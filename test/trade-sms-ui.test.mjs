@@ -9,10 +9,10 @@ const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Arra
 const button = (tree, name) => nodes(tree, node => node.type === "button" && text(node) === name)[0];
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const connection = { number: "+61400000000", accountLabel: "Test trade", accountType: "Full", dailyLimit: 100, usedSegments: 0, status: "connected" };
-const conversation = (overrides = {}) => ({ ok: true, connection, customerPhone: "+61400000001", consent: "allowed", messages: [], ...overrides });
+const conversation = (overrides = {}) => ({ ok: true, connection, customerPhone: "+61400000001", consent: "allowed", messages: [], canManageConnection: true, jobNumber: "", jobs: [], ...overrides });
 const reply = (value, status = 200) => ({ ok: status < 400, status, json: async () => value });
 
-function harness(component, responder) {
+function harness(component, responder, props = {}) {
   const source = fs.readFileSync(new URL(`../src/components/${component}.tsx`, import.meta.url), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const slots = [], effects = [], callbacks = [], pending = [], requests = [];
@@ -29,8 +29,8 @@ function harness(component, responder) {
   const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : {};
   const fetch = async (url, init) => { const payload = init.body ? JSON.parse(init.body) : null; requests.push({ url, init, payload }); return responder(payload, requests); };
   class FormDataFixture { constructor(values) { this.values = values; } get(key) { return this.values[key]; } }
-  Function("require", "exports", "fetch", "window", "document", "FormData", compiled)(require, exports, fetch, { addEventListener() {}, removeEventListener() {}, confirm: () => true }, { visibilityState: "visible" }, FormDataFixture);
-  const render = () => { cursor = 0; const tree = exports[component]({ user, customerId: "customer-a", onOpenIntegrations() {} }); for (const effect of pending.splice(0)) effect(); return tree; };
+  Function("require", "exports", "fetch", "window", "document", "FormData", compiled)(require, exports, fetch, { addEventListener() {}, removeEventListener() {}, setInterval() {}, clearInterval() {}, confirm: () => true }, { visibilityState: "visible", addEventListener() {}, removeEventListener() {} }, FormDataFixture);
+  const render = () => { cursor = 0; const tree = exports[component]({ user, customerId: "customer-a", onOpenIntegrations() {}, ...props }); for (const effect of pending.splice(0)) effect(); return tree; };
   return { render, requests, async mount() { render(); await flush(); return render(); }, async settle() { await flush(); render(); return render(); }, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
 }
 
@@ -127,4 +127,36 @@ test("a saved connection with failed status refresh provides recovery without a 
   button(tree, "Refresh connection").props.onClick(); tree = await h.settle();
   assert.match(text(tree), /Connected/); assert.match(text(tree), /\+61400000000/);
   assert.equal(h.requests.filter(item => item.payload?.action === "connect").length, 1); h.cleanup();
+});
+
+test("staff job SMS uses field-session authentication and sends the exact job while hiding owner setup", async () => {
+  const h = harness("TradeCustomerSmsPanel", async payload => payload ? reply({ ok: false, error: "Test only" }, 409) : reply(conversation({ canManageConnection: false, jobNumber: "TLJ-12345678" })),
+    { user: undefined, workOrderId: "job-1", getAuthHeaders: async () => ({ Authorization: "TLinkField fixture", "x-aea-device-id": "device-1" }) });
+  let tree = await h.mount();
+  assert.match(text(tree), /business can see and reply/); assert.match(text(tree), /TLJ-12345678/);
+  assert.equal(h.requests[0].init.headers.Authorization, "TLinkField fixture");
+  assert.equal(h.requests[0].init.headers["x-aea-device-id"], "device-1");
+  assert.match(h.requests[0].url, /workOrderId=job-1/);
+  tree = draft(h, tree); submit(tree); await h.settle();
+  assert.equal(h.requests.find(item => item.payload?.action === "send").payload.workOrderId, "job-1");
+  h.cleanup();
+  const unconnected = harness("TradeCustomerSmsPanel", async () => reply(conversation({ canManageConnection: false, connection: null })));
+  tree = await unconnected.mount(); assert.match(text(tree), /Ask the business owner/); assert.equal(button(tree, "Set up SMS"), undefined); unconnected.cleanup();
+});
+
+test("shared history labels actual staff senders and lets only the owner link an ambiguous reply", async () => {
+  let linked = false;
+  const messages = [{ id: "sent-1", senderName: "Jane Installer", workOrderId: "job-1", direction: "outbound", body: "Hello", status: "delivered", createdAt: "2026-09-28T00:00:00Z" },
+    { id: "reply-1", senderName: "", workOrderId: "", direction: "inbound", body: "Which date?", status: "received", createdAt: "2026-09-28T00:01:00Z" }];
+  const h = harness("TradeCustomerSmsPanel", async payload => {
+    if (payload) { assert.equal(payload.action, "link_reply"); assert.equal(payload.workOrderId, "job-2"); assert.equal(payload.messageId, "reply-1"); linked = true; return reply({ ok: true }); }
+    return reply(conversation({ messages: messages.map(message => message.id === "reply-1" && linked ? { ...message, workOrderId: "job-2" } : message), jobs: [{ id: "job-2", jobNumber: "TLJ-12345678" }] }));
+  });
+  let tree = await h.mount(); assert.match(text(tree), /Jane Installer/); assert.match(text(tree), /Business only/);
+  assert.equal(button(tree, "Link reply").props.disabled, true);
+  nodes(tree, node => node.type === "select")[0].props.onChange({ target: { value: "job-2" } });
+  tree = h.render(); button(tree, "Link reply").props.onClick(); tree = await h.settle();
+  assert.equal(button(tree, "Link reply"), undefined); assert.match(text(tree), /Reply shared/); h.cleanup();
+  const staff = harness("TradeCustomerSmsPanel", async () => reply(conversation({ canManageConnection: false, messages, jobs: [] })));
+  tree = await staff.mount(); assert.equal(button(tree, "Link reply"), undefined); staff.cleanup();
 });

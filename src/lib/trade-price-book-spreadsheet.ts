@@ -24,6 +24,7 @@ export const PRICE_BOOK_IMPORT_COLUMNS: { key: PriceBookImportField; label: stri
   { key: "panelWatts", label: "Panel watts", aliases: ["panel watts", "panel wattage", "panel power w", "panel power watts"] },
   { key: "panelLengthMm", label: "Panel length (mm)", aliases: ["panel length mm", "length mm"] },
   { key: "panelWidthMm", label: "Panel width (mm)", aliases: ["panel width mm", "width mm"] },
+  { key: "coverageM2PerUnit", label: "Coverage per unit (m²)", aliases: ["coverage per unit m²", "coverage per unit m2", "coverage m2 per unit", "coverage", "coverage m2", "coverage m²", "coverage per roll", "coverage per pack", "coverage per bag"] },
 ];
 
 function headerKey(value: unknown) {
@@ -140,10 +141,10 @@ export async function readPriceBookSpreadsheet(file: File): Promise<PriceBookShe
 
 export function priceBookTemplateCsv() {
   return [
-    "Item name,Type,Category,TLink item code,SKU,Charge by,Sell price ex GST,Cost ex GST,GST,Supplier,Product kind,Panel watts,Panel length (mm),Panel width (mm),Description",
-    "Example insulation roll,Material,Insulation,,EXAMPLE-INS-ROLL,Roll,95.00,65.00,GST,,General item,,,,Example prices only. Replace with your product and coverage per roll.",
-    "Example 440 W solar panel,Material,Solar panels,,EXAMPLE-PANEL-440,Each,180.00,120.00,GST,,Solar panel,440,1762,1134,Example specifications only. Replace watts and dimensions with your product datasheet values.",
-    "Call out fee,Call-out,Service fees,,EXAMPLE-CALLOUT,Visit,200.00,0.00,GST,,General item,,,,Example prices only. Standard call out.",
-    "Electrician labour per hour,Labour,Electrical,,EXAMPLE-LABOUR,Hour,120.00,60.00,GST,,General item,,,,Example prices only. One hour of labour.",
+    "Item name,Type,Category,TLink item code,SKU,Charge by,Sell price ex GST,Cost ex GST,GST,Supplier,Product kind,Panel watts,Panel length (mm),Panel width (mm),Coverage per unit (m²),Description",
+    "Example insulation roll,Material,Insulation,,EXAMPLE-INS-ROLL,Roll,95.00,65.00,GST,,General item,,,,20,Example prices only. Replace with your product and coverage per roll.",
+    "Example 440 W solar panel,Material,Solar panels,,EXAMPLE-PANEL-440,Each,180.00,120.00,GST,,Solar panel,440,1762,1134,,Example specifications only. Replace watts and dimensions with your product datasheet values.",
+    "Call out fee,Call-out,Service fees,,EXAMPLE-CALLOUT,Visit,200.00,0.00,GST,,General item,,,,,Example prices only. Standard call out.",
+    "Electrician labour per hour,Labour,Electrical,,EXAMPLE-LABOUR,Hour,120.00,60.00,GST,,General item,,,,,Example prices only. One hour of labour.",
   ].join("\r\n") + "\r\n";
 }

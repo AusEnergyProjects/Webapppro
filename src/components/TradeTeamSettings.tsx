@@ -36,6 +36,7 @@ export type TradeTeamPermissions = {
   canViewQuotes: boolean;
   canManageQuotes: boolean;
   canSendQuotes: boolean;
+  canSendSms: boolean;
   canApplyDiscounts: boolean;
   canViewInvoices: boolean;
   canManageInvoices: boolean;
@@ -145,7 +146,7 @@ const fullPermissions: TradeTeamPermissions = {
   jobScope: "team", canCreateJobs: true, canManageJobs: true, canAssignJobs: true,
   canViewCustomers: true, canManageCustomers: true,
   canSearchCustomers: true,
-  canViewQuotes: true, canManageQuotes: true, canSendQuotes: true, canApplyDiscounts: true,
+  canViewQuotes: true, canManageQuotes: true, canSendQuotes: true, canSendSms: false, canApplyDiscounts: true,
   canViewInvoices: true, canManageInvoices: true,
   canViewPriceBook: true, canManagePriceBook: true,
   scheduleScope: "team", canRescheduleJobs: true, canManageTeam: true, canEditTeamPermissions: true,
@@ -165,7 +166,7 @@ const fieldPermissions: TradeTeamPermissions = {
   jobScope: "own", canCreateJobs: true, canManageJobs: true, canAssignJobs: false,
   canViewCustomers: false, canManageCustomers: false,
   canSearchCustomers: false,
-  canViewQuotes: false, canManageQuotes: false, canSendQuotes: false, canApplyDiscounts: false,
+  canViewQuotes: false, canManageQuotes: false, canSendQuotes: false, canSendSms: false, canApplyDiscounts: false,
   canViewInvoices: false, canManageInvoices: false,
   canViewPriceBook: true, canManagePriceBook: false,
   scheduleScope: "own", canRescheduleJobs: false, canManageTeam: false, canEditTeamPermissions: false,
@@ -189,6 +190,7 @@ const permissionGroups: Array<{ label: string; items: Array<{ key: BooleanPermis
   { label: "Jobs and customers", items: [
     { key: "canCreateJobs", label: "Create jobs", detail: "Start a new customer job." },
     { key: "canManageJobs", label: "Edit job details and status", detail: "Edit work, tasks and job progress within their job scope." },
+    { key: "canSendSms", label: "Send and receive job SMS", detail: "Use the business SMS number on jobs within their access. The business can see and reply. Provider charges apply." },
     { key: "canAssignJobs", label: "Assign and reassign jobs", detail: "Choose who owns work within their job scope." },
     { key: "canViewCustomers", label: "View customer records", detail: "Open standalone customer records. Assigned jobs, quotes and invoices still show the customer context needed for that work." },
     { key: "canManageCustomers", label: "Update customers", detail: "Edit customer records they can access." },

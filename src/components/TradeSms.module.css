@@ -43,6 +43,9 @@
 .messages .inbound { align-self: flex-start; background: var(--trade-surface-soft, #f3f8f6); }
 .messageMeta { display: flex; flex-wrap: wrap; font-size: 12px; gap: 6px 16px; justify-content: space-between; }
 .messages time { font-size: 11px; }
+.jobLabel { display: block; margin-top: 6px; }
+.linkReply { border-top: 1px solid var(--trade-line, #c9ddd8); display: grid; gap: 8px; margin-top: 12px; padding-top: 10px; }
+.linkReply select { font-size: 14px; }
 .messages .empty { border: 0; color: var(--trade-muted, #536963); max-width: none; padding: 12px 0; }
 .composerFooter { align-items: flex-end; display: flex; gap: 16px; justify-content: space-between; }
 .composerFooter small { max-width: 520px; }

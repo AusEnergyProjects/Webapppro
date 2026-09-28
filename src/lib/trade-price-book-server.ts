@@ -11,6 +11,7 @@ export type PriceBookQuoteItem = {
   itemType: PriceBookItemType;
   lineType: "product" | "labour" | "adjustment";
   unitLabel: string;
+  coverageM2PerUnit: number | null;
   unitCostCentsExGst: number;
   sellPriceCentsExGst: number;
   taxCode: "gst" | "none";
@@ -28,6 +29,7 @@ function quoteItem(row: Row): PriceBookQuoteItem {
     itemType,
     lineType: priceBookQuoteLineType(itemType),
     unitLabel: String(row.unit_label),
+    coverageM2PerUnit: row.coverage_m2_per_unit_milli == null ? null : Number(row.coverage_m2_per_unit_milli) / 1000,
     unitCostCentsExGst: Number(row.supplier_cost_cents_ex_gst),
     sellPriceCentsExGst: Number(row.sell_price_cents_ex_gst),
     taxCode: String(row.tax_code) as "gst" | "none",
@@ -38,7 +40,7 @@ function quoteItem(row: Row): PriceBookQuoteItem {
 
 export async function priceBookItemsForQuote(ownerUid: string) {
   const rows = await getD1().prepare(`SELECT id, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
-      sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points
+      sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points, coverage_m2_per_unit_milli
     FROM trade_price_book_items WHERE firebase_uid = ? AND record_status = 'active'
     ORDER BY name COLLATE NOCASE, item_code LIMIT 5000`).bind(ownerUid).all<Row>();
   return rows.results.map(quoteItem);
@@ -49,7 +51,7 @@ export async function resolvePriceBookQuoteLines(ownerUid: string, rawLines: unk
   const ids = [...new Set(rawLines.map((line) => line && typeof line === "object" ? String((line as Row).priceBookItemId || "") : "").filter(Boolean))];
   if (!ids.length) return { lines: rawLines, references: rawLines.map(() => null) };
   const rows = await getD1().prepare(`SELECT id, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
-      sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points
+      sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points, coverage_m2_per_unit_milli
     FROM trade_price_book_items WHERE firebase_uid = ? AND record_status = 'active'
       AND id IN (${ids.map(() => "?").join(",")})`).bind(ownerUid, ...ids).all<Row>();
   const byId = new Map(rows.results.map((row) => [String(row.id), quoteItem(row)]));

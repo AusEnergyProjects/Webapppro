@@ -30,6 +30,7 @@ export type TeamAccess = {
   canViewQuotes: boolean;
   canManageQuotes: boolean;
   canSendQuotes: boolean;
+  canSendSms?: boolean;
   canViewInvoices: boolean;
   canManageInvoices: boolean;
   canViewPriceBook: boolean;
@@ -115,7 +116,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
       businessName: verified.businessName || "Installer business",
       canCreateJobs: true, canManageJobs: true, canAssignJobs: true, jobScope: "team",
       canViewCustomers: true, canManageCustomers: true,
-      canViewQuotes: true, canManageQuotes: true, canSendQuotes: true,
+      canViewQuotes: true, canManageQuotes: true, canSendQuotes: true, canSendSms: true,
       canViewInvoices: true, canManageInvoices: true,
       canViewPriceBook: true, canManagePriceBook: true, canApplyDiscounts: true,
       scheduleScope: "team", canRescheduleJobs: true, canManageTeam: true,
@@ -127,7 +128,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
   const member = await db.prepare(`SELECT m.id, m.owner_uid, m.display_name,
       m.can_create_jobs, m.can_manage_jobs, m.can_assign_jobs, m.job_scope,
       m.can_view_customers, m.can_manage_customers,
-      m.can_view_quotes, m.can_manage_quotes, m.can_send_quotes,
+      m.can_view_quotes, m.can_manage_quotes, m.can_send_quotes, m.can_send_sms,
       m.can_view_invoices, m.can_manage_invoices, m.can_view_price_book, m.can_manage_price_book,
       m.can_apply_discounts,
       m.schedule_scope, m.can_reschedule_jobs, m.can_manage_team,
@@ -154,7 +155,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
     jobScope: member.job_scope === "team" ? "team" : "own",
     canViewCustomers: Boolean(member.can_view_customers), canManageCustomers: Boolean(member.can_manage_customers),
     canViewQuotes: Boolean(member.can_view_quotes), canManageQuotes: Boolean(member.can_manage_quotes),
-    canSendQuotes: Boolean(member.can_send_quotes),
+    canSendQuotes: Boolean(member.can_send_quotes), canSendSms: Boolean(member.can_send_sms),
     canViewInvoices: Boolean(member.can_view_invoices), canManageInvoices: Boolean(member.can_manage_invoices),
     canViewPriceBook: Boolean(member.can_view_price_book), canManagePriceBook: Boolean(member.can_manage_price_book),
     canApplyDiscounts: Boolean(member.can_apply_discounts),

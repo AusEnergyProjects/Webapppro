@@ -182,7 +182,8 @@ test("appointments expose compact quote state without bypassing the existing quo
   assert.match(ui, /onOpenQuote && !selectedAppointment\.protectedJob/);
   assert.match(ui, />Open quote<\/button>/);
   assert.match(crm, /onOpenQuote=\{\(!staffPermissions \|\| staffPermissions\.canViewQuotes\) \? \(id\) => openFocusedJob\(id, "quote"\) : undefined\}/);
-  assert.doesNotMatch(teamPortal, /onOpenQuote=/);
+  assert.doesNotMatch(teamPortal, /<TradeScheduleWorkspace\b[^>]*\bonOpenQuote=/);
+  assert.match(teamPortal, /TradeMessagesWorkspace[\s\S]*onOpenQuote=\{workOrderId => \{ setCrmTarget\([\s\S]*jobTab: "quote"/);
 });
 
 test("completed appointments remain visible while cancelled jobs stay hidden", () => {

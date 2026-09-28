@@ -9,13 +9,14 @@ import styles from "./TradeSolarEquipmentPicker.module.css";
 
 type CatalogueProduct = { id: string; name: string; brand: string; modelNumber: string; warrantyYears?: number; datasheetUrl?: string };
 type Draft = { id: string; name: string; manufacturer: string; model: string; watts: string; widthM: string; lengthM: string;
-  capacityKwh: string; capacityLitres: string; warrantyYears: string; datasheetUrl: string; imageUrl: string; catalogueProductId?: string };
+  capacityKwh: string; capacityLitres: string; warrantyYears: string; datasheetUrl: string; imageUrl: string; catalogueProductId?: string; priceBookItemId?: string };
 function draftFor(item?: SolarEquipmentItem): Draft {
   return { id: item?.id || crypto.randomUUID(), name: item?.name || "", manufacturer: item?.manufacturer || "", model: item?.model || "",
     watts: item?.watts?.toString() || "", widthM: item?.widthM?.toString() || "", lengthM: item?.lengthM?.toString() || "",
     capacityKwh: item?.capacityKwh?.toString() || "", capacityLitres: item?.capacityLitres?.toString() || "",
     warrantyYears: item?.warrantyYears?.toString() || "", datasheetUrl: item?.datasheetUrl || "", imageUrl: item?.imageUrl || "",
-    ...(item?.catalogueProductId ? { catalogueProductId: item.catalogueProductId } : {}) };
+    ...(item?.catalogueProductId ? { catalogueProductId: item.catalogueProductId } : {}),
+    ...(item?.priceBookItemId ? { priceBookItemId: item.priceBookItemId } : {}) };
 }
 function catalogueProduct(value: unknown): value is CatalogueProduct {
   if (typeof value !== "object" || !value) return false;
@@ -42,25 +43,29 @@ export function TradeSolarEquipmentPicker({ user, kind, onSelect, priceBookPanel
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
-  const [ownPanels, setOwnPanels] = useState<SolarEquipmentItem[]>([]);
+  const [ownEquipment, setOwnEquipment] = useState<SolarEquipmentItem[]>([]);
+  const [ownLoading, setOwnLoading] = useState(false);
   const [nextCursor, setNextCursor] = useState("");
   const [page, setPage] = useState({ number: 1, cursor: "" });
   const label = SOLAR_EQUIPMENT_LABELS[kind];
 
   useEffect(() => {
-    if (kind !== "panel" || priceBookPanels !== undefined) return;
+    if (kind === "panel" && priceBookPanels !== undefined) return;
     const controller = new AbortController();
     void (async () => {
+      setOwnLoading(true);
       try {
         const token = await user.getIdToken();
         if (controller.signal.aborted) return;
-        const response = await fetch("/api/trade-price-book?mode=solar_panels", { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal, cache: "no-store" });
+        const url = kind === "panel" ? "/api/trade-price-book?mode=solar_panels" : `/api/trade-price-book?mode=solar_equipment&kind=${kind}`;
+        const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal, cache: "no-store" });
         const data = await response.json();
-        if (!response.ok || !data.ok || !Array.isArray(data.solarPanels)) throw new Error(data.error || "Your saved panel models could not be loaded.");
-        setOwnPanels(data.solarPanels.map(normalizeSolarEquipmentItem));
+        const items = kind === "panel" ? data.solarPanels : data.equipment;
+        if (!response.ok || !data.ok || !Array.isArray(items)) throw new Error(data.error || "Your saved equipment could not be loaded.");
+        if (!controller.signal.aborted) setOwnEquipment(items.map(normalizeSolarEquipmentItem));
       } catch (reason) {
-        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Your saved panel models could not be loaded.");
-      }
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Your saved equipment could not be loaded.");
+      } finally { if (!controller.signal.aborted) setOwnLoading(false); }
     })();
     return () => controller.abort();
   }, [user, kind, priceBookPanels]);
@@ -108,11 +113,13 @@ export function TradeSolarEquipmentPicker({ user, kind, onSelect, priceBookPanel
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Equipment could not be selected."); }
     finally { setSaving(false); }
   }
+  const ownItems = kind === "panel" && priceBookPanels !== undefined ? priceBookPanels : ownEquipment;
 
   return <section className={styles.picker} aria-label={`Choose ${label.toLowerCase()}`}>
     <header><strong>{editing ? `${label} details` : `Choose ${label.toLowerCase()}`}</strong>{onCancel && <button type="button" onClick={onCancel} disabled={saving}>Close</button>}</header>
     {editing ? <form onSubmit={selectEquipment}>
       {editing.catalogueProductId && <p className={styles.help}>Catalogue details added. Check the datasheet for the remaining specifications.</p>}
+      {editing.priceBookItemId && <p className={styles.help}>Linked to your price-book item. Tracked stock is committed when the quote is accepted.</p>}
       <div className={styles.fields}>
         <label>Brand<input value={editing.manufacturer} maxLength={140} onChange={(event) => field("manufacturer", event.target.value)} autoComplete="off" /></label>
         <label>Model<input value={editing.model} required maxLength={180} onChange={(event) => field("model", event.target.value)} autoComplete="off" /></label>
@@ -134,9 +141,9 @@ export function TradeSolarEquipmentPicker({ user, kind, onSelect, priceBookPanel
       {error && <p role="alert" className={styles.error}>{error}</p>}
       <footer><button type="button" onClick={() => { setEditing(null); setError(""); }} disabled={saving}>Back</button><button type="submit" className={styles.primary} disabled={saving}>{saving ? "Saving…" : `Use ${label.toLowerCase()}`}</button></footer>
     </form> : <>
-      {kind === "panel" && (priceBookPanels || ownPanels).length > 0 && <label htmlFor={`${id}-pricebook`} className={styles.favourite}>Your price-book panels<select id={`${id}-pricebook`} value="" onChange={(event) => { const item = (priceBookPanels || ownPanels).find((candidate) => candidate.id === event.target.value); if (item) onSelect({ ...item, quantity: 1 }); }}>
-        <option value="">Choose a saved model</option>{(priceBookPanels || ownPanels).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.watts} W</option>)}
-      </select></label>}
+      {(ownLoading || ownItems.length > 0) && <label htmlFor={`${id}-pricebook`} className={styles.favourite}>{kind === "panel" ? "Your price-book panels" : "Your price-book items"}<select id={`${id}-pricebook`} value="" disabled={ownLoading} onChange={(event) => { const item = ownItems.find((candidate) => candidate.id === event.target.value); if (item) onSelect({ ...item, quantity: 1 }); }}>
+        <option value="">{ownLoading ? "Loading your items…" : `Choose your ${label.toLowerCase()}`}</option>{ownItems.map((item) => <option key={item.id} value={item.id}>{item.name}{item.watts ? ` · ${item.watts} W` : ""}</option>)}
+      </select><small>Choose the product you will supply. Tracked stock is committed after acceptance.</small></label>}
       {error && <p role="status" className={styles.help}>{error}</p>}
       {kind === "panel" && <div className={styles.starters}><strong>Starter models</strong><div>{SOLAR_STARTER_PANELS.map((item) => <button key={item.id} type="button" onClick={() => onSelect({ ...item })}><strong>{item.manufacturer} · {item.watts} W</strong><small>{item.model}</small></button>)}</div><p className={styles.help}>Choose the exact model you will supply. Dimensions come from the linked manufacturer datasheet.</p></div>}
       <label htmlFor={`${id}-search`} className={styles.search}>Approved catalogue<input id={`${id}-search`} type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage({ number: 1, cursor: "" }); }} placeholder="Search brand or model" autoComplete="off" /></label>

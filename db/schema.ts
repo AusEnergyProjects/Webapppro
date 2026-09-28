@@ -547,6 +547,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   canViewInvoices: integer("can_view_invoices", { mode: "boolean" }).notNull().default(false),
   canManageInvoices: integer("can_manage_invoices", { mode: "boolean" }).notNull().default(false),
   canViewPriceBook: integer("can_view_price_book", { mode: "boolean" }).notNull().default(false),
+  canSendSms: integer("can_send_sms", { mode: "boolean" }).notNull().default(false),
   canManagePriceBook: integer("can_manage_price_book", { mode: "boolean" }).notNull().default(false),
   canApplyDiscounts: integer("can_apply_discounts", { mode: "boolean" }).notNull().default(false),
   scheduleScope: text("schedule_scope").notNull().default("own"),
@@ -2109,6 +2110,7 @@ export const tradePriceBookItems = sqliteTable("trade_price_book_items", {
   category: text("category").notNull().default(""),
   unitLabel: text("unit_label").notNull().default("each"),
   solarPanelJson: text("solar_panel_json").notNull().default("null"),
+  coverageM2PerUnitMilli: integer("coverage_m2_per_unit_milli"),
   supplierCostCentsExGst: integer("supplier_cost_cents_ex_gst").notNull().default(0),
   sellPriceCentsExGst: integer("sell_price_cents_ex_gst").notNull(),
   taxCode: text("tax_code").notNull().default("gst"),
@@ -2131,6 +2133,7 @@ export const tradePriceBookItems = sqliteTable("trade_price_book_items", {
   index("trade_price_book_items_owner_type_idx").on(table.firebaseUid, table.recordStatus, table.itemType, table.updatedAt),
   index("trade_price_book_items_supplier_product_idx").on(table.supplierProductId, table.recordStatus),
   check("trade_price_book_items_category_length", sql`length(${table.category}) <= 80`),
+  check("trade_price_book_items_coverage_check", sql`${table.coverageM2PerUnitMilli} IS NULL OR ${table.coverageM2PerUnitMilli} BETWEEN 1 AND 999999000`),
 ]);
 
 export const tradePriceBookPriceHistory = sqliteTable("trade_price_book_price_history", {
@@ -2279,6 +2282,7 @@ export const tradeCrmQuoteItems = sqliteTable("trade_crm_quote_items", {
 export const tradeCrmQuoteExecutionSnapshots = sqliteTable("trade_crm_quote_execution_snapshots", {
   id: text("id").primaryKey(), quoteVersionId: text("quote_version_id").notNull(), firebaseUid: text("firebase_uid").notNull(),
   sourceKind: text("source_kind").notNull().default("manual_quote"), packetsJson: text("packets_json").notNull().default("[]"),
+  solarStockJson: text("solar_stock_json").notNull().default(""),
   expectedDurationMinutes: integer("expected_duration_minutes").notNull().default(0), suggestedCrewSize: integer("suggested_crew_size").notNull().default(1),
   requiredCapabilitiesJson: text("required_capabilities_json").notNull().default("[]"), createdAt: text("created_at").notNull(),
 }, (table) => [uniqueIndex("trade_crm_quote_execution_snapshots_version_idx").on(table.quoteVersionId), index("trade_crm_quote_execution_snapshots_owner_idx").on(table.firebaseUid, table.createdAt)]);
@@ -6749,6 +6753,85 @@ export const tradeTrainingSubmissions = sqliteTable("trade_training_submissions"
   reference: text("reference").notNull(), completedAt: text("completed_at").notNull(), snapshotJson: text("snapshot_json").notNull(), resultJson: text("result_json").notNull().default("{}"),
 }, (t) => [index("trade_training_submissions_person_idx").on(t.ownerUid,t.memberId,t.completedAt), index("trade_training_submissions_module_idx").on(t.moduleId,t.completedAt), check("training_submission_score_check", sql`${t.scorePercent} BETWEEN 0 AND 100 AND ${t.firstTryScorePercent} BETWEEN 0 AND 100`), check("training_submission_json_check", sql`json_valid(${t.snapshotJson}) AND json_valid(${t.resultJson})`)]);
 
+export const tradeStockReceipts = sqliteTable("trade_stock_receipts", {
+  id: text("id").primaryKey(), firebaseUid: text("firebase_uid").notNull(), sha256: text("sha256").notNull(),
+  fileName: text("file_name").notNull(), objectKey: text("object_key").notNull(), status: text("status").notNull().default("review"),
+  extractionJson: text("extraction_json").notNull().default("{}"), analysisError: text("analysis_error").notNull().default(""),
+  confirmationJson: text("confirmation_json").notNull().default(""), confirmationId: text("confirmation_id").notNull().default(""),
+  supplier: text("supplier").notNull().default(""), reference: text("reference").notNull().default(""),
+  receivedAt: text("received_at").notNull().default(""), receivedByUid: text("received_by_uid").notNull().default(""),
+  createdAt: text("created_at").notNull(), createdByUid: text("created_by_uid").notNull(),
+}, t => [uniqueIndex("trade_stock_receipts_file_idx").on(t.firebaseUid, t.sha256),
+  uniqueIndex("trade_stock_receipts_reference_idx").on(t.firebaseUid, sql`lower(trim(${t.supplier}))`, sql`lower(trim(${t.reference}))`).where(sql`${t.status}='received' AND ${t.supplier}<>'' AND ${t.reference}<>''`),
+  index("trade_stock_receipts_owner_idx").on(t.firebaseUid, t.createdAt),
+  check("trade_stock_receipts_status_check", sql`${t.status} IN ('review','received')`),
+  check("trade_stock_receipts_extraction_check", sql`json_valid(${t.extractionJson})`),
+  check("trade_stock_receipts_confirmation_check", sql`${t.confirmationJson}='' OR json_valid(${t.confirmationJson})`)]);
+
+export const tradeMessageThreads = sqliteTable("trade_message_threads", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), kind: text("kind").notNull(),
+  subject: text("subject").notNull().default(""), dmKey: text("dm_key").notNull().default(""),
+  createdByMemberId: text("created_by_member_id").notNull(), requestId: text("request_id").notNull(), creationHash: text("creation_hash").notNull(),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, t => [uniqueIndex("trade_message_threads_dm_idx").on(t.ownerUid,t.dmKey).where(sql`${t.kind}='dm'`),
+  uniqueIndex("trade_message_threads_request_idx").on(t.ownerUid,t.createdByMemberId,t.requestId), check("trade_message_threads_kind_check",sql`${t.kind} IN ('dm','group')`)]);
+
+export const tradeMessageParticipants = sqliteTable("trade_message_participants", {
+  threadId: text("thread_id").notNull().references(() => tradeMessageThreads.id), ownerUid: text("owner_uid").notNull(),
+  memberId: text("member_id").notNull(), lastReadSequence: integer("last_read_sequence").notNull().default(0),
+}, t => [primaryKey({columns:[t.threadId,t.memberId]}), index("trade_message_participants_member_idx").on(t.ownerUid,t.memberId,t.threadId),
+  check("trade_message_participants_read_check",sql`${t.lastReadSequence}>=0`)]);
+
+export const tradeInternalMessages = sqliteTable("trade_internal_messages", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), threadId: text("thread_id").notNull().references(() => tradeMessageThreads.id),
+  sequence: integer("sequence").notNull(), actorMemberId: text("actor_member_id").notNull(), actorName: text("actor_name").notNull(),
+  body: text("body").notNull(), requestId: text("request_id").notNull(), createdAt: text("created_at").notNull(),
+}, t => [uniqueIndex("trade_internal_messages_sequence_idx").on(t.threadId,t.sequence),
+  uniqueIndex("trade_internal_messages_request_idx").on(t.ownerUid,t.actorMemberId,t.requestId),
+  check("trade_internal_messages_sequence_check",sql`${t.sequence}>0`), check("trade_internal_messages_body_check",sql`length(${t.body})<=2000`)]);
+
+export const tradeMessageMedia = sqliteTable("trade_message_media", {
+  id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), uploaderMemberId: text("uploader_member_id").notNull(),
+  purpose: text("purpose").notNull(), kind: text("kind").notNull(), threadId: text("thread_id").notNull().default(""),
+  memberId: text("member_id").notNull().default(""), messageId: text("message_id").notNull().default(""),
+  objectKey: text("object_key").notNull().unique(), contentType: text("content_type").notNull(), sizeBytes: integer("size_bytes").notNull(),
+  state: text("state").notNull(), createdAt: text("created_at").notNull(), expiresAt: text("expires_at").notNull().default(""),
+}, t => [index("trade_message_media_message_idx").on(t.ownerUid,t.threadId,t.messageId),
+  index("trade_message_media_pending_idx").on(t.ownerUid,t.uploaderMemberId,t.state,t.expiresAt),
+  uniqueIndex("trade_message_media_avatar_idx").on(t.ownerUid,t.memberId).where(sql`${t.purpose}='avatar' AND ${t.state}='active'`),
+  check("trade_message_media_purpose_check",sql`${t.purpose} IN ('message','avatar')`),
+  check("trade_message_media_kind_check",sql`${t.kind} IN ('image','audio')`),
+  check("trade_message_media_state_check",sql`${t.state} IN ('pending','attached','active','retired')`),
+  check("trade_message_media_size_check",sql`${t.sizeBytes}>0 AND ${t.sizeBytes}<=5242880`),
+  check("trade_message_media_binding_check",sql`(${t.purpose}='message' AND ${t.threadId}<>'' AND ${t.memberId}='' AND
+    ((${t.state}='pending' AND ${t.messageId}='' AND ${t.expiresAt}<>'') OR (${t.state}='attached' AND ${t.messageId}<>'')))
+    OR (${t.purpose}='avatar' AND ${t.kind}='image' AND ${t.threadId}='' AND ${t.memberId}<>'' AND ${t.messageId}='' AND ${t.state} IN ('active','retired'))`)]);
+
+export const tradeTeamCalls = sqliteTable("trade_team_calls", {
+  id:text("id").primaryKey(), ownerUid:text("owner_uid").notNull(), threadId:text("thread_id").notNull().references(()=>tradeMessageThreads.id),
+  mode:text("mode").notNull(), status:text("status").notNull().default("active"), createdByMemberId:text("created_by_member_id").notNull(),
+  requestId:text("request_id").notNull(), createdAt:text("created_at").notNull(), expiresAt:text("expires_at").notNull(), endedAt:text("ended_at").notNull().default(""),
+  nextSignalSequence:integer("next_signal_sequence").notNull().default(0), hadPeer:integer("had_peer").notNull().default(0),
+},t=>[uniqueIndex("trade_team_calls_active_thread_idx").on(t.ownerUid,t.threadId).where(sql`${t.status}='active'`),
+  uniqueIndex("trade_team_calls_request_idx").on(t.ownerUid,t.createdByMemberId,t.requestId), index("trade_team_calls_owner_expiry_idx").on(t.ownerUid,t.status,t.expiresAt),
+  check("trade_team_calls_mode_check",sql`${t.mode} IN ('audio','video')`),check("trade_team_calls_status_check",sql`${t.status} IN ('active','ended')`),
+  check("trade_team_calls_sequence_check",sql`${t.nextSignalSequence}>=0`),check("trade_team_calls_peer_check",sql`${t.hadPeer} IN (0,1)`)]);
+
+export const tradeTeamCallParticipants=sqliteTable("trade_team_call_participants",{
+  callId:text("call_id").notNull().references(()=>tradeTeamCalls.id),ownerUid:text("owner_uid").notNull(),memberId:text("member_id").notNull(),
+  sessionId:text("session_id").notNull(),joinedAt:text("joined_at").notNull(),lastSeenAt:text("last_seen_at").notNull(),leftAt:text("left_at").notNull().default(""),
+  iceIssuedAt:text("ice_issued_at").notNull().default(""),iceIssuedCount:integer("ice_issued_count").notNull().default(0),
+},t=>[primaryKey({columns:[t.callId,t.memberId]}),index("trade_team_call_participants_member_idx").on(t.ownerUid,t.memberId,t.lastSeenAt),
+  check("trade_team_call_participants_ice_check",sql`${t.iceIssuedCount} BETWEEN 0 AND 10`)]);
+
+export const tradeTeamCallSignals=sqliteTable("trade_team_call_signals",{
+  id:text("id").primaryKey(),ownerUid:text("owner_uid").notNull(),callId:text("call_id").notNull().references(()=>tradeTeamCalls.id),sequence:integer("sequence").notNull(),
+  fromMemberId:text("from_member_id").notNull(),fromSessionId:text("from_session_id").notNull(),toMemberId:text("to_member_id").notNull(),toSessionId:text("to_session_id").notNull(),
+  requestId:text("request_id").notNull(),type:text("type").notNull(),payload:text("payload").notNull(),createdAt:text("created_at").notNull(),
+},t=>[uniqueIndex("trade_team_call_signals_sequence_idx").on(t.callId,t.sequence),uniqueIndex("trade_team_call_signals_request_idx").on(t.callId,t.fromMemberId,t.fromSessionId,t.requestId),
+  index("trade_team_call_signals_recipient_idx").on(t.ownerUid,t.callId,t.toMemberId,t.toSessionId,t.sequence),check("trade_team_call_signals_sequence_check",sql`${t.sequence}>0`),
+  check("trade_team_call_signals_type_check",sql`${t.type} IN ('offer','answer','ice')`),check("trade_team_call_signals_payload_check",sql`length(${t.payload})<=65000`)]);
+
 export const tradeSmsConnections = sqliteTable("trade_sms_connections", {
   id: text("id").primaryKey(), firebaseUid: text("firebase_uid").notNull(), accountSid: text("account_sid").notNull(),
   accountLabel: text("account_label").notNull(), accountType: text("account_type").notNull(), numberSid: text("number_sid").notNull(),
@@ -6771,11 +6854,13 @@ export const tradeSmsMessages = sqliteTable("trade_sms_messages", {
   id: text("id").primaryKey(), connectionId: text("connection_id").notNull().references(() => tradeSmsConnections.id),
   recipientId: text("recipient_id").notNull().references(() => tradeSmsRecipients.id), firebaseUid: text("firebase_uid").notNull(),
   customerId: text("customer_id").notNull(), direction: text("direction").notNull(), body: text("body").notNull(), status: text("status").notNull(),
+  workOrderId: text("work_order_id").notNull().default(""), actorUid: text("actor_uid").notNull().default(""), actorName: text("actor_name").notNull().default(""),
   segments: integer("segments").notNull(), requestId: text("request_id").notNull().default(""), providerMessageSid: text("provider_message_sid").notNull().default(""),
   errorCode: text("error_code").notNull().default(""), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (t) => [uniqueIndex("trade_sms_messages_request_idx").on(t.firebaseUid, t.requestId).where(sql`${t.direction} = 'outbound'`),
   uniqueIndex("trade_sms_messages_provider_idx").on(t.connectionId, t.providerMessageSid).where(sql`${t.providerMessageSid} <> ''`),
   index("trade_sms_messages_history_idx").on(t.firebaseUid, t.customerId, t.createdAt), index("trade_sms_messages_usage_idx").on(t.firebaseUid, t.direction, t.createdAt),
+  index("trade_sms_messages_job_idx").on(t.firebaseUid, t.workOrderId, t.createdAt),
   check("trade_sms_messages_direction_check", sql`${t.direction} IN ('inbound', 'outbound')`), check("trade_sms_messages_segments_check", sql`${t.segments} >= 1`)]);
 
 export const creditexVoiceConnections = sqliteTable("creditex_voice_connections", {

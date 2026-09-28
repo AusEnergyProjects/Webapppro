@@ -39,6 +39,7 @@ import {
   tradeQuoteDeliveryPublicOrigin,
 } from "@/lib/trade-quote-delivery-policy.mjs";
 import { buildQuoteExecutionSnapshot } from "@/lib/trade-quote-execution-server";
+import { buildQuoteSolarStockSnapshot } from "@/lib/trade-solar-stock-server";
 import {
   buildTradeQuoteDocumentSnapshot,
   parseTradeQuoteDocumentSnapshot,
@@ -177,6 +178,8 @@ function errorResponse(error: unknown) {
   if (code === "QUOTE_DOCUMENT_TOO_LARGE") return adminJson({ ok: false, error: "This quote is too large to issue as one customer document." }, 400);
   if (["QUOTE_ISSUED_PDF_MISMATCH", "QUOTE_ISSUED_PDF_UNAVAILABLE"].includes(code)) return adminJson({ ok: false, error: "The exact issued quote PDF could not be verified. Create and issue a replacement quote version before sending." }, 409);
   if (code === "PRICE_BOOK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "A saved item is no longer active. Remove it or add its replacement from the price book." }, 409);
+  if (code === "QUOTE_SOLAR_STOCK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "An equipment item is no longer available in your price book. Choose an active product priced per item, or use a custom model without stock tracking." }, 409);
+  if (code === "QUOTE_SOLAR_STOCK_SNAPSHOT_INVALID") return adminJson({ ok: false, error: "The equipment list changed. Refresh the quote and check its equipment before sending." }, 409);
   if (code === "MAP_QUOTE_UNIT_MISMATCH") return adminJson({ ok: false, error: "A saved item's unit no longer matches the map measurement. Reload the quote and choose a matching rate or a custom line." }, 409);
   if (code === "MAP_QUOTE_SYSTEM_QUANTITY") return adminJson({ ok: false, error: "Enter one total price for the solar system." }, 400);
   if (["JOB_PACKET_UNAVAILABLE", "JOB_PACKET_DUPLICATE_LINE"].includes(code)) return adminJson({ ok: false, error: "That job packet changed or is no longer ready. Apply its current version again." }, 409);
@@ -965,6 +968,7 @@ export async function POST(request: Request) {
       let issuedPdf: Awaited<ReturnType<typeof storeTradeQuoteIssuedPdf>> | null = null;
       try {
         const execution = await buildQuoteExecutionSnapshot(access.ownerUid, String(version.id));
+        const solarStock = await buildQuoteSolarStockSnapshot(db, access.ownerUid, String(version.id));
         const documentSnapshot = await buildTradeQuoteDocumentSnapshot(
           access.ownerUid,
           String(version.id),
@@ -1059,11 +1063,11 @@ export async function POST(request: Request) {
         ];
         const issueResults = await db.batch([
           db.prepare(`INSERT INTO trade_crm_quote_execution_snapshots
-            (id, quote_version_id, firebase_uid, source_kind, packets_json, expected_duration_minutes, suggested_crew_size, required_capabilities_json, created_at)
-            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${claimStillHeld}`)
+            (id, quote_version_id, firebase_uid, source_kind, packets_json, expected_duration_minutes, suggested_crew_size, required_capabilities_json, solar_stock_json, created_at)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${claimStillHeld}`)
             .bind(crypto.randomUUID(), version.id, access.ownerUid, execution.sourceKind,
               JSON.stringify(execution.packets), execution.expectedDurationMinutes,
-              execution.suggestedCrewSize, JSON.stringify(execution.requiredCapabilities),
+              execution.suggestedCrewSize, JSON.stringify(execution.requiredCapabilities), JSON.stringify(solarStock),
               now, ...claimBindings),
           db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ?
             WHERE quote_id = ? AND firebase_uid = ? AND status = 'issued'
@@ -1289,7 +1293,7 @@ export async function POST(request: Request) {
     if (["replace_link", "revoke_link", "send_quote", "retry_quote_delivery", "answer_question"].includes(action)) {
       const quote = await db.prepare("SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?").bind(workOrderId, access.ownerUid).first<Row>();
       if (!quote) throw new Error("QUOTE_NOT_FOUND");
-      const version = await db.prepare("SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? AND version_number = ? AND status = 'issued'").bind(quote.id, access.ownerUid, quote.current_version_number).first<Row>();
+      const version = await db.prepare(`SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? AND version_number = ? AND ${action === "answer_question" ? "status IN ('issued','accepted')" : "status = 'issued'"}`).bind(quote.id, access.ownerUid, quote.current_version_number).first<Row>();
       if (!version) throw new Error("IMMUTABLE_VERSION");
       const link = await db.prepare("SELECT * FROM trade_crm_quote_links WHERE quote_version_id = ? AND firebase_uid = ?").bind(version.id, access.ownerUid).first<Row>();
       if (!link) throw new Error("QUOTE_NOT_FOUND");

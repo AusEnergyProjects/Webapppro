@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { ReactNode } from "react";
 import { isPayableQuoteDecisionInvoice } from "@/lib/trade-quote-receipt";
 import { canonicalGoogleBusinessProfileUrl } from "@/lib/trade-google-business-profile.mjs";
 import type { QuoteEquipment } from "@/lib/trade-quote-equipment";
@@ -120,6 +121,7 @@ type Result = {
   ok?: boolean;
   quote?: Quote;
   receipt?: QuoteDecisionReceipt;
+  conversation?: { questions: Question[] } | null;
   decision?: "accepted" | "declined";
   duplicate?: boolean;
   commercial?: unknown;
@@ -172,9 +174,11 @@ function displayDate(value: string) {
 function QuoteDecisionReceiptView({
   receipt,
   receiptPdfUrl,
+  conversation,
 }: {
   receipt: QuoteDecisionReceipt;
   receiptPdfUrl: string;
+  conversation?: ReactNode;
 }) {
   if (receipt.decision === "declined") {
     return (
@@ -318,6 +322,7 @@ function QuoteDecisionReceiptView({
           </a>
         </section>
 
+        {conversation}
         <footer>
           <span>Acceptance reference</span>
           <strong>{receipt.commercialReference}</strong>
@@ -326,6 +331,28 @@ function QuoteDecisionReceiptView({
       </section>
     </main>
   );
+}
+
+function QuoteQuestions({ questions, question, onChange, onSend, onRefresh, busy, message }: {
+  questions: Question[]; question: string; onChange: (value: string) => void; onSend: () => void;
+  onRefresh: () => void; busy: string; message?: string;
+}) {
+  return <section className="quote-link-question" aria-label="Messages with the trade business">
+    <span>Keep the conversation with this job</span>
+    <h2>Ask the trade business</h2>
+    {questions.map((item) => <article key={item.id}>
+      <strong>Your question</strong><p>{item.question}</p>
+      {item.answer ? <><strong>Trade response</strong><p>{item.answer}</p></> : <small>Awaiting a response</small>}
+    </article>)}
+    <label><span>Your question</span><textarea value={question} maxLength={1000} rows={3}
+      onChange={(event) => onChange(event.target.value)} placeholder="Ask about this job, the scope or timing" /></label>
+    <button type="button" disabled={Boolean(busy) || question.trim().length < 5} onClick={onSend}>
+      {busy === "question" ? "Sending..." : "Send question"}
+    </button>
+    <button type="button" disabled={Boolean(busy)} onClick={onRefresh}>{busy === "questions_refresh" ? "Checking..." : "Check for replies"}</button>
+    <small>Your message goes straight to the business in TLink. Return to this secure page to read its reply.</small>
+    {message && <p role="status">{message}</p>}
+  </section>;
 }
 
 function QuoteLines({ lines }: { lines: Line[] }) {
@@ -366,6 +393,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
   const decisionIdFallback = useRef("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [receipt, setReceipt] = useState<QuoteDecisionReceipt | null>(null);
+  const [conversation, setConversation] = useState<{ questions: Question[] } | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [signerName, setSignerName] = useState("");
   const [consent, setConsent] = useState(false);
@@ -386,6 +414,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
       }
       if (result.receipt) {
         setReceipt(result.receipt);
+        setConversation(result.conversation ?? null);
         setQuote(null);
         return;
       }
@@ -393,6 +422,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
       if (!nextQuote) throw new Error("This quote could not be opened.");
       setQuote(nextQuote);
       setReceipt(null);
+      setConversation(null);
       const required = new Map<string, Choice>();
       for (const choice of nextQuote.choices.filter(
         (item) => item.kind !== "addon",
@@ -511,8 +541,12 @@ export function QuoteLinkReview({ token }: { token: string }) {
     try {
       const result = await post({ action: "ask_question", question });
       if (result.quote) setQuote(result.quote);
+      if (result.receipt) {
+        setReceipt(result.receipt);
+        setConversation(result.conversation ?? null);
+      }
       setQuestion("");
-      setMessage("Your question is now in the trade office timeline.");
+      setMessage("Your question has been sent to the business.");
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -522,6 +556,18 @@ export function QuoteLinkReview({ token }: { token: string }) {
     } finally {
       setBusy("");
     }
+  }
+  async function refreshQuestions() {
+    setBusy("questions_refresh"); setMessage("");
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      const result = (await response.json()) as Result;
+      if (!response.ok || (!result.quote && !result.receipt)) throw new Error(result.error || "Replies could not be loaded.");
+      if (result.receipt) {
+        setReceipt(result.receipt); setQuote(null); setConversation(result.conversation ?? null);
+      } else if (result.quote) setQuote(result.quote);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Replies could not be loaded."); }
+    finally { setBusy(""); }
   }
   async function decide(decision: "accepted" | "declined") {
     if (!quote) return;
@@ -556,6 +602,8 @@ export function QuoteLinkReview({ token }: { token: string }) {
       }
       setReceipt(result.receipt);
       setQuote(null);
+      // Communication is loaded separately so its availability cannot change the accepted financial result.
+      if (result.receipt.decision === "accepted") await refreshQuestions();
     } catch (error) {
       setFailedDecision(decision);
       setMessage(
@@ -572,6 +620,8 @@ export function QuoteLinkReview({ token }: { token: string }) {
       <QuoteDecisionReceiptView
         receipt={receipt}
         receiptPdfUrl={`${endpoint}/receipt`}
+        conversation={receipt.decision === "accepted" && conversation ? <QuoteQuestions questions={conversation.questions}
+          question={question} onChange={setQuestion} onSend={() => void ask()} onRefresh={() => void refreshQuestions()} busy={busy} message={message} /> : undefined}
       />
     );
   }
@@ -792,39 +842,8 @@ export function QuoteLinkReview({ token }: { token: string }) {
           <QuoteProductDocuments documents={selectedQuoteProductDocuments(quote.productDocuments || [], selected)} choices={quote.choices} />
           {Boolean(quote.productDocuments?.some((document) => document.choiceKeys.length)) && <p>The proposal PDF includes clearly labelled documents for all offered options. The list above follows your selected options.</p>}
         </section>
-        <section className="quote-link-question">
-          <span>Need one detail clarified?</span>
-          <h2>Ask the trade business</h2>
-          {quote.questions.map((item) => (
-            <article key={item.id}>
-              <strong>Your question</strong>
-              <p>{item.question}</p>
-              {item.answer && (
-                <>
-                  <strong>Trade response</strong>
-                  <p>{item.answer}</p>
-                </>
-              )}
-            </article>
-          ))}
-          <label>
-            <span>Your question</span>
-            <textarea
-              value={question}
-              maxLength={1000}
-              rows={3}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Ask about the scope, timing or an option"
-            />
-          </label>
-          <button
-            type="button"
-            disabled={busy === "question" || question.trim().length < 5}
-            onClick={() => void ask()}
-          >
-            {busy === "question" ? "Sending..." : "Send question"}
-          </button>
-        </section>
+        <QuoteQuestions questions={quote.questions} question={question} onChange={setQuestion}
+          onSend={() => void ask()} onRefresh={() => void refreshQuestions()} busy={busy} />
         <section className="quote-link-signature">
           <span>Signed decision</span>
           <h2>Type your name to sign</h2>

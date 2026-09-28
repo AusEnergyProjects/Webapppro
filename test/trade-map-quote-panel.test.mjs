@@ -152,6 +152,32 @@ test("map rate choices filter by unit, retain measured quantity, and reject inje
   assert.equal(h.preview(tree).props.lines[1].priceBookItemId, "pack"); assert.equal(h.preview(tree).props.lines[1].quantity, "1");
 });
 
+test("one coverage product choice calculates whole packs, preserves manual quantity and restores saved waste", async t => {
+  const roll = { ...item("roll", "roll"), itemType: "material", coverageM2PerUnit: 20, sellPriceCentsExGst: 9500 };
+  const h = harness(t, result({ priceBookItems: [roll] }), { props: { mapQuoteIntent: intent({ measurement: { kind: "area", quantity: 229.5, roofImage } }) } });
+  let tree = await h.settle();
+  field(tree, "Line 1 price book item").props.onChange({ target: { value: "roll" } }); tree = h.render();
+  assert.equal(h.preview(tree).props.lines[0].quantity, "12");
+  assert.equal(h.preview(tree).props.lines[0].unitPrice, "95.00");
+  assert.match(text(tree), /20 m² coverage/);
+  field(tree, "Line 1 waste allowance percent").props.onChange({ target: { value: "10" } }); tree = h.render();
+  assert.equal(h.preview(tree).props.lines[0].quantity, "13");
+  field(tree, "Line 1 quantity (roll)").props.onChange({ target: { value: "14" } }); tree = h.render();
+  assert.equal(mapQuote.mapQuoteMeasuredContext(h.preview(tree).props.lines[0].sectionHeading).quantity, 229.5);
+  button(tree, "Save draft").props.onClick(); tree = await h.settle();
+  const saved = JSON.parse(h.requests.find(request => request.init.method).init.body);
+  assert.equal(saved.lines[0].quantity, "14");
+  assert.equal(saved.lines[0].priceBookItemId, "roll");
+  assert.equal(mapQuote.mapQuoteMeasuredContext(saved.lines[0].sectionHeading).wastePercent, 10);
+  assert.deepEqual(saved.roofImage, roofImage);
+  assert.equal(h.preview(tree).props.lines[0].quantity, "14", "save/reload never replaces a manual quantity");
+  button(tree, "Use calculated quantity").props.onClick(); tree = h.render();
+  assert.equal(h.preview(tree).props.lines[0].quantity, "13");
+  button(tree, "Use m² pricing").props.onClick(); tree = h.render();
+  assert.equal(h.preview(tree).props.lines[0].quantity, "229.5");
+  assert.equal(field(tree, "Line 1 waste allowance percent"), undefined);
+});
+
 test("solar quote takes one system price and keeps the panel count through save and reload", async t => {
   const h = harness(t, result({ priceBookItems: [item("panel", "each"), item("system", "system")] }), {
     props: { mapQuoteIntent: intent({ measurement: { kind: "solar", quantity: 12 } }) },
@@ -191,7 +217,7 @@ test("insulation rolls use an editable charge quantity while preserving map meas
   select.props.onChange({ target: { value: "area" } }); tree = h.render();
   assert.equal(h.preview(tree).props.lines[0].priceBookItemId, "", "a square-metre rate cannot be injected into pack pricing");
   select.props.onChange({ target: { value: "pack" } }); tree = h.render();
-  field(tree, "Line 1 quantity (items)").props.onChange({ target: { value: "8" } }); tree = h.render();
+  field(tree, "Line 1 quantity (pack)").props.onChange({ target: { value: "8" } }); tree = h.render();
   line = h.preview(tree).props.lines[0];
   assert.equal(line.quantity, "8"); assert.equal(line.unitPrice, "12.50");
   assert.equal(previewExports.liveQuoteDocument([line], []).totals.totalCents, 11000, "8 packs are charged, not123.4 square metres");
@@ -313,6 +339,16 @@ test("customer preview shows one system amount with the design count and no pane
   assert.match(text(tree), /Whole system/);
   assert.match(text(tree), /\$5,500\.00/);
   assert.doesNotMatch(text(tree), /Qty|per panels|\/ panels|each ex GST/);
+});
+
+test("customer preview keeps measured roof area alongside the separately charged pack count", () => {
+  const line = { ...mapQuote.mapQuoteApplyCoverage(mapQuote.mapQuoteLine({ kind: "area", quantity: 229.5 }), 20, 10), description: "Insulation rolls", quantity: "14", unitPrice: "95" };
+  const tree = previewExports.TradeQuoteLivePreview({ user: { uid: "owner" }, workOrderId: "job-one", lines: [line], choices: [], business: result().business, job: result().job, identity: null, customerMessage: "", terms: "", validUntil: "", validationMessage: "" });
+  assert.match(text(tree), /roof area 229\.5 m²/);
+  assert.match(text(tree), /14 items/);
+  assert.match(text(tree), /waste 10%/);
+  assert.match(text(tree), /\$1,463\.00/);
+  assert.doesNotMatch(text(tree), /1330 m²|14 m²/);
 });
 
 test("a saved map line whose price-book unit changed to packs cannot be saved or shown as a complete quote", async (t) => {

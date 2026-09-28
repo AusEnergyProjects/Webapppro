@@ -17,6 +17,7 @@ function fixture() {
   sqlite.exec(migration.slice(0, migration.indexOf("ALTER TABLE")));
   sqlite.exec(read("../drizzle/0199_trade_price_book_solar_panel.sql"));
   sqlite.exec(read("../drizzle/0209_trade_price_book_categories.sql"));
+  sqlite.exec(read("../drizzle/0211_trade_price_book_coverage.sql"));
   sqlite.exec("CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY, capabilities TEXT); INSERT INTO trade_accounts VALUES ('owner-a','[]'),('owner-b','[]')");
   let databaseCalls = 0;
   let access = { ownerUid: "owner-a", actorUid: "staff-a", isOwner: false, canViewPriceBook: true, canManagePriceBook: true };
@@ -66,6 +67,30 @@ test("price-book solar panel classification validates exact dimensions and retai
   const ordinary = { ...values }; delete ordinary.solarPanel;
   assert.equal("solarPanel" in priceBook.normalisePriceBookInput(ordinary, cleanAdminText), false, "older clients need not know the new field");
   assert.equal(priceBook.parsePriceBookSolarPanel("null"), null);
+});
+
+test("solar equipment selection is owner scoped and uses explicit kind without exposing financial fields", async () => {
+  const f = fixture();
+  const inverter = await f.create({ name: "My saved equipment", supplierSku: "MODEL-1", solarPanel: null });
+  await f.create({ name: "Pack item", unitLabel: "pack", solarPanel: null });
+  await f.create({ name: "Service", itemType: "labour", solarPanel: null });
+  const archived = await f.create({ name: "Archived equipment", solarPanel: null });
+  f.sqlite.prepare("UPDATE trade_price_book_items SET record_status='archived' WHERE id=?").run(archived.id);
+  f.setAccess({ ownerUid: "owner-b", actorUid: "owner-b", isOwner: true, canViewPriceBook: true });
+  await f.create({ name: "Other business equipment", solarPanel: null });
+  f.setAccess({ ownerUid: "owner-a", actorUid: "staff-a", canViewPriceBook: true });
+  for (const kind of ["inverter", "battery", "hot_water"]) {
+    const response = await f.route.GET(f.request("GET", null, `?mode=solar_equipment&kind=${kind}`));
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).equipment, [{ id: inverter.id, kind, name: "My saved equipment", manufacturer: "", model: "MODEL-1", quantity: 1, priceBookItemId: inverter.id }]);
+  }
+  const calls = f.calls();
+  assert.equal((await f.route.GET(f.request("GET", null, "?mode=solar_equipment&kind=panel"))).status, 400);
+  assert.equal(f.calls(), calls);
+  f.setAccess({ ownerUid: "owner-a", actorUid: "staff-a", canViewPriceBook: false });
+  assert.equal((await f.route.GET(f.request("GET", null, "?mode=solar_equipment&kind=inverter"))).status, 403);
+  assert.equal(f.calls(), calls);
+  f.sqlite.close();
 });
 
 test("own insulation products retain roll, pack and bag charging units", async () => {

@@ -21,6 +21,7 @@ function priceBookDatabase() {
 function fixture() {
   const sqlite = priceBookDatabase();
   sqlite.exec(read("../drizzle/0209_trade_price_book_categories.sql"));
+  sqlite.exec(read("../drizzle/0211_trade_price_book_coverage.sql"));
   sqlite.exec(`CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY, capabilities TEXT, business_name TEXT, partner_type TEXT);
     INSERT INTO trade_accounts VALUES ('owner-a','[]','Business A','installer'),('owner-b','[]','Business B','installer');
     CREATE TABLE supplier_products(id TEXT, firebase_uid TEXT, model_number TEXT, name TEXT, unit_price_cents_ex_gst INTEGER,
@@ -72,6 +73,23 @@ function fixture() {
   return { sqlite, route, request, create, list, setAccess: (next) => { access = next; }, calls: () => databaseCalls,
     beforeNextBatch: (callback) => { beforeBatch = callback; } };
 }
+
+test("coverage persists, omitted updates retain concurrent coverage and explicit empty clears it", async () => {
+  const f = fixture(); const item = await f.create({ coverageM2PerUnit: 20.125 });
+  assert.equal(item.coverageM2PerUnit, 20.125);
+  assert.equal((await f.list()).items[0].coverageM2PerUnit, 20.125);
+  f.beforeNextBatch(() => f.sqlite.prepare("UPDATE trade_price_book_items SET coverage_m2_per_unit_milli=25000 WHERE id=?").run(item.id));
+  let response = await f.route.PATCH(f.request("PATCH", { ...values, action: "update", itemId: item.id }));
+  assert.equal(response.status, 200); assert.equal((await response.json()).item.coverageM2PerUnit, 25);
+  response = await f.route.PATCH(f.request("PATCH", { ...values, action: "update", itemId: item.id, unitLabel: "hour" }));
+  assert.equal(response.status, 400, "an older caller cannot retain coverage while changing to a time unit");
+  response = await f.route.PATCH(f.request("PATCH", { ...values, action: "update", itemId: item.id, coverageM2PerUnit: "" }));
+  assert.equal(response.status, 200); assert.equal((await response.json()).item.coverageM2PerUnit, null);
+  f.setAccess({ ...accessA, ownerUid: "owner-b" });
+  response = await f.route.PATCH(f.request("PATCH", { ...values, action: "update", itemId: item.id, coverageM2PerUnit: 12 }));
+  assert.equal(response.status, 404);
+  f.sqlite.close();
+});
 
 test("category normalization is optional, bounded and independent of the financial type", () => {
   assert.equal(Object.hasOwn(priceBook.normalisePriceBookInput(values, cleanAdminText), "category"), false);

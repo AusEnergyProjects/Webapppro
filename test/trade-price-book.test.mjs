@@ -158,7 +158,7 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   const choose = (id, mapKind = null) => {
     let replacement;
     const systemLine = () => ({ ...line, quantity: "1", unitPrice: "2400.00", sectionHeading: "Solar system (12 panels)" });
-    const handler = new Function("onReplace", "solar", "systemLine", "line", "legacySolar", "compatibleItems", "mapKind", `${selectionCode}; return selectPriceBookItem;`)(value => { replacement = value; }, mapKind === "solar", systemLine, line, false, [item], mapKind);
+    const handler = new Function("onReplace", "solar", "systemLine", "line", "legacySolar", "compatibleItems", "mapKind", "measuredContext", `${selectionCode}; return selectPriceBookItem;`)(value => { replacement = value; }, mapKind === "solar", systemLine, line, false, [item], mapKind, null);
     handler(id);
     return replacement;
   };

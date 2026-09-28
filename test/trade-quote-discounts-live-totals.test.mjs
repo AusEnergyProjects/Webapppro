@@ -309,11 +309,12 @@ test("every base and choice row uses one price-book dropdown or an editable cust
   const selection = ui.slice(ui.indexOf("const selectPriceBookItem"), ui.indexOf("const isDragTarget"));
   assert.match(ui, /<span>\{solar \? "System pricing" : "Price book item"\}<\/span><select/);
   assert.match(ui, /<option value="">\{solar \? "Enter system price" : "Custom line"\}<\/option>/);
-  assert.match(ui, /const compatibleItems = mapKind \? priceBookItems\.filter\(\(item\) => \(legacySolar && item\.id === line\.priceBookItemId\) \|\| mapQuoteUnitMatches\(mapKind, item\.unitLabel, solarSection\)\) : priceBookItems/);
+  assert.match(ui, /const compatibleItems = mapKind \? priceBookItems\.filter\(\(item\) => \(legacySolar && item\.id === line\.priceBookItemId\) \|\| \(measuredContext\?\.kind === "area" && item\.coverageM2PerUnit\) \|\| mapQuoteUnitMatches\(mapKind, item\.unitLabel, solarSection\)\) : priceBookItems/);
   assert.match(ui, /compatibleItems\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}>/);
   assert.doesNotMatch(ui, /aria-label=\{`Line \$\{index \+ 1\} type`\}/);
   assert.match(selection, /const item = compatibleItems\.find\(\(candidate\) => candidate\.id === itemId\)/);
-  assert.match(selection, /onReplace\(\{[\s\S]*?priceBookItemId: item\.id[\s\S]*?lineType: item\.lineType[\s\S]*?description: item\.description \|\| item\.name[\s\S]*?quantity: solar \? "1" : mapKind \? line\.quantity : "1"[\s\S]*?unitPrice: \(item\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)[\s\S]*?taxCode: item\.taxCode/);
+  assert.match(selection, /onReplace\(\{[\s\S]*?priceBookItemId: item\.id[\s\S]*?lineType: item\.lineType[\s\S]*?description: item\.description \|\| item\.name[\s\S]*?quantity: solar \? "1" : mapKind \? selectedLine\.quantity : "1"[\s\S]*?unitPrice: \(item\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)[\s\S]*?taxCode: item\.taxCode/);
+  assert.match(selection, /mapQuoteApplyCoverage\(line, item\.coverageM2PerUnit, measuredContext\.wastePercent \|\| 0\)/);
   assert.match(selection, /onReplace\(\{ \.\.\.\(solar \? systemLine\(\) : line\), priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" \}\)/);
   assert.match(ui, /readOnly=\{linked\}/);
   assert.match(ui, /disabled=\{linked \|\| discountLocked\}/);

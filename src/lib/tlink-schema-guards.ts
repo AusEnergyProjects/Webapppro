@@ -28,7 +28,17 @@ export const TLINK_SCHEMA_GUARD_DEFINITIONS: readonly TlinkSchemaGuardDefinition
 const readinessByDatabase = new WeakSet<object>();
 
 const REQUIRED_COLUMNS = {
-  trade_price_book_items: ["id", "firebase_uid", "category"],
+  trade_price_book_items: ["id", "firebase_uid", "category", "coverage_m2_per_unit_milli"],
+  trade_crm_quote_execution_snapshots: ["id", "firebase_uid", "solar_stock_json"],
+  trade_sms_messages: ["id", "firebase_uid", "work_order_id", "actor_uid", "actor_name"],
+  trade_stock_receipts: ["id", "firebase_uid", "sha256", "status", "confirmation_json"],
+  trade_message_threads: ["id", "owner_uid", "kind", "dm_key"],
+  trade_message_participants: ["thread_id", "owner_uid", "member_id", "last_read_sequence"],
+  trade_internal_messages: ["id", "owner_uid", "thread_id", "sequence", "actor_member_id", "body"],
+  trade_message_media: ["id", "owner_uid", "uploader_member_id", "purpose", "kind", "thread_id", "member_id", "message_id", "object_key", "state", "expires_at"],
+  trade_team_calls: ["id", "owner_uid", "thread_id", "mode", "status", "next_signal_sequence", "expires_at"],
+  trade_team_call_participants: ["call_id", "owner_uid", "member_id", "session_id", "last_seen_at", "left_at", "ice_issued_count"],
+  trade_team_call_signals: ["id", "owner_uid", "call_id", "sequence", "from_member_id", "from_session_id", "to_member_id", "to_session_id", "payload"],
   trade_team_members: [
     "id", "owner_uid", "member_uid", "status", "can_create_jobs", "can_manage_jobs",
     "can_assign_jobs", "can_view_customers", "can_manage_customers", "can_view_quotes",
@@ -36,7 +46,7 @@ const REQUIRED_COLUMNS = {
     "can_view_price_book", "can_manage_price_book", "can_apply_discounts",
     "can_reschedule_jobs", "can_manage_team", "can_edit_team_permissions",
     "can_view_field_evidence", "can_manage_field_evidence", "can_run_reports",
-    "can_search_customers",
+    "can_search_customers", "can_send_sms",
   ],
   trade_crm_job_details: [
     "work_order_id", "firebase_uid", "customer_source", "accepted_disclosure_snapshot",

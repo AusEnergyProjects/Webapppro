@@ -1,4 +1,5 @@
 import type { SolarDesignEquipment } from "./trade-solar-equipment";
+import { priceBookCoverageMilli } from "./trade-price-book.ts";
 export type MapQuoteKind = "area" | "distance" | "solar";
 export type MapQuoteMeasurement = { kind: MapQuoteKind; quantity: number; roofImage?: { dataUrl: string }; equipment?: SolarDesignEquipment; designId?: string; designRevision?: number; workOrderId?: string };
 export type MapQuoteIntent = { id: string; ownerUid: string; workOrderId: string; measurement: MapQuoteMeasurement };
@@ -20,16 +21,35 @@ export function mapQuoteKind(section: string): MapQuoteKind | null {
 }
 
 /** The measured figure is context, independent of the editable quantity being charged. */
-export function mapQuoteMeasuredContext(section: string): { kind: "area" | "distance"; quantity: number; itemPricing: boolean } | null {
-  const match = /^Map estimate: (roof area|distance) (\d{1,6}(?:\.\d{1,2})?) (m²|m)( \(priced by item\))?$/.exec(section);
+export function mapQuoteMeasuredContext(section: string): { kind: "area" | "distance"; quantity: number; itemPricing: boolean; wastePercent?: number } | null {
+  const match = /^Map estimate: (roof area|distance) (\d{1,6}(?:\.\d{1,2})?) (m²|m)( \(priced by item(?:; waste (\d{1,3}(?:\.\d{1,2})?)%)?\))?$/.exec(section);
   if (!match || (match[1] === "roof area") !== (match[3] === "m²")) return null;
   const kind = match[1] === "roof area" ? "area" : "distance";
   const quantity = Number(match[2]);
-  return mapQuoteMeasurement(kind, quantity) ? { kind, quantity, itemPricing: Boolean(match[4]) } : null;
+  if (match[5] !== undefined && (kind !== "area" || Number(match[5]) > 100)) return null;
+  return mapQuoteMeasurement(kind, quantity) ? { kind, quantity, itemPricing: Boolean(match[4]), ...(match[5] === undefined ? {} : { wastePercent: Number(match[5]) }) } : null;
 }
 
-function measuredSection(kind: "area" | "distance", quantity: number, itemPricing = false) {
-  return `Map estimate: ${kind === "area" ? "roof area" : "distance"} ${quantity} ${MAP_QUOTE_UNITS[kind]}${itemPricing ? " (priced by item)" : ""}`;
+function measuredSection(kind: "area" | "distance", quantity: number, itemPricing = false, wastePercent = 0) {
+  return `Map estimate: ${kind === "area" ? "roof area" : "distance"} ${quantity} ${MAP_QUOTE_UNITS[kind]}${itemPricing ? ` (priced by item${wastePercent ? `; waste ${wastePercent}%` : ""})` : ""}`;
+}
+
+/** Whole packs round upwards with integer arithmetic, never undersupplying a fractional pack. */
+export function mapQuoteCoverageQuantity(areaM2: number, coverageM2PerUnit: number, wastePercent = 0) {
+  const area = priceBookCoverageMilli(areaM2), coverage = priceBookCoverageMilli(coverageM2PerUnit);
+  if (!area || !coverage || !/^\d{1,3}(?:\.\d{1,2})?$/.test(String(wastePercent)) || wastePercent > 100) throw new Error("Enter a valid coverage and waste allowance from 0 to 100%.");
+  const numerator = BigInt(area) * BigInt(10_000 + Math.round(wastePercent * 100));
+  const denominator = BigInt(coverage) * BigInt(10_000);
+  const quantity = Number((numerator + denominator - BigInt(1)) / denominator);
+  if (quantity > 999_999) throw new Error("This measurement requires too many packs. Check the product coverage.");
+  return quantity;
+}
+
+export function mapQuoteApplyCoverage<T extends { sectionHeading: string; quantity: string }>(line: T, coverageM2PerUnit: number, wastePercent = 0) {
+  const measured = mapQuoteMeasuredContext(line.sectionHeading);
+  if (measured?.kind !== "area") throw new Error("Coverage calculations need a saved area measurement.");
+  return { ...line, quantity: String(mapQuoteCoverageQuantity(measured.quantity, coverageM2PerUnit, wastePercent)),
+    sectionHeading: measuredSection("area", measured.quantity, true, wastePercent) };
 }
 
 /** Changing the charging unit must clear the old rate and references before a new price is chosen. */

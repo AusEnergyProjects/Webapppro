@@ -207,7 +207,12 @@ function fixture() {
       id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, quote_version_id TEXT NOT NULL, work_order_id TEXT NOT NULL,
       firebase_uid TEXT NOT NULL, crm_customer_id TEXT NOT NULL, token_hash TEXT NOT NULL,
       encrypted_token TEXT NOT NULL, token_issue INTEGER NOT NULL, status TEXT NOT NULL,
-      expires_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      expires_at TEXT NOT NULL, updated_at TEXT NOT NULL, revoked_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE trade_crm_quote_questions (
+      id TEXT PRIMARY KEY, quote_link_id TEXT NOT NULL, quote_id TEXT NOT NULL, quote_version_id TEXT NOT NULL,
+      work_order_id TEXT NOT NULL, firebase_uid TEXT NOT NULL, question TEXT NOT NULL, answer TEXT NOT NULL,
+      status TEXT NOT NULL, asked_at TEXT NOT NULL, answered_at TEXT NOT NULL, answered_by_uid TEXT NOT NULL
     );
     CREATE TABLE trade_crm_quote_acceptances (
       id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, quote_version_id TEXT NOT NULL UNIQUE, work_order_id TEXT NOT NULL,
@@ -272,7 +277,7 @@ function fixture() {
     .run(ids.version, ids.quote, ids.owner);
   database.prepare("UPDATE trade_crm_quote_versions SET document_snapshot_json = ? WHERE id = ?")
     .run(JSON.stringify({ ...targetSnapshot, acceptanceEmail: "customer@example.com" }), ids.version);
-  database.prepare("INSERT INTO trade_crm_quote_links VALUES (?, ?, ?, ?, ?, ?, 'active-hash', 'ciphertext', 1, 'active', '2099-12-31T00:00:00.000Z', '')")
+  database.prepare("INSERT INTO trade_crm_quote_links VALUES (?, ?, ?, ?, ?, ?, 'active-hash', 'ciphertext', 1, 'active', '2099-12-31T00:00:00.000Z', '', '')")
     .run(ids.link, ids.quote, ids.version, ids.work, ids.owner, ids.customer);
   return database;
 }
@@ -312,7 +317,7 @@ function loadRoute(database, snapshot = targetSnapshot, beforeBatch) {
     "@/lib/admin-server": {
       adminJson,
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum),
-      sameOrigin: () => true,
+      sameOrigin: (request) => !request.headers.get("Origin") || request.headers.get("Origin") === new URL(request.url).origin,
     },
     "@/lib/trade-quote-options": { calculateQuoteSelection },
     "@/lib/trade-commercial-reference": { providerNeutralCommercialRecord },
@@ -327,6 +332,9 @@ function loadRoute(database, snapshot = targetSnapshot, beforeBatch) {
       "./service-reminder-delivery": {}, "./trade-accepted-invoice-pdf-server": {},
     }),
     "@/lib/trade-quote-decision-server": decisions,
+    "@/lib/trade-quote-questions-server": compile(fs.readFileSync(new URL("../src/lib/trade-quote-questions-server.ts", import.meta.url), "utf8"), "questions.ts", {
+      "@/lib/trade-access-server": { verifiedTradeAccountPredicate: () => "trade.account_status = 'active'" },
+    }),
     "@/lib/trade-access-server": { verifiedTradeAccountPredicate: () => "1 = 1" },
     "@/lib/trade-quote-review-server": {
       buildTradeQuoteReviewPayload: async (link) => ({
@@ -337,6 +345,102 @@ function loadRoute(database, snapshot = targetSnapshot, beforeBatch) {
     },
   });
 }
+
+function questionRequest(question = "Could you confirm the installation access?", origin = "https://compare.ausenergyassessments.com") {
+  return new Request(`https://compare.ausenergyassessments.com/api/quote-review/${ids.link}.redacted`, {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: origin },
+    body: JSON.stringify({ action: "ask_question", question }),
+  });
+}
+
+test("accepted quote keeps customer questions and business answers alongside its immutable receipt", async () => {
+  const database = fixture(), route = loadRoute(database);
+  const accepted = await route.POST(decisionRequest(), context); assert.equal(accepted.status, 200);
+  const original = await accepted.json();
+  const financialTables = ["trade_crm_quote_acceptances", "trade_crm_commercial_handovers", "trade_crm_accepted_invoices", "trade_crm_quote_versions", "trade_crm_job_details"];
+  const financialState = () => financialTables.map(table => database.prepare(`SELECT * FROM ${table}`).all());
+  const before = financialState();
+  const sent = await route.POST(questionRequest(), context); assert.equal(sent.status, 200);
+  const response = await sent.json();
+  assert.deepEqual(response.receipt, original.receipt);
+  assert.equal(response.quote, undefined, "accepted choices cannot become editable again");
+  assert.equal(response.conversation.questions.length, 1);
+  assert.equal(response.conversation.questions[0].question, "Could you confirm the installation access?");
+  const questionId = response.conversation.questions[0].id;
+  database.prepare("UPDATE trade_crm_quote_questions SET answer='We will use the side gate.',status='answered',answered_at='2026-09-29T01:00:00.000Z',answered_by_uid='office' WHERE id=?").run(questionId);
+  const reopened = await route.GET(new Request("https://compare.ausenergyassessments.com"), context);
+  const reopenedBody = await reopened.json();
+  assert.equal(reopened.status, 200); assert.deepEqual(reopenedBody.receipt, original.receipt);
+  assert.equal(reopenedBody.conversation.questions[0].answer, "We will use the side gate.");
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_crm_quote_events WHERE event_type='questioned'").get().n, 1);
+  assert.deepEqual(financialState(), before);
+  database.close();
+});
+
+test("customer questions remain scoped to this owner, quote version and work order", async () => {
+  const database = fixture(), route = loadRoute(database); await route.POST(decisionRequest(), context);
+  const insert = database.prepare("INSERT INTO trade_crm_quote_questions VALUES(?,?,?,?,?,?,'Private question','Private answer','answered','','','office')");
+  insert.run("foreign-owner", ids.link, ids.quote, ids.version, ids.work, "different-owner");
+  insert.run("foreign-work", ids.link, ids.quote, ids.version, "different-work", ids.owner);
+  insert.run("foreign-version", ids.link, ids.quote, "different-version", ids.work, ids.owner);
+  const response = await route.GET(new Request("https://compare.ausenergyassessments.com"), context);
+  assert.deepEqual((await response.json()).conversation.questions, []);
+  database.close();
+});
+
+test("accepted receipts stay readable when current communication access ends, with no new question writes", async (t) => {
+  t.mock.method(console, "error", () => {});
+  for (const update of [
+    "UPDATE trade_accounts SET account_status='suspended'",
+    "UPDATE trade_accounts SET partner_type='supplier'",
+    "UPDATE trade_work_orders SET record_status='archived'",
+    "UPDATE trade_crm_job_details SET crm_customer_id='changed'",
+    "UPDATE trade_crm_job_details SET customer_source='public_lead_protected'",
+  ]) {
+    const database = fixture(), route = loadRoute(database); await route.POST(decisionRequest(), context); database.exec(update);
+    const response = await route.GET(new Request("https://compare.ausenergyassessments.com"), context);
+    const body = await response.json(); assert.equal(response.status, 200); assert.equal(body.receipt.decision, "accepted"); assert.equal(body.conversation, null);
+    assert.equal((await route.POST(questionRequest(), context)).status, 410);
+    assert.equal(count(database, "trade_crm_quote_questions"), 0); assert.equal(count(database, "trade_crm_quote_events"), 1);
+    database.close();
+  }
+});
+
+test("expiry, revocation, token rotation and access changes racing a question insert cannot report success", async (t) => {
+  t.mock.method(console, "error", () => {});
+  for (const update of [
+    "UPDATE trade_crm_quote_links SET expires_at='2000-01-01T00:00:00.000Z'",
+    "UPDATE trade_crm_quote_links SET status='revoked',revoked_at='2026-09-28'",
+    "UPDATE trade_crm_quote_links SET token_hash='rotated',token_issue=2",
+    "UPDATE trade_accounts SET account_status='suspended'",
+    "UPDATE trade_crm_job_details SET crm_customer_id='changed'",
+  ]) {
+    const database = fixture(); await loadRoute(database).POST(decisionRequest(), context);
+    const route = loadRoute(database, targetSnapshot, db => db.exec(update));
+    assert.equal((await route.POST(questionRequest(), context)).status, 410, update);
+    assert.equal(count(database, "trade_crm_quote_questions"), 0, update);
+    assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_crm_quote_events WHERE event_type='questioned'").get().n, 0, update);
+    database.close();
+  }
+});
+
+test("active questions still work while declined links and cross-origin posts cannot open communications", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const active = fixture(), activeRoute = loadRoute(active);
+  assert.equal((await activeRoute.POST(questionRequest(), context)).status, 200);
+  assert.equal(count(active, "trade_crm_quote_questions"), 1);
+  assert.equal((await activeRoute.POST(questionRequest("Hi"), context)).status, 400);
+  assert.equal((await activeRoute.POST(questionRequest("Could you call me?", "https://other.example"), context)).status, 403);
+  assert.equal(count(active, "trade_crm_quote_questions"), 1);
+  active.close();
+  const declined = fixture(), route = loadRoute(declined);
+  assert.equal((await route.POST(decisionRequest({ decision: "declined" }), context)).status, 200);
+  assert.equal((await route.POST(questionRequest(), context)).status, 410);
+  const response = await route.GET(new Request("https://compare.ausenergyassessments.com"), context);
+  assert.equal((await response.json()).conversation, null);
+  assert.equal(count(declined, "trade_crm_quote_questions"), 0);
+  declined.close();
+});
 
 const clientDecisionId = "d882bf58-1cc8-46cc-a0fd-e9e37f1c1fa9";
 
@@ -681,7 +785,7 @@ test("a later quote version cannot create a second accepted invoice after job fi
   database.prepare("UPDATE trade_crm_quotes SET current_version_number = 2, status = 'issued'").run();
   database.prepare(`INSERT INTO trade_crm_quote_links VALUES
     (?, ?, ?, ?, ?, ?, 'active-hash', 'ciphertext-2', 1, 'active',
-     '2099-12-31T00:00:00.000Z', '')`)
+     '2099-12-31T00:00:00.000Z', '', '')`)
     .run(secondLink, ids.quote, secondVersion, ids.work, ids.owner, ids.customer);
   const secondSnapshot = structuredClone(targetSnapshot);
   secondSnapshot.quoteVersionId = secondVersion;

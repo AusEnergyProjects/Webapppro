@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { MAX_STOCK_QUANTITY_MILLI, type StockDetailResponse, type StockHistoryEntry, type StockItem, type StockListResponse, type StockMutation, type StockLocation, type StockLocationResponse } from "@/lib/trade-stock";
 import styles from "./TradeStockWorkspace.module.css";
+import { TradeStockReceiptUpload } from "./TradeStockReceiptUpload";
 
 type ProductAction = "enable" | "configure" | "receive" | "count" | "transfer";
 type StockMember = { id: string; name: string };
@@ -256,6 +257,7 @@ export function TradeStockWorkspace({ user, canManage, onOpenItems, onTrackedCha
   const visible = items.filter((item) => (!lowOnly || item.availableMilli <= item.lowStockMilli) && `${item.name} ${item.itemCode}`.toLowerCase().includes(search.trim().toLowerCase()));
   return <section className={styles.workspace} aria-labelledby="trade-stock-title">
     <header className={styles.header}><div><h3 id="trade-stock-title">Stock</h3><p>On hand minus committed gives available stock. A negative number shows what is still needed.</p></div><button type="button" onClick={onOpenItems}>Price-book items</button></header>
+    {canManage && access && <TradeStockReceiptUpload user={user} onReceived={() => { refreshList(); onTrackedChanged?.(); }} />}
     {selected ? <TradeStockProductSettings key={selected.itemId} user={user} itemId={selected.itemId} canManage={canManage && access} initialAction={selected.action} onChanged={changed} onClose={() => { setSelected(null); refreshList(); }} /> : <>
       {loading && <p className={styles.empty} role="status">Loading stock…</p>}
       {error && <p className={styles.error} role="alert">{error} <button type="button" disabled={loading} onClick={refreshList}>Try again</button></p>}

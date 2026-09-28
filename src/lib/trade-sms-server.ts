@@ -3,15 +3,61 @@ import { encryptProtectedPayload, decryptProtectedPayload } from "@/lib/trade-in
 import { normalizeAustralianMobile, verifyTwilioWebhook } from "@/lib/service-reminder-delivery";
 import { smsConsentKeyword, smsDailyLimit, smsSegments, smsStatusRank, tradeSmsBody, twilioSmsStatus } from "./trade-sms";
 import { assertSmsNumberRouting, inspectSmsAccount, smsCredentials, submitSms, unwireSmsNumber, wireSmsNumber, type SmsCredentials } from "./trade-sms-provider";
+import type { TeamAccess } from "./trade-team-server";
 
 type Connection = { id: string; firebase_uid: string; account_sid: string; account_label: string; account_type: string; number_sid: string; phone_number: string; encrypted_credentials: string; callback_url: string; status: string; daily_limit: number };
 type Customer = { id: string; phone: string };
 type Recipient = { id: string; customer_id: string; phone_number: string; consent_at: string; opted_out_at: string };
-type Message = { id: string; connection_id: string; recipient_id: string; customer_id: string; direction: "inbound" | "outbound"; body: string; status: string; segments: number; request_id: string; provider_message_sid: string; created_at: string };
-export type SmsOwner = { uid: string; businessName: string };
+type Message = { id: string; connection_id: string; recipient_id: string; customer_id: string; direction: "inbound" | "outbound"; body: string; status: string; segments: number; request_id: string; provider_message_sid: string; created_at: string; work_order_id: string; actor_uid: string; actor_name: string };
+export type SmsActor = Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "displayName" | "isOwner" | "businessName" | "canSendSms" | "fieldSessionId">;
+type SmsJob = { id: string; work_number: string };
 
 function publicMessage(row: Message) {
-  return { id: row.id, requestId: row.request_id, direction: row.direction, body: row.body, status: row.status, createdAt: row.created_at };
+  return { id: row.id, requestId: row.request_id, direction: row.direction, body: row.body, status: row.status, createdAt: row.created_at,
+    workOrderId: row.work_order_id, senderName: row.actor_name || "Your business" };
+}
+
+// Reused in both reads and mutation reservations so revocation or reassignment cannot race a send.
+function smsScopeGuard(actor: SmsActor, customerId: string, workOrderId: string) {
+  const clauses: string[] = [];
+  const values: (string | number)[] = [];
+  if (!actor.isOwner) {
+    if (!actor.canSendSms || !workOrderId) throw new Error("SMS_JOB_ACCESS_REQUIRED");
+    clauses.push(`EXISTS (SELECT 1 FROM trade_team_members sms_actor WHERE sms_actor.id = ? AND sms_actor.owner_uid = ?
+      AND sms_actor.status = 'active' AND sms_actor.can_send_sms = 1 AND ${actor.fieldSessionId
+        ? `EXISTS (SELECT 1 FROM trade_field_sessions sms_session WHERE sms_session.id = ? AND sms_session.owner_uid = sms_actor.owner_uid
+            AND sms_session.team_member_id = sms_actor.id AND sms_session.status = 'active' AND sms_session.expires_at > ?)`
+        : "sms_actor.member_uid = ?"}
+      AND EXISTS (SELECT 1 FROM trade_work_orders sms_work WHERE sms_work.id = ? AND sms_work.firebase_uid = sms_actor.owner_uid
+        AND (sms_actor.job_scope = 'team' OR sms_work.assignee_member_id = sms_actor.id)))`);
+    values.push(actor.memberId, actor.ownerUid, ...(actor.fieldSessionId ? [actor.fieldSessionId, new Date().toISOString()] : [actor.actorUid]), workOrderId);
+  }
+  if (workOrderId) {
+    clauses.push(`EXISTS (SELECT 1 FROM trade_work_orders sms_job JOIN trade_crm_job_details sms_details
+      ON sms_details.work_order_id = sms_job.id AND sms_details.firebase_uid = sms_job.firebase_uid
+      WHERE sms_job.id = ? AND sms_job.firebase_uid = ? AND sms_job.partner_type = 'installer' AND sms_job.record_status = 'active'
+        AND sms_job.source_type <> 'opportunity' AND sms_details.customer_source <> 'platform_private' AND sms_details.crm_customer_id = ?)`);
+    values.push(workOrderId, actor.ownerUid, customerId);
+  }
+  return { sql: clauses.join(" AND ") || "1 = 1", values };
+}
+
+async function smsContext(actor: SmsActor, customerId: string, workOrderId: string, db: D1Database) {
+  const guard = smsScopeGuard(actor, customerId, workOrderId);
+  const allowed = await db.prepare(`SELECT 1 allowed WHERE ${guard.sql}`).bind(...guard.values).first();
+  if (!allowed) throw new Error("SMS_JOB_ACCESS_REQUIRED");
+  const customer = await currentCustomer(actor.ownerUid, customerId, db);
+  const job = workOrderId ? await db.prepare("SELECT id, work_number FROM trade_work_orders WHERE id = ? AND firebase_uid = ?")
+    .bind(workOrderId, actor.ownerUid).first<SmsJob>() : null;
+  return { customer, job, guard };
+}
+
+async function customerSmsJobs(ownerUid: string, customerId: string, db: D1Database) {
+  return (await db.prepare(`SELECT w.id, w.work_number FROM trade_work_orders w JOIN trade_crm_job_details d
+    ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+    WHERE w.firebase_uid = ? AND d.crm_customer_id = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      AND w.source_type <> 'opportunity' AND d.customer_source <> 'platform_private' ORDER BY w.created_at DESC LIMIT 100`)
+    .bind(ownerUid, customerId).all<SmsJob>()).results;
 }
 
 async function currentConnection(ownerUid: string, db: D1Database) {
@@ -50,19 +96,24 @@ async function usedSegments(ownerUid: string, db: D1Database, now = new Date().t
   return Number(usage?.total || 0);
 }
 
-export async function smsWorkspace(ownerUid: string, customerId = "", db: D1Database = getD1()) {
+export async function smsWorkspace(actor: SmsActor, customerId = "", workOrderId = "", db: D1Database = getD1()) {
+  const ownerUid = actor.ownerUid;
+  if (!customerId && !actor.isOwner) throw new Error("SMS_JOB_ACCESS_REQUIRED");
+  const context = customerId ? await smsContext(actor, customerId, workOrderId, db) : null;
   const current = await currentConnection(ownerUid, db);
   const connection = current ? { number: current.phone_number, status: current.status, accountLabel: current.account_label, accountType: current.account_type,
     dailyLimit: current.daily_limit, usedSegments: await usedSegments(ownerUid, db) } : null;
-  if (!customerId) return { connection };
-  const customer = await currentCustomer(ownerUid, customerId, db);
+  if (!context) return { connection, canManageConnection: true };
+  const { customer, guard } = context;
   const customerPhone = normalizeAustralianMobile(customer.phone);
   const recipient = current && customerPhone ? await currentRecipient(current, customerPhone, db) : null;
   const ownsRecipient = recipient?.customer_id === customerId;
   const consent = ownsRecipient && recipient.opted_out_at ? "opted_out" : ownsRecipient && recipient.consent_at ? "allowed" : "required";
-  const history = await db.prepare("SELECT * FROM trade_sms_messages WHERE firebase_uid = ? AND customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 100")
-    .bind(ownerUid, customerId).all<Message>();
-  return { connection, customerPhone, consent, messages: history.results.reverse().map(publicMessage) };
+  const history = await db.prepare(`SELECT * FROM trade_sms_messages WHERE firebase_uid = ? AND customer_id = ?
+    ${actor.isOwner ? "" : "AND work_order_id = ?"} AND ${guard.sql} ORDER BY created_at DESC, id DESC LIMIT 100`)
+    .bind(ownerUid, customerId, ...(!actor.isOwner ? [workOrderId] : []), ...guard.values).all<Message>();
+  return { connection, customerPhone, consent, messages: history.results.reverse().map(publicMessage), canManageConnection: actor.isOwner,
+    jobNumber: context.job?.work_number || "", jobs: actor.isOwner ? (await customerSmsJobs(ownerUid, customerId, db)).map(job => ({ id: job.id, jobNumber: job.work_number })) : [] };
 }
 
 export async function connectSms(ownerUid: string, credentials: SmsCredentials, numberSid: string, limit: unknown, origin: string, db: D1Database = getD1(), fetchImpl: typeof fetch = fetch) {
@@ -103,9 +154,10 @@ export async function disconnectSms(ownerUid: string, db: D1Database = getD1(), 
     .bind(new Date().toISOString(), connection.id, ownerUid).run();
 }
 
-export async function recordSmsConsent(ownerUid: string, customerId: string, note: unknown, db: D1Database = getD1()) {
+export async function recordSmsConsent(actor: SmsActor, customerId: string, note: unknown, workOrderId = "", db: D1Database = getD1()) {
+  const ownerUid = actor.ownerUid;
   if (typeof note !== "string" || note.trim().length < 8 || note.trim().length > 500) throw new Error("SMS_CONSENT_NOTE_REQUIRED");
-  const customer = await currentCustomer(ownerUid, customerId, db);
+  const { customer, guard } = await smsContext(actor, customerId, workOrderId, db);
   const phone = normalizeAustralianMobile(customer.phone);
   if (!phone) throw new Error("SMS_MOBILE_REQUIRED");
   const connection = await requiredConnection(ownerUid, db);
@@ -114,23 +166,23 @@ export async function recordSmsConsent(ownerUid: string, customerId: string, not
   if (recipient?.opted_out_at) throw new Error("SMS_OPTED_OUT");
   const now = new Date().toISOString();
   const saved = await db.prepare(`INSERT INTO trade_sms_recipients (id, connection_id, firebase_uid, customer_id, phone_number, consent_note, consent_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(connection_id, phone_number) DO UPDATE SET consent_note = excluded.consent_note,
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql} ON CONFLICT(connection_id, phone_number) DO UPDATE SET consent_note = excluded.consent_note,
       consent_at = excluded.consent_at, updated_at = excluded.updated_at
-    WHERE trade_sms_recipients.customer_id = excluded.customer_id AND trade_sms_recipients.firebase_uid = excluded.firebase_uid AND trade_sms_recipients.opted_out_at = ''`)
-    .bind(crypto.randomUUID(), connection.id, ownerUid, customerId, phone, note.trim(), now, now, now).run();
+    WHERE trade_sms_recipients.customer_id = excluded.customer_id AND trade_sms_recipients.firebase_uid = excluded.firebase_uid AND trade_sms_recipients.opted_out_at = '' AND ${guard.sql}`)
+    .bind(crypto.randomUUID(), connection.id, ownerUid, customerId, phone, note.trim(), now, now, now, ...guard.values, ...guard.values).run();
   if (!saved.meta.changes) throw new Error("SMS_OPTED_OUT");
 }
 
-export async function sendTradeSms(owner: SmsOwner, customerId: string, value: unknown, requestId: unknown, db: D1Database = getD1(), fetchImpl: typeof fetch = fetch) {
+export async function sendTradeSms(actor: SmsActor, customerId: string, value: unknown, requestId: unknown, workOrderId = "", db: D1Database = getD1(), fetchImpl: typeof fetch = fetch) {
   if (typeof requestId !== "string" || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new Error("SMS_REQUEST_ID_REQUIRED");
-  const customer = await currentCustomer(owner.uid, customerId, db);
-  const body = tradeSmsBody(value, owner.businessName);
-  const prior = await db.prepare("SELECT * FROM trade_sms_messages WHERE firebase_uid = ? AND request_id = ? AND direction = 'outbound'").bind(owner.uid, requestId).first<Message>();
+  const { customer, job, guard } = await smsContext(actor, customerId, workOrderId, db);
+  const body = tradeSmsBody(value, actor.businessName) + (job ? `\nJob ${job.work_number}` : "");
+  const prior = await db.prepare("SELECT * FROM trade_sms_messages WHERE firebase_uid = ? AND request_id = ? AND direction = 'outbound'").bind(actor.ownerUid, requestId).first<Message>();
   if (prior) {
-    if (prior.customer_id !== customerId || prior.body !== body) throw new Error("SMS_REQUEST_CONFLICT");
+    if (prior.customer_id !== customerId || prior.body !== body || prior.work_order_id !== workOrderId || prior.actor_uid !== actor.actorUid) throw new Error("SMS_REQUEST_CONFLICT");
     return publicMessage(prior);
   }
-  const connection = await requiredConnection(owner.uid, db);
+  const connection = await requiredConnection(actor.ownerUid, db);
   const phone = normalizeAustralianMobile(customer.phone);
   if (!phone) throw new Error("SMS_MOBILE_REQUIRED");
   const recipient = await currentRecipient(connection, phone, db);
@@ -142,17 +194,17 @@ export async function sendTradeSms(owner: SmsOwner, customerId: string, value: u
   const segments = smsSegments(body);
   // This single SQLite write reserves all segments, rechecks current consent/phone/connection, and claims the request ID.
   const inserted = await db.prepare(`INSERT OR IGNORE INTO trade_sms_messages
-    (id, connection_id, recipient_id, firebase_uid, customer_id, direction, body, status, segments, request_id, created_at, updated_at)
-    SELECT ?, ?, ?, ?, ?, 'outbound', ?, 'unknown', ?, ?, ?, ?
+    (id, connection_id, recipient_id, firebase_uid, customer_id, direction, body, status, segments, request_id, created_at, updated_at, work_order_id, actor_uid, actor_name)
+    SELECT ?, ?, ?, ?, ?, 'outbound', ?, 'unknown', ?, ?, ?, ?, ?, ?, ?
     WHERE EXISTS (SELECT 1 FROM trade_sms_connections WHERE id = ? AND firebase_uid = ? AND status = 'connected'
       AND daily_limit >= ? + (SELECT COALESCE(SUM(segments), 0) FROM trade_sms_messages WHERE firebase_uid = ? AND direction = 'outbound' AND created_at >= ?))
       AND EXISTS (SELECT 1 FROM trade_sms_recipients WHERE id = ? AND firebase_uid = ? AND customer_id = ? AND consent_at <> '' AND opted_out_at = '')
-      AND EXISTS (SELECT 1 FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND phone = ? AND record_status = 'active')`)
-    .bind(id, connection.id, recipient.id, owner.uid, customerId, body, segments, requestId, now, now,
-      connection.id, owner.uid, segments, owner.uid, `${now.slice(0, 10)}T00:00:00.000Z`, recipient.id, owner.uid, customerId, customerId, owner.uid, customer.phone).run();
+      AND EXISTS (SELECT 1 FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND phone = ? AND record_status = 'active') AND ${guard.sql}`)
+    .bind(id, connection.id, recipient.id, actor.ownerUid, customerId, body, segments, requestId, now, now, workOrderId, actor.actorUid, actor.displayName,
+      connection.id, actor.ownerUid, segments, actor.ownerUid, `${now.slice(0, 10)}T00:00:00.000Z`, recipient.id, actor.ownerUid, customerId, customerId, actor.ownerUid, customer.phone, ...guard.values).run();
   if (!inserted.meta.changes) {
-    const existing = await db.prepare("SELECT * FROM trade_sms_messages WHERE firebase_uid = ? AND request_id = ? AND direction = 'outbound'").bind(owner.uid, requestId).first<Message>();
-    if (existing && existing.customer_id === customerId && existing.body === body) return publicMessage(existing);
+    const existing = await db.prepare(`SELECT * FROM trade_sms_messages WHERE firebase_uid = ? AND request_id = ? AND direction = 'outbound' AND ${guard.sql}`).bind(actor.ownerUid, requestId, ...guard.values).first<Message>();
+    if (existing && existing.customer_id === customerId && existing.body === body && existing.work_order_id === workOrderId && existing.actor_uid === actor.actorUid) return publicMessage(existing);
     if (existing) throw new Error("SMS_REQUEST_CONFLICT");
     throw new Error("SMS_LIMIT_OR_PERMISSION_CHANGED");
   }
@@ -160,7 +212,7 @@ export async function sendTradeSms(owner: SmsOwner, customerId: string, value: u
   await applyMessageStatus(db, id, connection.id, result.sid, result.status, result.errorCode);
   if (result.errorCode === "21610") await db.prepare("UPDATE trade_sms_recipients SET opted_out_at = ?, updated_at = ? WHERE id = ? AND connection_id = ?")
     .bind(now, now, recipient.id, connection.id).run();
-  const saved = await db.prepare("SELECT * FROM trade_sms_messages WHERE id = ? AND firebase_uid = ?").bind(id, owner.uid).first<Message>();
+  const saved = await db.prepare("SELECT * FROM trade_sms_messages WHERE id = ? AND firebase_uid = ?").bind(id, actor.ownerUid).first<Message>();
   if (!saved) throw new Error("SMS_MESSAGE_UNAVAILABLE");
   return publicMessage(saved);
 }
@@ -171,6 +223,28 @@ async function applyMessageStatus(db: D1Database, id: string, connectionId: stri
     error_code = CASE WHEN ? <> '' THEN ? ELSE error_code END, updated_at = ?
     WHERE id = ? AND connection_id = ? AND direction = 'outbound' AND (provider_message_sid = '' OR provider_message_sid = ? OR ? = '')`)
     .bind(sid, smsStatusRank(status), status, errorCode, errorCode, new Date().toISOString(), id, connectionId, sid, sid).run();
+}
+
+export async function linkSmsReply(actor: SmsActor, customerId: string, messageId: string, workOrderId: string, db: D1Database = getD1()) {
+  if (!actor.isOwner) throw new Error("SMS_OWNER_REQUIRED");
+  if (!workOrderId || !messageId) throw new Error("SMS_JOB_ACCESS_REQUIRED");
+  const { guard } = await smsContext(actor, customerId, workOrderId, db);
+  const result = await db.prepare(`UPDATE trade_sms_messages SET work_order_id = ?, updated_at = ?
+    WHERE id = ? AND firebase_uid = ? AND customer_id = ? AND direction = 'inbound' AND work_order_id IN ('', ?) AND ${guard.sql}`)
+    .bind(workOrderId, new Date().toISOString(), messageId, actor.ownerUid, customerId, workOrderId, ...guard.values).run();
+  if (!result.meta.changes) throw new Error("SMS_REPLY_CHANGED");
+}
+
+async function inboundSmsJob(ownerUid: string, customerId: string, body: string, db: D1Database) {
+  const jobs = await customerSmsJobs(ownerUid, customerId, db);
+  const mentions = jobs.filter(job => job.work_number && body.toUpperCase().split(/[^A-Z0-9-]+/).includes(job.work_number.toUpperCase()));
+  if (mentions.length === 1) return mentions[0].id;
+  if (mentions.length > 1 || jobs.length !== 1) return "";
+  // A plain reply is safe only for a single job and a single, already established job conversation.
+  // Customer-level or historical conversations prevent inferring which job the reply concerns.
+  const contexts = (await db.prepare(`SELECT DISTINCT work_order_id FROM trade_sms_messages
+    WHERE firebase_uid = ? AND customer_id = ?`).bind(ownerUid, customerId).all<{ work_order_id: string }>()).results;
+  return contexts.length === 1 && contexts[0].work_order_id === jobs[0].id ? jobs[0].id : "";
 }
 
 export async function receiveSmsWebhook(request: Request, connectionId: string, db: D1Database = getD1()) {
@@ -204,17 +278,18 @@ export async function receiveSmsWebhook(request: Request, connectionId: string, 
   const recipient = await currentRecipient(connection, phone, db);
   // Only a conversation already attached to this business can receive customer messages. No global phone lookup.
   if (!recipient) return;
-  const customer = await db.prepare("SELECT id FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
-    .bind(recipient.customer_id, connection.firebase_uid).first();
-  if (!customer) return;
+  const customer = await db.prepare("SELECT id, phone FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
+    .bind(recipient.customer_id, connection.firebase_uid).first<Customer>();
+  if (!customer || normalizeAustralianMobile(customer.phone) !== phone) return;
   const text = (parameters.get("Body") || "").slice(0, 1600);
   const keyword = smsConsentKeyword(text, (parameters.get("OptOutType") || "").toUpperCase());
+  const workOrderId = keyword ? "" : await inboundSmsJob(connection.firebase_uid, recipient.customer_id, text, db);
   const messageKey = crypto.randomUUID();
   await db.batch([
     db.prepare(`INSERT OR IGNORE INTO trade_sms_messages
-      (id, connection_id, recipient_id, firebase_uid, customer_id, direction, body, status, segments, provider_message_sid, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'inbound', ?, 'received', ?, ?, ?, ?)`)
-      .bind(messageKey, connection.id, recipient.id, connection.firebase_uid, recipient.customer_id, text || "[Non-text message]", smsSegments(text), sid, now, now),
+      (id, connection_id, recipient_id, firebase_uid, customer_id, direction, body, status, segments, provider_message_sid, created_at, updated_at, work_order_id)
+      VALUES (?, ?, ?, ?, ?, 'inbound', ?, 'received', ?, ?, ?, ?, ?)`)
+      .bind(messageKey, connection.id, recipient.id, connection.firebase_uid, recipient.customer_id, text || "[Non-text message]", smsSegments(text), sid, now, now, workOrderId),
     db.prepare(`UPDATE trade_sms_recipients SET opted_out_at = CASE WHEN ? = 'stop' THEN ? WHEN ? = 'start' AND consent_at <> '' THEN '' ELSE opted_out_at END,
       opt_in_at = CASE WHEN ? = 'start' AND consent_at <> '' THEN ? ELSE opt_in_at END, updated_at = ?
       WHERE id = ? AND connection_id = ? AND EXISTS (SELECT 1 FROM trade_sms_messages WHERE id = ?)`)

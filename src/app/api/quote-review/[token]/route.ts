@@ -18,6 +18,7 @@ import {
   type QuoteDecision,
 } from "@/lib/trade-quote-decision-server";
 import { calculateQuoteSelection, type QuoteChoiceTotals } from "@/lib/trade-quote-options";
+import { quoteConversationForLink, quoteQuestionScope } from "@/lib/trade-quote-questions-server";
 import {
   buildTradeQuoteReviewPayload,
   quoteDocumentSnapshotForAuthorisedLink,
@@ -162,7 +163,7 @@ export async function GET(_request: Request, context: Context) {
     if (link.status !== "active") {
       const stored = await storedQuoteDecision(link);
       if (!stored) throw new Error("QUOTE_DECISION_RECEIPT_INVALID");
-      return adminJson({ ok: true, receipt: stored.receipt });
+      return adminJson({ ok: true, receipt: stored.receipt, conversation: await quoteConversationForLink(getD1(), link) });
     }
     const quote = await buildTradeQuoteReviewPayload(link);
     const now = new Date().toISOString();
@@ -183,7 +184,7 @@ async function askQuestion(
   link: AuthorisedTradeQuoteDecisionLink,
   body: Row,
 ) {
-  if (link.status !== "active") throw new Error("QUOTE_LINK_STOPPED");
+  if (link.status !== "active" && link.status !== "accepted") throw new Error("QUOTE_LINK_STOPPED");
   const question = cleanAdminText(body.question, 1000);
   if (question.length < 5) {
     return adminJson({ ok: false, error: "Enter a clear question for the trade business." }, 400);
@@ -191,20 +192,15 @@ async function askQuestion(
   const questionId = crypto.randomUUID();
   const now = new Date().toISOString();
   const db = getD1();
-  await db.batch([
+  const scope = quoteQuestionScope(link, now);
+  const results = await db.batch([
     db.prepare(`INSERT INTO trade_crm_quote_questions
       (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid,
        question, answer, status, asked_at, answered_at, answered_by_uid)
       SELECT ?, link.id, link.quote_id, link.quote_version_id, link.work_order_id,
         link.firebase_uid, ?, '', 'open', ?, '', ''
-      FROM trade_crm_quote_links link
-      WHERE link.id = ? AND link.quote_id = ? AND link.quote_version_id = ?
-        AND link.work_order_id = ? AND link.firebase_uid = ? AND link.crm_customer_id = ?
-        AND link.token_issue = ? AND link.token_hash = ? AND link.status = 'active'
-        AND link.expires_at > ?`)
-      .bind(questionId, question, now, link.id, link.quote_id, link.quote_version_id,
-        link.work_order_id, link.firebase_uid, link.crm_customer_id, link.token_issue,
-        link.token_hash, now),
+      ${scope.sql}`)
+      .bind(questionId, question, now, ...scope.bindings),
     db.prepare(`INSERT INTO trade_crm_quote_events
       (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid,
        event_type, actor_type, summary, evidence_key, occurred_at)
@@ -214,6 +210,12 @@ async function askQuestion(
       FROM trade_crm_quote_questions question WHERE question.id = ?`)
       .bind(crypto.randomUUID(), `question:${questionId}`, now, questionId),
   ]);
+  if (Number(results[0]?.meta.changes || 0) !== 1) throw new Error("QUOTE_LINK_STOPPED");
+  if (link.status === "accepted") {
+    const stored = await storedQuoteDecision(link);
+    if (!stored) throw new Error("QUOTE_DECISION_RECEIPT_INVALID");
+    return adminJson({ ok: true, receipt: stored.receipt, conversation: await quoteConversationForLink(db, link) });
+  }
   return adminJson({ ok: true, quote: await buildTradeQuoteReviewPayload(link) });
 }
 

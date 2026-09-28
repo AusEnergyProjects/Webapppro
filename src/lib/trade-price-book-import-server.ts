@@ -13,7 +13,7 @@ export class PriceBookImportError extends Error {
 
 type ImportDatabase = Pick<D1Database, "prepare" | "batch">;
 type ImportRequest = { action: "preview" | "import"; rows: PriceBookImportRow[]; previewToken?: string; pricesIncludeGst?: boolean };
-const snapshotColumns = ["id", "item_code", "name", "description", "item_type", "category", "solar_panel_json", "unit_label", "supplier_cost_cents_ex_gst",
+const snapshotColumns = ["id", "item_code", "name", "description", "item_type", "category", "solar_panel_json", "coverage_m2_per_unit_milli", "unit_label", "supplier_cost_cents_ex_gst",
   "sell_price_cents_ex_gst", "tax_code", "markup_basis_points", "margin_basis_points", "expected_duration_minutes",
   "required_skill", "supplier_name", "supplier_sku", "supplier_product_id", "record_status", "price_revision", "updated_at", "updated_by_uid"];
 
@@ -43,6 +43,7 @@ function publicPreview(plan: ReturnType<typeof planPriceBookImport>, token: stri
     items: plan.changes.map(({ rowNumber, existing, input, status }) => ({ rowNumber, status, name: input.name,
       itemCode: existing?.item_code || "Assigned on import", itemType: input.itemType, category: input.category || "",
       supplierSku: input.supplierSku, unitLabel: input.unitLabel, solarPanel: input.solarPanel ?? null,
+      coverageM2PerUnit: input.coverageM2PerUnitMilli == null ? null : input.coverageM2PerUnitMilli / 1000,
       before: existing ? { sellPriceCentsExGst: Number(existing.sell_price_cents_ex_gst),
         supplierCostCentsExGst: Number(existing.supplier_cost_cents_ex_gst) } : null,
       after: { sellPriceCentsExGst: input.sellPriceCentsExGst, supplierCostCentsExGst: input.supplierCostCentsExGst } })) };
@@ -104,6 +105,7 @@ export async function importPriceBook(db: ImportDatabase, ownerUid: string, acto
       name = json_extract(imported.value, '$.name'), description = json_extract(imported.value, '$.description'),
       item_type = json_extract(imported.value, '$.itemType'), unit_label = json_extract(imported.value, '$.unitLabel'),
       category = json_extract(imported.value, '$.category'), solar_panel_json = json_extract(imported.value, '$.solarPanelJson'),
+      coverage_m2_per_unit_milli = json_extract(imported.value, '$.coverageM2PerUnitMilli'),
       supplier_cost_cents_ex_gst = json_extract(imported.value, '$.supplierCostCentsExGst'),
       sell_price_cents_ex_gst = json_extract(imported.value, '$.sellPriceCentsExGst'), tax_code = json_extract(imported.value, '$.taxCode'),
       markup_basis_points = json_extract(imported.value, '$.markupBasisPoints'), margin_basis_points = json_extract(imported.value, '$.marginBasisPoints'),
@@ -114,13 +116,13 @@ export async function importPriceBook(db: ImportDatabase, ownerUid: string, acto
         AND firebase_uid = ? AND record_status = 'active' AND json_extract(imported.value, '$.status') = 'updated'`)
       .bind(now, actorUid, json, ownerUid));
     statements.push(db.prepare(`INSERT INTO trade_price_book_items
-      (id, firebase_uid, item_code, name, description, item_type, category, solar_panel_json, unit_label, supplier_cost_cents_ex_gst,
+      (id, firebase_uid, item_code, name, description, item_type, category, solar_panel_json, coverage_m2_per_unit_milli, unit_label, supplier_cost_cents_ex_gst,
        sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points, expected_duration_minutes,
        required_skill, supplier_name, supplier_sku, supplier_product_id, record_status, price_revision,
        created_by_uid, updated_by_uid, created_at, updated_at)
       SELECT json_extract(value, '$.id'), ?, json_extract(value, '$.itemCode'), json_extract(value, '$.name'),
        json_extract(value, '$.description'), json_extract(value, '$.itemType'), json_extract(value, '$.category'),
-       json_extract(value, '$.solarPanelJson'), json_extract(value, '$.unitLabel'),
+       json_extract(value, '$.solarPanelJson'), json_extract(value, '$.coverageM2PerUnitMilli'), json_extract(value, '$.unitLabel'),
        json_extract(value, '$.supplierCostCentsExGst'), json_extract(value, '$.sellPriceCentsExGst'), json_extract(value, '$.taxCode'),
        json_extract(value, '$.markupBasisPoints'), json_extract(value, '$.marginBasisPoints'), json_extract(value, '$.expectedDurationMinutes'),
        json_extract(value, '$.requiredSkill'), json_extract(value, '$.supplierName'), json_extract(value, '$.supplierSku'), '', 'active', 1,

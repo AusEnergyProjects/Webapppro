@@ -37,6 +37,21 @@ export const PRICE_BOOK_ITEM_TYPES = [
 export type PriceBookItemType = typeof PRICE_BOOK_ITEM_TYPES[number];
 export type PriceBookTaxCode = "gst" | "none";
 
+export function priceBookSupportsCoverage(itemType: string, unitLabel: string) {
+  return ["material", "equipment"].includes(itemType) && ["each", "roll", "pack", "bag"].includes(unitLabel);
+}
+
+/** Stored in thousandths of a square metre to keep pack rounding exact. */
+export function priceBookCoverageMilli(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const text = String(value).trim();
+  if (!/^\d{1,6}(?:\.\d{1,3})?$/.test(text)) throw new Error("INVALID_PRICE_BOOK_COVERAGE");
+  const [whole, fraction = ""] = text.split(".");
+  const milli = Number(whole) * 1000 + Number(fraction.padEnd(3, "0"));
+  if (milli < 1 || milli > 999_999_000) throw new Error("INVALID_PRICE_BOOK_COVERAGE");
+  return milli;
+}
+
 export const PRICE_BOOK_TYPE_LABELS: Record<PriceBookItemType, string> = {
   labour: "Labour",
   material: "Material",
@@ -122,6 +137,8 @@ export function normalisePriceBookInput(raw: Record<string, unknown>, clean: (va
   if (expectedDurationMinutes < 0 || expectedDurationMinutes > 10_080) throw new Error("INVALID_PRICE_BOOK_DURATION");
   const solarPanel = Object.hasOwn(raw, "solarPanel") ? parsePriceBookSolarPanel(raw.solarPanel) : undefined;
   if (solarPanel && itemType !== "material" && itemType !== "equipment") throw new Error("INVALID_PRICE_BOOK_SOLAR_PANEL_TYPE");
+  const coverageM2PerUnitMilli = Object.hasOwn(raw, "coverageM2PerUnit") ? priceBookCoverageMilli(raw.coverageM2PerUnit) : undefined;
+  if (coverageM2PerUnitMilli != null && (!priceBookSupportsCoverage(itemType, unitLabel) || solarPanel)) throw new Error("INVALID_PRICE_BOOK_COVERAGE_UNIT");
 
   return {
     name,
@@ -139,5 +156,6 @@ export function normalisePriceBookInput(raw: Record<string, unknown>, clean: (va
     supplierSku: clean(raw.supplierSku, 100),
     supplierProductId: clean(raw.supplierProductId, 180),
     ...(solarPanel === undefined ? {} : { solarPanel }),
+    ...(coverageM2PerUnitMilli === undefined ? {} : { coverageM2PerUnitMilli }),
   };
 }

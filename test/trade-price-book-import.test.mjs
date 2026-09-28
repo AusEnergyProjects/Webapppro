@@ -17,7 +17,7 @@ const input = (values = {}) => normalisePriceBookInput({ name: "Call out fee", i
 function existing(values = {}, overrides = {}) {
   const item = input(values);
   return { id: "item-a", item_code: "PB-A", name: item.name, description: item.description, item_type: item.itemType,
-    category: item.category || "", solar_panel_json: JSON.stringify(item.solarPanel ?? null),
+    coverage_m2_per_unit_milli: item.coverageM2PerUnitMilli ?? null, category: item.category || "", solar_panel_json: JSON.stringify(item.solarPanel ?? null),
     unit_label: item.unitLabel, supplier_cost_cents_ex_gst: item.supplierCostCentsExGst,
     sell_price_cents_ex_gst: item.sellPriceCentsExGst, tax_code: item.taxCode, markup_basis_points: item.markupBasisPoints,
     margin_basis_points: item.marginBasisPoints, expected_duration_minutes: item.expectedDurationMinutes,
@@ -31,6 +31,7 @@ function fixture() {
   sqlite.exec(migration.slice(0, migration.indexOf("ALTER TABLE")));
   sqlite.exec(fs.readFileSync(new URL("../drizzle/0199_trade_price_book_solar_panel.sql", import.meta.url), "utf8"));
   sqlite.exec(fs.readFileSync(new URL("../drizzle/0209_trade_price_book_categories.sql", import.meta.url), "utf8"));
+  sqlite.exec(fs.readFileSync(new URL("../drizzle/0211_trade_price_book_coverage.sql", import.meta.url), "utf8"));
   sqlite.exec("CREATE TABLE trade_accounts (firebase_uid TEXT PRIMARY KEY, capabilities TEXT); INSERT INTO trade_accounts VALUES ('owner-a', '[\"electrical\"]'), ('owner-b', '[]'); CREATE TABLE trade_crm_quote_items (id TEXT, price_book_item_id TEXT, unit_price_cents INTEGER); INSERT INTO trade_crm_quote_items VALUES ('quote-1', 'item-a', 20000)");
   const api = { beforeBatch: null, afterCommit: null, failAt: -1, batches: 0,
     prepare(sql) {
@@ -93,6 +94,7 @@ test("downloaded sample imports correct product/service types and exact panel di
   assert.equal(panel.category, "Solar panels");
   const insulation = saved.find((item) => item.supplier_sku === "EXAMPLE-INS-ROLL");
   assert.equal(insulation.item_type, "material"); assert.equal(insulation.unit_label, "roll"); assert.equal(insulation.category, "Insulation");
+  assert.equal(insulation.coverage_m2_per_unit_milli, 20000);
   const labour = saved.find((item) => item.supplier_sku === "EXAMPLE-LABOUR");
   assert.equal(labour.item_type, "labour"); assert.equal(labour.unit_label, "hour");
   const callout = saved.find((item) => item.supplier_sku === "EXAMPLE-CALLOUT");
@@ -171,6 +173,25 @@ test("invalid solar specifications prevent the entire mixed upload from changing
   const saved = sqlite.prepare("SELECT * FROM trade_price_book_items").all();
   assert.equal(saved.length, 1); assert.equal(saved[0].sell_price_cents_ex_gst, 20000);
   assert.deepEqual(JSON.parse(saved[0].solar_panel_json), panelDetails);
+});
+
+test("coverage imports preserve old sheets, reject invalid units and detect stale previews atomically", async () => {
+  const { sqlite, api, seed } = fixture();
+  seed(existing({ name: "Insulation", itemType: "material", unitLabel: "roll", coverageM2PerUnit: 20 }));
+  await previewAndImport(api, [row(2, { itemCode: "PB-A", supplierCost: "55" })]);
+  assert.equal(sqlite.prepare("SELECT coverage_m2_per_unit_milli value FROM trade_price_book_items").get().value, 20000);
+  const rows = [row(2, { itemCode: "PB-A", coverageM2PerUnit: "22.5", sellPrice: "210" })];
+  const { preview } = await importPriceBook(api, "owner-a", "staff-a", { action: "preview", rows });
+  assert.equal(preview.items[0].coverageM2PerUnit, 22.5);
+  api.beforeBatch = () => sqlite.exec("UPDATE trade_price_book_items SET coverage_m2_per_unit_milli=25000");
+  await assert.rejects(importPriceBook(api, "owner-a", "staff-a", { action: "import", rows, previewToken: preview.token }), (error) => error.status === 409);
+  assert.equal(sqlite.prepare("SELECT coverage_m2_per_unit_milli value FROM trade_price_book_items").get().value, 25000);
+  api.beforeBatch = null;
+  const invalid = await importPriceBook(api, "owner-a", "staff-a", { action: "preview", rows: [row(2, { itemCode: "PB-A", unitLabel: "hour" })] });
+  assert.equal(invalid.preview.canImport, false); assert.match(invalid.preview.issues[0].message, /Coverage/);
+  await previewAndImport(api, rows);
+  assert.equal(sqlite.prepare("SELECT coverage_m2_per_unit_milli value FROM trade_price_book_items").get().value, 22500);
+  sqlite.close();
 });
 
 test("panel/category changes invalidate preview and concurrent atomic assertions even with unchanged timestamps", async () => {

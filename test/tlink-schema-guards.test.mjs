@@ -112,11 +112,15 @@ function schemaDatabase() {
   const schema = fs.readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");
   for (const table of ["trade_price_book_items", "trade_crm_job_plans", "trade_crm_job_plan_requirements", "trade_crm_job_actuals", "trade_crm_commercial_handovers"]) {
     const start = schema.indexOf(`sqliteTable("${table}", {`), block = schema.slice(start, schema.indexOf("}, (table)", start));
-    const columns = [...block.matchAll(/(?:text|integer|real)\("([a-z_]+)"/g)].map(match => match[1]);
+    const columns = [...block.matchAll(/(?:text|integer|real)\("([a-z0-9_]+)"/g)].map(match => match[1]);
     database.exec(`CREATE TABLE ${table} (${columns.map(name => `${name} ${/cents|minutes|milli|position/.test(name) ? "INTEGER DEFAULT 0" : "TEXT DEFAULT ''"}`).join(",")})`);
   }
   database.exec(fs.readFileSync(new URL("../drizzle/0207_trade_stock.sql", import.meta.url), "utf8"));
   database.exec(fs.readFileSync(new URL("../drizzle/0208_trade_stock_locations.sql", import.meta.url), "utf8"));
+  database.exec("CREATE TABLE trade_crm_quote_execution_snapshots(id TEXT, firebase_uid TEXT); CREATE TABLE trade_sms_messages(id TEXT, firebase_uid TEXT, created_at TEXT);");
+  for (const migration of ["0210_trade_solar_stock_snapshot.sql", "0212_trade_team_sms.sql", "0213_trade_stock_receipts.sql", "0214_trade_messages.sql", "0215_trade_message_media.sql", "0216_trade_team_calls.sql"]) {
+    database.exec(fs.readFileSync(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
+  }
   return database;
 }
 

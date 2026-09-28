@@ -123,7 +123,7 @@ function accessFromRow(row: MemberAccessRow, sessionId: string): TeamAccess {
     canManageCustomers: Boolean(row.can_manage_customers),
     canViewQuotes: Boolean(row.can_view_quotes),
     canManageQuotes: Boolean(row.can_manage_quotes),
-    canSendQuotes: Boolean(row.can_send_quotes),
+    canSendQuotes: Boolean(row.can_send_quotes), canSendSms: Boolean(row.can_send_sms),
     canViewInvoices: Boolean(row.can_view_invoices),
     canManageInvoices: Boolean(row.can_manage_invoices),
     canViewPriceBook: Boolean(row.can_view_price_book),
@@ -144,7 +144,7 @@ function accessFromRow(row: MemberAccessRow, sessionId: string): TeamAccess {
 const MEMBER_ACCESS_COLUMNS = `m.id team_member_id, m.owner_uid, m.email, m.display_name, m.field_username,
   m.can_create_jobs, m.can_manage_jobs, m.can_assign_jobs, m.job_scope,
   m.can_view_customers, m.can_manage_customers, m.can_view_quotes, m.can_manage_quotes,
-  m.can_send_quotes, m.can_view_invoices, m.can_manage_invoices, m.can_view_price_book,
+  m.can_send_quotes, m.can_send_sms, m.can_view_invoices, m.can_manage_invoices, m.can_view_price_book,
   m.can_manage_price_book, m.can_apply_discounts, m.schedule_scope, m.can_reschedule_jobs,
   m.can_manage_team, m.can_edit_team_permissions, m.can_view_field_evidence,
   m.can_manage_field_evidence, m.can_run_reports, m.can_search_customers, a.business_name`;

@@ -1,16 +1,18 @@
-import { adminJson, sameOrigin } from "@/lib/admin-server";
-import { requireInstallerOperations } from "@/lib/trade-integrations-server";
+import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
+import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
-import { connectSms, disconnectSms, recordSmsConsent, sendTradeSms, smsWorkspace } from "@/lib/trade-sms-server";
+import { connectSms, disconnectSms, linkSmsReply, recordSmsConsent, sendTradeSms, smsWorkspace } from "@/lib/trade-sms-server";
 import { inspectSmsAccount, smsCredentials } from "@/lib/trade-sms-provider";
 
 export const runtime = "edge";
 
 function smsError(error: unknown) {
-  if (error instanceof TradeAccessError) return adminJson({ ok: false, error: "SMS is available to the verified business owner only." }, error.status);
+  const mfa = mfaErrorResponse(error);
+  if (mfa) return mfa;
+  if (error instanceof TradeAccessError) return adminJson({ ok: false, error: "Your account does not have access to these messages." }, error.status);
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
-  if (["PROFILE_REQUIRED", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "ACCOUNT_INACTIVE", "EMAIL_VERIFICATION_REQUIRED", "ABN_REVIEW_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "SMS is available to the verified business owner only." }, 403);
+  if (["PROFILE_REQUIRED", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "ACCOUNT_INACTIVE", "EMAIL_VERIFICATION_REQUIRED", "ABN_REVIEW_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED", "SMS_OWNER_REQUIRED", "SMS_JOB_ACCESS_REQUIRED"].includes(code)) return adminJson({ ok: false, error: code === "SMS_OWNER_REQUIRED" ? "Only the business owner can manage SMS connections or link customer replies." : "Your account does not have SMS access to this job. Ask the business to check your Team permissions." }, 403);
   const messages: Record<string, string> = {
     SMS_CREDENTIALS_INVALID: "Enter the Twilio Account SID and account Auth Token.",
     SMS_CREDENTIALS_REJECTED: "Twilio did not accept those account credentials.",
@@ -32,6 +34,7 @@ function smsError(error: unknown) {
     SMS_BODY_INVALID: "Enter a message of 1 to 480 characters without control characters.",
     SMS_REQUEST_ID_REQUIRED: "Refresh the conversation before sending.",
     SMS_REQUEST_CONFLICT: "This send request was already used for different content. Refresh the conversation.",
+    SMS_REPLY_CHANGED: "This reply was already linked or is no longer available. Refresh the conversation.",
     SMS_LIMIT_INVALID: "Choose a daily segment limit from 1 to 1000.",
     SMS_LIMIT_OR_PERMISSION_CHANGED: "The daily segment limit was reached, or the customer's permission or phone changed. Refresh the conversation.",
     SMS_ACCOUNT_TOO_LARGE: "This account has too many numbers or Messaging Services for automatic setup. Use a dedicated business account.",
@@ -54,26 +57,32 @@ async function requestBody(request: Request) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const owner = await requireInstallerOperations(request);
-    return adminJson({ ok: true, ...await smsWorkspace(owner.uid, new URL(request.url).searchParams.get("customerId") || "") });
+    const actor = await requireInstallerTeamAccess(request);
+    const params = new URL(request.url).searchParams;
+    return adminJson({ ok: true, ...await smsWorkspace(actor, params.get("customerId") || "", params.get("workOrderId") || "") });
   } catch (error) { return smsError(error); }
 }
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const owner = await requireInstallerOperations(request);
+    const actor = await requireInstallerTeamAccess(request);
     const body = await requestBody(request);
+    if (["inspect", "connect", "link_reply"].includes(String(body.action)) && !actor.isOwner) throw new Error("SMS_OWNER_REQUIRED");
     if (body.action === "inspect") return adminJson({ ok: true, ...await inspectSmsAccount(smsCredentials(body.accountSid, body.authToken)) });
     if (body.action === "connect") {
-      await connectSms(owner.uid, smsCredentials(body.accountSid, body.authToken), String(body.numberSid || ""), body.dailyLimit, new URL(request.url).origin);
+      await connectSms(actor.ownerUid, smsCredentials(body.accountSid, body.authToken), String(body.numberSid || ""), body.dailyLimit, new URL(request.url).origin);
       return adminJson({ ok: true });
     }
     if (body.action === "consent") {
-      await recordSmsConsent(owner.uid, String(body.customerId || ""), body.consentNote);
+      await recordSmsConsent(actor, String(body.customerId || ""), body.consentNote, String(body.workOrderId || ""));
       return adminJson({ ok: true });
     }
-    if (body.action === "send") return adminJson({ ok: true, message: await sendTradeSms(owner, String(body.customerId || ""), body.body, body.requestId) });
+    if (body.action === "link_reply") {
+      await linkSmsReply(actor, String(body.customerId || ""), String(body.messageId || ""), String(body.workOrderId || ""));
+      return adminJson({ ok: true });
+    }
+    if (body.action === "send") return adminJson({ ok: true, message: await sendTradeSms(actor, String(body.customerId || ""), body.body, body.requestId, String(body.workOrderId || "")) });
     return adminJson({ ok: false, error: "Choose an SMS action." }, 400);
   } catch (error) { return smsError(error); }
 }
@@ -81,10 +90,11 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const owner = await requireInstallerOperations(request);
+    const actor = await requireInstallerTeamAccess(request);
+    if (!actor.isOwner) throw new Error("SMS_OWNER_REQUIRED");
     const body = await requestBody(request);
     if (body.action !== "disconnect") return adminJson({ ok: false, error: "Choose an SMS action." }, 400);
-    await disconnectSms(owner.uid);
+    await disconnectSms(actor.ownerUid);
     return adminJson({ ok: true });
   } catch (error) { return smsError(error); }
 }

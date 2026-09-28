@@ -1,5 +1,7 @@
 import type { QuoteExecutionPacketSnapshot } from "./trade-quote-execution-server";
 import { ensureTradeStockSchemaGuards } from "./trade-stock-schema-guards.ts";
+import { readQuoteSolarStockSnapshot, selectedQuoteSolarStockComponents } from "./trade-solar-stock.ts";
+import { mapQuoteSystemPanels } from "./trade-map-quote.ts";
 
 type Row = Record<string, unknown>;
 type JobPlanInput = {
@@ -40,10 +42,20 @@ export async function buildJobPlanStatements(db: D1Database, input: JobPlanInput
   ]);
   const choices = parseJson<string[]>(acceptance?.selected_choice_ids_json, []).map(String);
   const selected = items.results.filter((item) => !item.quote_choice_id || choices.includes(String(item.quote_choice_id)));
+  const capturedSolarComponents = snapshot?.solar_stock_json ? selectedQuoteSolarStockComponents(
+    readQuoteSolarStockSnapshot(snapshot.solar_stock_json), choices,
+    selected.filter((line) => lineRequirementType(line) === "material").map((line) => ({ priceBookItemId: String(line.price_book_item_id || ""), choiceId: String(line.quote_choice_id || ""), quantityMilli: Number(line.quantity_milli) })),
+  ) : [];
+  // A saved whole-system supplier cost already budgets this equipment. Keep it as the
+  // authoritative cost, while component requirements still carry their stock quantities.
+  const systemCostIncluded = capturedSolarComponents.length > 0 && selected.some((line) =>
+    mapQuoteSystemPanels(String(line.section_heading || "")) !== null && Number(line.unit_cost_cents_ex_gst || 0) > 0);
+  const solarComponents = systemCostIncluded ? capturedSolarComponents.map((component) => ({ ...component, unitCostCents: 0 })) : capturedSolarComponents;
   if (input.onlyIfTracked) {
     const stock = await db.prepare("SELECT item_id FROM trade_stock_items WHERE firebase_uid=? AND tracked=1").bind(ownerUid).all<Row>();
     const tracked = new Set(stock.results.map((item) => String(item.item_id)));
-    if (!selected.some((line) => lineRequirementType(line) === "material" && tracked.has(String(line.price_book_item_id)))) return [];
+    if (!selected.some((line) => lineRequirementType(line) === "material" && tracked.has(String(line.price_book_item_id)))
+      && !solarComponents.some((component) => tracked.has(component.priceBookItemId))) return [];
   }
   await ensureTradeStockSchemaGuards(db);
   const packetSnapshots = parseJson<QuoteExecutionPacketSnapshot[]>(snapshot?.packets_json, []);
@@ -51,7 +63,8 @@ export async function buildJobPlanStatements(db: D1Database, input: JobPlanInput
   const packets = packetSnapshots.filter((packet) => selectedPacketIds.has(packet.packetId));
   const planId = crypto.randomUUID(); const sourceKind = packets.length ? "job_packet" : "manual_quote";
   const planGate = "EXISTS(SELECT 1 FROM trade_crm_job_plans WHERE id=? AND firebase_uid=?)";
-  const budgetCost = selected.reduce((total, item) => total + Math.round(Number(item.unit_cost_cents_ex_gst || 0) * Number(item.quantity_milli || 1000) / 1000), 0);
+  const budgetCost = selected.reduce((total, item) => total + Math.round(Number(item.unit_cost_cents_ex_gst || 0) * Number(item.quantity_milli || 1000) / 1000), 0)
+    + solarComponents.reduce((total, component) => total + Math.round(component.unitCostCents * component.quantityMilli / 1000), 0);
   const expectedDuration = packets.reduce((sum, packet) => sum + packet.expectedDurationMinutes, 0);
   const suggestedCrew = packets.reduce((maximum, packet) => Math.max(maximum, packet.suggestedCrewSize), 1);
   const statements = [db.prepare(`INSERT INTO trade_crm_job_plans
@@ -95,6 +108,11 @@ export async function buildJobPlanStatements(db: D1Database, input: JobPlanInput
   for (const [title, lines] of grouped) {
     const phaseId = addPhase(title, `${lines.length} accepted scope item${lines.length === 1 ? "" : "s"}`);
     lines.forEach((line) => { const type = lineRequirementType(line); addRequirement(phaseId, type, String(line.price_book_item_id || line.id), String(line.description), Number(line.quantity_milli), Number(line.unit_cost_cents_ex_gst || 0), 0, "", ["material", "form"].includes(type) ? "required" : "confirmed"); });
+  }
+  if (solarComponents.length) {
+    const phaseId = addPhase("System equipment", systemCostIncluded ? "Equipment cost included in the quoted system cost" : "Equipment included in the accepted system price");
+    for (const component of solarComponents) addRequirement(phaseId, "material", component.priceBookItemId, component.name,
+      component.quantityMilli, component.unitCostCents, 0, "", "required");
   }
   statements.push(db.prepare(`UPDATE trade_crm_job_plans SET status='completed', completed_at=COALESCE((SELECT MIN(created_at) FROM trade_work_order_events WHERE work_order_id=? AND firebase_uid=? AND event_type='job_completed'),'') WHERE id=? AND firebase_uid=? AND EXISTS(SELECT 1 FROM trade_work_orders WHERE id=? AND firebase_uid=? AND stage='completed')`).bind(workOrderId, ownerUid, planId, ownerUid, workOrderId, ownerUid));
   statements.push(db.prepare(`INSERT INTO trade_work_order_events(id,work_order_id,firebase_uid,event_type,summary,created_at)

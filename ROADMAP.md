@@ -16,7 +16,13 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
-## Current product category and import completion gate
+## Current Messages and practical stock completion gate
+
+Release and verify one simple Messages workspace with tenant/job/participant-scoped customer SMS, secure quote questions, internal DMs/groups, private images/voice notes, staff avatars and internal internet voice/video calls. Preserve existing SMS consent and provider routing. Calls use short-lived existing Twilio relay credentials, six concurrent members, one-hour expiry and no recording. Operational two-device calling and provider delivery must be evidenced separately from synthetic tests.
+
+Include immutable solar component-to-stock links, whole-unit insulation coverage with manual overrides and AI-assisted supplier PDF review with explicit received-stock confirmation. Migrations 0210-0216 and the existing canonical stock/customer records remain authoritative. Keep timers, customer booking, mailbox read access and unsupported supplier-bill accounting exports out of this milestone. Exact release evidence: C:/Webproject/outputs/tlink-operations-2026-09-28/.
+
+## Previous product category and import completion gate
 
 Publish and verify business-defined product categories through migration 0209, separate type/category/code columns, simple filters and solar-panel specification imports. Preserve the released stock-location model and keep price-sheet uploads separate from stock-count changes. Exact-source release evidence belongs in C:/Webproject/outputs/tlink-product-categories-2026-09-28/.
 

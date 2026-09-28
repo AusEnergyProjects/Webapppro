@@ -49,9 +49,12 @@ import {
   writeTLinkColourMode,
 } from "@/lib/tlink-colour-mode";
 
+import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
+
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
 const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace").then((module) => module.TradePriceBookWorkspace));
 const TradeEmailTemplatesWorkspace = dynamic(() => import("./TradeEmailTemplatesWorkspace").then((module) => module.TradeEmailTemplatesWorkspace));
+const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then((module) => module.TradeMessagesWorkspace), { loading: () => <p role="status">Loading messages...</p> });
 const TradeNetworkWorkspace = dynamic(() => import("./TradeNetworkWorkspace").then((module) => module.TradeNetworkWorkspace), { loading: () => <p role="status">Loading trade network...</p> });
 const InstallerPlatformQuote = dynamic(() => import("./InstallerPlatformQuote").then((module) => module.InstallerPlatformQuote));
 const InstallerArrivalWindows = dynamic(() => import("./InstallerArrivalWindows").then((module) => module.InstallerArrivalWindows));
@@ -228,12 +231,13 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "map" | "network" | "email-templates" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "map" | "network" | "messages" | "email-templates" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "map",
   "network",
   "email-templates",
+  "messages",
   "team",
   "training",
   "finance",
@@ -2067,7 +2071,7 @@ export function DirectTradeDashboard() {
   }
 
   return (
-    <main className="wrap direct-trade-dashboard-page">
+    <TradeTeamCallProvider user={user} enabled={Boolean(profile?.entitlements.verified && profile.partnerType === "installer")}><main className="wrap direct-trade-dashboard-page">
       <TLinkHeader active="dashboard" />
       {user && mfaRequired && <p className="crm-status" role="status">Your account needs authenticator verification. <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</p>}
       {authReady && user && installerPlanPreview && (
@@ -2402,7 +2406,7 @@ export function DirectTradeDashboard() {
             </div>
           </header>
 
-          {workspace !== "map" && workspace !== "network" && workspace !== "email-templates" && <div className="trade-portal-intro">
+          {workspace !== "map" && workspace !== "network" && workspace !== "email-templates" && workspace !== "messages" && <div className="trade-portal-intro">
             <span>{isSupplier ? "Wholesale operations" : "Business operations"}</span>
             <h1>{isSupplier ? "Products, orders and supply in one place" : "Your workday, without the clutter"}</h1>
             <p>
@@ -2474,6 +2478,7 @@ export function DirectTradeDashboard() {
                     setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() }));
                   }}><TLinkNavigationIcon name={view} /><span>{label}</span></button>)}
                 </div>
+                <button type="button" aria-current={workspace === "messages" ? "page" : undefined} className={workspace === "messages" ? "active" : ""} onClick={() => setWorkspace("messages")}><TLinkNavigationIcon name="messages" /><span>Messages</span><small>Customers and team chats</small></button>
                 <button type="button" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><TLinkNavigationIcon name="team" /><span>Team</span><small>People, access and files</small></button>
                 <button type="button" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span><small>Training and rebate registrations</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "schedule" ? "page" : undefined} className={workspace === "work" && activeWorkView === "schedule" ? "active" : ""} onClick={() => {
@@ -2497,6 +2502,7 @@ export function DirectTradeDashboard() {
               </nav>
 
               {workspace === "email-templates" && <TradeEmailTemplatesWorkspace user={user} />}
+              {workspace === "messages" && <TradeMessagesWorkspace user={user} onOpenQuote={workOrderId => { void setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() })); }} onOpenIntegrations={() => setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() }))} />}
 
               {(workspace === "work" || workspace === "map") && <TradeBusinessHub
                 key={`${user.uid}:${workspace}:${workspace === "map" ? mapNavigationNonce : 0}`}
@@ -3062,6 +3068,6 @@ export function DirectTradeDashboard() {
         accreditation, scheme approval, insurance, product compliance or
         customer obligations.
       </SiteFooter>
-    </main>
+    </main></TradeTeamCallProvider>
   );
 }

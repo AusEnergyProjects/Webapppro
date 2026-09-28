@@ -5,7 +5,7 @@ import type { User } from "firebase/auth";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { dollarsToCents } from "@/lib/trade-quote";
-import { calculatePriceBookRates, priceBookItemAllowsNegativeSellPrice, priceBookItemRequiresZeroSupplierCost,
+import { calculatePriceBookRates, priceBookItemAllowsNegativeSellPrice, priceBookItemRequiresZeroSupplierCost, priceBookSupportsCoverage,
   PRICE_BOOK_ITEM_TYPES, PRICE_BOOK_TYPE_LABELS, PRICE_BOOK_UNITS, type PriceBookItemType, type PriceBookSolarPanel } from "@/lib/trade-price-book";
 import { DEFAULT_SOLAR_EQUIPMENT, SOLAR_STARTER_PANELS } from "@/lib/trade-solar-equipment";
 import { TradeJobPacketWorkspace } from "./TradeJobPacketWorkspace";
@@ -22,7 +22,7 @@ type PriceBookItem = {
   supplierCostCentsExGst: number; sellPriceCentsExGst: number; taxCode: string; markupBasisPoints: number;
   marginBasisPoints: number; expectedDurationMinutes: number; requiredSkill: string; supplierName: string;
   supplierSku: string; supplierProductId: string; recordStatus: string; priceRevision: number; createdAt: string; updatedAt: string;
-  category?: string; solarPanel?: PriceBookSolarPanel | null;
+  category?: string; solarPanel?: PriceBookSolarPanel | null; coverageM2PerUnit?: number | null;
 };
 type CatalogueOption = { id: string; supplierSku: string; name: string; supplierCostCentsExGst: number; supplierName: string };
 type PriceHistory = { priceRevision: number; supplierCostCentsExGst: number; sellPriceCentsExGst: number; taxCode: string; markupBasisPoints: number; marginBasisPoints: number; changeType: string; changedAt: string };
@@ -32,7 +32,7 @@ type Result = { ok?: boolean; items?: PriceBookItem[]; item?: PriceBookItem; cou
 type Draft = { name: string; description: string; itemType: PriceBookItemType; unitLabel: string; supplierCost: string;
   sellPrice: string; taxCode: string; expectedDurationMinutes: string; requiredSkill: string; supplierName: string;
   supplierSku: string; supplierProductId: string; category: string; productKind: "general" | "solar_panel";
-  panelWatts: string; panelWidthMm: string; panelLengthMm: string; panelDetails: PriceBookSolarPanel | null };
+  panelWatts: string; panelWidthMm: string; panelLengthMm: string; panelDetails: PriceBookSolarPanel | null; coverageM2PerUnit: string };
 
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 const percentage = (basisPoints: number) => `${(basisPoints / 100).toFixed(1)}%`;
@@ -40,12 +40,12 @@ const stockQuantity = (milli: number) => new Intl.NumberFormat("en-AU", { maximu
 const words = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const blankDraft = (): Draft => ({ name: "", description: "", itemType: "material", unitLabel: "each", supplierCost: "0.00",
   sellPrice: "", taxCode: "gst", expectedDurationMinutes: "0", requiredSkill: "", supplierName: "", supplierSku: "", supplierProductId: "",
-  category: "", productKind: "general", panelWatts: "", panelWidthMm: "", panelLengthMm: "", panelDetails: null });
+  category: "", productKind: "general", panelWatts: "", panelWidthMm: "", panelLengthMm: "", panelDetails: null, coverageM2PerUnit: "" });
 const editDraft = (item: PriceBookItem): Draft => ({ name: item.name, description: item.description, itemType: item.itemType,
   unitLabel: item.unitLabel, supplierCost: (item.supplierCostCentsExGst / 100).toFixed(2), sellPrice: (item.sellPriceCentsExGst / 100).toFixed(2),
   taxCode: item.taxCode, expectedDurationMinutes: String(item.expectedDurationMinutes), requiredSkill: item.requiredSkill,
   supplierName: item.supplierName, supplierSku: item.supplierSku, supplierProductId: item.supplierProductId,
-  category: item.category || "", productKind: item.solarPanel ? "solar_panel" : "general", panelWatts: item.solarPanel?.watts.toString() || "",
+  category: item.category || "", coverageM2PerUnit: item.coverageM2PerUnit?.toString() || "", productKind: item.solarPanel ? "solar_panel" : "general", panelWatts: item.solarPanel?.watts.toString() || "",
   panelWidthMm: item.solarPanel ? String(Number((item.solarPanel.widthM * 1000).toFixed(3))) : "",
   panelLengthMm: item.solarPanel ? String(Number((item.solarPanel.lengthM * 1000).toFixed(3))) : "", panelDetails: item.solarPanel || null });
 
@@ -233,7 +233,8 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       const isNew = editing === "new"; const itemId = typeof editing === "object" && editing ? editing.id : "";
       const solarPanel = draft.productKind === "solar_panel" ? { ...draft.panelDetails, watts: Number(draft.panelWatts),
         widthM: Number(draft.panelWidthMm) / 1000, lengthM: Number(draft.panelLengthMm) / 1000 } : null;
-      const result = await request("", { method: isNew ? "POST" : "PATCH", body: JSON.stringify({ action: isNew ? "create" : "update", itemId, ...draft, solarPanel }) });
+      const coverageM2PerUnit = draft.productKind !== "solar_panel" && priceBookSupportsCoverage(draft.itemType, draft.unitLabel) ? draft.coverageM2PerUnit || null : null;
+      const result = await request("", { method: isNew ? "POST" : "PATCH", body: JSON.stringify({ action: isNew ? "create" : "update", itemId, ...draft, solarPanel, coverageM2PerUnit }) });
       if (!result.item) throw new Error("The save was not confirmed. Refresh the price book before trying again.");
       if (addDocuments || addStock) { setEditing(result.item); setDraft(editDraft(result.item)); setEditingStockTracked(null); setEditingStockOnHand(null); setStockSetup(addStock); }
       else setEditing(null);
@@ -289,6 +290,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       {preview && <div className={styles.preview}><div><span>Cost</span><strong>{money(preview.cost)}</strong></div><div><span>Sell</span><strong>{money(preview.sell)}</strong></div><div><span>Markup</span><strong>{percentage(preview.markupBasisPoints)}</strong></div><div><span>Margin</span><strong>{percentage(preview.marginBasisPoints)}</strong></div></div>}
       <details className={styles.advanced}><summary>More details, optional</summary><div>
         <label><span>Charge by</span><select value={draft.unitLabel} disabled={stockLocksUnits} onChange={(event) => change("unitLabel", event.target.value)}>{PRICE_BOOK_UNITS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{stockLocksUnits && <small>{editingStockTracked ? "Stock uses this type and unit. Stop tracking before changing them." : editingStockOnHand !== null && editingStockOnHand > 0 ? "Clear saved stock counts before changing the type or unit." : "Loading stock settings before changing the type or unit."}</small>}</label>
+        {draft.productKind !== "solar_panel" && priceBookSupportsCoverage(draft.itemType, draft.unitLabel) && <label><span>Coverage per {draft.unitLabel === "each" ? "item" : draft.unitLabel} (m²), optional</span><input type="number" min="0.001" max="999999" step="0.001" inputMode="decimal" value={draft.coverageM2PerUnit} onChange={(event) => change("coverageM2PerUnit", event.target.value)} placeholder="e.g. 20" /><small>Map measurements suggest whole {draft.unitLabel === "each" ? "items" : `${draft.unitLabel}s`}. You can adjust waste and the final quantity in the quote.</small></label>}
         <label className={styles.wide}><span>Description</span><textarea rows={3} maxLength={500} value={draft.description} onChange={(event) => change("description", event.target.value)} placeholder="What is included in this item" /></label>
         <label><span>Supplier cost ex GST</span><input inputMode="decimal" value={draft.supplierCost} readOnly={priceBookItemRequiresZeroSupplierCost(draft.itemType)} onChange={(event) => change("supplierCost", event.target.value)} />{priceBookItemRequiresZeroSupplierCost(draft.itemType) && <small>Certificate, rebate and discount items use zero supplier cost.</small>}</label>
         <label><span>Expected minutes</span><input type="number" min="0" max="10080" value={draft.expectedDurationMinutes} onChange={(event) => change("expectedDurationMinutes", event.target.value)} /></label>

@@ -97,7 +97,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   );
   assert.match(handover, /Current production: Sites version 499/);
   assert.match(releaseTruth, /Last reconciled locally: 28 September 2026/);
-  assert.match(releaseTruth, /## Current implementation: product categories and dimension-aware imports/);
+  assert.match(releaseTruth, /## Current implementation: Messages, internal calls and practical stock workflows/);
+  assert.match(releaseTruth, /Migrations 0210 through 0216 are additive/);
   assert.match(releaseTruth, /Migration 0209/);
   assert.match(releaseTruth, /## Previous implementation: product columns and stock by storage or team member/);
   assert.match(releaseTruth, /## Previous implementation: business email templates and follow-ups/);
@@ -112,7 +113,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Previous implementation: accounting export correctness and provider activation/);
   assert.match(releaseTruth, /## Previous implementation: lead access and technician service regions/);
   assert.match(releaseTruth, /## Historical public production release: predictive navigation and exact provenance/);
-  assert.match(releaseTruth, /Deployment baseline for this change: Sites 664, source `fdbbb0c66aae69ff4a03d48cff8aac6a479951fe`/);
+  assert.match(releaseTruth, /Deployment baseline for this change: Sites 667, source `9511bc6c635fd56f81579a8810b13ea036e8608d`/);
   assert.match(releaseTruth, /4908a1467d90b2fff57b70517fad5e41e18e12b0/);
   assert.match(releaseTruth, /Sites version 499/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508/);
@@ -1084,7 +1085,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*product categories and panel imports/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Messages, internal calling and practical stock workflows/);
   assert.match(currentHandover, /Direct regulator transmission remains dependent on approved interfaces and delegated access/);
   assert.match(currentHandover, /external provider registration and live OAuth acceptance remain in progress/);
   assert.match(currentHandover, /Milestone ID: `PUBLIC-MEASUREMENT-PROVENANCE-86`/);

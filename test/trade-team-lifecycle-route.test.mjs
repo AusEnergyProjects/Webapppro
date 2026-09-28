@@ -92,7 +92,7 @@ function loadRoute(database, aborted, currentAccess = managerAccess) {
 function fixture() {
   const database = new DatabaseSync(":memory:");
   const permissionColumns = ["can_create_jobs", "can_manage_jobs", "can_assign_jobs", "can_view_customers",
-    "can_manage_customers", "can_view_quotes", "can_manage_quotes", "can_send_quotes", "can_view_invoices",
+    "can_manage_customers", "can_view_quotes", "can_manage_quotes", "can_send_quotes", "can_send_sms", "can_view_invoices",
     "can_manage_invoices", "can_view_price_book", "can_manage_price_book", "can_apply_discounts",
     "can_reschedule_jobs", "can_manage_team", "can_edit_team_permissions", "can_view_field_evidence",
     "can_manage_field_evidence", "can_run_reports", "can_search_customers"];
@@ -345,4 +345,25 @@ test("the owner can set their own TLink username while owner lifecycle and permi
   });
   assert.equal(permissions.status, 403);
   assert.equal(database.prepare("SELECT can_manage_team FROM trade_team_members WHERE id='owner-member'").get().can_manage_team, 1);
+});
+
+test("SMS access is explicit, owner-grantable, independently revocable and cannot be escalated by a delegated manager", async () => {
+  const database = fixture();
+  try {
+    const memberId = "target-1";
+    const change = (route, canSendSms) => patch(route, { action: "update_member", memberId,
+      expectedUpdatedAt: database.prepare("SELECT updated_at FROM trade_team_members WHERE id=?").get(memberId).updated_at,
+      permissions: { canSendSms } });
+    assert.equal(database.prepare("SELECT can_send_sms FROM trade_team_members WHERE id=?").get(memberId).can_send_sms, 0);
+    const ownerRoute = loadRoute(database, [], { ...managerAccess, isOwner: true, actorUid: "owner-1", memberId: "owner-member" });
+    const enabled = await change(ownerRoute, true); assert.equal(enabled.status, 200, JSON.stringify(await enabled.json()));
+    assert.equal(database.prepare("SELECT can_send_sms FROM trade_team_members WHERE id=?").get(memberId).can_send_sms, 1);
+    assert.equal((await change(ownerRoute, false)).status, 200);
+    assert.equal(database.prepare("SELECT can_send_sms FROM trade_team_members WHERE id=?").get(memberId).can_send_sms, 0);
+    database.exec("UPDATE trade_team_members SET can_edit_team_permissions=1 WHERE id='manager-1'");
+    const managerRoute = loadRoute(database, [], { ...managerAccess, canEditTeamPermissions: true, canSendSms: false });
+    assert.equal((await change(managerRoute, true)).status, 403);
+    assert.equal(database.prepare("SELECT can_send_sms FROM trade_team_members WHERE id=?").get(memberId).can_send_sms, 0);
+    assert.ok(database.prepare("SELECT metadata FROM trade_team_member_events WHERE team_member_id=?").all(memberId).some(row => JSON.parse(row.metadata).permissionsAfter?.canSendSms === true));
+  } finally { database.close(); }
 });

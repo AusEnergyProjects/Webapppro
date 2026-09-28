@@ -6,11 +6,25 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 28 September 2026
 
-Deployment baseline for this change: Sites 664, source `fdbbb0c66aae69ff4a03d48cff8aac6a479951fe`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-product-categories-2026-09-28/.
+Deployment baseline for this change: Sites 667, source `9511bc6c635fd56f81579a8810b13ea036e8608d`. Final publication identity and verification evidence belong in C:/Webproject/outputs/tlink-operations-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: product categories and dimension-aware imports
+## Current implementation: Messages, internal calls and practical stock workflows
+
+Messages is a dedicated installer and team navigation workspace with name/phone search, private direct/group team chats, shared customer SMS and secure quote questions. Customer and team conversations have separate colours and explicit labels. New phone contacts use canonical owner-only CRM intake with stable IDs and number matching. Staff SMS starts off and requires current permission and authorised job scope; ambiguous customer replies stay with the office until linked to the correct job. Quote questions can continue after acceptance while customer access remains valid.
+
+Team chat photos, camera uploads, microphone voice notes and member avatars use private authenticated storage. Only active conversation participants can retrieve message media; business ownership does not grant access to other people's private chats. Members manage their own image and authorised team administrators may manage staff images. External SMS remains text only. Uncertain sends retain their request and attachment set for safe retry.
+
+Internal voice/video calls use browser WebRTC and the existing platform Twilio credentials for short-lived STUN/TURN access. Calls need no phone number, have six concurrent participants and a one-hour maximum, and are not recorded. Incoming calls appear across the open installer dashboard/team portal; browser/device permission is requested only after Start or Answer. Session fencing, membership checks, slot limits, heartbeat expiry and ephemeral signalling prevent stale tabs and unauthorised joins. Relay usage can incur existing Twilio account charges. Closed-app push calling and real cross-device/provider delivery are not proven by local tests.
+
+Solar components linked to the business price book are frozen at quote issue and feed the existing accepted-job stock commitments. Draft designs do not deduct stock; customer pricing remains one system price. Explicit quoted materials are not double-counted. Generic/untracked equipment is shown as advisory. Insulation coverage per roll/pack/bag suggests whole units from the measured area and optional waste, with manual quantity editing and the original map area retained.
+
+Supplier PDF upload uses the approved existing OpenAI configuration to suggest document rows and exact product matches. A human reviews products, units, received quantities and stock location before one atomic receipt changes counts. Uploading a purchase order alone never changes stock. File/reference deduplication, revisions, immutable confirmation and manual fallback protect against duplicate receipts. Supplier purchase-order/bill accounting export is not implemented by the existing customer-invoice accounting adapters.
+
+Migrations 0210 through 0216 are additive. Validation includes focused and full regressions, typecheck, scoped lint, complete migration replay and the exact-source publication build. Synthetic UI checks do not send real messages, accept quotes, change real stock, open microphones/cameras or place calls. Provider SMS, AI extraction and two-device media delivery remain operational checks unless separate evidence records them.
+
+## Previous implementation: product categories and dimension-aware imports
 
 Products exposes Type, business-defined Category and Code / SKU separately, with server-side type/category filtering, stock alerts and editable solar-panel specifications. Migration 0209 adds an optional category label to each business-owned item; older updates preserve it. Categories are suggested from that business's saved products without another setup screen.
 

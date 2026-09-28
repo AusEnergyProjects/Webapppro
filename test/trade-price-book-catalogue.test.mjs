@@ -9,6 +9,7 @@ test("an imported catalogue larger than 500 items remains available for quoting 
   const db = new DatabaseSync(":memory:");
   const migration = fs.readFileSync(new URL("../drizzle/0064_trade_price_book.sql", import.meta.url), "utf8");
   db.exec(migration.split("--> statement-breakpoint")[0]);
+  db.exec(fs.readFileSync(new URL("../drizzle/0211_trade_price_book_coverage.sql", import.meta.url), "utf8"));
   const insert = db.prepare(`INSERT INTO trade_price_book_items
     (id, firebase_uid, item_code, name, item_type, sell_price_cents_ex_gst, record_status,
      created_by_uid, updated_by_uid, created_at, updated_at)
@@ -16,6 +17,7 @@ test("an imported catalogue larger than 500 items remains available for quoting 
   for (let i = 0; i < 750; i++) insert.run(`item-${i}`, "owner-a", `PB-${i}`, `Product ${String(i).padStart(4, "0")}`, "active");
   insert.run("foreign", "owner-b", "PB-foreign", "Another business product", "active");
   insert.run("archived", "owner-a", "PB-archived", "Archived product", "archived");
+  db.exec("UPDATE trade_price_book_items SET coverage_m2_per_unit_milli=20000 WHERE id='item-749'");
   const source = fs.readFileSync(new URL("../src/lib/trade-price-book-server.ts", import.meta.url), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
@@ -25,6 +27,8 @@ test("an imported catalogue larger than 500 items remains available for quoting 
   assert.equal(items.length, 750);
   assert.equal(items.at(-1).id, "item-749");
   assert.equal(items.at(-1).sellPriceCentsExGst, 22000);
+  assert.equal(items.at(-1).coverageM2PerUnit, 20);
+  assert.equal(items[0].coverageM2PerUnit, null);
   assert.equal(items.some((item) => ["foreign", "archived"].includes(item.id)), false);
   const resolved = await exports.resolvePriceBookQuoteLines("owner-a", [{ priceBookItemId: "item-749", quantity: "1" }]);
   assert.equal(resolved.lines[0].unitPrice, "220.00");

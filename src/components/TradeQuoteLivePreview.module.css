@@ -113,3 +113,13 @@
 .completePdf p { width: 100%; margin: 0; font-size: 13px; }
 .completePdf iframe { width: 100%; height: 680px; border: 1px solid var(--trade-border, #cadad6); border-radius: 10px; background: #fff; }
 .completePdf button, .completePdf a { font: inherit; font-size: 14px; }
+.coverageCalculator {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--trade-line, #d9e5e0);
+}
+.coverageCalculator label { display: grid; gap: 0.35rem; }
+.coverageCalculator input { max-width: 9rem; }
+.coverageCalculator small { line-height: 1.45; }

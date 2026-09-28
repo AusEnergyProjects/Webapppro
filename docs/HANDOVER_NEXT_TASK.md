@@ -1,9 +1,17 @@
 # Next task handover
 
-Status: product categories and panel imports are in release validation. Verified baseline Sites 664, source fdbbb0c66aae69ff4a03d48cff8aac6a479951fe.
+Status: Messages, internal calling and practical stock workflows are in release validation. Verified baseline Sites 667, source 9511bc6c635fd56f81579a8810b13ea036e8608d.
 Prepared: 28 September 2026
 
-## Active contract: product categories and panel imports
+## Active contract: simple communications and stock completion
+
+Outcome: one Messages workspace for customers and internal team chats, name/phone lookup, private groups, member photos, internal camera/photo/voice notes, internet voice/video calls and secure quote questions after acceptance. Preserve per-business and per-job scope, consent and participant-only internal conversations. Calls are available in the open dashboard/team portal with six participants, one-hour expiry, no recording and short-lived relay credentials from the existing Twilio account. No new telephone number or email-mailbox permission is required for internal chat/calls.
+
+Stock scope: freeze linked solar equipment when issuing a quote, use accepted scope for commitments, avoid double-counting explicit material lines, suggest insulation rolls/packs from saved coverage with manual override, and review supplier PDF extraction before confirming received stock. Preserve immutable accepted documents, optional tracking, shortage warnings, cancellation releases and one system price. Supplier-bill accounting export is outside the supported invoice-only adapters and must not be claimed.
+
+Release: full regression suite, typecheck, scoped lint, migration replay 0210-0216, final diff review and exact-source Sites packaging. Publish the task-owned commit to the existing approved branch and matching Sites artifact. Evidence and final identities belong in C:/Webproject/outputs/tlink-operations-2026-09-28/. Do not use real customer sends, stock mutations or unsolicited live calls as QA. Complete a separately authorised two-device call and delivery check before claiming provider/media end-to-end proof.
+
+## Previous contract: product categories and panel imports
 
 Outcome: separate Type, Category and Code / SKU columns; optional business-defined categories; simple type/category filters; stock alerts; editable solar-panel millimetre dimensions; and an updated example sheet whose physical and service items import with the correct types. Existing stock ownership and quantity rules remain authoritative.
 

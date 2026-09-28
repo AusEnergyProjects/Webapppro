@@ -74,3 +74,21 @@ test("a late request for previous products cannot replace the current stock chec
   await h.settle(); h.props.lines = [line("2", "other")]; let tree = await h.settle(); assert.match(text(tree), /Heat pump/);
   first(Response.json({ ok: true, items: [item()], canManage: true })); tree = await h.settle(); assert.match(text(tree), /Heat pump/); assert.doesNotMatch(text(tree), /Solar panel/);
 });
+
+test("a whole-system price still warns for its 12 linked panels without double-counting explicit panel rows", async t => {
+  const h = harness(t, { props: { lines: [line("1", "")], equipment: { common: [{ name: "Solar panel", priceBookItemId: "panel", quantity: 12 }], choices: [] } } });
+  assert.match(text(await h.settle()), /3\s+items\s+short/);
+  h.props.lines = [line("12")]; assert.match(text(h.render()), /3\s+items\s+short/);
+  assert.equal(h.requests.length, 1);
+});
+
+test("unlinked equipment gives an actionable reminder without inventing a stock product", async t => {
+  const h = harness(t, { props: { lines: [line("1", "")], equipment: { common: [{ name: "Generic panel", quantity: 12 }], choices: [] } } });
+  const tree = await h.settle(); assert.match(text(tree), /Generic panel.*choose your price-book product/); assert.equal(h.requests.length, 0);
+});
+
+test("equipment options use their own quantities with the common included equipment", async t => {
+  const h = harness(t);
+  const warnings = h.warnings([], [choice("upgrade", "0")], [item()], { common: [{name:"Solar panel",priceBookItemId:"panel",quantity:2}], choices:[{choiceKey:"upgrade",items:[{name:"Solar panel",priceBookItemId:"panel",quantity:8}]}] });
+  assert.deepEqual(warnings.map(row => [row.scope,row.shortageMilli]), [["With upgrade",1000]]);
+});

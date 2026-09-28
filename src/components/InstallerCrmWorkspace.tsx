@@ -149,7 +149,7 @@ type WorkloadBucket = { weekStart: string; weekEnd: string; visits: number; book
 type CrmSummaryResult = { ok?: boolean; metrics?: CrmMetrics; workload?: WorkloadBucket[]; workStages?: Record<string, number>; upcomingAppointments?: ActivityAppointment[]; overdueTasks?: ActivityTask[]; openIssues?: ActivityNote[]; error?: string };
 type View = "today" | "leads" | "jobs" | "schedule" | "customers" | "pricebook" | "assets" | "templates" | "reports" | "import" | "integrations";
 type JobTab = "summary" | "schedule" | "quote" | "field" | "invoice" | "review";
-type JobDetailTab = JobTab | "files" | "forms" | "tasks" | "notes" | "handover";
+type JobDetailTab = JobTab | "files" | "forms" | "tasks" | "notes" | "handover" | "messages";
 type JobReturnTarget = { kind: "jobs" } | { kind: "customer"; customerId: string; customerName: string };
 
 const jobStatusFilters = JOB_REGISTER_OPERATIONAL_STATUSES.filter(status => status !== "deleted");
@@ -1857,6 +1857,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     }
   }, [canAssignJobs, job.serviceCategory, user]);
   const mainTabs: Array<readonly [JobDetailTab, string]> = [["summary", "Overview"]];
+  if (!isProtected && (!permissions || permissions.canSendSms)) mainTabs.push(["messages", "Messages"]);
   if (canOpenJobSchedule) mainTabs.push(["schedule", `Schedule (${visibleJobAppointments.length})`]);
   if (canViewQuotes) mainTabs.push(["quote", "Quote"]);
   if (canViewFieldEvidence) mainTabs.push(["field", job.serviceCategory === "rental-inspection" ? "Assessment" : "Field work"]);
@@ -1876,6 +1877,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   }, [activeTab, canAssignJobs, loadAllJobAssignees]);
   return <article className="crm-job-card"><header className="crm-job-card-header"><div><span>{job.workNumber}</span><h3>{job.title}</h3><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}{job.siteArea ? ` | ${job.siteArea}` : ""}</small></div><div className="crm-job-header-actions"><strong>{displayedLifecycle}</strong><span className={isProtected ? "protected" : "owned"}>{isProtected ? "Australian Energy Assessments protected" : customer ? "Your customer" : "Internal"}</span>{canViewFieldEvidence && !isProtected && customer && <button type="button" className="crm-request-info-button" onClick={() => setTab("field")}>Request info</button>}</div></header>
     <nav className="crm-job-tabs" aria-label="Job card sections">{mainTabs.map(([value, label]) => <button key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}<AccessibleMenu className="crm-job-more" active={moreActive} label={moreActive ? activeTab[0].toUpperCase() + activeTab.slice(1) : "More"}>{(close) => moreTabs.map(([value, label]) => <button role="menuitem" key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => { setTab(value); close(); }}>{label}</button>)}</AccessibleMenu></nav>
+    {activeTab === "messages" && !isProtected && (!permissions || permissions.canSendSms) && <TradeCustomerSmsPanel key={`${job.id}:${customer?.id || ""}`} user={user} workOrderId={job.id} customerId={customer?.id || ""} onOpenIntegrations={permissions ? undefined : onOpenIntegrations} />}
     {activeTab === "summary" && <section className="crm-job-section crm-summary-workspace">
         <section className={registerStyles.detailSection} aria-labelledby={`job-information-${job.id}`}>
           <h4 id={`job-information-${job.id}`}>Job information</h4>

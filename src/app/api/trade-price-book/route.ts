@@ -24,6 +24,7 @@ function errorResponse(error: unknown) {
   if (code === "CATALOGUE_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "That catalogue item is no longer available. Choose another item or enter the supplier details manually." }, 409);
   if (code === "INVALID_PRICE_BOOK_SKILL") return adminJson({ ok: false, error: "Choose a required skill already listed on the business profile." }, 400);
   if (code === "INVALID_PRICE_BOOK_CATEGORY") return adminJson({ ok: false, error: "Use a category name of up to 80 characters, or leave it blank." }, 400);
+  if (code.startsWith("INVALID_PRICE_BOOK_COVERAGE")) return adminJson({ ok: false, error: "Coverage must be a positive area in m², with up to three decimal places. Use Material or Equipment charged by roll, pack, bag or each." }, 400);
   if (code.startsWith("INVALID_PRICE_BOOK_SOLAR_PANEL")) return adminJson({ ok: false, error: "Solar panels need valid watts, width and length from the datasheet. Use Material or Equipment as the item type." }, 400);
   if (code.startsWith("INVALID_PRICE_BOOK") || ["INVALID_DECIMAL", "INVALID_MONEY"].includes(code)) {
     return adminJson({ ok: false, error: "Check the item name, type, cost, sell price, GST and duration." }, 400);
@@ -85,6 +86,7 @@ function itemPayload(row: Row) {
     supplierProductId: String(row.supplier_product_id), recordStatus: String(row.record_status), priceRevision: Number(row.price_revision),
     createdAt: String(row.created_at), updatedAt: String(row.updated_at),
     solarPanel: parsePriceBookSolarPanel(row.solar_panel_json),
+    coverageM2PerUnit: row.coverage_m2_per_unit_milli == null ? null : Number(row.coverage_m2_per_unit_milli) / 1000,
   };
 }
 
@@ -159,6 +161,17 @@ export async function GET(request: Request) {
       });
       return adminJson({ ok: true, solarPanels });
     }
+    if (url.searchParams.get("mode") === "solar_equipment") {
+      const kind = url.searchParams.get("kind") || "";
+      if (!["inverter", "battery", "hot_water"].includes(kind)) return adminJson({ ok: false, error: "Choose inverter, battery or hot water equipment." }, 400);
+      const rows = await getD1().prepare(`SELECT id, name, supplier_sku, supplier_product_id
+        FROM trade_price_book_items WHERE firebase_uid = ? AND record_status = 'active'
+          AND item_type IN ('material', 'equipment') AND unit_label = 'each'
+        ORDER BY name COLLATE NOCASE, item_code LIMIT 5000`).bind(access.ownerUid).all<Row>();
+      return adminJson({ ok: true, equipment: rows.results.map((row) => ({ id: String(row.id), kind, name: String(row.name),
+        manufacturer: "", model: String(row.supplier_sku || row.name), quantity: 1, priceBookItemId: String(row.id),
+        ...(row.supplier_product_id ? { catalogueProductId: String(row.supplier_product_id) } : {}) })) });
+    }
     const itemId = cleanAdminText(url.searchParams.get("itemId"), 180);
     if (itemId) {
       await ownedItem(access.ownerUid, itemId);
@@ -190,12 +203,12 @@ export async function POST(request: Request) {
         (id, firebase_uid, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
         sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points, expected_duration_minutes,
         required_skill, supplier_name, supplier_sku, supplier_product_id, record_status, price_revision,
-        created_by_uid, updated_by_uid, created_at, updated_at, solar_panel_json, category)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ?)`)
+        created_by_uid, updated_by_uid, created_at, updated_at, solar_panel_json, category, coverage_m2_per_unit_milli)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(id, access.ownerUid, itemCode, input.name, input.description, input.itemType, input.unitLabel,
           input.supplierCostCentsExGst, input.sellPriceCentsExGst, input.taxCode, input.markupBasisPoints,
           input.marginBasisPoints, input.expectedDurationMinutes, input.requiredSkill, input.supplierName,
-          input.supplierSku, input.supplierProductId, access.actorUid, access.actorUid, now, now, JSON.stringify(input.solarPanel ?? null), input.category ?? ""),
+          input.supplierSku, input.supplierProductId, access.actorUid, access.actorUid, now, now, JSON.stringify(input.solarPanel ?? null), input.category ?? "", input.coverageM2PerUnitMilli ?? null),
       db.prepare(`INSERT INTO trade_price_book_price_history
         (id, price_book_item_id, firebase_uid, price_revision, supplier_cost_cents_ex_gst, sell_price_cents_ex_gst,
         tax_code, markup_basis_points, margin_basis_points, change_type, changed_by_uid, changed_at)
@@ -220,17 +233,21 @@ export async function PATCH(request: Request) {
     }
     if (action !== "update") return adminJson({ ok: false, error: "Unsupported price-book action." }, 400);
     if (existing.record_status !== "active") return adminJson({ ok: false, error: "Archived price-book items cannot be changed." }, 409);
-    const input = await preparedInput(access.ownerUid, Object.hasOwn(body, "solarPanel") ? body : { ...body, solarPanel: parsePriceBookSolarPanel(existing.solar_panel_json) });
+    const input = await preparedInput(access.ownerUid, { ...body,
+      ...(!Object.hasOwn(body, "solarPanel") ? { solarPanel: parsePriceBookSolarPanel(existing.solar_panel_json) } : {}),
+      ...(!Object.hasOwn(body, "coverageM2PerUnit") ? { coverageM2PerUnit: existing.coverage_m2_per_unit_milli == null ? null : Number(existing.coverage_m2_per_unit_milli) / 1000 } : {}) });
     const priceChanged = Number(existing.supplier_cost_cents_ex_gst) !== input.supplierCostCentsExGst
       || Number(existing.sell_price_cents_ex_gst) !== input.sellPriceCentsExGst || String(existing.tax_code) !== input.taxCode;
     const priceRevision = Number(existing.price_revision) + (priceChanged ? 1 : 0);
     const statements = [db.prepare(`UPDATE trade_price_book_items SET name = ?, description = ?, item_type = ?, unit_label = ?,
       supplier_cost_cents_ex_gst = ?, sell_price_cents_ex_gst = ?, tax_code = ?, markup_basis_points = ?, margin_basis_points = ?,
       expected_duration_minutes = ?, required_skill = ?, supplier_name = ?, supplier_sku = ?, supplier_product_id = ?,
-      price_revision = ?, updated_by_uid = ?, updated_at = ?, solar_panel_json = ?, category = COALESCE(?, category) WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
+      price_revision = ?, updated_by_uid = ?, updated_at = ?, solar_panel_json = ?, category = COALESCE(?, category),
+      coverage_m2_per_unit_milli = CASE WHEN ? THEN ? ELSE coverage_m2_per_unit_milli END WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
       .bind(input.name, input.description, input.itemType, input.unitLabel, input.supplierCostCentsExGst, input.sellPriceCentsExGst,
         input.taxCode, input.markupBasisPoints, input.marginBasisPoints, input.expectedDurationMinutes, input.requiredSkill,
-        input.supplierName, input.supplierSku, input.supplierProductId, priceRevision, access.actorUid, now, JSON.stringify(input.solarPanel ?? null), input.category ?? null, itemId, access.ownerUid)];
+        input.supplierName, input.supplierSku, input.supplierProductId, priceRevision, access.actorUid, now, JSON.stringify(input.solarPanel ?? null), input.category ?? null,
+        Object.hasOwn(body, "coverageM2PerUnit") ? 1 : 0, input.coverageM2PerUnitMilli ?? null, itemId, access.ownerUid)];
     if (priceChanged) statements.push(db.prepare(`INSERT INTO trade_price_book_price_history
       (id, price_book_item_id, firebase_uid, price_revision, supplier_cost_cents_ex_gst, sell_price_cents_ex_gst,
       tax_code, markup_basis_points, margin_basis_points, change_type, changed_by_uid, changed_at)

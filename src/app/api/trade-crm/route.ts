@@ -19,6 +19,7 @@ import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
 import { appointmentEndsAt, assertAppointmentSlot, assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
 import { directCustomerHasEmail, findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
+import { messageCustomerIdentity } from "@/lib/trade-message-customer";
 import {
   assignedJob,
   canAssignJob,
@@ -1781,6 +1782,23 @@ export async function POST(request: Request) {
     }
 
     if (action === "create_customer") {
+      const fromMessages = body.source === "messages";
+      if (fromMessages && !identity.access.isOwner) throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
+      let chatCustomer: Awaited<ReturnType<typeof messageCustomerIdentity>> | null = null;
+      if (fromMessages) {
+        try { chatCustomer = await messageCustomerIdentity(db, identity.uid, body.phone); }
+        catch (error) {
+          const code = error instanceof Error ? error.message : "";
+          const messages: Record<string,string> = {
+            MESSAGE_CUSTOMER_PHONE_INVALID: "Enter an Australian mobile number, such as 0412 345 678.",
+            MESSAGE_CUSTOMER_AMBIGUOUS: "This number belongs to more than one customer. Search by name and choose the right customer.",
+            MESSAGE_CUSTOMER_ARCHIVED: "This customer is archived. Restore their customer record before starting a chat.",
+          };
+          if (messages[code]) return adminJson({ok:false,error:messages[code]},409);
+          throw error;
+        }
+        if (chatCustomer.existing) return adminJson({ok:true,id:chatCustomer.existing.id,customerNumber:chatCustomer.existing.customer_number,reused:true});
+      }
       const customerCount = await db.prepare("SELECT COUNT(*) count FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = 'active'")
         .bind(identity.uid).first<Record<string, unknown>>();
       if (Number(customerCount?.count || 0) >= CRM_CUSTOMER_LIMIT) throw new Error("CUSTOMER_LIMIT_REACHED");
@@ -1790,42 +1808,43 @@ export async function POST(request: Request) {
       const businessName = cleanAdminText(body.businessName, 140);
       const businessNumber = cleanAdminText(body.businessNumber, 30);
       const email = cleanAdminText(body.email, 180).toLowerCase();
-      const phone = cleanAdminText(body.phone, 40);
+      const phone = chatCustomer?.phone || cleanAdminText(body.phone, 40);
       if (customerType === "business" ? !businessName : !firstName && !lastName) {
         return adminJson({ ok: false, error: customerType === "business" ? "Add the business name." : "Add the customer name." }, 400);
       }
-      if (!email) return adminJson({ ok: false, error: "Add the customer email address." }, 400);
-      if (!EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
+      if (!email && !fromMessages) return adminJson({ ok: false, error: "Add the customer email address." }, 400);
+      if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
       if (phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Add a valid customer mobile number." }, 400);
-      const id = crypto.randomUUID();
-      const contactId = crypto.randomUUID();
-      const siteId = crypto.randomUUID();
-      const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${id.replaceAll("-", "").slice(0, 5).toUpperCase()}`;
+      const id = chatCustomer?.id || crypto.randomUUID();
+      const contactId = fromMessages ? `${id}-contact` : crypto.randomUUID();
+      const siteId = fromMessages ? `${id}-site` : crypto.randomUUID();
+      const replayConflict = fromMessages ? " ON CONFLICT(id) DO NOTHING" : "";
+      const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${(fromMessages ? id.slice(-8) : id.replaceAll("-", "").slice(0, 5)).toUpperCase()}`;
       const address = await resolvedAddressWrite(body, identity);
       await db.batch([db.prepare(`INSERT INTO trade_crm_customers
         (id, firebase_uid, customer_number, customer_type, first_name, last_name, business_name, business_number, email,
          phone, address_line_1, address_line_2, suburb, address_state, postcode, tags, private_notes,
          record_status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)${replayConflict}`)
         .bind(id, identity.uid, customerNumber, customerType, firstName, lastName, businessName, businessNumber, email,
           phone, address.addressLine1, address.addressLine2, address.suburb, address.addressState, address.postcode,
           JSON.stringify(cleanList(body.tags)), cleanAdminText(body.privateNotes, 2000), now, now),
         db.prepare(`INSERT INTO trade_crm_customer_contacts
           (id, firebase_uid, customer_id, first_name, last_name, role_label, email, phone, is_primary, record_status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, 'Primary contact', ?, ?, 1, 'active', ?, ?)`)
+          VALUES (?, ?, ?, ?, ?, 'Primary contact', ?, ?, 1, 'active', ?, ?)${replayConflict}`)
           .bind(contactId, identity.uid, id, firstName, lastName, email, phone, now, now),
         db.prepare(`INSERT INTO trade_crm_service_sites
           (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
            address_entry_mode, address_provider, address_provider_reference, address_formatted, address_verified_at,
            access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
-          VALUES (?, ?, ?, 'Primary site', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 1, 'active', ?, ?)`)
+          VALUES (?, ?, ?, 'Primary site', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 1, 'active', ?, ?)${replayConflict}`)
           .bind(siteId, identity.uid, id, address.addressLine1, address.addressLine2, address.suburb, address.addressState, address.postcode,
             address.addressEntryMode, address.addressProvider, address.addressProviderReference, address.addressFormatted,
             address.addressVerifiedAt, now, now),
         db.prepare(`INSERT INTO trade_crm_site_contacts
           (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, 'Primary service contact', 1, 'active', ?, ?)`)
-          .bind(crypto.randomUUID(), identity.uid, siteId, contactId, now, now),
+          VALUES (?, ?, ?, ?, 'Primary service contact', 1, 'active', ?, ?)${replayConflict}`)
+          .bind(fromMessages ? `${id}-site-contact` : crypto.randomUUID(), identity.uid, siteId, contactId, now, now),
       ]);
       return adminJson({ ok: true, id, customerNumber }, 201);
     }

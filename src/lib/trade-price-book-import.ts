@@ -6,7 +6,7 @@ export const PRICE_BOOK_IMPORT_MAX_ROWS = 2_000;
 export const PRICE_BOOK_IMPORT_MAX_BODY_BYTES = 2 * 1024 * 1024;
 export const PRICE_BOOK_IMPORT_FIELDS = ["name", "itemCode", "supplierSku", "supplierName", "sellPrice", "supplierCost",
   "itemType", "category", "unitLabel", "taxCode", "description", "expectedDurationMinutes", "requiredSkill",
-  "productKind", "panelWatts", "panelLengthMm", "panelWidthMm"] as const;
+  "productKind", "panelWatts", "panelLengthMm", "panelWidthMm", "coverageM2PerUnit"] as const;
 export type PriceBookImportField = typeof PRICE_BOOK_IMPORT_FIELDS[number];
 export type PriceBookImportRow = { rowNumber: number; values: Partial<Record<PriceBookImportField, string | number>> };
 export type PriceBookImportPrices = { sellPriceCentsExGst: number; supplierCostCentsExGst: number };
@@ -14,7 +14,7 @@ export type PriceBookImportPreview = {
   token: string;
   counts: { added: number; updated: number; unchanged: number; superseded: number };
   items: { rowNumber: number; status: "added" | "updated" | "unchanged"; name: string; itemCode: string;
-    itemType: PriceBookItemType; category: string; supplierSku: string; unitLabel: string; solarPanel: PriceBookSolarPanel | null;
+    itemType: PriceBookItemType; category: string; supplierSku: string; unitLabel: string; solarPanel: PriceBookSolarPanel | null; coverageM2PerUnit: number | null;
     before: PriceBookImportPrices | null; after: PriceBookImportPrices }[];
   issues: { rowNumber: number; message: string }[];
   canImport: boolean;
@@ -31,7 +31,7 @@ export function priceBookImportIdentity(value: unknown) {
 
 const limits: Record<PriceBookImportField, number> = { name: 140, itemCode: 100, supplierSku: 100, supplierName: 140,
   sellPrice: 40, supplierCost: 40, itemType: 30, unitLabel: 30, taxCode: 20, description: 500,
-  expectedDurationMinutes: 10, requiredSkill: 80, category: 80, productKind: 30, panelWatts: 20, panelLengthMm: 20, panelWidthMm: 20 };
+  expectedDurationMinutes: 10, requiredSkill: 80, category: 80, productKind: 30, panelWatts: 20, panelLengthMm: 20, panelWidthMm: 20, coverageM2PerUnit: 20 };
 const clean = (value: unknown, maximum: number) => String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, maximum);
 const supplied = (value: unknown) => value !== undefined && value !== null && String(value).trim() !== "";
 const inputColumns = {
@@ -50,6 +50,7 @@ function validationMessage(error: unknown) {
   if (code === "INVALID_PRICE_BOOK_SELL_PRICE") return "Enter a sell price greater than zero for this item type.";
   if (code === "INVALID_PRICE_BOOK_DURATION") return "Duration must be a whole number from 0 to 10,080 minutes.";
   if (code === "INVALID_PRICE_BOOK_CATEGORY") return "Use a category of up to 80 characters without control characters.";
+  if (code.startsWith("INVALID_PRICE_BOOK_COVERAGE")) return "Coverage must be a positive m² amount with up to three decimals, on Material or Equipment charged by roll, pack, bag or each.";
   if (code === "INVALID_PRICE_BOOK_SOLAR_PANEL_TYPE") return "Solar panels must use the Material or Equipment item type.";
   if (code === "INVALID_PRICE_BOOK_SOLAR_PANEL") return "Enter panel watts from 1 to 2,000 and length and width from 200 to 4,000 mm. Use the product datasheet.";
   return "Check the item name, type, unit, cost, sell price and GST setting.";
@@ -113,6 +114,7 @@ function inputForRow(values: PriceBookImportRow["values"], existing: PriceBookIm
   const raw: Record<string, unknown> = existing ? {
     name: existing.name, description: existing.description, itemType: existing.item_type, unitLabel: existing.unit_label,
     category: existing.category || "", solarPanel: parsePriceBookSolarPanel(existing.solar_panel_json),
+    coverageM2PerUnit: existing.coverage_m2_per_unit_milli == null ? null : Number(existing.coverage_m2_per_unit_milli) / 1000,
     supplierCost: (Number(existing.supplier_cost_cents_ex_gst) / 100).toFixed(2),
     sellPrice: (Number(existing.sell_price_cents_ex_gst) / 100).toFixed(2), taxCode: existing.tax_code,
     expectedDurationMinutes: existing.expected_duration_minutes, requiredSkill: existing.required_skill,
@@ -175,7 +177,8 @@ export function planPriceBookImport(rows: PriceBookImportRow[], existing: PriceB
       const priceChanged = !match || Number(match.supplier_cost_cents_ex_gst) !== input.supplierCostCentsExGst
         || Number(match.sell_price_cents_ex_gst) !== input.sellPriceCentsExGst || match.tax_code !== input.taxCode;
       const detailsChanged = match && (Object.entries(inputColumns).some(([field, column]) => input[field as keyof typeof inputColumns] !== match[column])
-        || JSON.stringify(input.solarPanel ?? null) !== JSON.stringify(parsePriceBookSolarPanel(match.solar_panel_json)));
+        || JSON.stringify(input.solarPanel ?? null) !== JSON.stringify(parsePriceBookSolarPanel(match.solar_panel_json))
+        || (input.coverageM2PerUnitMilli ?? null) !== (match.coverage_m2_per_unit_milli ?? null));
       const status = !match ? "added" : detailsChanged ? "updated" : "unchanged";
       if (changes.has(key)) superseded++;
       changes.set(key, { rowNumber: row.rowNumber, existing: match, input, status, priceChanged });
