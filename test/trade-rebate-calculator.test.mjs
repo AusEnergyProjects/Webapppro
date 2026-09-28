@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import ts from "typescript";
 import {
   resetTradeDashboardStateOnUidChange,
   tradeRebatePreparingMessage,
@@ -24,7 +25,22 @@ test("verified installers can open the governed rebate calculator from the trade
   assert.match(dashboard, /Rebates for quotes and invoices/);
   assert.match(dashboard, /workspace === "calculator"/);
   assert.match(dashboard, /<TradeRebateCalculatorWorkspace key=\{user\.uid\} user=\{user\}/);
-  assert.match(dashboard, /profile\?\.partnerType === "supplier" && workspace === "calculator"/);
+  const source = ts.createSourceFile("dashboard.tsx", dashboard, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let supplierEffect;
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(source) === "useEffect"
+      && node.arguments[0]?.getText(source).includes('profile?.partnerType === "supplier"')
+      && node.arguments[0]?.getText(source).includes('workspace === "calculator"')) supplierEffect = node.arguments[0];
+    if (!supplierEffect) ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.ok(supplierEffect, "Supplier accounts must be routed away from the installer calculator");
+  const output = ts.transpileModule(`const effect = ${supplierEffect.getText(source)};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  for (const [partnerType, selectedWorkspace, expected] of [["supplier", "calculator", ["work"]], ["supplier", "map", ["work"]], ["supplier", "work", []], ["installer", "calculator", []]]) {
+    const destinations = [];
+    Function("profile", "workspace", "setWorkspace", `${output}\neffect();`)({ partnerType }, selectedWorkspace, next => destinations.push(next));
+    assert.deepEqual(destinations, expected);
+  }
   assert.match(workspace, /Calculate before you quote/);
   assert.match(workspace, /<CreditexAllProgramCalculator[\s\S]*api=\{api\}[\s\S]*role="trade"[\s\S]*documentDraftOwnerUid=\{user\.uid\}/);
   assert.match(workspace, /requestWithCreditexTokenRecovery/);

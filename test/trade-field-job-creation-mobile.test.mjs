@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
+import { sendMailboxEmail } from "../src/lib/trade-email-provider.ts";
+import { sendServiceReminderProviderMessage } from "../src/lib/service-reminder-delivery.ts";
 
 import {
   directAppointmentDisplayTime,
@@ -145,11 +147,34 @@ test("optional TLink invite is requested only after the job and appointment comm
   assert.match(inviteServer, /messageType: "tlink_direct_appointment_invite"/);
   assert.match(inviteServer, /text\/calendar; charset=utf-8/);
   assert.match(inviteServer, /sendTradeCustomerEmail\(input\.ownerUid/);
-  const mailboxProvider = read("../src/lib/trade-email-provider.ts");
-  const emailServer = read("../src/lib/trade-email-server.ts");
-  assert.match(mailboxProvider, /redirect: "error", signal: AbortSignal\.timeout\(20000\)/);
-  assert.match(emailServer, /signal: AbortSignal\.timeout\(20_000\), redirect: 'error'/);
   assert.match(crmRoute, /customer_calendar_invite_accepted/);
+});
+
+test("appointment email delivery rejects provider redirects with a bounded timeout", async t => {
+  const timeouts = [];
+  t.mock.method(AbortSignal, "timeout", milliseconds => { timeouts.push(milliseconds); return new AbortController().signal; });
+  const emailServer = read("../src/lib/trade-email-server.ts");
+  const platformFetch = emailServer.match(/fetchImpl: (\(url, init\) => fetch\(url, \{[^\n]+?\}\))/)?.[1];
+  assert.ok(platformFetch, "Exercise the central sender's actual platform fetch wrapper");
+  const message = { senderEmail: "business@example.test", senderName: "Trade", recipient: "customer@example.test", subject: "Appointment", text: "Your appointment", messageId: "<appointment@example.test>" };
+  for (const status of [301, 302, 303, 307, 308]) {
+    for (const provider of ["google", "microsoft", "platform"]) {
+      let calls = 0;
+      const fetch = async (url, init) => {
+        calls++; assert.equal(init.redirect, "manual"); assert.ok(init.signal instanceof AbortSignal);
+        assert.notEqual(new URL(url).hostname, "redirect.example.test");
+        return new Response("", { status, headers: { Location: "https://redirect.example.test/collect" } });
+      };
+      const delivery = provider === "platform"
+        ? sendServiceReminderProviderMessage({ channel: "email", recipient: message.recipient, subject: message.subject, body: message.text, idempotencyKey: "appointment", callbackUrl: "" }, {
+          runtime: { RESEND_API_KEY: "fixture-key", RESEND_FROM_EMAIL: message.senderEmail }, fetchImpl: Function("fetch", `return ${platformFetch};`)(fetch),
+        })
+        : sendMailboxEmail(provider, "fixture-token", message, fetch);
+      await assert.rejects(delivery, error => provider === "platform" ? error.outcome === "definite_failure" : error.code === "email_provider_rejected" && error.outcome === "rejected");
+      assert.equal(calls, 1, "No redirect target or retry request may receive the credentials");
+    }
+  }
+  assert.deepEqual(timeouts, Array(15).fill(20_000));
 });
 
 test("the invite copy is TLink branded, timezone readable and calendar compatible", () => {

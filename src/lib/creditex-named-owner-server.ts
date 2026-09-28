@@ -62,7 +62,7 @@ export async function creditexNamedOwnerCapabilities(database: D1Database, ident
 
 export async function confirmCreditexNamedOwner(database: D1Database, identity: OwnerIdentity) {
   const candidate = await ownerCandidate(database, identity);
-  if (!candidate) throw new CreditexNamedOwnerError("This action requires the existing verified AEA owner and Creditex bootstrap membership.");
+  if (!candidate) throw new CreditexNamedOwnerError("This action requires the existing verified Australian Energy Assessments owner and Creditex bootstrap membership.");
   const confirmed = () => ({ displayName: CREDITEX_NAMED_OWNER_NAME, role: "admin" as const, namedOwnerConfirmed: true as const });
   if (Number(candidate.confirmation_count) === 1 && candidate.display_name === CREDITEX_NAMED_OWNER_NAME) return { ...confirmed(), reused: true };
   if (Number(candidate.confirmation_count) !== 0) throw new CreditexNamedOwnerError("The named owner record needs an access review before it can be confirmed again.");
@@ -85,7 +85,7 @@ export async function confirmCreditexNamedOwner(database: D1Database, identity: 
         (id, organisation_id, actor_type, actor_uid, event_type, target_type, target_id, summary, metadata, created_at)
         VALUES (?, ?, 'compliance', ?, ?, 'compliance_user', ?, ?, ?, ?)`)
         .bind(auditId, identity.organisationId, identity.uid, CONFIRMATION_EVENT, candidate.membership_id,
-          "The existing AEA owner confirmed their Creditex administrator identity as James Morris.",
+          "The existing Australian Energy Assessments owner confirmed their Creditex administrator identity as James Morris.",
           JSON.stringify({ adminId: candidate.admin_id, displayName: CREDITEX_NAMED_OWNER_NAME,
             previousDisplayName: candidate.display_name, bootstrapInvitationId: BOOTSTRAP_INVITATION_ID,
             governanceIdentityChanged: false }), now),

@@ -7,7 +7,7 @@ function expression(value: string) {
 }
 /** Rechecked at allocation, disclosure and notification claim, including old matches.
  * Receiving an opportunity requires current business onboarding and service/location
- * coverage. Verified AEA owners receive reserved assessment leads nationwide.
+ * coverage. Verified Australian Energy Assessments owners receive reserved assessment leads nationwide.
  * Training and installer credentials are enforced when booking the work.
  * Consent and customer-contact disclosure remain separate checks at each caller.
  */

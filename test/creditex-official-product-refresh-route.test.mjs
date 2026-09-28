@@ -58,12 +58,12 @@ function fixture({ status = "stale", failed = true, queued = true, due = true, c
       },
     },
   };
-  const module = { exports: {} };
+  const loadedModule = { exports: {} };
   new Function("require", "module", "exports", compiled)((name) => {
     if (!Object.hasOwn(mocks, name)) throw new Error(`Unexpected dependency: ${name}`);
     return mocks[name];
-  }, module, module.exports);
-  const get = () => module.exports.GET(new Request(
+  }, loadedModule, loadedModule.exports);
+  const get = () => loadedModule.exports.GET(new Request(
     "https://example.test/api/creditex/official-products?productKind=veu_air_conditioner&installationDate=2026-09-24",
   ));
   return { get, calls, result, registry };

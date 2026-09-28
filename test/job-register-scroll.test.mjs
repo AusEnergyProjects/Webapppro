@@ -12,15 +12,15 @@ test("top and bottom job scrollbars stay aligned through scrolling and column re
     observe(node) { this.targets.push(node); }
     disconnect() { this.targets = []; }
   }
-  const module = { exports: {} };
+  const loadedModule = { exports: {} };
   const react = { useRef: () => { const ref = { current: null }; refs.push(ref); return ref; }, useEffect: callback => effects.push(callback) };
   new Function("require", "module", "exports", "ResizeObserver", output)(name => {
     if (name === "react") return react;
     if (name === "react/jsx-runtime") return { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) };
     if (name.endsWith(".css")) return { default: {} };
     throw Error(name);
-  }, module, module.exports, Observer);
-  module.exports.JobRegisterScroll({ children: "rows" });
+  }, loadedModule, loadedModule.exports, Observer);
+  loadedModule.exports.JobRegisterScroll({ children: "rows" });
   const top = new EventTarget(), table = new EventTarget(), header = {};
   Object.assign(top, { scrollLeft: 0, hidden: false });
   Object.assign(table, { scrollLeft: 0, scrollWidth: 3000, clientWidth: 1000, firstElementChild: header });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import ts from "typescript";
 import {
   ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
   ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
@@ -98,12 +99,26 @@ test("admin lead updates reject stale concurrent state before appending events o
 
 test("notification Open routes directly to the protected follow-up record before generic customer routing", () => {
   const portal = read("../src/components/AdminOperationsPortal.tsx");
-  const specific = portal.indexOf('notification.entityType === "energy_assistant_lead"');
-  const generic = portal.indexOf('notification.actorType === "customer"');
-  assert.ok(specific >= 0 && generic >= 0 && specific < generic);
-  assert.match(portal, /setAssistantLeadTarget\(\{ id: notification\.entityId/);
-  assert.match(portal, /setTab\("assistant-leads"\)/);
+  const source = ts.createSourceFile("portal.tsx", portal, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let handler;
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "openNotificationRecord") handler = node;
+    if (!handler) ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.ok(handler, "The notification record handler must exist");
+  const output = ts.transpileModule(handler.getText(source), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const events = [];
+  const open = Function("setAssistantLeadTarget", "setDirectoryTarget", "selectTab", `${output}\nreturn openNotificationRecord;`)(
+    value => events.push(["lead", value.id]), value => events.push(["customer", value.uid]), tab => events.push(["tab", tab]),
+  );
+  open({ entityType: "energy_assistant_lead", entityId: "exact-lead", actorType: "customer", actorUid: "generic-customer" });
+  assert.deepEqual(events, [["lead", "exact-lead"], ["tab", "assistant-leads"]]);
+  events.length = 0;
+  open({ entityType: "customer_project", actorType: "customer", actorUid: "exact-customer" });
+  assert.deepEqual(events, [["customer", "exact-customer"], ["tab", "customers"]]);
   assert.match(portal, /<AdminEnergyAssistantLeads/);
+  assert.match(portal, /target=\{assistantLeadTarget\}/);
 });
 
 test("matched-trade opportunity creation has an assistant-specific, consent-current and document-free path", () => {

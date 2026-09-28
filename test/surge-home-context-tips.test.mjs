@@ -14,7 +14,9 @@ const reviewedProfile = (overrides = {}) => parseSurgeStarterProfile({
   ...overrides,
 });
 
-const text = (profile) => homeContextTips(profile)
+const reviewedTips = (profile) => homeContextTips(profile, { asOf: "2026-09-01" });
+
+const text = (profile) => reviewedTips(profile)
   .map((tip) => `${tip.title} ${tip.detail}`)
   .join(" ");
 
@@ -41,7 +43,7 @@ test("moisture guidance only appears for the reviewed moisture selection", () =>
 });
 
 test("tips are ranked and limited to the three most relevant current signals", () => {
-  const tips = homeContextTips(reviewedProfile({
+  const tips = reviewedTips(reviewedProfile({
     features: [
       "ceiling-insulation-limited",
       "draughty",
@@ -63,7 +65,7 @@ test("tips are ranked and limited to the three most relevant current signals", (
 });
 
 test("early tips prefer practical low-cost actions supported by the saved home context", () => {
-  const tips = homeContextTips(reviewedProfile({
+  const tips = reviewedTips(reviewedProfile({
     features: [
       "draughty",
       "electric-resistance-heating",
@@ -87,7 +89,7 @@ test("early tips prefer practical low-cost actions supported by the saved home c
 });
 
 test("solar and tariff tips explain load shifting without promoting a plan", () => {
-  const tips = homeContextTips(reviewedProfile({
+  const tips = reviewedTips(reviewedProfile({
     features: ["solar"],
     billPressure: "hard-to-manage",
   }));
@@ -97,4 +99,13 @@ test("solar and tariff tips explain load shifting without promoting a plan", () 
   assert.match(guidance, /heat-pump dryer/i);
   assert.match(guidance, /free-use windows/i);
   assert.match(guidance, /complete tariff/i);
+});
+
+
+test("solar guidance is shown through its review date and suppressed afterwards", () => {
+  const profile = reviewedProfile({ features: ["solar"], billPressure: "hard-to-manage" });
+  const ids = (asOf) => homeContextTips(profile, { asOf }).map((tip) => tip.id);
+  assert.deepEqual(ids("2026-09-20"), ["solar-load-shift", "tariff-load-shift"]);
+  assert.deepEqual(ids("2026-09-21"), ["tariff-load-shift"]);
+  assert.deepEqual(ids("2026-09-28"), ["tariff-load-shift"]);
 });

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import ts from "typescript";
 import { DatabaseSync } from "node:sqlite";
 import { calculatePriceBookRates, normalisePriceBookInput, priceBookItemAllowsNegativeSellPrice,
   priceBookItemRequiresZeroSupplierCost, priceBookQuoteLineType, PRICE_BOOK_TYPE_LABELS } from "../src/lib/trade-price-book.ts";
@@ -144,12 +145,31 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteServer, /unitPrice: \(reference\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)/);
   assert.match(quoteServer, /lineType: reference\.lineType/);
   assert.match(quoteUi, /description: item\.description \|\| item\.name/);
-  assert.match(quoteUi, /<span>Price book item<\/span><select/);
-  assert.match(quoteUi, /<option value="">Custom line<\/option>/);
+  assert.match(quoteUi, /aria-label=\{`Line \$\{index \+ 1\} price book item`\}/);
+  assert.match(quoteUi, /value=\{line\.priceBookItemId \|\| ""\}/);
+  assert.match(quoteUi, /onChange=\{\(event\) => selectPriceBookItem\(event\.target\.value\)\}/);
   assert.match(quoteUi, /compatibleItems\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}>/);
   assert.match(quoteUi, /const selectPriceBookItem = \(itemId: string\) =>/);
-  assert.match(quoteUi, /onReplace\(\{[\s\S]*?priceBookItemId: item\.id[\s\S]*?lineType: item\.lineType[\s\S]*?description: item\.description \|\| item\.name[\s\S]*?quantity: mapKind \? line\.quantity : "1"[\s\S]*?unitPrice: \(item\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)[\s\S]*?taxCode: item\.taxCode/);
-  assert.match(quoteUi, /onReplace\(\{ \.\.\.line, priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" \}\)/);
+  const selection = quoteUi.match(/const selectPriceBookItem = \(itemId: string\) => \{[\s\S]*?\n    \};/);
+  assert.ok(selection, "the quote editor exposes its saved-item selection handler");
+  const selectionCode = ts.transpileModule(selection[0], { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const item = { id: "saved-item", lineType: "product", description: "Saved description", name: "Saved name", sellPriceCentsExGst: 12500, taxCode: "gst" };
+  const line = { priceBookItemId: "old-item", jobPacketId: "packet", jobPacketLineId: "packet-line", lineType: "labour", description: "Old description", quantity: "162.5", unitPrice: "1.00", taxCode: "none", sectionHeading: "Included work" };
+  const choose = (id, mapKind = null) => {
+    let replacement;
+    const systemLine = () => ({ ...line, quantity: "1", unitPrice: "2400.00", sectionHeading: "Solar system (12 panels)" });
+    const handler = new Function("onReplace", "solar", "systemLine", "line", "legacySolar", "compatibleItems", "mapKind", `${selectionCode}; return selectPriceBookItem;`)(value => { replacement = value; }, mapKind === "solar", systemLine, line, false, [item], mapKind);
+    handler(id);
+    return replacement;
+  };
+  for (const [mapKind, quantity] of [[null, "1"], ["area", "162.5"], ["solar", "1"]]) {
+    const replaced = choose(item.id, mapKind);
+    assert.deepEqual({ id: replaced.priceBookItemId, type: replaced.lineType, description: replaced.description, quantity: replaced.quantity, price: replaced.unitPrice, tax: replaced.taxCode, packet: replaced.jobPacketId, packetLine: replaced.jobPacketLineId },
+      { id: item.id, type: "product", description: "Saved description", quantity, price: "125.00", tax: "gst", packet: "", packetLine: "" });
+  }
+  assert.equal(choose("unavailable-item"), undefined, "injected unavailable items cannot change the quote");
+  assert.deepEqual(choose(""), { ...line, priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" });
+  assert.deepEqual(choose("", "solar"), { ...line, priceBookItemId: "", jobPacketId: "", jobPacketLineId: "", quantity: "1", unitPrice: "2400.00", sectionHeading: "Solar system (12 panels)" });
   assert.match(quoteUi, /Manage price book/);
   assert.doesNotMatch(quoteUi, /Add a saved item|No saved items yet/);
   assert.doesNotMatch(quoteUi, /priceBookItems\.length > 0 && <div className="trade-quote-price-book"/);
@@ -158,7 +178,17 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteUi, /readOnly=\{linked\}/);
   assert.match(quoteUi, /readOnly=\{linked \|\| discountLocked\}/);
   assert.match(quoteUi, /Change the quantity\{mapKind \? " here" : " or customer section here"\}/);
-  assert.equal((crm.match(/onOpenPriceBook=\{\(\) => \{ setPriceBookView\("items"\); setView\("pricebook"\); \}\}/g) || []).length, 1);
+  assert.equal((crm.match(/onOpenPriceBook=\{\(\) => openPriceBook\(\)\}/g) || []).length, 1);
+  const navigation = crm.match(/function openPriceBook\([^\n]+\) \{[\s\S]*?\n  \}/);
+  assert.ok(navigation);
+  const navigationCode = ts.transpileModule(navigation[0], { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const navigations = [];
+  const openPriceBook = new Function("onOpenFinance", "setPriceBookView", "setView", `${navigationCode}; return openPriceBook;`);
+  openPriceBook((...args) => navigations.push(args), () => assert.fail("must use the parent Finance route"), () => assert.fail("must use the parent Finance route"))();
+  assert.deepEqual(navigations, [["pricebook", "items"]]);
+  const localNavigations = [];
+  openPriceBook(undefined, value => localNavigations.push(["priceBookView", value]), value => localNavigations.push(["view", value]))("packets");
+  assert.deepEqual(localNavigations, [["priceBookView", "packets"], ["view", "pricebook"]]);
   assert.equal((crm.match(/<JobDetail key=/g) || []).length, 1);
   assert.match(crm, /navigationTarget\.kind === "crm-view"/);
 });

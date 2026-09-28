@@ -62,7 +62,7 @@ test("price-book solar panel classification validates exact dimensions and retai
     assert.throws(() => priceBook.normalisePriceBookInput({ ...values, solarPanel: { ...solarPanel, ...change } }, cleanAdminText), /INVALID_PRICE_BOOK_SOLAR_PANEL/);
   }
   assert.throws(() => priceBook.normalisePriceBookInput({ ...values, itemType: "labour" }, cleanAdminText), /INVALID_PRICE_BOOK_SOLAR_PANEL_TYPE/);
-  const { solarPanel: _panel, ...ordinary } = values;
+  const ordinary = { ...values }; delete ordinary.solarPanel;
   assert.equal("solarPanel" in priceBook.normalisePriceBookInput(ordinary, cleanAdminText), false, "older clients need not know the new field");
   assert.equal(priceBook.parsePriceBookSolarPanel("null"), null);
 });
@@ -95,7 +95,7 @@ test("map projection includes only authenticated owner's active solar panels and
 
 test("price updates from older clients preserve panel metadata and explicit General item removes it", async () => {
   const f = fixture(); const item = await f.create();
-  const { solarPanel: _panel, ...older } = values;
+  const older = { ...values }; delete older.solarPanel;
   let response = await f.route.PATCH(f.request("PATCH", { ...older, action: "update", itemId: item.id, sellPrice: "180", ownerUid: "owner-b" }));
   assert.equal(response.status, 200);
   let saved = (await response.json()).item;

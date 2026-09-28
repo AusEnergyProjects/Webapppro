@@ -2441,14 +2441,16 @@ test("Retained calculators, audit views and server priorities preserve their saf
     workspaceStyles,
     /\.jobRegister > header \.registerTools button,[\s\S]*height:\s*28px[\s\S]*max-height:\s*28px/,
   );
-  assert.match(
-    portalStyles,
-    /\.shell\s*\{[\s\S]*--portal-soft:\s*#071b2a[\s\S]*#020b18/,
-  );
-  assert.match(
-    portalStyles,
-    /\.topbar\s*\{[\s\S]*background:\s*linear-gradient/,
-  );
+  const lightShell = sourceSection(portalStyles, ".shell {", "}");
+  const nightShell = sourceSection(portalStyles, ':global(html[data-tlink-colour-mode="night"]) .shell {', "}");
+  assert.match(lightShell, /--portal-soft:\s*#fff\s*;/);
+  assert.match(lightShell, /--portal-raised:\s*#f3f7f8\s*;/);
+  assert.match(lightShell, /background:\s*var\(--portal-raised\)/);
+  assert.match(lightShell, /color-scheme:\s*light/);
+  assert.match(nightShell, /--portal-soft:\s*#071b2a\s*;/);
+  assert.match(nightShell, /--portal-raised:\s*#0b2635\s*;/);
+  assert.match(nightShell, /color-scheme:\s*dark/);
+  assert.match(sourceSection(portalStyles, ".topbar {", "}"), /background:\s*var\(--portal-soft\)/);
   assert.match(
     workspaceStyles,
     /\.jobTable\s*\{[\s\S]*font-size:\s*0\.75rem/,

@@ -171,8 +171,17 @@ test("batch schedule saves explicitly request a provider refresh", () => {
 
 test("calendar job links open the exact authorised TLink job schedule", () => {
   assert.match(calendarSource, /jobId=\$\{encodeURIComponent\(eventText\(appointment\.work_order_id, 180\)\)\}/);
-  assert.match(dashboardSource, /function jobNavigationFromSearch\(search: string\)/);
-  assert.match(dashboardSource, /kind: "job", id: jobId, query: "", jobTab: "schedule"/);
+  const source = ts.createSourceFile("dashboard.tsx", dashboardSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const helpers = source.statements.filter(node => ts.isFunctionDeclaration(node) && ["dashboardWorkspaceFromSearch", "jobNavigationFromSearch"].includes(node.name?.text)
+    || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => ["dashboardWorkspaces", "workOrderIdPattern"].includes(declaration.name.getText(source))));
+  const output = ts.transpileModule(helpers.map(node => node.getText(source)).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const navigate = Function(`${output}\nreturn jobNavigationFromSearch;`)();
+  const target = navigate("?workspace=work&jobId=exact-job-123");
+  assert.equal(target.workspace, "work"); assert.equal(target.kind, "job"); assert.equal(target.id, "exact-job-123");
+  assert.equal(target.query, ""); assert.equal(target.jobTab, "schedule");
+  for (const jobTab of ["schedule", "quote", "invoice", "field", "summary"]) assert.equal(navigate(`?workspace=work&jobId=exact-job-123&jobTab=${jobTab}`).jobTab, jobTab);
+  assert.equal(navigate("?workspace=work&jobId=exact-job-123&jobTab=unknown").jobTab, "schedule");
+  for (const query of ["?workspace=work", "?workspace=work&jobId=bad%20id", "?workspace=finance&jobId=exact-job-123"]) assert.equal(navigate(query), null);
   assert.match(dashboardSource,
     /const initialJobTarget = dashboardCommandTargetFromSearch\(window\.location\.search\);[\s\S]{0,260}!commandTarget[\s\S]{0,160}initialJobTarget\?\.kind === "job"[\s\S]{0,160}setCommandTarget\(initialJobTarget\);[\s\S]{0,80}return;/,
     "hydration must consume the incoming jobId before route synchronisation can remove it");

@@ -27,7 +27,14 @@ test("member service regions save explicitly and show failures inside the editin
 });
 
 test("Team is a routed first-class workspace and Business links to it", () => {
-  assert.match(dashboard, /DashboardWorkspace = "work" \| "team"/);
+  const workspaceType = dashboard.match(/type DashboardWorkspace\s*=([^;]+);/);
+  const workspaceRegistry = dashboard.match(/const dashboardWorkspaces = new Set<DashboardWorkspace>\(\[([\s\S]*?)\]\)/);
+  assert.ok(workspaceType);
+  assert.ok(workspaceRegistry);
+  for (const name of ["work", "team"]) {
+    assert.ok(Array.from(workspaceType[1].matchAll(/"([^"]+)"/g), match => match[1]).includes(name));
+    assert.ok(Array.from(workspaceRegistry[1].matchAll(/"([^"]+)"/g), match => match[1]).includes(name));
+  }
   assert.match(dashboard, /workspace === "team"/);
   assert.match(dashboard, /People, access and member records/);
   assert.match(dashboard, /window\.addEventListener\("popstate"/);

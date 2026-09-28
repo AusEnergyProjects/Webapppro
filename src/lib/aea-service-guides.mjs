@@ -10,12 +10,12 @@ export const AEA_SERVICE_GUIDES = Object.freeze({
     ],
     preparation: ["Give us the property address, access contact and date of the last smoke alarm service.", "Tell us about beeping, damaged or missing alarms and any unusual alarm system before the visit.", "Arrange access to rooms containing alarms and corded window coverings; keep pets secure and access clear.", "Keep existing service records available. You do not need to climb up, remove alarms or touch wiring."],
     outcomeTitle: "Support continues between scheduled visits",
-    outcome: "Between-visit fault callouts for the covered smoke and blind service are included. Contact AEA when a fault is noticed instead of waiting for the next annual visit. We record the issue and arrange the appropriate response. If work falls outside the standard included items, we explain the scope and obtain authorisation before additional work proceeds.",
+    outcome: "Between-visit fault callouts for the covered smoke and blind service are included. Contact Australian Energy Assessments when a fault is noticed instead of waiting for the next annual visit. We record the issue and arrange the appropriate response. If work falls outside the standard included items, we explain the scope and obtain authorisation before additional work proceeds.",
     related: ["electrical-safety-check", "gas-safety-check", "minimum-rental-standards"],
   },
   "gas-safety-check": {
     title: "One property price, with a record for the gas work performed",
-    introduction: "A rental gas check involves more than confirming that a heater lights. The gasfitter considers the gas installation and appliances within the tenancy scope, carries out the required servicing and safety checks, and records the results. Additional gas appliances do not increase AEA's inspection price.",
+    introduction: "A rental gas check involves more than confirming that a heater lights. The gasfitter considers the gas installation and appliances within the tenancy scope, carries out the required servicing and safety checks, and records the results. Additional gas appliances do not increase Australian Energy Assessments' inspection price.",
     steps: [
       ["Confirm appliances and history", "We confirm the property details, appliance locations and any known faults or previous service records. The gas work is allocated to a gasfitter with the required Type A appliance servicing endorsement."],
       ["Service and test", "The gasfitter performs the applicable installation and appliance checks, including the relevant ventilation, flue, combustion and safety checks. The requirements depend on the appliance and installation; the professional service record captures the actual work and findings."],

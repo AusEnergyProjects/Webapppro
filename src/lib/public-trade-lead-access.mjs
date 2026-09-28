@@ -56,7 +56,7 @@ export function publicTradeContactForMatchedLead(row, allowAeaDelivery = false) 
     )
   ) return null;
 
-  // These notices authorise AEA to handle its own services. The saved sharing
+  // These notices authorise Australian Energy Assessments to handle its own services. The saved sharing
   // choices still govern disclosure to other businesses, including older notices.
   const aeaHandledContact = aeaServiceContactConsentAllows(row, allowAeaDelivery);
   const disclosed = new Set(disclosedFields);

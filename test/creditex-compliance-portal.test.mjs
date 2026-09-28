@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import ts from "typescript";
 import {
   requestWithCreditexTokenRecovery,
 } from "../src/lib/creditex-auth-token.ts";
@@ -68,6 +69,34 @@ test("Creditex compliance page is excluded from search and archival", () => {
   ]) assert.match(page, directive);
 });
 
+
+// Inspect executable provisioning imports/calls; comments about an existing owner do not create accounts.
+function provisioningOperations(source) {
+  const file = ts.createSourceFile("portal.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const forbidden = /createUserWithEmailAndPassword|signUp|bootstrap|seed_/i;
+  const operations = [];
+  const visit = (node) => {
+    const operation = ts.isImportDeclaration(node) ? node.getText(file)
+      : ts.isCallExpression(node) ? [node.expression.getText(file), ...node.arguments.filter(ts.isStringLiteralLike).map(argument => argument.text)].join(" ") : "";
+    if (operation && forbidden.test(operation)) operations.push(operation);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return operations;
+}
+
+test("registration guard detects executable provisioning and ignores explanatory comments", () => {
+  assert.deepEqual(provisioningOperations("// The bootstrap owner already exists.\nconst text = 'No public signUp';"), []);
+  for (const source of [
+    "import { createUserWithEmailAndPassword as register } from 'firebase/auth';",
+    "firebase.createUserWithEmailAndPassword(auth, email, password);",
+    "account['signUp']();",
+    "bootstrapAccount();",
+    "seed_demo();",
+    "fetch('/api/bootstrap');",
+  ]) assert.equal(provisioningOperations(source).length, 1, source);
+});
+
 test("portal uses Firebase sign-in without public registration or bootstrap", () => {
   for (const contract of [
     /onAuthStateChanged/,
@@ -76,7 +105,7 @@ test("portal uses Firebase sign-in without public registration or bootstrap", ()
     /sendPasswordResetEmail/,
     /There is no public registration/,
   ]) assert.match(portal, contract);
-  assert.doesNotMatch(surfaceSource, /createUserWithEmailAndPassword|signUp|bootstrap|seed_/i);
+  assert.deepEqual(provisioningOperations(surfaceSource), [], "Public portal surfaces must not import or call account provisioning.");
   assert.doesNotMatch(sessionRoute, /export async function POST/);
   assert.match(portal, /authUidRef = useRef\(""\)/);
   assert.match(portal, /workspaceLoadRef = useRef<\{[\s\S]*uid: string;[\s\S]*promise: Promise<void>/);

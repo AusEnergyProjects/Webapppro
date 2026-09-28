@@ -189,13 +189,18 @@ test("installer jobs export every filtered page through the owner scoped Datafor
 });
 
 test("the job register uses separate operational columns without changing the Dataforce export contract", () => {
-  assert.match(crm, /import \{ JOB_REGISTER_COLUMN_KEYS, type JobRegisterRecord \}/);
+  const registerImport = crm.match(/import\s*\{([^}]+)\}\s*from\s*"@\/lib\/trade-crm-job-register"/);
+  assert.ok(registerImport, "the register consumes the shared column contract");
+  const imports = registerImport[1].split(",").map(value => value.trim());
+  assert.ok(imports.includes("JOB_REGISTER_COLUMN_KEYS"));
+  assert.ok(imports.includes("type JobRegisterRecord"));
   assert.match(crm, /JOB_REGISTER_DEFAULT_COLUMNS/);
   assert.match(crm, /function safeJobRegisterColumns\(columns: unknown\): JobRegisterColumnKey\[\]/);
   assert.match(crm, /!JOB_REGISTER_COLUMN_KEY_SET\.has\(key\)/);
   assert.match(crm, /new Set\(columns\)\.size !== columns\.length/);
   assert.match(crm, /return \[\.\.\.columns\] as JobRegisterColumnKey\[\]/);
-  assert.match(crm, /setJobColumns\(safeJobRegisterColumns\(preferences\.jobColumnOrderVersion === 4 \? preferences\.columns : undefined\)\)/);
+  assert.match(crm, /setJobColumns\(safeJobRegisterColumns\(preferences\.jobColumnOrderVersion === 5 \? preferences\.columns : undefined\)\)/);
+  assert.match(crm, /jobColumnOrderVersion: 5, columns: jobColumns/);
   assert.match(crm, /setJobColumns\(safeJobRegisterColumns\(preferences\.columns\)\)/);
   assert.doesNotMatch(crm, /setJobColumns\(preferences\.columns\?\./);
   for (const label of ["Job ID", "First name", "Last name", "Contact number", "Email", "Street address", "Postcode", "Suburb", "State", "Assigned worker", "Schedule date", "Created date", "Quote total ex GST", "STC", "VEEC", "ESC", "Other certs"]) {
