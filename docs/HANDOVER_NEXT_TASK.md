@@ -1,9 +1,17 @@
 # Next task handover
 
-Status: minimum work rates and five daily job publications are in release validation. Verified baseline Sites 647, source 77d4dd7ba30bee8fb4e40659de56d49cc4a254ae.
-Prepared: 27 September 2026
+Status: automatic accepted-quote invoice delivery and accounting are in release validation. Verified baseline Sites 649, source 39495bda774d29341059bb09440dae848412e8bd.
+Prepared: 28 September 2026
 
-## Active contract: simple work preferences and bounded job publication
+## Active contract: hands-off invoicing after customer acceptance
+
+Outcome: a new customer acceptance creates the exact immutable invoice, emails its attached PDF to the issued quote recipient and exports to the connected accounting company without manual invoice preparation. Preserve existing invoice-conflict handling, protected-customer restrictions, MFA and payment checks. Never create a second invoice or blindly resend an uncertain email. No historical-invoice backfill.
+
+Scope: acceptance transaction, durable email/accounting queues, existing provider adapters, invoice status UI and migrations 0204/0205 in C:/Webproject/aea-energy-tlink-map, branch codex/tlink-customer-job-map. One account/item choice is remembered where the provider has several possibilities. Missing provider configuration or business connections remain explicit; provider acceptance is not proof of inbox receipt.
+
+Validation: focused acceptance/concurrency/tenant/revocation/PDF/transport tests, full suite, typecheck, scoped lint, 205-migration replay, visual synthetic PDF review and committed publication build. Publish the exact GitHub/Sites source and verify the affected desktop/mobile UI without accepting or emailing a real customer quote. Final identity, known baseline failures and live evidence: C:/Webproject/outputs/tlink-automatic-invoice-2026-09-28/.
+
+## Previous contract: simple work preferences and bounded job publication
 
 Outcome: businesses optionally save minimum hourly, daily and per-job rates; automatic leads respect the matching unit while all posts remain browsable. Every new or edited post requires a positive price. Each business may publish five work posts per Sydney calendar day, shared across team members. Renewals count; ordinary edits and successful retries do not. Available-trade listings retain the existing active-post limit.
 

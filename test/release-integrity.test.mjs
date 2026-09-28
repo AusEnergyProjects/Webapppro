@@ -81,7 +81,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(agents, /immutable dated evidence baseline; never rewrite it as current status/);
   assert.match(readme, /immutable evidence baseline/);
   assert.match(releaseTruth, /only current implementation and release-status document/);
-  assert.match(roadmap, /Last reconciled: 25 September 2026/);
+  assert.match(roadmap, /Last reconciled: 28 September 2026/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-69/);
@@ -90,14 +90,15 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-71/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-70/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 27 September 2026/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 28 September 2026/);
   assert.match(
     handover,
     /Status: system audit and polish[^\n]*Customer self-service accounts[^\n]*\r?\nPrepared: 9 September 2026/,
   );
   assert.match(handover, /Current production: Sites version 499/);
-  assert.match(releaseTruth, /Last reconciled locally: 27 September 2026/);
-  assert.match(releaseTruth, /## Current implementation: business minimum rates and five daily job posts/);
+  assert.match(releaseTruth, /Last reconciled locally: 28 September 2026/);
+  assert.match(releaseTruth, /## Current implementation: automatic accepted-quote invoice delivery and accounting/);
+  assert.match(releaseTruth, /## Previous implementation: business minimum rates and five daily job posts/);
   assert.match(releaseTruth, /## Previous implementation: automatic trade leads and simple work availability/);
   assert.match(releaseTruth, /## Previous implementation: saved roof designs and simple map quoting/);
   assert.match(releaseTruth, /## Previous implementation: bulk lodgement and explicit job review/);
@@ -108,7 +109,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Previous implementation: accounting export correctness and provider activation/);
   assert.match(releaseTruth, /## Previous implementation: lead access and technician service regions/);
   assert.match(releaseTruth, /## Historical public production release: predictive navigation and exact provenance/);
-  assert.match(releaseTruth, /Deployment baseline for this change: Sites 647, source `77d4dd7ba30bee8fb4e40659de56d49cc4a254ae`/);
+  assert.match(releaseTruth, /Deployment baseline for this change: Sites 649, source `39495bda774d29341059bb09440dae848412e8bd`/);
   assert.match(releaseTruth, /4908a1467d90b2fff57b70517fad5e41e18e12b0/);
   assert.match(releaseTruth, /Sites version 499/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508/);

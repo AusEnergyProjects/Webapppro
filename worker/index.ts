@@ -64,6 +64,10 @@ import {
 } from "../src/lib/service-reminder-delivery";
 import { drainTradeQuoteDeliveries } from "../src/lib/trade-quote-delivery-server";
 import { queueTradeQuoteDeliveryDispatch } from "../src/lib/trade-quote-delivery-dispatch";
+import { queueAccountingDispatch } from "../src/lib/trade-accounting-automation-dispatch";
+import { drainAccountingDispatches } from "../src/lib/trade-accounting-automation";
+import { exportAcceptedInvoiceAutomatically } from "../src/lib/trade-accounting-server";
+import { drainAcceptedInvoiceEmails } from "../src/lib/trade-accepted-invoice-delivery-server";
 import {
   canonicalPublicTarget,
   publicRedirectTarget,
@@ -433,6 +437,14 @@ function queueBackgroundDispatches(
       );
     }
   }
+  response = queueAccountingDispatch(response, {
+    waitUntil: (promise) => ctx.waitUntil(promise),
+    drain: (invoiceId) => Promise.all([
+      drainAccountingDispatches({ db: getD1(), invoiceId, exportInvoice: exportAcceptedInvoiceAutomatically }),
+      drainAcceptedInvoiceEmails({ db: getD1(), invoiceId }),
+    ]),
+    onError: () => console.error("Automatic invoice dispatch failed; the durable queues will retry."),
+  });
   return queueTradeQuoteDeliveryDispatch(queuePublicPlanDeliveryDispatch(queueCreditexProductRegistryDispatch(queueCustomerProjectActivityDispatch(
     queueOpportunityNotificationDispatch(
       queueCustomerOpportunityDispatch(response, ctx),
@@ -526,6 +538,12 @@ const worker = {
       }).EVIDENCE;
       const registryEnvironment = workerEnv as Readonly<Record<string, unknown>>;
       tasks.push(
+        drainAcceptedInvoiceEmails({ db: getD1() }).catch(() => {
+          console.error("Automatic accepted invoice email queue could not be processed.");
+        }),
+        drainAccountingDispatches({ db: getD1(), exportInvoice: exportAcceptedInvoiceAutomatically }).catch(() => {
+          console.error("Automatic invoice accounting queue could not be processed.");
+        }),
         removeExpiredIntegrationStates(getD1()).catch(() => {
           console.error("Integration state retention cleanup failed.", { code: "OAUTH_STATE_CLEANUP_FAILED" });
         }),

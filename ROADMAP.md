@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 25 September 2026
+Last reconciled: 28 September 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -15,6 +15,10 @@ Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-curren
 The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEASE_TRUTH.md) records the latest reconciled implementation and deployment state. The [next-task handover](./docs/HANDOVER_NEXT_TASK.md) contains one executable milestone. This roadmap contains only approved forward work and measurable gates.
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
+
+## Current accepted-invoice completion gate
+
+Automatic PDF email and connected bookkeeping export on new quote acceptance are implemented and in release validation, with migrations 0204/0205. Complete exact-source publication and read-only desktop/mobile checks. Provider inbox receipt and external invoice creation require an authorised operational acceptance with an active business email/accounting connection; do not treat local fixtures as live provider evidence. Preserve immutable invoices and duplicate protection. Evidence: C:/Webproject/outputs/tlink-automatic-invoice-2026-09-28/.
 
 ## Current certificate submission priority
 

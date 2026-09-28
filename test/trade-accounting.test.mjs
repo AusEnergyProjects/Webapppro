@@ -15,7 +15,7 @@ import {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0022_worried_sleepwalker.sql");
-const route = read("../src/app/api/trade-accounting/route.ts");
+const route = read("../src/lib/trade-accounting-server.ts");
 const providerExport = read("../src/lib/trade-accounting-export.ts");
 const schema = read("../db/schema.ts");
 const providerSettings = read("../src/lib/trade-integrations-server.ts");

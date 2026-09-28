@@ -9,7 +9,7 @@ const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0068_accepted_quote_handoff.sql");
 const handoffRoute = read("../src/app/api/trade-commercial-handoff/route.ts");
 const paymentRouteUrl = new URL("../src/app/api/trade-payment-links/route.ts", import.meta.url);
-const accountingRoute = read("../src/app/api/trade-accounting/route.ts");
+const accountingRoute = read("../src/lib/trade-accounting-server.ts");
 const ui = read("../src/components/TradeCommercialHandoffPanel.tsx");
 const accountingUi = read("../src/components/TradeAccountingPanel.tsx");
 

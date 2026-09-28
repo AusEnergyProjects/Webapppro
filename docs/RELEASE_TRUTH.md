@@ -4,13 +4,23 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 27 September 2026
+Last reconciled locally: 28 September 2026
 
-Deployment baseline for this change: Sites 647, source `77d4dd7ba30bee8fb4e40659de56d49cc4a254ae`. Saved roof designs, product documents and approved email delivery are preserved. The coordinating release records the next matching GitHub/Sites identity.
+Deployment baseline for this change: Sites 649, source `39495bda774d29341059bb09440dae848412e8bd`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-automatic-invoice-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: business minimum rates and five daily job posts
+## Current implementation: automatic accepted-quote invoice delivery and accounting
+
+New customer quote acceptances retain the existing exact, immutable invoice and atomically enqueue its PDF email and accounting export. Migration 0204 adds a connection-bound accounting queue and records verified MYOB MFA grants; 0205 adds the invoice delivery outbox. Neither migration sends historical invoices. The accepted quote's saved recipient, selected scope, discounts, GST, payment details and total remain authoritative.
+
+The worker starts both queues after acceptance and the existing minute schedule drains interrupted work. Email uses the business's existing transport with a compressed immutable PDF attachment and an idempotent submission journal. Current approval, customer access, unpaid balance and frozen payment details are rechecked before sending. Definite transient failures retry; uncertain provider submissions require reconciliation instead of blind resend. The job invoice screen shows truthful provider-acceptance status and a safe retry for definite failures.
+
+Accounting reuses the existing issued-invoice adapters and duplicate reconciliation. One connected provider and company are frozen at acceptance (most recently used when several are connected). A saved account/item is reused; an unambiguous sole account may be selected automatically; otherwise the business chooses it once. Current approval and connection binding are checked before provider requests. Missing connections, accounts or MYOB setup remain visible requirements. Accounting export does not ask the provider to send a second email.
+
+Validation: 214 focused tests passed; typecheck, scoped lint and all 205 migrations passed. Full suite: 6,115 passed, 11 skipped, the same 11 failures as the pre-change baseline. A synthetic 2,585-byte invoice PDF was visually inspected. Final build, release and live UI evidence belong in the release output folder. No real customer quote is accepted or invoice sent during verification; production provider receipt and accounting export remain unverified until an authorised operational use.
+
+## Previous implementation: business minimum rates and five daily job posts
 
 Businesses can optionally set a minimum per hour, day and job in Trades & rates. Values are private, excluding GST, and blank means any positive price for that rate type. Automatic leads, counts and notifications require the offered rate to meet the matching minimum; the browse feed and explicit enquiries remain available regardless of minimums. New and edited posts require a positive price and a rate unit. Legacy unpriced posts remain browsable but cannot deliver leads or renew until a price is added.
 

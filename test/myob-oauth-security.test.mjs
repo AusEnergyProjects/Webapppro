@@ -25,6 +25,8 @@ function fixture(t, options = {}) {
     INSERT INTO trade_accounts VALUES ('owner-one',1),('owner-two',1);
     CREATE TABLE admin_users(id TEXT PRIMARY KEY,firebase_uid TEXT,email TEXT,display_name TEXT,role TEXT,status TEXT,last_login_at TEXT,updated_at TEXT);
     INSERT INTO admin_users VALUES ('admin-record','owner-one','synthetic@example.test','Test administrator','admin','active','','');`);
+  sqlite.exec(`CREATE TABLE trade_crm_accepted_invoices(id TEXT PRIMARY KEY);`);
+  sqlite.exec(read("../drizzle/0204_accepted_invoice_accounting_automation.sql"));
   const statement = (sql, args = []) => ({
     bind: (...values) => statement(sql, values),
     async first() { return sqlite.prepare(sql).get(...args) || null; },
@@ -170,6 +172,7 @@ test("one-time MYOB callback state allows only one concurrent token exchange and
   const row = h.sqlite.prepare("SELECT * FROM trade_crm_integrations").get();
   assert.equal(row.firebase_uid, "owner-one"); assert.equal(row.external_account_id, "synthetic-file");
   assert.match(row.encrypted_credentials, /^encrypted:/);
+  assert.ok(Date.parse(row.invoice_sync_mfa_verified_at));
   assert.equal(h.events("oauth.callback").filter((event) => event.outcome === "success").length, 1);
 });
 

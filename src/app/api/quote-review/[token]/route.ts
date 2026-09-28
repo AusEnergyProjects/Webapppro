@@ -1,6 +1,9 @@
 import { getD1 } from "../../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { buildAcceptedInvoiceSnapshot } from "@/lib/trade-accepted-invoice";
+import { acceptedInvoiceAccountingDispatch } from "@/lib/trade-accounting-automation";
+import { withAccountingDispatch } from "@/lib/trade-accounting-automation-dispatch";
+import { acceptedInvoiceEmailDispatch } from "@/lib/trade-accepted-invoice-delivery-server";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import { acceptedScopeSnapshot, depositAmountCents } from "@/lib/trade-commercial-handoff";
 import { providerNeutralCommercialRecord } from "@/lib/trade-commercial-reference";
@@ -144,13 +147,13 @@ async function existingInvoiceConflict(
 }
 
 function success(stored: Awaited<ReturnType<typeof exactQuoteDecisionReplay>>, duplicate: boolean) {
-  return adminJson({
+  return withAccountingDispatch(adminJson({
     ok: true,
     duplicate,
     decision: stored.receipt.decision,
     commercial: stored.commercial,
     receipt: stored.receipt,
-  });
+  }), stored.receipt.decision === "accepted" ? stored.receipt.invoice?.id || "" : "");
 }
 
 export async function GET(_request: Request, context: Context) {
@@ -572,6 +575,10 @@ export async function POST(request: Request, context: Context) {
             selection.taxCents, selection.totalCents),
       );
     }
+    if (invoice?.status === "issued") statements.push(
+      acceptedInvoiceAccountingDispatch(db, invoiceId, now),
+      acceptedInvoiceEmailDispatch(db, invoiceId, now),
+    );
     statements.push(db.prepare(`INSERT INTO trade_accounts
       SELECT guard.* FROM trade_accounts guard
       WHERE guard.firebase_uid = ? AND NOT (

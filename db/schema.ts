@@ -3117,6 +3117,7 @@ export const tradeCrmIntegrations = sqliteTable("trade_crm_integrations", {
   externalAccountId: text("external_account_id").notNull().default(""),
   externalAccountLabel: text("external_account_label").notNull().default(""),
   defaultAccountReference: text("default_account_reference").notNull().default(""),
+  invoiceSyncMfaVerifiedAt: text("invoice_sync_mfa_verified_at").notNull().default(""),
   encryptedCredentials: text("encrypted_credentials").notNull(),
   scopes: text("scopes").notNull().default("[]"),
   tokenExpiresAt: text("token_expires_at").notNull().default(""),
@@ -3127,6 +3128,61 @@ export const tradeCrmIntegrations = sqliteTable("trade_crm_integrations", {
 }, (table) => [
   uniqueIndex("trade_crm_integrations_owner_provider_idx").on(table.firebaseUid, table.provider),
   index("trade_crm_integrations_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
+]);
+
+export const tradeCrmAcceptedInvoiceDeliveries = sqliteTable("trade_crm_accepted_invoice_deliveries", {
+  invoiceId: text("invoice_id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  quoteLinkId: text("quote_link_id").notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  status: text("status").notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  leaseToken: text("lease_token").notNull().default(""),
+  leaseExpiresAt: text("lease_expires_at").notNull().default(""),
+  pdfObjectKey: text("pdf_object_key").notNull().default(""),
+  pdfSha256: text("pdf_sha256").notNull().default(""),
+  pdfSizeBytes: integer("pdf_size_bytes").notNull().default(0),
+  provider: text("provider").notNull().default(""),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  errorCode: text("error_code").notNull().default(""),
+  submittedAt: text("submitted_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_crm_accepted_invoice_deliveries_due_idx").on(table.status, table.nextAttemptAt, table.leaseExpiresAt),
+  index("trade_crm_accepted_invoice_deliveries_owner_idx").on(table.firebaseUid, table.invoiceId),
+  check("trade_crm_accepted_invoice_deliveries_status_check", sql`${table.status} IN ('queued', 'sending', 'provider_accepted', 'failed', 'reconciliation_required')`),
+  check("trade_crm_accepted_invoice_deliveries_attempts_check", sql`${table.attempts} BETWEEN 0 AND 5`),
+  check("trade_crm_accepted_invoice_deliveries_size_check", sql`${table.pdfSizeBytes} >= 0`),
+  check("trade_crm_accepted_invoice_deliveries_lease_check", sql`${table.status} <> 'sending' OR (${table.leaseToken} <> '' AND ${table.leaseExpiresAt} <> '')`),
+  check("trade_crm_accepted_invoice_deliveries_submission_check", sql`${table.status} <> 'provider_accepted' OR ${table.providerMessageId} <> ''`),
+]);
+
+export const tradeCrmAccountingDispatches = sqliteTable("trade_crm_accounting_dispatches", {
+  invoiceId: text("invoice_id").primaryKey().references(() => tradeCrmAcceptedInvoices.id),
+  firebaseUid: text("firebase_uid").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  connectionId: text("connection_id").notNull(),
+  provider: text("provider").notNull(),
+  externalAccountId: text("external_account_id").notNull(),
+  accountReference: text("account_reference").notNull().default(""),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull(),
+  leaseToken: text("lease_token").notNull().default(""),
+  leaseExpiresAt: text("lease_expires_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_accounting_dispatches_owner_job_idx").on(table.firebaseUid, table.workOrderId),
+  index("trade_crm_accounting_dispatches_due_idx").on(table.status, table.nextAttemptAt),
+  check("trade_crm_accounting_dispatches_provider_check", sql`${table.provider} IN ('xero', 'myob', 'quickbooks')`),
+  check("trade_crm_accounting_dispatches_status_check", sql`${table.status} IN ('pending', 'processing', 'retry', 'needs_attention', 'synced')`),
+  check("trade_crm_accounting_dispatches_attempts_check", sql`${table.attempts} >= 0`),
+  check("trade_crm_accounting_dispatches_company_check", sql`trim(${table.externalAccountId}) <> ''`),
 ]);
 
 export const tradeCrmOauthStates = sqliteTable("trade_crm_oauth_states", {

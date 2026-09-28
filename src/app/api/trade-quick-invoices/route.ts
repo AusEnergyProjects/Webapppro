@@ -1,4 +1,6 @@
 import { getD1 } from "../../../../db";
+import { acceptedInvoiceEmailStatus, retryAcceptedInvoiceEmail } from "@/lib/trade-accepted-invoice-delivery-server";
+import { withAccountingDispatch } from "@/lib/trade-accounting-automation-dispatch";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import {
   assignedJob,
@@ -41,6 +43,9 @@ function invoiceError(error: unknown) {
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
+  if (code === "ACCEPTED_INVOICE_RETRY_UNAVAILABLE") return adminJson({ ok: false, error: "This invoice email cannot be retried safely. Refresh its status and check Sent mail first." }, 409);
+  if (code.startsWith("ACCEPTED_INVOICE_PAYMENT_")) return adminJson({ ok: false, error: "The saved invoice payment details need checking before this email can be sent." }, 409);
+  if (["ACCEPTED_INVOICE_ACCESS_ENDED", "ACCEPTED_INVOICE_DOCUMENT_INVALID", "ACCEPTED_INVOICE_RECIPIENT_INVALID"].includes(code)) return adminJson({ ok: false, error: "The accepted invoice or customer contact needs checking before this email can be sent." }, 409);
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED", "ABN_REVIEW_REQUIRED", "EMAIL_VERIFICATION_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "This installer account does not currently have invoice access." }, 403);
   if (code === "QUICK_INVOICE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can manage customer invoices." }, 403);
@@ -309,7 +314,8 @@ export async function GET(request: Request) {
       : await latestQuoteInvoiceTemplate(access.ownerUid, workOrderId);
     return adminJson({ ok: true, access: invoiceAccessPayload(access),
       invoice: row ? await completePayload(row) : null,
-      acceptedInvoice: acceptedRow ? acceptedInvoicePayload(acceptedRow) : null,
+      acceptedInvoice: acceptedRow ? { ...acceptedInvoicePayload(acceptedRow),
+        delivery: await acceptedInvoiceEmailStatus(getD1(), access.ownerUid, String(acceptedRow.id)) } : null,
       quoteTemplate });
   } catch (error) { return invoiceError(error); }
 }
@@ -325,6 +331,13 @@ export async function POST(request: Request) {
     if (scopedJobId) await assignedJob(access, scopedJobId);
     const db = getD1();
     const now = new Date().toISOString();
+    if (action === "retry_accepted_email") {
+      if (!scopedJobId) return adminJson({ ok: false, error: "Choose an invoice." }, 400);
+      const accepted = await acceptedInvoiceRow(access.ownerUid, scopedJobId);
+      if (!accepted) return adminJson({ ok: false, error: "Accepted invoice not found." }, 404);
+      await retryAcceptedInvoiceEmail(db, access.ownerUid, String(accepted.id));
+      return withAccountingDispatch(adminJson({ ok: true }), String(accepted.id));
+    }
     const australiaSydneyToday = australiaLocalDateTime(
       "NSW",
       new Date(now),

@@ -218,8 +218,8 @@ export async function GET(request: Request, context: CallbackContext) {
       : "";
     const attachmentStatement = db.prepare(`INSERT INTO trade_crm_integrations
       (id, firebase_uid, provider, status, external_account_id, external_account_label, encrypted_credentials,
-       scopes, token_expires_at, last_sync_at, last_error, created_at, updated_at)
-      SELECT ?, approved_account.firebase_uid, ?, 'connected', ?, ?, ?, ?, ?, '', '', ?, ?
+       scopes, token_expires_at, last_sync_at, last_error, created_at, updated_at, invoice_sync_mfa_verified_at)
+      SELECT ?, approved_account.firebase_uid, ?, 'connected', ?, ?, ?, ?, ?, '', '', ?, ?, ?
       FROM trade_accounts approved_account
       WHERE approved_account.firebase_uid = ? AND ${verifiedTradeAccountPredicate("approved_account")}
         AND EXISTS (SELECT 1 FROM trade_crm_oauth_states active_state
@@ -230,9 +230,10 @@ export async function GET(request: Request, context: CallbackContext) {
           THEN trade_crm_integrations.default_account_reference ELSE '' END,
         external_account_id = excluded.external_account_id, external_account_label = excluded.external_account_label,
         encrypted_credentials = excluded.encrypted_credentials, scopes = excluded.scopes,
+        invoice_sync_mfa_verified_at = excluded.invoice_sync_mfa_verified_at,
         token_expires_at = excluded.token_expires_at, last_error = '', updated_at = excluded.updated_at`)
       .bind(crypto.randomUUID(), provider, account.id, account.label,
-        await encryptIntegrationCredentials(credentials), JSON.stringify(setting.scopes), expiresAt, now, now,
+        await encryptIntegrationCredentials(credentials), JSON.stringify(setting.scopes), expiresAt, now, now, myobActorUid ? now : "",
         stateRow.firebase_uid, stateRow.id, provider, now, new Date().toISOString());
     const [attached] = await db.batch([
       attachmentStatement,

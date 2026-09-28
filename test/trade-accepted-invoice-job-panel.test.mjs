@@ -64,7 +64,7 @@ test("job Invoice tab renders the accepted invoice as a read-only exact summary"
   const acceptedView = panel.slice(acceptedStart, createStart);
   for (const copy of [
     "Invoice from accepted quote",
-    "This read-only invoice matches the exact quote the customer accepted.",
+    "Created automatically when the customer accepted.",
     "Subtotal",
     "GST",
     "Invoice total",
@@ -91,7 +91,7 @@ test("job Invoice tab renders the accepted invoice as a read-only exact summary"
     "correctDraft",
     "TradePaymentPanel",
   ]) assert.doesNotMatch(acceptedView, new RegExp(forbidden));
-  assert.match(acceptedView, /Send to MYOB, Xero or QuickBooks/);
+  assert.match(acceptedView, /<TradeAccountingPanel compact/);
   assert.match(acceptedView, /<TradeAccountingPanel/);
   assert.match(acceptedView, /invoiceSource="accepted_quote"/);
   assert.match(acceptedView, /acceptedInvoice\.document\.lines/);

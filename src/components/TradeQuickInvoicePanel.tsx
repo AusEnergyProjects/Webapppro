@@ -48,6 +48,7 @@ type AcceptedInvoice = {
     work?: { title?: string };
   };
   readOnly: true; source: "accepted_quote";
+  delivery: null | { status: string; errorCode: string; nextAttemptAt: string; recipientEmail: string; submittedAt: string };
 };
 type EditLine = { id: string; description: string; amount: string; taxCode: "gst" | "none" };
 type QuickInvoiceResult = { invoice?: QuickInvoice | null; acceptedInvoice?: AcceptedInvoice | null; access?: { canManageInvoices?: boolean; canViewPriceBook?: boolean; canApplyDiscounts?: boolean }; error?: string };
@@ -118,6 +119,26 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     setAcceptedInvoice(result.acceptedInvoice || null);
     acceptInvoice(result.invoice || null);
   }, [acceptInvoice, user, workOrderId]);
+
+  useEffect(() => {
+    if (!acceptedInvoice?.delivery || !["queued", "sending"].includes(acceptedInvoice.delivery.status)) return;
+    const timer = window.setTimeout(() => void load().catch(() => setStatus("Invoice status could not be refreshed.")), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [acceptedInvoice, load]);
+
+  async function retryAcceptedEmail() {
+    setBusy("accepted-email"); setStatus("");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/trade-quick-invoices", { method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "retry_accepted_email", workOrderId }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "The invoice email could not be retried.");
+      await load();
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The invoice email could not be retried."); }
+    finally { setBusy(""); }
+  }
 
   useEffect(() => {
     let active = true;
@@ -378,8 +399,19 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     const bankPayment = acceptedInvoice.payment.available
       ? acceptedInvoice.payment
       : null;
+    const email = acceptedInvoice.delivery;
+    const emailLabels: Record<string, string> = { queued: "Invoice email queued", sending: "Sending invoice PDF",
+      provider_accepted: "Invoice email accepted for delivery", failed: "Invoice email needs attention",
+      reconciliation_required: "Check invoice email delivery" };
     return <section className="crm-quick-invoice-panel">
-      <header><div><span>Invoice from accepted quote</span><h4>{acceptedInvoice.invoiceNumber}</h4><p>This read-only invoice matches the exact quote the customer accepted.</p></div><strong>{needsReconciliation ? "Reconciliation needed" : "Issued"}</strong></header>
+      <header><div><span>Invoice from accepted quote</span><h4>{acceptedInvoice.invoiceNumber}</h4><p>Created automatically when the customer accepted. The price and selected work match their accepted quote.</p></div><strong>{needsReconciliation ? "Reconciliation needed" : "Issued"}</strong></header>
+      {email && <div className="crm-invoice-credit-list" role="status">
+        <strong>{emailLabels[email.status] || "Invoice email status unavailable"}</strong>
+        <p>{email.recipientEmail} · PDF attached</p>
+        {email.status === "failed" && <p>{email.nextAttemptAt ? "TLink will retry automatically." : email.errorCode.startsWith("ACCEPTED_INVOICE_PAYMENT_") ? "Check the business payment details before retrying." : "Check your email connection and invoice details before retrying."}</p>}
+        {email.status === "reconciliation_required" && <p>The provider did not confirm the result. Check Sent mail before taking further action to avoid a duplicate invoice email.</p>}
+        {email.status === "failed" && canManageInvoice && <button type="button" disabled={Boolean(busy)} onClick={() => void retryAcceptedEmail()}>{busy === "accepted-email" ? "Retrying..." : "Retry invoice email"}</button>}
+      </div>}
       <dl>
         <div><dt>Subtotal</dt><dd>{money(acceptedInvoice.subtotalCents)}</dd></div>
         <div><dt>GST</dt><dd>{money(acceptedInvoice.taxCents)}</dd></div>
@@ -394,7 +426,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
       </div>}
       {needsReconciliation && <p className="crm-wizard-message" role="alert">This accepted invoice needs reconciliation before payment details can be used. It cannot be edited or sent again from this job.</p>}
       {!needsReconciliation && !bankPayment && <p className="crm-wizard-message" role="status">The invoice is recorded. Contact the business for payment details.</p>}
-      {!needsReconciliation && onOpenIntegrations && <details className="crm-quick-invoice-handoff"><summary>Send to MYOB, Xero or QuickBooks</summary><p>Create one matching invoice in your connected accounting system without re-entering the customer, certificate credits, GST or totals.</p><TradeAccountingPanel
+      {!needsReconciliation && onOpenIntegrations && <TradeAccountingPanel compact
         user={user} workOrderId={workOrderId} isProtected={false} hasDirectCustomer
         invoiceAmountCents={acceptedInvoice.totalCents} invoiceReference={acceptedInvoice.invoiceNumber}
         invoiceLines={(acceptedInvoice.document.lines || []).map((line) => ({ lineId: line.lineId, section: line.section, description: line.description, quantityMilli: line.quantityMilli, totalCents: line.totalCents }))}
@@ -402,7 +434,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
         customerName={acceptedInvoice.document.customer?.name || customerName}
         jobTitle={acceptedInvoice.document.work?.title || jobTitle} invoiceTerms={bankPayment?.terms || ""}
         invoiceSource="accepted_quote" onOpenIntegrations={onOpenIntegrations} onChanged={onChanged}
-      /></details>}
+      />}
       {status && <p className="crm-status" role="status">{status}</p>}
     </section>;
   }

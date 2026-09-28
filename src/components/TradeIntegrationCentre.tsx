@@ -27,9 +27,9 @@ type Provider = {
 type IntegrationResult = { ok?: boolean; providers?: Provider[]; error?: string };
 
 const providerNotes: Record<Provider["provider"], string> = {
-  xero: "Sync an issued TLink invoice straight to Xero, with the amount owing and no second approval. Your income account choice is remembered.",
-  myob: "Create an open MYOB service invoice from your TLink invoice, then refresh its total and payment status. This records the amount owing in MYOB.",
-  quickbooks: "Create a QuickBooks Online invoice from your TLink invoice, then refresh its total and payment status. This records the amount owing in QuickBooks.",
+  xero: "Customer accepts, TLink creates the invoice and syncs it to Xero automatically. Choose your income account once if asked.",
+  myob: "Customer accepts, TLink creates the invoice and syncs it to MYOB automatically. Connect with your authenticator and choose your income account once if asked.",
+  quickbooks: "Customer accepts, TLink creates the invoice and syncs it to QuickBooks automatically. Choose your sales product or service once if asked.",
   google_calendar: "Mirror TLink appointments to Google Calendar. TLink stays authoritative and protected customer details are withheld.",
   microsoft_calendar: "Mirror TLink appointments to Outlook. TLink stays authoritative and protected customer details are withheld.",
 };

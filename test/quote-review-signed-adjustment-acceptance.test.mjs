@@ -14,6 +14,8 @@ import {
   depositAmountCents,
 } from "../src/lib/trade-commercial-handoff.ts";
 import { buildAcceptedInvoiceSnapshot } from "../src/lib/trade-accepted-invoice.ts";
+import { acceptedInvoiceAccountingDispatch } from "../src/lib/trade-accounting-automation.ts";
+import { withAccountingDispatch } from "../src/lib/trade-accounting-automation-dispatch.ts";
 import { providerNeutralCommercialRecord } from "../src/lib/trade-commercial-reference.ts";
 import { calculateQuoteSelection } from "../src/lib/trade-quote-options.ts";
 
@@ -254,6 +256,10 @@ function fixture() {
       document_type TEXT NOT NULL, status TEXT NOT NULL
     );
   `);
+  database.exec(`CREATE TABLE trade_crm_integrations (id TEXT PRIMARY KEY, firebase_uid TEXT, provider TEXT,
+    status TEXT, external_account_id TEXT, default_account_reference TEXT, last_sync_at TEXT)`);
+  database.exec(fs.readFileSync(new URL("../drizzle/0204_accepted_invoice_accounting_automation.sql", import.meta.url), "utf8"));
+  database.exec(fs.readFileSync(new URL("../drizzle/0205_accepted_invoice_email_delivery.sql", import.meta.url), "utf8"));
   database.prepare(`INSERT INTO trade_accounts VALUES (?, 'installer', 'active',
     'Australian Energy Assessments', '063-000', '12345678', 'Quote acceptance', 'Payment due in 7 days')`).run(ids.owner);
   database.prepare("INSERT INTO trade_work_orders VALUES (?, ?, 'active')").run(ids.work, ids.owner);
@@ -263,6 +269,8 @@ function fixture() {
     .run(ids.quote, ids.work, ids.owner, ids.customer);
   database.prepare("INSERT INTO trade_crm_quote_versions VALUES (?, ?, ?, 1, 'issued', '', '', '2099-12-31')")
     .run(ids.version, ids.quote, ids.owner);
+  database.prepare("UPDATE trade_crm_quote_versions SET document_snapshot_json = ? WHERE id = ?")
+    .run(JSON.stringify({ ...targetSnapshot, acceptanceEmail: "customer@example.com" }), ids.version);
   database.prepare("INSERT INTO trade_crm_quote_links VALUES (?, ?, ?, ?, ?, ?, 'active-hash', 'ciphertext', 1, 'active', '2099-12-31T00:00:00.000Z', '')")
     .run(ids.link, ids.quote, ids.version, ids.work, ids.owner, ids.customer);
   return database;
@@ -309,6 +317,13 @@ function loadRoute(database, snapshot = targetSnapshot, beforeBatch) {
     "@/lib/trade-commercial-reference": { providerNeutralCommercialRecord },
     "@/lib/trade-commercial-handoff": { acceptedScopeSnapshot, depositAmountCents },
     "@/lib/trade-accepted-invoice": { buildAcceptedInvoiceSnapshot },
+    "@/lib/trade-accounting-automation": { acceptedInvoiceAccountingDispatch },
+    "@/lib/trade-accounting-automation-dispatch": { withAccountingDispatch },
+    "@/lib/trade-accepted-invoice-delivery-server": compile(fs.readFileSync(new URL("../src/lib/trade-accepted-invoice-delivery-server.ts", import.meta.url), "utf8"), "delivery.ts", {
+      "./trade-accepted-invoice": { buildAcceptedInvoiceSnapshot },
+      "./trade-access-server": { verifiedTradeAccountPredicate: () => "1 = 1" },
+      "./service-reminder-delivery": {}, "./trade-accepted-invoice-pdf-server": {},
+    }),
     "@/lib/trade-quote-decision-server": decisions,
     "@/lib/trade-access-server": { verifiedTradeAccountPredicate: () => "1 = 1" },
     "@/lib/trade-quote-review-server": {
@@ -610,10 +625,14 @@ test("migration enforces one accepted invoice per trade job", () => {
 
 test("a lost response replays the exact canonical acceptance receipt without duplicate writes", async () => {
   const database = fixture();
+  database.prepare(`INSERT INTO trade_crm_integrations
+    (id, firebase_uid, provider, status, external_account_id, default_account_reference, last_sync_at)
+    VALUES ('connected-xero', ?, 'xero', 'connected', 'company-one', 'income', '')`).run(ids.owner);
   const route = loadRoute(database);
   const first = await route.POST(decisionRequest(), context);
   assert.equal(first.status, 200);
   const firstBody = await first.json();
+  assert.equal(first.headers.get("X-TLink-Accounting-Dispatch"), firstBody.receipt.invoice.id);
   const replay = await route.POST(decisionRequest(), context);
   assert.equal(replay.status, 200);
   const replayBody = await replay.json();
@@ -623,6 +642,17 @@ test("a lost response replays the exact canonical acceptance receipt without dup
   assert.equal(count(database, "trade_crm_quote_acceptances"), 1);
   assert.equal(count(database, "trade_crm_commercial_handovers"), 1);
   assert.equal(count(database, "trade_crm_accepted_invoices"), 1);
+  const dispatch = database.prepare("SELECT * FROM trade_crm_accounting_dispatches").all();
+  assert.equal(dispatch.length, 1);
+  assert.equal(dispatch[0].invoice_id, firstBody.receipt.invoice.id);
+  assert.equal(dispatch[0].firebase_uid, ids.owner);
+  assert.equal(dispatch[0].external_account_id, "company-one");
+  assert.equal(dispatch[0].status, "pending");
+  const emailDelivery = database.prepare("SELECT * FROM trade_crm_accepted_invoice_deliveries").all();
+  assert.equal(emailDelivery.length, 1);
+  assert.equal(emailDelivery[0].invoice_id, firstBody.receipt.invoice.id);
+  assert.equal(emailDelivery[0].recipient_email, "customer@example.com");
+  assert.equal(emailDelivery[0].status, "queued");
   assert.equal(count(database, "trade_crm_quote_events"), 1);
   assert.deepEqual({ ...database.prepare("SELECT invoiced_value_cents, invoice_status, payment_due_at FROM trade_crm_job_details").get() }, {
     invoiced_value_cents: 391_600,
