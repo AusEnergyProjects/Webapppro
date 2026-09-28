@@ -7135,3 +7135,30 @@ export const tradePriceBookDocuments = sqliteTable("trade_price_book_documents",
   check("trade_price_book_documents_hash_check", sql`length(${t.sha256}) = 64`),
   check("trade_price_book_documents_status_check", sql`${t.recordStatus} IN ('active', 'removed')`),
 ]);
+
+export const tradeStockLocations = sqliteTable("trade_stock_locations", {
+  id: text("id").primaryKey().notNull(), firebaseUid: text("firebase_uid").notNull(), name: text("name").notNull(),
+  responsibleMemberId: text("responsible_member_id").notNull().default(""), isDefault: integer("is_default", { mode:"boolean" }).notNull().default(false),
+  revision: integer("revision").notNull().default(1), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [uniqueIndex("trade_stock_locations_name_idx").on(table.firebaseUid,sql`${table.name} COLLATE NOCASE`).where(sql`${table.responsibleMemberId}=''`),
+  uniqueIndex("trade_stock_locations_member_idx").on(table.firebaseUid,table.responsibleMemberId).where(sql`${table.responsibleMemberId}<>''`),
+  uniqueIndex("trade_stock_locations_default_idx").on(table.firebaseUid).where(sql`${table.isDefault}=1`),
+  check("trade_stock_locations_valid",sql`length(trim(${table.name})) BETWEEN 1 AND 60 AND ${table.isDefault} IN (0,1) AND ${table.revision}>0`)]);
+export const tradeStockLocationBalances = sqliteTable("trade_stock_location_balances", {
+  itemId:text("item_id").notNull(),locationId:text("location_id").notNull(),firebaseUid:text("firebase_uid").notNull(),
+  onHandMilli:integer("on_hand_milli").notNull().default(0),updatedAt:text("updated_at").notNull(),
+}, (table) => [primaryKey({columns:[table.itemId,table.locationId]}),index("trade_stock_location_balances_owner_idx").on(table.firebaseUid,table.itemId),check("trade_stock_location_balances_valid",sql`${table.onHandMilli} BETWEEN 0 AND 1000000000`)]);
+export const tradeStockUsageLocations = sqliteTable("trade_stock_usage_locations", {
+  requirementId:text("requirement_id").notNull(),locationId:text("location_id").notNull(),itemId:text("item_id").notNull(),firebaseUid:text("firebase_uid").notNull(),quantityMilli:integer("quantity_milli").notNull(),
+}, (table) => [primaryKey({columns:[table.requirementId,table.locationId]}),check("trade_stock_usage_locations_valid",sql`${table.quantityMilli} BETWEEN 0 AND 1000000000`)]);
+export const tradeStockUsageSelections = sqliteTable("trade_stock_usage_selections", {
+  requirementId:text("requirement_id").primaryKey().notNull(),itemId:text("item_id").notNull(),firebaseUid:text("firebase_uid").notNull(),quantityMilli:integer("quantity_milli").notNull(),locationsJson:text("locations_json").notNull(),expectedRevision:integer("expected_revision").notNull(),
+}, (table) => [check("trade_stock_usage_selections_valid",sql`${table.quantityMilli} BETWEEN 0 AND 1000000000 AND json_valid(${table.locationsJson}) AND json_type(${table.locationsJson})='array' AND ${table.expectedRevision}>0`)]);
+export const tradeStockLocationOperations = sqliteTable("trade_stock_location_operations", {
+  id:text("id").primaryKey().notNull(),firebaseUid:text("firebase_uid").notNull(),operationId:text("operation_id").notNull(),locationId:text("location_id").notNull(),action:text("action").notNull(),payloadJson:text("payload_json").notNull(),expectedRevision:integer("expected_revision").notNull(),actorUid:text("actor_uid").notNull(),createdAt:text("created_at").notNull(),
+}, (table) => [uniqueIndex("trade_stock_location_operations_replay_idx").on(table.firebaseUid,table.operationId),check("trade_stock_location_operations_valid",sql`${table.action} IN ('create_location','rename_location') AND json_valid(${table.payloadJson}) AND ${table.expectedRevision}>=0`)]);
+export const tradeStockTransfers = sqliteTable("trade_stock_transfers", {
+  id:text("id").primaryKey().notNull(),firebaseUid:text("firebase_uid").notNull(),operationId:text("operation_id").notNull(),itemId:text("item_id").notNull(),fromLocationId:text("from_location_id").notNull(),toLocationId:text("to_location_id").notNull(),quantityMilli:integer("quantity_milli").notNull(),onHandMilli:integer("on_hand_milli").notNull(),expectedRevision:integer("expected_revision").notNull(),payloadJson:text("payload_json").notNull(),note:text("note").notNull().default(""),actorUid:text("actor_uid").notNull(),createdAt:text("created_at").notNull(),
+}, (table) => [uniqueIndex("trade_stock_transfers_replay_idx").on(table.firebaseUid,table.operationId),check("trade_stock_transfers_valid",sql`${table.quantityMilli} BETWEEN 1 AND 1000000000 AND ${table.onHandMilli} BETWEEN 0 AND 1000000000 AND ${table.expectedRevision}>0 AND json_valid(${table.payloadJson})`)]);
+
+export const tradeStockLocationRollout = sqliteTable("trade_stock_location_rollout", { id:integer("id").primaryKey().notNull(),installedAt:text("installed_at").notNull() }, (table)=>[check("trade_stock_location_rollout_single",sql`${table.id}=1`)]);

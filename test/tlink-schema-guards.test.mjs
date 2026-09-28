@@ -116,6 +116,7 @@ function schemaDatabase() {
     database.exec(`CREATE TABLE ${table} (${columns.map(name => `${name} ${/cents|minutes|milli|position/.test(name) ? "INTEGER DEFAULT 0" : "TEXT DEFAULT ''"}`).join(",")})`);
   }
   database.exec(fs.readFileSync(new URL("../drizzle/0207_trade_stock.sql", import.meta.url), "utf8"));
+  database.exec(fs.readFileSync(new URL("../drizzle/0208_trade_stock_locations.sql", import.meta.url), "utf8"));
   return database;
 }
 

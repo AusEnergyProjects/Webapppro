@@ -19,6 +19,24 @@
 :global(html[data-tlink-colour-mode="night"]) .badge, :global(html[data-tlink-colour-mode="night"]) .lowStock { background: #382b17; border-color: #6b5532; color: #f2d58b; }
 .numbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 14px 0; border-top: 1px solid var(--trade-line, #d7e5df); border-bottom: 1px solid var(--trade-line, #d7e5df); }
 .numbers dt { color: var(--trade-muted, #5d7068); font-size: 13px; }.numbers dd { margin: 3px 0 0; font-size: 23px; line-height: 1.35; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }.numbers dd span { font-size: 13px; font-weight: 500; color: var(--trade-muted, #5d7068); }
+.numbers dd.shortage { color: #ae3328; }
+:global(html[data-tlink-colour-mode="night"]) .numbers dd.shortage { color: #ffb5a8; }
+.settings select { min-width: 0; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; background: var(--trade-field, #fff); color: var(--trade-field-ink, #153e39); font: inherit; font-size: 16px; }
+.settings select:focus-visible { outline: 3px solid var(--trade-accent-readable, #087567); outline-offset: 3px; }
+.locations { border-top: 1px solid var(--trade-line, #d7e5df); padding-top: 16px; }
+.locationHeading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.locationHeading h5 { margin: 0; font: inherit; font-weight: 650; }
+.locationHeading p { margin: 4px 0 0; font-size: 13px; color: var(--trade-muted, #5d7068); }
+.locationHeading button { flex-shrink: 0; }
+.locations ul { list-style: none; padding: 0; margin: 12px 0 0; }
+.locations li { display: flex; align-items: center; gap: 14px; border-top: 1px solid var(--trade-line, #d7e5df); padding: 10px 0; }
+.locations li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.locations li strong { font-size: 14px; font-weight: 600; }
+.locations li small { color: var(--trade-muted, #5d7068); margin-left: 9px; }
+.locations li small.responsible { display: block; margin: 3px 0 0; }
+.locations li b { font-size: 14px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.locationEditor { display: grid; gap: 12px; border: 1px solid var(--trade-line, #d7e5df); background: var(--trade-surface-soft, #f4f8f6); border-radius: 10px; padding: 16px; }
+@media (max-width: 650px) { .locationHeading { align-items: stretch; flex-direction: column; }.locations li { flex-wrap: wrap; }.locations li > span { flex-basis: 50%; } }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }.actionForm { display: grid; gap: 16px; background: var(--trade-surface-soft, #f4f8f6); border: 1px solid var(--trade-line, #d7e5df); border-radius: 11px; padding: 18px; }.actionForm fieldset { display: grid; gap: 14px; border: 0; min-width: 0; padding: 0; margin: 0; }.actionForm legend { color: var(--trade-ink, #153e39); font-size: 17px; font-weight: 650; padding: 0 0 14px; }.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }.fields small { color: var(--trade-muted, #5d7068); font-size: 13px; font-weight: 400; }
 .hint { color: var(--trade-muted, #5d7068); font-size: 14px; margin: 0; }.note summary, .details summary { color: var(--trade-ink, #153e39); cursor: pointer; min-height: 44px; padding: 10px 0; font-size: 14px; font-weight: 600; }.details { border-top: 1px solid var(--trade-line, #d7e5df); padding-top: 4px; }.settingsActions { display: grid; gap: 12px; padding: 12px 0; }.settingsActions > div { display: flex; align-items: center; justify-content: space-between; gap: 14px; }.settingsActions p { margin: 0; font-size: 14px; color: var(--trade-muted, #5d7068); }.settingsActions button { flex-shrink: 0; }
 .history { list-style: none; padding: 0; margin: 12px 0 0; }.history li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--trade-line, #d7e5df); }.history li > div { display: grid; gap: 3px; min-width: 0; }.history li > div:last-child { text-align: right; flex-shrink: 0; }.history strong { font-size: 14px; font-weight: 600; }.history span { font-size: 13px; color: var(--trade-muted, #5d7068); overflow-wrap: anywhere; }

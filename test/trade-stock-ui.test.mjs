@@ -9,17 +9,21 @@ import * as quote from "../src/lib/trade-quote.ts";
 import * as equipment from "../src/lib/trade-solar-equipment.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradeStockWorkspace.tsx", import.meta.url), "utf8");
-const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+const compiled = ts.transpileModule(source + "\nexports.TestLocationEditor = StockLocationEditor; exports.TestStockNumbers = StockNumbers;", { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const productSource = fs.readFileSync(new URL("../src/components/TradePriceBookWorkspace.tsx", import.meta.url), "utf8");
 const productCompiled = ts.transpileModule(productSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
 const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
 const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node) === label)[0];
 const input = (tree, label) => nodes(tree, node => node.type === "label" && text(node).includes(label)).flatMap(node => nodes(node, child => child.type === "input"))[0];
+const select = (tree, label) => nodes(tree, node => node.type === "label" && text(node).startsWith(label)).flatMap(node => nodes(node, child => child.type === "select"))[0];
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const response = (body, status = 200) => Response.json(body, { status });
-const item = (patch = {}) => ({ itemId: "product-1", itemCode: "PB-1", name: "Solar panel", itemType: "material", unitLabel: "each", recordStatus: "active", tracked: false, onHandMilli: 0, reservedMilli: 0, availableMilli: 0, lowStockMilli: 0, revision: 0, ...patch });
-const detail = (patch = {}) => ({ ok: true, item: item(patch), history: [], canManage: true });
+const main = { id: "main", name: "Main storage", isDefault: true, revision: 1, responsibleMemberId: "", responsibleName: "" };
+const john = { id: "john-stock", name: "John", isDefault: false, revision: 1, responsibleMemberId: "john", responsibleName: "John" };
+const members = [{ id: "john", name: "John" }];
+const item = (patch = {}) => ({ locations: [{ locationId: "main", name: "Main storage", responsibleName: "", onHandMilli: patch.onHandMilli || 0 }], itemId: "product-1", itemCode: "PB-1", name: "Solar panel", itemType: "material", unitLabel: "each", recordStatus: "active", tracked: false, onHandMilli: 0, reservedMilli: 0, availableMilli: 0, lowStockMilli: 0, revision: 0, ...patch });
+const detail = (patch = {}) => ({ ok: true, item: item(patch), history: [], canManage: true, locations: [main], members });
 const submit = tree => nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {} });
 class SubmitButton { constructor(value) { this.value = value; } }
 const product = { id: "product-1", itemCode: "PB-1", name: "Solar panel", description: "", itemType: "material", unitLabel: "each", supplierCostCentsExGst: 1000, sellPriceCentsExGst: 2000, taxCode: "gst", markupBasisPoints: 10000, marginBasisPoints: 5000, expectedDurationMinutes: 0, requiredSkill: "", supplierName: "", supplierSku: "", supplierProductId: "", recordStatus: "active", priceRevision: 1, createdAt: "now", updatedAt: "now" };
@@ -37,7 +41,7 @@ function harness(t, { component = "TradeStockProductSettings", props: overrides,
   };
   const ProductStock = () => null;
   const dependencies = { react: hooks, "react/jsx-runtime": jsx, "@/lib/trade-stock": stock, "@/lib/trade-price-book": priceBook, "@/lib/trade-quote": quote, "@/lib/trade-solar-equipment": equipment,
-    "./TradeStockWorkspace": { TradeStockProductSettings: ProductStock, TradeStockWorkspace: () => null }, "./TradeProductDocuments": { TradeProductDocuments: () => null }, "./TradeJobPacketWorkspace": { TradeJobPacketWorkspace: () => null }, "./TradePriceBookImport": { TradePriceBookImport: () => null } };
+    "./TradeProductTableControls": { TradeProductTableScroll: () => null, TradeProductStockSwitch: () => null }, "./TradeStockWorkspace": { TradeStockProductSettings: ProductStock, TradeStockWorkspace: () => null }, "./TradeProductDocuments": { TradeProductDocuments: () => null }, "./TradeJobPacketWorkspace": { TradeJobPacketWorkspace: () => null }, "./TradePriceBookImport": { TradePriceBookImport: () => null } };
   const exports = {};
   const fetch = async (url, init = {}) => { requests.push({ url, init }); return respond ? respond(url, init) : response(detail()); };
   const window = { setTimeout: callback => setImmediate(callback), clearTimeout: value => clearImmediate(value), confirm: () => true };
@@ -105,7 +109,7 @@ test("an uncertain retry followed by a definite conflict unlocks the preserved c
   button(tree, "Refresh stock").props.onClick(); tree = await h.settle(); assert.equal(input(tree, "Actual quantity").props.value, "6"); assert.equal(nodes(tree, node => node.type === "fieldset")[0].props.disabled, false); assert.equal(button(tree, "Cancel").props.disabled, false);
 });
 
-test("remaining stock prevents disabling, while archived tracked products retain stock controls", async t => {
+test("active commitments prevent disabling, while archived tracked products retain stock controls", async t => {
   const h = harness(t, { respond: () => response(detail({ tracked: true, recordStatus: "archived", onHandMilli: 4000, reservedMilli: 1000, availableMilli: 3000 })) });
   const tree = await h.settle(); assert.equal(button(tree, "Stop tracking").props.disabled, true); assert.equal(button(tree, "Stocktake").props.disabled, false); assert.equal(button(tree, "Receive stock").props.disabled, false); assert.match(text(tree), /Archived product/);
 });
@@ -149,6 +153,64 @@ test("tracked products expose Stock and lock type and units until tracking stops
   nodes(tree, node => node.type === h.ProductStock)[0].props.onLoaded(item({ tracked: true })); tree = h.render();
   for (const label of ["Type", "Charge by", "Product kind"]) { const field = nodes(tree, node => node.type === "label" && text(node).startsWith(label))[0]; assert.equal(nodes(field, node => node.type === "select")[0].props.disabled, true); }
   assert.match(text(tree), /Stop tracking before changing them/);
+});
+
+const splitDetail = (patch = {}) => ({ ...detail({ tracked: true, revision: 4, onHandMilli: 6000, reservedMilli: 7000, availableMilli: -1000,
+  locations: [{ locationId: main.id, name: main.name, responsibleName: "", onHandMilli: 6000 }, { locationId: john.id, name: john.name, responsibleName: "John", onHandMilli: 0 }], ...patch }), locations: [main, john] });
+
+test("stocktake edits the selected member location and preserves the other counts", async t => {
+  const h = harness(t, { props: { initialAction: "count" }, respond: (_url, init) => response(init.method ? splitDetail({ onHandMilli: 8000 }) : splitDetail()) });
+  let tree = await h.settle(); assert.equal(input(tree, "Actual quantity").props.value, "6");
+  select(tree, "Storage location").props.onChange({ target: { value: john.id } }); tree = h.render();
+  assert.equal(input(tree, "Actual quantity").props.value, "0"); assert.match(text(tree), /This replaces the count at\s+John/);
+  input(tree, "Actual quantity").props.onChange({ target: { value: "2" } }); submit(h.render()); await h.settle();
+  const body = JSON.parse(h.requests.find(row => row.init.method).init.body);
+  assert.equal(body.locationId, john.id); assert.equal(body.action, "count"); assert.equal(body.quantityMilli, 2000); assert.equal(body.expectedRevision, 4);
+});
+
+test("moving three of six items to John submits one transfer and keeps the business total", async t => {
+  let finish;
+  const h = harness(t, { respond: (_url, init) => !init.method ? response(splitDetail({ reservedMilli: 0, availableMilli: 6000 })) : new Promise(resolve => { finish = () => resolve(response(splitDetail({ revision: 5, reservedMilli: 0, availableMilli: 6000,
+    locations: [{ locationId: main.id, name: main.name, responsibleName: "", onHandMilli: 3000 }, { locationId: john.id, name: john.name, responsibleName: "John", onHandMilli: 3000 }] }))); }) });
+  let tree = await h.settle(); button(tree, "Move stock").props.onClick(); tree = h.render();
+  assert.equal(select(tree, "Move from").props.value, main.id); assert.equal(select(tree, "Move to").props.value, john.id);
+  assert.equal(nodes(select(tree, "Move to"), node => node.type === "option" && node.props.value === main.id).length, 0);
+  input(tree, "Quantity to move").props.onChange({ target: { value: "3" } }); tree = h.render(); submit(tree); submit(tree); await tick();
+  const writes = h.requests.filter(row => row.init.method); assert.equal(writes.length, 1);
+  const body = JSON.parse(writes[0].init.body); assert.equal(body.action, "transfer"); assert.equal(body.fromLocationId, main.id); assert.equal(body.toLocationId, john.id); assert.equal(body.quantityMilli, 3000);
+  finish(); tree = await h.settle(); assert.match(text(tree), /Stock moved. The business total has not changed/); assert.equal(h.changes[0].onHandMilli, 6000);
+  assert.deepEqual(h.changes[0].locations.map(location => location.onHandMilli), [3000, 3000]);
+});
+
+test("available stock keeps its negative sign and pausing retains positive counts", async t => {
+  const negative = harness(t, { component: "TestStockNumbers", props: { item: item({ onHandMilli: 3000, reservedMilli: 4000, availableMilli: -1000 }) } });
+  assert.match(text(negative.render()), /On hand 3 Committed 4 Available -1/);
+  const h = harness(t, { respond: (_url, init) => response(detail({ tracked: !init.method, revision: 2, onHandMilli: 6000, availableMilli: 6000 })) });
+  let tree = await h.settle(); assert.equal(button(tree, "Stop tracking").props.disabled, false);
+  button(tree, "Stop tracking").props.onClick(); tree = await h.settle(); assert.match(text(tree), /Saved counts and history are kept/); assert.ok(button(tree, "Stocktake"));
+  assert.equal(h.changes[0].onHandMilli, 6000); assert.equal(h.changes[0].tracked, false);
+});
+
+test("choose a team member as a location without entering vehicle details, with exact safe retry", async t => {
+  const saves = []; let attempts = 0;
+  const h = harness(t, { component: "TestLocationEditor", props: { location: null, members, onSaved: (...values) => saves.push(values), onCancel() {} }, respond: () => {
+    if (!attempts++) throw new Error("Connection lost");
+    return response({ ok: true, location: john, locations: [main, john], members });
+  } });
+  let tree = h.render(); select(tree, "Keep stock with").props.onChange({ target: { value: "member" } }); tree = h.render();
+  assert.equal(input(tree, "New location name"), undefined); select(tree, "Team member").props.onChange({ target: { value: "john" } });
+  submit(h.render()); tree = await h.settle(); assert.ok(button(tree, "Retry location update")); assert.equal(select(tree, "Team member").props.disabled, true);
+  submit(tree); await h.settle(); const writes = h.requests.filter(row => row.init.method);
+  assert.equal(writes.length, 2); assert.equal(writes[0].init.body, writes[1].init.body);
+  const body = JSON.parse(writes[0].init.body); assert.equal(body.name, "John"); assert.equal(body.responsibleMemberId, "john"); assert.equal(body.action, "create_location"); assert.equal(saves.length, 1);
+});
+
+test("location editing locks conflicting product actions and direct stock navigation selects the requested item", async t => {
+  const h = harness(t, { respond: () => response(splitDetail()) }); let tree = await h.settle();
+  button(tree, "Add location").props.onClick(); tree = h.render(); assert.equal(button(tree, "Move stock").props.disabled, true); assert.equal(button(tree, "Receive stock").props.disabled, true);
+  const direct = harness(t, { component: "TradeStockWorkspace", props: { initialItemId: "product-1" }, respond: () => response({ ok: true, canManage: true, items: [item()] }) }); tree = await direct.settle();
+  const settings = nodes(tree, node => typeof node.type === "function" && node.type.name === "TradeStockProductSettings")[0];
+  assert.equal(settings.props.itemId, "product-1"); assert.equal(settings.props.canManage, true);
 });
 
 test("Save and set up stock saves one product first without silently enabling stock or adding a second product", async t => {

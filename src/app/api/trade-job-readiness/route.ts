@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import type { PhotoRequirement } from "@/lib/trade-photo-requests";
+import { jobStock, stockActualStatements } from "@/lib/trade-stock-server";
 import { buildJobPlanStatements } from "@/lib/trade-job-plan-server";
 import { requireInstallerOperations } from "@/lib/trade-integrations-server";
 
@@ -12,7 +13,11 @@ const COMPLETE = new Set(["completed", "not_needed"]);
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   const stockCode = `${code} ${error instanceof Error && error.cause instanceof Error ? error.cause.message : ""}`;
-  if (stockCode.includes("STOCK_SHORTAGE")) return adminJson({ ok: false, error: "There is not enough stock available for this usage. Receive stock or release another job's allocation first." }, 409);
+  if (stockCode.includes("STOCK_SHORTAGE")) return adminJson({ ok: false, error: "There is not enough physical stock at the selected location. Choose another location or receive stock there first." }, 409);
+  if (stockCode.includes("STOCK_REFRESH_REQUIRED")) return adminJson({ok:false,error:"Stock tracking was updated. Refresh this page before making another change."},409);
+  if (stockCode.includes("STOCK_STALE")) return adminJson({ok:false,error:"Stock changed while this was open. Refresh the job and try again."},409);
+  if (stockCode.includes("STOCK_TRACKING_PAUSED")) return adminJson({ok:false,error:"Turn stock tracking back on for this product before correcting its previous stock usage."},409);
+  if (stockCode.includes("STOCK_LOCATION_REQUIRED") || stockCode.includes("STOCK_INVALID_LOCATION")) return adminJson({ok:false,error:"Choose where the stock was used from. Location quantities must add up to the recorded usage."},400);
   if (stockCode.includes("STOCK_REQUIREMENT_UNAVAILABLE")) return adminJson({ ok: false, error: "This job's materials changed or the job was cancelled. Refresh the job before recording stock usage." }, 409);
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["PROFILE_REQUIRED", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "ACCOUNT_INACTIVE"].includes(code)) return adminJson({ ok: false, error: "Job readiness is not available to this account." }, 403);
@@ -82,7 +87,7 @@ async function payload(uid: string, workOrderId: string) {
   const completionChecks = { scope: scope.every(requirementDone), forms: forms.every(requirementDone), materials: materials.every(requirementDone), proof: proof.ready };
   const completed = plan.status === "completed";
   return {
-    handoff: true,
+    handoff: true, stock: await jobStock(uid,workOrderId),
     plan: { id: plan.id, status: plan.status, sourceKind: plan.source_kind, commercialReference: plan.commercial_reference,
       acceptedTotalCents: Number(plan.accepted_total_cents), acceptedSubtotalCents: Number(plan.accepted_subtotal_cents), budgetCostCents,
       budgetMarginCents: Number(plan.budget_margin_cents), expectedDurationMinutes: Number(plan.expected_duration_minutes), suggestedCrewSize: Number(plan.suggested_crew_size),
@@ -135,7 +140,9 @@ export async function POST(request: Request) {
       const cost = body.usePlanned === true ? Number(requirement.total_cost_cents) : Math.round(Number(body.totalCostCents || 0));
       if (![quantity, duration, cost].every((value) => Number.isFinite(value) && value >= 0) || quantity > 100000000 || duration > 1000000 || cost > 1000000000) throw new Error("INVALID_ACTUAL");
       const actualType = ["material", "labour"].includes(String(requirement.requirement_type)) ? String(requirement.requirement_type) : "task";
+      const stockStatements = actualType === "material" ? await stockActualStatements(identity.uid,requirementId,quantity,body.stockLocations) : [];
       await db.batch([
+        ...stockStatements,
         db.prepare(`INSERT INTO trade_work_order_events (id,work_order_id,firebase_uid,event_type,summary,created_at) SELECT ?,?,?,'job_cost_recorded',
           'Cost record for ' || ? || ': previous ' || COALESCE((SELECT json_object('quantityMilli',quantity_milli,'minutes',duration_minutes,'costExGstCents',total_cost_cents) FROM trade_crm_job_actuals WHERE job_plan_requirement_id=? AND firebase_uid=?),'not recorded') || '; saved ' || json_object('quantityMilli',?,'minutes',?,'costExGstCents',?), ?`)
           .bind(crypto.randomUUID(), workOrderId, identity.uid, String(requirement.description), requirementId, identity.uid, quantity, duration, cost, now),

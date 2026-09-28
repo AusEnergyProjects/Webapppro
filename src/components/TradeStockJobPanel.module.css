@@ -16,6 +16,16 @@
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .error { margin: 12px 0 0; color: var(--trade-danger-ink, #a2332c); font-size: .875rem; }
 .message { margin: 12px 0 0; color: var(--trade-accent-readable, #087567); font-size: .875rem; }
+.useHint { margin: 0; font-size: .875rem; color: var(--trade-muted, #5d7068); }
+.useLocations { display: grid; gap: 10px; min-width: 0; width: 100%; color: var(--trade-ink, #183b35); font-size: .875rem; }
+.useLocations label { display: grid; gap: 5px; min-width: 0; }
+.useLocations label > span { font-weight: 600; }
+.useLocations select, .useLocations input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; background: var(--trade-field, #fff); color: var(--trade-ink, #183b35); padding: 9px 10px; font: inherit; font-size: 1rem; }
+.useLocations select:focus-visible, .useLocations input:focus-visible { outline: 3px solid var(--trade-accent-readable, #087567); outline-offset: 2px; }
+.splitLocations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; }
+.splitLocations legend { padding: 0 5px; font-weight: 600; }
+.splitLocations small, .splitLocations p { color: var(--trade-muted, #5d7068); }
+.splitLocations p { grid-column: 1 / -1; margin: 0; }
 :global(html[data-tlink-colour-mode="night"]) .shortage { color: #f4c773; }
 :global(html[data-tlink-colour-mode="night"]) .error { color: #ffb5aa; }
-@media (max-width: 600px) { .panel { padding: 12px; } .item { display: grid; gap: 10px; } .actions button { flex: 1; } }
+@media (max-width: 600px) { .panel { padding: 12px; } .item { display: grid; gap: 10px; } .actions button { flex: 1; } .splitLocations { grid-template-columns: minmax(0, 1fr); } }

@@ -6,11 +6,19 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 28 September 2026
 
-Deployment baseline for this change: Sites 660, source `4a565b63236d639210ab74666720b694565d1c11`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-stock-2026-09-28/.
+Deployment baseline for this change: Sites 662, source `945cc437bc62294095792b3dbecf0f7f779020ed`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-stock-columns-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: optional product stock and accepted-job allocations
+## Current implementation: product columns and stock by storage or team member
+
+Products uses a compact table with cost, sale price, margin, units, inline stock switches, on hand, committed, signed available and location counts. Tracking remains optional per physical product. Available is on hand minus the full job commitment, including negative values. Shortages stay advisory for quotes.
+
+Migration 0208 adds separate location balances, member locations, transfers and location-aware actual use. Existing counts start in Main storage. A team member is a location directly, with one location per member in the business. Move stock transfers physical items atomically without changing the business total. Stocktake and receiving target one location; job commitments remain business-wide. Actual-use corrections retain the recorded source locations.
+
+Turning tracking off retains counts and history and requires no active commitments. Saved stock still locks product units and type. No new supplier, accounting or purchasing integration is included. Focused checks, full-suite baseline comparison, migration replay and publication evidence: C:/Webproject/outputs/tlink-stock-columns-2026-09-28/.
+
+## Previous implementation: optional product stock and accepted-job allocations
 
 Stock tracking starts off on every product. Businesses opt in on saved material/equipment items, using their existing product unit and one Main stock pool. Products exposes a Stock view only after tracking is enabled, with on-hand, allocated and available quantities, receiving, stocktake, low-stock warnings and movement history. Existing product PDFs, solar dimensions, pricing and common-job packages remain intact.
 

@@ -13,7 +13,7 @@
 .listLimit { color: var(--color-aea-muted); font-size: .72rem; margin: 0; }
 .metrics { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .metrics article { background: #f5faf8; border: 1px solid var(--color-aea-line); border-radius: 12px; padding: 14px; }
-.metrics span, .preview span, .price span, .margin span { color: var(--color-aea-muted); display: block; font-size: .62rem; font-weight: 800; text-transform: uppercase; }
+.metrics span, .preview span { color: var(--color-aea-muted); display: block; font-size: .62rem; font-weight: 800; text-transform: uppercase; }
 .metrics strong { color: var(--color-aea-ink); display: block; font-size: 1.45rem; margin-top: 4px; }
 .toolbar { align-items: end; display: grid; gap: 14px; grid-template-columns: minmax(220px, 1fr) auto; }
 .toolbar label, .coreFields label, .advanced label { color: var(--color-aea-ink); display: grid; font-size: .68rem; font-weight: 800; gap: 6px; }
@@ -24,14 +24,22 @@
 .firstRun { background: linear-gradient(135deg, #edfaf5, #f8fbfa); border: 1px solid #bfe4d6; border-radius: 14px; padding: clamp(18px, 4vw, 30px); }
 .firstRun > div, .presets, .actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 15px; }
 .firstRun button, .presets button, .secondary { background: white; border: 1px solid #a7d7c7; border-radius: 9px; color: var(--color-aea-green); cursor: pointer; font-size: .72rem; font-weight: 850; padding: 10px 13px; }
-.list { display: grid; gap: 9px; }
-.list article { border: 1px solid var(--color-aea-line); border-radius: 12px; overflow: hidden; }
-.list article > button { align-items: center; background: white; border: 0; color: inherit; cursor: pointer; display: grid; gap: 14px; grid-template-columns: minmax(220px, 1fr) minmax(125px, .3fr) minmax(110px, .25fr) auto; padding: 14px 16px; text-align: left; width: 100%; }
-.list article > button:hover { background: #f8fcfa; }
-.list article span { color: var(--color-aea-green); font-size: .58rem; font-weight: 850; text-transform: uppercase; }
-.list article strong { color: var(--color-aea-ink); display: block; font-size: .8rem; margin-top: 3px; }
-.list article small { color: var(--color-aea-muted); display: block; font-size: .62rem; line-height: 1.4; margin-top: 3px; }
-.list article em { color: var(--color-aea-green); font-size: .66rem; font-style: normal; font-weight: 900; }
+.productTableFrame { min-width: 0; max-width: 100%; border: 1px solid var(--trade-line, #d7e5df); border-radius: 12px; overflow: hidden; background: var(--trade-surface, #fff); }
+.tableTopScroll, .tableBottomScroll { overflow-x: auto; scrollbar-color: var(--trade-muted, #6b827b) var(--trade-surface-soft, #edf5f2); scrollbar-width: auto; }
+.tableTopScroll { height: 20px; background: var(--trade-surface-soft, #edf5f2); }.tableTopScroll[hidden] { display: none; }.tableScrollTrack { height: 1px; }.tableBottomScroll { max-width: 100%; }
+.tableTopScroll:focus-visible, .tableBottomScroll:focus-visible { outline: 3px solid var(--trade-accent-readable, #087567); outline-offset: -3px; }
+.productTable { border-collapse: separate; border-spacing: 0; min-width: 1460px; width: 100%; color: var(--trade-ink, #183b35); background: var(--trade-surface, #fff); font-family: var(--font-aea-body, Arial, Helvetica, sans-serif); font-size: 14px; line-height: 1.4; }
+.productTable th, .productTable td { border-bottom: 1px solid var(--trade-line, #d7e5df); padding: 13px 16px; text-align: left; vertical-align: middle; font-size: 14px; font-weight: 400; }
+.productTable thead th { background: var(--trade-surface-soft, #edf5f2); color: var(--trade-ink, #183b35); font-weight: 650; text-transform: none; letter-spacing: 0; white-space: nowrap; }
+.productTable tr:last-child > th, .productTable tr:last-child > td { border-bottom: 0; }.productTable thead tr > th { border-bottom: 1px solid var(--trade-line, #d7e5df); }
+.productTable tr > :first-child { position: sticky; left: 0; z-index: 2; width: 260px; min-width: 220px; max-width: 300px; background: var(--trade-surface, #fff); border-right: 1px solid var(--trade-line, #d7e5df); }.productTable thead tr > :first-child { z-index: 3; background: var(--trade-surface-soft, #edf5f2); }
+.productTable tbody tr:hover > th, .productTable tbody tr:hover > td { background: var(--trade-surface-soft, #f4f8f6); }.productTable .numeric { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }.productTable td strong { font-weight: 650; }
+.productName { display: grid; gap: 5px; min-height: 44px; width: 100%; border: 0; padding: 2px 0; background: transparent; color: var(--trade-ink, #183b35); font: inherit; text-align: left; cursor: pointer; }.productName strong { display: block; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }.productName span { display: block; font-size: 13px; color: var(--trade-muted, #5d7068); }.productName:hover strong { color: var(--trade-accent-readable, #087567); text-decoration: underline; }.productName:focus-visible { outline: 3px solid var(--trade-accent-readable, #087567); outline-offset: 3px; border-radius: 4px; }
+.supplierName { display: block; min-width: 130px; max-width: 220px; overflow-wrap: anywhere; }.supplierSku { display: block; font-size: 13px; color: var(--trade-muted, #5d7068); margin-top: 4px; }.stockReadOnly { color: var(--trade-muted, #5d7068); font-size: 14px; white-space: nowrap; }
+.stockPaused, .pausedLabel { color: var(--trade-muted, #5d7068); }.pausedLabel { display: block; font-size: 13px; }.pausedLabel { display: block; font-size: 13px; }.stockLocations { display: grid; gap: 4px; min-height: 44px; min-width: 150px; max-width: 240px; border: 0; padding: 2px 0; background: transparent; color: var(--trade-ink, #183b35); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }.stockLocations > span { display: flex; justify-content: space-between; gap: 14px; }.stockLocations b { font-weight: 600; font-variant-numeric: tabular-nums; }.stockLocations small { color: var(--trade-accent-readable, #087567); font-size: 13px; }.stockLocations:hover small { text-decoration: underline; }.stockLocations:focus-visible { outline: 3px solid var(--trade-accent-readable, #087567); outline-offset: 3px; border-radius: 4px; }
+.inlineStockControl { min-width: 96px; max-width: 240px; }.stockSwitch { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 5px 0; background: transparent; border: 0; color: var(--trade-ink, #183b35); font: inherit; font-size: 14px; cursor: pointer; }.stockSwitch:disabled { cursor: default; opacity: .55; }.stockSwitch:focus-visible { outline: 3px solid var(--trade-accent-readable, #087567); outline-offset: 3px; border-radius: 4px; }.switchTrack { display: inline-flex; flex: 0 0 40px; align-items: center; width: 40px; height: 24px; border: 1px solid var(--trade-muted, #768a83); border-radius: 999px; background: var(--trade-surface-soft, #edf5f2); padding: 3px; }.switchTrack > span { height: 16px; width: 16px; border-radius: 50%; background: var(--trade-muted, #768a83); }.stockSwitch[aria-checked="true"] .switchTrack { background: var(--trade-accent, #12664f); border-color: var(--trade-accent, #12664f); }.stockSwitch[aria-checked="true"] .switchTrack > span { transform: translateX(16px); background: #fff; }
+.productTable .negativeValue, .stockInlineError { color: #a2332c; }.stockInlineError { font-size: 13px; line-height: 1.45; margin: 4px 0; min-width: 190px; overflow-wrap: anywhere; }.stockInlineError span { display: block; margin-top: 5px; }.stockInlineError button { display: block; min-height: 44px; margin-top: 6px; padding: 8px 11px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; background: var(--trade-field, #fff); color: var(--trade-ink, #183b35); font: inherit; cursor: pointer; }
+:global(html[data-tlink-colour-mode="night"]) .productTable .negativeValue, :global(html[data-tlink-colour-mode="night"]) .stockInlineError { color: #ffb5aa; }
 .editor { background: white; border: 1px solid var(--color-aea-line); border-radius: 14px; display: grid; gap: 16px; padding: clamp(16px, 3vw, 24px); }
 .editor > header { align-items: start; display: flex; gap: 18px; justify-content: space-between; }
 .presets { align-items: center; background: #f3f8f6; border-radius: 10px; margin: 0; padding: 10px; }
@@ -76,8 +84,6 @@
 
 @media (max-width: 900px) {
   .coreFields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .list article > button { grid-template-columns: minmax(180px, 1fr) minmax(120px, .5fr); }
-  .list article .margin, .list article em { display: none; }
 }
 
 @media (max-width: 600px) {
@@ -93,8 +99,8 @@
   .coreFields, .advanced > div { grid-template-columns: 1fr; }
   .advanced .wide { grid-column: auto; }
   .preview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .list article > button { align-items: start; grid-template-columns: 1fr; }
-  .list article .price { display: block; }
+  .productTable tr > :first-child { min-width: 168px; width: 168px; max-width: 190px; }
+  .productTable th, .productTable td { padding: 11px 12px; }
   .history article { align-items: start; flex-direction: column; gap: 5px; }
 }
 
@@ -123,8 +129,7 @@
 
 :global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .librarySwitch button.libraryActive,
 :global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .toolbar > div button.active,
-:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .editor,
-:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .list article > button {
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .editor {
   background: var(--trade-surface-raised, #fff);
 }
 
@@ -146,10 +151,6 @@
 :global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .presets button,
 :global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .secondary {
   color: var(--trade-accent-readable, #12a66a);
-}
-
-:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .list article > button:hover {
-  background: var(--trade-surface-soft, #f8fcfa);
 }
 
 :global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .firstRun {

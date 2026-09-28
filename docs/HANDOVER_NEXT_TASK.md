@@ -1,9 +1,15 @@
 # Next task handover
 
-Status: optional stock management is in release validation. Verified baseline Sites 660, source 4a565b63236d639210ab74666720b694565d1c11.
+Status: product columns and stock locations are in release validation. Verified baseline Sites 662, source 945cc437bc62294095792b3dbecf0f7f779020ed.
 Prepared: 28 September 2026
 
-## Active contract: optional stock in Products
+## Active contract: simple product stock columns and team member locations
+
+Outcome: readable product columns, inline tracking switches, signed availability and separate physical counts in Main storage, optional storage locations or directly with a team member. Move stock keeps the total unchanged. Existing quote and actual-use flows retain their stock rules and business permissions.
+
+Scope: product table, stock workspace/API/server/guards, job-readiness stock locations, additive migration0208 and focused regression tests. Validate migration transition and replay, full commitments, member scoping, negative availability, transfers and corrections. Release the exact task commit to the existing approved GitHub branch and Sites. Evidence: C:/Webproject/outputs/tlink-stock-columns-2026-09-28/.
+
+## Previous contract: optional stock in Products
 
 Outcome: businesses that buy as needed keep the existing workflow. Tracking is off by default and is enabled only for selected material/equipment items. One Main stock pool provides opening counts, low-stock warnings, receiving, stocktake and movement history. Draft quotes leave stock untouched. Accepted quotes automatically allocate available tracked products; cancelled work releases unconsumed allocations. Jobs show availability and shortages; existing Used as planned / Actual differs records physical use once, including corrections.
 
