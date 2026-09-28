@@ -1,4 +1,5 @@
 import type { QuoteExecutionPacketSnapshot } from "./trade-quote-execution-server";
+import { ensureTradeStockSchemaGuards } from "./trade-stock-schema-guards.ts";
 
 type Row = Record<string, unknown>;
 type JobPlanInput = {
@@ -44,6 +45,7 @@ export async function buildJobPlanStatements(db: D1Database, input: JobPlanInput
     const tracked = new Set(stock.results.map((item) => String(item.item_id)));
     if (!selected.some((line) => lineRequirementType(line) === "material" && tracked.has(String(line.price_book_item_id)))) return [];
   }
+  await ensureTradeStockSchemaGuards(db);
   const packetSnapshots = parseJson<QuoteExecutionPacketSnapshot[]>(snapshot?.packets_json, []);
   const selectedPacketIds = new Set(selected.map((item) => String(item.job_packet_id || "")).filter(Boolean));
   const packets = packetSnapshots.filter((packet) => selectedPacketIds.has(packet.packetId));

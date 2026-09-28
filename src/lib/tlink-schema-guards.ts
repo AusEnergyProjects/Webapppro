@@ -1,4 +1,5 @@
 import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from "./trade-job-deletion-schema-guards.ts";
+import { ensureTradeStockSchemaGuards } from "./trade-stock-schema-guards.ts";
 // Sites splits migration SQL on semicolons, so trigger bodies are installed
 // through D1 prepared statements after their tables and columns exist.
 type TlinkSchemaGuardDefinition = {
@@ -177,5 +178,6 @@ export async function ensureTlinkSchemaGuards(database: D1Database) {
   const key = database as object;
   if (readinessByDatabase.has(key)) return;
   await installTlinkSchemaGuards(database);
+  await ensureTradeStockSchemaGuards(database);
   readinessByDatabase.add(key);
 }

@@ -1,4 +1,5 @@
 import { getD1 } from "../../db";
+import { ensureTradeStockSchemaGuards } from "./trade-stock-schema-guards";
 import type { TeamAccess } from "./trade-team-server";
 import { normaliseStockMutation, type JobStockSummary, type StockHistoryEntry, type StockItem, type StockMutation } from "./trade-stock";
 
@@ -81,6 +82,7 @@ export async function jobStock(ownerUid: string, workOrderId: string): Promise<J
 
 export async function mutateStock(ownerUid: string, actorUid: string, raw: unknown) {
   const input: StockMutation = normaliseStockMutation(raw); const db = getD1();
+  await ensureTradeStockSchemaGuards(db);
   const product = await stockItem(ownerUid, input.itemId); const payloadJson = JSON.stringify(input);
   const previous = await db.prepare("SELECT payload_json FROM trade_stock_operations WHERE firebase_uid=? AND operation_id=?").bind(ownerUid, input.operationId).first<Row>();
   if (previous) {

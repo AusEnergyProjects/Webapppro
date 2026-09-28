@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { TRADE_STOCK_SCHEMA_GUARD_DEFINITIONS } from "../src/lib/trade-stock-schema-guards.ts";
 import {
   canonicalTlinkSchemaGuardSql,
   ensureTlinkSchemaGuards,
   TLINK_SCHEMA_GUARD_DEFINITIONS,
 } from "../src/lib/tlink-schema-guards.ts";
+const ALL_TLINK_GUARDS = [...TLINK_SCHEMA_GUARD_DEFINITIONS, ...TRADE_STOCK_SCHEMA_GUARD_DEFINITIONS];
 
 function testD1(database) {
   class Statement {
@@ -106,6 +108,14 @@ function schemaDatabase() {
       withdrawn_at text, granted_at text
     );
   `);
+  database.exec("ALTER TABLE trade_work_orders ADD COLUMN stage TEXT DEFAULT ''; ALTER TABLE trade_work_orders ADD COLUMN updated_at TEXT DEFAULT ''; ALTER TABLE trade_work_orders ADD COLUMN partner_type TEXT DEFAULT '';");
+  const schema = fs.readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");
+  for (const table of ["trade_price_book_items", "trade_crm_job_plans", "trade_crm_job_plan_requirements", "trade_crm_job_actuals", "trade_crm_commercial_handovers"]) {
+    const start = schema.indexOf(`sqliteTable("${table}", {`), block = schema.slice(start, schema.indexOf("}, (table)", start));
+    const columns = [...block.matchAll(/(?:text|integer|real)\("([a-z_]+)"/g)].map(match => match[1]);
+    database.exec(`CREATE TABLE ${table} (${columns.map(name => `${name} ${/cents|minutes|milli|position/.test(name) ? "INTEGER DEFAULT 0" : "TEXT DEFAULT ''"}`).join(",")})`);
+  }
+  database.exec(fs.readFileSync(new URL("../drizzle/0207_trade_stock.sql", import.meta.url), "utf8"));
   return database;
 }
 
@@ -284,7 +294,7 @@ test("runtime installer creates and verifies every TLink integrity guard", async
   await ensureTlinkSchemaGuards(d1);
   await ensureTlinkSchemaGuards(d1);
   const installed = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name").all();
-  assert.deepEqual(installed.map((row) => row.name), TLINK_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name).sort());
+  assert.deepEqual(installed.map((row) => row.name), ALL_TLINK_GUARDS.map((item) => item.name).sort());
   database.close();
   assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 13);
 });
@@ -300,6 +310,7 @@ test("TLink guard verification survives another request's stalled and then cance
       const statement = base.prepare(sql);
       return {
         ...statement,
+        bind: (...values) => statement.bind(...values),
         async all() {
           reads += 1;
           if (reads === 1) await parked.promise;
@@ -321,7 +332,7 @@ test("TLink guard verification survives another request's stalled and then cance
     assert.match((await interrupted).message, /Original request disconnected/);
     await ensureTlinkSchemaGuards(d1);
     assert.equal(reads, completedReads);
-    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, TLINK_SCHEMA_GUARD_DEFINITIONS.length);
+    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, ALL_TLINK_GUARDS.length);
   } finally {
     clearTimeout(timer);
     parked.reject(new Error('Fixture cleanup'));
@@ -344,7 +355,7 @@ test("TLink retries a failed schema verification without caching the failure", a
   try {
     await assert.rejects(ensureTlinkSchemaGuards(d1), /D1 unavailable/);
     await ensureTlinkSchemaGuards(d1);
-    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, TLINK_SCHEMA_GUARD_DEFINITIONS.length);
+    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, ALL_TLINK_GUARDS.length);
   } finally { database.close(); }
 });
 

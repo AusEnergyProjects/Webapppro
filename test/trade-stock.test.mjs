@@ -4,14 +4,21 @@ import fs from "node:fs";
 import ts from "typescript";
 import { DatabaseSync } from "node:sqlite";
 import * as contract from "../src/lib/trade-stock.ts";
+import * as stockGuards from "../src/lib/trade-stock-schema-guards.ts";
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const compile = path => ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 const serverCode = compile("src/lib/trade-stock-server.ts"), routeCode = compile("src/app/api/trade-stock/route.ts");
-const planHelper = {}; Function("require", "exports", compile("src/lib/trade-job-plan-server.ts"))(() => ({}), planHelper);
+const planHelper = {}; Function("require", "exports", compile("src/lib/trade-job-plan-server.ts"))(id => id === "./trade-stock-schema-guards.ts" ? stockGuards : {}, planHelper);
 const now = "2026-09-28T10:00:00.000Z";
 
-function fixture() {
+function replayStockMigration(db) {
+  for (const sql of read("drizzle/0207_trade_stock.sql").split(";")) {
+    if (sql.replace(/--[^\n]*/g, "").trim()) db.prepare(sql).run();
+  }
+}
+
+function fixture({ installGuards = true } = {}) {
   const db = new DatabaseSync(":memory:");
   const schema = read("db/schema.ts");
   for (const table of ["trade_price_book_items", "trade_work_orders", "trade_crm_job_details", "trade_crm_job_plans", "trade_crm_job_plan_phases", "trade_crm_job_plan_requirements", "trade_crm_job_actuals", "trade_work_order_events", "trade_crm_commercial_handovers", "trade_crm_quote_items", "trade_crm_quote_execution_snapshots", "trade_crm_quote_acceptances"]) {
@@ -21,12 +28,13 @@ function fixture() {
     db.exec(`CREATE TABLE ${table} (${columns.map(name => `${name} ${/cents|minutes|milli|position/.test(name) ? "INTEGER DEFAULT 0" : "TEXT DEFAULT ''"}`).join(",")})`);
   }
   db.exec("CREATE UNIQUE INDEX actual_requirement ON trade_crm_job_actuals(job_plan_requirement_id)");
-  db.exec(read("drizzle/0207_trade_stock.sql"));
+  replayStockMigration(db);
+  if (installGuards) for (const guard of stockGuards.TRADE_STOCK_SCHEMA_GUARD_DEFINITIONS) db.exec(guard.sql);
   db.exec("INSERT INTO trade_price_book_items(id,firebase_uid,item_code,name,item_type,unit_label,record_status) VALUES ('panel','owner','P1','Solar panel','material','each','active'),('foreign','other','P2','Other business','material','each','active'),('labour','owner','L1','Labour','labour','hour','active'),('untracked','owner','M1','Fittings','material','each','active'),('equipment','owner','E1','Heat pump','equipment','each','active')");
   const prepare = (sql, values = []) => ({ sql, values, bind: (...args) => prepare(sql, args), first: async () => db.prepare(sql).get(...values) || null,
     all: async () => ({ results: db.prepare(sql).all(...values) }), run: async () => db.prepare(sql).run(...values) });
   const d1 = { prepare, async batch(statements) { db.exec("BEGIN"); try { const result = statements.map(s => db.prepare(s.sql).run(...s.values)); db.exec("COMMIT"); return result; } catch (error) { db.exec("ROLLBACK"); throw error; } } };
-  const server = {}; Function("require", "exports", serverCode)(id => id.endsWith("/db") ? { getD1: () => d1 } : id === "./trade-stock" ? contract : {}, server);
+  const server = {}; Function("require", "exports", serverCode)(id => id.endsWith("/db") ? { getD1: () => d1 } : id === "./trade-stock" ? contract : id === "./trade-stock-schema-guards" ? stockGuards : {}, server);
   let access = { ownerUid: "owner", actorUid: "owner", isOwner: true, canViewPriceBook: true, canManagePriceBook: true }, authError = "";
   const route = {}, dependencies = {
     "@/lib/admin-server": { sameOrigin: request => !request.headers.get("origin") || request.headers.get("origin") === new URL(request.url).origin,
@@ -282,4 +290,55 @@ test("competing prepared acceptance helpers cannot create duplicate scope or all
   await f.d1.batch([q.handoff, ...first]); await f.d1.batch(second);
   assert.equal(f.count("trade_crm_job_plans"), 1); assert.equal(f.count("trade_crm_job_plan_requirements"), 2);
   assert.equal((await f.server.stockItem("owner", "panel")).reservedMilli, 8000);
+});
+
+test("Sites semicolon migration replay is additive, retry-safe and preserves existing stock", async () => {
+  assert.doesNotMatch(read("drizzle/0207_trade_stock.sql"), /\bCREATE\s+TRIGGER\b/i);
+  const partial = new DatabaseSync(":memory:");
+  for (const object of stockGuards.TRADE_STOCK_SCHEMA_OBJECTS.slice(0, 4)) partial.exec(object.sql);
+  partial.exec("INSERT INTO trade_stock_items VALUES('existing','owner',1,12000,1000,3,'2026-09-28')");
+  replayStockMigration(partial); replayStockMigration(partial);
+  assert.equal(partial.prepare("SELECT on_hand_milli FROM trade_stock_items").get().on_hand_milli, 12000);
+  assert.equal(partial.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='table'").get().n, 5);
+  partial.close();
+  const f = fixture({ installGuards: false });
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='trigger'").get().n, 0);
+  await stockGuards.ensureTradeStockSchemaGuards(f.d1);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='trigger'").get().n, 13);
+  await f.mutate("enable", { quantityMilli: 10000 }); f.job("accepted");
+  assert.equal((await f.server.stockItem("owner", "panel")).reservedMilli, 10000);
+});
+
+test("runtime guards fail closed on missing or incompatible existing schema and trigger bodies", async () => {
+  const missing = fixture({ installGuards: false }); missing.db.exec("DROP INDEX trade_stock_items_owner_idx");
+  await assert.rejects(stockGuards.ensureTradeStockSchemaGuards(missing.d1), /TRADE_STOCK_MIGRATIONS_REQUIRED:trade_stock_items_owner_idx/);
+  assert.equal(missing.db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='trigger'").get().n, 0);
+  const incompatible = fixture({ installGuards: false }); incompatible.db.exec("DROP TABLE trade_stock_operations; CREATE TABLE trade_stock_operations(id TEXT PRIMARY KEY)");
+  await assert.rejects(stockGuards.ensureTradeStockSchemaGuards(incompatible.d1), /TRADE_STOCK_SCHEMA_MISMATCH:trade_stock_operations/);
+  const weakened = fixture({ installGuards: false });
+  weakened.db.exec("CREATE TRIGGER trade_stock_operation_revision_guard BEFORE INSERT ON trade_stock_operations BEGIN SELECT 1; END;");
+  await assert.rejects(weakened.mutate("enable", { quantityMilli: 10000 }), /TRADE_STOCK_GUARD_MISMATCH:trade_stock_operation_revision_guard/);
+  assert.equal(weakened.count("trade_stock_items"), 0); assert.equal(weakened.count("trade_stock_operations"), 0);
+  assert.equal(weakened.db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='trigger'").get().n, 1);
+});
+
+test("incomplete guard installation cannot enable stock and failed verification is not cached", async () => {
+  const f = fixture({ installGuards: false }); let incomplete = true;
+  const db = { ...f.d1, async batch(statements) { return f.d1.batch(incomplete ? statements.slice(0, -1) : statements); } };
+  await assert.rejects(stockGuards.ensureTradeStockSchemaGuards(db), /TRADE_STOCK_GUARD_UNAVAILABLE:trade_stock_actual_update_scope/);
+  incomplete = false; await stockGuards.ensureTradeStockSchemaGuards(db);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='trigger'").get().n, 13);
+  const other = fixture({ installGuards: false }); let failed = true, batches = 0;
+  const retry = { ...other.d1, async batch(statements) { batches++; if (failed) throw new Error("D1 unavailable"); return other.d1.batch(statements); } };
+  await assert.rejects(stockGuards.ensureTradeStockSchemaGuards(retry), /D1 unavailable/);
+  assert.equal(other.db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='trigger'").get().n, 0);
+  failed = false; await stockGuards.ensureTradeStockSchemaGuards(retry); await stockGuards.ensureTradeStockSchemaGuards(retry);
+  assert.equal(batches, 2);
+});
+
+test("guard installation boundaries precede activation and accepted plan statements", () => {
+  const server = read("src/lib/trade-stock-server.ts"), plan = read("src/lib/trade-job-plan-server.ts"), tlink = read("src/lib/tlink-schema-guards.ts");
+  assert.ok(server.indexOf("await ensureTradeStockSchemaGuards(db)") < server.indexOf("INSERT INTO trade_stock_operations"));
+  assert.ok(plan.indexOf("await ensureTradeStockSchemaGuards(db)") < plan.indexOf("INSERT INTO trade_crm_job_plans"));
+  assert.match(tlink, /await ensureTradeStockSchemaGuards\(database\);\s*readinessByDatabase.add/);
 });
