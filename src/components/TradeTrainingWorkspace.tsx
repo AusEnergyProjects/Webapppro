@@ -305,6 +305,40 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
     })).filter((group) => group.modules.length || group.unavailable.length);
   return <div className={styles.shell}>
     <header className={styles.hero}><span className={styles.eyebrow}>Your compliance to-do list</span><h2>To do &amp; training</h2><p>{data?.officeOnly ? "Your saved team profile has no on-site services. Installation training is not required for office work." : "Saving your on-site services assigns the relevant activity modules here. Complete your own learning and assessments before carrying out government-program work, alongside business setup, current insurance and required credentials."}</p>{data && !data.officeOnly && <><strong>{pending} training {pending === 1 ? "task" : "tasks"} to do</strong><span>{passed} of {data.modules.length} activity modules passed</span></>}</header>
+    <details className={styles.programGuide} open={Boolean(data?.trainingServiceStates?.includes("VIC"))} aria-label="Solar Victoria rebate registration">
+      <summary><span><strong>Solar Victoria rebates</strong><span>Business and installer registration for solar and hot water in Victoria</span></span><span className={styles.badge}>VIC</span></summary>
+      <div className={styles.programContent}>
+        <p>For Solar Homes rebate jobs, the retailer business must be authorised and each installer must be registered with Solar Victoria. If you sell and install, complete both pathways.</p>
+        <div className={styles.grid}>
+          <section className={styles.programCard} aria-label="Solar PV registration">
+            <h3>Solar panels</h3>
+            <p><strong>Business:</strong> Become a NET Approved Seller, then register as a Solar Victoria retailer.</p>
+            <p><strong>Installer:</strong> Hold active SAA solar accreditation, an appropriate electrical licence and required safety training, then register with Solar Victoria.</p>
+            <div className={styles.programLinks}>
+              <a href="https://www.solar.vic.gov.au/become-approved-provider#step-2-register-your-solar-victoria-account" target="_blank" rel="noopener noreferrer" aria-label="Solar PV business registration (opens in a new tab)">Business registration <span aria-hidden="true">↗</span></a>
+              <a href="https://www.solar.vic.gov.au/become-approved-provider#installers" target="_blank" rel="noopener noreferrer" aria-label="Solar PV installer registration (opens in a new tab)">Installer registration <span aria-hidden="true">↗</span></a>
+            </div>
+            <a className={styles.programSource} href="https://www.solar.vic.gov.au/notice-to-market-2026-27/section-3-requirements-solar-pv-rebates" target="_blank" rel="noopener noreferrer">Full solar PV requirements</a>
+          </section>
+          <section className={styles.programCard} aria-label="Hot water registration">
+            <h3>Heat-pump &amp; solar hot water</h3>
+            <p><strong>Business:</strong> Register as an authorised hot-water retailer. NET Approved Seller status is not currently required for this stream.</p>
+            <p><strong>Installer:</strong> Register before installing. Appropriate plumbing accreditation and required training also apply.</p>
+            <div className={styles.programLinks}>
+              <a href="https://www.solar.vic.gov.au/become-authorised-hot-water-retailer-or-installer#become-an-authorised-hot-water-retailer" target="_blank" rel="noopener noreferrer" aria-label="Hot water business registration (opens in a new tab)">Business registration <span aria-hidden="true">↗</span></a>
+              <a href="https://www.solar.vic.gov.au/become-authorised-hot-water-retailer-or-installer#become-an-authorised-hot-water-installer" target="_blank" rel="noopener noreferrer" aria-label="Hot water installer registration (opens in a new tab)">Installer registration <span aria-hidden="true">↗</span></a>
+            </div>
+            <a className={styles.programSource} href="https://www.solar.vic.gov.au/notice-to-market-2026-27/section-4-requirements-hot-water-rebates" target="_blank" rel="noopener noreferrer">Full hot-water requirements</a>
+          </section>
+        </div>
+        <details className={styles.programExtra}>
+          <summary>Already registered, or need hot-water training?</summary>
+          <p>Existing authorised solar retailers can add hot water in the Solar Victoria portal: My account &gt; Eligible Rebate Types &gt; Hot Water (Owner occupier).</p>
+          <p>New hot-water installers need approved in-person heat-pump design and installation training. Installers registered on or before 31 August 2025 who remain in the program are exempt from this new training requirement. <a href="https://www.solar.vic.gov.au/become-authorised-hot-water-retailer-or-installer#mandatory-training-for-hot-water-installers" target="_blank" rel="noopener noreferrer">View training options</a>.</p>
+        </details>
+        <p className={styles.programFootnote}>TLink training and Creditex setup do not grant Solar Victoria approval. Customer and product eligibility still apply. Official guidance checked 28 September 2026.</p>
+      </div>
+    </details>
     {!data?.officeOnly && data?.trainingServiceStates?.length ? <p className={styles.muted}>Training for {data.trainingServiceStates.join(", ")}, plus relevant national programs. {data.selectedMember?.isOwner ? "Change your business regions in Business > Services and areas." : "Your business owner or team manager can change your regions in Team > your profile > Service regions. Only regions the business also serves apply."}</p> : null}
     {data && !data.officeOnly && <TrainingServiceGuide services={data.trainingServiceIds || [...new Set(data.modules.map(module => module.serviceCategory || ""))]} states={data.trainingServiceStates || []} modules={data.modules} unavailable={data.unavailableActivities || []} busy={Boolean(busy)} onOpen={openModule} />}
     <TradeCreditexOnboarding user={user} />

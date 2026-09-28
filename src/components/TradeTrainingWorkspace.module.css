@@ -24,6 +24,30 @@
 .badge { background: var(--learn-soft); border: 1px solid var(--learn-line); border-radius: 30px; font-size: .73rem; font-weight: 800; padding: 6px 11px; white-space: normal; }
 .passed { color: var(--trade-success, #66d5b2); }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 15px; }
+.programGuide { border: 1px solid var(--learn-line); border-radius: 16px; background: var(--learn-surface); min-width: 0; overflow: clip; }
+.programGuide > summary { display: flex; align-items: center; gap: 16px; padding: 20px 24px; cursor: pointer; list-style: none; }
+.programGuide > summary::-webkit-details-marker { display: none; }
+.programGuide > summary::before { content: "+"; color: var(--trade-link, #61cbd2); font-size: 24px; font-weight: 600; }
+.programGuide[open] > summary::before { content: "−"; }
+.programGuide > summary > span:first-child { flex: 1; display: grid; gap: 4px; }
+.programGuide > summary strong { font-size: 18px; }
+.programGuide > summary > span:first-child > span { font-size: 14px; color: var(--learn-muted); line-height: 1.5; }
+.programContent { display: grid; gap: 18px; border-top: 1px solid var(--learn-line); padding: 22px 24px; font-size: 16px; }
+.programCard { display: flex; flex-direction: column; gap: 12px; padding: 20px; border: 1px solid var(--learn-line); border-radius: 12px; min-width: 0; }
+.programCard h3 { font-size: 18px; }
+.programCard p { line-height: 1.55; }
+.programLinks { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; margin-top: auto; }
+.programLinks a { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 14px; border: 1px solid var(--learn-line); border-radius: 8px; background: var(--learn-soft); color: var(--learn-ink); text-decoration: none; font-size: 14px; font-weight: 700; }
+.programLinks a:hover { border-color: var(--trade-link, #61cbd2); }
+.programSource, .programExtra, .programContent .programFootnote { font-size: 14px; }
+.programExtra > summary { cursor: pointer; font-weight: 600; line-height: 1.5; }
+.programExtra p { margin-top: 12px; }
+.programContent .programFootnote { color: var(--learn-muted); }
+@media (max-width: 600px) {
+  .programGuide > summary, .programContent { padding: 16px; }
+  .programCard { padding: 16px; }
+  .programLinks { flex-direction: column; }
+}
 .serviceGroup { border: 1px solid var(--learn-line); border-radius: 14px; min-width: 0; overflow: clip; }
 .serviceGroup > summary { cursor: pointer; padding: 18px; background: var(--learn-soft); line-height: 1.5; }
 .serviceGroup > summary > span:first-child { display: inline-grid; gap: 4px; vertical-align: middle; margin-right: 18px; }
