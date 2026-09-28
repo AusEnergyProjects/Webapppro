@@ -286,7 +286,7 @@ test("SMS routes reject foreign origins and owner/verification failures before p
   let accessError = new TradeAccessError("ABN_REVIEW_REQUIRED", 403);
   const route = load("../src/app/api/trade-sms/route.ts", {
     "@/lib/admin-server": { mfaErrorResponse: () => null, adminJson: (body, status = 200) => Response.json(body, { status }), sameOrigin: (request) => !request.headers.get("origin") || request.headers.get("origin") === new URL(request.url).origin },
-    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => { accessCalls++; throw accessError; } },
+    "@/lib/trade-communications-access": { requireTeamCommunicationIdentity: async () => { accessCalls++; throw accessError; } },
     "@/lib/trade-access-server": { TradeAccessError }, "@/lib/trade-sms-server": {}, "@/lib/trade-sms-provider": {},
   });
   assert.equal((await route.POST(new Request(`${origin}/api/trade-sms`, { method: "POST", headers: { Origin: "https://attacker.test" } }))).status, 403);
@@ -393,13 +393,14 @@ test("staff history excludes other jobs and ambiguous inbound replies until the 
     await f.server.sendTradeSms(owner, "customer", "Office message", "owner-request-00001", "job-2", f.db, smsTransport);
     await inbound(f, "Can you please call me?", `SM${"e".repeat(32)}`);
     const all = await f.server.smsWorkspace(owner, "customer", "", f.db);
-    assert.equal(all.messages.length, 2); assert.equal(all.messages[1].workOrderId, "");
+    const reply = all.messages.find(message => message.direction === "inbound");
+    assert.equal(all.messages.length, 2); assert.ok(reply); assert.equal(reply.workOrderId, "");
     assert.equal((await f.server.smsWorkspace(worker, "customer", "job-1", f.db)).messages.length, 0);
-    await assert.rejects(f.server.linkSmsReply(worker, "customer", all.messages[1].id, "job-1", f.db), /SMS_OWNER_REQUIRED/);
-    await assert.rejects(f.server.linkSmsReply({ ...owner, ownerUid: "other" }, "customer", all.messages[1].id, "job-1", f.db), /SMS_JOB_ACCESS_REQUIRED/);
-    await f.server.linkSmsReply(owner, "customer", all.messages[1].id, "job-1", f.db);
+    await assert.rejects(f.server.linkSmsReply(worker, "customer", reply.id, "job-1", f.db), /SMS_OWNER_REQUIRED/);
+    await assert.rejects(f.server.linkSmsReply({ ...owner, ownerUid: "other" }, "customer", reply.id, "job-1", f.db), /SMS_JOB_ACCESS_REQUIRED/);
+    await f.server.linkSmsReply(owner, "customer", reply.id, "job-1", f.db);
     assert.equal((await f.server.smsWorkspace(worker, "customer", "job-1", f.db)).messages.length, 1);
-    await assert.rejects(f.server.linkSmsReply(owner, "customer", all.messages[1].id, "job-2", f.db), /SMS_REPLY_CHANGED/);
+    await assert.rejects(f.server.linkSmsReply(owner, "customer", reply.id, "job-2", f.db), /SMS_REPLY_CHANGED/);
     await inbound(f, "Question about TLJ-DEF12345", `SM${"f".repeat(32)}`);
     assert.equal((await f.server.smsWorkspace(worker, "customer", "job-1", f.db)).messages.length, 1);
     assert.equal((await f.server.smsWorkspace(owner, "customer", "", f.db)).messages.find(message => message.body === "Question about TLJ-DEF12345").workOrderId, "job-2");
@@ -440,7 +441,7 @@ test("staff STOP remains customer-wide, revoked staff cannot replay sends, and s
 test("staff cannot inspect, connect, disconnect or link replies through the SMS API", async () => {
   const route = load("../src/app/api/trade-sms/route.ts", {
     "@/lib/admin-server": { mfaErrorResponse: () => null, adminJson: (body, status = 200) => Response.json(body, { status }), sameOrigin: () => true },
-    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => worker },
+    "@/lib/trade-communications-access": { requireTeamCommunicationIdentity: async () => worker },
     "@/lib/trade-access-server": { TradeAccessError: class extends Error {} }, "@/lib/trade-sms-server": {}, "@/lib/trade-sms-provider": {},
   });
   for (const action of ["inspect", "connect", "link_reply", "disconnect"]) {

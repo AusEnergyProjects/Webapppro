@@ -25,6 +25,16 @@ async function assertDevice(actor: TeamAccess, deviceId: string) {
   if (!active) throw new Error("AUTH_REQUIRED");
 }
 
+// Native requests use their existing identity and registered device. This also
+// serves token-authenticated web requests, which do not carry a native device.
+// It intentionally never accepts a browser handoff cookie.
+export async function requireTeamCommunicationIdentity(request: Request): Promise<TeamAccess> {
+  if (!request.headers.get("authorization")) throw new Error("AUTH_REQUIRED");
+  const actor = await requireInstallerTeamAccess(request);
+  await assertDevice(actor, request.headers.get("x-aea-device-id") || "");
+  return actor;
+}
+
 async function originalAccess(row: HandoffRow, request: Request): Promise<TeamAccess> {
   const stored = await decryptProtectedPayload(row.encrypted_auth);
   if (typeof stored.authorization !== "string" || typeof stored.deviceId !== "string") throw new Error("AUTH_REQUIRED");
@@ -42,9 +52,7 @@ async function originalAccess(row: HandoffRow, request: Request): Promise<TeamAc
 export async function requireTeamCommunicationAccess(request: Request): Promise<TeamAccess> {
   if (!allowedPaths.has(new URL(request.url).pathname)) throw new Error("AUTH_REQUIRED");
   if (request.headers.has("authorization")) {
-    const actor = await requireInstallerTeamAccess(request);
-    await assertDevice(actor, request.headers.get("x-aea-device-id") || "");
-    return actor;
+    return requireTeamCommunicationIdentity(request);
   }
   const token = communicationCookie(request);
   if (!token) throw new Error("AUTH_REQUIRED");
@@ -60,8 +68,7 @@ export async function issueCommunicationHandoff(request: Request, input: Record<
   // Only the signed-in native app can mint a new handoff. Existing handoff
   // cookies cannot renew themselves or create further sessions.
   if (!request.headers.get("authorization")) throw new Error("AUTH_REQUIRED");
-  const actor = await requireInstallerTeamAccess(request), db = getD1();
-  await assertDevice(actor, request.headers.get("x-aea-device-id") || "");
+  const actor = await requireTeamCommunicationIdentity(request), db = getD1();
   const threadId = input.threadId === undefined ? "" : String(input.threadId);
   const callId = input.callId === undefined ? "" : String(input.callId);
   if ((threadId && !recordId.test(threadId)) || (callId && (!threadId || !recordId.test(callId)))) throw new Error("HANDOFF_INVALID");

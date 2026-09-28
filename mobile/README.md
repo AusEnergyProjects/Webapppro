@@ -7,7 +7,7 @@ TLink is the native iOS and Android app for technicians, trades and assessors us
 - TLink-issued one-time setup PIN sign-in using the worker's exact name, with a device-bound 90-day field session stored in the secure store.
 - Optional Firebase email and password sign-in for office users who need the broader web account path.
 - Registered installation-specific devices with app-version enforcement, native push tokens and owner-controlled revocation.
-- A Messages tab opens team chat and voice/video calls in the system browser through a short-lived, single-use authenticated handoff. Field-session tokens are never placed in a browser URL.
+- A native Messages inbox keeps team chats, groups, permitted customer SMS, photos, voice notes and internal voice/video calls inside TLink, using the app's dark theme. Requests use the existing device-bound authentication directly.
 - Explicit notification permission setup, phone-settings recovery, per-device mute and safe team-conversation routing from notification taps.
 - A worker-specific week calendar, day schedule, assigned-job cards and one-tap workflow launch.
 - A simple plus flow for workers who are allowed to create a new self-assigned rental or safety job.
@@ -44,7 +44,7 @@ npm run export:verify
 
 ## Distribution configuration
 
-The Android EAS project is `@ausenergy/aea-field` with project ID `3b02565e-dc34-4088-8cdd-e3c8a9ba11e9`. Preview builds use internal distribution and the `preview` update channel. The Android Firebase client file is supplied to EAS locally and remains excluded from Git.
+The Android EAS project is `@ausenergy/aea-field` with project ID `3b02565e-dc34-4088-8cdd-e3c8a9ba11e9`. Preview builds use internal distribution and the `preview` update channel. Version 1.0.2 adds native WebRTC and audio modules and therefore requires a new signed app installation; never publish its JavaScript to the older 1.0.1 runtime. The Android Firebase client file is supplied to EAS locally and remains excluded from Git.
 
 Before iOS or public app-store distribution, create and add:
 
@@ -54,7 +54,9 @@ Before iOS or public app-store distribution, create and add:
 
 These credentials are not source code and must not be committed. TLink name and PIN sign-in, offline operation and secure API sync do not depend on Google OAuth being configured.
 
-Team calls run in Safari or Chrome rather than a native calling module. The browser requests microphone/camera permission when a person starts or answers a call and must stay open during the call. Background push delivery additionally requires the server's FCM/APNs sender configuration; obtaining a device token alone does not prove delivery. Android channels are `field-sync`, `team-messages` and `team-calls`. Team push data uses `type: team_message | team_call`, `threadId` and optional `callId`. Taps wait for approved field access before opening the authenticated conversation.
+Team calls use native WebRTC with the same authorised signalling and short-lived relay credentials as the web portal. Microphone/camera permission is requested only when starting or answering a call. Calls require TLink to remain in the foreground; notification taps show an invitation and never answer automatically. Background push delivery additionally requires the server's FCM/APNs sender configuration; obtaining a device token alone does not prove delivery. Android channels are `field-sync`, `team-messages` and `team-calls`. Team push data uses `type: team_message | team_call`, `threadId` and optional `callId`. Taps wait for approved field access before opening the native conversation.
+
+Customer texts retain the business's shared number, recorded consent and assigned-job permissions. Team chat attachment bytes are retrieved through authenticated requests, bounded before local caching, and removed when their in-app viewer is released. Old browser handoff endpoints remain server-side for installed 1.0.1 clients; the 1.0.2 app no longer creates or opens them.
 
 ## Evidence capture boundary
 

@@ -49,6 +49,26 @@ function fixture() {
 const request = number => `message-request-${String(number).padStart(8, "0")}`;
 const create = (f, actor, memberIds, subject = "", requestId = request(1)) => f.server.createTeamConversation(actor, { memberIds, subject, requestId }, f.db);
 
+test("a new business team inbox returns HTTP 200 with no threads and its available teammates", async () => {
+  const f = fixture(); try {
+    const route = load("../src/app/api/trade-messages/route.ts", {
+      "@/lib/admin-server": { sameOrigin: () => true, mfaErrorResponse: () => null, adminJson: (body, status = 200) => Response.json(body, { status }) },
+      "@/lib/trade-access-server": { TradeAccessError: class extends Error {} },
+      "@/lib/trade-communications-access": { requireTeamCommunicationAccess: async () => jane },
+      "cloudflare:workers": { waitUntil: () => assert.fail("Reading an empty inbox cannot send a notification") },
+      "@/lib/trade-push-server": {}, "@/lib/bounded-request-body.mjs": bounded,
+      "@/lib/trade-messages-server": f.server,
+    });
+    const response = await route.GET(new Request("https://tlink.test/api/trade-messages"));
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.ok, true); assert.equal(result.memberId, jane.memberId);
+    assert.deepEqual(result.threads, []); assert.equal(result.hasMore, false);
+    assert.deepEqual(result.members.map(member => member.id).sort(), ["jane", "john", "owner"]);
+    assert.equal(result.error, undefined);
+  } finally { f.close(); }
+});
+
 test("message route rejects oversized UTF-8 bodies before any conversation mutation", async () => {
   const route = load("../src/app/api/trade-messages/route.ts", {
     "@/lib/admin-server": { sameOrigin:()=>true, mfaErrorResponse:()=>null, adminJson:(body,status=200)=>Response.json(body,{status}) },

@@ -8,6 +8,7 @@ import { DashboardAppUpdate } from '@/components/dashboard-app-update';
 import { NotificationNavigation } from '@/components/notification-navigation';
 import { colours } from '@/lib/theme';
 import { AppProvider, useApp } from '@/providers/app-provider';
+import { NativeTeamCallProvider } from '@/providers/native-team-call-provider';
 
 function AppNavigation() {
   const { access } = useApp();
@@ -37,7 +38,9 @@ function AppNavigation() {
 export default function RootLayout() {
   return (
     <AppProvider>
-      <AppNavigation />
+      <NativeTeamCallProvider>
+        <AppNavigation />
+      </NativeTeamCallProvider>
     </AppProvider>
   );
 }

@@ -18,7 +18,7 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 
 ## Current team communication usability completion gate
 
-Release the restricted camera/microphone policy fix, clear permission recovery, voice-only answer, camera switching, compact phone conversations, opt-in web push and exact chat/call links. Publish migrations 0217/0218 and verify one-use field-app handoff with current authority and per-tab identity checks. Native mobile configuration/distribution and an authorised two-device media/push check remain operational gates. Evidence: C:/Webproject/outputs/tlink-team-usability-2026-09-28/.
+Web communication usability and browser notifications were published in Sites 669, followed by the compatible Android 1.0.1 update. Complete native 1.0.2 with its own team/customer inbox, attachment playback, voice notes and native call controls, and publish a new signed Android binary plus matching server changes. Preserve the existing per-business, participant and assigned-job permissions. Keep older handoff endpoints only for installed 1.0.1 clients. An authorised physical-device installation and two-device media/push check remain operational gates. Evidence: C:/Webproject/outputs/tlink-native-comms-2026-09-28/.
 
 ## Previous Messages and practical stock completion gate
 

@@ -1,5 +1,5 @@
 import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
-import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { requireTeamCommunicationIdentity } from "@/lib/trade-communications-access";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { connectSms, disconnectSms, linkSmsReply, recordSmsConsent, sendTradeSms, smsWorkspace } from "@/lib/trade-sms-server";
 import { inspectSmsAccount, smsCredentials } from "@/lib/trade-sms-provider";
@@ -57,7 +57,7 @@ async function requestBody(request: Request) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireInstallerTeamAccess(request);
+    const actor = await requireTeamCommunicationIdentity(request);
     const params = new URL(request.url).searchParams;
     return adminJson({ ok: true, ...await smsWorkspace(actor, params.get("customerId") || "", params.get("workOrderId") || "") });
   } catch (error) { return smsError(error); }
@@ -66,7 +66,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireInstallerTeamAccess(request);
+    const actor = await requireTeamCommunicationIdentity(request);
     const body = await requestBody(request);
     if (["inspect", "connect", "link_reply"].includes(String(body.action)) && !actor.isOwner) throw new Error("SMS_OWNER_REQUIRED");
     if (body.action === "inspect") return adminJson({ ok: true, ...await inspectSmsAccount(smsCredentials(body.accountSid, body.authToken)) });
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireInstallerTeamAccess(request);
+    const actor = await requireTeamCommunicationIdentity(request);
     if (!actor.isOwner) throw new Error("SMS_OWNER_REQUIRED");
     const body = await requestBody(request);
     if (body.action !== "disconnect") return adminJson({ ok: false, error: "Choose an SMS action." }, 400);

@@ -76,14 +76,8 @@ test('registration outage reuses cache only after current permission is confirme
 });
 
 function teamHarness() {
-  const calls = { requests: [], opened: [] };
-  const trusted = 'https://tlink.example/direct-trade/messages#handoff=abcdefghijklmnopqrstuvwx';
-  const api = loadModule('../src/lib/team-messages.ts', {
-    'react-native': { Linking: { openURL: async (value) => calls.opened.push(value) } },
-    '@/lib/config': { API_BASE_URL: 'https://tlink.example' },
-    '@/lib/api': { apiRequest: async (...args) => { calls.requests.push(args); return { ok: true, url: trusted }; } },
-  });
-  return { api, calls, trusted };
+  const api = loadModule('../src/lib/team-messages.ts', {});
+  return { api };
 }
 
 test('team notifications accept only bounded conversation references, never supplied URLs', () => {
@@ -94,19 +88,16 @@ test('team notifications accept only bounded conversation references, never supp
   }
 });
 
-test('handoff URLs cannot escape the configured HTTPS origin, messages route or opaque fragment', () => {
-  const { api, trusted } = teamHarness();
-  assert.equal(api.trustedTeamHandoffUrl(trusted), trusted);
-  for (const url of [trusted.replace('https:', 'http:'), trusted.replace('tlink.example', 'evil.example'), trusted.replace('tlink.example', 'user@tlink.example'), trusted.replace('/messages', '/dashboard'), trusted.replace('#handoff', '?token=secret#handoff'), trusted.replace('abcdefghijklmnopqrstuvwx', 'bad%20code'), '//evil.example', null]) {
-    assert.throws(() => api.trustedTeamHandoffUrl(url));
-  }
+test('native notification targets never create browser handoffs or accept URLs', () => {
+  const { api } = teamHarness();
+  assert.equal(api.openTeamMessages, undefined);
+  assert.equal(api.trustedTeamHandoffUrl, undefined);
+  assert.equal(api.teamNotificationTarget({ type: 'team_message', threadId: 'https://evil.example' }), null);
+  assert.deepEqual(api.teamNotificationTarget({ type: 'team_message', threadId: 'thread-1', url: 'https://evil.example' }), { threadId: 'thread-1' });
 });
 
-test('opening a conversation uses authenticated POST and opens only the returned handoff', async () => {
-  const { api, calls, trusted } = teamHarness();
-  await api.openTeamMessages({ threadId: 'thread-1', callId: 'call-1' });
-  assert.equal(calls.requests[0][0], '/api/trade-team-handoff');
-  assert.deepEqual(JSON.parse(calls.requests[0][1].body), { action: 'issue', threadId: 'thread-1', callId: 'call-1' });
-  assert.deepEqual(calls.opened, [trusted]);
-  assert.equal(calls.opened.some((url) => url.includes('thread-1') || url.includes('call-1')), false);
+test('call invitation navigation cannot carry an invalid call reference', () => {
+  const { api } = teamHarness();
+  assert.deepEqual(api.teamNotificationTarget({ type: 'team_call', threadId: 'thread-1', callId: '../admin' }), { threadId: 'thread-1' });
+  assert.deepEqual(api.teamNotificationTarget({ type: 'team_message', threadId: 'thread-1', callId: 'ignored-call' }), { threadId: 'thread-1' });
 });

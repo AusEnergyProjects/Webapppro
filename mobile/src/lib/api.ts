@@ -145,6 +145,68 @@ export async function publicApiRequest<T>(path: string, init: RequestInit = {}) 
   return body as T;
 }
 
+/** Download private conversation media without exposing an authenticated URL to another app. */
+export async function apiDownloadMessageMedia(id: string, signal?: AbortSignal): Promise<{
+  bytes: Uint8Array;
+  contentType: string;
+}> {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(id)) {
+    throw new ApiError('This attachment is invalid.', 400, 'MESSAGE_MEDIA_INVALID');
+  }
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) controller.abort();
+  const timeout = setTimeout(abort, JSON_REQUEST_TIMEOUT_MS);
+  try {
+    const init: RequestInit = { method: 'GET', signal: controller.signal, redirect: 'error' };
+    const headers = await authenticatedHeaders(init);
+    if (controller.signal.aborted) throw new Error('Attachment download cancelled.');
+    const response = await expoFetch(`${API_BASE_URL}/api/trade-message-media?id=${encodeURIComponent(id)}`, { ...init, headers });
+    if (!response.ok) {
+      const body = await responseBody(response);
+      throw new ApiError(String(body.error || 'This attachment could not be opened.'), response.status,
+        String(body.code || 'MESSAGE_MEDIA_UNAVAILABLE'));
+    }
+    const contentType = (response.headers.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
+    const types = new Set(['image/jpeg', 'image/png', 'image/webp', 'audio/webm', 'audio/mp4', 'audio/ogg']);
+    const limit = 5 * 1024 * 1024;
+    const advertised = response.headers.get('content-length');
+    if (!types.has(contentType) || (advertised !== null && (!/^\d+$/.test(advertised) || Number(advertised) > limit))) {
+      throw new ApiError('This attachment has an unsupported format or size.', 413, 'MESSAGE_MEDIA_INVALID');
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new ApiError('This attachment is empty.', 502, 'MESSAGE_MEDIA_INVALID');
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const chunk = await reader.read();
+        if (controller.signal.aborted) throw new Error('Attachment download cancelled.');
+        if (chunk.done) break;
+        size += chunk.value.byteLength;
+        if (size > limit) throw new ApiError('This attachment is too large.', 413, 'MESSAGE_MEDIA_INVALID');
+        chunks.push(chunk.value);
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+    if (size < 1 || (advertised !== null && Number(advertised) !== size)) {
+      throw new ApiError('This attachment did not download completely. Try again.', 502, 'MESSAGE_MEDIA_INVALID');
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    return { bytes, contentType };
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
 export type VerifiedGovernedDocument = Readonly<{
   bytes: Uint8Array;
   contentType: string;

@@ -2,7 +2,7 @@
   "expo": {
     "name": "TLink",
     "slug": "aea-field",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -15,7 +15,7 @@
     "description": "Simple, secure TLink schedules and field workflows for technicians, trades and assessors.",
     "ios": {
       "bundleIdentifier": "au.com.australianenergyassessments.field",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "supportsTablet": true,
       "infoPlist": {
         "UIFileSharingEnabled": false,
@@ -25,13 +25,16 @@
     "android": {
       "package": "au.com.australianenergyassessments.field",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#07182b",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
@@ -70,8 +73,8 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow TLink to attach job photos.",
-          "cameraPermission": "Allow TLink to photograph job progress and evidence.",
-          "microphonePermission": false
+          "cameraPermission": "Allow TLink to take photos and join team video calls.",
+          "microphonePermission": "Allow TLink to make team calls and record voice messages."
         }
       ],
       [
@@ -87,7 +90,22 @@
       "expo-notifications",
       "expo-background-task",
       "expo-image",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow TLink to make team calls and record voice messages.",
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow TLink to take photos and join team video calls.",
+          "microphonePermission": "Allow TLink to make team calls and record voice messages."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

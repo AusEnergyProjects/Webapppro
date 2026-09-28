@@ -1,11 +1,11 @@
 # Next task handover
 
-Status: Team communications and device notifications are in release validation. Verified baseline Sites 668, source abac4a953463b077540164afd5068ef625de3e8f.
+Status: Team communications and device notifications are moving into native app screens. Verified baseline Sites 669, source 9e407cc3b72cce1c0aa9e0be129dd6719bea05c6.
 Prepared: 28 September 2026
 
 ## Active contract: straightforward team calls and notifications
 
-Publish the exact team communications usability slice, migrations 0217/0218, browser notification setup and native Messages entry. Validate permissions, revoked devices, cross-tab identity, one-use handoffs, chat deep links, logout cleanup and mobile day/night controls. Evidence: C:/Webproject/outputs/tlink-team-usability-2026-09-28/. Keep customer SMS on the existing business number.
+Publish native app 1.0.2 with in-app team/customer messaging, attachment playback and native voice/video calls. Preserve business/member/device permissions and the shared business SMS number. Validate native permissions, revoked devices, empty inboxes, failed sends, attachment cleanup, notification invitations and call teardown. Complete the signed Android build and matching server release; do not publish native-module changes into runtime 1.0.1. Evidence: C:/Webproject/outputs/tlink-native-comms-2026-09-28/.
 
 After web publication, verify a consented office-to-phone call and real OS notification receipt with named test participants. Native Expo exports are build checks, not an app-store release; FCM/APNs configuration and mobile distribution remain separate. Keep ClickSend partnership approval and provider replacement out of this change.
 
