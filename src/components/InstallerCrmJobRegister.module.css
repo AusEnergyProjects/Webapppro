@@ -16,7 +16,7 @@
   position: relative;
 }
 
-.statusStack { display: grid; justify-items: start; gap: 5px; white-space: normal; }
+.register .row .statusStack { display: grid; justify-items: start; gap: 5px; white-space: normal; }
 .statusStack .status { white-space: normal; text-align: left; }
 .invoiceStatus { display: inline-flex; width: fit-content; max-width: 100%; border: 1px solid var(--trade-line, #d5e4df); border-radius: 6px; padding: 4px 7px; color: var(--trade-muted, #526d64); background: var(--trade-surface-soft, #f5f9f7); font-size: 11px; font-weight: 600; line-height: 1.4; letter-spacing: normal; text-transform: none; white-space: normal; }
 .invoiceStatus[data-tone="paid"] { color: var(--trade-accent-readable, #087c69); background: var(--trade-accent-soft, #eaf5f1); border-color: var(--trade-accent, #087c69); }
