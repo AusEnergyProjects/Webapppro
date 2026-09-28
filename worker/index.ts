@@ -68,6 +68,7 @@ import { queueAccountingDispatch } from "../src/lib/trade-accounting-automation-
 import { drainAccountingDispatches } from "../src/lib/trade-accounting-automation";
 import { exportAcceptedInvoiceAutomatically } from "../src/lib/trade-accounting-server";
 import { drainAcceptedInvoiceEmails } from "../src/lib/trade-accepted-invoice-delivery-server";
+import { processBusinessFollowUps } from "../src/lib/trade-follow-ups-runtime";
 import {
   canonicalPublicTarget,
   publicRedirectTarget,
@@ -538,6 +539,9 @@ const worker = {
       }).EVIDENCE;
       const registryEnvironment = workerEnv as Readonly<Record<string, unknown>>;
       tasks.push(
+        processBusinessFollowUps(getD1()).catch(() => {
+          console.error("Business follow-up reminders could not be processed.");
+        }),
         drainAcceptedInvoiceEmails({ db: getD1() }).catch(() => {
           console.error("Automatic accepted invoice email queue could not be processed.");
         }),

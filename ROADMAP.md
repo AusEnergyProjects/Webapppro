@@ -16,7 +16,11 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
-## Current accepted-invoice completion gate
+## Current customer follow-up completion gate
+
+Business email templates, named insert buttons, job-level manual send and business-wide optional flexible invoice/appointment timings are implemented in migration0206. Complete exact-source publication and affected desktop/mobile day/night checks. Operational delivery requires the business to connect email and enable its chosen timing; release QA must not send customer email. Preserve accepted-invoice/accounting automation. Evidence: C:/Webproject/outputs/tlink-followups-2026-09-28/.
+
+## Previous accepted-invoice completion gate
 
 Automatic PDF email and connected bookkeeping export on new quote acceptance are implemented and in release validation, with migrations 0204/0205. Complete exact-source publication and read-only desktop/mobile checks. Provider inbox receipt and external invoice creation require an authorised operational acceptance with an active business email/accounting connection; do not treat local fixtures as live provider evidence. Preserve immutable invoices and duplicate protection. Evidence: C:/Webproject/outputs/tlink-automatic-invoice-2026-09-28/.
 

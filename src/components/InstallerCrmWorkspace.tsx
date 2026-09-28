@@ -1,5 +1,6 @@
 "use client";
 
+import { TradeFollowUpDialog } from "./TradeFollowUpDialog";
 import { BookingTrainingLinks, type BookingTrainingModule } from "./BookingTrainingLinks";
 import { TradeCustomerEmailComposer } from "./TradeCustomerEmailComposer";
 
@@ -465,6 +466,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const [customerViewSaved, setCustomerViewSaved] = useState(false);
   const [jobColumns, setJobColumns] = useState(() => [...JOB_REGISTER_DEFAULT_COLUMNS]);
   const [jobActionId, setJobActionId] = useState("");
+  const [followUpJobId, setFollowUpJobId] = useState("");
   const [jobActionPosition, setJobActionPosition] = useState({ left: 8, top: 8 });
   const [customerActionId, setCustomerActionId] = useState("");
   const [customerActionPosition, setCustomerActionPosition] = useState({ left: 8, top: 8 });
@@ -1094,7 +1096,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     const requestedTop = pointer ? event.clientY : rect.top + 36;
     setJobActionPosition({
       left: Math.max(8, Math.min(requestedLeft, window.innerWidth - 196)),
-      top: Math.max(8, Math.min(requestedTop, window.innerHeight - 236)),
+      top: Math.max(8, Math.min(requestedTop, window.innerHeight - 285)),
     });
     setJobActionId(jobId);
   }
@@ -1110,7 +1112,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         const rect = event.currentTarget.getBoundingClientRect();
         setJobActionPosition({
           left: Math.max(8, Math.min(rect.right - 180, window.innerWidth - 196)),
-          top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 236)),
+          top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 285)),
         });
         setJobActionId(job.id);
       }}>Actions</button>
@@ -1126,6 +1128,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         {(!staffPermissions || (staffPermissions.canManageJobs && staffPermissions.canViewFieldEvidence && staffPermissions.canManageFieldEvidence)) && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "review"); }}>Review</button>}
         {(!staffPermissions || staffPermissions.canManageJobs) && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "summary"); }}>Edit details</button>}
         {(!staffPermissions || (staffPermissions.canViewCustomers && staffPermissions.canManageCustomers)) && job.customerSource !== "platform_private" && job.crmCustomerId && <button role="menuitem" type="button" onClick={() => openJobCustomerEditor(job)}>Edit customer</button>}
+        {job.customerSource !== "platform_private" && job.crmCustomerId && (!staffPermissions || (staffPermissions.canViewCustomers && (staffPermissions.canManageCustomers || staffPermissions.canManageJobs || staffPermissions.canSendQuotes || staffPermissions.canManageInvoices))) && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); setFollowUpJobId(job.id); }}>Follow up</button>}
         {canOpenScheduleAction && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "schedule"); }}>Schedule job</button>}
       </div>, document.body)}
     </div>;
@@ -1347,6 +1350,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   }
 
   return <section id="business-hub" className="installer-crm" aria-labelledby="installer-crm-title">
+    {followUpJobId && <TradeFollowUpDialog user={user} workOrderId={followUpJobId} onClose={() => { const id=followUpJobId; setFollowUpJobId(""); requestAnimationFrame(() => { [...document.querySelectorAll<HTMLButtonElement>("[data-job-action-trigger]")].find(button => button.dataset.jobActionTrigger === id)?.focus(); }); }} />}
     <header className="crm-hero">
       <div>{!mapWorkspace && <span>Installer business workspace</span>}<h2 id="installer-crm-title">{mapWorkspace ? "Map & quote" : "Run the day from one clear place"}</h2><p>{mapWorkspace ? "Find your jobs and customers, measure a roof or design a solar system. Select Add to quote to include your design and measurements." : "Manage your own customers, jobs, visits, tasks, issues, quotes, invoices and handovers. Australian Energy Assessments customer identities remain protected."}</p></div>
       {!mapWorkspace && (canCreateJob || canCreateCustomer) && <div className="crm-primary-actions"><AccessibleMenu className="crm-quick-create" label="New">{(close) => <>{canCreateJob && <button role="menuitem" type="button" onClick={() => { setNewJobSeed(null); setView("jobs"); setCreating("job"); close(); }}>Job</button>}{canCreateCustomer && allowedViews.includes("customers") && <button role="menuitem" type="button" onClick={() => { setView("customers"); setCreating("customer"); close(); }}>Customer</button>}</>}</AccessibleMenu></div>}

@@ -3031,6 +3031,30 @@ export const tradeCrmSignoffs = sqliteTable("trade_crm_signoffs", {
   index("trade_crm_signoffs_work_order_idx").on(table.workOrderId, table.signedAt),
 ]);
 
+export const tradeEmailTemplates = sqliteTable("trade_email_templates", {
+  ownerUid: text("owner_uid").notNull(), id: text("id").notNull(), name: text("name").notNull(), kind: text("kind").notNull(),
+  subject: text("subject").notNull(), body: text("body").notNull(), archived: integer("archived").notNull().default(0), updatedAt: text("updated_at").notNull(),
+}, table => [primaryKey({ columns: [table.ownerUid, table.id] }), check("trade_email_templates_kind", sql`${table.kind} IN ('general','quote','invoice','appointment','appointment_after')`),
+  check("trade_email_templates_archived", sql`${table.archived} IN (0,1)`)]);
+
+export const tradeFollowUpSettings = sqliteTable("trade_follow_up_settings", {
+  ownerUid: text("owner_uid").primaryKey().notNull(), settingsJson: text("settings_json").notNull(), invoiceEnabledAt: text("invoice_enabled_at").notNull().default(""),
+  appointmentEnabledAt: text("appointment_enabled_at").notNull().default(""),
+  nextScanAt: text("next_scan_at").notNull().default(""), scanCursor: text("scan_cursor").notNull().default(""), revision: integer("revision").notNull().default(1), updatedAt: text("updated_at").notNull(),
+}, table => [index("trade_follow_up_settings_scan_idx").on(table.nextScanAt), check("trade_follow_up_settings_json", sql`json_valid(${table.settingsJson})`)]);
+
+export const tradeFollowUpMessages = sqliteTable("trade_follow_up_messages", {
+  id: text("id").primaryKey().notNull(), ownerUid: text("owner_uid").notNull(), actorUid: text("actor_uid").notNull(), workOrderId: text("work_order_id").notNull(),
+  templateId: text("template_id").notNull(), eventKey: text("event_key").notNull(), automatic: integer("automatic").notNull().default(0),
+  contextHash: text("context_hash").notNull(), contextJson: text("context_json").notNull(), recipient: text("recipient").notNull(),
+  subject: text("subject").notNull(), body: text("body").notNull(), status: text("status").notNull().default("queued"), error: text("error").notNull().default(""),
+  attempts: integer("attempts").notNull().default(0), nextAttemptAt: text("next_attempt_at").notNull(), leaseToken: text("lease_token").notNull().default(""),
+  leaseExpiresAt: text("lease_expires_at").notNull().default(""), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, table => [uniqueIndex("trade_follow_up_messages_event_idx").on(table.ownerUid, table.eventKey),
+  index("trade_follow_up_messages_due_idx").on(table.status, table.nextAttemptAt), index("trade_follow_up_messages_job_idx").on(table.ownerUid, table.workOrderId, table.createdAt),
+  check("trade_follow_up_messages_automatic", sql`${table.automatic} IN (0,1)`), check("trade_follow_up_messages_context", sql`json_valid(${table.contextJson})`),
+  check("trade_follow_up_messages_status", sql`${table.status} IN ('queued','sending','accepted','failed','uncertain','cancelled')`)]);
+
 export const tradeCrmQuickInvoices = sqliteTable("trade_crm_quick_invoices", {
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),

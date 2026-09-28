@@ -51,6 +51,7 @@ import {
 
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
 const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace").then((module) => module.TradePriceBookWorkspace));
+const TradeEmailTemplatesWorkspace = dynamic(() => import("./TradeEmailTemplatesWorkspace").then((module) => module.TradeEmailTemplatesWorkspace));
 const TradeNetworkWorkspace = dynamic(() => import("./TradeNetworkWorkspace").then((module) => module.TradeNetworkWorkspace), { loading: () => <p role="status">Loading trade network...</p> });
 const InstallerPlatformQuote = dynamic(() => import("./InstallerPlatformQuote").then((module) => module.InstallerPlatformQuote));
 const InstallerArrivalWindows = dynamic(() => import("./InstallerArrivalWindows").then((module) => module.InstallerArrivalWindows));
@@ -227,11 +228,12 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "map" | "network" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "map" | "network" | "email-templates" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "map",
   "network",
+  "email-templates",
   "team",
   "training",
   "finance",
@@ -2400,7 +2402,7 @@ export function DirectTradeDashboard() {
             </div>
           </header>
 
-          {workspace !== "map" && workspace !== "network" && <div className="trade-portal-intro">
+          {workspace !== "map" && workspace !== "network" && workspace !== "email-templates" && <div className="trade-portal-intro">
             <span>{isSupplier ? "Wholesale operations" : "Business operations"}</span>
             <h1>{isSupplier ? "Products, orders and supply in one place" : "Your workday, without the clutter"}</h1>
             <p>
@@ -2490,8 +2492,11 @@ export function DirectTradeDashboard() {
                 <button type="button" aria-current={workspace === "network" ? "page" : undefined} className={workspace === "network" ? "active" : ""} onClick={() => setWorkspace("network", () => { setNetworkPostId(""); setNetworkNavigationNonce(value => value + 1); })}><TLinkNavigationIcon name="network" /><span>Trade network</span><small>Local leads and subcontractors</small></button>
                 <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products", () => setCommandTarget(null))}><TLinkNavigationIcon name="products" /><span>Products</span><small>Your items, prices and PDFs</small></button>
                 <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><TLinkNavigationIcon name="calculator" /><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
+                <button type="button" aria-current={workspace === "email-templates" ? "page" : undefined} className={workspace === "email-templates" ? "active" : ""} onClick={() => setWorkspace("email-templates")}><TLinkNavigationIcon name="email" /><span>Email templates</span><small>Follow-ups and business reminders</small></button>
                 <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business</span><small>Settings and verification</small></button>
               </nav>
+
+              {workspace === "email-templates" && <TradeEmailTemplatesWorkspace user={user} />}
 
               {(workspace === "work" || workspace === "map") && <TradeBusinessHub
                 key={`${user.uid}:${workspace}:${workspace === "map" ? mapNavigationNonce : 0}`}

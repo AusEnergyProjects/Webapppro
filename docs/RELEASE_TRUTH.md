@@ -6,11 +6,21 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 28 September 2026
 
-Deployment baseline for this change: Sites 649, source `39495bda774d29341059bb09440dae848412e8bd`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-automatic-invoice-2026-09-28/.
+Deployment baseline for this change: Sites 651, source `e47bcdcbb4e1c9547839a65626616bb21eb89820`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-followups-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: automatic accepted-quote invoice delivery and accounting
+## Current implementation: business email templates and follow-ups
+
+Email templates is an installer navigation workspace. Businesses edit reusable messages with named insert buttons and readable detail labels, including customer first name, appointment time and invoice amount. A job's right-click or Actions menu opens Follow up: choose a template, review the automatically filled recipient/message, then send. No typing or per-job reminder configuration is required.
+
+Migration 0206 adds owner-scoped templates, business reminder settings and an idempotent email outbox. Both automatic options start off. Owners can choose a positive number of hours, days or weeks before/after an appointment or invoice due date, up to six weeks. Invoice dates use 9 am in the site's Australian time zone; manual and automatic after-visit templates use past scheduled/completed visits. Cancelled and no-show visits are excluded. Reminders whose trigger time predates enabling are skipped.
+
+The existing worker schedule scans eligible events in bounded pages. Current owner/staff scope, customer opt-outs, appointment changes, unpaid invoice/credit/payment records, connected-email readiness and the saved business setting are checked before sending. Automatic invoice reminders require the original recipient and a confirmed original delivery; stale linked accounting balances are skipped. One automatic message per invoice or appointment time, stable manual send references and the existing transport journal prevent blind duplicate retries. Follow-ups reuse business email connections and do not send test messages or enable business preferences during release validation.
+
+Validation and final publication evidence: C:/Webproject/outputs/tlink-followups-2026-09-28/. Focused core/API tests, scoped lint, typecheck, full suite, 206-migration replay and committed publication build are the release checks. Existing unrelated full-suite failures are recorded separately. Real provider inbox receipt and operational scheduled emails remain unverified until the business enables and uses the feature.
+
+## Previous implementation: automatic accepted-quote invoice delivery and accounting
 
 New customer quote acceptances retain the existing exact, immutable invoice and atomically enqueue its PDF email and accounting export. Migration 0204 adds a connection-bound accounting queue and records verified MYOB MFA grants; 0205 adds the invoice delivery outbox. Neither migration sends historical invoices. The accepted quote's saved recipient, selected scope, discounts, GST, payment details and total remain authoritative.
 

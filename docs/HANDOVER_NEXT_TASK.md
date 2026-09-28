@@ -1,9 +1,17 @@
 # Next task handover
 
-Status: automatic accepted-quote invoice delivery and accounting are in release validation. Verified baseline Sites 649, source 39495bda774d29341059bb09440dae848412e8bd.
+Status: business-wide follow-ups are in release validation. Verified baseline Sites 651, source e47bcdcbb4e1c9547839a65626616bb21eb89820.
 Prepared: 28 September 2026
 
-## Active contract: hands-off invoicing after customer acceptance
+## Active contract: simple business-wide customer follow-ups
+
+Outcome: named template insert buttons, job Actions/right-click Follow up with prefilled review/send, and optional business-wide before/after invoice and appointment timing in hours/days/weeks. No required typing and no per-job automation settings.
+
+Scope: installer navigation and CRM action menu, email template/follow-up components, trade-follow-ups pure/server/runtime modules and API, existing worker schedule, migration0206 and focused tests. Existing business email transport, consent, tenant/staff access and invoice balances remain authoritative. No dependency or provider configuration changes. Stop if publication cannot preserve the exact approved baseline; do not send live customer mail to verify.
+
+Acceptance: defaults off, one saved business rule per event type, flexible timing with Australian zones/DST, safe replay and stale/paid/cancelled/opt-out suppression, clear day/night desktop/mobile UI, no coded field entry. Validate focused tests, typecheck, scoped lint, full suite, migration replay and publication build; record exact GitHub/Sites identity in C:/Webproject/outputs/tlink-followups-2026-09-28/.
+
+## Previous contract: hands-off invoicing after customer acceptance
 
 Outcome: a new customer acceptance creates the exact immutable invoice, emails its attached PDF to the issued quote recipient and exports to the connected accounting company without manual invoice preparation. Preserve existing invoice-conflict handling, protected-customer restrictions, MFA and payment checks. Never create a second invoice or blindly resend an uncertain email. No historical-invoice backfill.
 
