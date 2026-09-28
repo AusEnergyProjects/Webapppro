@@ -296,11 +296,12 @@ test("job register and detail preserve canonical status values with explicit reb
   assert.match(ui, /jobStatusFilters\.some\(option => option === status\)/);
   assert.match(ui, /jobProgressStatusLabel\(status\)/);
   assert.match(ui, /const payment = jobInvoicePaymentStatus\(job\)/);
-  assert.match(ui, /registerStyles\.statusStack/);
-  assert.match(ui, /canViewInvoices && <JobInvoiceStatus job=\{job\}/);
+  assert.match(ui, /key: "customerBilling", label: "Customer billing"/);
+  assert.match(ui, /key: "invoicePayment", label: "Invoice payment"/);
+  assert.match(ui, /canViewInvoices && <div><dt>Invoice payment<\/dt><dd><JobInvoiceStatus job=\{job\}/);
   assert.match(ui, /job\.jobRegister\.operationalStatus === "audited" && auditOutcomeLabel/);
   assert.match(ui, /normaliseJobOperationalStatus\(preferences\.operationalStatus\)/);
-  assert.match(ui, /<dt>Status<\/dt><dd>\{displayedLifecycle\}<\/dd>/);
+  assert.match(ui, /<dt>Job \/ compliance<\/dt><dd>\{displayedLifecycle\}<\/dd>/);
   for (const obsolete of ["quoting", "assigned", "certified"]) {
     assert.doesNotMatch(ui, new RegExp(`<option value="${obsolete}">`));
   }

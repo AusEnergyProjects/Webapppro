@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { jobInvoicePaymentStatus, jobProgressStatusLabel } from "../src/lib/trade-job-payment-status.ts";
+import { jobCustomerBillingStatus, jobInvoicePaymentStatus, jobInvoiceSettlementStatus, jobProgressStatusLabel } from "../src/lib/trade-job-payment-status.ts";
 
 const invoice = (invoiceStatus, invoicedValueCents = 11000, paidValueCents = 0) =>
   jobInvoicePaymentStatus({ invoiceStatus, invoicedValueCents, paidValueCents });
 
 test("a paid customer invoice coexists with a rebate awaiting payment", () => {
   assert.deepEqual(invoice("paid", 11000, 0), { label: "Invoice paid", tone: "paid", status: "paid" });
-  assert.equal(jobProgressStatusLabel("submitted"), "Rebate awaiting payment");
+  assert.equal(jobProgressStatusLabel("submitted"), "Submitted / rebate pending");
 });
 
 test("a paid rebate does not imply the customer invoice was paid", () => {
@@ -58,4 +58,57 @@ test("non-payment progress labels retain their existing meaning and canonical va
   assert.equal(jobProgressStatusLabel("correction_required"), "Correction required");
   assert.equal(jobProgressStatusLabel("custom_state"), "Custom state");
   assert.equal(jobProgressStatusLabel(""), "");
+});
+
+const billingInput = (overrides = {}) => ({
+  invoiceStatus: "not_started", invoicedValueCents: 0, paidValueCents: 0,
+  quoteStatus: "not_started", quotedValueCents: 0, ...overrides,
+});
+
+test("customer billing progresses from an issued quote to an issued invoice and payment", () => {
+  assert.equal(jobCustomerBillingStatus(billingInput()), "Unquoted");
+  for (const quoteStatus of ["issued", "sent", "accepted", "declined"]) {
+    assert.equal(jobCustomerBillingStatus(billingInput({ quoteStatus })), "Quoted");
+  }
+  for (const invoiceStatus of ["issued", "part_paid", "overdue"]) {
+    const input = billingInput({ invoiceStatus, invoicedValueCents: 11000, paidValueCents: 3000 });
+    assert.equal(jobCustomerBillingStatus(input), "Invoiced");
+    assert.equal(jobInvoiceSettlementStatus(input), "Unpaid");
+    assert.equal(jobCustomerBillingStatus({ ...input, paidValueCents: 11000 }), "Paid");
+    assert.equal(jobInvoiceSettlementStatus({ ...input, paidValueCents: 11000 }), "Paid");
+  }
+  assert.equal(jobCustomerBillingStatus(billingInput({ invoiceStatus: "paid" })), "Paid");
+  assert.equal(jobInvoiceSettlementStatus(billingInput({ invoiceStatus: "paid" })), "Paid");
+});
+
+test("draft amounts and void or credited invoices do not claim a current issued invoice", () => {
+  for (const invoiceStatus of ["not_started", "draft", "void", "credited"]) {
+    const input = billingInput({ invoiceStatus, invoicedValueCents: 11000, paidValueCents: 11000, quotedValueCents: 11000 });
+    assert.equal(jobCustomerBillingStatus(input), "Unquoted");
+    assert.equal(jobCustomerBillingStatus({ ...input, quoteStatus: "draft" }), "Unquoted");
+    assert.equal(jobCustomerBillingStatus({ ...input, quoteStatus: "issued" }), "Quoted");
+    assert.equal(jobInvoiceSettlementStatus(input), "-");
+  }
+});
+
+test("billing and settlement columns preserve independent quote and invoice access", () => {
+  const restrictedInvoice = billingInput({ invoiceStatus: "restricted", quoteStatus: "issued", invoicedValueCents: 11000, paidValueCents: 11000 });
+  assert.equal(jobCustomerBillingStatus(restrictedInvoice), null);
+  assert.equal(jobInvoiceSettlementStatus(restrictedInvoice), null);
+  assert.equal(jobCustomerBillingStatus(billingInput({ quoteStatus: "restricted", quotedValueCents: 11000 })), null);
+  assert.equal(jobCustomerBillingStatus(billingInput({ quoteStatus: "restricted", invoiceStatus: "issued" })), "Invoiced");
+  assert.equal(jobCustomerBillingStatus(billingInput({ quoteStatus: "restricted", invoiceStatus: "paid" })), "Paid");
+});
+
+test("missing or invalid payment facts never fabricate paid status or quoted history", () => {
+  for (const invoiceStatus of ["", "unknown", "constructor"]) {
+    const input = billingInput({ invoiceStatus, invoicedValueCents: 11000, paidValueCents: 11000, quoteStatus: "issued" });
+    assert.equal(jobCustomerBillingStatus(input), "-");
+    assert.equal(jobInvoiceSettlementStatus(input), "-");
+  }
+  assert.equal(jobCustomerBillingStatus(billingInput({ quoteStatus: "", quotedValueCents: 11000 })), "-");
+  const invalidBalance = billingInput({ invoiceStatus: "issued", invoicedValueCents: NaN, paidValueCents: Infinity });
+  assert.equal(jobCustomerBillingStatus(invalidBalance), "Invoiced");
+  assert.equal(jobInvoiceSettlementStatus(invalidBalance), "-");
+  assert.equal(jobInvoiceSettlementStatus(billingInput({ invoiceStatus: "issued" })), "Unpaid");
 });

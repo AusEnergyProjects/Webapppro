@@ -26,6 +26,8 @@ export const JOB_REGISTER_COLUMN_KEYS = [
   "scheduleDate",
   "createdDate",
   "operationalStatus",
+  "customerBilling",
+  "invoicePayment",
   "quoteTotalExGst",
   "stc",
   "veec",

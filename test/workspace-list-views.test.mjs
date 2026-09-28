@@ -2,12 +2,36 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import ts from "typescript";
+import { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES } from "../src/lib/trade-crm-job-register.ts";
 import { defaultCustomerCreatedRange } from "../src/lib/customer-register-range.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0040_dry_pyro.sql");
 const shared = read("../src/lib/workspace-list-views.ts");
+
+test("saved job views gain separate billing columns once while preserving custom column choices", () => {
+  const dependencies = {
+    "../../db": {},
+    "@/lib/admin-server": { cleanAdminText: (value, length) => typeof value === "string" ? value.trim().slice(0, length) : "" },
+    "@/lib/creditex-dataforce-job-csv": { DATAFORCE_JOB_CSV_HEADERS: [] },
+    "@/lib/trade-crm-job-register": { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES },
+    "@/lib/customer-register-range": { CUSTOMER_REGISTER_FILTER_VERSION: 1, defaultCustomerCreatedRange },
+    "@/lib/trade-crm-register-sorts": { INSTALLER_CUSTOMER_REGISTER_SORT_VALUES: [], INSTALLER_JOB_REGISTER_SORT_VALUES: [] },
+  };
+  const compiled = ts.transpileModule(shared, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exported = {};
+  Function("require", "exports", compiled)(name => { assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name]; }, exported);
+  const original = ["jobId", "operationalStatus", "service"];
+  const upgraded = exported.cleanListView("installer-jobs", { jobColumnOrderVersion: 4, columns: original }, { migrateLegacyInstallerJobColumns: true });
+  assert.deepEqual(upgraded.columns, ["jobId", "operationalStatus", "customerBilling", "invoicePayment", "service"]);
+  assert.deepEqual(original, ["jobId", "operationalStatus", "service"]);
+  assert.equal(upgraded.jobColumnOrderVersion, 5);
+  assert.deepEqual(exported.cleanListView("installer-jobs", upgraded, { migrateLegacyInstallerJobColumns: true }).columns, upgraded.columns);
+  assert.deepEqual(exported.cleanListView("installer-jobs", { jobColumnOrderVersion: 5, columns: original }, { migrateLegacyInstallerJobColumns: true }).columns, original);
+  assert.deepEqual(exported.cleanListView("installer-jobs", { jobColumnOrderVersion: 4, columns: ["service", "jobId"] }, { migrateLegacyInstallerJobColumns: true }).columns, ["service", "jobId", "customerBilling", "invoicePayment"]);
+});
 const tradeRoute = read("../src/app/api/trade-list-views/route.ts");
 const adminRoute = read("../src/app/api/admin/list-views/route.ts");
 const supplierRoute = read("../src/app/api/supplier-products/route.ts");
@@ -84,13 +108,13 @@ test("installer indexes apply named views, movable columns and matching visible 
   assert.match(crmUi, /WorkspaceTableTools/);
   assert.match(crmUi, /downloadAllFilteredJobs/);
   assert.match(crmUi, /Download all filtered jobs CSV/);
-  assert.match(crmUi, /safeJobRegisterColumns\(preferences\.jobColumnOrderVersion === 4 \? preferences\.columns : undefined\)/);
+  assert.match(crmUi, /safeJobRegisterColumns\(preferences\.jobColumnOrderVersion === 5 \? preferences\.columns : undefined\)/);
   assert.match(crmUi, /downloadWorkspaceCsv\("tlink-customers\.csv"/);
   assert.match(crmUi, /jobCursors\.current = \[""\]; jobTotalReady\.current = false/);
   assert.match(crmUi, /customerCursors\.current = \[""\]; customerTotalReady\.current = false/);
   assert.match(shared, /"installer-jobs": \[\.\.\.JOB_REGISTER_COLUMN_KEYS\]/);
   assert.match(shared, /INSTALLER_JOB_DEFAULT_COLUMNS = \[\.\.\.JOB_REGISTER_COLUMN_KEYS\]/);
-  assert.match(shared, /if \(viewKey === "installer-jobs"\) return \{ \.\.\.defaults, jobColumnOrderVersion: 4, columns: \[\.\.\.INSTALLER_JOB_DEFAULT_COLUMNS\] \}/);
+  assert.match(shared, /if \(viewKey === "installer-jobs"\) return \{ \.\.\.defaults, jobColumnOrderVersion: 5, columns: \[\.\.\.INSTALLER_JOB_DEFAULT_COLUMNS\] \}/);
   assert.match(shared, /if \(viewKey === "installer-customers"\) \{[\s\S]*customerFilterVersion: CUSTOMER_REGISTER_FILTER_VERSION,[\s\S]*createdFrom: range\.from,[\s\S]*createdTo: range\.to/);
   assert.match(shared, /migrateLegacyInstallerJobColumns\?: boolean/);
   assert.match(shared, /migrateLegacyInstallerCustomerColumns\?: boolean/);

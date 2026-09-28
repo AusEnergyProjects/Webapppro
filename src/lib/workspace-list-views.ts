@@ -132,7 +132,7 @@ const sortsByView: Record<string, Set<string>> = {
 
 export function defaultListView(viewKey: string): ListViewDefaults {
   const defaults = { ...(defaultsByView[viewKey] || { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" }) };
-  if (viewKey === "installer-jobs") return { ...defaults, jobColumnOrderVersion: 4, columns: [...INSTALLER_JOB_DEFAULT_COLUMNS] };
+  if (viewKey === "installer-jobs") return { ...defaults, jobColumnOrderVersion: 5, columns: [...INSTALLER_JOB_DEFAULT_COLUMNS] };
   if (viewKey === "installer-customers") {
     const range = defaultCustomerCreatedRange();
     return {
@@ -163,6 +163,9 @@ export function cleanListView(
   const legacyInstallerJobColumns = viewKey === "installer-jobs"
     && options.migrateLegacyInstallerJobColumns
     && Number(raw.jobColumnOrderVersion || 0) < 4;
+  const legacyInstallerBillingColumns = viewKey === "installer-jobs"
+    && options.migrateLegacyInstallerJobColumns
+    && Number(raw.jobColumnOrderVersion || 0) < 5;
   const legacyInstallerCustomerColumns = viewKey === "installer-customers"
     && options.migrateLegacyInstallerCustomerColumns
     && Number(raw.customerColumnOrderVersion || 0) < 1;
@@ -177,7 +180,7 @@ export function cleanListView(
     filter: filtersByView[viewKey]?.has(filter) ? filter : defaults.filter,
     sort: sortsByView[viewKey]?.has(sort) ? sort : defaults.sort,
     pageSize: PAGE_SIZES.has(pageSize) ? pageSize : defaults.pageSize,
-    jobColumnOrderVersion: viewKey === "installer-jobs" ? 4 : undefined,
+    jobColumnOrderVersion: viewKey === "installer-jobs" ? 5 : undefined,
     customerColumnOrderVersion: viewKey === "installer-customers" ? 1 : undefined,
     customerFilterVersion: viewKey === "installer-customers" ? CUSTOMER_REGISTER_FILTER_VERSION : undefined,
     type: ["", "customer", "installer", "supplier", "admin"].includes(String(raw.type || "")) ? String(raw.type || "") : "",
@@ -226,6 +229,11 @@ export function cleanListView(
         ? raw.columns.filter((value): value is string => typeof value === "string" && columnsByView[viewKey].includes(value)).filter((value, index, values) => values.indexOf(value) === index)
         : [];
       if (viewKey === "installer-jobs") {
+        if (legacyInstallerBillingColumns && columns.length) {
+          const missing = ["customerBilling", "invoicePayment"].filter(column => !columns.includes(column));
+          const position = columns.includes("operationalStatus") ? columns.indexOf("operationalStatus") + 1 : columns.length;
+          columns.splice(position, 0, ...missing);
+        }
         const rawColumns = Array.isArray(raw.columns) ? raw.columns : [];
         const isLegacyExactOrder = rawColumns.length === DATAFORCE_JOB_CSV_HEADERS.length
           && rawColumns.every((column, index) => column === DATAFORCE_JOB_CSV_HEADERS[index]);

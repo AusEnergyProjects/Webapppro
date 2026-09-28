@@ -26,7 +26,7 @@ import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import type { CustomerDocumentDelivery, CustomerDocumentSendResult } from "./TradeCustomerDocumentDeliveryPanel";
 import type { DataforceJobCsvRecord } from "@/lib/creditex-dataforce-job-csv";
 import { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES, type JobRegisterRecord } from "@/lib/trade-crm-job-register";
-import { jobInvoicePaymentStatus, jobProgressStatusLabel } from "@/lib/trade-job-payment-status";
+import { jobCustomerBillingStatus, jobInvoicePaymentStatus, jobInvoiceSettlementStatus, jobProgressStatusLabel } from "@/lib/trade-job-payment-status";
 import { customerMapRecord, jobMapRecord } from "@/lib/trade-crm-map-records";
 import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import { defaultTradeMapDateRange } from "@/lib/trade-map-date-range";
@@ -216,8 +216,9 @@ type IndexColumn<Sort extends string = string, Key extends string = string> = Om
 type SortableIndexColumn<Sort extends string, Key extends string = string> = Omit<IndexColumn<Sort, Key>, "sort"> & {
   sort: readonly [asc: Sort, desc: Sort];
 };
-type JobIndexColumn = SortableIndexColumn<InstallerJobRegisterSort, Exclude<JobRegisterColumnKey, "actions">>
-  | (Omit<IndexColumn<InstallerJobRegisterSort, "actions">, "sort"> & { sort: null });
+type UnsortableJobColumn = "actions" | "customerBilling" | "invoicePayment";
+type JobIndexColumn = SortableIndexColumn<InstallerJobRegisterSort, Exclude<JobRegisterColumnKey, UnsortableJobColumn>>
+  | (Omit<IndexColumn<InstallerJobRegisterSort, UnsortableJobColumn>, "sort"> & { sort: null });
 
 const jobIndexColumns = [
   { key: "jobId", label: "Job ID", width: 128, sort: ["number-asc", "number-desc"] },
@@ -233,7 +234,9 @@ const jobIndexColumns = [
   { key: "assignedWorker", label: "Assigned worker", width: 160, sort: ["assignee-asc", "assignee-desc"] },
   { key: "scheduleDate", label: "Schedule date", width: 150, sort: ["date-asc", "date-desc"] },
   { key: "createdDate", label: "Created date", width: 135, sort: ["created-asc", "created-desc"] },
-  { key: "operationalStatus", label: "Status", width: 190, sort: ["status-asc", "status-desc"] },
+  { key: "operationalStatus", label: "Job / compliance", width: 190, sort: ["status-asc", "status-desc"] },
+  { key: "customerBilling", label: "Customer billing", width: 135, sort: null },
+  { key: "invoicePayment", label: "Invoice payment", width: 130, sort: null },
   { key: "quoteTotalExGst", label: "Quote total ex GST", width: 145, sort: ["quote-total-asc", "quote-total-desc"] },
   { key: "stc", label: "STC", width: 78, sort: ["s-a", "s-d"] },
   { key: "veec", label: "VEEC", width: 78, sort: ["v-a", "v-d"] },
@@ -323,10 +326,10 @@ function normaliseJobOperationalStatus(value: unknown) {
   return "";
 }
 
-function JobInvoiceStatus({ job, compact = true }: { job: Job; compact?: boolean }) {
+function JobInvoiceStatus({ job }: { job: Job }) {
   const payment = jobInvoicePaymentStatus(job);
-  if (compact && payment?.status === "not_started") return null;
-  return payment ? <span className={registerStyles.invoiceStatus} data-tone={payment.tone} title="Customer invoice payment. Separate from job and rebate progress.">{payment.label}</span> : null;
+  const settlement = jobInvoiceSettlementStatus(job);
+  return settlement ? <span className={registerStyles.invoiceStatus} data-tone={payment?.tone || "muted"} title={payment?.label}>{settlement}</span> : <span>Restricted</span>;
 }
 
 function jobIndexCell(job: Job, key: string, onOpen: () => void, actionNode: ReactNode, user: User): ReactNode {
@@ -337,10 +340,12 @@ function jobIndexCell(job: Job, key: string, onOpen: () => void, actionNode: Rea
   if (key === "email") return record.email ? <TradeCustomerEmailComposer user={user} workOrderId={job.id} recipient={record.email} className="crm-index-email-link" /> : <span>Not added</span>;
   if (key === "scheduleDate") return <span>{record.scheduleDate ? dateLabel(record.scheduleDate, record.scheduleDate.includes("T")) : "Unassigned"}</span>;
   if (key === "createdDate") return <span>{dateLabel(record.createdDate)}</span>;
+  if (key === "customerBilling") return <span>{jobCustomerBillingStatus(job) || "Restricted"}</span>;
+  if (key === "invoicePayment") return <JobInvoiceStatus job={job} />;
   if (key === "operationalStatus") {
     const auditOutcome = lifecycleLabel(record.auditOutcome || "");
     const label = lifecycleLabel(record.operationalStatus);
-    return <span className={registerStyles.statusStack}><span className={`${registerStyles.status} ${registerStyles[record.operationalStatus]}`}>{record.operationalStatus === "audited" && auditOutcome ? `${label} | ${auditOutcome}` : label}</span><JobInvoiceStatus job={job} /></span>;
+    return <span className={`${registerStyles.status} ${registerStyles[record.operationalStatus]}`}>{record.operationalStatus === "audited" && auditOutcome ? `${label} | ${auditOutcome}` : label}</span>;
   }
   if (key === "quoteTotalExGst") return <span>{record.quoteTotalExGstCents === null ? (record.quoteStatus === "restricted" ? "Restricted" : "Not quoted") : registerMoney(record.quoteTotalExGstCents)}</span>;
   if (key === "stc" || key === "veec" || key === "esc") return <span title={record.certificates.state === "pending" ? "Pending" : undefined}>{record.certificates[key]}</span>;
@@ -611,7 +616,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         setJobFirstName(preferences.firstName || ""); setJobLastName(preferences.lastName || ""); setJobStreet(preferences.street || ""); setJobState(preferences.state || "");
         setJobOperationalStatus(normaliseJobOperationalStatus(preferences.operationalStatus)); setJobQuoteTotalMin(preferences.quoteTotalMin || ""); setJobQuoteTotalMax(preferences.quoteTotalMax || "");
         setJobSort(preferences.sort || "updated-desc"); setJobPageSize(Number(preferences.pageSize) || 25);
-        setJobColumns(safeJobRegisterColumns(preferences.jobColumnOrderVersion === 4 ? preferences.columns : undefined));
+        setJobColumns(safeJobRegisterColumns(preferences.jobColumnOrderVersion === 5 ? preferences.columns : undefined));
         setJobPresets((result.presets || []) as NamedWorkspaceListView[]); setJobViewSaved(Boolean(result.saved));
       } else {
         setCustomerSearch(preferences.search || ""); setCustomerFirstName(preferences.firstName || ""); setCustomerLastName(preferences.lastName || "");
@@ -1199,7 +1204,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         invoiceStatus: jobInvoiceStatus, customerReference: jobCustomerReference, email: jobEmail, phone: jobPhone,
         suburb: jobSuburb, postcode: jobPostcode, firstName: jobFirstName, lastName: jobLastName, street: jobStreet,
         state: jobState, operationalStatus: jobOperationalStatus, quoteTotalMin: jobQuoteTotalMin, quoteTotalMax: jobQuoteTotalMax,
-        filter: jobFilter, sort: jobSort, pageSize: jobPageSize, jobColumnOrderVersion: 4, columns: jobColumns }
+        filter: jobFilter, sort: jobSort, pageSize: jobPageSize, jobColumnOrderVersion: 5, columns: jobColumns }
       : { search: customerSearch, firstName: customerFirstName, lastName: customerLastName, businessName: customerBusinessName,
         email: customerEmail, street: customerStreet, phone: customerPhone, postcode: customerPostcode,
         suburb: customerSuburb, state: customerState, service: customerService, jobId: customerJobId,
@@ -1849,15 +1854,16 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     const frame = window.requestAnimationFrame(() => void loadAllJobAssignees());
     return () => window.cancelAnimationFrame(frame);
   }, [activeTab, canAssignJobs, loadAllJobAssignees]);
-  return <article className="crm-job-card"><header className="crm-job-card-header"><div><span>{job.workNumber}</span><h3>{job.title}</h3><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}{job.siteArea ? ` | ${job.siteArea}` : ""}</small></div><div className="crm-job-header-actions"><strong>{displayedLifecycle}</strong>{canViewInvoices && <JobInvoiceStatus job={job} />}<span className={isProtected ? "protected" : "owned"}>{isProtected ? "Australian Energy Assessments protected" : customer ? "Your customer" : "Internal"}</span>{canViewFieldEvidence && !isProtected && customer && <button type="button" className="crm-request-info-button" onClick={() => setTab("field")}>Request info</button>}</div></header>
+  return <article className="crm-job-card"><header className="crm-job-card-header"><div><span>{job.workNumber}</span><h3>{job.title}</h3><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}{job.siteArea ? ` | ${job.siteArea}` : ""}</small></div><div className="crm-job-header-actions"><strong>{displayedLifecycle}</strong><span className={isProtected ? "protected" : "owned"}>{isProtected ? "Australian Energy Assessments protected" : customer ? "Your customer" : "Internal"}</span>{canViewFieldEvidence && !isProtected && customer && <button type="button" className="crm-request-info-button" onClick={() => setTab("field")}>Request info</button>}</div></header>
     <nav className="crm-job-tabs" aria-label="Job card sections">{mainTabs.map(([value, label]) => <button key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}<AccessibleMenu className="crm-job-more" active={moreActive} label={moreActive ? activeTab[0].toUpperCase() + activeTab.slice(1) : "More"}>{(close) => moreTabs.map(([value, label]) => <button role="menuitem" key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => { setTab(value); close(); }}>{label}</button>)}</AccessibleMenu></nav>
     {activeTab === "summary" && <section className="crm-job-section crm-summary-workspace">
         <section className={registerStyles.detailSection} aria-labelledby={`job-information-${job.id}`}>
           <h4 id={`job-information-${job.id}`}>Job information</h4>
           <dl className={registerStyles.detailGrid}>
             <div><dt>Job ID</dt><dd>{job.workNumber}</dd></div>
-            <div><dt>Status</dt><dd>{displayedLifecycle}</dd></div>
-            {canViewInvoices && <div><dt>Customer invoice</dt><dd><JobInvoiceStatus job={job} compact={false} /></dd></div>}
+            <div><dt>Job / compliance</dt><dd>{displayedLifecycle}</dd></div>
+            {(canViewQuotes || canViewInvoices) && <div><dt>Customer billing</dt><dd>{jobCustomerBillingStatus(job) || "Restricted"}</dd></div>}
+            {canViewInvoices && <div><dt>Invoice payment</dt><dd><JobInvoiceStatus job={job} /></dd></div>}
             <div><dt>Work type</dt><dd>{serviceLabels[job.serviceCategory] || job.serviceCategory || "Not added"}</dd></div>
             <div><dt>Assigned worker</dt><dd>{job.assigneeLabel || "Unassigned"}</dd></div>
             <div><dt>Scheduled date</dt><dd>{job.scheduledStart ? dateLabel(job.scheduledStart, true) : "Unassigned"}</dd></div>
