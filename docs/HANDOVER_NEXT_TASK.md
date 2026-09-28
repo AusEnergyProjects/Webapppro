@@ -1,9 +1,17 @@
 # Next task handover
 
-Status: business-wide follow-ups are in release validation. Verified baseline Sites 651, source e47bcdcbb4e1c9547839a65626616bb21eb89820.
+Status: optional stock management is in release validation. Verified baseline Sites 660, source 4a565b63236d639210ab74666720b694565d1c11.
 Prepared: 28 September 2026
 
-## Active contract: simple business-wide customer follow-ups
+## Active contract: optional stock in Products
+
+Outcome: businesses that buy as needed keep the existing workflow. Tracking is off by default and is enabled only for selected material/equipment items. One Main stock pool provides opening counts, low-stock warnings, receiving, stocktake and movement history. Draft quotes leave stock untouched. Accepted quotes automatically allocate available tracked products; cancelled work releases unconsumed allocations. Jobs show availability and shortages; existing Used as planned / Actual differs records physical use once, including corrections.
+
+Scope: price-book, non-blocking quote stock notices and job-readiness UI, the shared accepted-job plan builder, owner-scoped stock API/server/contracts, schema and additive migration 0207. Existing units, prices, invoice behaviour and permissions stay authoritative. Shortages never block quote saving, sending or acceptance. No supplier marketplace, purchasing workflow, extra warehouse setup, unit conversions or new dependencies. Issuing or paying a document never deducts physical stock.
+
+Acceptance: useful without stock setup, simple day/night mobile and desktop controls, immutable stock movements, atomic reservations/use, replay protection, stale-count protection, tenant isolation and bounded role access. Validate focused regressions, typecheck, lint, full suite, migration replay and publication build. Publish the exact task commit to the current approved GitHub branch and matching Sites artifact; verify only affected live flows. Evidence: C:/Webproject/outputs/tlink-stock-2026-09-28/.
+
+## Previous contract: simple business-wide customer follow-ups
 
 Outcome: named template insert buttons, job Actions/right-click Follow up with prefilled review/send, and optional business-wide before/after invoice and appointment timing in hours/days/weeks. No required typing and no per-job automation settings.
 

@@ -33,7 +33,7 @@ test("accepted scope becomes an explicitly gated ready job", () => {
   const route = read("src/app/api/trade-job-readiness/route.ts");
   const panel = read("src/components/TradeJobReadinessPanel.tsx");
   for (const check of ["scope", "forms", "people", "materials", "deposit"]) assert.match(route, new RegExp(`${check}:`));
-  assert.match(route, /trade_crm_job_plans/); assert.match(route, /job_plan_prepared/); assert.match(route, /stage = 'ready'/);
+  assert.match(route, /trade_crm_job_plans/); assert.match(route, /buildJobPlanStatements/); assert.match(read("src/lib/trade-job-plan-server.ts"), /job_plan_prepared/); assert.match(route, /stage = 'ready'/);
   assert.match(panel, /Prepare ready-to-run job/); assert.match(panel, /Confirm only what still needs a human decision/); assert.match(panel, /Mark ready to schedule/);
 });
 

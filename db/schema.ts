@@ -2414,6 +2414,37 @@ export const tradeCrmAcceptedInvoices = sqliteTable("trade_crm_accepted_invoices
   check("trade_crm_accepted_invoices_time_check", sql`datetime(${table.createdAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL`),
 ]);
 
+export const tradeStockItems = sqliteTable("trade_stock_items", {
+  itemId: text("item_id").primaryKey().notNull(), firebaseUid: text("firebase_uid").notNull(),
+  tracked: integer("tracked", { mode: "boolean" }).notNull().default(true), onHandMilli: integer("on_hand_milli").notNull().default(0),
+  lowStockMilli: integer("low_stock_milli").notNull().default(0), revision: integer("revision").notNull().default(1), updatedAt: text("updated_at").notNull(),
+}, (table) => [index("trade_stock_items_owner_idx").on(table.firebaseUid, table.tracked),
+  check("trade_stock_items_bounds", sql`${table.tracked} IN (0,1) AND ${table.onHandMilli} BETWEEN 0 AND 1000000000 AND ${table.lowStockMilli} BETWEEN 0 AND 1000000000 AND ${table.revision}>0`)]);
+
+export const tradeStockReservations = sqliteTable("trade_stock_reservations", {
+  requirementId: text("requirement_id").primaryKey().notNull(), itemId: text("item_id").notNull(), firebaseUid: text("firebase_uid").notNull(),
+  workOrderId: text("work_order_id").notNull(), quantityMilli: integer("quantity_milli").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [index("trade_stock_reservations_item_idx").on(table.firebaseUid, table.itemId), check("trade_stock_reservations_quantity", sql`${table.quantityMilli} BETWEEN 0 AND 1000000000`)]);
+
+export const tradeStockOperations = sqliteTable("trade_stock_operations", {
+  id: text("id").primaryKey().notNull(), firebaseUid: text("firebase_uid").notNull(), operationId: text("operation_id").notNull(), itemId: text("item_id").notNull(),
+  action: text("action").notNull(), payloadJson: text("payload_json").notNull(), expectedRevision: integer("expected_revision").notNull(), actorUid: text("actor_uid").notNull(), createdAt: text("created_at").notNull(),
+}, (table) => [uniqueIndex("trade_stock_operations_replay_idx").on(table.firebaseUid, table.operationId),
+  check("trade_stock_operations_valid", sql`${table.action} IN ('enable','configure','receive','count','disable','reserve','release') AND json_valid(${table.payloadJson}) AND ${table.expectedRevision}>=0`)]);
+
+export const tradeStockMovements = sqliteTable("trade_stock_movements", {
+  id: text("id").primaryKey().notNull(), itemId: text("item_id").notNull(), firebaseUid: text("firebase_uid").notNull(), action: text("action").notNull(),
+  quantityMilli: integer("quantity_milli").notNull(), changeMilli: integer("change_milli").notNull(), onHandMilli: integer("on_hand_milli").notNull(),
+  workOrderId: text("work_order_id").notNull().default(""), requirementId: text("requirement_id").notNull().default(""), note: text("note").notNull().default(""),
+  actorUid: text("actor_uid").notNull(), createdAt: text("created_at").notNull(),
+}, (table) => [index("trade_stock_movements_item_idx").on(table.firebaseUid, table.itemId, table.createdAt),
+  check("trade_stock_movements_valid", sql`${table.action} IN ('enable','configure','receive','count','disable','reserve','release','use','return') AND ${table.onHandMilli} BETWEEN 0 AND 1000000000`)]);
+
+export const tradeStockActualIssues = sqliteTable("trade_stock_actual_issues", {
+  requirementId: text("requirement_id").primaryKey().notNull(), itemId: text("item_id").notNull(), firebaseUid: text("firebase_uid").notNull(), workOrderId: text("work_order_id").notNull(),
+  baselineMilli: integer("baseline_milli").notNull(), issuedMilli: integer("issued_milli").notNull(), note: text("note").notNull().default(""), actorUid: text("actor_uid").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [index("trade_stock_actual_issues_item_idx").on(table.firebaseUid, table.itemId), check("trade_stock_actual_issues_quantity", sql`${table.baselineMilli} BETWEEN 0 AND 1000000000 AND ${table.issuedMilli} BETWEEN 0 AND 1000000000`)]);
+
 export const tradeCrmJobPlans = sqliteTable("trade_crm_job_plans", {
   id: text("id").primaryKey(),
   commercialHandoffId: text("commercial_handoff_id").notNull(),

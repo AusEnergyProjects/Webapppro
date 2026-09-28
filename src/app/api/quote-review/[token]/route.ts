@@ -575,6 +575,10 @@ export async function POST(request: Request, context: Context) {
             selection.taxCents, selection.totalCents),
       );
     }
+    if (decision === "accepted") statements.push(...await buildJobPlanStatements(db, {
+      ownerUid: link.firebase_uid, workOrderId: link.work_order_id, handoffId,
+      quoteVersionId: link.quote_version_id, selectedChoiceIds: selection.selectedIds, now, onlyIfTracked: true,
+    }));
     if (invoice?.status === "issued") statements.push(
       acceptedInvoiceAccountingDispatch(db, invoiceId, now),
       acceptedInvoiceEmailDispatch(db, invoiceId, now),
@@ -679,3 +683,4 @@ export async function POST(request: Request, context: Context) {
     return publicError(error, "decision");
   }
 }
+import { buildJobPlanStatements } from "@/lib/trade-job-plan-server";

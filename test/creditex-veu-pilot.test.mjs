@@ -196,9 +196,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 206);
+  assert.equal(completeMigrationChain.length, 207);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0206_trade_email_follow_ups\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0207_trade_stock\.sql$/);
   assert.ok(
     completeMigrationChain.includes("0190_trade_activity_master_drafts.sql"),
     "the complete migration chain must include activity master drafts",

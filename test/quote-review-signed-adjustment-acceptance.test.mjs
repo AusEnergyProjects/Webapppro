@@ -16,6 +16,7 @@ import {
 import { buildAcceptedInvoiceSnapshot } from "../src/lib/trade-accepted-invoice.ts";
 import { acceptedInvoiceAccountingDispatch } from "../src/lib/trade-accounting-automation.ts";
 import { withAccountingDispatch } from "../src/lib/trade-accounting-automation-dispatch.ts";
+import { buildJobPlanStatements } from "../src/lib/trade-job-plan-server.ts";
 import { providerNeutralCommercialRecord } from "../src/lib/trade-commercial-reference.ts";
 import { calculateQuoteSelection } from "../src/lib/trade-quote-options.ts";
 
@@ -184,7 +185,7 @@ function fixture() {
       invoice_payment_account_number TEXT NOT NULL DEFAULT '', invoice_payment_reference TEXT NOT NULL DEFAULT '',
       invoice_default_terms TEXT NOT NULL DEFAULT ''
     );
-    CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT NOT NULL, record_status TEXT NOT NULL);
+    CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT NOT NULL, record_status TEXT NOT NULL, partner_type TEXT NOT NULL DEFAULT 'installer');
     CREATE TABLE trade_crm_job_details (
       work_order_id TEXT PRIMARY KEY, firebase_uid TEXT NOT NULL, crm_customer_id TEXT NOT NULL,
       customer_source TEXT NOT NULL, quoted_value_cents INTEGER NOT NULL, quote_status TEXT NOT NULL,
@@ -262,7 +263,7 @@ function fixture() {
   database.exec(fs.readFileSync(new URL("../drizzle/0205_accepted_invoice_email_delivery.sql", import.meta.url), "utf8"));
   database.prepare(`INSERT INTO trade_accounts VALUES (?, 'installer', 'active',
     'Australian Energy Assessments', '063-000', '12345678', 'Quote acceptance', 'Payment due in 7 days')`).run(ids.owner);
-  database.prepare("INSERT INTO trade_work_orders VALUES (?, ?, 'active')").run(ids.work, ids.owner);
+  database.prepare("INSERT INTO trade_work_orders (id,firebase_uid,record_status) VALUES (?, ?, 'active')").run(ids.work, ids.owner);
   database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, 'public_lead_released', 0, 'sent', 0, 0, 'not_started', '', '')")
     .run(ids.work, ids.owner, ids.customer);
   database.prepare("INSERT INTO trade_crm_quotes VALUES (?, ?, ?, ?, 1, 'issued', '')")
@@ -317,6 +318,7 @@ function loadRoute(database, snapshot = targetSnapshot, beforeBatch) {
     "@/lib/trade-commercial-reference": { providerNeutralCommercialRecord },
     "@/lib/trade-commercial-handoff": { acceptedScopeSnapshot, depositAmountCents },
     "@/lib/trade-accepted-invoice": { buildAcceptedInvoiceSnapshot },
+    "@/lib/trade-job-plan-server": { buildJobPlanStatements },
     "@/lib/trade-accounting-automation": { acceptedInvoiceAccountingDispatch },
     "@/lib/trade-accounting-automation-dispatch": { withAccountingDispatch },
     "@/lib/trade-accepted-invoice-delivery-server": compile(fs.readFileSync(new URL("../src/lib/trade-accepted-invoice-delivery-server.ts", import.meta.url), "utf8"), "delivery.ts", {

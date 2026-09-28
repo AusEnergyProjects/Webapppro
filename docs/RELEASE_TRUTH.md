@@ -6,11 +6,21 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 28 September 2026
 
-Deployment baseline for this change: Sites 651, source `e47bcdcbb4e1c9547839a65626616bb21eb89820`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-followups-2026-09-28/.
+Deployment baseline for this change: Sites 660, source `4a565b63236d639210ab74666720b694565d1c11`. Final publication identity and live evidence are recorded in C:/Webproject/outputs/tlink-stock-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: business email templates and follow-ups
+## Current implementation: optional product stock and accepted-job allocations
+
+Stock tracking starts off on every product. Businesses opt in on saved material/equipment items, using their existing product unit and one Main stock pool. Products exposes a Stock view only after tracking is enabled, with on-hand, allocated and available quantities, receiving, stocktake, low-stock warnings and movement history. Existing product PDFs, solar dimensions, pricing and common-job packages remain intact.
+
+Migration 0207 adds tenant-scoped stock balances, reservations, operation replay records, actual-use baselines and movement history. Draft quotes leave counts unchanged. Shortages are advisory and do not block quote saving, sending or acceptance. On acceptance, tracked price-book lines prepare the existing job plan and reserve available quantities in the same transaction. Shortfalls remain visible. Cancelling, completing, archiving or superseding work releases unused allocations without restoring them when a job is reopened.
+
+The existing Used as planned / Actual differs actions record physical use and corrections atomically with job costs. Retried quantities cannot deduct twice; usage recorded before tracking cannot manufacture returns. Previously used material on a cancelled job can be explicitly corrected downward. Count revisions prevent stale stocktakes and concurrent over-allocation. Quotes and invoice payment never deduct physical stock. Stock permissions reuse existing business ownership and price-book grants.
+
+Allocation follows saved price-book product quantities. A map's whole-system price does not infer hidden component inventory. Multiple stock locations, pack-to-area conversions and purchase-document/AI imports are not part of this release. Validation and release evidence: C:/Webproject/outputs/tlink-stock-2026-09-28/. Existing unrelated suite/lint failures and expired energy-source approvals are recorded separately; they must not be represented as passing.
+
+## Previous implementation: business email templates and follow-ups
 
 Email templates is an installer navigation workspace. Businesses edit reusable messages with named insert buttons and readable detail labels, including customer first name, appointment time and invoice amount. A job's right-click or Actions menu opens Follow up: choose a template, review the automatically filled recipient/message, then send. No typing or per-job reminder configuration is required.
 

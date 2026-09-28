@@ -1,0 +1,21 @@
+.panel { border: 1px solid var(--trade-line, #d7e5df); border-radius: 12px; background: var(--trade-surface, #fff); color: var(--trade-ink, #183b35); padding: 16px; font-size: 1rem; line-height: 1.5; min-width: 0; }
+.heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.heading h4 { font: inherit; font-weight: 700; margin: 0; }
+.heading p { margin: 4px 0 0; font-size: .875rem; color: var(--trade-muted, #5d7068); }
+.panel button { border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; background: var(--trade-field, #fff); color: var(--trade-ink, #183b35); font: inherit; font-size: .875rem; font-weight: 600; min-height: 44px; padding: 9px 12px; cursor: pointer; }
+.panel button:disabled { cursor: default; opacity: .55; }
+.panel button:focus-visible { outline: 3px solid var(--trade-accent-readable, #087567); outline-offset: 2px; }
+.item { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; border-top: 1px solid var(--trade-line, #d7e5df); padding: 14px 0; }
+.item:last-of-type { padding-bottom: 0; }
+.description { flex: 1 1 180px; min-width: 0; display: grid; gap: 3px; overflow-wrap: anywhere; }
+.description span, .counts { font-size: .875rem; color: var(--trade-muted, #5d7068); }
+.counts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; flex: 1 1 220px; }
+.counts b { color: var(--trade-ink, #183b35); }
+.shortage { color: var(--trade-warning-ink, #995e15); font-weight: 600; }
+.ready { color: var(--trade-accent-readable, #087567); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.error { margin: 12px 0 0; color: var(--trade-danger-ink, #a2332c); font-size: .875rem; }
+.message { margin: 12px 0 0; color: var(--trade-accent-readable, #087567); font-size: .875rem; }
+:global(html[data-tlink-colour-mode="night"]) .shortage { color: #f4c773; }
+:global(html[data-tlink-colour-mode="night"]) .error { color: #ffb5aa; }
+@media (max-width: 600px) { .panel { padding: 12px; } .item { display: grid; gap: 10px; } .actions button { flex: 1; } }

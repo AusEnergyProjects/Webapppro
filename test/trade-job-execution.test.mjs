@@ -9,6 +9,7 @@ const migration = read("drizzle/0071_job_execution_progress.sql");
 const quoteRoute = read("src/app/api/trade-quotes/route.ts");
 const snapshotServer = read("src/lib/trade-quote-execution-server.ts");
 const executionRoute = read("src/app/api/trade-job-readiness/route.ts");
+const planServer = read("src/lib/trade-job-plan-server.ts");
 const panel = read("src/components/TradeJobReadinessPanel.tsx");
 const styles = [
   read("src/app/globals.css"),
@@ -31,12 +32,13 @@ test("issued packet quotes store one immutable execution snapshot", () => {
 });
 
 test("accepted conversion reads the snapshot and keeps a manual quote fallback", () => {
-  assert.match(executionRoute, /trade_crm_quote_execution_snapshots/);
-  assert.match(executionRoute, /snapshot\?\.packets_json/);
-  assert.match(executionRoute, /sourceKind = packets\.length \? "job_packet" : "manual_quote"/);
-  assert.match(executionRoute, /packet\.taskTitles\.forEach/);
-  assert.match(executionRoute, /packet\.forms\.forEach/);
-  assert.match(executionRoute, /const manual = selected\.filter/);
+  assert.match(executionRoute, /buildJobPlanStatements/);
+  assert.match(planServer, /trade_crm_quote_execution_snapshots/);
+  assert.match(planServer, /snapshot\?\.packets_json/);
+  assert.match(planServer, /sourceKind = packets\.length \? "job_packet" : "manual_quote"/);
+  assert.match(planServer, /packet\.taskTitles\.forEach/);
+  assert.match(planServer, /packet\.forms\.forEach/);
+  assert.match(planServer, /const manual = selected\.filter/);
 });
 
 test("actuals, variance and completion are authoritative and one-entry friendly", () => {

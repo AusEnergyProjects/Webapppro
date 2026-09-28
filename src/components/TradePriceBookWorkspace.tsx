@@ -11,6 +11,8 @@ import { SOLAR_STARTER_PANELS } from "@/lib/trade-solar-equipment";
 import { TradeJobPacketWorkspace } from "./TradeJobPacketWorkspace";
 import { TradePriceBookImport } from "./TradePriceBookImport";
 import { TradeProductDocuments } from "./TradeProductDocuments";
+import { TradeStockProductSettings, TradeStockWorkspace } from "./TradeStockWorkspace";
+import type { StockItem, StockListResponse } from "@/lib/trade-stock";
 import styles from "./TradePriceBookWorkspace.module.css";
 
 type PriceBookItem = {
@@ -45,7 +47,12 @@ const editDraft = (item: PriceBookItem): Draft => ({ name: item.name, descriptio
   panelLengthMm: item.solarPanel ? String(Number((item.solarPanel.lengthM * 1000).toFixed(3))) : "", panelDetails: item.solarPanel || null });
 
 export function TradePriceBookWorkspace({ user, initialView = "items", permissions, navigationTarget }: { user: User; initialView?: "items" | "packets"; permissions?: TradeTeamPermissions; navigationTarget?: TLinkCommandTarget | null }) {
-  const [libraryView, setLibraryView] = useState<"items" | "packets">(initialView);
+  const [libraryView, setLibraryView] = useState<"items" | "packets" | "stock">(initialView);
+  const [trackedCount, setTrackedCount] = useState(0);
+  const [stockLoadError, setStockLoadError] = useState("");
+  const [stockReload, setStockReload] = useState(0);
+  const [editingStockTracked, setEditingStockTracked] = useState<boolean | null>(null);
+  const [stockSetup, setStockSetup] = useState(false);
   const [items, setItems] = useState<PriceBookItem[]>([]); const [counts, setCounts] = useState({ total: 0, active: 0, archived: 0 });
   const [capabilities, setCapabilities] = useState<string[]>([]); const [catalogue, setCatalogue] = useState<CatalogueOption[]>([]);
   const [search, setSearch] = useState(""); const [status, setStatus] = useState("active"); const [loading, setLoading] = useState(true);
@@ -65,6 +72,9 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
   const openedNavigationNonce = useRef<number | null>(null);
   const canView = permissions?.canViewPriceBook !== false;
   const canManage = confirmedCanManage && canView && permissions?.canManagePriceBook !== false;
+  const editingAllowsStock = editing && editing !== "new" && (editing.itemType === "material" || editing.itemType === "equipment");
+  const stockLocksUnits = Boolean(editingAllowsStock && editingStockTracked !== false);
+  const productHasUnsavedChanges = Boolean(editing && editing !== "new" && JSON.stringify(draft) !== JSON.stringify(editDraft(editing)));
 
   if (navigationTarget?.kind === "product" && navigationTarget.workspace === "products"
     && navigationTarget.nonce !== productNavigation?.nonce) {
@@ -83,7 +93,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
 
   const edit = useCallback(async (item: PriceBookItem, signal?: AbortSignal) => {
     if (!canView || signal?.aborted) return;
-    setEditing(item); setDocumentsOpen(false); setDraft(editDraft(item)); setHistory([]); setMessage("");
+    setEditing(item); setEditingStockTracked(null); setStockSetup(false); setDocumentsOpen(false); setDraft(editDraft(item)); setHistory([]); setMessage("");
     try {
       const result = await request(`?itemId=${encodeURIComponent(item.id)}`, { signal });
       if (!signal?.aborted) setHistory(result.history || []);
@@ -106,6 +116,26 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       }
     }
   }, [canView, edit, productNavigation, request, search, status]);
+
+  useEffect(() => {
+    if (!canView) return;
+    const controller = new AbortController();
+    const loadStock = async () => {
+      try {
+        const token = await user.getIdToken(); if (controller.signal.aborted) return;
+        const response = await fetch("/api/trade-stock", { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal, cache: "no-store" });
+        const result = await response.json() as StockListResponse;
+        if (!response.ok || !result.ok || !Array.isArray(result.items)) throw new Error("Stock is unavailable. Try again.");
+        if (!controller.signal.aborted) { setTrackedCount(result.items.filter((item) => item.tracked).length); setStockLoadError(""); }
+      } catch (error) { if (!controller.signal.aborted) setStockLoadError(error instanceof Error ? error.message : "Stock is unavailable. Try again."); }
+    };
+    void loadStock(); return () => controller.abort();
+  }, [canView, stockReload, user]);
+
+  function stockChanged(item: StockItem) {
+    setEditingStockTracked(item.tracked); setStockReload((value) => value + 1);
+    if (item.tracked) setTrackedCount((value) => Math.max(1, value));
+  }
 
   useEffect(() => {
     if (!documentsOpen || !canManage) return;
@@ -170,7 +200,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
     if (preset === "stc") Object.assign(next, { itemType: "certificate", unitLabel: "each", name: "STC" });
     if (preset === "veec") Object.assign(next, { itemType: "certificate", unitLabel: "each", name: "VEEC" });
     if (preset === "esc") Object.assign(next, { itemType: "certificate", unitLabel: "each", name: "ESC" });
-    setEditing("new"); setImporting(false); setDocumentsOpen(false); setDraft(next); setHistory([]); setMessage("");
+    setEditing("new"); setEditingStockTracked(null); setStockSetup(false); setImporting(false); setDocumentsOpen(false); setDraft(next); setHistory([]); setMessage("");
   }
 
   function chooseCatalogue(id: string) {
@@ -186,6 +216,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
     event.preventDefault(); if (!canManage || saving.current) return;
     const submitter = "submitter" in event.nativeEvent ? event.nativeEvent.submitter : null;
     const addDocuments = submitter instanceof HTMLButtonElement && submitter.value === "documents";
+    const addStock = submitter instanceof HTMLButtonElement && submitter.value === "stock";
     saving.current = true; setBusy("save"); setMessage("");
     try {
       const isNew = editing === "new"; const itemId = typeof editing === "object" && editing ? editing.id : "";
@@ -193,9 +224,9 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
         widthM: Number(draft.panelWidthMm) / 1000, lengthM: Number(draft.panelLengthMm) / 1000 } : null;
       const result = await request("", { method: isNew ? "POST" : "PATCH", body: JSON.stringify({ action: isNew ? "create" : "update", itemId, ...draft, solarPanel }) });
       if (!result.item) throw new Error("The save was not confirmed. Refresh the price book before trying again.");
-      if (addDocuments) { setEditing(result.item); setDraft(editDraft(result.item)); }
+      if (addDocuments || addStock) { setEditing(result.item); setDraft(editDraft(result.item)); setEditingStockTracked(null); setStockSetup(addStock); }
       else setEditing(null);
-      await load(); setMessage(addDocuments ? "Item saved. Add its warranty or product PDFs below." : solarPanel ? "Saved. This panel is ready in your roof designer and price book." : isNew ? "Saved. This item is ready to add to quotes." : "Changes saved. Price changes are kept in history.");
+      await load(); setMessage(addStock ? "Item saved. Enter your opening stock below when ready." : addDocuments ? "Item saved. Add its warranty or product PDFs below." : solarPanel ? "Saved. This panel is ready in your roof designer and price book." : isNew ? "Saved. This item is ready to add to quotes." : "Changes saved. Price changes are kept in history.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "The price-book item could not be saved."); }
     finally { saving.current = false; setBusy(""); }
   }
@@ -211,26 +242,27 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
 
   if (!canView) return <section className={styles.workspace} aria-label="Price book"><p role="status">Ask the business owner for price-book access.</p></section>;
 
-  return <section className={styles.workspace} aria-labelledby={libraryView === "items" ? "price-book-title" : "job-packets-title"}>
+  return <section className={styles.workspace} aria-labelledby={libraryView === "stock" ? "trade-stock-title" : libraryView === "items" ? "price-book-title" : "job-packets-title"}>
     <nav className={styles.librarySwitch} aria-label="Pricing library">
       <button type="button" className={libraryView === "items" ? styles.libraryActive : ""} onClick={() => setLibraryView("items")}>Price-book items</button>
       {canManage && <button type="button" className={libraryView === "packets" ? styles.libraryActive : ""} onClick={() => setLibraryView("packets")}>Common jobs</button>}
+      {(trackedCount > 0 || libraryView === "stock") && <button type="button" className={libraryView === "stock" ? styles.libraryActive : ""} onClick={() => setLibraryView("stock")}>Stock</button>}
     </nav>
-    {libraryView === "packets" ? <TradeJobPacketWorkspace user={user} onOpenItems={() => setLibraryView("items")} /> : <>
+    {libraryView === "stock" ? <TradeStockWorkspace key={user.uid} user={user} canManage={canManage} onOpenItems={() => { setLibraryView("items"); setEditing(null); setDocumentsOpen(false); setImporting(false); }} onTrackedChanged={() => setStockReload((value) => value + 1)} /> : libraryView === "packets" ? <TradeJobPacketWorkspace user={user} onOpenItems={() => setLibraryView("items")} /> : <>
     <header className={styles.hero}><div><span>Your products, costs and prices</span><h3 id="price-book-title">Price book</h3><p>{canManage ? "Save common work once, then add it to a quote in one choice with the right price and GST." : "View the business products and rates available for quoting."}</p></div>{canManage && <div className={styles.heroActions}><button type="button" onClick={() => { setDocumentsOpen(true); setImporting(false); setEditing(null); setMessage(""); }}>Upload product PDF</button><button type="button" onClick={() => { setImporting(true); setDocumentsOpen(false); setEditing(null); setMessage(""); }}>Upload Excel / CSV</button><button type="button" onClick={() => startNew()}>New item</button></div>}</header>
     <div className={styles.metrics}><article><span>Ready to quote</span><strong>{counts.active}</strong></article><article><span>Archived</span><strong>{counts.archived}</strong></article><article><span>Total history</span><strong>{counts.total}</strong></article></div>
 
     {documentsOpen && canManage ? <section className={styles.editor} aria-label="Attach product PDFs"><header><div><h4>Attach product PDFs</h4><p>Choose the product, then drop in its warranty or information PDF.</p></div><button type="button" className={styles.secondary} onClick={() => setDocumentsOpen(false)}>Back to price book</button></header><div className={styles.documentProductFields}>
       {documentProducts.length > 20 && <label><span>Find product</span><input type="search" aria-label="Find product for PDF" value={documentProductSearch} onChange={(event) => setDocumentProductSearch(event.target.value)} placeholder="Name or item code" /></label>}
       <label><span>Product</span><select aria-label="Product for PDF" value={documentProductId} disabled={documentProductsLoading || Boolean(documentProductsError)} onChange={(event) => setDocumentProductId(event.target.value)}><option value="">{documentProductsLoading ? "Loading products…" : "Choose a product"}</option>{documentProducts.filter((item) => item.id === documentProductId || `${item.name} ${item.itemCode}`.toLowerCase().includes(documentProductSearch.trim().toLowerCase())).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.itemCode}</option>)}</select></label>
-      </div>{documentProductsError && <p role="alert">{documentProductsError} <button type="button" className={styles.secondary} onClick={() => setDocumentProductsReload((value) => value + 1)}>Try again</button></p>}{documentProductId && !documentProductsLoading && !documentProductsError && <TradeProductDocuments key={`${user.uid}:${documentProductId}`} user={user} itemId={documentProductId} canManage />}{!documentProductsLoading && !documentProductsError && !documentProducts.length && <button type="button" className={styles.secondary} onClick={() => startNew()}>Add a product first</button>}</section> : importing && canManage ? <TradePriceBookImport user={user} onClose={() => setImporting(false)} onImported={async () => { await load(); }} /> : editing ? <form className={styles.editor} onSubmit={save}>
+      </div>{documentProductsError && <p role="alert">{documentProductsError} <button type="button" className={styles.secondary} onClick={() => setDocumentProductsReload((value) => value + 1)}>Try again</button></p>}{documentProductId && !documentProductsLoading && !documentProductsError && <TradeProductDocuments key={`${user.uid}:${documentProductId}`} user={user} itemId={documentProductId} canManage />}{!documentProductsLoading && !documentProductsError && !documentProducts.length && <button type="button" className={styles.secondary} onClick={() => startNew()}>Add a product first</button>}</section> : importing && canManage ? <TradePriceBookImport user={user} onClose={() => setImporting(false)} onImported={async () => { await load(); }} /> : editing ? <><form className={styles.editor} onSubmit={save}>
       <header><div><span>{editing === "new" ? "Add once, reuse everywhere" : editing.itemCode}</span><h4>{editing === "new" ? "New price-book item" : `${canManage && editing.recordStatus === "active" ? "Edit" : "View"} ${editing.name}`}</h4><p>Only the name and sell price are essential. Open more details when they help the team.</p></div><button type="button" className={styles.secondary} onClick={() => setEditing(null)}>Back to price book</button></header>
       {editing === "new" && <div className={styles.presets}><span>Quick start</span><button type="button" onClick={() => startNew("labour")}>Labour hour</button><button type="button" onClick={() => startNew("material")}>Material</button><button type="button" onClick={() => startNew("solar_panel")}>Solar panel</button><button type="button" onClick={() => startNew("call_out")}>Call-out</button><button type="button" onClick={() => startNew("stc")}>STC credit</button><button type="button" onClick={() => startNew("veec")}>VEEC credit</button><button type="button" onClick={() => startNew("esc")}>ESC credit</button></div>}
       {editing !== "new" && editing.recordStatus === "archived" && <p className={styles.archived}>Archived items are read only and stay available in price history.</p>}
       <fieldset className={styles.fields} disabled={!canManage || (editing !== "new" && editing.recordStatus === "archived")}>
       <div className={styles.coreFields}>
         <label><span>Item name</span><input required maxLength={140} value={draft.name} onChange={(event) => change("name", event.target.value)} placeholder="e.g. Licensed electrician labour" /></label>
-        <label><span>Product kind</span><select value={draft.productKind} onChange={(event) => { const productKind = event.target.value === "solar_panel" ? "solar_panel" : "general"; setDraft((current) => ({ ...current, productKind, ...(productKind === "solar_panel" ? { itemType: current.itemType === "equipment" ? "equipment" : "material", unitLabel: "each" } : {}) })); }}><option value="general">General item</option><option value="solar_panel">Solar panel</option></select></label>
+        <label><span>Product kind</span><select value={draft.productKind} disabled={stockLocksUnits} onChange={(event) => { const productKind = event.target.value === "solar_panel" ? "solar_panel" : "general"; setDraft((current) => ({ ...current, productKind, ...(productKind === "solar_panel" ? { itemType: current.itemType === "equipment" ? "equipment" : "material", unitLabel: "each" } : {}) })); }}><option value="general">General item</option><option value="solar_panel">Solar panel</option></select></label>
         <label><span>Sell price ex GST</span><input required inputMode="decimal" value={draft.sellPrice} onChange={(event) => change("sellPrice", event.target.value)} placeholder={priceBookItemAllowsNegativeSellPrice(draft.itemType) ? "-38.00" : "0.00"} />{draft.itemType === "certificate" && <small>Enter the certificate value as a negative amount per certificate, such as -38.00 per STC.</small>}</label>
         <label><span>GST</span><select value={draft.taxCode} onChange={(event) => change("taxCode", event.target.value)}><option value="gst">Add 10% GST</option><option value="none">No GST</option></select></label>
       </div>
@@ -241,8 +273,8 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       </div>{draft.panelDetails?.datasheetUrl && <a href={draft.panelDetails.datasheetUrl} target="_blank" rel="noopener noreferrer">Manufacturer datasheet</a>}</section>}
       {preview && <div className={styles.preview}><div><span>Cost</span><strong>{money(preview.cost)}</strong></div><div><span>Sell</span><strong>{money(preview.sell)}</strong></div><div><span>Markup</span><strong>{percentage(preview.markupBasisPoints)}</strong></div><div><span>Margin</span><strong>{percentage(preview.marginBasisPoints)}</strong></div></div>}
       <details className={styles.advanced}><summary>More details, optional</summary><div>
-        <label><span>Type</span><select value={draft.itemType} onChange={(event) => changeItemType(event.target.value as PriceBookItemType)}>{PRICE_BOOK_ITEM_TYPES.map((type) => <option key={type} value={type}>{PRICE_BOOK_TYPE_LABELS[type]}</option>)}</select></label>
-        <label><span>Charge by</span><select value={draft.unitLabel} onChange={(event) => change("unitLabel", event.target.value)}>{PRICE_BOOK_UNITS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label><span>Type</span><select value={draft.itemType} disabled={stockLocksUnits} onChange={(event) => changeItemType(event.target.value as PriceBookItemType)}>{PRICE_BOOK_ITEM_TYPES.map((type) => <option key={type} value={type}>{PRICE_BOOK_TYPE_LABELS[type]}</option>)}</select></label>
+        <label><span>Charge by</span><select value={draft.unitLabel} disabled={stockLocksUnits} onChange={(event) => change("unitLabel", event.target.value)}>{PRICE_BOOK_UNITS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{stockLocksUnits && <small>{editingStockTracked ? "Stock uses this type and unit. Stop tracking before changing them." : "Loading stock settings before changing the type or unit."}</small>}</label>
         <label className={styles.wide}><span>Description</span><textarea rows={3} maxLength={500} value={draft.description} onChange={(event) => change("description", event.target.value)} placeholder="What is included in this item" /></label>
         <label><span>Supplier cost ex GST</span><input inputMode="decimal" value={draft.supplierCost} readOnly={priceBookItemRequiresZeroSupplierCost(draft.itemType)} onChange={(event) => change("supplierCost", event.target.value)} />{priceBookItemRequiresZeroSupplierCost(draft.itemType) && <small>Certificate, rebate and discount items use zero supplier cost.</small>}</label>
         <label><span>Expected minutes</span><input type="number" min="0" max="10080" value={draft.expectedDurationMinutes} onChange={(event) => change("expectedDurationMinutes", event.target.value)} /></label>
@@ -253,16 +285,18 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       </fieldset>
       {editing !== "new" && <TradeProductDocuments key={`${user.uid}:${editing.id}`} user={user} itemId={editing.id} canManage={canManage && editing.recordStatus === "active"} disabled={Boolean(busy)} />}
       {editing === "new" && canManage && <div className={styles.documentStart}><div><strong>Warranty or product PDFs?</strong><span>Save this item, then upload them once for future quotes.</span></div><button type="submit" name="afterSave" value="documents" disabled={Boolean(busy)}>Save &amp; add PDFs</button></div>}
-      {canManage && (editing === "new" || editing.recordStatus === "active") && <div className={styles.actions}><button type="submit" disabled={Boolean(busy)}>{busy === "save" ? "Saving..." : editing === "new" ? "Save and use in quotes" : "Save changes"}</button>{editing !== "new" && <button type="button" className={styles.danger} disabled={Boolean(busy)} onClick={() => void archive(editing)}>{busy === `archive:${editing.id}` ? "Archiving..." : "Archive item"}</button>}</div>}
+      {canManage && (editing === "new" || editing.recordStatus === "active") && <div className={styles.actions}><button type="submit" disabled={Boolean(busy)}>{busy === "save" ? "Saving..." : editing === "new" ? "Save and use in quotes" : "Save changes"}</button>{editing === "new" && (draft.itemType === "material" || draft.itemType === "equipment") && <button type="submit" className={styles.secondary} name="afterSave" value="stock" disabled={Boolean(busy)}>Save &amp; set up stock</button>}{editing !== "new" && <button type="button" className={styles.danger} disabled={Boolean(busy)} onClick={() => void archive(editing)}>{busy === `archive:${editing.id}` ? "Archiving..." : "Archive item"}</button>}</div>}
       {history.length > 0 && <details className={styles.history}><summary>Price history ({history.length})</summary>{history.map((entry) => <article key={entry.priceRevision}><div><strong>Revision {entry.priceRevision}</strong><span>{new Date(entry.changedAt).toLocaleString("en-AU")}</span></div><span>Cost {money(entry.supplierCostCentsExGst)} | Sell {money(entry.sellPriceCentsExGst)} | Margin {percentage(entry.marginBasisPoints)} | {entry.taxCode === "gst" ? "GST" : "No GST"}</span></article>)}</details>}
-    </form> : <>
+    </form>{editing !== "new" && editingAllowsStock && <TradeStockProductSettings key={`${user.uid}:${editing.id}`} user={user} itemId={editing.id} canManage={canManage} disabled={Boolean(busy) || productHasUnsavedChanges} initialAction={stockSetup ? "enable" : null} onLoaded={(item) => setEditingStockTracked(item.tracked)} onChanged={stockChanged} />}</> : <>
       <div className={styles.toolbar}><label><span>Find an item</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, code, supplier or SKU" /></label><div role="group" aria-label="Price-book status">{[["active", "Ready"], ["archived", "Archived"], ["all", "All"]].map(([value, label]) => <button type="button" key={value} className={status === value ? styles.active : ""} onClick={() => setStatus(value)}>{label}</button>)}</div></div>
       {canManage && !loading && !search && status === "active" && counts.active === 0 && <section className={styles.firstRun}><span>Start in under a minute</span><h4>Save the work you price most often</h4><p>Choose a quick start, enter the sell price, and it becomes available inside every direct-job quote.</p><div><button type="button" onClick={() => startNew("labour")}>Add labour hour</button><button type="button" onClick={() => startNew("material")}>Add material</button><button type="button" onClick={() => startNew("call_out")}>Add call-out</button><button type="button" onClick={() => startNew("stc")}>Add certificate credit</button></div></section>}
       <div className={styles.list}>{items.map((item) => <article key={item.id}><button type="button" onClick={() => void edit(item)}><div><span>{item.itemCode} | {PRICE_BOOK_TYPE_LABELS[item.itemType]}</span><strong>{item.name}</strong><small>{item.supplierName ? `${item.supplierName}${item.supplierSku ? ` | ${item.supplierSku}` : ""}` : item.description || "No extra details needed"}</small></div><div className={styles.price}><span>Sell ex GST</span><strong>{money(item.sellPriceCentsExGst)}</strong><small>{item.unitLabel} | {item.taxCode === "gst" ? "GST 10%" : "No GST"}</small></div><div className={styles.margin}><span>Margin</span><strong>{percentage(item.marginBasisPoints)}</strong><small>Cost {money(item.supplierCostCentsExGst)}</small></div><em>{item.recordStatus === "active" ? "Edit" : "View"}</em></button></article>)}</div>
       {items.length === 500 && <p className={styles.listLimit}>Showing the first 500 matches. Search by name or SKU to find another item.</p>}
       {!items.length && !loading && (search || counts.total > 0) && <div className={styles.empty}><strong>No matching items</strong><span>Change the search or status filter.</span></div>}
       {loading && <p className={styles.loading}>Loading the price book...</p>}
+      {canManage && !loading && !trackedCount && counts.active > 0 && <p className={styles.stockHint}>Keep products on hand? Open an item and choose <strong>Track stock</strong>. It is optional.</p>}
     </>}
+    {stockLoadError && <p className={styles.stockHint} role="status">{stockLoadError} <button type="button" className={styles.secondary} onClick={() => setStockReload((value) => value + 1)}>Retry stock</button></p>}
     {message && <p className={styles.message} role="status">{message}</p>}
     </>}
   </section>;

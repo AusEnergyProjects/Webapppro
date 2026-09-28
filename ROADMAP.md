@@ -16,7 +16,13 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
-## Current customer follow-up completion gate
+## Current optional stock completion gate
+
+Optional product tracking, receipts, stocktake and job allocations are implemented through migration 0207. Complete exact-source publication and affected day/night desktop/mobile checks. Stock stays off for businesses buying as needed. Quotes remain sendable during shortages; accepted quotes allocate available tracked products and cancellations release unused allocations. Physical use stays connected to the existing job checklist.
+
+Future purchasing work can add reviewed supplier-document imports, receipt confirmation and supported accounting exports. A purchase order alone must not increase on-hand stock. Keep manual receiving available. Multi-location stock, unit conversions and component inference from whole-system prices remain outside this first release. Evidence: C:/Webproject/outputs/tlink-stock-2026-09-28/.
+
+## Previous customer follow-up completion gate
 
 Business email templates, named insert buttons, job-level manual send and business-wide optional flexible invoice/appointment timings are implemented in migration0206. Complete exact-source publication and affected desktop/mobile day/night checks. Operational delivery requires the business to connect email and enable its chosen timing; release QA must not send customer email. Preserve accepted-invoice/accounting automation. Evidence: C:/Webproject/outputs/tlink-followups-2026-09-28/.
 

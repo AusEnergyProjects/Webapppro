@@ -12,6 +12,8 @@ function errorResponse(error: unknown) {
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
+  const stockCode = `${code} ${error instanceof Error && error.cause instanceof Error ? error.cause.message : ""}`;
+  if (stockCode.includes("STOCK_UNITS_LOCKED")) return adminJson({ ok: false, error: "This item tracks stock. Keep its type and unit unchanged, or finish its stock movements and turn tracking off first." }, 409);
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED"].includes(code)) {
     return adminJson({ ok: false, error: "An active verified installer account is required." }, 403);

@@ -2,7 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import type { PhotoRequirement } from "@/lib/trade-photo-requests";
-import type { QuoteExecutionPacketSnapshot } from "@/lib/trade-quote-execution-server";
+import { buildJobPlanStatements } from "@/lib/trade-job-plan-server";
 import { requireInstallerOperations } from "@/lib/trade-integrations-server";
 
 export const runtime = "edge";
@@ -11,6 +11,9 @@ const COMPLETE = new Set(["completed", "not_needed"]);
 
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
+  const stockCode = `${code} ${error instanceof Error && error.cause instanceof Error ? error.cause.message : ""}`;
+  if (stockCode.includes("STOCK_SHORTAGE")) return adminJson({ ok: false, error: "There is not enough stock available for this usage. Receive stock or release another job's allocation first." }, 409);
+  if (stockCode.includes("STOCK_REQUIREMENT_UNAVAILABLE")) return adminJson({ ok: false, error: "This job's materials changed or the job was cancelled. Refresh the job before recording stock usage." }, 409);
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["PROFILE_REQUIRED", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "ACCOUNT_INACTIVE"].includes(code)) return adminJson({ ok: false, error: "Job readiness is not available to this account." }, 403);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Job record not found." }, 404);
@@ -102,14 +105,6 @@ export async function GET(request: Request) {
   catch (error) { return errorResponse(error); }
 }
 
-function lineRequirementType(line: Row) {
-  const type = String(line.price_book_item_type || "");
-  if (["product", "material", "stock"].includes(type)) return "material";
-  if (type === "form") return "form";
-  if (type === "labour") return "labour";
-  return "task";
-}
-
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
@@ -119,47 +114,9 @@ export async function POST(request: Request) {
     if (action === "prepare") {
       const handoff = await db.prepare(`SELECT * FROM trade_crm_commercial_handovers WHERE firebase_uid = ? AND work_order_id = ? ORDER BY accepted_at DESC LIMIT 1`).bind(identity.uid, workOrderId).first<Row>();
       if (!handoff) return adminJson({ ok: false, error: "Accept a quote before preparing the job." }, 409);
-      const existing = await db.prepare(`SELECT id FROM trade_crm_job_plans WHERE firebase_uid = ? AND commercial_handoff_id = ?`).bind(identity.uid, handoff.id).first<Row>();
-      if (!existing) {
-        const [acceptance, snapshot] = await Promise.all([
-          db.prepare(`SELECT selected_choice_ids_json FROM trade_crm_quote_acceptances WHERE id = ? AND firebase_uid = ?`).bind(handoff.acceptance_id, identity.uid).first<Row>(),
-          db.prepare(`SELECT * FROM trade_crm_quote_execution_snapshots WHERE quote_version_id = ? AND firebase_uid = ?`).bind(handoff.quote_version_id, identity.uid).first<Row>(),
-        ]);
-        const choices = parseJson<string[]>(acceptance?.selected_choice_ids_json, []).map(String);
-        const items = await db.prepare(`SELECT * FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ? ORDER BY position`).bind(handoff.quote_version_id, identity.uid).all<Row>();
-        const selected = items.results.filter((item) => !item.quote_choice_id || choices.includes(String(item.quote_choice_id)));
-        const packetSnapshots = parseJson<QuoteExecutionPacketSnapshot[]>(snapshot?.packets_json, []);
-        const selectedPacketIds = new Set(selected.map((item) => String(item.job_packet_id || "")).filter(Boolean));
-        const packets = packetSnapshots.filter((packet) => selectedPacketIds.has(packet.packetId));
-        const planId = crypto.randomUUID(); const sourceKind = packets.length ? "job_packet" : "manual_quote";
-        const budgetCost = selected.reduce((total, item) => total + Math.round(Number(item.unit_cost_cents_ex_gst || 0) * Number(item.quantity_milli || 1000) / 1000), 0);
-        const expectedDuration = packets.reduce((sum, packet) => sum + packet.expectedDurationMinutes, 0);
-        const suggestedCrew = packets.reduce((maximum, packet) => Math.max(maximum, packet.suggestedCrewSize), 1);
-        const statements = [db.prepare(`INSERT INTO trade_crm_job_plans (id, commercial_handoff_id, quote_version_id, work_order_id, firebase_uid, commercial_reference, source_kind, status, accepted_subtotal_cents, accepted_tax_cents, accepted_total_cents, budget_cost_cents, budget_margin_cents, expected_duration_minutes, suggested_crew_size, deposit_requirement, ready_at, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'planning', ?, ?, ?, ?, ?, ?, ?, 'optional', '', '', ?, ?)`)
-          .bind(planId, handoff.id, handoff.quote_version_id, workOrderId, identity.uid, handoff.commercial_reference, sourceKind, handoff.subtotal_cents, handoff.tax_cents, handoff.total_cents, budgetCost, Number(handoff.subtotal_cents) - budgetCost, expectedDuration, suggestedCrew, now, now)];
-        let position = 0; let phasePosition = 0;
-        const addRequirement = (phaseId: string, type: string, sourceId: string, description: string, quantity: number, unitCost: number, duration: number, capability: string, status: string) => {
-          const cost = Math.round(unitCost * quantity / 1000); statements.push(db.prepare(`INSERT INTO trade_crm_job_plan_requirements (id, job_plan_id, job_plan_phase_id, firebase_uid, position, requirement_type, source_id, description, quantity_milli, unit_cost_cents, total_cost_cents, expected_duration_minutes, required_capability, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .bind(crypto.randomUUID(), planId, phaseId, identity.uid, position++, type, sourceId, description, quantity, unitCost, cost, duration, capability, status, now));
-        };
-        for (const packet of packets) {
-          const phaseId = crypto.randomUUID(); const capabilities = packet.requiredCapabilities.join(", ");
-          statements.push(db.prepare(`INSERT INTO trade_crm_job_plan_phases (id, job_plan_id, firebase_uid, position, title, customer_description, source_packet_id, source_packet_revision, expected_duration_minutes, status, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?)`)
-            .bind(phaseId, planId, identity.uid, phasePosition++, packet.name, `${packet.taskTitles.length} task${packet.taskTitles.length === 1 ? "" : "s"} from accepted packet revision ${packet.packetRevision}`, packet.packetId, packet.packetRevision, packet.expectedDurationMinutes, now, now));
-          packet.taskTitles.forEach((title, index) => addRequirement(phaseId, "task", `${packet.packetId}:task:${index}`, title, 1000, 0, 0, capabilities, "required"));
-          packet.forms.forEach((form) => addRequirement(phaseId, "form", `${form.templateKey}:${form.templateVersion}`, `${form.templateKey.replaceAll("_", " ")} v${form.templateVersion}`, 1000, 0, 0, "", "required"));
-          selected.filter((line) => line.job_packet_id === packet.packetId).forEach((line) => addRequirement(phaseId, lineRequirementType(line), String(line.price_book_item_id || line.id), String(line.description), Number(line.quantity_milli), Number(line.unit_cost_cents_ex_gst || 0),
-            lineRequirementType(line) === "labour" ? Math.round(packet.expectedDurationMinutes * Number(line.quantity_milli || 1000) / Math.max(1000, selected.filter((item) => item.job_packet_id === packet.packetId).reduce((sum, item) => sum + Number(item.quantity_milli || 0), 0))) : 0, capabilities, lineRequirementType(line) === "form" ? "required" : "confirmed"));
-        }
-        const manual = selected.filter((line) => !selectedPacketIds.has(String(line.job_packet_id || ""))); const grouped = new Map<string, Row[]>();
-        manual.forEach((item) => { const key = String(item.section_heading || "Included work"); grouped.set(key, [...(grouped.get(key) || []), item]); });
-        for (const [title, lines] of grouped) { const phaseId = crypto.randomUUID(); statements.push(db.prepare(`INSERT INTO trade_crm_job_plan_phases (id, job_plan_id, firebase_uid, position, title, customer_description, source_packet_id, source_packet_revision, expected_duration_minutes, status, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, '', 0, 0, 'pending', '', ?, ?)`)
-          .bind(phaseId, planId, identity.uid, phasePosition++, title, `${lines.length} accepted scope item${lines.length === 1 ? "" : "s"}`, now, now));
-          lines.forEach((line) => { const type = lineRequirementType(line); addRequirement(phaseId, type, String(line.price_book_item_id || line.id), String(line.description), Number(line.quantity_milli), Number(line.unit_cost_cents_ex_gst || 0), 0, "", ["material", "form"].includes(type) ? "required" : "confirmed"); }); }
-        statements.push(db.prepare(`UPDATE trade_crm_job_plans SET status='completed', completed_at=COALESCE((SELECT MIN(created_at) FROM trade_work_order_events WHERE work_order_id=? AND firebase_uid=? AND event_type='job_completed'),'') WHERE id=? AND firebase_uid=? AND EXISTS(SELECT 1 FROM trade_work_orders WHERE id=? AND firebase_uid=? AND stage='completed')`).bind(workOrderId, identity.uid, planId, identity.uid, workOrderId, identity.uid));
-        statements.push(db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'job_plan_prepared', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `Accepted scope ${String(handoff.commercial_reference)} prepared from its immutable execution snapshot.`, now));
-        await db.batch(statements);
-      }
+      const statements = await buildJobPlanStatements(db, { ownerUid: identity.uid, workOrderId,
+        handoffId: String(handoff.id), quoteVersionId: String(handoff.quote_version_id), now });
+      if (statements.length) await db.batch(statements);
     } else if (action === "requirement") {
       const requirementId = cleanAdminText(body.requirementId, 180); const status = ["required", "confirmed", "not_needed"].includes(String(body.status)) ? String(body.status) : "required";
       await db.prepare(`UPDATE trade_crm_job_plan_requirements SET status = ? WHERE id = ? AND firebase_uid = ? AND job_plan_id IN (SELECT id FROM trade_crm_job_plans WHERE work_order_id = ? AND firebase_uid = ?)`).bind(status, requirementId, identity.uid, workOrderId, identity.uid).run();
