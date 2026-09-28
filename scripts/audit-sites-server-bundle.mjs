@@ -74,6 +74,7 @@ const workerDynamicEntries = new Set(
   ),
 );
 const guardedPdfEntryKeys = [
+  "src/lib/trade-accepted-invoice-pdf-server.ts",
   "src/lib/creditex-activity-work-pack-pdf-renderer.ts",
   "src/lib/customer-plan-pdf.mjs",
   "src/lib/public-plan-customer-pdf.mjs",

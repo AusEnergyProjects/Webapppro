@@ -1,7 +1,7 @@
 import { buildAcceptedInvoiceSnapshot, type AcceptedInvoiceDocumentSnapshot } from "./trade-accepted-invoice";
 import { verifiedTradeAccountPredicate } from "./trade-access-server";
 import { reminderProviderFailureOutcome, type ReminderProviderMessage } from "./service-reminder-delivery";
-import { acceptedInvoicePdfFilename, renderAcceptedInvoicePdf } from "./trade-accepted-invoice-pdf-server";
+import type { renderAcceptedInvoicePdf } from "./trade-accepted-invoice-pdf-server";
 import type { ImmutableIssuedPdfReference } from "./trade-issued-document-store";
 
 type Row = Record<string, unknown>;
@@ -153,8 +153,10 @@ async function recipient(db: D1Database, row: Row) {
 }
 
 async function defaults(db: D1Database): Promise<Services> {
-  const [storage, email] = await Promise.all([import("./trade-issued-document-store"), import("./trade-email-server")]);
-  return { renderPdf: renderAcceptedInvoicePdf,
+  const [storage, email, pdf] = await Promise.all([
+    import("./trade-issued-document-store"), import("./trade-email-server"), import("./trade-accepted-invoice-pdf-server"),
+  ]);
+  return { renderPdf: pdf.renderAcceptedInvoicePdf,
     storePdf: (invoiceId, bytes) => storage.storeImmutableIssuedPdf({ ...pdfIdentity(invoiceId), bytes }),
     readPdf: (invoiceId, reference) => storage.readImmutableIssuedPdf(reference, pdfIdentity(invoiceId)),
     sendEmail: (ownerUid, message, beforeSend) => email.sendTradeCustomerEmail(ownerUid, "system:accepted-invoice", message, { db, beforeSend }),
@@ -225,6 +227,7 @@ export async function drainAcceptedInvoiceEmails(options: { db: D1Database; invo
       const bytes = await services.readPdf(invoiceId, reference);
       let binary = "";
       for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+      const { acceptedInvoicePdfFilename } = await import("./trade-accepted-invoice-pdf-server");
       const message: ReminderProviderMessage = { channel: "email", recipient: email,
         subject: `${snapshot.business.name} | Invoice ${snapshot.invoice.number}`,
         body: `Thank you for accepting your quote. Your invoice ${snapshot.invoice.number} is attached as a PDF.\n\nAmount due: AUD ${(snapshot.totals.totalCents / 100).toFixed(2)}\nDue: ${snapshot.invoice.dueAt}\n\nPlease contact ${snapshot.business.name} if you have any questions.`,
