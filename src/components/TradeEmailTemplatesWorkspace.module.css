@@ -81,6 +81,8 @@
 .visuallyHidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .dialog { width: min(650px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; margin: auto; overflow: auto; border: 1px solid var(--trade-line, #d5e4df); border-radius: 16px; background: var(--trade-surface, #fff); box-shadow: 0 24px 90px #001b2855; }
 .dialog::backdrop { background: #041e2bb3; }
+/* Native modal positioning must take precedence over the workspace's direct-child gutters. */
+.dialog { margin-inline: auto !important; }
 .dialog form { display: grid; gap: 18px; padding: 24px; }
 .dialogHeader { padding-bottom: 16px; border-bottom: 1px solid var(--trade-line); }
 .dialogHeader h2 { font-size: 20px; }
