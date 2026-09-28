@@ -25,7 +25,7 @@ export function TradePriceBookCategoryField({ value, categories, onChange }: {
   return <div className={styles.categoryField} onBlur={(event) => {
     if (!event.currentTarget.contains(event.relatedTarget)) close();
   }}>
-    <label htmlFor={id}>Category</label>
+    <label htmlFor={id}><span>Category</span></label>
     <div className={styles.categoryControl}>
       <input ref={input} id={id} role="combobox" autoComplete="off" maxLength={80}
         value={value} placeholder="Choose or type your own" aria-autocomplete="list"
