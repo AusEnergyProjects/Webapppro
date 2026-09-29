@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { tradeBrowserDevice } from "@/lib/trade-browser-device";
-import styles from "./FieldAppDownload.module.css";
+import { tradeBrowserDevice } from "@/lib/trade-notification-client";
 
 type ReleasePolicy = { latestVersion?: string; updateUrl?: string };
 type Platform = "ios" | "android" | "desktop";
@@ -67,26 +66,26 @@ export function FieldAppDownload() {
     finally { prompt.current = null; setCanInstall(false); setInstalling(false); }
   };
   const url = fieldAppReleaseUrl(policy?.updateUrl);
-  return <section className={styles.card} aria-label="Install TLink">
-    <div className={styles.devices} aria-label="Choose your device">{([['ios', 'iPhone / iPad'], ['android', 'Android'], ['desktop', 'Computer']] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={platform === value} onClick={() => { setPlatform(value); setNotice(""); }}>{label}</button>)}</div>
+  return <section className="tlink-install-card" aria-label="Install TLink">
+    <div className="tlink-install-devices" aria-label="Choose your device">{([['ios', 'iPhone / iPad'], ['android', 'Android'], ['desktop', 'Computer']] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={platform === value} onClick={() => { setPlatform(value); setNotice(""); }}>{label}</button>)}</div>
     {!platform ? <p role="status">Checking your device...</p> : installed ? <>
-      <h2>TLink is on this device</h2><p>Open your workspace to see your jobs and messages.</p><a className={styles.primary} href="/direct-trade/dashboard">Open TLink</a>
+      <h2>TLink is on this device</h2><p>Open your workspace to see your jobs and messages.</p><a className="tlink-install-primary" href="/direct-trade/dashboard">Open TLink</a>
     </> : platform === "ios" ? <>
-      <span className={styles.tag}>TLink web app</span><h2>Add TLink to your Home Screen</h2>
+      <span className="tlink-install-tag">TLink web app</span><h2>Add TLink to your Home Screen</h2>
       <p>Your existing team login works here. There is no separate account to create.</p>
       <ol><li>In {browser === "Chrome" || browser === "Safari" ? browser : "your browser"}, tap <strong>Share</strong> <span aria-hidden="true">↑</span> beside the address bar.</li><li>Choose <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li></ol>
-      <p className={styles.hint}>Open the new TLink icon, sign in and enable notifications in Messages. Keep “Open as Web App” on if your phone shows it.</p>
-      <a className={styles.secondary} href="/direct-trade/dashboard">Continue to TLink</a>
+      <p className="tlink-install-hint">Open the new TLink icon, sign in and enable notifications in Messages. Keep “Open as Web App” on if your phone shows it.</p>
+      <a className="tlink-install-secondary" href="/direct-trade/dashboard">Continue to TLink</a>
       <details><summary>Can’t find Add to Home Screen?</summary><p>Scroll down the Share menu. If it is still missing, open this page in Safari and use Share.</p></details>
     </> : platform === "android" ? <>
-      <span className={styles.tag}>Android app</span><h2>Get TLink on your phone</h2><p>Your work, team messages and calls in one app.</p>
-      {url ? <a className={styles.primary} href={url}>Download Android app{policy?.latestVersion ? ` · ${policy.latestVersion}` : ""}</a> : failed ? <><p role="alert">The download link could not load.</p><button type="button" className={styles.primary} onClick={() => { setFailed(false); setAttempt(value => value + 1); }}>Try again</button></> : <p role="status">Checking the latest Android app...</p>}
-      <p className={styles.hint}>Already installed? Open TLink → Settings → Check for update.</p>
+      <span className="tlink-install-tag">Android app</span><h2>Get TLink on your phone</h2><p>Your work, team messages and calls in one app.</p>
+      {url ? <a className="tlink-install-primary" href={url}>Download Android app{policy?.latestVersion ? ` · ${policy.latestVersion}` : ""}</a> : failed ? <><p role="alert">The download link could not load.</p><button type="button" className="tlink-install-primary" onClick={() => { setFailed(false); setAttempt(value => value + 1); }}>Try again</button></> : <p role="status">Checking the latest Android app...</p>}
+      <p className="tlink-install-hint">Already installed? Open TLink → Settings → Check for update.</p>
       <details><summary>Signing in to the Android app</summary><p>Your business opens Team, chooses your name, and sends a one-time field app PIN. Use that username and PIN on the app’s sign-in screen.</p></details>
     </> : <>
-      <span className={styles.tag}>Computer</span><h2>Keep TLink one click away</h2><p>Use your normal TLink login for your jobs, messages and calls.</p>
-      {canInstall ? <button type="button" className={styles.primary} disabled={installing} onClick={() => void install()}>{installing ? "Opening install prompt..." : "Install TLink"}</button> : <p>Open your browser menu and choose <strong>Install TLink</strong> if available, or bookmark your workspace.</p>}
-      <a className={styles.secondary} href="/direct-trade/dashboard">Open TLink</a>
+      <span className="tlink-install-tag">Computer</span><h2>Keep TLink one click away</h2><p>Use your normal TLink login for your jobs, messages and calls.</p>
+      {canInstall ? <button type="button" className="tlink-install-primary" disabled={installing} onClick={() => void install()}>{installing ? "Opening install prompt..." : "Install TLink"}</button> : <p>Open your browser menu and choose <strong>Install TLink</strong> if available, or bookmark your workspace.</p>}
+      <a className="tlink-install-secondary" href="/direct-trade/dashboard">Open TLink</a>
     </>}
     {notice && <p role="status">{notice}</p>}
   </section>;

@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 import {createRequire} from 'node:module';
-import {tradeBrowserDevice} from '../src/lib/trade-browser-device.ts';
+import {tradeBrowserDevice} from '../src/lib/trade-notification-client.ts';
 const require=createRequire(import.meta.url),record={exports:{}};
 const source=fs.readFileSync(new URL('../src/components/TradeNotificationSettings.tsx',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-new Function('require','module','exports',compiled)(name=>name.endsWith('.css')?{}:name==='./TradeBusinessProvider'?{useTradeBusinessFetch:()=>fetch}:name==='@/lib/trade-notification-client'?{}:name==='@/lib/trade-browser-device'?{tradeBrowserDevice}:require(name),record,record.exports);
+new Function('require','module','exports',compiled)(name=>name.endsWith('.css')?{}:name==='./TradeBusinessProvider'?{useTradeBusinessFetch:()=>fetch}:name==='@/lib/trade-notification-client'?{tradeBrowserDevice}:require(name),record,record.exports);
 const {notificationApplicationKey,notificationDeviceSupport}=record.exports;
 test('iPhone and iPad browsers explain Home Screen installation before permission requests',()=>{
   assert.equal(notificationDeviceSupport('iPhone',5,false,false),'home-screen');

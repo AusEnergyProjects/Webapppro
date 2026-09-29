@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
-import {tradeBrowserDevice} from '../src/lib/trade-browser-device.ts';
+import {tradeBrowserDevice} from '../src/lib/trade-notification-client.ts';
 
 const source=readFileSync(new URL('../src/components/FieldAppDownload.tsx',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
@@ -17,7 +17,7 @@ function fixture({ua='Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 CriOS/140.0 Mobi
   const navigator={userAgent:ua,maxTouchPoints:5,standalone};
   const window={matchMedia:()=>({matches:standalone}),addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)};
   const fetch=async(url,init)=>{requests.push({url,init});return Response.json({policy:{latestVersion:'1.0.2',updateUrl:release}});};
-  const deps={react,'react/jsx-runtime':jsx,'@/lib/trade-browser-device':{tradeBrowserDevice:()=>tradeBrowserDevice(navigator)},'./FieldAppDownload.module.css':{default:{}}};
+  const deps={react,'react/jsx-runtime':jsx,'@/lib/trade-notification-client':{tradeBrowserDevice:()=>tradeBrowserDevice(navigator)}};
   const exports={};Function('require','exports','window','navigator','fetch','requestAnimationFrame','cancelAnimationFrame',compiled)(id=>{assert.ok(deps[id],id);return deps[id];},exports,window,navigator,fetch,fn=>{frames.push(fn);return frames.length;},()=>{});
   const render=()=>{cursor=0;const tree=exports.FieldAppDownload();for(const fn of pending.splice(0))fn();for(const fn of frames.splice(0))fn();return tree;};
   return {requests,exports,emit:(name,event)=>listeners.get(name)?.(event),async settle(){let tree;for(let i=0;i<5;i++){tree=render();await tick();}return tree;},dispose(){for(const effect of effects)effect?.cleanup?.();}};

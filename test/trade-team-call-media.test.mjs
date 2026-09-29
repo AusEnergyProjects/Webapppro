@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openTeamCallMedia,TeamCallRinger,teamCallMediaConstraints,teamCallCameraConstraints,teamCallMediaError,teamCallNeedsPermission,teamCallPolicyBlocked,teamCallPermissionState,teamCallPermissionSteps} from '../src/lib/trade-team-call-media.ts';
-import {tradeBrowserDevice} from '../src/lib/trade-browser-device.ts';
+import {tradeBrowserDevice} from '../src/lib/trade-notification-client.ts';
 
 test('voice calling requests no camera and video starts with the front camera',()=>{
   assert.equal(teamCallMediaConstraints('audio').video,false);

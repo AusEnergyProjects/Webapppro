@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { FieldAppDownload } from "@/components/FieldAppDownload";
-import styles from "@/components/FieldAppDownload.module.css";
 
 export const metadata: Metadata = {
   title: "TLink app",
@@ -16,9 +15,9 @@ export const metadata: Metadata = {
 };
 
 export default function FieldAppPage() {
-  return <main className={styles.page}>
-    <header className={styles.header}><span className={styles.logo} aria-hidden="true" /><div><h1>Get TLink</h1><p>Your team and your work, together.</p></div></header>
+  return <main className="tlink-install-page">
+    <header className="tlink-install-header"><span className="tlink-install-logo" aria-hidden="true" /><div><h1>Get TLink</h1><p>Your team and your work, together.</p></div></header>
     <FieldAppDownload />
-    <p className={styles.footer}>Your business and saved permissions stay the same on every device.</p>
+    <p className="tlink-install-footer">Your business and saved permissions stay the same on every device.</p>
   </main>;
 }

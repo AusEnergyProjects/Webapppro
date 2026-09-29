@@ -157,7 +157,7 @@ test('inherited or embedded document policy denial offers a full-document calls 
   await f.begin('thread-1234','video');
   assert.deepEqual(f.state.PermissionHelp,{mode:'video',denied:false,policyBlocked:true});assert.match(f.state.Notice,/Open TLink directly/);
   assert.doesNotMatch(f.state.Notice,/settings/);assert.deepEqual(f.order,['media']);
-  assert.match(source,/<a className=\{styles\.directLink\} href=\{`\/direct-trade\/messages\?threadId=\$\{encodeURIComponent\(retry\.threadId\)\}/);
+  assert.match(source,/<a className="tlink-call-direct-link" href=\{`\/direct-trade\/messages\?threadId=\$\{encodeURIComponent\(retry\.threadId\)\}/);
   assert.match(source,/target=\{openDirectInNewTab \? "_blank" : undefined\} rel="noopener noreferrer"/);
   assert.match(source,/browser\.embedded \|\| typeof window !== "undefined" && window\.top !== window/);
 });
