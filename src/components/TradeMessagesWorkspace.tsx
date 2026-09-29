@@ -6,10 +6,10 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { normalizeAustralianMobile } from "@/lib/service-reminder-delivery";
 import { TradeCustomerSmsPanel } from "./TradeCustomerSmsPanel";
-import { TradeSmsDashboard } from "./TradeSmsDashboard";
 import TradeMessageAttachments, { TradeMessageAttachmentList } from "./TradeMessageAttachments";
 import TradeTeamAvatar from "./TradeTeamAvatar";
 import { TradeTeamCallButtons } from "./TradeTeamCallProvider";
@@ -20,6 +20,8 @@ import { safeMessageLink } from "@/lib/trade-message-job-files";
 import type { TradeTeamPresenceStatus } from "@/lib/trade-team-presence";
 import type { MessageAttachment, MessageMediaAuth } from "@/lib/trade-message-media";
 import styles from "./TradeMessagesWorkspace.module.css";
+
+const TradeSmsDashboard = dynamic(() => import("./TradeSmsDashboard").then(module => module.TradeSmsDashboard), { loading: () => <p role="status">Loading SMS account...</p> });
 
 type Member = { id: string; name: string; isOwner?: boolean; active?: boolean; avatarRevision?: string; presence?: TradeTeamPresenceStatus };
 type Thread = { id: string; kind: string; subject: string; latest: string; latestSender: string; unread: number; members: Member[] };

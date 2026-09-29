@@ -33,7 +33,7 @@ function harness(component, responder, props = {}) {
   const user = { getIdToken: async () => "fixture-token" };
   const router = { push() {} }, alerts = { refresh() {}, setActiveThread() {} };
   const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/trade-sms" ? sms : id === "@/lib/service-reminder-delivery" ? reminders : id === "@/lib/trade-follow-ups" ? followUps
-    : id === "next/navigation" ? { useRouter: () => router } : id === "./TradeMessageAlerts" ? { useTradeMessageAlerts: () => alerts }
+    : id === "next/navigation" ? { useRouter: () => router } : id === "next/dynamic" ? { default: load => { void load().then(component => assert.equal(component, fixtureComponents.TradeSmsDashboard)); return fixtureComponents.TradeSmsDashboard; } } : id === "./TradeMessageAlerts" ? { useTradeMessageAlerts: () => alerts }
     : id === "./TradeSmsDashboard" || id === "./TradeSmsAutomationPanel" ? fixtureComponents : id === "./TradeEmailSettings" ? { TRADE_EMAIL_SETTINGS_HREF: "/settings" }
     : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : {};
   const fetch = async (url, init) => { const payload = init.body ? JSON.parse(init.body) : null; requests.push({ url, init, payload }); return responder(payload, requests); };
