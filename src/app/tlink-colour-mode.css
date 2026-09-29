@@ -1117,6 +1117,16 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-day-track.tod
   color: var(--trade-ink);
 }
 
+.trade-portal-shell :is(.crm-job-booking-form, .schedule-workspace) :is(button.btn, button.primary):disabled {
+  background: var(--trade-line);
+  border-color: var(--trade-line);
+  box-shadow: none;
+  color: var(--trade-ink);
+  cursor: not-allowed;
+  opacity: 1;
+  transform: none;
+}
+
 .trade-portal-shell :is(.schedule-timetable-scroll, .schedule-time-rail, .schedule-day-track) {
   border-color: var(--trade-line);
 }
