@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { tradeTeamPresenceStatus, type TradeTeamPresence, type TradeTeamPresenceStatus } from "@/lib/trade-team-presence";
-import styles from "./TradeTeamPresence.module.css";
 
 export default function TradeTeamPresence({ getAuthHeaders }: { getAuthHeaders: () => Promise<Record<string,string>> }) {
   const fetch = useTradeBusinessFetch(), authentication = useRef(getAuthHeaders);
@@ -57,16 +56,16 @@ export default function TradeTeamPresence({ getAuthHeaders }: { getAuthHeaders: 
     finally { working.current = false; if (generation.current === epoch) setSaving(false); }
   };
 
-  return <div className={styles.presence}>
-    <label className={styles.control} title="Online: available for calls. Busy or Offline: no incoming calls. Messages still arrive.">
-      <span className={`${styles.dot} ${status ? styles[status] : ""}`} aria-hidden="true" />
-      <span className={styles.label}>My status</span>
+  return <div className="tlink-presence-presence">
+    <label className="tlink-presence-control" title="Online: available for calls. Busy or Offline: no incoming calls. Messages still arrive.">
+      <span className={`tlink-presence-dot ${status ? `tlink-presence-${status}` : ""}`} aria-hidden="true" />
+      <span className="tlink-presence-label">My status</span>
       <select aria-label="My call status" value={status || ""} disabled={saving || status === null} onChange={event => void change(tradeTeamPresenceStatus(event.target.value))}>
         {status === null && <option value="">Loading...</option>}
         <option value="online">Online</option><option value="busy">Busy</option><option value="offline">Offline</option>
       </select>
     </label>
-    <span className={styles.help} role="status">{saving ? "Saving..." : status === "online" ? "Available for calls" : status ? "Calls off. Messages on." : ""}</span>
-    {error && <span className={styles.error} role="alert">{error} <button type="button" disabled={saving} onClick={() => void refresh()}>Retry</button></span>}
+    <span className="tlink-presence-help" role="status">{saving ? "Saving..." : status === "online" ? "Available for calls" : status ? "Calls off. Messages on." : ""}</span>
+    {error && <span className="tlink-presence-error" role="alert">{error} <button type="button" disabled={saving} onClick={() => void refresh()}>Retry</button></span>}
   </div>;
 }

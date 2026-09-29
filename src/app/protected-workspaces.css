@@ -2897,3 +2897,25 @@ html[data-tlink-colour-mode="night"] .tlink-call-dock {
   .tlink-team-shell .team-job-focus select { font-size: 16px; }
   .tlink-team-footer { padding: 0 14px 20px; }
 }
+
+/* TradeTeamPresence */
+.tlink-presence-presence { display: grid; gap: 3px; color: var(--trade-ink, #163e37); font-size: 13px; }
+.tlink-presence-control { display: flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 9px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 9px; background: var(--trade-surface, #fff); }
+.tlink-presence-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #8a939c; }
+.tlink-presence-dot.online { background: #21a676; }
+.tlink-presence-dot.busy { background: #dc8b21; }
+.tlink-presence-dot.offline { background: #8a939c; }
+.tlink-presence-label { font-size: 12px; color: var(--trade-muted, #60736c); }
+.tlink-presence-control select { min-width: 76px; min-height: 38px; padding: 0 2px; border: 0; font: inherit; font-weight: 600; color: var(--trade-ink, #163e37); background: var(--trade-surface, #fff); cursor: pointer; }
+.tlink-presence-control select:disabled { opacity: .6; cursor: wait; }
+.tlink-presence-control select:focus-visible, .tlink-presence-error button:focus-visible { outline: 3px solid var(--trade-accent-readable, #087f68); outline-offset: 2px; }
+.tlink-presence-help { font-size: 11px; line-height: 1.3; color: var(--trade-muted, #60736c); }
+.tlink-presence-error { max-width: 230px; font-size: 12px; line-height: 1.4; }
+.tlink-presence-error button { min-height: 32px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 6px; color: inherit; background: var(--trade-surface, #fff); font: inherit; cursor: pointer; }
+@media(max-width:600px) { .tlink-presence-label { display: none; } }
+
+/* TradeMessageAlerts */
+.tlink-message-alert-badge{display:inline-flex;align-items:center;justify-content:center;min-width:1.35rem;height:1.35rem;padding:0 .35rem;margin-left:.45rem;border-radius:999px;background:#6ce5be;color:#07362d;font:700 .72rem/1 system-ui;vertical-align:middle}
+.tlink-message-alert-toast{position:fixed;z-index:1100;right:1rem;top:6rem;display:flex;align-items:center;gap:.8rem;max-width:min(420px,calc(100vw - 2rem));padding:1rem;border:1px solid var(--trade-line,#b6d3cb);border-radius:16px;background:var(--trade-surface,#fff);color:var(--trade-ink,#123c34);box-shadow:0 10px 40px #001c2433;font-family:inherit}
+.tlink-message-alert-toast>div{display:grid;gap:.2rem;min-width:0}.tlink-message-alert-toast strong{font-size:.95rem;overflow-wrap:anywhere}.tlink-message-alert-toast span{font-size:.85rem}.tlink-message-alert-toast button{flex-shrink:0;border:0;border-radius:9px;background:#087859;color:white;padding:.65rem .8rem;font-family:inherit;font-size:.85rem;font-weight:600;line-height:1.2;cursor:pointer}.tlink-message-alert-toast .tlink-message-alert-dismiss{background:transparent;color:inherit;padding:.4rem;font-size:1.4rem}.tlink-message-alert-toast button:focus-visible{outline:3px solid #63d8bc;outline-offset:3px}
+@media(max-width:600px){.tlink-message-alert-toast{top:auto;bottom:1rem;left:1rem;right:1rem;gap:.5rem}}

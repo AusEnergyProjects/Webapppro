@@ -4,7 +4,6 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { User } from "firebase/auth";
 import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 import type { MessageMediaAuth } from "@/lib/trade-message-media";
-import styles from "./TradeMessageAlerts.module.css";
 
 type UnreadThread = { id: string; name: string; unread: number; sequence: number; latestAt: string };
 type AlertState = { unreadCount: number; threads: UnreadThread[]; unavailable: boolean; refresh: () => void; open: (id: string) => void; setActiveThread: (id: string) => void };
@@ -84,10 +83,10 @@ function MessageAlerts({ children, user, getAuthHeaders, enabled = true, onOpen 
 
   return <Context.Provider value={{ ...snapshot, unavailable, refresh, open, setActiveThread }}>
     {children}
-    {notice && <aside className={styles.toast} aria-label="New team message" role="status">
+    {notice && <aside className="tlink-message-alert-toast" aria-label="New team message" role="status">
       <div><strong>{notice.name}</strong><span>{notice.unread === 1 ? "New team message" : `${notice.unread} unread messages`}</span></div>
       <button type="button" onClick={() => open(notice.id)}>Open chat</button>
-      <button type="button" className={styles.dismiss} aria-label="Dismiss message alert" onClick={() => setNotice(null)}>×</button>
+      <button type="button" className="tlink-message-alert-dismiss" aria-label="Dismiss message alert" onClick={() => setNotice(null)}>×</button>
     </aside>}
   </Context.Provider>;
 }
@@ -95,5 +94,5 @@ function MessageAlerts({ children, user, getAuthHeaders, enabled = true, onOpen 
 export function TradeMessageUnreadBadge() {
   const { unreadCount, unavailable } = useTradeMessageAlerts();
   if (!unreadCount && !unavailable) return null;
-  return <b className={styles.badge} title={unavailable ? "Message count could not refresh. Open Messages to check." : `${unreadCount} unread team messages`} aria-label={unavailable ? "Message count needs refreshing" : `${unreadCount} unread team messages`}>{unreadCount > 99 ? "99+" : unreadCount || "!"}</b>;
+  return <b className="tlink-message-alert-badge" title={unavailable ? "Message count could not refresh. Open Messages to check." : `${unreadCount} unread team messages`} aria-label={unavailable ? "Message count needs refreshing" : `${unreadCount} unread team messages`}>{unreadCount > 99 ? "99+" : unreadCount || "!"}</b>;
 }
