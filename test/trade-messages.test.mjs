@@ -34,6 +34,10 @@ function fixture() {
     CREATE TABLE trade_crm_job_details(work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,customer_source TEXT);
     CREATE TABLE trade_crm_quote_questions(id TEXT,work_order_id TEXT,firebase_uid TEXT,question TEXT,status TEXT,asked_at TEXT);
     CREATE TABLE trade_sms_messages(id TEXT PRIMARY KEY,firebase_uid TEXT,customer_id TEXT,work_order_id TEXT,body TEXT,created_at TEXT);
+    CREATE TABLE trade_sms_connections(id TEXT PRIMARY KEY,firebase_uid TEXT,provider TEXT,status TEXT,phone_number TEXT,account_sid TEXT);
+    CREATE TABLE trade_sms_accounts(owner_uid TEXT PRIMARY KEY,status TEXT,subaccount_id TEXT);
+    CREATE TABLE trade_sms_number_orders(id TEXT PRIMARY KEY,owner_uid TEXT,connection_id TEXT,number TEXT,status TEXT,renewal_at TEXT,inbound_rule_id TEXT,receipt_rule_id TEXT);
+    CREATE TABLE trade_sms_ledger(id TEXT PRIMARY KEY,owner_uid TEXT,amount_micro INTEGER);
     INSERT INTO trade_crm_customers VALUES('customer','business-a','Test','Customer','','0412 345 678','active'),('foreign-customer','business-b','Other','Customer','','0412 987 654','active');
     INSERT INTO trade_work_orders VALUES('job-1','business-a','installer','active','manual','jane','TLJ-ONE12345','2026-01-01'),('job-2','business-a','installer','active','manual','john','TLJ-TWO12345','2026-01-01'),('private-job','business-a','installer','active','opportunity','jane','TLJ-SEC12345','2026-01-01');
     INSERT INTO trade_crm_job_details VALUES('job-1','business-a','customer','internal'),('job-2','business-a','customer','internal'),('private-job','business-a','customer','platform_private');
@@ -50,6 +54,87 @@ function fixture() {
 }
 const request = number => `message-request-${String(number).padStart(8, "0")}`;
 const create = (f, actor, memberIds, subject = "", requestId = request(1)) => f.server.createTeamConversation(actor, { memberIds, subject, requestId }, f.db);
+
+function managedSms(f) {
+  f.sqlite.exec(`INSERT INTO trade_sms_connections VALUES('sms-connection','business-a','clicksend','connected','+61400000001','123');
+    INSERT INTO trade_sms_accounts VALUES('business-a','ready','123');
+    INSERT INTO trade_sms_number_orders VALUES('sms-rental','business-a','sms-connection','+61400000001','active','2099-01-01T00:00:00.000Z','inbound-1','receipt-1');`);
+}
+
+test("message overview shows exact owner credit before setup while texting remains locked and team chat stays available", async () => {
+  const f = fixture(); try {
+    f.sqlite.exec("INSERT INTO trade_sms_ledger VALUES('topup','business-a',50000000),('part','business-a',-99000),('foreign-credit','business-b',200000000)");
+    const thread = await create(f, owner, ["jane"]);
+    await f.server.sendTeamMessage(owner, thread.id, "Team chat works before SMS setup", request(902), f.db);
+    const overview = await f.server.messagesWorkspace(owner, "", 1, f.db);
+    assert.equal(overview.smsReady, false); assert.equal(overview.smsBalanceMicro, 49_901_000); assert.equal(overview.canUseSms, true);
+    assert.equal(overview.threads[0].latest, "Team chat works before SMS setup"); assert.equal(overview.canUseQuotes, true);
+    assert.equal((await f.server.messagesWorkspace(foreign, "", 1, f.db)).smsBalanceMicro, 200_000_000);
+  } finally { f.close(); }
+});
+
+test("managed SMS overview requires the owned connected Australian number, ready account and complete paid rental routing", async () => {
+  const f = fixture(); try {
+    managedSms(f);
+    assert.equal((await f.server.messagesWorkspace(owner, "", 1, f.db)).smsReady, true);
+    assert.equal((await f.server.messagesWorkspace(owner, "", 1, f.db)).smsBalanceMicro, 0, "An empty wallet must not hide a ready number");
+    assert.equal((await f.server.messagesWorkspace(foreign, "", 1, f.db)).smsReady, false);
+    for (const [mutation, restore] of [
+      ["UPDATE trade_sms_connections SET status='connecting'", "UPDATE trade_sms_connections SET status='connected'"],
+      ["UPDATE trade_sms_connections SET phone_number='+15551234567'", "UPDATE trade_sms_connections SET phone_number='+61400000001'"],
+      ["UPDATE trade_sms_accounts SET status='payment_review'", "UPDATE trade_sms_accounts SET status='ready'"],
+      ["UPDATE trade_sms_accounts SET subaccount_id='456'", "UPDATE trade_sms_accounts SET subaccount_id='123'"],
+      ["UPDATE trade_sms_number_orders SET status='registering'", "UPDATE trade_sms_number_orders SET status='active'"],
+      ["UPDATE trade_sms_number_orders SET status='cancel_requested'", "UPDATE trade_sms_number_orders SET status='active'"],
+      ["UPDATE trade_sms_number_orders SET status='suspended'", "UPDATE trade_sms_number_orders SET status='active'"],
+      ["UPDATE trade_sms_number_orders SET renewal_at='2000-01-01T00:00:00.000Z'", "UPDATE trade_sms_number_orders SET renewal_at='2099-01-01T00:00:00.000Z'"],
+      ["UPDATE trade_sms_number_orders SET inbound_rule_id=''", "UPDATE trade_sms_number_orders SET inbound_rule_id='inbound-1'"],
+      ["UPDATE trade_sms_number_orders SET receipt_rule_id=''", "UPDATE trade_sms_number_orders SET receipt_rule_id='receipt-1'"],
+      ["UPDATE trade_sms_number_orders SET owner_uid='business-b'", "UPDATE trade_sms_number_orders SET owner_uid='business-a'"],
+      ["UPDATE trade_sms_number_orders SET connection_id='foreign-connection'", "UPDATE trade_sms_number_orders SET connection_id='sms-connection'"],
+      ["UPDATE trade_sms_number_orders SET number='+61400000002'", "UPDATE trade_sms_number_orders SET number='+61400000001'"],
+    ]) {
+      f.sqlite.exec(mutation);
+      assert.equal((await f.server.messagesWorkspace(owner, "", 1, f.db)).smsReady, false, mutation);
+      f.sqlite.exec(restore);
+    }
+    assert.equal((await f.server.messagesWorkspace(owner, "", 1, f.db)).smsReady, true);
+  } finally { f.close(); }
+});
+
+test("legacy connected Twilio number remains ready without a managed account or rental", async () => {
+  const f = fixture(); try {
+    f.sqlite.exec("INSERT INTO trade_sms_connections VALUES('legacy','business-a','twilio','connected','+61400000001','legacy-account')");
+    assert.equal((await f.server.messagesWorkspace(owner, "", 1, f.db)).smsReady, true);
+    f.sqlite.exec("UPDATE trade_sms_connections SET status='disconnected'");
+    assert.equal((await f.server.messagesWorkspace(owner, "", 1, f.db)).smsReady, false);
+  } finally { f.close(); }
+});
+
+test("SMS overview exposes readiness and credit only to currently permitted staff and never exposes number or credentials", async () => {
+  const f = fixture(); try {
+    managedSms(f); f.sqlite.exec("INSERT INTO trade_sms_ledger VALUES('topup','business-a',12000000)");
+    const permitted = await f.server.messagesWorkspace(jane, "", 1, f.db);
+    assert.equal(permitted.smsReady, true); assert.equal(permitted.smsBalanceMicro, 12_000_000);
+    assert.equal(permitted.canCreateSmsContact, false);
+    assert.doesNotMatch(JSON.stringify(permitted), /\+61400000001|sms-connection|subaccount|credentials|callback|apiKey/);
+    const quoteOnly = await f.server.messagesWorkspace({ ...jane, canSendSms: false, canViewQuotes: true }, "", 1, f.db);
+    assert.equal(quoteOnly.smsReady, false); assert.equal(quoteOnly.smsBalanceMicro, null); assert.equal(quoteOnly.canUseQuotes, true);
+    f.sqlite.exec("UPDATE trade_team_members SET can_send_sms=0 WHERE id='jane'");
+    const revoked = await f.server.messagesWorkspace(jane, "", 1, f.db);
+    assert.equal(revoked.smsReady, false); assert.equal(revoked.smsBalanceMicro, null);
+    assert.equal((await f.server.messagesWorkspace(owner, "", 1, f.db)).smsBalanceMicro, 12_000_000);
+  } finally { f.close(); }
+});
+
+test("SMS overview never substitutes a zero balance when the ledger read fails", async () => {
+  const f = fixture(); try {
+    f.sqlite.exec("DROP TABLE trade_sms_ledger");
+    await assert.rejects(f.server.messagesWorkspace(owner, "", 1, f.db), /no such table: trade_sms_ledger/);
+    const forbidden = await f.server.messagesWorkspace({ ...jane, canSendSms: false }, "", 1, f.db);
+    assert.equal(forbidden.smsReady, false); assert.equal(forbidden.smsBalanceMicro, null);
+  } finally { f.close(); }
+});
 
 test("global unread counts include every conversation, exclude sent messages, and respect business membership and read receipts", async () => {
   const f = fixture(); try {

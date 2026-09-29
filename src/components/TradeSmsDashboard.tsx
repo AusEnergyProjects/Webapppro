@@ -27,8 +27,8 @@ const money = (micro: number) => new Intl.NumberFormat("en-AU", { style: "curren
 const blankRegistration: Registration = { businessName: "", contactName: "", email: "", phone: "", address: "", suburb: "", state: "", postcode: "", useCase: "Appointment reminders and customer service conversations." };
 const orderLabel: Record<string, string> = { reserved: "Setup in progress", pending: "Setup in progress", provisioning: "Setting up number", purchasing: "Setting up number", registering: "Registration in progress", active: "Number ready", connected: "Number ready", review: "Setup needs review", uncertain: "Setup needs review", reconciliation_required: "Setup needs review", price_review_required: "Rental price needs review", suspended: "Add credit to resume", cancel_requested: "Cancellation requested", cancel_pending: "Cancellation requested", cancellation_pending: "Cancellation requested", cancelled: "Rental ended", rejected: "Number request declined", failed: "Setup needs attention" };
 
-export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, canManage = true }: {
-  user?: User; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenAutomations?: () => void; canManage?: boolean;
+export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, canManage = true, visible = true }: {
+  user?: User; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenAutomations?: () => void; canManage?: boolean; visible?: boolean;
 }) {
   const fetch = useTradeBusinessFetch();
   const [account, setAccount] = useState<Account | null>(null);
@@ -40,7 +40,7 @@ export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, can
   const [registration, setRegistration] = useState<Registration>(blankRegistration);
   const [reviewing, setReviewing] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [showTopUp, setShowTopUp] = useState(false);
+  const [showTopUp, setShowTopUp] = useState(true);
   const [amountCents, setAmountCents] = useState(5000);
   const [pendingTopUp, setPendingTopUp] = useState<{ amountCents: number; requestId: string } | null>(null);
   const [pendingRental, setPendingRental] = useState<PendingRental | null>(null);
@@ -48,6 +48,8 @@ export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, can
   const active = useRef(true);
   const inFlight = useRef(false);
   const generation = useRef(0);
+  const previousVisible = useRef(visible);
+  const refreshAfterReopen = useRef(false);
   const selected = numbers?.find(item => item.number === selectedNumber);
   const initialReservationMicro = selected ? Math.max(selected.totalMicro, selected.setupMicro + selected.monthlyMicro) : 0;
   const availableMicro = account ? account.wallet.balanceMicro : 0;
@@ -85,7 +87,7 @@ export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, can
     return () => { controller.abort(); active.current = false; generation.current = epoch + 1; };
   }, [load, canManage]);
 
-  async function run(action: string, operation: (current: () => boolean) => Promise<void>) {
+  const run = useCallback(async (action: string, operation: (current: () => boolean) => Promise<void>) => {
     if (inFlight.current) return;
     const epoch = generation.current;
     const current = () => active.current && generation.current === epoch;
@@ -93,7 +95,23 @@ export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, can
     try { await operation(current); }
     catch (error) { if (current()) setNotice(error instanceof Error ? error.message : "SMS could not be updated. Refresh to check."); }
     finally { if (current()) { inFlight.current = false; setBusy(""); } }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (visible && !previousVisible.current) refreshAfterReopen.current = true;
+    previousVisible.current = visible;
+    if (!visible || !canManage || loading || busy || !refreshAfterReopen.current) return;
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled || inFlight.current || !active.current) return;
+      refreshAfterReopen.current = false;
+      return run("refresh", async current => {
+        const next = await load();
+        if (current()) setAccount(next);
+      });
+    });
+    return () => { cancelled = true; };
+  }, [visible, canManage, loading, busy, load, run]);
 
   function refresh() { void run("refresh", async current => { const next = await load(); if (current()) { setAccount(next); setLoading(false); } }); }
   function findNumbers() { void run("numbers", async current => {
@@ -157,7 +175,7 @@ export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, can
 
   if (!canManage) return null;
   return <section className={styles.dashboard} aria-label="Business SMS dashboard">
-    <header className={styles.header}><div><span className={styles.eyebrow}>TLINK SMS</span><h3>Your business. One number.</h3><p>Text customers, read their replies and keep every conversation together.</p></div><span className={styles.price}>{legacy ? "Your provider plan" : "9¢ + GST"}<span>{legacy ? "Billed directly by Twilio" : "per SMS part"}</span></span></header>
+    <header className={styles.header}><div><h3>SMS account</h3><p>Your number, credit and billing.</p></div><span className={styles.price}>{legacy ? "Your provider plan" : "9¢ + GST"}<span>{legacy ? "Billed directly by Twilio" : "per SMS part"}</span></span></header>
     {notice && <p className={styles.notice} role="status">{notice}</p>}
     {loading ? <p className={styles.notice} role="status">Loading your SMS account...</p> : !account ? <button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={refresh}>Reload SMS account</button> : legacy ? <>
       <TradeLegacySmsConnectionPanel user={user} getAuthHeaders={getAuthHeaders} onDisconnected={refresh} />
@@ -165,9 +183,9 @@ export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, can
     </> : <>
       {!ready && <p className={styles.notice}>TLink SMS setup is being completed. Number rental and sending will be available once the service is connected.</p>}
       <div className={styles.summary}>
-        <div className={styles.stat}><span>Business SMS number</span><strong>{account.connection?.number || account.order?.number || "Your number starts here"}</strong><small>{connected ? "Ready for two-way conversations" : account.order ? orderLabel[account.order.status] || "Setup in progress" : "Australian numbers only"}</small></div>
-        <div className={styles.stat}><span>Available SMS credit</span><strong>{money(availableMicro)}</strong><small>{account.wallet.reservedMicro > 0 ? `${money(account.wallet.reservedMicro)} reserved for processing` : "Prepaid. You control your spend."}</small></div>
-        <div className={styles.actions}><button type="button" className={styles.primary} disabled={Boolean(busy) || !account.billingConfigured} onClick={() => setShowTopUp(value => !value)}>Top up credit</button><button type="button" className={styles.textButton} disabled={Boolean(busy)} onClick={refresh}>{busy === "refresh" ? "Refreshing..." : "Refresh balance"}</button></div>
+        <div className={styles.stat}><span>Business number</span><strong>{account.connection?.number || account.order?.number || "Choose a number"}</strong><small>{connected ? "Connected · Two-way SMS" : account.order ? orderLabel[account.order.status] || "Setup in progress" : "Australian numbers only"}</small></div>
+        <div className={styles.stat}><span>Available credit</span><strong>{money(availableMicro)}</strong><small>{account.wallet.reservedMicro > 0 ? `${money(account.wallet.reservedMicro)} reserved for processing` : "Prepaid balance"}</small></div>
+        <div className={styles.actions}><button type="button" className={styles.primary} disabled={Boolean(busy) || !account.billingConfigured} onClick={() => setShowTopUp(true)}>Top up credit</button><button type="button" className={styles.textButton} disabled={Boolean(busy)} onClick={refresh}>{busy === "refresh" ? "Refreshing..." : "Refresh balance"}</button></div>
       </div>
       {!account.billingConfigured && <p className={styles.hint}>Secure top-ups are awaiting TLink account setup. No payment can be taken yet.</p>}
       {!account.urlsEnabled && <p className={styles.hint}>SMS links are awaiting provider approval. Prepare review requests now; use texts without links until approval is complete.</p>}
@@ -179,7 +197,7 @@ export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, can
         {pendingTopUp && <p className={styles.hint}>This top-up request is saved. Continue the same checkout to avoid creating another payment request.</p>}
         <div className={styles.buttonRow}><button type="button" className={styles.primary} disabled={Boolean(busy) || !account.billingConfigured} onClick={topUp}>{busy === "topup" ? "Opening checkout..." : pendingTopUp ? `Continue $${pendingTopUp.amountCents / 100} checkout` : `Continue with $${amountCents / 100}`}</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={() => setShowTopUp(false)}>Close</button></div>
       </div>}
-      {!connected && !orderOutstanding && <ol className={styles.steps} aria-label="SMS setup steps"><li><span>1</span><div><strong>Choose your number</strong><small>One Australian number for your business.</small></div></li><li><span>2</span><div><strong>Add credit</strong><small>Cover your rental, then pay as you text.</small></div></li><li><span>3</span><div><strong>Start a conversation</strong><small>Your customers can reply to you.</small></div></li></ol>}
+      {!connected && !orderOutstanding && <ol className={styles.steps} aria-label="SMS setup steps"><li><span>1</span><strong>Choose a number</strong></li><li><span>2</span><strong>Add credit</strong></li><li><span>3</span><strong>Send &amp; receive</strong></li></ol>}
       {account.order && <div className={styles.rentalStatus}><div><h4>{orderLabel[account.order.status] || "Number setup"}</h4><p>{account.order.number} · {money(account.order.monthlyMicro)} per month including GST</p>{account.order.renewalAt && <small>Next rental renewal (AEST): {new Date(account.order.renewalAt).toLocaleDateString("en-AU", { timeZone: "Australia/Brisbane" })}</small>}
         {typeof account.order.initialChargeMicro === "number" ? <p className={styles.hint}>Confirmed initial charge: {money(account.order.initialChargeMicro)} including GST.{account.order.initialReservedMicro > account.order.initialChargeMicro ? account.order.initialChargeSettled ? ` ${money(account.order.initialReservedMicro - account.order.initialChargeMicro)} of unused reservation returned to your SMS credit.` : ` ${money(account.order.initialReservedMicro - account.order.initialChargeMicro)} of unused reservation will return to your SMS credit once number setup is confirmed.` : ""}</p>
           : account.order.initialReservedMicro > 0 && !["cancelled", "rejected"].includes(account.order.status) && <p className={styles.hint}>Initial rental reservation: up to {money(account.order.initialReservedMicro)}. Unused credit is returned once the provider confirms the initial prorated charge.</p>}
@@ -187,7 +205,7 @@ export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, can
         {cancelConfirm && <div className={styles.confirm}><p>Request cancellation of {account.order.number}? Sending and future rental renewals will stop according to the confirmed cancellation. Your message history stays available. Release requires confirmation from the provider.</p><div className={styles.buttonRow}><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={cancelRental}>{busy === "cancel" ? "Requesting..." : "Request cancellation"}</button><button type="button" className={styles.textButton} disabled={Boolean(busy)} onClick={() => setCancelConfirm(false)}>Keep number</button></div></div>}
       </div>}
       {!account.connection && !orderOutstanding && <div className={styles.onboarding}>
-        <div className={styles.sectionTitle}><div><h4>Make it your number</h4><p>Choose an Australian number to send from and receive replies.</p></div><button type="button" className={styles.secondary} disabled={Boolean(busy) || !ready || Boolean(pendingRental)} onClick={findNumbers}>{busy === "numbers" ? "Finding numbers..." : numbers ? "Refresh numbers" : "Find an Australian number"}</button></div>
+        <div className={styles.sectionTitle}><div><h4>Choose your number</h4><p>One Australian number for customer texts and replies.</p></div><button type="button" className={styles.secondary} disabled={Boolean(busy) || !ready || Boolean(pendingRental)} onClick={findNumbers}>{busy === "numbers" ? "Finding numbers..." : numbers ? "Refresh numbers" : "Find an Australian number"}</button></div>
         {numbers && numbers.length === 0 && <p className={styles.notice}>No Australian numbers are available right now. Refresh later to check again.</p>}
         {numbers && numbers.length > 0 && <form className={styles.rentalForm} onSubmit={reviewRental}>
           <label><span>Your Australian number</span><select required value={selectedNumber} disabled={Boolean(busy) || reviewing || Boolean(pendingRental)} onChange={event => { setSelectedNumber(event.target.value); setTermsAccepted(false); }}><option value="">Choose a number</option>{numbers.map(number => <option value={number.number} key={number.number}>{number.number} · {money(number.monthlyMicro)}/month</option>)}</select></label>
@@ -202,7 +220,7 @@ export function TradeSmsDashboard({ user, getAuthHeaders, onOpenAutomations, can
           </>}
         </form>}
       </div>}
-      {onOpenAutomations && <div className={styles.automation}><div><h4>A little follow-up goes a long way</h4><p>Set appointment reminders, after-visit check-ins and review requests. You choose the timing and recipients with permission.</p></div><button type="button" className={styles.secondary} onClick={onOpenAutomations}>Set up auto texts</button></div>}
+      {onOpenAutomations && <div className={styles.automation}><div><h4>Automatic texts</h4><p>Appointment reminders and customer follow-ups.</p></div><button type="button" className={styles.secondary} onClick={onOpenAutomations}>Set up auto texts</button></div>}
       {account.ledger.length > 0 && <details className={styles.activity}><summary>Recent credit activity</summary><ul>{account.ledger.map(entry => <li key={entry.id}><div><strong>{entry.description}</strong><small>{new Date(entry.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small></div><span>{entry.amountMicro > 0 ? "+" : ""}{money(entry.amountMicro)}</span></li>)}</ul></details>}
     </>}
   </section>;

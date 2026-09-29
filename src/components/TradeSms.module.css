@@ -63,3 +63,117 @@
   .composerFooter button { align-self: stretch; width: 100%; }
   .messages > li { max-width: 96%; }
 }
+
+/* Customer texts use blue. Connection settings retain the shared business theme. */
+.customerConversation {
+  --sms-blue: #096eea;
+  --sms-soft: #edf5ff;
+  --sms-soft-ink: #1856a2;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-radius: 20px;
+  overflow: hidden;
+}
+.conversationHeading { align-items: center; display: flex; gap: 12px; padding: 20px 24px 16px; }
+.conversationIcon { align-items: center; background: var(--sms-soft); border-radius: 15px; color: var(--sms-blue); display: flex; flex: 0 0 44px; height: 44px; justify-content: center; }
+.conversationIcon svg { height: 23px; width: 23px; }
+.conversationIdentity { display: grid; gap: 3px; min-width: 0; }
+.conversationIdentity h4 { font-size: 17px; font-weight: 750; letter-spacing: -.025em; }
+.conversationIdentity small { font-size: 12px; }
+.customerConversation .refreshConversation { background: transparent; border-color: transparent; border-radius: 999px; color: var(--sms-soft-ink); font-size: 12px; margin-left: auto; min-height: 40px; padding: 8px 10px; }
+.customerConversation .primary { background: var(--sms-blue); border-radius: 999px; }
+.customerConversation :is(button, input, select, textarea, a, summary):focus-visible { outline-color: var(--sms-blue); }
+.customerConversation summary:focus-visible { outline: 2px solid var(--sms-blue); outline-offset: 4px; }
+.conversationContext { min-width: 0; }
+.conversationContext > .notice, .conversationContext > .consentCard, .conversationContext > .permission { margin: 0 24px 14px; }
+.conversationContext > .notice { border-radius: 14px; font-size: 13px; padding: 14px 16px; }
+.customerConversation .conversationNotice { border-color: color-mix(in srgb, var(--sms-blue) 22%, var(--trade-line, #c9ddd8)); }
+.customerConversation .setupTexting { background: var(--sms-soft); border-color: transparent; color: var(--trade-ink, #123f37); gap: 12px; padding: 22px; }
+.setupTexting strong { font-size: 17px; letter-spacing: -.02em; }
+.setupTexting p { max-width: 540px; }
+.conversationLoading { color: var(--trade-muted, #536963); padding: 36px 24px; }
+.conversationDetails { color: var(--trade-muted, #536963); font-size: 12px; margin: 0 24px; padding-bottom: 14px; }
+.conversationDetails summary { align-items: center; cursor: pointer; display: flex; gap: 7px; list-style: none; min-height: 28px; }
+.conversationDetails summary::-webkit-details-marker { display: none; }
+.conversationDetails p { font-size: 12px; padding-top: 8px; }
+.connectionDot { background: var(--trade-muted, #536963); border-radius: 50%; flex: 0 0 6px; height: 6px; }
+.connectionDot[data-connected="true"] { background: var(--sms-blue); }
+.detailsLabel { color: var(--sms-soft-ink); font-size: 11px; margin-left: auto; }
+.detailsLabel::after { content: "⌄"; margin-left: 6px; }
+.conversationDetails[open] .detailsLabel::after { content: "⌃"; }
+.consentCard { background: var(--sms-soft); border: 1px solid color-mix(in srgb, var(--sms-blue) 18%, transparent); border-radius: 14px; font-size: 13px; padding: 18px; }
+.conversationContext > .permission { border: 0; border-radius: 10px; color: var(--trade-muted, #536963); font-size: 12px; padding: 0 0 8px; }
+.customerConversation .permission summary { font-size: 12px; font-weight: 500; }
+.customerConversation .permission[open] { background: var(--trade-surface-soft, #f3f8f6); padding: 12px; }
+.customerConversation .conversationHistory { border-top: 1px solid var(--trade-line, #c9ddd8); gap: 20px; max-height: 560px; min-height: 300px; overscroll-behavior: contain; padding: 28px 24px; scrollbar-width: thin; }
+.customerConversation .conversationHistory > li { background: transparent; border: 0; border-radius: 0; display: grid; max-width: 78%; min-width: 0; padding: 0; }
+.bubbleSender { color: var(--trade-muted, #536963); font-size: 11px; line-height: 1.4; margin: 0 12px 6px; }
+.customerConversation .messageBubble { background: var(--trade-surface-soft, #f0f2f5); border: 1px solid var(--trade-line, #dce3e8); border-radius: 21px 21px 21px 5px; color: var(--trade-ink, #123f37); font-size: 14px; line-height: 1.6; margin: 0; padding: 12px 17px; white-space: pre-wrap; }
+.customerConversation .outbound .messageBubble { background: var(--sms-blue); border-color: var(--sms-blue); border-radius: 21px 21px 5px 21px; color: #fff; }
+.outbound .bubbleSender, .outbound .bubbleReceipt { text-align: right; }
+.bubbleReceipt { color: var(--trade-muted, #536963); display: flex; flex-wrap: wrap; font-size: 10px; gap: 4px 8px; line-height: 1.5; margin: 7px 10px 0; }
+.outbound .bubbleReceipt { justify-content: flex-end; }
+.customerConversation .bubbleReceipt time { font-size: inherit; }
+.bubbleReceipt span[data-attention="true"] { color: var(--trade-danger, #9d382b); font-weight: 700; }
+.replyDetails { color: var(--trade-muted, #536963); font-size: 11px; margin: 8px 10px 0; }
+.replyDetails summary { cursor: pointer; min-height: 24px; }
+.replyDetails .linkReply { margin-top: 0; }
+.replyDetails .linkReply small, .replyDetails .linkReply label > span { font-size: 11px; }
+.customerConversation .replyDetails .secondary { font-size: 12px; min-height: 38px; }
+.customerConversation .conversationHistory > .empty { align-content: center; align-self: stretch; color: var(--trade-muted, #536963); gap: 10px; justify-items: center; max-width: none; min-height: 250px; padding: 16px; text-align: center; }
+.emptyMessageIcon { align-items: center; background: var(--sms-soft); border-radius: 22px; color: var(--sms-blue); display: flex; height: 68px; justify-content: center; margin-bottom: 5px; width: 68px; }
+.emptyMessageIcon svg { height: 31px; width: 31px; }
+.empty strong { color: var(--trade-ink, #123f37); font-size: 15px; font-weight: 650; }
+.empty > span:last-child { font-size: 12px; line-height: 1.5; }
+.customerConversation .textComposer { border-top: 1px solid var(--trade-line, #c9ddd8); gap: 10px; padding: 16px 24px 20px; }
+.composerToolbar { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
+.composerToolbar label { max-width: min(100%, 290px); }
+.customerConversation .composerToolbar select { background: var(--trade-surface-soft, #f3f8f6); border-color: transparent; border-radius: 999px; font-size: 11px; min-height: 34px; padding: 6px 28px 6px 12px; }
+.composerToolbar > small { font-size: 10px; letter-spacing: .08em; }
+.composerInput { align-items: flex-end; background: var(--trade-field, #fff); border: 1px solid var(--trade-line, #abcac1); border-radius: 24px; display: flex; gap: 8px; padding: 7px; }
+.composerInput:focus-within { border-color: var(--sms-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sms-blue) 12%, transparent); }
+.composerInput label { flex: 1; }
+.customerConversation .composerInput textarea { background: transparent; border: 0; border-radius: 14px; font-size: 14px; line-height: 1.5; max-height: 180px; min-height: 44px; padding: 9px 8px 7px; resize: vertical; }
+.customerConversation .composerInput textarea:focus-visible { outline: none; }
+.customerConversation .sendText { align-self: flex-end; flex: 0 0 auto; font-size: 12px; min-height: 42px; padding: 11px 15px; }
+.sendText::after { content: "↑"; font-size: 16px; line-height: 1; margin-left: 7px; }
+.messagePrice { align-items: center; color: var(--trade-muted, #536963); display: flex; flex-wrap: wrap; font-size: 11px; gap: 4px 10px; justify-content: space-between; padding: 0 4px; }
+.messagePrice small { font-size: 10px; }
+.composerNote { align-items: flex-start; color: var(--trade-muted, #536963); display: flex; font-size: 10px; gap: 14px; justify-content: space-between; padding: 0 4px; }
+.composerNote details { min-width: 0; }
+.composerNote summary { cursor: pointer; line-height: 1.5; }
+.composerNote small { font-size: 10px; }
+.composerNote > small { flex: 0 0 auto; }
+.composerNote details small { display: block; padding-top: 6px; }
+.visuallyHidden { border: 0; clip-path: inset(50%); height: 1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; width: 1px; }
+:global(html[data-tlink-colour-mode="night"]) .customerConversation { --sms-blue: #126ee1; --sms-soft: #132d48; --sms-soft-ink: #a5ceff; }
+:global(html[data-tlink-colour-mode="night"]) .customerConversation .bubbleReceipt span[data-attention="true"] { color: #ffc0b5; }
+@media (max-width: 620px) {
+  .customerConversation { border-radius: 16px; padding: 0; }
+  .conversationHeading { gap: 10px; padding: 16px; }
+  .conversationIcon { border-radius: 13px; flex-basis: 38px; height: 38px; }
+  .conversationIdentity h4 { font-size: 15px; }
+  .conversationIdentity small { font-size: 11px; }
+  .customerConversation .refreshConversation { font-size: 11px; padding: 7px 2px; }
+  .conversationDetails { margin: 0 16px; }
+  .conversationContext > .notice, .conversationContext > .consentCard, .conversationContext > .permission { margin-left: 16px; margin-right: 16px; }
+  .customerConversation .conversationHistory { gap: 18px; max-height: 60dvh; min-height: 250px; padding: 22px 16px; }
+  .customerConversation .conversationHistory > li { max-width: 88%; }
+  .customerConversation .messageBubble { font-size: 13px; padding: 11px 14px; }
+  .customerConversation .textComposer { padding: 14px 12px 16px; }
+  .customerConversation .sendText { font-size: 11px; max-width: 118px; padding: 10px 12px; }
+  .composerToolbar label { max-width: calc(100% - 36px); }
+  .composerInput { gap: 4px; }
+  .messagePrice, .composerNote { padding: 0 3px; }
+}
+.customerConversation.embeddedConversation { border: 0; border-radius: 0; display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; }
+.embeddedConversation .conversationContext { flex: 0 1 auto; max-height: 40%; min-height: 36px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.embeddedConversation .conversationHeading { padding: 2px 16px 0; }
+.embeddedConversation .refreshConversation { min-height: 32px; padding: 5px 8px; }
+.embeddedConversation .conversationDetails { padding-bottom: 6px; }
+.embeddedConversation .permission { margin-bottom: 6px; }
+.customerConversation.embeddedConversation .conversationHistory { flex: 1 1 0; max-height: none; min-height: 0; padding-top: 20px; padding-bottom: 20px; }
+.embeddedConversation .conversationHistory > li { flex: 0 0 auto; }
+.customerConversation.embeddedConversation .conversationHistory > .empty { flex: 1 0 auto; min-height: 160px; }
+.embeddedConversation .textComposer { flex: 0 0 auto; max-height: 60%; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }

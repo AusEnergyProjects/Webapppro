@@ -9,7 +9,6 @@ import type { User } from "firebase/auth";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { normalizeAustralianMobile } from "@/lib/service-reminder-delivery";
-import { TradeCustomerSmsPanel } from "./TradeCustomerSmsPanel";
 import TradeMessageAttachments, { TradeMessageAttachmentList } from "./TradeMessageAttachments";
 import TradeTeamAvatar from "./TradeTeamAvatar";
 import { TradeTeamCallButtons } from "./TradeTeamCallProvider";
@@ -22,13 +21,14 @@ import type { MessageAttachment, MessageMediaAuth } from "@/lib/trade-message-me
 import styles from "./TradeMessagesWorkspace.module.css";
 
 const TradeSmsDashboard = dynamic(() => import("./TradeSmsDashboard").then(module => module.TradeSmsDashboard), { loading: () => <p role="status">Loading SMS account...</p> });
+const TradeCustomerSmsPanel = dynamic(() => import("./TradeCustomerSmsPanel").then(module => module.TradeCustomerSmsPanel), { loading: () => <p role="status">Loading customer conversation...</p> });
 
 type Member = { id: string; name: string; isOwner?: boolean; active?: boolean; avatarRevision?: string; presence?: TradeTeamPresenceStatus };
 type Thread = { id: string; kind: string; subject: string; latest: string; latestSender: string; unread: number; members: Member[] };
 type CustomerThread = { customerId: string; name: string; workOrderId: string; jobNumber: string; latest: string; phone: string };
 type QuoteQuestion = { id: string; workOrderId: string; jobNumber: string; question: string; status: string; askedAt: string };
 type TeamMessage = { id: string; sequence: number; senderName: string; senderMemberId: string; mine: boolean; body: string; requestId: string; createdAt: string; attachments: MessageAttachment[] };
-type Overview = { memberId: string; canUseSms: boolean; canUseQuotes: boolean; canCreateSmsContact: boolean; canManageTeam: boolean; members: Member[]; threads: Thread[]; hasMore: boolean };
+type Overview = { memberId: string; canUseSms: boolean; smsReady: boolean; smsBalanceMicro: number | null; canUseQuotes: boolean; canCreateSmsContact: boolean; canManageTeam: boolean; members: Member[]; threads: Thread[]; hasMore: boolean };
 type Result = Partial<Overview> & { ok?: boolean; error?: string; id?: string; thread?: Thread; message?: TeamMessage; messages?: TeamMessage[]; hasOlder?: boolean; customerThreads?: CustomerThread[]; questions?: QuoteQuestion[] };
 type RequestResult = { response: Response; result: Result };
 type ApiCall = (query?: string, payload?: Record<string, unknown>, path?: string) => Promise<RequestResult>;
@@ -36,6 +36,11 @@ type ApiCall = (query?: string, payload?: Record<string, unknown>, path?: string
 function threadName(thread: Thread, memberId: string) {
   return thread.kind === "group" ? thread.subject : thread.members.find(member => member.id !== memberId)?.name || "Team conversation";
 }
+
+function ChatMark({ locked = false }: { locked?: boolean }) {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d={locked ? "M7 10V7a5 5 0 0 1 10 0v3M6 10h12v11H6zM12 14v3" : "M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-2 2V11.5a9.5 9.5 0 0 1 19 0ZM7 10h10M7 14h6"} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+function contactInitials(name: string) { return name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?"; }
 
 function MessageBody({ body }: { body: string }) {
   return <p>{body.split(/(https?:\/\/[^\s<>"']+)/gi).map((part, index) => {
@@ -129,15 +134,15 @@ function TeamConversation({ thread, call, memberId, onRead, getAuthHeaders, canM
   }
 
   return <section className={styles.conversation} aria-label="Team conversation">
-    <header><span className={styles.internalBadge}>Internal · Team</span><div className={styles.chatTitle}><h3>{threadName(thread, memberId)}</h3><TradeTeamCallButtons threadId={thread.id} /></div><div className={styles.memberAvatars}>{thread.members.map(member => <TradeTeamAvatar key={member.id} memberId={member.id} name={member.name} revision={member.avatarRevision} editable={member.active !== false && (member.id === memberId || canManageTeam)} getAuthHeaders={getAuthHeaders} onChange={onRead} />)}</div><p>{thread.members.map(member => `${member.name} (${member.active === false ? "inactive" : member.presence === "busy" ? "Busy" : member.presence === "offline" ? "Offline" : "Online"})`).join(", ")}</p><small>Only people in this chat can see these messages.</small></header>
+    <header className={styles.conversationHeader}><div className={styles.chatTitle}><div><span className={styles.channelLabel}>Team conversation</span><h3>{threadName(thread, memberId)}</h3></div><TradeTeamCallButtons threadId={thread.id} /></div><details className={styles.conversationInfo}><summary>{thread.members.length} participants · Private chat</summary><div className={styles.memberAvatars}>{thread.members.map(member => <TradeTeamAvatar key={member.id} memberId={member.id} name={member.name} revision={member.avatarRevision} editable={member.active !== false && (member.id === memberId || canManageTeam)} getAuthHeaders={getAuthHeaders} onChange={onRead} />)}</div><p>{thread.members.map(member => `${member.name} (${member.active === false ? "inactive" : member.presence === "busy" ? "Busy" : member.presence === "offline" ? "Offline" : "Online"})`).join(", ")}</p><small>Only people in this chat can see these messages.</small></details></header>
     {status && <p className={styles.notice} role="status">{status}</p>}
     {hasOlder && <button type="button" className={styles.secondary} disabled={busy} onClick={() => void older()}>Load older messages</button>}
     <ol ref={history} className={styles.messages} aria-live="polite" aria-label="Team message history">
       {loading && <li className={styles.empty}>Loading messages...</li>}
       {!loading && !messages.length && <li className={styles.empty}>Start the conversation with your team.</li>}
-      {messages.map(message => <li key={message.id} className={message.mine ? styles.mine : styles.theirs}><strong>{message.senderName}</strong>{message.body && <MessageBody body={message.body} />}{message.attachments?.length > 0 && <TradeMessageAttachmentList attachments={message.attachments} getAuthHeaders={getAuthHeaders} />}<TradeMessageSaveToJob threadId={thread.id} message={message} getAuthHeaders={getAuthHeaders} /><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time></li>)}
+      {messages.map(message => <li key={message.id} className={message.mine ? styles.mine : styles.theirs}>{!message.mine && <strong className={styles.senderName}>{message.senderName}</strong>}<div className={styles.bubble}>{message.body && <MessageBody body={message.body} />}{message.attachments?.length > 0 && <TradeMessageAttachmentList attachments={message.attachments} getAuthHeaders={getAuthHeaders} />}</div><footer className={styles.messageMeta}><time dateTime={message.createdAt} title={new Date(message.createdAt).toLocaleString("en-AU")}>{new Date(message.createdAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}</time><TradeMessageSaveToJob threadId={thread.id} message={message} getAuthHeaders={getAuthHeaders} /></footer></li>)}
     </ol>
-    <form className={styles.composer} onSubmit={event => void send(event)}><label><span>Message your team</span><textarea rows={3} maxLength={2000} value={body} disabled={busy || !canSend || Boolean(pending)} onChange={event => setBody(event.target.value)} placeholder="Write a message" /></label><TradeMessageAttachments threadId={thread.id} value={attachments} onChange={setAttachments} getAuthHeaders={getAuthHeaders} disabled={busy || !canSend || Boolean(pending)} onBusyChange={setMediaBusy} /><button type="submit" className={styles.primary} disabled={busy || mediaBusy || !canSend || (!body.trim() && !attachments.length)}>{busy ? "Sending..." : pending ? "Check this message" : "Send"}</button></form>
+    <form className={styles.composer} onSubmit={event => void send(event)}><div className={styles.composerRow}><label><span className={styles.srOnly}>Message your team</span><textarea rows={1} maxLength={2000} value={body} disabled={busy || !canSend || Boolean(pending)} onChange={event => setBody(event.target.value)} placeholder="Message your team" /></label><button type="submit" className={pending || busy ? styles.primary : styles.sendButton} disabled={busy || mediaBusy || !canSend || (!body.trim() && !attachments.length)}>{busy ? "Sending..." : pending ? "Check this message" : <><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 11 6-6 6 6M12 5v14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg><span className={styles.srOnly}>Send</span></>}</button></div><details className={styles.attachmentTools}><summary>+ Photos & voice{attachments.length ? ` · ${attachments.length} attached` : ""}{mediaBusy ? " · Working..." : ""}</summary><TradeMessageAttachments threadId={thread.id} value={attachments} onChange={setAttachments} getAuthHeaders={getAuthHeaders} disabled={busy || !canSend || Boolean(pending)} onBusyChange={setMediaBusy} /></details></form>
   </section>;
 }
 
@@ -156,6 +161,16 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Thread | null>(null);
   const [customer, setCustomer] = useState<CustomerThread | null>(null);
+  const [smsOpen, setSmsOpen] = useState(false);
+  const [smsVisited, setSmsVisited] = useState(false);
+  const smsDialog = useRef<HTMLDialogElement>(null);
+  const openSmsAccount = () => { setSmsVisited(true); setSmsOpen(true); };
+  useEffect(() => {
+    const dialog = smsDialog.current;
+    if (!dialog) return;
+    if (smsOpen && !dialog.open) dialog.showModal();
+    else if (!smsOpen && dialog.open) dialog.close();
+  }, [smsOpen, smsVisited]);
   const [status, setStatus] = useState("");
   const [creating, setCreating] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
@@ -212,7 +227,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
       if (!response.ok || !result.ok) throw new Error(result.error || "Conversations could not be loaded.");
       if (!alive.current || activeQuery.current !== queryKey) return;
       if (result.memberId && result.members && result.threads) {
-        setOverview({ memberId: result.memberId, members: result.members, threads: result.threads, hasMore: Boolean(result.hasMore), canUseSms: Boolean(result.canUseSms), canUseQuotes: Boolean(result.canUseQuotes), canCreateSmsContact: Boolean(result.canCreateSmsContact), canManageTeam: Boolean(result.canManageTeam) });
+        setOverview({ memberId: result.memberId, members: result.members, threads: result.threads, hasMore: Boolean(result.hasMore), canUseSms: Boolean(result.canUseSms), smsReady: result.smsReady === true, smsBalanceMicro: typeof result.smsBalanceMicro === "number" ? result.smsBalanceMicro : null, canUseQuotes: Boolean(result.canUseQuotes), canCreateSmsContact: Boolean(result.canCreateSmsContact), canManageTeam: Boolean(result.canManageTeam) });
         if (mode === "team") setSelected(current => current ? result.threads?.find(thread => thread.id === current.id) || current : null);
       }
       if (mode === "customers") {
@@ -278,11 +293,35 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
 
   const hasMore = mode === "team" ? overview?.hasMore : hasMoreCustomers;
   const isBusinessOwner = Boolean(user && overview?.members.find(member => member.id === overview.memberId)?.isOwner);
-  return <section className={styles.workspace} aria-label="Messages workspace">
-    <header className={styles.heading}><div><h2>Messages</h2><p>{teamOnly ? "Chat, share photos and call your team." : "Your customers and team, in one place."}</p></div><div className={styles.actions}>{teamOnly && overview && <TradeTeamPresence getAuthHeaders={authHeaders} />}{overview && <TradeNotificationSettings key={user?.uid || overview.memberId} getAuthHeaders={authHeaders} />}{overview && <TradeTeamAvatar memberId={overview.memberId} name={overview.members.find(member => member.id === overview.memberId)?.name || "Your profile"} revision={overview.members.find(member => member.id === overview.memberId)?.avatarRevision} editable getAuthHeaders={authHeaders} onChange={onRead} />}<button type="button" className={styles.primary} disabled={createBusy || contactBusy} onClick={() => { setCreating(true); if (!pendingCreate && !pendingCustomer) setContactSearch(""); setStatus(""); }}>New chat</button></div></header>
-    <div className={styles.tabs} aria-label="Message types"><button type="button" aria-pressed={mode === "team"} onClick={() => { setMode("team"); setPage(1); setSearch(""); }}>Team</button>{!teamOnly && (overview?.canUseSms || overview?.canUseQuotes) && <button type="button" aria-pressed={mode === "customers"} onClick={() => { setMode("customers"); setPage(1); setSearch(""); }}>Customers</button>}</div>
+  const closeSmsAccount = () => { setSmsOpen(false); void refresh(); };
+  const balance = overview?.smsBalanceMicro;
+  const balanceLabel = typeof balance === "number" ? new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(balance / 1_000_000) : "…";
+  const openAutomationSettings = () => { closeSmsAccount(); if (onOpenAutomations) onOpenAutomations(); else router.push("/direct-trade/dashboard?workspace=email-templates"); };
+  const startNewChat = () => { setCreating(true); if (!pendingCreate && !pendingCustomer) setContactSearch(""); setStatus(""); };
+  const smsLocked = overview !== null && !overview.smsReady;
+  const customerPrompt = <div className={styles.welcome}>
+    <span className={styles.welcomeIcon}><ChatMark locked={smsLocked} /></span>
+    <h3>{smsLocked ? "Your number. Your conversations." : "A conversation starts here."}</h3>
+    <p>{smsLocked ? isBusinessOwner ? "Rent an Australian number to unlock customer texting. You can add credit at any time." : "Customer texting will unlock when your business owner activates a number." : "Choose a customer to pick up where you left off, or start a new conversation."}</p>
+    {isBusinessOwner && smsLocked ? <button type="button" className={styles.primary} onClick={openSmsAccount}>Set up customer texting</button> : !smsLocked && <button type="button" className={styles.primary} onClick={startNewChat}>New chat</button>}
+    {smsLocked && <span className={styles.welcomeNote}>Team chat is always available.</span>}
+  </div>;
+  return <section className={styles.workspace} data-channel={mode} aria-label="Messages workspace">
+    <header className={styles.heading}>
+      <div><h2>Messages</h2><p>{teamOnly ? "Your team, connected." : "Customer texts and team chat."}</p></div>
+      <div className={styles.actions}>
+        {!teamOnly && (isBusinessOwner || overview?.canUseSms) && (isBusinessOwner
+          ? <button type="button" className={styles.creditButton} onClick={openSmsAccount} aria-label={"SMS credit " + balanceLabel + ". Top up credit"}><span><small>Available SMS credit</small><strong>{balanceLabel}</strong></span><span className={styles.topUpLabel}>Top up <b aria-hidden="true">+</b></span></button>
+          : <div className={styles.creditButton} aria-label={"Available SMS credit " + balanceLabel}><span><small>Available SMS credit</small><strong>{balanceLabel}</strong></span></div>)}
+        {overview && <div className={styles.notifications}><TradeNotificationSettings key={user?.uid || overview.memberId} getAuthHeaders={authHeaders} /></div>}
+        <button type="button" className={styles.composeButton} aria-label="New chat" title="New chat" disabled={createBusy || contactBusy} onClick={startNewChat}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-8M17 3l4 4-10 10-5 1 1-5L17 3Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg><span className={styles.srOnly}>New chat</span></button>
+      </div>
+    </header>
     {status && <p className={styles.notice} role="status">{status}</p>}
-    {!teamOnly && mode === "customers" && isBusinessOwner && <TradeSmsDashboard key={overview?.memberId} user={user} getAuthHeaders={getAuthHeaders} onOpenAutomations={onOpenAutomations || (() => router.push("/direct-trade/dashboard?workspace=email-templates"))} />}
+    {!teamOnly && isBusinessOwner && <dialog ref={smsDialog} className={styles.accountDialog} aria-label="SMS account and credit" onCancel={closeSmsAccount} onClose={() => { if (smsOpen) closeSmsAccount(); }} onClick={event => { if (event.target === event.currentTarget) closeSmsAccount(); }}>
+      <div className={styles.accountDialogHeader}><strong>SMS account</strong><button type="button" className={styles.secondary} onClick={closeSmsAccount}>Done</button></div>
+      {smsVisited && <TradeSmsDashboard key={overview?.memberId} user={user} getAuthHeaders={getAuthHeaders} onOpenAutomations={openAutomationSettings} visible={smsOpen} />}
+    </dialog>}
     {creating && <form className={styles.newChat} onSubmit={event => void create(event)}>
       <h3>New chat</h3><label className={styles.groupName}><span>Name or phone number</span><input type="search" value={contactSearch} disabled={createBusy || contactBusy || Boolean(pendingCreate) || Boolean(pendingCustomer)} onChange={event => setContactSearch(event.target.value)} placeholder={teamOnly ? "Search your team" : "Search customers and your team"} /></label>
       <fieldset disabled={createBusy || contactBusy || Boolean(pendingCreate) || Boolean(pendingCustomer)}><legend>Choose a teammate, or several for a group</legend><div className={styles.people}>{contactResults.members.map(member => <label key={member.id}><input type="checkbox" checked={members.includes(member.id)} onChange={event => setMembers(current => event.target.checked ? [...current, member.id] : current.filter(id => id !== member.id))} /><TradeTeamAvatar memberId={member.id} name={member.name} revision={member.avatarRevision} getAuthHeaders={authHeaders} /><span>{member.name}{member.isOwner ? " · Business owner" : ""}<small className={styles.internalBadge}>Internal · Team</small></span></label>)}</div>
@@ -292,10 +331,43 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
       {!teamOnly && overview?.canCreateSmsContact && newContactPhone && !contactResults.customers.length && <div className={styles.newCustomer}><span className={styles.externalBadge}>External · New customer</span><label className={styles.groupName}><span>Customer name</span><input value={contactName} maxLength={80} disabled={contactBusy || Boolean(pendingCustomer)} onChange={event => setContactName(event.target.value)} placeholder="Name for this number" /></label><small>{newContactPhone}. Save the contact, then record permission before sending SMS.</small><button type="button" className={styles.primary} disabled={createBusy || contactBusy || Boolean(pendingCreate) || !contactName.trim()} onClick={() => void createCustomer()}>{contactBusy ? "Saving..." : pendingCustomer ? "Check this customer" : "Save & chat"}</button></div>}
       <div className={styles.actions}><button type="submit" className={styles.primary} disabled={contactBusy || Boolean(pendingCustomer) || createBusy || !members.length || (members.length > 1 && !subject.trim())}>{createBusy ? "Opening..." : pendingCreate ? "Check this conversation" : "Start chat"}</button><button type="button" className={styles.secondary} disabled={createBusy || contactBusy} onClick={() => { setCreating(false); setPendingCreate(null); setPendingCustomer(null); setContactName(""); setMembers([]); setSubject(""); }}>Cancel</button></div>
     </form>}
-    <div className={`${styles.layout} ${(mode === "team" ? selected : customer) ? styles.chatOpen : ""}`}><aside className={styles.list}><label className={styles.search}><span>Find a conversation</span><input type="search" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder={mode === "team" ? "Person or group name" : "Customer or job number"} /></label>
-      {mode === "team" ? overview?.threads.map(thread => <button type="button" key={thread.id} className={styles.thread} aria-pressed={selected?.id === thread.id} onClick={() => setSelected(thread)}><span className={styles.threadHeading}>{thread.members.filter(member => member.id !== overview.memberId).slice(0, 1).map(member => <TradeTeamAvatar key={member.id} memberId={member.id} name={member.name} revision={member.avatarRevision} getAuthHeaders={authHeaders} />)}<strong>{threadName(thread, overview.memberId)}{thread.unread > 0 && <span className={styles.unread}>{thread.unread}</span>}</strong></span><small className={styles.internalBadge}>Internal · Team</small><span>{thread.latest ? `${thread.latestSender}: ${thread.latest}` : "No messages yet"}</span></button>) : <>{questions.map(question => <button type="button" key={question.id} className={`${styles.thread} ${styles.externalThread}`} onClick={() => onOpenQuote ? onOpenQuote(question.workOrderId) : router.push(`/direct-trade/dashboard?workspace=work&jobId=${encodeURIComponent(question.workOrderId)}&jobTab=quote#quote-questions`)}><strong>{question.jobNumber}{question.status === "open" && <span className={styles.unread}>Question</span>}</strong><small className={styles.externalBadge}>External · Quote question</small><span>{question.question}</span><small>{question.status === "open" ? "Open question" : "View question and reply"}</small></button>)}{customers.map(item => <button type="button" key={`${item.customerId}:${item.workOrderId}`} className={`${styles.thread} ${styles.externalThread}`} aria-pressed={customer?.customerId === item.customerId && customer.workOrderId === item.workOrderId} onClick={() => setCustomer(item)}><strong>{item.name}</strong><small className={styles.externalBadge}>External · Customer SMS</small><small>{item.jobNumber || item.phone}</small><span>{item.latest || "Start a service SMS conversation"}</span></button>)}</>}
-      {(mode === "team" ? overview && !overview.threads.length : !customers.length && !questions.length) && <p className={styles.empty}>{mode === "team" ? "No chats here yet. Start a chat above." : "No matching customer conversations. Quote questions appear here. SMS needs a saved mobile number and SMS access."}</p>}
-      {(page > 1 || hasMore) && <div className={styles.pagination}><button type="button" className={styles.secondary} disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page}</span><button type="button" className={styles.secondary} disabled={!hasMore} onClick={() => setPage(value => value + 1)}>Next</button></div>}
-    </aside><div className={styles.detail}><button type="button" className={styles.back} onClick={() => { setSelected(null); setCustomer(null); }}>← All chats</button>{mode === "team" ? selected && overview ? <TeamConversation key={selected.id} thread={selected} call={call} memberId={overview.memberId} onRead={onRead} getAuthHeaders={authHeaders} canManageTeam={overview.canManageTeam} /> : <div className={styles.welcome}><h3>Keep the team in the loop</h3><p>Select a chat or start one with a teammate. Only the people in that chat can read and reply.</p></div> : customer ? <div><span className={styles.externalBadge}>External · Customer SMS</span><h3 className={styles.customerName}>{customer.name}</h3><TradeCustomerSmsPanel key={`${customer.customerId}:${customer.workOrderId}`} user={user} getAuthHeaders={getAuthHeaders} customerId={customer.customerId} workOrderId={customer.workOrderId} onOpenIntegrations={onOpenIntegrations} /></div> : <div className={styles.welcome}><h3>Shared customer conversations</h3><p>Open a quote question to respond, or select a customer for SMS. Quote questions use the customer&apos;s secure quote link and need no email mailbox connection.</p></div>}</div></div>
+    <div className={styles.layout + ((mode === "team" ? selected : customer) ? " " + styles.chatOpen : "")}>
+      <aside className={styles.list}>
+        <div className={styles.listTools}>
+          <div className={styles.tabs} aria-label="Message types">
+            {!teamOnly && (overview?.canUseSms || overview?.canUseQuotes) && <button type="button" data-channel="customers" aria-pressed={mode === "customers"} onClick={() => { setMode("customers"); setPage(1); setSearch(""); }}><span aria-hidden="true" />Customers</button>}
+            <button type="button" data-channel="team" aria-pressed={mode === "team"} onClick={() => { setMode("team"); setPage(1); setSearch(""); }}><span aria-hidden="true" />Team</button>
+          </div>
+          <label className={styles.search}><span className={styles.srOnly}>Find a conversation</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" /><path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg><input type="search" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder={mode === "team" ? "Search your team" : "Search customers"} /></label>
+          {mode === "customers" && smsLocked && isBusinessOwner && <button type="button" className={styles.activateNumber} onClick={openSmsAccount}><ChatMark locked /><span>Rent a number to start texting</span><span aria-hidden="true">›</span></button>}
+        </div>
+        <div className={styles.threadList}>
+          {mode === "team" ? overview?.threads.map(thread => <button type="button" key={thread.id} className={styles.thread} aria-pressed={selected?.id === thread.id} onClick={() => setSelected(thread)}>
+            <span className={styles.avatar}><span>{contactInitials(threadName(thread, overview.memberId))}</span></span>
+            <span className={styles.threadCopy}><strong>{threadName(thread, overview.memberId)}</strong><span>{thread.latest ? thread.latestSender + ": " + thread.latest : "Start a conversation"}</span><small>Team</small></span>
+            {thread.unread > 0 && <span className={styles.unread}>{thread.unread}</span>}
+          </button>) : <>
+            {questions.map(question => <button type="button" key={question.id} className={styles.thread + " " + styles.externalThread} onClick={() => onOpenQuote ? onOpenQuote(question.workOrderId) : router.push("/direct-trade/dashboard?workspace=work&jobId=" + encodeURIComponent(question.workOrderId) + "&jobTab=quote#quote-questions")}>
+              <span className={styles.avatar}><ChatMark /></span><span className={styles.threadCopy}><strong>{question.jobNumber}</strong><span>{question.question}</span><small>Quote question</small></span>{question.status === "open" && <span className={styles.unreadDot} aria-label="Open question" />}
+            </button>)}
+            {customers.map(item => <button type="button" key={item.customerId + ":" + item.workOrderId} className={styles.thread + " " + styles.externalThread} aria-pressed={customer?.customerId === item.customerId && customer.workOrderId === item.workOrderId} onClick={() => setCustomer(item)}>
+              <span className={styles.avatar}><span>{contactInitials(item.name)}</span></span><span className={styles.threadCopy}><strong>{item.name}</strong><span>{item.latest || item.phone}</span><small>{item.jobNumber || "Customer SMS"}</small></span>
+            </button>)}
+          </>}
+          {(mode === "team" ? overview && !overview.threads.length : !customers.length && !questions.length) && <div className={styles.emptyList}><ChatMark /><strong>{search ? "No conversations found" : mode === "team" ? "Your team chats live here" : "Your customer inbox"}</strong><p>{search ? "Try another name or number." : mode === "team" ? "Start a chat with your crew." : "Customer texts and quote questions, together."}</p></div>}
+        </div>
+        {(page > 1 || hasMore) && <div className={styles.pagination}><button type="button" className={styles.secondary} disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page}</span><button type="button" className={styles.secondary} disabled={!hasMore} onClick={() => setPage(value => value + 1)}>Next</button></div>}
+        <footer className={styles.listFooter}><span className={styles.channelDot} />{mode === "team" ? "Private team messages" : overview?.smsReady ? "Two-way customer texts" : "Customer texting locked"}{!teamOnly && isBusinessOwner && <button type="button" onClick={openSmsAccount}>SMS account</button>}{teamOnly && overview && <TradeTeamPresence getAuthHeaders={authHeaders} />}</footer>
+      </aside>
+      <div className={styles.detail}>
+        <button type="button" className={styles.back} onClick={() => { setSelected(null); setCustomer(null); }}>‹ <span>Messages</span></button>
+        {mode === "team" ? selected && overview
+          ? <TeamConversation key={selected.id} thread={selected} call={call} memberId={overview.memberId} onRead={onRead} getAuthHeaders={authHeaders} canManageTeam={overview.canManageTeam} />
+          : <div className={styles.welcome}><span className={styles.welcomeIcon}><ChatMark /></span><h3>Keep your team close.</h3><p>A quick question, a photo from site, or the next job. It all starts with a message.</p><button type="button" className={styles.primary} onClick={startNewChat}>New chat</button><span className={styles.welcomeNote}>Private to the people in each conversation.</span></div>
+          : customer && overview?.smsReady
+            ? <div className={styles.customerConversation}><header className={styles.customerHeader}><span className={styles.avatar}><span>{contactInitials(customer.name)}</span></span><div><h3>{customer.name}</h3><p>{customer.phone}{customer.jobNumber ? " · " + customer.jobNumber : ""}</p></div><span className={styles.externalBadge}>Customer SMS</span></header><TradeCustomerSmsPanel embedded key={customer.customerId + ":" + customer.workOrderId} user={user} getAuthHeaders={getAuthHeaders} customerId={customer.customerId} workOrderId={customer.workOrderId} onOpenIntegrations={isBusinessOwner ? openSmsAccount : onOpenIntegrations} onAccountChange={onRead} /></div>
+            : !overview ? <div className={styles.welcome}><p role="status">Loading your inbox...</p></div> : customerPrompt}
+      </div>
+    </div>
   </section>;
 }

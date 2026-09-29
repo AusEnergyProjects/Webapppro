@@ -150,7 +150,21 @@ export async function messagesWorkspace(actor: MessageActor, search = "", page =
     .bind(actor.memberId, actor.memberId, actor.ownerUid, ...guard.values, ...(targetThreadId ? [targetThreadId] : []), term, term, (page - 1) * 50)
     .all<{ id: string; kind: string; subject: string; latest: string; latest_sender: string; unread: number; members: string }>()).results;
   const avatars = await teamAvatarRevisions(db, actor);
-  return { memberId: actor.memberId, canUseSms: actor.isOwner || Boolean(actor.canSendSms), canUseQuotes: actor.isOwner || Boolean(actor.canViewQuotes), canCreateSmsContact: actor.isOwner, canManageTeam: actor.isOwner || Boolean(actor.canManageTeam),
+  const canUseSms = actor.isOwner || Boolean(actor.canSendSms);
+  const smsState = canUseSms ? await db.prepare(`SELECT EXISTS (
+      SELECT 1 FROM trade_sms_connections c WHERE c.firebase_uid=? AND c.status='connected'
+      AND c.phone_number GLOB '+614[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+      AND (c.provider='twilio' OR (c.provider='clicksend'
+        AND EXISTS (SELECT 1 FROM trade_sms_accounts a WHERE a.owner_uid=c.firebase_uid AND a.status='ready' AND a.subaccount_id=c.account_sid)
+        AND EXISTS (SELECT 1 FROM trade_sms_number_orders r WHERE r.owner_uid=c.firebase_uid AND r.connection_id=c.id AND r.number=c.phone_number
+          AND r.status='active' AND r.renewal_at>? AND r.inbound_rule_id<>'' AND r.receipt_rule_id<>'')))) sms_ready,
+      (SELECT COALESCE(SUM(amount_micro),0) FROM trade_sms_ledger WHERE owner_uid=?) sms_balance
+    WHERE ${guard.sql} ${actor.isOwner ? "" : "AND EXISTS (SELECT 1 FROM trade_team_members sms_member WHERE sms_member.id=? AND sms_member.owner_uid=? AND sms_member.status='active' AND sms_member.can_send_sms=1)"}`)
+    .bind(actor.ownerUid, new Date().toISOString(), actor.ownerUid, ...guard.values, ...(actor.isOwner ? [] : [actor.memberId, actor.ownerUid]))
+    .first<{ sms_ready: number; sms_balance: number }>() : null;
+  if (smsState && !Number.isSafeInteger(smsState.sms_balance)) throw new Error("MESSAGE_SMS_BALANCE_INVALID");
+  return { memberId: actor.memberId, canUseSms, smsReady: Boolean(smsState?.sms_ready), smsBalanceMicro: smsState ? smsState.sms_balance : null,
+    canUseQuotes: actor.isOwner || Boolean(actor.canViewQuotes), canCreateSmsContact: actor.isOwner, canManageTeam: actor.isOwner || Boolean(actor.canManageTeam),
     members: members.map(member => ({ id: member.id, name: member.display_name, isOwner: member.member_uid === actor.ownerUid, avatarRevision: avatars[member.id] || "" })),
     threads: threads.slice(0, 50).map(thread => ({ id: thread.id, kind: thread.kind, subject: thread.subject, latest: thread.latest || "", latestSender: thread.latest_sender || "",
       unread: Number(thread.unread), members: (JSON.parse(thread.members) as Array<{ id: string; name: string; active: boolean; presence: TradeTeamPresenceStatus }>).map(member => ({ ...member, active: Boolean(member.active), avatarRevision: avatars[member.id] || "" })) })), hasMore: threads.length > 50 };

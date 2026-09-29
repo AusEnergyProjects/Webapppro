@@ -18,8 +18,8 @@ const statusLabels: Record<string, string> = {
   failed: "Failed", undelivered: "Not delivered", unknown: "Delivery not confirmed", reserved: "Preparing", received: "Received", canceled: "Cancelled",
 };
 
-export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getAuthHeaders, onOpenIntegrations }: {
-  user?: User; customerId: string; workOrderId?: string; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenIntegrations?: () => void;
+export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getAuthHeaders, onOpenIntegrations, onAccountChange, embedded = false }: {
+  user?: User; customerId: string; workOrderId?: string; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenIntegrations?: () => void; onAccountChange?: () => void; embedded?: boolean;
 }) {
   const fetch = useTradeBusinessFetch();
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -162,19 +162,24 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
       }
     } catch {
       setStatus("The result is not confirmed. Refresh the conversation or choose Check this message to safely retry the same request.");
-    } finally { inFlight.current = false; setBusy(""); }
+    } finally { inFlight.current = false; setBusy(""); onAccountChange?.(); }
   }
 
-  return <section className={styles.panel} aria-label="Customer SMS">
-    <header className={styles.heading}><div><span className={styles.eyebrow}>Shared business messages</span><h4>SMS conversation</h4>{conversation?.customerPhone && <small>{conversation.customerPhone}{conversation.jobNumber ? ` · ${conversation.jobNumber}` : ""}</small>}</div><button type="button" className={styles.secondary} disabled={Boolean(busy) || loading} onClick={() => void refresh()}>{busy === "refresh" ? "Refreshing..." : "Refresh"}</button></header>
-    {status && <p className={styles.notice} role="status">{status}</p>}
-    {loading ? <p>Loading messages...</p> : conversation && <>
-      {!conversation.connection ? <div className={styles.notice}><p>{conversation.canManageConnection ? "Connect your business SMS number to send messages and receive replies here." : "Ask the business owner to connect the business SMS number."}</p>{conversation.canManageConnection && onOpenIntegrations && <button type="button" className={styles.primary} onClick={onOpenIntegrations}>Set up SMS</button>}</div> : <p className={styles.hint}>From {conversation.connection.number}. The business can see and reply to these messages. {conversation.connection.usedSegments} of {conversation.connection.dailyLimit} daily SMS segments used.</p>}
+  return <section className={`${styles.panel} ${styles.customerConversation}${embedded ? ` ${styles.embeddedConversation}` : ""}`} aria-label="Customer SMS">
+    <div className={styles.conversationContext}>
+    <header className={styles.conversationHeading}>
+      {!embedded && <><span className={styles.conversationIcon} aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-10a9 9 0 0 1 18 0Z" fill="currentColor" /><path d="M7 10h8M7 14h5" stroke="var(--trade-surface, #fff)" strokeWidth="1.7" strokeLinecap="round" /></svg></span>
+      <div className={styles.conversationIdentity}><h4>SMS conversation</h4><small>{conversation?.customerPhone || "Customer texting"}{conversation?.jobNumber ? ` · ${conversation.jobNumber}` : ""}</small></div></>}
+      <button type="button" className={`${styles.secondary} ${styles.refreshConversation}`} disabled={Boolean(busy) || loading} onClick={() => void refresh()}>{busy === "refresh" ? "Refreshing..." : "Refresh"}</button>
+    </header>
+    {status && <p className={`${styles.notice} ${styles.conversationNotice}`} role="status">{status}</p>}
+    {loading ? <p className={styles.conversationLoading}>Loading messages...</p> : conversation && <>
+      {!conversation.connection ? <div className={`${styles.notice} ${styles.setupTexting}`}><strong>Set up customer texting</strong><p>{conversation.canManageConnection ? "Rent an Australian business number to send texts and receive replies here. You can add credit before renting your number." : "Ask the business owner to connect the business SMS number."}</p>{conversation.canManageConnection && onOpenIntegrations && <button type="button" className={styles.primary} onClick={onOpenIntegrations}>Set up SMS</button>}</div> : <details className={styles.conversationDetails}><summary><span className={styles.connectionDot} data-connected={conversation.connection.status === "connected"} />From {conversation.connection.number}<span className={styles.detailsLabel}>Details</span></summary><p>The business can see and reply to these messages. {conversation.connection.usedSegments} of {conversation.connection.dailyLimit} daily SMS segments used.</p></details>}
       {conversation.connection && conversation.connection.status !== "connected" && <div className={styles.notice}><p>SMS routing is not confirmed. The business owner needs to reconnect the number before messages can be sent.</p>{conversation.canManageConnection && onOpenIntegrations && <button type="button" className={styles.secondary} onClick={onOpenIntegrations}>Check SMS connection</button>}</div>}
       {!conversation.customerPhone && <p className={styles.notice}>Save a valid Australian mobile number in Customer details to use SMS.</p>}
       {conversation.connection?.accountType.toLowerCase() === "trial" && <p className={styles.notice}>Twilio trial: this customer&apos;s number must be verified in your Twilio account.</p>}
       {conversation.consent === "opted_out" && <p className={styles.notice}>This customer has opted out. Messages are blocked. They can text START to your connected SMS number to resume.</p>}
-      {conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "required" && <form className={styles.form} onSubmit={(event) => void recordConsent(event)}>
+      {conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "required" && <form className={`${styles.form} ${styles.consentCard}`} onSubmit={(event) => void recordConsent(event)}>
         <p>Record the customer&apos;s permission before sending service SMS. This does not give permission for marketing.</p>
         <label><span>How and when did they agree to service SMS?</span><textarea required minLength={8} maxLength={500} rows={2} value={consentNote} onChange={(event) => setConsentNote(event.target.value)} placeholder="For example: agreed by phone today to appointment updates." disabled={Boolean(busy)} /></label>
         <button type="submit" className={styles.primary} disabled={Boolean(busy) || consentNote.trim().length < 8}>{busy === "consent" ? "Saving..." : "Record permission"}</button>
@@ -187,23 +192,26 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
           <button type="submit" className={styles.secondary} disabled={Boolean(busy) || Boolean(pending) || marketingNote.trim().length < 8}>{busy === "marketing_consent" ? "Saving..." : "Record review permission"}</button>
         </form>
       </details>}
-      <ol ref={historyRef} className={styles.messages} aria-label="SMS message history">{conversation.messages.length ? conversation.messages.map((message) => <li key={message.id} className={message.direction === "outbound" ? styles.outbound : styles.inbound}>
-        <div className={styles.messageMeta}><strong>{message.direction === "inbound" ? "Customer" : message.senderName || "Your business"}</strong><span>{message.direction === "inbound" ? "Received" : statusLabels[message.status] || "Status pending"}</span></div>
-        <p>{message.body}</p><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time>
-        {conversation.canManageConnection && message.workOrderId && <small className={styles.jobLabel}>{conversation.jobs.find(job => job.id === message.workOrderId)?.jobNumber || "Linked job"}</small>}
-        {conversation.canManageConnection && message.direction === "inbound" && !message.workOrderId && conversation.jobs.length > 0 && <div className={styles.linkReply}>
+    </>}
+    </div>
+    {!loading && conversation && <>
+      <ol ref={historyRef} className={`${styles.messages} ${styles.conversationHistory}`} aria-label="SMS message history">{conversation.messages.length ? conversation.messages.map((message) => <li key={message.id} className={message.direction === "outbound" ? styles.outbound : styles.inbound}>
+        <div className={styles.bubbleSender}>{message.direction === "inbound" ? "Customer" : message.senderName || "Your business"}</div>
+        <p className={styles.messageBubble}>{message.body}</p>
+        <div className={styles.bubbleReceipt}><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time><span data-attention={["unknown", "failed", "undelivered"].includes(message.status)}>{message.direction === "inbound" ? "Received" : statusLabels[message.status] || "Status pending"}</span>{conversation.canManageConnection && message.workOrderId && <span>{conversation.jobs.find(job => job.id === message.workOrderId)?.jobNumber || "Linked job"}</span>}</div>
+        {conversation.canManageConnection && message.direction === "inbound" && !message.workOrderId && conversation.jobs.length > 0 && <details className={styles.replyDetails}><summary>Link reply to a job</summary><div className={styles.linkReply}>
           <small>Business only. Link this reply to share it with the job&apos;s team.</small>
           <label><span>Job for this reply</span><select aria-label={`Job for reply ${message.id}`} value={replyJobs[message.id] || ""} disabled={Boolean(busy)} onChange={event => setReplyJobs(current => ({ ...current, [message.id]: event.target.value }))}><option value="">Choose job</option>{conversation.jobs.map(job => <option key={job.id} value={job.id}>{job.jobNumber}</option>)}</select></label>
           <button type="button" className={styles.secondary} disabled={Boolean(busy) || !replyJobs[message.id]} onClick={() => void linkReply(message.id)}>Link reply</button>
-        </div>}
-      </li>) : <li className={styles.empty}>No messages yet. Replies will appear here.</li>}</ol>
-      {conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "allowed" && <form className={styles.form} onSubmit={(event) => void send(event)}>
-        {managed && <label><span>Message purpose</span><select value={purpose} disabled={Boolean(busy) || Boolean(pending)} onChange={event => setPurpose(event.target.value === "marketing" ? "marketing" : "service")}><option value="service">Service update</option><option value="marketing" disabled={conversation.marketingConsent !== "allowed"}>Review or feedback request{conversation.marketingConsent !== "allowed" ? " (permission needed)" : ""}</option></select></label>}
-        <label><span>Message</span><textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={480} rows={3} required disabled={Boolean(busy) || Boolean(pending)} placeholder="Write a service update for this customer" /></label>
-        {managed && <div className={styles.costPreview} aria-live="polite"><strong>{parts} SMS {parts === 1 ? "part" : "parts"} · {price} including GST</strong><small>9¢ + GST per part. Includes your business name, job reference and STOP instructions.</small></div>}
+        </div></details>}
+      </li>) : <li className={styles.empty}><span className={styles.emptyMessageIcon} aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M26 15.5A10.5 10.5 0 0 1 15.5 26H8l-5 3V15.5a11.5 11.5 0 1 1 23 0Z" stroke="currentColor" strokeWidth="1.6" /><circle cx="10" cy="15" r="1.2" fill="currentColor" /><circle cx="15" cy="15" r="1.2" fill="currentColor" /><circle cx="20" cy="15" r="1.2" fill="currentColor" /></svg></span><strong>Your conversation starts here</strong><span>No messages yet. Replies will appear here.</span></li>}</ol>
+      {conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "allowed" && <form className={`${styles.form} ${styles.textComposer}`} onSubmit={(event) => void send(event)}>
+        {managed && <div className={styles.composerToolbar}><label><span className={styles.visuallyHidden}>Message purpose</span><select aria-label="Message purpose" value={purpose} disabled={Boolean(busy) || Boolean(pending)} onChange={event => setPurpose(event.target.value === "marketing" ? "marketing" : "service")}><option value="service">Service update</option><option value="marketing" disabled={conversation.marketingConsent !== "allowed"}>Review or feedback request{conversation.marketingConsent !== "allowed" ? " (permission needed)" : ""}</option></select></label><small>SMS</small></div>}
+        <div className={styles.composerInput}><label><span className={styles.visuallyHidden}>Message</span><textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={480} rows={2} required disabled={Boolean(busy) || Boolean(pending)} placeholder="Text message" /></label><button type="submit" className={`${styles.primary} ${styles.sendText}`} disabled={Boolean(busy) || !body.trim() || (!pending && (!outgoingBody || insufficientCredit || (purpose === "marketing" && conversation.marketingConsent !== "allowed")))}>{busy === "send" ? "Checking..." : pending ? "Check this message" : "Send SMS"}</button></div>
+        {managed && <div className={styles.messagePrice} aria-live="polite"><span>{parts} SMS {parts === 1 ? "part" : "parts"} · {price} including GST</span><small>9¢ + GST per part</small></div>}
         {insufficientCredit && !pending && <p className={styles.notice}>There is not enough SMS credit for this message. Ask the business owner to top up.</p>}
         {body.trim() && !outgoingBody && <p className={styles.notice}>Remove unsupported control characters before sending.</p>}
-        <div className={styles.composerFooter}><small>{body.length}/480 characters. Business name{workOrderId ? ", job number" : ""} and STOP instructions are added automatically. Longer messages and emoji can use more than one SMS part.</small><button type="submit" className={styles.primary} disabled={Boolean(busy) || !body.trim() || (!pending && (!outgoingBody || insufficientCredit || (purpose === "marketing" && conversation.marketingConsent !== "allowed")))}>{busy === "send" ? "Checking..." : pending ? "Check this message" : "Send SMS"}</button></div>
+        <div className={styles.composerNote}><details><summary>Business name and STOP added automatically</summary><small>Business name{workOrderId ? ", job number" : ""} and STOP instructions are added automatically. Longer messages and emoji can use more than one SMS part.</small></details><small>{body.length}/480</small></div>
       </form>}
     </>}
   </section>;

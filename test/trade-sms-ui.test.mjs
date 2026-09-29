@@ -9,12 +9,13 @@ import * as followUps from "../src/lib/trade-follow-ups.ts";
 
 const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
 const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
-const button = (tree, name) => nodes(tree, node => node.type === "button" && text(node) === name)[0];
+const button = (tree, name) => nodes(tree, node => node.type === "button" && text(node).replace(/\s+/g, " ").trim() === name)[0];
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const connection = { provider: "twilio", number: "+61400000000", accountLabel: "Test trade", accountType: "Full", dailyLimit: 100, usedSegments: 0, status: "connected" };
 const conversation = (overrides = {}) => ({ ok: true, connection, customerPhone: "+61400000001", consent: "allowed", messages: [], canManageConnection: true, jobNumber: "", jobs: [], businessName: "Test trade", marketingConsent: "required", partPriceMicro: 99000, balanceMicro: 50000000, ...overrides });
 const reply = (value, status = 200) => ({ ok: status < 400, status, json: async () => value });
-const fixtureComponents = { TradeSmsDashboard: () => null, TradeSmsAutomationPanel: () => null };
+const fixtureComponents = { TradeSmsDashboard: () => null, TradeSmsAutomationPanel: () => null, TradeCustomerSmsPanel: () => null };
+const isComponent = (node, component) => node.type === component || node.type?.resolvedComponent === component;
 
 function harness(component, responder, props = {}) {
   const source = fs.readFileSync(new URL(`../src/components/${component}.tsx`, import.meta.url), "utf8");
@@ -33,8 +34,8 @@ function harness(component, responder, props = {}) {
   const user = { getIdToken: async () => "fixture-token" };
   const router = { push() {} }, alerts = { refresh() {}, setActiveThread() {} };
   const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/trade-sms" ? sms : id === "@/lib/service-reminder-delivery" ? reminders : id === "@/lib/trade-follow-ups" ? followUps
-    : id === "next/navigation" ? { useRouter: () => router } : id === "next/dynamic" ? { default: load => { void load().then(component => assert.equal(component, fixtureComponents.TradeSmsDashboard)); return fixtureComponents.TradeSmsDashboard; } } : id === "./TradeMessageAlerts" ? { useTradeMessageAlerts: () => alerts }
-    : id === "./TradeSmsDashboard" || id === "./TradeSmsAutomationPanel" ? fixtureComponents : id === "./TradeEmailSettings" ? { TRADE_EMAIL_SETTINGS_HREF: "/settings" }
+    : id === "next/navigation" ? { useRouter: () => router } : id === "next/dynamic" ? { default: load => { const LazyComponent = () => null; void load().then(component => { assert.ok([fixtureComponents.TradeSmsDashboard, fixtureComponents.TradeCustomerSmsPanel].includes(component)); LazyComponent.resolvedComponent = component; }); return LazyComponent; } } : id === "./TradeMessageAlerts" ? { useTradeMessageAlerts: () => alerts }
+    : id === "./TradeSmsDashboard" || id === "./TradeSmsAutomationPanel" || id === "./TradeCustomerSmsPanel" ? fixtureComponents : id === "./TradeEmailSettings" ? { TRADE_EMAIL_SETTINGS_HREF: "/settings" }
     : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : {};
   const fetch = async (url, init) => { const payload = init.body ? JSON.parse(init.body) : null; requests.push({ url, init, payload }); return responder(payload, requests); };
   class FormDataFixture { constructor(values) { this.values = values; } get(key) { return this.values[key]; } }
@@ -243,21 +244,44 @@ test("managed dashboard shows available balance once, honest setup state and no 
 });
 
 test("topups use fixed $50 minimum amounts and preserve one request through unknown responses", async () => {
-  let attempts = 0;
+  let attempts = 0, availableBalance = 50000000;
+  const props = { visible: true };
   const h = harness("TradeSmsDashboard", async payload => {
-    if (!payload) return reply(smsAccount());
+    if (!payload) return reply(smsAccount({ wallet: { balanceMicro: availableBalance, reservedMicro: 0 } }));
     attempts++; assert.equal(payload.action, "top_up"); assert.equal(payload.amountCents, 5000);
     if (attempts === 1) throw new Error("Checkout response lost");
     return reply({ ok: true, checkoutUrl: "https://checkout.stripe.com/c/pay/fixture" });
-  });
+  }, props);
   let tree = await h.mount(); button(tree, "Top up credit").props.onClick(); tree = h.render();
   assert.deepEqual(nodes(tree, node => node.type === "input" && node.props.type === "radio").length, 3);
   assert.match(text(tree), /Minimum top-up \$50/); assert.match(text(tree), /No automatic card charges/);
   button(tree, "Continue with $50").props.onClick(); tree = await h.settle();
   assert.equal(nodes(tree, node => node.type === "fieldset")[0].props.disabled, true);
+  props.visible = false; h.render(); availableBalance = 40000000;
+  props.visible = true; h.render(); tree = await h.settle();
+  assert.match(text(tree), /\$40\.00/, "Reopening reads current available credit");
+  assert.equal(nodes(tree, node => node.type === "fieldset")[0].props.disabled, true, "Reopening preserves the uncertain top-up request");
   button(tree, "Continue $50 checkout").props.onClick(); await h.settle();
   const topups = h.requests.filter(item => item.payload); assert.equal(topups[0].payload.requestId, topups[1].payload.requestId);
   assert.deepEqual(h.navigations, ["https://checkout.stripe.com/c/pay/fixture"]); h.cleanup();
+});
+
+test("reopening the credit panel waits for an in-flight checkout before refreshing its balance", async () => {
+  let finishCheckout;
+  const checkout = new Promise(resolve => { finishCheckout = resolve; });
+  const props = { visible: true };
+  let reads = 0;
+  const h = harness("TradeSmsDashboard", async payload => payload ? checkout : reply(smsAccount({ wallet: { balanceMicro: ++reads === 1 ? 50000000 : 39000000, reservedMicro: 0 } })), props);
+  let tree = await h.mount();
+  button(tree, "Continue with $50").props.onClick(); tree = h.render();
+  props.visible = false; h.render(); props.visible = true; h.render(); await flush();
+  assert.equal(reads, 1, "A stale refresh cannot race the outstanding checkout mutation");
+  finishCheckout(reply({ ok: false, error: "Checkout not confirmed" }, 503));
+  tree = await h.settle(); tree = await h.settle();
+  assert.equal(reads, 2); assert.match(text(tree), /\$39\.00/);
+  assert.ok(button(tree, "Continue $50 checkout"));
+  assert.equal(nodes(tree, node => node.type === "fieldset")[0].props.disabled, true);
+  h.cleanup();
 });
 
 test("checkout only navigates to Stripe and never redirects after dashboard unmount", async () => {
@@ -390,18 +414,28 @@ test("an already paid topup refreshes credit and releases its intent for a later
 });
 
 const messagesOverview = (overrides = {}) => ({ ok: true, memberId: "own-member", members: [{ id: "own-member", name: "Business owner", isOwner: true }], threads: [],
-  canUseSms: true, canUseQuotes: true, canCreateSmsContact: true, canManageTeam: true, ...overrides });
+  canUseSms: true, smsReady: true, smsBalanceMicro: 50000000, canUseQuotes: true, canCreateSmsContact: true, canManageTeam: true, ...overrides });
 async function messagesReady(h) { await h.mount(); await new Promise(resolve => setTimeout(resolve, 5)); return h.settle(); }
 
-test("normal web Messages opens customers after loading identity and mounts SMS management only for its actual owner", async () => {
+test("normal web Messages shows credit and opens account controls only for its actual owner without losing its draft", async () => {
   for (const isOwner of [true, false]) {
     const h = harness("TradeMessagesWorkspace", async (_payload, requests) => reply(requests.at(-1).url.includes("view=customers")
       ? { ok: true, customerThreads: [], questions: [] }
       : messagesOverview({ members: [{ id: "own-member", name: "Current member", isOwner }, { id: "other-member", name: "Another owner", isOwner: true }] })));
-    const tree = await messagesReady(h);
+    let tree = await messagesReady(h);
     assert.equal(button(tree, "Customers").props["aria-pressed"], true);
     assert.equal(h.requests[0].url, "/api/trade-messages"); assert.match(h.requests[1].url, /view=customers/);
-    assert.equal(nodes(tree, node => node.type === fixtureComponents.TradeSmsDashboard).length, isOwner ? 1 : 0);
+    assert.match(text(tree), /Available SMS credit.*\$50\.00/);
+    assert.equal(nodes(tree, node => isComponent(node, fixtureComponents.TradeSmsDashboard)).length, 0);
+    assert.equal(Boolean(button(tree, "SMS account")), isOwner);
+    if (isOwner) {
+      button(tree, "SMS account").props.onClick(); tree = h.render();
+      assert.equal(nodes(tree, node => isComponent(node, fixtureComponents.TradeSmsDashboard)).length, 1);
+      button(tree, "Done").props.onClick(); tree = h.render();
+      assert.equal(nodes(tree, node => isComponent(node, fixtureComponents.TradeSmsDashboard)).length, 1, "Closing account controls preserves pending payment and rental requests");
+    }
+    button(tree, "Team").props.onClick(); tree = h.render();
+    assert.match(text(tree), /Available SMS credit.*\$50\.00/, "Balance remains visible in team conversations");
     h.cleanup();
   }
 });
@@ -413,7 +447,7 @@ test("native handoff and explicit team entry remain team-only without requesting
     const tree = await messagesReady(h);
     assert.equal(button(tree, "Team").props["aria-pressed"], true);
     assert.equal(h.requests.some(item => item.url.includes("view=customers")), false);
-    assert.equal(nodes(tree, node => node.type === fixtureComponents.TradeSmsDashboard).length, 0); h.cleanup();
+    assert.equal(nodes(tree, node => isComponent(node, fixtureComponents.TradeSmsDashboard)).length, 0); h.cleanup();
   }
 });
 
@@ -421,6 +455,32 @@ test("staff without customer access stay in team messages and do not fetch custo
   const h = harness("TradeMessagesWorkspace", async () => reply(messagesOverview({ canUseSms: false, canUseQuotes: false, members: [{ id: "own-member", name: "Staff", isOwner: false }] })));
   const tree = await messagesReady(h); assert.equal(button(tree, "Team").props["aria-pressed"], true);
   assert.equal(button(tree, "Customers"), undefined); assert.equal(h.requests.some(item => item.url.includes("view=customers")), false); h.cleanup();
+});
+
+test("the customer composer mounts through its own lazy boundary only after selecting a conversation", async () => {
+  const customer = { customerId: "customer-a", name: "Fixture customer", phone: "+61412345678", workOrderId: "", jobNumber: "", latest: "Fixture conversation" };
+  const h = harness("TradeMessagesWorkspace", async (_payload, requests) => reply(requests.at(-1).url.includes("view=customers")
+    ? { ok: true, customerThreads: [customer], questions: [] } : messagesOverview()));
+  let tree = await messagesReady(h);
+  assert.equal(nodes(tree, node => isComponent(node, fixtureComponents.TradeSmsDashboard)).length, 0);
+  assert.equal(nodes(tree, node => isComponent(node, fixtureComponents.TradeCustomerSmsPanel)).length, 0);
+  nodes(tree, node => node.type === "button" && text(node).includes("Fixture customer"))[0].props.onClick(); tree = h.render();
+  const composer = nodes(tree, node => isComponent(node, fixtureComponents.TradeCustomerSmsPanel));
+  assert.equal(composer.length, 1); assert.equal(composer[0].props.customerId, "customer-a"); assert.equal(composer[0].props.workOrderId, ""); h.cleanup();
+});
+
+test("customer texting stays locked until the number is ready while owners can still add credit", async () => {
+  const customer = { customerId: "customer-a", name: "Fixture customer", phone: "+61412345678", workOrderId: "", jobNumber: "", latest: "" };
+  const h = harness("TradeMessagesWorkspace", async (_payload, requests) => reply(requests.at(-1).url.includes("view=customers")
+    ? { ok: true, customerThreads: [customer], questions: [] } : messagesOverview({ smsReady: false, smsBalanceMicro: 25000000 })));
+  let tree = await messagesReady(h);
+  nodes(tree, node => node.type === "button" && text(node).includes("Fixture customer"))[0].props.onClick(); tree = h.render();
+  assert.equal(nodes(tree, node => isComponent(node, fixtureComponents.TradeCustomerSmsPanel)).length, 0);
+  assert.match(text(tree), /Rent an Australian number to unlock customer texting/);
+  assert.match(text(tree), /Available SMS credit.*\$25\.00/);
+  button(tree, "Set up customer texting").props.onClick(); tree = h.render();
+  assert.equal(nodes(tree, node => isComponent(node, fixtureComponents.TradeSmsDashboard)).length, 1);
+  h.cleanup();
 });
 
 test("Follow-ups opens auto texts for owners and preserves email templates and reminder controls", async () => {
