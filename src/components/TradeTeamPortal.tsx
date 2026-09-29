@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
+import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
@@ -13,6 +13,7 @@ import { TradeJobFormsPanel } from "./TradeJobFormsPanel";
 import { TradeTeamSettings, type TradeTeamPermissions } from "./TradeTeamSettings";
 import dynamic from "next/dynamic";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
+import { teamAuthErrorCode, teamAuthErrorMessage } from "./trade-team-auth-errors";
 
 const TradeTrainingWorkspace = dynamic(() => import("./TradeTrainingWorkspace").then((module) => module.TradeTrainingWorkspace), { loading: () => <p role="status">Loading activity training...</p> });
 const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then(module => module.TradeMessagesWorkspace));
@@ -25,6 +26,7 @@ type Job = { id: string; workNumber: string; title: string; serviceCategory: str
 type AssigneeRoster = { page: number; pageSize: number; total: number; totalPages: number; search: string; capability: string };
 type WorkRoster = { included: boolean; page: number; pageSize: number; total: number; totalPages: number };
 type Result = { code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; permissions: TradeTeamPermissions }; members?: Member[]; assignees?: Assignee[]; assigneeRoster?: AssigneeRoster; work?: WorkRoster; jobs?: Job[]; error?: string };
+type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
 const stages = [["backlog", "Planning"], ["ready", "Ready"], ["scheduled", "Scheduled"], ["in_progress", "On site"], ["blocked", "Waiting"], ["completed", "Complete"], ["cancelled", "Cancelled"]];
 
@@ -33,6 +35,12 @@ export function TradeTeamPortal() {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [inviteToken, setInviteToken] = useState("");
+  const [invitation, setInvitation] = useState<Invitation | null>(null);
+  const [invitationReady, setInvitationReady] = useState(false);
+  const [invitationError, setInvitationError] = useState("");
+  const [authRevision, setAuthRevision] = useState(0);
   const [mode, setMode] = useState<"signin" | "create">("signin");
   const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [data, setData] = useState<Result>({}); const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(""); const [status, setStatus] = useState("");
@@ -41,6 +49,7 @@ export function TradeTeamPortal() {
     try {
       await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {});
       await signOut(firebaseAuth);
+      setData({}); setStatus(""); setPassword("");
     } catch (failure) { setStatus(failure instanceof Error ? failure.message : "Sign out could not be completed. Try again."); }
   }
   const [portalView, setPortalView] = useState<"work" | "business" | "team" | "training" | "messages">("work");
@@ -49,6 +58,48 @@ export function TradeTeamPortal() {
   const [assigneesLoading, setAssigneesLoading] = useState(false);
   const [workLoading, setWorkLoading] = useState(false);
   const assigneeRequestRef = useRef(0);
+
+  useEffect(() => {
+    if (!authReady) return;
+    let active = true;
+    const frame = window.requestAnimationFrame(() => {
+      const invite = new URLSearchParams(window.location.search).get("invite") || "";
+      setInviteToken(invite);
+      setInvitationReady(false);
+      setInvitationError("");
+      if (!invite) { setInvitation(null); setInvitationReady(true); return; }
+      void (async () => {
+      const headers: Record<string, string> = user ? { Authorization: `Bearer ${await user.getIdToken()}` } : {};
+      const response = await fetch(`/api/trade-team/invitation?invite=${encodeURIComponent(invite)}`, { headers, cache: "no-store" });
+      const result = await response.json() as { invitation?: Invitation; error?: string };
+      if (!response.ok || !result.invitation) throw new Error(result.error || "This invitation is no longer available. Ask your business to resend it.");
+      if (active) {
+        setInvitation(result.invitation); setEmail(result.invitation.email); setName(result.invitation.displayName); setMode("create");
+      }
+      })().catch(error => { if (active) { setInvitation(null); setInvitationError(error instanceof Error ? error.message : "The invitation could not be opened. Please try again."); } })
+        .finally(() => { if (active) setInvitationReady(true); });
+    });
+    return () => { active = false; window.cancelAnimationFrame(frame); };
+  }, [authReady, user]);
+
+  const refreshVerification = useCallback(async (showStatus = false) => {
+    if (!user) return;
+    try {
+      await reload(user);
+      if (user.emailVerified) {
+        await user.getIdToken(true);
+        setEmailVerified(true); setStatus("Email confirmed. Opening your team...");
+      } else if (showStatus) setStatus("Open the verification email and confirm your email address, then return here.");
+    } catch (error) { if (showStatus) setStatus(teamAuthErrorMessage(error)); }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || emailVerified) return;
+    const check = () => { if (document.visibilityState === "visible") void refreshVerification(); };
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => { window.removeEventListener("focus", check); document.removeEventListener("visibilitychange", check); };
+  }, [emailVerified, refreshVerification, user]);
 
   useEffect(() => {
     const applyTrainingLink = () => {
@@ -139,29 +190,64 @@ export function TradeTeamPortal() {
     }
   }, [data.work, user, workLoading]);
 
-  useEffect(() => onAuthStateChanged(firebaseAuth, (next) => { setUser(next); setAuthReady(true); if (!next) setMfaRequired(false); }), []);
+  useEffect(() => onAuthStateChanged(firebaseAuth, (next) => { setUser(next); setData({}); setEmailVerified(Boolean(next?.emailVerified)); setAuthReady(true); if (!next) setMfaRequired(false); }), []);
   useEffect(() => {
-    if (!user) return; let active = true;
+    if (!user || !emailVerified || !invitationReady || invitationError) return;
+    if (invitation && user.email?.toLowerCase() !== invitation.email.toLowerCase()) return;
+    let active = true;
     const frame = window.requestAnimationFrame(() => {
-      setLoading(true); const invite = new URLSearchParams(window.location.search).get("invite") || "";
+      setLoading(true); const invite = inviteToken;
       void (async () => {
         if (invite) {
-          const token = await user.getIdToken();
+          const token = await user.getIdToken(true);
           const response = await fetch("/api/trade-team", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "accept_invite", token: invite }) });
           const accepted = await response.json().catch(() => ({})) as Result;
+          if (accepted.code === "MFA_REQUIRED") setMfaRequired(true);
           if (!response.ok && !accepted.access) throw new Error(accepted.error || "The team invitation could not be accepted.");
         }
         const result = await loadWork();
-        if (active) { setData(result); setSelectedJobId((current) => current || result.jobs?.[0]?.id || ""); if (invite) window.history.replaceState({}, "", "/direct-trade/team"); }
+        if (active) { setData(result); setStatus(""); setSelectedJobId((current) => current || result.jobs?.[0]?.id || ""); if (invite) window.history.replaceState({}, "", "/direct-trade/team"); }
       })().catch((error) => active && setStatus(error instanceof Error ? error.message : "The staff portal could not be opened."))
         .finally(() => active && setLoading(false));
     });
     return () => { active = false; window.cancelAnimationFrame(frame); };
-  }, [loadWork, user]);
+  }, [authRevision, emailVerified, invitation, invitationError, invitationReady, inviteToken, loadWork, user]);
 
-  async function google() { setBusy("auth"); setStatus("Opening Google sign-in..."); try { const provider = new GoogleAuthProvider(); provider.setCustomParameters({ prompt: "select_account" }); await signInWithPopup(firebaseAuth, provider); } catch (error) { if (!captureMfaError(error)) setStatus("Google sign-in could not be completed."); } finally { setBusy(""); } }
-  async function emailAuth(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy("auth"); setStatus(mode === "create" ? "Creating your team login..." : "Signing in..."); try { if (mode === "create") { const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password); await updateProfile(credential.user, { displayName: name.trim() }); } else await signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password); setPassword(""); } catch (error) { if (!captureMfaError(error)) setStatus("Check the email and password, then try again."); } finally { setBusy(""); } }
-  async function reset() { if (!email.trim()) { setStatus("Enter your email first."); return; } await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase()).then(() => setStatus("Password reset instructions sent.")).catch(() => setStatus("Password reset could not be sent.")); }
+  function emailActionSettings() {
+    const url = new URL("/direct-trade/team", window.location.origin);
+    if (inviteToken) url.searchParams.set("invite", inviteToken);
+    return { url: url.toString() };
+  }
+  async function sendVerification(account: User) {
+    try {
+      await sendEmailVerification(account, emailActionSettings());
+      setStatus(`We sent a verification email to ${account.email}. Open it and confirm your email to join your team.`);
+    } catch (error) {
+      setStatus(`Your login is saved, but the verification email could not be sent. ${teamAuthErrorMessage(error)} Use Resend verification email below.`);
+    }
+  }
+  async function google() { setBusy("auth"); setStatus("Opening Google sign-in..."); try { const provider = new GoogleAuthProvider(); provider.setCustomParameters({ prompt: "select_account", ...(invitation ? { login_hint: invitation.email } : {}) }); await signInWithPopup(firebaseAuth, provider); } catch (error) { if (!captureMfaError(error)) setStatus(teamAuthErrorMessage(error)); } finally { setBusy(""); } }
+  async function emailAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy("auth"); setStatus(mode === "create" ? "Creating your team login..." : "Signing in...");
+    try {
+      if (mode === "create") {
+        const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password);
+        await updateProfile(credential.user, { displayName: name.trim() });
+        await sendVerification(credential.user);
+      } else await signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password);
+      setPassword("");
+    } catch (error) {
+      if (teamAuthErrorCode(error) === "auth/email-already-in-use") { setMode("signin"); setPassword(""); }
+      if (!captureMfaError(error)) setStatus(teamAuthErrorMessage(error));
+    } finally { setBusy(""); }
+  }
+  async function reset() {
+    if (!email.trim()) { setStatus("Enter your email first."); return; }
+    setBusy("reset");
+    try { await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase(), emailActionSettings()); setStatus("Check your email for a secure link to set a new password, then return here to sign in."); }
+    catch (error) { setStatus(`The password reset email could not be sent. ${teamAuthErrorMessage(error)}`); }
+    finally { setBusy(""); }
+  }
   async function update(body: Record<string, unknown>, key: string, success: string) { if (!user) return; setBusy(key); try { const token = await user.getIdToken(); const response = await fetch("/api/trade-team", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }); const result = await response.json().catch(() => ({})) as Result; if (!response.ok) throw new Error(result.error || "The update could not be saved."); const selectedCapability = data.jobs?.find((job) => job.id === selectedJobId)?.serviceCategory || ""; const refreshed = await loadWork(selectedCapability, data.work?.page || 1); setData(refreshed); setSelectedJobId((current) => refreshed.jobs?.some((job) => job.id === current) ? current : refreshed.jobs?.[0]?.id || ""); setStatus(success); } catch (error) { setStatus(error instanceof Error ? error.message : "The update could not be saved."); } finally { setBusy(""); } }
 
   const permissions = data.access?.permissions;
@@ -174,10 +260,31 @@ export function TradeTeamPortal() {
   ));
 
   if (resolver) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
-  if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setData(await loadWork()); }} /><button type="button" onClick={() => void leaveAccount()}>Sign out</button></main>;
+  if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setAuthRevision(current => current + 1); }} /><button type="button" onClick={() => void leaveAccount()}>Sign out</button></main>;
 
   return <TradeTeamCallProvider user={user} enabled={Boolean(data.access)}><main className="wrap trade-team-page"><TLinkHeader active="team" />
-    {!authReady ? <section className="dashboard-state-card"><p>Opening the secure staff portal...</p></section> : !user ? <section className="team-auth-shell"><div className="team-auth-intro"><span>TLink installer team access</span><h1>Your workday, without the office clutter</h1><p>Use the email address your employer invited. Your workspace shows only the jobs, customers and business tools your saved access permits.</p></div><div className="team-auth-card"><button className="customer-google-button" type="button" onClick={() => void google()} disabled={busy === "auth"}>Continue with Google</button><div className="customer-auth-tabs"><button type="button" className={mode === "signin" ? "selected" : ""} onClick={() => setMode("signin")}>Sign in</button><button type="button" className={mode === "create" ? "selected" : ""} onClick={() => setMode("create")}>Create login</button></div><form onSubmit={emailAuth}>{mode === "create" && <label><span>Your name</span><input value={name} required onChange={(event) => setName(event.target.value)} /></label>}<label><span>Invited email</span><input type="email" value={email} required onChange={(event) => setEmail(event.target.value)} /></label><label><span>Password</span><input type="password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="btn" disabled={busy === "auth"}>{busy === "auth" ? "Please wait..." : mode === "create" ? "Create team login" : "Sign in"}</button>{mode === "signin" && <button className="customer-reset-link" type="button" onClick={() => void reset()}>Reset password</button>}</form>{status && <p role="status">{status}</p>}</div></section> : loading ? <section className="dashboard-state-card"><p>Loading assigned work...</p></section> : !data.access ? <section className="dashboard-state-card"><span>Team access required</span><h1>This login is not connected to an active installer team</h1><p>{status || "Open the invitation link from your employer, or ask them to create a fresh link."}</p><button className="btn" type="button" onClick={() => void leaveAccount()}>Use another account</button></section> : <>
+    {!authReady || !invitationReady ? <section className="dashboard-state-card"><p>Opening your invitation...</p></section>
+      : invitationError ? <section className="dashboard-state-card"><h1>Invitation unavailable</h1><p role="alert">{invitationError}</p><p>Ask your business administrator to resend your invitation.</p><a className="btn" href="/direct-trade/team">Already joined? Sign in</a></section>
+      : user && invitation && user.email?.toLowerCase() !== invitation.email.toLowerCase() ? <section className="dashboard-state-card"><h1>This invitation is for {invitation.displayName}</h1><p>Use {invitation.email} to join {invitation.businessName}. You are currently signed in as {user.email}.</p><button className="btn" type="button" onClick={() => void leaveAccount()}>Use invited email</button></section>
+      : !user ? <section className="team-auth-shell">
+        <div className="team-auth-intro"><span>TLink team invitation</span><h1>{invitation ? `Join ${invitation.businessName}` : "Welcome to your team"}</h1><p>{invitation ? `${invitation.displayName}, your business has your access ready. Set a password, confirm your email and you're in.` : "Sign in with the email your business invited. Your saved permissions control the jobs and tools you can use."}</p></div>
+        <div className="team-auth-card">
+          <button className="customer-google-button" type="button" onClick={() => void google()} disabled={Boolean(busy)}>Continue with Google</button>
+          <form onSubmit={emailAuth}>
+            <h2>{mode === "create" ? "Set your new password" : "Sign in to your team"}</h2>
+            {mode === "create" && !invitation && <label><span>Your name</span><input value={name} autoComplete="name" required onChange={(event) => setName(event.target.value)} /></label>}
+            <label><span>Invited email</span><input type="email" autoComplete="email" value={email} readOnly={Boolean(invitation)} required onChange={(event) => setEmail(event.target.value)} /></label>
+            <label><span>{mode === "create" ? "New password" : "Password"}</span><input type="password" autoComplete={mode === "create" ? "new-password" : "current-password"} minLength={mode === "create" ? 8 : undefined} required value={password} onChange={(event) => setPassword(event.target.value)} />{mode === "create" && <small>Use at least 8 characters. This is the password you will use to sign in.</small>}</label>
+            <button className="btn" disabled={Boolean(busy)}>{busy === "auth" ? "Please wait..." : mode === "create" ? "Join team" : "Sign in"}</button>
+            {mode === "signin" && <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => void reset()}>{busy === "reset" ? "Sending reset email..." : "Reset password"}</button>}
+          </form>
+          {status && <p role="status">{status}</p>}
+          <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => { setMode(mode === "create" ? "signin" : "create"); setStatus(""); setPassword(""); }}>{mode === "create" ? "Already have a login? Sign in" : "First time here? Set up your login"}</button>
+        </div>
+      </section>
+      : !emailVerified ? <section className="team-auth-shell"><div className="team-auth-intro"><span>One final step</span><h1>Confirm your email</h1><p>Your login is ready. Confirm that {user.email} is yours to open your team&apos;s workspace.</p></div><div className="team-auth-card"><h2>Check your inbox</h2><p>Open the verification email, tap the link and return here. Your team&apos;s saved access will then open automatically.</p>{status && <p role="status">{status}</p>}<button className="btn" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verify"); await refreshVerification(true); setBusy(""); }}>{busy === "verify" ? "Checking..." : "I've verified my email"}</button><button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verification-email"); await sendVerification(user); setBusy(""); }}>{busy === "verification-email" ? "Sending..." : "Resend verification email"}</button><button className="customer-reset-link" type="button" onClick={() => void leaveAccount()}>Use another account</button></div></section>
+      : loading ? <section className="dashboard-state-card"><p>Loading assigned work...</p></section>
+      : !data.access ? <section className="dashboard-state-card"><span>Team access</span><h1>Opening your team</h1><p>{status || "Checking your saved access..."}</p><button className="btn" type="button" onClick={() => void leaveAccount()}>Use another account</button></section> : <>
       <header className="team-portal-hero"><div><span>Team portal</span><h1>{data.access.businessName}</h1><p>Welcome, {data.access.displayName}. {permissions?.jobScope === "own" ? "Only work assigned to you is visible. Customer details are limited to assigned jobs." : "Coordinate the active work queue from one place."}</p></div><div><strong>{todayJobs.length}</strong><span>jobs today</span><button type="button" onClick={() => void leaveAccount()}>Sign out</button></div></header>
       <nav className="crm-nav" aria-label="Staff workspace">
         <button type="button" className={portalView === "work" ? "active" : ""} aria-current={portalView === "work" ? "page" : undefined} onClick={() => setPortalView("work")}>Assigned work</button>

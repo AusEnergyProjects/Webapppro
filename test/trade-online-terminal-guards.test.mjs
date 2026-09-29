@@ -314,6 +314,14 @@ function teamRoute(db) {
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": adminServer,
     "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: "actor-1" }) },
+    "@/lib/trade-team-invitation-server": {
+      TradeTeamInvitationError: class extends Error {},
+      acceptTradeTeamInvitation: async () => { throw new Error("Unexpected invitation acceptance in terminal job guard test"); },
+      tradeTeamInviteTokenHash: async () => { throw new Error("Unexpected invitation creation in terminal job guard test"); },
+    },
+    "@/lib/trade-team-invitation-email": {
+      sendTradeTeamInvitationEmail: async () => { throw new Error("Unexpected invitation email in terminal job guard test"); },
+    },
     "@/lib/trade-team-server": {
       assignedJob: assignedJobFor(db),
       canAssignJob: () => true,

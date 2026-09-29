@@ -4,6 +4,7 @@ import { certificateTestDependency, installCreditexTrainingFixture } from "./hel
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../src/app/api/trade-team/route.ts", import.meta.url), "utf8");
@@ -47,7 +48,7 @@ const managerAccess = {
   canViewFieldEvidence: false, canManageFieldEvidence: false, canRunReports: false, canSearchCustomers: false,
 };
 
-function loadRoute(database, aborted, currentAccess = managerAccess) {
+function loadRoute(database, aborted, currentAccess = managerAccess, { sent = [], deliveryStatus = "sent" } = {}) {
   const output = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
     fileName: "src/app/api/trade-team/route.ts",
@@ -58,6 +59,20 @@ function loadRoute(database, aborted, currentAccess = managerAccess) {
     "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum), sameOrigin: () => true },
     "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: "manager-uid" }) },
+    "@/lib/trade-team-invitation-server": {
+      TradeTeamInvitationError: class extends Error {},
+      acceptTradeTeamInvitation: async () => { throw new Error("Invitation acceptance is outside this lifecycle fixture"); },
+      tradeTeamInviteTokenHash: async (token) => createHash("sha256").update(token).digest("base64url"),
+    },
+    "@/lib/trade-team-invitation-email": {
+      sendTradeTeamInvitationEmail: async (input) => {
+        const saved = database.prepare("SELECT team_member_id FROM trade_team_invites WHERE id = ?").get(input.inviteId);
+        assert.ok(saved, "invitation must be committed before email dispatch");
+        assert.equal(database.prepare("SELECT email FROM trade_team_members WHERE id = ?").get(saved.team_member_id).email, input.email);
+        sent.push(input);
+        return { status: deliveryStatus, message: `Invitation ${deliveryStatus}` };
+      },
+    },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => currentAccess,
       canManageTeam: (value) => value.isOwner || value.canManageTeam,
       canAssignJob: () => false, assignedJob: async () => { throw new Error("not used"); } },
@@ -197,7 +212,7 @@ test("saving canonical personal services independently creates exact training to
 });
 
 test("delegated Team add creates an editable unique TLink username without requiring an office login", async () => {
-  const database = fixture(); const route = loadRoute(database, []);
+  const database = fixture(); const sent = []; const route = loadRoute(database, [], managerAccess, { sent });
   const response = await post(route, { action: "add_member", firstName: "Jane", lastName: "Worker",
     displayName: "Jane Worker", fieldUsername: "Jane Field", phone: "0412 111 222" });
   const payload = await response.json();
@@ -209,6 +224,87 @@ test("delegated Team add creates an editable unique TLink username without requi
   assert.equal(created.field_username, "Jane Field");
   assert.equal(created.field_username_normalized, "jane field");
   assert.equal(created.status, "active");
+  assert.equal(sent.length, 0, "members without an email do not trigger an invitation email");
+});
+
+test("adding a member emails the persisted invitation and reissuing preserves access while replacing its token", async () => {
+  const database = fixture(); const sent = [];
+  try {
+    const ownerAccess = { ...managerAccess, isOwner: true, actorUid: "owner-1", memberId: "owner-member" };
+    const route = loadRoute(database, [], ownerAccess, { sent });
+    const added = await post(route, { action: "add_member", displayName: "Alex Worker", fieldUsername: "Alex Worker",
+      email: "Alex@Example.com", permissions: { canViewQuotes: true, canViewInvoices: true, jobScope: "own" } });
+    const payload = await added.json();
+    assert.equal(added.status, 201, payload.error);
+    assert.ok(payload.createdMemberId);
+    assert.equal(payload.delivery.status, "sent");
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].email, "alex@example.com");
+    assert.equal(sent[0].businessName, "Installer");
+    assert.equal(sent[0].inviteUrl, payload.invite.inviteUrl);
+    const original = database.prepare("SELECT * FROM trade_team_invites WHERE team_member_id = ?").get(payload.createdMemberId);
+    const originalToken = new URL(sent[0].inviteUrl).searchParams.get("invite");
+    assert.equal(original.id, sent[0].inviteId);
+    assert.equal(original.token_hash, createHash("sha256").update(originalToken).digest("base64url"));
+    const before = database.prepare("SELECT can_view_quotes, can_view_invoices, job_scope, updated_at FROM trade_team_members WHERE id = ?").get(payload.createdMemberId);
+    assert.equal(before.can_view_quotes, 1);
+    assert.equal(before.can_view_invoices, 1);
+    assert.equal(before.job_scope, "own");
+    const reissued = await post(route, { action: "reissue_invite", memberId: payload.createdMemberId, expectedUpdatedAt: before.updated_at });
+    const fresh = await reissued.json();
+    assert.equal(reissued.status, 201, fresh.error);
+    assert.equal(sent.length, 2);
+    assert.notEqual(sent[1].inviteUrl, sent[0].inviteUrl);
+    assert.equal(sent[1].email, "alex@example.com");
+    assert.equal(database.prepare("SELECT count(*) count FROM trade_team_invites WHERE team_member_id = ?").get(payload.createdMemberId).count, 1);
+    assert.equal(database.prepare("SELECT id FROM trade_team_invites WHERE id = ?").get(original.id), undefined);
+    const after = database.prepare("SELECT can_view_quotes, can_view_invoices, job_scope FROM trade_team_members WHERE id = ?").get(payload.createdMemberId);
+    assert.deepEqual({ ...after }, { can_view_quotes: 1, can_view_invoices: 1, job_scope: "own" });
+    const events = database.prepare("SELECT metadata FROM trade_team_member_events WHERE team_member_id = ? AND event_type = 'member.invitation_email'").all(payload.createdMemberId);
+    assert.equal(events.length, 2);
+    assert.equal(JSON.parse(events[0].metadata).status, "sent");
+    assert.ok(events.every(event => !event.metadata.includes(originalToken)), "audit metadata must not contain the bearer token");
+  } finally { database.close(); }
+});
+
+for (const deliveryStatus of ["failed", "unknown"]) {
+  test(`invitation email ${deliveryStatus} keeps the member and assigned permissions available for resend`, async () => {
+    const database = fixture(); const sent = [];
+    try {
+      const ownerAccess = { ...managerAccess, isOwner: true, actorUid: "owner-1", memberId: "owner-member" };
+      const route = loadRoute(database, [], ownerAccess, { sent, deliveryStatus });
+      const response = await post(route, { action: "add_member", displayName: "Email Worker", email: "worker@example.com",
+        permissions: { canViewQuotes: true } });
+      const payload = await response.json();
+      assert.equal(response.status, 201, payload.error);
+      assert.equal(payload.delivery.status, deliveryStatus);
+      assert.equal(sent.length, 1);
+      const member = database.prepare("SELECT status, member_uid, can_view_quotes FROM trade_team_members WHERE id = ?").get(payload.createdMemberId);
+      assert.deepEqual({ ...member }, { status: "active", member_uid: "", can_view_quotes: 1 });
+      assert.ok(database.prepare("SELECT id FROM trade_team_invites WHERE team_member_id = ? AND consumed_at = ''").get(payload.createdMemberId));
+      const event = database.prepare("SELECT metadata FROM trade_team_member_events WHERE team_member_id = ? AND event_type = 'member.invitation_email'").get(payload.createdMemberId);
+      assert.equal(JSON.parse(event.metadata).status, deliveryStatus);
+    } finally { database.close(); }
+  });
+}
+
+test("changing a pending member email invalidates its previous invitation without changing access", async () => {
+  const database = fixture(); const sent = [];
+  try {
+    const ownerAccess = { ...managerAccess, isOwner: true, actorUid: "owner-1", memberId: "owner-member" };
+    const route = loadRoute(database, [], ownerAccess, { sent });
+    const added = await post(route, { action: "add_member", displayName: "Email Worker", email: "old@example.com",
+      permissions: { canViewQuotes: true } });
+    const payload = await added.json(); assert.equal(added.status, 201, payload.error);
+    const revision = database.prepare("SELECT updated_at FROM trade_team_members WHERE id = ?").get(payload.createdMemberId).updated_at;
+    const changed = await patch(route, { action: "update_member", memberId: payload.createdMemberId,
+      email: "new@example.com", expectedUpdatedAt: revision });
+    const changedPayload = await changed.json(); assert.equal(changed.status, 200, changedPayload.error);
+    assert.equal(database.prepare("SELECT count(*) count FROM trade_team_invites WHERE team_member_id = ?").get(payload.createdMemberId).count, 0);
+    const member = database.prepare("SELECT email, member_uid, can_view_quotes FROM trade_team_members WHERE id = ?").get(payload.createdMemberId);
+    assert.deepEqual({ ...member }, { email: "new@example.com", member_uid: "", can_view_quotes: 1 });
+    assert.equal(sent.length, 1, "editing an email does not silently resend the prior invitation");
+  } finally { database.close(); }
 });
 
 test('team service regions validate explicit subsets, preserve omitted values and allow inheritance', async () => {

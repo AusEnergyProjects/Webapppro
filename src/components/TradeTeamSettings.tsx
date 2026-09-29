@@ -109,7 +109,8 @@ type TeamResult = {
   members?: TradeTeamMember[];
   businessServiceStates?: string[];
   roster?: { page: number; pageSize: number; total: number; totalPages: number; search: string; status: string; capability: string };
-  invite?: { inviteUrl: string };
+  invite?: { inviteUrl: string; email?: string };
+  delivery?: { status: "sent" | "failed" | "unknown"; message: string };
   createdMemberId?: string;
   error?: string;
 };
@@ -292,6 +293,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   const [page, setPage] = useState(1);
   const [roster, setRoster] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [inviteUrl, setInviteUrl] = useState("");
+  const [inviteDelivery, setInviteDelivery] = useState<TeamResult["delivery"]>(undefined);
   const [fieldSetup, setFieldSetup] = useState<FieldSetupResult["setup"]>(undefined);
   const [fieldUsernameDraft, setFieldUsernameDraft] = useState("");
   const [fieldUsernameDirty, setFieldUsernameDirty] = useState(false);
@@ -435,6 +437,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
 
   function openNew() {
     setError(""); setMessage("");
+    setInviteUrl(""); setInviteDelivery(undefined);
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
     setFormPreset("field"); setFormPermissions(fieldPermissions); setEditing("new");
     setFieldUsernameDraft(""); setFieldUsernameDirty(false); setFieldSetup(undefined);
@@ -448,6 +451,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
 
   function openEdit(member: TradeTeamMember) {
     setError(""); setMessage("");
+    setInviteUrl(""); setInviteDelivery(undefined);
     if (!menu) restoreFocusRef.current = document.activeElement as HTMLElement | null;
     setFormPreset("custom"); setFormPermissions(normalizePermissions(member.permissions));
     setEditing(member); setMenu(null);
@@ -519,7 +523,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
       if (!isNew && await handleMemberConflict(response)) return;
       const result = await response.json().catch(() => ({})) as TeamResult;
       if (!response.ok || !result.ok) throw new Error(result.error || "The team member could not be saved.");
-      if (result.invite?.inviteUrl) setInviteUrl(result.invite.inviteUrl);
+      if (result.invite?.inviteUrl) { setInviteUrl(result.invite.inviteUrl); setInviteDelivery(result.delivery); }
       const refreshed = await load();
       const savedId = isNew ? result.createdMemberId : editedMember?.id;
       let savedMember = refreshed.members?.find((member) => member.id === savedId);
@@ -537,15 +541,18 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
         setMemberServiceStates(savedMember.assignedServiceStates ?? null);
         setTrainingRevision(value => value + 1);
       } else setEditing(null);
-      setMessage(isNew ? "Team member added. Their TLink username is ready for a PIN." : "Team member updated.");
+      if (result.invite) {
+        if (result.delivery?.status === "sent") setMessage(`Team member added. ${result.delivery.message}`);
+        else { setMessage("Team member saved with their selected permissions."); setError(result.delivery?.message || "Invitation delivery could not be confirmed. Use Resend invitation to try again."); }
+      } else setMessage(isNew ? "Team member added. Add their email to send an invitation." : "Team member updated.");
     } catch (caught) { setMessage(""); setError(caught instanceof Error ? caught.message : "The team member could not be saved."); }
     finally { setBusy(""); }
   }
 
   async function createLogin(member: TradeTeamMember) {
-    if (!member.email) { openEdit(member); setMessage("Add an email, save the member, then create their login link."); return; }
+    if (!member.email) { openEdit(member); setMessage("Add an email and save the member, then send their invitation."); return; }
     const action = member.invitePending ? "reissue_invite" : "invite_member";
-    setBusy(`invite:${member.id}`); setError(""); setMessage(action === "reissue_invite" ? "Refreshing login link..." : "Creating login link...");
+    setBusy(`invite:${member.id}`); setError(""); setMessage("Sending invitation email...");
     try {
       const response = await fetch("/api/trade-team", {
         method: "POST",
@@ -556,10 +563,14 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
       });
       if (await handleMemberConflict(response)) return;
       const result = await response.json().catch(() => ({})) as TeamResult;
-      if (!response.ok || !result.ok || !result.invite?.inviteUrl) throw new Error(result.error || "The login link could not be created.");
-      setInviteUrl(result.invite.inviteUrl); await load();
-      setMessage(action === "reissue_invite" ? "Fresh login link created." : "Login link created.");
-    } catch (caught) { setMessage(""); setError(caught instanceof Error ? caught.message : "The login link could not be created."); }
+      if (!response.ok || !result.ok || !result.invite?.inviteUrl) throw new Error(result.error || "The invitation could not be created.");
+      setInviteUrl(result.invite.inviteUrl); setInviteDelivery(result.delivery);
+      const refreshed = await load();
+      const refreshedMember = refreshed.members?.find(candidate => candidate.id === member.id);
+      if (refreshedMember) setEditing(current => current && current !== "new" && current.id === member.id ? refreshedMember : current);
+      if (result.delivery?.status === "sent") setMessage(result.delivery.message);
+      else { setMessage(""); setError(result.delivery?.message || "Invitation delivery could not be confirmed. Use Resend invitation to try again."); }
+    } catch (caught) { setMessage(""); setError(caught instanceof Error ? caught.message : "The invitation could not be sent."); }
     finally { setBusy(""); }
   }
 
@@ -751,13 +762,13 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   return <div className={styles.workspace}>
     <div className={styles.heading}><div><h4>Your team</h4><p>Keep each person&apos;s contact details, access, availability and documents in one place.</p></div><button type="button" className={styles.primary} onClick={openNew}>Add team member</button></div>
     <section className={styles.setupGuide} aria-label="Set up TLink for a team member">
-      <div><span>1</span><strong>Add the person</strong><small>Name and services only take a minute.</small></div>
-      <div><span>2</span><strong>Open details</strong><small>Check or change their TLink username.</small></div>
-      <div><span>3</span><strong>Generate PIN</strong><small>TLink emails the username and PIN to them.</small></div>
+      <div><span>1</span><strong>Add the person</strong><small>Enter their email and choose their access.</small></div>
+      <div><span>2</span><strong>Invitation sent</strong><small>They set their password from the email.</small></div>
+      <div><span>3</span><strong>Using the field app?</strong><small>Generate PIN below. TLink emails the username and PIN.</small></div>
     </section>
     {message && <p className={styles.status} role="status">{message}</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}
-    {inviteUrl && <section className={styles.invitePanel} aria-label="Private team login link"><div><strong>Private login link</strong><p>Send this link only to the person it was created for. It expires after 7 days.</p></div><input aria-label="Private login link" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} /><button type="button" className={styles.secondary} onClick={() => void copyInvite()}>Copy login link</button></section>}
+    {inviteUrl && <section className={styles.invitePanel} aria-label="Team invitation"><div><strong>{inviteDelivery?.status === "sent" ? "Invitation emailed" : "Invitation ready"}</strong><p>{inviteDelivery?.message || "Email delivery has not been confirmed."} The private link expires after 7 days. You can also copy it for this person.</p></div><input aria-label="Private login link" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} /><button type="button" className={styles.secondary} onClick={() => void copyInvite()}>Copy invitation link</button></section>}
     <section className={styles.list} aria-label="Team members"><header className={styles.listHeader}><strong>People</strong><span>{roster.total} team members</span></header>
       <form className={styles.filters} onSubmit={searchMembers}><label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, email or service" /></label><label>Status<select value={statusFilter} onChange={(event) => { setPage(1); setStatusFilter(event.target.value as RosterStatus); }}><option value="all">All statuses</option><option value="active">Active</option><option value="invited">Invited</option><option value="suspended">Former or inactive</option></select></label><label>Service<select value={capabilityFilter} onChange={(event) => { setPage(1); setCapabilityFilter(event.target.value); }}><option value="">All services</option>{ENERGY_SERVICE_CATALOGUE.map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}</select></label><button className={styles.secondary}>Search</button></form>
       <p className={styles.hint}>Deactivating access stops future sign-in and assignment. Job history and member documents remain saved. Reactivation restores login eligibility, but revoked devices and old invitation links remain inactive.</p>
@@ -792,7 +803,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
       <form className={styles.form} onSubmit={saveMember}>
         {error && <p className={styles.error} role="alert">{error}</p>}
         {message && <p className={styles.status} role="status">{message}</p>}
-        {editingOwner ? <><p className={styles.status}>This is your main business account. TLink will email the app username and one-time PIN to <strong>{editing.email}</strong>.</p><div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing.lastName} /></label></div><p className={styles.hint}>Your personal name is used for technician sign-off when a job is assigned to you. TLink will not use the business name as the signer.</p></> : <div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email, optional until app setup<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>An email is required when you generate a TLink app PIN. Office login remains optional.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>}
+        {editingOwner ? <><p className={styles.status}>This is your main business account. TLink will email the app username and one-time PIN to <strong>{editing.email}</strong>.</p><div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing.lastName} /></label></div><p className={styles.hint}>Your personal name is used for technician sign-off when a job is assigned to you. TLink will not use the business name as the signer.</p></> : <div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email for invitation<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>Adding a person with an email sends their team invitation automatically. Leave it blank for a roster-only person.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>}
         <section className={styles.fieldAccessPanel} aria-label="TLink app access">
           <img src="/tlink-icon-192.png" alt="" />
           <div className={styles.fieldAccessBody}>
@@ -807,7 +818,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
               {fieldSetup?.memberId === editing.id && <div className={styles.pinResult}><div><span>USERNAME</span><strong>{fieldSetup.username || fieldSetup.displayName}</strong></div><div><span>ONE-TIME PIN</span><strong>{fieldSetup.pin}</strong></div><p>Expires {new Date(fieldSetup.expiresAt).toLocaleString("en-AU")}. Creating another PIN cancels this one.</p><button type="button" className={styles.secondary} onClick={() => void copyFieldSetup()}>Copy username and PIN</button></div>}
               <div className={styles.memberControls}>
                 {editing.status === "active" && <button type="button" className={styles.secondary} disabled={busy === `field-revoke:${editing.id}`} onClick={() => void revokeFieldAccess(editing)}>Sign out field devices</button>}
-                {editing.status === "active" && !editing.hasLogin && <button type="button" className={styles.secondary} disabled={busy === `invite:${editing.id}`} onClick={() => void createLogin(editing)}>{editing.email ? editing.invitePending ? "Refresh office login link" : "Create office login link" : "Add email for office login"}</button>}
+                {editing.status === "active" && !editing.hasLogin && <button type="button" className={styles.secondary} disabled={busy === `invite:${editing.id}`} onClick={() => void createLogin(editing)}>{editing.email ? editing.invitePending ? "Resend invitation" : "Send invitation" : "Add email for invitation"}</button>}
                 {!isCurrentMember(editing) && editing.status === "active" && <button type="button" className={styles.danger} disabled={busy === `status:${editing.id}`} onClick={() => void updateMemberStatus(editing, "suspended")}>Deactivate access</button>}
                 {!isCurrentMember(editing) && editing.status === "suspended" && <button type="button" className={styles.secondary} disabled={busy === `status:${editing.id}`} onClick={() => void updateMemberStatus(editing, "active")}>Reactivate access</button>}
               </div>

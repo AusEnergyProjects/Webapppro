@@ -3,6 +3,8 @@ import { getD1 } from "../../../../db";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import { acceptTradeTeamInvitation, TradeTeamInvitationError, tradeTeamInviteTokenHash as tokenHash } from "@/lib/trade-team-invitation-server";
+import { sendTradeTeamInvitationEmail } from "@/lib/trade-team-invitation-email";
 import { assignedJob, canAssignJob, canManageTeam, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import {
   guardedOnlineChildMutationBatch,
@@ -333,6 +335,9 @@ function inviteReplacementStatements(db: D1Database, access: TeamAccess, memberI
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof TradeTeamInvitationError) {
+    return adminJson({ ok: false, code: error.code, error: error.publicMessage }, error.status);
+  }
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
@@ -374,11 +379,6 @@ function base64Url(bytes: Uint8Array) {
   let binary = "";
   bytes.forEach((value) => { binary += String.fromCharCode(value); });
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-}
-
-async function tokenHash(token: string) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-  return base64Url(new Uint8Array(digest));
 }
 
 type RosterOptions = {
@@ -654,43 +654,7 @@ export async function POST(request: Request) {
   try {
     if (action === "accept_invite") {
       const identity = await requireFirebaseIdentity(request);
-      const token = cleanAdminText(body.token, 300);
-      if (!token) return adminJson({ ok: false, error: "The invitation link is incomplete." }, 400);
-      const now = new Date().toISOString();
-      const invite = await getD1().prepare(`SELECT i.id, i.team_member_id, i.owner_uid, i.expires_at, i.consumed_at,
-          m.email, m.status FROM trade_team_invites i JOIN trade_team_members m ON m.id = i.team_member_id
-        WHERE i.token_hash = ?`).bind(await tokenHash(token)).first<Record<string, unknown>>();
-      if (!invite || invite.consumed_at || String(invite.expires_at) <= now || invite.status === "suspended") {
-        return adminJson({ ok: false, error: "This invitation has expired or has already been used." }, 410);
-      }
-      if (String(invite.email).toLowerCase() !== identity.email) {
-        return adminJson({ ok: false, error: `Sign in with ${String(invite.email)} to accept this invitation.` }, 403);
-      }
-      const existing = await getD1().prepare(`SELECT id FROM trade_team_members
-        WHERE member_uid = ? AND status = 'active' AND id <> ? LIMIT 1`).bind(identity.uid, invite.team_member_id).first();
-      if (existing) return adminJson({ ok: false, error: "This account is already active in another installer team." }, 409);
-      const accepted = await getD1().batch([
-        getD1().prepare(`UPDATE trade_team_members SET member_uid = ?, status = 'active', accepted_at = ?,
-          last_active_at = ?, updated_at = ?
-          WHERE id = ? AND owner_uid = ? AND member_uid = '' AND status = 'active'
-            AND NOT EXISTS (SELECT 1 FROM trade_team_members other
-              WHERE other.member_uid = ? AND other.status = 'active' AND other.id <> trade_team_members.id)
-            AND EXISTS (SELECT 1 FROM trade_team_invites active_invite
-              WHERE active_invite.id = ? AND active_invite.team_member_id = trade_team_members.id
-                AND active_invite.owner_uid = trade_team_members.owner_uid
-                AND active_invite.consumed_at = '' AND active_invite.expires_at > ?)`)
-          .bind(identity.uid, now, now, now, invite.team_member_id, invite.owner_uid,
-            identity.uid, invite.id, now),
-        getD1().prepare(`UPDATE trade_team_invites SET consumed_at = ?
-          WHERE id = ? AND consumed_at = '' AND expires_at > ?
-            AND EXISTS (SELECT 1 FROM trade_team_members member
-              WHERE member.id = trade_team_invites.team_member_id AND member.owner_uid = trade_team_invites.owner_uid
-                AND member.member_uid = ? AND member.accepted_at = ?)`)
-          .bind(now, invite.id, now, identity.uid, now),
-      ]);
-      if (!accepted[0]?.meta.changes || !accepted[1]?.meta.changes) {
-        return adminJson({ ok: false, error: "This invitation is no longer available." }, 409);
-      }
+      await acceptTradeTeamInvitation(cleanAdminText(body.token, 300), identity);
       const access = await requireInstallerTeamAccess(request);
       return adminJson({ ok: true, accepted: true, ...(await teamPayload(access)) });
     }
@@ -713,7 +677,9 @@ export async function POST(request: Request) {
     if (!SCHEDULE_COLOURS.has(scheduleColour)) throw new Error("SCHEDULE_COLOUR_INVALID");
     let displayName = cleanAdminText(body.displayName, 100)
       || [firstName, lastName].filter(Boolean).join(" ");
-    let appUsername = fieldUsername(body.fieldUsername, displayName);
+    // Resends load the saved name and username below; they do not need the add-member form again.
+    let appUsername = action === "reissue_invite" ? { username: "", normalized: "" }
+      : fieldUsername(body.fieldUsername, displayName);
     const requestedPermissions = permissionInput(body);
     let permissions = memberPermissions(requestedPermissions);
     if (hasPermissionMutation(body)) assertPermissionGrant(access, permissions);
@@ -877,7 +843,15 @@ export async function POST(request: Request) {
       }
     }
     const inviteUrl = new URL("/direct-trade/team", request.url); inviteUrl.searchParams.set("invite", inviteToken);
-    return adminJson({ ok: true, createdMemberId: action === "invite_member" && !cleanAdminText(body.memberId, 180) ? memberId : undefined,
+    const delivery = await sendTradeTeamInvitationEmail({ requestUrl: request.url, inviteId,
+      email, displayName, businessName: access.businessName, inviteUrl: inviteUrl.toString() });
+    await db.prepare(`INSERT INTO trade_team_member_events
+      (id, owner_uid, team_member_id, actor_uid, entity_type, entity_id, event_type, metadata, created_at)
+      VALUES (?, ?, ?, ?, 'member', ?, 'member.invitation_email', ?, ?)`)
+      .bind(crypto.randomUUID(), access.ownerUid, memberId, access.actorUid, memberId,
+        JSON.stringify({ inviteId, status: delivery.status }), now).run();
+    return adminJson({ ok: true, createdMemberId: action === "add_member" || (action === "invite_member" && !cleanAdminText(body.memberId, 180)) ? memberId : undefined,
+      delivery,
       invite: { memberId, email, displayName, firstName, lastName, phone,
       permissions, inviteUrl: inviteUrl.toString(), expiresInDays: 7 },
       ...(await teamPayload(access)) }, 201);
@@ -973,6 +947,14 @@ export async function PATCH(request: Request) {
           status, capabilities, serviceStates: serviceStates === null ? null : JSON.parse(serviceStates), permissionsBefore: beforePermissions, permissionsAfter: permissions,
           permissionsChanged, fieldUsernameChanged: usernameChanged,
         }, now),
+        ...(email !== String(current.email || "") ? [
+          db.prepare(`DELETE FROM trade_team_invites
+            WHERE owner_uid = ? AND team_member_id = ? AND consumed_at = ''
+              AND EXISTS (SELECT 1 FROM trade_team_members member
+                WHERE member.id = trade_team_invites.team_member_id
+                  AND member.owner_uid = trade_team_invites.owner_uid AND member.updated_at = ?)`)
+            .bind(access.ownerUid, memberId, now),
+        ] : []),
         ...(usernameChanged ? [
           db.prepare(`UPDATE trade_field_access_codes SET status = 'revoked', updated_at = ?
             WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'

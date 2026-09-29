@@ -43,6 +43,7 @@ function deniedRoute(routeName, error) {
     TradeComplianceIntentError: OtherDomainError,
     ComplianceDomainError: OtherDomainError,
     TradeAccessError: OtherDomainError,
+    TradeTeamInvitationError: OtherDomainError,
   };
   const names = ['GET', 'POST', 'PATCH', 'errorResponse'];
   if (routeName === 'trade-crm') names.push('crmIdentity');

@@ -348,3 +348,13 @@ test("team settings are readable and avoid prohibited dash characters", () => {
   assert.doesNotMatch(styles, /font-size:\s*\.(?:[0-7]\d*)rem/);
   assert.match(styles, /min-height: 44px/);
 });
+
+test("team invitations report actual email delivery and offer a direct resend", () => {
+  assert.match(settings, /result\.delivery\?\.status === "sent"/);
+  assert.match(settings, /setError\(result\.delivery\?\.message/);
+  assert.match(settings, /Invitation delivery could not be confirmed/);
+  assert.match(settings, /"Resend invitation"/);
+  assert.match(settings, /Adding a person with an email sends their team invitation automatically/);
+  assert.match(settings, /Copy invitation link/);
+  assert.doesNotMatch(settings, /Fresh login link created|Refresh office login link|Create office login link/);
+});

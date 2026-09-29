@@ -8,6 +8,7 @@ const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0025_dizzy_spot.sql");
 const rosterMigration = read("../drizzle/0070_frictionless_team_roster.sql");
 const route = read("../src/app/api/trade-team/route.ts");
+const invitation = read("../src/lib/trade-team-invitation-server.ts");
 const access = read("../src/lib/trade-team-server.ts");
 const settings = read("../src/components/TradeTeamSettings.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
@@ -39,11 +40,14 @@ test("the team migration applies cleanly to SQLite", () => {
 
 test("invitations are random, hashed, expiring, single-use and email bound", () => {
   assert.match(route, /crypto\.getRandomValues/);
-  assert.match(route, /SHA-256/);
-  assert.match(route, /token_hash = \?/);
+  assert.match(invitation, /SHA-256/);
+  assert.match(invitation, /token_hash = \?/);
+  assert.match(route, /await acceptTradeTeamInvitation\(cleanAdminText\(body\.token, 300\), identity\)/);
   assert.match(route, /7 \* 24 \* 60 \* 60 \* 1000/);
   assert.match(route, /consumed_at = ''/);
-  assert.match(route, /String\(invite\.email\)\.toLowerCase\(\) !== identity\.email/);
+  assert.match(invitation, /invite\.email\.toLowerCase\(\) !== identity\.email\.toLowerCase\(\)/);
+  assert.match(invitation, /if \(!identity\.emailVerified\)/);
+  assert.match(invitation, /active_invite\.consumed_at = '' AND active_invite\.expires_at > \?/);
   assert.match(route, /This person already has login access/);
   assert.doesNotMatch(migration, /`token` text/);
 });
@@ -56,9 +60,10 @@ test("owners and roster-only people are assignable before a separate login is cr
   assert.match(route, /appUsername\.username, appUsername\.normalized/);
   assert.match(route, /WHERE \$\{createGuard\.sql\}/);
   assert.match(route, /hasLogin: Boolean\(row\.member_uid\)/);
-  assert.match(settings, /Email, optional/);
+  assert.match(settings, /Email for invitation/);
+  assert.match(settings, /Leave it blank for a roster-only person/);
   assert.match(settings, /Roster only/);
-  assert.match(settings, /Create office login link/);
+  assert.match(settings, /Send invitation/);
   assert.match(rosterMigration, /WHERE `email` <> ''/);
 });
 
