@@ -2412,7 +2412,7 @@ function DirectTradeDashboardContent() {
               {!isSupplier && <TradeTeamPresence key={user.uid} getAuthHeaders={async () => ({ Authorization: `Bearer ${await user.getIdToken()}` })} />}
               {!isSupplier && <a className="tlink-get-app" href="/direct-trade/field-app"><Image src="/tlink-icon-192.png" alt="" width={25} height={25} /><span>Get the app</span></a>}
               <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
-              <div>
+              <div className="dashboard-account-summary">
                 <small>Business account</small>
                 <strong title={user.email || ""}>{profile.businessName}</strong>
               </div>

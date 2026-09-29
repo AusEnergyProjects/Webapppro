@@ -2093,7 +2093,7 @@
   .trade-portal-shell .crm-today-grid,
   .tlink-command-launcher { max-width: 360px; }
   .tlink-command-launcher kbd { display: none; }
-  .trade-portal-shell .dashboard-account-actions > div { display: none; }
+  .trade-portal-shell .dashboard-account-actions > .dashboard-account-summary { display: none; }
 }
 
 @media (max-width: 960px) {
