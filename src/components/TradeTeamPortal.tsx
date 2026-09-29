@@ -11,7 +11,11 @@ import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib
 import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import { SiteFooter } from "./ComparatorChrome";
-import { TLinkHeader } from "./TLinkChrome";
+import { TLinkHeader, TLinkMark } from "./TLinkChrome";
+import { TLinkNavigationIcon } from "./TLinkNavigationIcon";
+import { readTLinkColourMode, writeTLinkColourMode, TLINK_COLOUR_MODE_STORAGE_KEY, type TLinkColourMode } from "@/lib/tlink-colour-mode";
+import styles from "./TradeTeamPortal.module.css";
+import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import { InstallerCrmWorkspace } from "./InstallerCrmWorkspace";
 import { TradeFieldWorkPanel } from "./TradeFieldWorkPanel";
 import { TradeJobFormsPanel } from "./TradeJobFormsPanel";
@@ -36,6 +40,30 @@ type Result = { ownerUid?: string; businessName?: string; code?: string; ok?: bo
 type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
 const stages = [["backlog", "Planning"], ["ready", "Ready"], ["scheduled", "Scheduled"], ["in_progress", "On site"], ["blocked", "Waiting"], ["completed", "Complete"], ["cancelled", "Cancelled"]];
+type PortalView = "work" | "business" | "map" | "team" | "training" | "messages";
+type CrmShortcut = "jobs" | "customers" | "schedule" | "pricebook";
+
+function teamCrmShortcuts(permissions: TradeTeamPermissions) {
+  const shortcuts: { id: CrmShortcut; label: string; icon: "jobs" | "customers" | "schedule" | "products" }[] = [{ id: "jobs", label: "Jobs", icon: "jobs" }];
+  if (permissions.scheduleScope) shortcuts.push({ id: "schedule", label: "Schedule", icon: "schedule" });
+  if (permissions.canViewCustomers && permissions.canSearchCustomers) shortcuts.push({ id: "customers", label: "Customers", icon: "customers" });
+  if (permissions.canViewPriceBook) shortcuts.push({ id: "pricebook", label: "Products", icon: "products" });
+  return shortcuts;
+}
+
+function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm }: {
+  permissions: TradeTeamPermissions; view: PortalView; crmView: string;
+  onView: (view: PortalView) => void; onCrm: (view: CrmShortcut) => void;
+}) {
+  return <nav className={styles.navigation} aria-label="Staff workspace">
+    <button type="button" aria-current={view === "work" ? "page" : undefined} onClick={() => onView("work")}><TLinkNavigationIcon name="work" /><span>My work</span></button>
+    <button type="button" aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="messages" /><span>Messages <TradeMessageUnreadBadge /></span></button>
+    {teamCrmShortcuts(permissions).map(item => <button type="button" key={item.id} aria-current={view === "business" && crmView === item.id ? "page" : undefined} onClick={() => onCrm(item.id)}><TLinkNavigationIcon name={item.icon} /><span>{item.label}</span></button>)}
+    {permissions.canViewQuotes && permissions.canManageQuotes && <button type="button" aria-current={view === "map" ? "page" : undefined} onClick={() => onView("map")}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span></button>}
+    <button type="button" aria-current={view === "training" ? "page" : undefined} onClick={() => onView("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span></button>
+    {permissions.canManageTeam && <button type="button" aria-current={view === "team" ? "page" : undefined} onClick={() => onView("team")}><TLinkNavigationIcon name="team" /><span>Team</span></button>}
+  </nav>;
+}
 
 function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
   return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" />{visible && <path d="m3 3 18 18" />}</svg>;
@@ -83,17 +111,50 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   }, []);
   async function leaveAccount() {
     try {
+      if (!await mapNavigation.run(() => {})) return;
       await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {}, fetch);
       await signOut(firebaseAuth);
       setData({}); setStatus(""); clearPasswordFields();
     } catch (failure) { setStatus(failure instanceof Error ? failure.message : "Sign out could not be completed. Try again."); }
   }
-  const [portalView, setPortalView] = useState<"work" | "business" | "team" | "training" | "messages">("work");
+  const [portalView, setPortalViewState] = useState<PortalView>("work");
+  const [mapNavigation] = useState(createMapNavigationGuard);
+  const registerMapSave = useCallback((save: (() => Promise<unknown>) | null) => mapNavigation.register(save), [mapNavigation]);
+  const setPortalView = useCallback((view: PortalView) => { void mapNavigation.run(() => setPortalViewState(view)); }, [mapNavigation, setPortalViewState]);
   const [crmTarget, setCrmTarget] = useState<TLinkCommandTarget | null>(null);
+  const [crmView, setCrmView] = useState("jobs");
+  const [colourMode, setColourMode] = useState<TLinkColourMode>("day");
+  const teamReady = Boolean(user && emailVerified && data.access && invitationReady && !invitationError && !resolver && !mfaRequired);
   const [assigneeSearch, setAssigneeSearch] = useState("");
   const [assigneesLoading, setAssigneesLoading] = useState(false);
   const [workLoading, setWorkLoading] = useState(false);
   const assigneeRequestRef = useRef(0);
+
+  useEffect(() => {
+    if (!teamReady) return;
+    const apply = () => {
+      let next: TLinkColourMode = "day";
+      try { next = readTLinkColourMode(window.localStorage); } catch { /* Storage can be unavailable in private browsing. */ }
+      setColourMode(next); document.documentElement.dataset.tlinkColourMode = next;
+    };
+    const stored = (event: StorageEvent) => { if (event.key === TLINK_COLOUR_MODE_STORAGE_KEY || event.key === null) apply(); };
+    apply(); window.addEventListener("storage", stored);
+    return () => { window.removeEventListener("storage", stored); delete document.documentElement.dataset.tlinkColourMode; };
+  }, [teamReady]);
+
+  const toggleColourMode = () => {
+    const next = colourMode === "night" ? "day" : "night";
+    setColourMode(next); document.documentElement.dataset.tlinkColourMode = next;
+    try { writeTLinkColourMode(window.localStorage, next); } catch { /* This tab still keeps the selected appearance. */ }
+  };
+
+  const openCrm = (view: CrmShortcut) => {
+    void mapNavigation.run(() => {
+      setCrmView(view);
+      setCrmTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() });
+      setPortalViewState("business");
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -170,7 +231,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
     applyTrainingLink();
     window.addEventListener("popstate", applyTrainingLink);
     return () => window.removeEventListener("popstate", applyTrainingLink);
-  }, []);
+  }, [setPortalView]);
 
   const loadWork = useCallback(async (requestedCapability = "", throughPage = 1) => {
     if (!user) return {} as Result;
@@ -255,10 +316,11 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
     const timeout = window.setTimeout(() => setAuthDelayed(true), 10_000);
     const unsubscribe = onAuthStateChanged(firebaseAuth, (next) => {
       window.clearTimeout(timeout); setAuthDelayed(false);
+      mapNavigation.reset();
       setUser(next); setData({}); setEmailVerified(Boolean(next?.emailVerified)); setAuthReady(true); if (!next) setMfaRequired(false);
     }, () => { window.clearTimeout(timeout); setAuthDelayed(true); });
-    return () => { window.clearTimeout(timeout); unsubscribe(); };
-  }, []);
+    return () => { window.clearTimeout(timeout); unsubscribe(); mapNavigation.reset(); };
+  }, [mapNavigation]);
   useEffect(() => {
     if (!user || !emailVerified || !invitationReady || invitationError) return;
     if (invitation && user.email?.toLowerCase() !== invitation.email.toLowerCase()) return;
@@ -348,7 +410,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   if (resolver) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
   if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setAuthRevision(current => current + 1); }} /><button type="button" onClick={() => void leaveAccount()}>Sign out</button></main>;
 
-  return <TradeMessageAlerts user={user} enabled={Boolean(data.access)} onOpen={threadId => { setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 })); setPortalView("messages"); }}><TradeTeamCallProvider user={user} enabled={Boolean(data.access)}><main className="wrap trade-team-page"><TLinkHeader active="team" />
+  return <TradeMessageAlerts user={user} enabled={Boolean(data.access)} onOpen={threadId => { setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 })); setPortalView("messages"); }}><TradeTeamCallProvider user={user} enabled={Boolean(data.access)}><main className={teamReady ? `trade-team-page trade-portal-shell ${styles.shell}` : "wrap trade-team-page"} data-trade-colour-mode={teamReady ? colourMode : undefined}>{!teamReady && <TLinkHeader active="team" />}
     {!invitationReady ? <section className="dashboard-state-card"><p role="status">Opening your invitation...</p></section>
       : invitationError ? <section className="dashboard-state-card"><h1>{invitationInvalid ? "Use your newest invitation" : "Let's try that again"}</h1><p role="alert">{invitationError}</p>{invitationInvalid ? <><p>Look for the most recent email titled &ldquo;You&apos;re invited to ... on TLink&rdquo;. Earlier invitation and password-reset links may refer to the old invitation.</p><p>Your business can also send you the current link from Team &gt; Copy invitation link.</p><a className="btn" href="/direct-trade/team">Already joined? Sign in</a></> : <button className="btn" type="button" onClick={() => setInvitationAttempt(current => current + 1)}>Try again</button>}</section>
       : !authReady ? <section className="dashboard-state-card"><h1>{invitation ? "Your invitation is ready" : "Opening TLink"}</h1><p role="status">{authDelayed ? "Sign-in is taking longer than expected. Check your connection and try again." : "Checking your sign-in..."}</p>{authDelayed && <button className="btn" type="button" onClick={() => window.location.reload()}>Try again</button>}</section>
@@ -379,21 +441,31 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       : !emailVerified ? <section className="team-auth-shell"><div className="team-auth-intro"><span>One final step</span><h1>Confirm your email</h1><p>Your login is ready. Confirm that {user.email} is yours to open your team&apos;s workspace.</p></div><div className="team-auth-card"><h2>Check your inbox</h2><p>Open the verification email, tap the link and return here. Your team&apos;s saved access will then open automatically.</p>{status && <p role="status">{status}</p>}<button className="btn" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verify"); await refreshVerification(true); setBusy(""); }}>{busy === "verify" ? "Checking..." : "I've verified my email"}</button><button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verification-email"); await sendVerification(user); setBusy(""); }}>{busy === "verification-email" ? "Sending..." : "Resend verification email"}</button><button className="customer-reset-link" type="button" onClick={() => void leaveAccount()}>Use another account</button></div></section>
       : loading ? <section className="dashboard-state-card"><p>Loading assigned work...</p></section>
       : !data.access ? <section className="dashboard-state-card"><span>Team access</span><h1>Opening your team</h1><p>{status || "Checking your saved access..."}</p><button className="btn" type="button" onClick={() => void leaveAccount()}>Use another account</button></section> : <>
-      <header className="team-portal-hero"><div><span>Team portal</span><h1>{data.access.businessName}</h1><p>Welcome, {data.access.displayName}. {permissions?.jobScope === "own" ? "Only work assigned to you is visible. Customer details are limited to assigned jobs." : "Coordinate the active work queue from one place."}</p></div><div><strong>{todayJobs.length}</strong><span>jobs today</span><button type="button" onClick={() => void leaveAccount()}>Sign out</button></div></header>
-      <TradeTeamPresence key={user.uid} getAuthHeaders={async () => ({ Authorization: `Bearer ${await user.getIdToken()}` })} />
-      <nav className="crm-nav" aria-label="Staff workspace">
-        <button type="button" className={portalView === "work" ? "active" : ""} aria-current={portalView === "work" ? "page" : undefined} onClick={() => setPortalView("work")}>Assigned work</button>
-        <button type="button" className={portalView === "training" ? "active" : ""} aria-current={portalView === "training" ? "page" : undefined} onClick={() => setPortalView("training")}>My to do &amp; training</button>
-        {businessToolsAvailable && <button type="button" className={portalView === "business" ? "active" : ""} aria-current={portalView === "business" ? "page" : undefined} onClick={() => setPortalView("business")}>Business tools</button>}
-        <button type="button" className={portalView === "messages" ? "active" : ""} aria-current={portalView === "messages" ? "page" : undefined} onClick={() => setPortalView("messages")}>Messages <TradeMessageUnreadBadge /></button>
-        {permissions?.canManageTeam && <button type="button" className={portalView === "team" ? "active" : ""} aria-current={portalView === "team" ? "page" : undefined} onClick={() => setPortalView("team")}>Team</button>}
-      </nav>
+      <header className={styles.header}>
+        <div className={styles.topbar}>
+          <a className={styles.brand} href="/direct-trade/team" aria-label="TLink team workspace"><TLinkMark size={34} /><strong>TLink</strong></a>
+          <div className={styles.headerActions}>
+            <a className={styles.getApp} href="/direct-trade/field-app">Get the app <span aria-hidden="true">↗</span></a>
+            <button type="button" className={styles.themeToggle} aria-label="Night mode" aria-pressed={colourMode === "night"} title={colourMode === "night" ? "Switch to day mode" : "Switch to night mode"} onClick={toggleColourMode}>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">{colourMode === "night" ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5" /></> : <path d="M20.4 15.1A8.7 8.7 0 0 1 8.9 3.6 8.8 8.8 0 1 0 20.4 15.1Z" />}</svg>
+            </button>
+          </div>
+        </div>
+        <div className={styles.businessBar}>
+          <div className={styles.business}><span>Working with</span><strong>{data.access.businessName}</strong></div>
+          <TradeTeamPresence key={user.uid} getAuthHeaders={async () => ({ Authorization: "Bearer " + await user.getIdToken() })} />
+        </div>
+      </header>
+      <TeamWorkspaceNavigation permissions={data.access.permissions} view={portalView} crmView={crmView} onView={setPortalView} onCrm={openCrm} />
+      <div className={styles.content}>
+      {portalView === "work" && <div className={styles.welcome}><div><h1>Hi, {data.access.displayName.split(" ")[0] || data.access.displayName}</h1><p>{permissions?.jobScope === "own" ? "Only work assigned to you is visible." : "Your team’s work, ready to go."}</p></div><span>{todayJobs.length} {todayJobs.length === 1 ? "job" : "jobs"} today</span></div>}
       {portalView === "work" && <><section className="team-queue-summary"><article><span>Assigned work</span><strong>{jobs.filter((job) => !["completed", "cancelled"].includes(job.stage)).length}</strong></article><article><span>Today</span><strong>{todayJobs.length}</strong></article><article><span>Waiting</span><strong>{jobs.filter((job) => job.stage === "blocked").length}</strong></article><article><span>Open tasks</span><strong>{jobs.flatMap((job) => job.tasks).filter((task) => task.status !== "done").length}</strong></article></section>
-      <div className="team-queue-layout"><aside className="team-job-queue"><header><strong>Work queue</strong><span>{jobs.length}{data.work?.total ? ` of ${data.work.total}` : ""} visible</span></header>{jobs.length ? jobs.map((job) => <button type="button" key={job.id} className={selectedJobId === job.id ? "active" : ""} onClick={() => { setSelectedJobId(job.id); setAssigneeSearch(""); if (permissions?.canAssignJobs) void loadAssignees(job.serviceCategory, ""); }}><span>{job.workNumber}<b>{job.priority}</b></span><strong>{job.title}</strong><small>{job.scheduledStart || "Not scheduled"} | {job.assigneeLabel || "Unassigned"}</small></button>) : <div className="crm-empty"><strong>No work assigned</strong><span>Your dispatcher can assign the next job.</span></div>}{data.work && data.work.page < data.work.totalPages && <button type="button" disabled={workLoading} onClick={() => void loadMoreWork()}>{workLoading ? "Loading more work..." : "Load more work"}</button>}</aside><section className="team-job-focus">{selectedJob ? <article><header><div><span>{selectedJob.workNumber}</span><h2>{selectedJob.title}</h2><p>{selectedJob.protectedJob ? `${selectedJob.siteArea || "Service region"}. Australian Energy Assessments protected job, no customer identity or street address.` : selectedJob.serviceAddress || "Direct customer address has not been added."}</p></div><label><span>Job stage</span><select value={selectedJob.stage} disabled={!permissions?.canManageJobs || busy === `job:${selectedJob.id}`} onChange={(event) => void update({ action: "update_job", workOrderId: selectedJob.id, stage: event.target.value }, `job:${selectedJob.id}`, "Job stage updated.")}>{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></header>{permissions?.canAssignJobs && <section className="team-portal-assignment" aria-label="Assign this job"><label><span>Assigned technician</span><select value={selectedJob.assigneeMemberId} disabled={busy === `assign:${selectedJob.id}` || assigneesLoading} onChange={(event) => void update({ action: "assign_job", workOrderId: selectedJob.id, memberId: event.target.value }, `assign:${selectedJob.id}`, "Assignment updated.")}><option value="">Unassigned</option>{selectedJob.assigneeMemberId && !(data.assignees || []).some((member) => member.id === selectedJob.assigneeMemberId) && <option value={selectedJob.assigneeMemberId}>{selectedJob.assigneeLabel || "Current assignee"}</option>}{(data.assignees || []).map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select></label><form onSubmit={(event) => { event.preventDefault(); void loadAssignees(selectedJob.serviceCategory, assigneeSearch); }}><label><span>Find an active teammate</span><input type="search" value={assigneeSearch} onChange={(event) => setAssigneeSearch(event.target.value)} placeholder="Search by name" /></label><button type="submit" disabled={assigneesLoading}>{assigneesLoading ? "Searching..." : "Search"}</button></form>{data.assigneeRoster && data.assigneeRoster.page < data.assigneeRoster.totalPages && <button type="button" disabled={assigneesLoading} onClick={() => void loadAssignees(selectedJob.serviceCategory, data.assigneeRoster?.search || "", data.assigneeRoster!.page + 1, true)}>{assigneesLoading ? "Loading..." : "Load more team members"}</button>}<small>{permissions.jobScope === "own" ? "You can hand your assigned job to an active teammate. You cannot open or reassign someone else's work." : "Choose an active teammate who provides this service."}</small></section>}<section className="team-mobile-checklist"><h3>Job checklist</h3>{selectedJob.tasks.length ? selectedJob.tasks.map((task) => <label key={task.id}><input type="checkbox" checked={task.status === "done"} disabled={!permissions?.canManageJobs || busy === `task:${task.id}`} onChange={(event) => void update({ action: "update_task", taskId: task.id, status: event.target.checked ? "done" : "pending" }, `task:${task.id}`, event.target.checked ? "Task completed." : "Task reopened.")} /><span>{task.title}<small>{task.dueAt ? `Due ${task.dueAt}` : "No due date"}</small></span></label>) : <div className="crm-empty"><strong>No checklist yet</strong><span>The office can add task steps from the CRM.</span></div>}</section>{permissions?.canViewFieldEvidence && <section className="team-field-tools"><h3>Field record</h3><TradeFieldWorkPanel user={user} workOrderId={selectedJob.id} isProtected={selectedJob.protectedJob} readOnly={!permissions.canManageFieldEvidence} /></section>}{permissions?.canViewFieldEvidence && <section className="team-field-tools"><h3>Field forms</h3><TradeJobFormsPanel user={user} workOrderId={selectedJob.id} readOnly={!permissions.canManageFieldEvidence} /></section>}</article> : <div className="crm-empty"><strong>Select a job</strong><span>Its work details will open here.</span></div>}</section></div></>}
+      <div className="team-queue-layout"><aside className="team-job-queue"><header><strong>Work queue</strong><span>{jobs.length}{data.work?.total ? ` of ${data.work.total}` : ""} visible</span></header>{jobs.length ? jobs.map((job) => <button type="button" key={job.id} className={selectedJobId === job.id ? "active" : ""} onClick={() => { setSelectedJobId(job.id); setAssigneeSearch(""); if (permissions?.canAssignJobs) void loadAssignees(job.serviceCategory, ""); }}><span>{job.workNumber}<b>{job.priority}</b></span><strong>{job.title}</strong><small>{job.scheduledStart || "Not scheduled"} | {job.assigneeLabel || "Unassigned"}</small></button>) : <div className="crm-empty"><strong>No work assigned</strong><span>Your dispatcher can assign the next job.</span></div>}{data.work && data.work.page < data.work.totalPages && <button type="button" disabled={workLoading} onClick={() => void loadMoreWork()}>{workLoading ? "Loading more work..." : "Load more work"}</button>}</aside><section className="team-job-focus">{selectedJob ? <article><header><div><span>{selectedJob.workNumber}</span><h2>{selectedJob.title}</h2><p>{selectedJob.protectedJob ? `${selectedJob.siteArea || "Service region"}. Australian Energy Assessments protected job, no customer identity or street address.` : selectedJob.serviceAddress || "Direct customer address has not been added."}</p>{permissions?.canViewQuotes && <button className={styles.quoteButton} type="button" onClick={() => { setCrmTarget({ workspace: "work", kind: "job", id: selectedJob.id, jobTab: "quote", query: "", nonce: Date.now() }); setCrmView("jobs"); setPortalView("business"); }}>Open quote</button>}</div><label><span>Job stage</span><select value={selectedJob.stage} disabled={!permissions?.canManageJobs || busy === `job:${selectedJob.id}`} onChange={(event) => void update({ action: "update_job", workOrderId: selectedJob.id, stage: event.target.value }, `job:${selectedJob.id}`, "Job stage updated.")}>{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></header>{permissions?.canAssignJobs && <section className="team-portal-assignment" aria-label="Assign this job"><label><span>Assigned technician</span><select value={selectedJob.assigneeMemberId} disabled={busy === `assign:${selectedJob.id}` || assigneesLoading} onChange={(event) => void update({ action: "assign_job", workOrderId: selectedJob.id, memberId: event.target.value }, `assign:${selectedJob.id}`, "Assignment updated.")}><option value="">Unassigned</option>{selectedJob.assigneeMemberId && !(data.assignees || []).some((member) => member.id === selectedJob.assigneeMemberId) && <option value={selectedJob.assigneeMemberId}>{selectedJob.assigneeLabel || "Current assignee"}</option>}{(data.assignees || []).map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select></label><form onSubmit={(event) => { event.preventDefault(); void loadAssignees(selectedJob.serviceCategory, assigneeSearch); }}><label><span>Find an active teammate</span><input type="search" value={assigneeSearch} onChange={(event) => setAssigneeSearch(event.target.value)} placeholder="Search by name" /></label><button type="submit" disabled={assigneesLoading}>{assigneesLoading ? "Searching..." : "Search"}</button></form>{data.assigneeRoster && data.assigneeRoster.page < data.assigneeRoster.totalPages && <button type="button" disabled={assigneesLoading} onClick={() => void loadAssignees(selectedJob.serviceCategory, data.assigneeRoster?.search || "", data.assigneeRoster!.page + 1, true)}>{assigneesLoading ? "Loading..." : "Load more team members"}</button>}<small>{permissions.jobScope === "own" ? "You can hand your assigned job to an active teammate. You cannot open or reassign someone else's work." : "Choose an active teammate who provides this service."}</small></section>}<section className="team-mobile-checklist"><h3>Job checklist</h3>{selectedJob.tasks.length ? selectedJob.tasks.map((task) => <label key={task.id}><input type="checkbox" checked={task.status === "done"} disabled={!permissions?.canManageJobs || busy === `task:${task.id}`} onChange={(event) => void update({ action: "update_task", taskId: task.id, status: event.target.checked ? "done" : "pending" }, `task:${task.id}`, event.target.checked ? "Task completed." : "Task reopened.")} /><span>{task.title}<small>{task.dueAt ? `Due ${task.dueAt}` : "No due date"}</small></span></label>) : <div className="crm-empty"><strong>No checklist yet</strong><span>The office can add task steps from the CRM.</span></div>}</section>{permissions?.canViewFieldEvidence && <section className="team-field-tools"><h3>Field record</h3><TradeFieldWorkPanel user={user} workOrderId={selectedJob.id} isProtected={selectedJob.protectedJob} readOnly={!permissions.canManageFieldEvidence} /></section>}{permissions?.canViewFieldEvidence && <section className="team-field-tools"><h3>Field forms</h3><TradeJobFormsPanel user={user} workOrderId={selectedJob.id} readOnly={!permissions.canManageFieldEvidence} /></section>}</article> : <div className="crm-empty"><strong>Select a job</strong><span>Its work details will open here.</span></div>}</section></div></>}
       {portalView === "messages" && <TradeMessagesWorkspace user={user} initialThreadId={messageTarget.id} initialThreadRevision={messageTarget.revision} onOpenQuote={workOrderId => { setCrmTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() }); setPortalView("business"); }} />}
-      {portalView === "business" && businessToolsAvailable && <InstallerCrmWorkspace user={user} teamAccess={Boolean(permissions?.canManageTeam)} staffPermissions={permissions} navigationTarget={crmTarget} />}
+      {(portalView === "business" || (portalView === "map" && permissions?.canViewQuotes && permissions.canManageQuotes)) && businessToolsAvailable && <InstallerCrmWorkspace key={portalView} user={user} teamAccess={Boolean(permissions?.canManageTeam)} staffPermissions={permissions} navigationTarget={portalView === "map" ? null : crmTarget} mapWorkspace={portalView === "map"} onRegisterMapSave={registerMapSave} onViewChange={setCrmView} />}
       {portalView === "training" && <TradeTrainingWorkspace key={user.uid} user={user} />}
       {portalView === "team" && permissions?.canManageTeam && <section className="team-field-tools" aria-label="Team management"><TradeTeamSettings user={user} onOpenOwnTraining={() => setPortalView("training")} /></section>}
       {status && <p className="crm-status" role="status">{status}</p>}
-    </>}<SiteFooter>Team access is controlled by the installer business. Australian Energy Assessments protected customer identity and contact details remain unavailable.</SiteFooter></main></TradeTeamCallProvider></TradeMessageAlerts>;
+      </div><footer className={styles.footer}><span>Signed in as {data.access.displayName}</span><button type="button" onClick={() => void leaveAccount()}>Sign out</button></footer>
+    </>}{!teamReady && <SiteFooter>Team access is controlled by the installer business. Australian Energy Assessments protected customer identity and contact details remain unavailable.</SiteFooter>}</main></TradeTeamCallProvider></TradeMessageAlerts>;
 }

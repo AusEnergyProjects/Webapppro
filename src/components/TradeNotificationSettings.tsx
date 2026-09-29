@@ -4,6 +4,7 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { notificationErrorMessage, notificationTimeout, readTradePushSubscriptionId as localId, saveTradePushSubscriptionId as saveLocalId } from "@/lib/trade-notification-client";
+import { tradeBrowserDevice } from "@/lib/trade-browser-device";
 import styles from "./TradeNotificationSettings.module.css";
 
 type SavedSubscription = { id: string; messages: boolean; calls: boolean; enabled: boolean };
@@ -18,7 +19,7 @@ export function notificationApplicationKey(value: string): Uint8Array<ArrayBuffe
 }
 
 export function notificationDeviceSupport(userAgent: string, touchPoints: number, standalone: boolean, supported: boolean): "ready" | "home-screen" | "unsupported" {
-  const appleMobile = /iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && touchPoints > 1);
+  const appleMobile = tradeBrowserDevice({ userAgent, maxTouchPoints: touchPoints, standalone }).platform === "ios";
   if (appleMobile && !standalone) return "home-screen";
   return supported ? "ready" : "unsupported";
 }
@@ -27,6 +28,7 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
   const fetch = useTradeBusinessFetch();
   const [saved,setSaved] = useState<SavedSubscription | null>(null), [browserLinked,setBrowserLinked] = useState(false);
   const [support,setSupport] = useState<"loading" | "ready" | "home-screen" | "unsupported">("loading");
+  const [homeScreenBrowser,setHomeScreenBrowser] = useState("your browser");
   const [permission,setPermission] = useState<NotificationPermission>("default"), [configured,setConfigured] = useState(false);
   const [prepared,setPrepared] = useState(false);
   const [busy,setBusy] = useState(true), [notice,setNotice] = useState(""), [reload,setReload] = useState(0);
@@ -54,6 +56,8 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
     const load = async () => {
       setBusy(true); setStep("Checking this device..."); setNotice(""); setIssue(false); setSaved(null); setPrepared(false); setBrowserLinked(false); registration.current = null; subscription.current = null; applicationKey.current = null;
       const standalone = window.matchMedia("(display-mode: standalone)").matches || ("standalone" in navigator && navigator.standalone === true);
+      const browser = tradeBrowserDevice({ userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints, standalone }).browser;
+      setHomeScreenBrowser(browser === "chrome" ? "Chrome" : browser === "safari" ? "Safari" : "your browser");
       const device = notificationDeviceSupport(navigator.userAgent,navigator.maxTouchPoints,standalone,
         window.isSecureContext && "Notification" in window && "serviceWorker" in navigator && "PushManager" in window);
       setSupport(device);
@@ -188,7 +192,7 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
     <section className={styles.panel} aria-label="Notifications on this device">
       <header><strong>Alerts on this device</strong><button type="button" onClick={event => { const details = event.currentTarget.closest("details"); if (details) details.open = false; }}>Close</button></header>
       <p>Get alerts for team messages and incoming calls. Message contents stay private on the lock screen.</p>
-      {support === "home-screen" ? <div className={styles.setup}><strong>Set up iPhone or iPad alerts</strong><ol><li>Open TLink in Safari.</li><li>Tap Share, then Add to Home Screen.</li><li>Open that TLink icon and enable notifications.</li></ol><p>A normal browser tab cannot alert you once iOS puts it to sleep.</p></div>
+      {support === "home-screen" ? <div className={styles.setup}><strong>Add TLink to your Home Screen</strong><ol><li>In {homeScreenBrowser}, tap Share → Add to Home Screen → Add.</li><li>Open the TLink icon, then turn on notifications here.</li></ol><p>Calls work while this page is open. Home Screen setup lets this device receive background alerts.</p><a href="/direct-trade/field-app">Show install steps</a></div>
         : support === "unsupported" ? <p>This browser cannot receive background notifications. Use an up-to-date Chrome, Firefox or Safari browser. Calls and messages still work while TLink is open.</p>
         : support === "loading" || busy && !prepared ? <p role="status">{step}</p>
         : !configured && !issue ? <p>Background alerts are not configured for TLink yet. Contact TLink support. Keep TLink open for live messages and calls.</p>

@@ -17,9 +17,16 @@
 .controls { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .dock .hangup { background: #b5283d; border-color: #b5283d; color: #fff; }
 .dock .answer { background: #087859; border-color: #087859; color: #fff; }
+.dock .directLink { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 44px; padding: 10px 14px; border-radius: 10px; background: #087859; color: #fff; font-size: 14px; font-weight: 600; text-decoration: none; }
+.dock .directLink:focus-visible { outline: 3px solid var(--trade-accent-readable, #087f68); outline-offset: 3px; }
 .minimized { width: min(420px, calc(100vw - 32px)); }
 .dock p { margin: 8px 0; font-size: 14px; }
 .dock .help { color: var(--trade-muted, #60736c); font-size: 13px; }
+.permissionHelp { margin-top: 12px; padding: 12px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 10px; font-size: 13px; }
+.permissionHelp summary { cursor: pointer; font-weight: 600; }
+.permissionHelp summary:focus-visible { outline: 3px solid var(--trade-accent-readable, #087f68); outline-offset: 3px; }
+.permissionHelp ol { padding-left: 20px; margin: 10px 0 0; color: var(--trade-muted, #60736c); }
+.permissionHelp li + li { margin-top: 8px; }
 :global(html[data-tlink-colour-mode="night"]) .dock {
   --trade-surface: #102027;
   --trade-ink: #e4efed;

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {openTeamCallMedia,TeamCallRinger,teamCallMediaConstraints,teamCallCameraConstraints,teamCallMediaError} from '../src/lib/trade-team-call-media.ts';
+import {openTeamCallMedia,TeamCallRinger,teamCallMediaConstraints,teamCallCameraConstraints,teamCallMediaError,teamCallNeedsPermission,teamCallPolicyBlocked,teamCallPermissionState,teamCallPermissionSteps} from '../src/lib/trade-team-call-media.ts';
+import {tradeBrowserDevice} from '../src/lib/trade-browser-device.ts';
 
 test('voice calling requests no camera and video starts with the front camera',()=>{
   assert.equal(teamCallMediaConstraints('audio').video,false);
@@ -9,12 +10,73 @@ test('voice calling requests no camera and video starts with the front camera',(
   assert.equal(teamCallCameraConstraints('environment').facingMode.exact,'environment');
 });
 
-test('permission denial tells the user how to recover and only names the requested devices',()=>{
+test('permission refusal does not claim a persistent block unless the browser reports denied',()=>{
   const denied=new DOMException('blocked','NotAllowedError');
-  assert.match(teamCallMediaError(denied,'audio'),/microphone permission is blocked/);
+  assert.match(teamCallMediaError(denied,'audio'),/Choose Allow/);
+  assert.doesNotMatch(teamCallMediaError(denied,'audio'),/blocked|Safari|Chrome|Edge/);
   assert.doesNotMatch(teamCallMediaError(denied,'audio'),/camera/);
   assert.match(teamCallMediaError(denied,'video'),/microphone and camera/);
-  assert.match(teamCallMediaError(denied,'video'),/device settings/);
+  assert.match(teamCallMediaError(denied,'video',true),/reports microphone and camera access is blocked/);
+  assert.equal(teamCallNeedsPermission(denied),true);
+  assert.equal(teamCallNeedsPermission(new Error('Network failed')),false);
+});
+
+test('permission help names only the current browser and requested devices',()=>{
+  const chrome=tradeBrowserDevice({userAgent:'Mozilla/5.0 (iPhone) CriOS/140.0 Mobile Safari/604.1'});
+  const chromeSteps=teamCallPermissionSteps('audio',chrome).join(' ');
+  assert.match(chromeSteps,/iPhone Settings > Apps > Chrome/);assert.match(chromeSteps,/microphone icon/);
+  assert.doesNotMatch(chromeSteps,/camera|Safari|Edge|Website Settings/);
+  const safari=tradeBrowserDevice({userAgent:'Mozilla/5.0 (iPad) Version/18.5 Mobile Safari/604.1'});
+  assert.match(teamCallPermissionSteps('video',safari).join(' '),/Website Settings.+Microphone and Camera.+iPad Settings/);
+  assert.doesNotMatch(teamCallPermissionSteps('video',safari).join(' '),/Chrome|Edge/);
+  const android=tradeBrowserDevice({userAgent:'Mozilla/5.0 (Linux; Android 15) Chrome/140.0 Safari/537.36'});
+  assert.match(teamCallPermissionSteps('audio',android).join(' '),/Site settings > Microphone.+Android Settings/);
+  const desktop=tradeBrowserDevice({userAgent:'Mozilla/5.0 (Windows) Chrome/140.0 Safari/537.36 Edg/140.0'});
+  assert.match(teamCallPermissionSteps('audio',desktop).join(' '),/site controls beside/);
+  assert.doesNotMatch(teamCallPermissionSteps('audio',desktop).join(' '),/iPhone|Android|Safari/);
+  const embedded=tradeBrowserDevice({userAgent:'Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148'});
+  assert.match(teamCallPermissionSteps('audio',embedded).join(' '),/phone's browser/);
+});
+
+test('permission queries distinguish denied, prompt, granted and unsupported without requesting access',async()=>{
+  const names=[];
+  const mixed={query:async({name})=>{names.push(name);return {state:name==='camera'?'denied':'granted'};}};
+  assert.equal(await teamCallPermissionState('video',mixed),'denied');assert.deepEqual(names,['microphone','camera']);
+  assert.equal(await teamCallPermissionState('audio',mixed),'granted');
+  assert.equal(await teamCallPermissionState('audio',{query:async()=>({state:'prompt'})}),'prompt');
+  assert.equal(await teamCallPermissionState('audio',{query:async()=>{throw new TypeError('unsupported');}}),'unknown');
+  assert.equal(await teamCallPermissionState('audio',{}),'unknown');
+});
+
+test('document policy checks actual microphone and camera capability, not browser identity',()=>{
+  assert.equal(teamCallPolicyBlocked('audio',{permissionsPolicy:{allowsFeature:()=>false}}),true);
+  assert.equal(teamCallPolicyBlocked('audio',{permissionsPolicy:undefined,featurePolicy:{allowsFeature:()=>false}}),true);
+  const cameraOnly={featurePolicy:{allowsFeature:name=>name!=='camera'}};
+  assert.equal(teamCallPolicyBlocked('video',cameraOnly),true);assert.equal(teamCallPolicyBlocked('audio',cameraOnly),false);
+  assert.equal(teamCallPolicyBlocked('video',{permissionsPolicy:{allowsFeature:()=>true}}),false);
+  assert.equal(teamCallPolicyBlocked('video',{featurePolicy:{allowsFeature:()=>{throw new Error('unsupported');}}}),false);
+  assert.equal(teamCallPolicyBlocked('video',{featurePolicy:{allowsFeature:()=>undefined}}),false);
+  assert.equal(teamCallPolicyBlocked('video',{}),false);
+});
+
+test('ignored permission queries cannot leave recovery waiting',async context=>{
+  context.mock.timers.enable({apis:['setTimeout']});
+  const result=teamCallPermissionState('audio',{query:()=>new Promise(()=>{})});
+  context.mock.timers.tick(500);assert.equal(await result,'unknown');
+});
+
+test('media request happens synchronously on the initiating click before yielding',async()=>{
+  let requested=false;const stream={getTracks:()=>[]};
+  const pending=openTeamCallMedia({},()=>{requested=true;return Promise.resolve(stream);});
+  assert.equal(requested,true);assert.equal(await pending,stream);
+});
+
+test('cancelled permission requests settle promptly and stop any later granted stream',async()=>{
+  let grant,stopped=0;const controller=new AbortController();
+  const pending=openTeamCallMedia({},()=>new Promise(resolve=>{grant=resolve;}),controller.signal);
+  const failure=assert.rejects(pending,error=>error.name==='AbortError');controller.abort();await failure;
+  grant({getTracks:()=>[{stop:()=>stopped++}]});await new Promise(resolve=>setImmediate(resolve));assert.equal(stopped,1);
+  await assert.rejects(openTeamCallMedia({},()=>assert.fail('cancelled request opened hardware'),controller.signal),error=>error.name==='AbortError');
 });
 
 test('missing hardware, busy devices and network failures have distinct recovery guidance',()=>{
@@ -29,7 +91,7 @@ test('media permission timeout stops a stream granted after the call was cancell
   context.mock.timers.enable({apis:['setTimeout']});
   let grant,stopped=0;
   const pending=openTeamCallMedia(teamCallMediaConstraints('audio'),()=>new Promise(resolve=>{grant=resolve;}));
-  const failure=assert.rejects(pending,/access was not completed/);
+  const failure=assert.rejects(pending,error=>error.name==='TeamCallMediaPermissionTimeout'&&teamCallNeedsPermission(error));
   context.mock.timers.tick(30000);await failure;
   grant({getTracks:()=>[{stop:()=>stopped++}]});await new Promise(resolve=>setImmediate(resolve));
   assert.equal(stopped,1);

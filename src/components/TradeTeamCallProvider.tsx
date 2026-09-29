@@ -5,7 +5,8 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { User } from "firebase/auth";
 import { TeamCallConnections, type CallRemote } from "@/lib/trade-team-call-client";
-import { openTeamCallMedia, TeamCallRinger, teamCallCameraConstraints, teamCallMediaConstraints, teamCallMediaError, type CameraFacing } from "@/lib/trade-team-call-media";
+import { openTeamCallMedia, TeamCallRinger, teamCallCameraConstraints, teamCallMediaConstraints, teamCallMediaError, teamCallNeedsPermission, teamCallPolicyBlocked, teamCallPermissionState, teamCallPermissionSteps, type CameraFacing } from "@/lib/trade-team-call-media";
+import { tradeBrowserDevice } from "@/lib/trade-browser-device";
 import type { TeamCall, TeamCallSignal } from "@/lib/trade-team-calls";
 import styles from "./TradeTeamCallProvider.module.css";
 
@@ -50,6 +51,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   const [localPreview,setLocalPreview] = useState<MediaStream | null>(null);
   const [notice,setNotice] = useState(""), [remotes,setRemotes] = useState<CallRemote[]>([]), [muted,setMuted] = useState(false), [cameraOff,setCameraOff] = useState(false), [minimized,setMinimized] = useState(false);
   const [retry,setRetry] = useState<RetryCall | null>(null), [openingMode,setOpeningMode] = useState<Mode>("audio");
+  const [permissionHelp,setPermissionHelp] = useState<{mode: Mode; denied: boolean; policyBlocked: boolean} | null>(null);
   const [hasCamera,setHasCamera] = useState(false), [multipleCameras,setMultipleCameras] = useState(false), [switchingCamera,setSwitchingCamera] = useState(false);
   const [cameraNotice,setCameraNotice] = useState("");
   const [ringReady,setRingReady] = useState(false);
@@ -57,6 +59,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   const presenceRevision = useRef(0);
   const facing = useRef<CameraFacing>("user"), changingCamera = useRef(false);
   const session = useRef<CallSession | null>(null), media = useRef<MediaStream | null>(null), generation = useRef(0), dismissed = useRef(new Set<string>()), starting = useRef(false);
+  const mediaRequest = useRef<AbortController | null>(null);
   const authentication = useRef({user,getAuthHeaders});
   useEffect(() => { authentication.current = {user,getAuthHeaders}; },[user,getAuthHeaders]);
   const available = enabled && Boolean(user || getAuthHeaders);
@@ -115,6 +118,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
 
   const release = useCallback((notify = true) => {
     generation.current++; starting.current = false;
+    mediaRequest.current?.abort(); mediaRequest.current = null;
     const current = session.current; session.current = null;
     current?.peers?.close();
     media.current?.getTracks().forEach(track => track.stop()); media.current = null;
@@ -124,7 +128,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   const stop = useCallback((message = "", notify = true) => {
     release(notify);
     setActive(null); setRemotes([]); setLocalPreview(null); setBusy(false); setMuted(false); setCameraOff(false); setNotice(message);
-    setRetry(null); setCameraNotice(""); setHasCamera(false); setMultipleCameras(false); setSwitchingCamera(false);
+    setRetry(null); setPermissionHelp(null); setCameraNotice(""); setHasCamera(false); setMultipleCameras(false); setSwitchingCamera(false);
   },[release]);
 
   useEffect(() => {
@@ -134,11 +138,13 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
 
   const begin = useCallback(async (threadId: string, mode: Mode, existing?: TeamCall) => {
     if (!available || starting.current || session.current) return;
-    starting.current = true; setBusy(true); setNotice(""); setRetry(null); setMinimized(false); setOpeningMode(mode);
+    starting.current = true; setBusy(true); setNotice(""); setRetry(null); setPermissionHelp(null); setMinimized(false); setOpeningMode(mode);
     const epoch = ++generation.current, sessionId = crypto.randomUUID();
     try {
       if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error("Calling is not supported here. Open TLink in an up-to-date Chrome, Edge, Safari or Firefox browser using HTTPS.");
-      const local = await openTeamCallMedia(teamCallMediaConstraints(mode));
+      const request = new AbortController(); mediaRequest.current = request;
+      const local = await openTeamCallMedia(teamCallMediaConstraints(mode),undefined,request.signal);
+      if (mediaRequest.current === request) mediaRequest.current = null;
       if (generation.current !== epoch) { local.getTracks().forEach(track => track.stop()); return; }
       media.current = local; setLocalPreview(local); setHasCamera(local.getVideoTracks().length > 0);
       facing.current = local.getVideoTracks()[0]?.getSettings().facingMode === "environment" ? "environment" : "user";
@@ -162,6 +168,18 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       if (generation.current !== epoch) return;
       const code = error && typeof error === "object" && "code" in error ? error.code : "";
       stop(teamCallMediaError(error,mode));
+      if (teamCallNeedsPermission(error)) {
+        const failureEpoch = generation.current;
+        const policyBlocked = teamCallPolicyBlocked(mode);
+        setPermissionHelp({mode,denied:false,policyBlocked});
+        if (policyBlocked) setNotice("Open TLink directly to allow calls. Then choose Allow when your browser asks.");
+        // Read-only diagnostics run after the permission request failed. Never
+        // await a permission query before a user-initiated getUserMedia call.
+        else void teamCallPermissionState(mode).then(state => {
+          if (generation.current !== failureEpoch || state !== "denied") return;
+          setPermissionHelp({mode,denied:true,policyBlocked:false}); setNotice(teamCallMediaError(error,mode,true));
+        });
+      }
       if (code !== "CALL_ALREADY_ACTIVE") setRetry({threadId,mode,existing});
       if (code === "CALL_ALREADY_ACTIVE") { try { const result = await api(`threadId=${encodeURIComponent(threadId)}`); if(result.call?.status === "active") { dismissed.current.delete(result.call.id); setIncoming([result.call]); } } catch { /* Original failure remains visible. */ } }
     }
@@ -182,12 +200,12 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       void api(`threadId=${encodeURIComponent(threadId)}`).then(result => {
         if (disposed || session.current || starting.current || availabilityVersion !== presenceRevision.current) return;
         if (result.call?.id !== callId || result.call.status !== "active") { setNotice("This call has ended. You can call your teammate back from Messages."); return; }
-        dismissed.current.delete(callId); setNotice(""); setRetry(null); setMinimized(false); setIncoming([result.call]);
+        dismissed.current.delete(callId); stop("",false); setMinimized(false); setIncoming([result.call]);
       }).catch(error => { if (!disposed) setNotice(error instanceof Error ? error.message : "This call is no longer available."); });
     };
     window.addEventListener("tlink:open-team-call",openInvitation);
     return () => { disposed = true; window.removeEventListener("tlink:open-team-call",openInvitation); };
-  },[available,api]);
+  },[available,api,stop]);
 
   const activeId = active?.id;
   useEffect(() => {
@@ -242,7 +260,9 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
     old?.stop();
     let replacement: MediaStream | null = null;
     try {
-      replacement = await openTeamCallMedia({audio:false,video:teamCallCameraConstraints(nextFacing)});
+      const request = new AbortController(); mediaRequest.current = request;
+      replacement = await openTeamCallMedia({audio:false,video:teamCallCameraConstraints(nextFacing)},undefined,request.signal);
+      if (mediaRequest.current === request) mediaRequest.current = null;
       const track = replacement.getVideoTracks()[0];
       if (!track) throw new Error("The camera did not open.");
       if (session.current !== current) { replacement.getTracks().forEach(item => item.stop()); return; }
@@ -267,13 +287,30 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   };
   const connected = remotes.some(peer => peer.state === "connected");
   const invitation = incoming[0];
+  const browser = tradeBrowserDevice();
+  const openDirectInNewTab = browser.embedded || typeof window !== "undefined" && window.top !== window;
   return <CallContext.Provider value={{start:(threadId,mode) => void begin(threadId,mode),busy:busy || Boolean(active)}}>{children}
     {(active || busy || invitation || notice) && <aside className={`${styles.dock} ${minimized ? styles.minimized : ""}`} aria-label="Internal team call">
       {active ? <><header><div><strong>{active.threadName || "Team call"}</strong><span role="status">{connected ? "Connected" : busy || remotes.length ? "Connecting..." : "Waiting for answer..."} · Internal · {hasCamera ? "Video" : "Voice"}</span></div><button type="button" onClick={() => setMinimized(value => !value)}>{minimized ? "Expand" : "Minimise"}</button></header>
         {!minimized && <div className={styles.grid}><StreamTile stream={localPreview} name={muted ? "You · Muted" : "You"} local cameraOff={cameraOff || !hasCamera} />{remotes.map(peer => <StreamTile key={peer.memberId} stream={peer.stream} name={peer.name} state={peer.state} />)}</div>}
         {cameraNotice && <p role="status" className={styles.help}>{cameraNotice}</p>}
         <div className={styles.controls}><button type="button" aria-pressed={muted} onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button>{hasCamera && <><button type="button" disabled={switchingCamera} aria-pressed={cameraOff} onClick={toggleCamera}>{cameraOff ? "Camera on" : "Camera off"}</button>{multipleCameras && <button type="button" disabled={switchingCamera} onClick={() => void changeCamera(facing.current === "user" ? "environment" : "user")}>{switchingCamera ? "Switching..." : "Switch camera"}</button>}</>}<button type="button" className={styles.hangup} onClick={() => stop()}>Hang up</button></div>
-      </> : busy ? <><strong>Opening your {openingMode === "video" ? "video" : "voice"} call</strong><p role="status">Allow {openingMode === "video" ? "microphone and camera" : "microphone"} access if your device asks.</p><button type="button" onClick={() => stop()}>Cancel</button></> : notice && (retry || !invitation) ? <><strong>Team call</strong><p role="status">{notice}</p><div className={styles.controls}>{retry && <><button type="button" className={styles.answer} onClick={() => void begin(retry.threadId,retry.mode,retry.existing)}>Retry</button>{retry.mode === "video" && <button type="button" onClick={() => void begin(retry.threadId,"audio",retry.existing)}>Use voice only</button>}</>}<button type="button" onClick={() => {setNotice("");setRetry(null);}}>Close</button></div></> : invitation ? <><strong>{invitation.threadName || "Team call"}</strong><p role="status">Incoming {invitation.mode === "video" ? "video" : "voice"} call · Internal</p><p className={styles.help}>Your microphone{invitation.mode === "video" ? " and camera turn" : " turns"} on when you answer.</p>{!ringReady && <button type="button" onClick={() => void ringer.current?.unlock()}>Enable ring sound</button>}<div className={styles.controls}><button type="button" className={styles.answer} onClick={() => void begin(invitation.threadId,invitation.mode,invitation)}>Answer</button>{invitation.mode === "video" && <button type="button" onClick={() => void begin(invitation.threadId,"audio",invitation)}>Voice only</button>}<button type="button" onClick={() => {dismissed.current.add(invitation.id);setIncoming(items=>items.filter(item=>item.id!==invitation.id));}}>Decline</button></div></> : null}
+      </> : busy ? <><strong>Opening your {openingMode === "video" ? "video" : "voice"} call</strong><p role="status">Choose Allow if your browser asks for {openingMode === "video" ? "microphone and camera" : "microphone"} access.</p><button type="button" onClick={() => stop()}>Cancel</button></>
+        : notice && (retry || !invitation) ? <>
+          <strong>{permissionHelp ? permissionHelp.mode === "video" ? "Microphone and camera access" : "Microphone access" : "Team call"}</strong>
+          <p role="status">{notice}</p>
+          {permissionHelp && !permissionHelp.policyBlocked && <details className={styles.permissionHelp} open={permissionHelp.denied}>
+            <summary>{permissionHelp.denied ? "How to allow access" : "Not seeing a permission prompt?"}</summary>
+            <ol>{teamCallPermissionSteps(permissionHelp.mode,browser).map(step => <li key={step}>{step}</li>)}</ol>
+          </details>}
+          <div className={styles.controls}>
+            {retry && (permissionHelp?.policyBlocked ? <a className={styles.directLink} href={`/direct-trade/messages?threadId=${encodeURIComponent(retry.threadId)}${retry.existing ? `&callId=${encodeURIComponent(retry.existing.id)}` : ""}`} target={openDirectInNewTab ? "_blank" : undefined} rel="noopener noreferrer">Open TLink calls</a>
+              : <><button type="button" className={styles.answer} onClick={() => void begin(retry.threadId,retry.mode,retry.existing)}>
+              {permissionHelp && !permissionHelp.denied ? retry.mode === "video" ? "Allow mic & camera" : "Allow microphone" : "Try again"}
+            </button>{retry.mode === "video" && <button type="button" onClick={() => void begin(retry.threadId,"audio",retry.existing)}>Use voice only</button>}</>)}
+            <button type="button" onClick={() => stop()}>Close</button>
+          </div>
+        </> : invitation ? <><strong>{invitation.threadName || "Team call"}</strong><p role="status">Incoming {invitation.mode === "video" ? "video" : "voice"} call · Internal</p><p className={styles.help}>Your microphone{invitation.mode === "video" ? " and camera turn" : " turns"} on when you answer.</p>{!ringReady && <button type="button" onClick={() => void ringer.current?.unlock()}>Enable ring sound</button>}<div className={styles.controls}><button type="button" className={styles.answer} onClick={() => void begin(invitation.threadId,invitation.mode,invitation)}>Answer</button>{invitation.mode === "video" && <button type="button" onClick={() => void begin(invitation.threadId,"audio",invitation)}>Voice only</button>}<button type="button" onClick={() => {dismissed.current.add(invitation.id);setIncoming(items=>items.filter(item=>item.id!==invitation.id));}}>Decline</button></div></> : null}
     </aside>}
   </CallContext.Provider>;
 }

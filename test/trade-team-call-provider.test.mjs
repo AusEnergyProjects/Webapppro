@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
+import {openTeamCallMedia,teamCallMediaConstraints,teamCallMediaError,teamCallNeedsPermission} from '../src/lib/trade-team-call-media.ts';
 
 const source=fs.readFileSync(new URL('../src/components/TradeTeamCallProvider.tsx',import.meta.url),'utf8');
 const tree=ts.createSourceFile('TradeTeamCallProvider.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
@@ -81,4 +82,82 @@ test('an incoming response started before a presence change cannot restart ringi
   const pending=tick();revision.current++;
   resolve({memberId:'member-self',calls:[{id:'call-1234',createdByMemberId:'member-other'}]});await pending;
   assert.deepEqual(incoming,[]);
+});
+
+function startFixture({requestMedia,permissionState=async()=> 'unknown',policyBlocked=false}={}) {
+  const order=[],state={},session={current:null},media={current:null},mediaRequest={current:null},generation={current:0},starting={current:false};
+  const setters=Object.fromEntries(['Busy','Notice','Retry','PermissionHelp','Minimized','OpeningMode','LocalPreview','HasCamera','Active','Incoming','Remotes','Muted','CameraOff','CameraNotice','MultipleCameras','SwitchingCamera'].map(name=>[`set${name}`,value=>{state[name]=value;}]));
+  const call={id:'call-1234',threadId:'thread-1234',status:'active',participants:[]};
+  const api=async(_query,body)=>{
+    order.push(body.action);
+    return body.action==='ice'?{iceServers:[{urls:'stun:example.test'}]}:{call,memberId:'member-self'};
+  };
+  const release=operation('release',{generation,starting,mediaRequest,session,media,changingCamera:{current:false},dismissed:{current:new Set()},api});
+  const stop=operation('stop',{release,...setters});
+  const begin=operation('begin',{available:true,starting,session,...setters,generation,mediaRequest,media,facing:{current:'user'},
+    navigator:{mediaDevices:{getUserMedia(){}}},window:{RTCPeerConnection(){}},teamCallMediaConstraints,
+    openTeamCallMedia:(constraints,_request,signal)=>openTeamCallMedia(constraints,value=>{order.push('media');return requestMedia(value);},signal),
+    api,stop,teamCallMediaError,teamCallNeedsPermission,teamCallPolicyBlocked:()=>policyBlocked,teamCallPermissionState:permissionState,
+    TeamCallConnections:class{async sync(){}close(){}},dismissed:{current:new Set()}});
+  return {begin,stop,state,order,session,media,generation};
+}
+
+const fakeStream=()=>({stopped:0,getTracks(){return[{stop:()=>this.stopped++}];},getVideoTracks(){return[];}});
+
+test('start and answer invoke media on the click stack before auth or server work',async()=>{
+  for(const existing of [undefined,{id:'incoming-1234'}]){
+    let grant;const stream=fakeStream();
+    const f=startFixture({requestMedia:()=>new Promise(resolve=>{grant=resolve;})});
+    const pending=f.begin('thread-1234','audio',existing);
+    assert.deepEqual(f.order,['media']);assert.equal(f.state.Busy,true);
+    grant(stream);await pending;
+    assert.deepEqual(f.order,['media',existing?'join':'start','ice']);assert.equal(f.state.Active.id,'call-1234');
+    f.stop();assert.equal(stream.stopped,1);
+  }
+});
+
+test('permission refusal shows retry without contacting the server and voice recovery requests no camera',async()=>{
+  const requests=[],stream=fakeStream();let attempt=0;
+  const f=startFixture({requestMedia:async constraints=>{requests.push(constraints);if(attempt++===0)throw new DOMException('not allowed','NotAllowedError');return stream;}});
+  await f.begin('thread-1234','video');
+  assert.deepEqual(f.order,['media']);assert.equal(f.state.Retry.mode,'video');assert.deepEqual(f.state.PermissionHelp,{mode:'video',denied:false,policyBlocked:false});
+  assert.doesNotMatch(f.state.Notice,/blocked/);
+  await f.begin('thread-1234','audio');
+  assert.equal(requests[1].video,false);assert.equal(f.state.PermissionHelp,null);assert.equal(f.state.Busy,false);f.stop();
+});
+
+test('cancelled permission prompts never create calls or revive a late camera stream',async()=>{
+  let grant;const stream=fakeStream();
+  const f=startFixture({requestMedia:()=>new Promise(resolve=>{grant=resolve;})});
+  const pending=f.begin('thread-1234','video');f.stop();await pending;
+  grant(stream);await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(stream.stopped,1);assert.deepEqual(f.order,['media']);assert.equal(f.state.Retry,null);assert.equal(f.state.Notice,'');
+});
+
+test('late permission diagnostics cannot overwrite a successful retry or a closed notice',async()=>{
+  for(const action of ['retry','close']){
+    let resolvePermission,attempt=0;const stream=fakeStream();
+    const f=startFixture({requestMedia:async()=>{if(attempt++===0)throw new DOMException('denied','NotAllowedError');return stream;},permissionState:()=>new Promise(resolve=>{resolvePermission=resolve;})});
+    await f.begin('thread-1234','audio');
+    if(action==='retry')await f.begin('thread-1234','audio');else f.stop();
+    resolvePermission('denied');await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(f.state.PermissionHelp,null,action);assert.equal(f.state.Notice,'',action);f.stop();
+  }
+});
+
+test('a confirmed permission block opens device help but never pretends access is granted',async()=>{
+  const f=startFixture({requestMedia:async()=>{throw new DOMException('denied','NotAllowedError');},permissionState:async()=> 'denied'});
+  await f.begin('thread-1234','audio');await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(f.state.PermissionHelp,{mode:'audio',denied:true,policyBlocked:false});assert.match(f.state.Notice,/reports microphone access is blocked/);
+  assert.deepEqual(f.order,['media']);assert.equal(f.state.Active,null);
+});
+
+test('inherited or embedded document policy denial offers a full-document calls link instead of permission settings',async()=>{
+  const f=startFixture({requestMedia:async()=>{throw new DOMException('policy denied','NotAllowedError');},policyBlocked:true,permissionState:()=>assert.fail('policy denial should not be mislabelled as user denial')});
+  await f.begin('thread-1234','video');
+  assert.deepEqual(f.state.PermissionHelp,{mode:'video',denied:false,policyBlocked:true});assert.match(f.state.Notice,/Open TLink directly/);
+  assert.doesNotMatch(f.state.Notice,/settings/);assert.deepEqual(f.order,['media']);
+  assert.match(source,/<a className=\{styles\.directLink\} href=\{`\/direct-trade\/messages\?threadId=\$\{encodeURIComponent\(retry\.threadId\)\}/);
+  assert.match(source,/target=\{openDirectInNewTab \? "_blank" : undefined\} rel="noopener noreferrer"/);
+  assert.match(source,/browser\.embedded \|\| typeof window !== "undefined" && window\.top !== window/);
 });

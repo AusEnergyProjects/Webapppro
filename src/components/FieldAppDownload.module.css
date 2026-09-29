@@ -1,0 +1,31 @@
+.page { min-height: 100dvh; background: #f3f7f7; color: #153832; padding: 28px 18px 48px; font: 400 15px/1.55 Arial, sans-serif; }
+.header, .card, .footer { width: min(100%, 640px); margin: 0 auto; }
+.header { display: flex; align-items: center; gap: 14px; padding: 8px 4px 24px; }
+.header img { border-radius: 14px; }
+.header h1 { margin: 0; color: inherit; font-size: 24px; font-weight: 700; letter-spacing: -.5px; line-height: 1.2; }
+.header p { margin: 3px 0 0; color: #516e67; }
+.card { padding: clamp(20px, 5vw, 32px); border: 1px solid #d8e3df; border-radius: 20px; background: white; box-shadow: 0 10px 35px #123d3510; }
+.devices { display: flex; gap: 5px; padding: 4px; margin-bottom: 24px; border-radius: 12px; background: #eff4f2; }
+.devices button { flex: 1; min-height: 42px; padding: 8px; border: 0; border-radius: 9px; color: #49635e; background: transparent; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.devices button[aria-pressed=true] { background: white; color: #55396d; box-shadow: 0 2px 5px #092e3014; }
+.tag { color: #67517b; font-size: 12px; font-weight: 700; }
+.card h2 { color: inherit; margin: 8px 0 12px; font-size: clamp(22px, 5vw, 28px); font-weight: 700; line-height: 1.2; letter-spacing: -.5px; }
+.card p { margin: 14px 0; font-size: 15px; line-height: 1.6; }
+.card ol { margin: 24px 0; padding-left: 24px; }
+.card li { margin: 16px 0; padding-left: 5px; font-size: 16px; }
+.primary, .secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 11px 18px; margin: 8px 10px 8px 0; border: 1px solid #d1dfda; border-radius: 10px; color: #23473f; background: white; text-decoration: none; font: inherit; font-weight: 700; cursor: pointer; }
+.primary { color: white; background: #644174; border-color: #644174; }
+.primary:disabled { opacity: .65; cursor: wait; }
+.card .hint { color: #59716b; font-size: 14px; }
+.card details { margin-top: 22px; padding-top: 18px; border-top: 1px solid #dce6e2; }
+.card summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.footer { color: #5c746d; font-size: 13px; padding: 20px 5px; }
+.card :is(button,a,summary):focus-visible { outline: 3px solid #15967d; outline-offset: 3px; }
+:global(html[data-tlink-colour-mode=night]) .page { background: #071920; color: #ecf5f1; }
+:global(html[data-tlink-colour-mode=night]) .card { background: #11272e; border-color: #314a50; }
+:global(html[data-tlink-colour-mode=night]) :is(.header p,.hint,.footer) { color: #aac3bc; }
+:global(html[data-tlink-colour-mode=night]) .devices { background: #0a1e25; }
+:global(html[data-tlink-colour-mode=night]) .devices button { color: #c6d9d3; }
+:global(html[data-tlink-colour-mode=night]) .devices button[aria-pressed=true] { background: #3e315b; color: white; }
+:global(html[data-tlink-colour-mode=night]) .tag { color: #d1b9e0; }
+:global(html[data-tlink-colour-mode=night]) .secondary { color: #ecf5f1; background: #18323a; border-color: #3f5960; }

@@ -72,7 +72,7 @@ test("the field calendar, self-intake, update control and TLink app entry remain
     read("mobile/src/lib/config.ts"),
     read("mobile/src/app/(tabs)/settings.tsx"),
     read("src/components/DirectTradeDashboard.tsx"),
-    read("src/app/direct-trade/field-app/page.tsx"),
+    read("src/components/FieldAppDownload.tsx"),
     read("src/app/api/trade-crm/route.ts"),
   ]);
   assert.match(calendar, /MY SCHEDULE/);

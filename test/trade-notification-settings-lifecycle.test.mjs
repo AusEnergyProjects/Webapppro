@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
+import {tradeBrowserDevice} from '../src/lib/trade-browser-device.ts';
 
 const compile = path => ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 const component = compile('../src/components/TradeNotificationSettings.tsx');
@@ -27,14 +28,14 @@ function harness(options={}) {
   };
   const subscription={toJSON:()=>({endpoint:'private-browser-endpoint',keys:{}}),unsubscribe:async()=>{unsubscribed++;browserSubscription=null;return true;}};
   const registration={active:{scriptURL:'https://tlink.test/tlink-notifications-sw.js'},pushManager:{getSubscription:async()=>browserSubscription,subscribe:async()=>{browserSubscription=subscription;return subscription;}},showNotification:async(title,settings)=>{shown.push({title,settings});}};
-  const navigator={userAgent:options.iphone?'iPhone':'Chrome',maxTouchPoints:options.iphone?5:0,serviceWorker:{getRegistration:async()=>undefined,register:async()=>registration,ready:options.workerHang?new Promise(()=>{}):Promise.resolve(registration)}};
+  const navigator={userAgent:options.userAgent || (options.iphone?'iPhone':'Chrome'),maxTouchPoints:options.iphone?5:0,serviceWorker:{getRegistration:async()=>undefined,register:async()=>registration,ready:options.workerHang?new Promise(()=>{}):Promise.resolve(registration)}};
   const Notification={get permission(){return permission;},requestPermission:async()=>{permissionRequests++;if(options.permissionError)throw options.permissionError;const result=options.choose?await options.choose():options.choice||'granted';permission=result;return result;}};
   const window={isSecureContext:true,Notification,PushManager:{},matchMedia:()=>({matches:!!options.standalone}),addEventListener(){},removeEventListener(){}};
   const fetch=async(url,init)=>{requests.push({url,init});if(options.postError&&init.method==='POST')return Response.json({ok:false,error:options.postError},{status:503});return Response.json({ok:true,...(init.method==='GET'?{configured:options.configured!==false,publicKey:key,subscription:options.saved||null}:{subscription:saved})});};
   const localStorage={getItem:name=>storage.get(name)||null,setItem:(name,value)=>storage.set(name,value),removeItem:name=>storage.delete(name)};
   const helpers={};
   Function('exports','setTimeout','clearTimeout','localStorage',client)(helpers,(callback,ms)=>{const id=Symbol();timers.set(id,{callback,ms});return id;},id=>timers.delete(id),localStorage);
-  const dependencies={react,'react/jsx-runtime':jsx,'./TradeBusinessProvider':{useTradeBusinessFetch:()=>fetch},'@/lib/trade-notification-client':helpers,'./TradeNotificationSettings.module.css':{default:{}}};
+  const dependencies={react,'react/jsx-runtime':jsx,'./TradeBusinessProvider':{useTradeBusinessFetch:()=>fetch},'@/lib/trade-notification-client':helpers,'@/lib/trade-browser-device':{tradeBrowserDevice},'./TradeNotificationSettings.module.css':{default:{}}};
   const exports={};Function('require','exports','window','navigator','Notification',component)(id=>{assert.ok(dependencies[id],id);return dependencies[id];},exports,window,navigator,Notification);
   let auth=options.auth|| (async()=>({Authorization:'Bearer fixture-user'}));
   const render=()=>{cursor=0;const tree=exports.TradeNotificationSettings({getAuthHeaders:auth});for(const effect of pending.splice(0))effect();return tree;};
@@ -44,6 +45,11 @@ function harness(options={}) {
     async settle(){let tree;for(let i=0;i<6;i++){tree=render();await tick();}return tree;},
   };
 }
+
+test('iPhone Chrome Home Screen setup does not send the user to Safari or request unsupported permissions',async()=>{
+  const f=harness({iphone:true,userAgent:'iPhone CriOS/140.0 Mobile Safari/604.1'}),tree=await f.settle();
+  assert.match(text(tree),/In\s+Chrome\s*, tap\s+Share/);assert.doesNotMatch(text(tree),/Open TLink in Safari/);assert.equal(f.permissionRequests(),0);assert.equal(f.requests.length,0);f.unmount();
+});
 
 test('enable requests permission only on click, persists On, and test alerts are local to this device',async()=>{
   const h=harness();let tree=await h.settle();assert.equal(h.permissionRequests(),0);assert.match(label(tree),/Off/);

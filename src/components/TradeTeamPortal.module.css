@@ -1,0 +1,76 @@
+.shell:global(.trade-portal-shell) { display: block; width: 100%; min-height: 100dvh; margin: 0; padding: 0; color: var(--trade-ink); background: var(--trade-page); font-size: 14px; }
+/* The staff shell has no sidebar rail, so its sections must not inherit the owner dashboard gutters. */
+.shell:global(.trade-portal-shell) > :not(:global(.dashboard-hero)):not(:global(.dashboard-workspace-nav)):not(:global(.trade-portal-intro)) { margin-left: 0; margin-right: 0; min-width: 0; box-sizing: border-box; }
+.header { padding: 14px clamp(16px, 3vw, 40px) 16px; background: var(--trade-surface); border-bottom: 1px solid var(--trade-line); }
+.topbar, .headerActions, .businessBar, .brand, .welcome, .footer { display: flex; align-items: center; }
+.topbar { justify-content: space-between; gap: 16px; }
+.brand { gap: 9px; color: var(--trade-ink); text-decoration: none; }
+.brand strong { font-size: 19px; letter-spacing: -.6px; }
+.brand img { width: 34px; height: 34px; border-radius: 9px; }
+.headerActions { gap: 8px; }
+.getApp, .themeToggle, .quoteButton, .footer button { min-height: 44px; border: 1px solid var(--trade-line); border-radius: 10px; font: inherit; font-weight: 650; cursor: pointer; }
+.getApp { display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 0 14px; background: var(--trade-accent-soft); color: var(--trade-accent-soft-ink); text-decoration: none; }
+.themeToggle { display: grid; place-items: center; width: 44px; padding: 0; color: var(--trade-ink); background: var(--trade-surface); }
+.businessBar { justify-content: space-between; gap: 16px; margin-top: 14px; }
+.business { min-width: 0; display: grid; gap: 3px; }
+.business > span { color: var(--trade-muted); font-size: 11px; font-weight: 650; }
+.business > strong { color: var(--trade-ink); font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+.navigation { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px clamp(16px, 3vw, 40px); border-bottom: 1px solid var(--trade-line); background: var(--trade-surface); }
+.navigation button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 13px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--trade-muted); font: inherit; font-weight: 600; cursor: pointer; }
+.navigation button > span { display: flex; align-items: center; gap: 5px; }
+.navigation button:hover { background: var(--trade-surface-soft); color: var(--trade-ink); }
+.navigation button[aria-current="page"] { background: var(--trade-accent-soft); border-color: var(--trade-line); color: var(--trade-accent-soft-ink); }
+.shell :is(button, a, select):focus-visible { outline: 3px solid var(--trade-accent-readable); outline-offset: 3px; }
+.content { padding: 22px clamp(16px, 3vw, 40px); min-width: 0; }
+.welcome { justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.welcome h1 { margin: 0; color: var(--trade-ink); font-size: 25px; letter-spacing: -.8px; line-height: 1.25; }
+.welcome p { color: var(--trade-muted); font-size: 13px; margin: 5px 0 0; }
+.welcome > span { color: var(--trade-accent-soft-ink); background: var(--trade-accent-soft); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.quoteButton { padding: 0 13px; margin-top: 12px; background: var(--trade-accent-soft); color: var(--trade-accent-soft-ink); }
+.footer { justify-content: space-between; gap: 12px; padding: 8px clamp(16px, 3vw, 40px) 24px; color: var(--trade-muted); font-size: 12px; }
+.footer button { color: var(--trade-ink); background: var(--trade-surface); padding: 0 15px; }
+.shell :global(.team-queue-summary) { gap: 10px; }
+.shell :global(.team-queue-summary article) { background: var(--trade-surface); border-color: var(--trade-line); padding: 14px 16px; }
+.shell :global(.team-queue-summary span) { font-size: 12px; color: var(--trade-muted); }
+.shell :global(.team-queue-summary strong) { font-size: 18px; color: var(--trade-ink); }
+.shell :global(.team-job-queue), .shell :global(.team-job-focus) { background: var(--trade-surface); border-color: var(--trade-line); }
+.shell :global(.team-job-queue > header) { background: var(--trade-surface-soft); border-color: var(--trade-line); }
+.shell :global(.team-job-queue > header strong) { color: var(--trade-ink); font-size: 14px; }
+.shell :global(.team-job-queue > header span) { color: var(--trade-muted); font-size: 12px; }
+.shell :global(.team-job-queue > button) { background: var(--trade-surface); border-color: var(--trade-line); padding: 16px; gap: 7px; }
+.shell :global(.team-job-queue > button.active), .shell :global(.team-job-queue > button:hover) { background: var(--trade-accent-soft); box-shadow: inset 3px 0 var(--trade-accent-readable); }
+.shell :global(.team-job-queue > button > span) { color: var(--trade-accent-readable); font-size: 12px; }
+.shell :global(.team-job-queue > button b) { color: var(--trade-muted); background: var(--trade-surface-soft); font-size: 10px; }
+.shell :global(.team-job-queue > button > strong) { color: var(--trade-ink); font-size: 14px; }
+.shell :global(.team-job-queue > button > small) { color: var(--trade-muted); font-size: 12px; }
+.shell :global(.team-job-focus > article > header), .shell :global(.team-portal-assignment), .shell :global(.team-mobile-checklist), .shell :global(.team-field-tools) { border-color: var(--trade-line); }
+.shell :global(.team-job-focus > article > header > div > span) { color: var(--trade-accent-readable); font-size: 12px; }
+.shell :global(.team-job-focus h2) { color: var(--trade-ink); font-size: 21px; }
+.shell :global(.team-job-focus > article > header p) { color: var(--trade-muted); font-size: 13px; }
+.shell :global(.team-job-focus label > span) { color: var(--trade-muted); font-size: 12px; }
+.shell :global(.team-job-focus select) { min-height: 44px; background: var(--trade-field); color: var(--trade-field-ink); border-color: var(--trade-line); font-size: 14px; }
+.shell :global(.team-mobile-checklist > label) { border-color: var(--trade-line); }
+.shell :global(.team-mobile-checklist h3), .shell :global(.team-field-tools h3) { color: var(--trade-ink); font-size: 15px; }
+.shell :global(.team-mobile-checklist label > span) { color: var(--trade-ink); font-size: 13px; }
+
+@media (max-width: 700px) {
+  .header { padding: 10px 14px 12px; }
+  .businessBar { margin-top: 10px; gap: 10px; }
+  .business > strong { font-size: 14px; }
+  .navigation { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px 10px; }
+  .navigation button { flex-direction: column; gap: 5px; padding: 8px 2px; font-size: 11px; line-height: 1.25; min-height: 60px; }
+  .navigation button > span { flex-wrap: wrap; justify-content: center; gap: 3px; text-align: center; }
+  .content { padding: 18px 12px; }
+  .welcome { align-items: flex-start; margin-bottom: 14px; gap: 8px; }
+  .welcome h1 { font-size: 22px; }
+  .welcome p { font-size: 12px; }
+  .welcome > span { font-size: 11px; padding: 7px 10px; }
+  .shell :global(.team-queue-summary) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .shell :global(.team-queue-summary article) { padding: 11px 12px; }
+  .shell :global(.team-queue-layout) { grid-template-columns: minmax(0, 1fr); }
+  .shell :global(.team-job-queue) { max-height: 330px; overflow-y: auto; }
+  .shell :global(.team-job-focus > article > header) { flex-direction: column; gap: 15px; padding: 17px; }
+  .shell :global(.team-job-focus > article > header > label) { width: 100%; }
+  .shell :global(.team-job-focus select) { font-size: 16px; }
+  .footer { padding: 0 14px 20px; }
+}
