@@ -15,7 +15,9 @@ type Signoff = { id: string; signerRole: string; signerName: string; confirmatio
 type ProofReview = { proofReady: boolean; counts: { total: number; required: number; supplied: number; accepted: number; retakeRequested: number; notNeeded: number; pending: number };
   completion: null | { current: boolean; evidenceCurrent: boolean; completedAt: string }; uploadCounts: Record<string, number>; reviews: PhotoRequirementReview[] };
 type FieldBlocker = { key: string; label: string; target: string };
+type FieldVisit = { id: string; memberId: string; memberName: string; status: string; startsAt: string; endsAt: string; instructions: string; canAdvance: boolean };
 type FieldJob = { id: string; workNumber: string; title: string; status: string; customerName: string; serviceSite: string; scheduledStart: string; scheduledEnd: string;
+  appointmentId: string; appointmentRevision: number; collaborativeJob: boolean; remainingActiveVisits: number; visits: FieldVisit[];
   primaryAction: null | { action: string; label: string }; actionUnavailableReason: string; phone: string; address: string; directionsUrl: string;
   checklist: Array<{ key: string; label: string; complete: boolean; count: number; target: string }>; blockers: FieldBlocker[];
   completion: { ready: boolean; invoiceReady: boolean; handoverReady: boolean } };
@@ -40,25 +42,43 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
   const [retakeDialog, setRetakeDialog] = useState<RetakeDialog | null>(null);
   const [hasGovernedPacks, setHasGovernedPacks] = useState<boolean | null>(null);
   const actionId = useRef("");
+  const [selectedVisitId, setSelectedVisitId] = useState("");
+  const loadGeneration = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const generation = ++loadGeneration.current;
     const token = await user.getIdToken();
-    const response = await fetch(`/api/trade-field-work?workOrderId=${encodeURIComponent(workOrderId)}`, {
-      headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+    const response = await fetch(`/api/trade-field-work?workOrderId=${encodeURIComponent(workOrderId)}&appointmentId=${encodeURIComponent(selectedVisitId)}`, {
+      headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal,
     });
     const result = await response.json().catch(() => ({})) as Result;
     if (!response.ok) throw new Error(result.error || "Field records could not be loaded.");
-    setData(result);
-  }, [fetch, user, workOrderId]);
+    if (!signal?.aborted && generation === loadGeneration.current) {
+      setData(result);
+      if (selectedVisitId && result.fieldJob?.appointmentId !== selectedVisitId) setSelectedVisitId(result.fieldJob?.appointmentId || "");
+    }
+  }, [fetch, user, workOrderId, selectedVisitId]);
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     const frame = window.requestAnimationFrame(() => {
-      void load().catch((error) => active && setStatus(error instanceof Error ? error.message : "Field records could not be loaded."))
+      void load(controller.signal).catch((error) => active && setStatus(error instanceof Error ? error.message : "Field records could not be loaded."))
         .finally(() => active && setLoading(false));
     });
-    return () => { active = false; window.cancelAnimationFrame(frame); };
+    return () => { active = false; controller.abort(); window.cancelAnimationFrame(frame); };
   }, [load]);
+
+  useEffect(() => {
+    if (busy || !online) return;
+    const refresh = () => { if (document.visibilityState === "visible") void load().catch(() => undefined); };
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [load, busy, online]);
+
+  useEffect(() => { if (busy) loadGeneration.current++; }, [busy]);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -83,6 +103,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
   }, [retakeDialog, busy]);
 
   const totalMinutes = useMemo(() => (data.timeEntries || []).reduce((sum, item) => sum + item.durationMinutes, 0), [data.timeEntries]);
+  const selectingVisit = Boolean(selectedVisitId && data.fieldJob?.appointmentId !== selectedVisitId);
 
   function openChecklist(target: string) {
     if (target === "evidence") document.getElementById("field-evidence")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -91,15 +112,16 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
   }
 
   async function advance() {
-    if (readOnly) return;
+    if (readOnly || selectingVisit || busy) return;
     const fieldJob = data.fieldJob; if (!fieldJob?.primaryAction) return;
     if (!online) { setStatus(fieldJob.primaryAction.action === "finish" ? "Reconnect before finishing. Offline completion is not accepted because blockers and sync state must be checked." : "Reconnect before advancing the job. This web page does not queue field actions offline."); return; }
-    if (fieldJob.primaryAction.action === "finish" && fieldJob.blockers.length) { setStatus(`Finish these items first: ${fieldJob.blockers.map((item) => item.label).join("; ")}.`); openChecklist(fieldJob.blockers[0].target); return; }
+    if (fieldJob.primaryAction.action === "finish" && fieldJob.remainingActiveVisits <= 1 && fieldJob.blockers.length) { setStatus(`Finish these items first: ${fieldJob.blockers.map((item) => item.label).join("; ")}.`); openChecklist(fieldJob.blockers[0].target); return; }
     actionId.current ||= `web-field-${crypto.randomUUID()}`; setBusy("transition"); setStatus("Syncing");
     try {
       const token = await user.getIdToken();
-      const response = await fetch("/api/trade-field-work", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "field_transition", transition: fieldJob.primaryAction.action, clientActionId: actionId.current, workOrderId }) });
+      const response = await fetch("/api/trade-field-work", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "field_transition", transition: fieldJob.primaryAction.action, clientActionId: actionId.current, workOrderId, appointmentId: fieldJob.appointmentId || undefined, baseAppointmentRevision: fieldJob.appointmentRevision }) });
       const result = await response.json().catch(() => ({})) as Result;
+      if (response.status === 409) { actionId.current = ""; await load(); }
       if (!response.ok || !result.ok) throw new Error(result.blockers?.length ? `${result.error} ${result.blockers.map((item) => item.label).join("; ")}.` : result.error || "The job state could not be advanced.");
       setData(result); actionId.current = ""; setStatus("Saved"); await onChanged?.();
     } catch (error) { setStatus(error instanceof Error ? error.message : "Action required"); }
@@ -121,7 +143,8 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
         "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
       const result = await response.json().catch(() => ({})) as Result;
       if (!response.ok) throw new Error(result.error || "The field record could not be saved.");
-      setData(result); form.reset(); setStatus(success);
+      if (selectedVisitId) await load(); else setData(result);
+      form.reset(); setStatus(success);
     } catch (error) { setStatus(error instanceof Error ? error.message : "The field record could not be saved."); }
     finally { setBusy(""); }
   }
@@ -134,7 +157,8 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
       const response = await fetch("/api/trade-field-work", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: values });
       const result = await response.json().catch(() => ({})) as Result;
       if (!response.ok) throw new Error(result.error || "The job file could not be uploaded.");
-      setData(result); form.reset(); setStatus("Job photo or document added.");
+      if (selectedVisitId) await load(); else setData(result);
+      form.reset(); setStatus("Job photo or document added.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The job file could not be uploaded."); }
     finally { setBusy(""); }
   }
@@ -225,10 +249,20 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
     }
   }
 
+  const visitPicker = data.fieldJob?.collaborativeJob && <section className="crm-field-card" aria-label="Team visits">
+    <header><div><span>Shared job</span><h4>Team visits</h4></div><strong>{data.fieldJob.remainingActiveVisits} still open</strong></header>
+    <p>Each worker finishes their own visit. The job closes after the last visit and all required job items are complete.</p>
+    <label className="crm-field-form"><span>Viewing visit</span><select value={selectedVisitId || data.fieldJob.appointmentId} disabled={Boolean(busy)} onChange={(event) => { loadGeneration.current++; actionId.current = ""; setSelectedVisitId(event.target.value); setStatus(""); }}>
+      {data.fieldJob.visits.map(visit => <option key={visit.id} value={visit.id}>{visit.memberName || "Unassigned"} · {visit.startsAt ? new Date(visit.startsAt).toLocaleString("en-AU", { dateStyle: "short", timeStyle: "short" }) : "Time to confirm"} · {visit.status.replaceAll("_", " ")}</option>)}
+    </select></label>
+    <ol className="crm-field-records">{data.fieldJob.visits.map(visit => <li key={visit.id}><div><strong>{visit.memberName || "Unassigned"}</strong><span>{visit.status.replaceAll("_", " ")}{visit.startsAt && ` · ${new Date(visit.startsAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}`}</span>{visit.instructions && <p>{visit.instructions}</p>}</div>{visit.id === data.fieldJob?.appointmentId && <small>Selected</small>}</li>)}</ol>
+  </section>;
+
   if (loading) return <div className="crm-empty"><strong>Opening field tools</strong><span>Loading time, files and sign-offs...</span></div>;
 
   if (readOnly) return <div className="crm-field-work" aria-readonly="true">
-    {data.fieldJob && <header className="crm-field-job-header"><div className="crm-field-job-heading"><span>{data.fieldJob.workNumber} | {data.fieldJob.status.replaceAll("_", " ")}</span><h3>{data.fieldJob.title}</h3><p>{data.fieldJob.customerName} | {data.fieldJob.serviceSite}</p>{data.fieldJob.scheduledStart && <small>{new Date(data.fieldJob.scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small>}</div><div className="crm-field-job-primary"><strong>View only</strong><span className="crm-sync-state">Read only</span></div></header>}
+    {visitPicker}
+    {data.fieldJob && <header className="crm-field-job-header"><div className="crm-field-job-heading"><span>{data.fieldJob.workNumber} | {data.fieldJob.collaborativeJob ? "Visit: " : ""}{data.fieldJob.status.replaceAll("_", " ")}</span><h3>{data.fieldJob.title}</h3><p>{data.fieldJob.customerName} | {data.fieldJob.serviceSite}</p>{data.fieldJob.scheduledStart && <small>{new Date(data.fieldJob.scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small>}</div><div className="crm-field-job-primary"><strong>View only</strong><span className="crm-sync-state">Read only</span></div></header>}
     <div className={`crm-field-privacy ${isProtected ? "protected" : "owned"}`}><strong>Field evidence access</strong><span>You can review this job&apos;s field record. Adding or changing field evidence is not included in your access.</span></div>
     <TradeActivityWorkPackPanel key={workOrderId} user={user} workOrderId={workOrderId} readOnly onPresenceChange={setHasGovernedPacks} onOpenSupportingForms={onNavigate ? () => onNavigate("forms") : undefined} />
     <section className="crm-field-summary"><article><span>Time recorded</span><strong>{timeLabel(totalMinutes)}</strong></article><article><span>Job files</span><strong>{(data.media || []).length}</strong></article><article><span>Sign-offs</span><strong>{(data.signoffs || []).length}</strong></article></section>
@@ -242,7 +276,8 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
   </div>;
 
   return <div className="crm-field-work">
-        {data.fieldJob && <><header className="crm-field-job-header"><div className="crm-field-job-heading"><span>{data.fieldJob.workNumber} | {data.fieldJob.status.replaceAll("_", " ")}</span><h3>{data.fieldJob.title}</h3><p>{data.fieldJob.customerName} | {data.fieldJob.serviceSite}</p>{data.fieldJob.scheduledStart && <small>{new Date(data.fieldJob.scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small>}</div><div className="crm-field-job-primary">{data.fieldJob.primaryAction ? <button type="button" disabled={busy === "transition"} onClick={() => void advance()}>{busy === "transition" ? "Syncing..." : data.fieldJob.primaryAction.label}</button> : <strong>{data.fieldJob.actionUnavailableReason}</strong>}<span className={`crm-sync-state ${!online ? "offline" : status && status !== "Saved" && status !== "Syncing" ? "attention" : ""}`}>{!online ? "Offline" : busy === "transition" ? "Syncing" : status && status !== "Saved" ? "Action required" : "Saved"}</span></div></header><div className="crm-field-contact-actions">{data.fieldJob.phone && <a href={`tel:${data.fieldJob.phone.replace(/[^+\d]/g, "")}`}>Call</a>}{data.fieldJob.directionsUrl && <a href={data.fieldJob.directionsUrl} target="_blank" rel="noreferrer">Get directions</a>}</div><section className="crm-today-checklist" aria-labelledby="today-checklist-title"><header><span>Today</span><h4 id="today-checklist-title">What must happen on this job</h4></header><ol>{data.fieldJob.checklist.map((item) => <li key={item.key}><button type="button" onClick={() => openChecklist(item.target)}><span aria-hidden="true">{item.complete ? "Done" : item.count ? String(item.count) : "Open"}</span><strong>{item.label}</strong><small>{item.complete ? "Ready" : item.count ? `${item.count} outstanding` : "Review"}</small></button></li>)}</ol>{data.fieldJob.blockers.length > 0 && <div className="crm-finish-blockers"><strong>Finish blockers</strong>{data.fieldJob.blockers.map((blocker) => <button type="button" key={blocker.key} onClick={() => openChecklist(blocker.target)}>{blocker.label}</button>)}</div>}{data.fieldJob.completion.invoiceReady && onNavigate && <div className="crm-field-next-paths"><button type="button" onClick={() => onNavigate("invoice")}>Prepare invoice</button>{canOpenHandover && <button type="button" onClick={() => onNavigate("handover")}>Open handover</button>}</div>}</section></>}
+    {visitPicker}
+        {data.fieldJob && <><header className="crm-field-job-header"><div className="crm-field-job-heading"><span>{data.fieldJob.workNumber} | {data.fieldJob.collaborativeJob ? "Visit: " : ""}{data.fieldJob.status.replaceAll("_", " ")}</span><h3>{data.fieldJob.title}</h3><p>{data.fieldJob.customerName} | {data.fieldJob.serviceSite}</p>{data.fieldJob.scheduledStart && <small>{new Date(data.fieldJob.scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small>}</div><div className="crm-field-job-primary">{data.fieldJob.primaryAction ? <button type="button" disabled={Boolean(busy) || selectingVisit} onClick={() => void advance()}>{busy === "transition" ? "Syncing..." : data.fieldJob.primaryAction.label}</button> : <strong>{data.fieldJob.actionUnavailableReason}</strong>}<span className={`crm-sync-state ${!online ? "offline" : status && status !== "Saved" && status !== "Syncing" ? "attention" : ""}`}>{!online ? "Offline" : busy === "transition" ? "Syncing" : status && status !== "Saved" ? "Action required" : "Saved"}</span></div></header><div className="crm-field-contact-actions">{data.fieldJob.phone && <a href={`tel:${data.fieldJob.phone.replace(/[^+\d]/g, "")}`}>Call</a>}{data.fieldJob.directionsUrl && <a href={data.fieldJob.directionsUrl} target="_blank" rel="noreferrer">Get directions</a>}</div><section className="crm-today-checklist" aria-labelledby="today-checklist-title"><header><span>Today</span><h4 id="today-checklist-title">What must happen on this job</h4></header><ol>{data.fieldJob.checklist.map((item) => <li key={item.key}><button type="button" onClick={() => openChecklist(item.target)}><span aria-hidden="true">{item.complete ? "Done" : item.count ? String(item.count) : "Open"}</span><strong>{item.label}</strong><small>{item.complete ? "Ready" : item.count ? `${item.count} outstanding` : "Review"}</small></button></li>)}</ol>{data.fieldJob.blockers.length > 0 && <div className="crm-finish-blockers"><strong>Required before closing the job</strong>{data.fieldJob.blockers.map((blocker) => <button type="button" key={blocker.key} onClick={() => openChecklist(blocker.target)}>{blocker.label}</button>)}</div>}{data.fieldJob.completion.invoiceReady && onNavigate && <div className="crm-field-next-paths"><button type="button" onClick={() => onNavigate("invoice")}>Prepare invoice</button>{canOpenHandover && <button type="button" onClick={() => onNavigate("handover")}>Open handover</button>}</div>}</section></>}
     <div className={`crm-field-privacy ${isProtected ? "protected" : "owned"}`}>
       <strong>{isProtected ? "Australian Energy Assessments protected field record" : "Direct customer field record"}</strong>
       <span>{isProtected ? "Record work, time and site evidence without names, contact details or a precise address. Customer sign-off stays with Australian Energy Assessments." : "This job belongs to your business, so the customer may complete a recorded sign-off."}</span>

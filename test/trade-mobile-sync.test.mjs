@@ -66,7 +66,7 @@ test("the mobile sync contract is authenticated, assignment scoped and cursor bo
   assert.match(syncRoute, /requireInstallerTeamAccess\(request\)/);
   assert.match(syncRoute, /sameOrigin\(request\)/);
   assert.match(syncRoute, /access\.jobScope/);
-  assert.match(syncRoute, /\? <> 'own' OR w\.assignee_member_id = \?/);
+  assert.match(syncRoute, /\? <> 'own' OR \$\{jobMemberSql\("w"\)\}/);
   assert.doesNotMatch(syncRoute, /access\.role|\.role\s*===?\s*["']technician["']/);
   assert.match(syncRoute, /MAX_CHANGES = 200/);
   assert.match(syncRoute, /MAX_ACTIONS = 50/);
@@ -119,8 +119,13 @@ test("web, dispatch and field writes all advance the mobile sync ledger", () => 
   assert.match(workRoute, /"delete"/);
   assert.match(crmRoute, /relatedJobs/);
   assert.match(fieldRoute, /nextJobRevision/);
-  assert.match(syncServer, /previousAudience !== currentAudience/);
-  assert.match(syncServer, /statement\(db, change, previousAudience, "delete"\)/);
+  assert.match(syncServer, /SELECT DISTINCT member_id FROM/);
+  assert.match(syncServer, /UNION SELECT assignee_member_id FROM trade_crm_appointments WHERE work_order_id = \? AND firebase_uid = \?/);
+  assert.match(syncServer, /UNION SELECT audience_member_id FROM trade_team_sync_changes WHERE entity_type = 'job' AND entity_id = \? AND owner_uid = \?/);
+  assert.match(syncServer, /change\.previousAudienceMemberId \|\| ""/);
+  assert.match(syncServer, /jobMemberSql\("current_job", "audience\.member_id"\)/);
+  assert.match(syncServer, /THEN 'upsert' ELSE 'delete' END/);
+  assert.match(syncServer, /push_member\.status='active' AND push_member\.can_view_field_evidence=1/);
   assert.match(syncServer, /trade_mobile_push_outbox/);
   assert.match(syncServer, /sync_required/);
 });

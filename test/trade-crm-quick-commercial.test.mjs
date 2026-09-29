@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,7 +25,7 @@ const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 function moduleAt(path, mocks = {}) {
   const output = ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const moduleRecord = { exports: {} };
-  new Function('require', 'module', 'exports', output)(name => mocks[name] || certificateTestDependency(name) || {}, moduleRecord, moduleRecord.exports);
+  new Function('require', 'module', 'exports', output)(name => mocks[name] || (/trade-job-collaboration(?:\.ts)?$/.test(name) ? jobCollaboration : certificateTestDependency(name)) || {}, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
 const clean = (value, limit) => typeof value === 'string' ? value.trim().slice(0, limit) : '';
@@ -42,7 +43,9 @@ function fixture(overrides = {}) {
     trade_work_order_events: 'id work_order_id firebase_uid event_type summary created_at',
     trade_work_order_tasks: 'id work_order_id firebase_uid title due_at status completed_at revision sort_order created_at updated_at',
     trade_team_sync_changes: 'owner_uid audience_member_id entity_type entity_id operation revision changed_at',
-    trade_crm_appointments: 'id work_order_id firebase_uid starts_at ends_at status created_at',
+    trade_team_members: 'id owner_uid status can_view_field_evidence',
+    trade_crm_appointments: 'id work_order_id firebase_uid starts_at ends_at status assignee_member_id assignee_label created_at',
+    trade_mobile_push_outbox: 'id owner_uid audience_member_id event_key event_type entity_type entity_id payload status attempts next_attempt_at created_at updated_at',
     trade_work_order_compliance_intents: 'id work_order_id installer_uid intent_snapshot status revision created_at',
     trade_handover_packs: 'id work_order_id firebase_uid status updated_at',
     compliance_cases: 'id work_order_id installer_uid status evidence_status',

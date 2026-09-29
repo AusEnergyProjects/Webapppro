@@ -1,4 +1,6 @@
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "./trade-certificate-eligibility";
+import { jobMemberSql } from "./trade-job-collaboration";
+import { jobSyncChangeStatements } from "./trade-team-sync-server";
 import { creditexMutationConflict, creditexWriteGuard } from "./creditex-onboarding-server";
 import {
   CREDITEX_ACTIVITY_WORK_PACK_CUSTOMER_CONTEXT_CONTRACT,
@@ -137,6 +139,9 @@ export const CREDITEX_WORK_PACK_SIGNATURE_OFFLINE_MAX_AGE_MS =
 export class CreditexActivityWorkPackServerError extends Error {
   readonly code: string;
   readonly status: number;
+  conflicts?: readonly CreditexWorkPackAnswerConflict[];
+  mergedPatches?: readonly CreditexWorkPackSectionPatch[];
+  currentInstance?: Readonly<{ id: string; responseSha256: string }>;
 
   constructor(code: string, status: number, message: string) {
     super(message);
@@ -2666,7 +2671,7 @@ async function assignedInstanceRow(
         WHERE requested.id = ?
         LIMIT 1
       )
-      AND (? = 'team' OR work_order.assignee_member_id = ?)
+      AND (? = 'team' OR ${jobMemberSql("work_order")})
       AND NOT EXISTS (
         SELECT 1 FROM compliance_activity_work_pack_instances newer
         WHERE newer.organisation_id = instance.organisation_id
@@ -2972,7 +2977,8 @@ function signerBindingsForInstance(
   workPack: CreditexActivityWorkPack,
   actorUid: string,
 ) {
-  return Object.freeze(workPack.signerRoles.map((role) =>
+  return Object.freeze(workPack.signerRoles.filter(role => role.identitySource !== "authenticated_actor"
+    || actorUid === envelope.prefill.assignmentContext.memberUid || actorUid === envelope.prefill.installerBusinessContext.ownerUid).map((role) =>
     authoritativeSignerBinding(envelope, role, actorUid)
   )) satisfies readonly CreditexActivityWorkPackSignerBindingProjection[];
 }
@@ -3251,8 +3257,7 @@ async function projectAssignedInstance(
       !== creditexCanonicalSha256(executionContexts.installerBusinessContext)
     || creditexCanonicalSha256(envelope.prefill.assignmentContext)
       !== creditexCanonicalSha256(executionContexts.assignmentContext)
-    || creditexCanonicalSha256(envelope.prefill.jobContext)
-      !== creditexCanonicalSha256(executionContexts.jobContext);
+    || !sameWorkPackJobContent(envelope.prefill.jobContext, executionContexts.jobContext);
   const dependencies = await resolveServerDependencies(
     database,
     row,
@@ -3433,7 +3438,7 @@ export async function listAssignedCreditexActivityWorkPacks(
       ON assigned_member.id = work_order.assignee_member_id
       AND assigned_member.owner_uid = work_order.firebase_uid
       AND assigned_member.status = 'active'
-    WHERE (? = 'team' OR work_order.assignee_member_id = ?)
+    WHERE (? = 'team' OR ${jobMemberSql("work_order")})
       ${workOrderFilter}
       AND NOT EXISTS (
         SELECT 1 FROM compliance_activity_work_pack_instances newer
@@ -3470,6 +3475,16 @@ export type CreditexWorkPackSectionPatch = Readonly<{
   repeatInstanceKey?: string;
   remove?: boolean;
   answers?: Readonly<Record<string, unknown>>;
+}>;
+
+export type CreditexWorkPackAnswerConflict = Readonly<{
+  sectionKey: string;
+  repeatInstanceKey?: string;
+  promptKey: string;
+  label: string;
+  base: unknown;
+  local: unknown;
+  saved: unknown;
 }>;
 
 export type CreditexWorkPackReferenceAcknowledgementInput = Readonly<{
@@ -3809,6 +3824,16 @@ function patchResponse(
         instance.instanceKey === repeatInstanceKey
       );
       if (patch.remove) {
+        if (index >= 0 && section.prompts.some((prompt) =>
+          ["signature", "photo", "document", "reference_document"].includes(prompt.type)
+          && instances[index].answers[prompt.promptKey] !== undefined
+          && instances[index].answers[prompt.promptKey] !== null
+          && instances[index].answers[prompt.promptKey] !== ""
+          && (!Array.isArray(instances[index].answers[prompt.promptKey])
+            || (instances[index].answers[prompt.promptKey] as unknown[]).length > 0))) {
+          return fail("WORK_PACK_REPEAT_EVIDENCE_RETAINED", 409,
+            "This item contains retained files, signatures or document acknowledgements. Keep its evidence and use the existing correction or supersession process.");
+        }
         if (index >= 0) instances.splice(index, 1);
         continue;
       }
@@ -3880,6 +3905,57 @@ function patchResponse(
     repeatableSections: Object.freeze(repeatableSections),
     dependencyResolutions: response.dependencyResolutions,
   }));
+}
+
+/** Compare only edited answers with the immutable revision the worker saw. */
+export function mergeWorkPackAnswerPatches(
+  workPack: CreditexActivityWorkPack,
+  base: CreditexActivityWorkPackResponse,
+  saved: CreditexActivityWorkPackResponse,
+  patches: readonly CreditexWorkPackSectionPatch[],
+) {
+  const local = patchResponse(workPack, base, patches);
+  const conflicts: CreditexWorkPackAnswerConflict[] = [];
+  const mergedPatches: CreditexWorkPackSectionPatch[] = [];
+  const scopes = new Map<string, { sectionKey: string; repeatInstanceKey?: string; promptKeys: Set<string> }>();
+  for (const patch of patches) {
+    const key = `${patch.sectionKey}:${patch.repeatInstanceKey || ""}`;
+    const scope = scopes.get(key) || { sectionKey: patch.sectionKey, repeatInstanceKey: patch.repeatInstanceKey, promptKeys: new Set<string>() };
+    for (const promptKey of Object.keys(patch.answers || {})) scope.promptKeys.add(promptKey);
+    scopes.set(key, scope);
+  }
+  const equal = (left: unknown, right: unknown) => creditexCanonicalSha256(left ?? null) === creditexCanonicalSha256(right ?? null);
+  for (const scope of scopes.values()) {
+    const section = workPack.sections.find(item => item.sectionKey === scope.sectionKey)!;
+    const item = (response: CreditexActivityWorkPackResponse) => scope.repeatInstanceKey
+      ? response.repeatableSections[scope.sectionKey]?.find(candidate => candidate.instanceKey === scope.repeatInstanceKey) : undefined;
+    const baseItem = item(base), savedItem = item(saved), localItem = item(local);
+    if (scope.repeatInstanceKey && (!localItem || !baseItem || !savedItem)) {
+      if (equal(baseItem, localItem) || equal(localItem, savedItem)) continue;
+      if (!equal(baseItem, savedItem)) {
+        conflicts.push({ sectionKey: scope.sectionKey, repeatInstanceKey: scope.repeatInstanceKey, promptKey: "", label: `${section.title} item`,
+          base: baseItem?.answers ?? null, local: localItem?.answers ?? null, saved: savedItem?.answers ?? null });
+        continue;
+      }
+      mergedPatches.push({ sectionKey: scope.sectionKey, repeatInstanceKey: scope.repeatInstanceKey,
+        ...(!localItem ? { remove: true } : { answers: localItem.answers }) });
+      continue;
+    }
+    const baseAnswers = scope.repeatInstanceKey ? baseItem!.answers : base.answers;
+    const savedAnswers = scope.repeatInstanceKey ? savedItem!.answers : saved.answers;
+    const localAnswers = scope.repeatInstanceKey ? localItem!.answers : local.answers;
+    const answers: Record<string, unknown> = {};
+    for (const promptKey of scope.promptKeys) {
+      if (equal(baseAnswers[promptKey], localAnswers[promptKey]) || equal(savedAnswers[promptKey], localAnswers[promptKey])) continue;
+      if (!equal(baseAnswers[promptKey], savedAnswers[promptKey])) {
+        conflicts.push({ sectionKey: scope.sectionKey, repeatInstanceKey: scope.repeatInstanceKey, promptKey,
+          label: section.prompts.find(prompt => prompt.promptKey === promptKey)?.label || promptKey,
+          base: baseAnswers[promptKey] ?? null, local: localAnswers[promptKey] ?? null, saved: savedAnswers[promptKey] ?? null });
+      } else answers[promptKey] = localAnswers[promptKey] ?? null;
+    }
+    if (Object.keys(answers).length) mergedPatches.push({ sectionKey: scope.sectionKey, repeatInstanceKey: scope.repeatInstanceKey, answers });
+  }
+  return { patches: mergedPatches, conflicts };
 }
 
 function uniqueReferenceIds(value: readonly string[] | undefined) {
@@ -5041,6 +5117,13 @@ async function resolveServerDependencies(
   });
 }
 
+function sameWorkPackJobContent(left: CreditexActivityWorkPackJobContext, right: CreditexActivityWorkPackJobContext) {
+  // A form save advances the shared job sync cursor, not the signed job facts.
+  const content = (context: CreditexActivityWorkPackJobContext) => Object.fromEntries(Object.entries(context)
+    .filter(([key]) => !["revision", "updatedAt", "contextSha256"].includes(key)));
+  return creditexCanonicalSha256(content(left)) === creditexCanonicalSha256(content(right));
+}
+
 function nextInstanceEnvelope(
   prior: CreditexActivityWorkPackInstanceEnvelope,
   response: CreditexActivityWorkPackResponse,
@@ -5060,7 +5143,8 @@ function nextInstanceEnvelope(
     providerContext: executionContexts.providerContext,
     installerBusinessContext: executionContexts.installerBusinessContext,
     assignmentContext: executionContexts.assignmentContext,
-    jobContext: executionContexts.jobContext,
+    jobContext: sameWorkPackJobContent(prior.prefill.jobContext, executionContexts.jobContext)
+      ? prior.prefill.jobContext : executionContexts.jobContext,
   });
   return Object.freeze({
     ...prior,
@@ -5213,9 +5297,11 @@ async function runWorkPackMutation(
   await assertCertificateJobEligibility(database, certificateAccess);
   const statements: D1PreparedStatement[] = await certificateJobEligibilityGuards(database, certificateAccess);
   statements.push(creditexWriteGuard(database, input.scope.ownerUid,
-    `EXISTS (SELECT 1 FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
-      AND assignee_member_id = ? AND revision = ? AND record_status = 'active')`,
-    [input.row.work_order_id, input.scope.ownerUid, String(input.row.assignee_member_id || ""), Number(input.row.work_order_revision)]));
+    `EXISTS (SELECT 1 FROM trade_work_orders guard_work WHERE guard_work.id = ? AND guard_work.firebase_uid = ?
+      AND guard_work.assignee_member_id = ? AND guard_work.revision = ? AND guard_work.record_status = 'active'
+      AND (? = 'team' OR ${jobMemberSql("guard_work")}))`,
+    [input.row.work_order_id, input.scope.ownerUid, String(input.row.assignee_member_id || ""), Number(input.row.work_order_revision),
+      input.scope.scope, input.scope.actorMemberId]));
   if (!existing) {
     statements.push(database.prepare(`INSERT INTO trade_offline_actions
       (id, owner_uid, actor_uid, member_id, device_id, client_action_id,
@@ -5261,45 +5347,18 @@ async function runWorkPackMutation(
       input.scope.actorMemberId,
       idempotency.deviceId,
     ));
-  statements.push(database.prepare(`INSERT INTO trade_team_sync_changes
-      (owner_uid, audience_member_id, entity_type, entity_id, operation,
-       revision, changed_at)
-    SELECT ?, '', 'job', ?, 'upsert', ?, ?
-    WHERE EXISTS (
-      SELECT 1 FROM trade_offline_actions receipt
-      WHERE receipt.id = ? AND receipt.owner_uid = ?
-        AND receipt.status = 'applied' AND receipt.result_revision = ?
-    )`)
-    .bind(
-      input.scope.ownerUid,
-      input.row.work_order_id,
-      Number(input.row.work_order_revision),
-      input.now,
-      receiptId,
-      input.scope.ownerUid,
-      input.resultRevision,
-    ));
-  if (input.row.assignee_member_id) {
-    statements.push(database.prepare(`INSERT INTO trade_team_sync_changes
-        (owner_uid, audience_member_id, entity_type, entity_id, operation,
-         revision, changed_at)
-      SELECT ?, ?, 'job', ?, 'upsert', ?, ?
-      WHERE EXISTS (
-        SELECT 1 FROM trade_offline_actions receipt
-        WHERE receipt.id = ? AND receipt.owner_uid = ?
-          AND receipt.status = 'applied' AND receipt.result_revision = ?
-      )`)
-      .bind(
-        input.scope.ownerUid,
-        input.row.assignee_member_id,
-        input.row.work_order_id,
-        Number(input.row.work_order_revision),
-        input.now,
-        receiptId,
-        input.scope.ownerUid,
-        input.resultRevision,
-      ));
-  }
+  const savedGuard = { sql: `EXISTS (SELECT 1 FROM trade_offline_actions receipt
+    WHERE receipt.id = ? AND receipt.owner_uid = ? AND receipt.status = 'applied' AND receipt.result_revision = ?)`,
+    values: [receiptId, input.scope.ownerUid, input.resultRevision] };
+  statements.push(database.prepare(`UPDATE trade_work_orders SET revision = revision + 1
+    WHERE id = ? AND firebase_uid = ? AND revision = ? AND ${savedGuard.sql}`)
+    .bind(input.row.work_order_id, input.scope.ownerUid, Number(input.row.work_order_revision), ...savedGuard.values));
+  statements.push(creditexWriteGuard(database, input.scope.ownerUid,
+    `EXISTS (SELECT 1 FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND revision = ?)`,
+    [input.row.work_order_id, input.scope.ownerUid, Number(input.row.work_order_revision) + 1]));
+  statements.push(...jobSyncChangeStatements(database, { ownerUid: input.scope.ownerUid,
+    workOrderId: input.row.work_order_id, revision: Number(input.row.work_order_revision) + 1,
+    changedAt: input.now }, savedGuard));
   statements.push(database.prepare(`UPDATE trade_work_orders SET revision = NULL
     WHERE id = ? AND firebase_uid = ? AND NOT EXISTS (
       SELECT 1 FROM trade_offline_actions receipt
@@ -6562,7 +6621,8 @@ export async function commitAssignedCreditexActivityWorkPack(
     idempotency: CreditexWorkPackMutationIdempotency;
     now?: string;
   }>,
-) {
+  attempt = 0,
+): Promise<CreditexWorkPackMutationResult> {
   const row = await assignedInstanceRow(database, input, input.caseInstanceId);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
@@ -6578,17 +6638,11 @@ export async function commitAssignedCreditexActivityWorkPack(
       "A completed or void work pack cannot be edited.",
     );
   }
-  if (normaliseSha256(
+  const expectedHash = normaliseSha256(
     input.expectedResponseSha256,
     "WORK_PACK_REVISION_REQUIRED",
     "Expected work-pack response SHA-256",
-  ) !== row.response_sha256) {
-    return fail(
-      "WORK_PACK_REVISION_CONFLICT",
-      409,
-      "This work pack changed elsewhere. Reload before saving.",
-    );
-  }
+  );
   const resolved = await resolvePinnedCreditexActivityWorkPack(database, {
     organisationId: row.organisation_id,
     workPackVersionId: row.work_pack_version_id,
@@ -6596,10 +6650,36 @@ export async function commitAssignedCreditexActivityWorkPack(
     activityDate: row.activity_date,
   });
   const prior = validateInstanceEnvelope(row, resolved);
+  let sectionPatches = input.sectionPatches || [];
+  if (expectedHash !== row.response_sha256) {
+    if (!sectionPatches.length || Object.keys(input.dependencyResolutions || {}).length
+      || input.referenceAcknowledgements?.length || input.artifactLinks?.length) {
+      return fail("WORK_PACK_REVISION_CONFLICT", 409, "This work pack changed elsewhere. Review the latest form before continuing.");
+    }
+    const baseRow = await database.prepare(`SELECT * FROM compliance_activity_work_pack_instances
+      WHERE id = ? AND instance_key = ? AND organisation_id = ? AND compliance_case_id = ? AND response_sha256 = ?`)
+      .bind(input.caseInstanceId, row.instance_key, row.organisation_id, row.compliance_case_id, expectedHash).first<WorkPackInstanceRecord>();
+    if (!baseRow) return fail("WORK_PACK_REVISION_CONFLICT", 409, "The saved base revision could not be verified. Your draft must be reviewed before saving.");
+    const base = validateInstanceEnvelope({ ...row, ...baseRow }, resolved);
+    if (base.prefillSha256 !== prior.prefillSha256 || base.definitionSha256 !== prior.definitionSha256
+      || base.declarationsSha256 !== prior.declarationsSha256 || base.compositionSha256 !== prior.compositionSha256) {
+      return fail("WORK_PACK_REVISION_CONFLICT", 409, "The form context changed. Review the latest form before saving your draft.");
+    }
+    const merged = mergeWorkPackAnswerPatches(resolved.workPack, base.response, prior.response, sectionPatches);
+    if (merged.conflicts.length) {
+      const error = new CreditexActivityWorkPackServerError("WORK_PACK_ANSWER_CONFLICT", 409,
+        "Another worker changed these answers. Your draft is retained. Choose which values to keep.");
+      error.conflicts = merged.conflicts;
+      error.mergedPatches = merged.patches;
+      error.currentInstance = { id: row.id, responseSha256: row.response_sha256 };
+      throw error;
+    }
+    sectionPatches = merged.patches;
+  }
   let response = patchResponse(
     resolved.workPack,
     prior.response,
-    input.sectionPatches || [],
+    sectionPatches,
   );
   response = await applyReferenceAcknowledgements(
     database,
@@ -6629,8 +6709,9 @@ export async function commitAssignedCreditexActivityWorkPack(
     prior.prefill.customerContext,
     executionContexts,
   );
-  if (creditexCanonicalSha256(envelope) === row.response_sha256
-    && !(input.artifactLinks || []).length) {
+  const unchanged = creditexCanonicalSha256(envelope) === row.response_sha256
+    && !(input.artifactLinks || []).length;
+  if (unchanged && expectedHash === row.response_sha256) {
     return fail(
       "WORK_PACK_NO_CHANGES",
       409,
@@ -6640,8 +6721,8 @@ export async function commitAssignedCreditexActivityWorkPack(
   const now = input.now
     ? instant(input.now, "WORK_PACK_NOW_INVALID", "Save time")
     : new Date().toISOString();
-  const newInstanceId = `work-pack:${row.compliance_case_id}:revision:${Number(row.revision) + 1}`;
-  const artifactStatements = await prepareArtifactStatements(database, {
+  const newInstanceId = unchanged ? row.id : `work-pack:${row.compliance_case_id}:revision:${Number(row.revision) + 1}`;
+  const artifactStatements = unchanged ? [] : await prepareArtifactStatements(database, {
     scope: input,
     row,
     workPack: resolved.workPack,
@@ -6650,18 +6731,23 @@ export async function commitAssignedCreditexActivityWorkPack(
     links: input.artifactLinks || [],
     now,
   });
-  const revocationStatements = row.status === "ready_to_sign"
+  const revocationStatements = !unchanged && row.status === "ready_to_sign"
     ? await signatureRevocationStatements(database, row, now)
     : [];
-  return runWorkPackMutation(database, {
+  try { return await runWorkPackMutation(database, {
     scope: input,
     row,
     idempotency: input.idempotency,
     action: "work_pack_commit",
-    resultRevision: Number(row.revision) + 1,
+    resultRevision: Number(row.revision) + (unchanged ? 0 : 1),
     newInstanceId,
     now,
-    statements: [
+    statements: unchanged ? [creditexWriteGuard(database, input.ownerUid,
+      `EXISTS (SELECT 1 FROM compliance_activity_work_pack_instances current_instance WHERE current_instance.id = ?
+        AND current_instance.response_sha256 = ? AND NOT EXISTS (
+          SELECT 1 FROM compliance_activity_work_pack_instances newer WHERE newer.instance_key = current_instance.instance_key
+            AND newer.organisation_id = current_instance.organisation_id AND newer.revision > current_instance.revision))`,
+      [row.id, row.response_sha256])] : [
       ...revocationStatements,
       appendInstanceStatement(database, row, {
         id: newInstanceId,
@@ -6672,7 +6758,18 @@ export async function commitAssignedCreditexActivityWorkPack(
       }),
       ...artifactStatements,
     ],
-  });
+  }); } catch (error) {
+    // A different writer can append after our read. Re-read and compare the
+    // same trusted base again; never turn a same-field conflict into a retry.
+    if (attempt < 2) {
+      const latest = await assignedInstanceRow(database, input, input.caseInstanceId);
+      if (latest.id !== row.id || (latest.assignee_member_id === row.assignee_member_id
+        && Number(latest.work_order_revision) !== Number(row.work_order_revision))) {
+        return commitAssignedCreditexActivityWorkPack(database, input, attempt + 1);
+      }
+    }
+    throw error;
+  }
 }
 
 /** Compose with the authorised correction event in one transaction. Signed originals stay immutable. */
@@ -8507,8 +8604,7 @@ export async function refreshAssignedCreditexActivityWorkPackExecutionContext(
       !== creditexCanonicalSha256(executionContexts.installerBusinessContext)
     || creditexCanonicalSha256(prior.prefill.assignmentContext)
       !== creditexCanonicalSha256(executionContexts.assignmentContext)
-    || creditexCanonicalSha256(prior.prefill.jobContext)
-      !== creditexCanonicalSha256(executionContexts.jobContext);
+    || !sameWorkPackJobContent(prior.prefill.jobContext, executionContexts.jobContext);
   if (!executionChanged) {
     return fail(
       "WORK_PACK_EXECUTION_CONTEXT_UNCHANGED",

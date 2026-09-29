@@ -1,4 +1,5 @@
 import { getD1 } from "../../db";
+import { isJobMember } from "./trade-job-collaboration";
 import { requireFirebaseIdentity, type FirebaseIdentity } from "./firebase-server";
 import { requireTradeMyobSecondFactor } from "./trade-mfa-server";
 import {
@@ -222,7 +223,8 @@ export async function assignedJob(access: TeamAccess, workOrderId: string) {
       assignee_member_id: string; assignee_label: string; stage: string; service_category: string;
       revision: number; customer_source: string }>();
   if (!row) throw new Error("JOB_NOT_FOUND");
-  if (!access.isOwner && access.jobScope === "own" && row.assignee_member_id !== access.memberId) {
+  if (!access.isOwner && access.jobScope === "own" && row.assignee_member_id !== access.memberId
+    && !(await isJobMember(getD1(), access.ownerUid, workOrderId, access.memberId))) {
     throw new Error("JOB_NOT_ASSIGNED");
   }
   return row;

@@ -715,7 +715,7 @@ test("every existing work-order date mutation path shares the atomic replanning 
     1,
   );
   assert.equal(
-    crmRoute.match(
+    crmAppointment.match(
       /previousTradeScheduleMutationGuardStatement\(/g,
     )?.length,
     1,

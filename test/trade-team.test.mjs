@@ -72,7 +72,7 @@ test("owners and delegated managers are bounded by authoritative permission flag
   assert.match(access, /return access\.isOwner/);
   assert.match(access, /access\.canManageTeam/);
   assert.match(access, /access\.jobScope === "own" && row\.assignee_member_id !== access\.memberId/);
-  assert.match(route, /\? <> 'own' OR w\.assignee_member_id = \?/);
+  assert.match(route, /\? <> 'own' OR \$\{jobMemberSql\("w"\)\}/);
   assert.match(route, /if \(!canManageTeam\(access\)\) throw new Error\("OWNER_REQUIRED"\)/);
   assert.match(route, /if \(!access\.canManageJobs\) throw new Error\("DISPATCH_REQUIRED"\)/);
   assert.match(route, /canAssignJob\(access,/);

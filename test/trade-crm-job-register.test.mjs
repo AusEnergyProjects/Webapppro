@@ -260,7 +260,7 @@ test("job register route and UI keep tenant scope, filters, sorting and accessib
   const addAppointment = ui.match(/async function addAppointment\([\s\S]*?(?=\n\s*async function completeAppointment)/)?.[0] || "";
   assert.match(route, /w\.firebase_uid = \?/);
   assert.match(route, /identity\.access\.jobScope === "own"/);
-  assert.match(route, /AND \(\? = 'team' OR w\.assignee_member_id = \?\)/);
+  assert.match(route, /AND \(\? = 'team' OR \$\{jobMemberSql\("w"\)\}\)/);
   assert.match(route, /projectJobRegisterRecord/);
   for (const filter of ["firstName", "lastName", "state", "operationalStatus"]) {
     assert.match(route, new RegExp(`searchParams\\.get\\(\"${filter}\"\\)`));
@@ -364,7 +364,7 @@ test("the Schedule tab requires an assignee and commits before optional calendar
   assert.match(createAppointment, /expectedRevision !== Number\(job\.revision\)/);
   assert.match(createAppointment, /const requestedAssigneeMemberId = cleanAdminText\(body\.assigneeMemberId/);
   assert.match(createAppointment, /if \(!requestedAssigneeMemberId\)[\s\S]*Choose the team member who will attend/);
-  assert.match(createAppointment, /assignmentChanged && !canAssignJob\(identity\.access/);
+  assert.match(createAppointment, /currentAssigneeMemberId !== assigneeMemberId && !canAssignJob\(identity\.access/);
   assert.match(createAppointment, /assertMemberCapability\(db, identity, assigneeMemberId/);
   assert.match(createAppointment, /revision = \? AND stage = \? AND stage NOT IN \('completed', 'cancelled'\) AND assignee_member_id = \?/);
   assert.match(createAppointment, /rentalInspectionAssignmentStatements/);
@@ -384,9 +384,41 @@ test("the Schedule tab requires an assignee and commits before optional calendar
     && memberGuard < eligibilityGuard && eligibilityGuard < mutationBatch
     && mutationBatch < calendarSync && calendarSync < response,
   "job update, appointment, rental sync and guards must commit before calendar sync and response");
-  assert.match(ui, /assignmentDirty \? "Assign and add appointment" : "Add appointment"/);
+  assert.match(ui, /assignmentDirty && job\.assigneeMemberId \? "Add worker visit" : "Add appointment"/);
+  assert.match(ui, /Add a separate visit for each worker, at the same time or on another day/);
   assert.match(scheduleSection, /setBookingDraftOpen\(true\); \}\}>Add another appointment<\/button>/);
   assert.doesNotMatch(scheduleSection, /crm-job-assignment-form/);
   assert.doesNotMatch(styles, /\.assignmentForm[\s\S]*grid-template-columns: minmax\(240px, 420px\) auto/);
   assert.doesNotMatch(globalStyles, /\.crm-job-schedule-panel \.crm-job-assignment-form/);
+});
+
+
+test("job search and assigned-worker filter match qualifying visit workers within the same job and owner", () => {
+  const route = read("../src/app/api/trade-crm/route.ts");
+  const expression = route.match(/const JOB_REGISTER_ASSIGNEE_SEARCH_SQL = `([\s\S]*?)`;/)?.[1];
+  assert.ok(expression);
+  assert.match(route, /\$\{JOB_REGISTER_ASSIGNEE_SEARCH_SQL\} \|\| ' ' \|\| COALESCE\(w\.stage/);
+  assert.match(route, /if \(assignee\) \{ conditions\.push\(`LOWER\(\$\{JOB_REGISTER_ASSIGNEE_SEARCH_SQL\}\) LIKE \?/);
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(`CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, assignee_label TEXT);
+      CREATE TABLE trade_crm_appointments (id TEXT PRIMARY KEY, work_order_id TEXT, firebase_uid TEXT, assignee_label TEXT, status TEXT);
+      INSERT INTO trade_work_orders VALUES ('shared-job','owner-1','Pat Plumber'), ('other-job','owner-1','Other lead'), ('foreign-job','owner-2','Foreign lead');
+      INSERT INTO trade_crm_appointments VALUES
+        ('plumber','shared-job','owner-1','Pat Plumber','in_progress'),
+        ('electrician','shared-job','owner-1','Erin Electrician','scheduled'),
+        ('completed-worker','shared-job','owner-1','Casey Complete','completed'),
+        ('cancelled-worker','shared-job','owner-1','Cancel Person','cancelled'),
+        ('no-show-worker','shared-job','owner-1','Absent Person','no_show'),
+        ('foreign-owner','shared-job','owner-2','Foreign Person','in_progress'),
+        ('other-job-worker','other-job','owner-1','Other Person','arrived');`);
+    const matches = name => db.prepare(`SELECT w.id FROM trade_work_orders w
+      WHERE w.firebase_uid=? AND LOWER(${expression}) LIKE ? ORDER BY w.id`).all('owner-1', '%' + name.toLowerCase() + '%').map(row => row.id);
+    assert.deepEqual(matches('Pat Plumber'), ['shared-job']);
+    assert.deepEqual(matches('Erin Electrician'), ['shared-job']);
+    assert.deepEqual(matches('Casey Complete'), ['shared-job']);
+    for (const name of ['Cancel Person','Absent Person','Foreign Person']) assert.deepEqual(matches(name), [], name);
+    assert.deepEqual(matches('Other Person'), ['other-job']);
+    assert.equal(db.prepare("SELECT assignee_label FROM trade_work_orders WHERE id='shared-job'").get().assignee_label, 'Pat Plumber');
+  } finally { db.close(); }
 });

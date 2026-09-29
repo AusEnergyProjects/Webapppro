@@ -38,6 +38,7 @@ import type {
   CreditexWorkPackBrowserUploadResult,
   CreditexWorkPackMutationResult,
   CreditexWorkPackSectionPatch,
+  CreditexWorkPackAnswerConflict,
 } from "@/lib/creditex-activity-work-pack-server";
 import {
   AustralianAddressLookup,
@@ -58,7 +59,12 @@ type WorkPackResult = {
   result?: CreditexWorkPackMutationResult;
   code?: string;
   error?: string;
+  conflicts?: readonly CreditexWorkPackAnswerConflict[];
+  mergedPatches?: readonly CreditexWorkPackSectionPatch[];
+  currentInstance?: { id: string; responseSha256: string };
 };
+
+type WorkPackSaveError = Error & Pick<WorkPackResult, "code" | "conflicts" | "currentInstance" | "mergedPatches">;
 
 type BrowserUploadResponse = {
   ok?: boolean;
@@ -433,7 +439,7 @@ export function TradeActivityWorkPackPanel({
 function WorkPack({
   user,
   initialPack,
-  readOnly,
+  readOnly: readOnlyProp,
   initiallyOpen,
   onReplace,
   onReload,
@@ -456,6 +462,13 @@ function WorkPack({
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [conflict, setConflict] = useState("");
+  const readOnly = readOnlyProp || Boolean(conflict);
+  const [answerConflicts, setAnswerConflicts] = useState<readonly CreditexWorkPackAnswerConflict[]>([]);
+  const conflictRef = useRef(false);
+  const conflictPack = useRef<CreditexAssignedActivityWorkPackProjection | null>(null);
+  const [conflictChangedAgain, setConflictChangedAgain] = useState(false);
+  const resolvedPatches = useRef<Record<string, CreditexWorkPackSectionPatch>>({});
+  const savingRef = useRef<Promise<void> | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [openedReferences, setOpenedReferences] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -534,13 +547,14 @@ function WorkPack({
   async function applyActionResponse(responseValue: Response) {
     const result = await responseValue.json().catch(() => ({})) as WorkPackResult;
     if (!responseValue.ok || !result.result?.projection) {
-      const error = new Error(result.error || "The activity form could not be saved.") as Error & { code?: string };
-      error.code = result.code;
+      const error: WorkPackSaveError = Object.assign(new Error(result.error || "The activity form could not be saved."),
+        { code: result.code, conflicts: result.conflicts, currentInstance: result.currentInstance, mergedPatches: result.mergedPatches });
       throw error;
     }
     const projection = result.result.projection;
     setPack(projection);
-    setResponse(projection.response);
+    setResponse(mergeWorkPackSectionPatches(projection.response,
+      projection.definition.schema.sections, Object.values(dirtyRef.current)));
     packRef.current = projection;
     onReplace(projection);
     return projection;
@@ -787,37 +801,50 @@ function WorkPack({
     return upload;
   }
 
-  async function reloadAfterConflict(error: Error & { code?: string }) {
-    if (error.code !== "WORK_PACK_REVISION_CONFLICT") throw error;
+  async function reloadAfterConflict(error: WorkPackSaveError) {
+    if (!["WORK_PACK_REVISION_CONFLICT", "WORK_PACK_ANSWER_CONFLICT"].includes(error.code || "")) throw error;
+    conflictRef.current = true;
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    setConflict("Your draft is retained. Review the saved answers and choose which values to keep before saving.");
     const latest = await onReload();
     const next = latest.find((item) => item.instance.instanceKey === pack.instance.instanceKey);
     if (next) {
-      setPack(next);
-      setResponse(next.response);
-      packRef.current = next;
-      setDirty({});
-      setConflict("This form changed elsewhere. The current saved version has been reloaded. Review this page before continuing.");
+      conflictPack.current = next;
+      if (error.currentInstance && next.instance.id !== error.currentInstance.id) {
+        setConflict("The saved form changed again. Your draft is retained. Check the latest changes before choosing values.");
+        setAnswerConflicts([]);
+        setConflictChangedAgain(true);
+        return;
+      }
+      setConflictChangedAgain(false);
+      resolvedPatches.current = Object.fromEntries((error.mergedPatches || Object.values(dirtyRef.current)).map((patch) => [
+        patch.repeatInstanceKey ? `${patch.sectionKey}:${patch.repeatInstanceKey}` : patch.sectionKey, patch,
+      ]));
+      setAnswerConflicts(error.conflicts || []);
+      setMessage("");
     }
   }
 
   const flushDirty = useCallback(async () => {
+    if (savingRef.current) { await savingRef.current; return flushDirtyRef.current(); }
+    if (conflictRef.current) return;
     const saving = { ...dirtyRef.current };
     const patches = Object.values(saving);
-    if (!patches.length || readOnly) return;
+    if (!patches.length || readOnlyProp) return;
     setBusy("save");
     setMessage("Saving...");
-    try {
+    const operation = (async () => { try {
       const saved = await action("work_pack_commit", { sectionPatches: patches });
       const pending = Object.fromEntries(Object.entries(dirtyRef.current)
         .filter(([key, patch]) => saving[key] !== patch));
       dirtyRef.current = pending;
       setDirty(pending);
-      if (Object.keys(pending).length) {
-        setResponse(mergeWorkPackSectionPatches(
+      setResponse(mergeWorkPackSectionPatches(
           saved.response,
           saved.definition.schema.sections,
           Object.values(pending),
         ));
+      if (Object.keys(pending).length) {
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => {
           saveTimer.current = null;
@@ -828,15 +855,27 @@ function WorkPack({
       setMessage(Object.keys(pending).length ? "Saving latest changes..." : "Saved");
     } catch (saveError) {
       const error = saveError instanceof Error ? saveError : new Error("The form could not be saved.");
-      await reloadAfterConflict(error as Error & { code?: string }).catch((nextError) => {
+      const conflictCode = (error as WorkPackSaveError).code;
+      if (["WORK_PACK_ANSWER_CONFLICT", "WORK_PACK_REVISION_CONFLICT"].includes(conflictCode || "")
+        && Object.entries(dirtyRef.current).some(([key, patch]) => saving[key] !== patch)) {
+        // The rejected request did not include these newer edits. Recheck that
+        // complete draft against its original base before offering any choice.
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => { saveTimer.current = null; void flushDirtyRef.current(); }, 150);
+        setMessage("Checking latest changes...");
+        return;
+      }
+      await reloadAfterConflict(error as WorkPackSaveError).catch((nextError) => {
         setMessage(nextError instanceof Error ? nextError.message : "The form could not be saved.");
       });
     } finally {
       setBusy("");
-    }
+    } })();
+    savingRef.current = operation;
+    try { await operation; } finally { savingRef.current = null; }
   // action and reloadAfterConflict intentionally use refs for exact latest CAS state.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readOnly]);
+  }, [readOnlyProp]);
 
   useEffect(() => {
     flushDirtyRef.current = flushDirty;
@@ -846,10 +885,42 @@ function WorkPack({
     dirtyRef.current = nextDirty;
     setDirty(nextDirty);
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (conflictRef.current) return;
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
-      void flushDirty();
+      void flushDirtyRef.current();
     }, 700);
+  }
+
+  function resolveAnswerConflict(item: CreditexWorkPackAnswerConflict, useLocal: boolean) {
+    const key = item.repeatInstanceKey ? `${item.sectionKey}:${item.repeatInstanceKey}` : item.sectionKey;
+    const pending = { ...resolvedPatches.current };
+    if (useLocal) {
+      pending[key] = { sectionKey: item.sectionKey, repeatInstanceKey: item.repeatInstanceKey,
+        ...(!item.promptKey
+          ? item.local === null ? { remove: true } : { answers: item.local as Record<string, unknown> }
+          : { answers: { ...pending[key]?.answers, [item.promptKey]: item.local } }) };
+    }
+    resolvedPatches.current = pending;
+    const remaining = answerConflicts.filter((entry) => entry !== item);
+    setAnswerConflicts(remaining);
+    if (remaining.length) return;
+    dirtyRef.current = pending;
+    setDirty(pending);
+    acceptReviewedDraft();
+  }
+
+  function acceptReviewedDraft() {
+    const next = conflictPack.current;
+    if (!next) return;
+    setPack(next);
+    packRef.current = next;
+    setResponse(mergeWorkPackSectionPatches(next.response, next.definition.schema.sections, Object.values(dirtyRef.current)));
+    setSignatureDrafts({});
+    conflictRef.current = false;
+    conflictPack.current = null;
+    setConflict("");
+    scheduleSave(dirtyRef.current);
   }
 
   function changeAnswer(
@@ -858,7 +929,7 @@ function WorkPack({
     promptKey: string,
     answer: unknown,
   ) {
-    if (readOnly || pack.instance.status === "completed") return;
+    if (readOnly || conflictRef.current || pack.instance.status === "completed") return;
     const key = section.repeatability
       ? `${section.sectionKey}:${repeatInstanceKey}` : section.sectionKey;
     const patch: CreditexWorkPackSectionPatch = {
@@ -1202,7 +1273,15 @@ function WorkPack({
     </button>
     {open && <div className={styles.packBody}>
       <IdentityBoundary pack={pack} />
-      {conflict && <div className={styles.conflict} role="alert"><strong>This form was updated elsewhere</strong><span>{conflict}</span></div>}
+      {conflict && <div className={styles.conflict} role="alert"><strong>This form was updated elsewhere</strong><span>{conflict}</span>
+        {answerConflicts.map((item) => <div key={`${item.sectionKey}:${item.repeatInstanceKey || ""}:${item.promptKey}`}>
+          <strong>{item.label}</strong><p>Your answer: {JSON.stringify(item.local) ?? "Empty"}</p><p>Saved answer: {JSON.stringify(item.saved) ?? "Empty"}</p>
+          <button type="button" onClick={() => resolveAnswerConflict(item, true)}>Use my answer</button>
+          <button type="button" onClick={() => resolveAnswerConflict(item, false)}>Use saved answer</button>
+        </div>)}
+        {conflictChangedAgain ? <button type="button" onClick={() => { conflictRef.current = false; void flushDirty(); }}>Check latest changes</button>
+          : !answerConflicts.length && <button type="button" onClick={acceptReviewedDraft}>Keep my draft on the latest form</button>}
+      </div>}
       {pack.definition.schema.dependencies.length > 0 && <section className={styles.dependencies}>
         <header><span>Job setup</span><strong>Products, scenarios and calculations</strong></header>
         {pack.definition.schema.dependencies.map((dependency) => {

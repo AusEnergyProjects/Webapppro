@@ -1,3 +1,4 @@
+import { jobMemberSql } from "@/lib/trade-job-collaboration";
 import { getD1 } from "../../../../db";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
@@ -83,7 +84,7 @@ async function notifications(access: TeamAccess) {
       JOIN trade_work_orders work ON work.id = completion.work_order_id AND work.firebase_uid = completion.firebase_uid
         AND work.record_status = 'active'
       LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
-      WHERE completion.firebase_uid = ? AND (? <> 'own' OR work.assignee_member_id = ?)
+      WHERE completion.firebase_uid = ? AND (? <> 'own' OR ${jobMemberSql("work")} )
       ORDER BY completion.completed_at DESC LIMIT 80`)
       .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
     access.canViewQuotes ? db.prepare(`SELECT question.id, question.work_order_id, question.question, question.asked_at,
@@ -93,7 +94,7 @@ async function notifications(access: TeamAccess) {
         AND work.record_status = 'active'
       LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       JOIN trade_crm_quotes quote ON quote.id = question.quote_id AND quote.firebase_uid = question.firebase_uid
-      WHERE question.firebase_uid = ? AND (? <> 'own' OR work.assignee_member_id = ?)
+      WHERE question.firebase_uid = ? AND (? <> 'own' OR ${jobMemberSql("work")} )
       ORDER BY question.asked_at DESC LIMIT 80`)
       .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
     access.canViewQuotes ? db.prepare(`SELECT acceptance.id, acceptance.work_order_id, acceptance.decision, acceptance.signer_name,
@@ -104,7 +105,7 @@ async function notifications(access: TeamAccess) {
         AND work.record_status = 'active'
       LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       JOIN trade_crm_quotes quote ON quote.id = acceptance.quote_id AND quote.firebase_uid = acceptance.firebase_uid
-      WHERE acceptance.firebase_uid = ? AND (? <> 'own' OR work.assignee_member_id = ?)
+      WHERE acceptance.firebase_uid = ? AND (? <> 'own' OR ${jobMemberSql("work")} )
       ORDER BY acceptance.decided_at DESC LIMIT 80`)
       .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
     access.canViewQuotes ? db.prepare(`SELECT event.id, event.work_order_id, event.occurred_at, work.work_number, work.title,
@@ -115,7 +116,7 @@ async function notifications(access: TeamAccess) {
       LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       JOIN trade_crm_quotes quote ON quote.id = event.quote_id AND quote.firebase_uid = event.firebase_uid
       WHERE event.firebase_uid = ? AND event.actor_type = 'link_holder' AND event.event_type = 'viewed'
-        AND (? <> 'own' OR work.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("work")} )
       ORDER BY event.occurred_at DESC LIMIT 80`)
       .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
     access.canRescheduleJobs ? db.prepare(`SELECT event.id, event.work_order_id, event.summary, event.created_at,
@@ -144,7 +145,7 @@ async function notifications(access: TeamAccess) {
           WHERE completed.firebase_uid = event.firebase_uid AND completed.work_order_id = event.work_order_id
             AND completed.event_type = 'job_completed' AND completed.created_at = event.created_at
         ))
-        AND (? <> 'own' OR work.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("work")} )
       ORDER BY event.created_at DESC LIMIT 120`)
       .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
     access.canViewFieldEvidence ? db.prepare(`SELECT signoff.id, signoff.work_order_id, signoff.signer_role, signoff.signer_name, signoff.signed_at,
@@ -154,7 +155,7 @@ async function notifications(access: TeamAccess) {
         AND work.record_status = 'active'
       LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       WHERE signoff.firebase_uid = ? AND signoff.signer_role IN ('customer', 'technician')
-        AND (? <> 'own' OR work.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("work")} )
       ORDER BY signoff.signed_at DESC LIMIT 80`)
       .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
     access.canViewQuotes && scope.scope === "team" ? db.prepare(`SELECT assignment.id opportunity_match_id, assignment.matched_at
@@ -208,7 +209,7 @@ async function notifications(access: TeamAccess) {
           WHERE successor.firebase_uid = delivery.firebase_uid
             AND successor.retry_of_delivery_id = delivery.id
         )
-        AND (? <> 'own' OR work.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("work")} )
       ORDER BY delivery.updated_at DESC LIMIT 80`)
       .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
     (access.isOwner || access.canManageTeam)

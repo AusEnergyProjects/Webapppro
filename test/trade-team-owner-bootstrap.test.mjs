@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import assert from "node:assert/strict";
@@ -36,6 +37,7 @@ function loadServer(database) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const mocks = {
+    "@/lib/trade-job-collaboration": jobCollaboration, "./trade-job-collaboration": jobCollaboration,
     "./firebase-mfa": firebaseMfa,
     "./myob-security-audit": myobSecurityAudit,
     "../../db": { getD1: () => ({ prepare: (sql) => new Statement(database, sql) }) },

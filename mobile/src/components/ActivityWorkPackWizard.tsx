@@ -148,9 +148,43 @@ function initialFieldWorkPackPage(pack: FieldActivityWorkPack) {
   return sectionIndex < 0 ? 0 : sectionIndex;
 }
 
+type WorkPackAnswerConflict = Readonly<{
+  sectionKey: string; repeatInstanceKey?: string; promptKey: string; label: string;
+  base: unknown; local: unknown; saved: unknown;
+}>;
+type WorkPackAnswerChoice = Readonly<{
+  sectionKey: string; repeatInstanceKey?: string; promptKey: string; use: 'local' | 'saved';
+}>;
+
+function WorkPackAnswerChoices({ conflicts, busy, onResolve }: {
+  conflicts: readonly WorkPackAnswerConflict[]; busy: boolean;
+  onResolve: (choices: readonly WorkPackAnswerChoice[]) => Promise<void>;
+}) {
+  const [choices, setChoices] = useState<Record<number, 'local' | 'saved'>>({});
+  const [resolving, setResolving] = useState(false);
+  return <View style={styles.body}>
+    <Text style={styles.pageTitle}>Choose which answers to keep</Text>
+    {conflicts.map((item, index) => <View key={`${item.sectionKey}:${item.repeatInstanceKey || ''}:${item.promptKey}`} style={styles.body}>
+      <Text style={styles.conflictTitle}>{item.label}</Text>
+      <Text style={styles.meta}>Your answer: {JSON.stringify(item.local) ?? 'Empty'}</Text>
+      <Text style={styles.meta}>Saved answer: {JSON.stringify(item.saved) ?? 'Empty'}</Text>
+      <FieldButton variant={choices[index] === 'local' ? 'primary' : 'secondary'} disabled={busy || resolving}
+        onPress={() => setChoices((current) => ({ ...current, [index]: 'local' }))}>Use my answer</FieldButton>
+      <FieldButton variant={choices[index] === 'saved' ? 'primary' : 'secondary'} disabled={busy || resolving}
+        onPress={() => setChoices((current) => ({ ...current, [index]: 'saved' }))}>Use saved answer</FieldButton>
+    </View>)}
+    <FieldButton disabled={busy || resolving || conflicts.some((_, index) => !choices[index])}
+      onPress={() => { setResolving(true); void onResolve(conflicts.map((item, index) => ({
+        sectionKey: item.sectionKey, repeatInstanceKey: item.repeatInstanceKey, promptKey: item.promptKey, use: choices[index],
+      }))).finally(() => setResolving(false)); }}>Save chosen answers</FieldButton>
+  </View>;
+}
+
 export function ActivityWorkPackWizard({
   pack,
   conflict,
+  answerConflicts = [],
+  onResolveAnswerConflicts,
   pendingActions = [],
   busy,
   onSaveSections,
@@ -170,6 +204,8 @@ export function ActivityWorkPackWizard({
 }: {
   pack: FieldActivityWorkPack;
   conflict?: string;
+  answerConflicts?: readonly WorkPackAnswerConflict[];
+  onResolveAnswerConflicts?: (choices: readonly WorkPackAnswerChoice[]) => Promise<void>;
   pendingActions?: string[];
   busy: string;
   onSaveSections: (patches: FieldWorkPackSectionPatch[]) => Promise<void>;
@@ -219,6 +255,8 @@ export function ActivityWorkPackWizard({
   const mounted = useRef(true);
   const responseSha256 = useRef(pack.instance.responseSha256);
   const leaving = useRef(false);
+  const dirtyRef = useRef(dirty);
+  const savingRef = useRef<Promise<void> | null>(null);
 
   function backToSectionsOrJob() {
     if (!overview) { setOverview(true); setOpen(true); return; }
@@ -241,10 +279,10 @@ export function ActivityWorkPackWizard({
   }, []);
 
   useEffect(() => {
-    if (Object.keys(dirty).length > 0) return undefined;
-    const refresh = setTimeout(() => setResponse(pack.response), 0);
+    const refresh = setTimeout(() => setResponse(mergeFieldWorkPackSectionPatches(
+      pack.response, pack.definition.schema.sections, Object.values(dirtyRef.current))), 0);
     return () => clearTimeout(refresh);
-  }, [dirty, pack.instance.responseSha256, pack.response]);
+  }, [dirty, pack.instance.responseSha256, pack.response, pack.definition.schema.sections]);
 
   useEffect(() => {
     if (responseSha256.current === pack.instance.responseSha256) return undefined;
@@ -266,31 +304,40 @@ export function ActivityWorkPackWizard({
     expectedSchemaSha256: pack.definition.schemaSha256,
   }), [pack.definition.schema, pack.definition.schemaSha256, response]);
 
-  async function flushDirty(nextDirty = dirty) {
+  async function flushDirty(): Promise<void> {
+    if (savingRef.current) { await savingRef.current; return flushDirty(); }
+    if (answerConflicts.length) throw new Error('Choose which conflicting answers to keep before saving.');
+    const nextDirty = { ...dirtyRef.current };
     const patches = Object.values(nextDirty);
     if (!patches.length) return;
-    try {
+    const operation = (async () => { try {
       await onSaveSections(patches);
       setOperationError('');
     } catch (error) {
       setOperationError(errorMessage(error));
       throw error;
     }
-    if (mounted.current) setDirty((current) => {
-      const next = { ...current };
+    if (mounted.current) {
+      const next = { ...dirtyRef.current };
       for (const patch of patches) {
         const key = `${patch.sectionKey}:${patch.repeatInstanceKey}`;
         if (next[key] === nextDirty[key]) delete next[key];
       }
-      return next;
-    });
+      dirtyRef.current = next;
+      setDirty(next);
+      if (Object.keys(next).length) scheduleSave(next);
+    }
+    })();
+    savingRef.current = operation;
+    try { await operation; } finally { savingRef.current = null; }
   }
 
   function scheduleSave(nextDirty: Record<string, FieldWorkPackSectionPatch>) {
+    dirtyRef.current = nextDirty;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
-      void flushDirty(nextDirty).catch(() => undefined);
+      void flushDirty().catch(() => undefined);
     }, AUTOSAVE_DELAY_MS);
   }
 
@@ -315,11 +362,11 @@ export function ActivityWorkPackWizard({
       repeatInstanceKey,
       remove: false,
       answers: {
-        ...(dirty[key]?.answers || {}),
+        ...(dirtyRef.current[key]?.answers || {}),
         [promptKey]: answer,
       },
     };
-    const nextDirty = { ...dirty, [key]: patch };
+    const nextDirty = { ...dirtyRef.current, [key]: patch };
     setDirty(nextDirty);
     setResponse((current) => mergeFieldWorkPackSectionPatches(
       current,
@@ -352,7 +399,7 @@ export function ActivityWorkPackWizard({
       remove: false,
       answers: {},
     };
-    const nextDirty = { ...dirty, [key]: patch };
+    const nextDirty = { ...dirtyRef.current, [key]: patch };
     setDirty(nextDirty);
     setResponse((current) => mergeFieldWorkPackSectionPatches(
       current,
@@ -371,7 +418,7 @@ export function ActivityWorkPackWizard({
       remove: true,
       answers: {},
     };
-    const nextDirty = { ...dirty, [key]: patch };
+    const nextDirty = { ...dirtyRef.current, [key]: patch };
     setDirty(nextDirty);
     setResponse((current) => mergeFieldWorkPackSectionPatches(
       current,
@@ -489,9 +536,12 @@ export function ActivityWorkPackWizard({
         <View style={styles.flex}>
           <Text style={styles.conflictTitle}>This work pack changed elsewhere</Text>
           <Text style={styles.conflictText}>{conflict}</Text>
-          <Text style={styles.meta}>Your encrypted draft is retained. Review the conflict in Sync before retrying.</Text>
+          <Text style={styles.meta}>Your encrypted draft is retained. {answerConflicts.length ? 'Choose which answers to keep below.' : 'Review the conflict in Sync before retrying.'}</Text>
         </View>
       </View> : null}
+      {answerConflicts.length && onResolveAnswerConflicts ? <WorkPackAnswerChoices
+        key={JSON.stringify(answerConflicts)} conflicts={answerConflicts} busy={Boolean(busy)}
+        onResolve={(choices) => run(() => onResolveAnswerConflicts(choices))} /> : null}
       {operationError ? <View style={styles.conflict} accessibilityLiveRegion="assertive">
         <MaterialCommunityIcons name="alert-circle-outline" size={24} color={colours.red} />
         <View style={styles.flex}>
@@ -589,7 +639,7 @@ export function ActivityWorkPackWizard({
         pendingArtifacts={pendingArtifacts}
         pendingSignatures={pendingSignatures}
         signatureDrafts={signatureDrafts}
-        busy={busy}
+        busy={answerConflicts.length ? 'answer-conflict' : busy}
         onSelectRepeat={(instanceKey) => setRepeatSelection((current) => ({ ...current, [section.sectionKey]: instanceKey }))}
         onAddRepeat={() => addRepeatItem(section)}
         onRemoveRepeat={(instanceKey) => removeRepeatItem(section, instanceKey)}

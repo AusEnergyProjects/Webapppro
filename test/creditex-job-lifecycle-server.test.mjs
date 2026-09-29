@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFileSync} from 'node:fs';
@@ -30,7 +31,7 @@ function fixture(t){
  CREATE TABLE trade_crm_job_details(work_order_id TEXT,firebase_uid TEXT,pipeline_stage TEXT);
  CREATE TABLE trade_job_forms(work_order_id TEXT,firebase_uid TEXT,status TEXT);
  CREATE TABLE trade_work_order_events(id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,event_type TEXT,summary TEXT NOT NULL,created_at TEXT);
- CREATE TABLE trade_crm_appointments(work_order_id TEXT,firebase_uid TEXT,status TEXT,revision INTEGER,updated_at TEXT);
+ CREATE TABLE trade_crm_appointments(assignee_member_id TEXT DEFAULT '',work_order_id TEXT,firebase_uid TEXT,status TEXT,revision INTEGER,updated_at TEXT);
  CREATE TABLE trade_crm_job_notes(id TEXT,work_order_id TEXT,firebase_uid TEXT,note_type TEXT,body TEXT,issue_status TEXT,created_at TEXT,updated_at TEXT);
  INSERT INTO trade_work_orders VALUES('job','owner','installer','TLJ-123','Installation','completed','active',1,'tech','${NOW}');
  INSERT INTO trade_accounts VALUES('owner','Trade Pty Ltd');
@@ -41,7 +42,8 @@ function fixture(t){
  class Statement{constructor(sql,values=[]){this.sql=sql;this.values=values;}bind(...v){return new Statement(this.sql,v);}async first(){return sqlite.prepare(this.sql).get(...this.values)||null;}async all(){return {results:sqlite.prepare(this.sql).all(...this.values)};}runSync(){return {meta:{changes:Number(sqlite.prepare(this.sql).run(...this.values).changes)}};}async run(){return this.runSync();}}
  let beforeBatch;
  const db={prepare:sql=>new Statement(sql),async batch(statements){if(beforeBatch){const fn=beforeBatch;beforeBatch=null;fn();}sqlite.exec('BEGIN');try{const r=statements.map(s=>s.runSync());sqlite.exec('COMMIT');return r;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
- const dependencies={'./creditex-job-lifecycle-schema-guards':lifecycleGuardFixture(sqlite,JOB_LIFECYCLE_GUARD_NAMES),'node:crypto':{createHash},'./trade-team-sync-server':{jobSyncChangeStatements:()=>[]},'./creditex-job-lifecycle-sql':lifecycleSql,'./service-reminder-delivery':delivery,
+ const dependencies={
+    "@/lib/trade-job-collaboration": jobCollaboration, "./trade-job-collaboration": jobCollaboration,'./creditex-job-lifecycle-schema-guards':lifecycleGuardFixture(sqlite,JOB_LIFECYCLE_GUARD_NAMES),'node:crypto':{createHash},'./trade-team-sync-server':{jobSyncChangeStatements:()=>[]},'./creditex-job-lifecycle-sql':lifecycleSql,'./service-reminder-delivery':delivery,
  './trade-job-cancellation-server':{cancelledJobAppointmentsStatement:(db,owner,job,now)=>db.prepare(`UPDATE trade_crm_appointments SET status='cancelled',revision=revision+1,updated_at=? WHERE work_order_id=? AND firebase_uid=? AND status='scheduled'`).bind(now,job,owner),reconcileCancelledJobCalendars:async()=>({attempted:0,synced:0,failed:0})},
  './creditex-activity-work-pack-server':{prepareCreditexCorrectionWorkPackStatements:async()=>[]},
  './trade-activity-forms-server':{prepareFieldCorrectionStatements:async(db,input)=>{const sources=JSON.parse(input.sourceSnapshot).records.filter(r=>r.kind==='field');return sources.map(s=>db.prepare(`INSERT INTO trade_activity_field_records SELECT id||'-correction',intent_id,work_order_id,owner_uid,organisation_id,revision+1,'draft','','','',id FROM trade_activity_field_records WHERE id=?`).bind(s.id));}}};

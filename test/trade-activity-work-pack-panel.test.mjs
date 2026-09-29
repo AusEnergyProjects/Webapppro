@@ -19,17 +19,22 @@ test("assigned trades open governed work packs in the field record", () => {
   assert.match(panel, /readOnly=\{readOnly\}/);
 });
 
-test("the guided web form autosaves exact CAS revisions and reloads conflicts", () => {
+test("the guided web form serializes autosave and retains drafts for explicit conflict choices", () => {
   assert.match(panel, /expectedResponseSha256: packRef\.current\.instance\.responseSha256/);
   assert.match(
     panel,
     /idempotency: \{[\s\S]*clientActionId,[\s\S]*deviceId: idempotencyDeviceId,[\s\S]*payloadHash/,
   );
-  assert.match(panel, /setTimeout\(\(\) => \{[\s\S]*void flushDirty\(\);[\s\S]*\}, 700\)/);
+  assert.match(panel, /setTimeout\(\(\) => \{[\s\S]*void flushDirtyRef\.current\(\);[\s\S]*\}, 700\)/);
   assert.match(panel, /saving\[key\] !== patch/);
   assert.match(panel, /Saving latest changes/);
   assert.match(panel, /WORK_PACK_REVISION_CONFLICT/);
-  assert.match(panel, /The current saved version has been reloaded/);
+  assert.match(panel, /WORK_PACK_ANSWER_CONFLICT/);
+  assert.match(panel, /Your draft is retained/);
+  assert.match(panel, /Use my answer/);
+  assert.match(panel, /Use saved answer/);
+  assert.match(panel, /if \(savingRef\.current\) \{ await savingRef\.current/);
+  assert.doesNotMatch(panel.slice(panel.indexOf('async function reloadAfterConflict'), panel.indexOf('const flushDirty =')), /setDirty\(\{\}\)/);
   assert.match(panel, /firstIncompleteWorkPackPage/);
   assert.match(panel, /className=\{styles\.stepCount\}>Step/);
   assert.match(panel, /setMessage\("Saving\.\.\."\)/);

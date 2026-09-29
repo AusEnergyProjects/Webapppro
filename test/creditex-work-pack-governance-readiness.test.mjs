@@ -4,6 +4,8 @@ import fs from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as collaboration from "../src/lib/trade-job-collaboration.ts";
+import * as syncChanges from "../src/lib/trade-team-sync-server.ts";
 
 import * as activityWorkPack from "../src/lib/creditex-activity-work-pack.ts";
 import * as interchangePreflight from "../src/lib/creditex-interchange-preflight.ts";
@@ -47,6 +49,8 @@ function loadTypescriptModule(path, mocks) {
 const server = loadTypescriptModule(
   "../src/lib/creditex-activity-work-pack-server.ts",
   {
+    "./trade-job-collaboration": collaboration,
+    "./trade-team-sync-server": syncChanges,
     "./creditex-activity-work-pack.ts": activityWorkPack,
     "./creditex-interchange-preflight.ts": interchangePreflight,
     "./creditex-manual-policy-merge.ts": manualPolicy,

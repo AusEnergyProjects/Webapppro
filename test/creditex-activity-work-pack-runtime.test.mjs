@@ -1978,6 +1978,132 @@ test("assigned work-pack rejects hidden evidence and binds commit, signatures, r
 
 });
 
+test("governed answers merge disjoint edits from retained history and require explicit same-field choices", async () => {
+  const { sqlite, database } = await seededRuntime();
+  try {
+    const { projection: base } = await openAssignedRuntimeWorkPack(database);
+    const write = (pack, answers, key) => server.commitAssignedCreditexActivityWorkPack(database, {
+      ...scope(), caseInstanceId: pack.instance.id, expectedResponseSha256: pack.instance.responseSha256,
+      sectionPatches: [{ sectionKey: "evidence", answers }], idempotency: idempotency(key), now: "2026-08-15T00:00:03.000Z",
+    });
+    await write(base, { "visit-note": "Electrician notes" }, "collaboration-electrician");
+    const disjoint = await write(base, { "show-hidden-photo": true }, "collaboration-plumber");
+    assert.equal(disjoint.projection.response.answers["visit-note"], "Electrician notes");
+    assert.equal(disjoint.projection.response.answers["show-hidden-photo"], true);
+    await assert.rejects(write(base, { "visit-note": "Plumber notes" }, "collaboration-conflict"), (error) => {
+      assert.equal(error.code, "WORK_PACK_ANSWER_CONFLICT");
+      assert.deepEqual(error.conflicts, [{ sectionKey: "evidence", repeatInstanceKey: undefined, promptKey: "visit-note",
+        label: "Visit note", base: null, local: "Plumber notes", saved: "Electrician notes" }]);
+      assert.equal(error.currentInstance.id, disjoint.projection.instance.id);
+      return true;
+    });
+    const chosen = await write(disjoint.projection, { "visit-note": "Plumber notes" }, "collaboration-resolved");
+    assert.equal(chosen.projection.response.answers["visit-note"], "Plumber notes");
+    assert.equal(chosen.projection.response.answers["show-hidden-photo"], true);
+    const history = sqlite.prepare("SELECT COUNT(*) count FROM compliance_activity_work_pack_instances WHERE instance_key=?").get(base.instance.instanceKey);
+    assert.equal(history.count, 4, "conflicts do not append an instance or duplicate the form");
+    const duplicate = await write(base, { "show-hidden-photo": true }, "collaboration-plumber");
+    assert.equal(duplicate.status, "duplicate");
+    await assert.rejects(server.prepareAssignedCreditexActivityWorkPackSigning(database, {
+      ...scope(), caseInstanceId: base.instance.id, expectedResponseSha256: base.instance.responseSha256,
+      idempotency: idempotency("collaboration-stale-signing"),
+    }), (error) => error.code === "WORK_PACK_REVISION_CONFLICT");
+    await assert.rejects(write({ ...base, instance: { ...base.instance, responseSha256: "f".repeat(64) } },
+      { "visit-note": "Forged base" }, "collaboration-forged-base"), (error) => error.code === "WORK_PACK_REVISION_CONFLICT");
+  } finally { sqlite.close(); }
+});
+
+test("governed repeat-item merges preserve independent items and conflict on deletion versus edit", () => {
+  const schema = workPackSchema();
+  const repeating = { ...schema, sections: [{ ...schema.sections[0],
+    repeatability: { minimumInstances: 0, maximumInstances: 10, itemLabel: "unit" },
+    prompts: [schema.sections[0].prompts.find((prompt) => prompt.promptKey === "visit-note")],
+  }] };
+  const response = (items) => ({ answers: {}, repeatableSections: { evidence: items }, dependencyResolutions: {} });
+  const first = { instanceKey: "unit-a", answers: { "visit-note": "Base A" } };
+  const second = { instanceKey: "unit-b", answers: { "visit-note": "Base B" } };
+  const base = response([first, second]);
+  const saved = response([{ ...first, answers: { "visit-note": "Other worker A" } }, second]);
+  const result = server.mergeWorkPackAnswerPatches(repeating, base, saved,
+    [{ sectionKey: "evidence", repeatInstanceKey: "unit-b", answers: { "visit-note": "My B" } }]);
+  assert.deepEqual(result.conflicts, []);
+  assert.deepEqual(result.patches, [{ sectionKey: "evidence", repeatInstanceKey: "unit-b", answers: { "visit-note": "My B" } }]);
+  const removal = server.mergeWorkPackAnswerPatches(repeating, base, saved,
+    [{ sectionKey: "evidence", repeatInstanceKey: "unit-a", remove: true }]);
+  assert.deepEqual(removal.patches, []);
+  assert.equal(removal.conflicts[0].promptKey, "");
+  assert.equal(removal.conflicts[0].local, null);
+  assert.deepEqual(removal.conflicts[0].saved, { "visit-note": "Other worker A" });
+  const governed = { ...repeating, sections: [{ ...repeating.sections[0], prompts: [
+    ...repeating.sections[0].prompts, prompt({ promptKey: "photo", type: "photo", label: "Unit photo" }),
+  ] }] };
+  const retained = response([{ ...first, answers: { ...first.answers, photo: ["retained-artifact"] } }]);
+  assert.throws(() => server.mergeWorkPackAnswerPatches(governed, retained, retained,
+    [{ sectionKey: "evidence", repeatInstanceKey: "unit-a", remove: true }]),
+    (error) => error.code === "WORK_PACK_REPEAT_EVIDENCE_RETAINED");
+});
+
+test("a parent sync revision advancing for another activity retries without bypassing membership checks", async () => {
+  const { sqlite, database } = await seededRuntime();
+  try {
+    const { projection: base } = await openAssignedRuntimeWorkPack(database);
+    database.interceptNextBatch((statements) => statements.some((statement) => statement.sql.includes("INSERT INTO trade_offline_actions")),
+      () => sqlite.prepare("UPDATE trade_work_orders SET revision=revision+1 WHERE id=?").run(WORK_ORDER_ID));
+    const saved = await server.commitAssignedCreditexActivityWorkPack(database, { ...scope(),
+      caseInstanceId: base.instance.id, expectedResponseSha256: base.instance.responseSha256,
+      sectionPatches: [{ sectionKey: "evidence", answers: { "visit-note": "Retained after unrelated activity update" } }],
+      idempotency: idempotency("parent-cursor-race"), now: "2026-08-15T00:00:03.000Z" });
+    assert.equal(saved.projection.response.answers["visit-note"], "Retained after unrelated activity update");
+    assert.equal(sqlite.prepare("SELECT revision FROM trade_work_orders WHERE id=?").get(WORK_ORDER_ID).revision, 3);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM trade_offline_actions WHERE client_action_id='parent-cursor-race'").get().count, 1);
+  } finally { sqlite.close(); }
+});
+
+test("convergent stale answers receive an idempotent receipt without duplicating the form revision", async () => {
+  const { sqlite, database } = await seededRuntime();
+  try {
+    const { projection: base } = await openAssignedRuntimeWorkPack(database);
+    const input = { ...scope(), caseInstanceId: base.instance.id, expectedResponseSha256: base.instance.responseSha256,
+      sectionPatches: [{ sectionKey: "evidence", answers: { "visit-note": "Same observation" } }],
+      idempotency: idempotency("convergent-first"), now: "2026-08-15T00:00:03.000Z" };
+    const first = await server.commitAssignedCreditexActivityWorkPack(database, input);
+    const secondInput = { ...input, idempotency: idempotency("convergent-second") };
+    const second = await server.commitAssignedCreditexActivityWorkPack(database, secondInput);
+    assert.equal(second.status, "applied");
+    assert.equal(second.projection.instance.id, first.projection.instance.id);
+    const replay = await server.commitAssignedCreditexActivityWorkPack(database, secondInput);
+    assert.equal(replay.status, "duplicate");
+    assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM compliance_activity_work_pack_instances WHERE instance_key=?").get(base.instance.instanceKey).count, 2);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM trade_offline_actions WHERE client_action_id='convergent-second' AND status='applied'").get().count, 1);
+  } finally { sqlite.close(); }
+});
+
+test("governed collaborators retain read and answer access for completed visits but lose it on cancellation", async () => {
+  const { sqlite, database } = await seededRuntime();
+  try {
+    const { projection: base } = await openAssignedRuntimeWorkPack(database);
+    sqlite.prepare(`INSERT INTO trade_crm_appointments
+      (id,work_order_id,firebase_uid,title,starts_at,created_at,updated_at,assignee_member_id,status)
+      VALUES ('collaborator-visit',?,?, 'Plumbing visit',?,?,?,?,'completed')`)
+      .run(WORK_ORDER_ID, OWNER_UID, NOW, NOW, NOW, MEMBER_TWO_ID);
+    const collaborator = { ...scope({ workerUid: WORKER_TWO_UID, memberId: MEMBER_TWO_ID }), scope: "own" };
+    const read = await server.loadAssignedCreditexActivityWorkPack(database, { ...collaborator, caseInstanceId: base.instance.id });
+    assert.equal(read.instance.instanceKey, base.instance.instanceKey);
+    const saved = await server.commitAssignedCreditexActivityWorkPack(database, { ...collaborator,
+      caseInstanceId: base.instance.id, expectedResponseSha256: base.instance.responseSha256,
+      sectionPatches: [{ sectionKey: "evidence", answers: { "visit-note": "Plumber contribution" } }],
+      idempotency: idempotency("collaborator-write"), now: "2026-08-15T00:00:03.000Z" });
+    assert.equal(saved.projection.response.answers["visit-note"], "Plumber contribution");
+    assert.equal(sqlite.prepare("SELECT revision FROM trade_work_orders WHERE id=?").get(WORK_ORDER_ID).revision, 2);
+    const audiences = sqlite.prepare("SELECT DISTINCT audience_member_id FROM trade_team_sync_changes WHERE entity_id=? AND audience_member_id<>'' ORDER BY audience_member_id")
+      .all(WORK_ORDER_ID).map((row) => row.audience_member_id);
+    assert.deepEqual(audiences, [MEMBER_ID, MEMBER_TWO_ID].sort());
+    sqlite.prepare("UPDATE trade_crm_appointments SET status='cancelled' WHERE id='collaborator-visit'").run();
+    await assert.rejects(server.loadAssignedCreditexActivityWorkPack(database, { ...collaborator, caseInstanceId: saved.projection.instance.id }),
+      (error) => error.code === "WORK_PACK_INSTANCE_NOT_ASSIGNED");
+  } finally { sqlite.close(); }
+});
+
 test("source-backed not-applicable dependencies reject forged product, scenario and calculator actions", async () => {
   const { database } = await seededRuntime();
   const { projection } = await openAssignedRuntimeWorkPack(database);

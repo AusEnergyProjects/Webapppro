@@ -5,6 +5,7 @@ import test from "node:test";
 import ts from "typescript";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "../src/lib/bounded-json-request.ts";
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from "../src/lib/firebase-mfa.ts";
+import { isJobMember } from "../src/lib/trade-job-collaboration.ts";
 
 function functions(file, names, dependencies = {}) {
   const source = ts.createSourceFile(file, readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
@@ -27,6 +28,8 @@ function fixture(t, overrides = {}) {
     assignee_label TEXT DEFAULT 'Installer', stage TEXT DEFAULT 'scheduled', service_category TEXT DEFAULT 'solar', revision INTEGER DEFAULT 1,
     record_status TEXT DEFAULT 'active');
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT);
+    CREATE TABLE trade_crm_appointments (id TEXT PRIMARY KEY, work_order_id TEXT NOT NULL, firebase_uid TEXT NOT NULL,
+      assignee_member_id TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'scheduled');
     CREATE TABLE compliance_manual_evidence_test_jobs (id TEXT PRIMARY KEY, organisation_id TEXT DEFAULT 'manual-org',
       field_tester_uid TEXT DEFAULT 'person', form_version_id TEXT DEFAULT 'form', record_mode TEXT DEFAULT 'synthetic_test', status TEXT DEFAULT 'field_testing');
     CREATE TABLE compliance_manual_evidence_form_versions (id TEXT PRIMARY KEY, organisation_id TEXT DEFAULT 'manual-org',
@@ -37,7 +40,7 @@ function fixture(t, overrides = {}) {
     jobScope: "own", canViewFieldEvidence: true, ...overrides.access };
   const calls = { selected: [], jobs: [], authenticated: 0, manualSelected: [], manualJobs: [] };
   const db = { prepare: sql => ({ bind: (...values) => ({ first: async () => database.prepare(sql).get(...values) || null }) }) };
-  const jobs = functions("src/lib/trade-team-server.ts", ["assignedJob"], { getD1: () => db });
+  const jobs = functions("src/lib/trade-team-server.ts", ["assignedJob"], { getD1: () => db, isJobMember });
   const manual = functions("src/lib/creditex-manual-field-server.ts", ["manualFieldJobRow"], {
     CreditexManualFieldError: class extends Error { constructor(code, status, message) { super(message); this.code = code; this.status = status; } },
   });
@@ -145,6 +148,23 @@ test("legacy cache ownership proves every unique job under an immutable explicit
 test("an empty cache can establish current membership without manufacturing job evidence", async t => {
   const f = fixture(t); assert.equal((await f.request()).status, 200);
   assert.equal(f.calls.selected.length, 1); assert.deepEqual(f.calls.jobs, []);
+});
+
+test("a collaborator can restore only while a qualifying visit still grants job access", async t => {
+  const f = fixture(t); f.add("shared-job", "business-a", "lead-member");
+  f.database.exec("INSERT INTO trade_crm_appointments (id,work_order_id,firebase_uid,assignee_member_id) VALUES ('visit','shared-job','business-a','member-a')");
+  for (const status of ["scheduled", "en_route", "arrived", "in_progress", "completed"]) {
+    f.database.prepare("UPDATE trade_crm_appointments SET status=?").run(status);
+    assert.equal((await f.request({ ownerUid: "business-a", workOrderIds: ["shared-job"] })).status, 200, status);
+  }
+  for (const status of ["cancelled", "no_show"]) {
+    f.database.prepare("UPDATE trade_crm_appointments SET status=?").run(status);
+    const result = await f.request({ ownerUid: "business-a", workOrderIds: ["shared-job"] });
+    assert.equal(result.status, 403, status);
+    assert.equal((await result.json()).code, "CACHE_OWNERSHIP_UNCONFIRMED");
+  }
+  f.database.exec("UPDATE trade_crm_appointments SET status='scheduled',firebase_uid='business-b'");
+  assert.equal((await f.request({ ownerUid: "business-a", workOrderIds: ["shared-job"] })).status, 403, 'another business cannot grant access');
 });
 
 for (const failure of ["missing", "foreign", "unassigned", "deleted", "supplier", "manual-only"]) {

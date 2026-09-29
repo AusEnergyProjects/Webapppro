@@ -1,3 +1,5 @@
+import { jobMemberSql } from "../src/lib/trade-job-collaboration.ts";
+import { creditexWriteGuard } from "../src/lib/creditex-onboarding-server.ts";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -9,7 +11,7 @@ import { rentalImageWithinReportLimit } from '../src/lib/trade-rental-image-dime
 const source = fs.readFileSync(new URL('../src/app/api/trade-field-work/route.ts', import.meta.url), 'utf8');
 const ast = ts.createSourceFile('route.ts', source, ts.ScriptTarget.Latest, true);
 const names = ['safeName', 'serialisedEvidenceEnvelope', 'exactArrayBuffer', 'sha256',
-  'rentalUploadIdentity', 'findRentalUpload', 'rentalUploadReplay', 'upload'];
+  'rentalUploadIdentity', 'findRentalUpload', 'rentalUploadReplay', 'fieldMutationGuard', 'upload'];
 const code = ts.transpileModule(names.map((name) => {
   const declaration = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === name);
   assert.ok(declaration, name);
@@ -21,8 +23,10 @@ const imageBytes = Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB
 function fixture(t) {
   const sql = new DatabaseSync(':memory:');
   t.after(() => sql.close());
-  sql.exec(`CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, service_category TEXT,
-    revision INTEGER DEFAULT 1, updated_at TEXT, record_status TEXT DEFAULT 'active', assignee_member_id TEXT);
+  sql.exec(`CREATE TABLE trade_crm_write_guards(id TEXT PRIMARY KEY,firebase_uid TEXT,operation_id TEXT,step_number INTEGER,verified INTEGER CHECK(verified=1),created_at TEXT);
+    CREATE TABLE trade_crm_appointments(work_order_id TEXT,firebase_uid TEXT,assignee_member_id TEXT,status TEXT);
+    CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, service_category TEXT,
+    stage TEXT DEFAULT 'in_progress', revision INTEGER DEFAULT 1, updated_at TEXT, record_status TEXT DEFAULT 'active', assignee_member_id TEXT);
     CREATE TABLE trade_crm_job_media (id TEXT PRIMARY KEY, work_order_id TEXT, firebase_uid TEXT,
       category TEXT, file_name TEXT, content_type TEXT, size_bytes INTEGER, object_key TEXT,
       caption TEXT, evidence_envelope TEXT, original_sha256 TEXT, created_at TEXT, updated_at TEXT);
@@ -54,7 +58,7 @@ function fixture(t) {
       if (afterCommit) { const hook = afterCommit; afterCommit = null; hook(); }
     },
   };
-  const dependencies = {
+  const dependencies = { jobMemberSql, creditexWriteGuard,
     getD1: () => db,
     adminJson: (value, status = 200) => Response.json(value, { status }),
     cleanAdminText: (value, limit) => String(value || '').trim().slice(0, limit),
@@ -92,7 +96,7 @@ function fixture(t) {
     return new Request('https://example.test/api/trade-field-work', { method: 'POST', body: form });
   }
   return { api, sql, objects, request, envelope,
-    upload: (options = {}, ownerUid = 'owner') => api.upload(request(options), { ownerUid, actorUid: 'assessor' }),
+    upload: (options = {}, ownerUid = 'owner') => api.upload(request(options), { ownerUid, actorUid: 'assessor', memberId: 'assessor', isOwner: true }),
     putCount: () => putCount,
     later: (milliseconds) => { clock += milliseconds; },
     beforeBatch: (hook) => { beforeBatch = hook; }, afterCommit: (hook) => { afterCommit = hook; },

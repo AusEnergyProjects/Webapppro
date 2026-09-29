@@ -70,6 +70,10 @@ function failure(error: unknown) {
   if (error instanceof BoundedJsonRequestError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   const code = error instanceof Error ? error.message : "ACTIVITY_REQUEST_FAILED";
   const detail = error && typeof error === "object" ? error as Row : {};
+  if (code === "ACTIVITY_ANSWER_CONFLICT" && Array.isArray(detail.conflicts)) {
+    return adminJson({ ok: false, code, error: "Another worker changed these answers. Your draft is retained. Choose which values to keep.",
+      conflicts: detail.conflicts, revision: detail.revision }, 409);
+  }
   const fieldKey = str(detail.fieldKey); const fieldLabel = str(detail.fieldLabel);
   if (["INVALID_ACTIVITY_ANSWER", "INVALID_ACTIVITY_OPTION", "INVALID_ACTIVITY_DATE", "INVALID_ACTIVITY_REPEAT", "INVALID_ACTIVITY_FIELD"].includes(code)) {
     const label = fieldLabel || "the highlighted form answer";

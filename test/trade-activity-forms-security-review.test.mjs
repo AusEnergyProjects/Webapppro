@@ -11,6 +11,8 @@ import ts from "typescript";
 import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import * as core from "../src/lib/trade-activity-forms.ts";
 import * as flow from "../src/lib/trade-activity-form-flow.ts";
+import * as collaboration from "../src/lib/trade-job-collaboration.ts";
+import * as syncChanges from "../src/lib/trade-team-sync-server.ts";
 import * as receipt from "../src/lib/scheduled-activity-customer-document-receipt.ts";
 import { activityApprovedProductContract, activityFieldWorkerForm } from "../src/lib/trade-activity-forms-library.ts";
 import { canEditCreditexFieldMasters } from "../src/lib/creditex-field-master-access.ts";
@@ -49,6 +51,9 @@ function fixture(fieldForm = form(), options = {}) {
   database.exec(`PRAGMA foreign_keys = ON;
     CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, partner_type TEXT, record_status TEXT, source_type TEXT, source_reference TEXT,
       assignee_member_id TEXT, assignee_label TEXT, stage TEXT, service_category TEXT, scheduled_start TEXT, revision INTEGER);
+    CREATE TABLE trade_crm_appointments (id TEXT PRIMARY KEY, work_order_id TEXT, firebase_uid TEXT, assignee_member_id TEXT, status TEXT);
+    CREATE TABLE trade_team_sync_changes (owner_uid TEXT, audience_member_id TEXT, entity_type TEXT, entity_id TEXT, operation TEXT, revision INTEGER, changed_at TEXT);
+    CREATE TABLE trade_mobile_push_outbox (id TEXT PRIMARY KEY, owner_uid TEXT, audience_member_id TEXT, event_key TEXT UNIQUE, event_type TEXT, entity_type TEXT, entity_id TEXT, payload TEXT, status TEXT, attempts INTEGER, next_attempt_at TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT, crm_customer_id TEXT, service_site_id TEXT);
     CREATE TABLE trade_crm_customers (id TEXT, firebase_uid TEXT, first_name TEXT, last_name TEXT, email TEXT, phone TEXT, business_name TEXT, business_number TEXT);
     CREATE TABLE trade_crm_service_sites (id TEXT, firebase_uid TEXT, address_line_1 TEXT, address_line_2 TEXT, suburb TEXT, address_state TEXT, postcode TEXT);
@@ -76,12 +81,15 @@ function fixture(fieldForm = form(), options = {}) {
   database.exec("INSERT INTO trade_accounts(firebase_uid) VALUES ('owner-a')");
   database.exec("INSERT INTO trade_team_members(id,owner_uid,status,display_name,first_name,last_name,member_uid) VALUES ('manager','owner-a','active','Manager','Business','Manager','manager')");
   installCreditexTrainingFixture(database);
+  database.exec("ALTER TABLE trade_team_members ADD COLUMN can_view_field_evidence INTEGER NOT NULL DEFAULT 1");
+  let inBatch = false;
   const d1 = { prepare(sql) { const statement = (values = []) => ({
+    sql, values,
     bind(...boundValues) { return statement(boundValues); },
     async first() { return database.prepare(sql).get(...values) || null; },
     async all() { return { results: database.prepare(sql).all(...values) }; },
     async run() {
-      await options.beforeRun?.({ sql, values, database });
+      if (!inBatch) await options.beforeRun?.({ sql, values, database });
       const result = database.prepare(sql).run(...values);
       await options.afterRun?.({ sql, values, database, result });
       return { success: true, meta: { changes: Number(result.changes) } };
@@ -90,9 +98,15 @@ function fixture(fieldForm = form(), options = {}) {
   let transactionTail = Promise.resolve();
   d1.batch = (statements) => {
     const transaction = transactionTail.then(async () => {
+      for (const statement of statements) await options.beforeRun?.({ sql: statement.sql, values: statement.values, database });
+      inBatch = true;
       database.exec("BEGIN");
-      try { const results = []; for (const statement of statements) results.push(await statement.run()); database.exec("COMMIT"); return results; }
+      let results;
+      try { results = []; for (const statement of statements) results.push(await statement.run()); database.exec("COMMIT"); }
       catch (error) { database.exec("ROLLBACK"); throw error; }
+      finally { inBatch = false; }
+      await options.afterBatch?.({ statements, database });
+      return results;
     });
     transactionTail = transaction.catch(() => {});
     return transaction;
@@ -107,8 +121,10 @@ function fixture(fieldForm = form(), options = {}) {
     async put(key, bytes) { objects.set(key, Uint8Array.from(bytes)); },
     async delete(key) { objects.delete(key); },
   };
-  const assignedJob = sourceFunction(read("../src/lib/trade-team-server.ts"), "assignedJob", { getD1: () => d1 });
+  const assignedJob = sourceFunction(read("../src/lib/trade-team-server.ts"), "assignedJob", { getD1: () => d1, ...collaboration });
   const server = loadModule(serverSource, {
+    "./trade-job-collaboration": collaboration,
+    "./trade-team-sync-server": syncChanges,
     "./creditex-job-lifecycle-schema-guards": lifecycleGuardFixture(database, FIELD_CORRECTION_GUARD_NAMES),
     "cloudflare:workers": { env: { EVIDENCE: bucket } },
     "../../db": { getD1: () => d1 }, "./trade-team-server": { assignedJob },
@@ -1063,7 +1079,7 @@ test("concurrent opens return one durable record and stale saves cannot replace 
       server.saveActivityAnswers(access, opened[0].id, 1, { before_name: "Second" }),
     ]);
     assert.equal(writes.filter((value) => value.status === "fulfilled").length, 1);
-    assert.match(writes.find((value) => value.status === "rejected").reason.message, /ACTIVITY_REVISION_CONFLICT/);
+    assert.match(writes.find((value) => value.status === "rejected").reason.message, /ACTIVITY_ANSWER_CONFLICT/);
     assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_activity_field_records").get().count, 1);
     assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_activity_field_record_versions").get().count, 2);
   } finally { database.close(); }
@@ -1224,14 +1240,18 @@ test("technician signing atomically rejects a reassignment made at the write bou
   } finally { database.close(); }
 });
 
-test("team-scoped form saves cannot reuse training checked before reassignment or revision changes", async () => {
-  for (const mutation of ["assignee_member_id = 'untrained-worker'", "revision = revision + 1"]) {
+test("team-scoped form retries cannot reuse eligibility checked before reassignment or training revocation", async () => {
+  for (const [mutation, expectedCode] of [
+    ["UPDATE trade_work_orders SET assignee_member_id='untrained-worker', revision=revision+1 WHERE id='job-a'", "ACTIVE_TEAM_REQUIRED"],
+    ["UPDATE trade_work_orders SET revision=revision+1 WHERE id='job-a'; DELETE FROM trade_training_completions WHERE owner_uid='owner-a' AND member_id='training-owner-owner-a'", "ACTIVITY_TRAINING_REQUIRED"],
+    ["UPDATE trade_work_orders SET revision=revision+1 WHERE id='job-a'; DELETE FROM trade_training_completions WHERE owner_uid='owner-a' AND member_id='worker-a'", "ACTIVITY_TRAINING_REQUIRED"],
+  ]) {
     let armed = false;
     const { database, server, access } = fixture(form(), {
       beforeRun: ({ sql, database: db }) => {
         if (armed && /UPDATE trade_activity_field_records SET revision/.test(sql)) {
           armed = false;
-          db.exec(`UPDATE trade_work_orders SET ${mutation} WHERE id = 'job-a'`);
+          db.exec(mutation);
         }
       },
     });
@@ -1241,12 +1261,40 @@ test("team-scoped form saves cannot reuse training checked before reassignment o
       const manager = { ...access, memberId: "manager", actorUid: "manager", jobScope: "team" };
       armed = true;
       await assert.rejects(server.saveActivityAnswers(manager, record.id, record.revision,
-        { before_name: "Should not save" }), (error) => mutation.startsWith("assignee")
-        ? error.code === "ACTIVE_TEAM_REQUIRED" : error.message === "ACTIVITY_SAVE_FAILED");
+        { before_name: "Should not save" }), (error) => error.code === expectedCode, mutation);
       assert.equal(armed, false);
       assert.equal(database.prepare("SELECT payload FROM trade_activity_field_records WHERE id = ?").get(record.id).payload, original);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count, 0);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_activity_field_record_versions WHERE record_id=?").get(record.id).count, 1);
     } finally { database.close(); }
   }
+});
+
+test("an otherwise authorised team-scoped save retries a parent cursor change without duplicating the form", async () => {
+  let armed = false;
+  let saveAttempts = 0;
+  const { database, server, access } = fixture(form(), {
+    beforeRun: ({ sql, database: db }) => {
+      if (!/UPDATE trade_activity_field_records SET revision/.test(sql)) return;
+      saveAttempts += 1;
+      if (armed) {
+        armed = false;
+        db.exec("UPDATE trade_work_orders SET revision=revision+1 WHERE id='job-a'");
+      }
+    },
+  });
+  try {
+    const record = await server.openActivityRecord(access, "job-a", "intent-a");
+    const manager = { ...access, memberId: "manager", actorUid: "manager", jobScope: "team" };
+    armed = true;
+    const saved = await server.saveActivityAnswers(manager, record.id, record.revision, { before_name: "Authorised saved answer" });
+    assert.equal(saveAttempts, 2, "the initial guarded transaction loses before a fresh authorized retry");
+    assert.equal(saved.answers.before_name, "Authorised saved answer");
+    assert.equal(saved.revision, 2);
+    assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-a'").get().revision, 3);
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_activity_field_record_versions WHERE record_id=?").get(record.id).count, 2);
+    assert.deepEqual(database.prepare("SELECT DISTINCT revision FROM trade_team_sync_changes").all().map((row) => row.revision), [3]);
+  } finally { database.close(); }
 });
 
 test("an inactive assigned member cannot supply a technician declaration identity", async () => {
@@ -1355,9 +1403,9 @@ test("a missing immutable activity PDF is restored at the same key for authentic
 test("a committed submission keeps its final PDF when D1 loses the update response", async () => {
   let failSubmittedResponse = true;
   const { database, server, access, objects } = fixture(form(), {
-    afterRun({ sql, values }) {
-      if (failSubmittedResponse && sql.includes("UPDATE trade_activity_field_records SET revision")
-        && values[1] === "submitted_for_creditex_review") {
+    afterBatch({ statements }) {
+      if (failSubmittedResponse && statements.some(({ sql, values }) => sql.includes("UPDATE trade_activity_field_records SET revision")
+        && values[1] === "submitted_for_creditex_review")) {
         failSubmittedResponse = false;
         throw new Error("simulated response loss after commit");
       }
@@ -1564,10 +1612,71 @@ test("phone saves apply only changed answers to the latest record automatically"
       { ...initial.answers, after_model: "Installed model" }, initial.answers);
     assert.equal(saved.answers.before_name, "Office corrected customer");
     assert.equal(saved.answers.after_model, "Installed model");
-    const latestPhone = await server.saveActivityAnswers(access, initial.id, initial.revision,
-      { ...initial.answers, after_model: "Corrected installed model" }, initial.answers);
+    await assert.rejects(server.saveActivityAnswers(access, initial.id, initial.revision,
+      { ...initial.answers, after_model: "Corrected installed model" }, initial.answers), (error) => {
+        assert.equal(error.message, "ACTIVITY_ANSWER_CONFLICT");
+        assert.deepEqual(error.conflicts, [{ fieldKey: "after_model", label: "after_model", base: "Old model", local: "Corrected installed model", saved: "Installed model" }]);
+        return true;
+      });
+    const latestPhone = await server.saveActivityAnswers(access, initial.id, saved.revision,
+      { ...saved.answers, after_model: "Corrected installed model" }, { after_model: "Forged client base" });
     assert.equal(latestPhone.answers.after_model, "Corrected installed model");
     assert.equal(latestPhone.answers.before_name, "Office corrected customer");
+  } finally { database.close(); }
+});
+
+test("activity answer merges use immutable history and reject a forged or missing base", async () => {
+  const { database, server, access } = fixture();
+  try {
+    const base = await server.openActivityRecord(access, "job-a", "intent-a");
+    await server.saveActivityAnswers(access, base.id, base.revision, { before_name: "Saved by another worker" });
+    await assert.rejects(server.saveActivityAnswers(access, base.id, base.revision,
+      { before_name: "Overwrite" }, { before_name: "Saved by another worker" }), /ACTIVITY_ANSWER_CONFLICT/);
+    await assert.rejects(server.saveActivityAnswers(access, base.id, 900, { before_name: "Overwrite" }), /ACTIVITY_REVISION_CONFLICT/);
+    assert.equal((await server.loadActivityRecord(access, base.id)).answers.before_name, "Saved by another worker");
+  } finally { database.close(); }
+});
+
+test("a scheduled collaborator can contribute answers but cannot attest as the lead or retain removed access", async () => {
+  const { database, server, access } = fixture();
+  try {
+    const base = await server.openActivityRecord(access, "job-a", "intent-a");
+    const collaborator = { ...access, memberId: "manager", actorUid: "field-member:manager" };
+    database.prepare("INSERT INTO trade_crm_appointments VALUES ('visit-collaborator','job-a','owner-a','manager','scheduled')").run();
+    const saved = await server.saveActivityAnswers(collaborator, base.id, base.revision, { before_name: "Customer", after_model: "Unit" });
+    assert.equal(saved.answers.after_model, "Unit");
+    assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-a'").get().revision, 2);
+    assert.deepEqual(database.prepare("SELECT DISTINCT audience_member_id FROM trade_team_sync_changes WHERE audience_member_id<>'' ORDER BY audience_member_id").all()
+      .map((row) => row.audience_member_id), ["manager", "worker-a"]);
+    const syncCount = database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count;
+    await assert.rejects(server.signActivityDeclaration(collaborator, base.id, {
+      expectedRevision: saved.revision, declarationKey: "after_technician", signerName: "Worker A", acknowledged: true, strokes,
+    }), /ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED/);
+    database.prepare("UPDATE trade_crm_appointments SET status='completed' WHERE id='visit-collaborator'").run();
+    assert.equal((await server.loadActivityRecord(collaborator, base.id)).id, base.id);
+    database.prepare("UPDATE trade_crm_appointments SET status='cancelled' WHERE id='visit-collaborator'").run();
+    await assert.rejects(server.saveActivityAnswers(collaborator, base.id, saved.revision, { after_model: "Unauthorized" }), /JOB_NOT_ASSIGNED/);
+    assert.equal((await server.loadActivityRecord(access, base.id)).answers.after_model, "Unit");
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count, syncCount);
+  } finally { database.close(); }
+});
+
+test("two independent activity forms save concurrently while advancing the shared job cursor", async () => {
+  const { database, server, access } = fixture();
+  try {
+    database.prepare(`INSERT INTO trade_work_order_compliance_intents
+      (id,work_order_id,installer_uid,compliance_organisation_id,activity_template_id,status,program_code,intent_snapshot,created_at)
+      SELECT 'intent-c','job-a',installer_uid,compliance_organisation_id,
+      activity_template_id,status,program_code,intent_snapshot,created_at FROM trade_work_order_compliance_intents WHERE id='intent-a'`).run();
+    const first = await server.openActivityRecord(access, "job-a", "intent-a");
+    const second = await server.openActivityRecord(access, "job-a", "intent-c");
+    const results = await Promise.all([
+      server.saveActivityAnswers(access, first.id, first.revision, { before_name: "First activity" }),
+      server.saveActivityAnswers(access, second.id, second.revision, { before_name: "Second activity" }),
+    ]);
+    assert.deepEqual(results.map((record) => record.answers.before_name), ["First activity", "Second activity"]);
+    assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-a'").get().revision, 3);
+    assert.deepEqual(database.prepare("SELECT DISTINCT revision FROM trade_team_sync_changes ORDER BY revision").all().map((row) => row.revision), [2, 3]);
   } finally { database.close(); }
 });
 

@@ -3,6 +3,7 @@ import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -89,6 +90,13 @@ function testD1(database) {
   };
 }
 
+const syncHelperModule = { exports: {} };
+const syncHelperCode = ts.transpileModule(fs.readFileSync(new URL("../src/lib/trade-team-sync-server.ts", import.meta.url), "utf8"),
+  { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+new Function("require", "module", "exports", syncHelperCode)((specifier) => {
+  assert.equal(specifier, "./trade-job-collaboration.ts"); return jobCollaboration;
+}, syncHelperModule, syncHelperModule.exports);
+
 function loadRoute(mocks) {
   const output = ts.transpileModule(source, {
     compilerOptions: {
@@ -101,6 +109,7 @@ function loadRoute(mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (specifier === "@/lib/trade-job-collaboration") return jobCollaboration;
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
     if (specifier === "@/lib/trade-job-lifecycle") return tradeJobLifecycleDependency;
@@ -267,6 +276,7 @@ function syncDatabase(stage = "in_progress", revision = 5) {
     );
     CREATE TABLE trade_crm_appointments (
       id text PRIMARY KEY NOT NULL,
+      assignee_member_id text NOT NULL DEFAULT 'member-1',
       work_order_id text NOT NULL,
       firebase_uid text NOT NULL,
       status text NOT NULL,
@@ -530,19 +540,20 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       '{"name":"Field form","fields":[]}', 'draft', 1, '{}', '', '', 'initial')`)
     .run();
   installCreditexTrainingFixture(database, { qualified: false });
+  database.exec("ALTER TABLE trade_team_members ADD COLUMN can_view_field_evidence INTEGER NOT NULL DEFAULT 1");
   database.exec("INSERT INTO trade_accounts(firebase_uid,abn,business_name) VALUES ('owner-1','53004085616','Training fixture Pty Ltd'); INSERT INTO trade_team_members(id,owner_uid,member_uid,status) VALUES ('member-1','owner-1','actor-1','active')");
   installCreditexTrainingFixture(database);
   return database;
 }
 
-function routeHarness(database, { assigned = true, workPacks = [] } = {}) {
+function routeHarness(database, { assigned = true, workPacks = [], memberId = "member-1" } = {}) {
   const d1 = testD1(database);
   const workPackCalls = [];
   const workPackMutationCalls = [];
   const access = {
     ownerUid: "owner-1",
     actorUid: "actor-1",
-    memberId: "member-1",
+    memberId,
     displayName: "Field technician",
     isOwner: false,
     jobScope: "own",
@@ -575,9 +586,7 @@ function routeHarness(database, { assigned = true, workPacks = [] } = {}) {
       },
       requireInstallerTeamAccess: async () => access,
     },
-    "@/lib/trade-team-sync-server": {
-      nextJobRevision: (value) => Number(value) + 1,
-    },
+    "@/lib/trade-team-sync-server": syncHelperModule.exports,
     "@/lib/trade-mobile-server": {
       mobileAppPolicy: () => ({ contractVersion: 3 }),
       mobileErrorResponse: () => null,
@@ -2224,4 +2233,128 @@ test("a concurrent photo-proof change rolls back the entire finish batch", async
     database.prepare("SELECT COUNT(*) count FROM trade_mobile_push_outbox").get().count,
     0,
   );
+});
+
+function addSecondVisit(database) {
+  database.exec("INSERT OR IGNORE INTO trade_team_members(id,owner_uid,member_uid,status,can_view_field_evidence) VALUES ('member-2','owner-1','actor-2','active',1)");
+  database.exec(`INSERT INTO trade_crm_appointments
+    (id,work_order_id,firebase_uid,assignee_member_id,status,starts_at,revision,updated_at)
+    VALUES ('appointment-2','job-1','owner-1','member-2','in_progress','2026-08-01T00:00:00.000Z',1,'initial')`);
+}
+const visitFinish = (id, visit = 'appointment-1', appointmentRevision = 1) => ({
+  clientActionId: id, type: 'advance_field_job', workOrderId: 'job-1', transition: 'finish',
+  baseRevision: 5, appointmentId: visit, baseAppointmentRevision: appointmentRevision,
+});
+
+test('each worker receives their own visit and a completed participant retains shared access', async () => {
+  const database = syncDatabase(); prepareFinishableJob(database); addSecondVisit(database);
+  try {
+    for (const memberId of ['member-1', 'member-2']) {
+      const result = await bootstrap(routeHarness(database, { memberId }).route);
+      assert.equal(result.response.status, 200);
+      const job = result.payload.changes.find(change => change.entityId === 'job-1').entity;
+      assert.equal(job.appointmentId, memberId === 'member-1' ? 'appointment-1' : 'appointment-2');
+      assert.equal(job.appointmentRevision, 1); assert.equal(job.collaborativeJob, true);
+      assert.equal(job.remainingActiveVisits, 2);
+    }
+    database.exec("UPDATE trade_crm_appointments SET status='completed' WHERE id='appointment-2'");
+    const result = await bootstrap(routeHarness(database, { memberId: 'member-2' }).route);
+    assert.equal(result.payload.changes[0].entity.appointmentStatus, 'completed');
+  } finally { database.close(); }
+});
+
+test('first visit bypasses whole-job blockers and last worker uses visit CAS after parent revision changes', async () => {
+  const database = syncDatabase(); prepareFinishableJob(database); addSecondVisit(database);
+  try {
+    database.exec(`INSERT INTO trade_work_order_tasks (id,work_order_id,firebase_uid,title,status,revision,updated_at,completed_at)
+      VALUES ('blocking-task','job-1','owner-1','Still required','pending',1,'initial','')`);
+    const firstRoute = routeHarness(database).route;
+    const first = (await postActions(firstRoute, [visitFinish('worker-one-finish')])).payload.results[0];
+    assert.equal(first.status, 'applied'); assert.equal(first.jobState.stage, 'in_progress');
+    assert.equal(first.jobState.appointmentStatus, 'completed'); assert.equal(first.jobState.remainingActiveVisits, 1);
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-2'").get().status, 'in_progress');
+    const audiences = database.prepare("SELECT audience_member_id,operation FROM trade_team_sync_changes ORDER BY audience_member_id").all();
+    assert.deepEqual(audiences.map(row => [row.audience_member_id,row.operation]), [['','upsert'],['member-1','upsert'],['member-2','upsert']]);
+    const secondRoute = routeHarness(database, { memberId: 'member-2' }).route;
+    const secondAction = visitFinish('worker-two-finish', 'appointment-2');
+    const blocked = (await postActions(secondRoute, [secondAction])).payload.results[0];
+    assert.equal(blocked.code, 'FINISH_BLOCKED');
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-2'").get().status, 'in_progress');
+    database.exec("DELETE FROM trade_work_order_tasks");
+    const finished = (await postActions(secondRoute, [secondAction])).payload.results[0];
+    assert.equal(finished.status, 'applied'); assert.equal(finished.jobState.stage, 'completed');
+    assert.equal(finished.jobState.remainingActiveVisits, 0); assert.equal(finished.jobState.revision, 7);
+    const replay = (await postActions(secondRoute, [secondAction])).payload.results[0];
+    assert.equal(replay.status, 'duplicate'); assert.equal(replay.jobState.stage, 'completed');
+    assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_work_order_events WHERE event_type='job_completed'").get().n, 1);
+  } finally { database.close(); }
+});
+
+test('legacy ambiguous visits, another worker visit, and stale own visit are never silently rebased', async () => {
+  const database = syncDatabase(); prepareFinishableJob(database); addSecondVisit(database);
+  try {
+    const route = routeHarness(database).route;
+    const legacy = { ...visitFinish('legacy-shared-finish'), appointmentId: undefined, baseAppointmentRevision: undefined };
+    assert.equal((await postActions(route,[legacy])).payload.results[0].code, 'VISIT_SELECTION_REQUIRED');
+    assert.equal((await postActions(route,[visitFinish('wrong-worker-finish','appointment-2')])).payload.results[0].code, 'VISIT_REVISION_CONFLICT');
+    database.exec("UPDATE trade_crm_appointments SET revision=2 WHERE id='appointment-1'");
+    assert.equal((await postActions(route,[visitFinish('stale-visit-finish')])).payload.results[0].code, 'VISIT_REVISION_CONFLICT');
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_offline_actions').get().n, 0);
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders WHERE id='job-1'").get().stage, 'in_progress');
+  } finally { database.close(); }
+});
+
+test('a visit appearing during last-worker completion rolls back visit, parent, receipt and fanout', async () => {
+  const database = syncDatabase(); prepareFinishableJob(database);
+  try {
+    const { route,d1 } = routeHarness(database);
+    d1.injectBeforeNextBatch(() => addSecondVisit(database));
+    const result = (await postActions(route,[visitFinish('racing-last-finish')])).payload.results[0];
+    assert.equal(result.code, 'VISIT_REVISION_CONFLICT');
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-1'").get().status,'in_progress');
+    assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-1'").get().revision,5);
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_team_sync_changes').get().n,0);
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_mobile_push_outbox').get().n,0);
+  } finally { database.close(); }
+});
+
+test('changing the lead retains another visit participant and emits removal only after all their visits end', async () => {
+  const database = syncDatabase(); prepareFinishableJob(database); addSecondVisit(database);
+  try {
+    const db = testD1(database);
+    database.exec("UPDATE trade_work_orders SET assignee_member_id='member-2'");
+    await db.batch(syncHelperModule.exports.jobSyncChangeStatements(db,{ownerUid:'owner-1',workOrderId:'job-1',revision:6,changedAt:'now',audienceMemberId:'member-2',previousAudienceMemberId:'member-1'}));
+    assert.equal(database.prepare("SELECT operation FROM trade_team_sync_changes WHERE audience_member_id='member-1' ORDER BY sequence DESC LIMIT 1").get().operation,'upsert');
+    database.exec("UPDATE trade_crm_appointments SET status='cancelled' WHERE id='appointment-1'");
+    await db.batch(syncHelperModule.exports.jobSyncChangeStatements(db,{ownerUid:'owner-1',workOrderId:'job-1',revision:7,changedAt:'later'}));
+    assert.equal(database.prepare("SELECT operation FROM trade_team_sync_changes WHERE audience_member_id='member-1' ORDER BY sequence DESC LIMIT 1").get().operation,'delete');
+    assert.equal(database.prepare("SELECT operation FROM trade_team_sync_changes WHERE audience_member_id='member-2' ORDER BY sequence DESC LIMIT 1").get().operation,'upsert');
+  } finally { database.close(); }
+});
+
+test('work-pack conflict transport includes trusted nonconflicting patches and disputed answers', () => {
+  const ast=ts.createSourceFile('sync.ts',source,ts.ScriptTarget.Latest,true);
+  const node=ast.statements.find(entry=>ts.isFunctionDeclaration(entry)&&entry.name?.text==='workPackActionError');
+  class PackError extends Error { constructor(){super('Choose values');this.code='WORK_PACK_ANSWER_CONFLICT';this.status=409;this.conflicts=[{sectionKey:'s',promptKey:'x',local:'mine',saved:'other'}];this.currentInstance={id:'latest',responseSha256:'hash'};this.mergedPatches=[{sectionKey:'s',answers:{safe:'my edit'}}];} }
+  const code=ts.transpileModule(node.getText(ast),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+  const call=new Function('CreditexActivityWorkPackServerError',code+'; return workPackActionError;')(PackError);
+  const result=call('client-action',new PackError());
+  assert.equal(result.status,'conflict');assert.equal(result.conflicts[0].promptKey,'x');
+  assert.deepEqual(result.mergedPatches,[{sectionKey:'s',answers:{safe:'my edit'}}]);
+  assert.equal(result.currentInstance.id,'latest');
+});
+
+test('sync retains removal audiences but native pushes require active field permission in the same business', async () => {
+  const database=syncDatabase();prepareFinishableJob(database);addSecondVisit(database);
+  try {
+    const db=testD1(database);
+    database.exec("UPDATE trade_team_members SET can_view_field_evidence=0 WHERE id='member-2'");
+    await db.batch(syncHelperModule.exports.jobSyncChangeStatements(db,{ownerUid:'owner-1',workOrderId:'job-1',revision:6,changedAt:'now'}));
+    assert.deepEqual(database.prepare('SELECT audience_member_id FROM trade_mobile_push_outbox').all().map(row=>row.audience_member_id),['member-1']);
+    assert.equal(database.prepare("SELECT operation FROM trade_team_sync_changes WHERE audience_member_id='member-2'").get().operation,'upsert');
+    database.exec("DELETE FROM trade_mobile_push_outbox; UPDATE trade_team_members SET status='inactive'; UPDATE trade_crm_appointments SET status='cancelled' WHERE id='appointment-2'");
+    await db.batch(syncHelperModule.exports.jobSyncChangeStatements(db,{ownerUid:'owner-1',workOrderId:'job-1',revision:7,changedAt:'later'}));
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_mobile_push_outbox').get().n,0);
+    assert.equal(database.prepare("SELECT operation FROM trade_team_sync_changes WHERE audience_member_id='member-2' ORDER BY sequence DESC LIMIT 1").get().operation,'delete');
+  } finally {database.close();}
 });

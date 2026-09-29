@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
@@ -55,6 +56,7 @@ function loadRoute(database, aborted, currentAccess = managerAccess, { sent = []
   }).outputText;
   const moduleRecord = { exports: {} }; const databaseBinding = d1(database);
   const mocks = {
+    "@/lib/trade-job-collaboration": jobCollaboration, "./trade-job-collaboration": jobCollaboration,
     "../../../../db": { getD1: () => databaseBinding },
     "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum), sameOrigin: () => true },

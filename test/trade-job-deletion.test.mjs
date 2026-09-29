@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,10 +22,26 @@ const load = (path, dependencies = {}) => {
   const source = ts.transpileModule(fs.readFileSync(new URL(path, root), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  new Function('require', 'module', 'exports', source)((name) => dependencies[name] || {}, moduleRecord, moduleRecord.exports);
+  new Function('require', 'module', 'exports', source)((name) => dependencies[name] || (/trade-job-collaboration(?:\.ts)?$/.test(name) ? jobCollaboration : {}), moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 };
 const timestamp = '2026-09-10T01:00:00.000Z';
+
+function enforceD1CompoundLimit(query) {
+  // Nested subqueries each have their own compound SELECT limit.
+  const sql = query.replace(/'(?:[^']|'')*'|"(?:[^"]|"")*"|`[^`]*`/g, '');
+  const terms = [1];
+  for (const token of sql.matchAll(/\(|\)|\bUNION(?:\s+ALL)?\s+SELECT\b/gi)) {
+    if (token[0] === '(') terms.push(1);
+    else if (token[0] === ')') terms.pop();
+    else if (++terms[terms.length - 1] > 5) throw new Error('D1_ERROR: too many terms in compound SELECT: SQLITE_ERROR');
+  }
+}
+
+test('D1 fixture limits each compound SELECT independently', () => {
+  assert.doesNotThrow(() => enforceD1CompoundLimit('SELECT * FROM (SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5) WHERE 1 IN (SELECT 1 UNION SELECT 2)'));
+  assert.throws(() => enforceD1CompoundLimit('SELECT * FROM (SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6)'), /too many terms/);
+});
 
 function installAllRuntimeGuards(sql) {
   for (const definition of [...TLINK_SCHEMA_GUARD_DEFINITIONS, ...TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS, ...CREDITEX_JOB_LIFECYCLE_SCHEMA_GUARD_DEFINITIONS]) {
@@ -67,8 +84,7 @@ function fixture(t) {
   const db = { prepare(query) {
     // Sites D1 limits a compound SELECT to five terms. Desktop SQLite accepts
     // 500, which previously hid the production failure in deletion preflight.
-    const terms = 1 + (query.match(/\bUNION(?:\s+ALL)?\s+SELECT\b/gi) || []).length;
-    if (terms > 5) throw new Error('D1_ERROR: too many terms in compound SELECT: SQLITE_ERROR');
+    enforceD1CompoundLimit(query);
     return new Statement(query);
   }, async batch(statements) {
     if (beforeBatch && statements.some((statement) => statement.query.includes('UPDATE trade_work_orders'))) { const hook = beforeBatch; beforeBatch = null; hook(); }

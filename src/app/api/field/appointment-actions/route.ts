@@ -11,35 +11,42 @@ import { sendDirectAppointmentCalendarInvite } from "@/lib/direct-appointment-in
 import { rentalAssignmentRequiredGates, rentalAssignmentCredentialSql } from "@/lib/trade-rental-credentials";
 import { deleteTradeJob, scheduleJobFileCleanup } from "@/lib/trade-job-deletion-server";
 import { assertTradeJobCanCancel,tradeJobCancellationGuard } from "@/lib/trade-job-cancellation-server";
+import { deriveTradeJobLifecycle } from "@/lib/trade-job-lifecycle";
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
 
-async function context(request: Request, workOrderId: string) {
+async function context(request: Request, workOrderId: string, appointmentId = '', action = '') {
   const access = await requireInstallerTeamAccess(request);
   const job = await assignedJob(access, workOrderId);
   const db = getD1();
-  const [appointment, customer] = await Promise.all([
+  const teamSchedule = access.isOwner || access.scheduleScope === 'team';
+  const [visits, customer] = await Promise.all([
     db.prepare(`SELECT id, revision, status, starts_at, ends_at, assignee_member_id FROM trade_crm_appointments
       WHERE work_order_id = ? AND firebase_uid = ?
+        AND (? = 1 OR assignee_member_id = ?)
       ORDER BY CASE WHEN status IN ('scheduled', 'en_route', 'arrived', 'in_progress') THEN 0 ELSE 1 END,
-        updated_at DESC, created_at DESC LIMIT 1`).bind(workOrderId, access.ownerUid).first<Row>(),
+        CASE WHEN assignee_member_id = ? THEN 0 ELSE 1 END, starts_at, created_at`)
+      .bind(workOrderId, access.ownerUid, teamSchedule || action === 'cancel' ? 1 : 0, access.memberId, access.memberId).all<Row>(),
     db.prepare(`SELECT c.id, c.first_name, c.last_name, c.business_name, c.phone, c.email, c.updated_at
       FROM trade_crm_job_details d JOIN trade_crm_customers c ON c.id = d.crm_customer_id
         AND c.firebase_uid = d.firebase_uid AND c.record_status = 'active'
       WHERE d.work_order_id = ? AND d.firebase_uid = ? AND d.customer_source IN ('trade_owned', 'public_lead_released')`)
       .bind(workOrderId, access.ownerUid).first<Row>(),
   ]);
+  const appointment = appointmentId ? visits.results.find(visit => visit.id === appointmentId) || null : visits.results[0] || null;
+  if (appointmentId && !appointment) throw new Error('APPOINTMENT_NOT_FOUND');
+  if (['reschedule', 'no_show'].includes(action) && !appointmentId && visits.results.length > 1) throw new Error('APPOINTMENT_SELECTION_REQUIRED');
   const protectedJob = job.source_type === 'opportunity' || !['trade_owned', 'public_lead_released'].includes(job.customer_source);
   const mutable = !protectedJob && !['completed', 'cancelled'].includes(job.stage);
-  const canReschedule = mutable && canRescheduleWithinScope(access, job.assignee_member_id);
+  const canReschedule = mutable && canRescheduleWithinScope(access, String(appointment?.assignee_member_id || job.assignee_member_id));
   const active = Boolean(appointment && ['scheduled', 'en_route', 'arrived', 'in_progress'].includes(String(appointment.status)));
   const permissions = { schedule: canReschedule && !active && appointment?.status !== 'no_show',
     reschedule: canReschedule && Boolean(appointment && (active || appointment.status === 'no_show')),
-    noShow: canReschedule && active, cancel: mutable && (access.isOwner || access.canManageJobs) && canReschedule,
+    noShow: canReschedule && active, cancel: mutable && (access.isOwner || access.canManageJobs) && canRescheduleWithinScope(access, job.assignee_member_id),
     editCustomer: !protectedJob && Boolean(customer) && (access.isOwner || access.canManageCustomers),
     deleteJob: !protectedJob && job.stage !== 'completed' && (access.isOwner || access.canManageJobs) };
-  return { access, job, appointment, customer: protectedJob ? null : customer, permissions };
+  return { access, job, appointment, visits: visits.results, customer: protectedJob ? null : customer, permissions };
 }
 
 function fail(error: unknown) {
@@ -50,6 +57,7 @@ function fail(error: unknown) {
   }
   const code = error instanceof Error ? error.message : '';
   if (code === 'INVALID_DATE') return adminJson({ ok: false, error: 'Choose a valid appointment date.' }, 400);
+  if (code === 'APPOINTMENT_SELECTION_REQUIRED') return adminJson({ ok: false, code, error: 'Choose the visit you want to change.' }, 409);
   if(code.includes('JOB_CANCEL_COMPLETED'))return adminJson({ok:false,error:'A job that has been completed cannot be cancelled. Its completed records must be retained.'},409);
   if (code === 'AUTH_REQUIRED') return adminJson({ ok: false, error: 'Sign in to continue.' }, 401);
   if (['JOB_NOT_FOUND', 'APPOINTMENT_NOT_FOUND'].includes(code)) return adminJson({ ok: false, error: 'Job or appointment not found.' }, 404);
@@ -63,7 +71,8 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: 'Request origin was not accepted.' }, 403);
   try {
     const url = new URL(request.url);
-    const { access, job, appointment, customer, permissions } = await context(request, cleanAdminText(url.searchParams.get('workOrderId'), 180));
+    const { access, job, appointment, visits, customer, permissions } = await context(request,
+      cleanAdminText(url.searchParams.get('workOrderId'), 180), cleanAdminText(url.searchParams.get('appointmentId'), 180));
     scheduleJobFileCleanup(getD1());
     const date = cleanAdminText(url.searchParams.get('appointmentDate'), 10) || String(appointment?.starts_at || '').slice(0, 10);
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
@@ -82,10 +91,13 @@ export async function GET(request: Request) {
     return adminJson({ ok: true, job: { id: job.id, revision: Number(job.revision), stage: job.stage },
       appointment: appointment ? { id: appointment.id, revision: Number(appointment.revision), status: appointment.status,
         startsAt: appointment.starts_at, endsAt: appointment.ends_at, memberId: appointment.assignee_member_id } : null,
+      appointments: visits.map(visit => ({ id: visit.id, revision: Number(visit.revision), status: visit.status,
+        startsAt: visit.starts_at, endsAt: visit.ends_at, memberId: visit.assignee_member_id })),
       permissions, customer: customer ? { id: customer.id, updatedAt: customer.updated_at, firstName: customer.first_name,
         lastName: customer.last_name, businessName: customer.business_name, phone: customer.phone, email: customer.email } : null,
       assignees: members.results.filter(member => (access.isOwner || access.scheduleScope === 'team' || member.id === access.memberId)
-        && (member.id === job.assignee_member_id || canAssignJob(access, job.assignee_member_id, String(member.id))))
+        && (member.id === (appointment?.assignee_member_id || job.assignee_member_id)
+          || canAssignJob(access, String(appointment?.assignee_member_id || job.assignee_member_id), String(member.id))))
         .map(member => ({ id: member.id, displayName: member.display_name })) });
   } catch (error) { return fail(error); }
 }
@@ -95,7 +107,8 @@ export async function PATCH(request: Request) {
   try {
     const body = await request.json() as Row;
     const action = cleanAdminText(body.action, 40);
-    const { access, job, appointment, customer, permissions } = await context(request, cleanAdminText(body.workOrderId, 180));
+    const { access, job, appointment, customer, permissions } = await context(request,
+      cleanAdminText(body.workOrderId, 180), cleanAdminText(body.appointmentId, 180), action);
     if (Number(body.expectedRevision) !== Number(job.revision)) throw new Error('REVISION_CONFLICT');
     const db = getD1(); const now = new Date().toISOString();
     if (action === 'delete') {
@@ -132,8 +145,10 @@ export async function PATCH(request: Request) {
       return adminJson({ ok: true, jobPatch: { revision: nextJobRevision(job.revision), customerName: customer.business_name || [firstName, lastName].filter(Boolean).join(' '), customerPhone: phone, customerEmail: email } });
     }
     if (!['schedule', 'reschedule', 'no_show', 'cancel'].includes(action)) return adminJson({ ok: false, error: 'Unsupported appointment action.' }, 400);
-    if (appointment ? String(body.appointmentId) !== appointment.id || Number(body.expectedAppointmentRevision) !== Number(appointment.revision)
-      : Boolean(body.appointmentId) || Number(body.expectedAppointmentRevision || 0) !== 0) throw new Error('REVISION_CONFLICT');
+    if (action !== 'cancel' || body.appointmentId) {
+      if (appointment ? String(body.appointmentId) !== appointment.id || Number(body.expectedAppointmentRevision) !== Number(appointment.revision)
+        : Boolean(body.appointmentId) || Number(body.expectedAppointmentRevision || 0) !== 0) throw new Error('REVISION_CONFLICT');
+    }
     if (action === 'schedule' || action === 'reschedule') {
       if (action === 'schedule' ? !permissions.schedule : !permissions.reschedule || !appointment) throw new Error('ACTION_NOT_ALLOWED');
       {
@@ -200,6 +215,9 @@ export async function PATCH(request: Request) {
       WHERE work_order_id = ? AND firebase_uid = ? AND id <> ? AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'no_show')`)
       .bind(job.id, access.ownerUid, appointment.id).all<Row>() : { results: [] };
     const revision = nextJobRevision(job.revision);
+    const remainingVisitsSql = `EXISTS (SELECT 1 FROM trade_crm_appointments remaining_visit
+      WHERE remaining_visit.work_order_id = trade_work_orders.id AND remaining_visit.firebase_uid = trade_work_orders.firebase_uid
+        AND remaining_visit.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed'))`;
     await db.batch([
       ...(action==='cancel'?[tradeJobCancellationGuard(db,access.ownerUid,job.id)]:[]),
       ...otherAppointments.results.flatMap(other => [
@@ -212,15 +230,20 @@ export async function PATCH(request: Request) {
         WHERE id = ? AND firebase_uid = ? AND revision = ? AND status = ?`)
         .bind(status, now, appointment.id, access.ownerUid, appointment.revision, appointment.status),
       previousTradeScheduleMutationGuardStatement(db, { ownerUid: access.ownerUid, changedAt: now }),
-      db.prepare(`UPDATE trade_work_orders SET stage = ?, scheduled_start = '', scheduled_end = '', revision = ?, updated_at = ?
+      db.prepare(`UPDATE trade_work_orders
+        SET stage = CASE WHEN ? = 'cancelled' OR NOT ${remainingVisitsSql} THEN ? ELSE stage END,
+          scheduled_start = CASE WHEN ? = 'cancelled' OR NOT ${remainingVisitsSql} THEN '' ELSE scheduled_start END,
+          scheduled_end = CASE WHEN ? = 'cancelled' OR NOT ${remainingVisitsSql} THEN '' ELSE scheduled_end END,
+          revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ? AND stage = ?`)
-        .bind(status, revision, now, job.id, access.ownerUid, job.revision, job.assignee_member_id, job.stage),
+        .bind(status, status, status, status, revision, now, job.id, access.ownerUid, job.revision, job.assignee_member_id, job.stage),
       previousTradeScheduleMutationGuardStatement(db, { ownerUid: access.ownerUid, changedAt: now }),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
         VALUES (?, ?, ?, ?, ?, ?)`)
         .bind(crypto.randomUUID(), job.id, access.ownerUid, `appointment_${status}`,
           action === 'no_show' ? 'Customer was not available. Ready to contact and reschedule.' : 'Appointment and job cancelled.', now),
-      ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId: job.id, revision, changedAt: now, audienceMemberId: job.assignee_member_id }),
+      ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId: job.id, revision, changedAt: now,
+        audienceMemberId: job.assignee_member_id, previousAudienceMemberId: String(appointment.assignee_member_id || '') }),
     ]);
     const [calendarSync, email] = await Promise.all([
       (async () => {
@@ -233,7 +256,12 @@ export async function PATCH(request: Request) {
       })(),
       action === 'cancel' ? sendDirectAppointmentCalendarInvite({ ownerUid: access.ownerUid, appointmentId: String(appointment.id), origin: new URL(request.url).origin, change: 'cancelled' }) : Promise.resolve(null),
     ]);
-    return adminJson({ ok: true, jobPatch: { revision, stage: status, lifecycleStatus: status, appointmentId: appointment.id,
-      appointmentStatus: status, scheduledStart: '', scheduledEnd: '', appointmentStartsAt: '', appointmentEndsAt: '' }, calendarSync, email });
+    const saved = await db.prepare('SELECT stage,scheduled_start,scheduled_end FROM trade_work_orders WHERE id=? AND firebase_uid=?')
+      .bind(job.id, access.ownerUid).first<Row>();
+    if (!saved) throw new Error('JOB_NOT_FOUND');
+    return adminJson({ ok: true, jobPatch: { revision, stage: saved.stage,
+      lifecycleStatus: deriveTradeJobLifecycle({ workStage: saved.stage, scheduleDate: saved.scheduled_start }).status,
+      appointmentId: appointment.id, appointmentStatus: status, scheduledStart: saved.scheduled_start,
+      scheduledEnd: saved.scheduled_end, appointmentStartsAt: '', appointmentEndsAt: '' }, calendarSync, email });
   } catch (error) { return fail(error); }
 }

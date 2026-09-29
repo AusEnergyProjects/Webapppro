@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import test from "node:test";
@@ -79,6 +80,7 @@ function loadTypescriptModule(path, mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (/trade-job-collaboration(?:\.ts)?$/.test(specifier)) return jobCollaboration;
     if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
@@ -98,6 +100,11 @@ const syncHelpers = loadTypescriptModule(
 function fixture(stage = "in_progress", revision = 5) {
   const database = new DatabaseSync(":memory:");
   database.exec(`
+    CREATE TABLE trade_crm_appointments (
+      id text PRIMARY KEY NOT NULL, work_order_id text NOT NULL, firebase_uid text NOT NULL,
+      assignee_member_id text NOT NULL DEFAULT '', status text NOT NULL DEFAULT 'scheduled',
+      revision integer NOT NULL DEFAULT 1, updated_at text NOT NULL DEFAULT ''
+    );
     CREATE TABLE trade_work_orders (
       id text PRIMARY KEY NOT NULL,
       firebase_uid text NOT NULL,
@@ -149,6 +156,7 @@ function fixture(stage = "in_progress", revision = 5) {
       id text PRIMARY KEY NOT NULL,
       owner_uid text NOT NULL,
       member_uid text NOT NULL DEFAULT '',
+      can_view_field_evidence integer NOT NULL DEFAULT 0,
       display_name text NOT NULL,
       capabilities text NOT NULL DEFAULT '[]',
       status text NOT NULL
@@ -808,5 +816,20 @@ for (const mutation of directJobMutations) {
       events: 0,
       syncChanges: 0,
     });
+  });
+}
+
+
+for (const [name, loader, action] of [['Team', teamRoute, 'update_job'], ['Business Hub', workOrdersRoute, 'update_work_order']]) {
+  for(const concurrent of [false,true]) test(name+' completion refuses an open visit'+(concurrent?' created during commit':''),async()=>{
+    const {database,db}=fixture();
+    try {
+      const addVisit=()=>database.exec("INSERT INTO trade_crm_appointments(id,work_order_id,firebase_uid,assignee_member_id,status) VALUES('other-visit','job-1','owner-1','member-2','in_progress')");
+      if(concurrent) db.setBeforeBatch(addVisit); else addVisit();
+      const before=mutationState(database);
+      const response=await loader(db).PATCH(patchRequest({action,workOrderId:'job-1',stage:'completed'}));
+      assert.equal(response.status,409,JSON.stringify(await response.clone().json()));
+      assert.deepEqual(mutationState(database),before);
+    } finally {database.close();}
   });
 }

@@ -44,8 +44,9 @@ test("CRM appointment creation atomically authorises the requested assignment an
     /expectedRevision !== Number\(job\.revision\)/,
     /if \(!requestedAssigneeMemberId\)/,
     /identity\.access\.scheduleScope === "own"[\s\S]*?assigneeMemberId !== identity\.memberId/,
-    /assignmentChanged && !canAssignJob\(identity\.access, currentAssigneeMemberId, assigneeMemberId\)/,
-    /assignmentChanged[\s\S]*?status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)[\s\S]*?ACTIVE_APPOINTMENT_REASSIGN/,
+    /currentAssigneeMemberId !== assigneeMemberId && !canAssignJob\(identity\.access, currentAssigneeMemberId, assigneeMemberId\)/,
+    /rentalInspectionAppointment[\s\S]*?status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)[\s\S]*?RENTAL_ACTIVE_APPOINTMENT/,
+    /const leadMemberId = currentAssigneeMemberId \|\| assigneeMemberId/,
   ]) assert.match(createAppointment, boundary);
   const statements = createAppointment.indexOf("const statements = [");
   const jobUpdate = createAppointment.indexOf("UPDATE trade_work_orders", statements);

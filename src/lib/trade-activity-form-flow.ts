@@ -1,4 +1,4 @@
-import type { ActivityAnswers, ActivityCondition, ActivityDeclaration, ActivityField, ActivityForm } from './trade-activity-form-types';
+import type { ActivityAnswerConflict, ActivityAnswers, ActivityCondition, ActivityDeclaration, ActivityField, ActivityForm } from './trade-activity-form-types';
 
 // Only answers changed on this device replace the latest record. Unrelated office
 // edits and system-owned values remain current, including when a save races a sync.
@@ -18,6 +18,14 @@ export function mergeActivityAnswers(base: ActivityAnswers, local: ActivityAnswe
     else delete merged[key];
   }
   return { merged, conflicts };
+}
+
+export function activityAnswerConflictDetails(form: ActivityForm, keys: readonly string[],
+  base: ActivityAnswers, local: ActivityAnswers, saved: ActivityAnswers): ActivityAnswerConflict[] {
+  return keys.map((fieldKey) => ({ fieldKey,
+    label: form.fields.find((field) => field.key === activityBaseFieldKey(fieldKey))?.label || fieldKey,
+    base: base[fieldKey] ?? null, local: local[fieldKey] ?? null, saved: saved[fieldKey] ?? null,
+  }));
 }
 
 export const activityBaseFieldKey = (key: string) => key.replace(/\[([1-9]|1[0-9])\]$/, '');

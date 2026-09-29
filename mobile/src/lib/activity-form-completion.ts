@@ -6,8 +6,9 @@ import { activityCurrentSignatureKeys } from '@/lib/activity-field-wizard';
 import { ApiError, apiRequest } from '@/lib/api';
 import { getSetting, listActivityFormCacheSettings, setSetting } from '@/lib/database';
 import type { FieldWorkPackSignatureDraft } from '@/lib/types';
-import type { ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-activity-form-types';
+import type { ActivityAnswerConflict, ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-activity-form-types';
 import {
+  activityAnswerConflictDetails,
   activityBaseFieldKey,
   activityRepeatCount,
   activityWizardPages,
@@ -72,6 +73,7 @@ type PendingSignature = {
 };
 
 type ActivityFormCache = {
+  conflicts?: ActivityAnswerConflict[];
   record: PresentedActivityRecord;
   answers: ActivityAnswers;
   pending: PendingFile[];
@@ -234,6 +236,7 @@ async function acceptResponse(
 ) {
   const stored = await readCache(cacheKey);
   const current = stored?.record.id === snapshot.record.id ? stored : snapshot;
+  if (nextRecord.revision < current.record.revision) return current;
   const answers = nextRecord.status === 'submitted_for_creditex_review'
     ? nextRecord.answers
     : sanitiseActivityAnswers(nextRecord.form,
@@ -249,13 +252,18 @@ async function refresh(cacheKey: string, snapshot: ActivityFormCache) {
   const fresh = await latestRecord(snapshot.record.id);
   const stored = await readCache(cacheKey);
   const current = stored?.record.id === snapshot.record.id ? stored : snapshot;
+  const reconciliation = reconcileAnswers(snapshot.record.answers, current.answers, fresh);
   const answers = fresh.status === 'submitted_for_creditex_review'
     ? fresh.answers
-    : reconcileAnswers(snapshot.record.answers, current.answers, fresh).merged;
+    : reconciliation.merged;
+  const conflicts = [...(current.conflicts || []), ...activityAnswerConflictDetails(fresh.form,
+    reconciliation.conflicts.filter((key) => !current.conflicts?.some((item) => item.fieldKey === key)),
+    snapshot.record.answers, current.answers, fresh.answers)];
   return remember(cacheKey, {
     ...current,
     record: fresh,
     answers,
+    conflicts,
     pendingSignatures: reconcilePendingSignatures(current.pendingSignatures, fresh, answers),
   });
 }
@@ -263,6 +271,7 @@ async function refresh(cacheKey: string, snapshot: ActivityFormCache) {
 async function saveAnswers(cacheKey: string, snapshot: ActivityFormCache) {
   let latest = snapshot;
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (latest.conflicts?.length) throw new ApiError('Choose which conflicting answers to keep in the activity form.', 409, 'ACTIVITY_ANSWER_CONFLICT');
     if (latest.record.status === 'submitted_for_creditex_review'
       || JSON.stringify(latest.answers) === JSON.stringify(latest.record.answers)) return latest;
     try {
@@ -278,6 +287,10 @@ async function saveAnswers(cacheKey: string, snapshot: ActivityFormCache) {
       });
       return acceptResponse(cacheKey, latest, response.record);
     } catch (caught) {
+      if (caught instanceof ApiError && caught.code === 'ACTIVITY_ANSWER_CONFLICT') {
+        await refresh(cacheKey, latest);
+        throw caught;
+      }
       if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_REVISION_CONFLICT' || attempt === 2) throw caught;
       latest = await refresh(cacheKey, latest);
     }
@@ -556,6 +569,7 @@ function completionFailureNeedsAttention(caught: unknown) {
   if (caught instanceof ActivityCompletionAttentionError) return true;
   if (!(caught instanceof ApiError)) return false;
   return caught.code.startsWith('INVALID_ACTIVITY_') || [
+    'ACTIVITY_ANSWER_CONFLICT',
     'ACTIVITY_APPROVED_PRODUCT_REQUIRED',
     'ACTIVITY_DECLARATION_DETAILS_REQUIRED',
     'ACTIVITY_DECLARATION_INVALID',

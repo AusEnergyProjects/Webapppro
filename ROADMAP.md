@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 29 September 2026
+Last reconciled: 30 September 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -16,7 +16,11 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
-## Current managed SMS operational proof gate
+## Current shared-job operational proof gate
+
+Publish and inspect independent worker visits on a shared job, per-visit completion and durable shared-form conflict handling. Retain existing rental, training and professional-signature requirements. Server concurrency tests must prove simultaneous edits preserve both workers' contributions and prevent early whole-job completion. Publish the compatible runtime 1.0.2 native update and distinguish release evidence from physical-device installation. Evidence: C:/Webproject/outputs/tlink-multi-trade-2026-09-30/.
+
+## Managed SMS operational proof gate
 
 Publish the Australian ClickSend number onboarding, owner-funded Stripe credit, two-way customer inbox and optional SMS Follow-ups for inspection. Then obtain owner-funded ClickSend credit and an authorised controlled rental/send/reply test before claiming handset delivery. Keep registration status, link approval and provider-confirmed cancellation explicit. Evidence: C:/Webproject/outputs/tlink-managed-sms-2026-09-29/.
 

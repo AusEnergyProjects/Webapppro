@@ -1,53 +1,51 @@
+import { jobMemberSql } from "./trade-job-collaboration.ts";
+
 export type SyncOperation = "upsert" | "delete";
 
-type SyncJobChange = {
-  ownerUid: string;
-  workOrderId: string;
-  revision: number;
-  changedAt: string;
-  audienceMemberId?: string;
-  previousAudienceMemberId?: string;
-  operation?: SyncOperation;
-};
+type SyncJobChange = { ownerUid: string; workOrderId: string; revision: number; changedAt: string;
+  audienceMemberId?: string; previousAudienceMemberId?: string; operation?: SyncOperation };
 
-function statement(
-  db: D1Database,
-  change: SyncJobChange,
-  audienceMemberId: string,
-  operation: SyncOperation,
-) {
-  return db.prepare(`INSERT INTO trade_team_sync_changes
-    (owner_uid, audience_member_id, entity_type, entity_id, operation, revision, changed_at)
-    VALUES (?, ?, 'job', ?, ?, ?, ?)`)
-    .bind(change.ownerUid, audienceMemberId, change.workOrderId, operation, change.revision, change.changedAt);
-}
-
-function pushStatement(db: D1Database, change: SyncJobChange, audienceMemberId: string, operation: SyncOperation) {
-  const eventKey = `${change.ownerUid}:${audienceMemberId}:${change.workOrderId}:${change.revision}:${operation}`;
-  return db.prepare(`INSERT OR IGNORE INTO trade_mobile_push_outbox
-    (id, owner_uid, audience_member_id, event_key, event_type, entity_type, entity_id, payload,
-     status, attempts, next_attempt_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 'job', ?, ?, 'pending', 0, '', ?, ?)`).bind(
-    crypto.randomUUID(), change.ownerUid, audienceMemberId, eventKey,
-    operation === "delete" ? "job_removed" : "job_changed", change.workOrderId,
-    JSON.stringify({ contractVersion: 2, reason: "sync_required" }), change.changedAt, change.changedAt,
-  );
-}
-
-export function jobSyncChangeStatements(db: D1Database, change: SyncJobChange) {
+export function jobSyncChangeStatements(db: D1Database, change: SyncJobChange, guard?: { sql: string; values: unknown[] }) {
   const operation = change.operation || "upsert";
-  const currentAudience = change.audienceMemberId || "";
-  const previousAudience = change.previousAudienceMemberId || "";
-  const statements = [statement(db, change, "", operation)];
-  if (previousAudience && previousAudience !== currentAudience) {
-    statements.push(statement(db, change, previousAudience, "delete"));
-    statements.push(pushStatement(db, change, previousAudience, "delete"));
-  }
-  if (currentAudience) {
-    statements.push(statement(db, change, currentAudience, operation));
-    statements.push(pushStatement(db, change, currentAudience, operation));
-  }
-  return statements;
+  const guardSql = guard ? ` AND (${guard.sql})` : "";
+  const guardValues = guard?.values || [];
+  // Include former audiences for removal; each remaining participant receives an upsert.
+  const audienceSql = `SELECT DISTINCT member_id FROM (
+    SELECT assignee_member_id member_id FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
+    UNION SELECT assignee_member_id FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
+      AND status IN ('scheduled','en_route','arrived','in_progress','completed')
+    UNION SELECT audience_member_id FROM trade_team_sync_changes WHERE entity_type = 'job' AND entity_id = ? AND owner_uid = ?
+    UNION SELECT ? UNION SELECT ?
+  ) WHERE member_id <> ''`;
+  const audienceValues = [change.workOrderId, change.ownerUid, change.workOrderId, change.ownerUid,
+    change.workOrderId, change.ownerUid, change.audienceMemberId || "", change.previousAudienceMemberId || ""];
+  const operationSql = operation === "delete" ? "'delete'" : `CASE WHEN EXISTS (
+    SELECT 1 FROM trade_work_orders current_job WHERE current_job.id = ? AND current_job.firebase_uid = ?
+      AND current_job.record_status = 'active' AND ${jobMemberSql("current_job", "audience.member_id")}
+    ) THEN 'upsert' ELSE 'delete' END`;
+  const operationValues = operation === "delete" ? [] : [change.workOrderId, change.ownerUid];
+  const changedAudienceSql = `SELECT audience.member_id, ${operationSql} operation FROM (${audienceSql}) audience`;
+  return [
+    db.prepare(`INSERT INTO trade_team_sync_changes
+      (owner_uid,audience_member_id,entity_type,entity_id,operation,revision,changed_at)
+      SELECT ?, '', 'job', ?, ?, ?, ? WHERE 1=1${guardSql}`)
+      .bind(change.ownerUid, change.workOrderId, operation, change.revision, change.changedAt, ...guardValues),
+    db.prepare(`INSERT INTO trade_team_sync_changes
+      (owner_uid,audience_member_id,entity_type,entity_id,operation,revision,changed_at)
+      SELECT ?, member_id, 'job', ?, operation, ?, ? FROM (${changedAudienceSql}) WHERE 1=1${guardSql}`)
+      .bind(change.ownerUid, change.workOrderId, change.revision, change.changedAt, ...operationValues, ...audienceValues, ...guardValues),
+    db.prepare(`INSERT OR IGNORE INTO trade_mobile_push_outbox
+      (id,owner_uid,audience_member_id,event_key,event_type,entity_type,entity_id,payload,status,attempts,next_attempt_at,created_at,updated_at)
+      SELECT ? || ':' || member_id, ?, member_id, ? || ':' || member_id || ':' || operation,
+        CASE operation WHEN 'delete' THEN 'job_removed' ELSE 'job_changed' END, 'job', ?, ?, 'pending', 0, '', ?, ?
+      FROM (${changedAudienceSql}) push_audience WHERE EXISTS (
+        SELECT 1 FROM trade_team_members push_member WHERE push_member.id=push_audience.member_id
+          AND push_member.owner_uid=? AND push_member.status='active' AND push_member.can_view_field_evidence=1
+      )${guardSql}`)
+      .bind(crypto.randomUUID(), change.ownerUid, `${change.ownerUid}:${change.workOrderId}:${change.revision}`, change.workOrderId,
+        JSON.stringify({contractVersion:2,reason:"sync_required"}), change.changedAt, change.changedAt,
+        ...operationValues, ...audienceValues, change.ownerUid, ...guardValues),
+  ];
 }
 
 export function nextJobRevision(value: unknown) {
@@ -213,6 +211,9 @@ export async function guardedOnlineJobMutationBatch(
       SELECT 1 FROM trade_work_orders
       WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
         AND stage = ? AND revision = ? AND updated_at = ?
+        AND (stage <> 'completed' OR NOT EXISTS (SELECT 1 FROM trade_crm_appointments open_visit
+          WHERE open_visit.work_order_id = trade_work_orders.id AND open_visit.firebase_uid = trade_work_orders.firebase_uid
+            AND open_visit.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')))
         ${resultChecks}
     )`,
     [

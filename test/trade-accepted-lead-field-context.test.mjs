@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
@@ -19,6 +20,7 @@ function compile(source, fileName, mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (/trade-job-collaboration(?:\.ts)?$/.test(specifier)) return jobCollaboration;
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
     if (specifier === "@/lib/trade-job-lifecycle") return tradeJobLifecycle;
@@ -71,10 +73,19 @@ function fieldRoute(accessRecord, jobs) {
   class Statement {
     constructor(sql, values = []) { this.sql = sql; this.values = values; }
     bind(...values) { return new Statement(this.sql, values); }
-    async all() { return { results: [] }; }
+    async all() {
+      if (this.sql.includes('FROM trade_crm_appointments WHERE work_order_id')) {
+        return { results: jobs.filter(row => row.id === this.values[0] && row.firebase_uid === this.values[1])
+          .map(row => ({ id: row.appointment_id, revision: 1, assignee_member_id: row.assignee_member_id,
+            assignee_label: row.assignee_label, status: row.appointment_status,
+            starts_at: row.appointment_starts_at, ends_at: row.appointment_ends_at, notes: '' })) };
+      }
+      return { results: [] };
+    }
     async first() {
       if (this.sql.includes("SELECT w.id, w.work_number")) {
-        return jobs.find((row) => row.id === this.values[0] && row.firebase_uid === this.values[1]) || null;
+        return jobs.find((row) => row.appointment_id === this.values[0]
+          && row.id === this.values[1] && row.firebase_uid === this.values[2]) || null;
       }
       if (this.sql.includes("SELECT COUNT(*) count")) return { count: 0 };
       return null;

@@ -3,6 +3,9 @@ import { getD1 } from "../../db";
 import { ensureCreditexJobLifecycleSchemaGuards } from "./creditex-job-lifecycle-schema-guards";
 import { assertCertificateJobEligibility, certificateJobEligibilityPredicate } from "./trade-certificate-eligibility";
 import { assignedJob, type TeamAccess } from "./trade-team-server";
+import { jobMemberSql } from "./trade-job-collaboration";
+import { jobSyncChangeStatements } from "./trade-team-sync-server";
+import { creditexMutationConflict, creditexWriteGuard } from "./creditex-onboarding-server";
 import {
   activityPrefill,
   activityConsumerDocuments,
@@ -15,7 +18,7 @@ import {
 import {
   activityCanonical, activityConditionMet, activityDeclarationText, activityHash, activityMissing, activitySigningScope,
   assertActivityEditable, normaliseActivityAnswers, validateActivityStrokes,
-  type ActivityAnswers, type ActivityEvidence, type ActivityForm, type ActivityRecord,
+  type ActivityAnswerConflict, type ActivityAnswers, type ActivityEvidence, type ActivityForm, type ActivityRecord,
 } from "./trade-activity-forms.ts";
 import { activityBaseFieldKey, expandedActivityFields, mergeActivityAnswers } from "./trade-activity-form-flow.ts";
 import { searchOfficialProducts } from "./creditex-official-product-registry-server.ts";
@@ -770,10 +773,10 @@ async function saveRecord(access: TeamAccess, previous: ActivityRecord, next: Ac
   const training = await certificateJobEligibilityPredicate(getD1(), { ownerUid: access.ownerUid,
     actorMemberId: access.memberId, assignedMemberId: String(job.assignee_member_id || ""), workOrderId: previous.workOrderId });
   next.revision = previous.revision + 1; next.updatedAt = iso();
-  const result = await getD1().prepare(`UPDATE trade_activity_field_records SET revision = ?, status = ?, payload = ?, actor_uid = ?, updated_at = ?, submitted_at = ?, pdf_object_key = ?, pdf_sha256 = ?
+  const update = getD1().prepare(`UPDATE trade_activity_field_records SET revision = ?, status = ?, payload = ?, actor_uid = ?, updated_at = ?, submitted_at = ?, pdf_object_key = ?, pdf_sha256 = ?
     WHERE id = ? AND owner_uid = ? AND revision = ? AND status = 'draft'
       AND EXISTS (SELECT 1 FROM trade_work_orders w WHERE w.id = work_order_id AND w.firebase_uid = owner_uid
-        AND w.record_status = 'active' AND (? = 1 OR w.assignee_member_id = ?)
+        AND w.record_status = 'active' AND (? = 1 OR ${jobMemberSql("w")})
         AND w.assignee_member_id = ? AND w.revision = ?
         AND (? = '' OR w.assignee_member_id = ?))
       AND EXISTS (SELECT 1 FROM trade_work_order_compliance_intents i WHERE i.id = intent_id AND i.status IN ('planned', 'case_linked'))
@@ -781,8 +784,23 @@ async function saveRecord(access: TeamAccess, previous: ActivityRecord, next: Ac
     .bind(next.revision, next.status, activityCanonical(next), access.actorUid, next.updatedAt, next.submittedAt, pdf?.key || "", pdf?.hash || "",
       previous.id, access.ownerUid, previous.revision, access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId,
       String(job.assignee_member_id || ""), Number(job.revision),
-      expectedAssigneeMemberId, expectedAssigneeMemberId, ...training.bindings).run();
-  if (result.meta.changes !== 1) {
+      expectedAssigneeMemberId, expectedAssigneeMemberId, ...training.bindings);
+  const savedGuard = { sql: `EXISTS (SELECT 1 FROM trade_activity_field_records WHERE id = ? AND owner_uid = ?
+    AND revision = ? AND payload = ? AND actor_uid = ?)`,
+    values: [previous.id, access.ownerUid, next.revision, activityCanonical(next), access.actorUid] };
+  let changed = false;
+  try {
+    const results = await getD1().batch([update,
+      getD1().prepare(`UPDATE trade_work_orders SET revision = revision + 1 WHERE id = ? AND firebase_uid = ? AND revision = ? AND ${savedGuard.sql}`)
+        .bind(previous.workOrderId, access.ownerUid, Number(job.revision), ...savedGuard.values),
+      creditexWriteGuard(getD1(), access.ownerUid, `${savedGuard.sql} AND EXISTS (SELECT 1 FROM trade_work_orders
+        WHERE id = ? AND firebase_uid = ? AND revision = ?)`, [...savedGuard.values, previous.workOrderId, access.ownerUid, Number(job.revision) + 1]),
+      ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId: previous.workOrderId,
+        revision: Number(job.revision) + 1, changedAt: next.updatedAt }, savedGuard),
+    ]);
+    changed = results[0]?.meta.changes === 1;
+  } catch (error) { if (!creditexMutationConflict(error)) throw error; }
+  if (!changed) {
     // Zero writes can mean a changed assignment or withdrawn intent, not just
     // another editor. Reload with the same access checks to identify it.
     const latest = await loadActivityRecord(access, previous.id, true);
@@ -791,20 +809,40 @@ async function saveRecord(access: TeamAccess, previous: ActivityRecord, next: Ac
       const assignment = await assignedJob(access, previous.workOrderId);
       if (assignment.assignee_member_id !== expectedAssigneeMemberId) throw new Error("ACTIVITY_TECHNICIAN_SIGNER_NOT_ASSIGNED");
     }
+    const currentJob = await assignedJob(access, previous.workOrderId);
+    if (currentJob.assignee_member_id === job.assignee_member_id && Number(currentJob.revision) !== Number(job.revision)) {
+      throw new Error("ACTIVITY_REVISION_CONFLICT");
+    }
     throw new Error("ACTIVITY_SAVE_FAILED");
   }
   return next;
 }
 
 export async function saveActivityAnswers(access: TeamAccess, id: string, expectedRevision: unknown, answers: unknown, baseAnswers?: unknown) {
+  // Older clients include baseAnswers. The retained server revision is the
+  // authoritative base; caller-supplied values cannot erase another edit.
+  void baseAnswers;
+  if (!Number.isSafeInteger(expectedRevision) || Number(expectedRevision) < 1) throw new Error("ACTIVITY_REVISION_CONFLICT");
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const previous = await loadActivityRecord(access, id, true);
-    assertActivityEditable(previous, baseAnswers === undefined ? expectedRevision : previous.revision);
+    assertActivityEditable(previous, previous.revision);
+    const version = await getD1().prepare(`SELECT version.payload FROM trade_activity_field_record_versions version
+      JOIN trade_activity_field_records record ON record.id = version.record_id
+      WHERE version.record_id = ? AND version.revision = ? AND record.owner_uid = ?`)
+      .bind(id, expectedRevision, access.ownerUid).first<{ payload: string }>();
+    if (!version) throw new Error("ACTIVITY_REVISION_CONFLICT");
+    const base: ActivityRecord = JSON.parse(version.payload);
+    if (base.id !== previous.id || base.ownerUid !== access.ownerUid || base.formSha256 !== previous.formSha256
+      || activityHash(base.form) !== base.formSha256) throw new Error("ACTIVITY_REVISION_CONFLICT");
     const derived = new Set(previous.form.fields.filter((field) => field.presentation === "derived").map((field) => field.key));
     const local = normaliseActivityAnswersForSave(previous.form, answers);
-    const nextAnswers = baseAnswers === undefined ? local : mergeActivityAnswers(
-      normaliseActivityAnswersForSave(previous.form, baseAnswers), local, previous.answers, derived,
-    ).merged;
+    const { merged: nextAnswers, conflicts } = mergeActivityAnswers(base.answers, local, previous.answers, derived, "remote");
+    if (conflicts.length) {
+      const details: ActivityAnswerConflict[] = conflicts.map(fieldKey => ({ fieldKey,
+        label: previous.form.fields.find(field => field.key === activityBaseFieldKey(fieldKey))?.label || fieldKey,
+        base: base.answers[fieldKey] ?? null, local: local[fieldKey] ?? null, saved: previous.answers[fieldKey] ?? null }));
+      throw Object.assign(new Error("ACTIVITY_ANSWER_CONFLICT"), { conflicts: details, revision: previous.revision });
+    }
     for (const key of derived) {
       delete nextAnswers[key];
       if (previous.answers[key] !== undefined) nextAnswers[key] = previous.answers[key];
@@ -812,7 +850,7 @@ export async function saveActivityAnswers(access: TeamAccess, id: string, expect
     const next = { ...previous, answers: nextAnswers, hasUserEdits: previous.hasUserEdits || activityHash(previous.answers) !== activityHash(nextAnswers) };
     try { return await saveRecord(access, previous, next); }
     catch (error) {
-      if (baseAnswers === undefined || !(error instanceof Error) || error.message !== "ACTIVITY_REVISION_CONFLICT" || attempt === 2) throw error;
+      if (!(error instanceof Error) || error.message !== "ACTIVITY_REVISION_CONFLICT" || attempt === 2) throw error;
     }
   }
   throw new Error("ACTIVITY_SAVE_FAILED");

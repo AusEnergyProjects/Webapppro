@@ -7,7 +7,7 @@ import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, StyleSheet,
 import { FieldButton } from '@/components/field-button';
 import { Screen } from '@/components/screen';
 import { emailSignIn, resetPassword } from '@/lib/auth';
-import { API_BASE_URL, APP_VERSION } from '@/lib/config';
+import { API_BASE_URL, APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import { colours, radius, spacing } from '@/lib/theme';
 import { checkForAppUpdate, restartIntoUpdate } from '@/lib/updates';
 import { readableAuthError, useApp } from '@/providers/app-provider';
@@ -81,7 +81,7 @@ function StartupSettings() {
                 <MaterialCommunityIcons name="close" color={colours.ink} size={24} />
               </Pressable>
             </View>
-            <Text style={styles.settingsBody}>Check for small app updates here. If TLink needs a full Android build, open the secure install page.</Text>
+            <Text style={styles.settingsBody}>Check for small app updates here. If TLink needs a full {MOBILE_PLATFORM === 'ios' ? 'iPhone / iPad' : 'Android'} app update, open the secure install page.</Text>
             {message ? <Text accessibilityLiveRegion="polite" style={styles.updateMessage}>{message}</Text> : null}
             <FieldButton loading={checking} onPress={() => void checkUpdate()}>Check for update</FieldButton>
             <FieldButton variant="quiet" disabled={checking} onPress={() => void Linking.openURL(installUrl)}>Open secure install page</FieldButton>

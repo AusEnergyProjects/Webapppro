@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -22,6 +23,7 @@ function harness(t, options = {}) {
   const access = { ownerUid: "business-a", canViewPriceBook: true, ...options.access };
   class TradeAccessError extends Error {}
   const dependencies = {
+    "@/lib/trade-job-collaboration": jobCollaboration, "./trade-job-collaboration": jobCollaboration,
     "../../../../db": { getD1: () => ({ prepare: sql => ({ bind: (...args) => ({
       all: async () => { queries.push({ sql, args }); return { results: db.prepare(sql).all(...args) }; },
     }) }) }) },

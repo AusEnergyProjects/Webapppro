@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import * as collaboration from "../src/lib/trade-job-collaboration.ts";
 
 const routeFile = new URL(
   "../src/app/api/trade-team/work-packs/route.ts",
@@ -41,6 +42,7 @@ function fixture() {
       id text PRIMARY KEY, firebase_uid text NOT NULL, partner_type text NOT NULL,
       record_status text NOT NULL, assignee_member_id text NOT NULL
     );
+    CREATE TABLE trade_crm_appointments (id text, work_order_id text, firebase_uid text, assignee_member_id text, status text);
     CREATE TABLE compliance_cases (
       id text PRIMARY KEY, organisation_id text NOT NULL,
       work_order_id text NOT NULL, installer_uid text NOT NULL
@@ -114,6 +116,7 @@ function loadRoute({ database, bucket, scope }) {
   const moduleRecord = { exports: {} };
   const calls = { scope: 0, byteResponse: [] };
   const mocks = {
+    "@/lib/trade-job-collaboration": collaboration,
     "../../../../../db": { getD1: () => d1(database) },
     "@/lib/admin-server": {
       adminJson: (value, status = 200) => Response.json(value, { status }),
@@ -272,7 +275,7 @@ test("the Files panel exposes governed artifacts through identifiers only", () =
   assert.match(panelSource, /artifactId: artifact\.id/);
   assert.doesNotMatch(panelSource, /individual portal download is not available/);
   assert.match(routeSource, /work_order\.firebase_uid = \?/);
-  assert.match(routeSource, /\? = 'team' OR work_order\.assignee_member_id = \?/);
+  assert.match(routeSource, /\? = 'team' OR \$\{jobMemberSql\("work_order"\)\}/);
   assert.match(routeSource, /successor\.supersedes_artifact_id = artifact\.id/);
   assert.match(routeSource, /newer\.revision > instance\.revision/);
   assert.doesNotMatch(panelSource, /object_key|custody_locator|private\/work-packs/);

@@ -605,6 +605,6 @@ test("rental report permissions and field images require matching live assignmen
   assert.match(assessmentRoute, /rentalEvidencePhotoCapture\(media\.evidence_envelope, \{ receivedAtUtc: String\(media\.created_at \|\| ""\) \}\)/);
   assert.match(reportServer, /rentalEvidencePhotoCapture\(evidence\.evidence_envelope\)/);
 
-  assert.match(teamSyncRoute, /\(\? <> 'own' OR work_order\.assignee_member_id = \?\)/);
+  assert.match(teamSyncRoute, /\(\? <> 'own' OR \$\{jobMemberSql\("work_order"\)\}\)/);
   assert.match(teamSyncRoute, /canIssue: access\.canRunReports[\s\S]{0,220}rental\.assessor_member_id[\s\S]{0,180}row\.assignee_member_id[\s\S]{0,100}!terminal/);
 });

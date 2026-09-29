@@ -22,8 +22,8 @@ import { observeLocation } from '@/lib/evidence';
 import { activityCurrentSignatureKeys, activityOptionLabel, activityProgress, activitySectionProgress, activitySignerDefault, mergeActivityAnswers } from '@/lib/activity-field-wizard';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldWorkPackSignatureDraft, FieldWorkPackSignerRole } from '@/lib/types';
-import type { ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-activity-form-types';
-import { activityBaseFieldKey, activityRepeatCount, activityRepeatItemLabel, activityRepeatKey, boundActivityDeclaration, removeLastActivityRepeat, activityWizardSteps, activityWizardPages, activityWizardPageForStepKey, streamlinedActivityPages, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
+import type { ActivityAnswerConflict, ActivityAnswers, ActivityRecord } from '../../../src/lib/trade-activity-form-types';
+import { activityAnswerConflictDetails, activityBaseFieldKey, activityRepeatCount, activityRepeatItemLabel, activityRepeatKey, boundActivityDeclaration, removeLastActivityRepeat, activityWizardSteps, activityWizardPages, activityWizardPageForStepKey, streamlinedActivityPages, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
 
 const endpoint = '/api/trade-activity-forms';
 export type ActivityFieldSummary = { id: string; intentId: string; title: string; status: 'not_started' | ActivityRecord['status']; lifecycleStatus?: 'unscheduled' | 'scheduled' | 'partial' | 'completed' | 'audited' | 'correction_required' | 'cancelled'; recordNumber: string; progress: { complete: number; total: number } };
@@ -31,7 +31,7 @@ type Presented = Omit<ActivityRecord, 'evidence'> & { evidence: Omit<ActivityRec
 type CaptureMetadata = { capturedAt: string; latitude: number | null; longitude: number | null; accuracy: number | null; metadataOrigin: 'device_capture' | 'file_upload'; locationObservedAt?: string; mocked?: boolean | null };
 type PendingFile = { id: string; fieldKey: string; uri: string; name: string; contentType: string; metadata: CaptureMetadata };
 type PendingSignature = { declarationKey: string; declarationText: string; phase: 'before' | 'after'; role: 'customer' | 'technician' | 'other'; signerName: string; strokes: FieldWorkPackSignatureDraft['strokes'] };
-type Cache = { record: Presented; answers: ActivityAnswers; pending: PendingFile[]; pendingSignatures?: PendingSignature[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata }; finishRequested?: boolean; finishError?: string };
+type Cache = { conflicts?: ActivityAnswerConflict[]; record: Presented; answers: ActivityAnswers; pending: PendingFile[]; pendingSignatures?: PendingSignature[]; stepKey: string; camera?: { fieldKey: string; metadata: CaptureMetadata }; finishRequested?: boolean; finishError?: string };
 type ApprovedProductOption = { value: string; label: string; count: number };
 
 function pendingSignatureToSync(
@@ -223,6 +223,9 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
             ...(saved || {}),
             record: fresh,
             answers,
+            conflicts: [...(saved?.conflicts || []), ...activityAnswerConflictDetails(fresh.form,
+              reconciliation.conflicts.filter((key) => !saved?.conflicts?.some((item) => item.fieldKey === key)),
+              saved?.record.answers || {}, saved?.answers || {}, fresh.answers)],
             pending: saved?.pending || [],
             pendingSignatures: saved?.pendingSignatures || [],
             stepKey: availableStepKey(fresh, answers, addedSelfie?.key || saved?.stepKey),
@@ -294,13 +297,12 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           await acceptResponse(latest, await latestRecord(latest.record.id));
           setError('This form was submitted while it was open. The completed saved version is now shown.');
         } catch { setError('This form was submitted while it was open. Reopen it when you are connected.'); }
-      } else if (caught instanceof ApiError && ['ACTIVITY_REVISION_CONFLICT', 'ACTIVITY_SIGNING_SCOPE_CHANGED'].includes(caught.code)) {
+      } else if (caught instanceof ApiError && ['ACTIVITY_REVISION_CONFLICT', 'ACTIVITY_ANSWER_CONFLICT', 'ACTIVITY_SIGNING_SCOPE_CHANGED'].includes(caught.code)) {
         const local = cacheRef.current;
         if (local) {
           try {
             const fresh = await latestRecord(local.record.id);
-            const answers = reconcileAnswers(local.record.answers, local.answers, fresh).merged;
-            await remember({ ...local, record: fresh, answers, stepKey: availableStepKey(fresh, answers, local.stepKey) });
+            await retainConflicts(local, fresh);
           } catch {
             setError('Reconnect to continue saving. Your answers and photos remain on this phone.');
             return;
@@ -310,7 +312,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           setSignature((current) => ({ ...current, strokes: [], capturedAt: '' }));
           setAcknowledged(false);
           setError(caught.message);
-        } else setError('TLink loaded the latest saved details automatically.');
+        } else setError('Your draft is retained. Review conflicting answers before saving.');
       } else setError(caught instanceof Error ? caught.message : 'The action could not be completed. Your draft is retained.');
     }
     finally { actionRunning.current = false; setBusy(''); }
@@ -321,6 +323,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   }
   async function acceptResponse(snapshot: Cache, nextRecord: Presented) {
     const current = cacheRef.current?.record.id === snapshot.record.id ? cacheRef.current : snapshot;
+    if (nextRecord.revision < current.record.revision) return current;
     const answers = sanitiseActivityAnswers(nextRecord.form,
       mergeActivityAnswers(snapshot.answers, current.answers, nextRecord.answers, derivedAnswerKeys(nextRecord)).merged);
     const next: Cache = {
@@ -332,9 +335,20 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     await remember(next);
     return next;
   }
+  async function retainConflicts(local: Cache, fresh: Presented) {
+    const reconciliation = reconcileAnswers(local.record.answers, local.answers, fresh);
+    const conflicts = [...(local.conflicts || []), ...activityAnswerConflictDetails(fresh.form,
+      reconciliation.conflicts.filter((key) => !local.conflicts?.some((item) => item.fieldKey === key)),
+      local.record.answers, local.answers, fresh.answers)];
+    const next = { ...local, record: fresh, answers: reconciliation.merged, conflicts,
+      stepKey: availableStepKey(fresh, reconciliation.merged, local.stepKey) };
+    await remember(next);
+    return next;
+  }
   async function request(action: string, body: Record<string, unknown> = {}): Promise<Cache> {
     const initial = cacheRef.current;
     if (!initial || !online) throw new Error('Reconnect to save this action. Your draft stays on this phone.');
+    if (initial.conflicts?.length) throw new ApiError('Choose which conflicting answers to keep before saving.', 409, 'ACTIVITY_ANSWER_CONFLICT');
     let latest: Cache = initial;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -342,20 +356,19 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
           ...body, ...(action === 'save' ? { answers: latest.answers, baseAnswers: latest.record.answers } : {}) }) });
         return acceptResponse(latest, response.record);
       } catch (caught) {
+        if (caught instanceof ApiError && caught.code === 'ACTIVITY_ANSWER_CONFLICT') {
+          const current = cacheRef.current?.record.id === latest.record.id ? cacheRef.current : latest;
+          await retainConflicts(current, await latestRecord(latest.record.id));
+          throw caught;
+        }
         const retryRevision = action === 'save' || action === 'submit';
         if (!(caught instanceof ApiError) || caught.code !== 'ACTIVITY_REVISION_CONFLICT' || !retryRevision || attempt === 2) throw caught;
         const fresh = await latestRecord(latest.record.id);
         if (fresh.status === 'submitted_for_creditex_review') return acceptResponse(latest, fresh);
         const cached = cacheRef.current;
         const current: Cache = cached?.record.id === latest.record.id ? cached : latest;
-        const reconciliation = reconcileAnswers(latest.record.answers, current.answers, fresh);
-        latest = {
-          ...current,
-          record: fresh,
-          answers: reconciliation.merged,
-          stepKey: availableStepKey(fresh, reconciliation.merged, current.stepKey),
-        };
-        await remember(latest);
+        latest = await retainConflicts(current, fresh);
+        if (latest.conflicts?.length) throw new ApiError('Choose which conflicting answers to keep before saving.', 409, 'ACTIVITY_ANSWER_CONFLICT');
         if (action === 'submit' && JSON.stringify(latest.answers) !== JSON.stringify(fresh.answers)) {
           latest = await request('save');
           if (latest.record.status === 'submitted_for_creditex_review') return latest;
@@ -363,6 +376,18 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       }
     }
     throw new Error('The activity form could not be saved.');
+  }
+  async function resolveAnswerConflict(item: ActivityAnswerConflict, useLocal: boolean) {
+    const latest = cacheRef.current;
+    if (!latest) return;
+    const answers = { ...latest.answers };
+    if (!useLocal) {
+      if (Object.hasOwn(latest.record.answers, item.fieldKey)) answers[item.fieldKey] = latest.record.answers[item.fieldKey];
+      else delete answers[item.fieldKey];
+    }
+    const conflicts = latest.conflicts?.filter((entry) => entry.fieldKey !== item.fieldKey) || [];
+    await remember({ ...latest, answers, conflicts, finishRequested: false, finishError: '' });
+    if (!conflicts.length) { setError(''); queuePageSync([], true); }
   }
   function answer(key: string, value: string | number | boolean) {
     if (!cacheRef.current) return;
@@ -813,6 +838,17 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
       scrollEnabled={true}
     >
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+      {cache.conflicts?.length ? <View style={styles.fieldCard} accessibilityLiveRegion="assertive">
+        <Text style={styles.title}>Choose which answers to keep</Text>
+        <Text style={styles.small}>Your draft is saved on this phone. Finish each choice before saving or signing.</Text>
+        {cache.conflicts.map((item) => <View key={item.fieldKey} style={styles.group}>
+          <Text style={styles.text}>{item.label}</Text>
+          <Text style={styles.small}>Your answer: {String(cache.answers[item.fieldKey] ?? 'Empty')}</Text>
+          <Text style={styles.small}>Saved answer: {String(cache.record.answers[item.fieldKey] ?? 'Empty')}</Text>
+          <View style={styles.row}><FieldButton style={styles.flex} disabled={Boolean(busy)} onPress={() => void resolveAnswerConflict(item, true)}>Use my answer</FieldButton>
+            <FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => void resolveAnswerConflict(item, false)}>Use saved answer</FieldButton></View>
+        </View>)}
+      </View> : null}
       {record.correction && editable ? <View style={styles.group}><Text style={styles.section}>Corrections requested</Text><Text style={styles.text}>{record.correction.note}</Text><Text style={styles.small}>Answers and evidence have been copied into this new revision. Check the changes and sign again. The original signed report stays in the job history.</Text></View> : null}
       <ProgressMeter label="Form progress" complete={overallProgress.complete} total={overallProgress.total} />
       {overview ? <>

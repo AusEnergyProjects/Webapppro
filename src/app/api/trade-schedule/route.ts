@@ -63,7 +63,7 @@ function errorResponse(error: unknown) {
   if (code === "REVISION_CONFLICT") return adminJson({ ok: false, error: "This schedule item changed after you opened it. Refresh the week before saving again." }, 409);
   if (code === "RENTAL_ACTIVE_APPOINTMENT") return adminJson({ ok: false, error: "This rental assessment already has an active appointment. Move or cancel that appointment instead of creating another one." }, 409);
   if (code === "INVALID_SCHEDULE_CHANGES") return adminJson({ ok: false, error: "Choose between one and five different appointments to save." }, 400);
-  if (code === "DUPLICATE_SCHEDULE_JOB") return adminJson({ ok: false, error: "Save one appointment per job at a time." }, 400);
+  if (code === "AMBIGUOUS_LEAD_CHANGES") return adminJson({ ok: false, error: "Visits for the current job lead must keep the same lead when saved together." }, 400);
   if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed or cancelled jobs cannot be rescheduled." }, 409);
   if (code.includes("NOT NULL constraint failed: trade_crm_appointment_reschedule_events.summary")
     || code.includes("NOT NULL constraint failed: trade_crm_appointment_revisions.starts_at")) {
@@ -318,7 +318,8 @@ export async function PATCH(request: Request) {
       const current = await db.prepare(`SELECT r.*, a.starts_at current_starts_at, a.ends_at current_ends_at,
           a.assignee_member_id current_assignee_member_id, a.assignee_label current_assignee_label,
           a.revision appointment_revision, a.status appointment_status, w.revision job_revision,
-          w.service_category
+          w.assignee_member_id job_assignee_member_id, w.assignee_label job_assignee_label,
+          w.scheduled_start job_scheduled_start, w.scheduled_end job_scheduled_end, w.service_category
         FROM trade_crm_appointment_reschedule_requests r
         JOIN trade_crm_appointments a ON a.id = r.appointment_id AND a.firebase_uid = r.firebase_uid
         JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
@@ -386,16 +387,17 @@ export async function PATCH(request: Request) {
           ]);
         } else {
           const appointmentRevision = Number(current.appointment_revision) + 1; const jobRevision = nextJobRevision(current.job_revision);
+          const primaryVisit = current.current_assignee_member_id === current.job_assignee_member_id;
           await assertTradeJobReadyForScheduling(access.ownerUid, String(current.work_order_id));
           await assertCertificateJobEligibility(db, { ownerUid: access.ownerUid, actorMemberId: access.memberId,
             assignedMemberId: memberId, workOrderId: String(current.work_order_id) });
-          const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
+          const complianceIntentStatements = primaryVisit ? await plannedComplianceIntentReplanStatements(db, {
             actorUid: access.actorUid,
             changedAt: now,
             ownerUid: access.ownerUid,
             plannedStart: startsAt,
             workOrderId: String(current.work_order_id),
-          });
+          }) : [];
           await db.batch([
             ...complianceIntentStatements,
             db.prepare(`INSERT OR IGNORE INTO trade_crm_appointment_revisions
@@ -431,8 +433,11 @@ export async function PATCH(request: Request) {
             db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?,
               revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND revision = ?
                 AND assignee_member_id = ?`).bind(
-                memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now,
-                current.work_order_id, access.ownerUid, current.job_revision, current.current_assignee_member_id),
+                primaryVisit ? memberId : current.job_assignee_member_id,
+                primaryVisit ? member.display_name : current.job_assignee_label,
+                primaryVisit ? startsAt.slice(0, 10) : current.job_scheduled_start,
+                primaryVisit ? endsAt.slice(0, 10) : current.job_scheduled_end, jobRevision, now,
+                current.work_order_id, access.ownerUid, current.job_revision, current.job_assignee_member_id),
             previousTradeScheduleMutationGuardStatement(db, {
               changedAt: now,
               ownerUid: access.ownerUid,
@@ -511,6 +516,7 @@ export async function PATCH(request: Request) {
       const currentRows = await db.prepare(`SELECT a.id, a.work_order_id, a.starts_at, a.ends_at,
           a.assignee_member_id, a.assignee_label, a.status, a.revision,
           w.revision job_revision, w.stage job_stage, w.assignee_member_id job_assignee_member_id,
+          w.assignee_label job_assignee_label, w.scheduled_start job_scheduled_start, w.scheduled_end job_scheduled_end,
           w.service_category
         FROM trade_crm_appointments a
         JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
@@ -519,8 +525,6 @@ export async function PATCH(request: Request) {
         .bind(access.ownerUid, ...appointmentIds).all<Record<string, unknown>>();
       if (currentRows.results.length !== changes.length) throw new Error("APPOINTMENT_NOT_FOUND");
       const currentById = new Map(currentRows.results.map((row) => [String(row.id), row]));
-      const workOrderIds = currentRows.results.map((row) => String(row.work_order_id));
-      if (new Set(workOrderIds).size !== workOrderIds.length) throw new Error("DUPLICATE_SCHEDULE_JOB");
       const members = new Map<string, Record<string, unknown>>();
       const prepared = [] as Array<{
         appointmentId: string;
@@ -537,8 +541,7 @@ export async function PATCH(request: Request) {
         const current = currentById.get(change.appointmentId);
         if (!current) throw new Error("APPOINTMENT_NOT_FOUND");
         if (["completed", "cancelled"].includes(String(current.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
-        if (change.expectedRevision !== Number(current.revision)
-          || String(current.job_assignee_member_id || "") !== String(current.assignee_member_id || "")) {
+        if (change.expectedRevision !== Number(current.revision)) {
           throw new Error("REVISION_CONFLICT");
         }
         assertCurrentScheduleAssignment(access, String(current.assignee_member_id || ""));
@@ -571,8 +574,19 @@ export async function PATCH(request: Request) {
       }
       const batchReference = crypto.randomUUID();
       const statements: D1PreparedStatement[] = [];
+      const jobChanges = new Map<string, typeof prepared>();
       for (const item of prepared) {
-        statements.push(...await plannedComplianceIntentReplanStatements(db, {
+        const id = String(item.current.work_order_id);
+        jobChanges.set(id, [...(jobChanges.get(id) || []), item]);
+      }
+      const jobUpdates = [...jobChanges.values()].map((items) => {
+        const primaryVisits = items.filter((item) => item.current.assignee_member_id === item.current.job_assignee_member_id);
+        if (new Set(primaryVisits.map((item) => item.memberId)).size > 1) throw new Error("AMBIGUOUS_LEAD_CHANGES");
+        const primary = primaryVisits.toSorted((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+        return { item: primary || items[0], primary };
+      });
+      for (const { item, primary } of jobUpdates) {
+        if (primary) statements.push(...await plannedComplianceIntentReplanStatements(db, {
           actorUid: access.actorUid,
           changedAt: now,
           ownerUid: access.ownerUid,
@@ -617,7 +631,7 @@ export async function PATCH(request: Request) {
               item.member.display_name, batchReference, access.actorUid, now),
         );
       }
-      for (const item of prepared) {
+      for (const { item, primary } of jobUpdates) {
         statements.push(
           db.prepare(`UPDATE trade_work_orders
             SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, revision = ?, updated_at = ?
@@ -630,7 +644,10 @@ export async function PATCH(request: Request) {
                   AND saved_appointment.status = 'scheduled' AND saved_appointment.revision = ?
                   AND saved_appointment.assignee_member_id = ? AND saved_appointment.starts_at = ? AND saved_appointment.ends_at = ?
               )`)
-            .bind(item.memberId, item.member.display_name, item.startsAt.slice(0, 10), item.endsAt.slice(0, 10),
+            .bind(primary ? item.memberId : item.current.job_assignee_member_id,
+              primary ? item.member.display_name : item.current.job_assignee_label,
+              primary ? item.startsAt.slice(0, 10) : item.current.job_scheduled_start,
+              primary ? item.endsAt.slice(0, 10) : item.current.job_scheduled_end,
               item.jobRevision, now, item.current.work_order_id, access.ownerUid, item.current.job_stage,
               item.current.job_revision, item.current.job_assignee_member_id, item.appointmentId,
               item.appointmentRevision, item.memberId, item.startsAt, item.endsAt),
@@ -712,7 +729,9 @@ export async function PATCH(request: Request) {
       const startsAt = assertAppointmentSlot(normaliseLocalDateTime(body.startsAt)); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
       assertFutureAppointment(startsAt, localNow);
       const current = await db.prepare(`SELECT a.id, a.work_order_id, a.revision, a.assignee_member_id, a.assignee_label, a.starts_at, a.ends_at, a.status,
-          w.revision job_revision, w.stage job_stage, w.service_category
+          w.revision job_revision, w.stage job_stage, w.service_category,
+          w.assignee_member_id job_assignee_member_id, w.assignee_label job_assignee_label,
+          w.scheduled_start job_scheduled_start, w.scheduled_end job_scheduled_end
         FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
         WHERE a.id = ? AND a.firebase_uid = ? AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'no_show')`).bind(appointmentId, access.ownerUid).first<Record<string, unknown>>();
       if (!current) throw new Error("APPOINTMENT_NOT_FOUND");
@@ -726,13 +745,14 @@ export async function PATCH(request: Request) {
       assertMemberCapability(member, String(current.service_category || ""), access.ownerUid);
       await assertTradeScheduleAvailable({ ownerUid: access.ownerUid, memberId, startsAt, endsAt });
       const revision = Number(current.revision) + 1; const jobRevision = nextJobRevision(current.job_revision);
-      const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
+      const primaryVisit = current.assignee_member_id === current.job_assignee_member_id;
+      const complianceIntentStatements = primaryVisit ? await plannedComplianceIntentReplanStatements(db, {
         actorUid: access.actorUid,
         changedAt: now,
         ownerUid: access.ownerUid,
         plannedStart: startsAt,
         workOrderId: String(current.work_order_id),
-      });
+      }) : [];
       await db.batch([
         ...complianceIntentStatements,
         db.prepare(`INSERT OR IGNORE INTO trade_crm_appointment_revisions
@@ -751,7 +771,7 @@ export async function PATCH(request: Request) {
                 AND current_job.stage = ? AND current_job.stage NOT IN ('completed', 'cancelled')
                 AND current_job.revision = ? AND current_job.assignee_member_id = ?)`)
           .bind(startsAt, endsAt, memberId, member.display_name, revision, now, appointmentId, access.ownerUid,
-            current.revision, current.assignee_member_id, current.job_stage, current.job_revision, current.assignee_member_id),
+            current.revision, current.assignee_member_id, current.job_stage, current.job_revision, current.job_assignee_member_id),
         previousTradeScheduleMutationGuardStatement(db, {
           changedAt: now,
           ownerUid: access.ownerUid,
@@ -759,8 +779,11 @@ export async function PATCH(request: Request) {
         db.prepare(`UPDATE trade_work_orders SET stage = CASE WHEN stage = 'no_show' THEN 'scheduled' ELSE stage END, assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ?
             AND stage = ? AND stage NOT IN ('completed', 'cancelled')`)
-          .bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now,
-            current.work_order_id, access.ownerUid, current.job_revision, current.assignee_member_id, current.job_stage),
+          .bind(primaryVisit ? memberId : current.job_assignee_member_id,
+            primaryVisit ? member.display_name : current.job_assignee_label,
+            primaryVisit ? startsAt.slice(0, 10) : current.job_scheduled_start,
+            primaryVisit ? endsAt.slice(0, 10) : current.job_scheduled_end, jobRevision, now,
+            current.work_order_id, access.ownerUid, current.job_revision, current.job_assignee_member_id, current.job_stage),
         previousTradeScheduleMutationGuardStatement(db, {
           changedAt: now,
           ownerUid: access.ownerUid,
@@ -808,7 +831,7 @@ export async function PATCH(request: Request) {
       const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
       assertFutureAppointment(startsAt, localNow);
       const job = await db.prepare(`SELECT w.id, w.work_number, w.title, w.revision, w.stage, w.assignee_member_id,
-          w.service_category, w.source_type, d.customer_source
+          w.assignee_label, w.scheduled_start, w.scheduled_end, w.service_category, w.source_type, d.customer_source
         FROM trade_work_orders w
         LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
         WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
@@ -833,22 +856,25 @@ export async function PATCH(request: Request) {
       assertMemberCapability(member, String(job.service_category || ""), access.ownerUid);
       await assertTradeScheduleAvailable({ ownerUid: access.ownerUid, memberId, startsAt, endsAt }); const revision = nextJobRevision(job.revision);
       const appointmentId = crypto.randomUUID();
-      const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
+      const primaryVisit = !job.assignee_member_id || job.assignee_member_id === memberId;
+      const complianceIntentStatements = primaryVisit ? await plannedComplianceIntentReplanStatements(db, {
         actorUid: access.actorUid,
         changedAt: now,
         ownerUid: access.ownerUid,
         plannedStart: startsAt,
         workOrderId,
-      });
+      }) : [];
       await db.batch([
         ...complianceIntentStatements,
         db.prepare(`INSERT INTO trade_crm_appointments (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id,
           assignee_label, status, notes, revision, created_at, updated_at) VALUES (?, ?, ?, 'work', ?, ?, ?, ?, ?, 'scheduled', '', 1, ?, ?)`)
           .bind(appointmentId, workOrderId, access.ownerUid, job.title, startsAt, endsAt, memberId, member.display_name, now, now),
-        db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, stage = 'scheduled', revision = ?, updated_at = ?
+        db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, stage = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ?
             AND stage = ? AND stage NOT IN ('completed', 'cancelled')`)
-          .bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), revision, now,
+          .bind(primaryVisit ? memberId : job.assignee_member_id, primaryVisit ? member.display_name : job.assignee_label,
+            primaryVisit ? startsAt.slice(0, 10) : job.scheduled_start, primaryVisit ? endsAt.slice(0, 10) : job.scheduled_end,
+            primaryVisit ? "scheduled" : job.stage, revision, now,
             workOrderId, access.ownerUid, job.revision, job.assignee_member_id, job.stage),
         previousTradeScheduleMutationGuardStatement(db, {
           changedAt: now,

@@ -32,13 +32,13 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
   const [assigneeDate, setAssigneeDate] = useState('');
   const [assigneeError, setAssigneeError] = useState('');
   const [customer, setCustomer] = useState({ firstName: '', lastName: '', phone: '', email: '' });
-  const requestKey = `${job.id}:${online}:${attempt}`;
+  const requestKey = `${job.id}:${job.appointmentId}:${online}:${attempt}`;
   const loading = online && loadedKey !== requestKey;
 
   useEffect(() => {
     const controller = new AbortController();
     if (!online) return () => controller.abort();
-    void apiRequest<AppointmentActionContext>(`/api/field/appointment-actions?workOrderId=${encodeURIComponent(job.id)}`, { signal: controller.signal })
+    void apiRequest<AppointmentActionContext>(`/api/field/appointment-actions?workOrderId=${encodeURIComponent(job.id)}&appointmentId=${encodeURIComponent(job.appointmentId || '')}`, { signal: controller.signal })
       .then((result) => {
         if (controller.signal.aborted) return;
         setContext(result); setError('');
@@ -52,12 +52,12 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
       .catch((caught) => { if (!controller.signal.aborted) { setContext(null); setError(caught instanceof Error ? caught.message : 'Could not load appointment actions.'); } })
       .finally(() => { if (!controller.signal.aborted) setLoadedKey(requestKey); });
     return () => controller.abort();
-  }, [job.id, job.assigneeMemberId, online, requestKey]);
+  }, [apiRequest, job.id, job.appointmentId, job.assigneeMemberId, online, requestKey]);
 
   useEffect(() => {
     if (!online || !['schedule', 'reschedule'].includes(screen) || !context || date === assigneeDate) return;
     const controller = new AbortController();
-    void apiRequest<AppointmentActionContext>(`/api/field/appointment-actions?workOrderId=${encodeURIComponent(job.id)}&appointmentDate=${encodeURIComponent(date)}`, { signal: controller.signal })
+    void apiRequest<AppointmentActionContext>(`/api/field/appointment-actions?workOrderId=${encodeURIComponent(job.id)}&appointmentId=${encodeURIComponent(job.appointmentId || '')}&appointmentDate=${encodeURIComponent(date)}`, { signal: controller.signal })
       .then((result) => {
         if (controller.signal.aborted) return;
         if (result.job.revision !== context.job.revision) {
@@ -70,7 +70,7 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
       })
       .catch((caught) => { if (!controller.signal.aborted) { setAssigneeError(caught instanceof Error ? caught.message : 'Could not check worker availability.'); setAssigneeDate(date); } });
     return () => controller.abort();
-  }, [online, screen, context, date, assigneeDate, job.id]);
+  }, [apiRequest, online, screen, context, date, assigneeDate, job.id, job.appointmentId]);
 
   const links = appointmentContactLinks(job, context?.customer || null);
   const clock = appointmentTimeParts(time);

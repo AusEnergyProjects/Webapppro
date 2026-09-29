@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import * as activityFlow from '../../src/lib/trade-activity-form-flow.ts';
 
 function read(path) {
   return readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -43,6 +44,33 @@ const completion = read('../src/lib/activity-form-completion.ts');
 const database = read('../src/lib/database.ts');
 const sync = read('../src/lib/sync.ts');
 const background = read('../src/lib/background.ts');
+
+test('background completion retains conflicting answers across reloads and never posts them without a choice', async () => {
+  class ApiError extends Error { constructor(message, status, code) { super(message); this.status = status; this.code = code; } }
+  const form = { fields: [{ key: 'model', label: 'Installed model' }, { key: 'note', label: 'Visit note' }] };
+  let stored = { record: { id: 'record', revision: 1, status: 'draft', form, answers: { model: 'Base', note: 'Original' } },
+    answers: { model: 'Phone model', note: 'Original' }, pending: [], pendingSignatures: [], finishRequested: true };
+  const fresh = { ...stored.record, revision: 2, answers: { model: 'Saved model', note: 'Other worker note' } };
+  let posted = 0;
+  const { refresh, saveAnswers } = loadFunctions(completion, ['refresh', 'saveAnswers'], {
+    ApiError,
+    latestRecord: async () => fresh,
+    readCache: async () => structuredClone(stored),
+    remember: async (_key, value) => { stored = structuredClone(value); return stored; },
+    reconcileAnswers: (base, local, next) => activityFlow.mergeActivityAnswers(base, local, next.answers),
+    activityAnswerConflictDetails: activityFlow.activityAnswerConflictDetails,
+    reconcilePendingSignatures: (pending) => pending,
+    apiRequest: async () => { posted += 1; throw new Error('must not post unresolved answers'); },
+  });
+  const updated = await refresh('activity-form:job:intent', stored);
+  assert.equal(updated.answers.model, 'Phone model');
+  assert.equal(updated.answers.note, 'Other worker note');
+  assert.deepEqual(updated.conflicts, [{ fieldKey: 'model', label: 'Installed model', base: 'Base', local: 'Phone model', saved: 'Saved model' }]);
+  const reopened = await refresh('activity-form:job:intent', structuredClone(stored));
+  assert.equal(reopened.conflicts.length, 1, 'loading the new revision does not count as choosing a winner');
+  await assert.rejects(saveAnswers('activity-form:job:intent', reopened), (error) => error.code === 'ACTIVITY_ANSWER_CONFLICT');
+  assert.equal(posted, 0);
+});
 
 test('the durable activity completion queue has the required public entry point and settings scan', () => {
   const sourceFile = ts.createSourceFile('activity-form-completion.ts', completion,

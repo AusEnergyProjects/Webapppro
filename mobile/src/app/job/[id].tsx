@@ -38,6 +38,8 @@ import {
   listLocallyFinishedActivityIntentIds,
   listPendingWorkPackActions,
   listWorkPackProblems,
+  listWorkPackAnswerConflicts,
+  resolveWorkPackAnswerConflict,
   setSetting,
   type JobCompletionQueueState,
 } from '@/lib/database';
@@ -60,6 +62,8 @@ import type {
   ComplianceEvidenceRequirement,
   FieldComplianceIntent,
   FieldActivityWorkPack,
+  PendingWorkPackAnswerConflict,
+  WorkPackAnswerConflictChoice,
   FieldForm,
   FieldJob,
   FieldJobCompliance,
@@ -108,7 +112,7 @@ type PendingWorkPackPhotoCapture = PendingPhotoCapture & {
 function readable(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
 function lifecycleLabel(job: FieldJob, activityRecords: readonly ActivityFieldSummary[] = [], completionQueued = false) {
-  const serverStatus = completionQueued ? 'completed' : job.lifecycleStatus || job.stage;
+  const serverStatus = completionQueued && !job.appointmentRevision && !job.collaborativeJob ? 'completed' : job.lifecycleStatus || job.stage;
   const effectiveStatus = ['unscheduled', 'scheduled', 'backlog', 'ready'].includes(serverStatus)
     && activityRecords.some((record) => record.status !== 'not_started' || record.lifecycleStatus === 'partial')
     ? 'partial'
@@ -125,6 +129,7 @@ function canCompleteFieldJob(job: FieldJob) {
 }
 
 function jobFinishLocalBlockers(job: FieldJob) {
+  if (job.collaborativeJob && (job.remainingActiveVisits || 0) > 1) return [];
   return [
     job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '',
     job.forms.some((item) => item.status !== 'complete') ? 'required forms' : '',
@@ -296,6 +301,7 @@ export default function JobScreen() {
   const [jobLoadError, setJobLoadError] = useState('');
   const [savedMessage, setSavedMessage] = useState('');
   const [workPackProblems, setWorkPackProblems] = useState<Record<string, string>>({});
+  const [answerConflicts, setAnswerConflicts] = useState<PendingWorkPackAnswerConflict[]>([]);
   const [pendingWorkPackActions, setPendingWorkPackActions] = useState<Record<string, string[]>>({});
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
@@ -314,14 +320,16 @@ export default function JobScreen() {
   const load = useCallback(async (refreshActivityForms = true) => {
     const workOrderId = String(id);
     try {
-    const [nextJob, problems, pendingActions, queuedCompletion, finishedActivityIntents] = await Promise.all([
+    const [nextJob, problems, pendingActions, queuedCompletion, finishedActivityIntents, nextAnswerConflicts] = await Promise.all([
       findJob(workOrderId),
       listWorkPackProblems(workOrderId),
       listPendingWorkPackActions(workOrderId),
       getJobCompletionQueueState(workOrderId),
       listLocallyFinishedActivityIntentIds(workOrderId),
+      listWorkPackAnswerConflicts(workOrderId),
     ]);
     setJob(nextJob);
+    setAnswerConflicts(nextAnswerConflicts);
     setLoadingJob(false);
     setJobLoadError('');
     setWorkPackProblems(problems);
@@ -339,7 +347,7 @@ export default function JobScreen() {
       setLoadingJob(false);
       setJobLoadError('This job could not be loaded from your device. Try again.');
     }
-  }, [findJob, id]);
+  }, [apiRequest, findJob, id]);
 
   const processPendingPhoto = useCallback(async (pending: PendingWorkPackPhotoCapture) => {
     if (!pending.asset || recoveringPhoto.current) return;
@@ -498,7 +506,8 @@ export default function JobScreen() {
     if (localBlockers.length) return Alert.alert('Finish the required work', `Complete ${localBlockers.join(', ')} first.`);
     setBusy(`field:${action.transition}`);
     try {
-      await saveActionInBackground({ type: 'advance_field_job', workOrderId: job.id, baseRevision: job.revision, transition: action.transition });
+      await saveActionInBackground({ type: 'advance_field_job', workOrderId: job.id, baseRevision: job.revision, transition: action.transition,
+        ...(job.appointmentId && job.appointmentRevision ? { appointmentId: job.appointmentId, baseAppointmentRevision: job.appointmentRevision } : {}) });
       setCompletionQueue((current) => ({
         ...current,
         finish: { status: 'queued', errorCode: '', errorMessage: '' },
@@ -831,9 +840,24 @@ export default function JobScreen() {
         caseInstanceId: pack.instance.id,
         expectedResponseSha256: pack.instance.responseSha256,
         sectionPatches: patches,
+        workPackInstanceKey: pack.instance.instanceKey,
       });
       await load();
     } finally {
+      setBusy('');
+    }
+  }
+
+  async function resolveWorkPackAnswers(problem: PendingWorkPackAnswerConflict, choices: readonly WorkPackAnswerConflictChoice[]) {
+    if (!sync.online) throw new Error('Reconnect to check the latest answers before resolving this change.');
+    setBusy('work-pack-resolve:' + problem.currentInstance.id);
+    try {
+      const result = await apiRequest<{ workPack: FieldActivityWorkPack }>(
+        '/api/trade-team/work-packs?caseInstanceId=' + encodeURIComponent(problem.currentInstance.id));
+      await resolveWorkPackAnswerConflict(problem.actionId, result.workPack, choices);
+    } finally {
+      await syncNow();
+      await load();
       setBusy('');
     }
   }
@@ -1365,11 +1389,16 @@ export default function JobScreen() {
           const pack = (job.activityWorkPacks || []).find(
             (item) => item.instance.complianceIntentId === intent.id,
           );
+          const answerProblem = pack ? answerConflicts.find(problem => problem.instanceKey
+            ? problem.instanceKey === pack.instance.instanceKey
+            : [problem.caseInstanceId, problem.currentInstance.id].includes(pack.instance.id)) : undefined;
           return pack ? <ActivityWorkPackWizard
             key={pack.instance.id}
             pack={pack}
             onReturnToJob={() => setActiveFormId(null)}
-            conflict={workPackProblems[pack.instance.id]}
+            conflict={answerProblem ? 'Another worker changed these answers. Choose which values to keep.' : workPackProblems[pack.instance.id]}
+            answerConflicts={answerProblem?.conflicts}
+            onResolveAnswerConflicts={answerProblem ? choices => resolveWorkPackAnswers(answerProblem, choices) : undefined}
             pendingActions={pendingWorkPackActions[pack.instance.id] || []}
             busy={busy}
             onSaveSections={(patches) => saveWorkPackSections(pack, patches)}
@@ -1441,12 +1470,12 @@ export default function JobScreen() {
       </View> : null}
 
       {!activeFormId && !creditexManual ? <View style={styles.card}>
-        <Text style={styles.cardTitle}>Complete job</Text>
+        <Text style={styles.cardTitle}>{job.collaborativeJob ? 'Finish my visit' : 'Complete job'}</Text>
         {job.openIssues ? <Text style={styles.warningText}>{job.openIssues} open issue(s) need attention before completion.</Text> : null}
         {finishProblem ? <Text style={styles.warningText}>{finishProblem}</Text> : null}
-        <FieldButton disabled={!canCompleteJob || Boolean(busy) || finishQueued || finishBlockers.length > 0} loading={busy === 'field:finish'} onPress={() => void advanceFieldJob()}>{job.stage === 'completed' ? 'Job complete' : finishQueued ? 'Completion saved' : 'Complete job'}</FieldButton>
+        <FieldButton disabled={!canCompleteJob || Boolean(busy) || finishQueued || finishBlockers.length > 0} loading={busy === 'field:finish'} onPress={() => void advanceFieldJob()}>{job.stage === 'completed' ? 'Job complete' : finishQueued ? 'Completion saved' : job.collaborativeJob ? job.appointmentStatus === 'completed' ? 'Visit complete' : 'Finish my visit' : 'Complete job'}</FieldButton>
         <Text style={styles.meta}>{finishQueued
-          ? 'Done. TLink is finishing the saved Creditex files and closing this job in the background.'
+          ? job.collaborativeJob ? 'Your visit completion is saved on this phone. The job stays open until the team finishes and server checks pass.' : 'Completion is saved on this phone. TLink will confirm the job status after syncing.'
           : finishBlockers.length
             ? `Complete ${finishBlockers.join(', ')} first.`
             : 'Tap once to save completion on this phone. TLink will finish uploads and server checks in the background.'}</Text>

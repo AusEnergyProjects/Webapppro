@@ -10,7 +10,7 @@ function fixture() {
   const sql = new DatabaseSync(':memory:');
   sql.exec(`CREATE TABLE action_queue (id TEXT PRIMARY KEY, work_order_id TEXT, field_lane TEXT, payload TEXT,
     status TEXT DEFAULT 'queued', dispatched_at TEXT DEFAULT '', attempts INTEGER DEFAULT 0, retry_after TEXT DEFAULT '',
-    error_code TEXT DEFAULT '', error_message TEXT DEFAULT '', created_at TEXT, updated_at TEXT);
+    error_code TEXT DEFAULT '', error_message TEXT DEFAULT '', conflict_json TEXT DEFAULT '', created_at TEXT, updated_at TEXT);
     CREATE TABLE jobs (id TEXT PRIMARY KEY, field_lane TEXT, payload TEXT);
     CREATE TABLE upload_queue (client_upload_id TEXT, status TEXT, work_order_id TEXT, field_lane TEXT, local_uri TEXT);`);
   let beforeUpdate;
@@ -30,7 +30,7 @@ function fixture() {
     saveJob: async (_db, job) => { sql.prepare('INSERT OR REPLACE INTO jobs VALUES (?, ?, ?)').run(job.id, job.fieldLane, JSON.stringify(job)); },
     workPackUploadIds: () => [], Crypto: { randomUUID: () => 'new-retry-id' }, deleteEncryptedBundle: () => {},
   };
-  const names = ['persistQueuedAction', 'queueAction', 'queuedActions', 'resolveAction', 'retryConflict', 'applyQueuedForm', 'applyChanges'];
+  const names = ['persistQueuedAction', 'queueAction', 'queuedActions', 'resolveAction', 'retryConflict', 'applyQueuedForm', 'applyQueuedProjection', 'applyChanges', 'resolvedWorkPackAnswerPatches', 'resolveWorkPackAnswerConflict', 'mergeSectionPatches', 'patchKey'];
   const functions = names.map((name) => {
     const node = ast.statements.find((entry) => ts.isFunctionDeclaration(entry) && entry.name?.text === name);
     assert.ok(node, name); return node.getText(ast).replace(/^export\s+/, '');
@@ -113,4 +113,88 @@ test('authoritative job deletion removes stuck conflicts and uploads only for th
   await f.api.applyChanges([{ operation: 'delete', entityId: 'job' }], false, 'now', 'trade_team');
   assert.deepEqual(f.rows().map((row) => row.id), ['other']);
   assert.deepEqual(f.sql.prepare('SELECT client_upload_id FROM upload_queue').all().map((row) => row.client_upload_id), ['other-upload']);
+});
+
+const sharedJob = () => ({ id:'job',fieldLane:'trade_team',revision:5,stage:'in_progress',lifecycleStatus:'partial',
+  appointmentId:'visit-1',appointmentRevision:1,appointmentStatus:'in_progress',completedAt:'',
+  collaborativeJob:true,remainingActiveVisits:2,tasks:[{id:'task',status:'pending'}],
+  forms:[{id:'form',revision:1,answers:{name:'saved'},template:{fields:[{key:'name',type:'text',required:true,label:'Name'}]}}] });
+const sharedFinish = () => ({clientActionId:'visit-finish',type:'advance_field_job',workOrderId:'job',transition:'finish',
+  baseRevision:5,appointmentId:'visit-1',baseAppointmentRevision:1});
+
+test('queued finish projects only its own visit and a visit conflict never automatically retries', async t => {
+  const f=fixture();t.after(()=>f.sql.close());
+  f.sql.prepare('INSERT INTO jobs VALUES (?,?,?)').run('job','trade_team',JSON.stringify(sharedJob()));
+  await f.api.queueAction(sharedFinish());
+  let job=JSON.parse(f.sql.prepare('SELECT payload FROM jobs').get().payload);
+  assert.equal(job.appointmentStatus,'completed');assert.equal(job.appointmentRevision,2);
+  assert.equal(job.stage,'in_progress');assert.equal(job.lifecycleStatus,'partial');
+  await f.api.resolveAction('visit-finish',{status:'conflict',code:'REVISION_CONFLICT',currentRevision:9});
+  assert.equal(f.rows()[0].id,'visit-finish');assert.equal(f.rows()[0].status,'conflict');
+  assert.equal(JSON.parse(f.rows()[0].payload).baseRevision,5);
+});
+
+test('acknowledgement restores authoritative parent status while preserving pending task and form drafts',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());
+  f.sql.prepare('INSERT INTO jobs VALUES (?,?,?)').run('job','trade_team',JSON.stringify(sharedJob()));
+  await f.api.queueAction(sharedFinish());
+  await f.api.queueAction(formAction('form-pending','my unsynced answer'));
+  await f.api.queueAction({clientActionId:'task-pending',type:'set_task_status',workOrderId:'job',baseRevision:1,taskId:'task',status:'done'});
+  await f.api.resolveAction('visit-finish',{status:'applied',jobState:{revision:6,stage:'in_progress',lifecycleStatus:'partial',
+    appointmentId:'visit-1',appointmentRevision:2,appointmentStatus:'completed',completedAt:'server-time',collaborativeJob:true,remainingActiveVisits:1}});
+  const job=JSON.parse(f.sql.prepare('SELECT payload FROM jobs').get().payload);
+  assert.equal(job.revision,6);assert.equal(job.stage,'in_progress');assert.equal(job.remainingActiveVisits,1);
+  assert.equal(job.forms[0].answers.name,'my unsynced answer');assert.equal(job.tasks[0].status,'done');
+  assert.deepEqual(f.rows().map(row=>row.id),['form-pending','task-pending']);
+});
+
+test('refresh cannot project a queued finish onto a different visit',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());await f.api.queueAction(sharedFinish());
+  const job={...sharedJob(),appointmentId:'visit-2',appointmentStatus:'scheduled'};
+  await f.api.applyChanges([{operation:'upsert',entityId:'job',entity:job}],false,'now','trade_team');
+  const saved=JSON.parse(f.sql.prepare('SELECT payload FROM jobs').get().payload);
+  assert.equal(saved.appointmentId,'visit-2');assert.equal(saved.appointmentStatus,'scheduled');
+});
+
+const answerConflict = () => ({ conflicts:[{sectionKey:'details',promptKey:'size',label:'Size',base:'old',local:'mine',saved:'theirs'}],
+  currentInstance:{id:'pack-current',responseSha256:'current-hash'},
+  mergedPatches:[{sectionKey:'details',repeatInstanceKey:'',remove:false,answers:{notes:'independent local edit'}}] });
+const conflictingAction = () => ({clientActionId:'pack-edit',type:'work_pack_commit',workOrderId:'job',baseRevision:5,
+  caseInstanceId:'pack-base',expectedResponseSha256:'base-hash',workPackInstanceKey:'pack-stable',
+  sectionPatches:[{sectionKey:'details',repeatInstanceKey:'',remove:false,answers:{size:'mine',notes:'independent local edit',other:'unchanged base'}}]});
+const freshPack = () => ({instance:{id:'pack-current',responseSha256:'current-hash',workOrderId:'job'}});
+
+test('answer conflicts preserve original transport bytes and only retry trusted local deltas plus explicit choices',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());await f.api.queueAction(conflictingAction());
+  const [sent]=await f.api.queuedActions('trade_team');
+  const state=answerConflict();
+  await f.api.resolveAction('pack-edit',{status:'conflict',code:'WORK_PACK_ANSWER_CONFLICT',...state});
+  assert.equal(f.rows()[0].payload,sent.payload);assert.deepEqual(JSON.parse(f.rows()[0].conflict_json),state);
+  await assert.rejects(f.api.retryConflict('pack-edit',{...conflictingAction(),clientActionId:'unsafe'}),/Open the job/);
+  await f.api.resolveWorkPackAnswerConflict('pack-edit',freshPack(),[{sectionKey:'details',promptKey:'size',use:'local'}]);
+  const next=JSON.parse(f.rows()[0].payload);
+  assert.equal(next.clientActionId,'act-new-retry-id');assert.equal(next.expectedResponseSha256,'current-hash');
+  assert.deepEqual(next.sectionPatches[0].answers,{notes:'independent local edit',size:'mine'});
+  assert.equal(f.rows()[0].dispatched_at,'');assert.equal(f.rows()[0].conflict_json,'');
+});
+
+test('saved choice never overwrites the disputed value and choices are required for every conflict',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());
+  assert.throws(()=>f.api.resolvedWorkPackAnswerPatches(answerConflict(),[]),/every changed answer/);
+  const patches=f.api.resolvedWorkPackAnswerPatches(answerConflict(),[{sectionKey:'details',promptKey:'size',use:'saved'}]);
+  assert.deepEqual(patches[0].answers,{notes:'independent local edit'});
+  const removal={...answerConflict(),mergedPatches:[],conflicts:[{sectionKey:'units',repeatInstanceKey:'unit-1',promptKey:'',label:'Unit',base:{serial:'old'},local:null,saved:{serial:'other'}}]};
+  assert.deepEqual(f.api.resolvedWorkPackAnswerPatches(removal,[{sectionKey:'units',repeatInstanceKey:'unit-1',promptKey:'',use:'local'}]),
+    [{sectionKey:'units',repeatInstanceKey:'unit-1',remove:true,answers:{}}]);
+});
+
+test('changed-again conflict reruns original draft without applying obsolete resolution; cross-job snapshot cannot modify queue',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());await f.api.queueAction(conflictingAction());
+  await f.api.resolveAction('pack-edit',{status:'conflict',code:'WORK_PACK_ANSWER_CONFLICT',...answerConflict()});
+  const original=f.rows()[0].payload;
+  const choices=[{sectionKey:'details',promptKey:'size',use:'local'}];
+  await assert.rejects(f.api.resolveWorkPackAnswerConflict('pack-edit',{instance:{...freshPack().instance,workOrderId:'other-job'}},choices),/does not belong/);
+  assert.equal(f.rows()[0].status,'conflict');
+  await assert.rejects(f.api.resolveWorkPackAnswerConflict('pack-edit',{instance:{...freshPack().instance,id:'pack-newer',responseSha256:'newer-hash'}},choices),/changed again/);
+  assert.equal(f.rows()[0].payload,original);assert.equal(f.rows()[0].status,'queued');
 });

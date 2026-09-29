@@ -8,6 +8,7 @@ import { certificateActivityIds, assertCertificateJobEligibility, certificateJob
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { nextTlinkJobNumber } from "@/lib/trade-job-number-server";
+import { jobMemberSql } from "@/lib/trade-job-collaboration";
 import {
   guardedOnlineChildMutationBatch,
   guardedOnlineJobMutationBatch,
@@ -192,6 +193,12 @@ const JOB_REGISTER_QUOTE_TOTAL_SQL = `(
   LIMIT 1
 )`;
 const JOB_REGISTER_QUOTE_SORT_SQL = `COALESCE(${JOB_REGISTER_QUOTE_TOTAL_SQL}, 0)`;
+const JOB_REGISTER_ASSIGNEE_SEARCH_SQL = `COALESCE(w.assignee_label, '') || ' ' || COALESCE((
+  SELECT GROUP_CONCAT(worker_visit.assignee_label, ' ')
+  FROM trade_crm_appointments worker_visit
+  WHERE worker_visit.work_order_id = w.id AND worker_visit.firebase_uid = w.firebase_uid
+    AND worker_visit.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
+), '')`;
 const JOB_EFFECTIVE_SCHEDULE_SQL = "COALESCE(NULLIF(selected_appointment.starts_at, ''), NULLIF(w.scheduled_start, ''), '')";
 const JOB_REGISTER_AUDIT_OUTCOME_SQL = tradeJobAuditOutcomeSql("w");
 const JOB_REGISTER_HAS_PROGRESS_SQL = tradeJobHasProgressSql("w");
@@ -417,9 +424,9 @@ function errorResponse(error: unknown) {
   if (code === "JOB_ASSIGN_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow assigning jobs to other team members." }, 403);
   if (code === "JOB_ASSIGNMENT_REQUIRED") return adminJson({ ok: false, error: "Assign this job before adding an appointment." }, 409);
   if (code === "JOB_ASSIGNMENT_CHANGED") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job's assignment changed. Refresh it before booking." }, 409);
-  if (code === "ACTIVE_APPOINTMENT_REASSIGN") return adminJson({ ok: false, error: "This job already has an active appointment. Move or cancel that appointment before assigning the job to someone else." }, 409);
   if (code === "RENTAL_ACTIVE_APPOINTMENT") return adminJson({ ok: false, error: "This rental assessment already has an active appointment. Move or cancel that appointment instead of creating another one." }, 409);
   if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed or cancelled jobs cannot be scheduled." }, 409);
+  if (code === "JOB_VISITS_OPEN") return adminJson({ ok: false, code, error: "Finish or cancel each worker's remaining visit before completing this job." }, 409);
   if (code.includes("JOB_CANCEL_COMPLETED")) return adminJson({ok:false,error:"A job that has been completed cannot be cancelled. Its completed records must be retained."},409);
   if (code === "JOB_RESCHEDULE_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow appointment scheduling or rescheduling." }, 403);
   if (code === "DISCOUNT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow discounts, credits or price reductions." }, 403);
@@ -799,7 +806,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       conditions.push("w.source_type <> 'opportunity'", "COALESCE(d.customer_source, '') <> 'platform_private'", "w.stage <> 'cancelled'");
     }
     if (!identity.access.isOwner && identity.access.jobScope === "own") {
-      conditions.push("w.assignee_member_id = ?");
+      conditions.push(jobMemberSql("w"));
       bindings.push(identity.memberId);
     }
     if (search) {
@@ -812,7 +819,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       const normalizedPhoneSearch = /^[+\d\s().-]+$/.test(search) ? search.replace(/\D/g, "") : "";
       conditions.push(`(LOWER(
         COALESCE(w.work_number, '') || ' ' || ${searchableJobTitleSql}
-        COALESCE(w.assignee_label, '') || ' ' || COALESCE(w.stage, '') || ' ' || ${JOB_EFFECTIVE_SCHEDULE_SQL} || ' ' ||
+        ${JOB_REGISTER_ASSIGNEE_SEARCH_SQL} || ' ' || COALESCE(w.stage, '') || ' ' || ${JOB_EFFECTIVE_SCHEDULE_SQL} || ' ' ||
         ${searchableCustomerSql} ||
         COALESCE((SELECT GROUP_CONCAT(
             json_extract(ci.intent_snapshot, '$.activity.title'),
@@ -861,7 +868,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     const stage = cleanAdminText(url.searchParams.get("stage"), 30);
     if (WORK_STAGES.has(stage)) { conditions.push("w.stage = ?"); bindings.push(stage); }
     const assignee = cleanAdminText(url.searchParams.get("assignee"), 100).toLowerCase();
-    if (assignee) { conditions.push("LOWER(w.assignee_label) LIKE ?"); bindings.push(`%${assignee}%`); }
+    if (assignee) { conditions.push(`LOWER(${JOB_REGISTER_ASSIGNEE_SEARCH_SQL}) LIKE ?`); bindings.push(`%${assignee}%`); }
     const location = cleanAdminText(url.searchParams.get("location"), 100).toLowerCase();
     if (location) {
       conditions.push(`LOWER(CASE WHEN w.source_type = 'opportunity' THEN '' ELSE COALESCE(w.site_area, '') END || ' ' || ${protectedJobCustomerText("ss.address_line_1")} || ' ' || ${protectedJobCustomerText("ss.address_line_2")} || ' ' || ${protectedJobCustomerText("ss.suburb")} || ' ' || ${protectedJobCustomerText("ss.address_state")} || ' ' || ${protectedJobCustomerText("ss.postcode")}) LIKE ?`);
@@ -1142,7 +1149,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     const row = await db.prepare(`SELECT c.*,
       (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
         WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active'
-          AND (? = 'team' OR w.assignee_member_id = ?)) job_count
+          AND (? = 'team' OR ${jobMemberSql("w")})) job_count
       FROM trade_crm_customers c WHERE c.id = ? AND c.firebase_uid = ? AND c.record_status = 'active'`)
       .bind(identity.access.isOwner ? "team" : identity.access.jobScope, identity.memberId,
         id, identity.uid).first<Record<string, unknown>>();
@@ -1155,7 +1162,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
       FROM trade_work_orders w JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
        WHERE d.crm_customer_id = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-         AND (? = 'team' OR w.assignee_member_id = ?)
+         AND (? = 'team' OR ${jobMemberSql("w")})
        ORDER BY w.updated_at DESC LIMIT 200`)
         .bind(id, identity.uid, identity.access.isOwner ? "team" : identity.access.jobScope,
           identity.memberId).all<Record<string, unknown>>(),
@@ -1188,7 +1195,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
     WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      AND (? = 'team' OR w.assignee_member_id = ?)`)
+      AND (? = 'team' OR ${jobMemberSql("w")})`)
     .bind(id, identity.uid, identity.access.isOwner ? "team" : identity.access.jobScope,
       identity.memberId).first<Record<string, unknown>>();
   if (!row) throw new Error("JOB_NOT_FOUND");
@@ -1370,14 +1377,14 @@ async function crmSummary(identity: CrmIdentity) {
       FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id AND w.firebase_uid = t.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       WHERE t.firebase_uid = ? AND w.record_status = 'active' AND t.status = 'pending' AND t.due_at <> '' AND t.due_at < ?
-        AND (? = 1 OR ? = 'team' OR w.assignee_member_id = ?)
+        AND (? = 1 OR ? = 'team' OR ${jobMemberSql("w")})
       ORDER BY t.due_at, t.created_at LIMIT 4`).bind(identity.uid, today,
         identity.access.isOwner ? 1 : 0, identity.access.jobScope, identity.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT n.*, w.id work_order_id, w.work_number, w.title job_title, w.assignee_member_id, w.source_type, d.customer_source
       FROM trade_crm_job_notes n JOIN trade_work_orders w ON w.id = n.work_order_id AND w.firebase_uid = n.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       WHERE n.firebase_uid = ? AND w.record_status = 'active' AND n.note_type = 'issue' AND n.issue_status = 'open'
-        AND (? = 1 OR ? = 'team' OR w.assignee_member_id = ?)
+        AND (? = 1 OR ? = 'team' OR ${jobMemberSql("w")})
       ORDER BY n.updated_at DESC LIMIT 4`).bind(identity.uid,
         identity.access.isOwner ? 1 : 0, identity.access.jobScope, identity.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT a.starts_at, a.ends_at, a.assignee_member_id
@@ -1429,15 +1436,11 @@ async function crmSummary(identity: CrmIdentity) {
        endsAt: row.ends_at, assigneeLabel: row.assignee_label, status: row.status,
        notes: protectedJobContext(row) ? "" : row.notes, job: activityJob(row, protectedJobContext(row)),
     })),
-    overdueTasks: overdueTasks.results.filter((row) => identity.access.isOwner
-      || identity.access.jobScope === "team" || row.assignee_member_id === identity.memberId)
-      .map((row: Record<string, unknown>) => ({
+    overdueTasks: overdueTasks.results.map((row: Record<string, unknown>) => ({
        id: row.id, title: protectedJobContext(row) ? "Assigned task" : row.title, dueAt: row.due_at,
        status: row.status, completedAt: row.completed_at, job: activityJob(row, protectedJobContext(row)),
     })),
-    openIssues: openIssues.results.filter((row) => identity.access.isOwner
-      || identity.access.jobScope === "team" || row.assignee_member_id === identity.memberId)
-      .map((row: Record<string, unknown>) => ({
+    openIssues: openIssues.results.map((row: Record<string, unknown>) => ({
        id: row.id, noteType: row.note_type, body: protectedJobContext(row) ? "Protected job issue" : row.body,
        issueStatus: row.issue_status, createdAt: row.created_at, updatedAt: row.updated_at,
        job: activityJob(row, protectedJobContext(row)),
@@ -1489,7 +1492,7 @@ async function crmReports(identity: CrmIdentity, url: URL) {
 }
 
 async function ownedJob(db: D1Database, identity: CrmIdentity, workOrderId: string) {
-  const job = await db.prepare(`SELECT w.id, w.source_type, w.service_category, w.assignee_member_id, w.revision, w.stage,
+  const job = await db.prepare(`SELECT w.id, w.source_type, w.service_category, w.assignee_member_id, w.assignee_label, w.revision, w.stage,
       d.customer_source, c.customer_number, c.business_name, c.first_name, c.last_name
     FROM trade_work_orders w
     LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
@@ -1597,7 +1600,7 @@ async function assertCustomerDetailAccess(identity: CrmIdentity, customerId: str
   const linked = await getD1().prepare(`SELECT 1 allowed FROM trade_crm_job_details d
     JOIN trade_work_orders w ON w.id = d.work_order_id AND w.firebase_uid = d.firebase_uid
     WHERE d.crm_customer_id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer'
-      AND w.record_status = 'active' AND w.assignee_member_id = ? LIMIT 1`)
+      AND w.record_status = 'active' AND ${jobMemberSql("w")} LIMIT 1`)
     .bind(customerId, identity.uid, identity.memberId).first();
   if (!linked) throw new Error("CUSTOMER_VIEW_REQUIRED");
 }
@@ -2705,30 +2708,31 @@ export async function POST(request: Request) {
         && assigneeMemberId !== identity.memberId) throw new Error("JOB_RESCHEDULE_REQUIRED");
       await assertCertificateJobEligibility(db, { ownerUid: identity.uid, actorMemberId: identity.memberId,
         assignedMemberId: assigneeMemberId, workOrderId });
-      const assignmentChanged = currentAssigneeMemberId !== assigneeMemberId;
-      if (assignmentChanged && !canAssignJob(identity.access, currentAssigneeMemberId, assigneeMemberId)) {
+      const additionalWorker = Boolean(currentAssigneeMemberId && currentAssigneeMemberId !== assigneeMemberId);
+      const assignmentChanged = !currentAssigneeMemberId;
+      if (currentAssigneeMemberId !== assigneeMemberId && !canAssignJob(identity.access, currentAssigneeMemberId, assigneeMemberId)) {
         throw new Error("JOB_ASSIGN_REQUIRED");
       }
       const member = await assertMemberCapability(db, identity, assigneeMemberId, String(job.service_category || ""));
       if (!member) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
       const rentalInspectionAppointment = String(job.service_category || "") === RENTAL_INSPECTION_SERVICE_CATEGORY;
-      if (assignmentChanged || rentalInspectionAppointment) {
+      if (rentalInspectionAppointment) {
         const activeAppointment = await db.prepare(`SELECT id FROM trade_crm_appointments
           WHERE work_order_id = ? AND firebase_uid = ?
             AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)
           .bind(workOrderId, identity.uid).first();
         if (activeAppointment) {
-          throw new Error(rentalInspectionAppointment
-            ? "RENTAL_ACTIVE_APPOINTMENT"
-            : "ACTIVE_APPOINTMENT_REASSIGN");
+          throw new Error("RENTAL_ACTIVE_APPOINTMENT");
         }
       }
       const assignee = String(member.display_name || "");
+      const leadMemberId = currentAssigneeMemberId || assigneeMemberId;
+      const leadLabel = currentAssigneeMemberId ? String(job.assignee_label || "") : assignee;
       const displayName = customerDisplayName(job);
       const appointmentTitle = `${displayName} ${SERVICE_LABELS[String(job.service_category)] || APPOINTMENT_LABELS[appointmentType]}`.trim();
       const appointmentId = crypto.randomUUID();
       const jobRevision = nextJobRevision(job.revision);
-      const installation = appointmentType === "installation";
+      const installation = appointmentType === "installation" && !additionalWorker;
       const complianceIntentStatements = installation
         ? await plannedComplianceIntentReplanStatements(db, {
           actorUid: identity.access.actorUid,
@@ -2752,7 +2756,7 @@ export async function POST(request: Request) {
                   AND active_appointment.firebase_uid = trade_work_orders.firebase_uid
                   AND active_appointment.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
               ))`)
-            .bind(assigneeMemberId, assignee, startsAt, endsAt, jobRevision, now,
+            .bind(leadMemberId, leadLabel, startsAt, endsAt, jobRevision, now,
               workOrderId, identity.uid, expectedRevision, job.stage, currentAssigneeMemberId,
               assignmentChanged ? 1 : 0)
           : db.prepare(`UPDATE trade_work_orders
@@ -2765,7 +2769,7 @@ export async function POST(request: Request) {
                   AND active_appointment.firebase_uid = trade_work_orders.firebase_uid
                   AND active_appointment.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
               ))`)
-            .bind(assigneeMemberId, assignee, jobRevision, now, workOrderId, identity.uid,
+            .bind(leadMemberId, leadLabel, jobRevision, now, workOrderId, identity.uid,
               expectedRevision, job.stage, currentAssigneeMemberId, assignmentChanged ? 1 : 0),
         previousTradeScheduleMutationGuardStatement(db, {
           changedAt: now,
@@ -2836,8 +2840,8 @@ export async function POST(request: Request) {
       );
       await guardedOnlineJobMutationBatch(db, statements, {
         kind: "assignment",
-        assigneeLabel: assignee,
-        assigneeMemberId,
+        assigneeLabel: leadLabel,
+        assigneeMemberId: leadMemberId,
         jobRevision,
         jobStage: installation ? "scheduled" : String(job.stage),
         ownerUid: identity.uid,
@@ -3145,6 +3149,7 @@ export async function PATCH(request: Request) {
         WHERE a.id = ? AND a.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(appointmentId, identity.uid, identity.uid).first<Record<string, unknown>>();
       if (!current) throw new Error("APPOINTMENT_NOT_FOUND");
+      if (!identity.access.isOwner) await assignedJob(identity.access, String(current.work_order_id));
       if (!canRescheduleWithinScope(identity.access, String(current.assignee_member_id || ""))) {
         throw new Error("JOB_NOT_ASSIGNED");
       }
@@ -3165,6 +3170,7 @@ export async function PATCH(request: Request) {
           trainingGuards.push(...await certificateJobEligibilityGuards(db, certificateAccess));
         }
       }
+      const jobRevision = nextJobRevision(current.job_revision);
       await db.batch([
         creditexWriteGuard(db, identity.uid, `EXISTS (
           SELECT 1 FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id=a.work_order_id AND w.firebase_uid=a.firebase_uid
@@ -3177,6 +3183,14 @@ export async function PATCH(request: Request) {
         ...trainingGuards,
         db.prepare("UPDATE trade_crm_appointments SET status = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND firebase_uid = ?")
           .bind(status, now, appointmentId, identity.uid),
+        db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ? AND stage = ?`)
+          .bind(jobRevision, now, current.work_order_id, identity.uid, current.job_revision,
+            current.job_assignee_member_id, current.job_stage),
+        previousTradeScheduleMutationGuardStatement(db, { ownerUid: identity.uid, changedAt: now }),
+        ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId: String(current.work_order_id),
+          revision: jobRevision, changedAt: now, audienceMemberId: String(current.job_assignee_member_id || ""),
+          previousAudienceMemberId: String(current.assignee_member_id || "") }),
       ]);
       return adminJson({ ok: true });
     }
@@ -3261,6 +3275,10 @@ export async function PATCH(request: Request) {
       && current?.customer_source === "public_lead_released";
     const pipelineStage = body.pipelineStage === undefined ? String(current?.pipeline_stage || (platformPrivate ? "qualifying" : "enquiry")) : cleanAdminText(body.pipelineStage, 30);
     const workStage = body.stage === undefined ? "" : cleanAdminText(body.stage, 30);
+    const completingJob = workStage === "completed" || (body.pipelineStage !== undefined && pipelineStage === "complete");
+    if (completingJob && await db.prepare(`SELECT id FROM trade_crm_appointments
+      WHERE work_order_id = ? AND firebase_uid = ? AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)
+      .bind(workOrderId, identity.uid).first()) throw new Error("JOB_VISITS_OPEN");
     if(workStage==="cancelled") await assertTradeJobCanCancel(db,identity.uid,workOrderId);
     const priority = body.priority === undefined ? "" : cleanAdminText(body.priority, 20);
     const quoteStatus = body.quoteStatus === undefined ? String(current?.quote_status || "not_started") : cleanAdminText(body.quoteStatus, 20);
@@ -3324,7 +3342,10 @@ export async function PATCH(request: Request) {
           values.invoiced, values.paid, quoteStatus, invoiceStatus, values.paymentDue, now, now);
     const revision = nextJobRevision(expectedRevision);
     const nextStage = workStage || String(job.stage || "");
-    const statements = [...(nextStage==="cancelled"?[tradeJobCancellationGuard(db,identity.uid,workOrderId)]:[]),detailStatement, db.prepare(`UPDATE trade_work_orders SET stage = ?,
+    const completionGuards = completingJob ? [creditexWriteGuard(db, identity.uid, `NOT EXISTS (
+      SELECT 1 FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
+        AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress'))`, [workOrderId, identity.uid])] : [];
+    const statements = [...completionGuards, ...(nextStage==="cancelled"?[tradeJobCancellationGuard(db,identity.uid,workOrderId)]:[]),detailStatement, db.prepare(`UPDATE trade_work_orders SET stage = ?,
       scheduled_start=CASE WHEN ?='cancelled' THEN '' ELSE scheduled_start END,
       scheduled_end=CASE WHEN ?='cancelled' THEN '' ELSE scheduled_end END,
       priority = COALESCE(NULLIF(?, ''), priority), revision = ?, updated_at = ?

@@ -5,7 +5,8 @@ import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/a
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { fieldFinishWithoutActiveAppointment, fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
 import { activityConsumerDocuments } from "@/lib/trade-activity-forms-library";
-import { nextJobRevision } from "@/lib/trade-team-sync-server";
+import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
+import { jobMemberSql } from "@/lib/trade-job-collaboration";
 import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
   requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
 import { normalizeTradeFormAnswers, tradeFormCompletion } from "@/lib/trade-form-library.mjs";
@@ -100,7 +101,7 @@ const ACCESSIBLE_JOB_COHORT_SQL = `SELECT cohort.id
   WHERE cohort.firebase_uid = ?
     AND cohort.partner_type = 'installer'
     AND cohort.record_status = 'active'
-    AND (? <> 'own' OR cohort.assignee_member_id = ?)
+    AND (? <> 'own' OR ${jobMemberSql("cohort")})
     AND NOT ${syncJobCancelledSql("cohort", "cohort_detail")}
   ORDER BY CASE WHEN ${syncJobTerminalSql("cohort", "cohort_detail")} THEN 1 ELSE 0 END,
     cohort.scheduled_start = '', cohort.scheduled_start,
@@ -129,7 +130,7 @@ async function reconcilePlannedWorkPacksAfterSync(
       AND work_order.firebase_uid = ?
       AND work_order.partner_type = 'installer'
       AND work_order.record_status = 'active'
-      AND (? <> 'own' OR work_order.assignee_member_id = ?)
+      AND (? <> 'own' OR ${jobMemberSql("work_order")})
     WHERE intent.status = 'planned'
       AND intent.compliance_case_id = ''
     ORDER BY work_order.updated_at, work_order.id
@@ -495,6 +496,7 @@ function workPackActionError(clientActionId: string, error: unknown) {
   if (!(error instanceof CreditexActivityWorkPackServerError)) throw error;
   const conflict = error.status === 409 && [
     "WORK_PACK_REVISION_CONFLICT",
+    "WORK_PACK_ANSWER_CONFLICT",
     "WORK_PACK_CUSTOMER_CONTEXT_STALE",
   ].includes(error.code);
   return {
@@ -502,6 +504,8 @@ function workPackActionError(clientActionId: string, error: unknown) {
     status: conflict ? "conflict" : "rejected",
     code: error.code,
     error: error.message,
+    ...(error.code === "WORK_PACK_ANSWER_CONFLICT" ? { conflicts: error.conflicts,
+      currentInstance: error.currentInstance, mergedPatches: error.mergedPatches } : {}),
   };
 }
 
@@ -756,7 +760,7 @@ async function reconcileMissingDerivedLifecycleChanges(
       WHERE w.firebase_uid = ?
         AND w.partner_type = 'installer'
         AND w.record_status = 'active'
-        AND (? <> 'own' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("w")})
         AND NOT ${syncJobCancelledSql("w", "d")}
       ORDER BY CASE WHEN ${syncJobTerminalSql("w", "d")} THEN 1 ELSE 0 END,
         w.scheduled_start = '', w.scheduled_start, w.updated_at DESC
@@ -808,7 +812,9 @@ async function accessibleJobs(access: TeamAccess) {
           WHERE sc.service_site_id = ss.id AND sc.firebase_uid = w.firebase_uid AND sc.record_status = 'active' AND cc.record_status = 'active'
           AND cc.phone <> '' ORDER BY sc.is_primary DESC, sc.created_at LIMIT 1), c.phone, '') customer_phone,
         ss.site_label, ss.address_line_1, ss.address_line_2, ss.suburb, ss.address_state, ss.postcode,
-        a.id appointment_id, a.status appointment_status, a.starts_at appointment_starts_at, a.ends_at appointment_ends_at,
+        a.id appointment_id, a.revision appointment_revision, a.status appointment_status,
+        (SELECT COUNT(*) FROM trade_crm_appointments count_visit WHERE count_visit.work_order_id=w.id AND count_visit.firebase_uid=w.firebase_uid AND count_visit.status IN ('scheduled','en_route','arrived','in_progress','completed')) visit_count,
+        (SELECT COUNT(*) FROM trade_crm_appointments count_visit WHERE count_visit.work_order_id=w.id AND count_visit.firebase_uid=w.firebase_uid AND count_visit.status IN ('scheduled','en_route','arrived','in_progress')) active_visit_count, a.starts_at appointment_starts_at, a.ends_at appointment_ends_at,
         a.travel_started_at, a.arrived_at, a.work_started_at, a.completed_at,
         (SELECT COUNT(*) FROM trade_crm_job_notes n WHERE n.work_order_id = w.id AND n.firebase_uid = w.firebase_uid AND n.note_type = 'issue' AND n.issue_status = 'open') open_issues,
         delivery.id customer_document_delivery_id, delivery.appointment_id customer_document_appointment_id,
@@ -823,18 +829,22 @@ async function accessibleJobs(access: TeamAccess) {
       LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_appointments a ON a.id = (SELECT fa.id FROM trade_crm_appointments fa WHERE fa.work_order_id = w.id AND fa.firebase_uid = w.firebase_uid
         AND fa.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
-        ORDER BY CASE fa.status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, fa.starts_at DESC LIMIT 1)
+        AND (fa.assignee_member_id = ? OR ? = 1 OR (fa.assignee_member_id = '' AND w.assignee_member_id = ?
+          AND (SELECT COUNT(*) FROM trade_crm_appointments sole_visit WHERE sole_visit.work_order_id=w.id AND sole_visit.firebase_uid=w.firebase_uid
+            AND sole_visit.status IN ('scheduled','en_route','arrived','in_progress','completed')) <= 1))
+        ORDER BY CASE WHEN fa.assignee_member_id = ? THEN 0 ELSE 1 END, CASE fa.status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, fa.starts_at DESC LIMIT 1)
       LEFT JOIN trade_activity_customer_document_deliveries delivery ON delivery.id = (
         SELECT latest_delivery.id FROM trade_activity_customer_document_deliveries latest_delivery
         WHERE latest_delivery.work_order_id = w.id AND latest_delivery.firebase_uid = w.firebase_uid
         ORDER BY latest_delivery.created_at DESC, latest_delivery.delivery_generation DESC LIMIT 1)
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-        AND (? <> 'own' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("w")})
         AND NOT ${syncJobCancelledSql("w", "d")}
       ORDER BY CASE WHEN ${syncJobTerminalSql("w", "d")} THEN 1 ELSE 0 END,
         w.scheduled_start = '', w.scheduled_start, w.updated_at DESC
       LIMIT ?`)
       .bind(
+        access.memberId, access.isOwner ? 1 : 0, access.memberId, access.memberId,
         access.ownerUid,
         access.jobScope,
         access.memberId,
@@ -843,7 +853,7 @@ async function accessibleJobs(access: TeamAccess) {
     db.prepare(`SELECT t.id, t.work_order_id, t.title, t.due_at, t.status, t.completed_at, t.revision, t.updated_at
       FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id
       WHERE t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-        AND (? <> 'own' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("w")})
         AND t.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       ORDER BY t.status = 'done', t.due_at = '', t.due_at, t.created_at
       LIMIT ?`)
@@ -860,7 +870,7 @@ async function accessibleJobs(access: TeamAccess) {
     db.prepare(`SELECT m.id, m.work_order_id, m.category, m.file_name, m.content_type, m.size_bytes, m.caption, m.created_at
       FROM trade_crm_job_media m JOIN trade_work_orders w ON w.id = m.work_order_id
       WHERE m.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-        AND (? <> 'own' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("w")})
         AND m.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       ORDER BY m.created_at DESC
       LIMIT ?`)
@@ -878,7 +888,7 @@ async function accessibleJobs(access: TeamAccess) {
         f.template_snapshot, f.answers, f.status, f.revision, f.completed_at, f.updated_at
       FROM trade_job_forms f JOIN trade_work_orders w ON w.id = f.work_order_id
       WHERE f.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-        AND (? <> 'own' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("w")})
         AND f.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       ORDER BY f.status = 'complete', f.created_at
       LIMIT ?`)
@@ -915,7 +925,7 @@ async function accessibleJobs(access: TeamAccess) {
         AND linked_case.status NOT IN ('rejected', 'closed')
       WHERE intent.installer_uid = ?
         AND work_order.record_status = 'active'
-        AND (? <> 'own' OR work_order.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("work_order")})
         AND intent.status IN ('planned', 'case_linked')
         AND intent.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       ORDER BY intent.work_order_id, intent.created_at, intent.intent_key
@@ -960,7 +970,7 @@ async function accessibleJobs(access: TeamAccess) {
         AND e.organisation_id = c.organisation_id
       WHERE c.installer_uid = ? AND c.status NOT IN ('rejected', 'closed')
         AND w.record_status = 'active'
-        AND (? <> 'own' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("w")})
         AND c.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       GROUP BY
         c.work_order_id, c.id, c.case_number, c.activity_version_id,
@@ -1003,7 +1013,7 @@ async function accessibleJobs(access: TeamAccess) {
       LEFT JOIN trade_rental_inspection_modules module ON module.inspection_id = inspection.id
         AND module.firebase_uid = inspection.firebase_uid
       WHERE inspection.firebase_uid = ? AND work_order.record_status = 'active'
-        AND (? <> 'own' OR work_order.assignee_member_id = ?)
+        AND (? <> 'own' OR ${jobMemberSql("work_order")})
         AND inspection.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       GROUP BY inspection.id, inspection.work_order_id, inspection.inspection_number,
         inspection.status, inspection.template_key, inspection.template_version,
@@ -1075,6 +1085,9 @@ async function accessibleJobs(access: TeamAccess) {
       customerPhone: customerContext ? String(row.customer_phone || "") : "",
       serviceAddress,
       appointmentId: row.appointment_id || "",
+      appointmentRevision: Number(row.appointment_revision || 0),
+      collaborativeJob: Number(row.visit_count || 0) > 1,
+      remainingActiveVisits: Number(row.active_visit_count || 0),
       appointmentStatus: row.appointment_status || "",
       appointmentStartsAt: row.appointment_starts_at || "",
       appointmentEndsAt: row.appointment_ends_at || "",
@@ -1366,7 +1379,7 @@ export async function GET(request: Request) {
     page.forEach((row) => latest.set(`${row.entity_type}:${row.entity_id}`, row));
     const changes = [...latest.values()].map((row) => {
       const entity = jobs.get(String(row.entity_id));
-      if (row.operation === "delete" || !entity) return { sequence: Number(row.sequence), entityType: row.entity_type,
+      if (!entity) return { sequence: Number(row.sequence), entityType: row.entity_type,
         entityId: row.entity_id, operation: "delete", revision: Number(row.revision), changedAt: row.changed_at };
       return { sequence: Number(row.sequence), entityType: row.entity_type, entityId: row.entity_id,
         operation: "upsert", revision: entity.revision, changedAt: row.changed_at, entity };
@@ -1437,52 +1450,7 @@ function guardedJobSyncChangeStatements(
   },
   guardValues: unknown[],
 ) {
-  const statements = [
-    db.prepare(`INSERT INTO trade_team_sync_changes
-      (owner_uid, audience_member_id, entity_type, entity_id, operation, revision, changed_at)
-      SELECT ?, '', 'job', ?, 'upsert', ?, ? WHERE ${APPLIED_ACTION_GUARD}`)
-      .bind(
-        change.ownerUid,
-        change.workOrderId,
-        change.revision,
-        change.changedAt,
-        ...guardValues,
-      ),
-  ];
-  const audienceMemberId = change.audienceMemberId || "";
-  if (audienceMemberId) {
-    statements.push(
-      db.prepare(`INSERT INTO trade_team_sync_changes
-        (owner_uid, audience_member_id, entity_type, entity_id, operation, revision, changed_at)
-        SELECT ?, ?, 'job', ?, 'upsert', ?, ? WHERE ${APPLIED_ACTION_GUARD}`)
-        .bind(
-          change.ownerUid,
-          audienceMemberId,
-          change.workOrderId,
-          change.revision,
-          change.changedAt,
-          ...guardValues,
-        ),
-      db.prepare(`INSERT OR IGNORE INTO trade_mobile_push_outbox
-        (id, owner_uid, audience_member_id, event_key, event_type,
-         entity_type, entity_id, payload, status, attempts,
-         next_attempt_at, created_at, updated_at)
-        SELECT ?, ?, ?, ?, 'job_changed', 'job', ?, ?, 'pending', 0, '', ?, ?
-        WHERE ${APPLIED_ACTION_GUARD}`)
-        .bind(
-          crypto.randomUUID(),
-          change.ownerUid,
-          audienceMemberId,
-          `${change.ownerUid}:${audienceMemberId}:${change.workOrderId}:${change.revision}:upsert`,
-          change.workOrderId,
-          JSON.stringify({ contractVersion: 2, reason: "sync_required" }),
-          change.changedAt,
-          change.changedAt,
-          ...guardValues,
-        ),
-    );
-  }
-  return statements;
+  return jobSyncChangeStatements(db, change, { sql: APPLIED_ACTION_GUARD, values: guardValues });
 }
 
 function failClosedActionGuardStatement(
@@ -2168,39 +2136,62 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
   if (actionType === "advance_field_job") {
     const workOrderId = cleanAdminText(action.workOrderId, 180); const transitionName = cleanAdminText(action.transition, 30);
     const transition = FIELD_TRANSITIONS[transitionName as keyof typeof FIELD_TRANSITIONS];
-    const baseRevision = Number(action.baseRevision);
-    if (!transition || !Number.isInteger(baseRevision) || baseRevision < 1) return { clientActionId, status: "rejected", code: "INVALID_FIELD_TRANSITION", error: "Use the next available field-job action." };
+    const submittedBaseRevision = Number(action.baseRevision);
+    const appointmentId = cleanAdminText(action.appointmentId, 180);
+    const explicitVisit = Boolean(appointmentId);
+    const baseAppointmentRevision = Number(action.baseAppointmentRevision);
+    if (!transition || !Number.isInteger(submittedBaseRevision) || submittedBaseRevision < 1
+      || (explicitVisit && (!Number.isSafeInteger(baseAppointmentRevision) || baseAppointmentRevision < 1))) {
+      return { clientActionId, status: "rejected", code: "INVALID_FIELD_TRANSITION", error: "Use the next available field-job action." };
+    }
     const job = await assignedJob(access, workOrderId);
-    if (Number(job.revision) !== baseRevision) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: workOrderId, baseRevision, currentRevision: Number(job.revision) };
+    const visitCounts = await db.prepare(`SELECT COUNT(*) total,
+      SUM(CASE WHEN status IN ('scheduled','en_route','arrived','in_progress') THEN 1 ELSE 0 END) active
+      FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
+        AND status IN ('scheduled','en_route','arrived','in_progress','completed')`)
+      .bind(workOrderId, access.ownerUid).first<{ total: number; active: number }>();
+    if (!explicitVisit && Number(visitCounts?.total || 0) > 1) {
+      return { clientActionId, status: "rejected", code: "VISIT_SELECTION_REQUIRED",
+        error: "Update the field app and select your visit before changing this shared job." };
+    }
     const jobState = await workOrderMutationState(access, workOrderId);
-    if (!jobState || Number(jobState.revision) !== baseRevision) {
-      return {
-        clientActionId,
-        status: "conflict",
-        code: "REVISION_CONFLICT",
-        entityId: workOrderId,
-        baseRevision,
-        currentRevision: Number(jobState?.revision || job.revision),
-      };
+    const baseRevision = Number(jobState?.revision || job.revision);
+    if (!jobState || (!explicitVisit && baseRevision !== submittedBaseRevision)) {
+      return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: workOrderId,
+        baseRevision: submittedBaseRevision, currentRevision: baseRevision };
     }
     const capturedJobStage = String(jobState.stage || "");
-    if (TERMINAL_WORK_STAGES.has(capturedJobStage)) {
-      return terminalJobResult(clientActionId);
-    }
+    if (TERMINAL_WORK_STAGES.has(capturedJobStage)) return terminalJobResult(clientActionId);
     const appointment = await db.prepare(`SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
-      AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed') ORDER BY CASE status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, starts_at DESC LIMIT 1`)
-      .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
+      AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
+      AND (? = '' OR id = ?)
+      AND (assignee_member_id = ? OR ? = 1 OR (assignee_member_id = '' AND ? = 1 AND ? <= 1))
+      ORDER BY CASE status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, starts_at DESC LIMIT 1`)
+      .bind(workOrderId, access.ownerUid, appointmentId, appointmentId, access.memberId, access.isOwner ? 1 : 0,
+        job.assignee_member_id === access.memberId ? 1 : 0, Number(visitCounts?.total || 0)).first<Record<string, unknown>>();
+    if (explicitVisit && (!appointment || Number(appointment.revision) !== baseAppointmentRevision)) {
+      return { clientActionId, status: "conflict", code: "VISIT_REVISION_CONFLICT", entityId: appointmentId,
+        currentRevision: Number(appointment?.revision || 0), error: "This visit changed. Review the latest job before continuing." };
+    }
     const issuedRental = transitionName === "finish"
       ? await db.prepare(`SELECT id FROM trade_rental_inspections
           WHERE work_order_id = ? AND firebase_uid = ? AND status = 'issued' LIMIT 1`)
           .bind(workOrderId, access.ownerUid).first<{ id: string }>()
       : null;
     const finishWithoutAppointment = transitionName === "finish"
+      && Number(visitCounts?.active || 0) === 0 && Number(visitCounts?.total || 0) <= 1
       && fieldFinishWithoutActiveAppointment(capturedJobStage, String(appointment?.status || ""), Boolean(issuedRental));
     if (!appointment && !finishWithoutAppointment) return { clientActionId, status: "rejected", code: "APPOINTMENT_REQUIRED", error: "Schedule this job before starting field work." };
     const expectedAppointmentStatus = fieldTransitionExpectedStatus(transitionName, String(appointment?.status || ""), transition.from);
     if (!finishWithoutAppointment && appointment?.status !== expectedAppointmentStatus) return { clientActionId, status: "rejected", code: "OUT_OF_ORDER", error: `This action is out of order. The appointment is ${String(appointment?.status).replaceAll("_", " ")}.` };
-    const finishState = transitionName === "finish"
+    const otherActiveVisits = Number(visitCounts?.active || 0)
+      - (appointment && ["scheduled", "en_route", "arrived", "in_progress"].includes(String(appointment.status)) ? 1 : 0);
+    const parentTransition = transitionName === "finish" && otherActiveVisits > 0 ? "visit_finish" : transitionName;
+    const visitSetGuard = `(SELECT COUNT(*) FROM trade_crm_appointments remaining_visit
+      WHERE remaining_visit.work_order_id = ? AND remaining_visit.firebase_uid = ? AND remaining_visit.id <> ?
+        AND remaining_visit.status IN ('scheduled','en_route','arrived','in_progress')) = ?`;
+    const visitSetValues = [workOrderId, access.ownerUid, String(appointment?.id || ""), otherActiveVisits];
+    const finishState = parentTransition === "finish"
       ? await fieldFinishState(access.ownerUid, workOrderId)
       : {
           blockers: [],
@@ -2214,11 +2205,11 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
         error: `Complete ${finishState.blockers.join(", ")} before finishing.`,
       };
     }
-    const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now); if (reserved) return reserved;
-    const resultRevision = nextJobRevision(job.revision);
-    const expectedJobStage = transitionName === "start_work"
+    const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, submittedBaseRevision, now); if (reserved) return reserved;
+    const resultRevision = nextJobRevision(baseRevision);
+    const expectedJobStage = parentTransition === "start_work" || parentTransition === "visit_finish"
       ? "in_progress"
-      : transitionName === "finish"
+      : parentTransition === "finish"
         ? "completed"
         : capturedJobStage;
     const appointmentAppliedGuard = finishWithoutAppointment ? `EXISTS (
@@ -2232,12 +2223,12 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     )` : `EXISTS (
       SELECT 1 FROM trade_crm_appointments field_appointment
       WHERE field_appointment.id = ? AND field_appointment.firebase_uid = ?
-        AND field_appointment.status = ? AND field_appointment.${transition.timestamp} = ?
+        AND field_appointment.revision = ? AND field_appointment.status = ? AND field_appointment.${transition.timestamp} = ?
         AND field_appointment.last_transition_by_uid = ?
     )`;
     const appointmentAppliedValues = finishWithoutAppointment
       ? [workOrderId, access.ownerUid, workOrderId, access.ownerUid]
-      : [appointment?.id, access.ownerUid, transition.to, now, access.actorUid];
+      : [appointment?.id, access.ownerUid, Number(appointment?.revision || 0) + 1, transition.to, now, access.actorUid];
     const finishBlockerGuard = `(
       ? <> 'finish'
       OR (
@@ -2305,7 +2296,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     )`;
     const photoGuard = finishState.photoGuard;
     const finishBlockerValues = [
-      transitionName,
+      parentTransition,
       workOrderId,
       access.ownerUid,
       workOrderId,
@@ -2336,12 +2327,12 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       action,
       hash,
       workOrderId,
-      baseRevision,
+      submittedBaseRevision,
       resultRevision,
     );
     const appointmentStatements = !finishWithoutAppointment && appointment ? [
       db.prepare(`UPDATE trade_crm_appointments SET status = ?, ${transition.timestamp} = ?, last_transition_by_uid = ?, revision = revision + 1, updated_at = ?
-        WHERE id = ? AND firebase_uid = ? AND status = ?
+        WHERE id = ? AND firebase_uid = ? AND status = ? AND revision = ? AND assignee_member_id = ?
           AND EXISTS (
             SELECT 1 FROM trade_work_orders work_order
             WHERE work_order.id = ? AND work_order.firebase_uid = ?
@@ -2350,7 +2341,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
               AND work_order.stage = ?
               AND work_order.stage NOT IN ('completed', 'cancelled')
           )
-          AND ${finishBlockerGuard}`)
+          AND ${finishBlockerGuard} AND ${visitSetGuard}`)
         .bind(
           transition.to,
           now,
@@ -2359,24 +2350,27 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
           appointment.id,
           access.ownerUid,
           expectedAppointmentStatus,
+          Number(appointment.revision),
+          String(appointment.assignee_member_id || ""),
           workOrderId,
           access.ownerUid,
           baseRevision,
           capturedJobStage,
           ...finishBlockerValues,
+          ...visitSetValues,
         ),
     ] : [];
     const statements = [
       ...appointmentStatements,
-      db.prepare(`UPDATE trade_work_orders SET stage = CASE WHEN ? = 'start_work' THEN 'in_progress' WHEN ? = 'finish' THEN 'completed' ELSE stage END,
+      db.prepare(`UPDATE trade_work_orders SET stage = CASE WHEN ? IN ('start_work', 'visit_finish') THEN 'in_progress' WHEN ? = 'finish' THEN 'completed' ELSE stage END,
         revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?
           AND revision = ? AND stage = ?
           AND record_status = 'active'
           AND stage NOT IN ('completed', 'cancelled')
           AND ${appointmentAppliedGuard}
-          AND ${finishBlockerGuard}`)
-        .bind(transitionName, transitionName, resultRevision, now, workOrderId, access.ownerUid,
-          baseRevision, capturedJobStage, ...appointmentAppliedValues, ...finishBlockerValues),
+          AND ${finishBlockerGuard} AND ${visitSetGuard}`)
+        .bind(parentTransition, parentTransition, resultRevision, now, workOrderId, access.ownerUid,
+          baseRevision, capturedJobStage, ...appointmentAppliedValues, ...finishBlockerValues, ...visitSetValues),
       actionReceiptStatement(
         db,
         access,
@@ -2384,7 +2378,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
         action,
         hash,
         workOrderId,
-        baseRevision,
+        submittedBaseRevision,
         resultRevision,
         now,
         `EXISTS (
@@ -2402,17 +2396,17 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
           ...appointmentAppliedValues,
         ],
       ),
-      db.prepare(`UPDATE trade_crm_job_details SET pipeline_stage = CASE WHEN ? = 'start_work' THEN 'in_progress' WHEN ? = 'finish' THEN 'complete' ELSE pipeline_stage END,
+      db.prepare(`UPDATE trade_crm_job_details SET pipeline_stage = CASE WHEN ? IN ('start_work', 'visit_finish') THEN 'in_progress' WHEN ? = 'finish' THEN 'complete' ELSE pipeline_stage END,
         updated_at = ? WHERE work_order_id = ? AND firebase_uid = ? AND ${APPLIED_ACTION_GUARD}`)
-        .bind(transitionName, transitionName, now, workOrderId, access.ownerUid, ...receiptGuardValues),
+        .bind(parentTransition, parentTransition, now, workOrderId, access.ownerUid, ...receiptGuardValues),
       db.prepare(`UPDATE trade_crm_job_plans SET status = 'completed', completed_at = ?, updated_at = ?
         WHERE work_order_id = ? AND firebase_uid = ? AND ? = 'finish'
           AND ${APPLIED_ACTION_GUARD}`)
-        .bind(now, now, workOrderId, access.ownerUid, transitionName, ...receiptGuardValues),
+        .bind(now, now, workOrderId, access.ownerUid, parentTransition, ...receiptGuardValues),
       db.prepare(`UPDATE trade_crm_job_plan_phases SET status = 'completed', completed_at = ?, updated_at = ?
         WHERE firebase_uid = ? AND job_plan_id IN (SELECT id FROM trade_crm_job_plans WHERE work_order_id = ? AND firebase_uid = ?)
         AND ? = 'finish' AND ${APPLIED_ACTION_GUARD}`)
-        .bind(now, now, access.ownerUid, workOrderId, access.ownerUid, transitionName, ...receiptGuardValues),
+        .bind(now, now, access.ownerUid, workOrderId, access.ownerUid, parentTransition, ...receiptGuardValues),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
         SELECT ?, ?, ?, 'field_state_changed', ?, ? WHERE ${APPLIED_ACTION_GUARD}`)
         .bind(crypto.randomUUID(), workOrderId, access.ownerUid, `${transition.label} recorded in the field app.`, now,
@@ -2420,7 +2414,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
         SELECT ?, ?, ?, 'job_completed', 'Required work, forms, proof and blockers cleared. Invoice and handover preparation are ready.', ?
         WHERE ? = 'finish' AND ${APPLIED_ACTION_GUARD}`)
-        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now, transitionName,
+        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now, parentTransition,
           ...receiptGuardValues),
       ...guardedJobSyncChangeStatements(
         db,
@@ -2451,7 +2445,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       return {
         clientActionId,
         status: "conflict",
-        code: "REVISION_CONFLICT",
+        code: explicitVisit ? "VISIT_REVISION_CONFLICT" : "REVISION_CONFLICT",
         entityId: workOrderId,
         baseRevision,
         currentRevision: Number(current.revision),
@@ -3099,6 +3093,33 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
   return { clientActionId, status: "rejected", code: "UNSUPPORTED_ACTION", error: "This offline action is not supported." };
 }
 
+async function acknowledgedJobState(access: TeamAccess, action: OfflineAction) {
+  const workOrderId = cleanAdminText(action.workOrderId, 180);
+  await assignedJob(access, workOrderId);
+  const lifecycleSql = tradeJobLifecycleStatusSql({ workAlias: "w", detailAlias: "d",
+    scheduleSql: "COALESCE(a.starts_at, w.scheduled_start, '')" });
+  const row = await getD1().prepare(`SELECT w.revision, w.stage, ${lifecycleSql} lifecycle_status,
+      a.id appointment_id, a.revision appointment_revision, a.status appointment_status, a.completed_at,
+      (SELECT COUNT(*) FROM trade_crm_appointments v WHERE v.work_order_id=w.id AND v.firebase_uid=w.firebase_uid
+        AND v.status IN ('scheduled','en_route','arrived','in_progress','completed')) visit_count,
+      (SELECT COUNT(*) FROM trade_crm_appointments v WHERE v.work_order_id=w.id AND v.firebase_uid=w.firebase_uid
+        AND v.status IN ('scheduled','en_route','arrived','in_progress')) active_count
+    FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
+    LEFT JOIN trade_crm_appointments a ON a.id=(SELECT v.id FROM trade_crm_appointments v
+      WHERE v.work_order_id=w.id AND v.firebase_uid=w.firebase_uid
+      AND (v.assignee_member_id=? OR ?=1 OR (v.assignee_member_id='' AND w.assignee_member_id=?))
+      AND v.status IN ('scheduled','en_route','arrived','in_progress','completed')
+      ORDER BY CASE WHEN v.id=? THEN 0 ELSE 1 END, v.starts_at DESC LIMIT 1)
+    WHERE w.id=? AND w.firebase_uid=? AND w.record_status='active'`)
+    .bind(access.memberId, access.isOwner ? 1 : 0, access.memberId, cleanAdminText(action.appointmentId, 180),
+      workOrderId, access.ownerUid).first<Record<string, unknown>>();
+  if (!row) return undefined;
+  return { revision: Number(row.revision), stage: String(row.stage), lifecycleStatus: String(row.lifecycle_status),
+    appointmentId: String(row.appointment_id || ""), appointmentRevision: Number(row.appointment_revision || 0),
+    appointmentStatus: String(row.appointment_status || ""), completedAt: String(row.completed_at || ""),
+    collaborativeJob: Number(row.visit_count || 0) > 1, remainingActiveVisits: Number(row.active_count || 0) };
+}
+
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
@@ -3140,7 +3161,10 @@ export async function POST(request: Request) {
           && !access.canManageJobs) throw new Error("JOB_MANAGEMENT_REQUIRED");
         if (["save_job_form", "add_time_entry", ...WORK_PACK_ACTIONS].includes(actionType)
           && !access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
-        results.push(await applyAction(access, deviceId, action));
+        const result = await applyAction(access, deviceId, action);
+        if (actionType === "advance_field_job" && ["applied", "duplicate"].includes(result.status)) {
+          results.push({ ...result, jobState: await acknowledgedJobState(access, action) });
+        } else results.push(result);
       }
       catch (error) {
         const conflict = creditexMutationConflict(error);

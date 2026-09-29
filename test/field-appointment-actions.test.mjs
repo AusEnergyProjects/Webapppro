@@ -7,6 +7,8 @@ import { mfaErrorResponse } from './helpers/admin-response-fixture.mjs';
 import { canAssignWithinScope, canRescheduleWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
 import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
 import { lifecycleGuardFixture } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
+import * as collaboration from "../src/lib/trade-job-collaboration.ts";
+import * as jobLifecycle from "../src/lib/trade-job-lifecycle.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -75,7 +77,8 @@ function loadTypescriptModule(path, mocks = {}) {
     fileName: path,
   }).outputText;
   const moduleRecord = { exports: {} };
-  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : {};
+  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier]
+    : specifier.includes('trade-job-collaboration') ? collaboration : specifier.includes('trade-job-lifecycle') ? jobLifecycle : {};
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
@@ -142,7 +145,7 @@ function fixture(overrides = {}, effects = {}) {
   const patch = (action, extra={}) => route.PATCH(new Request('https://example.test/api/field/appointment-actions', {
     method:'PATCH', body:JSON.stringify({workOrderId:'job',action,expectedRevision:4,appointmentId:'appointment',expectedAppointmentRevision:2,...extra}) }));
   return { database, db, access, messages, calendars, scheduleChanges, patch,
-    get: () => route.GET(new Request('https://example.test/api/field/appointment-actions?workOrderId=job')) };
+    get: (appointmentId = '') => route.GET(new Request(`https://example.test/api/field/appointment-actions?workOrderId=job&appointmentId=${appointmentId}`)) };
 }
 
 test('an unscheduled job exposes Schedule and Delete and creates its first appointment through the existing scheduler', async () => {
@@ -211,6 +214,73 @@ test('no show removes the slot, preserves the job and evidence identity, and upd
   assert.equal(f.database.prepare('select status from trade_crm_appointments').get().status,'no_show');
   assert.equal(f.database.prepare('select revision from trade_work_orders').get().revision,5);
   assert.equal(f.calendars.length,1);assert.equal(f.messages.length,0);
+});
+
+function addPlumberVisit(database) {
+  database.exec("INSERT INTO trade_crm_appointments VALUES('plumbing','job','owner',1,'scheduled','2026-10-10T11:00','2026-10-10T12:00','plumber','later','later')");
+}
+
+test('action context defaults to the current worker and keeps other visits inside schedule scope', async () => {
+  const own = fixture({ memberId: 'plumber', canRescheduleJobs: false });
+  addPlumberVisit(own.database);
+  const personal = await (await own.get()).json();
+  assert.equal(personal.appointment.id, 'plumbing');
+  assert.deepEqual(personal.appointments.map(visit => visit.id), ['plumbing']);
+  assert.equal((await own.get('appointment')).status, 404);
+
+  const team = fixture({ scheduleScope: 'team', canRescheduleJobs: false });
+  addPlumberVisit(team.database);
+  const defaultContext = await (await team.get()).json();
+  assert.equal(defaultContext.appointment.id, 'appointment');
+  assert.equal(defaultContext.appointments.length, 2);
+  assert.equal((await (await team.get('plumbing')).json()).appointment.id, 'plumbing');
+});
+
+test('a secondary worker can mark their selected visit no-show without demoting the shared job or another visit', async () => {
+  const f = fixture({ memberId: 'plumber', canManageJobs: false });
+  addPlumberVisit(f.database);
+  const response = await f.patch('no_show', { appointmentId: 'plumbing', expectedAppointmentRevision: 1 });
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  assert.deepEqual({ ...f.database.prepare('SELECT stage,assignee_member_id,scheduled_start,revision FROM trade_work_orders').get() },
+    { stage: 'scheduled', assignee_member_id: 'worker', scheduled_start: '2026-10-10', revision: 5 });
+  assert.equal(f.database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment'").get().status, 'scheduled');
+  assert.equal(f.database.prepare("SELECT status FROM trade_crm_appointments WHERE id='plumbing'").get().status, 'no_show');
+  assert.equal((await response.json()).jobPatch.lifecycleStatus, 'scheduled');
+  assert.deepEqual(f.calendars, [['owner', 'plumbing']]);
+});
+
+test('secondary worker rescheduling delegates the selected visit and cannot target another worker', async () => {
+  const f = fixture({ memberId: 'plumber', canManageJobs: false });
+  addPlumberVisit(f.database);
+  const denied = await f.patch('reschedule', { startsAt: '2026-10-11T11:00', durationMinutes: 60, memberId: 'plumber' });
+  assert.equal(denied.status, 404);
+  const response = await f.patch('reschedule', { appointmentId: 'plumbing', expectedAppointmentRevision: 1,
+    startsAt: '2026-10-11T11:00', durationMinutes: 60, memberId: 'plumber' });
+  assert.equal(response.status, 200);
+  assert.equal(f.scheduleChanges.length, 1);
+  assert.equal(f.scheduleChanges[0].appointmentId, 'plumbing');
+  assert.equal(f.scheduleChanges[0].expectedRevision, 1);
+  assert.equal(f.scheduleChanges[0].expectedJobRevision, 4);
+});
+
+test('ambiguous or mismatched visit mutations fail before changing a shared job', async () => {
+  const f = fixture({ isOwner: true });
+  addPlumberVisit(f.database);
+  const missing = await f.patch('no_show', { appointmentId: '', expectedAppointmentRevision: 0 });
+  assert.equal(missing.status, 409);
+  assert.equal((await missing.json()).code, 'APPOINTMENT_SELECTION_REQUIRED');
+  assert.equal((await f.patch('no_show', { appointmentId: 'another-job-visit' })).status, 404);
+  assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 4);
+  assert.equal(f.calendars.length, 0);
+});
+
+test('manager cancellation remains job-wide across all workers', async () => {
+  const f = fixture({ isOwner: true });
+  addPlumberVisit(f.database);
+  assert.equal((await f.patch('cancel')).status, 200);
+  assert.equal(f.database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments WHERE status='cancelled'").get().count, 2);
+  assert.equal(f.database.prepare('SELECT stage FROM trade_work_orders').get().stage, 'cancelled');
+  assert.equal(f.calendars.length, 2);
 });
 test('cancel changes appointment and job status and sends one cancellation update',async()=>{
   const f=fixture();assert.equal((await f.patch('cancel')).status,200);

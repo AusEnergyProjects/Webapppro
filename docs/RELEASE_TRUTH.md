@@ -4,13 +4,25 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 29 September 2026
+Last reconciled locally: 30 September 2026
 
-Deployment baseline for managed SMS: Sites 680, source `33efd55afc3446b5c99b9face78544acb58dd1c6`. Exact publication identities and checks belong in C:/Webproject/outputs/tlink-managed-sms-2026-09-29/. Prior native publication evidence remains in C:/Webproject/outputs/tlink-native-comms-2026-09-28/.
+Deployment baseline for shared job visits: Sites 682, source `6462cb311747adcb9a158e65014022468e3fa627`. Shared-job publication evidence belongs in C:/Webproject/outputs/tlink-multi-trade-2026-09-30/. Exact publication identities and checks belong in C:/Webproject/outputs/tlink-managed-sms-2026-09-29/. Prior native publication evidence remains in C:/Webproject/outputs/tlink-native-comms-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: managed Australian customer SMS
+## Current implementation: multiple workers on one job
+
+The existing appointment is now the durable worker visit. A job retains one lead while other assigned team members receive shared job access through scheduled, travelling, arrived, in-progress or completed visits. Cancelled/no-show visits stop granting access. Each visit has its own worker, time, instructions, status and revision. Overlapping visits and different appointment times are supported; rental-assessment single-active-visit and credential rules remain intact.
+
+Web and native field actions bind the selected appointment and revision. Completing a visit while another is open leaves the job in progress. The final visit retains all required forms/evidence gates. Both final-visit and manual job completion atomically verify there are no other open visits. Old mobile requests cannot silently choose a visit on a shared job. Sync changes reach all current collaborators and remove access for former participants.
+
+Shared answers use the immutable server revision as their merge base. Disjoint edits merge; divergent answers and repeated-item removal conflicts need explicit Mine/Saved choices. Web retains dirty answers during conflict, and native persists the original queued draft and conflict resolution. Evidence contributions do not grant the lead's professional signing authority. Native JS changes remain compatible with runtime 1.0.2 and require its existing preview update path; 1.0.1 cannot receive 1.0.2 native modules.
+
+This is the committed implementation record prepared before publication. Exact Git/Sites and native update identities, validation and live checks belong in C:/Webproject/outputs/tlink-multi-trade-2026-09-30/. Physical two-device operation is separate from database concurrency tests and native export checks. No remote migration or new participant table is required; the existing browser-evidence trigger upgrades only from its exact known predecessor.
+
+iPhone release readiness: the shared native source includes iOS fieldwork and passes the iOS JavaScript export, but EAS currently lists no iOS builds and no iOS signing credentials. The public installer correctly withholds a native iPhone download until a genuine TestFlight or App Store URL exists. Apple Developer signing access, a successful signed build and TestFlight distribution remain required. Native iOS push delivery also requires an APNs sender implementation; the existing native push sender supports Android FCM only. Foreground fieldwork does not depend on Google OAuth or native push.
+
+## Previous implementation: managed Australian customer SMS
 
 Migration 0220 adds a tenant-scoped SMS credit ledger, ClickSend subaccounts and Australian number rental, Stripe-hosted top-ups, separate marketing permission, and optional appointment/review text rules. Normal web Messages opens customer conversations and owner-only setup; Follow-ups includes automatic texts alongside existing email controls. Team communications retain their existing path.
 

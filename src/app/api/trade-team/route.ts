@@ -1,3 +1,4 @@
+import { jobMemberSql } from "@/lib/trade-job-collaboration";
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
@@ -485,7 +486,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       .all<Record<string, unknown>>();
   const workCount = !includeWork ? 0 : Number((await db.prepare(`SELECT COUNT(*) count FROM trade_work_orders w
     WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      AND (? <> 'own' OR w.assignee_member_id = ?)`)
+      AND (? <> 'own' OR ${jobMemberSql("w")} )`)
     .bind(access.ownerUid, access.jobScope, access.memberId).first<Record<string, unknown>>())?.count || 0);
   const jobRows = !includeWork ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage,
       w.priority, w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label,
@@ -495,7 +496,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
     LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
     WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      AND (? <> 'own' OR w.assignee_member_id = ?)
+      AND (? <> 'own' OR ${jobMemberSql("w")} )
     ORDER BY w.scheduled_start = '', w.scheduled_start, w.priority = 'urgent' DESC, w.updated_at DESC, w.id
     LIMIT ? OFFSET ?`)
     .bind(access.ownerUid, access.jobScope, access.memberId, workPageSize, (workPage - 1) * workPageSize).all<Record<string, unknown>>();
@@ -1077,6 +1078,9 @@ export async function PATCH(request: Request) {
       const job = await mutableAssignedJobState(db, access, workOrderId);
       const stage = cleanAdminText(body.stage, 30);
       if (!WORK_STAGES.has(stage)) return adminJson({ ok: false, error: "Choose a valid job stage." }, 400);
+      if (stage === "completed" && await db.prepare(`SELECT 1 FROM trade_crm_appointments
+        WHERE work_order_id = ? AND firebase_uid = ? AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)
+        .bind(workOrderId, access.ownerUid).first()) return adminJson({ ok: false, code: "ACTIVE_VISITS_REMAIN", error: "Finish the remaining team visits before completing this job." }, 409);
       const revision = nextJobRevision(job.revision);
       await guardedOnlineJobMutationBatch(db, [
         db.prepare(`UPDATE trade_work_orders SET stage = ?, revision = ?, updated_at = ?

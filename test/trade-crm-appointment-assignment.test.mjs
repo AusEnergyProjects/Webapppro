@@ -1,3 +1,5 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
+import { appointmentEndsAt } from "../src/lib/trade-schedule.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -81,7 +83,7 @@ function loadTypescriptModule(path, mocks) {
     fileName: path,
   }).outputText;
   const moduleRecord = { exports: {} };
-  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : certificateTestDependency(specifier) || {};
+  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : (specifier.includes("trade-job-collaboration") ? jobCollaboration : certificateTestDependency(specifier)) || {};
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
@@ -355,6 +357,8 @@ function fixture() {
     INSERT INTO trade_team_members VALUES (
       'member-b', 'owner-1', 'actor-2', 'Other worker', '["hot-water"]', 'active'
     );
+    ALTER TABLE trade_team_members ADD COLUMN can_view_field_evidence integer NOT NULL DEFAULT 0;
+    UPDATE trade_team_members SET can_view_field_evidence=1;
   `);
   installCreditexTrainingFixture(database);
   return { database, d1: testD1(database) };
@@ -425,7 +429,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     "@/lib/trade-access-server": { TradeAccessError },
     "@/lib/trade-team-server": {
       assignedJob: async (scope, id) => {
-        const job = await d1.prepare("SELECT id FROM trade_work_orders WHERE id=? AND firebase_uid=? AND record_status='active' AND (?='team' OR assignee_member_id=?)").bind(id, scope.ownerUid, scope.jobScope, scope.memberId).first();
+        const job = await d1.prepare(`SELECT id FROM trade_work_orders w WHERE id=? AND firebase_uid=? AND record_status='active' AND (?='team' OR ${jobCollaboration.jobMemberSql("w")})`).bind(id, scope.ownerUid, scope.jobScope, scope.memberId).first();
         if (!job) throw Error("JOB_NOT_FOUND");
         return job;
       },
@@ -448,7 +452,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
       activityConsumerDocuments: () => [],
     },
     "@/lib/trade-schedule": {
-      appointmentEndsAt: () => "2099-01-02T11:00:00.000Z",
+      appointmentEndsAt,
       assertAppointmentSlot: () => {},
       assertFutureAppointment: () => {},
       australiaLocalDateTime: () => "2099-01-01T00:00",
@@ -490,7 +494,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
   });
 }
 
-function appointmentRequest(assigneeMemberId, expectedRevision = 3) {
+function appointmentRequest(assigneeMemberId, expectedRevision = 3, overrides = {}) {
   return new Request("https://example.test/api/trade-crm", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -502,6 +506,7 @@ function appointmentRequest(assigneeMemberId, expectedRevision = 3) {
       durationMinutes: 60,
       assigneeMemberId,
       expectedRevision,
+      ...overrides,
     }),
   });
 }
@@ -538,7 +543,7 @@ test("create_appointment POST requires assignment permission when the draft assi
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
 });
 
-test("create_appointment POST atomically reassigns and books for an owner", async () => {
+test("create_appointment POST adds another worker and preserves the job lead", async () => {
   const { database, d1 } = fixture();
   const { POST } = crmRoute(d1, access({ isOwner: true, actorUid: "owner-1", canAssignJobs: true }));
 
@@ -549,8 +554,8 @@ test("create_appointment POST atomically reassigns and books for an owner", asyn
   assert.equal(payload.revision, 4);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 1);
   assert.deepEqual({ ...database.prepare("SELECT assignee_member_id, assignee_label, revision FROM trade_work_orders WHERE id = 'job-1'").get() }, {
-    assignee_member_id: "member-b",
-    assignee_label: "Other worker",
+    assignee_member_id: "member-a",
+    assignee_label: "Assigned worker",
     revision: 4,
   });
 });
@@ -580,7 +585,7 @@ test("create_appointment does not let an own-scope worker assign an unassigned j
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
 });
 
-test("create_appointment POST refuses to reassign a job that already has an active appointment", async () => {
+test("create_appointment POST adds another worker while the existing visit remains active", async () => {
   const { database, d1 } = fixture();
   database.prepare(`INSERT INTO trade_crm_appointments VALUES
     ('appointment-existing', 'job-1', 'owner-1', 'site_visit', 'Existing visit',
@@ -589,13 +594,12 @@ test("create_appointment POST refuses to reassign a job that already has an acti
   const response = await crmRoute(d1, access({ isOwner: true, actorUid: "owner-1", canAssignJobs: true }))
     .POST(appointmentRequest("member-b"));
 
-  assert.equal(response.status, 409);
-  assert.match((await response.json()).error, /already has an active appointment/i);
+  assert.equal(response.status, 201);
   assert.deepEqual({ ...database.prepare("SELECT assignee_member_id, revision FROM trade_work_orders WHERE id = 'job-1'").get() }, {
     assignee_member_id: "member-a",
-    revision: 3,
+    revision: 4,
   });
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 2);
 });
 
 test("create_appointment POST allows the current exact assignee without canAssignJobs", async () => {
@@ -632,6 +636,24 @@ test("create_appointment POST bumps the job revision so the same displayed save 
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 1);
   assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id = 'job-1'").get().revision, 4);
 });
+
+for (const startsAt of ["2099-01-02T10:00:00.000Z", "2099-01-03T14:00:00.000Z"]) {
+  test(`two workers can book the same job at ${startsAt} without replacing its lead or first visit`, async () => {
+    const { database, d1 } = fixture();
+    const route = crmRoute(d1, access({ isOwner: true, canAssignJobs: true }));
+    assert.equal((await route.POST(appointmentRequest("member-a", 3))).status, 201);
+    const leadBefore = { ...database.prepare("SELECT assignee_member_id,assignee_label,stage,scheduled_start,scheduled_end FROM trade_work_orders WHERE id='job-1'").get() };
+    const firstVisit = { ...database.prepare("SELECT * FROM trade_crm_appointments").get() };
+    const second = await route.POST(appointmentRequest("member-b", 4, { startsAt, appointmentType: "installation", notes: "Plumber: connect pipework" }));
+    assert.equal(second.status, 201);
+    assert.deepEqual({ ...database.prepare("SELECT assignee_member_id,assignee_label,stage,scheduled_start,scheduled_end FROM trade_work_orders WHERE id='job-1'").get() }, leadBefore);
+    assert.deepEqual({ ...database.prepare("SELECT * FROM trade_crm_appointments WHERE id=?").get(firstVisit.id) }, firstVisit);
+    const plumber = database.prepare("SELECT * FROM trade_crm_appointments WHERE assignee_member_id='member-b'").get();
+    assert.equal(plumber.starts_at, startsAt);
+    assert.equal(plumber.notes, "Plumber: connect pipework");
+    assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-1'").get().revision, 5);
+  });
+}
 
 test("create_appointment POST rejects terminal jobs before any schedule write", async () => {
   const { database, d1 } = fixture();
@@ -876,6 +898,26 @@ test("CRM update_job uses the displayed revision and rejects a stale second staf
     "First staff edit");
 });
 
+for (const completion of [{ stage: "completed" }, { pipelineStage: "complete" }]) {
+  for (const race of [false, true]) {
+    test(`manual job completion ${JSON.stringify(completion)} rejects an open worker visit${race ? " arriving during save" : ""}`, async () => {
+      const { database, d1 } = fixture();
+      const insertVisit = () => database.prepare(`INSERT INTO trade_crm_appointments VALUES
+        ('plumber-visit','job-1','owner-1','site_visit','Plumber visit','2099-01-02T10:00','2099-01-02T11:00',
+          'member-b','Other worker','scheduled','Connect pipework','2026-01-01','2026-01-01')`).run();
+      if (race) d1.setBeforeBatch(insertVisit); else insertVisit();
+      const before = crmMutationState(database);
+      const response = await crmRoute(d1, access({ canManageJobs: true })).PATCH(new Request('https://example.test/api/trade-crm', {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'update_job', workOrderId: 'job-1', expectedRevision: 3, description: 'Must not commit', ...completion }),
+      }));
+      assert.equal(response.status, 409);
+      assert.deepEqual(crmMutationState(database), before);
+      assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='plumber-visit'").get().status, 'scheduled');
+    });
+  }
+}
+
 test("CRM update_job rolls back details, events and sync when the job becomes terminal", async () => {
   const { database, d1 } = fixture();
   const { PATCH } = crmRoute(d1, access({ canManageJobs: true }));
@@ -928,6 +970,36 @@ function appointmentStatusRequest(status) {
 function appointmentStatusState(database) {
   return { ...database.prepare("SELECT status,revision,assignee_member_id FROM trade_crm_appointments WHERE id='appointment-1'").get() };
 }
+for (const status of ["cancelled", "no_show"]) {
+  test(`a ${status} final visit atomically revokes collaborator detail access without changing the lead`, async () => {
+    const { database, d1 } = programmeAppointmentFixture();
+    database.prepare("UPDATE trade_crm_appointments SET status='scheduled' WHERE id='appointment-1'").run();
+    const worker = crmRoute(d1, access({ memberId: "member-b", scheduleScope: "own" }));
+    const getRequest = () => new Request("https://example.test/api/trade-crm?mode=detail&resource=job&id=job-1");
+    assert.equal((await worker.GET(getRequest())).status, 200);
+    const response = await crmRoute(d1, access({ isOwner: true })).PATCH(appointmentStatusRequest(status));
+    assert.equal(response.status, 200);
+    assert.equal((await worker.GET(getRequest())).status, 404);
+    assert.deepEqual({ ...database.prepare("SELECT assignee_member_id,revision FROM trade_work_orders WHERE id='job-1'").get() }, { assignee_member_id: "member-a", revision: 4 });
+    assert.ok(database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes WHERE entity_id='job-1' AND revision=4").get().count > 0);
+  });
+}
+
+test("a completed visit preserves collaborator detail access", async () => {
+  const { database, d1 } = programmeAppointmentFixture();
+  database.prepare("UPDATE trade_crm_appointments SET status='completed' WHERE id='appointment-1'").run();
+  const response = await crmRoute(d1, access({ memberId: "member-b", scheduleScope: "own" })).GET(new Request("https://example.test/api/trade-crm?mode=detail&resource=job&id=job-1"));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).job.assigneeMemberId, "member-a");
+});
+
+test("a removed own-scope collaborator cannot restore job access by reactivating a cancelled visit", async () => {
+  const { database, d1 } = programmeAppointmentFixture();
+  const response = await crmRoute(d1, access({ memberId: "member-b", scheduleScope: "own" })).PATCH(appointmentStatusRequest("scheduled"));
+  assert.equal(response.status, 404);
+  assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-1'").get().status, "cancelled");
+  assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-1'").get().revision, 3);
+});
 for (const status of ['scheduled', 'completed']) {
   for (const memberId of ['member-a', 'member-b', 'training-owner-owner-1']) {
     test(`appointment ${status} requires the actual job worker, appointment worker and owner: ${memberId}`, async () => {

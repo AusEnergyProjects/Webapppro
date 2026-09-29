@@ -1,3 +1,4 @@
+import { jobMemberSql } from "@/lib/trade-job-collaboration";
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
@@ -78,7 +79,7 @@ export async function GET(request: Request) {
         LEFT JOIN trade_crm_job_details detail
           ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
         WHERE work.firebase_uid = ? AND work.partner_type = 'installer' AND work.record_status = 'active'
-          AND (? = 'team' OR work.assignee_member_id = ?)
+          AND (? = 'team' OR ${jobMemberSql("work")} )
           AND LOWER(work.work_number || ' ' || work.service_category || ' ' || work.assignee_label || ' ' ||
             CASE WHEN work.source_type = 'opportunity' OR detail.customer_source = 'platform_private'
               THEN work.source_reference

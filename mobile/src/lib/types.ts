@@ -740,6 +740,9 @@ export type FieldJob = {
   customerPhone: string;
   serviceAddress: string;
   appointmentId: string;
+  appointmentRevision?: number;
+  collaborativeJob?: boolean;
+  remainingActiveVisits?: number;
   appointmentStatus: string;
   appointmentStartsAt: string;
   appointmentEndsAt: string;
@@ -853,6 +856,8 @@ export type OfflineAction = {
   taskId?: string;
   formId?: string;
   baseRevision: number;
+  appointmentId?: string;
+  baseAppointmentRevision?: number;
   stage?: JobStage;
   transition?: 'start_travel' | 'arrive' | 'start_work' | 'finish';
   status?: TaskStatus;
@@ -862,6 +867,8 @@ export type OfflineAction = {
   answers?: Record<string, string | boolean>;
   complete?: boolean;
   caseInstanceId?: string;
+  /** Local grouping for immutable revisions of one work pack. Never sent to the server. */
+  workPackInstanceKey?: string;
   expectedResponseSha256?: string;
   dependencyKey?: string;
   scenarioCode?: string;
@@ -881,6 +888,21 @@ export type OfflineAction = {
   contactPatch?: Partial<Pick<FieldWorkPackCustomerContext, 'phone' | 'email'>>;
 };
 
+export type FieldJobState = Pick<FieldJob, 'revision' | 'stage' | 'lifecycleStatus' | 'appointmentId' | 'appointmentRevision'
+  | 'appointmentStatus' | 'completedAt' | 'collaborativeJob' | 'remainingActiveVisits'>;
+
+export type WorkPackAnswerConflict = {
+  sectionKey: string; repeatInstanceKey?: string; promptKey: string; label: string;
+  base: unknown; local: unknown; saved: unknown;
+};
+export type WorkPackAnswerConflictChoice = Pick<WorkPackAnswerConflict, 'sectionKey' | 'repeatInstanceKey' | 'promptKey'> & { use: 'local' | 'saved' };
+export type WorkPackAnswerConflictState = {
+  conflicts: readonly WorkPackAnswerConflict[];
+  currentInstance: { id: string; responseSha256: string };
+  mergedPatches: readonly FieldWorkPackSectionPatch[];
+};
+export type PendingWorkPackAnswerConflict = WorkPackAnswerConflictState & { actionId: string; instanceKey: string; caseInstanceId: string };
+
 export type QueueRow = {
   id: string;
   work_order_id: string;
@@ -890,6 +912,7 @@ export type QueueRow = {
   attempts: number;
   error_code: string;
   error_message: string;
+  conflict_json?: string;
   created_at: string;
 };
 

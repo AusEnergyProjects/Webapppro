@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
@@ -69,7 +70,7 @@ function testD1(database) {
   };
 }
 
-function loadRoute(db) {
+function loadRoute(db, accessPatch = {}) {
   const output = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -88,9 +89,11 @@ function loadRoute(db) {
     canViewFieldEvidence: true,
     canManageFieldEvidence: true,
     jobScope: "team",
+    ...accessPatch,
   };
   const mocks = {
     "cloudflare:workers": { env: {} },
+    "@/lib/trade-job-collaboration": jobCollaboration,
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": { mfaErrorResponse,
       adminJson: (value, status = 200) => Response.json(value, { status }),
@@ -99,7 +102,7 @@ function loadRoute(db) {
     },
     "@/lib/trade-team-server": {
       assignedJob: async (_access, workOrderId) => {
-        const row = await db.prepare(`SELECT id, source_type, revision, assignee_member_id
+        const row = await db.prepare(`SELECT id, source_type, stage, revision, assignee_member_id
           FROM trade_work_orders
           WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
           .bind(workOrderId, access.ownerUid).first();
@@ -148,7 +151,7 @@ function loadRoute(db) {
   return moduleRecord.exports;
 }
 
-function fixture() {
+function fixture(accessPatch = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec(fs.readFileSync(new URL("../drizzle/0170_trade_activity_forms.sql", import.meta.url), "utf8"));
   installFieldCorrectionFixture(database);
@@ -221,6 +224,9 @@ function fixture() {
       created_at text NOT NULL
     );
     CREATE TABLE trade_crm_appointments (
+      assignee_member_id text NOT NULL DEFAULT 'member-1',
+      assignee_label text NOT NULL DEFAULT 'Field Technician',
+      notes text NOT NULL DEFAULT '',
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
       firebase_uid text NOT NULL,
@@ -476,7 +482,7 @@ CREATE TABLE compliance_activity_work_pack_final_records (
     );`);
   installCreditexTrainingFixture(database);
   const db = testD1(database);
-  return { database, db, route: loadRoute(db) };
+  return { database, db, route: loadRoute(db, accessPatch) };
 }
 
 function finishRequest(clientActionId) {
@@ -643,4 +649,87 @@ test("photo proof changed after preflight cannot race through the atomic finish 
     receipts: 0,
     events: 0,
   });
+});
+
+function addSecondVisit(database, status = 'in_progress') {
+  database.prepare(`INSERT INTO trade_crm_appointments
+    (id,work_order_id,firebase_uid,status,starts_at,ends_at,travel_started_at,arrived_at,work_started_at,completed_at,last_transition_by_uid,revision,updated_at,assignee_member_id,assignee_label,notes)
+    SELECT 'appointment-2',work_order_id,firebase_uid,?,starts_at,ends_at,'','','','','',1,'initial','member-2','Electrician','Electrical connection and testing'
+    FROM trade_crm_appointments WHERE id='appointment-1'`).run(status);
+}
+function visitFinish(id, revision = 1, clientActionId = 'finish-' + id) {
+  return new Request('https://example.test/api/trade-field-work', { method:'POST', headers:{'content-type':'application/json'},
+    body:JSON.stringify({action:'field_transition',transition:'finish',workOrderId:'job-1',appointmentId:id,baseAppointmentRevision:revision,clientActionId}) });
+}
+function clearEvidenceBlocker(database) {
+  database.exec(`INSERT INTO compliance_case_evidence (id,organisation_id,case_id,requirement_id,original_sha256,supersedes_evidence_id,status)
+    VALUES ('evidence-2','org-1','case-2','requirement-2','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','','accepted')`);
+}
+
+test('workers finish independently; final visit must clear shared job requirements', async () => {
+  const {database, db, route}=fixture({isOwner:false,jobScope:'own'});
+  try {
+    addSecondVisit(database);
+    const first=await route.POST(visitFinish('appointment-1')); assert.equal(first.status,200,JSON.stringify(await first.clone().json()));
+    const firstPayload=await first.json(); assert.equal(firstPayload.fieldJob.remainingActiveVisits,1);
+    assert.equal(firstPayload.fieldJob.status,'completed'); assert.equal(jobState(database).job.stage,'in_progress');
+    assert.equal(jobState(database).appointment.status,'completed');
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-2'").get().status,'in_progress');
+    const electrician=loadRoute(db,{isOwner:false,jobScope:'own',memberId:'member-2',actorUid:'actor-2'});
+    const blocked=await electrician.POST(visitFinish('appointment-2')); assert.equal(blocked.status,409);
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-2'").get().status,'in_progress');
+    clearEvidenceBlocker(database);
+    const last=await electrician.POST(visitFinish('appointment-2')); assert.equal(last.status,200,JSON.stringify(await last.clone().json()));
+    assert.equal(jobState(database).job.stage,'completed');
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events WHERE event_type='job_completed'").get().count,1);
+    const duplicate=await electrician.POST(visitFinish('appointment-2')); assert.equal(duplicate.status,200); assert.equal((await duplicate.json()).duplicate,true);
+  } finally {database.close();}
+});
+
+test('multi-visit jobs require explicit visit selection and enforce the selected worker and revision', async () => {
+  const {database,route}=fixture({isOwner:false,jobScope:'own'});
+  try {
+    addSecondVisit(database);
+    const ambiguous=await route.POST(finishRequest('ambiguous')); assert.equal(ambiguous.status,409); assert.equal((await ambiguous.json()).code,'VISIT_SELECTION_REQUIRED');
+    assert.equal((await route.POST(visitFinish('appointment-2'))).status,403);
+    assert.equal((await route.POST(visitFinish('appointment-1',0))).status,409);
+    assert.equal(jobState(database).receipts,0);
+  } finally {database.close();}
+});
+
+test('a new visit or reassignment during finish rolls back the entire transition', async () => {
+  for(const mutation of ['new_visit','reassignment']) {
+    const {database,db,route}=fixture({isOwner:false,jobScope:'own'});
+    try {
+      clearEvidenceBlocker(database);
+      db.setBeforeBatch(()=>mutation==='new_visit'?addSecondVisit(database):database.exec("UPDATE trade_crm_appointments SET assignee_member_id='member-2',revision=revision+1 WHERE id='appointment-1'"));
+      const response=await route.POST(visitFinish('appointment-1')); assert.equal(response.status,409);
+      assert.equal(jobState(database).job.stage,'in_progress'); assert.equal(jobState(database).receipts,0); assert.equal(jobState(database).events,0);
+    } finally {database.close();}
+  }
+});
+
+test('visit completion receipts cannot be replayed by another actor or for another visit',async()=>{
+  const {database,db,route}=fixture();
+  try {
+    addSecondVisit(database);
+    assert.equal((await route.POST(visitFinish('appointment-1',1,'shared-key'))).status,200);
+    assert.equal((await route.POST(visitFinish('appointment-2',1,'shared-key'))).status,409);
+    const other=loadRoute(db,{actorUid:'actor-2',memberId:'member-2'});
+    assert.equal((await other.POST(visitFinish('appointment-1',1,'shared-key'))).status,409);
+    assert.equal(jobState(database).receipts,1);
+  } finally {database.close();}
+});
+
+
+test('finishing an early visit makes the shared job in progress without inventing another workers events',async()=>{
+  const {database,route}=fixture();
+  try {
+    database.exec("UPDATE trade_work_orders SET stage='scheduled'; UPDATE trade_crm_appointments SET status='scheduled'");
+    addSecondVisit(database,'scheduled');
+    const response=await route.POST(visitFinish('appointment-1')); assert.equal(response.status,200);
+    assert.equal(jobState(database).job.stage,'in_progress');
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-2'").get().status,'scheduled');
+    assert.equal(database.prepare("SELECT work_started_at FROM trade_crm_appointments WHERE id='appointment-2'").get().work_started_at,'');
+  } finally {database.close();}
 });

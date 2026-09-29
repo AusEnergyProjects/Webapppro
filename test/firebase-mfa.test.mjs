@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -11,6 +12,7 @@ function load(path, dependencies) {
   const output = ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const loadedModule = { exports: {} };
   new Function("require", "module", "exports", output)((name) => {
+    if (name === "./trade-job-collaboration") return jobCollaboration;
     assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency ${name}`);
     return dependencies[name];
   }, loadedModule, loadedModule.exports);

@@ -1,5 +1,22 @@
 # Next task handover
 
+Status: Multi-trade job collaboration implementation and validation.
+Prepared: 30 September 2026
+
+## Active contract: multiple workers on one job
+
+Prepared: 30 September 2026. Baseline source `6462cb311747adcb9a158e65014022468e3fa627`, Sites 682.
+
+Outcome: an electrician and a plumber can attend the same job together or on separate visits, retain their own progress and safely contribute to shared field forms. Finishing one visit must not close another worker's unfinished work.
+
+Scope: existing appointment-based assignments and scheduling, assigned-job access, per-visit field transitions, web/native sync projections and immutable activity-form revisions. The scalar assignee remains the lead; non-cancelled/non-no-show assigned visits grant collaborator access. Reuse existing appointment notes for work instructions. Do not duplicate governed forms or grant a collaborator the lead's regulated signing authority. Existing training, rental-assessment, privacy, signature and finalisation gates remain required.
+
+Acceptance: simultaneous and separate visits preserve the lead and each worker's booking; only the selected authorised visit advances; the parent completes only after remaining visits and existing completion blockers clear; stale actions cannot silently target a different appointment; disjoint answer edits survive and divergent edits require explicit review without losing drafts; reassignment/revocation removes access; mobile offline changes and retries remain persistent and idempotent.
+
+Validation: focused scheduling, authority, concurrent forms and two-worker lifecycle regressions; root/mobile typechecks and scoped lint; full validation with pre-existing failures distinguished; publication build, exact Git/Sites source and affected desktop/mobile checks. Native publication follows its existing authorised release path and remains separate from Sites. Stop on a conflicting checkout, missing release authority or a required change to governed professional signer roles beyond contribution access. Evidence belongs outside the checkout under `C:/Webproject/outputs/tlink-multi-trade-2026-09-30/`.
+
+## Previous contract: managed SMS inspection
+
 Status: Managed Australian SMS is implemented for inspection. Baseline Sites 680, source 33efd55afc3446b5c99b9face78544acb58dd1c6. Publication evidence is recorded outside the checkout.
 Prepared: 29 September 2026
 

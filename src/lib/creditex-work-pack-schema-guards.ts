@@ -643,12 +643,27 @@ function correctionInstanceGuard(definition: { name: string; sql: string }) {
   return { name: definition.name, sql: definition.sql.replace(predecessor, predecessor + permittedCorrection) };
 }
 
+const COLLABORATOR_UPLOAD_GUARD = "compliance_work_pack_browser_upload_insert_guard";
+function collaboratorUploadGuard(definition: { name: string; sql: string }) {
+  if (definition.name !== COLLABORATOR_UPLOAD_GUARD) return definition;
+  const previous = "OR work.`assignee_member_id` = member.`id`";
+  if (!definition.sql.includes(previous)) throw new Error("WORK_PACK_UPLOAD_PREDECESSOR_CHANGED");
+  return { name: definition.name, sql: definition.sql.replace(previous, previous + `
+        OR (NEW.purpose = 'artifact' AND EXISTS (
+          SELECT 1 FROM trade_crm_appointments contributor_visit
+          WHERE contributor_visit.work_order_id = work.id
+            AND contributor_visit.firebase_uid = work.firebase_uid
+            AND contributor_visit.assignee_member_id = member.id
+            AND contributor_visit.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
+        ))`) };
+}
+
 // Keep the exact superseded SQL so an already-initialised database can move
 // from the original, D1-incompatible trigger bodies to the flattened guards. Only
 // an exact known predecessor is replaceable; every other mismatch still fails
 // closed as possible schema drift or tampering.
 export const CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_DEFINITIONS =
-  [...SRES_D1_EXPRESSION_DEPTH_GUARD_SQL.keys(), ...MASTER_AUTHOR_SAVE_GUARDS, CORRECTION_INSTANCE_GUARD].map((name) => {
+  [...SRES_D1_EXPRESSION_DEPTH_GUARD_SQL.keys(), ...MASTER_AUTHOR_SAVE_GUARDS, CORRECTION_INSTANCE_GUARD, COLLABORATOR_UPLOAD_GUARD].map((name) => {
     const previous = CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.find(
       (definition) => definition.name === name,
     );
@@ -668,7 +683,7 @@ export const CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS =
   CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.flatMap((definition) =>
     SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS.get(definition.name)
       ?? [authorSaveGuard(definition)],
-  ).map((definition) => correctionInstanceGuard(draftWorkPackDeletionGuardDefinitions.find((replacement) => replacement.name === definition.name) ?? definition));
+  ).map((definition) => collaboratorUploadGuard(correctionInstanceGuard(draftWorkPackDeletionGuardDefinitions.find((replacement) => replacement.name === definition.name) ?? definition)));
 
 export const CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES = [
   "compliance_master_save_schema",

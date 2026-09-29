@@ -42,7 +42,7 @@ test('sequential saves reconcile disjoint server changes without dropping phone 
   });
 });
 
-test('the current phone answer wins automatically when the same answer changed remotely', () => {
+test('a conflicting phone answer stays in the local draft and is explicitly identified for resolution', () => {
   const result = mergeActivityAnswers(
     { existingSystem: 'gas' },
     { existingSystem: 'electric' },

@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -25,6 +26,7 @@ function routeHarness() {
       return { meta: { changes: 1 } }; },
   }; } }; }, async batch(statements) { return Promise.all(statements.map(statement => statement.run())); } };
   const dependencies = {
+    "@/lib/trade-job-collaboration": jobCollaboration, "./trade-job-collaboration": jobCollaboration,
     "../../../../db": { getD1: () => db },
     "@/lib/trade-certificate-leads": { certificateLeadEligibilitySql: () => "1=1" },
     "@/lib/admin-server": { sameOrigin: () => true, mfaErrorResponse: () => null, cleanAdminText: (value, maximum) => String(value || "").slice(0, maximum), adminJson: (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } }) },

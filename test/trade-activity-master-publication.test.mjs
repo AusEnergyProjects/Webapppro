@@ -12,6 +12,8 @@ import * as library from "../src/lib/trade-activity-forms-library.ts";
 import * as core from "../src/lib/trade-activity-forms.ts";
 import * as bounded from "../src/lib/bounded-json-request.ts";
 import * as flow from "../src/lib/trade-activity-form-flow.ts";
+import * as collaboration from "../src/lib/trade-job-collaboration.ts";
+import * as syncChanges from "../src/lib/trade-team-sync-server.ts";
 import { validateActivityEvidenceBytes } from "../src/lib/trade-activity-forms-pdf.ts";
 import { PDFDocument } from "pdf-lib";
 
@@ -62,6 +64,9 @@ test("the master editor supports safe routing, ordering and Creditex declaration
 function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec(`CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, record_status TEXT, assignee_member_id TEXT, scheduled_start TEXT, revision INTEGER, stage TEXT);
+    CREATE TABLE trade_crm_appointments (id TEXT,work_order_id TEXT,firebase_uid TEXT,assignee_member_id TEXT,status TEXT);
+    CREATE TABLE trade_team_sync_changes (owner_uid TEXT, audience_member_id TEXT, entity_type TEXT, entity_id TEXT, operation TEXT, revision INTEGER, changed_at TEXT);
+    CREATE TABLE trade_mobile_push_outbox (id TEXT PRIMARY KEY, owner_uid TEXT, audience_member_id TEXT, event_key TEXT UNIQUE, event_type TEXT, entity_type TEXT, entity_id TEXT, payload TEXT, status TEXT, attempts INTEGER, next_attempt_at TEXT, created_at TEXT, updated_at TEXT);
     INSERT INTO trade_work_orders VALUES ('job','owner','active','worker','2026-09-08T09:00:00.000Z',1,'scheduled');
     CREATE TABLE trade_work_order_compliance_intents (id TEXT PRIMARY KEY, work_order_id TEXT, installer_uid TEXT, compliance_organisation_id TEXT, activity_template_id TEXT, status TEXT, intent_snapshot TEXT);
     CREATE TABLE trade_crm_job_details (work_order_id TEXT, firebase_uid TEXT, customer_source TEXT, crm_customer_id TEXT, service_site_id TEXT);
@@ -76,6 +81,7 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   installFieldCorrectionFixture(database);
   database.exec("INSERT INTO trade_accounts(firebase_uid,address_state) VALUES ('owner','VIC'); INSERT INTO trade_team_members(id,owner_uid,member_uid,status,display_name) VALUES ('worker','owner','owner','active','Fixture owner')");
   installCreditexTrainingFixture(database);
+  database.exec("ALTER TABLE trade_team_members ADD COLUMN can_view_field_evidence INTEGER NOT NULL DEFAULT 1");
   const d1 = { prepare(sql) { return { async all() { return { results: database.prepare(sql).all() }; }, bind(...values) { return {
     async first() { return database.prepare(sql).get(...values) || null; },
     async all() { return { results: database.prepare(sql).all(...values) }; },
@@ -93,9 +99,11 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   const bucket = { async put(key, bytes) { objects.set(key, bytes); }, async delete(key) { objects.delete(key); },
     async get(key) { const bytes = objects.get(key); return bytes ? { arrayBuffer: async () => new Uint8Array(bytes).buffer } : null; } };
   const server = load(fs.readFileSync(new URL("../src/lib/trade-activity-forms-server.ts", import.meta.url), "utf8"), {
+    "./trade-job-collaboration": collaboration,
+    "./trade-team-sync-server": syncChanges,
     "./creditex-job-lifecycle-schema-guards": lifecycleGuardFixture(database, FIELD_CORRECTION_GUARD_NAMES),
     "cloudflare:workers": { env: { EVIDENCE: bucket } }, "../../db": { getD1: () => d1 },
-    "./trade-team-server": { assignedJob: async (_access, id) => { assert.equal(id, "job"); return { assignee_member_id: "worker", assignee_label: "Worker", revision: 1 }; } },
+    "./trade-team-server": { assignedJob: async (_access, id) => { assert.equal(id, "job"); return { ...database.prepare("SELECT * FROM trade_work_orders WHERE id=?").get(id), assignee_label: "Worker" }; } },
     "./trade-activity-forms-library.ts": library, "./trade-activity-forms.ts": core, "./trade-activity-form-flow.ts": flow,
     "./scheduled-activity-customer-document-receipt.ts": { parseScheduledActivityCustomerDocumentReceipt: () => null },
     "./creditex-official-product-registry-server.ts": { searchOfficialProducts: async () => ({ items: [], matchCount: 0 }) },

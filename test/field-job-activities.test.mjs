@@ -11,7 +11,7 @@ import * as rental from '../src/lib/trade-rental-assessment.mjs';
 import * as safety from '../src/lib/rental-safety-visit.mjs';
 import * as rentalGuards from '../src/lib/trade-rental-schema-guards.ts';
 import * as credentials from '../src/lib/trade-rental-credentials.ts';
-import * as sync from '../src/lib/trade-team-sync-server.ts';
+import * as jobCollaboration from '../src/lib/trade-job-collaboration.ts';
 import * as bounded from '../src/lib/bounded-json-request.ts';
 import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 
@@ -21,6 +21,7 @@ function load(path, mocks) {
   const record = { exports: {} };
   new Function('require', 'module', 'exports', output)((name) => {
     if (name in mocks) return mocks[name];
+    if (/trade-job-collaboration(?:\.ts)?$/.test(name)) return jobCollaboration;
     const dependency = certificateTestDependency(name);
     if (dependency) return dependency;
     throw new Error(`Unmocked import ${name}`);
@@ -28,6 +29,7 @@ function load(path, mocks) {
   return record.exports;
 }
 const intent = load('src/lib/trade-compliance-intent.ts', { './australian-government-program-catalogue': catalogue });
+const sync = load('src/lib/trade-team-sync-server.ts', {});
 
 function fixture(accessOverrides = {}) {
   const database = new DatabaseSync(':memory:');
@@ -54,6 +56,10 @@ function fixture(accessOverrides = {}) {
     INSERT INTO trade_team_members VALUES('worker','owner','owner','Assessor','[]','active');
     INSERT INTO trade_crm_appointments VALUES('appointment','job','owner','scheduled','2026-09-10T11:00');
     INSERT INTO compliance_organisations VALUES('creditex','CREDITEX-AU','active');
+    ALTER TABLE trade_crm_appointments ADD COLUMN assignee_member_id text NOT NULL DEFAULT '';
+    UPDATE trade_crm_appointments SET assignee_member_id='worker';
+    ALTER TABLE trade_team_members ADD COLUMN can_view_field_evidence integer NOT NULL DEFAULT 0;
+    UPDATE trade_team_members SET can_view_field_evidence=1 WHERE id='worker';
   `);
   // Execute the actual production rental tables and scope amendments, plus the intent table/key migrations.
   database.exec(read('drizzle/0160_trade_rental_inspections.sql'));

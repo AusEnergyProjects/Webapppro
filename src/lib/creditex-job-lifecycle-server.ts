@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isJobMember } from "./trade-job-collaboration";
 import { ensureCreditexJobLifecycleSchemaGuards } from "./creditex-job-lifecycle-schema-guards";
 import type { TeamAccess } from "./trade-team-server";
 import { jobSyncChangeStatements } from "./trade-team-sync-server";
@@ -42,7 +43,9 @@ async function context(db: D1Database, actor: JobLifecycleActor, intentId: strin
     WHERE intent.id=? AND ${actor.kind === "trade" ? "work.firebase_uid=?" : "intent.compliance_organisation_id=?"}`)
     .bind(intentId, actor.kind === "trade" ? actor.access.ownerUid : actor.organisationId).first<ContextRow>();
   if (!row) return fail("JOB_LIFECYCLE_NOT_FOUND", "This activity is not available in your workspace.", 404);
-  if (actor.kind === "trade" && (!actor.access.isOwner && (actor.access.jobScope !== "team" && row.assignee_member_id !== actor.access.memberId))) {
+  if (actor.kind === "trade" && !actor.access.isOwner && actor.access.jobScope !== "team"
+    && row.assignee_member_id !== actor.access.memberId
+    && !await isJobMember(db, actor.access.ownerUid, row.work_order_id, actor.access.memberId)) {
     return fail("JOB_LIFECYCLE_NOT_FOUND", "This activity is not assigned to your team access.", 404);
   }
   return row;

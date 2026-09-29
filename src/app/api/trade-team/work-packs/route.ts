@@ -5,6 +5,7 @@ import {
 } from "@/lib/bounded-json-request";
 import { getCreditexCustodyBucket } from "@/lib/creditex-custody-bucket";
 import {
+  CreditexActivityWorkPackServerError,
   captureAssignedCreditexActivityWorkPackSignatures,
   commitAssignedCreditexActivityWorkPack,
   finaliseAssignedCreditexActivityWorkPack,
@@ -25,6 +26,7 @@ import {
   type CreditexWorkPackSectionPatch,
   type CreditexWorkPackSignaturePacketInput,
 } from "@/lib/creditex-activity-work-pack-server";
+import { jobMemberSql } from "@/lib/trade-job-collaboration";
 import type {
   CreditexActivityWorkPackCustomerContext,
 } from "@/lib/creditex-activity-work-pack";
@@ -133,7 +135,7 @@ async function assignedArtifactResponse(
       AND work_order.record_status = 'active'
     WHERE artifact.id = ?
       AND artifact.verification_state = 'matched'
-      AND (? = 'team' OR work_order.assignee_member_id = ?)
+      AND (? = 'team' OR ${jobMemberSql("work_order")})
       AND EXISTS (
         SELECT 1 FROM compliance_activity_work_pack_instances captured
         WHERE captured.id = artifact.case_instance_id
@@ -426,6 +428,11 @@ export async function POST(request: Request) {
       error: "Choose a supported assigned work-pack action.",
     }, 400);
   } catch (error) {
+    if (error instanceof CreditexActivityWorkPackServerError
+      && error.code === "WORK_PACK_ANSWER_CONFLICT") {
+      return adminJson({ ok: false, code: error.code, error: error.message,
+        conflicts: error.conflicts, mergedPatches: error.mergedPatches, currentInstance: error.currentInstance }, 409);
+    }
     return assignedWorkPackError(error);
   }
 }

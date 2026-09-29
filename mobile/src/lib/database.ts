@@ -10,6 +10,11 @@ import { rentalJobWithResult, type RentalAssessmentResult } from '@/lib/rental-i
 import type {
   FieldAccessMode,
   FieldJob,
+  FieldJobState,
+  FieldActivityWorkPack,
+  WorkPackAnswerConflictState,
+  WorkPackAnswerConflictChoice,
+  PendingWorkPackAnswerConflict,
   FieldWorkPackArtifactLink,
   FieldWorkPackReferenceAcknowledgementInput,
   FieldWorkPackSectionPatch,
@@ -168,6 +173,9 @@ async function openDatabase() {
     await db.execAsync("ALTER TABLE jobs ADD COLUMN field_lane TEXT NOT NULL DEFAULT 'trade_team';");
   }
   const actionColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(action_queue)');
+  if (!actionColumns.some((column) => column.name === 'conflict_json')) {
+    await db.execAsync("ALTER TABLE action_queue ADD COLUMN conflict_json TEXT NOT NULL DEFAULT ''; ");
+  }
   if (!actionColumns.some((column) => column.name === 'dispatched_at')) {
     // Legacy rows may have reached the server even when no response was received.
     await db.withTransactionAsync(async () => {
@@ -287,7 +295,7 @@ export async function applyChanges(
         "SELECT payload, updated_at FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry') ORDER BY created_at, rowid",
         change.entityId, mode,
       );
-      for (const row of pending) applyQueuedForm(job, JSON.parse(row.payload) as OfflineAction, row.updated_at);
+      for (const row of pending) applyQueuedProjection(job, JSON.parse(row.payload) as OfflineAction, row.updated_at);
       await saveJob(db, job, serverTime);
     }
     if (bootstrap) {
@@ -387,6 +395,21 @@ function applyQueuedForm(job: FieldJob, action: OfflineAction, savedAt: string) 
   form.ready = !form.missing.length;
   form.completedAt = action.complete ? savedAt : '';
   form.updatedAt = savedAt;
+}
+
+function applyQueuedProjection(job: FieldJob, action: OfflineAction, savedAt: string) {
+  applyQueuedForm(job, action, savedAt);
+  if (action.type === 'set_task_status' && action.taskId && action.status) {
+    const task = job.tasks?.find(item => item.id === action.taskId);
+    if (task) { task.status = action.status; task.completedAt = action.status === 'done' ? savedAt : ''; }
+  }
+  // Project this visit only; the server confirms the parent job status.
+  if (action.type === 'advance_field_job' && action.transition && action.appointmentId
+    && action.appointmentId === job.appointmentId && action.baseAppointmentRevision === job.appointmentRevision) {
+    const states = { start_travel: 'en_route', arrive: 'arrived', start_work: 'in_progress', finish: 'completed' } as const;
+    job.appointmentStatus = states[action.transition];
+    job.appointmentRevision = (job.appointmentRevision || 0) + 1;
+  }
 }
 
 async function persistQueuedAction(
@@ -574,9 +597,10 @@ export async function queueAction(action: OfflineAction, expectedOwner?: LocalDa
       lane,
     );
     const existing = candidates.map((candidate) => JSON.parse(candidate.payload) as OfflineAction)
-      .find((candidate) => candidate.type === 'advance_field_job' && candidate.transition === 'finish');
+      .find((candidate) => candidate.type === 'advance_field_job' && candidate.transition === 'finish'
+        && (candidate.appointmentId || '') === (action.appointmentId || ''));
     if (existing) {
-      queuedAction = existing;
+      return;
     } else {
       await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
@@ -595,13 +619,16 @@ export async function queueAction(action: OfflineAction, expectedOwner?: LocalDa
   if (!row) return;
   const job = JSON.parse(row.payload) as FieldJob;
   if (action.type === 'set_job_stage' && action.stage) job.stage = action.stage;
-  if (action.type === 'advance_field_job' && action.transition) {
+  if (action.type === 'advance_field_job' && action.transition
+    && (!action.appointmentId || (action.appointmentId === job.appointmentId
+      && action.baseAppointmentRevision === job.appointmentRevision))) {
     const states = { start_travel: 'en_route', arrive: 'arrived', start_work: 'in_progress', finish: 'completed' } as const;
     if (action.transition !== 'finish' || ['scheduled', 'en_route', 'arrived', 'in_progress'].includes(job.appointmentStatus)) {
       job.appointmentStatus = states[action.transition];
     }
+    if (action.appointmentId) job.appointmentRevision = (job.appointmentRevision || 0) + 1;
     if (action.transition === 'start_work') job.stage = 'in_progress';
-    if (action.transition === 'finish') {
+    if (action.transition === 'finish' && !action.appointmentId && !job.collaborativeJob) {
       job.stage = 'completed';
       job.lifecycleStatus = 'completed';
     }
@@ -913,7 +940,7 @@ export async function queuedActions(mode: FieldAccessMode, limit = 50) {
 
 export async function resolveAction(
   id: string,
-  result: { status: string; code?: string; error?: string; retryAfterSeconds?: number; currentRevision?: number },
+  result: { status: string; code?: string; error?: string; retryAfterSeconds?: number; currentRevision?: number; jobState?: FieldJobState } & Partial<WorkPackAnswerConflictState>,
 ) {
   const db = await getDatabase();
   const now = new Date().toISOString();
@@ -931,13 +958,28 @@ export async function resolveAction(
         );
       }
       await db.runAsync('DELETE FROM action_queue WHERE id = ?', id);
+      if (row && result.jobState) {
+        const action = JSON.parse(row.payload) as OfflineAction;
+        const cached = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM jobs WHERE id = ? AND field_lane = ?', action.workOrderId, action.fieldLane || 'trade_team');
+        if (cached) {
+          const job = JSON.parse(cached.payload) as FieldJob;
+          if (Number.isSafeInteger(result.jobState.revision) && result.jobState.revision >= job.revision) {
+            Object.assign(job, result.jobState);
+            const pending = await db.getAllAsync<{ payload: string; updated_at: string }>(
+              "SELECT payload, updated_at FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry') ORDER BY created_at, rowid",
+              action.workOrderId, action.fieldLane || 'trade_team');
+            for (const queued of pending) applyQueuedProjection(job, JSON.parse(queued.payload) as OfflineAction, queued.updated_at);
+            await saveJob(db, job, now);
+          }
+        }
+      }
     });
     return;
   }
   if (result.status === 'conflict' && result.code === 'REVISION_CONFLICT' && row) {
     const action = JSON.parse(row.payload) as OfflineAction;
     const currentRevision = Number(result.currentRevision);
-    if (action.type === 'advance_field_job' && action.transition === 'finish'
+    if (action.type === 'advance_field_job' && action.transition === 'finish' && !action.appointmentId
       && Number.isInteger(currentRevision) && currentRevision >= 1) {
       const clientActionId = `act-${Crypto.randomUUID()}`;
       const rebased = { ...action, clientActionId, baseRevision: currentRevision };
@@ -953,11 +995,13 @@ export async function resolveAction(
     : '';
   await db.runAsync(
     `UPDATE action_queue SET status = ?, attempts = attempts + 1, retry_after = ?,
-      error_code = ?, error_message = ?, updated_at = ? WHERE id = ?`,
+      error_code = ?, error_message = ?, conflict_json = ?, updated_at = ? WHERE id = ?`,
     status,
     retryAfter,
     result.code || '',
     result.error || '',
+    result.code === 'WORK_PACK_ANSWER_CONFLICT' && result.conflicts && result.currentInstance && result.mergedPatches
+      ? JSON.stringify({ conflicts: result.conflicts, currentInstance: result.currentInstance, mergedPatches: result.mergedPatches }) : '',
     now,
     id,
   );
@@ -965,6 +1009,10 @@ export async function resolveAction(
 
 export async function retryConflict(id: string, action: OfflineAction) {
   const db = await getDatabase();
+  const problem = await db.getFirstAsync<{ error_code: string }>('SELECT error_code FROM action_queue WHERE id = ?', id);
+  if (['WORK_PACK_ANSWER_CONFLICT', 'VISIT_REVISION_CONFLICT', 'VISIT_SELECTION_REQUIRED'].includes(problem?.error_code || '')) {
+    throw new Error('Open the job and review the specific changes before trying again.');
+  }
   const now = new Date().toISOString();
   const lane = await workOrderFieldLane(db, action.workOrderId, action.fieldLane);
   const queuedAction = { ...action, fieldLane: lane };
@@ -998,6 +1046,74 @@ export async function listProblemActions() {
   return db.getAllAsync<QueueRow>(
     "SELECT * FROM action_queue WHERE status IN ('conflict', 'rejected') ORDER BY updated_at DESC",
   );
+}
+
+export async function listWorkPackAnswerConflicts(workOrderId: string): Promise<PendingWorkPackAnswerConflict[]> {
+  const rows = (await listProblemActions()).filter(row => row.work_order_id === workOrderId && row.error_code === 'WORK_PACK_ANSWER_CONFLICT');
+  return rows.flatMap(row => {
+    if (!row.conflict_json) return [];
+    const action = JSON.parse(row.payload) as OfflineAction;
+    const state = JSON.parse(row.conflict_json) as WorkPackAnswerConflictState;
+    if (!action.caseInstanceId || !state.currentInstance?.id || !Array.isArray(state.conflicts) || !Array.isArray(state.mergedPatches)) return [];
+    return [{ ...state, actionId: row.id, instanceKey: action.workPackInstanceKey || '', caseInstanceId: action.caseInstanceId }];
+  });
+}
+
+/** Keep only the server-verified local delta and values explicitly chosen by the worker. */
+export function resolvedWorkPackAnswerPatches(state: WorkPackAnswerConflictState, choices: readonly WorkPackAnswerConflictChoice[]) {
+  const key = (value: { sectionKey: string; repeatInstanceKey?: string; promptKey: string }) => JSON.stringify([value.sectionKey, value.repeatInstanceKey || '', value.promptKey]);
+  const selected = new Map(choices.map(choice => [key(choice), choice.use]));
+  if (selected.size !== state.conflicts.length || choices.length !== state.conflicts.length
+    || state.conflicts.some(conflict => !['local', 'saved'].includes(selected.get(key(conflict)) || ''))) {
+    throw new Error('Choose Mine or Saved for every changed answer.');
+  }
+  let patches: FieldWorkPackSectionPatch[] = state.mergedPatches.map(patch => ({ ...patch,
+    repeatInstanceKey: patch.repeatInstanceKey || '', remove: patch.remove === true, answers: { ...patch.answers } }));
+  for (const conflict of state.conflicts) {
+    if (selected.get(key(conflict)) === 'saved') continue;
+    const repeatInstanceKey = conflict.repeatInstanceKey || '';
+    if (!conflict.promptKey && repeatInstanceKey) {
+      if (conflict.local !== null && (!conflict.local || typeof conflict.local !== 'object' || Array.isArray(conflict.local))) {
+        throw new Error('The saved item needs to be refreshed before resolving it.');
+      }
+      patches = mergeSectionPatches(patches, [{ sectionKey: conflict.sectionKey, repeatInstanceKey,
+        remove: conflict.local === null, answers: conflict.local === null ? {} : conflict.local as Record<string, unknown> }]);
+    } else {
+      patches = mergeSectionPatches(patches, [{ sectionKey: conflict.sectionKey, repeatInstanceKey,
+        remove: false, answers: { [conflict.promptKey]: conflict.local } }]);
+    }
+  }
+  return patches;
+}
+
+export async function resolveWorkPackAnswerConflict(id: string, current: FieldActivityWorkPack, choices: readonly WorkPackAnswerConflictChoice[]) {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<QueueRow>("SELECT * FROM action_queue WHERE id = ? AND status = 'conflict' AND error_code = 'WORK_PACK_ANSWER_CONFLICT'", id);
+  if (!row?.conflict_json) throw new Error('This saved conflict changed. Reopen the job and review it.');
+  const action = JSON.parse(row.payload) as OfflineAction;
+  const state = JSON.parse(row.conflict_json) as WorkPackAnswerConflictState;
+  if (current.instance.workOrderId !== row.work_order_id || action.type !== 'work_pack_commit') {
+    throw new Error('This form does not belong to the saved job.');
+  }
+  if (current.instance.id !== state.currentInstance.id || current.instance.responseSha256 !== state.currentInstance.responseSha256) {
+    // Resend the original immutable draft to obtain a fresh comparison, without applying these outdated choices.
+    await db.runAsync("UPDATE action_queue SET status='queued', retry_after='' WHERE id=? AND payload=? AND conflict_json=? AND status='conflict'", id, row.payload, row.conflict_json);
+    throw new Error('This form changed again. Your original draft is syncing so you can review the latest choices.');
+  }
+  const patches = resolvedWorkPackAnswerPatches(state, choices);
+  const now = new Date().toISOString();
+  const next: OfflineAction = { ...action, clientActionId: 'act-' + Crypto.randomUUID(), caseInstanceId: current.instance.id,
+    expectedResponseSha256: current.instance.responseSha256, sectionPatches: patches };
+  if (Object.keys(action.dependencyResolutions || {}).length || action.artifactLinks?.length || action.referenceAcknowledgements?.length) {
+    throw new Error('Review the separate governed file or dependency change before retrying.');
+  }
+  const result = patches.length
+    ? await db.runAsync(`UPDATE action_queue SET id=?, payload=?, status='queued', attempts=0, dispatched_at='', retry_after='',
+      error_code='', error_message='', conflict_json='', created_at=?, updated_at=?
+      WHERE id=? AND payload=? AND conflict_json=? AND status='conflict'`,
+      next.clientActionId, JSON.stringify(next), now, now, id, row.payload, row.conflict_json)
+    : await db.runAsync("DELETE FROM action_queue WHERE id=? AND payload=? AND conflict_json=? AND status='conflict'", id, row.payload, row.conflict_json);
+  if (!result.changes) throw new Error('This saved conflict changed. Reopen the job and review it.');
 }
 
 export async function listWorkPackProblems(workOrderId: string) {

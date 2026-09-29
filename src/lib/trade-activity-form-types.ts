@@ -1,5 +1,6 @@
 export type ActivityAnswer = string | number | boolean;
 export type ActivityAnswers = Record<string, ActivityAnswer>;
+export type ActivityAnswerConflict = { fieldKey: string; label: string; base: ActivityAnswer | null; local: ActivityAnswer | null; saved: ActivityAnswer | null };
 export type ActivityPhase = "before" | "after";
 export type ActivityCondition = { all?: ActivityCondition[]; any?: ActivityCondition[]; fieldKey?: string; equals?: ActivityAnswer; notEquals?: ActivityAnswer; lessThanOrEqual?: number };
 export type ActivityApprovedProductSelector = {

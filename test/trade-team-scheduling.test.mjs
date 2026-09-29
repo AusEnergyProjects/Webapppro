@@ -125,7 +125,8 @@ test("several staged moves are validated and committed as one guarded schedule b
   assert.match(batch, /body\.changes\.length < 1 \|\| body\.changes\.length > 5/);
   assert.match(batch, /new Set\(appointmentIds\)\.size !== appointmentIds\.length/);
   assert.match(batch, /currentRows\.results\.length !== changes\.length/);
-  assert.match(batch, /new Set\(workOrderIds\)\.size !== workOrderIds\.length/);
+  assert.match(batch, /const jobChanges = new Map/);
+  assert.doesNotMatch(batch, /DUPLICATE_SCHEDULE_JOB/);
   assert.match(batch, /change\.expectedRevision !== Number\(current\.revision\)/);
   assert.match(batch, /assertCurrentScheduleAssignment\(access/);
   assert.match(batch, /assertScheduleTarget\(access, change\.memberId\)/);

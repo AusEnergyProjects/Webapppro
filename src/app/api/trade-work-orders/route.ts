@@ -654,6 +654,9 @@ export async function PATCH(request: Request) {
     }
 
     const requestedStage = body.stage === undefined ? String(current.stage) : cleanAdminText(body.stage, 30);
+    if (requestedStage === "completed" && await db.prepare(`SELECT 1 FROM trade_crm_appointments
+      WHERE work_order_id = ? AND firebase_uid = ? AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)
+      .bind(workOrderId, identity.uid).first()) return adminJson({ ok: false, code: "ACTIVE_VISITS_REMAIN", error: "Finish the remaining team visits before completing this job." }, 409);
     if(requestedStage==="cancelled")await assertTradeJobCanCancel(db,identity.uid,workOrderId);
     const requestedPriority = body.priority === undefined ? String(current.priority) : cleanAdminText(body.priority, 20);
     if (!STAGES.has(requestedStage) || !PRIORITIES.has(requestedPriority)) {

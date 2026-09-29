@@ -1,3 +1,4 @@
+import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -74,7 +75,7 @@ function loadTypescriptModule(path, mocks = {}) {
     fileName: path,
   }).outputText;
   const moduleRecord = { exports: {} };
-  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : certificateTestDependency(specifier) || {};
+  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : (specifier.includes("trade-job-collaboration") ? jobCollaboration : certificateTestDependency(specifier)) || {};
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
@@ -188,6 +189,8 @@ function fixture() {
     INSERT INTO trade_team_members VALUES
       ('member-a', 'owner-1', 'actor-a', 'a@example.test', 'Worker A', '["hot-water"]', '#111111', 'active'),
       ('member-b', 'owner-1', 'actor-b', 'b@example.test', 'Worker B', '["hot-water"]', '#222222', 'active');
+    ALTER TABLE trade_team_members ADD COLUMN can_view_field_evidence integer NOT NULL DEFAULT 0;
+    UPDATE trade_team_members SET can_view_field_evidence=1;
     INSERT INTO trade_crm_customers VALUES
       ('customer-a', 'owner-1', 'Alex', 'Alpha', '', 'alex@example.test', '0400000001', 'active'),
       ('customer-b', 'owner-1', 'Blair', 'Beta', '', 'blair@example.test', '0400000002', 'active');
@@ -368,6 +371,58 @@ test("save_schedule_changes atomically swaps two appointments and records every 
   assert.deepEqual(synced.map((item) => item.appointmentId).sort(), ["appointment-a", "appointment-b"]);
   assert.ok(synced.every((item) => item.options?.force === true));
 });
+
+function sharedJobFixture() {
+  const value = fixture();
+  value.database.prepare("UPDATE trade_crm_appointments SET work_order_id='job-a', assignee_member_id='member-b',assignee_label='Worker B' WHERE id='appointment-b'").run();
+  return value;
+}
+
+test("a batch moves two workers on the same job with one job revision and separate visit revisions", async () => {
+  const { database, d1 } = sharedJobFixture();
+  const response = await scheduleRoute(d1).PATCH(batchRequest([
+    { ...swappedChanges[0], startsAt: "2099-01-06T10:00" },
+    { ...swappedChanges[1], memberId: "member-b", startsAt: "2099-01-06T10:00" },
+  ]));
+  assert.equal(response.status, 200);
+  assert.deepEqual({ ...database.prepare("SELECT assignee_member_id,revision,scheduled_start FROM trade_work_orders WHERE id='job-a'").get() },
+    { assignee_member_id: "member-a", revision: 4, scheduled_start: "2099-01-06" });
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments WHERE work_order_id='job-a' AND revision=2 AND starts_at='2099-01-06T10:00'").get().count, 2);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointment_revisions").get().count, 4);
+});
+
+for (const action of ["schedule_appointment", "save_schedule_changes"]) {
+  test(`${action} moves a secondary worker independently without replacing the lead or lead time`, async () => {
+    const { database, d1 } = sharedJobFixture();
+    const change = { ...swappedChanges[1], memberId: "member-b", startsAt: "2099-01-07T14:00" };
+    const request = action === "save_schedule_changes" ? batchRequest([change]) : scheduleMutationRequest({ action, ...change });
+    const response = await scheduleRoute(d1).PATCH(request);
+    assert.equal(response.status, 200);
+    assert.deepEqual({ ...database.prepare("SELECT assignee_member_id,assignee_label,scheduled_start,revision FROM trade_work_orders WHERE id='job-a'").get() },
+      { assignee_member_id: "member-a", assignee_label: "Worker A", scheduled_start: "2099-01-05", revision: 4 });
+    assert.equal(database.prepare("SELECT starts_at FROM trade_crm_appointments WHERE id='appointment-a'").get().starts_at, "2099-01-05T10:00");
+    assert.equal(database.prepare("SELECT starts_at FROM trade_crm_appointments WHERE id='appointment-b'").get().starts_at, "2099-01-07T14:00");
+  });
+}
+
+for (const race of ["visit", "unavailability"]) {
+  test(`the entire shared-job move rolls back when ${race} changes during save`, async () => {
+    const { database, d1 } = sharedJobFixture();
+    d1.setBeforeBatch(() => {
+      if (race === "visit") database.prepare("UPDATE trade_crm_appointments SET revision=9 WHERE id='appointment-b'").run();
+      else database.prepare("INSERT INTO trade_team_unavailability VALUES ('leave','owner-1','member-b','2099-01-06T09:00','2099-01-06T17:00','Leave','owner-1','2026-01-01','2026-01-01')").run();
+    });
+    const response = await scheduleRoute(d1).PATCH(batchRequest([
+      { ...swappedChanges[0], startsAt: "2099-01-06T10:00" },
+      { ...swappedChanges[1], memberId: "member-b", startsAt: "2099-01-06T10:00" },
+    ]));
+    assert.equal(response.status, 409);
+    assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-a'").get().revision, 3);
+    assert.equal(database.prepare("SELECT starts_at FROM trade_crm_appointments WHERE id='appointment-a'").get().starts_at, "2099-01-05T10:00");
+    assert.equal(database.prepare("SELECT starts_at FROM trade_crm_appointments WHERE id='appointment-b'").get().starts_at, "2099-01-05T11:00");
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointment_revisions").get().count, 0);
+  });
+}
 
 test("save_schedule_changes rolls back every requested move when one appointment changes concurrently", async () => {
   const { database, d1 } = fixture();

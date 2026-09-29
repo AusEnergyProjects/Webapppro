@@ -14,7 +14,7 @@ import {
   setSetting,
 } from '@/lib/database';
 import { deviceRegistration, forgetPushToken, getDeviceId } from '@/lib/device';
-import type { FieldAccessMode, OfflineAction, SyncResponse } from '@/lib/types';
+import type { FieldAccessMode, FieldJobState, WorkPackAnswerConflictState, OfflineAction, SyncResponse } from '@/lib/types';
 import { processUploadQueue } from '@/lib/uploads';
 import { processRentalSaveQueue, purgeDeletedRentalJob, restoreRentalJobAccess } from '@/lib/rental-save-queue';
 import { processActivityFormCompletionQueue } from '@/lib/activity-form-completion';
@@ -86,6 +86,7 @@ export async function removeDeletedFieldJob(workOrderId: string) {
 function actionForServer(row: { payload: string }) {
   const serverAction = { ...(JSON.parse(row.payload) as OfflineAction) };
   delete serverAction.fieldLane;
+  delete serverAction.workPackInstanceKey;
   return serverAction;
 }
 
@@ -114,7 +115,7 @@ async function sendActions(mode: FieldAccessMode) {
   if (!rows.length) return;
   const actions = rows.map(actionForServer);
   const response = await apiRequest<{
-    results: { clientActionId: string; status: string; code?: string; error?: string; retryAfterSeconds?: number }[];
+    results: ({ clientActionId: string; status: string; code?: string; error?: string; retryAfterSeconds?: number; currentRevision?: number; jobState?: FieldJobState } & Partial<WorkPackAnswerConflictState>)[];
   }>(syncPath(mode), {
     method: 'POST',
     body: JSON.stringify({
