@@ -17,6 +17,11 @@ export function teamAuthErrorMessage(error: unknown): string {
     case "auth/invalid-email": return "Enter a valid email address.";
     case "auth/network-request-failed": return "The connection was interrupted. Check your internet connection and try again.";
     case "auth/too-many-requests": return "Too many attempts. Please wait a few minutes, then try again.";
+    case "auth/quota-exceeded": return "The email sending limit has been reached. Try again later, or use Continue with Google. If this continues, ask your business administrator for help.";
+    case "auth/unauthorized-continue-uri":
+    case "auth/invalid-continue-uri":
+    case "auth/missing-continue-uri":
+      return "The secure email return link is not configured correctly. Use Continue with Google, or ask your business administrator to contact TLink support.";
     case "auth/user-disabled": return "This login has been disabled. Ask your business administrator for help.";
     case "auth/popup-blocked": return "Your browser blocked Google sign-in. Allow the sign-in window and try again, or use your email.";
     case "auth/popup-closed-by-user": return "Google sign-in was closed. Try again, or use your email.";

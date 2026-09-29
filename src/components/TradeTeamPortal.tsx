@@ -30,6 +30,10 @@ type Invitation = { email: string; displayName: string; businessName: string; ex
 
 const stages = [["backlog", "Planning"], ["ready", "Ready"], ["scheduled", "Scheduled"], ["in_progress", "On site"], ["blocked", "Waiting"], ["completed", "Complete"], ["cancelled", "Cancelled"]];
 
+function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
+  return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" />{visible && <path d="m3 3 18 18" />}</svg>;
+}
+
 export function TradeTeamPortal() {
   const { resolver, captureMfaError, clearMfaChallenge } = useFirebaseMfaChallenge();
   const [mfaRequired, setMfaRequired] = useState(false);
@@ -43,13 +47,21 @@ export function TradeTeamPortal() {
   const [authRevision, setAuthRevision] = useState(0);
   const [mode, setMode] = useState<"signin" | "create">("signin");
   const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordMismatch, setPasswordMismatch] = useState(false);
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<Result>({}); const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(""); const [status, setStatus] = useState("");
   const [selectedJobId, setSelectedJobId] = useState("");
+  const clearPasswordFields = useCallback(() => {
+    setPassword(""); setConfirmPassword(""); setShowPassword(false); setShowConfirmPassword(false); setPasswordMismatch(false);
+  }, []);
   async function leaveAccount() {
     try {
       await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {});
       await signOut(firebaseAuth);
-      setData({}); setStatus(""); setPassword("");
+      setData({}); setStatus(""); clearPasswordFields();
     } catch (failure) { setStatus(failure instanceof Error ? failure.message : "Sign out could not be completed. Try again."); }
   }
   const [portalView, setPortalView] = useState<"work" | "business" | "team" | "training" | "messages">("work");
@@ -74,13 +86,13 @@ export function TradeTeamPortal() {
       const result = await response.json() as { invitation?: Invitation; error?: string };
       if (!response.ok || !result.invitation) throw new Error(result.error || "This invitation is no longer available. Ask your business to resend it.");
       if (active) {
-        setInvitation(result.invitation); setEmail(result.invitation.email); setName(result.invitation.displayName); setMode("create");
+        setInvitation(result.invitation); setEmail(result.invitation.email); setName(result.invitation.displayName); setMode("create"); clearPasswordFields();
       }
       })().catch(error => { if (active) { setInvitation(null); setInvitationError(error instanceof Error ? error.message : "The invitation could not be opened. Please try again."); } })
         .finally(() => { if (active) setInvitationReady(true); });
     });
     return () => { active = false; window.cancelAnimationFrame(frame); };
-  }, [authReady, user]);
+  }, [authReady, clearPasswordFields, user]);
 
   const refreshVerification = useCallback(async (showStatus = false) => {
     if (!user) return;
@@ -226,26 +238,35 @@ export function TradeTeamPortal() {
       setStatus(`Your login is saved, but the verification email could not be sent. ${teamAuthErrorMessage(error)} Use Resend verification email below.`);
     }
   }
-  async function google() { setBusy("auth"); setStatus("Opening Google sign-in..."); try { const provider = new GoogleAuthProvider(); provider.setCustomParameters({ prompt: "select_account", ...(invitation ? { login_hint: invitation.email } : {}) }); await signInWithPopup(firebaseAuth, provider); } catch (error) { if (!captureMfaError(error)) setStatus(teamAuthErrorMessage(error)); } finally { setBusy(""); } }
+  async function google() { setBusy("auth"); setStatus("Opening Google sign-in..."); try { const provider = new GoogleAuthProvider(); provider.setCustomParameters({ prompt: "select_account", ...(invitation ? { login_hint: invitation.email } : {}) }); await signInWithPopup(firebaseAuth, provider); clearPasswordFields(); } catch (error) { if (!captureMfaError(error)) setStatus(teamAuthErrorMessage(error)); } finally { setBusy(""); } }
   async function emailAuth(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy("auth"); setStatus(mode === "create" ? "Creating your team login..." : "Signing in...");
+    event.preventDefault();
+    if (mode === "create" && password !== confirmPassword) {
+      setPasswordMismatch(true); setStatus("Your passwords do not match. Enter the same password in both fields."); confirmPasswordRef.current?.focus(); return;
+    }
+    setPasswordMismatch(false); setBusy("auth"); setStatus(mode === "create" ? "Creating your team login..." : "Signing in...");
     try {
       if (mode === "create") {
         const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password);
         await updateProfile(credential.user, { displayName: name.trim() });
         await sendVerification(credential.user);
       } else await signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password);
-      setPassword("");
+      clearPasswordFields();
     } catch (error) {
-      if (teamAuthErrorCode(error) === "auth/email-already-in-use") { setMode("signin"); setPassword(""); }
+      if (teamAuthErrorCode(error) === "auth/email-already-in-use") { setMode("signin"); clearPasswordFields(); }
       if (!captureMfaError(error)) setStatus(teamAuthErrorMessage(error));
     } finally { setBusy(""); }
   }
   async function reset() {
-    if (!email.trim()) { setStatus("Enter your email first."); return; }
-    setBusy("reset");
-    try { await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase(), emailActionSettings()); setStatus("Check your email for a secure link to set a new password, then return here to sign in."); }
-    catch (error) { setStatus(`The password reset email could not be sent. ${teamAuthErrorMessage(error)}`); }
+    const recipient = email.trim().toLowerCase();
+    if (!recipient) { setStatus("Enter your email first."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) { setStatus("Enter a valid email address before resetting your password."); return; }
+    setBusy("reset"); setStatus(`Requesting a password reset for ${recipient}...`);
+    try {
+      await sendPasswordResetEmail(firebaseAuth, recipient, emailActionSettings());
+      setStatus(`Password reset request accepted for ${recipient}. If this email has a login, check your Inbox and Spam for a message from noreply@australian-energy-assessments.firebaseapp.com. You can also use Continue with Google if that is how you joined.`);
+    }
+    catch (error) { setStatus(`We could not confirm the password reset request. ${teamAuthErrorMessage(error)}`); }
     finally { setBusy(""); }
   }
   async function update(body: Record<string, unknown>, key: string, success: string) { if (!user) return; setBusy(key); try { const token = await user.getIdToken(); const response = await fetch("/api/trade-team", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }); const result = await response.json().catch(() => ({})) as Result; if (!response.ok) throw new Error(result.error || "The update could not be saved."); const selectedCapability = data.jobs?.find((job) => job.id === selectedJobId)?.serviceCategory || ""; const refreshed = await loadWork(selectedCapability, data.work?.page || 1); setData(refreshed); setSelectedJobId((current) => refreshed.jobs?.some((job) => job.id === current) ? current : refreshed.jobs?.[0]?.id || ""); setStatus(success); } catch (error) { setStatus(error instanceof Error ? error.message : "The update could not be saved."); } finally { setBusy(""); } }
@@ -274,12 +295,13 @@ export function TradeTeamPortal() {
             <h2>{mode === "create" ? "Set your new password" : "Sign in to your team"}</h2>
             {mode === "create" && !invitation && <label><span>Your name</span><input value={name} autoComplete="name" required onChange={(event) => setName(event.target.value)} /></label>}
             <label><span>Invited email</span><input type="email" autoComplete="email" value={email} readOnly={Boolean(invitation)} required onChange={(event) => setEmail(event.target.value)} /></label>
-            <label><span>{mode === "create" ? "New password" : "Password"}</span><input type="password" autoComplete={mode === "create" ? "new-password" : "current-password"} minLength={mode === "create" ? 8 : undefined} required value={password} onChange={(event) => setPassword(event.target.value)} />{mode === "create" && <small>Use at least 8 characters. This is the password you will use to sign in.</small>}</label>
+            <label htmlFor="team-auth-password"><span>{mode === "create" ? "New password" : "Password"}</span><span className="team-auth-password-control"><input id="team-auth-password" type={showPassword ? "text" : "password"} autoComplete={mode === "create" ? "new-password" : "current-password"} minLength={mode === "create" ? 8 : undefined} required value={password} onChange={(event) => { setPassword(event.target.value); setPasswordMismatch(false); }} /><button className="team-auth-password-visibility" type="button" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} aria-controls="team-auth-password" onClick={() => setShowPassword(current => !current)}><PasswordVisibilityIcon visible={showPassword} /></button></span>{mode === "create" && <small>Use at least 8 characters. This is the password you will use to sign in.</small>}</label>
+            {mode === "create" && <label htmlFor="team-auth-confirm-password"><span>Confirm new password</span><span className="team-auth-password-control"><input id="team-auth-confirm-password" ref={confirmPasswordRef} type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" minLength={8} required value={confirmPassword} aria-invalid={passwordMismatch} aria-describedby={passwordMismatch ? "team-auth-password-error" : undefined} onChange={(event) => { setConfirmPassword(event.target.value); setPasswordMismatch(false); }} /><button className="team-auth-password-visibility" type="button" aria-label={showConfirmPassword ? "Hide confirmed password" : "Show confirmed password"} aria-pressed={showConfirmPassword} aria-controls="team-auth-confirm-password" onClick={() => setShowConfirmPassword(current => !current)}><PasswordVisibilityIcon visible={showConfirmPassword} /></button></span>{passwordMismatch && <small id="team-auth-password-error" role="alert">Your passwords do not match. Enter the same password in both fields.</small>}</label>}
             <button className="btn" disabled={Boolean(busy)}>{busy === "auth" ? "Please wait..." : mode === "create" ? "Join team" : "Sign in"}</button>
-            {mode === "signin" && <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => void reset()}>{busy === "reset" ? "Sending reset email..." : "Reset password"}</button>}
+            <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => void reset()}>{busy === "reset" ? "Requesting reset..." : "Reset password"}</button>
           </form>
           {status && <p role="status">{status}</p>}
-          <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => { setMode(mode === "create" ? "signin" : "create"); setStatus(""); setPassword(""); }}>{mode === "create" ? "Already have a login? Sign in" : "First time here? Set up your login"}</button>
+          <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => { setMode(mode === "create" ? "signin" : "create"); setStatus(""); clearPasswordFields(); }}>{mode === "create" ? "Already have a login? Sign in" : "First time here? Set up your login"}</button>
         </div>
       </section>
       : !emailVerified ? <section className="team-auth-shell"><div className="team-auth-intro"><span>One final step</span><h1>Confirm your email</h1><p>Your login is ready. Confirm that {user.email} is yours to open your team&apos;s workspace.</p></div><div className="team-auth-card"><h2>Check your inbox</h2><p>Open the verification email, tap the link and return here. Your team&apos;s saved access will then open automatically.</p>{status && <p role="status">{status}</p>}<button className="btn" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verify"); await refreshVerification(true); setBusy(""); }}>{busy === "verify" ? "Checking..." : "I've verified my email"}</button><button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verification-email"); await sendVerification(user); setBusy(""); }}>{busy === "verification-email" ? "Sending..." : "Resend verification email"}</button><button className="customer-reset-link" type="button" onClick={() => void leaveAccount()}>Use another account</button></div></section>
