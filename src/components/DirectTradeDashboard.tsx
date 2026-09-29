@@ -16,7 +16,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
-import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
+import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
 import type { FinanceView } from "./TradeFinanceWorkspace";
 import { TLinkNavigationIcon } from "./TLinkNavigationIcon";
@@ -52,7 +52,7 @@ import {
   TLINK_COLOUR_MODE_STORAGE_KEY,
   type TLinkColourMode,
   writeTLinkColourMode,
-} from "@/lib/tlink-colour-mode";
+} from "@/lib/trade-device-client";
 
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
 import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlerts";

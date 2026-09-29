@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { onIdTokenChanged, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
-import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
+import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { createTradeBusinessFetch, readTradeBusinessSelection, resolveTradeBusinessSelection, saveTradeBusinessSelection, type TradeBusinessChoice } from "@/lib/trade-business-client";
 import styles from "./TradeBusinessProvider.module.css";
 

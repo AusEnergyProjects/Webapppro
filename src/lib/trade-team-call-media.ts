@@ -1,4 +1,4 @@
-import type { TradeBrowserDevice } from "./trade-notification-client";
+import type { TradeBrowserDevice } from "./trade-device-client";
 
 export type TeamCallMode = "audio" | "video";
 export type CameraFacing = "user" | "environment";

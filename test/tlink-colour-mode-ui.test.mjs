@@ -7,7 +7,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const dashboardPage = read("../src/app/direct-trade/dashboard/page.tsx");
 const rootLayout = read("../src/app/layout.tsx");
-const colourModeBoundary = read("../src/lib/tlink-colour-mode.ts");
+const colourModeBoundary = read("../src/lib/trade-device-client.ts");
 const colourModeStyles = read("../src/app/tlink-colour-mode.css");
 const teamStyles = read("../src/components/TradeTeamSettings.module.css");
 const protectedWorkspaceStyles = read(
@@ -111,7 +111,7 @@ test("the stable preference key is wired through early bootstrap and live portal
   );
   assert.match(
     dashboardPage,
-    /import \{ TLINK_COLOUR_MODE_STORAGE_KEY \} from "@\/lib\/tlink-colour-mode";/,
+    /import \{ TLINK_COLOUR_MODE_STORAGE_KEY \} from "@\/lib\/trade-device-client";/,
   );
   assert.match(
     dashboardPage,

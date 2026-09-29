@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
-const source=fs.readFileSync(new URL('../src/lib/trade-notification-client.ts',import.meta.url),'utf8');
+const source=fs.readFileSync(new URL('../src/lib/trade-device-client.ts',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 function fixture(options={}){
   const record={exports:{}},storage=new Map([['tlink-push-subscription-id','subscription-fixture']]),requests=[],closed=[];

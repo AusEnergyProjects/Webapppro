@@ -3,7 +3,7 @@
 import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { tradeBrowserDevice, notificationErrorMessage, notificationTimeout, readTradePushSubscriptionId as localId, saveTradePushSubscriptionId as saveLocalId } from "@/lib/trade-notification-client";
+import { tradeBrowserDevice, notificationErrorMessage, notificationTimeout, readTradePushSubscriptionId as localId, saveTradePushSubscriptionId as saveLocalId } from "@/lib/trade-device-client";
 import styles from "./TradeNotificationSettings.module.css";
 
 type SavedSubscription = { id: string; messages: boolean; calls: boolean; enabled: boolean };

@@ -5,7 +5,7 @@ import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvide
 import { useCallback, useEffect, useRef, useState } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
-import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
+import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { TradeMessagesWorkspace } from "./TradeMessagesWorkspace";
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
 import { TradeMessageAlerts } from "./TradeMessageAlerts";

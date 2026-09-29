@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { DirectTradeDashboard } from "@/components/DirectTradeDashboard";
-import { TLINK_COLOUR_MODE_STORAGE_KEY } from "@/lib/tlink-colour-mode";
+import { TLINK_COLOUR_MODE_STORAGE_KEY } from "@/lib/trade-device-client";
 
 export const metadata: Metadata = {
   title: "TLink trade dashboard",

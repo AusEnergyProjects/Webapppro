@@ -4,7 +4,7 @@ import {
   readTLinkColourMode,
   TLINK_COLOUR_MODE_STORAGE_KEY,
   writeTLinkColourMode,
-} from "../src/lib/tlink-colour-mode.ts";
+} from "../src/lib/trade-device-client.ts";
 
 test("TLink colour mode reads only the exact persisted values", () => {
   assert.equal(TLINK_COLOUR_MODE_STORAGE_KEY, "tlink-colour-mode");

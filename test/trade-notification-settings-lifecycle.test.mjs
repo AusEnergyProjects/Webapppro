@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
-import {tradeBrowserDevice} from '../src/lib/trade-notification-client.ts';
+import {tradeBrowserDevice} from '../src/lib/trade-device-client.ts';
 
 const compile = path => ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 const component = compile('../src/components/TradeNotificationSettings.tsx');
-const client = compile('../src/lib/trade-notification-client.ts');
+const client = compile('../src/lib/trade-device-client.ts');
 const key = Buffer.from([4,...Array.from({length:64},(_,i)=>i)]).toString('base64url');
 const saved = {id:'device_1',messages:true,calls:true,enabled:true};
 const text = node => node == null || typeof node === 'boolean' ? '' : typeof node !== 'object' ? String(node) : Array.isArray(node) ? node.map(text).join(' ') : text(node.props?.children);
@@ -35,7 +35,7 @@ function harness(options={}) {
   const localStorage={getItem:name=>storage.get(name)||null,setItem:(name,value)=>storage.set(name,value),removeItem:name=>storage.delete(name)};
   const helpers={};
   Function('exports','setTimeout','clearTimeout','localStorage',client)(helpers,(callback,ms)=>{const id=Symbol();timers.set(id,{callback,ms});return id;},id=>timers.delete(id),localStorage);
-  const dependencies={react,'react/jsx-runtime':jsx,'./TradeBusinessProvider':{useTradeBusinessFetch:()=>fetch},'@/lib/trade-notification-client':{...helpers,tradeBrowserDevice},'./TradeNotificationSettings.module.css':{default:{}}};
+  const dependencies={react,'react/jsx-runtime':jsx,'./TradeBusinessProvider':{useTradeBusinessFetch:()=>fetch},'@/lib/trade-device-client':{...helpers,tradeBrowserDevice},'./TradeNotificationSettings.module.css':{default:{}}};
   const exports={};Function('require','exports','window','navigator','Notification',component)(id=>{assert.ok(dependencies[id],id);return dependencies[id];},exports,window,navigator,Notification);
   let auth=options.auth|| (async()=>({Authorization:'Bearer fixture-user'}));
   const render=()=>{cursor=0;const tree=exports.TradeNotificationSettings({getAuthHeaders:auth});for(const effect of pending.splice(0))effect();return tree;};

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {tradeBrowserDevice} from '../src/lib/trade-notification-client.ts';
+import {tradeBrowserDevice} from '../src/lib/trade-device-client.ts';
 
 test('iOS browser guidance distinguishes Chrome, Safari, Edge, Firefox and embedded webviews',()=>{
   for(const [version,browser] of [['CriOS/140.0','chrome'],['Version/18.5','safari'],['EdgiOS/140.0','edge'],['FxiOS/140.0','firefox']]){

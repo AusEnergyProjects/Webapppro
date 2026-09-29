@@ -6,7 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { User } from "firebase/auth";
 import { TeamCallConnections, type CallRemote } from "@/lib/trade-team-call-client";
 import { openTeamCallMedia, TeamCallRinger, teamCallCameraConstraints, teamCallMediaConstraints, teamCallMediaError, teamCallNeedsPermission, teamCallPolicyBlocked, teamCallPermissionState, teamCallPermissionSteps, type CameraFacing } from "@/lib/trade-team-call-media";
-import { tradeBrowserDevice } from "@/lib/trade-notification-client";
+import { tradeBrowserDevice } from "@/lib/trade-device-client";
 import type { TeamCall, TeamCallSignal } from "@/lib/trade-team-calls";
 
 type Mode = "audio" | "video";

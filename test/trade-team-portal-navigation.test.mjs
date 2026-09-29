@@ -14,7 +14,7 @@ const executable = ts.transpileModule(functions.map(node => node.getText(source)
 }).outputText;
 const jsx = (type, props, ...children) => ({ type, props: { ...props, children } });
 const context = {
-  React: { createElement: jsx }, styles: { navigation: 'navigation' },
+  React: { createElement: jsx },
   TLinkNavigationIcon: 'Icon', TradeMessageUnreadBadge: 'UnreadBadge',
 };
 runInNewContext(`${executable}\nglobalThis.renderNavigation = TeamWorkspaceNavigation;`, context);
@@ -69,7 +69,7 @@ test('map design and team management retain their distinct permission gates', ()
 test('authenticated team shell exposes installation and theme while public invitation chrome stays conditional', () => {
   assert.match(portal, /!teamReady && <TLinkHeader active="team"/);
   assert.match(portal, /!teamReady && <SiteFooter>/);
-  assert.match(portal, /className=\{styles\.getApp\} href="\/direct-trade\/field-app"/);
+  assert.match(portal, /className="tlink-team-getApp" href="\/direct-trade\/field-app"/);
   assert.match(portal, /aria-label="Night mode" aria-pressed=\{colourMode === "night"\}/);
   assert.match(portal, /readTLinkColourMode\(window\.localStorage\)/);
   assert.match(portal, /writeTLinkColourMode\(window\.localStorage, next\)/);
@@ -81,5 +81,5 @@ test('direct tools retain the original staff permission object and save map desi
   assert.match(portal, /mapWorkspace=\{portalView === "map"\}/);
   assert.match(portal, /onRegisterMapSave=\{registerMapSave\}/);
   assert.match(portal, /mapNavigation\.run\(\(\) => setPortalViewState\(view\)\)/);
-  assert.match(portal, /permissions\?\.canViewQuotes && <button className=\{styles\.quoteButton\}/);
+  assert.match(portal, /permissions\?\.canViewQuotes && <button className="tlink-team-quoteButton"/);
 });

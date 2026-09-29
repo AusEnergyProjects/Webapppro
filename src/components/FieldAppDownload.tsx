@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { tradeBrowserDevice } from "@/lib/trade-notification-client";
+import { tradeBrowserDevice } from "@/lib/trade-device-client";
 
 type ReleasePolicy = { latestVersion?: string; updateUrl?: string };
 type Platform = "ios" | "android" | "desktop";
