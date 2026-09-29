@@ -130,7 +130,7 @@
 .composerToolbar { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
 .composerToolbar label { max-width: min(100%, 290px); }
 .customerConversation .composerToolbar select { background: var(--trade-surface-soft, #f3f8f6); border-color: transparent; border-radius: 999px; font-size: 11px; min-height: 34px; padding: 6px 28px 6px 12px; }
-.composerToolbar > small { font-size: 10px; letter-spacing: .08em; }
+.composerToolbar > small { flex-shrink: 0; white-space: nowrap; font-size: 10px; letter-spacing: .08em; }
 .composerInput { align-items: flex-end; background: var(--trade-field, #fff); border: 1px solid var(--trade-line, #abcac1); border-radius: 24px; display: flex; gap: 8px; padding: 7px; }
 .composerInput:focus-within { border-color: var(--sms-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sms-blue) 12%, transparent); }
 .composerInput label { flex: 1; }
