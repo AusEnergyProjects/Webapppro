@@ -10,13 +10,13 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
-  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
   type User,
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib/tlink-password-reset-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import {
   AdminNotificationInbox,
@@ -404,14 +404,14 @@ export function AdminOperationsPortal() {
       setStatus("Enter your operations email address first.");
       return;
     }
-    setStatus("Sending secure password reset instructions...");
+    setStatus("Requesting a secure password reset...");
     try {
-      await sendPasswordResetEmail(firebaseAuth, accountEmail);
+      await requestTLinkPasswordReset(accountEmail, "/operations/control-centre");
       setStatus(
-        "Password reset instructions have been sent. Use the same email so your existing operations identity is preserved.",
+        "Request accepted. If this email has a login, check Inbox and Spam for “Reset your TLink password” from TLink. Use the same email to retain your operations access.",
       );
     } catch (error) {
-      setStatus(authMessage(error));
+      setStatus(tlinkPasswordResetErrorMessage(error));
     }
   }
 

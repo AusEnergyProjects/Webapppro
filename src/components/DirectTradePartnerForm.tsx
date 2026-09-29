@@ -8,7 +8,6 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
-  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -16,6 +15,7 @@ import {
   type User,
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib/tlink-password-reset-client";
 import { FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import { Field, SiteFooter } from "./ComparatorChrome";
 import { TLinkHeader } from "./TLinkChrome";
@@ -208,10 +208,10 @@ export function DirectTradePartnerForm() {
     }
     setAuthBusy(true);
     try {
-      await sendPasswordResetEmail(firebaseAuth, email);
-      setAuthStatus("Password reset instructions have been sent.");
+      await requestTLinkPasswordReset(email, "/direct-trade/partners");
+      setAuthStatus("Request accepted. If this email has a login, check Inbox and Spam for “Reset your TLink password” from TLink.");
     } catch (error) {
-      setAuthStatus(authMessage(error));
+      setAuthStatus(tlinkPasswordResetErrorMessage(error));
     } finally {
       setAuthBusy(false);
     }

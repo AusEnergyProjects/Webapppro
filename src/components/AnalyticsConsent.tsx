@@ -15,6 +15,7 @@ const PRIVATE_PATH_PREFIXES = [
   "/account",
   "/creditex",
   "/direct-trade/dashboard",
+  "/direct-trade/reset-password",
   "/direct-trade/team",
   "/job-information",
   "/operations",

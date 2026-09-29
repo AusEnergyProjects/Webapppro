@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { teamAuthErrorCode, teamAuthErrorMessage } from "../src/components/trade-team-auth-errors.ts";
+import { TLinkPasswordResetError, tlinkPasswordResetErrorMessage } from "../src/lib/tlink-password-reset-client.ts";
 
 const portal = readFileSync(new URL("../src/components/TradeTeamPortal.tsx", import.meta.url), "utf8");
 
@@ -12,7 +13,7 @@ test("existing Firebase accounts offer their existing sign-in and a secure passw
   assert.match(message, /Continue with Google/);
   assert.match(message, /Reset password/);
   assert.match(portal, /teamAuthErrorCode\(error\) === "auth\/email-already-in-use"\) \{ setMode\("signin"\); clearPasswordFields\(\);/);
-  assert.match(portal, /sendPasswordResetEmail\(firebaseAuth, recipient, emailActionSettings\(\)\)/);
+  assert.match(portal, /requestTLinkPasswordReset\(recipient, emailActionSettings\(\)\.url\)/);
 });
 
 test("password, connection and rate-limit failures explain the appropriate recovery", () => {
@@ -130,8 +131,8 @@ function requestPasswordReset(email, provider = async () => {}) {
   const completion = runInNewContext(`(async () => { ${handler}\nawait reset(); })()`, {
     email, firebaseAuth: "test-auth", emailActionSettings: () => actionSettings,
     setStatus: value => messages.push(value), setBusy: value => calls.push(["busy", value]),
-    sendPasswordResetEmail: async (...args) => { calls.push(["request", ...args]); return await provider(); },
-    teamAuthErrorMessage,
+    requestTLinkPasswordReset: async (...args) => { calls.push(["request", ...args]); return await provider(); },
+    tlinkPasswordResetErrorMessage,
   });
   return { calls, messages, completion, actionSettings };
 }
@@ -139,11 +140,11 @@ function requestPasswordReset(email, provider = async () => {}) {
 test("password reset normalizes the exact recipient and preserves the invitation return settings", async () => {
   const { calls, messages, completion, actionSettings } = requestPasswordReset("  Member@Example.test  ");
   await completion;
-  assert.deepEqual(calls.find(([action]) => action === "request"), ["request", "test-auth", "member@example.test", actionSettings]);
+  assert.deepEqual(calls.find(([action]) => action === "request"), ["request", "member@example.test", actionSettings.url]);
   assert.match(messages.at(-1), /request accepted for member@example\.test/);
   assert.match(messages.at(-1), /If this email has a login/);
   assert.match(messages.at(-1), /Inbox and Spam/);
-  assert.match(messages.at(-1), /noreply@australian-energy-assessments\.firebaseapp\.com/);
+  assert.match(messages.at(-1), /Reset your TLink password.*from TLink.*press Reset password/);
   assert.match(messages.at(-1), /Continue with Google/);
   assert.doesNotMatch(messages.at(-1), /email (?:was )?sent|delivered|inbox confirmed/i);
 });
@@ -158,15 +159,17 @@ test("password reset replaces stale status immediately and waits for the provide
   assert.match(messages.at(-1), /request accepted/);
 });
 
-test("rejected reset requests never show success and give quota or return-link recovery", async () => {
-  for (const code of ["auth/quota-exceeded", "auth/unauthorized-continue-uri", "auth/invalid-continue-uri", "auth/missing-continue-uri", "auth/network-request-failed"]) {
-    const { calls, messages, completion } = requestPasswordReset("member@example.test", async () => { throw { code }; });
+test("rejected reset requests never show success and give safe actionable recovery", async () => {
+  for (const reason of ["invalid-email", "rate-limited", "unavailable", "connection", "failed"]) {
+    const { calls, messages, completion } = requestPasswordReset("member@example.test", async () => { throw new TLinkPasswordResetError(reason); });
     await completion;
     assert.match(messages.at(-1), /could not confirm/);
     assert.doesNotMatch(messages.join(" "), /request accepted|email sent/);
     assert.deepEqual(calls.at(-1), ["busy", ""]);
-    if (code.includes("continue-uri")) assert.match(messages.at(-1), /return link is not configured correctly/);
-    if (code === "auth/quota-exceeded") assert.match(messages.at(-1), /email sending limit/);
+    if (reason === "unavailable") assert.match(messages.at(-1), /temporarily unavailable/);
+    if (reason === "rate-limited") assert.match(messages.at(-1), /wait a few minutes/);
+    if (reason === "invalid-email") assert.match(messages.at(-1), /valid email/);
+    if (reason === "connection") assert.match(messages.at(-1), /internet connection/);
   }
 });
 

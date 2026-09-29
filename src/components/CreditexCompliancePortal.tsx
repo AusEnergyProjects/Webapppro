@@ -6,7 +6,6 @@ import Image from "next/image";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
-  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -31,6 +30,7 @@ import {
 } from "@/lib/australian-government-program-catalogue";
 import { requestWithCreditexTokenRecovery } from "@/lib/creditex-auth-token";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib/tlink-password-reset-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
@@ -900,11 +900,11 @@ export function CreditexCompliancePortal() {
     }
     setBusy("auth");
     try {
-      await sendPasswordResetEmail(firebaseAuth, accountEmail);
-      setNotice("Password reset instructions have been sent.");
+      await requestTLinkPasswordReset(accountEmail, "/creditex/compliance");
+      setNotice("Request accepted. If this email has a login, check Inbox and Spam for “Reset your TLink password” from TLink.");
       setNoticeKind("success");
     } catch (error) {
-      setNotice(authMessage(error));
+      setNotice(tlinkPasswordResetErrorMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");

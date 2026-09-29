@@ -226,7 +226,7 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /AdminWorkspaceNavigation/);
   assert.match(read("../src/components/AdminWorkspaceNavigation.tsx"), /id: "database", label: "Database", ownerOnly: true/);
   assert.match(databaseWorkspace, /Live database console/);
-  assert.match(portal, /sendPasswordResetEmail/);
+  assert.match(portal, /requestTLinkPasswordReset\(accountEmail, "\/operations\/control-centre"\)/);
   assert.match(portal, /Forgot password\?/);
   assert.match(portal, /href="#operations-inbox"/);
   assert.match(portal, /aria-label=\{`Open operations inbox/);

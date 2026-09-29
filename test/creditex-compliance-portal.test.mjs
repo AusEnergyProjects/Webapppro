@@ -102,7 +102,7 @@ test("portal uses Firebase sign-in without public registration or bootstrap", ()
     /onAuthStateChanged/,
     /signInWithEmailAndPassword/,
     /signInWithPopup/,
-    /sendPasswordResetEmail/,
+    /requestTLinkPasswordReset\(accountEmail, "\/creditex\/compliance"\)/,
     /There is no public registration/,
   ]) assert.match(portal, contract);
   assert.deepEqual(provisioningOperations(surfaceSource), [], "Public portal surfaces must not import or call account provisioning.");

@@ -171,8 +171,8 @@ export default function SignInScreen() {
   async function reset() {
     if (!email.trim()) return setMessage('Enter the account email first.');
     setBusy(true); setMessage('');
-    try { await resetPassword(email); setMessage('Password reset instructions have been sent.'); }
-    catch (error) { setMessage(readableAuthError(error)); }
+    try { await resetPassword(email); setMessage('If this email has a login, look for "Reset your TLink password" from TLink in your Inbox or Spam, then tap Reset password.'); }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'We could not request a password reset. Please try again.'); }
     finally { setBusy(false); }
   }
 

@@ -3,8 +3,9 @@
 import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
+import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib/tlink-password-reset-client";
 import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import { SiteFooter } from "./ComparatorChrome";
@@ -284,10 +285,10 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) { setStatus("Enter a valid email address before resetting your password."); return; }
     setBusy("reset"); setStatus(`Requesting a password reset for ${recipient}...`);
     try {
-      await sendPasswordResetEmail(firebaseAuth, recipient, emailActionSettings());
-      setStatus(`Password reset request accepted for ${recipient}. If this email has a login, check your Inbox and Spam for a message from noreply@australian-energy-assessments.firebaseapp.com. You can also use Continue with Google if that is how you joined.`);
+      await requestTLinkPasswordReset(recipient, emailActionSettings().url);
+      setStatus(`Password reset request accepted for ${recipient}. If this email has a login, look for “Reset your TLink password” from TLink and press Reset password in the email. Check Inbox and Spam. You can also use Continue with Google if that is how you joined.`);
     }
-    catch (error) { setStatus(`We could not confirm the password reset request. ${teamAuthErrorMessage(error)}`); }
+    catch (error) { setStatus(`We could not confirm the password reset request. ${tlinkPasswordResetErrorMessage(error)}`); }
     finally { setBusy(""); }
   }
   async function update(body: Record<string, unknown>, key: string, success: string) { if (!user) return; setBusy(key); try { const token = await user.getIdToken(); const response = await fetch("/api/trade-team", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }); const result = await response.json().catch(() => ({})) as Result; if (!response.ok) throw new Error(result.error || "The update could not be saved."); const selectedCapability = data.jobs?.find((job) => job.id === selectedJobId)?.serviceCategory || ""; const refreshed = await loadWork(selectedCapability, data.work?.page || 1); setData(refreshed); setSelectedJobId((current) => refreshed.jobs?.some((job) => job.id === current) ? current : refreshed.jobs?.[0]?.id || ""); setStatus(success); } catch (error) { setStatus(error instanceof Error ? error.message : "The update could not be saved."); } finally { setBusy(""); } }

@@ -8,6 +8,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativePath), "utf8");
 const privacy = read("../src/app/privacy/page.tsx");
 const analyticsConsent = read("../src/components/AnalyticsConsent.tsx");
+const lazyAssistant = read("../src/components/LazyEnergyAssistantWidget.tsx");
 const layout = read("../src/app/layout.tsx");
 const integrations = read("../src/app/direct-trade/integrations/page.tsx");
 const siteFooter = read("../src/components/SiteFooter.tsx");
@@ -67,6 +68,8 @@ test("basic website analytics is cookieless, bounded and can be disabled without
   assert.match(analyticsConsent, /australian-energy-assessments-analytics-consent-v1/);
   assert.match(analyticsConsent, /if \(preference === undefined\) return/);
   assert.match(analyticsConsent, /PRIVATE_PATH_PREFIXES/);
+  assert.match(analyticsConsent, /PRIVATE_PATH_PREFIXES = \[[\s\S]*?"\/direct-trade\/reset-password"[\s\S]*?\];/);
+  assert.match(lazyAssistant, /print\|pdf\|reset-password/);
   assert.match(analyticsConsent, /pathname\.includes\("\/print\/"\)/);
   assert.match(analyticsConsent, /pathname\.includes\("\/pdf\/"\)/);
   assert.match(analyticsConsent, /readStoredChoice\(\) === CONSENT_DENIED/);

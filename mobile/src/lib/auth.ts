@@ -5,13 +5,12 @@ import {
   getAuth,
   getReactNativePersistence,
   initializeAuth,
-  sendPasswordResetEmail,
   signInWithCredential,
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
 
-import { firebaseConfig } from '@/lib/config';
+import { API_BASE_URL, firebaseConfig } from '@/lib/config';
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
@@ -33,8 +32,46 @@ export function googleSignIn(idToken: string) {
   return signInWithCredential(firebaseAuth, GoogleAuthProvider.credential(idToken));
 }
 
-export function resetPassword(email: string) {
-  return sendPasswordResetEmail(firebaseAuth, email.trim());
+export async function resetPassword(email: string) {
+  const recipient = email.trim().toLowerCase();
+  if (recipient.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+    throw new Error('Enter a valid email address before resetting your password.');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/api/auth/password-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recipient, continuePath: '/direct-trade/team' }),
+        signal: controller.signal,
+      });
+    } catch {
+      throw new Error('We could not request a password reset. Check your connection and try again.');
+    }
+    if (!response.ok) {
+      if (response.status === 400) {
+        throw new Error('Enter a valid email address before resetting your password.');
+      }
+      if (response.status === 429) {
+        throw new Error('Please wait before requesting another password reset.');
+      }
+      throw new Error('The password reset service is temporarily unavailable. Please try again.');
+    }
+    let result: unknown;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error('The password reset service did not respond correctly. Please try again.');
+    }
+    if (!result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) {
+      throw new Error('We could not request a password reset. Please try again.');
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function firebaseSignOut() {

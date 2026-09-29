@@ -14,9 +14,7 @@ function loadEnergyAssistant() {
 
 const DeferredEnergyAssistantWidget = lazy(loadEnergyAssistant);
 
-function hiddenRoute(pathname: string) {
-  return /\/(?:print|pdf)(?:\/|$)/.test(pathname);
-}
+const hiddenRoute = (pathname: string) => /\/(print|pdf|reset-password)(\/|$)/.test(pathname);
 
 function storeTucked(tucked: boolean) {
   try {
@@ -25,14 +23,6 @@ function storeTucked(tucked: boolean) {
   } catch {
     // Storage can be unavailable in strict privacy modes. The control still works for this page.
   }
-}
-
-function Loader() {
-  return (
-    <div className={styles.dedicatedLoading} role="status">
-      Loading Wattzun AI...
-    </div>
-  );
 }
 
 function QuickChatLoader() {
@@ -78,7 +68,7 @@ export function LazyEnergyAssistantWidget() {
 
   if (dedicated) {
     return (
-      <Suspense fallback={<Loader />}>
+      <Suspense fallback={<div className={styles.dedicatedLoading} role="status">Loading Wattzun AI...</div>}>
         <DeferredEnergyAssistantWidget />
       </Suspense>
     );
