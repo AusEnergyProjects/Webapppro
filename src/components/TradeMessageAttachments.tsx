@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import type { MessageAttachment, MessageMediaAuth } from "@/lib/trade-message-media";
@@ -7,6 +9,7 @@ import { prepareMessagePhoto, removePrivateMessageFile, startVoiceNoteCapture, u
 import styles from "./TradeMessageAttachments.module.css";
 
 function PrivateAttachment({ attachment, getAuthHeaders }: { attachment: MessageAttachment; getAuthHeaders: MessageMediaAuth }) {
+  const fetch = useTradeBusinessFetch();
   const [loaded, setLoaded] = useState({ id: "", url: "", error: false });
   useEffect(() => {
     const controller = new AbortController(); let objectUrl = "";
@@ -20,7 +23,7 @@ function PrivateAttachment({ attachment, getAuthHeaders }: { attachment: Message
       } catch { if (!controller.signal.aborted) setLoaded({ id: attachment.id, url: "", error: true }); }
     })();
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [attachment.id, getAuthHeaders]);
+  }, [fetch, attachment.id, getAuthHeaders]);
   const url = loaded.id === attachment.id ? loaded.url : "";
   if (loaded.id === attachment.id && loaded.error) return <span className={styles.status}>Attachment unavailable. Refresh the conversation to retry.</span>;
   if (!url) return <span className={styles.status}>Loading {attachment.kind === "audio" ? "voice note" : "photo"}…</span>;
@@ -36,6 +39,7 @@ export function TradeMessageAttachmentList({ attachments, getAuthHeaders }: { at
 export default function TradeMessageAttachments({ threadId, value, onChange, getAuthHeaders, disabled = false, onBusyChange }: {
   threadId: string; value: MessageAttachment[]; onChange: (value: MessageAttachment[]) => void; getAuthHeaders: MessageMediaAuth; disabled?: boolean; onBusyChange?: (busy: boolean) => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [busy, setBusy] = useState(false), [recording, setRecording] = useState(false), [error, setError] = useState("");
   const upload = useRef<HTMLInputElement>(null), camera = useRef<HTMLInputElement>(null);
   const capture = useRef<Awaited<ReturnType<typeof startVoiceNoteCapture>> | null>(null);
@@ -50,15 +54,15 @@ export default function TradeMessageAttachments({ threadId, value, onChange, get
     try {
       const prepared = isPhoto ? await prepareMessagePhoto(file) : file;
       if (!isCurrent()) return;
-      const attachment = await uploadPrivateMessageFile(prepared, { threadId }, getAuthHeaders);
+      const attachment = await uploadPrivateMessageFile(prepared, { threadId }, getAuthHeaders, undefined, fetch);
       if (isCurrent()) onChange([...latest.current, attachment]);
-      else await removePrivateMessageFile(attachment.id, getAuthHeaders);
+      else await removePrivateMessageFile(attachment.id, getAuthHeaders, fetch);
     } catch (problem) { if (isCurrent()) setError(problem instanceof Error ? problem.message : "Upload failed. Please try again."); }
     finally { if (isCurrent()) setBusy(false); }
   };
   const remove = async (id: string) => {
     setBusy(true); setError("");
-    try { await removePrivateMessageFile(id, getAuthHeaders); onChange(latest.current.filter(item => item.id !== id)); }
+    try { await removePrivateMessageFile(id, getAuthHeaders, fetch); onChange(latest.current.filter(item => item.id !== id)); }
     catch (problem) { setError(problem instanceof Error ? problem.message : "Attachment could not be removed."); }
     finally { setBusy(false); }
   };

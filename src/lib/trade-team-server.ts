@@ -5,8 +5,7 @@ import {
   requireVerifiedTradeIdentity,
   tradeAccountProjection,
 } from "./trade-access-server";
-import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
-import { ensureTlinkSchemaGuards } from "./tlink-schema-guards";
+import { requestedTradeBusiness, selectTradeBusiness, TradeBusinessContextError } from "./trade-business-context-server";
 import { canAssignWithinScope } from "./trade-team-permission-policy.mjs";
 import { isFieldSessionRequest, requireFieldSessionAccess } from "./trade-field-session-server";
 
@@ -99,15 +98,16 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
 export async function requireInstallerTeamAccess(request: Request): Promise<TeamAccess> {
   if (isFieldSessionRequest(request)) {
     const access = await requireFieldSessionAccess(request);
+    const requested = requestedTradeBusiness(request);
+    if (requested !== null && requested !== access.ownerUid) throw new TradeBusinessContextError(
+      "BUSINESS_ACCESS_REQUIRED", 403, "This app login belongs to a different business. Sign in to switch businesses.");
     await requireTradeMyobSecondFactor(undefined, access.ownerUid, access.actorUid);
     return access;
   }
   const identity = await requireFirebaseIdentity(request);
   const db = getD1();
-  await ensureCreditexSchemaGuards(db);
-  await ensureTlinkSchemaGuards(db);
-  const owner = await tradeAccountProjection(identity.uid);
-  if (owner) {
+  const selected = await selectTradeBusiness(request, identity);
+  if (selected.role === "owner") {
     const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"] });
     const displayName = verified.businessName || "Business owner";
     const memberId = await ensureOwnerTeamMember(identity.uid, identity.email, displayName);
@@ -136,8 +136,8 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
       m.can_view_field_evidence, m.can_manage_field_evidence,
       m.can_run_reports, m.can_search_customers, a.business_name
     FROM trade_team_members m JOIN trade_accounts a ON a.firebase_uid = m.owner_uid
-    WHERE m.member_uid = ? AND m.status = 'active' ORDER BY m.accepted_at DESC LIMIT 1`)
-    .bind(identity.uid).first<Record<string, unknown>>();
+    WHERE m.member_uid = ? AND m.owner_uid = ? AND m.id = ? AND m.status = 'active'`)
+    .bind(identity.uid, selected.ownerUid, selected.memberId).first<Record<string, unknown>>();
   if (!member) throw new Error("TEAM_ACCESS_RECORD_REQUIRED");
   const ownerUid = String(member.owner_uid);
   const ownerAccount = await tradeAccountProjection(ownerUid);

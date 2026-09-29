@@ -84,7 +84,18 @@ test("sync registers the device, safely replays work and handles revocation", ()
 test("post-PIN access verification cannot stall before the secure API", () => {
   assert.match(provider, /NETWORK_STATUS_TIMEOUT_MS = 1_500/);
   assert.match(provider, /Promise\.race\(\[NetInfo\.fetch\(\)\.catch\(\(\) => null\), fallback\]\)/);
-  assert.match(provider, /const verified = await verifyFieldAccess\(\);[\s\S]{0,300}setAccess\(approvedAccess\);\s*await prepareLocalDataOwner\(localOwnerKey\)/);
+  const syncNow = provider.slice(provider.indexOf('const syncNow = useCallback'), provider.indexOf('const activateBusiness = useCallback'));
+  const networkCheck = syncNow.indexOf('await networkAvailable()');
+  const verifyAccess = syncNow.indexOf('await verifyFieldAccess(principal.localOwnerKey)');
+  const approveAccess = syncNow.indexOf('setAccess(approvedAccess)', verifyAccess);
+  const prepareCache = syncNow.indexOf('await prepareLocalDataOwner(localOwnerKey)', verifyAccess);
+  const syncWork = syncNow.indexOf('await runSync(verified.modes)', verifyAccess);
+  assert.ok(networkCheck >= 0 && verifyAccess > networkCheck, 'The bounded network check precedes secure access verification');
+  assert.ok(approveAccess > verifyAccess && prepareCache > approveAccess && syncWork > prepareCache,
+    'Authoritative access must succeed before approving access, preparing the selected cache and syncing');
+  const accessGate = syncNow.slice(verifyAccess, approveAccess);
+  assert.match(accessGate, /generation !== authGeneration\.current \|\| switching\.current/);
+  assert.match(accessGate, /verified\.ownerUid !== principal\.ownerId/);
   assert.match(provider, /updateFieldPrincipalDisplayName\(verified\.fieldUsername\)/);
   assert.match(provider, /setLoading\(false\);[\s\S]{0,120}void syncNow\(\);/);
   assert.match(api, /JSON_REQUEST_TIMEOUT_MS = 20_000/);

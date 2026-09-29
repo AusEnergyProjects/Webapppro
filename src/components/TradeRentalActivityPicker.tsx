@@ -1,4 +1,6 @@
 "use client";
+
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeRentalInspectionPanel } from "./TradeRentalInspectionPanel";
@@ -9,6 +11,7 @@ type Catalogue = { ok?: boolean; revision: number; canAdd: boolean; unavailableR
 export function TradeRentalActivityPicker({ user, workOrderId, refreshKey, readOnly, active, initiallyAttached,
   onChanged, onAttachmentChanged }: { user: User; workOrderId: string; refreshKey: number; readOnly: boolean;
   active: boolean; initiallyAttached: boolean; onChanged: () => Promise<void>; onAttachmentChanged: (attached: boolean) => void }) {
+  const fetch = useTradeBusinessFetch();
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [selection, setSelection] = useState("");
   const [message, setMessage] = useState("");
@@ -25,7 +28,7 @@ export function TradeRentalActivityPicker({ user, workOrderId, refreshKey, readO
     const result: Catalogue = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || "The assessment library could not be loaded.");
     return result;
-  }, [user, workOrderId]);
+  }, [fetch, user, workOrderId]);
   useEffect(() => {
     const controller = new AbortController();
     void request(undefined, controller.signal).then((next) => {

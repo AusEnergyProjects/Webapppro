@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useState } from "react";
 import type { User } from "firebase/auth";
 import registerStyles from "./InstallerCrmJobRegister.module.css";
@@ -40,6 +42,7 @@ export function TradeCustomerDocumentDeliveryPanel({
   onReload: () => Promise<void>;
   user: User;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const accepted = delivery ? ["provider_accepted", "sent", "delivered"].includes(delivery.status) : false;

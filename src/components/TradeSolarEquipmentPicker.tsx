@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
 import type { User } from "firebase/auth";
@@ -35,6 +37,7 @@ export type TradeSolarEquipmentPickerProps = {
 };
 
 export function TradeSolarEquipmentPicker({ user, kind, onSelect, priceBookPanels, selected, onCancel }: TradeSolarEquipmentPickerProps) {
+  const fetch = useTradeBusinessFetch();
   const id = useId();
   const [search, setSearch] = useState("");
   const [products, setProducts] = useState<CatalogueProduct[]>([]);
@@ -68,7 +71,7 @@ export function TradeSolarEquipmentPicker({ user, kind, onSelect, priceBookPanel
       } finally { if (!controller.signal.aborted) setOwnLoading(false); }
     })();
     return () => controller.abort();
-  }, [user, kind, priceBookPanels]);
+  }, [fetch, user, kind, priceBookPanels]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -91,7 +94,7 @@ export function TradeSolarEquipmentPicker({ user, kind, onSelect, priceBookPanel
       } finally { if (!controller.signal.aborted) setLoading(false); }
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [user, search, kind, page]);
+  }, [fetch, user, search, kind, page]);
 
   function chooseProduct(product: CatalogueProduct) {
     const draft = draftFor();

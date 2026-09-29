@@ -12,6 +12,8 @@ import {
   approvedAbnAccess,
   approvedTradeReviewPredicate,
   requireVerifiedTradeIdentity,
+  assertTradeOwnerContext,
+  TradeAccessError,
 } from "@/lib/trade-access-server";
 import {
   DEFAULT_QUOTE_EMAIL_INTRO,
@@ -260,8 +262,11 @@ async function stableAccountClosureId(firebaseUid: string, closureCycle: number)
 
 async function identityOrResponse(request: Request) {
   try {
-    return await requireFirebaseIdentity(request);
-  } catch {
+    const identity = await requireFirebaseIdentity(request);
+    assertTradeOwnerContext(request, identity);
+    return identity;
+  } catch (error) {
+    if (error instanceof TradeAccessError) return json({ ok: false, code: error.code, error: error.message }, error.status);
     return null;
   }
 }
@@ -269,6 +274,7 @@ async function identityOrResponse(request: Request) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   const identity = await identityOrResponse(request);
+  if (identity instanceof Response) return identity;
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
 
   const db = getD1();
@@ -421,6 +427,7 @@ type SettingsPayload = {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   const identity = await identityOrResponse(request);
+  if (identity instanceof Response) return identity;
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
   try {
     await requireVerifiedTradeIdentity(identity);
@@ -757,6 +764,7 @@ export async function PATCH(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   const identity = await identityOrResponse(request);
+  if (identity instanceof Response) return identity;
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
 
   let raw: ProfilePayload;
@@ -1000,6 +1008,7 @@ export async function DELETE(request: Request) {
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
   }
   const identity = await identityOrResponse(request);
+  if (identity instanceof Response) return identity;
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
   if (!hasRecentFirebaseAuthentication(identity.authTime)) {
     return json({

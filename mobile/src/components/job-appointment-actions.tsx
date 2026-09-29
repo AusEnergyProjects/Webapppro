@@ -1,3 +1,4 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useEffect, useState, type ComponentProps } from 'react';
 import { Linking, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -6,7 +7,7 @@ import { FieldButton } from '@/components/field-button';
 import { FieldDatePicker } from '@/components/field-date-picker';
 import { FieldSelect } from '@/components/field-select';
 import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view';
-import { apiRequest } from '@/lib/api';
+
 import { appointmentContactLinks, appointmentFormValues, appointmentTimeParts, appointmentTimeValue, type AppointmentAction, type AppointmentActionContext, type AppointmentActionResult } from '@/lib/appointment-actions';
 import { localWorkDate } from '@/lib/schedule';
 import { removeDeletedFieldJob } from '@/lib/sync';
@@ -17,6 +18,7 @@ export function JobAppointmentActions({ job, online, onClose, onSaved }: {
   job: FieldJob; online: boolean; onClose: () => void;
   onSaved: (action: AppointmentAction, result: AppointmentActionResult) => void;
 }) {
+  const apiRequest = useBusinessApi();
   const [screen, setScreen] = useState<AppointmentAction | 'menu'>('menu');
   const [context, setContext] = useState<AppointmentActionContext | null>(null);
   const [loadedKey, setLoadedKey] = useState('');

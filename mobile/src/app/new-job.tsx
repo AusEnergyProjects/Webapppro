@@ -1,3 +1,4 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Crypto from 'expo-crypto';
 import { router, useNavigation } from 'expo-router';
@@ -17,7 +18,7 @@ import {
   type PlannedFieldActivity,
 } from '@/components/job-work-selection';
 import { Screen } from '@/components/screen';
-import { ApiError, apiRequest } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import { colours, radius, spacing } from '@/lib/theme';
 import { useApp } from '@/providers/app-provider';
 
@@ -70,6 +71,7 @@ function premisesVariantsReady(activities: PlannedFieldActivity[], buildingType:
 }
 
 export default function NewJobScreen() {
+  const apiRequest = useBusinessApi();
   const { syncNow } = useApp();
   const navigation = useNavigation();
   const allowExit = useRef(false);

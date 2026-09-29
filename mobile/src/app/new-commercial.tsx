@@ -1,3 +1,4 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -10,7 +11,7 @@ import { FieldCommercialWorkspace } from '@/components/field-commercial-workspac
 import { FieldSelect } from '@/components/field-select';
 import type { FieldJobOptions } from '@/components/job-work-selection';
 import { Screen } from '@/components/screen';
-import { apiRequest } from '@/lib/api';
+
 import { colours, radius, spacing } from '@/lib/theme';
 import { useApp } from '@/providers/app-provider';
 
@@ -87,6 +88,7 @@ function previousSetupStage(stage: Stage, selectedCustomer: CustomerMatch | null
 }
 
 export default function NewCommercialScreen() {
+  const apiRequest = useBusinessApi();
   const params = useLocalSearchParams<{ kind?: string | string[] }>();
   const { sync } = useApp();
   const navigation = useNavigation();

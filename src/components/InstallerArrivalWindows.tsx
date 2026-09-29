@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useState } from "react";
 import { firebaseAuth } from "@/lib/firebase-client";
 
@@ -30,6 +32,7 @@ export function InstallerArrivalWindows({ matchId, initialProposal, onStatus }: 
   initialProposal: ArrivalProposal | null;
   onStatus: (message: string) => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [proposal, setProposal] = useState(initialProposal);
   const [windows, setWindows] = useState<WindowDraft[]>(initialProposal?.windows.length
     ? initialProposal.windows.map(draftFromWindow) : [emptyWindow()]);

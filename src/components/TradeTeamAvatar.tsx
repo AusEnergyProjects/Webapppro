@@ -1,4 +1,6 @@
 "use client";
+
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import type { MessageMediaAuth } from "@/lib/trade-message-media";
@@ -8,6 +10,7 @@ import styles from "./TradeTeamAvatar.module.css";
 export default function TradeTeamAvatar({ memberId, name, revision = "", editable = false, getAuthHeaders, onChange }: {
   memberId: string; name: string; revision?: string; editable?: boolean; getAuthHeaders: MessageMediaAuth; onChange?: (revision: string) => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [loaded, setLoaded] = useState({ revision: "", url: "" }), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [saved, setSaved] = useState<{ memberId: string; base: string; revision: string } | null>(null); const file = useRef<HTMLInputElement>(null);
   const savedRevision = saved?.memberId === memberId && saved.base === revision ? saved.revision : revision;
@@ -22,11 +25,11 @@ export default function TradeTeamAvatar({ memberId, name, revision = "", editabl
       } catch { /* The initials remain when the current photo is unavailable. */ }
     })();
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [savedRevision, memberId, getAuthHeaders]);
+  }, [fetch, savedRevision, memberId, getAuthHeaders]);
   const save = async (selected: File) => {
     setBusy(true); setError("");
     try {
-      const photo = await prepareMessagePhoto(selected, true), result = await uploadPrivateMessageFile(photo, { memberId }, getAuthHeaders);
+      const photo = await prepareMessagePhoto(selected, true), result = await uploadPrivateMessageFile(photo, { memberId }, getAuthHeaders, undefined, fetch);
       setSaved({ memberId, base: revision, revision: result.id }); onChange?.(result.id);
     } catch (problem) { setError(problem instanceof Error ? problem.message : "Photo could not be saved."); }
     finally { setBusy(false); }

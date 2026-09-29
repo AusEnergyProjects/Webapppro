@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -289,7 +291,7 @@ function signaturePacketBytes(payload: CreditexActivityWorkPackSignaturePayload)
   return new TextEncoder().encode(canonicalWorkPackJson(payload));
 }
 
-async function exactAuthenticatedBlob(input: {
+async function exactAuthenticatedBlob(fetch: typeof globalThis.fetch, input: {
   user: User;
   path: string;
   sha256: string;
@@ -350,6 +352,7 @@ export function TradeActivityWorkPackPanel({
   onPresenceChange?: (hasGovernedPacks: boolean) => void;
   onOpenSupportingForms?: () => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [packs, setPacks] = useState<CreditexAssignedActivityWorkPackProjection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -371,7 +374,7 @@ export function TradeActivityWorkPackPanel({
       setError("");
     }
     return next;
-  }, [onPresenceChange, user, workOrderId]);
+  }, [fetch, onPresenceChange, user, workOrderId]);
 
   useEffect(() => {
     let active = true;
@@ -442,6 +445,7 @@ function WorkPack({
   onReplace: (projection: CreditexAssignedActivityWorkPackProjection) => void;
   onReload: () => Promise<CreditexAssignedActivityWorkPackProjection[]>;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [pack, setPack] = useState(initialPack);
   const [open, setOpen] = useState(initiallyOpen);
   const [page, setPage] = useState(() => firstIncompleteWorkPackPage(initialPack));
@@ -925,7 +929,7 @@ function WorkPack({
   async function openReference(document: CreditexActivityWorkPackReferenceDocumentProjection) {
     setBusy(`reference:${document.sourceArtifactId}`);
     try {
-      const blob = await exactAuthenticatedBlob({
+      const blob = await exactAuthenticatedBlob(fetch, {
         user,
         path: document.openUrl,
         sha256: document.sourceArtifactSha256,
@@ -1146,7 +1150,7 @@ function WorkPack({
     if (!record) return;
     setBusy("final-record");
     try {
-      const blob = await exactAuthenticatedBlob({
+      const blob = await exactAuthenticatedBlob(fetch, {
         user,
         path: record.downloadUrl,
         sha256: record.pdfSha256,

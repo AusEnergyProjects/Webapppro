@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { PriceBookImportField, PriceBookImportPreview, PriceBookImportRow } from "@/lib/trade-price-book-import";
@@ -14,6 +16,7 @@ const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "curren
 export function TradePriceBookImport({ user, onClose, onImported }: {
   user: User; onClose: () => void; onImported: (preview: PriceBookImportPreview) => Promise<void>;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [fileName, setFileName] = useState(""); const [sheets, setSheets] = useState<PriceBookSheet[]>([]);
   const [sheetIndex, setSheetIndex] = useState(0); const [headerRow, setHeaderRow] = useState(0);
   const [mapping, setMapping] = useState<PriceBookColumnMapping>({}); const [pricesIncludeGst, setPricesIncludeGst] = useState(false);

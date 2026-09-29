@@ -1,9 +1,10 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { defaultTradeQuoteTotal, persistedOverallDiscountUnitPrice, overallTradeQuoteDiscountKind } from '../../../src/lib/trade-quote';
-import { apiRequest } from '@/lib/api';
+
 import { colours, radius, spacing } from '@/lib/theme';
 import { FieldButton } from './field-button';
 import { FieldSelect } from './field-select';
@@ -36,6 +37,7 @@ function futureDate(days: number) {
 export function FieldCommercialWorkspace({ workOrderId, selected, onSelect, online, protectedJob }: {
   workOrderId: string; selected: string | null; onSelect: (value: string | null) => void; online: boolean; protectedJob: boolean;
 }) {
+  const apiRequest = useBusinessApi();
   const [permissions, setPermissions] = useState<FieldPermissions | null>(null);
   const [accessError, setAccessError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -61,6 +63,7 @@ export function FieldCommercialWorkspace({ workOrderId, selected, onSelect, onli
 function CommercialEditor({ workOrderId, kind, onBack, online, permissions }: {
   workOrderId: string; kind: 'quote' | 'invoice'; onBack: () => void; online: boolean; permissions: FieldPermissions | null;
 }) {
+  const apiRequest = useBusinessApi();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [acceptedInvoice, setAcceptedInvoice] = useState<InvoiceResult['acceptedInvoice']>(null);

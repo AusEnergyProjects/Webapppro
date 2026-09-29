@@ -1,3 +1,4 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import * as Crypto from 'expo-crypto';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
@@ -13,7 +14,7 @@ import { FieldDatePicker } from '@/components/field-date-picker';
 import { FieldSelect } from '@/components/field-select';
 import { ActivityAssignmentReview } from '@/components/ActivityAssignmentReview';
 import { SignatureCapture } from '@/components/SignatureCapture';
-import { apiRequest, ApiError } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import { activitySignatureStrokesAreValid, processActivityFormCompletionQueue, sanitiseActivityAnswers } from '@/lib/activity-form-completion';
 import { getSetting, setSetting } from '@/lib/database';
 import { API_BASE_URL } from '@/lib/config';
@@ -108,6 +109,7 @@ function ProgressMeter({ label, complete, total, compact = false }: { label: str
 export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '', online, onReturnToJob, onChanged }: {
   workOrderId: string; intentId: string; variantId?: string; online: boolean; onReturnToJob: () => void; onChanged: () => Promise<void>;
 }) {
+  const apiRequest = useBusinessApi();
   const [cache, setCache] = useState<Cache | null>(null);
   const cacheRef = useRef<Cache | null>(null);
   const writes = useRef(Promise.resolve());

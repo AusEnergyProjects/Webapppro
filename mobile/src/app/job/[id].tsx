@@ -1,3 +1,4 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Application from 'expo-application';
 import * as Crypto from 'expo-crypto';
@@ -24,11 +25,7 @@ import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflo
 import { subscribeRentalSaves } from '@/lib/rental-save-queue';
 import { Screen } from '@/components/screen';
 import { firebaseAuth } from '@/lib/auth';
-import {
-  apiRequest,
-  downloadAssignedWorkPackDocument,
-  governedReferenceDocumentBytesSha256,
-} from '@/lib/api';
+import { downloadAssignedWorkPackDocument, governedReferenceDocumentBytesSha256 } from '@/lib/api';
 import {
   complianceCasesForJob,
   type GovernedEvidenceSelection,
@@ -284,6 +281,7 @@ function workPackCaption(context: ActivityWorkPackPromptContext) {
 }
 
 export default function JobScreen() {
+  const apiRequest = useBusinessApi();
   const { id, openCommercial } = useLocalSearchParams<{ id: string; openCommercial?: string }>();
   const {
     findJob,

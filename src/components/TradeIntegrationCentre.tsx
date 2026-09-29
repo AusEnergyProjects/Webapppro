@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
@@ -35,6 +37,7 @@ const providerNotes: Record<Provider["provider"], string> = {
 };
 
 export function TradeIntegrationCentre({ user }: { user: User }) {
+  const fetch = useTradeBusinessFetch();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -50,7 +53,7 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
     const nextProviders = result.providers || [];
     setProviders(nextProviders);
     return nextProviders;
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     let active = true;

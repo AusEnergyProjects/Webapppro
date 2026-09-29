@@ -201,7 +201,7 @@ test("latest queued or local shared capture supersedes older saved values withou
 test("web markup uses compact controls and removes already captured equipment fields on later heater checks", async () => {
   const source = (await readFile(new URL("../src/components/TradeRentalInspectionPanel.tsx", import.meta.url), "utf8"))
     .replace("function AssessmentItemCard(", "export function AssessmentItemCard(");
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
   const record = { exports: {} };
   const dependencies = {
     react: React, "react/jsx-runtime": jsxRuntime,

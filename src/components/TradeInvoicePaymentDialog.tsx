@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import styles from "./InstallerCrmJobRegister.module.css";
@@ -12,6 +14,7 @@ export type InvoicePaymentJob = {
 export function TradeInvoicePaymentDialog({ user, job, onClose, onSaved }: {
   user: User; job: InvoicePaymentJob; onClose: () => void; onSaved: () => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const dialog = useRef<HTMLDialogElement>(null);
   const [amount, setAmount] = useState((job.paidValueCents / 100).toFixed(2));
   const [busy, setBusy] = useState(false);

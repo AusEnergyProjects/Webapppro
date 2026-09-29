@@ -1,4 +1,6 @@
 "use client";
+
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import {
@@ -9,9 +11,10 @@ import {
 type Location = { id: string; locationName: string; locationType: string; addressLine1: string; suburb: string; addressState: string; postcode: string; salesEmail: string; contactNumber: string; dispatchNotes: string; serviceStates: string[] };
 const states = ["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"];
 export function SupplierLocationManager({ user }: { user: User }) {
+  const fetch = useTradeBusinessFetch();
   const [locations, setLocations] = useState<Location[]>([]); const [editing, setEditing] = useState<Location | null>(null); const [adding, setAdding] = useState(false); const [status, setStatus] = useState("");
   const [address, setAddress] = useState({ addressLine1: "", suburb: "", addressState: "VIC", postcode: "" });
-  const request = useCallback(async (init?: RequestInit) => { const token = await user.getIdToken(); const response = await fetch("/api/supplier-locations", { ...init, headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), Authorization: `Bearer ${token}` }, cache: "no-store" }); const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || "Locations could not be updated."); setLocations(result.locations || []); }, [user]);
+  const request = useCallback(async (init?: RequestInit) => { const token = await user.getIdToken(); const response = await fetch("/api/supplier-locations", { ...init, headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), Authorization: `Bearer ${token}` }, cache: "no-store" }); const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || "Locations could not be updated."); setLocations(result.locations || []); }, [fetch, user]);
   function openLocation(location: Location | null) { setEditing(location); setAddress({ addressLine1: location?.addressLine1 || "", suburb: location?.suburb || "", addressState: location?.addressState || "VIC", postcode: location?.postcode || "" }); setAdding(true); }
   function selectAddress(selection: AustralianAddressSuggestion) { setAddress({ addressLine1: [selection.addressLine2, selection.addressLine1].filter(Boolean).join(", "), suburb: selection.suburb, addressState: selection.addressState, postcode: selection.postcode }); }
   useEffect(() => { const frame = requestAnimationFrame(() => void request().catch((error) => setStatus(error instanceof Error ? error.message : "Locations could not be loaded."))); return () => cancelAnimationFrame(frame); }, [request]);

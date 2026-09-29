@@ -1,14 +1,16 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Linking, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
-import { apiRequest } from '@/lib/api';
+
 import { deviceRegistration, getNativePushToken, notificationDeviceState, setNotificationsMuted } from '@/lib/device';
 import { resolveFieldAccessModes } from '@/lib/sync';
 import { colours, radius, spacing } from '@/lib/theme';
 import { useApp } from '@/providers/app-provider';
 
 export function DeviceNotificationSettings() {
+  const apiRequest = useBusinessApi();
   const { sync } = useApp();
   const [state, setState] = useState<Awaited<ReturnType<typeof notificationDeviceState>> | null>(null);
   const [busy, setBusy] = useState(false);

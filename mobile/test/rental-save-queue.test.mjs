@@ -145,6 +145,7 @@ function harness(shared = {}) {
     },
     '@/lib/evidence': { captureSessionId: () => 'capture-session' },
     '@/lib/field-session': { getFieldPrincipal: async () => null },
+    '@/lib/business-session': { getBusinessSession: async () => ({ principal: { localOwnerKey: state.owner.key } }) },
     '@/lib/rental-inspection': { RENTAL_ADVERSE_OUTCOMES: new Set(['does_not_meet', 'not_accessible', 'specialist_verification_required', 'exemption_evidence_pending']) },
   };
   new Function('require', 'exports', 'FormData', documentOutput)((id) => { assert.ok(modules[id], id); return modules[id]; }, documentExports, FormDataMock);
@@ -1078,6 +1079,7 @@ test('normal sync downloads new jobs and sends ordinary actions while rental pho
   const syncOutput = ts.transpileModule(syncFunction.getText(syncSource), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
   const photos = deferred(), reached = [];
   const dependencies = { firebaseAuth: { currentUser: { uid: 'alice' } }, getFieldPrincipal: async () => null,
+    getBusinessSession: async () => ({ principal: { localOwnerKey: 'firebase:alice:owner:member' } }),
     prepareLocalDataOwner: async () => undefined, verifyFieldAccessModes: async () => ['trade_team'], setSetting: async () => undefined,
     purgeExpiredAddresses: async () => undefined, registerDevice: async () => undefined, processActivityFormCompletionQueue: async () => undefined,
     processRentalSaveQueue: () => { reached.push('rental-started'); return photos.promise; },
@@ -1109,6 +1111,9 @@ test('SQLite sync counts include all 50 pending rental photos and exclude linked
     const exports = {};
     new Function('exports', 'getDatabase', countOutput)(exports, async () => ({ getFirstAsync: async (sql) => db.prepare(sql).get() }));
     assert.deepEqual(await exports.queueCounts(), { actions: 2, uploads: 52, conflicts: 0 });
+    insert.run('rental-documents:job', JSON.stringify([{ id: 'retained-pdf', ownerKey: 'owner', workOrderId: 'job' }]));
+    assert.deepEqual(await exports.queueCounts(), { actions: 2, uploads: 53, conflicts: 0 },
+      'A retained professional PDF also blocks a business switch until it is attached or removed');
   } finally { db.close(); }
 });
 

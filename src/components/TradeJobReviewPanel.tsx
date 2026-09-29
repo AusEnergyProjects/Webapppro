@@ -1,4 +1,6 @@
 "use client";
+
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { useCallback,useEffect,useRef,useState } from "react";
 import styles from "./JobLifecycleActions.module.css";
 import type { User } from "firebase/auth";
@@ -10,12 +12,13 @@ export function TradeJobReviewPanel(props:Props) {
   return <ReviewPanel key={`${props.user.uid}:${props.workOrderId}`} {...props}/>;
 }
 function ReviewPanel({user,workOrderId,onChanged}:Props) {
+  const fetch = useTradeBusinessFetch();
   const [state,setState]=useState<Review|null>(null),[note,setNote]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
   const inFlight=useRef(false),pending=useRef<{identity:string;body:string}|null>(null);
   const active=useRef(true),loadVersion=useRef(0);
   const fetchState=useCallback(async()=>{const response=await fetch(`/api/trade-job-review?workOrderId=${encodeURIComponent(workOrderId)}`,{headers:{Authorization:`Bearer ${await user.getIdToken()}`},cache:"no-store"});
     const payload=await response.json();if(!response.ok)throw new Error(payload.error||"Review could not be loaded.");return payload.state as Review;
-  },[user,workOrderId]);
+  },[fetch, user,workOrderId]);
   const load=useCallback(()=>{const version=++loadVersion.current;return fetchState().then(value=>{if(active.current&&loadVersion.current===version){setState(value);setError("");}})
     .catch(e=>{if(active.current&&loadVersion.current===version)setError(e instanceof Error?e.message:"Review could not be loaded.");});},[fetchState]);
   useEffect(()=>{active.current=true;const version=++loadVersion.current;

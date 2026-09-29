@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeBusinessFormEditor } from "./TradeBusinessFormEditor";
@@ -10,6 +12,7 @@ type FormRecord = { id: string; templateKey: string; templateVersion: number; te
 type Result = { ok?: boolean; protectedJob?: boolean; serviceCategory?: string; templates?: Template[]; forms?: FormRecord[]; error?: string };
 
 export function TradeJobFormsPanel({ user, workOrderId, readOnly = false }: { user: User; workOrderId: string; readOnly?: boolean }) {
+  const fetch = useTradeBusinessFetch();
   const [result, setResult] = useState<Result>({ templates: [], forms: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -27,7 +30,7 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false }: { us
     const next = await response.json().catch(() => ({})) as Result;
     if (!response.ok) throw new Error(next.error || "The field forms could not be loaded.");
     setResult(next);
-  }, [readOnly, user, workOrderId]);
+  }, [fetch, readOnly, user, workOrderId]);
 
   useEffect(() => {
     let active = true;

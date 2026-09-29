@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import type { QuoteProductDocumentSummary } from "@/lib/trade-quote-product-documents";
@@ -11,6 +13,7 @@ export function QuoteProductDocuments({ documents, choices = [] }: { documents: 
 }
 
 export function QuoteCompletePdfPreview({ user, workOrderId, versionId, expectedUpdatedAt, dirty, revisionKey }: { user: User; workOrderId: string; versionId?: string; expectedUpdatedAt?: string; dirty: boolean; revisionKey: string }) {
+  const fetch = useTradeBusinessFetch();
   const [result, setResult] = useState<{ key: string; url: string; error: string } | null>(null);
   const [requested, setRequested] = useState<{ key: string; attempt: number } | null>(null);
   const key = `${user.uid}:${workOrderId}:${versionId}:${expectedUpdatedAt}:${revisionKey}:${dirty}`;
@@ -31,7 +34,7 @@ export function QuoteCompletePdfPreview({ user, workOrderId, versionId, expected
       if (!controller.signal.aborted) setResult({ key, url: "", error: error instanceof Error ? error.message : "Could not load the complete PDF." });
     });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [dirty, expectedUpdatedAt, key, requested, user, versionId, workOrderId]);
+  }, [fetch, dirty, expectedUpdatedAt, key, requested, user, versionId, workOrderId]);
   const current = result?.key === key ? result : null;
   return <div className={styles.completePdf}>{!versionId || dirty ? <p>Save draft to refresh product documents and view the complete PDF.</p> : <>
     <button type="button" onClick={() => { setResult(null); setRequested((previous) => ({ key, attempt: (previous?.attempt || 0) + 1 })); }} disabled={requested?.key === key && !current}>{requested?.key === key && !current ? "Preparing PDF..." : "View complete PDF"}</button>

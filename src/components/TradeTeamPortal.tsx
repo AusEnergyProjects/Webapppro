@@ -1,5 +1,7 @@
 "use client";
 
+import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
@@ -14,6 +16,7 @@ import { TradeTeamSettings, type TradeTeamPermissions } from "./TradeTeamSetting
 import dynamic from "next/dynamic";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { teamAuthErrorCode, teamAuthErrorMessage } from "./trade-team-auth-errors";
+import { saveTradeBusinessSelection } from "@/lib/trade-business-client";
 
 const TradeTrainingWorkspace = dynamic(() => import("./TradeTrainingWorkspace").then((module) => module.TradeTrainingWorkspace), { loading: () => <p role="status">Loading activity training...</p> });
 const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then(module => module.TradeMessagesWorkspace));
@@ -25,7 +28,7 @@ type Task = { id: string; title: string; dueAt: string; status: string };
 type Job = { id: string; workNumber: string; title: string; serviceCategory: string; siteArea: string; stage: string; priority: string; scheduledStart: string; scheduledEnd: string; assigneeMemberId: string; assigneeLabel: string; protectedJob: boolean; serviceAddress: string; tasks: Task[] };
 type AssigneeRoster = { page: number; pageSize: number; total: number; totalPages: number; search: string; capability: string };
 type WorkRoster = { included: boolean; page: number; pageSize: number; total: number; totalPages: number };
-type Result = { code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; permissions: TradeTeamPermissions }; members?: Member[]; assignees?: Assignee[]; assigneeRoster?: AssigneeRoster; work?: WorkRoster; jobs?: Job[]; error?: string };
+type Result = { ownerUid?: string; businessName?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; permissions: TradeTeamPermissions }; members?: Member[]; assignees?: Assignee[]; assigneeRoster?: AssigneeRoster; work?: WorkRoster; jobs?: Job[]; error?: string };
 type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
 const stages = [["backlog", "Planning"], ["ready", "Ready"], ["scheduled", "Scheduled"], ["in_progress", "On site"], ["blocked", "Waiting"], ["completed", "Complete"], ["cancelled", "Cancelled"]];
@@ -35,6 +38,18 @@ function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
 }
 
 export function TradeTeamPortal() {
+  const [invitationEntry, setInvitationEntry] = useState<boolean | null>(null);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setInvitationEntry(new URLSearchParams(window.location.search).has("invite")));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  if (invitationEntry === null) return <p role="status">Opening TLink...</p>;
+  if (invitationEntry) return <TradeTeamPortalContent onInvitationAccepted={() => setInvitationEntry(false)} />;
+  return <TradeBusinessGate destination="member"><TradeTeamPortalContent /></TradeBusinessGate>;
+}
+
+function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted?: () => void }) {
+  const fetch = useTradeBusinessFetch();
   const { resolver, captureMfaError, clearMfaChallenge } = useFirebaseMfaChallenge();
   const [mfaRequired, setMfaRequired] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -59,7 +74,7 @@ export function TradeTeamPortal() {
   }, []);
   async function leaveAccount() {
     try {
-      await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {});
+      await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {}, fetch);
       await signOut(firebaseAuth);
       setData({}); setStatus(""); clearPasswordFields();
     } catch (failure) { setStatus(failure instanceof Error ? failure.message : "Sign out could not be completed. Try again."); }
@@ -92,7 +107,7 @@ export function TradeTeamPortal() {
         .finally(() => { if (active) setInvitationReady(true); });
     });
     return () => { active = false; window.cancelAnimationFrame(frame); };
-  }, [authReady, clearPasswordFields, user]);
+  }, [fetch, authReady, clearPasswordFields, user]);
 
   const refreshVerification = useCallback(async (showStatus = false) => {
     if (!user) return;
@@ -153,7 +168,7 @@ export function TradeTeamPortal() {
       result.assigneeRoster = assigneeResult.assigneeRoster;
     }
     return result;
-  }, [user]);
+  }, [fetch, user]);
 
   const loadAssignees = useCallback(async (capability: string, search: string, page = 1, append = false) => {
     if (!user || !capability) return;
@@ -180,7 +195,7 @@ export function TradeTeamPortal() {
     } finally {
       if (assigneeRequestRef.current === requestId) setAssigneesLoading(false);
     }
-  }, [user]);
+  }, [fetch, user]);
 
   const loadMoreWork = useCallback(async () => {
     if (!user || workLoading || !data.work || data.work.page >= data.work.totalPages) return;
@@ -200,7 +215,7 @@ export function TradeTeamPortal() {
     } finally {
       setWorkLoading(false);
     }
-  }, [data.work, user, workLoading]);
+  }, [fetch, data.work, user, workLoading]);
 
   useEffect(() => onAuthStateChanged(firebaseAuth, (next) => { setUser(next); setData({}); setEmailVerified(Boolean(next?.emailVerified)); setAuthReady(true); if (!next) setMfaRequired(false); }), []);
   useEffect(() => {
@@ -216,6 +231,12 @@ export function TradeTeamPortal() {
           const accepted = await response.json().catch(() => ({})) as Result;
           if (accepted.code === "MFA_REQUIRED") setMfaRequired(true);
           if (!response.ok && !accepted.access) throw new Error(accepted.error || "The team invitation could not be accepted.");
+          if (accepted.ownerUid && onInvitationAccepted) {
+            saveTradeBusinessSelection(user.uid, accepted.ownerUid);
+            window.history.replaceState({}, "", "/direct-trade/team");
+            if (active) onInvitationAccepted();
+            return;
+          }
         }
         const result = await loadWork();
         if (active) { setData(result); setStatus(""); setSelectedJobId((current) => current || result.jobs?.[0]?.id || ""); if (invite) window.history.replaceState({}, "", "/direct-trade/team"); }
@@ -223,7 +244,7 @@ export function TradeTeamPortal() {
         .finally(() => active && setLoading(false));
     });
     return () => { active = false; window.cancelAnimationFrame(frame); };
-  }, [authRevision, emailVerified, invitation, invitationError, invitationReady, inviteToken, loadWork, user]);
+  }, [fetch, authRevision, emailVerified, invitation, invitationError, invitationReady, inviteToken, loadWork, onInvitationAccepted, user]);
 
   function emailActionSettings() {
     const url = new URL("/direct-trade/team", window.location.origin);

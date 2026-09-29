@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useState } from "react";
 import type { User } from "firebase/auth";
 import {
@@ -96,6 +98,7 @@ export function TradeHandoverCentre({
   workOrderId: string;
   fullAccess: boolean;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [pack, setPack] = useState<HandoverPack | null>(null);
   const [customerLinked, setCustomerLinked] = useState(false);
   const [loaded, setLoaded] = useState(false);

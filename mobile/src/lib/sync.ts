@@ -1,6 +1,7 @@
 import { ApiError, apiRequest } from '@/lib/api';
 import { firebaseAuth, firebaseSignOut } from '@/lib/auth';
 import { clearFieldSession, getFieldPrincipal } from '@/lib/field-session';
+import { clearBusinessSession, getBusinessSession } from '@/lib/business-session';
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import {
   applyChanges,
@@ -34,18 +35,23 @@ function isFieldAccessMode(value: unknown): value is FieldAccessMode {
   return value === 'trade_team' || value === 'creditex_manual';
 }
 
-export async function verifyFieldAccess() {
+export async function verifyFieldAccess(expectedBusinessKey?: string) {
   const response = await apiRequest<{
     mode: FieldAccessMode;
     modes?: FieldAccessMode[];
     fieldUsername?: string;
-  }>('/api/field/access');
+    ownerUid?: string;
+    memberId?: string;
+    businessName?: string;
+    displayName?: string;
+    permissions?: { canCreateJobs: boolean; canManageCustomers: boolean; canViewCustomers: boolean };
+  }>('/api/field/access', {}, undefined, { expectedBusinessKey });
   const modes = [...new Set((response.modes?.length ? response.modes : [response.mode])
     .filter(isFieldAccessMode))];
   if (!modes.length) {
     throw new ApiError('No active field access was returned.', 403, 'FIELD_ACCESS_REQUIRED');
   }
-  return { modes, fieldUsername: String(response.fieldUsername || '').trim() };
+  return { ...response, modes, fieldUsername: String(response.fieldUsername || '').trim() };
 }
 
 export async function verifyFieldAccessModes() {
@@ -159,6 +165,7 @@ async function fetchChanges(mode: FieldAccessMode) {
 async function revokedSignOut() {
   await forgetPushToken();
   await clearFieldSession();
+  await clearBusinessSession();
   await firebaseSignOut();
 }
 
@@ -166,7 +173,10 @@ async function performSync(verifiedModes?: FieldAccessMode[]): Promise<SyncOutco
   const currentUser = firebaseAuth.currentUser;
   const fieldPrincipal = await getFieldPrincipal();
   if (!currentUser && !fieldPrincipal) throw new ApiError('Sign in to continue.', 401, 'AUTH_REQUIRED');
-  await prepareLocalDataOwner(fieldPrincipal?.localOwnerKey || `firebase:${currentUser!.uid}`);
+  const business = currentUser ? await getBusinessSession(currentUser.uid) : null;
+  const principal = fieldPrincipal || business?.principal;
+  if (!principal) throw new ApiError('Choose a business before syncing.', 409, 'BUSINESS_SELECTION_REQUIRED');
+  await prepareLocalDataOwner(principal.localOwnerKey);
   try {
     const modes = verifiedModes?.length ? [...new Set(verifiedModes)] : await verifyFieldAccessModes();
     await setSetting('field_access_mode', modes[0]);
@@ -222,6 +232,8 @@ export function runSync(verifiedModes?: FieldAccessMode[]) {
   activeSync ||= performSync(verifiedModes).finally(() => { activeSync = null; });
   return activeSync;
 }
+
+export async function waitForActiveSync() { await activeSync; }
 
 export async function localSyncOutcome(message?: string) {
   const counts = await queueCounts();

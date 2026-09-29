@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { NETWORK_PAGE_SIZE, NETWORK_STATES, NETWORK_TRADES, networkText, normalizeNetworkContact, normalizeNetworkPost,
@@ -33,6 +35,7 @@ function ContactDetails({ contact }: { contact: NetworkContact }) {
 export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, onOpenServiceAreas }: {
   user: User; initialPostId?: string; onClearPost?: () => void; onOpenServiceAreas: () => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [view, setView] = useState<View>("leads");
   const [filters, setFilters] = useState({ trade: "", state: "", search: "" });
   const [applied, setApplied] = useState(filters);
@@ -60,7 +63,7 @@ export function TradeNetworkWorkspace({ user, initialPostId = "", onClearPost, o
     const result: ApiResult = await response.json();
     if (!response.ok || result.ok !== true) throw new Error(result.error || "The trade network could not be loaded. Please try again.");
     return result;
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     const controller = new AbortController();

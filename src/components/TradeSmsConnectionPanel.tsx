@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import styles from "./TradeSms.module.css";
@@ -14,6 +16,7 @@ type SetupResult = {
 };
 
 export function TradeSmsConnectionPanel({ user }: { user: User }) {
+  const fetch = useTradeBusinessFetch();
   const [connection, setConnection] = useState<TradeSmsConnection | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -34,7 +37,7 @@ export function TradeSmsConnectionPanel({ user }: { user: User }) {
     const result = await response.json().catch(() => ({})) as SetupResult;
     if (!response.ok || !result.ok) throw new Error(result.error || "The SMS connection could not be checked. Try again.");
     return result;
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     let active = true;

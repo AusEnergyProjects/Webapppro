@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { MAX_STOCK_QUANTITY_MILLI, type StockDetailResponse, type StockHistoryEntry, type StockItem, type StockListResponse, type StockMutation, type StockLocation, type StockLocationResponse } from "@/lib/trade-stock";
@@ -26,7 +28,7 @@ class StockRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
 
-async function stockRequest(user: User, path: string, init: RequestInit = {}) {
+async function stockRequest(fetch: typeof globalThis.fetch, user: User, path: string, init: RequestInit = {}) {
   const token = await user.getIdToken();
   if (init.signal?.aborted) throw new DOMException("Request cancelled.", "AbortError");
   const headers = new Headers(init.headers); headers.set("Authorization", `Bearer ${token}`);
@@ -51,6 +53,7 @@ function StockLocationEditor({ user, location, members, onSaved, onCancel }: {
   user: User; location: StockLocation | null; members: StockMember[];
   onSaved: (locations: StockLocation[], saved: StockLocation) => void; onCancel: () => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [name, setName] = useState(location?.name || "");
   const [kind, setKind] = useState(location?.responsibleMemberId ? "member" : "storage");
   const [responsibleMemberId, setResponsibleMemberId] = useState(location?.responsibleMemberId || "");
@@ -72,7 +75,7 @@ function StockLocationEditor({ user, location, members, onSaved, onCancel }: {
     const requestController = new AbortController(); controller.current = requestController;
     inFlight.current = true; setBusy(true); setError("");
     try {
-      const response = await stockRequest(user, "", { method: "POST", body: pending.current, signal: requestController.signal });
+      const response = await stockRequest(fetch, user, "", { method: "POST", body: pending.current, signal: requestController.signal });
       const result = await response.json() as StockLocationResponse;
       if (!result.ok || !result.location?.id || !Array.isArray(result.locations)) throw new Error("The location update was not confirmed. Retry this same update.");
       if (!requestController.signal.aborted) onSaved(result.locations, result.location);
@@ -96,6 +99,7 @@ export function TradeStockProductSettings({ user, itemId, canManage, disabled = 
   user: User; itemId: string; canManage: boolean; disabled?: boolean; initialAction?: ProductAction | null;
   onChanged?: (item: StockItem) => void; onLoaded?: (item: StockItem) => void; onClose?: () => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [item, setItem] = useState<StockItem | null>(null);
   const [history, setHistory] = useState<StockHistoryEntry[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
@@ -129,7 +133,7 @@ export function TradeStockProductSettings({ user, itemId, canManage, disabled = 
   useEffect(() => { onLoadedRef.current = onLoaded; onChangedRef.current = onChanged; }, [onLoaded, onChanged]);
   useEffect(() => {
     const controller = new AbortController();
-    void stockRequest(user, `?itemId=${encodeURIComponent(itemId)}`, { signal: controller.signal }).then(async (response) => {
+    void stockRequest(fetch, user, `?itemId=${encodeURIComponent(itemId)}`, { signal: controller.signal }).then(async (response) => {
       const result = await response.json() as StockDetailResponse;
       if (!result.ok || result.item?.itemId !== itemId || !Array.isArray(result.item.locations) || !Array.isArray(result.history) || !Array.isArray(result.locations) || !Array.isArray(result.members)) throw new Error("Stock details could not be verified. Load them again.");
       if (controller.signal.aborted) return;
@@ -144,7 +148,7 @@ export function TradeStockProductSettings({ user, itemId, canManage, disabled = 
     }).catch((failure: unknown) => { if (!controller.signal.aborted) { setLoadError(failure instanceof Error ? failure.message : "Stock could not be loaded."); setAccess(false); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [initialAction, itemId, reload, user]);
+  }, [fetch, initialAction, itemId, reload, user]);
 
   function begin(next: ProductAction) {
     if (!writable || busy || loading || uncertain || locationEditor !== null || !item) return;
@@ -170,7 +174,7 @@ export function TradeStockProductSettings({ user, itemId, canManage, disabled = 
     inFlight.current = true; setBusy(true);
     const controller = new AbortController(); actionController.current = controller;
     try {
-      const response = await stockRequest(user, "", { method: "POST", body: JSON.stringify(mutation), signal: controller.signal });
+      const response = await stockRequest(fetch, user, "", { method: "POST", body: JSON.stringify(mutation), signal: controller.signal });
       const result = await response.json() as StockDetailResponse;
       if (!result.ok || result.item?.itemId !== itemId || !Array.isArray(result.item.locations) || !Array.isArray(result.history) || !Array.isArray(result.locations) || !Array.isArray(result.members)) throw new Error("The update was not confirmed. Try again to check this same update safely.");
       if (!mounted.current) return;
@@ -233,6 +237,7 @@ export function TradeStockProductSettings({ user, itemId, canManage, disabled = 
 export function TradeStockWorkspace({ user, canManage, onOpenItems, onTrackedChanged, initialItemId }: {
   user: User; canManage: boolean; onOpenItems: () => void; onTrackedChanged?: () => void; initialItemId?: string;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [items, setItems] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -243,14 +248,14 @@ export function TradeStockWorkspace({ user, canManage, onOpenItems, onTrackedCha
   const [selected, setSelected] = useState<{ itemId: string; action: ProductAction | null } | null>(() => initialItemId ? { itemId: initialItemId, action: null } : null);
   useEffect(() => {
     const controller = new AbortController();
-    void stockRequest(user, "", { signal: controller.signal }).then(async (response) => {
+    void stockRequest(fetch, user, "", { signal: controller.signal }).then(async (response) => {
       const result = await response.json() as StockListResponse;
       if (!result.ok || !Array.isArray(result.items)) throw new Error("Stock could not be loaded. Try again.");
       if (!controller.signal.aborted) { setItems(result.items.filter((item) => item.tracked)); setAccess(result.canManage === true); }
     }).catch((failure: unknown) => { if (!controller.signal.aborted) { setError(failure instanceof Error ? failure.message : "Stock could not be loaded."); setAccess(false); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [user, reload]);
+  }, [fetch, user, reload]);
   function refreshList() { setLoading(true); setError(""); setReload((value) => value + 1); }
   function changed(item: StockItem) { setItems((current) => current.map((row) => row.itemId === item.itemId ? item : row).filter((row) => row.tracked)); onTrackedChanged?.(); }
   const lowCount = items.filter((item) => item.availableMilli <= item.lowStockMilli).length;

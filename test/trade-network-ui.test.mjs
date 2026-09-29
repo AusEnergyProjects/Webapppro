@@ -6,7 +6,7 @@ import * as jsx from "react/jsx-runtime";
 import * as contract from "../src/lib/trade-network.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradeNetworkWorkspace.tsx", import.meta.url), "utf8");
-const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const text = node => node == null || typeof node === "boolean" || node.props?.["aria-hidden"] === "true" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : typeof node.type === "function" ? text(node.type(node.props)) : text(node.props?.children);
 function nodes(node, predicate) {
   if (!node || typeof node !== "object") return [];

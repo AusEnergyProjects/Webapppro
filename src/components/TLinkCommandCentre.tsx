@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 
@@ -46,6 +48,7 @@ const kindLabels: Record<SearchKind | "all", string> = {
 };
 
 export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: CommandProps) {
+  const fetch = useTradeBusinessFetch();
   const { businessOperations, priceBook, teamAccess } = features;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -127,7 +130,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
       window.clearTimeout(debounce);
       controller.abort();
     };
-  }, [category, open, query, user]);
+  }, [fetch, category, open, query, user]);
 
   const results = resultKey === `${category}:${query.trim()}`
     ? records.filter((record) => partnerType === "supplier" || record.kind !== "order") : [];

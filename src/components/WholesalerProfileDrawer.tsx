@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 
@@ -17,6 +19,7 @@ const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD
 const readable = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export function WholesalerProfileDrawer({ user, supplierUid, onClose }: { user: User; supplierUid: string; onClose: () => void }) {
+  const fetch = useTradeBusinessFetch();
   const [profile, setProfile] = useState<SupplierProfile | null>(null);
   const [status, setStatus] = useState("Loading wholesaler profile...");
   const [search, setSearch] = useState("");
@@ -32,7 +35,7 @@ export function WholesalerProfileDrawer({ user, supplierUid, onClose }: { user: 
         if (active) { setProfile(result.supplier); setStatus(""); }
       }).catch((error) => { if (active && !controller.signal.aborted) setStatus(error instanceof Error ? error.message : "The wholesaler profile could not be loaded."); });
     return () => { active = false; controller.abort(); };
-  }, [supplierUid, user]);
+  }, [fetch, supplierUid, user]);
 
   const products = useMemo(() => profile?.products.filter((product) => `${product.brand} ${product.modelNumber} ${product.name}`.toLowerCase().includes(search.toLowerCase())) || [], [profile, search]);
 

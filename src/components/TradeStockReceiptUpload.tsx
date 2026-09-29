@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { MAX_RECEIPT_BYTES, receiptQuantityMilli, type ReceiptProduct, type StockReceipt } from "@/lib/trade-stock-receipts";
@@ -9,6 +11,7 @@ import styles from "./TradeStockReceiptUpload.module.css";
 type Workspace = { ok: boolean; products: ReceiptProduct[]; locations: StockLocation[]; receipts: StockReceipt[]; receipt: StockReceipt | null; error?: string };
 type Line = { id: string; description: string; documentUnit: string; itemId: string; quantity: string };
 export function TradeStockReceiptUpload({ user, onReceived }: { user: User; onReceived: () => void }) {
+  const fetch = useTradeBusinessFetch();
   const [open, setOpen] = useState(false), [workspace, setWorkspace] = useState<Workspace | null>(null), [receipt, setReceipt] = useState<StockReceipt | null>(null);
   const [lines, setLines] = useState<Line[]>([]), [supplier, setSupplier] = useState(""), [reference, setReference] = useState(""), [location, setLocation] = useState("");
   const [busy, setBusy] = useState(""), [error, setError] = useState(""), [message, setMessage] = useState(""), [confirmed, setConfirmed] = useState(false);
@@ -17,7 +20,7 @@ export function TradeStockReceiptUpload({ user, onReceived }: { user: User; onRe
   const request = useCallback(async (suffix = "", init: RequestInit = {}) => {
     const response = await fetch(`/api/trade-stock/receipts${suffix}`, { ...init, headers: { Authorization: `Bearer ${await user.getIdToken()}`, ...init.headers }, cache: "no-store" });
     const result = await response.json(); if (!response.ok || !result.ok) throw new Error(result.error || "Stock documents could not be loaded."); return result;
-  }, [user]);
+  }, [fetch, user]);
   function selectReceipt(value: StockReceipt | null) {
     setReceipt(value); setConfirmed(false); setError(""); setPendingConfirmation(null);
     setSupplier(value?.confirmed?.supplier || value?.extraction.supplier || ""); setReference(value?.confirmed?.reference || value?.extraction.reference || "");

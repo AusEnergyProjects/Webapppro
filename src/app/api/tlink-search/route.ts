@@ -48,11 +48,11 @@ export async function GET(request: Request) {
     let teamAccess: TeamAccess | null = null;
     let partnerType: "installer" | "supplier";
     let ownerUid: string;
-    if (ownAccount) {
-      const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer", "supplier"] });
+    if (ownAccount?.partnerType === "supplier"
+      && (!request.headers.has("X-TLink-Business") || request.headers.get("X-TLink-Business") === identity.uid)) {
+      const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["supplier"] });
       partnerType = verified.partnerType;
       ownerUid = identity.uid;
-      if (partnerType === "installer") teamAccess = await requireInstallerTeamAccess(request);
     } else {
       teamAccess = await requireInstallerTeamAccess(request);
       partnerType = "installer";

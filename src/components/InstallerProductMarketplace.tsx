@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
@@ -157,6 +159,7 @@ function readable(value: string) {
 }
 
 export function InstallerProductMarketplace({ user, navigationTarget }: { user: User; navigationTarget?: TLinkCommandTarget | null }) {
+  const fetch = useTradeBusinessFetch();
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
   const [facets, setFacets] = useState<CatalogueFacets>({ suppliers: [], brands: [], states: [], stocks: [], models: [] });
   const [page, setPage] = useState(1);
@@ -212,7 +215,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     const result = await response.json().catch(() => ({}));
     if (!response.ok || result.ok === false) throw new Error(result.error || "The product workspace could not be updated.");
     return result;
-  }, [user]);
+  }, [fetch, user]);
 
   const applyLists = useCallback((nextLists: ProductList[]) => {
     setLists(nextLists);

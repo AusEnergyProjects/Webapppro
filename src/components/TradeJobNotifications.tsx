@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
@@ -31,6 +33,7 @@ export function TradeJobNotifications({
   onOpenOpportunity: (matchId: string) => void;
   onOpenNetwork: (postId: string) => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<JobNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -67,7 +70,7 @@ export function TradeJobNotifications({
       window.clearTimeout(timeout);
       if (loadController.current === controller) loadController.current = null;
     }
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     const initial = window.setTimeout(() => void load(), 0);

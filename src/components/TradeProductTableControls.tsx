@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { StockDetailResponse, StockItem, StockMutation } from "@/lib/trade-stock";
@@ -29,6 +31,7 @@ export function TradeProductStockSwitch({ user, itemId, name, stock, loading, fa
   user: User; itemId: string; name: string; stock: StockItem | null; loading: boolean; failed: boolean; canManage: boolean;
   onChanged: (item: StockItem) => void; onRefresh: () => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [uncertain, setUncertain] = useState(false);

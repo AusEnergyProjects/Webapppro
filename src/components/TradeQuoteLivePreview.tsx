@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { dollarsToCents, normaliseTradeQuoteLineGroup, overallTradeQuoteDiscountKind, OVERALL_PERCENT_DISCOUNT_SECTION, tradeQuoteChoiceValidationIssue, tradeQuoteLineValidationIssues } from "@/lib/trade-quote";
@@ -56,6 +58,7 @@ type Props = {
 };
 
 export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, business, job, identity, customerMessage, terms, validUntil, validationMessage, roofImage, equipment, productDocuments = [], pdfVersionId, pdfUpdatedAt, draftDirty = false, review = false }: Props) {
+  const fetch = useTradeBusinessFetch();
   const [logo, setLogo] = useState<{ ownerContext: string; url: string } | null>(null);
   const [roofAsset, setRoofAsset] = useState<{ key: string; url: string; error: string } | null>(null);
   const ownerContext = `${user.uid}:${workOrderId}`;
@@ -78,7 +81,7 @@ export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, busin
       if (!controller.signal.aborted) setRoofAsset({ key: roofKey, url: "", error: error instanceof Error ? error.message : "Could not load the roof image." });
     });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [roofKey, roofVersion, user, workOrderId]);
+  }, [fetch, roofKey, roofVersion, user, workOrderId]);
   const roofUrl = roofImage && "dataUrl" in roofImage ? roofImage.dataUrl : roofAsset?.key === roofKey ? roofAsset.url : "";
   const roofError = roofAsset?.key === roofKey ? roofAsset.error : "";
   useEffect(() => {
@@ -95,7 +98,7 @@ export function TradeQuoteLivePreview({ user, workOrderId, lines, choices, busin
       setLogo({ ownerContext, url: objectUrl });
     }).catch(() => { /* Business name remains visible when no authorised logo can be loaded. */ });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [business?.hasLogo, ownerContext, user, workOrderId]);
+  }, [fetch, business?.hasLogo, ownerContext, user, workOrderId]);
   const document = validationMessage ? { complete: false as const, message: validationMessage } : liveQuoteDocument(lines, choices);
   const name = business?.businessName || "Your trade business";
   return <aside className={`${styles.preview}${review ? ` ${styles.review}` : ""}`} aria-label={review ? "Quote ready for review" : "Live quote document preview"} data-theme={business?.brandThemeKey || "emerald_navy"} data-border={business?.brandBorderStyle || "soft"}>

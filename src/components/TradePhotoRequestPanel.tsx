@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import type { PhotoRequirement, PhotoTemplateFeedback, PhotoTemplateFeedbackValue } from "@/lib/trade-photo-requests";
@@ -39,6 +41,7 @@ type Result = {
 };
 
 export function TradePhotoRequestPanel({ user, workOrderId }: { user: User; workOrderId: string }) {
+  const fetch = useTradeBusinessFetch();
   const [record, setRecord] = useState<RequestRecord | null>(null);
   const [requirements, setRequirements] = useState<PhotoRequirement[]>([]);
   const [defaults, setDefaults] = useState<PhotoRequirement[]>([]);
@@ -85,7 +88,7 @@ export function TradePhotoRequestPanel({ user, workOrderId }: { user: User; work
     }
     void load();
     return () => { active = false; };
-  }, [apply, user, workOrderId]);
+  }, [fetch, apply, user, workOrderId]);
 
   function update(index: number, field: keyof PhotoRequirement, value: string | boolean) {
     setRequirements((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));

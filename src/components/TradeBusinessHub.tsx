@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeHandoverCentre } from "./TradeHandoverCentre";
@@ -159,6 +161,7 @@ function BusinessHubFoundation({
   fullAccess: boolean;
   teamAccess: boolean;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [sourceOptions, setSourceOptions] = useState<SourceOption[]>([]);
   const [recentActivity, setRecentActivity] = useState<HubResult["recentActivity"]>([]);
@@ -235,7 +238,7 @@ function BusinessHubFoundation({
     }
     void load();
     return () => { cancelled = true; };
-  }, [user]);
+  }, [fetch, user]);
 
   const selectedSource = sourceSelection === "internal"
     ? null

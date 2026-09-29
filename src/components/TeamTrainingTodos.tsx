@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
@@ -21,6 +23,7 @@ function moduleStatus(module: Module) {
 }
 
 export function TeamTrainingTodos({ user, memberId, displayName, hasOfficeLogin, active, unsavedServices, saving, onSave, onOpenOwnTraining, ownTrainingHref }: Props) {
+  const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(active);
@@ -46,7 +49,7 @@ export function TeamTrainingTodos({ user, memberId, displayName, hasOfficeLogin,
       finally { if (current) setLoading(false); }
     })();
     return () => { current = false; controller.abort(); };
-  }, [active, memberId, refresh, user]);
+  }, [fetch, active, memberId, refresh, user]);
   const modules = data?.modules || [];
   const unavailable = data?.unavailableActivities || [];
   const programs = [...new Set([...modules, ...unavailable].map(module => module.programCode))].sort();

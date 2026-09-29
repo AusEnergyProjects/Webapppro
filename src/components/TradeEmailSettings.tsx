@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import styles from "./TradeEmailSettings.module.css";
@@ -23,6 +25,7 @@ type EmailSettingsResponse = {
 export const TRADE_EMAIL_SETTINGS_HREF = "/direct-trade/dashboard?workspace=account#business-settings-email";
 
 export function TradeEmailSettings({ user }: { user: User }) {
+  const fetch = useTradeBusinessFetch();
   const [settings, setSettings] = useState<EmailSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -38,7 +41,7 @@ export function TradeEmailSettings({ user }: { user: User }) {
     const result = await response.json() as EmailSettingsResponse;
     if (!response.ok || !result.ok) throw new Error(result.error || "Your email connection could not be loaded.");
     return result;
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     const controller = new AbortController();

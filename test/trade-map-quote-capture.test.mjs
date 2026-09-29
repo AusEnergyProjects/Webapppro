@@ -14,7 +14,7 @@ const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 function harness(t, component, captureImage, options = {}) {
   const source = fs.readFileSync(new URL(`../src/components/${component}.tsx`, import.meta.url), "utf8");
-  const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
   let cursor = 0;
   const slots = [], effects = [], pending = [], quoted = [], busy = [], controls = [], events = [], savedInputs = [];
   const react = {

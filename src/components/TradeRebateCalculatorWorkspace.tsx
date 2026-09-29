@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useState } from "react";
 import type { User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
@@ -18,6 +20,8 @@ type ApiAttempt = {
 };
 
 export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
+  const fetch = useTradeBusinessFetch();
+  const businessOwnerUid = useTradeBusiness()?.ownerUid || user.uid;
   const [preparingMessage, setPreparingMessage] = useState("");
 
   const api = useCallback(async (
@@ -118,7 +122,7 @@ export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
     } finally {
       setPreparingMessage(tradeRebatePreparingMessage(null));
     }
-  }, [user]);
+  }, [fetch, user]);
 
   return (
     <section className="dashboard-panel trade-rebate-calculator" aria-labelledby="trade-rebate-calculator-title">
@@ -142,7 +146,7 @@ export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
         <CreditexAllProgramCalculator
           api={api}
           role="trade"
-          documentDraftOwnerUid={user.uid}
+          documentDraftOwnerUid={businessOwnerUid}
         />
       </div>
     </section>

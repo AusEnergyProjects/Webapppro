@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 
@@ -32,6 +34,7 @@ const warrantyState = (end: string) => {
 export function TradeAssetWorkspace({ user, customerId = "", sites = [], compact = false, onOpenJob }: {
   user: User; customerId?: string; sites?: Site[]; compact?: boolean; onOpenJob?: (id: string) => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [pending, setPending] = useState<Asset[]>([]);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
@@ -46,7 +49,7 @@ export function TradeAssetWorkspace({ user, customerId = "", sites = [], compact
     const result = await response.json().catch(() => ({})) as AssetResult;
     if (!response.ok || result.ok === false) throw new Error(result.error || "The asset register request could not be completed.");
     return result;
-  }, [user]);
+  }, [fetch, user]);
 
   const load = useCallback(async () => {
     const params = new URLSearchParams({ search, status: assetStatus, warranty, category, customerId, siteId });

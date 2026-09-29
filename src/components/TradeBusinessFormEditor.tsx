@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 
@@ -9,6 +11,7 @@ type Library = { canManage: boolean; templates: Template[] };
 const newField = (): Field => ({ key: `question_${crypto.randomUUID().replaceAll("-", "_")}`, label: "", type: "select", required: false, options: ["Yes", "No"] });
 
 export function TradeBusinessFormEditor({ user, serviceCategory, onSaved }: { user: User; serviceCategory: string; onSaved: () => Promise<void> }) {
+  const fetch = useTradeBusinessFetch();
   const [library, setLibrary] = useState<Library>({ canManage: false, templates: [] });
   const [draft, setDraft] = useState<Template | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
@@ -17,7 +20,7 @@ export function TradeBusinessFormEditor({ user, serviceCategory, onSaved }: { us
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Could not open your form library.");
     return result;
-  }, [user]);
+  }, [fetch, user]);
   useEffect(() => {
     let active = true;
     void request().then((result) => { if (active) setLibrary(result); }).catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Could not open the form library."); });

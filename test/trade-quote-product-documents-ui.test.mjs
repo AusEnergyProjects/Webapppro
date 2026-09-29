@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
 const source = fs.readFileSync(new URL('../src/components/TradeQuoteProductDocuments.tsx', import.meta.url), 'utf8');
-const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const nodes = (node, match) => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, match)) : [...(match(node) ? [node] : []), ...nodes(node.props?.children, match)];
 test('complete PDF viewer retries failed requests, exposes download and removes stale cross-job assets', async t => {
   const state = [], effects = [], pending = [], revoked = [], requests = [];

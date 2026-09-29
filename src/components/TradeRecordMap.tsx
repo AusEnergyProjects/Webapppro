@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 /// <reference types="google.maps" />
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -105,6 +107,8 @@ const geocodeMessages = {
 };
 
 export function TradeRecordMap({ user, records, loading = false, total, onOpenRecord, quoteAccess, onRegisterMapSave }: Props) {
+  const fetch = useTradeBusinessFetch();
+  const businessOwnerUid = useTradeBusiness()?.ownerUid || user.uid;
   const [quoteMeasurement, setQuoteMeasurement] = useState<MapQuoteMeasurement | null>(null);
   const [linkedDesign, setLinkedDesign] = useState<SolarDesign | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -184,7 +188,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
         });
         createdMap.addListener("dragstart", () => { interactedRef.current = true; });
         const geocoder = new api.Geocoder();
-        setRuntime({ ownerUid: user.uid, api, map: createdMap, resolve: createTradeMapAddressResolver((address) => geocodeTradeMapAddress(geocoder, address)) });
+        setRuntime({ ownerUid: businessOwnerUid, api, map: createdMap, resolve: createTradeMapAddressResolver((address) => geocodeTradeMapAddress(geocoder, address)) });
         setMapState("ready");
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -198,7 +202,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
       if (createdMap && api) api.event.clearInstanceListeners(createdMap);
       canvas?.replaceChildren();
     };
-  }, [user, setupAttempt]);
+  }, [businessOwnerUid, fetch, user, setupAttempt]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -207,7 +211,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
       setLocations(new Map());
       setProgress(INITIAL_PROGRESS);
       interactedRef.current = exploringRef.current;
-      if (!runtime || runtime.ownerUid !== user.uid || loading) return;
+      if (!runtime || runtime.ownerUid !== businessOwnerUid || loading) return;
       const addresses = new Map<string, string>();
       for (const record of records) {
         const address = prepareTradeMapAddress(record.address);
@@ -237,7 +241,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
     }
     void locateRecords();
     return () => { controller.abort(); };
-  }, [runtime, records, loading, locateAttempt, user.uid]);
+  }, [businessOwnerUid, runtime, records, loading, locateAttempt, user.uid]);
 
   const pins = useMemo(() => groupTradeMapPins(records, locations), [records, locations]);
   const legendCategories = useMemo(() => {
@@ -264,7 +268,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
   }, [runtime]);
 
   useEffect(() => {
-    if (!runtime || runtime.ownerUid !== user.uid) return;
+    if (!runtime || runtime.ownerUid !== businessOwnerUid) return;
     const markers = markersRef.current;
     const activeKeys = new Set(pins.map((pin) => pin.key));
     for (const [key, entry] of markers) {
@@ -298,7 +302,7 @@ export function TradeRecordMap({ user, records, loading = false, total, onOpenRe
         selectedPinKeys.has(pin.key),
       );
     }
-  }, [runtime, pins, selectedPinKeys, user.uid, measuring]);
+  }, [businessOwnerUid, runtime, pins, selectedPinKeys, user.uid, measuring]);
 
   function selectRecord(record: TradeMapRecord) {
     interactedRef.current = true;

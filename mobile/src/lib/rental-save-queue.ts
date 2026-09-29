@@ -10,6 +10,7 @@ import { assertLocalDataOwner, getLocalDataOwner, readRentalSetting, rentalQueue
   subscribeLocalDataOwner, writeRentalSetting, type LocalDataOwner } from '@/lib/database';
 import { captureSessionId, type observeLocation, type observedTime } from '@/lib/evidence';
 import { getFieldPrincipal } from '@/lib/field-session';
+import { getBusinessSession } from '@/lib/business-session';
 import { RENTAL_ADVERSE_OUTCOMES, type RentalAssessmentFinding, type RentalAssessmentItem,
   type RentalAssessmentModule, type RentalAssessmentResult } from '@/lib/rental-inspection';
 
@@ -133,7 +134,8 @@ async function checkOwner(owner: LocalDataOwner) {
   assertLocalDataOwner(owner);
   const principal = await getFieldPrincipal();
   assertLocalDataOwner(owner);
-  const current = principal?.localOwnerKey || (firebaseAuth.currentUser ? `firebase:${firebaseAuth.currentUser.uid}` : '');
+  const business = firebaseAuth.currentUser ? await getBusinessSession(firebaseAuth.currentUser.uid) : null;
+  const current = principal?.localOwnerKey || business?.principal.localOwnerKey || '';
   if (!current || current !== owner.key) throw new RentalSaveQueueError('The signed-in account changed. Your save has stopped.', 'RENTAL_OWNER_CHANGED');
 }
 

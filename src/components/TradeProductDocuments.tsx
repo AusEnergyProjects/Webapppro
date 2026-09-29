@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { MAX_PRODUCT_DOCUMENT_BYTES, MAX_PRODUCT_DOCUMENTS, MAX_PRODUCT_DOCUMENT_PAGES, type ProductDocumentMetadata } from "@/lib/trade-price-book-documents";
@@ -8,6 +10,7 @@ import styles from "./TradeProductDocuments.module.css";
 type Result = { ok?: boolean; error?: string; documents?: ProductDocumentMetadata[]; document?: ProductDocumentMetadata };
 
 export function TradeProductDocuments({ user, itemId, canManage, disabled = false }: { user: User; itemId: string; canManage: boolean; disabled?: boolean }) {
+  const fetch = useTradeBusinessFetch();
   const [documents, setDocuments] = useState<ProductDocumentMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -35,7 +38,7 @@ export function TradeProductDocuments({ user, itemId, canManage, disabled = fals
       throw new Error(result.error || "The product document could not be loaded. Try again.");
     }
     return response;
-  }, [path, user]);
+  }, [fetch, path, user]);
 
   useEffect(() => {
     mounted.current = true;

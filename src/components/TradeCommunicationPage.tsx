@@ -1,5 +1,7 @@
 "use client";
 
+import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
@@ -15,6 +17,22 @@ type HandoffResult = { ok?: boolean; error?: string; access?: Access; threadId?:
 const safeId = (value: string | null) => value && /^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/.test(value) ? value : "";
 
 export default function TradeCommunicationPage() {
+  const [nativeSession, setNativeSession] = useState<boolean | null>(null);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      let handoff = new URLSearchParams(window.location.hash.slice(1)).has("handoff");
+      try { handoff ||= Boolean(sessionStorage.getItem("tlink-team-handoff")); } catch { /* A fresh native handoff still works without storage. */ }
+      setNativeSession(handoff);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  if (nativeSession === null) return <p role="status">Opening team messages...</p>;
+  if (nativeSession) return <TradeCommunicationContent />;
+  return <TradeBusinessGate destination="messages"><TradeCommunicationContent /></TradeBusinessGate>;
+}
+
+function TradeCommunicationContent() {
+  const fetch = useTradeBusinessFetch();
   const [session,setSession] = useState<Session | null>(null);
   const [loading,setLoading] = useState(true);
   const [error,setError] = useState("");
@@ -64,11 +82,11 @@ export default function TradeCommunicationPage() {
     }
     const unsubscribe = redemption.current || expectedMember ? (void open(null,redemption.current || undefined), () => {}) : onAuthStateChanged(firebaseAuth,user => { setSession(null); setLoading(true); void open(user); });
     return () => { active = false; unsubscribe(); };
-  },[]);
+  },[fetch]);
   const getAuthHeaders = useCallback(async ():Promise<Record<string,string>> => session?.user ? {Authorization:`Bearer ${await session.user.getIdToken()}`} : {"x-tlink-comms-member":session?.access.memberId || ""},[session]);
   async function closeSession() {
     try {
-      await disableTradeDeviceNotifications(getAuthHeaders);
+      await disableTradeDeviceNotifications(getAuthHeaders, fetch);
       const response = await fetch("/api/trade-team-handoff",{method:"DELETE",headers:await getAuthHeaders(),signal:AbortSignal.timeout(15000)});
       if (!response.ok) throw new Error("Could not close this session. Try again.");
       try { sessionStorage.removeItem("tlink-team-handoff"); } catch { /* The server session has already been closed. */ }

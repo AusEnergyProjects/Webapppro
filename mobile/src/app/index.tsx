@@ -97,7 +97,8 @@ function StartupSettings() {
 }
 
 export default function SignInScreen() {
-  const { user, loading, access, sync, syncNow, pinSignIn, signOut } = useApp();
+  const { user, loading, access, sync, syncNow, pinSignIn, signOut, businesses, choosingBusiness,
+    businessError, chooseBusiness, cancelBusinessChooser, retryBusinesses } = useApp();
   const [displayName, setDisplayName] = useState('');
   const [pin, setPin] = useState('');
   const [officeMode, setOfficeMode] = useState(false);
@@ -107,6 +108,27 @@ export default function SignInScreen() {
   const [message, setMessage] = useState('');
 
   if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color={colours.green} /><Text style={styles.intro}>Checking secure trade access...</Text></View>;
+  if (choosingBusiness) return <Screen>
+    <View style={styles.brand}>
+      <Image accessibilityLabel="TLink" alt="TLink" source={tlinkIcon} style={styles.mark} />
+      <Text style={styles.eyebrow}>YOUR WORKSPACE</Text>
+      <Text style={styles.title}>Which business are you working with?</Text>
+      <Text style={styles.intro}>Choose a business for today. You can switch from the top of the app.</Text>
+    </View>
+    {businesses.map(choice => <Pressable key={`${choice.ownerUid}:${choice.memberId}`}
+      accessibilityRole="button" accessibilityLabel={`Open ${choice.businessName}, ${choice.role === 'owner' ? 'your business' : 'team member'}`}
+      onPress={() => void chooseBusiness(choice)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+      <MaterialCommunityIcons name="office-building-outline" color={colours.green} size={28} />
+      <Text style={styles.cardTitle}>{choice.businessName}</Text>
+      <Text style={styles.guidance}>{choice.role === 'owner' ? 'Your business' : 'Team member'}{user?.ownerId === choice.ownerUid ? ' · Current' : ''}</Text>
+    </Pressable>)}
+    {businessError ? <Text accessibilityLiveRegion="polite" style={styles.message}>{businessError}</Text> : null}
+    {businessError ? <FieldButton onPress={() => void retryBusinesses()}>Try again</FieldButton> : null}
+    {user ? <FieldButton variant="quiet" onPress={cancelBusinessChooser}>Back to {user.businessName}</FieldButton> : null}
+    <FieldButton variant="quiet" onPress={() => Alert.alert('Sign out?', 'Saved offline work will be removed. Stay signed in if you still need to sync it.', [
+      { text: 'Stay signed in', style: 'cancel' }, { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
+    ])}>Sign out</FieldButton>
+  </Screen>;
   if (user && access.status === 'approved') return <Redirect href="/(tabs)/work" />;
   if (user) {
     return (

@@ -13,7 +13,7 @@ import { checkForAppUpdate, restartIntoUpdate } from '@/lib/updates';
 import { useApp } from '@/providers/app-provider';
 
 export default function SettingsScreen() {
-  const { user, signOut } = useApp();
+  const { user, signOut, businesses, openBusinessChooser } = useApp();
   const [deviceId, setDeviceId] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateMessage, setUpdateMessage] = useState('');
@@ -42,6 +42,9 @@ export default function SettingsScreen() {
         <View style={styles.icon}><MaterialCommunityIcons name="account-hard-hat-outline" color={colours.white} size={30} /></View>
         <Text style={styles.title}>{user?.displayName || 'Installer team member'}</Text>
         <Text style={styles.body}>{user?.email}</Text>
+        <Text style={styles.label}>CURRENT BUSINESS</Text>
+        <Text style={styles.title}>{user?.businessName || 'Your team'}</Text>
+        {user?.authMode === 'firebase' && businesses.length > 1 ? <FieldButton variant="quiet" onPress={() => void openBusinessChooser()}>Switch business</FieldButton> : null}
       </View>
       <DeviceNotificationSettings />
       <View style={styles.card}>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { platformQuoteOptions as rawPlatformQuoteOptions } from "@/lib/customer-projects.mjs";
@@ -69,6 +71,7 @@ function authoritativeSavedQuote(value: unknown): SavedQuote | null {
 }
 
 export function InstallerPlatformQuote({ matchId, initialQuote, onStatus }: { matchId: string; initialQuote: SavedQuote | null; onStatus: (message: string) => void }) {
+  const fetch = useTradeBusinessFetch();
   const [lists, setLists] = useState<ProductList[]>([]);
   const [listsReady, setListsReady] = useState(false);
   const [expanded, setExpanded] = useState(!initialQuote);
@@ -100,7 +103,7 @@ export function InstallerPlatformQuote({ matchId, initialQuote, onStatus }: { ma
     }
     void loadLists();
     return () => { cancelled = true; };
-  }, []);
+  }, [fetch]);
 
   const selectedList = lists.find((list) => list.id === productListId);
   const productSubtotal = useMemo(() => selectedList?.items.reduce((sum, item) => sum + item.quantity * item.unitPriceCentsExGst, 0) || saved?.productSubtotalCentsExGst || 0, [saved, selectedList]);

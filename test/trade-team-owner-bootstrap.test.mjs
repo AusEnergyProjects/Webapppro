@@ -47,6 +47,7 @@ function loadServer(database) {
     "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => {} },
     "./tlink-schema-guards": { ensureTlinkSchemaGuards: async () => {} },
     "./trade-team-permission-policy.mjs": { canAssignWithinScope: () => false },
+    "./trade-business-context-server": {},
     "./trade-field-session-server": {
       isFieldSessionRequest: () => false,
       requireFieldSessionAccess: async () => { throw new Error("not used"); },

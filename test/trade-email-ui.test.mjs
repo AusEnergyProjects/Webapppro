@@ -42,7 +42,7 @@ function component(name, props, fetchImpl) {
       effects.push(() => { slots[index].cleanup = effect(); });
     },
   };
-  const compiled = ts.transpileModule(source(name), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const compiled = ts.transpileModule(source(name), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
   const exported = {};
   Function("exports", "require", "fetch", "window", "document", compiled)(exported, id => {
     if (id === "react") return hooks;

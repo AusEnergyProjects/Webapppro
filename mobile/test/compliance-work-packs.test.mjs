@@ -63,7 +63,8 @@ test('linked current activities open a phone-first schema-driven wizard without 
 });
 
 test('editable work-pack context resolves minimal predictions without changing protected records or save semantics', () => {
-  assert.match(wizard, /import \{ apiRequest \} from '@\/lib\/api'/);
+  assert.match(wizard, /import \{ useBusinessApi \} from '@\/lib\/use-business-api'/);
+  assert.match(wizard, /const apiRequest = useBusinessApi\(\)/);
   assert.equal(
     [...wizard.matchAll(/apiRequest<[^>]+>\('\/api\/trade-address-suggestions'/g)].length,
     2,

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import type { User } from "firebase/auth";
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { SearchableLookup, type SearchableLookupOption } from "./SearchableLookup";
@@ -194,6 +196,7 @@ export function TradeNewJobForm({
   initial?: TradeNewJobInitial;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const formRef = useRef<HTMLFormElement>(null);
   const appointmentScheduleStatusId = useId();
   const [step, setStep] = useState(1);
@@ -333,7 +336,7 @@ export function TradeNewJobForm({
     } finally {
       setAssigneesLoading(false);
     }
-  }, [canChooseTeamAssignee, serviceCategory, teamMembers, user]);
+  }, [fetch, canChooseTeamAssignee, serviceCategory, teamMembers, user]);
 
   function resetActivityDraft() {
     setActivityDraftOpen(false);
@@ -423,7 +426,7 @@ export function TradeNewJobForm({
     const response = await fetch(`/api/trade-crm?${new URLSearchParams({ mode: "index", resource: "customers", search: query, pageSize: "25", sort: "name-asc", total: "0" })}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     const result = await response.json() as { items?: Customer[] };
     return (result.items || []).map((customer) => ({ id: customer.id, label: customer.displayName, secondary: [customer.customerNumber, customer.phone, customer.suburb, customer.postcode].filter(Boolean).join(" | ") }));
-  }, [allowCustomerSearch, user]);
+  }, [fetch, allowCustomerSearch, user]);
 
   useEffect(() => {
     if (!customerId) return;
@@ -464,7 +467,7 @@ export function TradeNewJobForm({
         if (active) setLoadingSites(false);
       });
     return () => { active = false; };
-  }, [customerId, initial?.createNewSite, initial?.customerId, initial?.serviceSiteId, siteLoadRetry, user]);
+  }, [fetch, customerId, initial?.createNewSite, initial?.customerId, initial?.serviceSiteId, siteLoadRetry, user]);
 
   function selectCustomer(id: string) {
     const changed = id !== customerId;

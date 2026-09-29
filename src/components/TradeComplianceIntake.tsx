@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -75,6 +77,7 @@ export function TradeComplianceIntake({
   };
   onChanged: () => Promise<void>;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [activities, setActivities] = useState<ComplianceActivity[]>([]);
   const [context, setContext] = useState<CatalogueResponse["context"]>();
   const [programId, setProgramId] = useState("");
@@ -196,7 +199,7 @@ export function TradeComplianceIntake({
     } finally {
       setLoading(false);
     }
-  }, [initialIntent, user, workOrderId]);
+  }, [fetch, initialIntent, user, workOrderId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);

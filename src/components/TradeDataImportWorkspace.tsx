@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { IMPORT_DEFINITIONS, importTemplateCsv, mappedImportCsv, parseImportCsv } from "@/lib/trade-data-imports.mjs";
@@ -42,6 +44,7 @@ function rowTitle(row: ImportRow, type: ImportType) {
 }
 
 export function TradeDataImportWorkspace({ user, partnerType, onImported }: { user: User; partnerType: "installer" | "supplier"; onImported?: () => void | Promise<void> }) {
+  const fetch = useTradeBusinessFetch();
   const availableTypes = useMemo(() => (partnerType === "supplier" ? ["products"] : ["customers", "jobs"]) as SelectableImportType[], [partnerType]);
   const [importType, setImportType] = useState<SelectableImportType>(availableTypes[0]);
   const [batches, setBatches] = useState<ImportBatch[]>([]);
@@ -64,7 +67,7 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
     const result = await response.json().catch(() => ({})) as ImportResult;
     if (!response.ok || result.ok === false) throw new Error(result.error || "The import request could not be completed.");
     return result;
-  }, [user]);
+  }, [fetch, user]);
 
   const load = useCallback(async (batchId = "") => {
     const result = await request(`/api/trade-imports${batchId ? `?batchId=${encodeURIComponent(batchId)}` : ""}`);

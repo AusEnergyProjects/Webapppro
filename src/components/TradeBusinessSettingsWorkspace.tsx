@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import {
   type CSSProperties,
   type FormEvent,
@@ -254,6 +256,7 @@ export function TradeBusinessSettingsWorkspace({
   onProfileChange,
   onAccountClosed,
 }: Props) {
+  const fetch = useTradeBusinessFetch();
   const [availabilityStatus, setAvailabilityStatus] =
     useState<AvailabilityStatus>(profile.availabilityStatus);
   const [emailOpportunities, setEmailOpportunities] = useState(
@@ -369,7 +372,7 @@ export function TradeBusinessSettingsWorkspace({
       active = false;
       controller.abort();
     };
-  }, [profile.logoMediaUrl, user]);
+  }, [fetch, profile.logoMediaUrl, user]);
 
   useEffect(
     () => () => {

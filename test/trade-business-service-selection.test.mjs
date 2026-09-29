@@ -19,7 +19,7 @@ const routeSource = read("../src/app/api/trade-profile/route.ts");
 const compile = (source) => ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
 } }).outputText;
-const uiCompiled = compile(uiSource);
+const uiCompiled = compile(uiSource).replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const routeCompiled = compile(routeSource);
 const text = (node) => node == null || typeof node === "boolean" ? ""
   : typeof node === "string" || typeof node === "number" ? String(node)
@@ -101,6 +101,7 @@ function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"]) {
     "../../../../db": { getD1: () => d1 },
     "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: "owner-1", email: "owner@example.test", emailVerified: true }) },
     "@/lib/trade-access-server": { requireVerifiedTradeIdentity: async () => {}, approvedAbnAccess: () => true,
+      assertTradeOwnerContext: () => {}, TradeAccessError: class extends Error {},
       approvedTradeReviewPredicate: () => "1 = 1" },
     "@/lib/postcode-distance": { postcodeCoordinate: (postcode) => ({ "3000": [-37.81, 144.96], "2000": [-33.86, 151.20] })[postcode] || null },
     "@/lib/admin-notifications": {}, "@/lib/direct-trade-entitlements": entitlements,

@@ -40,6 +40,8 @@ async function originalAccess(row: HandoffRow, request: Request): Promise<TeamAc
   if (typeof stored.authorization !== "string" || typeof stored.deviceId !== "string") throw new Error("AUTH_REQUIRED");
   const headers = new Headers();
   headers.set("Authorization", stored.authorization);
+  // A handoff remains pinned to its original business even after the user joins other teams.
+  headers.set("X-TLink-Business", row.owner_uid);
   if (stored.deviceId) headers.set("x-aea-device-id", stored.deviceId);
   // Delegate all account, ABN, member, device session and MFA checks to the
   // existing authority on every request. A browser handoff never extends it.

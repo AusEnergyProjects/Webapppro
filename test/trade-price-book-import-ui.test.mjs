@@ -7,7 +7,7 @@ import * as spreadsheet from "../src/lib/trade-price-book-spreadsheet.ts";
 import * as priceBook from "../src/lib/trade-price-book.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradePriceBookImport.tsx", import.meta.url), "utf8");
-const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const sheet = { name: "Catalogue", data: [["Item name", "Sell price ex GST", "Cost ex GST"], ["Call-out", 220, 0]] };
 const preview = () => ({ token: "a".repeat(64), counts: { added: 0, updated: 1, unchanged: 0, superseded: 0 }, canImport: true, issues: [],
   items: [{ rowNumber: 2, status: "updated", name: "Call-out", itemCode: "PB-callout", itemType: "call_out", category: "Service fees", supplierSku: "CALL-01", unitLabel: "visit", solarPanel: null, before: { sellPriceCentsExGst: 20000, supplierCostCentsExGst: 0 }, after: { sellPriceCentsExGst: 22000, supplierCostCentsExGst: 0 } }] });

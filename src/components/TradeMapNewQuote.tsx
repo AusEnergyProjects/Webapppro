@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { AustralianAddressLookup, type AustralianAddressSuggestion } from "./AustralianAddressLookup";
@@ -47,6 +49,7 @@ export function TradeMapNewQuote({ user, canCreateCustomer, onCreated, onBusyCha
   onDirtyChange: (dirty: boolean) => void;
   measurementKind: "area" | "distance" | "solar";
 }) {
+  const fetch = useTradeBusinessFetch();
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [search, setSearch] = useState("");
   const [searchRetry, setSearchRetry] = useState(0);
@@ -107,7 +110,7 @@ export function TradeMapNewQuote({ user, canCreateCustomer, onCreated, onBusyCha
       })();
     }, 280);
     return () => { active = false; controller.abort(); clearTimeout(debounce); clearTimeout(timeout); };
-  }, [getAuthorization, locked, lookupKey, mode, searchTerm, selected]);
+  }, [fetch, getAuthorization, locked, lookupKey, mode, searchTerm, selected]);
 
   function changeAddress(field: "addressLine1" | "addressLine2" | "suburb" | "addressState" | "postcode", value: string) {
     if (locked || request.current) return;

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { ENERGY_SERVICE_LABELS, ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
@@ -34,6 +36,7 @@ const percent = (basisPoints: number) => `${(basisPoints / 100).toFixed(1)}%`;
 const blankDraft = (): Draft => ({ name: "", serviceCategory: "assessment", jobTemplateId: "", suggestedCrewSize: "1", recordStatus: "active", lines: [], forms: [] });
 
 export function TradeJobPacketWorkspace({ user, onOpenItems }: { user: User; onOpenItems: () => void }) {
+  const fetch = useTradeBusinessFetch();
   const [packets, setPackets] = useState<JobPacket[]>([]); const [priceItems, setPriceItems] = useState<PacketPriceItem[]>([]);
   const [jobTemplates, setJobTemplates] = useState<JobTemplate[]>([]); const [formOptions, setFormOptions] = useState<FormOption[]>([]);
   const [draft, setDraft] = useState<Draft>(blankDraft()); const [editing, setEditing] = useState<JobPacket | "new" | null>(null);
@@ -45,7 +48,7 @@ export function TradeJobPacketWorkspace({ user, onOpenItems }: { user: User; onO
     const response = await fetch(`/api/trade-job-packets?serviceCategory=${encodeURIComponent(category)}`, { ...init, headers, cache: "no-store" });
     const result = await response.json().catch(() => ({})) as Result;
     if (!response.ok || result.ok === false) throw new Error(result.error || "Your common jobs could not be loaded."); return result;
-  }, [user]);
+  }, [fetch, user]);
   const load = useCallback(async (category = draft.serviceCategory, signal?: AbortSignal) => {
     const result = await request(category, { signal }); if (signal?.aborted) return;
     setPackets(result.packets || []); setPriceItems(result.priceBookItems || []); setJobTemplates(result.jobTemplates || []); setFormOptions(result.formOptions || []);

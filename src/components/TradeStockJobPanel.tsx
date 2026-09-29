@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { JobStockRequirement, JobStockResponse, JobStockSummary, StockMutation } from "@/lib/trade-stock";
@@ -10,6 +12,7 @@ const quantity = (milli: number) => new Intl.NumberFormat("en-AU", { maximumFrac
 export function TradeStockJobPanel({ user, workOrderId, job, onChanged, disabled = false }: {
   user: User; workOrderId: string; job: JobStockSummary | null; onChanged: (job: JobStockSummary) => void; disabled?: boolean;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);

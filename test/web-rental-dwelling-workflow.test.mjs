@@ -13,7 +13,7 @@ const source = readFileSync(new URL("../src/components/TradeRentalInspectionPane
 const exposed = source.replace(/function (assessmentGroups|groupItems|earlierObservationItems|blockerSection|initialItem|metadataAnswerPatch|MetadataForm|AssessmentItemCard)\(/g, "export function $1(");
 const compiled = ts.transpileModule(exposed, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
-} }).outputText;
+} }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const output = { exports: {} };
 const dependencies = {
   react: React, "react/jsx-runtime": jsxRuntime,

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { ENERGY_SERVICE_LABELS, ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
@@ -52,6 +54,7 @@ function blankRequirement(): PhotoRequirement {
 }
 
 export function TradePhotoTemplateLibrary({ user }: { user: User }) {
+  const fetch = useTradeBusinessFetch();
   const [templates, setTemplates] = useState<PhotoTemplate[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [name, setName] = useState("");
@@ -84,7 +87,7 @@ export function TradePhotoTemplateLibrary({ user }: { user: User }) {
     const result = await response.json().catch(() => ({})) as Result;
     if (!response.ok || !result.ok) throw new Error(result.error || "Photo templates could not be loaded.");
     setTemplates(result.templates || []);
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     let active = true;

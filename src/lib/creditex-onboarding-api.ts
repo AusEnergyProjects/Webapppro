@@ -13,6 +13,11 @@ export function creditexJson(body: object, status = 200) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
 }
 export function creditexApiError(error: unknown) {
+  const contextCode = error instanceof Error && 'code' in error ? error.code : '';
+  if (contextCode === 'BUSINESS_SELECTION_REQUIRED' || contextCode === 'BUSINESS_ACCESS_REQUIRED') {
+    return creditexJson({ ok: false, code: contextCode, error: 'Choose a business you have access to.' },
+      contextCode === 'BUSINESS_SELECTION_REQUIRED' ? 409 : 403);
+  }
   if (error instanceof FirebaseMfaRequiredError) return creditexJson({ ok: false, code: error.code,
     error: MFA_REQUIRED_MESSAGE, setupUrl: MFA_SETUP_URL }, 403);
   const conflict = creditexMutationConflict(error);
@@ -37,7 +42,8 @@ export async function requireCreditexOnboardingAccess(request: Request) {
       const identity = await requireFirebaseIdentity(request);
       if (!identity.emailVerified) throw new CreditexComplianceError('EMAIL_VERIFICATION_REQUIRED', 'Verify your email before providing onboarding identity information.');
       const owner = await getD1().prepare("SELECT business_name FROM trade_accounts WHERE firebase_uid=? AND partner_type='installer'").bind(identity.uid).first<{ business_name: string }>();
-      if (owner) return { ownerUid: identity.uid, actorUid: identity.uid, isOwner: true, displayName: owner.business_name, memberId: '' };
+      const selected = request.headers.get('X-TLink-Business');
+      if (owner && (selected === null || selected === identity.uid)) return { ownerUid: identity.uid, actorUid: identity.uid, isOwner: true, displayName: owner.business_name, memberId: '' };
     } catch (error) {
       if (!(error instanceof Error) || error.message !== 'AUTH_REQUIRED') throw error;
     }

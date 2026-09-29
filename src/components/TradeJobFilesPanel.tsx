@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 /* eslint-disable @next/next/no-img-element */
 
 import type { User } from "firebase/auth";
@@ -189,7 +191,7 @@ function signatureFile(input: {
   };
 }
 
-async function jsonRequest<T>(user: User, path: string) {
+async function jsonRequest<T>(fetch: typeof globalThis.fetch, user: User, path: string) {
   const response = await fetch(path, {
     headers: { Authorization: `Bearer ${await user.getIdToken()}` },
     cache: "no-store",
@@ -214,6 +216,7 @@ export function TradeJobFilesPanel({
   includeQuotes?: boolean;
   includeInvoices?: boolean;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [files, setFiles] = useState<JobFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -226,13 +229,13 @@ export function TradeJobFilesPanel({
     setStatus("");
     const queryId = encodeURIComponent(workOrderId);
     const sources = await Promise.allSettled([
-      jsonRequest<FieldWorkResult>(user, `/api/trade-field-work?workOrderId=${queryId}`),
-      jsonRequest<{ records?: ActivitySummary[] }>(user, `/api/trade-activity-forms?workOrderId=${queryId}`),
-      jsonRequest<{ instances?: CreditexAssignedActivityWorkPackProjection[] }>(user, `/api/trade-team/work-packs?workOrderId=${queryId}`),
-      includeRentalReports ? jsonRequest<RentalResult>(user, `/api/trade-rental-inspections?workOrderId=${queryId}`) : Promise.resolve<RentalResult>({ reports: [] }),
-      includeHandover ? jsonRequest<HandoverResult>(user, `/api/trade-handover?workOrderId=${queryId}`) : Promise.resolve<HandoverResult>({ pack: null }),
-      includeQuotes ? jsonRequest<QuoteResult>(user, `/api/trade-quotes?workOrderId=${queryId}`) : Promise.resolve<QuoteResult>({ quote: null }),
-      includeInvoices ? jsonRequest<InvoiceResult>(user, `/api/trade-quick-invoices?workOrderId=${queryId}`) : Promise.resolve<InvoiceResult>({ invoice: null }),
+      jsonRequest<FieldWorkResult>(fetch, user, `/api/trade-field-work?workOrderId=${queryId}`),
+      jsonRequest<{ records?: ActivitySummary[] }>(fetch, user, `/api/trade-activity-forms?workOrderId=${queryId}`),
+      jsonRequest<{ instances?: CreditexAssignedActivityWorkPackProjection[] }>(fetch, user, `/api/trade-team/work-packs?workOrderId=${queryId}`),
+      includeRentalReports ? jsonRequest<RentalResult>(fetch, user, `/api/trade-rental-inspections?workOrderId=${queryId}`) : Promise.resolve<RentalResult>({ reports: [] }),
+      includeHandover ? jsonRequest<HandoverResult>(fetch, user, `/api/trade-handover?workOrderId=${queryId}`) : Promise.resolve<HandoverResult>({ pack: null }),
+      includeQuotes ? jsonRequest<QuoteResult>(fetch, user, `/api/trade-quotes?workOrderId=${queryId}`) : Promise.resolve<QuoteResult>({ quote: null }),
+      includeInvoices ? jsonRequest<InvoiceResult>(fetch, user, `/api/trade-quick-invoices?workOrderId=${queryId}`) : Promise.resolve<InvoiceResult>({ invoice: null }),
     ]);
     const next: JobFile[] = [];
     const failures: string[] = [];
@@ -273,7 +276,7 @@ export function TradeJobFilesPanel({
 
     const activityList = value<{ records?: ActivitySummary[] }>(1);
     const activityDetails = await Promise.allSettled((activityList?.records || []).filter((item) => item.id)
-      .map((item) => jsonRequest<{ record?: ActivityRecord }>(user, `/api/trade-activity-forms?recordId=${encodeURIComponent(item.id)}`)));
+      .map((item) => jsonRequest<{ record?: ActivityRecord }>(fetch, user, `/api/trade-activity-forms?recordId=${encodeURIComponent(item.id)}`)));
     for (const [index, result] of activityDetails.entries()) {
       if (result.status === "rejected") {
         failures.push(result.reason instanceof Error ? result.reason.message : "An activity record could not be loaded.");
@@ -453,7 +456,7 @@ export function TradeJobFilesPanel({
     setFiles(unique);
     if (failures.length) setStatus([...new Set(failures)].join(" "));
     setLoading(false);
-  }, [includeHandover, includeInvoices, includeQuotes, includeRentalReports, user, workOrderId]);
+  }, [fetch, includeHandover, includeInvoices, includeQuotes, includeRentalReports, user, workOrderId]);
 
   useEffect(() => {
     let active = true;

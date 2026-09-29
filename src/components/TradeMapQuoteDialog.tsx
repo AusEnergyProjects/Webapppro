@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { isMapQuoteJob, MAP_QUOTE_UNITS, type MapQuoteIntent, type MapQuoteJob, type MapQuoteMeasurement } from "@/lib/trade-map-quote";
@@ -12,6 +14,7 @@ export type MapQuoteAccess = { canCreate: boolean; canCreateCustomer: boolean; c
 type QuoteIndex = { ok?: boolean; error?: string; items?: unknown[]; pagination?: { hasNext: boolean; nextCursor: string; pageCount: number } };
 
 function QuotePicker({ user, onSelect }: { user: User; onSelect: (id: string) => void }) {
+  const fetch = useTradeBusinessFetch();
   const [search, setSearch] = useState("");
   const [navigation, setNavigation] = useState({ search: "", page: 1, cursors: [""] });
   const [refresh, setRefresh] = useState(0);
@@ -42,7 +45,7 @@ function QuotePicker({ user, onSelect }: { user: User; onSelect: (id: string) =>
       } finally { clearTimeout(timer); }
     })();
     return () => { active = false; controller.abort(); clearTimeout(timer); };
-  }, [user, navigation.search, navigation.page, cursor, key]);
+  }, [fetch, user, navigation.search, navigation.page, cursor, key]);
   function find(event: FormEvent) { event.preventDefault(); setNavigation({ search: search.trim(), page: 1, cursors: [""] }); }
   return <div className={styles.picker}>
     <form onSubmit={find} className={styles.search}>
@@ -68,8 +71,10 @@ function QuotePicker({ user, onSelect }: { user: User; onSelect: (id: string) =>
 }
 
 export function TradeMapQuoteDialog({ user, measurement, access, onClose, onDesignLinked }: { user: User; measurement: MapQuoteMeasurement; access: MapQuoteAccess; onClose: () => void; onDesignLinked?: (design: SolarDesign) => void }) {
+  const fetch = useTradeBusinessFetch();
+  const businessOwnerUid = useTradeBusiness()?.ownerUid || user.uid;
   const dialog = useRef<HTMLDialogElement>(null);
-  const [intent, setIntent] = useState<MapQuoteIntent | null>(() => measurement.workOrderId ? { id: crypto.randomUUID(), ownerUid: user.uid, workOrderId: measurement.workOrderId, measurement } : null);
+  const [intent, setIntent] = useState<MapQuoteIntent | null>(() => measurement.workOrderId ? { id: crypto.randomUUID(), ownerUid: businessOwnerUid, workOrderId: measurement.workOrderId, measurement } : null);
   const [linkError, setLinkError] = useState("");
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [dirty, setDirty] = useState(false);
@@ -107,7 +112,7 @@ export function TradeMapQuoteDialog({ user, measurement, access, onClose, onDesi
         if (!response.ok || !result.ok || !result.design) throw new Error(result.error || "Could not link this design. Return to the map and try again.");
         onDesignLinked?.(result.design);
       }
-      setDirty(false); setIntent({ id: crypto.randomUUID(), ownerUid: user.uid, workOrderId, measurement });
+      setDirty(false); setIntent({ id: crypto.randomUUID(), ownerUid: businessOwnerUid, workOrderId, measurement });
     } catch (error) { setLinkError(error instanceof Error ? error.message : "Could not link this design."); }
     finally { linkingRequest.current = false; setLinking(false); }
   }

@@ -61,7 +61,7 @@ test("verification happens before acceptance, is recoverable and preserves the i
 test("completing MFA retries invitation acceptance rather than loading an unbound member", () => {
   assert.match(portal, /accepted\.code === "MFA_REQUIRED"/);
   assert.match(portal, /onComplete=\{async \(\) => \{ setMfaRequired\(false\); setAuthRevision\(current => current \+ 1\); \}\}/);
-  assert.match(portal, /\[authRevision, emailVerified, invitation/);
+  assert.match(portal, /\[fetch, authRevision, emailVerified, invitation/);
 });
 
 async function submitPasswordForm({ mode = "create", password = "ExamplePassword1", confirmPassword = "ExamplePassword1" } = {}) {

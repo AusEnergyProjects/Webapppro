@@ -186,19 +186,31 @@ for (const [name, change] of [
   });
 }
 
-test("an identity already active in another team is not moved by an invitation", async (t) => {
+test("an identity may join another team without changing its existing membership", async (t) => {
   const { helper, database, member, invite } = fixture(t);
   database.prepare(`INSERT INTO trade_team_members (id, owner_uid, member_uid, email, display_name)
     VALUES ('another-member', 'owner-2', ?, ?, 'Katja elsewhere')`).run(identity.uid, invitedEmail);
-  await assert.rejects(helper.acceptTradeTeamInvitation(token, identity), { message: "INVITATION_TEAM_CONFLICT" });
-  assert.equal(member().member_uid, ""); assert.equal(invite().consumed_at, "");
+  const original = database.prepare("SELECT * FROM trade_team_members WHERE id='another-member'").get();
+  assert.deepEqual(await helper.acceptTradeTeamInvitation(token, identity), { ownerUid: "owner-1", businessName: "Test Trade Pty Ltd" });
+  assert.equal(member().member_uid, identity.uid); assert.ok(invite().consumed_at);
+  assert.deepEqual(database.prepare("SELECT * FROM trade_team_members WHERE id='another-member'").get(), original);
 });
 
-test("an existing business owner login cannot join a different business as staff", async (t) => {
+test("an existing business owner login may join a different business as staff", async (t) => {
   const { helper, database, member, invite } = fixture(t);
   database.exec(`INSERT INTO trade_accounts SELECT 'katja-uid', business_name, partner_type, account_status,
     abn, verified_abn, verification_status, verification_review_id, verification_reviewed_at,
     verification_reviewed_by_uid FROM trade_accounts WHERE firebase_uid = 'owner-1'`);
+  await helper.acceptTradeTeamInvitation(token, identity);
+  assert.equal(member().member_uid, identity.uid); assert.ok(invite().consumed_at);
+  assert.equal(member().can_manage_team, 0);
+  assert.ok(database.prepare("SELECT 1 FROM trade_accounts WHERE firebase_uid = ?").get(identity.uid));
+});
+
+test("a second active membership within the same business is rejected", async (t) => {
+  const { helper, database, member, invite } = fixture(t);
+  database.prepare(`INSERT INTO trade_team_members (id, owner_uid, member_uid, email, display_name)
+    VALUES ('duplicate-member', 'owner-1', ?, 'other-address@example.invalid', 'Existing member')`).run(identity.uid);
   await assert.rejects(helper.acceptTradeTeamInvitation(token, identity), { message: "INVITATION_TEAM_CONFLICT" });
   assert.equal(member().member_uid, ""); assert.equal(invite().consumed_at, "");
 });
@@ -262,11 +274,8 @@ for (const [name, change] of [
   ["invitation is replaced", "DELETE FROM trade_team_invites"],
   ["invitation expires", "UPDATE trade_team_invites SET expires_at = '2000-01-01T00:00:00.000Z'"],
   ["another identity claims the member", "UPDATE trade_team_members SET member_uid = 'another-uid'"],
-  ["identity joins another team", `INSERT INTO trade_team_members (id, owner_uid, member_uid, email, display_name)
-    VALUES ('racing-member', 'owner-2', 'katja-uid', 'katja@example.invalid', 'Katja elsewhere')`],
-  ["identity becomes a business owner", `INSERT INTO trade_accounts SELECT 'katja-uid', business_name,
-    partner_type, account_status, abn, verified_abn, verification_status, verification_review_id,
-    verification_reviewed_at, verification_reviewed_by_uid FROM trade_accounts WHERE firebase_uid = 'owner-1'`],
+  ["identity acquires duplicate membership in this business", `INSERT INTO trade_team_members (id, owner_uid, member_uid, email, display_name)
+    VALUES ('racing-member', 'owner-1', 'katja-uid', 'different@example.invalid', 'Duplicate member')`],
 ]) {
   test(`acceptance rejects a concurrent change when ${name}`, async (t) => {
     const { helper, database, member, invite } = fixture(t, { beforeBatch: (db) => db.exec(change) });

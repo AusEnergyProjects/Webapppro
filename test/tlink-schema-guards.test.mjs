@@ -597,9 +597,11 @@ test("runtime installer requires the price-book category migration", async () =>
 
 test("team access, Interested handoff, health and minute cron install guards before guarded work", () => {
   const access = fs.readFileSync(new URL("../src/lib/trade-team-server.ts", import.meta.url), "utf8");
+  const businessContext = fs.readFileSync(new URL("../src/lib/trade-business-context-server.ts", import.meta.url), "utf8");
   const workflow = fs.readFileSync(new URL("../src/lib/public-lead-quote-workflow-server.ts", import.meta.url), "utf8");
   const worker = fs.readFileSync(new URL("../worker/index.ts", import.meta.url), "utf8");
-  assert.match(access, /await ensureTlinkSchemaGuards\(db\)/);
+  assert.match(access, /await selectTradeBusiness\(request, identity\)/);
+  assert.match(businessContext, /await ensureTlinkSchemaGuards\(db\)[\s\S]*await db\.prepare/);
   assert.match(workflow, /await ensureTlinkSchemaGuards\(db\)/);
   assert.match(worker, /pathname === "\/api\/health"[\s\S]*await ensureTlinkSchemaGuards\(getD1\(\)\)/);
   assert.match(worker, /controller\.cron === NOTIFICATION_DELIVERY_CRON[\s\S]*ensureTlinkSchemaGuards\(getD1\(\)\)/);

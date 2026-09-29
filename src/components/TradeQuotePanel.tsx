@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import type { QuoteProductDocumentSummary } from "@/lib/trade-quote-product-documents";
 import { TradeQuoteStockNotice } from "./TradeQuoteStockNotice";
 
@@ -288,6 +290,8 @@ function packetLines(packet: JobPacket, sectionHeading: string): QuoteLine[] {
 }
 
 export function TradeQuotePanel({ user, workOrderId, available, readOnly = false, canSend = true, onOpenPriceBook, onOpenCustomer, onScheduleJob, onChanged, mapQuoteIntent, onDraftDirtyChange, onBusyChange, showLivePreview = true }: { user: User; workOrderId: string; available: boolean; readOnly?: boolean; canSend?: boolean; onOpenPriceBook?: () => void; onOpenCustomer?: (customerId: string) => void; onScheduleJob?: () => void; onChanged?: () => void | Promise<void>; mapQuoteIntent?: MapQuoteIntent; onDraftDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void; showLivePreview?: boolean }) {
+  const fetch = useTradeBusinessFetch();
+  const businessOwnerUid = useTradeBusiness()?.ownerUid || user.uid;
   const [quote, setQuote] = useState<Quote | null>(null); const [emails, setEmails] = useState<string[]>([]);
   const [priceBookItems, setPriceBookItems] = useState<PriceBookItem[]>([]); const [jobPackets, setJobPackets] = useState<JobPacket[]>([]);
   const [lines, setLines] = useState<QuoteLine[]>([blankLine()]); const [choices, setChoices] = useState<QuoteChoice[]>([]); const [packetId, setPacketId] = useState("");
@@ -344,7 +348,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
       throw new Error(`${result.error || "The quote could not be loaded."}${reference ? ` Reference ${reference}.` : ""}`);
     }
     return result;
-  }, [user, workOrderId]);
+  }, [fetch, user, workOrderId]);
 
   const applyResult = useCallback((result: QuoteResult, mode: "metadata" | "load" | "saved" = "metadata") => {
     if (result.access) {
@@ -372,7 +376,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     setDraftBaseline(draftFingerprint(draft));
     setSaveAsBusinessDefault(false);
     const intent = initialMapIntent.current;
-    if (mode === "load" && intent && canApplyMapQuoteIntent(intent, { ownerUid: user.uid, workOrderId,
+    if (mode === "load" && intent && canApplyMapQuoteIntent(intent, { ownerUid: businessOwnerUid, workOrderId,
       canManage: !readOnly && result.access?.canManageQuotes === true, consumedId: consumedMapIntent.current })) {
       const sameDesign = intent.measurement.kind === "solar" && Boolean(intent.measurement.designId) && draft.designId === intent.measurement.designId;
       const existingSystem = [...draft.lines, ...draft.choices.flatMap((choice) => choice.lines)].some((line) => mapQuoteSystemPanels(line.sectionHeading) !== null);
@@ -392,7 +396,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     setRoofImage(draft.roofImage); setEquipment(draft.equipment); setDesignId(draft.designId);
     setLines(draft.lines); setChoices(draft.choices); setCustomerEmail(draft.customerEmail);
     setTerms(draft.terms); setCustomerMessage(draft.customerMessage); setValidUntil(draft.validUntil);
-  }, [readOnly, user.uid, workOrderId]);
+  }, [businessOwnerUid, readOnly, workOrderId]);
 
   useEffect(() => {
     const identity = `${user.uid}:${workOrderId}`;
@@ -476,15 +480,15 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
       controller.abort();
       for (const url of objectUrls) URL.revokeObjectURL(url);
     };
-  }, [available, user, workOrderId]);
+  }, [fetch, available, user, workOrderId]);
 
   useEffect(() => {
     if (!available) return;
     const frame = window.requestAnimationFrame(() => {
-      setRebateDraft(loadTradeRebateEstimateDraft(window.sessionStorage, user.uid));
+      setRebateDraft(loadTradeRebateEstimateDraft(window.sessionStorage, businessOwnerUid));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [available, user.uid]);
+  }, [available, businessOwnerUid, user.uid]);
 
   useEffect(() => {
     if (!sendPreview) return;
@@ -542,7 +546,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     setLines((current) => (
       current.length === 1 && !current[0].description ? [line] : appendBeforeFinalPercent(current, line)
     ));
-    clearTradeRebateEstimateDraft(window.sessionStorage, user.uid);
+    clearTradeRebateEstimateDraft(window.sessionStorage, businessOwnerUid);
     setRebateDraft(null);
     setMessage("Rebate discount added. Check the amount and GST before saving the quote.");
   }

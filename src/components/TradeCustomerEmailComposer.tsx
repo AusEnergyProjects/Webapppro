@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "firebase/auth";
@@ -19,6 +21,7 @@ type Props = RecipientTarget & {
 };
 
 export function TradeCustomerEmailComposer({ user, customerId, enquiryId, workOrderId, recipient, recipientName, label, className, initialSubject = "" }: Props) {
+  const fetch = useTradeBusinessFetch();
   const [open, setOpen] = useState(false);
   const [portalTarget, setPortalTarget] = useState<Element | null>(null);
   const [connection, setConnection] = useState<TradeEmailConnection | null>(null);
@@ -49,7 +52,7 @@ export function TradeCustomerEmailComposer({ user, customerId, enquiryId, workOr
       if (!controller.signal.aborted) { setConnection(null); setError(reason instanceof Error ? reason.message : "The business email connection could not be loaded."); }
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [open, user]);
+  }, [fetch, open, user]);
 
   function close() {
     if (sending.current) return;

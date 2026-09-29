@@ -8,6 +8,7 @@ import {
 } from "./firebase-server";
 import {
   requireVerifiedTradeIdentity,
+  assertTradeOwnerContext,
   TradeAccessError,
   type VerifiedTradeAccess,
 } from "./trade-access-server";
@@ -44,13 +45,16 @@ export async function requireCreditexCalculatorAccess(
     return { accessType: "public_quote", identity: null };
   }
   const identity = await requireFirebaseIdentity(request);
+  assertTradeOwnerContext(request, identity);
 
   try {
-    const complianceIdentity = await requireComplianceIdentity(identity, {
-      allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
-      claimPendingInvitation: false,
-    }, database);
-    return { accessType: "compliance", identity: complianceIdentity };
+    if (!request.headers.has("X-TLink-Business")) {
+      const complianceIdentity = await requireComplianceIdentity(identity, {
+        allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
+        claimPendingInvitation: false,
+      }, database);
+      return { accessType: "compliance", identity: complianceIdentity };
+    }
   } catch (error) {
     if (!(error instanceof ComplianceAccessError)) throw error;
   }

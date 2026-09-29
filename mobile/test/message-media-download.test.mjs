@@ -12,6 +12,7 @@ function harness(response) {
     '@/lib/device': { getDeviceId: async () => 'device-1' },
     '@/lib/auth': { firebaseAuth: { currentUser: null } },
     '@/lib/field-session': { getFieldSessionToken: async () => 'field-test-token' },
+    '@/lib/business-session': { getBusinessSession: async () => null, businessSessionRevision: () => 0 },
   };
   const source = fs.readFileSync(new URL('../src/lib/api.ts', import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;

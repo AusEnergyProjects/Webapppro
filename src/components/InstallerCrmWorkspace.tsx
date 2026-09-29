@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { TradeInvoicePaymentDialog } from "./TradeInvoicePaymentDialog";
 import { JobRegisterScroll } from "./JobRegisterScroll";
 import { TradeFollowUpDialog } from "./TradeFollowUpDialog";
@@ -390,6 +392,7 @@ function unreachableCustomerRegisterColumn(key: never): never {
 }
 
 export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navigationTarget, mapWorkspace = false, onRegisterMapSave, onOpenSchedule, onViewChange, onOpenInvoices, onOpenFinance, onCloseJobNavigation }: { user: User; teamAccess: boolean; staffPermissions?: TradeTeamPermissions; navigationTarget?: TLinkCommandTarget | null; mapWorkspace?: boolean; onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void; onOpenSchedule?: (weekStart?: string) => void; onViewChange?: (view: View) => void; onOpenInvoices?: () => void; onOpenFinance?: (view: "pricebook" | "reports", priceBookView?: "items" | "packets") => void; onCloseJobNavigation?: () => void }) {
+  const fetch = useTradeBusinessFetch();
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [view, setViewState] = useState<View>(() => mapWorkspace || staffPermissions ? "jobs" : "today");
@@ -582,7 +585,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     if (!response.ok || !result.ok) throw new Error(result.error || "The installer CRM could not be loaded.");
     setTemplates(result.templates || []);
     setTeamMembers(result.teamMembers || []);
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     const needsBootstrap = creating === "job" || view === "jobs" || view === "templates" || Boolean(focusedJobId);
@@ -652,7 +655,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       }
     });
     return () => { active = false; controller.abort(); if (!applied) loadedRef.current = false; };
-  }, [mapWorkspace, staffPermissions, user, view]);
+  }, [fetch, mapWorkspace, staffPermissions, user, view]);
 
   const jobIndexParams = useCallback((page: number, pageSize: number, cursor = "", includeTotal = true) => {
     const params = new URLSearchParams({ mode: "index", resource: "jobs", service: jobService,
@@ -694,7 +697,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       if (next.hasNext && next.nextCursor) jobCursors.current[jobPage] = next.nextCursor;
       jobCursors.current.length = Math.max(jobPage, next.hasNext ? jobPage + 1 : jobPage); return next;
     });
-  }, [jobIndexKey, jobIndexParams, jobPage, jobPageSize, user]);
+  }, [fetch, jobIndexKey, jobIndexParams, jobPage, jobPageSize, user]);
 
   const downloadAllFilteredJobs = useCallback(async () => {
     if (jobExporting) return;
@@ -776,7 +779,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     } finally {
       setJobExporting(false);
     }
-  }, [jobExporting, jobIndexParams, user]);
+  }, [fetch, jobExporting, jobIndexParams, user]);
 
   const customerIndexParams = useCallback(() => {
     const params = new URLSearchParams({ mode: "index", resource: "customers", search: customerSearch, firstName: customerFirstName,
@@ -808,7 +811,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       if (next.hasNext && next.nextCursor) customerCursors.current[customerPage] = next.nextCursor;
       customerCursors.current.length = Math.max(customerPage, next.hasNext ? customerPage + 1 : customerPage); return next;
     });
-  }, [customerIndexKey, customerIndexParams, customerPage, customerPageSize, user]);
+  }, [fetch, customerIndexKey, customerIndexParams, customerPage, customerPageSize, user]);
 
   // Match the response to the current filters before exposing any addresses to Google.
   // A loading flag alone would still expose the old page during the debounce interval.
@@ -881,7 +884,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       if (active) { setSelectedJobDetail(result.job); setSelectedJobCustomer(result.customer || null); setSelectedJobSites(result.sites || []); setFocusedJobRefreshing(false); }
     }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The job record could not be loaded."));
     return () => { active = false; controller.abort(); };
-  }, [focusedJobId, refreshNonce, user, view]);
+  }, [fetch, focusedJobId, refreshNonce, user, view]);
 
   useEffect(() => {
     if (view !== "jobs" || !focusedJobId) return;
@@ -920,7 +923,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       }
     }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The customer record could not be loaded."));
     return () => { active = false; controller.abort(); };
-  }, [refreshNonce, selectedCustomerId, user, view]);
+  }, [fetch, refreshNonce, selectedCustomerId, user, view]);
 
   useEffect(() => {
     if (view !== "today") return;
@@ -934,7 +937,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       if (active) setSummary(result);
     }).catch((error) => active && setStatus(error instanceof Error ? error.message : "The workday summary could not be loaded."));
     return () => { active = false; };
-  }, [refreshNonce, user, view]);
+  }, [fetch, refreshNonce, user, view]);
 
   useEffect(() => {
     if (view !== "jobs" || jobLayout !== "board") return;
@@ -955,7 +958,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       }
     }).catch((error) => active && setStatus(error instanceof Error ? error.message : "The job board could not be loaded."));
     return () => { active = false; };
-  }, [jobLayout, refreshNonce, user, view]);
+  }, [fetch, jobLayout, refreshNonce, user, view]);
 
   useEffect(() => {
     if (
@@ -1592,6 +1595,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
 }
 
 function CustomerLookupSelect({ user, initialCustomer }: { user: User; initialCustomer?: Customer }) {
+  const fetch = useTradeBusinessFetch();
   const [selectedId, setSelectedId] = useState(initialCustomer?.id || "");
   const loadCustomers = useCallback(async (query: string, selected: string): Promise<SearchableLookupOption[]> => {
     const token = await user.getIdToken();
@@ -1604,7 +1608,7 @@ function CustomerLookupSelect({ user, initialCustomer }: { user: User; initialCu
     const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     const result = await response.json() as CrmIndexResult;
     return ((result.items || []) as Customer[]).map((customer) => ({ id: customer.id, label: customer.displayName, secondary: [customer.customerNumber, customer.phone, customer.suburb, customer.postcode].filter(Boolean).join(" | ") }));
-  }, [user]);
+  }, [fetch, user]);
   return <fieldset className="crm-customer-lookup"><legend>Your customer, optional</legend><input type="hidden" name="crmCustomerId" value={selectedId} /><SearchableLookup label="Find and select a customer" value={selectedId} placeholder="Name, number, phone, suburb or postcode" load={loadCustomers} onChange={setSelectedId} /><small>Australian Energy Assessments protected leads enter automatically and cannot be linked to direct contact records.</small></fieldset>;
 }
 
@@ -1701,6 +1705,7 @@ function CrmAddressFields({ user, initialValue }: { user: User; initialValue?: C
 }
 
 function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamMembers, permissions, initialTab = "summary", onEditPayment, onCrm, onWorkOrder, onOpenJob, onOpenPriceBook, onOpenCustomer, onOpenIntegrations, onReload }: { job: Job; customer?: Customer; sites: ServiceSite[]; user: User; busy: string; refreshing?: boolean; teamMembers: TeamMember[]; permissions?: TradeTeamPermissions; initialTab?: JobTab; onEditPayment: () => void; onCrm: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onWorkOrder: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onOpenJob: (workOrderId: string) => void; onOpenPriceBook: () => void; onOpenCustomer: (customerId: string) => void; onOpenIntegrations: () => void; onReload: () => Promise<void> }) {
+  const fetch = useTradeBusinessFetch();
   const activeJobAppointmentKey = job.appointments
     .filter((item) => ["scheduled", "en_route", "arrived", "in_progress"].includes(item.status))
     .map((item) => `${item.id}:${item.status}`)
@@ -1855,7 +1860,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     } finally {
       setJobAssigneesLoading(false);
     }
-  }, [canAssignJobs, job.serviceCategory, user]);
+  }, [fetch, canAssignJobs, job.serviceCategory, user]);
   const mainTabs: Array<readonly [JobDetailTab, string]> = [["summary", "Overview"]];
   if (!isProtected && (!permissions || permissions.canSendSms)) mainTabs.push(["messages", "Messages"]);
   if (canOpenJobSchedule) mainTabs.push(["schedule", `Schedule (${visibleJobAppointments.length})`]);

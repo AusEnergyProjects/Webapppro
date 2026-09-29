@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 
@@ -27,6 +29,7 @@ export function TradeQuoteWorkspace({ user, onOpenJob, onNewQuote }: {
   onOpenJob: (workOrderId: string) => void;
   onNewQuote: () => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [search, setSearch] = useState("");
   const [navigation, setNavigation] = useState({ search: "", page: 1, cursors: [""] });
   const [refresh, setRefresh] = useState(0);
@@ -64,7 +67,7 @@ export function TradeQuoteWorkspace({ user, onOpenJob, onNewQuote }: {
       }
     })();
     return () => { active = false; controller.abort(); clearTimeout(timer); };
-  }, [user, navigation.search, navigation.page, cursor, requestKey]);
+  }, [fetch, user, navigation.search, navigation.page, cursor, requestKey]);
 
   function applySearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

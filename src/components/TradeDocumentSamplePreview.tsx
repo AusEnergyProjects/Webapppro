@@ -1,9 +1,12 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useState } from "react";
 import { tradeDocumentSamples, type DocumentSampleSettings } from "@/lib/trade-document-sample";
 
 export function TradeDocumentSamplePreview({ settings, logoSrc }: { settings: DocumentSampleSettings; logoSrc: string }) {
+  const fetch = useTradeBusinessFetch();
   const [kind, setKind] = useState<"quote" | "invoice">("quote");
   const [opened, setOpened] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -32,7 +35,7 @@ export function TradeDocumentSamplePreview({ settings, logoSrc }: { settings: Do
       finally { clearTimeout(timer); }
     })();
     return () => { active = false; controller.abort(); clearTimeout(timer); if (url) URL.revokeObjectURL(url); };
-  }, [opened, kind, input, logoSrc, key]);
+  }, [fetch, opened, kind, input, logoSrc, key]);
   const ready = pdf?.key === key;
   return <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
     <div role="group" aria-label="Sample document" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{(["quote", "invoice"] as const).map(value => <button type="button" key={value} className="btn" aria-pressed={kind === value} onClick={() => { setKind(value); setOpened(true); setError(""); }}>{value === "quote" ? "Preview sample quote" : "Preview sample invoice"}</button>)}</div>

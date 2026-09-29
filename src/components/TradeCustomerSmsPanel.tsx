@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TradeSmsConnection } from "./TradeSmsConnectionPanel";
@@ -17,6 +19,7 @@ const statusLabels: Record<string, string> = {
 export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getAuthHeaders, onOpenIntegrations }: {
   user?: User; customerId: string; workOrderId?: string; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenIntegrations?: () => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -45,7 +48,7 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
     });
     const result = await response.json().catch(() => ({})) as SmsResult;
     return { response, result };
-  }, [user, customerId, workOrderId, getAuthHeaders]);
+  }, [fetch, user, customerId, workOrderId, getAuthHeaders]);
 
   const load = useCallback(() => {
     if (loadingRequest.current) return loadingRequest.current;

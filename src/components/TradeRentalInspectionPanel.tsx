@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import {
   type FormEvent,
   useCallback,
@@ -705,6 +707,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   readOnly?: boolean;
   onChanged?: () => Promise<void>;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<AssessmentResult>({ modules: [], items: [], findings: [], evidence: [], completion: {} });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -748,7 +751,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     setActiveModuleId((current) => current && result.modules?.some((module) => module.id === current)
       ? current : result.modules?.[0]?.id || "");
     return result;
-  }, [user, workOrderId]);
+  }, [fetch, user, workOrderId]);
 
   useEffect(() => {
     let active = true;

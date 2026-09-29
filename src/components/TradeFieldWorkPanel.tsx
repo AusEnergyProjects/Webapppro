@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 /* eslint-disable @next/next/no-img-element */
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +30,7 @@ const day = () => new Date().toISOString().slice(0, 10);
 const timeLabel = (minutes: number) => minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? `${minutes % 60}m` : ""}`.trim() : `${minutes}m`;
 
 export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly = false, canOpenHandover = true, onNavigate, onChanged }: { user: User; workOrderId: string; isProtected: boolean; readOnly?: boolean; canOpenHandover?: boolean; onNavigate?: (target: "forms" | "tasks" | "notes" | "invoice" | "handover") => void; onChanged?: () => Promise<void> }) {
+  const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<Result>({ protectedJob: isProtected, timeEntries: [], media: [], signoffs: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -46,7 +49,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
     const result = await response.json().catch(() => ({})) as Result;
     if (!response.ok) throw new Error(result.error || "Field records could not be loaded.");
     setData(result);
-  }, [user, workOrderId]);
+  }, [fetch, user, workOrderId]);
 
   useEffect(() => {
     let active = true;

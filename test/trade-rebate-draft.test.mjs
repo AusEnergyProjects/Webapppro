@@ -54,7 +54,9 @@ test("trade calculator offers one practical document handoff without a receipt",
   const action = read("../src/components/TradeRebateEstimateAction.tsx");
   const workspace = read("../src/components/TradeRebateCalculatorWorkspace.tsx");
   assert.match(calculator, /TradeRebateEstimateAction/);
-  assert.match(workspace, /documentDraftOwnerUid=\{user\.uid\}/);
+  assert.match(workspace, /documentDraftOwnerUid=\{businessOwnerUid\}/);
+  assert.match(workspace, /const businessOwnerUid = useTradeBusiness\(\)\?\.ownerUid \|\| user\.uid/);
+  assert.match(action, /saveTradeRebateEstimateDraft\(\s*window\.sessionStorage,\s*ownerUid,/);
   assert.match(action, /USE FOR QUOTE PLANNING/);
   assert.match(action, /Use in next quote or invoice/);
   assert.match(action, /Customer discount before GST/);
@@ -66,7 +68,7 @@ test("trade calculator offers one practical document handoff without a receipt",
   assert.doesNotMatch(action, /receipt|download|share/i);
 });
 
-test("quotes and invoices consume the same identity-scoped discount", () => {
+test("quotes and invoices consume the same business-scoped discount", () => {
   const quote = read("../src/components/TradeQuotePanel.tsx");
   const invoice = read("../src/components/TradeQuickInvoicePanel.tsx");
   assert.match(quote, /Add discount to this quote/);
@@ -83,7 +85,44 @@ test("quotes and invoices consume the same identity-scoped discount", () => {
   );
   assert.match(invoice, /added to the existing invoice discount/);
   for (const source of [quote, invoice]) {
-    assert.match(source, /loadTradeRebateEstimateDraft\(window\.sessionStorage, user\.uid\)/);
-    assert.match(source, /clearTradeRebateEstimateDraft\(window\.sessionStorage, user\.uid\)/);
+    assert.match(source, /const businessOwnerUid = useTradeBusiness\(\)\?\.ownerUid \|\| user\.uid/);
+    assert.match(source, /loadTradeRebateEstimateDraft\(window\.sessionStorage, businessOwnerUid\)/);
+    assert.match(source, /clearTradeRebateEstimateDraft\(window\.sessionStorage, businessOwnerUid\)/);
+  }
+});
+
+test("one login's own and employer rebate drafts stay separate through calculator, quote and invoice handoffs", () => {
+  const calculator = read("../src/components/TradeRebateCalculatorWorkspace.tsx");
+  const quote = read("../src/components/TradeQuotePanel.tsx");
+  const invoice = read("../src/components/TradeQuickInvoicePanel.tsx");
+  const user = { uid: "owner-and-team-member" };
+  const selectedScope = (source, business) => {
+    const expression = source.match(/const businessOwnerUid = ([^;]+);/)?.[1];
+    assert.ok(expression, "The component must derive its document scope from the selected business");
+    return Function("useTradeBusiness", "user", `return ${expression};`)(() => business, user);
+  };
+  for (const source of [calculator, quote, invoice]) {
+    assert.equal(selectedScope(source, null), user.uid, "Standalone own-business rendering preserves existing drafts");
+    assert.equal(selectedScope(source, { ownerUid: "employer" }), "employer");
+  }
+  const storage = store();
+  const input = { programCode: "VEU", activityCode: "6", activityTitle: "Space heating and cooling", quantity: "18", unit: "VEEC", customerDiscountDollars: "1200" };
+  const own = saveTradeRebateEstimateDraft(storage, selectedScope(calculator, { ownerUid: user.uid }), input);
+  const employer = saveTradeRebateEstimateDraft(storage, selectedScope(calculator, { ownerUid: "employer" }), { ...input, customerDiscountDollars: "800" });
+  for (const source of [quote, invoice]) {
+    const businessOwnerUid = selectedScope(source, { ownerUid: "employer" });
+    const loadCall = source.match(/loadTradeRebateEstimateDraft\(window\.sessionStorage, businessOwnerUid\)/)?.[0];
+    assert.ok(loadCall);
+    const loaded = Function("loadTradeRebateEstimateDraft", "window", "businessOwnerUid", `return ${loadCall};`)(loadTradeRebateEstimateDraft, { sessionStorage: storage }, businessOwnerUid);
+    assert.deepEqual(loaded, employer);
+    assert.notDeepEqual(loaded, own);
+  }
+  for (const source of [quote, invoice]) {
+    saveTradeRebateEstimateDraft(storage, "employer", { ...input, customerDiscountDollars: "800" });
+    const clearCall = source.match(/clearTradeRebateEstimateDraft\(window\.sessionStorage, businessOwnerUid\)/)?.[0];
+    assert.ok(clearCall);
+    Function("clearTradeRebateEstimateDraft", "window", "businessOwnerUid", `${clearCall};`)(clearTradeRebateEstimateDraft, { sessionStorage: storage }, selectedScope(source, { ownerUid: "employer" }));
+    assert.equal(loadTradeRebateEstimateDraft(storage, "employer"), null);
+    assert.deepEqual(loadTradeRebateEstimateDraft(storage, user.uid), own, "Consuming an employer discount must leave the personal business draft untouched");
   }
 });

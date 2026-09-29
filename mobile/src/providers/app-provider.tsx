@@ -3,10 +3,11 @@ import * as Crypto from 'expo-crypto';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { ApiError, apiRequest, publicApiRequest } from '@/lib/api';
+import { businessPrincipal, clearBusinessSession, getBusinessSession, pauseBusinessSession, saveBusinessSession, type BusinessChoice } from '@/lib/business-session';
 import { subscribeAllRentalSaves } from '@/lib/rental-save-queue';
 import {
   accessStateForServerError,
@@ -20,8 +21,12 @@ import { firebaseAuth, firebaseSignOut } from '@/lib/auth';
 import { registerBackgroundSync, unregisterBackgroundSync } from '@/lib/background';
 import {
   addUpload,
+  assertLocalDataOwner,
+  getLocalDataOwner,
   getJob,
   listJobs,
+  legacyLocalWork,
+  migrateLegacyLocalOwner,
   prepareLocalDataOwner,
   purgeLocalData,
   queueAction,
@@ -38,7 +43,7 @@ import {
   updateFieldPrincipalDisplayName,
   type FieldPrincipal,
 } from '@/lib/field-session';
-import { localSyncOutcome, resolveFieldAccessModes, runSync, verifyFieldAccess, type SyncOutcome } from '@/lib/sync';
+import { localSyncOutcome, resolveFieldAccessModes, runSync, verifyFieldAccess, waitForActiveSync, type SyncOutcome } from '@/lib/sync';
 import type { FieldAccessMode, FieldJob, OfflineAction } from '@/lib/types';
 
 type UploadInput = {
@@ -67,6 +72,13 @@ type AppValue = {
   saveUpload: (input: UploadInput) => Promise<void>;
   pinSignIn: (displayName: string, pin: string) => Promise<void>;
   signOut: () => Promise<void>;
+  businesses: BusinessChoice[];
+  choosingBusiness: boolean;
+  businessError: string;
+  chooseBusiness: (choice: BusinessChoice) => Promise<void>;
+  openBusinessChooser: () => Promise<void>;
+  cancelBusinessChooser: () => void;
+  retryBusinesses: () => Promise<void>;
 };
 
 const emptySync: AppValue['sync'] = {
@@ -105,33 +117,26 @@ function isConfirmedFieldAccessLoss(error: unknown): error is ApiError {
   );
 }
 
-function firebasePrincipal(user: FirebaseUser): FieldPrincipal {
-  return {
-    ownerId: user.uid,
-    memberId: user.uid,
-    displayName: user.displayName || user.email || 'Installer team member',
-    email: user.email || '',
-    businessName: '',
-    permissions: {
-      canCreateJobs: false,
-      canManageCustomers: false,
-      canViewCustomers: false,
-    },
-    authMode: 'firebase',
-    localOwnerKey: `firebase:${user.uid}`,
-  };
-}
-
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FieldPrincipal | null>(null);
   const [loading, setLoading] = useState(true);
   const [access, setAccess] = useState<FieldAccessState>(signedOutAccess);
   const [jobs, setJobs] = useState<FieldJob[]>([]);
   const [sync, setSync] = useState(emptySync);
+  const [businesses, setBusinesses] = useState<BusinessChoice[]>([]);
+  const [choosingBusiness, setChoosingBusiness] = useState(false);
+  const [businessError, setBusinessError] = useState('');
+  const switching = useRef(false);
+  const selecting = useRef(false);
+  const localWrites = useRef(0);
+  const authGeneration = useRef(0);
 
   const refreshLocal = useCallback(async () => {
-    setJobs(await listJobs());
+    const generation = authGeneration.current;
+    const nextJobs = await listJobs();
     const local = await localSyncOutcome();
+    if (generation !== authGeneration.current || switching.current) return;
+    setJobs(nextJobs);
     setSync((value) => ({ ...value, ...local }));
   }, []);
 
@@ -148,6 +153,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await purgeLocalData();
     await forgetPushToken().catch(() => undefined);
     await clearFieldSession();
+    await clearBusinessSession();
     await firebaseSignOut().catch(() => undefined);
     const nextAccess = accessStateForServerError(
       confirmedLoss.status,
@@ -169,11 +175,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncNow = useCallback(async () => {
+    if (switching.current) return;
     const fieldPrincipal = await getFieldPrincipal();
     const currentUser = firebaseAuth.currentUser;
     if (!fieldPrincipal && !currentUser) return;
-    const localOwnerKey = fieldPrincipal?.localOwnerKey || `firebase:${currentUser!.uid}`;
+    const business = currentUser ? await getBusinessSession(currentUser.uid) : null;
+    const principal = fieldPrincipal || business?.principal;
+    if (!principal || switching.current) return;
+    const generation = authGeneration.current;
+    const localOwnerKey = principal.localOwnerKey;
     const online = await networkAvailable();
+    if (generation !== authGeneration.current || switching.current) return;
     if (!online) {
       const local = await prepareLocalDataOwner(localOwnerKey)
         .then(() => localSyncOutcome())
@@ -181,24 +193,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...emptySync,
           message: 'Reconnect so TLink can prepare secure field work on this device.',
         }));
+      if (generation !== authGeneration.current || switching.current) return;
       setSync((value) => ({ ...value, ...local, running: false, online: false }));
       setAccess((value) => value.status === 'approved' ? value : networkVerificationRequired);
       return;
     }
     setSync((value) => ({ ...value, running: true, online: true, message: 'Syncing secure field work...' }));
     try {
-      const verified = await verifyFieldAccess();
+      const verified = await verifyFieldAccess(principal.localOwnerKey);
+      if (generation !== authGeneration.current || switching.current) return;
       if (fieldPrincipal && verified.fieldUsername) {
         const updatedPrincipal = await updateFieldPrincipalDisplayName(verified.fieldUsername);
         if (updatedPrincipal) setUser(updatedPrincipal);
       }
+      if (!fieldPrincipal && currentUser && business) {
+        if (!business.business.manualOnly && verified.ownerUid !== principal.ownerId) {
+          throw new ApiError('Business access changed. Choose your business again.', 403, 'BUSINESS_ACCESS_REQUIRED');
+        }
+        const updated = { ...principal, memberId: verified.memberId || principal.memberId,
+          businessName: verified.businessName || principal.businessName,
+          displayName: verified.displayName || principal.displayName,
+          permissions: verified.permissions || principal.permissions };
+        await saveBusinessSession(currentUser.uid, business.business, updated);
+        setUser(updated);
+      }
       setAccess(approvedAccess);
       await prepareLocalDataOwner(localOwnerKey);
       const result = await runSync(verified.modes);
+      if (generation !== authGeneration.current || switching.current) return;
       setSync((value) => ({ ...value, ...result, running: false, online: true }));
       setJobs(await listJobs());
       setAccess(approvedAccess);
     } catch (error) {
+      if (generation !== authGeneration.current || switching.current) return;
+      if (error instanceof ApiError && error.code.startsWith('BUSINESS_')) {
+        switching.current = true;
+        pauseBusinessSession(true);
+        await unregisterBackgroundSync().catch(() => undefined);
+        setAccess(checkingAccess);
+        setChoosingBusiness(true);
+        setBusinessError(error.message);
+        setJobs([]);
+        return;
+      }
       if (await handleAccessError(error)) return;
       const message = error instanceof Error ? error.message : 'Sync paused. Saved work remains on this device.';
       const counts = await queueCounts().catch(() => ({ actions: 0, uploads: 0, conflicts: 0 }));
@@ -215,11 +252,148 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [handleAccessError]);
 
+  const activateBusiness = useCallback(async (identity: FirebaseUser, choice: BusinessChoice) => {
+    const principal = businessPrincipal(identity.uid, identity.email || '', choice);
+    const legacy = await legacyLocalWork(identity.uid);
+    if (legacy) {
+      if (legacy.lanes.some(lane => lane !== (choice.manualOnly ? 'creditex_manual' : 'trade_team'))) {
+        throw new Error('This phone has saved work in more than one workspace. The files are retained; contact TLink support before changing business.');
+      }
+      for (let start = 0; start < legacy.workOrderIds.length; start += 500) {
+        const proof = await apiRequest<{ ownerUid: string; memberId: string }>('/api/trade-businesses/restore-cache', {
+          method: 'POST', body: JSON.stringify({ ownerUid: choice.ownerUid, workOrderIds: legacy.workOrderIds.slice(start, start + 500) }),
+        }, identity);
+        if (proof.ownerUid !== choice.ownerUid || (choice.role !== 'owner' && proof.memberId !== choice.memberId)) {
+          throw new Error('The saved work belongs to a different business. Choose that business to finish syncing.');
+        }
+      }
+      await migrateLegacyLocalOwner(identity.uid, principal.localOwnerKey);
+    }
+    const previous = await getBusinessSession(identity.uid, true);
+    if (previous && previous.business.ownerUid !== choice.ownerUid && !previous.business.manualOnly) {
+      // A fresh app launch also needs to retire the last business's push delivery.
+      pauseBusinessSession(false);
+      try {
+        await apiRequest('/api/trade-team/devices', { method: 'POST', body: JSON.stringify({
+          deviceId: await getDeviceId(), platform: MOBILE_PLATFORM, appVersion: APP_VERSION,
+          deviceName: getDeviceName(), pushToken: '', pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
+        }) });
+      } catch (error) {
+        // Revoked membership cannot receive authorised push delivery or unregister its old device.
+        if (!(error instanceof ApiError && [401, 403].includes(error.status))) throw error;
+      } finally { pauseBusinessSession(true); }
+      await Notifications.dismissAllNotificationsAsync();
+      await Notifications.clearLastNotificationResponseAsync();
+    }
+    await prepareLocalDataOwner(principal.localOwnerKey);
+    await saveBusinessSession(identity.uid, choice, principal);
+    pauseBusinessSession(false);
+    switching.current = false;
+    setChoosingBusiness(false);
+    setBusinessError('');
+    setUser(principal);
+    setJobs([]);
+    setAccess(checkingAccess);
+    await registerBackgroundSync().catch(() => undefined);
+    void syncNow();
+  }, [syncNow]);
+
+  const loadBusinesses = useCallback(async (identity: FirebaseUser) => {
+    switching.current = true;
+    pauseBusinessSession(true);
+    setLoading(true);
+    setBusinessError('');
+    setAccess(checkingAccess);
+    await unregisterBackgroundSync().catch(() => undefined);
+    await waitForActiveSync().catch(() => undefined);
+    try {
+      const result = await apiRequest<{ businesses: BusinessChoice[] }>('/api/trade-businesses', {}, identity);
+      if (firebaseAuth.currentUser?.uid !== identity.uid) return;
+      setBusinesses(result.businesses);
+      if (result.businesses.length === 1) await activateBusiness(identity, result.businesses[0]);
+      else if (!result.businesses.length) {
+        // Existing assigned compliance-only accounts retain their separate field lane.
+        await activateBusiness(identity, { ownerUid: `compliance:${identity.uid}`, memberId: identity.uid,
+          businessName: 'Compliance work', displayName: identity.displayName || identity.email || 'Team member', role: 'member', manualOnly: true });
+      } else setChoosingBusiness(true);
+    } catch (error) {
+      setChoosingBusiness(true);
+      setBusinessError(error instanceof Error ? error.message : 'Reconnect to choose your business.');
+    } finally { setLoading(false); }
+  }, [activateBusiness]);
+
+  const chooseBusiness = useCallback(async (choice: BusinessChoice) => {
+    const identity = firebaseAuth.currentUser;
+    if (selecting.current || !identity || !businesses.some(item => item.ownerUid === choice.ownerUid && item.memberId === choice.memberId)) return;
+    selecting.current = true;
+    setLoading(true);
+    try { await activateBusiness(identity, choice); }
+    catch (error) { setBusinessError(error instanceof Error ? error.message : 'This business could not be opened.'); }
+    finally { selecting.current = false; setLoading(false); }
+  }, [activateBusiness, businesses]);
+
+  const openBusinessChooser = useCallback(async () => {
+    if (!firebaseAuth.currentUser || user?.authMode !== 'firebase' || switching.current) return;
+    if (localWrites.current) { setBusinessError('Finish saving your current work before changing business.'); return; }
+    setBusinessError('');
+    switching.current = true;
+    setAccess(checkingAccess);
+    // Keep the old tenant header in place until its requests and device registration finish.
+    await unregisterBackgroundSync().catch(() => undefined);
+    try {
+      await waitForActiveSync();
+      const counts = await queueCounts();
+      if (counts.actions || counts.uploads || counts.conflicts) throw new Error('Open Sync and finish or resolve your saved work before changing business.');
+      await apiRequest('/api/trade-team/devices', { method: 'POST', body: JSON.stringify({
+        deviceId: await getDeviceId(), platform: MOBILE_PLATFORM, appVersion: APP_VERSION,
+        deviceName: getDeviceName(), pushToken: '', pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
+      }) });
+      await Notifications.dismissAllNotificationsAsync();
+      await Notifications.clearLastNotificationResponseAsync();
+      pauseBusinessSession(true);
+      authGeneration.current++;
+      setChoosingBusiness(true);
+      setAccess(checkingAccess);
+      setJobs([]);
+      await loadBusinesses(firebaseAuth.currentUser);
+    } catch (error) {
+      switching.current = false;
+      pauseBusinessSession(false);
+      setAccess(approvedAccess);
+      setBusinessError(error instanceof Error ? error.message : 'Business could not be changed. Try again.');
+      await registerBackgroundSync().catch(() => undefined);
+    }
+  }, [loadBusinesses, user?.authMode]);
+
+  const cancelBusinessChooser = useCallback(() => {
+    if (!user) return;
+    pauseBusinessSession(false);
+    switching.current = false;
+    setChoosingBusiness(false);
+    setBusinessError('');
+    void registerBackgroundSync().catch(() => undefined);
+    void syncNow();
+  }, [syncNow, user]);
+
+  const retryBusinesses = useCallback(async () => {
+    if (firebaseAuth.currentUser) await loadBusinesses(firebaseAuth.currentUser);
+  }, [loadBusinesses]);
+
   useEffect(() => onAuthStateChanged(firebaseAuth, async (nextUser) => {
+    authGeneration.current++;
     const fieldPrincipal = await getFieldPrincipal();
-    const nextPrincipal = fieldPrincipal || (nextUser ? firebasePrincipal(nextUser) : null);
-    setUser(nextPrincipal);
-    if (!nextPrincipal) {
+    if (!fieldPrincipal && nextUser) {
+      setUser(null);
+      setJobs([]);
+      await loadBusinesses(nextUser);
+      return;
+    }
+    setUser(fieldPrincipal);
+    setChoosingBusiness(false);
+    if (!fieldPrincipal) {
+      switching.current = false;
+      pauseBusinessSession(false);
+      await clearBusinessSession();
       setJobs([]);
       setSync(emptySync);
       setAccess(signedOutAccess);
@@ -231,9 +405,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLoading(false);
     void registerBackgroundSync().catch(() => undefined);
     void syncNow();
-  }), [syncNow]);
+  }), [loadBusinesses, syncNow]);
 
-  const signedIn = Boolean(user);
+  const signedIn = Boolean(user) && !choosingBusiness;
 
   useEffect(() => {
     if (!signedIn) return;
@@ -256,13 +430,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (state === 'active' && signedIn) void syncNow();
     });
     const token = Notifications.addPushTokenListener(async (nextToken) => {
-      if (!signedIn) return;
+      if (!signedIn || switching.current) return;
+      const generation = authGeneration.current;
+      const expectedBusinessKey = user?.localOwnerKey;
       const state = await notificationDeviceState().catch(() => null);
+      if (generation !== authGeneration.current || switching.current) return;
       const pushToken = state?.granted && !state.muted ? String(nextToken.data) : '';
       if (pushToken) await rememberPushToken(pushToken);
       else await forgetPushToken();
       const modes = await resolveFieldAccessModes().catch(() => []);
       const deviceId = await getDeviceId();
+      if (generation !== authGeneration.current || switching.current) return;
       void Promise.allSettled(modes.map((mode) =>
         apiRequest(mode === 'creditex_manual'
           ? '/api/creditex/manual-field/devices'
@@ -277,26 +455,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
             pushToken,
             pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
           }),
-        }).catch((error) => { void handleAccessError(error); })
+        }, undefined, { expectedBusinessKey }).catch((error) => {
+          if (generation === authGeneration.current && !switching.current) void handleAccessError(error);
+        })
       ));
     });
     return () => { network(); response.remove(); foreground.remove(); token.remove(); };
-  }, [handleAccessError, signedIn, syncNow]);
+  }, [handleAccessError, signedIn, syncNow, user?.localOwnerKey]);
+
+  const savedWorkOwner = useCallback(async () => {
+    const expected = user?.localOwnerKey;
+    if (switching.current || !expected) throw new Error('Choose your business before saving work.');
+    const owner = await getLocalDataOwner();
+    if (owner.key !== expected || switching.current) throw new Error('Your business changed. Reopen this job before saving.');
+    return owner;
+  }, [user?.localOwnerKey]);
 
   const saveAction = useCallback(async (action: Omit<OfflineAction, 'clientActionId'>) => {
-    await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}` });
-    await refreshLocal();
+    const owner = await savedWorkOwner();
+    localWrites.current++;
+    try {
+      await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}` }, owner);
+      assertLocalDataOwner(owner);
+      await refreshLocal();
+    } finally { localWrites.current--; }
     if (sync.online) await syncNow();
-  }, [refreshLocal, sync.online, syncNow]);
+  }, [refreshLocal, savedWorkOwner, sync.online, syncNow]);
 
   const saveActionInBackground = useCallback(async (action: Omit<OfflineAction, 'clientActionId'>) => {
-    await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}` });
-    await refreshLocal();
+    const owner = await savedWorkOwner();
+    localWrites.current++;
+    try {
+      await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}` }, owner);
+      assertLocalDataOwner(owner);
+      await refreshLocal();
+    } finally { localWrites.current--; }
     if (sync.online) void syncNow();
-  }, [refreshLocal, sync.online, syncNow]);
+  }, [refreshLocal, savedWorkOwner, sync.online, syncNow]);
 
   const saveUpload = useCallback(async (input: UploadInput) => {
-    await addUpload({
+    const owner = await savedWorkOwner();
+    localWrites.current++;
+    try {
+      await addUpload({
       id: `upload-${Crypto.randomUUID()}`,
       work_order_id: input.workOrderId,
       local_uri: input.uri,
@@ -307,10 +508,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       caption: input.caption,
       evidenceEnvelope: input.evidenceEnvelope,
       clearSettingKey: input.clearSettingKey,
-    });
-    await refreshLocal();
+      }, owner);
+      assertLocalDataOwner(owner);
+      await refreshLocal();
+    } finally { localWrites.current--; }
     if (sync.online) void syncNow();
-  }, [refreshLocal, sync.online, syncNow]);
+  }, [refreshLocal, savedWorkOwner, sync.online, syncNow]);
 
   const pinSignIn = useCallback(async (displayName: string, pin: string) => {
     const response = await publicApiRequest<{
@@ -328,6 +531,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }),
     });
     const principal = await saveFieldSession(response.token, response.principal);
+    switching.current = false;
+    pauseBusinessSession(false);
+    setChoosingBusiness(false);
     setUser(principal);
     setAccess(checkingAccess);
     setLoading(false);
@@ -369,6 +575,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await purgeLocalData();
     await forgetPushToken();
     await clearFieldSession();
+    await clearBusinessSession();
     await firebaseSignOut();
     setUser(null);
     setAccess(signedOutAccess);
@@ -388,7 +595,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     saveUpload,
     pinSignIn,
     signOut,
-  }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveActionInBackground, saveUpload, pinSignIn, signOut]);
+    businesses, choosingBusiness, businessError, chooseBusiness, openBusinessChooser, cancelBusinessChooser, retryBusinesses,
+  }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveActionInBackground, saveUpload, pinSignIn, signOut,
+    businesses, choosingBusiness, businessError, chooseBusiness, openBusinessChooser, cancelBusinessChooser, retryBusinesses]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

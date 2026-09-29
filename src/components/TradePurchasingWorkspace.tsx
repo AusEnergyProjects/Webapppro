@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
@@ -34,6 +36,7 @@ const readable = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, 
 const displayDate = (value: string) => value ? new Date(value.length === 10 ? `${value}T00:00:00` : value).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "Not set";
 
 export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }: { user: User; partnerType: PartnerType; navigationTarget?: TLinkCommandTarget | null }) {
+  const fetch = useTradeBusinessFetch();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [eligible, setEligible] = useState<EligibleEnquiry[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -82,7 +85,7 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
     const result = await response.json().catch(() => ({})) as PurchasingResult;
     if (!response.ok || result.ok === false) throw new Error(result.error || "The purchasing workspace could not be updated.");
     apply(result);
-  }, [apply, filter, page, pageSize, search, sort, user]);
+  }, [fetch, apply, filter, page, pageSize, search, sort, user]);
 
   useEffect(() => {
     pageCursors.current = [""]; totalReady.current = false;
@@ -97,7 +100,7 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
         setPageSize(Number(preferences.pageSize) || 25); setViewSaved(Boolean(result.saved));
       }).catch(() => undefined).finally(() => active && setViewReady(true));
     return () => { active = false; };
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     if (!viewReady) return;

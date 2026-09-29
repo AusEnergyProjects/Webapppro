@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { ASSET_SERVICE_TYPES } from "@/lib/asset-lifecycle.mjs";
@@ -19,6 +21,7 @@ function readable(value: string) {
 }
 
 export function TradeAssetLifecycle({ user, workOrderId, assets: handoverAssets }: { user: User; workOrderId: string; assets: Array<Pick<Asset, "id" | "brand" | "modelNumber">> }) {
+  const fetch = useTradeBusinessFetch();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [plans, setPlans] = useState<ServicePlan[]>([]);
   const [events, setEvents] = useState<ServiceEvent[]>([]);
@@ -47,7 +50,7 @@ export function TradeAssetLifecycle({ user, workOrderId, assets: handoverAssets 
     const result = await response.json().catch(() => ({})) as LifecycleResult;
     if (!response.ok || result.ok === false) throw new Error(result.error || "The asset lifecycle workspace could not be loaded.");
     apply(result);
-  }, [apply, user, workOrderId]);
+  }, [fetch, apply, user, workOrderId]);
 
   useEffect(() => {
     let active = true;

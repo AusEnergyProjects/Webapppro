@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { FOLLOW_UP_FIELDS, followUpEditorText, followUpStoredText, renderFollowUp, type FollowUpSettings, type FollowUpTemplate } from "@/lib/trade-follow-ups";
@@ -48,6 +50,7 @@ function ReminderTimingFields({ value, eventLabel, disabled, onChange }: {
 }
 
 export function TradeEmailTemplatesWorkspace({ user }: { user: User }) {
+  const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<WorkspaceData | null>(null);
   const [tab, setTab] = useState<"templates" | "reminders">("templates");
   const [draft, setDraft] = useState<FollowUpTemplate | null>(null);
@@ -76,7 +79,7 @@ export function TradeEmailTemplatesWorkspace({ user }: { user: User }) {
     const result = await response.json() as WorkspaceData;
     if (!response.ok || !result.ok) throw new Error(result.error || "Email templates could not be loaded.");
     return { ...result, templates: result.templates.map(template => ({ ...template, subject: followUpEditorText(template.subject), body: followUpEditorText(template.body) })) };
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     const controller = new AbortController();

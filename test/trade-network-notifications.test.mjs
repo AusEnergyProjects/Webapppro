@@ -4,7 +4,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 
-const compile = file => ts.transpileModule(fs.readFileSync(new URL(file, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+const compile = file => ts.transpileModule(fs.readFileSync(new URL(file, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const routeCode = compile("../src/app/api/trade-job-notifications/route.ts");
 const uiCode = compile("../src/components/TradeJobNotifications.tsx");
 const postId = "32e50c00-f279-4879-936f-15f287ff38a5";

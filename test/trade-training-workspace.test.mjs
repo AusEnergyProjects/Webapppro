@@ -7,9 +7,9 @@ import { ENERGY_SERVICE_CATALOGUE } from "../src/lib/energy-service-catalogue.mj
 import * as trainingSections from "../src/lib/training-service-sections.mjs";
 
 const source = fs.readFileSync(new URL("../src/components/TradeTrainingWorkspace.tsx", import.meta.url), "utf8");
-const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const reviewSource = fs.readFileSync(new URL("../src/components/CreditexOnboardingReviewWorkspace.tsx", import.meta.url), "utf8");
-const reviewCompiled = ts.transpileModule(reviewSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+const reviewCompiled = ts.transpileModule(reviewSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const user = { uid: "learner-a", getIdToken: async () => "test-token" };
 const business = { status: "approved", revision: 1, insuranceExpiresOn: "2027-01-01", approved: true, blockedReasons: [] };
 const course = (availability = "active") => ({ id: "veu-6", version: "reviewed-v1", title: "Activity 6 heating and cooling", serviceCategory: "heating-cooling", activityTemplateIds: ["veu-6"], estimatedMinutes: 25,

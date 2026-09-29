@@ -5,13 +5,14 @@ import { fetch as expoFetch } from 'expo/fetch';
 import { API_BASE_URL, APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import { getDeviceId } from '@/lib/device';
 import { firebaseAuth } from '@/lib/auth';
-import { getFieldSessionToken } from '@/lib/field-session';
+import { getFieldPrincipal, getFieldSessionToken } from '@/lib/field-session';
+import { businessSessionRevision, getBusinessSession } from '@/lib/business-session';
 
 const JSON_REQUEST_TIMEOUT_MS = 20_000;
 const REPORT_REQUEST_TIMEOUT_MS = 120_000;
 const MULTIPART_REQUEST_TIMEOUT_MS = 120_000;
 
-type ApiRequestOptions = { operation?: 'report' };
+export type ApiRequestOptions = { operation?: 'report'; expectedBusinessKey?: string };
 
 export class ApiError extends Error {
   constructor(
@@ -31,10 +32,23 @@ async function bearer(user?: User | null) {
   return active.getIdToken(true);
 }
 
-async function authenticatedHeaders(init: RequestInit, user?: User | null) {
+async function authenticatedHeaders(init: RequestInit, user?: User | null, discovery = false, expectedBusinessKey?: string) {
   const deviceId = await getDeviceId();
   const headers = new Headers(init.headers);
   const fieldToken = await getFieldSessionToken();
+  headers.delete('X-TLink-Business');
+  if (!fieldToken && !discovery) {
+    const active = user || firebaseAuth.currentUser;
+    const session = active ? await getBusinessSession(active.uid) : null;
+    if (!session) throw new ApiError('Choose a business to continue.', 409, 'BUSINESS_SELECTION_REQUIRED');
+    if (expectedBusinessKey && session.principal.localOwnerKey !== expectedBusinessKey) {
+      throw new ApiError('Your business changed. Reopen this item before continuing.', 409, 'BUSINESS_CHANGED');
+    }
+    if (!session.business.manualOnly) headers.set('X-TLink-Business', session.business.ownerUid);
+  }
+  if (fieldToken && expectedBusinessKey && (await getFieldPrincipal())?.localOwnerKey !== expectedBusinessKey) {
+    throw new ApiError('Your business changed. Reopen this item before continuing.', 409, 'BUSINESS_CHANGED');
+  }
   headers.set('Authorization', fieldToken
     ? `TLinkField ${fieldToken}`
     : `Bearer ${await bearer(user)}`);
@@ -113,10 +127,17 @@ async function responseBody(response: Response): Promise<Record<string, unknown>
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}, user?: User | null, options: ApiRequestOptions = {}) {
-  const headers = await authenticatedHeaders(init, user);
+  const revision = businessSessionRevision();
+  const headers = await authenticatedHeaders(init, user,
+    path === '/api/trade-businesses' || path === '/api/trade-businesses/restore-cache', options.expectedBusinessKey);
+  const assertBusiness = () => {
+    if (revision !== businessSessionRevision()) throw new ApiError('Your business changed. Reopen this item before continuing.', 409, 'BUSINESS_CHANGED');
+  };
+  assertBusiness();
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   const response = await fetchJson(`${API_BASE_URL}${path}`, { ...init, headers }, options);
   const body = await responseBody(response);
+  assertBusiness();
   if (!response.ok) {
     const error = new ApiError(
       String(body.error || 'The request could not be completed.'),

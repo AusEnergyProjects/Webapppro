@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { User } from "firebase/auth";
 import { TeamCallConnections, type CallRemote } from "@/lib/trade-team-call-client";
@@ -43,6 +45,7 @@ export function TradeTeamCallProvider(props: ProviderProps) {
   return <TradeTeamCallSession key={`${props.user?.uid || "session"}:${props.enabled !== false}`} {...props} />;
 }
 function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }: ProviderProps) {
+  const fetch = useTradeBusinessFetch();
   const [active,setActive] = useState<TeamCall | null>(null), [incoming,setIncoming] = useState<TeamCall[]>([]), [busy,setBusy] = useState(false);
   const [localPreview,setLocalPreview] = useState<MediaStream | null>(null);
   const [notice,setNotice] = useState(""), [remotes,setRemotes] = useState<CallRemote[]>([]), [muted,setMuted] = useState(false), [cameraOff,setCameraOff] = useState(false), [minimized,setMinimized] = useState(false);
@@ -61,7 +64,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
     const result: CallResult = await response.json();
     if (!response.ok || !result.ok) { const error = new Error(result.error || "The call could not connect."); Object.assign(error,{code:result.code,status:response.status}); throw error; }
     return result;
-  },[]);
+  },[fetch]);
 
   const release = useCallback((notify = true) => {
     generation.current++; starting.current = false;

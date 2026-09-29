@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -24,6 +26,7 @@ function activityProgressText(item: FieldRecord) {
 }
 
 export function TradeActivityFieldRecords({ user, workOrderId, canShare, refreshKey }: { user: User; workOrderId: string; canShare: boolean; refreshKey: number }) {
+  const fetch = useTradeBusinessFetch();
   const [records, setRecords] = useState<FieldRecord[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -38,7 +41,7 @@ export function TradeActivityFieldRecords({ user, workOrderId, canShare, refresh
       setRecords(body.records);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Activity forms could not be loaded."); }
     finally { setBusy(false); }
-  }, [user, workOrderId]);
+  }, [fetch, user, workOrderId]);
   useEffect(() => { const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [load, refreshKey]);
   useEffect(() => () => { if (report) URL.revokeObjectURL(report.url); }, [report]);
   async function openReport(item: FieldRecord) {

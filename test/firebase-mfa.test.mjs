@@ -86,6 +86,10 @@ test("team access applies the policy to the employer owner rather than the staff
   const server = load("src/lib/trade-team-server.ts", {
     "../../db": { getD1: () => ({ prepare: () => ({ bind: () => ({ first: async () => ({ id: "member", owner_uid: "myob-owner" }), run: async () => ({}) }) }) }) },
     "./firebase-server": { requireFirebaseIdentity: async () => identity },
+    "./trade-business-context-server": {
+      selectTradeBusiness: async () => ({ ownerUid: "myob-owner", role: "member", memberId: "member" }),
+      requestedTradeBusiness: () => null,
+    },
     "./trade-access-server": { tradeAccountProjection: async (uid) => uid === "staff" ? null : { partnerType: "installer", approvedAbnAccess: true } },
     "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => {} },
     "./tlink-schema-guards": { ensureTlinkSchemaGuards: async () => {} },

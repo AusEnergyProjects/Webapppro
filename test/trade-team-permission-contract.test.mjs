@@ -190,7 +190,15 @@ test("team access is permission- and scope-driven with no role template model", 
   for (const source of [schema, migration, access, route]) {
     assert.doesNotMatch(source, /role_template|permissions_overridden/i);
   }
-  assert.doesNotMatch(access, /\.role\b|\brole\s*[=!]==?/);
+  // The business chooser distinguishes an owned business from a membership. It
+  // must not introduce staff role templates or replace saved permission flags.
+  const ownerContextCheck = 'selected.role === "owner"';
+  assert.equal(access.split(ownerContextCheck).length - 1, 1);
+  assert.match(access, /const selected = await selectTradeBusiness\(request, identity\);\s*if \(selected\.role === "owner"\) \{\s*const verified = await requireVerifiedTradeIdentity\(identity, \{ partnerTypes: \["installer"\] \}\)/);
+  assert.doesNotMatch(access.replace(ownerContextCheck, "true"), /\.role\b|\brole\s*[=!]==?/);
+  assert.match(access, /canAssignJobs: Boolean\(member\.can_assign_jobs\)/);
+  assert.match(access, /canApplyDiscounts: Boolean\(member\.can_apply_discounts\)/);
+  assert.match(access, /canEditTeamPermissions: Boolean\(member\.can_edit_team_permissions\)/);
   for (const column of ["can_apply_discounts", "can_assign_jobs", "can_reschedule_jobs", "can_edit_team_permissions"]) {
     assert.match(migration, new RegExp(column));
   }

@@ -1,9 +1,10 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import * as Crypto from 'expo-crypto';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { apiRequest } from '@/lib/api';
+
 import { colours, radius, spacing } from '@/lib/theme';
 import { FieldButton } from './field-button';
 import { FieldSelect } from './field-select';
@@ -18,6 +19,7 @@ const fresh = (): Question => ({ key: `question_${Crypto.randomUUID().replaceAll
 export function FieldFormLibrary({ workOrderId, serviceCategory, onBack, onChanged, online }: {
   workOrderId: string; serviceCategory: string; onBack: () => void; onChanged: () => Promise<void>; online: boolean;
 }) {
+  const apiRequest = useBusinessApi();
   const [library, setLibrary] = useState<Library>({ canManage: false, templates: [] });
   const [jobForms, setJobForms] = useState<JobForms>({ templates: [], forms: [] });
   const [editing, setEditing] = useState<BusinessForm | 'new' | null>(null);

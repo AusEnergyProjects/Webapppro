@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -123,6 +125,7 @@ function TeamConversation({ thread, call, memberId, onRead, getAuthHeaders, canM
 export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegrations, onOpenQuote, initialThreadId = "", initialCallId = "", teamOnly = false }: {
   user?: User; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenIntegrations?: () => void; onOpenQuote?: (workOrderId: string) => void; initialThreadId?: string; initialCallId?: string; teamOnly?: boolean;
 }) {
+  const fetch = useTradeBusinessFetch();
   const router = useRouter();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [mode, setMode] = useState<"team" | "customers">("team");
@@ -161,7 +164,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
       cache: "no-store", signal: AbortSignal.timeout(20000) });
     const result = await response.json().catch(() => ({})) as Result;
     return { response, result };
-  }, [authHeaders]);
+  }, [fetch, authHeaders]);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);

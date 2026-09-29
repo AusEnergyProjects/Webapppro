@@ -1,5 +1,7 @@
 "use client";
 
+import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import {
   useCallback,
   useEffect,
@@ -794,6 +796,11 @@ function TradeAccessPanel({ profile }: { profile: DashboardProfile }) {
 }
 
 export function DirectTradeDashboard() {
+  return <TradeBusinessGate destination="owner"><DirectTradeDashboardContent /></TradeBusinessGate>;
+}
+
+function DirectTradeDashboardContent() {
+  const fetch = useTradeBusinessFetch();
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
@@ -802,7 +809,7 @@ export function DirectTradeDashboard() {
   const [mfaRequired, setMfaRequired] = useState(false);
   async function leaveAccount() {
     try {
-      await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {});
+      await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {}, fetch);
       await signOut(firebaseAuth);
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Sign out could not be completed. Try again."); }
   }
@@ -1314,7 +1321,7 @@ export function DirectTradeDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     if (profile?.partnerType === "supplier" && (workspace === "calculator" || workspace === "map")) {
@@ -1370,7 +1377,7 @@ export function DirectTradeDashboard() {
       protectedOpportunityRequestControllers.current.delete(controller);
       if (opportunityListController.current === controller) opportunityListController.current = null;
     }
-  }, [profile, user]);
+  }, [fetch, profile, user]);
 
   useEffect(() => {
     void refreshOpportunities();
@@ -1506,7 +1513,7 @@ export function DirectTradeDashboard() {
     } finally {
       protectedOpportunityRequestControllers.current.delete(controller);
     }
-  }, [user, setWorkspace]);
+  }, [fetch, user, setWorkspace]);
 
   useEffect(() => {
     if (!user || !pendingOpportunityMatchId.current) return;

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { BookingTrainingLinks, type BookingTrainingModule } from "./BookingTrainingLinks";
 import { TradeCustomerEmailComposer } from "./TradeCustomerEmailComposer";
 
@@ -147,6 +149,7 @@ function DurationControl({ id, value, onChange }: { id: string; value: number; o
 }
 
 export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => undefined, onOpenQuote, initialWeekStart, variant = "full", proposal, refreshNonce = 0, focusedMemberId, proposalStatusId = "trade-schedule-proposal-status", onProposalValidation, onProposalChange, onScheduleChanged }: TradeScheduleWorkspaceProps) {
+  const fetch = useTradeBusinessFetch();
   const jobCalendar = variant === "job";
   const [initialTarget] = useState(() => initialScheduleWeekStart(initialWeekStart));
   const [initialFocusDate] = useState(() => initialScheduleFocusDate(initialWeekStart));
@@ -212,7 +215,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
       }
     }
     finally { if (!signal?.aborted) setLoading(false); }
-  }, [rangeStart, user]);
+  }, [fetch, rangeStart, user]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -275,7 +278,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     }
     const frame = window.requestAnimationFrame(() => void loadCalendars());
     return () => { controller.abort(); window.cancelAnimationFrame(frame); };
-  }, [initialTarget, jobCalendar, permissions, user]);
+  }, [fetch, initialTarget, jobCalendar, permissions, user]);
   useEffect(() => {
     if (!hoursMember) return; const next: Record<number, WorkingHours> = {};
     for (let weekday = 0; weekday < 7; weekday += 1) next[weekday] = data.workingHours?.find((row) => row.teamMemberId === hoursMember && row.weekday === weekday) || { ...defaultHours(weekday), teamMemberId: hoursMember };

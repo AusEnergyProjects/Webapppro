@@ -216,8 +216,19 @@ export async function requireVerifiedTradeAccess(
   request: Request,
   options: AccessOptions = {},
 ) {
+  const identity = await requireFirebaseIdentity(request);
+  assertTradeOwnerContext(request, identity);
   return requireVerifiedTradeIdentity(
-    await requireFirebaseIdentity(request),
+    identity,
     options,
   );
+}
+
+/** Owner-only tools must never act on the actor's own business while a different team is selected. */
+export function assertTradeOwnerContext(request: Request, identity: FirebaseIdentity) {
+  const selected = request.headers.get("X-TLink-Business");
+  if (selected !== null && selected !== identity.uid) {
+    throw new TradeAccessError("BUSINESS_OWNER_CONTEXT_REQUIRED", 403,
+      "This tool is for your own business. Switch to your business to use it.");
+  }
 }

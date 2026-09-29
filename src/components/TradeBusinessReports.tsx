@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { reportChange, reportCsvRows, type BusinessReport, type ReportBreakdown, type ReportPreset } from "@/lib/trade-business-reports";
@@ -22,6 +24,7 @@ type ReportResponse = { ok?: boolean; report?: BusinessReport; error?: string };
 export function TradeBusinessReports({ user, onOpenJobs, onOpenSchedule, onOpenInvoices, onOpenJobCosts }: {
   user: User; onOpenJobs: () => void; onOpenSchedule?: () => void; onOpenInvoices?: () => void; onOpenJobCosts?: (id: string) => void;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [preset, setPreset] = useState<ReportPreset>("monthly"); const [anchor, setAnchor] = useState("");
   const [service, setService] = useState(""); const [state, setState] = useState("");
   const [custom, setCustom] = useState(false); const [from, setFrom] = useState(""); const [to, setTo] = useState("");
@@ -48,7 +51,7 @@ export function TradeBusinessReports({ user, onOpenJobs, onOpenSchedule, onOpenI
       finally { clearTimeout(timer); if (active && !controller.signal.aborted) setSettledKey(requestKey); }
     })();
     return () => { active = false; controller.abort(); clearTimeout(timer); };
-  }, [user, preset, anchor, service, state, range.from, range.to, profitPage, requestKey]);
+  }, [fetch, user, preset, anchor, service, state, range.from, range.to, profitPage, requestKey]);
   function selectPeriod(next: ReportPreset) {
     setProfitPage(1);
     if (next === "custom") { setCustom(true); setFrom(report?.period.start || ""); setTo(report?.period.end || ""); return; }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { quantityToMilli } from "@/lib/trade-quote";
@@ -53,6 +55,7 @@ export function quoteStockWarnings(lines: readonly StockLine[], choices: readonl
 }
 
 export function TradeQuoteStockNotice({ user, lines, choices, equipment }: { user: User; lines: readonly QuoteLine[]; choices: readonly QuoteChoice[]; equipment?: QuoteEquipment }) {
+  const fetch = useTradeBusinessFetch();
   const equipmentItems = [...(equipment?.common || []), ...(equipment?.choices.flatMap(group => group.items) || [])];
   const productIds = [...new Set([...lines, ...choices.flatMap((choice) => choice.lines), ...equipmentItems].map((line) => line.priceBookItemId).filter((id): id is string => Boolean(id)))].sort().join("|");
   const [refresh, setRefresh] = useState(0);
@@ -71,7 +74,7 @@ export function TradeQuoteStockNotice({ user, lines, choices, equipment }: { use
     };
     void check().catch(() => { if (!controller.signal.aborted) setResult({ key, items: [], failed: true }); });
     return () => controller.abort();
-  }, [key, productIds, user]);
+  }, [fetch, key, productIds, user]);
 
   const unlinked = [...new Set(equipmentItems.filter(item => !item.priceBookItemId).map(item => item.name))];
   if (productIds && result?.key !== key) return null;

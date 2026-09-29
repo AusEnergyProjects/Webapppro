@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { CSSProperties, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
@@ -226,6 +228,7 @@ export function SupplierCatalogueWorkspace({
   hasAnalytics: boolean;
   navigationTarget?: TLinkCommandTarget | null;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [products, setProducts] = useState<SupplierProduct[]>([]);
   const [productOptions, setProductOptions] = useState<SupplierProductOption[]>([]);
   const [dependencySearch, setDependencySearch] = useState("");
@@ -303,7 +306,7 @@ export function SupplierCatalogueWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [brandFilter, catalogueFilter, catalogueSort, categoryFilter, maximumPrice, minimumPrice, modelSearch, page, pageSize, search, stockFilter, user]);
+  }, [fetch, brandFilter, catalogueFilter, catalogueSort, categoryFilter, maximumPrice, minimumPrice, modelSearch, page, pageSize, search, stockFilter, user]);
 
   useEffect(() => {
     pageCursors.current = [""]; totalReady.current = false;
@@ -322,7 +325,7 @@ export function SupplierCatalogueWorkspace({
         setViewSaved(Boolean(result.saved));
       }).catch(() => undefined).finally(() => active && setViewReady(true));
     return () => { active = false; };
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     if (!viewReady) return;
@@ -354,7 +357,7 @@ export function SupplierCatalogueWorkspace({
         .finally(() => active && setDependencySearchBusy(false));
     }, 180);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [catalogueView, dependencySearch, user]);
+  }, [fetch, catalogueView, dependencySearch, user]);
 
   const liveCount = catalogueCounts.live;
   const reviewCount = catalogueCounts.pending;

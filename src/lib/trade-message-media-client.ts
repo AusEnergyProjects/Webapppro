@@ -17,19 +17,19 @@ export async function prepareMessagePhoto(file: File, avatar = false) {
   } finally { bitmap.close(); }
 }
 
-export async function uploadPrivateMessageFile(file: File, target: { threadId: string } | { memberId: string }, getAuthHeaders: MessageMediaAuth, signal?: AbortSignal) {
+export async function uploadPrivateMessageFile(file: File, target: { threadId: string } | { memberId: string }, getAuthHeaders: MessageMediaAuth, signal?: AbortSignal, request: typeof fetch = fetch) {
   const form = new FormData(); form.set("file", file);
   if ("threadId" in target) { form.set("purpose", "message"); form.set("threadId", target.threadId); }
   else { form.set("purpose", "avatar"); form.set("memberId", target.memberId); }
   const headers = new Headers(await getAuthHeaders()); headers.delete("Content-Type");
-  const response = await fetch("/api/trade-message-media", { method: "POST", headers, body: form, signal });
+  const response = await request("/api/trade-message-media", { method: "POST", headers, body: form, signal });
   const result: { ok?: boolean; error?: string; attachment?: MessageAttachment } = await response.json();
   if (!response.ok || !result.ok || !result.attachment) throw new Error(result.error || "Upload failed. Please try again.");
   return result.attachment;
 }
 
-export async function removePrivateMessageFile(id: string, getAuthHeaders: MessageMediaAuth) {
-  const response = await fetch(`/api/trade-message-media?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: await getAuthHeaders() });
+export async function removePrivateMessageFile(id: string, getAuthHeaders: MessageMediaAuth, request: typeof fetch = fetch) {
+  const response = await request(`/api/trade-message-media?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: await getAuthHeaders() });
   if (!response.ok) throw new Error("Attachment could not be removed. Please try again.");
 }
 

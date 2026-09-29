@@ -1,11 +1,13 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { SolarDesign, SolarDesignInput, SolarDesignSummary } from "@/lib/trade-solar-design";
 
 type Result = { ok?: boolean; error?: string; design?: SolarDesign; designs?: SolarDesignSummary[]; hasMore?: boolean; nextCursor?: string };
-export async function solarDesignRequest(user: User, query = "", body?: unknown): Promise<Result> {
+export async function solarDesignRequest(fetch: typeof globalThis.fetch, user: User, query = "", body?: unknown): Promise<Result> {
   const token = await user.getIdToken();
   const response = await fetch(`/api/trade-solar-designs${query}`, {
     method: body ? "POST" : "GET", cache: "no-store",
@@ -21,6 +23,7 @@ export async function solarDesignRequest(user: User, query = "", body?: unknown)
 
 /** Serial writes prevent delayed autosaves from replacing newer geometry. */
 export function useTradeSolarDesign(user: User, enabled: boolean) {
+  const fetch = useTradeBusinessFetch();
   const input = useRef<SolarDesignInput | null>(null);
   const identity = useRef({ id: "", revision: 0 });
   const saved = useRef("");
@@ -44,7 +47,7 @@ export function useTradeSolarDesign(user: User, enabled: boolean) {
         const fingerprint = JSON.stringify(snapshot);
         if (!identity.current.id) identity.current.id = crypto.randomUUID();
         if (mounted.current) { setStatus("Saving…"); setError(""); }
-        const result = await solarDesignRequest(user, "", { id: identity.current.id, expectedRevision: identity.current.revision, design: snapshot });
+        const result = await solarDesignRequest(fetch, user, "", { id: identity.current.id, expectedRevision: identity.current.revision, design: snapshot });
         if (generation.current !== attemptGeneration) return current.current;
         if (!result.design) throw new Error("The design save was not confirmed. Try again.");
         identity.current = { id: result.design.id, revision: result.design.revision };
@@ -61,7 +64,7 @@ export function useTradeSolarDesign(user: User, enabled: boolean) {
     }).finally(() => { if (saving.current?.generation === attemptGeneration) saving.current = null; });
     saving.current = { generation: attemptGeneration, promise };
     return promise;
-  }, [enabled, user]);
+  }, [fetch, enabled, user]);
 
   const update = useCallback((value: SolarDesignInput) => {
     input.current = value;

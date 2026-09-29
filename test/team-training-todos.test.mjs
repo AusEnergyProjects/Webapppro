@@ -6,7 +6,7 @@ import * as jsx from 'react/jsx-runtime';
 import { ENERGY_SERVICE_CATALOGUE } from '../src/lib/energy-service-catalogue.mjs';
 
 const source=fs.readFileSync(new URL('../src/components/TeamTrainingTodos.tsx',import.meta.url),'utf8');
-const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const text=node=>node==null||typeof node==='boolean'?'':typeof node==='string'||typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(''):text(node.props?.children);
 const nodes=(node,predicate)=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(child=>nodes(child,predicate)):[...(predicate(node)?[node]:[]),...nodes(node.props?.children,predicate)];
 const button=(tree,label)=>nodes(tree,node=>node.type==='button'&&text(node)===label)[0];

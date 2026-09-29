@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./TradeRebateDocumentActions.css";
@@ -71,6 +73,8 @@ function editLines(invoice: QuickInvoice): EditLine[] {
 }
 
 export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTitle, readOnly = false, onOpenIntegrations, onChanged }: { user: User; workOrderId: string; customerName: string; jobTitle: string; readOnly?: boolean; onOpenIntegrations?: () => void; onChanged: () => Promise<void> }) {
+  const fetch = useTradeBusinessFetch();
+  const businessOwnerUid = useTradeBusiness()?.ownerUid || user.uid;
   const [invoice, setInvoice] = useState<QuickInvoice | null>(null);
   const [acceptedInvoice, setAcceptedInvoice] = useState<AcceptedInvoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,7 +122,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     if (result.access) { setCanApplyDiscounts(result.access.canApplyDiscounts === true); setServerCanManageInvoices(result.access.canManageInvoices === true); }
     setAcceptedInvoice(result.acceptedInvoice || null);
     acceptInvoice(result.invoice || null);
-  }, [acceptInvoice, user, workOrderId]);
+  }, [fetch, acceptInvoice, user, workOrderId]);
 
   useEffect(() => {
     if (!acceptedInvoice?.delivery || !["queued", "sending"].includes(acceptedInvoice.delivery.status)) return;
@@ -151,10 +155,10 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      setRebateDraft(loadTradeRebateEstimateDraft(window.sessionStorage, user.uid));
+      setRebateDraft(loadTradeRebateEstimateDraft(window.sessionStorage, businessOwnerUid));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [user.uid]);
+  }, [businessOwnerUid, user.uid]);
 
   useEffect(() => {
     if (!previewOpen) return;
@@ -374,7 +378,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     } else {
       return;
     }
-    clearTradeRebateEstimateDraft(window.sessionStorage, user.uid);
+    clearTradeRebateEstimateDraft(window.sessionStorage, businessOwnerUid);
     setRebateDraft(null);
   }
 

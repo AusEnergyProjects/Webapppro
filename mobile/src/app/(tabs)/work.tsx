@@ -1,3 +1,4 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -7,7 +8,7 @@ import { JobAppointmentActions } from '@/components/job-appointment-actions';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { FieldPermissions } from '@/components/job-work-selection';
-import { apiRequest } from '@/lib/api';
+
 import { appointmentSavedMessage, type AppointmentAction, type AppointmentActionResult } from '@/lib/appointment-actions';
 import { effectiveJobStart, isUnscheduledJob, isVisibleScheduleJob, matchesJobSearch } from '@/lib/schedule';
 import { colours, radius, spacing } from '@/lib/theme';
@@ -88,6 +89,7 @@ function JobCard({ job, onActions }: { job: FieldJob; onActions: (job: FieldJob)
 }
 
 export default function WorkScreen() {
+  const apiRequest = useBusinessApi();
   const { jobs, sync, syncNow, refreshLocal, user } = useApp();
   const [actionJob, setActionJob] = useState<FieldJob | null>(null);
   const [jobPatches, setJobPatches] = useState<Record<string, AppointmentActionResult['jobPatch']>>({});

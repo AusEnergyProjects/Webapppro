@@ -1,3 +1,4 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +13,7 @@ import {
 
 import { SignatureCapture } from '@/components/SignatureCapture';
 import { FieldButton } from '@/components/field-button';
-import { apiRequest } from '@/lib/api';
+
 import { colours, radius, spacing } from '@/lib/theme';
 import type {
   FieldActivityWorkPack,
@@ -1517,6 +1518,7 @@ function CustomerContextReview({
   protectedCustomer: boolean;
   onSave: (next: FieldWorkPackCustomerContext) => Promise<void>;
 }) {
+  const apiRequest = useBusinessApi();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<FieldWorkPackCustomerContext | null>(null);
   const [saving, setSaving] = useState(false);

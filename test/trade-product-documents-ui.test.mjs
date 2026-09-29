@@ -36,7 +36,7 @@ function harness(t, component = "TradeProductDocuments", options = {}) {
     "@/lib/trade-price-book": priceBook, "@/lib/trade-quote": quote, "@/lib/trade-solar-equipment": equipment,
     "./TradeProductDocuments": { TradeProductDocuments: ProductDocuments }, "./TradeJobPacketWorkspace": { TradeJobPacketWorkspace: () => null }, "./TradePriceBookImport": { TradePriceBookImport: () => null } };
   const source = fs.readFileSync(new URL(`../src/components/${component}.tsx`, import.meta.url), "utf8");
-  const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
   const fetch = async (url, init = {}) => {
     requests.push({ url, init });
     if (options.respond) return options.respond(url, init);

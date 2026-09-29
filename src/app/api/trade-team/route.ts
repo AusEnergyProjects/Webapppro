@@ -654,9 +654,8 @@ export async function POST(request: Request) {
   try {
     if (action === "accept_invite") {
       const identity = await requireFirebaseIdentity(request);
-      await acceptTradeTeamInvitation(cleanAdminText(body.token, 300), identity);
-      const access = await requireInstallerTeamAccess(request);
-      return adminJson({ ok: true, accepted: true, ...(await teamPayload(access)) });
+      const business = await acceptTradeTeamInvitation(cleanAdminText(body.token, 300), identity);
+      return adminJson({ ok: true, accepted: true, ...business });
     }
 
     const access = await requireInstallerTeamAccess(request);

@@ -17,6 +17,7 @@ const schemaGuards = read("../src/lib/creditex-schema-guards.ts");
 const complianceDomain = read("../src/lib/creditex-compliance-server.ts");
 const tradeAccess = read("../src/lib/trade-access-server.ts");
 const tradeTeam = read("../src/lib/trade-team-server.ts");
+const tradeBusinessContext = read("../src/lib/trade-business-context-server.ts");
 const publicJobInformation = read("../src/app/api/job-information/[token]/route.ts");
 
 function loadServer() {
@@ -290,7 +291,15 @@ test("compliance-sensitive installer and public mutation boundaries initialise s
   );
   assert.match(
     tradeTeam,
-    /requireInstallerTeamAccess[\s\S]+await ensureCreditexSchemaGuards\(db\)/,
+    /requireInstallerTeamAccess[\s\S]+await selectTradeBusiness\(request, identity\)[\s\S]+await db\.prepare/,
+  );
+  assert.match(
+    tradeBusinessContext,
+    /selectTradeBusiness[\s\S]+await listTradeBusinesses\(identity\)/,
+  );
+  assert.match(
+    tradeBusinessContext,
+    /listTradeBusinesses[\s\S]+await ensureCreditexSchemaGuards\(db\)[\s\S]+await db\.prepare/,
   );
   assert.match(
     publicJobInformation,

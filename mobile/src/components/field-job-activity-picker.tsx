@@ -1,6 +1,7 @@
+import { useBusinessApi } from '@/lib/use-business-api';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { apiRequest } from '@/lib/api';
+
 import { colours, spacing } from '@/lib/theme';
 import { FieldButton } from './field-button';
 import { FieldSelect } from './field-select';
@@ -16,6 +17,7 @@ type Catalogue = {
 export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
   workOrderId: string; online: boolean; onChanged: () => Promise<void>;
 }) {
+  const apiRequest = useBusinessApi();
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [group, setGroup] = useState('rental');
   const [selection, setSelection] = useState('');

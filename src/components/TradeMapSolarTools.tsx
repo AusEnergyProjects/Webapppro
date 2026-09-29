@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { createTradeMapSolarLayout, DEFAULT_SOLAR_PANEL_TILT, sameSolarPanelGeometry, validSolarPanelSize, validSolarPanelTilt, type SolarLayout } from "@/lib/trade-map-solar";
@@ -17,6 +19,7 @@ type Props = { user: User; onRegisterMapSave?: (save: (() => Promise<unknown>) |
 const EMPTY_LAYOUT: SolarLayout = { panels: [], selectedId: null, selectionMode: "one", selectedIds: [] };
 
 export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDesign, api, map, active, disabled, onActivate, onClose, onCapturing, onQuote }: Props) {
+  const fetch = useTradeBusinessFetch();
   const controller = useRef<ReturnType<typeof createTradeMapSolarLayout> | null>(null);
   const capture = useRef<AbortController | null>(null);
   const [layout, setLayout] = useState<SolarLayout>(EMPTY_LAYOUT);
@@ -79,7 +82,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
       if (live) setPriceBookPanels(result.solarPanels ?? []);
     })().catch((error: unknown) => { if (live) setMessage(error instanceof Error ? error.message : "Your price-list panels could not load."); });
     return () => { live = false; };
-  }, [user, onQuote]);
+  }, [fetch, user, onQuote]);
 
   const restoreDesign = useCallback((design: SolarDesign) => {
     accept(design); setTitle(design.title); setLinks({ customerId: design.customerId, workOrderId: design.workOrderId });
@@ -136,7 +139,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
   async function showSaved(search = savedSearch, offset = 0) {
     setSavedOpen(true); setSavedLoading(true); setMessage("");
     try {
-      const result = await solarDesignRequest(user, `?search=${encodeURIComponent(search.trim())}&offset=${offset}`);
+      const result = await solarDesignRequest(fetch, user, `?search=${encodeURIComponent(search.trim())}&offset=${offset}`);
       setSavedDesigns((previous) => offset ? [...previous, ...(result.designs ?? [])].filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index) : result.designs ?? []);
       setSavedOffset(offset); setSavedHasMore(Boolean(result.hasMore));
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not load saved designs."); }
@@ -146,7 +149,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
     setSavedLoading(true); setMessage("");
     try {
       await ensureSaved();
-      const result = await solarDesignRequest(user, `?id=${encodeURIComponent(id)}`);
+      const result = await solarDesignRequest(fetch, user, `?id=${encodeURIComponent(id)}`);
       if (!result.design) throw new Error("This saved design is unavailable.");
       restoreDesign(result.design); onActivate(); setSavedOpen(false);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not open this design."); }

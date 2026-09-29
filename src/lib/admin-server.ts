@@ -36,6 +36,14 @@ export function adminError(error: unknown) {
 }
 
 export function mfaErrorResponse(error: unknown) {
+  // Keep context-selection failures actionable in the existing shared access-response path.
+  const code = error instanceof Error && "code" in error ? error.code : error instanceof Error ? error.message : "";
+  if (code === "BUSINESS_SELECTION_REQUIRED") return adminJson({ ok: false, code,
+    error: "Choose which business you want to open." }, 409);
+  if (code === "BUSINESS_ACCESS_REQUIRED") return adminJson({ ok: false, code,
+    error: "Your access to this business changed. Choose a business you have access to." }, 403);
+  if (code === "BUSINESS_OWNER_CONTEXT_REQUIRED") return adminJson({ ok: false, code,
+    error: "Switch to your own business to use this tool." }, 403);
   if (!(error instanceof FirebaseMfaRequiredError)) return null;
   return adminJson({ ok: false, code: "MFA_REQUIRED", error: MFA_REQUIRED_MESSAGE, setupUrl: MFA_SETUP_URL }, 403);
 }

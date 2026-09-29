@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readTradePushSubscriptionId as localId, saveTradePushSubscriptionId as saveLocalId } from "@/lib/trade-notification-client";
 import styles from "./TradeNotificationSettings.module.css";
@@ -22,6 +24,7 @@ export function notificationDeviceSupport(userAgent: string, touchPoints: number
 }
 
 export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { getAuthHeaders: () => Promise<Record<string,string>>; enabled?: boolean }) {
+  const fetch = useTradeBusinessFetch();
   const [saved,setSaved] = useState<SavedSubscription | null>(null), [browserLinked,setBrowserLinked] = useState(false);
   const [support,setSupport] = useState<"loading" | "ready" | "home-screen" | "unsupported">("loading");
   const [permission,setPermission] = useState<NotificationPermission>("default"), [configured,setConfigured] = useState(false);
@@ -40,7 +43,7 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
     const result: PushResult = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || "Notification settings could not be saved. Try again.");
     return result;
-  },[]);
+  },[fetch]);
 
   useEffect(() => {
     if (!enabled) return;

@@ -406,8 +406,10 @@ async function persistQueuedAction(
   return incoming;
 }
 
-export async function queueAction(action: OfflineAction) {
+export async function queueAction(action: OfflineAction, expectedOwner?: LocalDataOwner) {
+  if (expectedOwner) assertLocalDataOwner(expectedOwner);
   const db = await getDatabase();
+  if (expectedOwner) assertLocalDataOwner(expectedOwner);
   const now = new Date().toISOString();
   const lane = await workOrderFieldLane(db, action.workOrderId, action.fieldLane);
   const phaseError = workPackActionPhaseError(action);
@@ -1049,9 +1051,15 @@ type AddUploadInput = Omit<
   clearSettingKey?: string;
 };
 
-export async function addUpload(input: AddUploadInput) {
+export async function addUpload(input: AddUploadInput, expectedOwner?: LocalDataOwner) {
+  if (expectedOwner) assertLocalDataOwner(expectedOwner);
   const encrypted = await encryptFileForQueue(input.local_uri, input.id);
+  if (expectedOwner) {
+    try { assertLocalDataOwner(expectedOwner); }
+    catch (error) { deleteEncryptedBundle(encrypted.bundle); throw error; }
+  }
   const db = await getDatabase();
+  if (expectedOwner) assertLocalDataOwner(expectedOwner);
   const now = new Date().toISOString();
   const lane = await workOrderFieldLane(db, input.work_order_id);
   const evidenceEnvelope = completeEvidenceEnvelope(input.evidenceEnvelope, {
@@ -1177,9 +1185,11 @@ export async function queueCounts() {
     WHERE settings.key LIKE 'rental-save:%' AND json_valid(settings.value)
       AND json_extract(settings.value, '$.status') <> 'succeeded'
       AND COALESCE(json_extract(photo.value, '$.linked'), 0) <> 1`);
+  const rentalDocuments = await db.getFirstAsync<{ count: number }>(`SELECT COALESCE(SUM(json_array_length(value)), 0) count
+    FROM settings WHERE key LIKE 'rental-documents:%' AND json_valid(value)`);
   return {
     actions: (actions?.count || 0) + (activityCompletions?.count || 0) + (rentalSaves?.count || 0),
-    uploads: (uploads?.count || 0) + (rentalPhotos?.count || 0),
+    uploads: (uploads?.count || 0) + (rentalPhotos?.count || 0) + (rentalDocuments?.count || 0),
     conflicts: (conflicts?.count || 0) + (activityCompletions?.errors || 0) + (rentalSaves?.errors || 0),
   };
 }
@@ -1259,8 +1269,69 @@ export async function prepareLocalDataOwner(firebaseUid: string) {
   if (!ownerUid) throw new Error('A signed-in account is required before opening local field data.');
   const currentOwnerUid = await SecureStore.getItemAsync(DATABASE_OWNER_KEY);
   if (currentOwnerUid === ownerUid) return;
+  if (currentOwnerUid) {
+    const pending = await queueCounts();
+    if (pending.actions || pending.uploads || pending.conflicts) {
+      throw new Error('Sync or resolve the saved work for your current business before switching. Your work is still on this device.');
+    }
+  }
   await purgeLocalData();
   await SecureStore.setItemAsync(DATABASE_OWNER_KEY, ownerUid, {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+}
+
+/** Old app builds stored one Firebase account without its business identifier. */
+export async function legacyLocalWork(firebaseUid: string) {
+  const oldKey = `firebase:${firebaseUid}`;
+  if (await SecureStore.getItemAsync(DATABASE_OWNER_KEY) !== oldKey) return null;
+  const counts = await queueCounts();
+  if (!counts.actions && !counts.uploads && !counts.conflicts) return null;
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ id: string; field_lane: string }>(`SELECT id, field_lane FROM jobs
+    UNION SELECT work_order_id id, field_lane FROM action_queue
+    UNION SELECT work_order_id id, field_lane FROM upload_queue
+    UNION SELECT json_extract(value, '$.workOrderId') id, 'trade_team' field_lane FROM settings
+      WHERE key LIKE 'rental-save:%' AND json_valid(value)
+    UNION SELECT json_extract(value, '$.record.workOrderId') id, 'trade_team' field_lane FROM settings
+      WHERE key LIKE 'activity-form:%' AND json_valid(value)
+    UNION SELECT json_extract(document.value, '$.workOrderId') id, 'trade_team' field_lane
+      FROM settings, json_each(CASE WHEN settings.key LIKE 'rental-documents:%' AND json_valid(settings.value) THEN settings.value ELSE '[]' END) document
+      WHERE settings.key LIKE 'rental-documents:%'`);
+  const ids = [...new Set(rows.map(row => row.id).filter(Boolean))];
+  if (!ids.length) throw new Error('Your earlier saved work needs recovery before changing business. Keep this app installed so the files are retained.');
+  return { oldKey, workOrderIds: ids, lanes: [...new Set(rows.map(row => row.field_lane))] };
+}
+
+function changeRentalOwner(value: unknown, previousKey: string, nextKey: string): unknown {
+  if (Array.isArray(value)) return value.map(entry => changeRentalOwner(entry, previousKey, nextKey));
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key,
+    key === 'ownerKey' && entry === previousKey ? nextKey : changeRentalOwner(entry, previousKey, nextKey)]));
+}
+
+/** Call only after the server proves every retained job belongs to the selected business. */
+export async function migrateLegacyLocalOwner(firebaseUid: string, nextKey: string) {
+  const previousKey = `firebase:${firebaseUid}`;
+  if (await SecureStore.getItemAsync(DATABASE_OWNER_KEY) !== previousKey) return;
+  if (!nextKey.startsWith(`firebase:${encodeURIComponent(firebaseUid)}:`) || nextKey === previousKey) throw new Error('A verified business is required to recover saved work.');
+  localOwnerEpoch++;
+  for (const listener of localOwnerListeners) listener();
+  const db = await getDatabase();
+  await db.withTransactionAsync(async () => {
+    const settings = await db.getAllAsync<{ key: string; value: string }>(
+      "SELECT key, value FROM settings WHERE key LIKE 'rental-save:%' OR key LIKE 'rental-result:%' OR key LIKE 'rental-documents:%'");
+    for (const row of settings) {
+      let value: unknown;
+      try { value = JSON.parse(row.value); }
+      catch { throw new Error('A saved rental record needs recovery. Its files have been retained.'); }
+      const newKey = row.key.replace(`:${encodeURIComponent(previousKey)}:`, `:${encodeURIComponent(nextKey)}:`);
+      await db.runAsync('DELETE FROM settings WHERE key = ?', row.key);
+      await db.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', newKey,
+        JSON.stringify(changeRentalOwner(value, previousKey, nextKey)));
+    }
+  });
+  await SecureStore.setItemAsync(DATABASE_OWNER_KEY, nextKey, {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
 }

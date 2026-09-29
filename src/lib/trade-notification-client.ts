@@ -13,13 +13,13 @@ export function saveTradePushSubscriptionId(id: string): void {
   catch { /* Browser subscription state remains authoritative if storage is unavailable. */ }
 }
 
-export async function disableTradeDeviceNotifications(getAuthHeaders: () => Promise<Record<string,string>>): Promise<{serverRemoved:boolean;browserRemoved:boolean}> {
+export async function disableTradeDeviceNotifications(getAuthHeaders: () => Promise<Record<string,string>>, request: typeof fetch = fetch): Promise<{serverRemoved:boolean;browserRemoved:boolean}> {
   const id = readTradePushSubscriptionId();
   // Start with the current identity before any browser or sign-out operation.
   const serverRemoval = id ? (async () => {
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch("/api/trade-push",{method:"DELETE",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({subscriptionId:id}),cache:"no-store",signal:AbortSignal.timeout(12000)});
+      const response = await request("/api/trade-push",{method:"DELETE",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({subscriptionId:id}),cache:"no-store",signal:AbortSignal.timeout(12000)});
       if (!response.ok) return false;
       const result: {ok?:boolean} = await response.json();
       return result.ok === true;

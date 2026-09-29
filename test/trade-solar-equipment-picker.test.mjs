@@ -7,7 +7,7 @@ import * as equipment from "../src/lib/trade-solar-equipment.ts";
 
 const compiled = ts.transpileModule(fs.readFileSync(new URL("../src/components/TradeSolarEquipmentPicker.tsx", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
-}).outputText;
+}).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
 const panel = { id: "my-panel", kind: "panel", name: "My 440 W panel", manufacturer: "", model: "P440", watts: 440, widthM: 1.134, lengthM: 1.762, quantity: 1, priceBookItemId: "my-panel" };
 

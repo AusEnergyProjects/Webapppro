@@ -184,6 +184,7 @@ test("calculator access requests a non-claiming compliance lookup", async () => 
       },
       "./trade-access-server": {
         TradeAccessError: MockTradeAccessError,
+        assertTradeOwnerContext: request => assert.equal(request.headers.get("X-TLink-Business"), null),
         requireVerifiedTradeIdentity: async () => installerAccess,
       },
     },

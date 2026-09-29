@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
@@ -41,6 +43,7 @@ export function TradeAccountingPanel({
   compact?: boolean;
   onOpenIntegrations?: () => void; onChanged: () => Promise<void>;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -72,7 +75,7 @@ export function TradeAccountingPanel({
     } catch (error) {
       if (generation === loadGeneration.current) setStatus(error instanceof Error ? error.message : "Accounting information could not be loaded.");
     } finally { if (generation === loadGeneration.current) setBusy(""); }
-  }, [invoiceSource, user, workOrderId]);
+  }, [fetch, invoiceSource, user, workOrderId]);
 
   useEffect(() => {
     if (isProtected || !hasDirectCustomer) return;

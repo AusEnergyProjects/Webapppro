@@ -4,7 +4,7 @@ import fs from "node:fs";
 import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../src/components/useTradeSolarDesign.ts", import.meta.url), "utf8");
-const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const draft = (title = "Roof A") => ({ title, panels: [{ id: 1 }], equipment: [], installationNotes: "", center: { lat: -37, lng: 145 }, zoom: 20, customerId: "customer-a", workOrderId: "job-a" });
 const persisted = (input, id, revision) => ({ ...input, id, revision, createdAt: "2026-09-27", updatedAt: "2026-09-27" });

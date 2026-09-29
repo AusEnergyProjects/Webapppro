@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { JobStockRequirement, JobStockSummary } from "@/lib/trade-stock";
@@ -23,6 +25,7 @@ const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "curren
 const label = (value: string) => value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
 
 export function TradeJobReadinessPanel({ user, workOrderId, onOpenTeam, onChanged, completionAction = true }: { user: User; workOrderId: string; onOpenTeam: () => void; onChanged: () => Promise<void>; completionAction?: boolean }) {
+  const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<Data | null>(null); const [busy, setBusy] = useState(""); const [status, setStatus] = useState("");
   const [drafts, setDrafts] = useState<Record<string, ActualDraft>>({});
   const [stockUseDrafts, setStockUseDrafts] = useState<Record<string, StockUseDraft>>({});
@@ -32,7 +35,7 @@ export function TradeJobReadinessPanel({ user, workOrderId, onOpenTeam, onChange
     const response = await fetch(`/api/trade-job-readiness?workOrderId=${encodeURIComponent(workOrderId)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
     const result = await response.json().catch(() => ({})); if (signal.aborted) return;
     if (!response.ok) throw new Error(result.error || "Job readiness could not be loaded."); setData(result as Data);
-  }, [user, workOrderId]);
+  }, [fetch, user, workOrderId]);
   useEffect(() => {
     const request = new AbortController();
     const frame = requestAnimationFrame(() => void load(request.signal).catch((error) => { if (!request.signal.aborted) setStatus(error instanceof Error ? error.message : "Job readiness could not be loaded."); }));

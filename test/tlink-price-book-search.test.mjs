@@ -28,7 +28,7 @@ function harness(t, options = {}) {
     "@/lib/admin-server": { sameOrigin: () => true, mfaErrorResponse: () => null,
       adminJson: (body, status = 200) => Response.json(body, { status }), cleanAdminText: (value, length) => String(value || "").trim().slice(0, length) },
     "@/lib/direct-trade-entitlements-server": { accountEntitlements: async () => ({ features: { business_operations: options.businessOperations !== false, installer_marketplace: false } }) },
-    "@/lib/trade-access-server": { TradeAccessError, tradeAccountProjection: async () => options.member ? null : {},
+    "@/lib/trade-access-server": { TradeAccessError, tradeAccountProjection: async () => options.member ? null : { partnerType: options.supplier ? "supplier" : "installer" },
       requireVerifiedTradeIdentity: async () => ({ partnerType: options.supplier ? "supplier" : "installer" }) },
     "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: options.supplier ? "supplier-a" : options.member ? "member-a" : "business-a" }) },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access, canManageTeam: () => false },
@@ -38,8 +38,10 @@ function harness(t, options = {}) {
   const exports = {}; Function("require", "exports", code)(id => {
     assert.ok(dependencies[id], `Unexpected dependency ${id}`); return dependencies[id];
   }, exports);
-  return { queries, async search(query = "heat") {
-    const response = await exports.GET(new Request(`https://tlink.test/api/tlink-search?kind=product&q=${encodeURIComponent(query)}`));
+  return { queries, async search(query = "heat", selectedBusiness) {
+    const response = await exports.GET(new Request(`https://tlink.test/api/tlink-search?kind=product&q=${encodeURIComponent(query)}`, {
+      headers: selectedBusiness ? { "X-TLink-Business": selectedBusiness } : {},
+    }));
     assert.equal(response.status, 200); return (await response.json()).records;
   } };
 }
@@ -57,6 +59,19 @@ test("team member search uses the owner price book instead of the member uid", a
   const h = harness(t, { member: true });
   assert.deepEqual((await h.search("PB-001")).map(result => result.id), ["own-product"]);
   assert.equal(h.queries[0].args[0], "business-a");
+});
+
+test("a business owner working for another team searches only the selected teams price book", async t => {
+  const h = harness(t, { access: { ownerUid: "business-b" } });
+  assert.deepEqual((await h.search("PB-001", "business-b")).map(result => result.id), ["other-product"]);
+  assert.equal(h.queries[0].args[0], "business-b");
+});
+
+test("a supplier working for an installer team does not search their own supplier catalogue", async t => {
+  const h = harness(t, { supplier: true, access: { ownerUid: "business-b" } });
+  assert.deepEqual((await h.search("PB-001", "business-b")).map(result => result.id), ["other-product"]);
+  assert.equal(h.queries[0].args[0], "business-b");
+  assert.doesNotMatch(h.queries[0].sql, /supplier_products/);
 });
 
 for (const options of [{ access: { canViewPriceBook: false } }, { businessOperations: false }]) {

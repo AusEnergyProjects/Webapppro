@@ -5,6 +5,7 @@ import {
 } from "@/lib/creditex-manual-field-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { tradeFieldPermissions } from "@/lib/trade-field-permissions";
+import { mfaErrorResponse } from "@/lib/admin-server";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,9 @@ export async function GET(request: Request) {
   let displayName = "";
   let businessName = "";
   let fieldUsername = "";
+  let ownerUid = "";
+  let memberId = "";
+  let isOwner = false;
   let tradeError: unknown;
   let manualError: unknown;
   let permissions: ReturnType<typeof tradeFieldPermissions> | null = null;
@@ -45,19 +49,27 @@ export async function GET(request: Request) {
     displayName = trade.displayName;
     businessName = trade.businessName;
     fieldUsername = trade.fieldUsername || "";
+    ownerUid = trade.ownerUid;
+    memberId = trade.memberId;
+    isOwner = trade.isOwner;
     permissions = tradeFieldPermissions(trade);
   } catch (error) {
     tradeError = error;
   }
+  const contextFailure = mfaErrorResponse(tradeError);
+  if (contextFailure) return contextFailure;
   try {
-    const database = getD1();
-    const member = await requireManualFieldMember(request, database);
-    if (await hasManualFieldAssignment(database, member)) {
-      modes.push("creditex_manual");
-      if (!displayName) displayName = member.displayName;
-      if (!businessName) {
-        businessName = member.organisationTradingName
-          || member.organisationLegalName;
+    // An explicitly selected TLink business must not pull in another organisation's test work.
+    if (!request.headers.has("X-TLink-Business")) {
+      const database = getD1();
+      const member = await requireManualFieldMember(request, database);
+      if (await hasManualFieldAssignment(database, member)) {
+        modes.push("creditex_manual");
+        if (!displayName) displayName = member.displayName;
+        if (!businessName) {
+          businessName = member.organisationTradingName
+            || member.organisationLegalName;
+        }
       }
     }
   } catch (error) {
@@ -71,13 +83,14 @@ export async function GET(request: Request) {
       displayName,
       businessName,
       fieldUsername,
+      ...(ownerUid ? { ownerUid, memberId, isOwner } : {}),
       permissions,
       ...(modes.includes("creditex_manual")
         ? { recordMode: "synthetic_test" }
         : {}),
     });
   }
-  const unauthenticated = [tradeError, manualError].every((error) =>
+  const unauthenticated = (request.headers.has("X-TLink-Business") ? [tradeError] : [tradeError, manualError]).every((error) =>
     error instanceof Error && error.message === "AUTH_REQUIRED"
   );
   if (unauthenticated) {

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeAccountingPanel } from "./TradeAccountingPanel";
@@ -18,6 +20,7 @@ const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "curren
 export function TradeCommercialHandoffPanel({ user, workOrderId, isProtected, hasDirectCustomer, customerName, jobTitle, onOpenIntegrations, onChanged }: {
   user: User; workOrderId: string; isProtected: boolean; hasDirectCustomer: boolean; customerName: string; jobTitle: string; onOpenIntegrations: () => void; onChanged: () => Promise<void>;
 }) {
+  const fetch = useTradeBusinessFetch();
   const [handoff, setHandoff] = useState<Handoff | null>(null);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [depositKind, setDepositKind] = useState<"percentage" | "fixed">("percentage");
@@ -36,7 +39,7 @@ export function TradeCommercialHandoffPanel({ user, workOrderId, isProtected, ha
       setDepositKind(result.handoff.depositKind);
       setDepositValue(result.handoff.depositKind === "percentage" ? String(result.handoff.depositBasisPoints / 100) : (result.handoff.depositFixedCents / 100).toFixed(2));
     }
-  }, [hasDirectCustomer, isProtected, user, workOrderId]);
+  }, [fetch, hasDirectCustomer, isProtected, user, workOrderId]);
 
   useEffect(() => { const frame = window.requestAnimationFrame(() => { void load().catch((error) => setStatus(error instanceof Error ? error.message : "The handoff could not be loaded.")); }); return () => window.cancelAnimationFrame(frame); }, [load]);
 

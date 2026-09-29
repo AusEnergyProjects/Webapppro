@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
@@ -50,6 +52,7 @@ const editDraft = (item: PriceBookItem): Draft => ({ name: item.name, descriptio
   panelLengthMm: item.solarPanel ? String(Number((item.solarPanel.lengthM * 1000).toFixed(3))) : "", panelDetails: item.solarPanel || null });
 
 export function TradePriceBookWorkspace({ user, initialView = "items", permissions, navigationTarget }: { user: User; initialView?: "items" | "packets"; permissions?: TradeTeamPermissions; navigationTarget?: TLinkCommandTarget | null }) {
+  const fetch = useTradeBusinessFetch();
   const [libraryView, setLibraryView] = useState<"items" | "packets" | "stock">(initialView);
   const [stockInitialItemId, setStockInitialItemId] = useState<string | undefined>();
   const [trackedCount, setTrackedCount] = useState(0);
@@ -99,7 +102,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
     const result = await response.json().catch(() => ({})) as Result;
     if (!response.ok || result.ok === false) throw new Error(result.error || "The price book could not be loaded.");
     return result;
-  }, [user]);
+  }, [fetch, user]);
 
   const edit = useCallback(async (item: PriceBookItem, signal?: AbortSignal) => {
     if (!canView || signal?.aborted) return;
@@ -140,7 +143,7 @@ export function TradePriceBookWorkspace({ user, initialView = "items", permissio
       } catch (error) { if (!controller.signal.aborted) { setStockLoaded(false); setStockCanManage(false); setStockLoadError(error instanceof Error ? error.message : "Stock is unavailable. Try again."); } }
     };
     void loadStock(); return () => controller.abort();
-  }, [canView, stockReload, user]);
+  }, [fetch, canView, stockReload, user]);
 
   function stockChanged(item: StockItem) {
     setStockItems((current) => [...current.filter((row) => row.itemId !== item.itemId), item]);

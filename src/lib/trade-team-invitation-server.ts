@@ -66,33 +66,30 @@ export async function acceptTradeTeamInvitation(token: string, identity: Firebas
   if (!invite.owner_eligible) throw new TradeTeamInvitationError("ABN_REVIEW_REQUIRED", 403,
     "This business needs its account access restored before you can join.");
   await requireTradeMyobSecondFactor(identity, invite.owner_uid);
-  if (isBoundIdentity(invite, identity)) return;
+  const business = { ownerUid: invite.owner_uid, businessName: invite.business_name };
+  if (isBoundIdentity(invite, identity)) return business;
   const now = new Date().toISOString();
   if (invite.member_uid || invite.consumed_at || invite.expires_at <= now) invalidInvitation();
   const db = getD1();
-  const ownedBusiness = await db.prepare("SELECT firebase_uid FROM trade_accounts WHERE firebase_uid = ?")
-    .bind(identity.uid).first();
-  if (ownedBusiness) throw new TradeTeamInvitationError("INVITATION_TEAM_CONFLICT", 409,
-    "This login is a business owner account. Use a separate team login for this invitation.");
   const existing = await db.prepare(`SELECT id FROM trade_team_members
-    WHERE member_uid = ? AND status = 'active' AND id <> ? LIMIT 1`)
-    .bind(identity.uid, invite.team_member_id).first();
+    WHERE member_uid = ? AND owner_uid = ? AND status = 'active' AND id <> ? LIMIT 1`)
+    .bind(identity.uid, invite.owner_uid, invite.team_member_id).first();
   if (existing) throw new TradeTeamInvitationError("INVITATION_TEAM_CONFLICT", 409,
-    "This login already belongs to another installer team. Ask the business to check your invitation.");
+    "This login already belongs to this business. Ask the business to check your invitation.");
   const accepted = await db.batch([
     db.prepare(`UPDATE trade_team_members SET member_uid = ?, accepted_at = ?, last_active_at = ?, updated_at = ?
       WHERE id = ? AND owner_uid = ? AND member_uid = '' AND status = 'active' AND lower(email) = ?
-        AND NOT EXISTS (SELECT 1 FROM trade_accounts owned_business WHERE owned_business.firebase_uid = ?)
         AND EXISTS (SELECT 1 FROM trade_accounts owner WHERE owner.firebase_uid = trade_team_members.owner_uid
           AND owner.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("owner")})
         AND NOT EXISTS (SELECT 1 FROM trade_team_members other
-          WHERE other.member_uid = ? AND other.status = 'active' AND other.id <> trade_team_members.id)
+          WHERE other.member_uid = ? AND other.owner_uid = trade_team_members.owner_uid
+            AND other.status = 'active' AND other.id <> trade_team_members.id)
         AND EXISTS (SELECT 1 FROM trade_team_invites active_invite
           WHERE active_invite.id = ? AND active_invite.team_member_id = trade_team_members.id
             AND active_invite.owner_uid = trade_team_members.owner_uid
             AND active_invite.consumed_at = '' AND active_invite.expires_at > ?)`)
       .bind(identity.uid, now, now, now, invite.team_member_id, invite.owner_uid,
-        identity.email.toLowerCase(), identity.uid, identity.uid, invite.id, now),
+        identity.email.toLowerCase(), identity.uid, invite.id, now),
     db.prepare(`UPDATE trade_team_invites SET consumed_at = ?
       WHERE id = ? AND consumed_at = '' AND expires_at > ?
         AND EXISTS (SELECT 1 FROM trade_team_members member
@@ -105,4 +102,5 @@ export async function acceptTradeTeamInvitation(token: string, identity: Firebas
     throw new TradeTeamInvitationError("INVITATION_CONFLICT", 409,
       "This invitation changed. Reopen the latest invitation email and try again.");
   }
+  return business;
 }

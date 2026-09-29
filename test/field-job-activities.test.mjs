@@ -84,7 +84,7 @@ function fixture(accessOverrides = {}) {
   };
   const access = { ownerUid: 'owner', actorUid: 'owner', memberId: 'worker', isOwner: true, jobScope: 'own', canManageJobs: true, ...accessOverrides };
   const teams = load('src/lib/trade-team-server.ts', { '../../db': { getD1: () => db }, './trade-team-permission-policy.mjs': {},
-    './firebase-server': {}, './trade-access-server': {}, './creditex-schema-guards': {}, './tlink-schema-guards': {}, './trade-field-session-server': {} });
+    './firebase-server': {}, './trade-access-server': {}, './trade-business-context-server': {}, './creditex-schema-guards': {}, './tlink-schema-guards': {}, './trade-field-session-server': {} });
   const route = load('src/app/api/field/job-activities/route.ts', {
     '../../../../../db': { getD1: () => db },
     '@/lib/admin-server': { mfaErrorResponse, cleanAdminText: (value, max) => String(value || '').trim().slice(0, max),

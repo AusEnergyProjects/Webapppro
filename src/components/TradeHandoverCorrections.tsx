@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { HANDOVER_CORRECTION_DATE_FIELDS, HANDOVER_CORRECTION_FIELDS } from "@/lib/handover-corrections.mjs";
@@ -14,6 +16,7 @@ const readable = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, 
 const dateTime = (value: string) => value ? new Date(value).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }) : "Not yet";
 
 export function TradeHandoverCorrections({ user, workOrderId, assets }: { user: User; workOrderId: string; assets: Asset[] }) {
+  const fetch = useTradeBusinessFetch();
   const [result, setResult] = useState<Result>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -27,7 +30,7 @@ export function TradeHandoverCorrections({ user, workOrderId, assets }: { user: 
     const payload = await response.json().catch(() => ({})) as Result;
     if (!response.ok || payload.ok === false) throw new Error(payload.error || "The correction history could not be loaded.");
     setResult(payload);
-  }, [user, workOrderId]);
+  }, [fetch, user, workOrderId]);
 
   useEffect(() => {
     let active = true;

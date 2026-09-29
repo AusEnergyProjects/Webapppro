@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -266,6 +268,7 @@ function trapDialogKey(event: KeyboardEvent<HTMLElement>, close: () => void) {
 }
 
 export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }: { user: User; navigationTarget?: TLinkCommandTarget | null; onOpenOwnTraining?: () => void }) {
+  const fetch = useTradeBusinessFetch();
   const [members, setMembers] = useState<TradeTeamMember[]>([]);
   const [teamAccess, setTeamAccess] = useState<TeamResult["access"]>(undefined);
   const [loading, setLoading] = useState(true);
@@ -335,7 +338,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     setBusinessServiceStates(result.businessServiceStates || []);
     if (result.roster) setRoster(result.roster);
     return result;
-  }, [appliedQuery, capabilityFilter, navigationTarget, page, statusFilter, tokenHeaders]);
+  }, [fetch, appliedQuery, capabilityFilter, navigationTarget, page, statusFilter, tokenHeaders]);
   const handleMemberConflict = useCallback(async (response: Response) => {
     if (response.status !== 409) return false;
     const result = await response.clone().json().catch(() => ({})) as { code?: string };
@@ -367,7 +370,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     } finally {
       setDevicesLoading(false);
     }
-  }, [appliedDeviceQuery, deviceMemberId, devicePage, deviceStatus, tokenHeaders]);
+  }, [fetch, appliedDeviceQuery, deviceMemberId, devicePage, deviceStatus, tokenHeaders]);
 
   const openFiles = useCallback(async (member: TradeTeamMember) => {
     if (!restoreFocusRef.current) restoreFocusRef.current = document.activeElement as HTMLElement | null;
@@ -380,7 +383,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
       setFiles(result.files || []);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Member files could not be loaded."); }
     finally { setFilesLoading(false); }
-  }, [preview, tokenHeaders]);
+  }, [fetch, preview, tokenHeaders]);
 
   useEffect(() => {
     let active = true;

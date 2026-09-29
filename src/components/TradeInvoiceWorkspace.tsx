@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 
@@ -23,6 +25,7 @@ const statusLabels: Record<string, string> = {
 };
 
 export function TradeInvoiceWorkspace({ user, onOpenJob }: { user: User; onOpenJob: (workOrderId: string) => void }) {
+  const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<InvoiceResult>({});
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
@@ -35,7 +38,7 @@ export function TradeInvoiceWorkspace({ user, onOpenJob }: { user: User; onOpenJ
     const result = await response.json().catch(() => ({})) as InvoiceResult;
     if (!response.ok || !result.ok) throw new Error(result.error || "Invoices could not be loaded.");
     setData(result);
-  }, [user]);
+  }, [fetch, user]);
 
   useEffect(() => {
     let active = true;

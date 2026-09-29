@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
@@ -60,7 +62,7 @@ const moduleProgram = (module: Module) => {
   return id.startsWith("nsw-ess") ? "NSW ESS" : id.startsWith("nsw-pdrs") ? "NSW PDRS" : id.split("-")[0].toUpperCase();
 };
 
-async function request<T extends ApiResult>(user: User, url: string, init: RequestInit = {}): Promise<T> {
+async function request<T extends ApiResult>(fetch: typeof globalThis.fetch, user: User, url: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => {
@@ -85,6 +87,7 @@ function TextField({ title, value, onChange, type = "text", required = false, ma
 }
 
 export function TradeCreditexOnboarding({ user, initialExpanded = false, businessName = "", businessAddress = "" }: { user: User; initialExpanded?: boolean; businessName?: string; businessAddress?: string }) {
+  const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<OnboardingResult | null>(null);
   const [application, setApplication] = useState<CreditexOnboardingApplication>(() => ({ ...emptyApplication(), legalName: businessName, address: businessAddress }));
   const [expanded, setExpanded] = useState(initialExpanded);
@@ -95,10 +98,10 @@ export function TradeCreditexOnboarding({ user, initialExpanded = false, busines
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadKind, setUploadKind] = useState("insurance");
 
-  useEffect(() => { let active = true; void request<OnboardingResult>(user, "/api/creditex-onboarding").then((next) => {
+  useEffect(() => { let active = true; void request<OnboardingResult>(fetch, user, "/api/creditex-onboarding").then((next) => {
     if (active) { setData(next); if (next.application) setApplication({ ...emptyApplication(), ...next.application, acceptedCompliance: next.application.acceptedCompliance === true }); }
   }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Onboarding could not be loaded."); });
-  return () => { active = false; }; }, [user]);
+  return () => { active = false; }; }, [fetch, user]);
 
   function change<K extends keyof CreditexOnboardingApplication>(key: K, value: CreditexOnboardingApplication[K]) {
     setApplication((current) => ({ ...current, [key]: value })); setDirty(true); setNotice("");
@@ -107,7 +110,7 @@ export function TradeCreditexOnboarding({ user, initialExpanded = false, busines
     setApplication((current) => ({ ...current, [kind]: { ...current[kind], [key]: value } })); setDirty(true); setNotice("");
   }
   async function persistApplication(expectedRevision: number) {
-    const saved = await request<OnboardingResult>(user, "/api/creditex-onboarding", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expectedRevision, application }) });
+    const saved = await request<OnboardingResult>(fetch, user, "/api/creditex-onboarding", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expectedRevision, application }) });
     if (!saved.business) throw new Error("The saved setup revision could not be confirmed. Refresh before completing setup.");
     setData((current) => current ? { ...current, business: saved.business, application } : current);
     setDirty(false);
@@ -127,7 +130,7 @@ export function TradeCreditexOnboarding({ user, initialExpanded = false, busines
     setBusy("submit"); setError(""); setNotice("");
     try {
       const saved = dirty || !data.application ? await persistApplication(data.business.revision) : data.business;
-      const completed = await request<OnboardingResult>(user, "/api/creditex-onboarding", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submit", expectedRevision: saved.revision }) });
+      const completed = await request<OnboardingResult>(fetch, user, "/api/creditex-onboarding", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submit", expectedRevision: saved.revision }) });
       if (!completed.business) throw new Error("Setup completion could not be confirmed. Refresh your status before trying again.");
       setData((current) => current ? { ...current, business: completed.business } : current);
       setNotice(completed.business.approved ? "Business setup complete. Your completion record is saved." : "Complete the remaining setup requirements shown below.");
@@ -139,7 +142,7 @@ export function TradeCreditexOnboarding({ user, initialExpanded = false, busines
     setBusy("upload"); setError("");
     try {
       const form = new FormData(); form.set("action", "upload"); form.set("kind", uploadKind); form.set("file", file);
-      const result = await request<ApiResult & { document: Document }>(user, "/api/creditex-onboarding", { method: "POST", body: form });
+      const result = await request<ApiResult & { document: Document }>(fetch, user, "/api/creditex-onboarding", { method: "POST", body: form });
       setData((current) => current ? { ...current, documents: [...(current.documents || []), result.document] } : current);
       const id = result.document.id;
       if (uploadKind === "insurance") change("insuranceDocumentId", id);
@@ -202,6 +205,7 @@ export function TradeCreditexOnboarding({ user, initialExpanded = false, busines
 }
 
 export function TradeTrainingWorkspace({ user }: { user: User }) {
+  const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<TrainingResult | null>(null);
   const [moduleSearch, setModuleSearch] = useState(""); const [programFilter, setProgramFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("todo");
@@ -219,8 +223,8 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
   const initialModuleOpened = useRef(false);
   const acknowledgedLesson = useRef("");
   const startingAssessment = useRef(false);
-  const load = useCallback(async () => { const next = await request<TrainingResult>(user, "/api/trade-training"); setData(next); }, [user]);
-  useEffect(() => { let active = true; void request<TrainingResult>(user, "/api/trade-training").then((next) => {
+  const load = useCallback(async () => { const next = await request<TrainingResult>(fetch, user, "/api/trade-training"); setData(next); }, [fetch, user]);
+  useEffect(() => { let active = true; void request<TrainingResult>(fetch, user, "/api/trade-training").then((next) => {
     if (!active) return;
     setData(next);
     if (!initialModuleOpened.current) {
@@ -228,7 +232,7 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
       const moduleId = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("module");
       if (!next.officeOnly && moduleId && next.modules.some((module) => module.id === moduleId)) setSelectedId(moduleId);
     }
-  }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Training could not be loaded."); }); return () => { active = false; }; }, [user]);
+  }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Training could not be loaded."); }); return () => { active = false; }; }, [fetch, user]);
   useEffect(() => { if (attempt) questionHeading.current?.focus(); }, [questionIndex, attempt]);
   useEffect(() => { lessonHeading.current?.focus(); }, [selectedId, lessonIndex]);
   const selected = data?.modules.find((module) => module.id === selectedId);
@@ -239,7 +243,7 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
   async function start(completedLessons: string[]) {
     if (!selected || !selected.lessons.length || !selected.lessons.every((_, index) => completedLessons.includes(`${selected.id}:${selected.version}:${index}`)) || !selected.assessmentAvailable || reviewingPassedModule || busy || startingAssessment.current) return;
     startingAssessment.current = true; setBusy("start"); setError("");
-    try { const next = await request<ApiResult & { attempt: Attempt }>(user, "/api/trade-training", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start", moduleId: selected.id }) }); setAttempt(next.attempt); setQuestionIndex(Math.min(next.attempt.questions.length - 1, next.attempt.questions.filter(item => next.attempt.feedback?.[item.id]?.correct).length)); setAnswers(next.attempt.answers || {}); setAnswerFeedback(next.attempt.feedback || {}); setResult(null); }
+    try { const next = await request<ApiResult & { attempt: Attempt }>(fetch, user, "/api/trade-training", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start", moduleId: selected.id }) }); setAttempt(next.attempt); setQuestionIndex(Math.min(next.attempt.questions.length - 1, next.attempt.questions.filter(item => next.attempt.feedback?.[item.id]?.correct).length)); setAnswers(next.attempt.answers || {}); setAnswerFeedback(next.attempt.feedback || {}); setResult(null); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "The assessment could not be started."); } finally { startingAssessment.current = false; setBusy(""); }
   }
   function acknowledgeAndContinue(clickCount: number) {
@@ -266,19 +270,19 @@ export function TradeTrainingWorkspace({ user }: { user: User }) {
     if (!attempt || !question || busy || answerFeedback[question.id]?.correct) return;
     setAnswers(current => ({ ...current, [question.id]: answer })); setBusy("check"); setError("");
     try {
-      const next = await request<ApiResult & { feedback: AnswerFeedback }>(user, "/api/trade-training", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "check", attemptId: attempt.id, questionId: question.id, answer }) });
+      const next = await request<ApiResult & { feedback: AnswerFeedback }>(fetch, user, "/api/trade-training", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "check", attemptId: attempt.id, questionId: question.id, answer }) });
       setAnswerFeedback(current => ({ ...current, [question.id]: next.feedback }));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "This answer could not be checked. Try again."); }
     finally { setBusy(""); }
   }
   async function submitQuiz() {
     if (!attempt || busy || attempt.questions.some((item) => !answerFeedback[item.id]?.correct)) return; setBusy("submit"); setError("");
-    try { const next = await request<ApiResult & { result: AssessmentResult }>(user, "/api/trade-training", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submit", attemptId: attempt.id, answers }) }); setResult(next.result); setAttempt(null); void load().catch(() => setError("Your result is saved. Refresh status to update the module list.")); }
+    try { const next = await request<ApiResult & { result: AssessmentResult }>(fetch, user, "/api/trade-training", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submit", attemptId: attempt.id, answers }) }); setResult(next.result); setAttempt(null); void load().catch(() => setError("Your result is saved. Refresh status to update the module list.")); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "The assessment could not be submitted."); } finally { setBusy(""); }
   }
   async function openSavedForm(id: string) {
     setBusy("history"); setError("");
-    try { const next = await request<ApiResult & { submission: SubmittedAnswers }>(user, `/api/trade-training?submissionId=${encodeURIComponent(id)}`); setSavedForm(next.submission); }
+    try { const next = await request<ApiResult & { submission: SubmittedAnswers }>(fetch, user, `/api/trade-training?submissionId=${encodeURIComponent(id)}`); setSavedForm(next.submission); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "This saved form could not be opened."); }
     finally { setBusy(""); }
   }

@@ -17,7 +17,8 @@ test("supplier marketplace surfaces use the authoritative ABN review predicate",
     supplierRoute,
     /FROM trade_accounts supplier WHERE supplier\.firebase_uid = \? AND supplier\.partner_type = 'supplier'[\s\S]*verifiedTradeAccountPredicate\("supplier"\)/,
   );
-  assert.match(searchRoute, /requireVerifiedTradeIdentity\(identity, \{ partnerTypes: \["installer", "supplier"\] \}\)/);
+  assert.match(searchRoute, /ownAccount\?\.partnerType === "supplier"[\s\S]*requireVerifiedTradeIdentity\(identity, \{ partnerTypes: \["supplier"\] \}\)/);
+  assert.match(searchRoute, /teamAccess = await requireInstallerTeamAccess\(request\);\s*partnerType = "installer";\s*ownerUid = teamAccess\.ownerUid/);
   assert.match(searchRoute, /partnerType === "supplier" && matches\("product", selectedKind\)[\s\S]*FROM supplier_products WHERE firebase_uid = \?/);
   assert.doesNotMatch(searchRoute, /FROM supplier_products p JOIN trade_accounts/);
 

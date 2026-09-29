@@ -1,5 +1,7 @@
 "use client";
 
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "firebase/auth";
@@ -17,6 +19,7 @@ type FollowUpData = {
 type Preview = { jobNumber: string; ok: boolean; recipient: string; recipientName: string; subject: string; body: string; contextHash: string; missing: string[]; error?: string };
 
 export function TradeFollowUpDialog({ user, workOrderId, onClose }: { user: User; workOrderId: string; onClose: () => void }) {
+  const fetch = useTradeBusinessFetch();
   const [portalTarget, setPortalTarget] = useState<Element | null>(null);
   const [data, setData] = useState<FollowUpData | null>(null);
   const [templateId, setTemplateId] = useState("");
@@ -65,7 +68,7 @@ export function TradeFollowUpDialog({ user, workOrderId, onClose }: { user: User
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Follow-up templates could not be loaded.");
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [user, workOrderId, reload]);
+  }, [fetch, user, workOrderId, reload]);
 
   useEffect(() => {
     if (data) templateSelect.current?.focus();
@@ -87,7 +90,7 @@ export function TradeFollowUpDialog({ user, workOrderId, onClose }: { user: User
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "This follow-up could not be prepared.");
     }).finally(() => { if (!controller.signal.aborted) setPreviewing(false); });
     return () => controller.abort();
-  }, [templateId, user, workOrderId, previewReload]);
+  }, [fetch, templateId, user, workOrderId, previewReload]);
 
   function close() {
     if (sending.current) return;

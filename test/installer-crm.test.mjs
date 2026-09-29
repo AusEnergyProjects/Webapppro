@@ -495,7 +495,7 @@ test("heavy workspaces load dynamically and profile readiness does not wait for 
   }
 
   const profileLoadStart = dashboard.indexOf("async function loadDashboard()");
-  const profileLoadEnd = dashboard.indexOf("}, [user]);", profileLoadStart);
+  const profileLoadEnd = dashboard.indexOf("}, [fetch, user]);", profileLoadStart);
   assert.ok(profileLoadStart >= 0 && profileLoadEnd > profileLoadStart);
   const profileLoad = dashboard.slice(profileLoadStart, profileLoadEnd);
   assert.match(profileLoad, /fetch\("\/api\/trade-profile"/);
