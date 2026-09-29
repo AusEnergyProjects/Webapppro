@@ -1,6 +1,24 @@
 const SUBSCRIPTION_ID_KEY = "tlink-push-subscription-id";
 const NOTIFICATION_WORKER_PATH = "/tlink-notifications-sw.js";
 
+export async function notificationTimeout<T>(operation: Promise<T>, milliseconds = 12000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([operation, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("Notification setup took too long. Check your connection, then try again.")), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+export function notificationErrorMessage(error: unknown, fallback: string): string {
+  const name = error instanceof Error ? error.name : "";
+  if (name === "AbortError" || name === "TimeoutError" || name === "TypeError") return "Could not connect to notifications. Check your connection, then try again.";
+  if (name === "NotAllowedError") return "Notifications are blocked. Allow notifications in this site's browser settings, then check again.";
+  if (name === "NotSupportedError") return "This browser cannot enable notifications. Use an up-to-date browser or open TLink from its Home Screen icon on iPhone.";
+  if (name === "InvalidStateError") return "This browser needs to reconnect. Turn off notifications on this device, then enable them again.";
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export function readTradePushSubscriptionId(): string {
   try {
     const id = localStorage.getItem(SUBSCRIPTION_ID_KEY);

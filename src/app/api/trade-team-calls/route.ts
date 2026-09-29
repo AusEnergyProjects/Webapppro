@@ -7,6 +7,18 @@ import { readBoundedRequestText, RequestBodyTooLargeError } from "@/lib/bounded-
 import { assertTeamCallJoined, incomingTeamCalls, joinTeamCall, leaveTeamCall, reserveTeamCallIce, sendTeamCallSignal, startTeamCall, teamCallStatus } from "@/lib/trade-team-calls-server";
 import { teamCallIceServers, teamCallTurnCredentials } from "@/lib/trade-team-calls-provider";
 export const runtime = "edge";
+// Only fixed operation names, result codes and timings enter call diagnostics.
+// Never log request bodies, identities, SDP, candidates or relay credentials.
+function callTrace(method: "GET" | "POST", action: string) {
+    const started = Date.now(), state = { action, stage: "access" };
+    const report = (code: string) => console.warn("tlink_team_call", { method, ...state, code, elapsedMs: Date.now() - started });
+    const timer = setTimeout(() => report("CALL_SLOW"), 8000);
+    return { state, finish(error?: unknown) {
+        clearTimeout(timer);
+        const code = error instanceof Error && /^CALL_(?:INPUT_INVALID|SIGNAL_INVALID|REQUEST_CONFLICT|ALREADY_ACTIVE|RECIPIENT_UNAVAILABLE|PRESENCE_UNAVAILABLE|ENDED|FULL|SESSION_REPLACED|RATE_LIMIT|UNAVAILABLE|RELAY_UNAVAILABLE|ACCESS_REQUIRED)$/.test(error.message) ? error.message : error ? "CALL_REQUEST_FAILED" : "OK";
+        if (error || Date.now() - started >= 4000) report(code);
+    } };
+}
 function failure(error: unknown) {
     const mfa = mfaErrorResponse(error);
     if (mfa)
@@ -20,31 +32,41 @@ function failure(error: unknown) {
         return adminJson({ ok: false, error: "You do not have access to this call.", code }, 403);
     if (error instanceof RequestBodyTooLargeError)
         return adminJson({ ok: false, error: "Call details were too large.", code: 'CALL_INPUT_INVALID' }, 413);
-    const errors: Record<string, string> = { CALL_INPUT_INVALID: "Refresh the conversation before calling.", CALL_SIGNAL_INVALID: "Call connection details were not accepted.", CALL_REQUEST_CONFLICT: "That call request has already been used. Refresh the conversation.", CALL_ALREADY_ACTIVE: "There is already a call in this conversation. Join the existing call.", CALL_ENDED: "This call has ended.", CALL_FULL: "This call already has six people.", CALL_SESSION_REPLACED: "This call was opened in another tab or device.", CALL_RATE_LIMIT: "Too many call requests. Wait a moment and try again.", CALL_UNAVAILABLE: "Team calls are not configured yet.", CALL_RELAY_UNAVAILABLE: "The call connection service is unavailable. Try again shortly." };
+    const errors: Record<string, string> = { CALL_INPUT_INVALID: "Refresh the conversation before calling.", CALL_SIGNAL_INVALID: "Call connection details were not accepted.", CALL_REQUEST_CONFLICT: "That call request has already been used. Refresh the conversation.", CALL_ALREADY_ACTIVE: "There is already a call in this conversation. Join the existing call.", CALL_RECIPIENT_UNAVAILABLE: "No one in this chat is available for a call. They may be busy or offline. Send a message instead.", CALL_PRESENCE_UNAVAILABLE: "Your status is Busy or Offline. Switch to Online before joining a call.", CALL_ENDED: "This call has ended.", CALL_FULL: "This call already has six people.", CALL_SESSION_REPLACED: "This call was opened in another tab or device.", CALL_RATE_LIMIT: "Too many call requests. Wait a moment and try again.", CALL_UNAVAILABLE: "Team calls are not configured yet.", CALL_RELAY_UNAVAILABLE: "The call connection service is unavailable. Try again shortly." };
     return adminJson({ ok: false, error: errors[code] || "The call could not be connected. Try again.", code: errors[code] ? code : 'CALL_UNAVAILABLE' }, code === 'CALL_RATE_LIMIT' ? 429 : code === 'CALL_UNAVAILABLE' || code === 'CALL_RELAY_UNAVAILABLE' ? 503 : error instanceof SyntaxError || code === 'CALL_INPUT_INVALID' || code === 'CALL_SIGNAL_INVALID' ? 400 : errors[code] ? 409 : 500);
 }
 export async function GET(request: Request) {
     if (!sameOrigin(request))
         return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
+    const trace = callTrace("GET", new URL(request.url).searchParams.get('view') === 'incoming' ? "incoming" : "status");
+    let failureError: unknown;
     try {
         const actor = await requireTeamCommunicationAccess(request), params = new URL(request.url).searchParams;
+        trace.state.stage = trace.state.action;
         if (params.get('view') === 'incoming')
             return adminJson({ ok: true, memberId: actor.memberId, calls: await incomingTeamCalls(actor) });
         return adminJson({ ok: true, memberId: actor.memberId, ...await teamCallStatus(actor, { callId: params.get('callId') || undefined, threadId: params.get('threadId') || undefined, sessionId: params.get('sessionId') || undefined, after: params.get('after') || '0' }) });
     }
     catch (error) {
+        failureError = error;
         return failure(error);
     }
+    finally { trace.finish(failureError); }
 }
 export async function POST(request: Request) {
     if (!sameOrigin(request))
         return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
+    const trace = callTrace("POST", "unknown");
+    let failureError: unknown;
     try {
         const actor = await requireTeamCommunicationAccess(request);
+        trace.state.stage = "input";
         const raw: unknown = JSON.parse(await readBoundedRequestText(request, 70000));
         if (!raw || typeof raw !== 'object' || Array.isArray(raw))
             throw new Error('CALL_INPUT_INVALID');
         const body = raw as Record<string, unknown>;
+        if (typeof body.action === "string" && ["start","join","leave","signal","ice"].includes(body.action)) trace.state.action = body.action;
+        trace.state.stage = trace.state.action;
         if (body.action === 'start') {
             teamCallTurnCredentials(); // A missing relay must not create a ringing call.
             const call = await startTeamCall(actor, body);
@@ -60,14 +82,19 @@ export async function POST(request: Request) {
             return adminJson({ ok: true });
         }
         if (body.action === 'ice') {
+            trace.state.stage = "reserve-relay";
             const credentials = teamCallTurnCredentials(), reservation = await reserveTeamCallIce(actor, body.callId, body.sessionId);
+            trace.state.stage = "relay-provider";
             const iceServers = await teamCallIceServers(credentials, reservation.ttl);
+            trace.state.stage = "relay-recheck";
             await assertTeamCallJoined(actor, body.callId, body.sessionId); // Auth/session can change while the provider responds.
             return adminJson({ ok: true, iceServers, expiresAt: reservation.expiresAt });
         }
         throw new Error('CALL_INPUT_INVALID');
     }
     catch (error) {
+        failureError = error;
         return failure(error);
     }
+    finally { trace.finish(failureError); }
 }

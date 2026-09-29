@@ -1,5 +1,7 @@
 "use client";
 
+import TradeTeamPresence from "./TradeTeamPresence";
+
 import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -11,10 +13,14 @@ import TradeMessageAttachments, { TradeMessageAttachmentList } from "./TradeMess
 import TradeTeamAvatar from "./TradeTeamAvatar";
 import { TradeTeamCallButtons } from "./TradeTeamCallProvider";
 import TradeNotificationSettings from "./TradeNotificationSettings";
+import { useTradeMessageAlerts } from "./TradeMessageAlerts";
+import TradeMessageSaveToJob from "./TradeMessageSaveToJob";
+import { safeMessageLink } from "@/lib/trade-message-job-files";
+import type { TradeTeamPresenceStatus } from "@/lib/trade-team-presence";
 import type { MessageAttachment, MessageMediaAuth } from "@/lib/trade-message-media";
 import styles from "./TradeMessagesWorkspace.module.css";
 
-type Member = { id: string; name: string; isOwner?: boolean; active?: boolean; avatarRevision?: string };
+type Member = { id: string; name: string; isOwner?: boolean; active?: boolean; avatarRevision?: string; presence?: TradeTeamPresenceStatus };
 type Thread = { id: string; kind: string; subject: string; latest: string; latestSender: string; unread: number; members: Member[] };
 type CustomerThread = { customerId: string; name: string; workOrderId: string; jobNumber: string; latest: string; phone: string };
 type QuoteQuestion = { id: string; workOrderId: string; jobNumber: string; question: string; status: string; askedAt: string };
@@ -26,6 +32,14 @@ type ApiCall = (query?: string, payload?: Record<string, unknown>, path?: string
 
 function threadName(thread: Thread, memberId: string) {
   return thread.kind === "group" ? thread.subject : thread.members.find(member => member.id !== memberId)?.name || "Team conversation";
+}
+
+function MessageBody({ body }: { body: string }) {
+  return <p>{body.split(/(https?:\/\/[^\s<>"']+)/gi).map((part, index) => {
+    const trimmed = part.replace(/[.,;!?]+$/, "");
+    const href = safeMessageLink(trimmed);
+    return href ? <span key={index}><a href={href} target="_blank" rel="noopener noreferrer">{trimmed}</a>{part.slice(trimmed.length)}</span> : part;
+  })}</p>;
 }
 
 function useVisibleRefresh(refresh: () => Promise<void>, milliseconds = 15000) {
@@ -44,6 +58,8 @@ function useVisibleRefresh(refresh: () => Promise<void>, milliseconds = 15000) {
 function TeamConversation({ thread, call, memberId, onRead, getAuthHeaders, canManageTeam }: {
   thread: Thread; call: ApiCall; memberId: string; onRead: () => void; getAuthHeaders: MessageMediaAuth; canManageTeam: boolean;
 }) {
+  const { setActiveThread } = useTradeMessageAlerts();
+  useEffect(() => { setActiveThread(thread.id); return () => setActiveThread(""); }, [thread.id, setActiveThread]);
   const [messages, setMessages] = useState<TeamMessage[]>([]);
   const [hasOlder, setHasOlder] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -110,23 +126,24 @@ function TeamConversation({ thread, call, memberId, onRead, getAuthHeaders, canM
   }
 
   return <section className={styles.conversation} aria-label="Team conversation">
-    <header><span className={styles.internalBadge}>Internal · Team</span><div className={styles.chatTitle}><h3>{threadName(thread, memberId)}</h3><TradeTeamCallButtons threadId={thread.id} /></div><div className={styles.memberAvatars}>{thread.members.map(member => <TradeTeamAvatar key={member.id} memberId={member.id} name={member.name} revision={member.avatarRevision} editable={member.active !== false && (member.id === memberId || canManageTeam)} getAuthHeaders={getAuthHeaders} onChange={onRead} />)}</div><p>{thread.members.map(member => `${member.name}${member.active === false ? " (inactive)" : ""}`).join(", ")}</p><small>Only people in this chat can see these messages.</small></header>
+    <header><span className={styles.internalBadge}>Internal · Team</span><div className={styles.chatTitle}><h3>{threadName(thread, memberId)}</h3><TradeTeamCallButtons threadId={thread.id} /></div><div className={styles.memberAvatars}>{thread.members.map(member => <TradeTeamAvatar key={member.id} memberId={member.id} name={member.name} revision={member.avatarRevision} editable={member.active !== false && (member.id === memberId || canManageTeam)} getAuthHeaders={getAuthHeaders} onChange={onRead} />)}</div><p>{thread.members.map(member => `${member.name} (${member.active === false ? "inactive" : member.presence === "busy" ? "Busy" : member.presence === "offline" ? "Offline" : "Online"})`).join(", ")}</p><small>Only people in this chat can see these messages.</small></header>
     {status && <p className={styles.notice} role="status">{status}</p>}
     {hasOlder && <button type="button" className={styles.secondary} disabled={busy} onClick={() => void older()}>Load older messages</button>}
     <ol ref={history} className={styles.messages} aria-live="polite" aria-label="Team message history">
       {loading && <li className={styles.empty}>Loading messages...</li>}
       {!loading && !messages.length && <li className={styles.empty}>Start the conversation with your team.</li>}
-      {messages.map(message => <li key={message.id} className={message.mine ? styles.mine : styles.theirs}><strong>{message.senderName}</strong>{message.body && <p>{message.body}</p>}{message.attachments?.length > 0 && <TradeMessageAttachmentList attachments={message.attachments} getAuthHeaders={getAuthHeaders} />}<time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time></li>)}
+      {messages.map(message => <li key={message.id} className={message.mine ? styles.mine : styles.theirs}><strong>{message.senderName}</strong>{message.body && <MessageBody body={message.body} />}{message.attachments?.length > 0 && <TradeMessageAttachmentList attachments={message.attachments} getAuthHeaders={getAuthHeaders} />}<TradeMessageSaveToJob threadId={thread.id} message={message} getAuthHeaders={getAuthHeaders} /><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time></li>)}
     </ol>
     <form className={styles.composer} onSubmit={event => void send(event)}><label><span>Message your team</span><textarea rows={3} maxLength={2000} value={body} disabled={busy || !canSend || Boolean(pending)} onChange={event => setBody(event.target.value)} placeholder="Write a message" /></label><TradeMessageAttachments threadId={thread.id} value={attachments} onChange={setAttachments} getAuthHeaders={getAuthHeaders} disabled={busy || !canSend || Boolean(pending)} onBusyChange={setMediaBusy} /><button type="submit" className={styles.primary} disabled={busy || mediaBusy || !canSend || (!body.trim() && !attachments.length)}>{busy ? "Sending..." : pending ? "Check this message" : "Send"}</button></form>
   </section>;
 }
 
-export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegrations, onOpenQuote, initialThreadId = "", initialCallId = "", teamOnly = false }: {
-  user?: User; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenIntegrations?: () => void; onOpenQuote?: (workOrderId: string) => void; initialThreadId?: string; initialCallId?: string; teamOnly?: boolean;
+export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegrations, onOpenQuote, initialThreadId = "", initialThreadRevision = 0, initialCallId = "", teamOnly = false }: {
+  user?: User; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenIntegrations?: () => void; onOpenQuote?: (workOrderId: string) => void; initialThreadId?: string; initialThreadRevision?: number; initialCallId?: string; teamOnly?: boolean;
 }) {
   const fetch = useTradeBusinessFetch();
   const router = useRouter();
+  const { refresh: refreshAlerts } = useTradeMessageAlerts();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [mode, setMode] = useState<"team" | "customers">("team");
   const [customers, setCustomers] = useState<CustomerThread[]>([]);
@@ -180,7 +197,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
       }
     }).catch(error => { if (active) setStatus(error instanceof Error ? error.message : "Conversation could not be opened."); });
     return () => { active = false; };
-  }, [call, initialThreadId, initialCallId]);
+  }, [call, initialThreadId, initialThreadRevision, initialCallId]);
 
   const refresh = useCallback(async () => {
     if (overviewRequests.current.has(queryKey)) return;
@@ -201,7 +218,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
   }, [call, mode, search, page, queryKey]);
   useEffect(() => { const timer = window.setTimeout(() => void refresh(), search ? 250 : 0); return () => window.clearTimeout(timer); }, [refresh, search]);
   useVisibleRefresh(refresh);
-  const onRead = useCallback(() => { void refresh(); }, [refresh]);
+  const onRead = useCallback(() => { void refresh(); refreshAlerts(); }, [refresh, refreshAlerts]);
   useEffect(() => {
     if (!creating) return;
     let active = true;
@@ -252,7 +269,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
 
   const hasMore = mode === "team" ? overview?.hasMore : hasMoreCustomers;
   return <section className={styles.workspace} aria-label="Messages workspace">
-    <header className={styles.heading}><div><h2>Messages</h2><p>{teamOnly ? "Chat, share photos and call your team." : "Your customers and team, in one place."}</p></div><div className={styles.actions}>{overview && <TradeNotificationSettings key={user?.uid || overview.memberId} getAuthHeaders={authHeaders} />}{overview && <TradeTeamAvatar memberId={overview.memberId} name={overview.members.find(member => member.id === overview.memberId)?.name || "Your profile"} revision={overview.members.find(member => member.id === overview.memberId)?.avatarRevision} editable getAuthHeaders={authHeaders} onChange={onRead} />}<button type="button" className={styles.primary} disabled={createBusy || contactBusy} onClick={() => { setCreating(true); if (!pendingCreate && !pendingCustomer) setContactSearch(""); setStatus(""); }}>New chat</button></div></header>
+    <header className={styles.heading}><div><h2>Messages</h2><p>{teamOnly ? "Chat, share photos and call your team." : "Your customers and team, in one place."}</p></div><div className={styles.actions}>{teamOnly && overview && <TradeTeamPresence getAuthHeaders={authHeaders} />}{overview && <TradeNotificationSettings key={user?.uid || overview.memberId} getAuthHeaders={authHeaders} />}{overview && <TradeTeamAvatar memberId={overview.memberId} name={overview.members.find(member => member.id === overview.memberId)?.name || "Your profile"} revision={overview.members.find(member => member.id === overview.memberId)?.avatarRevision} editable getAuthHeaders={authHeaders} onChange={onRead} />}<button type="button" className={styles.primary} disabled={createBusy || contactBusy} onClick={() => { setCreating(true); if (!pendingCreate && !pendingCustomer) setContactSearch(""); setStatus(""); }}>New chat</button></div></header>
     <div className={styles.tabs} aria-label="Message types"><button type="button" aria-pressed={mode === "team"} onClick={() => { setMode("team"); setPage(1); setSearch(""); }}>Team</button>{!teamOnly && (overview?.canUseSms || overview?.canUseQuotes) && <button type="button" aria-pressed={mode === "customers"} onClick={() => { setMode("customers"); setPage(1); setSearch(""); }}>Customers</button>}</div>
     {status && <p className={styles.notice} role="status">{status}</p>}
     {creating && <form className={styles.newChat} onSubmit={event => void create(event)}>

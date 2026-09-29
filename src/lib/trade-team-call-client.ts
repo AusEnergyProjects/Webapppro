@@ -1,7 +1,7 @@
 import type { TeamCallParticipant, TeamCallSignal, TeamCallSignalPayload } from "./trade-team-calls";
 
 export type CallRemote = { memberId: string; name: string; stream: MediaStream | null; state: RTCPeerConnectionState };
-type Peer = { person: TeamCallParticipant; connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; stream: MediaStream | null };
+type Peer = { person: TeamCallParticipant; connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; stream: MediaStream | null; deadline?: ReturnType<typeof setTimeout> };
 type SignalSender = (target: TeamCallParticipant, type: TeamCallSignal["type"], payload: TeamCallSignalPayload) => Promise<void>;
 
 // One session owns all peer connections. Session IDs fence late packets from a
@@ -21,6 +21,15 @@ export class TeamCallConnections {
       stream: peer.stream, state: peer.connection.connectionState })));
   }
 
+  private connectionDeadline(peer: Peer, milliseconds: number) {
+    clearTimeout(peer.deadline);
+    peer.deadline = setTimeout(() => {
+      if (!this.closed && this.peers.get(peer.person.memberId) === peer && peer.connection.connectionState !== "connected") {
+        this.options.failed("The call could not connect. Check both devices have internet access, then call again.");
+      }
+    }, milliseconds);
+  }
+
   private send(peer: Peer, type: TeamCallSignal["type"], payload: TeamCallSignalPayload) {
     this.outgoing = this.outgoing.then(async () => {
       if (!this.closed && this.peers.get(peer.person.memberId) === peer) await this.options.send(peer.person, type, payload);
@@ -32,7 +41,7 @@ export class TeamCallConnections {
     if (this.closed) return;
     const remote = people.filter(person => person.memberId !== this.options.memberId);
     for (const [id, peer] of this.peers) if (!remote.some(person => person.memberId === id && person.sessionId === peer.person.sessionId)) {
-      peer.connection.close(); this.peers.delete(id);
+      clearTimeout(peer.deadline); peer.connection.close(); this.peers.delete(id);
     }
     for (const person of remote) {
       if (this.peers.has(person.memberId) || this.closed) continue;
@@ -40,6 +49,7 @@ export class TeamCallConnections {
       const connection = this.options.createPeer ? this.options.createPeer(configuration) : new RTCPeerConnection(configuration);
       const peer: Peer = { person, connection, candidates: [], stream: null };
       this.peers.set(person.memberId, peer);
+      this.connectionDeadline(peer, 30000);
       for (const track of this.options.local.getTracks()) connection.addTrack(track, this.options.local);
       connection.ontrack = event => {
         if (this.closed || this.peers.get(person.memberId) !== peer) return;
@@ -49,6 +59,9 @@ export class TeamCallConnections {
       };
       connection.onicecandidate = event => { if (event.candidate) void this.send(peer, "ice", {candidate:event.candidate.candidate,sdpMid:event.candidate.sdpMid,sdpMLineIndex:event.candidate.sdpMLineIndex,usernameFragment:event.candidate.usernameFragment}); };
       connection.onconnectionstatechange = () => {
+        if (this.closed || this.peers.get(person.memberId) !== peer) return;
+        if (connection.connectionState === "connected" || connection.connectionState === "closed" || connection.connectionState === "failed") clearTimeout(peer.deadline);
+        if (connection.connectionState === "disconnected") this.connectionDeadline(peer, 15000);
         this.changed();
         if (!this.closed && connection.connectionState === "failed") this.options.failed("A teammate could not connect. Check your connection and call again.");
       };
@@ -108,7 +121,7 @@ export class TeamCallConnections {
 
   close() {
     this.closed = true;
-    for (const peer of this.peers.values()) { peer.connection.ontrack = null; peer.connection.onicecandidate = null; peer.connection.onconnectionstatechange = null; peer.connection.close(); }
+    for (const peer of this.peers.values()) { clearTimeout(peer.deadline); peer.connection.ontrack = null; peer.connection.onicecandidate = null; peer.connection.onconnectionstatechange = null; peer.connection.close(); }
     this.peers.clear();
   }
 }

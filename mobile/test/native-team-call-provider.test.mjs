@@ -9,12 +9,12 @@ const invitation = { id: 'call-123456', threadId: 'thread-123456', threadName: '
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 
 function harness() {
-  const slots = [], effects = [], pendingEffects = [], intervals = new Set(), listeners = new Set();
+  const slots = [], effects = [], pendingEffects = [], intervals = new Set(), listeners = new Set(), pushListeners = new Set(), presenceListeners = new Set();
   let cursor = 0, tree;
-  const state = { api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0,
+  const state = { api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0, rings:0, ringStops:0, notificationMuted:false, audioModes:[],
     respond: async (url, body) => body?.action === 'start' || body?.action === 'join' ? { ok: true, call: invitation, memberId: 'member-local' }
       : body?.action === 'ice' ? { ok: true, iceServers: [{ urls: 'turn:relay.test' }] }
-        : url.includes('view=incoming') ? { ok: true, calls: [] } : { ok: true, call: invitation },
+        : url.includes('view=incoming') ? { ok: true, calls: [invitation] } : { ok: true, call: invitation },
   };
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
   const react = {
@@ -29,17 +29,25 @@ function harness() {
   state.stream = stream;
   state.acquire = async (mode, isCurrent) => isCurrent() ? stream : null;
   class ApiError extends Error {}
+  let audioReleased = false;
+  const ringtone = {pause:()=>{assert.equal(audioReleased,false,'released audio player used during cleanup');state.ringStops++;},play:()=>state.rings++,seekTo:async()=>{},loop:false,volume:1};
   const dependencies = {
     react,
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     'expo-crypto': { randomUUID: () => 'random-session-123456' },
+    'expo-audio': {useAudioPlayer:()=>{react.useEffect(()=>()=>{audioReleased=true;},[]);return ringtone;},setAudioModeAsync:async value=>{state.audioModes.push(value);}},
+    'expo-notifications': {addNotificationReceivedListener:fn=>{pushListeners.add(fn);return {remove:()=>pushListeners.delete(fn)};}},
+    '../../assets/sounds/tlink-call-soft.wav':1,
     'react-native': { ActivityIndicator: 'ActivityIndicator', AppState: { currentState: 'active', addEventListener: (_event, fn) => { listeners.add(fn); return { remove: () => listeners.delete(fn) }; } },
+      DeviceEventEmitter:{addListener:(_name,fn)=>{presenceListeners.add(fn);return {remove:()=>presenceListeners.delete(fn)};}},
       Linking: { openSettings: async () => { state.settings++; } }, Modal: 'Modal', Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View', StyleSheet: { create: value => value, absoluteFill: {} } },
     'react-native-incall-manager': { start: value => state.audioStarts.push(value), stop: () => state.stops++, setKeepScreenOn: () => undefined, setForceSpeakerphoneOn: () => undefined },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     'react-native-webrtc': { mediaDevices: { enumerateDevices: async () => [{ kind: 'videoinput' }, { kind: 'videoinput' }] }, RTCView: 'RTCView' },
     '@/components/field-button': { FieldButton: 'FieldButton' },
     '@/lib/api': { ApiError, apiRequest: async (url, options) => { const body = options.body ? JSON.parse(options.body) : null; state.api.push({ url, body, signal: options.signal }); return state.respond(url, body); } },
+    '@/lib/device':{notificationsMuted:async()=>state.notificationMuted},
+    '@/lib/team-messages':{teamNotificationTarget:value=>value?.type==='team_call'?{threadId:value.threadId,callId:value.callId}:null},
     '@/lib/native-team-call-client': { NativeTeamCallConnections: class { async sync() {} async receive() {} close() { state.peerCloses++; } } },
     '@/lib/native-team-call-media': { acquireNativeCallMedia: (...args) => { state.media.push(args[0]); return state.acquire(...args); }, releaseNativeCallMedia: media => { if (media) state.released.push(media); }, nativeCallError: error => ({ message: error.message, settings: error.name === 'NotAllowedError' }) },
     '@/lib/theme': { colours: {}, radius: {}, spacing: {} },
@@ -57,8 +65,45 @@ function harness() {
   function appState(value) { for (const listener of [...listeners]) listener(value); }
   function cleanup() { for (const effect of effects) effect?.cleanup?.(); }
   render();
-  return { state, render, nodes, button, context, appState, cleanup, intervals };
+  return { state, render, nodes, button, context, appState, cleanup, intervals,ringtone,
+    receivePush:()=>{for(const listener of pushListeners)listener({request:{content:{data:{type:'team_call',threadId:invitation.threadId,callId:invitation.id}}}});},
+    presence:status=>{for(const listener of presenceListeners)listener({status});},
+  };
 }
+
+test('incoming calls play the bundled soft chime, stop when dismissed and never acquire microphone',async()=>{
+  const h=harness();await h.context().openInvitation({threadId:invitation.threadId,callId:invitation.id});h.render();await flush();
+  assert.equal(h.state.rings,1);assert.equal(h.ringtone.loop,true);assert.equal(h.ringtone.volume,0.6);assert.equal(h.state.audioModes[0].playsInSilentMode,false);assert.deepEqual(h.state.media,[]);
+  const stops=h.state.ringStops;h.button('Decline')();h.render();assert.ok(h.state.ringStops>stops);h.cleanup();
+});
+
+test('muted devices show incoming calls without audio and Busy immediately silences an invitation',async()=>{
+  const h=harness();h.state.notificationMuted=true;await h.context().openInvitation({threadId:invitation.threadId,callId:invitation.id});h.render();await flush();assert.equal(h.state.rings,0);assert.ok(h.button('Answer'));
+  h.presence('busy');h.render();assert.equal(h.nodes().some(node=>node.type==='FieldButton'&&node.props.children==='Answer'),false);h.cleanup();
+});
+
+test('a native push refreshes authenticated incoming state without navigating or accessing media',async()=>{
+  const h=harness();await flush();h.state.respond=async()=>({ok:true,calls:[invitation]});h.receivePush();await flush();h.render();await flush();
+  assert.ok(h.button('Answer'));assert.equal(h.state.rings,1);assert.deepEqual(h.state.media,[]);const stops=h.state.ringStops;h.appState('background');h.render();assert.ok(h.state.ringStops>stops);h.cleanup();
+});
+
+test('returning Online refreshes call availability after Busy dismissed a ringing invitation', async () => {
+  const h = harness();
+  await h.context().openInvitation({threadId:invitation.threadId,callId:invitation.id});h.render();await flush();
+  h.presence('busy');h.render();
+  assert.equal(h.nodes().some(node=>node.type==='FieldButton'&&node.props.children==='Answer'),false);
+  h.presence('online');await flush();h.render();await flush();
+  assert.ok(h.button('Answer'));assert.equal(h.state.rings,2);assert.deepEqual(h.state.media,[]);h.cleanup();
+});
+
+test('unanswered foreground ringtone stops after 45 seconds while leaving the invitation visible', async t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  const h = harness();
+  await h.context().openInvitation({threadId:invitation.threadId,callId:invitation.id});h.render();await flush();
+  const stopped = h.state.ringStops;
+  t.mock.timers.tick(45_000);await flush();h.render();
+  assert.ok(h.state.ringStops>stopped);assert.ok(h.button('Answer'));assert.deepEqual(h.state.media,[]);h.cleanup();
+});
 
 test('incoming polling and notification opening show an invitation without accessing microphone or camera', async () => {
   const h = harness();
@@ -160,7 +205,7 @@ test('expired notification invitations cannot acquire media or open a different 
   await h.context().openInvitation({ threadId: invitation.threadId, callId: invitation.id });
   h.render();
   assert.equal(h.state.media.length, 0);
-  assert.ok(h.nodes().some(node => node.type === 'Text' && String(node.props.children).includes('This call has ended')));
+  assert.ok(h.nodes().some(node => node.type === 'Text' && String(node.props.children).includes('This call is no longer available')));
   assert.ok(!h.nodes().some(node => node.type === 'FieldButton' && node.props.children === 'Answer'));
   h.cleanup();
 });

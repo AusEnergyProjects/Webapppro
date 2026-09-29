@@ -1,6 +1,9 @@
 import * as Crypto from 'expo-crypto';
+import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
+import softRingtone from '../../assets/sounds/tlink-call-soft.wav';
+import * as Notifications from 'expo-notifications';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, AppState, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, DeviceEventEmitter, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { mediaDevices, RTCView, type MediaStream } from 'react-native-webrtc';
@@ -8,6 +11,8 @@ import { mediaDevices, RTCView, type MediaStream } from 'react-native-webrtc';
 import type { TeamCall, TeamCallSignal } from '../../../src/lib/trade-team-calls';
 import { FieldButton } from '@/components/field-button';
 import { ApiError, apiRequest } from '@/lib/api';
+import { notificationsMuted } from '@/lib/device';
+import { teamNotificationTarget } from '@/lib/team-messages';
 import { NativeTeamCallConnections, type NativeCallRemote, type NativeIceServer } from '@/lib/native-team-call-client';
 import { acquireNativeCallMedia, nativeCallError, releaseNativeCallMedia, type NativeCallMode } from '@/lib/native-team-call-media';
 import { colours, radius, spacing } from '@/lib/theme';
@@ -71,7 +76,12 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   const audioStarted = useRef(false);
   const requests = useRef(new Set<AbortController>());
   const dismissed = useRef(new Set<string>());
+  const availableForCalls = useRef(true);
   const cameraChanging = useRef(false);
+  const ringtone = useAudioPlayer(softRingtone);
+  const ringtoneRef = useRef(ringtone);
+  const ringtoneMode = useRef<Promise<void> | null>(null);
+  useEffect(() => { ringtoneRef.current = ringtone; }, [ringtone]);
 
   const api = useCallback(async (query = '', body?: Record<string, unknown>) => {
     if (!mounted.current) throw new Error('This call session has closed.');
@@ -95,6 +105,8 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     generation.current++;
     starting.current = false;
     cameraChanging.current = false;
+    // expo-audio releases the player itself during unmount, before this cleanup.
+    if (mounted.current) ringtone.pause();
     const current = session.current;
     session.current = null;
     current?.peers?.close();
@@ -108,7 +120,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
         // removes disconnected participants even when this request cannot send.
       });
     }
-  }, [api]);
+  }, [api, ringtone]);
 
   const stop = useCallback((message = '', notify = true) => {
     release(notify);
@@ -139,6 +151,10 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     const sessionId = Crypto.randomUUID();
     setOpening(true); setMode(nextMode); setNotice(''); setRetry(null); setShowSettings(false); setMinimized(false);
     try {
+      // Finish a pending ringtone audio-mode change before WebRTC takes over.
+      ringtone.pause();
+      if (ringtoneMode.current) await ringtoneMode.current;
+      if (!isCurrent()) return;
       // This function is reached only through Start, Answer, or Retry. Neither
       // notification handling nor foreground polling acquires device media.
       const stream = await acquireNativeCallMedia(nextMode, isCurrent);
@@ -191,27 +207,50 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
         } catch { /* Preserve the useful original failure. */ }
       } else setRetry({ threadId, mode: nextMode, existing });
     }
-  }, [enabled, api, stop]);
+  }, [enabled, api, stop, ringtone]);
 
   const openInvitation = useCallback(async ({ threadId, callId }: Invitation) => {
     if (!enabled || !validId(threadId) || !validId(callId)) return;
     if (session.current?.call.id === callId) { setMinimized(false); return; }
-    if (session.current || starting.current) return;
+    if (session.current || starting.current || !availableForCalls.current) return;
     const epoch = generation.current;
     try {
-      const result = await api(`threadId=${encodeURIComponent(threadId)}`);
-      if (!mounted.current || epoch !== generation.current || session.current || starting.current) return;
-      if (result.call?.id !== callId || result.call.status !== 'active') {
-        setNotice('This call has ended. Call your teammate back from Messages.'); return;
+      const result = await api('view=incoming');
+      if (!mounted.current || epoch !== generation.current || session.current || starting.current || !availableForCalls.current) return;
+      const invitation = result.calls?.find(call => call.id === callId && call.threadId === threadId && call.status === 'active');
+      if (!invitation) {
+        setNotice('This call is no longer available. Check your call status or call your teammate from Messages.'); return;
       }
       dismissed.current.delete(callId);
-      setIncoming([result.call]); setNotice(''); setRetry(null); setMinimized(false);
+      setIncoming([invitation]); setNotice(''); setRetry(null); setMinimized(false);
     } catch (error) {
       if (mounted.current && epoch === generation.current) setNotice(error instanceof Error ? error.message : 'This call is no longer available.');
     }
   }, [api, enabled]);
 
   const activeId = active?.id;
+  const incomingId = incoming[0]?.id;
+  useEffect(() => {
+    if (!enabled || !incomingId || activeId || opening || !foreground.current) return;
+    let cancelled = false;
+    const epoch = generation.current;
+    const timeout = setTimeout(() => { cancelled = true; ringtone.pause(); },45000);
+    void (async () => {
+      if (await notificationsMuted() || cancelled || !foreground.current || generation.current !== epoch) return;
+      const ready = setAudioModeAsync({allowsRecording:false,playsInSilentMode:false,shouldPlayInBackground:false,interruptionMode:'mixWithOthers'});
+      ringtoneMode.current = ready.catch(() => undefined);
+      await ready;
+      if (cancelled || !mounted.current || !foreground.current || generation.current !== epoch || session.current || starting.current) return;
+      const player = ringtoneRef.current;
+      await player.seekTo(0);
+      if (cancelled || !foreground.current || generation.current !== epoch) return;
+      player.loop = true;
+      player.volume = 0.6;
+      player.play();
+    })().catch(() => { /* The visible Answer/Decline invitation remains usable if device audio is unavailable. */ });
+    return () => { cancelled = true; clearTimeout(timeout); if (mounted.current) ringtone.pause(); };
+  }, [activeId, enabled, incomingId, opening, ringtone]);
+
   useEffect(() => {
     if (!enabled) return;
     let disposed = false;
@@ -239,7 +278,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
           current.lastSuccess = Date.now();
         } else {
           const result = await api('view=incoming');
-          if (!disposed && foreground.current && !session.current && !starting.current) {
+          if (!disposed && foreground.current && !session.current && !starting.current && availableForCalls.current) {
             setIncoming((result.calls || []).filter(call => !dismissed.current.has(call.id)));
           }
         }
@@ -259,10 +298,18 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
         setIncoming([]);
       } else if (state === 'active') { foreground.current = true; void tick(); }
     });
+    const notification = Notifications.addNotificationReceivedListener(value => {
+      if (teamNotificationTarget(value.request.content.data)) void tick();
+    });
+    const presence = DeviceEventEmitter.addListener('tlink:team-presence-changed', value => {
+      if (value?.status === 'busy' || value?.status === 'offline') {
+        availableForCalls.current = false; ringtone.pause(); setIncoming([]);
+      } else if (value?.status === 'online') { availableForCalls.current = true; void tick(); }
+    });
     void tick();
     const interval = setInterval(() => void tick(), activeId ? 1500 : 5000);
-    return () => { disposed = true; clearInterval(interval); listener.remove(); };
-  }, [enabled, api, stop, activeId]);
+    return () => { disposed = true; clearInterval(interval); listener.remove(); notification.remove(); presence.remove(); };
+  }, [enabled, api, stop, activeId, ringtone]);
 
   const switchCamera = async () => {
     const current = session.current;

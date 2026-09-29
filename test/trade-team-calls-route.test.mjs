@@ -4,14 +4,14 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as bounded from '../src/lib/bounded-request-body.mjs';
 const source=fs.readFileSync(new URL('../src/app/api/trade-team-calls/route.ts',import.meta.url),'utf8');
-function fixture({denied=false,configured=true,revokeAfterProvider=false,deferStart=false,startFails=false,deferPush=false}={}){
- const events=[],background=[];let persisted=false,releaseStart,releasePush;class AccessError extends Error{status=403;}
- const server={};for(const name of ['incomingTeamCalls','joinTeamCall','leaveTeamCall','reserveTeamCallIce','sendTeamCallSignal','startTeamCall','teamCallStatus','assertTeamCallJoined'])server[name]=async()=>{events.push(name);if(denied)throw new Error('CALL_ACCESS_REQUIRED');if(name==='assertTeamCallJoined'&&revokeAfterProvider)throw new Error('CALL_ACCESS_REQUIRED');if(name==='startTeamCall'){if(deferStart)await new Promise(resolve=>{releaseStart=resolve;});if(startFails)throw new Error('CALL_RATE_LIMIT');persisted=true;events.push('persisted');}return name==='reserveTeamCallIce'?{ttl:300,expiresAt:'2099-01-01'}:name==='incomingTeamCalls'?[]:name==='teamCallStatus'?{call:null,signals:[]}:{id:'call-1234',threadId:'thread-1234'};};
+function fixture({denied=false,configured=true,revokeAfterProvider=false,deferStart=false,startFails=false,deferPush=false,operationError=''}={}){
+ const events=[],background=[],diagnostics=[];let persisted=false,releaseStart,releasePush;class AccessError extends Error{status=403;}
+ const server={};for(const name of ['incomingTeamCalls','joinTeamCall','leaveTeamCall','reserveTeamCallIce','sendTeamCallSignal','startTeamCall','teamCallStatus','assertTeamCallJoined'])server[name]=async()=>{events.push(name);if(operationError)throw new Error(operationError);if(denied)throw new Error('CALL_ACCESS_REQUIRED');if(name==='assertTeamCallJoined'&&revokeAfterProvider)throw new Error('CALL_ACCESS_REQUIRED');if(name==='startTeamCall'){if(deferStart)await new Promise(resolve=>{releaseStart=resolve;});if(startFails)throw new Error('CALL_RATE_LIMIT');persisted=true;events.push('persisted');}return name==='reserveTeamCallIce'?{ttl:300,expiresAt:'2099-01-01'}:name==='incomingTeamCalls'?[]:name==='teamCallStatus'?{call:null,signals:[]}:{id:'call-1234',threadId:'thread-1234'};};
  const dependencies={'@/lib/admin-server':{sameOrigin:request=>!request.headers.get('origin')||request.headers.get('origin')===new URL(request.url).origin,adminJson:(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}}),mfaErrorResponse:()=>null},'@/lib/trade-access-server':{TradeAccessError:AccessError},'@/lib/trade-communications-access':{requireTeamCommunicationAccess:async request=>{events.push('access');if(!request.headers.get('authorization'))throw new Error('AUTH_REQUIRED');return{memberId:'member-0001'};}},
  'cloudflare:workers':{waitUntil:promise=>{events.push('waitUntil');background.push(promise);}},'@/lib/trade-push-server':{notifyTeamCall:async(actor,call)=>{assert.equal(persisted,true,'Call must persist before notification');assert.equal(actor.memberId,'member-0001');assert.deepEqual(call,{id:'call-1234',threadId:'thread-1234'});events.push('notifyTeamCall');if(deferPush)await new Promise(resolve=>{releasePush=resolve;});return {attempted:0,accepted:0,failed:1,skipped:true};}},
  '@/lib/bounded-request-body.mjs':bounded,'@/lib/trade-team-calls-server':server,'@/lib/trade-team-calls-provider':{teamCallTurnCredentials:()=>{events.push('credentials');if(!configured)throw new Error('CALL_UNAVAILABLE');return{accountSid:'server-only-sid',authToken:'server-only-token'};},teamCallIceServers:async()=>{events.push('provider');return[{urls:'turn:global.turn.twilio.com:3478',username:'ephemeral',credential:'temporary'}];}}};
  const output=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,record={exports:{}};
- new Function('require','module','exports',output)(name=>{assert.ok(Object.hasOwn(dependencies,name),name);return dependencies[name];},record,record.exports);return{route:record.exports,events,background,releaseStart:()=>releaseStart(),releasePush:()=>releasePush()};
+ new Function('require','module','exports','console',output)(name=>{assert.ok(Object.hasOwn(dependencies,name),name);return dependencies[name];},record,record.exports,{warn:(tag,fields)=>diagnostics.push({tag,...fields})});return{route:record.exports,events,background,diagnostics,releaseStart:()=>releaseStart(),releasePush:()=>releasePush()};
 }
 const req=(body,headers={})=>new Request('https://tlink.test/api/trade-team-calls',{method:'POST',headers:{Authorization:'Bearer synthetic','Content-Type':'application/json',...headers},body:typeof body==='string'?body:JSON.stringify(body)});
 test('route rejects foreign origins, missing auth, invalid actions and oversized actual bytes before operations',async()=>{
@@ -41,4 +41,26 @@ test('denied, failed or unconfigured call starts never dispatch notifications',a
  for(const [options,status] of [[{denied:true},403],[{startFails:true},429],[{configured:false},503]]){
   const f=fixture(options);assert.equal((await f.route.POST(req({action:'start'}))).status,status);assert.ok(!f.events.includes('notifyTeamCall'));assert.equal(f.background.length,0);
  }
+});
+
+test('busy and offline call failures are actionable and do not send invitations',async()=>{
+ for(const [code,text]of [['CALL_RECIPIENT_UNAVAILABLE',/busy or offline/],['CALL_PRESENCE_UNAVAILABLE',/Switch to Online/]]){
+  const f=fixture({operationError:code});const response=await f.route.POST(req({action:code==='CALL_PRESENCE_UNAVAILABLE'?'join':'start'}));
+  assert.equal(response.status,409);const result=await response.json();assert.equal(result.code,code);assert.match(result.error,text);assert.equal(f.background.length,0);
+ }
+});
+
+test('slow-call diagnostics show operation and stage without private payloads and clear when finished',async context=>{
+ context.mock.timers.enable({apis:['setTimeout']});
+ const f=fixture({deferStart:true});const pending=f.route.POST(req({action:'start',threadId:'private-thread',sessionId:'private-session',payload:'private-sdp'}));
+ await new Promise(resolve=>setImmediate(resolve));context.mock.timers.tick(8000);
+ assert.equal(f.diagnostics.length,1);assert.equal(f.diagnostics[0].action,'start');assert.equal(f.diagnostics[0].stage,'start');assert.equal(f.diagnostics[0].code,'CALL_SLOW');
+ assert.doesNotMatch(JSON.stringify(f.diagnostics),/private|Bearer/);
+ f.releaseStart();assert.equal((await pending).status,200);context.mock.timers.tick(9000);assert.equal(f.diagnostics.length,1);
+});
+
+test('unexpected errors and unrecognised actions cannot put arbitrary text in call logs',async()=>{
+ let f=fixture({operationError:'private-provider-token'});await f.route.POST(req({action:'ice',callId:'private-call'}));
+ assert.equal(f.diagnostics[0].code,'CALL_REQUEST_FAILED');assert.doesNotMatch(JSON.stringify(f.diagnostics),/private/);
+ f=fixture();await f.route.POST(req({action:'private-action'}));assert.equal(f.diagnostics[0].action,'unknown');assert.doesNotMatch(JSON.stringify(f.diagnostics),/private/);
 });

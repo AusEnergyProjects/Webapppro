@@ -79,3 +79,28 @@ test('camera replacement cannot revive a closed call',async()=>{
   await assert.rejects(f.client.replaceVideoTrack({id:'new-camera',kind:'video'}),/ended/);
   assert.equal(f.local.getVideoTracks()[0],old);
 });
+
+test('a peer that never finishes connecting fails within thirty seconds',async context=>{
+  context.mock.timers.enable({apis:['setTimeout']});
+  const f=fixture();await f.client.sync(people);
+  context.mock.timers.tick(29999);assert.equal(f.failures.length,0);
+  context.mock.timers.tick(1);assert.equal(f.failures.length,1);assert.match(f.failures[0],/could not connect/);
+  f.client.close();
+});
+
+test('connected peers cancel negotiation timeout and transient disconnects can recover',async context=>{
+  context.mock.timers.enable({apis:['setTimeout']});
+  const f=fixture();await f.client.sync(people);const pc=f.connections[0];
+  pc.connectionState='connected';pc.onconnectionstatechange();context.mock.timers.tick(30001);assert.equal(f.failures.length,0);
+  pc.connectionState='disconnected';pc.onconnectionstatechange();context.mock.timers.tick(10000);
+  pc.connectionState='connected';pc.onconnectionstatechange();context.mock.timers.tick(16000);assert.equal(f.failures.length,0);
+  pc.connectionState='disconnected';pc.onconnectionstatechange();context.mock.timers.tick(15000);assert.equal(f.failures.length,1);
+  f.client.close();
+});
+
+test('removed and closed peers cannot report a late connection timeout',async context=>{
+  context.mock.timers.enable({apis:['setTimeout']});
+  const f=fixture();await f.client.sync(people);await f.client.sync([people[0]]);
+  context.mock.timers.tick(30001);assert.equal(f.failures.length,0);
+  await f.client.sync(people);f.client.close();context.mock.timers.tick(30001);assert.equal(f.failures.length,0);
+});

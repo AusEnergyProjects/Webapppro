@@ -48,7 +48,7 @@ test("customer and field activity powers one unread installer review queue", () 
   assert.doesNotMatch(clearBranch, /DELETE|UPDATE trade_|status =/);
   assert.match(route, /current\.items\.some\(\(item\) => item\.id === notificationKey\)/);
   assert.match(notifications, /30_000/);
-  assert.match(notifications, /unread work updates/);
+  assert.match(notifications, /unread updates, including \$\{messages\.unreadCount\} team messages/);
   assert.match(notifications, /JSON\.stringify\(\{ action: "mark_all_read" \}\)/);
   assert.match(notifications, /className="tlink-notification-clear"/);
   assert.match(notifications, /Work updates cleared\. Their records remain available below\./);

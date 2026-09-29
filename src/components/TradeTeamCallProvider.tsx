@@ -5,13 +5,13 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { User } from "firebase/auth";
 import { TeamCallConnections, type CallRemote } from "@/lib/trade-team-call-client";
-import { teamCallCameraConstraints, teamCallMediaConstraints, teamCallMediaError, type CameraFacing } from "@/lib/trade-team-call-media";
+import { openTeamCallMedia, TeamCallRinger, teamCallCameraConstraints, teamCallMediaConstraints, teamCallMediaError, type CameraFacing } from "@/lib/trade-team-call-media";
 import type { TeamCall, TeamCallSignal } from "@/lib/trade-team-calls";
 import styles from "./TradeTeamCallProvider.module.css";
 
 type Mode = "audio" | "video";
 type CallResult = { ok: boolean; error?: string; code?: string; call?: TeamCall | null; calls?: TeamCall[]; memberId?: string; signals?: TeamCallSignal[]; iceServers?: RTCIceServer[] };
-type CallSession = { call: TeamCall; sessionId: string; memberId: string; local: MediaStream; peers: TeamCallConnections | null; cursor: number; lastSuccess: number };
+type CallSession = { call: TeamCall; sessionId: string; memberId: string; local: MediaStream; peers: TeamCallConnections | null; cursor: number; lastSuccess: number; startedAt: number; hadRemote: boolean };
 type RetryCall = { threadId: string; mode: Mode; existing?: TeamCall };
 const CallContext = createContext<{ start: (threadId: string, mode: Mode) => void; busy: boolean } | null>(null);
 
@@ -52,18 +52,65 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   const [retry,setRetry] = useState<RetryCall | null>(null), [openingMode,setOpeningMode] = useState<Mode>("audio");
   const [hasCamera,setHasCamera] = useState(false), [multipleCameras,setMultipleCameras] = useState(false), [switchingCamera,setSwitchingCamera] = useState(false);
   const [cameraNotice,setCameraNotice] = useState("");
+  const [ringReady,setRingReady] = useState(false);
+  const ringer = useRef<TeamCallRinger | null>(null);
+  const presenceRevision = useRef(0);
   const facing = useRef<CameraFacing>("user"), changingCamera = useRef(false);
   const session = useRef<CallSession | null>(null), media = useRef<MediaStream | null>(null), generation = useRef(0), dismissed = useRef(new Set<string>()), starting = useRef(false);
   const authentication = useRef({user,getAuthHeaders});
   useEffect(() => { authentication.current = {user,getAuthHeaders}; },[user,getAuthHeaders]);
   const available = enabled && Boolean(user || getAuthHeaders);
+  useEffect(() => {
+    if (!available) return;
+    const audio = new TeamCallRinger(setRingReady);
+    ringer.current = audio;
+    const unlock = () => { void audio.unlock(); };
+    const message = () => { if (!session.current && !starting.current) audio.message(); };
+    const presenceChanged = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !["online","busy","offline"].includes(event.detail?.status)) return;
+      presenceRevision.current++;
+      if (event.detail.status !== "online") { setIncoming([]); audio.stop(); }
+    };
+    // The first ordinary interaction unlocks page audio without requesting
+    // microphone access. Incoming calls still require an explicit Answer.
+    window.addEventListener("pointerdown",unlock);
+    window.addEventListener("keydown",unlock);
+    window.addEventListener("tlink:enable-call-sound",unlock);
+    window.addEventListener("tlink:message-received",message);
+    window.addEventListener("tlink:team-presence-changed",presenceChanged);
+    return () => {
+      ringer.current = null; audio.close();
+      window.removeEventListener("pointerdown",unlock);
+      window.removeEventListener("keydown",unlock);
+      window.removeEventListener("tlink:enable-call-sound",unlock);
+      window.removeEventListener("tlink:message-received",message);
+      window.removeEventListener("tlink:team-presence-changed",presenceChanged);
+    };
+  },[available]);
+  const ringingId = !active && !busy && !retry ? incoming[0]?.id : undefined;
+  useEffect(() => {
+    if (!ringingId) return;
+    const audio = ringer.current; audio?.start();
+    return () => audio?.stop();
+  },[ringingId]);
   const api = useCallback(async (query = "", body?: Record<string,unknown>): Promise<CallResult> => {
-    const {user,getAuthHeaders} = authentication.current;
-    const headers: Record<string,string> = getAuthHeaders ? await getAuthHeaders() : user ? {Authorization:`Bearer ${await user.getIdToken()}`} : {};
-    const response = await fetch(`/api/trade-team-calls${query ? `?${query}` : ""}`, { method:body ? "POST" : "GET", headers:{...headers,...(body ? {"Content-Type":"application/json"} : {})}, body:body ? JSON.stringify(body) : undefined, cache:"no-store", signal:AbortSignal.timeout(12000) });
-    const result: CallResult = await response.json();
-    if (!response.ok || !result.ok) { const error = new Error(result.error || "The call could not connect."); Object.assign(error,{code:result.code,status:response.status}); throw error; }
-    return result;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutError = new Error("The call connection timed out. Check your internet connection and try again.");
+    const request = async () => {
+      const {user,getAuthHeaders} = authentication.current;
+      const headers: Record<string,string> = getAuthHeaders ? await getAuthHeaders() : user ? {Authorization:`Bearer ${await user.getIdToken()}`} : {};
+      if (controller.signal.aborted) throw timeoutError;
+      const response = await fetch(`/api/trade-team-calls${query ? `?${query}` : ""}`, { method:body ? "POST" : "GET", headers:{...headers,...(body ? {"Content-Type":"application/json"} : {})}, body:body ? JSON.stringify(body) : undefined, cache:"no-store", signal:controller.signal });
+      const result: CallResult = await response.json();
+      if (!response.ok || !result.ok) { const error = new Error(result.error || "The call could not connect."); Object.assign(error,{code:result.code,status:response.status}); throw error; }
+      return result;
+    };
+    try {
+      return await Promise.race([request(), new Promise<never>((_,reject) => {
+        timer = setTimeout(() => { reject(timeoutError); controller.abort(); },15000);
+      })]);
+    } finally { clearTimeout(timer); }
   },[fetch]);
 
   const release = useCallback((notify = true) => {
@@ -91,7 +138,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
     const epoch = ++generation.current, sessionId = crypto.randomUUID();
     try {
       if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error("Calling is not supported here. Open TLink in an up-to-date Chrome, Edge, Safari or Firefox browser using HTTPS.");
-      const local = await navigator.mediaDevices.getUserMedia(teamCallMediaConstraints(mode));
+      const local = await openTeamCallMedia(teamCallMediaConstraints(mode));
       if (generation.current !== epoch) { local.getTracks().forEach(track => track.stop()); return; }
       media.current = local; setLocalPreview(local); setHasCamera(local.getVideoTracks().length > 0);
       facing.current = local.getVideoTracks()[0]?.getSettings().facingMode === "environment" ? "environment" : "user";
@@ -102,7 +149,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       const result = await api("",existing ? {action:"join",callId:existing.id,sessionId} : {action:"start",threadId,mode,sessionId,requestId:crypto.randomUUID()});
       if (!result.call || !result.memberId) throw new Error("The call could not start.");
       if (generation.current !== epoch) { local.getTracks().forEach(track => track.stop()); void api("",{action:"leave",callId:result.call.id,sessionId}).catch(() => {}); return; }
-      const current: CallSession = {call:result.call,memberId:result.memberId,sessionId,local,peers:null,cursor:0,lastSuccess:Date.now()};
+      const current: CallSession = {call:result.call,memberId:result.memberId,sessionId,local,peers:null,cursor:0,lastSuccess:Date.now(),startedAt:Date.now(),hadRemote:result.call.participants.some(person => person.memberId !== result.memberId)};
       session.current = current; setActive(result.call); setIncoming(items => items.filter(item => item.id !== result.call?.id));
       const ice = await api("",{action:"ice",callId:current.call.id,sessionId});
       if (session.current !== current || !ice.iceServers?.length) { if (session.current === current) throw new Error("The call relay is unavailable. Try again shortly."); return; }
@@ -129,10 +176,11 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       if (typeof callId !== "string" || typeof threadId !== "string" || !/^[a-zA-Z0-9_-]{8,120}$/.test(callId) || !/^[a-zA-Z0-9_-]{8,120}$/.test(threadId)) return;
       if (session.current?.call.id === callId) { setMinimized(false); return; }
       if (session.current || starting.current) return;
+      const availabilityVersion = presenceRevision.current;
       // A notification is only a request to show the invitation. The server
       // verifies current membership and an explicit Answer requests media.
       void api(`threadId=${encodeURIComponent(threadId)}`).then(result => {
-        if (disposed || session.current || starting.current) return;
+        if (disposed || session.current || starting.current || availabilityVersion !== presenceRevision.current) return;
         if (result.call?.id !== callId || result.call.status !== "active") { setNotice("This call has ended. You can call your teammate back from Messages."); return; }
         dismissed.current.delete(callId); setNotice(""); setRetry(null); setMinimized(false); setIncoming([result.call]);
       }).catch(error => { if (!disposed) setNotice(error instanceof Error ? error.message : "This call is no longer available."); });
@@ -149,7 +197,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       if (inFlight || disposed) return;
       const current = session.current;
       if (!current && starting.current) return;
-      if (!navigator.onLine) return;
+      if (!navigator.onLine) { if (current) stop("Your device is offline. Reconnect to the internet, then call again."); return; }
       inFlight = true;
       let processing = false;
       try {
@@ -157,13 +205,18 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
           const result = await api(`callId=${encodeURIComponent(current.call.id)}&sessionId=${encodeURIComponent(current.sessionId)}&after=${current.cursor}`);
           if (disposed || session.current !== current) return;
           if (!result.call || result.call.status !== "active") { stop("Call ended.",false); return; }
+          const hasRemote = result.call.participants.some(person => person.memberId !== current.memberId);
+          if (current.hadRemote && !hasRemote) { stop("Your teammate left the call."); return; }
+          if (!hasRemote && Date.now()-current.startedAt >= 60000) { stop("No answer. You can call again or send a message."); return; }
+          current.hadRemote ||= hasRemote;
           current.call = result.call; setActive(result.call); processing = true;
           await current.peers.sync(result.call.participants);
           for (const signal of result.signals || []) { await current.peers.receive(signal); current.cursor = Math.max(current.cursor,signal.sequence); }
           current.lastSuccess = Date.now();
         } else if (!current) {
+          const availabilityVersion = presenceRevision.current;
           const result = await api("view=incoming");
-          if (!disposed && !session.current) setIncoming((result.calls || []).filter(call => !dismissed.current.has(call.id)));
+          if (!disposed && !session.current && availabilityVersion === presenceRevision.current) setIncoming((result.calls || []).filter(call => !dismissed.current.has(call.id) && call.createdByMemberId !== result.memberId));
         }
       } catch (error) {
         if (disposed || !current || session.current !== current) return;
@@ -189,7 +242,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
     old?.stop();
     let replacement: MediaStream | null = null;
     try {
-      replacement = await navigator.mediaDevices.getUserMedia({audio:false,video:teamCallCameraConstraints(nextFacing)});
+      replacement = await openTeamCallMedia({audio:false,video:teamCallCameraConstraints(nextFacing)});
       const track = replacement.getVideoTracks()[0];
       if (!track) throw new Error("The camera did not open.");
       if (session.current !== current) { replacement.getTracks().forEach(item => item.stop()); return; }
@@ -216,11 +269,11 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   const invitation = incoming[0];
   return <CallContext.Provider value={{start:(threadId,mode) => void begin(threadId,mode),busy:busy || Boolean(active)}}>{children}
     {(active || busy || invitation || notice) && <aside className={`${styles.dock} ${minimized ? styles.minimized : ""}`} aria-label="Internal team call">
-      {active ? <><header><div><strong>{active.threadName || "Team call"}</strong><span role="status">{connected ? "Connected" : busy || remotes.length ? "Connecting..." : "Ringing..."} · Internal · {hasCamera ? "Video" : "Voice"}</span></div><button type="button" onClick={() => setMinimized(value => !value)}>{minimized ? "Expand" : "Minimise"}</button></header>
+      {active ? <><header><div><strong>{active.threadName || "Team call"}</strong><span role="status">{connected ? "Connected" : busy || remotes.length ? "Connecting..." : "Waiting for answer..."} · Internal · {hasCamera ? "Video" : "Voice"}</span></div><button type="button" onClick={() => setMinimized(value => !value)}>{minimized ? "Expand" : "Minimise"}</button></header>
         {!minimized && <div className={styles.grid}><StreamTile stream={localPreview} name={muted ? "You · Muted" : "You"} local cameraOff={cameraOff || !hasCamera} />{remotes.map(peer => <StreamTile key={peer.memberId} stream={peer.stream} name={peer.name} state={peer.state} />)}</div>}
         {cameraNotice && <p role="status" className={styles.help}>{cameraNotice}</p>}
         <div className={styles.controls}><button type="button" aria-pressed={muted} onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button>{hasCamera && <><button type="button" disabled={switchingCamera} aria-pressed={cameraOff} onClick={toggleCamera}>{cameraOff ? "Camera on" : "Camera off"}</button>{multipleCameras && <button type="button" disabled={switchingCamera} onClick={() => void changeCamera(facing.current === "user" ? "environment" : "user")}>{switchingCamera ? "Switching..." : "Switch camera"}</button>}</>}<button type="button" className={styles.hangup} onClick={() => stop()}>Hang up</button></div>
-      </> : busy ? <><strong>Opening your {openingMode === "video" ? "video" : "voice"} call</strong><p role="status">Allow {openingMode === "video" ? "microphone and camera" : "microphone"} access if your device asks.</p><button type="button" onClick={() => stop()}>Cancel</button></> : notice && (retry || !invitation) ? <><strong>Team call</strong><p role="status">{notice}</p><div className={styles.controls}>{retry && <><button type="button" className={styles.answer} onClick={() => void begin(retry.threadId,retry.mode,retry.existing)}>Retry</button>{retry.mode === "video" && <button type="button" onClick={() => void begin(retry.threadId,"audio",retry.existing)}>Use voice only</button>}</>}<button type="button" onClick={() => {setNotice("");setRetry(null);}}>Close</button></div></> : invitation ? <><strong>{invitation.threadName || "Team call"}</strong><p role="status">Incoming {invitation.mode === "video" ? "video" : "voice"} call · Internal</p><p className={styles.help}>Your microphone{invitation.mode === "video" ? " and camera turn" : " turns"} on when you answer.</p><div className={styles.controls}><button type="button" className={styles.answer} onClick={() => void begin(invitation.threadId,invitation.mode,invitation)}>Answer</button>{invitation.mode === "video" && <button type="button" onClick={() => void begin(invitation.threadId,"audio",invitation)}>Voice only</button>}<button type="button" onClick={() => {dismissed.current.add(invitation.id);setIncoming(items=>items.filter(item=>item.id!==invitation.id));}}>Decline</button></div></> : null}
+      </> : busy ? <><strong>Opening your {openingMode === "video" ? "video" : "voice"} call</strong><p role="status">Allow {openingMode === "video" ? "microphone and camera" : "microphone"} access if your device asks.</p><button type="button" onClick={() => stop()}>Cancel</button></> : notice && (retry || !invitation) ? <><strong>Team call</strong><p role="status">{notice}</p><div className={styles.controls}>{retry && <><button type="button" className={styles.answer} onClick={() => void begin(retry.threadId,retry.mode,retry.existing)}>Retry</button>{retry.mode === "video" && <button type="button" onClick={() => void begin(retry.threadId,"audio",retry.existing)}>Use voice only</button>}</>}<button type="button" onClick={() => {setNotice("");setRetry(null);}}>Close</button></div></> : invitation ? <><strong>{invitation.threadName || "Team call"}</strong><p role="status">Incoming {invitation.mode === "video" ? "video" : "voice"} call · Internal</p><p className={styles.help}>Your microphone{invitation.mode === "video" ? " and camera turn" : " turns"} on when you answer.</p>{!ringReady && <button type="button" onClick={() => void ringer.current?.unlock()}>Enable ring sound</button>}<div className={styles.controls}><button type="button" className={styles.answer} onClick={() => void begin(invitation.threadId,invitation.mode,invitation)}>Answer</button>{invitation.mode === "video" && <button type="button" onClick={() => void begin(invitation.threadId,"audio",invitation)}>Voice only</button>}<button type="button" onClick={() => {dismissed.current.add(invitation.id);setIncoming(items=>items.filter(item=>item.id!==invitation.id));}}>Decline</button></div></> : null}
     </aside>}
   </CallContext.Provider>;
 }

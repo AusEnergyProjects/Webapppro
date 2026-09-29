@@ -70,9 +70,11 @@ test("clear marks current eligible network and existing notifications read witho
 
 const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
 const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
-function uiHarness(t, { read = false, failRead = false, targetKind = "network" } = {}) {
+function uiHarness(t, { read = false, failRead = false, targetKind = "network", threads = [] } = {}) {
   let cursor = 0;
-  const state = [], effects = [], pending = [], requests = [], opened = [], navigated = [], opportunities = [];
+  const state = [], effects = [], pending = [], requests = [], opened = [], navigated = [], opportunities = [], openedChats = [];
+  const messages = { unreadCount: threads.reduce((total, thread) => total + thread.unread, 0), threads,
+    refresh() {}, open: id => openedChats.push(id) };
   const hooks = {
     useState(initial) { const i = cursor++; if (!(i in state)) state[i] = typeof initial === "function" ? initial() : initial; return [state[i], value => { state[i] = typeof value === "function" ? value(state[i]) : value; }]; },
     useRef(initial) { const i = cursor++; return state[i] ||= { current: initial }; },
@@ -80,8 +82,8 @@ function uiHarness(t, { read = false, failRead = false, targetKind = "network" }
     useEffect(callback, deps) { const i = cursor++, old = effects[i]; if (!old || deps.some((value, j) => value !== old.deps[j])) { old?.cleanup?.(); effects[i] = { deps }; pending.push(() => { effects[i].cleanup = callback(); }); } },
   };
   let item = { id: `network:${postId}`, targetId: postId, targetKind, workOrderId: "job-1", workNumber: "Trade lead", title: lead.title, summary: lead.summary, createdAt: lead.createdAt, targetTab: "quote", source: targetKind === "network" ? "network" : "customer", read };
-  const fetch = async (_url, init = {}) => {
-    requests.push(init);
+  const fetch = async (url, init = {}) => {
+    requests.push({ ...init, url });
     if (init.method === "PATCH") {
       if (failRead) return Response.json({ error: "Could not save read receipt." }, { status: 503 });
       item = { ...item, read: true };
@@ -90,11 +92,14 @@ function uiHarness(t, { read = false, failRead = false, targetKind = "network" }
   };
   const window = { setTimeout: (callback, delay) => delay === 0 ? setImmediate(callback) : undefined, clearTimeout: id => clearImmediate(id), setInterval: () => 0, clearInterval() {}, addEventListener() {}, removeEventListener() {}, requestAnimationFrame: callback => { callback(); return 0; }, cancelAnimationFrame() {} };
   const document = { visibilityState: "visible", addEventListener() {}, removeEventListener() {} };
-  const exports = {}; Function("require", "exports", "fetch", "window", "document", uiCode)(id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : {}, exports, fetch, window, document);
+  const dependencies = { react: hooks, "react/jsx-runtime": jsx, "./TradeMessageAlerts": { useTradeMessageAlerts: () => messages } };
+  const exports = {}; Function("require", "exports", "fetch", "window", "document", uiCode)(id => {
+    assert.ok(dependencies[id], `Unmocked notification dependency: ${id}`); return dependencies[id];
+  }, exports, fetch, window, document);
   const props = { user: { getIdToken: async () => "private-token" }, onOpenNetwork: id => opened.push(id), onNavigate: target => navigated.push(target), onOpenOpportunity: id => opportunities.push(id) };
   const render = () => { cursor = 0; const tree = exports.TradeJobNotifications(props); for (const callback of pending.splice(0)) callback(); return tree; };
   t.after(() => { for (const effect of effects) effect?.cleanup?.(); });
-  return { requests, opened, navigated, opportunities, render, async settle() { let tree; for (let i = 0; i < 6; i++) { tree = render(); await new Promise(resolve => setImmediate(resolve)); } return tree; },
+  return { requests, opened, navigated, opportunities, openedChats, messages, render, async settle() { let tree; for (let i = 0; i < 6; i++) { tree = render(); await new Promise(resolve => setImmediate(resolve)); } return tree; },
     async open() { let tree = await this.settle(); nodes(tree, node => node.type === "button" && node.props["aria-haspopup"] === "dialog")[0].props.onClick(); tree = await this.settle(); return tree; } };
 }
 
@@ -114,4 +119,30 @@ test("existing job and customer opportunity notification destinations are unchan
     if (targetKind === "opportunity") assert.deepEqual(h.opportunities, [postId]);
     else assert.deepEqual(h.navigated, [{ workspace: "work", kind: "job", id: "job-1", query: "Trade lead", nonce: 1, jobTab: "quote" }]);
   }
+});
+
+test("team notifications open their chat and clearing work updates preserves unread messages", async t => {
+  const thread = { id: "team-thread-1", name: "Site team", unread: 3, sequence: 8, latestAt: "2026-09-29T10:00:00.000Z" };
+  const h = uiHarness(t, { threads: [thread] });
+  let tree = await h.open();
+  const bell = () => nodes(tree, node => node.type === "button" && node.props["aria-haspopup"] === "dialog")[0];
+  assert.equal(bell().props["aria-label"], "4 unread updates, including 3 team messages");
+  nodes(tree, node => node.type === "button" && text(node).includes(thread.name))[0].props.onClick();
+  tree = await h.settle();
+  assert.deepEqual(h.openedChats, [thread.id]);
+  assert.deepEqual(h.opened, []); assert.deepEqual(h.navigated, []); assert.deepEqual(h.opportunities, []);
+  assert.equal(h.requests.filter(request => request.method === "PATCH").length, 0, "Opening the chat must not mark messages or work updates read");
+  assert.equal(h.messages.unreadCount, 3);
+
+  tree = await h.open();
+  nodes(tree, node => node.type === "button" && node.props.className === "tlink-notification-clear")[0].props.onClick();
+  tree = await h.settle();
+  const writes = h.requests.filter(request => request.method === "PATCH");
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].url, "/api/trade-job-notifications");
+  assert.deepEqual(JSON.parse(writes[0].body), { action: "mark_all_read" });
+  assert.equal(h.messages.unreadCount, 3); assert.deepEqual(h.messages.threads, [thread]);
+  assert.equal(bell().props["aria-label"], "3 unread updates, including 3 team messages");
+  assert.match(text(tree).replace(/\s+/g, " "), /3 unread team messages/);
+  assert.equal(nodes(tree, node => node.type === "button" && node.props.className === "tlink-notification-clear")[0].props.disabled, true);
 });

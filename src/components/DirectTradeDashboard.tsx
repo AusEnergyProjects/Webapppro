@@ -1,5 +1,7 @@
 "use client";
 
+import TradeTeamPresence from "./TradeTeamPresence";
+
 import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import {
@@ -53,6 +55,7 @@ import {
 } from "@/lib/tlink-colour-mode";
 
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
+import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlerts";
 
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
 const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace").then((module) => module.TradePriceBookWorkspace));
@@ -802,6 +805,7 @@ export function DirectTradeDashboard() {
 function DirectTradeDashboardContent() {
   const fetch = useTradeBusinessFetch();
   const [user, setUser] = useState<User | null>(null);
+  const [messageTarget, setMessageTarget] = useState({ id: "", revision: 0 });
   const [authReady, setAuthReady] = useState(false);
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2085,7 +2089,7 @@ function DirectTradeDashboardContent() {
   }
 
   return (
-    <TradeTeamCallProvider user={user} enabled={Boolean(profile?.entitlements.verified && profile.partnerType === "installer")}><main className="wrap direct-trade-dashboard-page">
+    <TradeMessageAlerts user={user} enabled={Boolean(profile?.entitlements.verified && profile.partnerType === "installer")} onOpen={threadId => { void setWorkspace("messages", () => setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 }))); }}><TradeTeamCallProvider user={user} enabled={Boolean(profile?.entitlements.verified && profile.partnerType === "installer")}><main className="wrap direct-trade-dashboard-page">
       <TLinkHeader active="dashboard" />
       {user && mfaRequired && <p className="crm-status" role="status">Your account needs authenticator verification. <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</p>}
       {authReady && user && installerPlanPreview && (
@@ -2405,6 +2409,7 @@ function DirectTradeDashboardContent() {
               </span>
             </button>
             <div className="dashboard-account-actions">
+              {!isSupplier && <TradeTeamPresence key={user.uid} getAuthHeaders={async () => ({ Authorization: `Bearer ${await user.getIdToken()}` })} />}
               {!isSupplier && <a className="tlink-get-app" href="/direct-trade/field-app"><Image src="/tlink-icon-192.png" alt="" width={25} height={25} /><span>Get the app</span></a>}
               <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
               <div>
@@ -2492,7 +2497,7 @@ function DirectTradeDashboardContent() {
                     setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() }));
                   }}><TLinkNavigationIcon name={view} /><span>{label}</span></button>)}
                 </div>
-                <button type="button" aria-current={workspace === "messages" ? "page" : undefined} className={workspace === "messages" ? "active" : ""} onClick={() => setWorkspace("messages")}><TLinkNavigationIcon name="messages" /><span>Messages</span><small>Customers and team chats</small></button>
+                <button type="button" aria-current={workspace === "messages" ? "page" : undefined} className={workspace === "messages" ? "active" : ""} onClick={() => setWorkspace("messages")}><TLinkNavigationIcon name="messages" /><span>Messages <TradeMessageUnreadBadge /></span><small>Customers and team chats</small></button>
                 <button type="button" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><TLinkNavigationIcon name="team" /><span>Team</span><small>People, access and files</small></button>
                 <button type="button" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span><small>Training and rebate registrations</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView === "schedule" ? "page" : undefined} className={workspace === "work" && activeWorkView === "schedule" ? "active" : ""} onClick={() => {
@@ -2516,7 +2521,7 @@ function DirectTradeDashboardContent() {
               </nav>
 
               {workspace === "email-templates" && <TradeEmailTemplatesWorkspace user={user} />}
-              {workspace === "messages" && <TradeMessagesWorkspace user={user} onOpenQuote={workOrderId => { void setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() })); }} onOpenIntegrations={() => setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() }))} />}
+              {workspace === "messages" && <TradeMessagesWorkspace user={user} initialThreadId={messageTarget.id} initialThreadRevision={messageTarget.revision} onOpenQuote={workOrderId => { void setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() })); }} onOpenIntegrations={() => setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() }))} />}
 
               {(workspace === "work" || workspace === "map") && <TradeBusinessHub
                 key={`${user.uid}:${workspace}:${workspace === "map" ? mapNavigationNonce : 0}`}
@@ -3082,6 +3087,6 @@ function DirectTradeDashboardContent() {
         accreditation, scheme approval, insurance, product compliance or
         customer obligations.
       </SiteFooter>
-    </main></TradeTeamCallProvider>
+    </main></TradeTeamCallProvider></TradeMessageAlerts>
   );
 }

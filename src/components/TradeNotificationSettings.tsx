@@ -3,7 +3,7 @@
 import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readTradePushSubscriptionId as localId, saveTradePushSubscriptionId as saveLocalId } from "@/lib/trade-notification-client";
+import { notificationErrorMessage, notificationTimeout, readTradePushSubscriptionId as localId, saveTradePushSubscriptionId as saveLocalId } from "@/lib/trade-notification-client";
 import styles from "./TradeNotificationSettings.module.css";
 
 type SavedSubscription = { id: string; messages: boolean; calls: boolean; enabled: boolean };
@@ -30,17 +30,20 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
   const [permission,setPermission] = useState<NotificationPermission>("default"), [configured,setConfigured] = useState(false);
   const [prepared,setPrepared] = useState(false);
   const [busy,setBusy] = useState(true), [notice,setNotice] = useState(""), [reload,setReload] = useState(0);
+  const [issue,setIssue] = useState(false), [step,setStep] = useState("Checking this device...");
   const authentication = useRef(getAuthHeaders), registration = useRef<ServiceWorkerRegistration | null>(null);
   const subscription = useRef<PushSubscription | null>(null), applicationKey = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const current = useRef(0), working = useRef(false);
   useEffect(() => { authentication.current = getAuthHeaders; },[getAuthHeaders]);
 
   const api = useCallback(async (method = "GET", body?: Record<string,unknown>, subscriptionId = "", frozenHeaders?: Record<string,string>): Promise<PushResult> => {
-    const response = await fetch(`/api/trade-push${subscriptionId ? `?subscriptionId=${encodeURIComponent(subscriptionId)}` : ""}`, {
-      method, headers:{...(frozenHeaders || await authentication.current()),...(body ? {"Content-Type":"application/json"} : {})},
+    // Bound authentication too; a stalled token refresh must not leave Enable grey.
+    const headers = frozenHeaders || await notificationTimeout(authentication.current());
+    const response = await notificationTimeout(fetch(`/api/trade-push${subscriptionId ? `?subscriptionId=${encodeURIComponent(subscriptionId)}` : ""}`, {
+      method, headers:{...headers,...(body ? {"Content-Type":"application/json"} : {})},
       ...(body ? {body:JSON.stringify(body)} : {}), cache:"no-store", signal:AbortSignal.timeout(12000),
-    });
-    const result: PushResult = await response.json();
+    }));
+    const result: PushResult = await notificationTimeout(response.json());
     if (!response.ok || !result.ok) throw new Error(result.error || "Notification settings could not be saved. Try again.");
     return result;
   },[fetch]);
@@ -49,7 +52,7 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
     if (!enabled) return;
     const epoch = ++current.current;
     const load = async () => {
-      setBusy(true); setNotice(""); setSaved(null); setPrepared(false); registration.current = null; applicationKey.current = null;
+      setBusy(true); setStep("Checking this device..."); setNotice(""); setIssue(false); setSaved(null); setPrepared(false); setBrowserLinked(false); registration.current = null; subscription.current = null; applicationKey.current = null;
       const standalone = window.matchMedia("(display-mode: standalone)").matches || ("standalone" in navigator && navigator.standalone === true);
       const device = notificationDeviceSupport(navigator.userAgent,navigator.maxTouchPoints,standalone,
         window.isSecureContext && "Notification" in window && "serviceWorker" in navigator && "PushManager" in window);
@@ -62,17 +65,15 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
         setConfigured(Boolean(settings.configured));
         if (!settings.configured || !settings.publicKey) { setBusy(false); return; }
         applicationKey.current = notificationApplicationKey(settings.publicKey);
-        const existingWorker = await navigator.serviceWorker.getRegistration("/");
+        const existingWorker = await notificationTimeout(navigator.serviceWorker.getRegistration("/"));
+        if (current.current !== epoch) return;
         const existingScript = existingWorker?.active?.scriptURL || existingWorker?.waiting?.scriptURL || existingWorker?.installing?.scriptURL;
         if (existingScript && new URL(existingScript).pathname !== WORKER_PATH) throw new Error("Another site service is using notifications. Contact TLink support before enabling them.");
-        await navigator.serviceWorker.register(WORKER_PATH,{scope:"/",updateViaCache:"none"});
-        const ready = await new Promise<ServiceWorkerRegistration>((resolve,reject) => {
-          const timeout = window.setTimeout(() => reject(new Error("Notification setup took too long. Check your connection and try again.")),12000);
-          navigator.serviceWorker.ready.then(value => { window.clearTimeout(timeout); resolve(value); },error => { window.clearTimeout(timeout); reject(error); });
-        });
+        await notificationTimeout(navigator.serviceWorker.register(WORKER_PATH,{scope:"/",updateViaCache:"none"}));
+        const ready = await notificationTimeout(navigator.serviceWorker.ready);
         if (current.current !== epoch) return;
         registration.current = ready;
-        const browserSubscription = await ready.pushManager.getSubscription();
+        const browserSubscription = await notificationTimeout(ready.pushManager.getSubscription());
         if (current.current !== epoch) return;
         subscription.current = browserSubscription; setBrowserLinked(Boolean(browserSubscription));
         setPrepared(true);
@@ -86,7 +87,7 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
           status = renewed.subscription; saveLocalId(status.id);
         }
         setSaved(browserSubscription && Notification.permission === "granted" ? status : null);
-      } catch (error) { if (current.current === epoch) setNotice(error instanceof Error ? error.message : "Notifications could not load. Try again."); }
+      } catch (error) { if (current.current === epoch) { setIssue(true); setNotice(notificationErrorMessage(error,"Notifications could not load. Try again.")); } }
       finally { if (current.current === epoch) setBusy(false); }
     };
     void load();
@@ -96,41 +97,43 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
   },[enabled,reload,api]);
 
   const enable = async () => {
-    if (working.current || !registration.current || !applicationKey.current) return;
-    working.current = true; setBusy(true); setNotice("");
+    if (working.current) return;
+    if (!registration.current || !applicationKey.current) { setIssue(true); setNotice("This device is not ready yet. Choose Check again to reconnect."); return; }
+    working.current = true; setBusy(true); setStep("Waiting for your browser permission..."); setNotice(""); setIssue(false);
     const epoch = current.current;
     // Capture this identity now. A later permission response must not register
     // or clean up notifications using the next person's sign-in.
-    const capturedHeaders = authentication.current().then(value => ({ok:true as const,value}),error => ({ok:false as const,error}));
+    const capturedHeaders = notificationTimeout(authentication.current()).then(value => ({ok:true as const,value}),error => ({ok:false as const,error}));
     let created: PushSubscription | null = null;
     try {
       // Keep the permission request directly inside the explicit button click.
-      const choice = await Notification.requestPermission();
+      const choice = await notificationTimeout(Notification.requestPermission(),60000);
       if (current.current !== epoch) return;
       setPermission(choice);
-      if (choice !== "granted") { setNotice(choice === "denied" ? "Notifications are blocked. Allow notifications in this site's browser settings, then check again." : "Notifications stay off until you choose Allow. You can try again whenever you are ready."); return; }
+      if (choice !== "granted") { setIssue(true); setNotice(choice === "denied" ? "Notifications are blocked. Allow notifications in this site's browser settings, then check again." : "Notifications stay off until you choose Allow. Check for the permission prompt beside the address bar, then try Enable notifications again."); return; }
+      setStep("Connecting notifications to this device...");
       const authorisation = await capturedHeaders;
       if (!authorisation.ok) throw authorisation.error;
       if (current.current !== epoch) return;
-      const browserSubscription = subscription.current || await registration.current.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:applicationKey.current});
+      const browserSubscription = subscription.current || await notificationTimeout(registration.current.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:applicationKey.current}));
       if (!subscription.current) created = browserSubscription;
-      if (current.current !== epoch) { if (created) await created.unsubscribe(); return; }
+      if (current.current !== epoch) { if (created) await notificationTimeout(created.unsubscribe()); return; }
       subscription.current = browserSubscription; setBrowserLinked(true);
       const result = await api("POST",{subscription:browserSubscription.toJSON(),messages:true,calls:true},"",authorisation.value);
       if (current.current !== epoch) {
         try { if (result.subscription?.id) await api("DELETE",{subscriptionId:result.subscription.id},"",authorisation.value); }
-        finally { await browserSubscription.unsubscribe(); }
+        finally { await notificationTimeout(browserSubscription.unsubscribe()); }
         return;
       }
       if (!result.subscription?.enabled) throw new Error("Notifications were not enabled. Try again.");
-      saveLocalId(result.subscription.id); setSaved(result.subscription); setNotice("Notifications are on for this device.");
+      saveLocalId(result.subscription.id); setSaved(result.subscription); setNotice("Notifications are on. Use Test this device to check your browser and device settings.");
     } catch (error) {
       if (current.current === epoch) {
         setSaved(null);
-        setNotice(error instanceof Error ? error.message : "Notifications could not be enabled. Try again.");
+        setIssue(true); setNotice(notificationErrorMessage(error,"Notifications could not be enabled. Try again."));
       }
       if (created) {
-        try { if (await created.unsubscribe()) { subscription.current = null; if (current.current === epoch) setBrowserLinked(false); } }
+        try { if (await notificationTimeout(created.unsubscribe())) { subscription.current = null; if (current.current === epoch) setBrowserLinked(false); } }
         catch { /* The visible error remains; Turn off can retry browser cleanup. */ }
       }
     } finally { working.current = false; if (current.current === epoch) setBusy(false); }
@@ -138,54 +141,70 @@ export function TradeNotificationSettings({ getAuthHeaders, enabled = true }: { 
 
   const update = async (messages: boolean, calls: boolean) => {
     if (!saved || working.current) return;
-    working.current = true; setBusy(true); setNotice(""); const epoch = current.current;
+    working.current = true; setBusy(true); setStep("Saving your choices..."); setNotice(""); setIssue(false); const epoch = current.current;
     try {
       const result = await api("PATCH",{subscriptionId:saved.id,messages,calls});
       if (!result.subscription?.enabled) throw new Error("Notification choices were not saved. Try again.");
       if (current.current === epoch) setSaved(result.subscription);
-    } catch (error) { if (current.current === epoch) setNotice(error instanceof Error ? error.message : "Notification choices could not be saved."); }
+    } catch (error) { if (current.current === epoch) { setIssue(true); setNotice(notificationErrorMessage(error,"Notification choices could not be saved.")); } }
     finally { working.current = false; if (current.current === epoch) setBusy(false); }
   };
 
   const turnOff = async () => {
     if (working.current) return;
-    working.current = true; setBusy(true); setNotice(""); const epoch = current.current;
+    working.current = true; setBusy(true); setStep("Turning off notifications..."); setNotice(""); setIssue(false); const epoch = current.current;
     try {
       const id = saved?.id || localId();
       if (id) await api("DELETE",{subscriptionId:id});
       saveLocalId("");
       if (current.current === epoch) setSaved(null);
       if (subscription.current) {
-        const removed = await subscription.current.unsubscribe();
-        if (!removed && await registration.current?.pushManager.getSubscription()) throw new Error("TLink alerts are off, but this browser could not disconnect. Try Turn off again.");
+        const removed = await notificationTimeout(subscription.current.unsubscribe());
+        if (!removed && registration.current && await notificationTimeout(registration.current.pushManager.getSubscription())) throw new Error("TLink alerts are off, but this browser could not disconnect. Try Turn off again.");
       }
       subscription.current = null;
       if (current.current === epoch) { setBrowserLinked(false); setNotice("Notifications are off on this device."); }
-    } catch (error) { if (current.current === epoch) setNotice(error instanceof Error ? error.message : "Notifications could not be turned off. Try again."); }
+    } catch (error) { if (current.current === epoch) { setIssue(true); setNotice(notificationErrorMessage(error,"Notifications could not be turned off. Try again.")); } }
+    finally { working.current = false; if (current.current === epoch) setBusy(false); }
+  };
+
+  const testDevice = async () => {
+    if (working.current || !registration.current || Notification.permission !== "granted") return;
+    working.current = true; setBusy(true); setStep("Showing a test alert..."); setNotice(""); setIssue(false); const epoch = current.current;
+    try {
+      await notificationTimeout(registration.current.showNotification("TLink",{
+        body:"Device notification test", icon:"/tlink-icon-192.png", badge:"/tlink-mark.png", tag:"tlink:device-test", data:{kind:"device-test"},
+      }));
+      if (current.current === epoch) setNotice("Test alert sent to this device. If you did not see it, allow browser notifications in your device settings and check Focus or Do Not Disturb.");
+    } catch (error) { if (current.current === epoch) { setIssue(true); setNotice(notificationErrorMessage(error,"The test alert could not be shown. Check this device's notification settings.")); } }
     finally { working.current = false; if (current.current === epoch) setBusy(false); }
   };
 
   if (!enabled) return null;
   const active = Boolean(saved?.enabled && browserLinked && permission === "granted");
+  const label = busy ? "Checking" : support === "home-screen" ? "Set up" : support === "unsupported" ? "Unsupported" : permission === "denied" ? "Blocked" : issue ? "Needs attention" : !configured ? "Unavailable" : active ? saved?.messages || saved?.calls ? "On" : "Muted" : "Off";
   return <details className={styles.settings}>
-    <summary>Notifications <span className={active ? styles.on : styles.off}>{busy ? "…" : active ? saved?.messages || saved?.calls ? "On" : "Muted" : "Off"}</span></summary>
+    <summary>Notifications <span className={issue || permission === "denied" ? styles.warning : active ? styles.on : styles.off}>{label}</span></summary>
     <section className={styles.panel} aria-label="Notifications on this device">
       <header><strong>Alerts on this device</strong><button type="button" onClick={event => { const details = event.currentTarget.closest("details"); if (details) details.open = false; }}>Close</button></header>
-      <p>Get team messages and incoming calls when TLink is in the background. Notification previews keep message content private.</p>
-      {support === "home-screen" ? <p>On iPhone or iPad, open TLink in Safari, tap Share, then Add to Home Screen. Open TLink from that icon and enable notifications here.</p>
+      <p>Get alerts for team messages and incoming calls. Message contents stay private on the lock screen.</p>
+      {support === "home-screen" ? <div className={styles.setup}><strong>Set up iPhone or iPad alerts</strong><ol><li>Open TLink in Safari.</li><li>Tap Share, then Add to Home Screen.</li><li>Open that TLink icon and enable notifications.</li></ol><p>A normal browser tab cannot alert you once iOS puts it to sleep.</p></div>
         : support === "unsupported" ? <p>This browser cannot receive background notifications. Use an up-to-date Chrome, Firefox or Safari browser. Calls and messages still work while TLink is open.</p>
-        : support === "loading" || busy && !prepared ? <p role="status">Checking this device...</p>
-        : !configured ? <p>Background alerts are being set up. Messages and calls still work while TLink is open.</p>
+        : support === "loading" || busy && !prepared ? <p role="status">{step}</p>
+        : !configured && !issue ? <p>Background alerts are not configured for TLink yet. Contact TLink support. Keep TLink open for live messages and calls.</p>
         : <>
           {permission === "denied" && <p>Notifications are blocked. Allow notifications for TLink in your browser or device settings, then return here.</p>}
           {active && saved ? <div className={styles.preferences}>
             <label><span>Team messages</span><input type="checkbox" role="switch" checked={saved.messages} disabled={busy} onChange={event => void update(event.target.checked,saved.calls)} /></label>
             <label><span>Incoming calls</span><input type="checkbox" role="switch" checked={saved.calls} disabled={busy} onChange={event => void update(saved.messages,event.target.checked)} /></label>
-          </div> : permission !== "denied" && <button type="button" className={styles.enable} disabled={busy || !prepared} onClick={() => void enable()}>{browserLinked ? "Reconnect notifications" : "Enable notifications"}</button>}
+          </div> : permission !== "denied" && prepared && <button type="button" className={styles.enable} disabled={busy} onClick={() => void enable()}>{busy ? "Enabling..." : browserLinked ? "Reconnect notifications" : "Enable notifications"}</button>}
+          {active && <button type="button" disabled={busy} onClick={() => void testDevice()}>Test this device</button>}
           {(active || browserLinked) && <button type="button" disabled={busy} onClick={() => void turnOff()}>Turn off on this device</button>}
+          {active && <p>Keep sound on and allow TLink through Focus or Do Not Disturb. Background call alerts use your device&apos;s notification sound; an open TLink screen can ring.</p>}
         </>}
-      {notice && <p role="status" className={styles.notice}>{notice}</p>}
-      {(notice && !active || permission === "denied") && support === "ready" && <button type="button" disabled={busy} onClick={() => setReload(value => value+1)}>Check again</button>}
+      {busy && prepared && <p role="status">{step}</p>}
+      {notice && <p role={issue ? "alert" : "status"} className={styles.notice}>{notice}</p>}
+      {(issue || notice && !active || permission === "denied" || !configured) && support === "ready" && <button type="button" disabled={busy} onClick={() => setReload(value => value+1)}>Check again</button>}
     </section>
   </details>;
 }

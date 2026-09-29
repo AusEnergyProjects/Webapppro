@@ -53,3 +53,9 @@ test('a messages tab closing during navigation falls back to a new same-origin t
   const f=fixture([{url:'https://tlink.example/direct-trade/messages',navigate:async()=>{throw new Error('Tab closed');}}]);
   await click(f,payload());assert.equal(f.opened.length,1);assert.match(f.opened[0],/^https:\/\/tlink.example\/direct-trade\/messages\?/);
 });
+
+test('local device test opens only TLink messages and cannot supply a redirect or request a call',async()=>{
+  const f=fixture();await click(f,{kind:'device-test',url:'https://evil.test',callId:'untrusted'});
+  assert.equal(f.opened[0],'https://tlink.example/direct-trade/messages');
+  await push(f,{kind:'device-test'});assert.equal(f.shown.length,0);
+});

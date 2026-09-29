@@ -8,6 +8,7 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
 import { TradeMessagesWorkspace } from "./TradeMessagesWorkspace";
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
+import { TradeMessageAlerts } from "./TradeMessageAlerts";
 import { TLinkMark } from "./TLinkChrome";
 import styles from "./TradeCommunicationPage.module.css";
 
@@ -35,6 +36,7 @@ function TradeCommunicationContent() {
   const fetch = useTradeBusinessFetch();
   const [session,setSession] = useState<Session | null>(null);
   const [loading,setLoading] = useState(true);
+  const [messageTarget, setMessageTarget] = useState({ id: "", revision: 0 });
   const [error,setError] = useState("");
   const [signInUrl,setSignInUrl] = useState("/direct-trade/team?workspace=messages");
   const redemption = useRef<Promise<HandoffResult> | null>(null);
@@ -96,8 +98,8 @@ function TradeCommunicationContent() {
   return <main className={`${styles.page} trade-portal-shell is-installer`}>
     <header className={styles.brand}><a href="/direct-trade/dashboard"><TLinkMark size={36} /><strong>TLink</strong></a>{session && <div><span>{session.access.businessName}</span>{!session.user && <button type="button" onClick={() => void closeSession()}>Close session</button>}</div>}</header>
     {error && <p className={styles.notice} role="status">{error}</p>}
-    {loading ? <p role="status">Opening your team messages...</p> : session ? <TradeTeamCallProvider key={session.access.memberId} user={session.user} getAuthHeaders={getAuthHeaders}>
-      <TradeMessagesWorkspace key={session.access.memberId} user={session.user || undefined} getAuthHeaders={getAuthHeaders} initialThreadId={session.threadId} initialCallId={session.callId} teamOnly />
-    </TradeTeamCallProvider> : <section className={styles.signin}><h1>Team messages</h1><p>Sign in with your team account, or open Messages from the TLink field app.</p><a href={signInUrl}>Sign in to TLink</a></section>}
+    {loading ? <p role="status">Opening your team messages...</p> : session ? <TradeMessageAlerts key={session.access.memberId} user={session.user} getAuthHeaders={getAuthHeaders} onOpen={threadId => setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 }))}><TradeTeamCallProvider key={session.access.memberId} user={session.user} getAuthHeaders={getAuthHeaders}>
+      <TradeMessagesWorkspace key={session.access.memberId} user={session.user || undefined} getAuthHeaders={getAuthHeaders} initialThreadId={messageTarget.id || session.threadId} initialThreadRevision={messageTarget.revision} initialCallId={session.callId} teamOnly />
+    </TradeTeamCallProvider></TradeMessageAlerts> : <section className={styles.signin}><h1>Team messages</h1><p>Sign in with your team account, or open Messages from the TLink field app.</p><a href={signInUrl}>Sign in to TLink</a></section>}
   </main>;
 }

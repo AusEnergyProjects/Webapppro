@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colours, spacing } from '@/lib/theme';
 import { useApp } from '@/providers/app-provider';
+import { TeamPresence } from '@/components/team-presence';
 
 export function BusinessBanner() {
   const { user, access, businesses, businessError, openBusinessChooser } = useApp();
@@ -17,6 +18,7 @@ export function BusinessBanner() {
         <Text style={styles.label}>{own ? 'YOUR BUSINESS' : 'WORKING WITH'}</Text>
         <Text numberOfLines={1} style={styles.name}>{user.businessName || 'Your team'}</Text>
       </View>
+      <TeamPresence key={user.localOwnerKey} />
       {canSwitch ? <Pressable accessibilityRole="button" accessibilityLabel="Switch business"
         style={styles.switch} onPress={() => void openBusinessChooser()}><Text style={styles.switchText}>Switch</Text></Pressable> : null}
     </View>

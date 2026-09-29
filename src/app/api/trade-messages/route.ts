@@ -4,7 +4,7 @@ import { requireTeamCommunicationAccess } from "@/lib/trade-communications-acces
 import { waitUntil } from "cloudflare:workers";
 import { notifyTeamMessage } from "@/lib/trade-push-server";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "@/lib/bounded-request-body.mjs";
-import { createTeamConversation, customerMessageThreads, messagesWorkspace, readTeamConversation, searchMessageContacts, sendTeamMessage, teamConversation } from "@/lib/trade-messages-server";
+import { createTeamConversation, customerMessageThreads, messagesWorkspace, readTeamConversation, searchMessageContacts, sendTeamMessage, teamConversation, unreadTeamMessages } from "@/lib/trade-messages-server";
 
 export const runtime = "edge";
 
@@ -34,6 +34,7 @@ export async function GET(request: Request) {
   try {
     const actor = await requireTeamCommunicationAccess(request);
     const params = new URL(request.url).searchParams;
+    if (params.get("view") === "unread") return adminJson({ ok: true, ...await unreadTeamMessages(actor) });
     const threadId = params.get("threadId");
     if (threadId && params.get("view") === "thread") {
       const workspace = await messagesWorkspace(actor, "", 1, undefined, threadId);

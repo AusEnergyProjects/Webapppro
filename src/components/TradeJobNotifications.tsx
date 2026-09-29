@@ -5,6 +5,7 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
+import { useTradeMessageAlerts } from "./TradeMessageAlerts";
 
 type JobNotification = {
   id: string;
@@ -34,6 +35,7 @@ export function TradeJobNotifications({
   onOpenNetwork: (postId: string) => void;
 }) {
   const fetch = useTradeBusinessFetch();
+  const messages = useTradeMessageAlerts();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<JobNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -161,10 +163,11 @@ export function TradeJobNotifications({
     }
   }
 
+  const totalUnread = unreadCount + messages.unreadCount;
   return <div className="tlink-job-notifications">
-    <button ref={triggerRef} type="button" className={unreadCount ? "has-unread" : ""} onClick={() => { if (open) closeNotifications(); else { setOpen(true); void load(); } }} aria-haspopup="dialog" aria-expanded={open} aria-label={unreadCount ? `${unreadCount} unread work updates` : "Work updates"}>
+    <button ref={triggerRef} type="button" className={totalUnread ? "has-unread" : ""} onClick={() => { if (open) closeNotifications(); else { setOpen(true); void load(); messages.refresh(); } }} aria-haspopup="dialog" aria-expanded={open} aria-label={totalUnread ? `${totalUnread} unread updates, including ${messages.unreadCount} team messages` : "Work updates"}>
       <span className="tlink-bell-icon" aria-hidden="true" />
-      {unreadCount > 0 && <b aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</b>}
+      {totalUnread > 0 && <b aria-hidden="true">{totalUnread > 99 ? "99+" : totalUnread}</b>}
     </button>
     {open && <>
       <section ref={dialogRef} tabIndex={-1} className="tlink-notification-popover" role="dialog" aria-modal="false" aria-labelledby="job-update-title">
@@ -176,8 +179,9 @@ export function TradeJobNotifications({
           </div>
         </header>
         <div className="tlink-notification-list">
+          {messages.threads.map(thread => <button key={`message:${thread.id}`} type="button" className="unread" onClick={() => { closeNotifications(); messages.open(thread.id); }}><span className="tlink-notification-dot" aria-hidden="true" /><span><strong>{thread.name}</strong><small>{thread.unread} unread team {thread.unread === 1 ? "message" : "messages"}</small><em>Open chat</em></span></button>)}
           {status && <p role="status">{status}</p>}
-          {!status && !items.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>New leads, customer decisions, quote delivery issues, questions, uploads, document expiry warnings, schedule requests and field team progress will appear here.</span></div>}
+          {!status && !items.length && !messages.threads.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>New team messages, leads, customer decisions, quote delivery issues, questions, uploads, document expiry warnings, schedule requests and field team progress will appear here.</span></div>}
           {items.map((item) => <button type="button" key={item.id} className={item.read ? "read" : "unread"} onClick={() => void openItem(item)}>
             <span className="tlink-notification-dot" aria-hidden="true" />
             <span><strong>{item.title}</strong><small>{item.summary}</small><em>{item.source === "network" ? "Trade network" : item.source === "customer" ? "Customer" : item.source === "team" ? "Team" : "Field team"} | {item.workNumber} | {new Date(item.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</em></span>

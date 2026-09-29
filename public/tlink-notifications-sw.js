@@ -8,6 +8,8 @@ function safeNotificationData(value) {
 }
 
 function notificationDestination(value, now = Date.now()) {
+  // Created only by the explicit local test button. Never accept a URL from it.
+  if (value?.kind === 'device-test') return new URL('/direct-trade/messages',self.location.origin).href;
   const data = safeNotificationData(value);
   if (!data) return null;
   const url = new URL('/direct-trade/messages',self.location.origin);

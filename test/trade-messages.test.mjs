@@ -1,3 +1,4 @@
+import * as presence from '../src/lib/trade-team-presence.ts';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -39,15 +40,46 @@ function fixture() {
     INSERT INTO trade_sms_messages VALUES('sms-1','business-a','customer','job-1','Jane job message','2026-09-01'),('sms-2','business-a','customer','job-2','Other job confidential','2026-09-02');`);
   sqlite.exec(read("../drizzle/0214_trade_messages.sql").replaceAll("--> statement-breakpoint", ""));
   sqlite.exec(read("../drizzle/0215_trade_message_media.sql").replaceAll("--> statement-breakpoint", ""));
+  sqlite.exec(read("../drizzle/0219_trade_team_presence.sql").replaceAll("--> statement-breakpoint", ""));
   const statement = (sql, values = []) => ({ bind: (...params) => statement(sql, params), first: async () => sqlite.prepare(sql).get(...values) || null,
     all: async () => ({ results: sqlite.prepare(sql).all(...values) }), runSync: () => ({ meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } }), run() { return Promise.resolve(this.runSync()); } });
   const db = { prepare: statement, batch: async statements => { sqlite.exec("BEGIN"); try { const out = []; for (const s of statements) out.push(s.runSync()); sqlite.exec("COMMIT"); return out; } catch (error) { sqlite.exec("ROLLBACK"); throw error; } } };
-  const server = load("../src/lib/trade-messages-server.ts", { "../../db": { getD1: () => db }, "./trade-messages": pure,
+  const server = load("../src/lib/trade-messages-server.ts", { "../../db": { getD1: () => db }, "./trade-messages": pure, "./trade-team-presence": presence,
     "./trade-message-media-access": mediaAccess, "./trade-message-media": mediaPure, "./trade-message-media-server": mediaServer });
   return { sqlite, db, server, close: () => sqlite.close() };
 }
 const request = number => `message-request-${String(number).padStart(8, "0")}`;
 const create = (f, actor, memberIds, subject = "", requestId = request(1)) => f.server.createTeamConversation(actor, { memberIds, subject, requestId }, f.db);
+
+test("global unread counts include every conversation, exclude sent messages, and respect business membership and read receipts", async () => {
+  const f = fixture(); try {
+    for (let i=1;i<=55;i++) {
+      const thread = await create(f,owner,["jane","john"],`Group ${i}`,request(500+i));
+      await f.server.sendTeamMessage(owner,thread.id,"Hello",request(600+i),f.db);
+    }
+    const unseen = await f.server.unreadTeamMessages(jane,f.db);
+    assert.equal(unseen.unreadCount,55);assert.equal(unseen.threads.length,55);
+    assert.equal((await f.server.unreadTeamMessages(owner,f.db)).unreadCount,0);
+    assert.deepEqual(await f.server.unreadTeamMessages(foreign,f.db),{unreadCount:0,threads:[]});
+    await f.server.readTeamConversation(jane,unseen.threads[0].id,1,f.db);
+    assert.equal((await f.server.unreadTeamMessages(jane,f.db)).unreadCount,54);
+    assert.equal((await f.server.unreadTeamMessages(john,f.db)).unreadCount,55);
+    f.sqlite.prepare("UPDATE trade_team_members SET status='suspended' WHERE id='jane'").run();
+    await assert.rejects(f.server.unreadTeamMessages(jane,f.db),/MESSAGE_ACCESS_REQUIRED/);
+  } finally {f.close();}
+});
+
+test("conversation previews distinguish attachments and show the teammate's call availability",async()=>{
+  const f=fixture();try{
+    const thread=await create(f,owner,["jane"]);
+    await f.server.sendTeamMessage(owner,thread.id,"temporary fixture",request(991),f.db);
+    f.sqlite.prepare("UPDATE trade_internal_messages SET body='' WHERE thread_id=?").run(thread.id);
+    f.sqlite.prepare("INSERT INTO trade_team_presence(owner_uid,member_id,status,updated_at) VALUES('business-a','jane','busy','2026-09-29')").run();
+    const result=await f.server.messagesWorkspace(owner,"",1,f.db);
+    assert.equal(result.threads[0].latest,"Shared an attachment");
+    assert.equal(result.threads[0].members.find(member=>member.id==='jane').presence,'busy');
+  }finally{f.close();}
+});
 
 test("a new business team inbox returns HTTP 200 with no threads and its available teammates", async () => {
   const f = fixture(); try {

@@ -5,6 +5,7 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 /* eslint-disable @next/next/no-img-element */
 
 import type { User } from "firebase/auth";
+import type { SavedMessageJobFile } from "@/lib/trade-message-job-files";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   CreditexAssignedActivityWorkPackProjection,
@@ -24,6 +25,7 @@ type JobFile = {
   detail: string;
   path?: string;
   inlineText?: string;
+  externalUrl?: string;
   signature?: { signerName: string; strokes: readonly SignatureStroke[] };
 };
 
@@ -236,6 +238,7 @@ export function TradeJobFilesPanel({
       includeHandover ? jsonRequest<HandoverResult>(fetch, user, `/api/trade-handover?workOrderId=${queryId}`) : Promise.resolve<HandoverResult>({ pack: null }),
       includeQuotes ? jsonRequest<QuoteResult>(fetch, user, `/api/trade-quotes?workOrderId=${queryId}`) : Promise.resolve<QuoteResult>({ quote: null }),
       includeInvoices ? jsonRequest<InvoiceResult>(fetch, user, `/api/trade-quick-invoices?workOrderId=${queryId}`) : Promise.resolve<InvoiceResult>({ invoice: null }),
+      jsonRequest<{ files: SavedMessageJobFile[] }>(fetch, user, `/api/trade-message-job-files?workOrderId=${queryId}`),
     ]);
     const next: JobFile[] = [];
     const failures: string[] = [];
@@ -451,6 +454,14 @@ export function TradeJobFilesPanel({
       });
     }
 
+    for (const item of value<{ files: SavedMessageJobFile[] }>(7)?.files || []) {
+      const source = item.source;
+      next.push({ id: `job-media:${item.id}`, group: "Saved from chats", title: source.itemKind === "link" ? source.url : `Chat ${source.itemKind === "image" ? "photo" : "voice note"}`,
+        fileName: item.fileName, contentType: item.contentType, sizeBytes: item.sizeBytes, recordedAt: source.savedAt,
+        detail: `From ${source.senderName} in ${source.threadName} | Sent ${dateTime(source.messageCreatedAt)} | Saved by ${source.savedByName} | Message ${source.messageId}`,
+        path: `/api/trade-field-work?preview=${encodeURIComponent(item.id)}`, externalUrl: source.itemKind === "link" ? source.url : undefined });
+    }
+
     const unique = [...new Map(next.map((item) => [item.id, item])).values()]
       .sort((left, right) => (Date.parse(right.recordedAt) || 0) - (Date.parse(left.recordedAt) || 0));
     setFiles(unique);
@@ -502,7 +513,7 @@ export function TradeJobFilesPanel({
     setStatus("");
     try {
       const blob = await fileBlob(item);
-      setPreview({ item, url: URL.createObjectURL(blob), text: item.inlineText || "" });
+      setPreview({ item, url: URL.createObjectURL(blob), text: item.inlineText || (blob.type.startsWith("text/") ? await blob.text() : "") });
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The file could not be opened.");
     } finally {
@@ -544,10 +555,10 @@ export function TradeJobFilesPanel({
     {status && <p className="crm-status" role="status">{status}</p>}
     {groups.map((group) => <section className="crm-field-card wide" key={group}>
       <header><div><span>{visibleFiles.filter((item) => item.group === group).length} file{visibleFiles.filter((item) => item.group === group).length === 1 ? "" : "s"}</span><h4>{group}</h4></div></header>
-      <ol className="crm-field-records">{visibleFiles.filter((item) => item.group === group).map((item) => <li key={item.id}><div><strong>{item.title}</strong><span>{item.fileName} | {sizeLabel(item.sizeBytes)}</span><small>{item.detail} | {dateTime(item.recordedAt)}</small></div><div><button type="button" disabled={Boolean(busy)} onClick={() => void openFile(item)}>{busy === `open:${item.id}` ? "Opening..." : "Preview"}</button><button type="button" disabled={Boolean(busy)} onClick={() => void downloadFile(item)}>{busy === `download:${item.id}` ? "Downloading..." : "Download"}</button></div></li>)}</ol>
+      <ol className="crm-field-records">{visibleFiles.filter((item) => item.group === group).map((item) => <li key={item.id}><div><strong>{item.title}</strong><span>{item.fileName} | {sizeLabel(item.sizeBytes)}</span><small>{item.detail} | {dateTime(item.recordedAt)}</small></div><div>{item.externalUrl && <a href={item.externalUrl} target="_blank" rel="noopener noreferrer">Open link</a>}<button type="button" disabled={Boolean(busy)} onClick={() => void openFile(item)}>{busy === `open:${item.id}` ? "Opening..." : "Preview"}</button><button type="button" disabled={Boolean(busy)} onClick={() => void downloadFile(item)}>{busy === `download:${item.id}` ? "Downloading..." : "Download"}</button></div></li>)}</ol>
     </section>)}
     {!loading && !status && !files.length && <div className="crm-empty"><strong>No job files recorded yet</strong><span>Photos, documents, signatures and completed reports will appear here as the team records them.</span></div>}
     {!loading && files.length > 0 && visibleFiles.length === 0 && <div className="crm-empty"><strong>No matching files</strong><span>Try another file name or activity.</span></div>}
-    {preview && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setPreview(null); }}><section className="crm-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="job-file-preview-title"><header><div><span>{preview.item.group}</span><strong id="job-file-preview-title">{preview.item.title}</strong><small>{preview.item.fileName}</small></div><button type="button" onClick={() => setPreview(null)} aria-label="Close file preview">Close</button></header><div className="crm-preview-content">{preview.item.contentType === "application/pdf" ? <iframe title={preview.item.title} src={preview.url} /> : preview.item.contentType.startsWith("image/") ? <img src={preview.url} alt={preview.item.title} /> : <pre>{preview.text}</pre>}</div><footer><a href={preview.url} download={preview.item.fileName}>Download file</a><button type="button" className="btn" onClick={() => setPreview(null)}>Done</button></footer></section></div>}
+    {preview && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setPreview(null); }}><section className="crm-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="job-file-preview-title"><header><div><span>{preview.item.group}</span><strong id="job-file-preview-title">{preview.item.title}</strong><small>{preview.item.fileName}</small></div><button type="button" onClick={() => setPreview(null)} aria-label="Close file preview">Close</button></header><div className="crm-preview-content">{preview.item.contentType === "application/pdf" ? <iframe title={preview.item.title} src={preview.url} /> : preview.item.contentType.startsWith("image/") ? <img src={preview.url} alt={preview.item.title} /> : preview.item.contentType.startsWith("audio/") ? <audio controls src={preview.url} aria-label={preview.item.title} /> : <pre>{preview.text}</pre>}</div><footer><a href={preview.url} download={preview.item.fileName}>Download file</a><button type="button" className="btn" onClick={() => setPreview(null)}>Done</button></footer></section></div>}
   </section>;
 }

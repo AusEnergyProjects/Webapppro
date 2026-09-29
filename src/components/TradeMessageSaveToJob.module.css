@@ -1,0 +1,13 @@
+.root { margin-top: .5rem; color: var(--tlink-text, #173d37); }
+.trigger { background: transparent; border: 1px solid currentColor; border-radius: 7px; padding: .35rem .65rem; font-size: .8rem; cursor: pointer; }
+.panel { margin-top: .6rem; padding: .85rem; border: 1px solid #b9d4cc; border-radius: 10px; background: var(--tlink-panel, #fff); max-width: 430px; }
+.panel p, .status { font-size: .82rem; line-height: 1.5; margin: .5rem 0; }
+.search { display: flex; gap: .5rem; align-items: end; margin-top: .75rem; }
+.search label { display: grid; gap: .3rem; flex: 1; min-width: 0; font-size: .8rem; }
+.search input { width: 100%; min-width: 0; padding: .55rem; border: 1px solid #a8bfb7; border-radius: 6px; color: inherit; background: transparent; }
+.panel button { padding: .5rem .7rem; border: 1px solid #8caea2; border-radius: 6px; color: inherit; background: transparent; cursor: pointer; }
+.panel button:disabled { opacity: .55; cursor: default; }
+.jobs { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .6rem; }
+.jobs button[aria-pressed="true"] { background: #087e60; color: white; border-color: #087e60; }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+.actions button:first-child { background: #087e60; color: white; border-color: #087e60; }

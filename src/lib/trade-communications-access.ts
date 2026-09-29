@@ -4,7 +4,7 @@ import { encryptProtectedPayload, decryptProtectedPayload, integrationStateHash 
 import { messageParticipantGuard } from "./trade-message-media-access";
 
 export const COMMUNICATION_COOKIE = "__Host-tlink-comms";
-const allowedPaths = new Set(["/api/trade-messages", "/api/trade-message-media", "/api/trade-team-calls", "/api/trade-push", "/api/trade-team-handoff"]);
+const allowedPaths = new Set(["/api/trade-messages", "/api/trade-message-media", "/api/trade-message-job-files", "/api/trade-team-presence", "/api/trade-team-calls", "/api/trade-push", "/api/trade-team-handoff"]);
 const opaque = /^[A-Za-z0-9_-]{43}$/;
 const recordId = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/;
 type HandoffRow = { id: string; owner_uid: string; member_id: string; encrypted_auth: string; thread_id: string; call_id: string; expires_at: string };

@@ -1,10 +1,12 @@
 import { getD1 } from '../../db';
+import { tradeTeamCallAvailabilitySql } from './trade-team-presence';
 import { messageActorGuard, messageParticipantGuard } from './trade-message-media-access';
 import { verifiedTradeAccountPredicate } from './trade-access-server';
 import type { MessageActor } from './trade-messages-server';
 import type { TeamCall } from './trade-team-calls';
 import { pushBoolean, pushId, pushSubscriptionInput, type TradePushPayload, type TradePushSubscriptionStatus } from './trade-push';
 import { sendTradePush, tradePushCredentials } from './trade-push-provider';
+import { authorizeTradeNativePush, sendTradeNativePush, tradeNativePushCredentials, type TradeNativePushCredentials } from './trade-native-push-provider';
 
 type SubscriptionRow = {
   id: string; owner_uid: string; member_id: string; actor_uid: string; field_session_id: string;
@@ -115,14 +117,66 @@ function deliveryGuard(actor: MessageActor, kind: TradePushPayload['kind'], thre
   return { sql: `${source.sql} AND ${recipient.sql} AND s.owner_uid=? AND s.member_id<>? AND s.${kind === 'team-call' ? 'calls' : 'messages'}=1
     AND EXISTS (SELECT 1 FROM trade_message_participants p WHERE p.owner_uid=s.owner_uid AND p.thread_id=? AND p.member_id=s.member_id
       ${kind === 'team-message' ? `AND p.last_read_sequence<(SELECT sequence FROM trade_internal_messages WHERE id=? AND owner_uid=s.owner_uid)` : ''})
-    ${kind === 'team-call' ? `AND NOT EXISTS (SELECT 1 FROM trade_team_call_participants joined WHERE joined.owner_uid=s.owner_uid AND joined.call_id=? AND joined.member_id=s.member_id)` : ''}`,
+    ${kind === 'team-call' ? `AND ${tradeTeamCallAvailabilitySql('s.member_id','s.owner_uid')} AND NOT EXISTS (SELECT 1 FROM trade_team_call_participants joined WHERE joined.owner_uid=s.owner_uid AND joined.call_id=? AND joined.member_id=s.member_id)` : ''}`,
     values: [...source.values,...recipient.values,actor.ownerUid,actor.memberId,threadId,eventId] };
+}
+
+type NativeDeviceRow = { id: string; owner_uid: string; member_id: string; push_token: string };
+function nativeDeliveryGuard(actor: MessageActor, payload: TradePushPayload): Guard {
+  const source = sourceGuard(actor,payload.kind,payload.threadId,payload.id);
+  return { sql: `${source.sql} AND d.owner_uid=? AND d.member_id<>? AND d.status='active' AND d.platform='android' AND d.push_provider='fcm' AND d.push_token<>''
+    AND EXISTS (SELECT 1 FROM trade_team_members member WHERE member.id=d.member_id AND member.owner_uid=d.owner_uid AND member.status='active'
+      AND ((member.member_uid<>'' AND member.member_uid=d.actor_uid) OR (d.actor_uid='field-member:'||d.member_id AND EXISTS
+        (SELECT 1 FROM trade_field_sessions session WHERE session.owner_uid=d.owner_uid AND session.team_member_id=d.member_id
+          AND session.device_id=d.device_id AND session.status='active' AND session.expires_at>?))))
+    AND NOT EXISTS (SELECT 1 FROM trade_mobile_devices newer WHERE newer.id<>d.id
+      AND (newer.device_id=d.device_id OR newer.push_token=d.push_token) AND newer.updated_at>=d.updated_at)
+    AND EXISTS (SELECT 1 FROM trade_message_participants participant WHERE participant.owner_uid=d.owner_uid AND participant.thread_id=? AND participant.member_id=d.member_id
+      ${payload.kind === 'team-message' ? `AND participant.last_read_sequence<(SELECT sequence FROM trade_internal_messages WHERE id=? AND owner_uid=d.owner_uid)` : ''})
+    ${payload.kind === 'team-call' ? `AND ${tradeTeamCallAvailabilitySql('d.member_id','d.owner_uid')} AND NOT EXISTS
+      (SELECT 1 FROM trade_team_call_participants joined WHERE joined.owner_uid=d.owner_uid AND joined.call_id=? AND joined.member_id=d.member_id)` : ''}`,
+    values: [...source.values,actor.ownerUid,actor.memberId,nowIso(),payload.threadId,payload.id] };
+}
+
+async function dispatchNative(actor: MessageActor, payload: TradePushPayload, credentials: TradeNativePushCredentials, db: D1Database): Promise<TradePushDeliveryResult> {
+  const result: TradePushDeliveryResult = { attempted:0,accepted:0,failed:0,skipped:false };
+  const guard = nativeDeliveryGuard(actor,payload);
+  const devices = (await db.prepare(`SELECT d.id,d.owner_uid,d.member_id,d.push_token FROM trade_mobile_devices d WHERE ${guard.sql} ORDER BY d.member_id,d.id LIMIT 125`)
+    .bind(...guard.values).all<NativeDeviceRow>()).results;
+  if (!devices.length) return result;
+  const authorization = await authorizeTradeNativePush(credentials);
+  if (!authorization) return { ...result,failed:1,skipped:true };
+  const deliveries = await Promise.allSettled(devices.map(async device => {
+    // A token may rotate while the same phone remains registered. The durable
+    // registration claim keeps a replay from ringing that phone twice.
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`fcm-device:${device.id}`)))].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+    const fresh = nativeDeliveryGuard(actor,payload), now = nowIso();
+    const claimed = await db.prepare(`INSERT OR IGNORE INTO trade_push_deliveries(event_kind,event_id,endpoint_hash,owner_uid,member_id,created_at,updated_at)
+      SELECT ?,?,?,d.owner_uid,d.member_id,?,? FROM trade_mobile_devices d WHERE d.id=? AND d.push_token=? AND ${fresh.sql}`)
+      .bind(payload.kind,payload.id,hash,now,now,device.id,device.push_token,...fresh.values).run();
+    if (!claimed.meta.changes) return;
+    result.attempted++;
+    const latest = nativeDeliveryGuard(actor,payload);
+    const current = await db.prepare(`SELECT d.id,d.owner_uid,d.member_id,d.push_token FROM trade_mobile_devices d WHERE d.id=? AND d.push_token=? AND ${latest.sql}`)
+      .bind(device.id,device.push_token,...latest.values).first<NativeDeviceRow>();
+    const outcome = current ? await sendTradeNativePush(current.push_token,payload,authorization) : 'stale';
+    const deliveryStatus = outcome === 'stale' ? 'expired' : outcome;
+    if (deliveryStatus === 'accepted') result.accepted++; else result.failed++;
+    await db.prepare('UPDATE trade_push_deliveries SET status=?,updated_at=? WHERE event_kind=? AND event_id=? AND endpoint_hash=? AND owner_uid=?')
+      .bind(deliveryStatus,nowIso(),payload.kind,payload.id,hash,actor.ownerUid).run();
+    // Token cleanup is not a registration or business switch. Do not make an
+    // older business registration current by advancing its updated_at here.
+    if (current && outcome === 'expired') await db.prepare("UPDATE trade_mobile_devices SET push_token='',push_token_updated_at=? WHERE id=? AND owner_uid=? AND push_provider='fcm' AND push_token=?")
+      .bind(nowIso(),current.id,actor.ownerUid,current.push_token).run();
+  }));
+  result.failed += deliveries.filter(delivery => delivery.status === 'rejected').length;
+  return result;
 }
 
 async function dispatch(actor: MessageActor, kind: TradePushPayload['kind'], threadId: string, eventId: string, db: D1Database): Promise<TradePushDeliveryResult> {
   const result: TradePushDeliveryResult = { attempted: 0, accepted: 0, failed: 0, skipped: false };
-  const credentials = tradePushCredentials();
-  if (!credentials) return { ...result, skipped: true };
+  const credentials = tradePushCredentials(), nativeCredentials = tradeNativePushCredentials();
+  if (!credentials && !nativeCredentials) return { ...result, skipped: true };
   const source = sourceGuard(actor,kind,threadId,eventId);
   const event = kind === 'team-call' ? await db.prepare(`SELECT created_at,expires_at,mode FROM trade_team_calls WHERE id=? AND owner_uid=? AND ${source.sql}`)
     .bind(eventId,actor.ownerUid,...source.values).first<{ created_at:string; expires_at:string; mode:string }>()
@@ -134,9 +188,10 @@ async function dispatch(actor: MessageActor, kind: TradePushPayload['kind'], thr
     url: `/direct-trade/messages?threadId=${encodeURIComponent(threadId)}${kind === 'team-call' ? `&callId=${encodeURIComponent(eventId)}` : ''}`, expiresAt };
   const guard = deliveryGuard(actor,kind,threadId,eventId);
   // Groups are bounded to 25 members, each with at most five registered browsers.
-  const subscriptions = (await db.prepare(`SELECT s.* FROM trade_push_subscriptions s WHERE ${guard.sql} ORDER BY s.member_id,s.id LIMIT 125`)
-    .bind(...guard.values).all<SubscriptionRow>()).results;
-  await Promise.all(subscriptions.map(async subscription => {
+  const subscriptions = credentials ? (await db.prepare(`SELECT s.* FROM trade_push_subscriptions s WHERE ${guard.sql} ORDER BY s.member_id,s.id LIMIT 125`)
+    .bind(...guard.values).all<SubscriptionRow>()).results : [];
+  const nativeDelivery = nativeCredentials ? dispatchNative(actor,payload,nativeCredentials,db) : Promise.resolve(null);
+  const webDelivery = Promise.allSettled(subscriptions.map(async subscription => {
     const freshGuard = deliveryGuard(actor,kind,threadId,eventId), now = nowIso();
     // Claim before the network request: a replay or ambiguous timeout must never ring the same device twice.
     const claimed = await db.prepare(`INSERT OR IGNORE INTO trade_push_deliveries(event_kind,event_id,endpoint_hash,owner_uid,member_id,created_at,updated_at)
@@ -148,7 +203,7 @@ async function dispatch(actor: MessageActor, kind: TradePushPayload['kind'], thr
     const currentGuard = deliveryGuard(actor,kind,threadId,eventId);
     const current = await db.prepare(`SELECT s.* FROM trade_push_subscriptions s WHERE s.id=? AND ${currentGuard.sql}`)
       .bind(subscription.id,...currentGuard.values).first<SubscriptionRow>();
-    const providerStatus = current ? await sendTradePush({ endpoint:current.endpoint, expirationTime:Date.parse(current.expires_at), keys:{p256dh:current.p256dh,auth:current.auth} },payload,credentials) : 'stale';
+    const providerStatus = current && credentials ? await sendTradePush({ endpoint:current.endpoint, expirationTime:Date.parse(current.expires_at), keys:{p256dh:current.p256dh,auth:current.auth} },payload,credentials) : 'stale';
     const deliveryStatus = providerStatus === 'stale' ? 'expired' : providerStatus;
     if (deliveryStatus === 'accepted') result.accepted++; else result.failed++;
     await db.prepare(`UPDATE trade_push_deliveries SET status=?,updated_at=? WHERE event_kind=? AND event_id=? AND endpoint_hash=? AND owner_uid=?`)
@@ -156,6 +211,15 @@ async function dispatch(actor: MessageActor, kind: TradePushPayload['kind'], thr
     if (current && providerStatus === 'expired') await db.prepare('UPDATE trade_push_subscriptions SET enabled=0,updated_at=? WHERE id=? AND owner_uid=? AND endpoint_hash=?')
       .bind(nowIso(),current.id,actor.ownerUid,current.endpoint_hash).run();
   }));
+  const [webOutcome,nativeOutcome] = await Promise.allSettled([webDelivery,nativeDelivery]);
+  if (webOutcome.status === 'rejected') result.failed++;
+  else result.failed += webOutcome.value.filter(delivery => delivery.status === 'rejected').length;
+  if (nativeOutcome.status === 'rejected') result.failed++;
+  else if (nativeOutcome.value) {
+    const native = nativeOutcome.value;
+    result.attempted += native.attempted; result.accepted += native.accepted; result.failed += native.failed;
+    result.skipped = native.skipped && !credentials;
+  }
   // Old source events cannot be dispatched, so deleting older claims cannot permit a replay.
   await db.prepare('DELETE FROM trade_push_deliveries WHERE owner_uid=? AND created_at<?').bind(actor.ownerUid,recent(14*86400000)).run();
   return result;

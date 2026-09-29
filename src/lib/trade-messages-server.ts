@@ -4,6 +4,7 @@ import { messageRequestId, teamMessageBody, teamThreadInput } from "./trade-mess
 import { messageActorGuard as actorGuard, messageParticipantGuard as participantGuard } from "./trade-message-media-access";
 import { loadMessageAttachments, messageAttachmentStatements, teamAvatarRevisions } from "./trade-message-media-server";
 import { messageAttachmentIds, type MessageAttachment } from "./trade-message-media";
+import { tradeTeamPresenceStatusSql, type TradeTeamPresenceStatus } from "./trade-team-presence";
 
 export type MessageActor = Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "displayName" | "isOwner" | "canSendSms" | "fieldSessionId"> & { canViewQuotes?: boolean; canManageTeam?: boolean };
 type Thread = { id: string; kind: "dm" | "group"; subject: string; creation_hash: string };
@@ -107,6 +108,27 @@ export async function readTeamConversation(actor: MessageActor, threadId: string
   if (!result.meta.changes) throw new Error("MESSAGE_ACCESS_REQUIRED");
 }
 
+export async function unreadTeamMessages(actor: MessageActor, db: D1Database = getD1()) {
+  const guard = actorGuard(actor);
+  await assertGuard(db, guard);
+  const rows = (await db.prepare(`SELECT t.id thread_id, t.kind, t.subject, COUNT(*) unread,
+    MAX(m.sequence) sequence, MAX(m.created_at) latest_at,
+    (SELECT person.display_name FROM trade_message_participants other
+      JOIN trade_team_members person ON person.id=other.member_id AND person.owner_uid=other.owner_uid
+      WHERE other.thread_id=t.id AND other.owner_uid=t.owner_uid AND other.member_id<>? ORDER BY person.id LIMIT 1) name
+    FROM trade_message_participants p
+    JOIN trade_message_threads t ON t.id=p.thread_id AND t.owner_uid=p.owner_uid
+    JOIN trade_internal_messages m ON m.thread_id=t.id AND m.owner_uid=t.owner_uid
+      AND m.sequence>p.last_read_sequence AND m.actor_member_id<>?
+    WHERE p.owner_uid=? AND p.member_id=? AND ${guard.sql}
+    GROUP BY t.id ORDER BY latest_at DESC,t.id`)
+    .bind(actor.memberId, actor.memberId, actor.ownerUid, actor.memberId, ...guard.values)
+    .all<{ thread_id: string; kind: string; subject: string; unread: number; sequence: number; latest_at: string; name: string }>()).results;
+  return { unreadCount: rows.reduce((total, row) => total + Number(row.unread), 0),
+    threads: rows.map(row => ({ id: row.thread_id, name: row.kind === "group" ? row.subject : row.name || "Team conversation",
+      unread: Number(row.unread), sequence: Number(row.sequence), latestAt: row.latest_at })) };
+}
+
 export async function messagesWorkspace(actor: MessageActor, search = "", page = 1, db: D1Database = getD1(), targetThreadId = "") {
   if (!Number.isSafeInteger(page) || page < 1 || page > 1000) throw new Error("MESSAGE_CURSOR_INVALID");
   const guard = actorGuard(actor);
@@ -116,10 +138,10 @@ export async function messagesWorkspace(actor: MessageActor, search = "", page =
   const members = (await db.prepare(`SELECT id, display_name, member_uid FROM trade_team_members WHERE owner_uid = ? AND status = 'active' AND ${guard.sql} ORDER BY display_name LIMIT 250`)
     .bind(actor.ownerUid, ...guard.values).all<{ id: string; display_name: string; member_uid: string }>()).results;
   const threads = (await db.prepare(`SELECT t.id, t.kind, t.subject,
-    (SELECT m.body FROM trade_internal_messages m WHERE m.thread_id=t.id AND m.owner_uid=t.owner_uid ORDER BY sequence DESC LIMIT 1) latest,
+    (SELECT COALESCE(NULLIF(m.body,''),'Shared an attachment') FROM trade_internal_messages m WHERE m.thread_id=t.id AND m.owner_uid=t.owner_uid ORDER BY sequence DESC LIMIT 1) latest,
     (SELECT m.actor_name FROM trade_internal_messages m WHERE m.thread_id=t.id AND m.owner_uid=t.owner_uid ORDER BY sequence DESC LIMIT 1) latest_sender,
     (SELECT COUNT(*) FROM trade_internal_messages m WHERE m.thread_id=t.id AND m.owner_uid=t.owner_uid AND m.sequence>p.last_read_sequence AND m.actor_member_id<>?) unread,
-    (SELECT json_group_array(json_object('id', other.id, 'name', other.display_name, 'active', other.status='active')) FROM trade_message_participants tp
+    (SELECT json_group_array(json_object('id', other.id, 'name', other.display_name, 'active', other.status='active', 'presence', ${tradeTeamPresenceStatusSql('other.id', 'other.owner_uid')})) FROM trade_message_participants tp
       JOIN trade_team_members other ON other.id=tp.member_id AND other.owner_uid=tp.owner_uid WHERE tp.thread_id=t.id AND tp.owner_uid=t.owner_uid) members
     FROM trade_message_threads t JOIN trade_message_participants p ON p.thread_id=t.id AND p.owner_uid=t.owner_uid AND p.member_id=?
     WHERE t.owner_uid=? AND ${guard.sql} ${targetThreadId ? "AND t.id=?" : ""} AND (t.subject LIKE ? ESCAPE '!' OR EXISTS (SELECT 1 FROM trade_message_participants tp
@@ -131,7 +153,7 @@ export async function messagesWorkspace(actor: MessageActor, search = "", page =
   return { memberId: actor.memberId, canUseSms: actor.isOwner || Boolean(actor.canSendSms), canUseQuotes: actor.isOwner || Boolean(actor.canViewQuotes), canCreateSmsContact: actor.isOwner, canManageTeam: actor.isOwner || Boolean(actor.canManageTeam),
     members: members.map(member => ({ id: member.id, name: member.display_name, isOwner: member.member_uid === actor.ownerUid, avatarRevision: avatars[member.id] || "" })),
     threads: threads.slice(0, 50).map(thread => ({ id: thread.id, kind: thread.kind, subject: thread.subject, latest: thread.latest || "", latestSender: thread.latest_sender || "",
-      unread: Number(thread.unread), members: (JSON.parse(thread.members) as Array<{ id: string; name: string; active: boolean }>).map(member => ({ ...member, active: Boolean(member.active), avatarRevision: avatars[member.id] || "" })) })), hasMore: threads.length > 50 };
+      unread: Number(thread.unread), members: (JSON.parse(thread.members) as Array<{ id: string; name: string; active: boolean; presence: TradeTeamPresenceStatus }>).map(member => ({ ...member, active: Boolean(member.active), avatarRevision: avatars[member.id] || "" })) })), hasMore: threads.length > 50 };
 }
 
 export async function customerMessageThreads(actor: MessageActor, search = "", page = 1, db: D1Database = getD1()) {
