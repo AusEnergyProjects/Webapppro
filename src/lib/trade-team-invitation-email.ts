@@ -42,6 +42,7 @@ export function tradeTeamInvitationEmail(input: TradeTeamInvitationEmailInput) {
   }
   const name = singleLine(input.displayName) || "there";
   const business = singleLine(input.businessName) || "your team";
+  const portalUrl = new URL("/direct-trade/team", requestUrl).toString();
   const subject = `You’re invited to ${business} on TLink`;
   const body = [
     `Hello ${name},`,
@@ -55,6 +56,8 @@ export function tradeTeamInvitationEmail(input: TradeTeamInvitationEmailInput) {
     `Already use TLink? Sign in with your existing account or continue with Google using ${input.email}.`,
     "",
     "This invitation expires in 7 days. If it expires, ask your business to resend it.",
+    "After joining, use this portal login for everyday access:",
+    portalUrl,
     "",
     "Keep this invitation private. If you were not expecting it, you can ignore this email.",
   ].join("\n");
@@ -68,6 +71,7 @@ export function tradeTeamInvitationEmail(input: TradeTeamInvitationEmailInput) {
     <p style="margin:24px 0"><a href="${escapeHtml(inviteUrl.toString())}" style="background:#087e60;border-radius:8px;color:#ffffff;display:inline-block;font-size:16px;font-weight:700;padding:14px 24px;text-decoration:none">Join team</a></p>
     <p style="font-size:14px;line-height:1.6">Already use TLink? Sign in with your existing account or continue with Google using <strong>${escapeHtml(input.email)}</strong>.</p>
     <p style="color:#526b65;font-size:13px;line-height:1.6;margin-top:24px">This invitation expires in 7 days. If it expires, ask your business to resend it.</p>
+    <p style="font-size:14px;line-height:1.6">After joining, use <a href="${escapeHtml(portalUrl)}" style="color:#087e60;font-weight:700">TLink portal login</a> for everyday access.</p>
     <p style="color:#526b65;font-size:13px;line-height:1.6">Keep this invitation private. If you were not expecting it, you can ignore this email.</p>
   </div>
 </div>`;

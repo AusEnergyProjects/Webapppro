@@ -439,6 +439,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }, [loading, members, navigationTarget, openFiles]);
 
   function openNew() {
+    if (busy) return;
     setError(""); setMessage("");
     setInviteUrl(""); setInviteDelivery(undefined);
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
@@ -453,6 +454,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }
 
   function openEdit(member: TradeTeamMember) {
+    if (busy) return;
     setError(""); setMessage("");
     setInviteUrl(""); setInviteDelivery(undefined);
     if (!menu) restoreFocusRef.current = document.activeElement as HTMLElement | null;
@@ -546,7 +548,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
       } else setEditing(null);
       if (result.invite) {
         if (result.delivery?.status === "sent") setMessage(`Team member added. ${result.delivery.message}`);
-        else { setMessage("Team member saved with their selected permissions."); setError(result.delivery?.message || "Invitation delivery could not be confirmed. Use Resend invitation to try again."); }
+        else { setMessage("Team member saved with their selected permissions."); setError(result.delivery?.message || "Invitation delivery could not be confirmed. Use Send new invitation to try again."); }
       } else setMessage(isNew ? "Team member added. Add their email to send an invitation." : "Team member updated.");
     } catch (caught) { setMessage(""); setError(caught instanceof Error ? caught.message : "The team member could not be saved."); }
     finally { setBusy(""); }
@@ -554,15 +556,13 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
 
   async function createLogin(member: TradeTeamMember) {
     if (!member.email) { openEdit(member); setMessage("Add an email and save the member, then send their invitation."); return; }
-    const action = member.invitePending ? "reissue_invite" : "invite_member";
+    setMenu(null); setInviteUrl(""); setInviteDelivery(undefined);
     setBusy(`invite:${member.id}`); setError(""); setMessage("Sending invitation email...");
     try {
       const response = await fetch("/api/trade-team", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await tokenHeaders()) },
-        body: JSON.stringify({ action, memberId: member.id, firstName: member.firstName, lastName: member.lastName,
-          displayName: memberLabel(member), email: member.email, phone: member.phone,
-          scheduleColour: member.scheduleColour, expectedUpdatedAt: member.updatedAt }),
+        body: JSON.stringify({ action: "reissue_invite", memberId: member.id, expectedUpdatedAt: member.updatedAt }),
       });
       if (await handleMemberConflict(response)) return;
       const result = await response.json().catch(() => ({})) as TeamResult;
@@ -572,7 +572,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
       const refreshedMember = refreshed.members?.find(candidate => candidate.id === member.id);
       if (refreshedMember) setEditing(current => current && current !== "new" && current.id === member.id ? refreshedMember : current);
       if (result.delivery?.status === "sent") setMessage(result.delivery.message);
-      else { setMessage(""); setError(result.delivery?.message || "Invitation delivery could not be confirmed. Use Resend invitation to try again."); }
+      else { setMessage(""); setError(result.delivery?.message || "Invitation delivery could not be confirmed. Use Send new invitation to try again."); }
     } catch (caught) { setMessage(""); setError(caught instanceof Error ? caught.message : "The invitation could not be sent."); }
     finally { setBusy(""); }
   }
@@ -603,6 +603,11 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   async function copyInvite() {
     try { await navigator.clipboard.writeText(inviteUrl); setMessage("Private login link copied."); }
     catch { setError("Copy was blocked. Select the login link and copy it manually."); }
+  }
+
+  async function copyPortalLogin() {
+    try { await navigator.clipboard.writeText(new URL("/direct-trade/team", window.location.origin).toString()); setMessage("Portal login link copied. They can sign in with their existing TLink email and password."); }
+    catch { setError("Copy was blocked. Use the Portal login link below."); }
   }
 
   async function createFieldPin(member: TradeTeamMember) {
@@ -761,9 +766,10 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   const fixedCredentialType = isSresCredential ? "accreditation"
     : uploadRentalGate === "registered_plumber" ? "registration"
       : uploadRentalGate === "licensed_plumber" || uploadRentalGate === "refrigerant_handler" ? "licence" : "";
+  const invitationPanel = inviteUrl && <section className={styles.invitePanel} aria-label="Team invitation"><div><strong>{inviteDelivery?.status === "sent" ? "Invitation emailed" : "Invitation ready"}</strong><p>{inviteDelivery?.message || "Email delivery has not been confirmed."} This new link lasts 7 days and replaces the previous invitation.</p></div><input aria-label="Private login link" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} /><button type="button" className={styles.secondary} onClick={() => void copyInvite()}>Copy invitation link</button></section>;
 
   return <div className={styles.workspace}>
-    <div className={styles.heading}><div><h4>Your team</h4><p>Keep each person&apos;s contact details, access, availability and documents in one place.</p></div><button type="button" className={styles.primary} onClick={openNew}>Add team member</button></div>
+    <div className={styles.heading}><div><h4>Your team</h4><p>Keep each person&apos;s contact details, access, availability and documents in one place.</p></div><button type="button" className={styles.primary} disabled={Boolean(busy)} onClick={openNew}>Add team member</button></div>
     <section className={styles.setupGuide} aria-label="Set up TLink for a team member">
       <div><span>1</span><strong>Add the person</strong><small>Enter their email and choose their access.</small></div>
       <div><span>2</span><strong>Invitation sent</strong><small>They set their password from the email.</small></div>
@@ -771,7 +777,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     </section>
     {message && <p className={styles.status} role="status">{message}</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}
-    {inviteUrl && <section className={styles.invitePanel} aria-label="Team invitation"><div><strong>{inviteDelivery?.status === "sent" ? "Invitation emailed" : "Invitation ready"}</strong><p>{inviteDelivery?.message || "Email delivery has not been confirmed."} The private link expires after 7 days. You can also copy it for this person.</p></div><input aria-label="Private login link" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} /><button type="button" className={styles.secondary} onClick={() => void copyInvite()}>Copy invitation link</button></section>}
+    {!editing && invitationPanel}
     <section className={styles.list} aria-label="Team members"><header className={styles.listHeader}><strong>People</strong><span>{roster.total} team members</span></header>
       <form className={styles.filters} onSubmit={searchMembers}><label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, email or service" /></label><label>Status<select value={statusFilter} onChange={(event) => { setPage(1); setStatusFilter(event.target.value as RosterStatus); }}><option value="all">All statuses</option><option value="active">Active</option><option value="invited">Invited</option><option value="suspended">Former or inactive</option></select></label><label>Service<select value={capabilityFilter} onChange={(event) => { setPage(1); setCapabilityFilter(event.target.value); }}><option value="">All services</option>{ENERGY_SERVICE_CATALOGUE.map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}</select></label><button className={styles.secondary}>Search</button></form>
       <p className={styles.hint}>Deactivating access stops future sign-in and assignment. Job history and member documents remain saved. Reactivation restores login eligibility, but revoked devices and old invitation links remain inactive.</p>
@@ -787,15 +793,15 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
               <td>{member.email ? <a href={`mailto:${member.email}`}>{member.email}</a> : <span>Not added</span>}</td>
               <td><span className={`${styles.state} ${member.status === "active" ? styles.current : styles.expired}`}>{statusName(member)}</span></td>
               <td><span className={styles.colourName}><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span></td>
-              <td><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></td>
+              <td><div className={styles.actions}><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" className={styles.memberMenuButton} disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}</div></td>
             </tr>)}</tbody>
           </table>
         </div>
         <div className={styles.mobileCards}>{visibleMembers.map((member) => <article className={styles.memberCard} key={member.id} tabIndex={0} onContextMenu={(event) => { if (!member.isOwner || isOwner) showMenu(event, member); }}>
-        <header className={styles.memberHeader}><div><strong>{member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>TLink username: {member.fieldUsername || "Not set"}</small><small>{statusName(member)}</small></div><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></header>
+        <header className={styles.memberHeader}><div><strong>{member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>TLink username: {member.fieldUsername || "Not set"}</small><small>{statusName(member)}</small></div><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></header>
         <div className={styles.chips}><span><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span><span>{member.permissions.jobScope === "own" ? "Assigned jobs only" : "All team jobs"}</span><span>{member.fileCount || 0} documents</span>{member.capabilities?.length ? <span>{member.capabilities.length} services</span> : null}</div>
         <small>Last active: {member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleString("en-AU") : "Not signed in yet"}</small>
-        <div className={styles.actions}><button type="button" onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button><button type="button" onClick={() => void openFiles(member)}>Documents</button></div>
+        <div className={styles.actions}><button type="button" disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button></div>
       </article>)}</div></> : <p className={styles.empty}>No team members match these filters.</p>}
       {roster.totalPages > 1 && <nav className={styles.pagination} aria-label="Team member pages"><button type="button" className={styles.secondary} disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {roster.page} of {roster.totalPages}</span><button type="button" className={styles.secondary} disabled={page >= roster.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Next</button></nav>}
     </section>
@@ -807,6 +813,19 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
         {error && <p className={styles.error} role="alert">{error}</p>}
         {message && <p className={styles.status} role="status">{message}</p>}
         {editingOwner ? <><p className={styles.status}>This is your main business account. TLink will email the app username and one-time PIN to <strong>{editing.email}</strong>.</p><div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing.lastName} /></label></div><p className={styles.hint}>Your personal name is used for technician sign-off when a job is assigned to you. TLink will not use the business name as the signer.</p></> : <div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email for invitation<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>Adding a person with an email sends their team invitation automatically. Leave it blank for a roster-only person.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>}
+        <section className={styles.portalAccessPanel} aria-label="TLink portal access">
+          <div><strong>TLink portal access</strong><p>Use TLink in a browser with an email and password, or Google.</p></div>
+          {editing === "new" ? <p className={styles.hint}>Save with an email address to send their portal invitation automatically.</p> : <>
+            <p className={styles.hint}>{editing.status !== "active" ? "Reactivate this person before they can sign in or receive a new invitation." : editing.hasLogin ? `Login ready for ${editing.email}. Use the portal link to sign in.` : editing.email ? `Send a fresh invitation to ${editing.email}. Their details and permissions stay the same.` : "Add and save their email address, then send an invitation."}</p>
+            <div className={styles.actions}>
+              {editing.status === "active" && !editing.hasLogin && <button type="button" className={styles.primary} disabled={Boolean(busy) || !editing.email} onClick={() => void createLogin(editing)}>{busy === `invite:${editing.id}` ? "Sending..." : "Send new invitation"}</button>}
+              <button type="button" className={styles.secondary} onClick={() => void copyPortalLogin()}>Copy portal login</button>
+              <a className={styles.portalLogin} href="/direct-trade/team" target="_blank" rel="noopener noreferrer">Portal login</a>
+            </div>
+            {!editing.hasLogin && editing.status === "active" && editing.email && <small className={styles.hint}>Expired invite? Send a new one here. No need to remove or add them again.</small>}
+            {invitationPanel}
+          </>}
+        </section>
         <section className={styles.fieldAccessPanel} aria-label="TLink app access">
           <img src="/tlink-icon-192.png" alt="" />
           <div className={styles.fieldAccessBody}>
@@ -821,13 +840,13 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
               {fieldSetup?.memberId === editing.id && <div className={styles.pinResult}><div><span>USERNAME</span><strong>{fieldSetup.username || fieldSetup.displayName}</strong></div><div><span>ONE-TIME PIN</span><strong>{fieldSetup.pin}</strong></div><p>Expires {new Date(fieldSetup.expiresAt).toLocaleString("en-AU")}. Creating another PIN cancels this one.</p><button type="button" className={styles.secondary} onClick={() => void copyFieldSetup()}>Copy username and PIN</button></div>}
               <div className={styles.memberControls}>
                 {editing.status === "active" && <button type="button" className={styles.secondary} disabled={busy === `field-revoke:${editing.id}`} onClick={() => void revokeFieldAccess(editing)}>Sign out field devices</button>}
-                {editing.status === "active" && !editing.hasLogin && <button type="button" className={styles.secondary} disabled={busy === `invite:${editing.id}`} onClick={() => void createLogin(editing)}>{editing.email ? editing.invitePending ? "Resend invitation" : "Send invitation" : "Add email for invitation"}</button>}
-                {!isCurrentMember(editing) && editing.status === "active" && <button type="button" className={styles.danger} disabled={busy === `status:${editing.id}`} onClick={() => void updateMemberStatus(editing, "suspended")}>Deactivate access</button>}
-                {!isCurrentMember(editing) && editing.status === "suspended" && <button type="button" className={styles.secondary} disabled={busy === `status:${editing.id}`} onClick={() => void updateMemberStatus(editing, "active")}>Reactivate access</button>}
               </div>
             </>}
           </div>
         </section>
+        {editing !== "new" && !isCurrentMember(editing) && <div className={styles.memberControls}>
+          {editing.status === "active" ? <button type="button" className={styles.danger} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(editing, "suspended")}>Deactivate access</button> : <button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(editing, "active")}>Reactivate access</button>}
+        </div>}
         {editingOwner && trainingTodos}
         {!editingOwner && <>{editing !== "new" && editing.status === "suspended" && <p className={styles.status}>This person is inactive. Their job history and documents remain saved. Reactivation does not restore revoked devices or old invitation links.</p>}
         <fieldset className={styles.colourPicker}><legend>Schedule colour</legend><p className={styles.hint}>This colour identifies the team member throughout the schedule.</p><div>{scheduleColours.map((colour) => <label key={colour.id} className={`${styles.colourChoice} ${styles[colour.id]}`}><input type="radio" name="scheduleColour" value={colour.id} defaultChecked={(editing === "new" ? "emerald" : editing.scheduleColour || "emerald") === colour.id} /><span aria-hidden="true" /><strong>{colour.label}</strong></label>)}</div></fieldset>

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const settings = read("../src/components/TradeTeamSettings.tsx");
@@ -91,7 +93,7 @@ test("member lifecycle preserves historical records and has no hard-delete contr
   assert.match(settings, /Reactivate access/);
   assert.match(settings, /Job history and member documents remain saved/);
   assert.match(settings, /revoked devices and old invitation links remain inactive/);
-  assert.match(settings, /!isCurrentMember\(editing\).*?editing\.status === "active"/);
+  assert.match(settings, /!isCurrentMember\(editing\)[\s\S]*?editing\.status === "active"/);
   assert.doesNotMatch(settings, /delete_member|remove_member|Delete team member|Remove team member/);
   assert.match(settings, /device\.memberStatus === "suspended"/);
   assert.match(settings, /Reactivate this team member before authorising a device/);
@@ -353,8 +355,55 @@ test("team invitations report actual email delivery and offer a direct resend", 
   assert.match(settings, /result\.delivery\?\.status === "sent"/);
   assert.match(settings, /setError\(result\.delivery\?\.message/);
   assert.match(settings, /Invitation delivery could not be confirmed/);
-  assert.match(settings, /"Resend invitation"/);
+  assert.match(settings, /"Send new invitation"/);
+  assert.match(settings, /Send new portal invitation to/);
   assert.match(settings, /Adding a person with an email sends their team invitation automatically/);
   assert.match(settings, /Copy invitation link/);
   assert.doesNotMatch(settings, /Fresh login link created|Refresh office login link|Create office login link/);
+});
+
+test("portal invitation and login controls are separate from field app PIN access", () => {
+  const portalPanel = settings.slice(settings.indexOf('aria-label="TLink portal access"'), settings.indexOf('aria-label="TLink app access"'));
+  const appPanel = settings.slice(settings.indexOf('aria-label="TLink app access"'), settings.indexOf('{editingOwner && trainingTodos}'));
+  assert.match(portalPanel, /Send new invitation/);
+  assert.match(portalPanel, /Copy portal login/);
+  assert.match(portalPanel, /href="\/direct-trade\/team"/);
+  assert.match(portalPanel, /\{invitationPanel\}/);
+  assert.match(settings, /!editing && invitationPanel/);
+  assert.doesNotMatch(appPanel, /createLogin\(editing\)/);
+  assert.match(appPanel, /Generate and email PIN/);
+});
+
+test("quick reinvite renews expired invitations using saved membership without overwriting access", async () => {
+  const handler = settings.slice(settings.indexOf("  async function createLogin("), settings.indexOf("  async function updateMemberStatus("));
+  const script = ts.transpileModule(handler, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const member = { id: "member-1", email: "member@example.test", hasLogin: false, invitePending: false, updatedAt: "saved-revision" };
+  const requests = []; const links = []; const errors = [];
+  await runInNewContext(`(async () => { ${script}; await createLogin(member); })()`, {
+    member,
+    setMenu() {}, setInviteUrl: value => links.push(value), setInviteDelivery() {}, setBusy() {}, setError: value => errors.push(value), setMessage() {},
+    tokenHeaders: async () => ({ Authorization: "Bearer test" }),
+    fetch: async (url, options) => { requests.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true, invite: { inviteUrl: "https://tlink.example/direct-trade/team?invite=fresh" }, delivery: { status: "sent", message: "Submitted" } }) }; },
+    handleMemberConflict: async () => false,
+    load: async () => ({ members: [{ ...member, updatedAt: "new-revision" }] }),
+    setEditing: fn => assert.equal(fn(member).updatedAt, "new-revision"),
+  });
+  assert.deepEqual(requests, [{ url: "/api/trade-team", body: { action: "reissue_invite", memberId: "member-1", expectedUpdatedAt: "saved-revision" } }]);
+  assert.equal(links.at(-1), "https://tlink.example/direct-trade/team?invite=fresh");
+  assert.deepEqual(errors, [""]);
+});
+
+test("a pending invitation cannot be displayed against another member", () => {
+  const handlers = [
+    settings.slice(settings.indexOf("  function openNew("), settings.indexOf("  function searchMembers(")),
+    settings.slice(settings.indexOf("  function openEdit("), settings.indexOf("  function applyPreset(")),
+  ];
+  for (const [index, handler] of handlers.entries()) {
+    const script = ts.transpileModule(handler, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    // No state setter is available: either entry must return before it can
+    // replace the selected member or clear the pending invitation state.
+    runInNewContext(`${script}; ${index === 0 ? "openNew()" : "openEdit({ id: 'other-member' })"};`, { busy: "invite:member-1" });
+  }
+  assert.match(settings, /disabled=\{Boolean\(busy\)\} onClick=\{openNew\}/);
+  assert.doesNotMatch(settings, /(?<!disabled=\{Boolean\(busy\)\} )onClick=\{\(\) => openEdit\(member\)\}/);
 });

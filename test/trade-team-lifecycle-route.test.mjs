@@ -267,6 +267,88 @@ test("adding a member emails the persisted invitation and reissuing preserves ac
   } finally { database.close(); }
 });
 
+for (const invitationState of ["expired", "absent"]) {
+  test(`portal re-invite renews an ${invitationState} invitation without recreating the member or changing their records`, async () => {
+    const database = fixture(); const sent = [];
+    try {
+      database.exec(`UPDATE trade_team_members SET member_uid = '', email = 'saved@example.com',
+        first_name = 'Saved', last_name = 'Member', display_name = 'Saved Member', phone = '+61400111222',
+        field_username = 'Saved Field', field_username_normalized = 'saved field', schedule_colour = 'rose',
+        can_view_quotes = 1, can_view_invoices = 1, job_scope = 'own', service_states = '["VIC"]'
+        WHERE id = 'target-1';
+        UPDATE trade_team_invites SET expires_at = '2000-01-01T00:00:00.000Z' WHERE id = 'invite-1';
+        INSERT INTO trade_team_member_events VALUES ('historic-event', 'owner-1', 'target-1', 'owner-1',
+          'member', 'target-1', 'member.created', '{}', '2026-08-12T00:00:00.000Z');`);
+      if (invitationState === "absent") database.exec("DELETE FROM trade_team_invites WHERE id = 'invite-1'");
+      const before = database.prepare("SELECT * FROM trade_team_members WHERE id = 'target-1'").get();
+      const historyTables = ["trade_work_orders", "trade_team_member_files", "trade_team_member_credentials",
+        "trade_mobile_devices", "trade_field_access_codes", "trade_field_sessions"];
+      const history = historyTables.map(table => database.prepare(`SELECT * FROM ${table} ORDER BY id`).all());
+      // A delegated team manager can resend without permission-edit rights or the original form fields.
+      const route = loadRoute(database, [], managerAccess, { sent });
+      const started = Date.now();
+      const response = await post(route, { action: "reissue_invite", memberId: "target-1", expectedUpdatedAt: before.updated_at });
+      const payload = await response.json();
+      assert.equal(response.status, 201, payload.error);
+      assert.equal(payload.invite.memberId, "target-1");
+      assert.equal(payload.createdMemberId, undefined);
+      assert.equal(payload.invite.expiresInDays, 7);
+      assert.equal(sent.length, 1);
+      assert.equal(sent[0].email, before.email);
+      assert.equal(sent[0].displayName, before.display_name);
+      assert.equal(sent[0].inviteUrl, payload.invite.inviteUrl);
+      const link = new URL(payload.invite.inviteUrl);
+      assert.equal(link.pathname, "/direct-trade/team");
+      assert.match(link.searchParams.get("invite"), /^[A-Za-z0-9_-]{43}$/);
+      const invites = database.prepare("SELECT * FROM trade_team_invites WHERE team_member_id = 'target-1'").all();
+      assert.equal(invites.length, 1);
+      assert.notEqual(invites[0].id, "invite-1");
+      assert.equal(invites[0].consumed_at, "");
+      assert.equal(invites[0].token_hash, createHash("sha256").update(link.searchParams.get("invite")).digest("base64url"));
+      assert.equal(database.prepare("SELECT id FROM trade_team_invites WHERE token_hash = 'hash'").get(), undefined);
+      assert.ok(Date.parse(invites[0].expires_at) >= started + 7 * 24 * 60 * 60 * 1000);
+      assert.ok(Date.parse(invites[0].expires_at) <= Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const after = database.prepare("SELECT * FROM trade_team_members WHERE id = 'target-1'").get();
+      assert.ok(after.invited_at);
+      assert.notEqual(after.updated_at, before.updated_at);
+      assert.deepEqual({ ...after, invited_at: before.invited_at, updated_at: before.updated_at }, { ...before });
+      assert.equal(database.prepare("SELECT count(*) count FROM trade_team_members").get().count, 3);
+      assert.deepEqual(historyTables.map(table => database.prepare(`SELECT * FROM ${table} ORDER BY id`).all()), history);
+      assert.ok(database.prepare("SELECT id FROM trade_team_member_events WHERE id = 'historic-event'").get());
+      assert.ok(database.prepare("SELECT id FROM trade_team_member_events WHERE team_member_id = 'target-1' AND event_type = 'member.invitation_reissued'").get());
+    } finally { database.close(); }
+  });
+}
+
+for (const denied of [
+  { name: "another business's member", sql: "UPDATE trade_team_members SET owner_uid = 'owner-2' WHERE id = 'target-1'", status: 404 },
+  { name: "a bound login", sql: "UPDATE trade_team_members SET member_uid = 'already-bound' WHERE id = 'target-1'", status: 409 },
+  { name: "suspended access", sql: "UPDATE trade_team_members SET status = 'suspended' WHERE id = 'target-1'", status: 409 },
+  { name: "a missing login email", sql: "UPDATE trade_team_members SET email = '' WHERE id = 'target-1'", status: 400 },
+  { name: "a stale member revision", expectedUpdatedAt: "2000-01-01T00:00:00.000Z", status: 409 },
+  { name: "missing team-management permission", access: { ...managerAccess, canManageTeam: false }, status: 403 },
+  { name: "team-management permission revoked after access lookup", sql: "UPDATE trade_team_members SET can_manage_team = 0 WHERE id = 'manager-1'", status: 409 },
+]) {
+  test(`portal re-invite rejects ${denied.name} without modifying records or sending email`, async () => {
+    const database = fixture(); const sent = [];
+    try {
+      database.exec("UPDATE trade_team_members SET member_uid = '' WHERE id = 'target-1'");
+      if (denied.sql) database.exec(denied.sql);
+      const tables = ["trade_team_members", "trade_team_invites", "trade_team_member_events"];
+      const snapshot = () => tables.map(table => database.prepare(`SELECT * FROM ${table} ORDER BY id`).all());
+      const before = snapshot();
+      const route = loadRoute(database, [], denied.access || managerAccess, { sent });
+      const response = await post(route, { action: "reissue_invite", memberId: "target-1",
+        expectedUpdatedAt: denied.expectedUpdatedAt || "2026-08-12T00:00:00.000Z" });
+      const payload = await response.json();
+      assert.equal(response.status, denied.status, payload.error);
+      assert.equal(payload.ok, false);
+      assert.equal(sent.length, 0);
+      assert.deepEqual(snapshot(), before);
+    } finally { database.close(); }
+  });
+}
+
 for (const deliveryStatus of ["failed", "unknown"]) {
   test(`invitation email ${deliveryStatus} keeps the member and assigned permissions available for resend`, async () => {
     const database = fixture(); const sent = [];

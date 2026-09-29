@@ -43,6 +43,6 @@ test("roster-only people can be assigned while login access remains separate", (
   assert.match(route, /ROSTER_STATUS_FILTERS = new Set\(\["active", "invited", "suspended"\]\)/);
   assert.match(route, /rosterStatus === "invited"[\s\S]*?status = 'active'[\s\S]*?pending_invite\.consumed_at = ''/);
   assert.match(route, /action === "add_member"/);
-  assert.match(settings, /Roster only/); assert.match(settings, /Send invitation/);
+  assert.match(settings, /Roster only/); assert.match(settings, /Send new invitation/);
   assert.match(settings, /Leave it blank for a roster-only person/);
 });

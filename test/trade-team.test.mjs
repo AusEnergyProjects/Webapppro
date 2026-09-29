@@ -63,7 +63,7 @@ test("owners and roster-only people are assignable before a separate login is cr
   assert.match(settings, /Email for invitation/);
   assert.match(settings, /Leave it blank for a roster-only person/);
   assert.match(settings, /Roster only/);
-  assert.match(settings, /Send invitation/);
+  assert.match(settings, /Send new invitation/);
   assert.match(rosterMigration, /WHERE `email` <> ''/);
 });
 

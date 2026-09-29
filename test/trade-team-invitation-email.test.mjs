@@ -47,7 +47,9 @@ test("team invitation explains new password setup, assigned access and seven-day
   assert.match(email.body, /continue with Google using worker@example.com/);
   assert.match(email.body, /expires in 7 days/);
   assert.match(email.body, /Join team: https:\/\/tlink.example\/direct-trade\/team\?invite=private-token&view=join/);
-  assert.equal((email.html.match(/<a /g) || []).length, 1);
+  assert.equal((email.html.match(/<a /g) || []).length, 2);
+  assert.match(email.html, /href="https:\/\/tlink.example\/direct-trade\/team"[^>]*>TLink portal login<\/a>/);
+  assert.match(email.body, /After joining, use this portal login for everyday access:\nhttps:\/\/tlink.example\/direct-trade\/team\n/);
   assert.match(email.html, /Alex &lt;Worker&gt;/);
   assert.match(email.html, /Roof &amp; Solar/);
   assert.match(email.html, /invite=private-token&amp;view=join/);
