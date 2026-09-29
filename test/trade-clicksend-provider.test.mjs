@@ -15,7 +15,7 @@ const sent = (changes = {}) => envelope({ _currency: currency, total_count: 1, q
 const page = (rows, changes = {}) => envelope({ data: rows, current_page: 1, last_page: 1, next_page_url: null, _currency: currency, ...changes });
 const fetchResponse = (body, status = 200) => async (url, options) => {
   assert.equal(new URL(url).origin, "https://rest.clicksend.com");
-  assert.equal(options.redirect, "error");
+  assert.equal(options.redirect, "manual");
   assert.equal(options.headers.Authorization, `Basic ${btoa(`${credentials.username}:${credentials.apiKey}`)}`);
   assert.ok(options.signal instanceof AbortSignal);
   return Response.json(body, { status });

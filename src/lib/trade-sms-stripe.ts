@@ -7,7 +7,7 @@ async function stripeRequest(key: string, path: string, data: URLSearchParams | 
   if (!/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/.test(key)) throw new Error("SMS_BILLING_SETUP_REQUIRED");
   let response: Response;
   try {
-    response = await fetchImpl(`https://api.stripe.com/v1/${path}`, {method:data ? "POST" : "GET",redirect:"error",signal:AbortSignal.timeout(15000),
+    response = await fetchImpl(`https://api.stripe.com/v1/${path}`, {method:data ? "POST" : "GET",redirect:"manual",signal:AbortSignal.timeout(15000),
       headers:{Authorization:`Bearer ${key}`,"Stripe-Version":"2025-06-30.basil",...(data ? {"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":requestId} : {})},body:data});
   } catch { throw new Error("SMS_PAYMENT_UNCERTAIN"); }
   if (!response.ok) throw new Error(response.status >= 500 ? "SMS_PAYMENT_UNCERTAIN" : "SMS_PAYMENT_UNAVAILABLE");

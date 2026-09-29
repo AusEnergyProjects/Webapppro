@@ -59,7 +59,7 @@ test("top-up uses hosted checkout and credits nothing until verified payment; sa
     const transport = async (url, init) => {
       requests++;
       assert.equal(url, "https://api.stripe.com/v1/checkout/sessions");
-      assert.equal(init.redirect, "error");
+      assert.equal(init.redirect, "manual");
       assert.equal(init.body.get("line_items[0][price_data][unit_amount]"), "5000");
       assert.equal(init.body.get("metadata[tlink_owner_uid]"), "owner");
       assert.equal(init.body.get("payment_intent_data[metadata][tlink_owner_uid]"), "owner");
@@ -181,7 +181,7 @@ test("restricted live Stripe keys support checkout, live callback and authentica
     const checkout = await f.wallet.startSmsTopUp(actor, { amountCents: 5000, requestId: "restricted-live-checkout" }, f.db, async (url, init) => {
       assert.equal(url, "https://api.stripe.com/v1/checkout/sessions");
       assert.equal(init.headers.Authorization, "Bearer rk_live_FixtureOnly");
-      assert.equal(init.redirect, "error");
+      assert.equal(init.redirect, "manual");
       return Response.json({ id: "cs_live_hosted", url: "https://checkout.stripe.com/c/pay/cs_live_hosted" });
     });
     assert.equal(checkout.checkoutUrl, "https://checkout.stripe.com/c/pay/cs_live_hosted");
@@ -260,7 +260,7 @@ test("dispute before checkout confirmation retries a failed lookup and freezes v
       requests++;
       assert.equal(url, `https://api.stripe.com/v1/payment_intents/${session.payment_intent}`);
       assert.equal(init.method, "GET");
-      assert.equal(init.redirect, "error");
+      assert.equal(init.redirect, "manual");
       assert.equal(init.headers.Authorization, "Bearer sk_test_FixtureOnly");
       return Response.json({ id: session.payment_intent, metadata: session.metadata, amount: session.amount_total, currency: "aud", livemode: false });
     });

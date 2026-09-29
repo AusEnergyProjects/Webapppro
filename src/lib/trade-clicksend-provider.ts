@@ -83,11 +83,13 @@ async function request(credentials: ClickSendCredentials, path: string, fetchImp
   let response: Response;
   try {
     response = await fetchImpl(origin + path, {
-      method: body ? "POST" : "GET", redirect: "error", signal: AbortSignal.timeout(12000),
+      method: body ? "POST" : "GET", redirect: "manual", signal: AbortSignal.timeout(12000),
       headers: { Authorization: `Basic ${btoa(`${safe.username}:${safe.apiKey}`)}`, "Content-Type": "application/json", Accept: "application/json" },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
   } catch { throw new ClickSendProviderError("SMS_PROVIDER_OUTCOME_UNKNOWN"); }
+  // Workers supports manual/follow only. Never forward credentials to a redirect target.
+  if (response.status >= 300 && response.status < 400) throw new ClickSendProviderError("SMS_PROVIDER_REJECTED", true);
   let envelope: Json;
   try { envelope = object(await response.json()); } catch { throw new ClickSendProviderError("SMS_PROVIDER_OUTCOME_UNKNOWN"); }
   if (!response.ok) {
