@@ -13,7 +13,7 @@ export function teamAuthErrorMessage(error: unknown): string {
     case "auth/invalid-credential":
     case "auth/wrong-password":
     case "auth/user-not-found":
-      return "The email or password was not recognised. Try again, or choose Reset password.";
+      return "The email or password was not recognised. If you joined with Google, use Continue with Google. To set or change a password, choose Reset password and open the link in the email.";
     case "auth/invalid-email": return "Enter a valid email address.";
     case "auth/network-request-failed": return "The connection was interrupted. Check your internet connection and try again.";
     case "auth/too-many-requests": return "Too many attempts. Please wait a few minutes, then try again.";

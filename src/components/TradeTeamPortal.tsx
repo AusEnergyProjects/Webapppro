@@ -3,7 +3,7 @@
 import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
+import { browserPopupRedirectResolver, createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib/tlink-password-reset-client";
 import { disableTradeDeviceNotifications } from "@/lib/trade-notification-client";
@@ -60,8 +60,12 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [invitationReady, setInvitationReady] = useState(false);
   const [invitationError, setInvitationError] = useState("");
+  const [invitationInvalid, setInvitationInvalid] = useState(false);
+  const [invitationAttempt, setInvitationAttempt] = useState(0);
+  const [authDelayed, setAuthDelayed] = useState(false);
   const [authRevision, setAuthRevision] = useState(0);
   const [mode, setMode] = useState<"signin" | "create">("signin");
+  const [existingAccount, setExistingAccount] = useState(false);
   const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -88,27 +92,52 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   const assigneeRequestRef = useRef(0);
 
   useEffect(() => {
-    if (!authReady) return;
     let active = true;
+    const controller = new AbortController();
+    let timeout: number | undefined;
     const frame = window.requestAnimationFrame(() => {
       const invite = new URLSearchParams(window.location.search).get("invite") || "";
       setInviteToken(invite);
       setInvitationReady(false);
       setInvitationError("");
+      setInvitationInvalid(false);
       if (!invite) { setInvitation(null); setInvitationReady(true); return; }
-      void (async () => {
-      const headers: Record<string, string> = user ? { Authorization: `Bearer ${await user.getIdToken()}` } : {};
-      const response = await fetch(`/api/trade-team/invitation?invite=${encodeURIComponent(invite)}`, { headers, cache: "no-store" });
-      const result = await response.json() as { invitation?: Invitation; error?: string };
-      if (!response.ok || !result.invitation) throw new Error(result.error || "This invitation is no longer available. Ask your business to resend it.");
-      if (active) {
-        setInvitation(result.invitation); setEmail(result.invitation.email); setName(result.invitation.displayName); setMode("create"); clearPasswordFields();
-      }
-      })().catch(error => { if (active) { setInvitation(null); setInvitationError(error instanceof Error ? error.message : "The invitation could not be opened. Please try again."); } })
-        .finally(() => { if (active) setInvitationReady(true); });
+      const loadInvitation = async () => {
+        const url = `/api/trade-team/invitation?invite=${encodeURIComponent(invite)}`;
+        // Public invitations must open without waiting for Firebase's mobile sign-in restoration.
+        let response = await fetch(url, { cache: "no-store", signal: controller.signal });
+        if (response.status === 410 && user) {
+          // A previously accepted link can still be reopened by its bound account.
+          const token = await user.getIdToken();
+          if (controller.signal.aborted) throw new Error("INVITATION_CONNECTION");
+          response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal });
+        }
+        if (response.status === 410) throw new Error("INVITATION_INVALID");
+        if (!response.ok) throw new Error("INVITATION_CONNECTION");
+        const result = await response.json() as { invitation?: Invitation };
+        if (!result.invitation) throw new Error("INVITATION_CONNECTION");
+        return result;
+      };
+      const deadline = new Promise<never>((_, reject) => {
+        timeout = window.setTimeout(() => { controller.abort(); reject(new Error("INVITATION_CONNECTION")); }, 10_000);
+      });
+      void Promise.race([loadInvitation(), deadline]).then(result => {
+        if (active && result.invitation) {
+          setInvitation(result.invitation); setEmail(result.invitation.email); setName(result.invitation.displayName);
+          setMode(new URLSearchParams(window.location.search).get("auth") === "signin" ? "signin" : "create"); clearPasswordFields();
+        }
+      }).catch(error => {
+        if (active) {
+          const invalid = error instanceof Error && error.message === "INVITATION_INVALID";
+          setInvitation(null); setInvitationInvalid(invalid);
+          setInvitationError(invalid
+            ? "This link has expired or been replaced. Open the newest TLink invitation email and press Join team."
+            : "We could not load your invitation. Check your connection and try again.");
+        }
+      }).finally(() => { window.clearTimeout(timeout); if (active) setInvitationReady(true); });
     });
-    return () => { active = false; window.cancelAnimationFrame(frame); };
-  }, [fetch, authReady, clearPasswordFields, user]);
+    return () => { active = false; controller.abort(); window.clearTimeout(timeout); window.cancelAnimationFrame(frame); };
+  }, [fetch, clearPasswordFields, user, invitationAttempt]);
 
   const refreshVerification = useCallback(async (showStatus = false) => {
     if (!user) return;
@@ -218,7 +247,14 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
     }
   }, [fetch, data.work, user, workLoading]);
 
-  useEffect(() => onAuthStateChanged(firebaseAuth, (next) => { setUser(next); setData({}); setEmailVerified(Boolean(next?.emailVerified)); setAuthReady(true); if (!next) setMfaRequired(false); }), []);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setAuthDelayed(true), 10_000);
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (next) => {
+      window.clearTimeout(timeout); setAuthDelayed(false);
+      setUser(next); setData({}); setEmailVerified(Boolean(next?.emailVerified)); setAuthReady(true); if (!next) setMfaRequired(false);
+    }, () => { window.clearTimeout(timeout); setAuthDelayed(true); });
+    return () => { window.clearTimeout(timeout); unsubscribe(); };
+  }, []);
   useEffect(() => {
     if (!user || !emailVerified || !invitationReady || invitationError) return;
     if (invitation && user.email?.toLowerCase() !== invitation.email.toLowerCase()) return;
@@ -250,6 +286,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   function emailActionSettings() {
     const url = new URL("/direct-trade/team", window.location.origin);
     if (inviteToken) url.searchParams.set("invite", inviteToken);
+    url.searchParams.set("auth", "signin");
     return { url: url.toString() };
   }
   async function sendVerification(account: User) {
@@ -260,7 +297,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       setStatus(`Your login is saved, but the verification email could not be sent. ${teamAuthErrorMessage(error)} Use Resend verification email below.`);
     }
   }
-  async function google() { setBusy("auth"); setStatus("Opening Google sign-in..."); try { const provider = new GoogleAuthProvider(); provider.setCustomParameters({ prompt: "select_account", ...(invitation ? { login_hint: invitation.email } : {}) }); await signInWithPopup(firebaseAuth, provider); clearPasswordFields(); } catch (error) { if (!captureMfaError(error)) setStatus(teamAuthErrorMessage(error)); } finally { setBusy(""); } }
+  async function google() { setBusy("auth"); setStatus("Opening Google sign-in..."); try { const provider = new GoogleAuthProvider(); provider.setCustomParameters({ prompt: "select_account", ...(invitation ? { login_hint: invitation.email } : {}) }); await signInWithPopup(firebaseAuth, provider, browserPopupRedirectResolver); clearPasswordFields(); } catch (error) { if (!captureMfaError(error)) setStatus(teamAuthErrorMessage(error)); } finally { setBusy(""); } }
   async function emailAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (mode === "create" && password !== confirmPassword) {
@@ -275,7 +312,9 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       } else await signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password);
       clearPasswordFields();
     } catch (error) {
-      if (teamAuthErrorCode(error) === "auth/email-already-in-use") { setMode("signin"); clearPasswordFields(); }
+      if (teamAuthErrorCode(error) === "auth/email-already-in-use") {
+        setExistingAccount(true); clearPasswordFields(); setStatus(""); return;
+      }
       if (!captureMfaError(error)) setStatus(teamAuthErrorMessage(error));
     } finally { setBusy(""); }
   }
@@ -306,14 +345,21 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setAuthRevision(current => current + 1); }} /><button type="button" onClick={() => void leaveAccount()}>Sign out</button></main>;
 
   return <TradeTeamCallProvider user={user} enabled={Boolean(data.access)}><main className="wrap trade-team-page"><TLinkHeader active="team" />
-    {!authReady || !invitationReady ? <section className="dashboard-state-card"><p>Opening your invitation...</p></section>
-      : invitationError ? <section className="dashboard-state-card"><h1>Invitation unavailable</h1><p role="alert">{invitationError}</p><p>Ask your business administrator to resend your invitation.</p><a className="btn" href="/direct-trade/team">Already joined? Sign in</a></section>
+    {!invitationReady ? <section className="dashboard-state-card"><p role="status">Opening your invitation...</p></section>
+      : invitationError ? <section className="dashboard-state-card"><h1>{invitationInvalid ? "Use your newest invitation" : "Let's try that again"}</h1><p role="alert">{invitationError}</p>{invitationInvalid ? <><p>Look for the most recent email titled &ldquo;You&apos;re invited to ... on TLink&rdquo;. Earlier invitation and password-reset links may refer to the old invitation.</p><p>Your business can also send you the current link from Team &gt; Copy invitation link.</p><a className="btn" href="/direct-trade/team">Already joined? Sign in</a></> : <button className="btn" type="button" onClick={() => setInvitationAttempt(current => current + 1)}>Try again</button>}</section>
+      : !authReady ? <section className="dashboard-state-card"><h1>{invitation ? "Your invitation is ready" : "Opening TLink"}</h1><p role="status">{authDelayed ? "Sign-in is taking longer than expected. Check your connection and try again." : "Checking your sign-in..."}</p>{authDelayed && <button className="btn" type="button" onClick={() => window.location.reload()}>Try again</button>}</section>
       : user && invitation && user.email?.toLowerCase() !== invitation.email.toLowerCase() ? <section className="dashboard-state-card"><h1>This invitation is for {invitation.displayName}</h1><p>Use {invitation.email} to join {invitation.businessName}. You are currently signed in as {user.email}.</p><button className="btn" type="button" onClick={() => void leaveAccount()}>Use invited email</button></section>
       : !user ? <section className="team-auth-shell">
-        <div className="team-auth-intro"><span>TLink team invitation</span><h1>{invitation ? `Join ${invitation.businessName}` : "Welcome to your team"}</h1><p>{invitation ? `${invitation.displayName}, your business has your access ready. Set a password, confirm your email and you're in.` : "Sign in with the email your business invited. Your saved permissions control the jobs and tools you can use."}</p></div>
+        <div className="team-auth-intro"><span>TLink team invitation</span><h1>{invitation ? `Join ${invitation.businessName}` : "Welcome to your team"}</h1><p>{invitation ? `${invitation.displayName}, your access is ready. Continue with Google using ${invitation.email}, or use your TLink email login below.` : "Sign in with the email your business invited. Your saved permissions control the jobs and tools you can use."}</p></div>
         <div className="team-auth-card">
           <button className="customer-google-button" type="button" onClick={() => void google()} disabled={Boolean(busy)}>Continue with Google</button>
-          <form onSubmit={emailAuth}>
+          {existingAccount ? <section aria-labelledby="team-existing-login">
+            <h2 id="team-existing-login">You already have a TLink login</h2>
+            <p><strong>The new password you entered was not saved.</strong></p>
+            <p>Continue with Google above using <strong>{email}</strong>. To use a password instead, request a reset link and set it from the email.</p>
+            <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void reset()}>{busy === "reset" ? "Requesting reset..." : "Email me a password reset link"}</button>
+            <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => { setExistingAccount(false); setMode("signin"); setStatus(""); clearPasswordFields(); }}>I know my existing password</button>
+          </section> : <form onSubmit={emailAuth}>
             <h2>{mode === "create" ? "Set your new password" : "Sign in to your team"}</h2>
             {mode === "create" && !invitation && <label><span>Your name</span><input value={name} autoComplete="name" required onChange={(event) => setName(event.target.value)} /></label>}
             <label><span>Invited email</span><input type="email" autoComplete="email" value={email} readOnly={Boolean(invitation)} required onChange={(event) => setEmail(event.target.value)} /></label>
@@ -321,9 +367,9 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
             {mode === "create" && <label htmlFor="team-auth-confirm-password"><span>Confirm new password</span><span className="team-auth-password-control"><input id="team-auth-confirm-password" ref={confirmPasswordRef} type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" minLength={8} required value={confirmPassword} aria-invalid={passwordMismatch} aria-describedby={passwordMismatch ? "team-auth-password-error" : undefined} onChange={(event) => { setConfirmPassword(event.target.value); setPasswordMismatch(false); }} /><button className="team-auth-password-visibility" type="button" aria-label={showConfirmPassword ? "Hide confirmed password" : "Show confirmed password"} aria-pressed={showConfirmPassword} aria-controls="team-auth-confirm-password" onClick={() => setShowConfirmPassword(current => !current)}><PasswordVisibilityIcon visible={showConfirmPassword} /></button></span>{passwordMismatch && <small id="team-auth-password-error" role="alert">Your passwords do not match. Enter the same password in both fields.</small>}</label>}
             <button className="btn" disabled={Boolean(busy)}>{busy === "auth" ? "Please wait..." : mode === "create" ? "Join team" : "Sign in"}</button>
             <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => void reset()}>{busy === "reset" ? "Requesting reset..." : "Reset password"}</button>
-          </form>
+          </form>}
           {status && <p role="status">{status}</p>}
-          <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => { setMode(mode === "create" ? "signin" : "create"); setStatus(""); clearPasswordFields(); }}>{mode === "create" ? "Already have a login? Sign in" : "First time here? Set up your login"}</button>
+          {!existingAccount && <button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={() => { setMode(mode === "create" ? "signin" : "create"); setStatus(""); clearPasswordFields(); }}>{mode === "create" ? "Already have a login? Sign in" : "First time here? Set up your login"}</button>}
         </div>
       </section>
       : !emailVerified ? <section className="team-auth-shell"><div className="team-auth-intro"><span>One final step</span><h1>Confirm your email</h1><p>Your login is ready. Confirm that {user.email} is yours to open your team&apos;s workspace.</p></div><div className="team-auth-card"><h2>Check your inbox</h2><p>Open the verification email, tap the link and return here. Your team&apos;s saved access will then open automatically.</p>{status && <p role="status">{status}</p>}<button className="btn" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verify"); await refreshVerification(true); setBusy(""); }}>{busy === "verify" ? "Checking..." : "I've verified my email"}</button><button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verification-email"); await sendVerification(user); setBusy(""); }}>{busy === "verification-email" ? "Sending..." : "Resend verification email"}</button><button className="customer-reset-link" type="button" onClick={() => void leaveAccount()}>Use another account</button></div></section>

@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 
 import Image from "next/image";
 import {
+  browserPopupRedirectResolver,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -881,7 +882,7 @@ export function CreditexCompliancePortal() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      await signInWithPopup(firebaseAuth, provider);
+      await signInWithPopup(firebaseAuth, provider, browserPopupRedirectResolver);
     } catch (error) {
       if (!captureMfaError(error)) setNotice(authMessage(error));
       setNoticeKind("error");

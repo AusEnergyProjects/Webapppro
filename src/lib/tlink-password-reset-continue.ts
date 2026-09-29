@@ -18,7 +18,9 @@ export function normalizeTLinkPasswordResetContinue(value: unknown): string {
     if (url.origin !== TLINK_ORIGIN || url.username || url.password || !CONTINUE_PATHS.has(url.pathname)) return DEFAULT_CONTINUE;
     const invite = url.searchParams.get("invite");
     if (url.pathname === DEFAULT_CONTINUE && invite && /^[A-Za-z0-9_-]{1,256}$/.test(invite)) {
-      return `${DEFAULT_CONTINUE}?${new URLSearchParams({ invite })}`;
+      const params = new URLSearchParams({ invite });
+      if (url.searchParams.get("auth") === "signin") params.set("auth", "signin");
+      return `${DEFAULT_CONTINUE}?${params}`;
     }
     return url.pathname;
   } catch {

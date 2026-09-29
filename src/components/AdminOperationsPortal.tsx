@@ -8,6 +8,7 @@ import "./AdminOperationsPortal.css";
 import { AdminWorkspaceNavigation, adminWorkspaceHash, adminWorkspaceTabFromHash, type AdminWorkspaceTab } from "./AdminWorkspaceNavigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
+  browserPopupRedirectResolver,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -378,7 +379,7 @@ export function AdminOperationsPortal() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      await signInWithPopup(firebaseAuth, provider);
+      await signInWithPopup(firebaseAuth, provider, browserPopupRedirectResolver);
     } catch (error) {
       if (!captureMfaError(error)) setStatus(authMessage(error));
     }

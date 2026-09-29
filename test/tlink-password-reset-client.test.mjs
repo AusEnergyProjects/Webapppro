@@ -16,17 +16,26 @@ test("reset destinations preserve only approved pages and a bounded team invitat
   }
 });
 
+test("reset invitation returns to existing sign-in without allowing arbitrary auth modes or extra data", () => {
+  const destination = "/direct-trade/team?invite=abc_123&auth=signin";
+  assert.equal(normalizeTLinkPasswordResetContinue(`${destination}&email=private#ignored`), destination);
+  assert.equal(normalizeTLinkPasswordResetContinue(normalizeTLinkPasswordResetContinue(destination)), destination);
+  assert.equal(normalizeTLinkPasswordResetContinue("/direct-trade/team?invite=abc_123&auth=create"), "/direct-trade/team?invite=abc_123");
+  assert.equal(normalizeTLinkPasswordResetContinue("/direct-trade/team?auth=signin"), "/direct-trade/team");
+  assert.equal(normalizeTLinkPasswordResetContinue("/operations/control-centre?auth=signin&invite=abc_123"), "/operations/control-centre");
+});
+
 test("reset request posts the normalized email and safe invitation without credentials", async t => {
   const calls = [];
   t.mock.method(globalThis, "fetch", async (...args) => { calls.push(args); return Response.json({ ok: true }); });
-  await requestTLinkPasswordReset("  Member@Example.test  ", "https://ausenergyassessments.com/direct-trade/team?invite=abc_123&other=drop");
+  await requestTLinkPasswordReset("  Member@Example.test  ", "https://ausenergyassessments.com/direct-trade/team?invite=abc_123&auth=signin&other=drop");
   assert.equal(calls.length, 1);
   const [url, options] = calls[0];
   assert.equal(url, "/api/auth/password-reset");
   assert.equal(options.method, "POST");
   assert.equal(options.cache, "no-store");
   assert.equal(options.credentials, "omit");
-  assert.deepEqual(JSON.parse(options.body), { email: "member@example.test", continuePath: "/direct-trade/team?invite=abc_123" });
+  assert.deepEqual(JSON.parse(options.body), { email: "member@example.test", continuePath: "/direct-trade/team?invite=abc_123&auth=signin" });
 });
 
 test("success needs both an HTTP success and the explicit application acknowledgement", async t => {

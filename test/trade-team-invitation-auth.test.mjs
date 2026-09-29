@@ -12,7 +12,6 @@ test("existing Firebase accounts offer their existing sign-in and a secure passw
   assert.match(message, /already has a login/);
   assert.match(message, /Continue with Google/);
   assert.match(message, /Reset password/);
-  assert.match(portal, /teamAuthErrorCode\(error\) === "auth\/email-already-in-use"\) \{ setMode\("signin"\); clearPasswordFields\(\);/);
   assert.match(portal, /requestTLinkPasswordReset\(recipient, emailActionSettings\(\)\.url\)/);
 });
 
@@ -22,6 +21,7 @@ test("password, connection and rate-limit failures explain the appropriate recov
   assert.match(teamAuthErrorMessage({ code: "auth/network-request-failed" }), /internet connection/);
   assert.match(teamAuthErrorMessage({ code: "auth/too-many-requests" }), /wait a few minutes/);
   assert.match(teamAuthErrorMessage({ code: "auth/invalid-credential" }), /Reset password/);
+  assert.match(teamAuthErrorMessage({ code: "auth/invalid-credential" }), /joined with Google.*Continue with Google/);
   assert.doesNotMatch(teamAuthErrorMessage({ code: "auth/network-request-failed" }), /password was not recognised/);
 });
 
@@ -36,7 +36,7 @@ test("unexpected authentication errors never render provider internals or suppli
 test("invitation setup locks the invited address and clearly asks for a new password", () => {
   assert.match(portal, /\/api\/trade-team\/invitation\?invite=/);
   assert.match(portal, /setEmail\(result\.invitation\.email\)/);
-  assert.match(portal, /setMode\("create"\)/);
+  assert.match(portal, /setMode\(new URLSearchParams\(window\.location\.search\)\.get\("auth"\) === "signin" \? "signin" : "create"\)/);
   assert.match(portal, /readOnly=\{Boolean\(invitation\)\}/);
   assert.match(portal, /Set your new password/);
   assert.match(portal, /autoComplete=\{mode === "create" \? "new-password" : "current-password"\}/);
@@ -65,9 +65,12 @@ test("completing MFA retries invitation acceptance rather than loading an unboun
   assert.match(portal, /\[fetch, authRevision, emailVerified, invitation/);
 });
 
-async function submitPasswordForm({ mode = "create", password = "ExamplePassword1", confirmPassword = "ExamplePassword1" } = {}) {
+async function submitPasswordForm({ mode = "create", password = "ExamplePassword1", confirmPassword = "ExamplePassword1",
+  createError, signInError, mfaHandled = false } = {}) {
   const calls = [];
   const messages = [];
+  const mfaErrors = [];
+  let existingAccount = false;
   const handler = portal.slice(portal.indexOf("  async function emailAuth("), portal.indexOf("  async function reset()"))
     .replace("event: FormEvent<HTMLFormElement>", "event");
   await runInNewContext(`(async () => { ${handler}\nawait emailAuth({ preventDefault() {} }); })()`, {
@@ -75,16 +78,20 @@ async function submitPasswordForm({ mode = "create", password = "ExamplePassword
     setPasswordMismatch: value => calls.push(["mismatch", value]),
     setStatus: value => messages.push(value),
     setBusy: value => calls.push(["busy", value]),
+    setExistingAccount: value => { existingAccount = value; calls.push(["existing-account", value]); },
     confirmPasswordRef: { current: { focus: () => calls.push(["focus-confirmation"]) } },
-    createUserWithEmailAndPassword: async () => { calls.push(["create-account"]); return { user: {} }; },
-    signInWithEmailAndPassword: async () => { calls.push(["sign-in"]); },
+    createUserWithEmailAndPassword: async () => {
+      calls.push(["create-account"]); if (createError) throw createError; return { user: {} };
+    },
+    signInWithEmailAndPassword: async () => { calls.push(["sign-in"]); if (signInError) throw signInError; },
     updateProfile: async () => { calls.push(["profile"]); },
     sendVerification: async () => { calls.push(["verify-email"]); },
+    reset: async () => calls.push(["reset"]),
     clearPasswordFields: () => calls.push(["clear-passwords"]),
-    captureMfaError: () => false, teamAuthErrorCode, teamAuthErrorMessage,
+    captureMfaError: error => { mfaErrors.push(error); return mfaHandled; }, teamAuthErrorCode, teamAuthErrorMessage,
     setMode: value => calls.push(["mode", value]),
   });
-  return { calls, messages };
+  return { calls, messages, existingAccount, mfaErrors };
 }
 
 test("mismatched confirmation stops account creation and focuses confirmation without exposing passwords", async () => {
@@ -95,11 +102,70 @@ test("mismatched confirmation stops account creation and focuses confirmation wi
 });
 
 test("matching passwords create one account, verify email and clear both password controls", async () => {
-  const { calls } = await submitPasswordForm();
+  const { calls, existingAccount } = await submitPasswordForm();
   assert.equal(calls.filter(([action]) => action === "create-account").length, 1);
   assert.equal(calls.filter(([action]) => action === "verify-email").length, 1);
   assert.equal(calls.filter(([action]) => action === "clear-passwords").length, 1);
   assert.ok(calls.findIndex(([action]) => action === "create-account") < calls.findIndex(([action]) => action === "verify-email"));
+  assert.equal(existingAccount, false);
+});
+
+test("an existing account collision shows explicit recovery without silently trying the unsaved password", async () => {
+  const { calls, messages, existingAccount, mfaErrors } = await submitPasswordForm({
+    createError: { code: "auth/email-already-in-use", message: "provider-internal-details" },
+  });
+  assert.equal(existingAccount, true);
+  assert.equal(calls.filter(([action]) => action === "create-account").length, 1);
+  assert.equal(calls.filter(([action]) => action === "clear-passwords").length, 1);
+  assert.equal(calls.some(([action]) => ["mode", "sign-in", "profile", "verify-email", "reset"].includes(action)), false);
+  assert.equal(messages.at(-1), "", "the dedicated recovery panel replaces stale creating status");
+  assert.equal(mfaErrors.length, 0);
+  assert.deepEqual(calls.at(-1), ["busy", ""]);
+  assert.doesNotMatch(messages.join(" "), /provider-internal-details|ExamplePassword1/);
+});
+
+test("existing-account recovery explains the password was not saved and leaves sending a reset to an explicit click", () => {
+  const recovery = portal.slice(portal.indexOf('{existingAccount ? <section'), portal.indexOf('</section> : <form onSubmit={emailAuth}>'));
+  assert.match(recovery, /You already have a TLink login/);
+  assert.match(recovery, /The new password you entered was not saved/);
+  assert.match(recovery, /Continue with Google/);
+  assert.match(recovery, /Email me a password reset link/);
+  assert.match(recovery, /type="button"[^>]+onClick=\{\(\) => void reset\(\)\}/);
+  assert.match(recovery, /I know my existing password/);
+  assert.match(recovery, /onClick=\{\(\) => \{ setExistingAccount\(false\); setMode\("signin"\); setStatus\(""\); clearPasswordFields\(\); \}\}/);
+});
+
+for (const code of ["auth/weak-password", "auth/network-request-failed", "auth/too-many-requests"]) {
+  test(`${code} keeps the signup form available without showing existing-account recovery`, async () => {
+    const { calls, messages, existingAccount } = await submitPasswordForm({ createError: { code } });
+    assert.equal(existingAccount, false);
+    assert.equal(calls.filter(([action]) => action === "create-account").length, 1);
+    assert.equal(calls.some(([action]) => ["clear-passwords", "mode", "sign-in", "profile", "verify-email", "reset"].includes(action)), false);
+    assert.equal(messages.at(-1), teamAuthErrorMessage({ code }));
+    assert.deepEqual(calls.at(-1), ["busy", ""]);
+  });
+}
+
+test("a wrong sign-in password keeps sign-in available and explains Google and email reset choices", async () => {
+  const { calls, messages, existingAccount } = await submitPasswordForm({ mode: "signin",
+    confirmPassword: "", signInError: { code: "auth/invalid-credential" } });
+  assert.equal(existingAccount, false);
+  assert.equal(calls.filter(([action]) => action === "sign-in").length, 1);
+  assert.equal(calls.some(([action]) => ["create-account", "clear-passwords", "mode", "verify-email", "reset"].includes(action)), false);
+  assert.match(messages.at(-1), /Continue with Google/);
+  assert.match(messages.at(-1), /Reset password/);
+  assert.deepEqual(calls.at(-1), ["busy", ""]);
+});
+
+test("an MFA challenge retains the existing MFA flow instead of treating the account as a signup collision", async () => {
+  const challenge = { code: "auth/multi-factor-auth-required" };
+  const { calls, messages, existingAccount, mfaErrors } = await submitPasswordForm({ mode: "signin",
+    confirmPassword: "", signInError: challenge, mfaHandled: true });
+  assert.deepEqual(mfaErrors, [challenge]);
+  assert.equal(existingAccount, false);
+  assert.equal(calls.some(([action]) => ["create-account", "mode", "verify-email", "reset"].includes(action)), false);
+  assert.deepEqual(messages, ["Signing in..."]);
+  assert.deepEqual(calls.at(-1), ["busy", ""]);
 });
 
 test("existing sign-in requires no confirmation", async () => {
@@ -136,6 +202,20 @@ function requestPasswordReset(email, provider = async () => {}) {
   });
   return { calls, messages, completion, actionSettings };
 }
+
+test("verification and reset return URLs preserve the invitation and explicitly select sign-in", () => {
+  const handler = portal.slice(portal.indexOf("  function emailActionSettings()"), portal.indexOf("  async function sendVerification("));
+  for (const inviteToken of ["", "a".repeat(43)]) {
+    const settings = runInNewContext(`${handler}\nemailActionSettings()`, {
+      URL, inviteToken, window: { location: { origin: "https://tlink.example.test" } },
+    });
+    const target = new URL(settings.url);
+    assert.equal(target.origin, "https://tlink.example.test");
+    assert.equal(target.pathname, "/direct-trade/team");
+    assert.equal(target.searchParams.get("auth"), "signin");
+    assert.equal(target.searchParams.get("invite"), inviteToken || null);
+  }
+});
 
 test("password reset normalizes the exact recipient and preserves the invitation return settings", async () => {
   const { calls, messages, completion, actionSettings } = requestPasswordReset("  Member@Example.test  ");

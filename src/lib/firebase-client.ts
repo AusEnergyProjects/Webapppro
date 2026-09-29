@@ -1,7 +1,12 @@
 "use client";
 
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import {
+  browserLocalPersistence,
+  browserSessionPersistence,
+  indexedDBLocalPersistence,
+  initializeAuth,
+} from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBL9P793q5z7o6Baqg-o2yuIteYU6IHrug",
@@ -14,4 +19,8 @@ const firebaseConfig = {
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-export const firebaseAuth = getAuth(app);
+// Load the Google popup resolver only when a popup sign-in is requested. Its
+// mobile iframe must not hold up email sign-in or restoring a saved session.
+export const firebaseAuth = initializeAuth(app, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
+});

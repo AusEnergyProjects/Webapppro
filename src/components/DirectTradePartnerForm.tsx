@@ -4,6 +4,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import {
+  browserPopupRedirectResolver,
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -163,7 +164,7 @@ export function DirectTradePartnerForm() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      await signInWithPopup(firebaseAuth, provider);
+      await signInWithPopup(firebaseAuth, provider, browserPopupRedirectResolver);
       setAuthStatus("Google account connected. Complete the business profile below.");
     } catch (error) {
       if (!captureMfaError(error)) setAuthStatus(authMessage(error));

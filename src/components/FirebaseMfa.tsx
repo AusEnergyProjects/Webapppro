@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 import { FirebaseError } from "firebase/app";
 import {
-  EmailAuthProvider, GoogleAuthProvider, getMultiFactorResolver, multiFactor,
+  browserPopupRedirectResolver, EmailAuthProvider, GoogleAuthProvider, getMultiFactorResolver, multiFactor,
   reauthenticateWithCredential, reauthenticateWithPopup, sendEmailVerification,
   TotpMultiFactorGenerator, type MultiFactorError, type MultiFactorResolver,
   type TotpSecret, type User,
@@ -121,7 +121,7 @@ export function FirebaseAccountSecurity({ user, onComplete }: { user: User; onCo
       if (method === "google") {
         const provider = new GoogleAuthProvider();
         provider.setCustomParameters({ login_hint: user.email || "", prompt: "select_account" });
-        await reauthenticateWithPopup(user, provider);
+        await reauthenticateWithPopup(user, provider, browserPopupRedirectResolver);
       } else await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email || "", password));
       setPassword("");
       if (multiFactor(user).enrolledFactors.length) {
