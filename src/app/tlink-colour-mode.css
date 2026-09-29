@@ -1110,7 +1110,30 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-day-track.tod
   background: var(--trade-accent-soft);
 }
 
-/* Schedule navigation darkens; coloured appointment blocks keep their status colours. */
+/* Booking surfaces and text share the portal palette in both colour modes. */
+.trade-portal-shell .crm-job-schedule-panel {
+  background: var(--trade-surface-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-ink);
+}
+
+.trade-portal-shell :is(.schedule-timetable-scroll, .schedule-time-rail, .schedule-day-track) {
+  border-color: var(--trade-line);
+}
+
+.trade-portal-shell :is(.schedule-time-track span, .schedule-day-track > header strong, .schedule-appointment-details dd) {
+  color: var(--trade-ink);
+}
+
+.trade-portal-shell :is(.schedule-time-heading, .schedule-day-track > header span, .schedule-free-day, .schedule-week-range small) {
+  color: var(--trade-muted);
+}
+
+.trade-portal-shell :is(.schedule-duration > span strong, .schedule-pending-actions strong) {
+  color: var(--trade-accent-readable);
+}
+
+/* Preserve worker colours while adapting cards, statuses and the drawer. */
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .schedule-capacity,
   .schedule-board > section,
@@ -1120,6 +1143,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .schedule-availability,
   .schedule-calendar-links,
   .schedule-selection,
+  .schedule-request-decision .schedule-duration,
   .job-calendar-person-filter,
   .schedule-filter-panel
 ) {
@@ -1161,6 +1185,76 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-timetable {
   background: var(--trade-surface);
 }
 
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-appointment-dialog :is(.schedule-selection > p, .schedule-quote-summary) {
+  background: var(--trade-surface-raised);
+  border-color: var(--trade-line);
+  color: var(--trade-muted);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.schedule-appointment-contact > span, .schedule-appointment-notes > span) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-appointment-dialog > footer > button.schedule-secondary {
+  background: var(--trade-field);
+  border-color: var(--trade-line);
+  color: var(--trade-accent-readable);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.schedule-pending-actions, .schedule-week-nav strong) {
+  background: var(--trade-accent-soft);
+  border-color: var(--trade-line);
+  color: var(--trade-accent-soft-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-pending-actions.conflict {
+  background: color-mix(in srgb, #ffad91 15%, var(--trade-surface));
+  border-color: #ffad91;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block {
+  --schedule-block-colour: #69d7aa;
+  background: color-mix(in srgb, var(--schedule-block-colour) 18%, var(--trade-surface));
+  border-color: color-mix(in srgb, var(--schedule-block-colour) 50%, var(--trade-line));
+  border-left-color: var(--schedule-block-colour);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block.teal { --schedule-block-colour: #67d5cc; }
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block.blue { --schedule-block-colour: #88baff; }
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block.violet { --schedule-block-colour: #c4a7f5; }
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block.amber { --schedule-block-colour: #f4c475; }
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block.rose { --schedule-block-colour: #f2a6bc; }
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block.proposal { --schedule-block-colour: #f4c475; }
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block.unavailable { --schedule-block-colour: var(--trade-muted); }
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block.conflict { --schedule-block-colour: #ffad91; }
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block:is(.proposal, .unavailable) {
+  background: repeating-linear-gradient(135deg,
+    color-mix(in srgb, var(--schedule-block-colour) 12%, var(--trade-surface)) 0 8px,
+    color-mix(in srgb, var(--schedule-block-colour) 22%, var(--trade-surface)) 8px 16px);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block > :is(strong, small, em, span) {
+  color: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block > b {
+  color: var(--schedule-block-colour);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-block:is(:hover, .selected, .conflict, .draft) {
+  box-shadow: 0 0 0 2px var(--schedule-block-colour);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.schedule-proposal-resize, .schedule-appointment-resize)::before {
+  background: var(--trade-ink);
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.crm-job-schedule-workspace, .schedule-workspace) :focus-visible {
+  outline-color: var(--trade-accent-readable);
+}
+
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.schedule-time-heading, .schedule-day-track > header) {
   background: var(--trade-surface-soft);
   border-color: var(--trade-line);
@@ -1172,6 +1266,10 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-day-grid {
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-day-track.past .schedule-day-grid {
   background-color: #0d1a20;
+}
+
+html[data-tlink-colour-mode="night"] .trade-portal-shell .schedule-day-track.drop-target .schedule-day-grid {
+  background-color: var(--trade-accent-soft);
 }
 
 /* Invoice navigation is themed; invoice and quote documents are reset below. */

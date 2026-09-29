@@ -935,7 +935,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
         return <section key={bufferedWeekStart} className="schedule-week-page" aria-hidden={!pageIsActive}>
         <div ref={pageIsActive ? timetableScrollRef : undefined} className="schedule-timetable-scroll" onDragOver={(event) => { if (draggingId) autoScrollDuringDrag(event.clientX, event.clientY); }}>
         <div className="schedule-timetable">
-        <div className="schedule-time-rail" style={{ background: "#fff", left: 0, position: "sticky", zIndex: 20 }}><div className="schedule-time-heading">Time</div><div className="schedule-time-track" style={{ height: `${gridHeight}px` }}>{timeLabels.map((minute) => <span className={minute === gridStartMinute ? "first" : minute === gridEndMinute ? "last" : undefined} key={minute} style={{ top: `${((minute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT}px` }}>{formatTime(`2000-01-01T${minuteLabel(minute)}`)}</span>)}</div></div>
+        <div className="schedule-time-rail" style={{ background: "var(--trade-surface)", left: 0, position: "sticky", zIndex: 20 }}><div className="schedule-time-heading">Time</div><div className="schedule-time-track" style={{ height: `${gridHeight}px` }}>{timeLabels.map((minute) => <span className={minute === gridStartMinute ? "first" : minute === gridEndMinute ? "last" : undefined} key={minute} style={{ top: `${((minute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT}px` }}>{formatTime(`2000-01-01T${minuteLabel(minute)}`)}</span>)}</div></div>
         {days.map((date) => {
           const dayIsPast = date < minimumStart.slice(0, 10);
           const dayIsToday = date === todayDate;
