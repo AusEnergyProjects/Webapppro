@@ -24,7 +24,7 @@ function smsError(error: unknown) {
     SMS_NUMBER_ALREADY_CONNECTED: "This number is already linked to another TLink business.",
     SMS_DISCONNECT_FIRST: "Disconnect the current SMS number before choosing another.",
     SMS_CONNECTION_ORIGIN_CHANGED: "Open TLink using the original connection's website address to reconnect this number.",
-    SMS_CONNECTION_REQUIRED: "Connect your business's Twilio number in Integrations first.",
+    SMS_CONNECTION_REQUIRED: "Set up your business SMS number in Messages first.",
     SMS_CUSTOMER_REQUIRED: "Choose an active customer owned by your business.",
     SMS_MOBILE_REQUIRED: "Save an Australian mobile number on this customer first.",
     SMS_PHONE_CONFLICT: "This mobile number already belongs to a different SMS conversation in your customer records.",
@@ -32,6 +32,12 @@ function smsError(error: unknown) {
     SMS_CONSENT_REQUIRED: "Record this customer's permission for service text messages first.",
     SMS_OPTED_OUT: "This customer opted out. They must text START to your connected number before further service texts can be sent.",
     SMS_BODY_INVALID: "Enter a message of 1 to 480 characters without control characters.",
+    SMS_CREDIT_REQUIRED: "Add SMS credit before sending this message.",
+    SMS_ACCOUNT_NOT_READY: "Your SMS account needs a provider or billing check before sending.",
+    SMS_MARKETING_CONSENT_REQUIRED: "Record separate permission for feedback and review messages first.",
+    SMS_PURPOSE_INVALID: "Choose service update or feedback and review.",
+    SMS_URL_APPROVAL_REQUIRED: "ClickSend has not yet enabled links for this SMS account. Contact TLink support.",
+    SMS_MANAGED_CANCELLATION_REQUIRED: "Manage your number rental in Messages, then Customer SMS.",
     SMS_REQUEST_ID_REQUIRED: "Refresh the conversation before sending.",
     SMS_REQUEST_CONFLICT: "This send request was already used for different content. Refresh the conversation.",
     SMS_REPLY_CHANGED: "This reply was already linked or is no longer available. Refresh the conversation.",
@@ -74,15 +80,18 @@ export async function POST(request: Request) {
       await connectSms(actor.ownerUid, smsCredentials(body.accountSid, body.authToken), String(body.numberSid || ""), body.dailyLimit, new URL(request.url).origin);
       return adminJson({ ok: true });
     }
-    if (body.action === "consent") {
-      await recordSmsConsent(actor, String(body.customerId || ""), body.consentNote, String(body.workOrderId || ""));
+    if (body.action === "consent" || body.action === "marketing_consent") {
+      await recordSmsConsent(actor, String(body.customerId || ""), body.consentNote, String(body.workOrderId || ""),undefined,body.action === "marketing_consent" ? "marketing":"service");
       return adminJson({ ok: true });
     }
     if (body.action === "link_reply") {
       await linkSmsReply(actor, String(body.customerId || ""), String(body.messageId || ""), String(body.workOrderId || ""));
       return adminJson({ ok: true });
     }
-    if (body.action === "send") return adminJson({ ok: true, message: await sendTradeSms(actor, String(body.customerId || ""), body.body, body.requestId, String(body.workOrderId || "")) });
+    if (body.action === "send") {
+      if(body.purpose!==undefined&&body.purpose!=="service"&&body.purpose!=="marketing")throw new Error("SMS_PURPOSE_INVALID");
+      return adminJson({ ok: true, message: await sendTradeSms(actor, String(body.customerId || ""), body.body, body.requestId, String(body.workOrderId || ""),undefined,undefined,{purpose:body.purpose||"service"}) });
+    }
     return adminJson({ ok: false, error: "Choose an SMS action." }, 400);
   } catch (error) { return smsError(error); }
 }

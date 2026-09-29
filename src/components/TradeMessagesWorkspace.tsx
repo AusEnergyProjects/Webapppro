@@ -9,6 +9,7 @@ import type { User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { normalizeAustralianMobile } from "@/lib/service-reminder-delivery";
 import { TradeCustomerSmsPanel } from "./TradeCustomerSmsPanel";
+import { TradeSmsDashboard } from "./TradeSmsDashboard";
 import TradeMessageAttachments, { TradeMessageAttachmentList } from "./TradeMessageAttachments";
 import TradeTeamAvatar from "./TradeTeamAvatar";
 import { TradeTeamCallButtons } from "./TradeTeamCallProvider";
@@ -138,14 +139,14 @@ function TeamConversation({ thread, call, memberId, onRead, getAuthHeaders, canM
   </section>;
 }
 
-export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegrations, onOpenQuote, initialThreadId = "", initialThreadRevision = 0, initialCallId = "", teamOnly = false }: {
-  user?: User; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenIntegrations?: () => void; onOpenQuote?: (workOrderId: string) => void; initialThreadId?: string; initialThreadRevision?: number; initialCallId?: string; teamOnly?: boolean;
+export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegrations, onOpenQuote, onOpenAutomations, initialThreadId = "", initialThreadRevision = 0, initialCallId = "", teamOnly = false }: {
+  user?: User; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenIntegrations?: () => void; onOpenQuote?: (workOrderId: string) => void; onOpenAutomations?: () => void; initialThreadId?: string; initialThreadRevision?: number; initialCallId?: string; teamOnly?: boolean;
 }) {
   const fetch = useTradeBusinessFetch();
   const router = useRouter();
   const { refresh: refreshAlerts } = useTradeMessageAlerts();
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [mode, setMode] = useState<"team" | "customers">("team");
+  const [mode, setMode] = useState<"team" | "customers">(teamOnly || initialThreadId ? "team" : "customers");
   const [customers, setCustomers] = useState<CustomerThread[]>([]);
   const [questions, setQuestions] = useState<QuoteQuestion[]>([]);
   const [hasMoreCustomers, setHasMoreCustomers] = useState(false);
@@ -204,14 +205,20 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
     overviewRequests.current.add(queryKey);
     try {
       const query = `search=${encodeURIComponent(search)}&page=${page}`;
-      const { response, result } = await call(mode === "customers" ? `view=customers&${query}` : query);
+      // Load current identity and permissions even when customer SMS is the first view.
+      const { response, result } = await call(mode === "team" ? query : "");
       if (!response.ok || !result.ok) throw new Error(result.error || "Conversations could not be loaded.");
       if (!alive.current || activeQuery.current !== queryKey) return;
-      if (mode === "team" && result.memberId && result.members && result.threads) {
+      if (result.memberId && result.members && result.threads) {
         setOverview({ memberId: result.memberId, members: result.members, threads: result.threads, hasMore: Boolean(result.hasMore), canUseSms: Boolean(result.canUseSms), canUseQuotes: Boolean(result.canUseQuotes), canCreateSmsContact: Boolean(result.canCreateSmsContact), canManageTeam: Boolean(result.canManageTeam) });
-        setSelected(current => current ? result.threads?.find(thread => thread.id === current.id) || current : null);
-      } else if (mode === "customers") {
-        setCustomers(result.customerThreads || []); setQuestions(result.questions || []); setHasMoreCustomers(Boolean(result.hasMore));
+        if (mode === "team") setSelected(current => current ? result.threads?.find(thread => thread.id === current.id) || current : null);
+      }
+      if (mode === "customers") {
+        if (!result.canUseSms && !result.canUseQuotes) { setMode("team"); return; }
+        const customerResponse = await call(`view=customers&${query}`);
+        if (!customerResponse.response.ok || !customerResponse.result.ok) throw new Error(customerResponse.result.error || "Customer conversations could not be loaded.");
+        if (!alive.current || activeQuery.current !== queryKey) return;
+        setCustomers(customerResponse.result.customerThreads || []); setQuestions(customerResponse.result.questions || []); setHasMoreCustomers(Boolean(customerResponse.result.hasMore));
       }
     } catch (error) { if (alive.current && activeQuery.current === queryKey) setStatus(error instanceof Error ? error.message : "Conversations could not be loaded."); }
     finally { overviewRequests.current.delete(queryKey); }
@@ -268,10 +275,12 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
   }
 
   const hasMore = mode === "team" ? overview?.hasMore : hasMoreCustomers;
+  const isBusinessOwner = Boolean(user && overview?.members.find(member => member.id === overview.memberId)?.isOwner);
   return <section className={styles.workspace} aria-label="Messages workspace">
     <header className={styles.heading}><div><h2>Messages</h2><p>{teamOnly ? "Chat, share photos and call your team." : "Your customers and team, in one place."}</p></div><div className={styles.actions}>{teamOnly && overview && <TradeTeamPresence getAuthHeaders={authHeaders} />}{overview && <TradeNotificationSettings key={user?.uid || overview.memberId} getAuthHeaders={authHeaders} />}{overview && <TradeTeamAvatar memberId={overview.memberId} name={overview.members.find(member => member.id === overview.memberId)?.name || "Your profile"} revision={overview.members.find(member => member.id === overview.memberId)?.avatarRevision} editable getAuthHeaders={authHeaders} onChange={onRead} />}<button type="button" className={styles.primary} disabled={createBusy || contactBusy} onClick={() => { setCreating(true); if (!pendingCreate && !pendingCustomer) setContactSearch(""); setStatus(""); }}>New chat</button></div></header>
     <div className={styles.tabs} aria-label="Message types"><button type="button" aria-pressed={mode === "team"} onClick={() => { setMode("team"); setPage(1); setSearch(""); }}>Team</button>{!teamOnly && (overview?.canUseSms || overview?.canUseQuotes) && <button type="button" aria-pressed={mode === "customers"} onClick={() => { setMode("customers"); setPage(1); setSearch(""); }}>Customers</button>}</div>
     {status && <p className={styles.notice} role="status">{status}</p>}
+    {!teamOnly && mode === "customers" && isBusinessOwner && <TradeSmsDashboard key={overview?.memberId} user={user} getAuthHeaders={getAuthHeaders} onOpenAutomations={onOpenAutomations || (() => router.push("/direct-trade/dashboard?workspace=email-templates"))} />}
     {creating && <form className={styles.newChat} onSubmit={event => void create(event)}>
       <h3>New chat</h3><label className={styles.groupName}><span>Name or phone number</span><input type="search" value={contactSearch} disabled={createBusy || contactBusy || Boolean(pendingCreate) || Boolean(pendingCustomer)} onChange={event => setContactSearch(event.target.value)} placeholder={teamOnly ? "Search your team" : "Search customers and your team"} /></label>
       <fieldset disabled={createBusy || contactBusy || Boolean(pendingCreate) || Boolean(pendingCustomer)}><legend>Choose a teammate, or several for a group</legend><div className={styles.people}>{contactResults.members.map(member => <label key={member.id}><input type="checkbox" checked={members.includes(member.id)} onChange={event => setMembers(current => event.target.checked ? [...current, member.id] : current.filter(id => id !== member.id))} /><TradeTeamAvatar memberId={member.id} name={member.name} revision={member.avatarRevision} getAuthHeaders={authHeaders} /><span>{member.name}{member.isOwner ? " · Business owner" : ""}<small className={styles.internalBadge}>Internal · Team</small></span></label>)}</div>

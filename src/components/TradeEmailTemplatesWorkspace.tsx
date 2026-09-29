@@ -6,6 +6,7 @@ import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 
 import type { User } from "firebase/auth";
 import { FOLLOW_UP_FIELDS, followUpEditorText, followUpStoredText, renderFollowUp, type FollowUpSettings, type FollowUpTemplate } from "@/lib/trade-follow-ups";
 import { TRADE_EMAIL_SETTINGS_HREF } from "./TradeEmailSettings";
+import { TradeSmsAutomationPanel } from "./TradeSmsAutomationPanel";
 import styles from "./TradeEmailTemplatesWorkspace.module.css";
 
 type WorkspaceData = {
@@ -52,7 +53,7 @@ function ReminderTimingFields({ value, eventLabel, disabled, onChange }: {
 export function TradeEmailTemplatesWorkspace({ user }: { user: User }) {
   const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<WorkspaceData | null>(null);
-  const [tab, setTab] = useState<"templates" | "reminders">("templates");
+  const [tab, setTab] = useState<"sms" | "templates" | "reminders">("sms");
   const [draft, setDraft] = useState<FollowUpTemplate | null>(null);
   const [savedDraft, setSavedDraft] = useState<FollowUpTemplate | null>(null);
   const [settings, setSettings] = useState<FollowUpSettings | null>(null);
@@ -154,19 +155,21 @@ export function TradeEmailTemplatesWorkspace({ user }: { user: User }) {
 
   return <section className={styles.workspace} aria-labelledby={headingId} aria-busy={loading || busy}>
     <header className={styles.heading}>
-      <div><h2 id={headingId}>Email templates</h2><p>Choose a job, select Follow up, then review and send.</p></div>
-      {!loading && data && <span className={connected ? styles.connectionReady : styles.connectionPaused}>{connected ? data.connection?.email : "Email not connected"}</span>}
+      <div><h2 id={headingId}>Follow-ups</h2><p>Automatic texts, email templates and reminders for your customers.</p></div>
+      {tab !== "sms" && !loading && data && <span className={connected ? styles.connectionReady : styles.connectionPaused}>{connected ? data.connection?.email : "Email not connected"}</span>}
     </header>
-    <nav className={styles.tabs} aria-label="Email template views">
-      <button type="button" aria-pressed={tab === "templates"} disabled={busy || settingsDirty} onClick={() => setTab("templates")}>Templates</button>
-      <button type="button" aria-pressed={tab === "reminders"} disabled={busy || templateDirty} onClick={() => setTab("reminders")}>Automatic reminders <span className={styles.badge}>Optional</span></button>
+    <nav className={styles.tabs} aria-label="Follow-up channels">
+      <button type="button" aria-pressed={tab === "sms"} disabled={busy || templateDirty || settingsDirty} onClick={() => setTab("sms")}>Auto texts</button>
+      <button type="button" aria-pressed={tab === "templates"} disabled={busy || settingsDirty} onClick={() => setTab("templates")}>Email templates</button>
+      <button type="button" aria-pressed={tab === "reminders"} disabled={busy || templateDirty} onClick={() => setTab("reminders")}>Email reminders</button>
     </nav>
     {error && <p className={styles.error} role="alert">{error}</p>}
     {notice && <p className={styles.notice} role="status">{notice}</p>}
     {loading ? <p className={styles.loading} role="status">Loading email templates...</p> : !data ? <button type="button" className={styles.secondary} onClick={() => { setLoading(true); setError(""); setReload(value => value + 1); }}>Try again</button> : <>
-      {!connected && <p className={styles.notice}>You can prepare templates now. <a href={TRADE_EMAIL_SETTINGS_HREF}>Connect your business email</a> before sending.</p>}
+      {tab !== "sms" && !connected && <p className={styles.notice}>You can prepare templates now. <a href={TRADE_EMAIL_SETTINGS_HREF}>Connect your business email</a> before sending.</p>}
       {!canManage && <p className={styles.subtle}>Your team can use these templates. The business owner manages templates and automatic reminders.</p>}
-      {tab === "templates" ? <div className={styles.templateLayout}>
+      {canManage && <div hidden={tab !== "sms"}><TradeSmsAutomationPanel user={user} /></div>}
+      {tab === "sms" ? !canManage && <p className={styles.notice}>The business owner manages automatic customer texts.</p> : tab === "templates" ? <div className={styles.templateLayout}>
         <aside className={styles.templateSidebar} aria-label="Saved templates">
           <div className={styles.listHeading}><h3>Your templates</h3>{canManage && <button type="button" className={styles.secondary} disabled={busy || templateDirty} onClick={() => {
             setDraft({ id: `custom-${crypto.randomUUID()}`, name: "", kind: "general", subject: "", body: "" });

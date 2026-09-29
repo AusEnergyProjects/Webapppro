@@ -36,7 +36,7 @@ function fixture() {
     CREATE TABLE trade_crm_customers(id TEXT PRIMARY KEY,firebase_uid TEXT,phone TEXT,record_status TEXT);
     CREATE TABLE trade_work_orders(id TEXT PRIMARY KEY,firebase_uid TEXT,partner_type TEXT,record_status TEXT,source_type TEXT,assignee_member_id TEXT,work_number TEXT,created_at TEXT);
     CREATE TABLE trade_crm_job_details(work_order_id TEXT PRIMARY KEY,firebase_uid TEXT,crm_customer_id TEXT,customer_source TEXT);`);
-  for (const file of ['0182_trade_sms.sql', '0212_trade_team_sms.sql']) sqlite.exec(read(`../drizzle/${file}`).replaceAll('--> statement-breakpoint', ''));
+  for (const file of ['0182_trade_sms.sql', '0212_trade_team_sms.sql', '0220_trade_managed_sms.sql']) sqlite.exec(read(`../drizzle/${file}`).replaceAll('--> statement-breakpoint', ''));
   sqlite.exec(`INSERT INTO trade_team_members VALUES('worker','business','','active','own',1),('owner','business','business','active','team',1);
     INSERT INTO trade_field_sessions VALUES('field-session','business','worker','active','2099-01-01');
     INSERT INTO trade_crm_customers VALUES('customer','business','0412345678','active'),('foreign','another-business','0498765432','active');
@@ -65,8 +65,11 @@ function fixture() {
     './trade-integration-crypto': {}, './trade-message-media-access': {},
   });
   const server = load('../src/lib/trade-sms-server.ts', {
+    './trade-access-server': {},
     '../../db': { getD1: () => db }, '@/lib/trade-integration-crypto': {}, '@/lib/service-reminder-delivery': reminders,
     './trade-sms': sms, './trade-sms-provider': {},
+    './trade-sms-account-server': {}, './trade-clicksend-provider': {}, './trade-sms-billing': {},
+    './trade-sms-wallet-server': {}, './trade-sms-environment': {}, './trade-integration-crypto': {},
   });
   const api = load('../src/app/api/trade-sms/route.ts', {
     '@/lib/admin-server': { sameOrigin: input => !input.headers.get('origin') || input.headers.get('origin') === new URL(input.url).origin,

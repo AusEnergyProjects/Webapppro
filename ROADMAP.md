@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 28 September 2026
+Last reconciled: 29 September 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -16,7 +16,11 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
-## Current team communication usability completion gate
+## Current managed SMS operational proof gate
+
+Publish the Australian ClickSend number onboarding, owner-funded Stripe credit, two-way customer inbox and optional SMS Follow-ups for inspection. Then obtain owner-funded ClickSend credit and an authorised controlled rental/send/reply test before claiming handset delivery. Keep registration status, link approval and provider-confirmed cancellation explicit. Evidence: C:/Webproject/outputs/tlink-managed-sms-2026-09-29/.
+
+## Previous team communication usability completion gate
 
 Web communication usability and browser notifications were published in Sites 669, followed by the compatible Android 1.0.1 update. Complete native 1.0.2 with its own team/customer inbox, attachment playback, voice notes and native call controls, and publish a new signed Android binary plus matching server changes. Preserve the existing per-business, participant and assigned-job permissions. Keep older handoff endpoints only for installed 1.0.1 clients. An authorised physical-device installation and two-device media/push check remain operational gates. Evidence: C:/Webproject/outputs/tlink-native-comms-2026-09-28/.
 

@@ -99,7 +99,7 @@ function TradeCommunicationContent() {
     <header className={styles.brand}><a href="/direct-trade/dashboard"><TLinkMark size={36} /><strong>TLink</strong></a>{session && <div><span>{session.access.businessName}</span>{!session.user && <button type="button" onClick={() => void closeSession()}>Close session</button>}</div>}</header>
     {error && <p className={styles.notice} role="status">{error}</p>}
     {loading ? <p role="status">Opening your team messages...</p> : session ? <TradeMessageAlerts key={session.access.memberId} user={session.user} getAuthHeaders={getAuthHeaders} onOpen={threadId => setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 }))}><TradeTeamCallProvider key={session.access.memberId} user={session.user} getAuthHeaders={getAuthHeaders}>
-      <TradeMessagesWorkspace key={session.access.memberId} user={session.user || undefined} getAuthHeaders={getAuthHeaders} initialThreadId={messageTarget.id || session.threadId} initialThreadRevision={messageTarget.revision} initialCallId={session.callId} teamOnly />
+      <TradeMessagesWorkspace key={session.access.memberId} user={session.user || undefined} getAuthHeaders={getAuthHeaders} initialThreadId={messageTarget.id || session.threadId} initialThreadRevision={messageTarget.revision} initialCallId={session.callId} teamOnly={!session.user} />
     </TradeTeamCallProvider></TradeMessageAlerts> : <section className={styles.signin}><h1>Team messages</h1><p>Sign in with your team account, or open Messages from the TLink field app.</p><a href={signInUrl}>Sign in to TLink</a></section>}
   </main>;
 }

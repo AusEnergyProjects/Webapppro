@@ -69,6 +69,8 @@ import { drainAccountingDispatches } from "../src/lib/trade-accounting-automatio
 import { exportAcceptedInvoiceAutomatically } from "../src/lib/trade-accounting-server";
 import { drainAcceptedInvoiceEmails } from "../src/lib/trade-accepted-invoice-delivery-server";
 import { processBusinessFollowUps } from "../src/lib/trade-follow-ups-runtime";
+import { processSmsAutomations } from "../src/lib/trade-sms-automation-runtime";
+import { processManagedSmsRentals } from "../src/lib/trade-sms-account-server";
 import {
   canonicalPublicTarget,
   publicRedirectTarget,
@@ -542,6 +544,12 @@ const worker = {
       tasks.push(
         processBusinessFollowUps(getD1()).catch(() => {
           console.error("Business follow-up reminders could not be processed.");
+        }),
+        processSmsAutomations(getD1()).catch(() => {
+          console.error("Automatic SMS reminders could not be processed.");
+        }),
+        processManagedSmsRentals(getD1()).catch(() => {
+          console.error("Managed SMS number rentals could not be processed.");
         }),
         drainAcceptedInvoiceEmails({ db: getD1() }).catch(() => {
           console.error("Automatic accepted invoice email queue could not be processed.");

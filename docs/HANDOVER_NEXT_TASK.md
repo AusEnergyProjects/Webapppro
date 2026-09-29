@@ -1,9 +1,21 @@
 # Next task handover
 
-Status: Team communications and device notifications are moving into native app screens. Verified baseline Sites 669, source 9e407cc3b72cce1c0aa9e0be129dd6719bea05c6.
-Prepared: 28 September 2026
+Status: Managed Australian SMS is implemented for inspection. Baseline Sites 680, source 33efd55afc3446b5c99b9face78544acb58dd1c6. Publication evidence is recorded outside the checkout.
+Prepared: 29 September 2026
 
-## Active contract: straightforward team calls and notifications
+## Active contract: TLink managed Australian SMS
+
+Outcome: business owners rent one Australian SMS number, fund a business-only credit balance and use the existing customer inbox for two-way SMS. Optional independent appointment reminders, after-visit messages and consent-based review requests share that sending authority. Internal team chat/calls and invoice payment processing remain unchanged.
+
+Scope: ClickSend adapter, managed SMS account/number lifecycle, Stripe-hosted credit checkout and verified payment callbacks, additive migration 0220, the existing SMS server/API/UI, SMS automation modules and the existing scheduled worker. Price is 9 cents plus GST per SMS part (9.9 cents including GST); number rental passes through the verified provider quote. Top-ups start at $50 with no card surcharge. Payment-card details are handled only by Stripe. Current Sites terms section 2.6 permits third-party e-commerce; the historical July 21 audit is unchanged.
+
+Acceptance: owner-only provisioning/billing/automation, existing tenant and assigned-job access, explicit service versus marketing consent, STOP suppression, exact number/subaccount routing, atomic credit reservations, idempotent paid credits and uncertain-send handling, clear provider registration/credential states, usable day/night mobile and desktop UI. No real number purchase, paid checkout or customer SMS is a development test. Provider launch proof requires configured secrets and an authorised test.
+
+Validation: focused provider/ledger/consent/automation/legacy SMS regressions, typecheck, scoped lint, full validate with baseline failures distinguished, migration replay, publication build, final diff review and Git/Sites provenance. Stop on unverified provider authority, undocumented number cancellation, missing processor credentials or conflicting concurrent source; keep those operational states explicit. Evidence: C:/Webproject/outputs/tlink-managed-sms-2026-09-29/.
+
+Operational proof: ClickSend parent and Stripe live key/webhook are configured in Sites. Live read-only API checks confirm 197 Australian numbers, AUD pricing and an empty owned-number list. The owner chose publication for inspection before funding ClickSend; no paid checkout, number purchase or live SMS has been performed. URL-bearing texts require ClickSend approval before TLINK_SMS_URLS_ENABLED is set. Number release is a provider support operation; cancellation stays pending until confirmed absent. Initial provider rental cost is reconciled against a maximum reservation; monthly renewals follow ClickSend's first-of-month AEST cycle.
+
+## Previous contract: straightforward team calls and notifications
 
 Publish native app 1.0.2 with in-app team/customer messaging, attachment playback and native voice/video calls. Preserve business/member/device permissions and the shared business SMS number. Validate native permissions, revoked devices, empty inboxes, failed sends, attachment cleanup, notification invitations and call teardown. Complete the signed Android build and matching server release; do not publish native-module changes into runtime 1.0.1. Evidence: C:/Webproject/outputs/tlink-native-comms-2026-09-28/.
 

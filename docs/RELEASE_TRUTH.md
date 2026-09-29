@@ -4,13 +4,23 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 28 September 2026
+Last reconciled locally: 29 September 2026
 
-Deployment baseline for this change: Sites 669, source `9e407cc3b72cce1c0aa9e0be129dd6719bea05c6`. Android runtime 1.0.1 update `01a0e7d2-6f79-786a-b6b6-abe4f08942bd` was separately published and verified. Final native 1.0.2 build and matching server publication evidence belong in C:/Webproject/outputs/tlink-native-comms-2026-09-28/.
+Deployment baseline for managed SMS: Sites 680, source `33efd55afc3446b5c99b9face78544acb58dd1c6`. Exact publication identities and checks belong in C:/Webproject/outputs/tlink-managed-sms-2026-09-29/. Prior native publication evidence remains in C:/Webproject/outputs/tlink-native-comms-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: team communication usability and device notifications
+## Current implementation: managed Australian customer SMS
+
+Migration 0220 adds a tenant-scoped SMS credit ledger, ClickSend subaccounts and Australian number rental, Stripe-hosted top-ups, separate marketing permission, and optional appointment/review text rules. Normal web Messages opens customer conversations and owner-only setup; Follow-ups includes automatic texts alongside existing email controls. Team communications retain their existing path.
+
+The advertised price is 9 cents plus GST per SMS part, with a 9.9-cent debit including GST. Top-ups are $50/$100/$200 with no card surcharge. Rental passes through provider cost: reserve the accepted maximum, reconcile the verified initial charge, then renew on the first of the month AEST. Unknown provider outcomes remain reserved and are never automatically resent or repurchased. Cancellation records a support action until ClickSend confirms release; there is no documented cancellation API.
+
+Live ClickSend read-only verification passed against the real account, including 197 AU numbers at $20.90 monthly. ClickSend and Stripe live secrets plus the signed payment webhook are configured. The owner explicitly chose inspection before funding the $20 provider balance. Paid checkout, rental, registration and handset send/reply delivery remain unverified; URL-bearing SMS remains disabled pending provider approval. No developer test sends a real message or spends funds.
+
+Current [Sites terms section 2.6](https://openai.com/policies/chatgpt-sites-terms/) permit third-party payment processing. This narrow SMS checkout does not reactivate retired invoice Stripe/Square routes. Historical July 21 audit evidence is unchanged. [ClickSend rental billing](https://help.clicksend.com/en/articles/84229-what-are-the-monthly-fees-and-billing-policies-for-dedicated-numbers-on-clicksend) and [number release](https://help.clicksend.com/en/articles/67746-managing-dedicated-numbers-other-monthly-charges) define operational boundaries.
+
+## Previous implementation: team communication usability and device notifications
 
 The 1.0.2 native app replaces browser launching with its own dark-themed team/customer inbox, authenticated attachment playback, voice notes and native WebRTC call controls. It shares existing conversations and business SMS identity with the web portal, and uses the existing authority and registered-device checks. It requires a newly signed Android binary because native audio and WebRTC modules cannot be added by an update to runtime 1.0.1. Package/export success is not evidence of installation or two-device media delivery. No new database migration is required.
 

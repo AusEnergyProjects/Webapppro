@@ -27,7 +27,7 @@ test("Australian states have one canonical stored representation", () => {
   assert.equal(canonicalAustralianState("Tas"), "TAS");
 });
 
-test("Sites ignores Stripe events and cannot reconcile or initiate payments", () => {
+test("the retired invoice Stripe webhook remains disabled independently of managed SMS checkout", () => {
   const webhook = fs.readFileSync(path.join(root, "src", "app", "api", "stripe", "webhook", "route.ts"), "utf8");
   assert.doesNotMatch(webhook, /plink_[A-Za-z0-9]+/);
   assert.match(webhook, /SITES_FINANCIAL_TRANSACTIONS_DISABLED/);
@@ -81,7 +81,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(agents, /immutable dated evidence baseline; never rewrite it as current status/);
   assert.match(readme, /immutable evidence baseline/);
   assert.match(releaseTruth, /only current implementation and release-status document/);
-  assert.match(roadmap, /Last reconciled: 28 September 2026/);
+  assert.match(roadmap, /Last reconciled: 29 September 2026/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-69/);
@@ -90,14 +90,15 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-71/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-70/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 28 September 2026/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 29 September 2026/);
   assert.match(
     handover,
     /Status: system audit and polish[^\n]*Customer self-service accounts[^\n]*\r?\nPrepared: 9 September 2026/,
   );
   assert.match(handover, /Current production: Sites version 499/);
-  assert.match(releaseTruth, /Last reconciled locally: 28 September 2026/);
-  assert.match(releaseTruth, /## Current implementation: team communication usability and device notifications/);
+  assert.match(releaseTruth, /Last reconciled locally: 29 September 2026/);
+  assert.match(releaseTruth, /## Current implementation: managed Australian customer SMS/);
+  assert.match(releaseTruth, /## Previous implementation: team communication usability and device notifications/);
   assert.match(releaseTruth, /Migrations 0210 through 0216 are additive/);
   assert.match(releaseTruth, /Migration 0209/);
   assert.match(releaseTruth, /## Previous implementation: product columns and stock by storage or team member/);
@@ -113,7 +114,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Previous implementation: accounting export correctness and provider activation/);
   assert.match(releaseTruth, /## Previous implementation: lead access and technician service regions/);
   assert.match(releaseTruth, /## Historical public production release: predictive navigation and exact provenance/);
-  assert.match(releaseTruth, /Deployment baseline for this change: Sites 669, source `9e407cc3b72cce1c0aa9e0be129dd6719bea05c6`/);
+  assert.match(releaseTruth, /Deployment baseline for managed SMS: Sites 680, source `33efd55afc3446b5c99b9face78544acb58dd1c6`/);
   assert.match(releaseTruth, /4908a1467d90b2fff57b70517fad5e41e18e12b0/);
   assert.match(releaseTruth, /Sites version 499/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_a43c371ac43c8191ad99a0f4189e7508/);
@@ -1085,7 +1086,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Team communications and device notifications/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Managed Australian SMS/);
   assert.match(currentHandover, /Direct regulator transmission remains dependent on approved interfaces and delegated access/);
   assert.match(currentHandover, /external provider registration and live OAuth acceptance remain in progress/);
   assert.match(currentHandover, /Milestone ID: `PUBLIC-MEASUREMENT-PROVENANCE-86`/);

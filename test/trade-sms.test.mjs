@@ -6,6 +6,9 @@ import test from "node:test";
 import ts from "typescript";
 import * as pure from "../src/lib/trade-sms.ts";
 import * as reminders from "../src/lib/service-reminder-delivery.ts";
+import * as clicksend from "../src/lib/trade-clicksend-provider.ts";
+import * as billing from "../src/lib/trade-sms-billing.ts";
+import * as stripe from "../src/lib/trade-sms-stripe.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 function load(path, dependencies) {
@@ -23,6 +26,7 @@ const protectedPayload = load("../src/lib/trade-integration-crypto.ts", {
   "cloudflare:workers": { env: { CRM_INTEGRATION_ENCRYPTION_KEY: Buffer.alloc(32, 91).toString("base64url") } },
   "@/lib/trade-integration-state": {},
 });
+const environment = load("../src/lib/trade-sms-environment.ts", { "cloudflare:workers": { env: {} } });
 const credentials = { accountSid: `AC${"a".repeat(32)}`, authToken: "b".repeat(32) };
 const numberSid = `PN${"c".repeat(32)}`;
 const messageSid = `SM${"d".repeat(32)}`;
@@ -61,6 +65,7 @@ function fixture() {
   sqlite.exec(read("../drizzle/0182_trade_sms.sql").replaceAll("--> statement-breakpoint", ""));
   sqlite.exec("CREATE TABLE trade_team_members(id TEXT PRIMARY KEY, owner_uid TEXT, member_uid TEXT, status TEXT, job_scope TEXT); CREATE TABLE trade_work_orders(id TEXT PRIMARY KEY, firebase_uid TEXT, partner_type TEXT, record_status TEXT, source_type TEXT, assignee_member_id TEXT, work_number TEXT, created_at TEXT); CREATE TABLE trade_crm_job_details(work_order_id TEXT PRIMARY KEY, firebase_uid TEXT, crm_customer_id TEXT, customer_source TEXT); CREATE TABLE trade_field_sessions(id TEXT PRIMARY KEY, owner_uid TEXT, team_member_id TEXT, status TEXT, expires_at TEXT);");
   sqlite.exec(read("../drizzle/0212_trade_team_sms.sql").replaceAll("--> statement-breakpoint", ""));
+  sqlite.exec(read("../drizzle/0220_trade_managed_sms.sql").replaceAll("--> statement-breakpoint", ""));
   sqlite.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, 'active')").run("customer", "owner", "0412 345 678");
   sqlite.prepare("INSERT INTO trade_crm_customers VALUES (?, ?, ?, 'active')").run("other-customer", "other", "0412 345 678");
   const statement = (sql, bindings = []) => ({
@@ -74,9 +79,15 @@ function fixture() {
     try { const results = []; for (const item of statements) results.push(await item.run()); sqlite.exec("COMMIT"); return results; }
     catch (error) { sqlite.exec("ROLLBACK"); throw error; }
   } };
-  const server = load("../src/lib/trade-sms-server.ts", { "../../db": { getD1: () => db },
+  const shared = { "../../db": { getD1: () => db }, "./trade-integration-crypto": protectedPayload,
+    "./trade-clicksend-provider": clicksend, "./trade-sms-billing": billing, "./trade-sms-environment": environment, "./trade-sms-stripe": stripe };
+  const wallet = load("../src/lib/trade-sms-wallet-server.ts", shared);
+  const account = load("../src/lib/trade-sms-account-server.ts", { ...shared, "./trade-sms-wallet-server": wallet,
+    "./admin-notifications": { adminNotificationStatement: () => { throw new Error("Unexpected rental notification in SMS fixture"); } } });
+  const server = load("../src/lib/trade-sms-server.ts", { ...shared,
+    "./trade-access-server": {},
     "@/lib/trade-integration-crypto": protectedPayload, "@/lib/service-reminder-delivery": reminders,
-    "./trade-sms": pure, "./trade-sms-provider": provider });
+    "./trade-sms": pure, "./trade-sms-provider": provider, "./trade-sms-account-server": account, "./trade-sms-wallet-server": wallet });
   return { sqlite, db, server, close: () => sqlite.close() };
 }
 

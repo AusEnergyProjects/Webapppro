@@ -50,6 +50,11 @@
 .composerFooter { align-items: flex-end; display: flex; gap: 16px; justify-content: space-between; }
 .composerFooter small { max-width: 520px; }
 .composerFooter button { flex: 0 0 auto; }
+.permission { border: 1px solid var(--trade-line, #c9ddd8); border-radius: 9px; padding: 12px; }
+.permission summary { cursor: pointer; font-size: 13px; font-weight: 700; min-height: 24px; }
+.permission .form { padding-top: 12px; }
+.costPreview { background: var(--trade-accent-soft, #e8f5f0); border-radius: 9px; color: var(--trade-accent-soft-ink, #075743); display: grid; gap: 5px; padding: 12px; }
+.costPreview strong { font-size: 14px; }
 @media (max-width: 620px) {
   .panel { padding: 15px; }
   .fields { grid-template-columns: minmax(0, 1fr); }

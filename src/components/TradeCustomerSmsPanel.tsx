@@ -5,14 +5,16 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TradeSmsConnection } from "./TradeSmsConnectionPanel";
+import { smsSegments, tradeSmsBody } from "@/lib/trade-sms";
 import styles from "./TradeSms.module.css";
 
 type SmsMessage = { id: string; requestId: string; direction: "inbound" | "outbound"; body: string; status: string; createdAt: string; workOrderId: string; senderName: string };
 type Conversation = { connection: TradeSmsConnection | null; customerPhone: string; consent: "required" | "allowed" | "opted_out"; messages: SmsMessage[];
-  canManageConnection: boolean; jobNumber: string; jobs: Array<{ id: string; jobNumber: string }> };
+  canManageConnection: boolean; jobNumber: string; jobs: Array<{ id: string; jobNumber: string }>;
+  businessName: string; partPriceMicro: number; balanceMicro: number; marketingConsent: "required" | "allowed" };
 type SmsResult = Partial<Conversation> & { ok?: boolean; error?: string; message?: SmsMessage };
 const statusLabels: Record<string, string> = {
-  accepted: "Accepted by Twilio", queued: "Queued", sending: "Sending", sent: "Sent to carrier", delivered: "Delivered",
+  accepted: "Accepted by provider", queued: "Queued", sending: "Sending", sent: "Sent to carrier", delivered: "Delivered",
   failed: "Failed", undelivered: "Not delivered", unknown: "Delivery not confirmed", reserved: "Preparing", received: "Received", canceled: "Cancelled",
 };
 
@@ -26,13 +28,25 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
   const [status, setStatus] = useState("");
   const [body, setBody] = useState("");
   const [consentNote, setConsentNote] = useState("");
+  const [marketingNote, setMarketingNote] = useState("");
+  const [purpose, setPurpose] = useState<"service" | "marketing">("service");
   const [replyJobs, setReplyJobs] = useState<Record<string, string>>({});
-  const [pending, setPending] = useState<{ requestId: string; body: string } | null>(null);
-  const pendingRequest = useRef<{ requestId: string; body: string } | null>(null);
+  const [pending, setPending] = useState<{ requestId: string; body: string; purpose: "service" | "marketing" } | null>(null);
+  const pendingRequest = useRef<{ requestId: string; body: string; purpose: "service" | "marketing" } | null>(null);
   const inFlight = useRef(false);
   const loadingRequest = useRef<Promise<Conversation> | null>(null);
   const historyRef = useRef<HTMLOListElement>(null);
   const latestMessageId = conversation?.messages.at(-1)?.id;
+  const managed = conversation?.connection?.provider === "clicksend";
+  let outgoingBody = "";
+  if (body.trim()) {
+    try { outgoingBody = tradeSmsBody(body, conversation?.businessName || "Your trade business") + (conversation?.jobNumber ? `\nJob ${conversation.jobNumber}` : ""); }
+    catch { /* Invalid message characters are blocked before sending. */ }
+  }
+  const parts = outgoingBody ? smsSegments(outgoingBody) : 0;
+  const costMicro = parts * (conversation?.partPriceMicro || 0);
+  const insufficientCredit = Boolean(managed && conversation && conversation.balanceMicro < costMicro);
+  const price = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(costMicro / 1_000_000);
 
   useEffect(() => {
     const history = historyRef.current;
@@ -52,12 +66,13 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
 
   const load = useCallback(() => {
     if (loadingRequest.current) return loadingRequest.current;
-    loadingRequest.current = (async () => {
+    loadingRequest.current = (async (): Promise<Conversation> => {
       const { response, result } = await request();
       if ([401, 403].includes(response.status)) setConversation(null);
       if (!response.ok || !result.ok || !result.messages || !result.consent) throw new Error(result.error || "Messages could not be loaded.");
       return { connection: result.connection || null, customerPhone: result.customerPhone || "", consent: result.consent, messages: result.messages,
-        canManageConnection: result.canManageConnection === true, jobNumber: result.jobNumber || "", jobs: result.jobs || [] };
+        canManageConnection: result.canManageConnection === true, jobNumber: result.jobNumber || "", jobs: result.jobs || [],
+        businessName: result.businessName || "", partPriceMicro: result.partPriceMicro || 0, balanceMicro: result.balanceMicro || 0, marketingConsent: result.marketingConsent === "allowed" ? "allowed" : "required" };
     })().finally(() => { loadingRequest.current = null; });
     return loadingRequest.current;
   }, [request]);
@@ -104,6 +119,18 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
     finally { inFlight.current = false; setBusy(""); }
   }
 
+  async function recordMarketingConsent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true; setBusy("marketing_consent"); setStatus("");
+    try {
+      const { response, result } = await request({ action: "marketing_consent", consentNote: marketingNote.trim() });
+      if (!response.ok || !result.ok) throw new Error(result.error || "Review and feedback permission could not be saved.");
+      updateConversation(await load()); setMarketingNote(""); setStatus("Review and feedback SMS permission recorded.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Permission could not be saved."); }
+    finally { inFlight.current = false; setBusy(""); }
+  }
+
   async function linkReply(messageId: string) {
     if (inFlight.current || !replyJobs[messageId]) return;
     inFlight.current = true; setBusy(messageId); setStatus("");
@@ -117,8 +144,8 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
 
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (inFlight.current || !body.trim()) return;
-    const submission = pending || { requestId: crypto.randomUUID(), body: body.trim() };
+    if (inFlight.current || !body.trim() || (!pending && (!outgoingBody || insufficientCredit || (purpose === "marketing" && conversation?.marketingConsent !== "allowed")))) return;
+    const submission = pending || { requestId: crypto.randomUUID(), body: body.trim(), purpose };
     pendingRequest.current = submission; setPending(submission); inFlight.current = true; setBusy("send"); setStatus("");
     try {
       const { response, result } = await request({ action: "send", ...submission });
@@ -152,6 +179,14 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
         <label><span>How and when did they agree to service SMS?</span><textarea required minLength={8} maxLength={500} rows={2} value={consentNote} onChange={(event) => setConsentNote(event.target.value)} placeholder="For example: agreed by phone today to appointment updates." disabled={Boolean(busy)} /></label>
         <button type="submit" className={styles.primary} disabled={Boolean(busy) || consentNote.trim().length < 8}>{busy === "consent" ? "Saving..." : "Record permission"}</button>
       </form>}
+      {managed && conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "allowed" && conversation.marketingConsent !== "allowed" && <details className={styles.permission}>
+        <summary>Permission for review and feedback texts</summary>
+        <form className={styles.form} onSubmit={event => void recordMarketingConsent(event)}>
+          <p>Service updates do not give permission for review requests or marketing. Record the customer&apos;s separate agreement before sending those texts.</p>
+          <label><span>How and when did they agree to review and feedback SMS?</span><textarea required minLength={8} maxLength={500} rows={2} value={marketingNote} disabled={Boolean(busy) || Boolean(pending)} onChange={event => setMarketingNote(event.target.value)} placeholder="For example: agreed to a review request in the booking form today." /></label>
+          <button type="submit" className={styles.secondary} disabled={Boolean(busy) || Boolean(pending) || marketingNote.trim().length < 8}>{busy === "marketing_consent" ? "Saving..." : "Record review permission"}</button>
+        </form>
+      </details>}
       <ol ref={historyRef} className={styles.messages} aria-label="SMS message history">{conversation.messages.length ? conversation.messages.map((message) => <li key={message.id} className={message.direction === "outbound" ? styles.outbound : styles.inbound}>
         <div className={styles.messageMeta}><strong>{message.direction === "inbound" ? "Customer" : message.senderName || "Your business"}</strong><span>{message.direction === "inbound" ? "Received" : statusLabels[message.status] || "Status pending"}</span></div>
         <p>{message.body}</p><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time>
@@ -163,8 +198,12 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
         </div>}
       </li>) : <li className={styles.empty}>No messages yet. Replies will appear here.</li>}</ol>
       {conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "allowed" && <form className={styles.form} onSubmit={(event) => void send(event)}>
+        {managed && <label><span>Message purpose</span><select value={purpose} disabled={Boolean(busy) || Boolean(pending)} onChange={event => setPurpose(event.target.value === "marketing" ? "marketing" : "service")}><option value="service">Service update</option><option value="marketing" disabled={conversation.marketingConsent !== "allowed"}>Review or feedback request{conversation.marketingConsent !== "allowed" ? " (permission needed)" : ""}</option></select></label>}
         <label><span>Message</span><textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={480} rows={3} required disabled={Boolean(busy) || Boolean(pending)} placeholder="Write a service update for this customer" /></label>
-        <div className={styles.composerFooter}><small>{body.length}/480 characters. Business name{workOrderId ? ", job number" : ""} and STOP instructions are added automatically. Longer messages cost more than one SMS.</small><button type="submit" className={styles.primary} disabled={Boolean(busy) || !body.trim()}>{busy === "send" ? "Checking..." : pending ? "Check this message" : "Send SMS"}</button></div>
+        {managed && <div className={styles.costPreview} aria-live="polite"><strong>{parts} SMS {parts === 1 ? "part" : "parts"} · {price} including GST</strong><small>9¢ + GST per part. Includes your business name, job reference and STOP instructions.</small></div>}
+        {insufficientCredit && !pending && <p className={styles.notice}>There is not enough SMS credit for this message. Ask the business owner to top up.</p>}
+        {body.trim() && !outgoingBody && <p className={styles.notice}>Remove unsupported control characters before sending.</p>}
+        <div className={styles.composerFooter}><small>{body.length}/480 characters. Business name{workOrderId ? ", job number" : ""} and STOP instructions are added automatically. Longer messages and emoji can use more than one SMS part.</small><button type="submit" className={styles.primary} disabled={Boolean(busy) || !body.trim() || (!pending && (!outgoingBody || insufficientCredit || (purpose === "marketing" && conversation.marketingConsent !== "allowed")))}>{busy === "send" ? "Checking..." : pending ? "Check this message" : "Send SMS"}</button></div>
       </form>}
     </>}
   </section>;

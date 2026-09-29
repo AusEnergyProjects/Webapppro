@@ -6837,16 +6837,19 @@ export const tradeSmsConnections = sqliteTable("trade_sms_connections", {
   accountLabel: text("account_label").notNull(), accountType: text("account_type").notNull(), numberSid: text("number_sid").notNull(),
   phoneNumber: text("phone_number").notNull(), encryptedCredentials: text("encrypted_credentials").notNull(), callbackUrl: text("callback_url").notNull(),
   status: text("status").notNull().default("connecting"), dailyLimit: integer("daily_limit").notNull().default(100),
+  provider: text("provider").notNull().default("twilio"),
   createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (t) => [uniqueIndex("trade_sms_connections_number_idx").on(t.accountSid, t.numberSid),
   uniqueIndex("trade_sms_connections_active_owner_idx").on(t.firebaseUid).where(sql`${t.status} IN ('connecting', 'connected')`),
-  check("trade_sms_connections_limit_check", sql`${t.dailyLimit} BETWEEN 1 AND 1000`)]);
+  check("trade_sms_connections_limit_check", sql`${t.dailyLimit} BETWEEN 1 AND 1000`),
+  check("trade_sms_connections_provider_check", sql`${t.provider} IN ('twilio','clicksend')`)]);
 
 export const tradeSmsRecipients = sqliteTable("trade_sms_recipients", {
   id: text("id").primaryKey(), connectionId: text("connection_id").notNull().references(() => tradeSmsConnections.id),
   firebaseUid: text("firebase_uid").notNull(), customerId: text("customer_id").notNull(), phoneNumber: text("phone_number").notNull(),
   consentNote: text("consent_note").notNull().default(""), consentAt: text("consent_at").notNull().default(""),
   optedOutAt: text("opted_out_at").notNull().default(""), optInAt: text("opt_in_at").notNull().default(""),
+  marketingConsentAt: text("marketing_consent_at").notNull().default(""), marketingConsentNote: text("marketing_consent_note").notNull().default(""),
   createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (t) => [uniqueIndex("trade_sms_recipients_number_idx").on(t.connectionId, t.phoneNumber), index("trade_sms_recipients_customer_idx").on(t.firebaseUid, t.customerId)]);
 
@@ -6856,12 +6859,68 @@ export const tradeSmsMessages = sqliteTable("trade_sms_messages", {
   customerId: text("customer_id").notNull(), direction: text("direction").notNull(), body: text("body").notNull(), status: text("status").notNull(),
   workOrderId: text("work_order_id").notNull().default(""), actorUid: text("actor_uid").notNull().default(""), actorName: text("actor_name").notNull().default(""),
   segments: integer("segments").notNull(), requestId: text("request_id").notNull().default(""), providerMessageSid: text("provider_message_sid").notNull().default(""),
+  purpose: text("purpose").notNull().default("service"), priceMicro: integer("price_micro").notNull().default(0),
   errorCode: text("error_code").notNull().default(""), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (t) => [uniqueIndex("trade_sms_messages_request_idx").on(t.firebaseUid, t.requestId).where(sql`${t.direction} = 'outbound'`),
   uniqueIndex("trade_sms_messages_provider_idx").on(t.connectionId, t.providerMessageSid).where(sql`${t.providerMessageSid} <> ''`),
   index("trade_sms_messages_history_idx").on(t.firebaseUid, t.customerId, t.createdAt), index("trade_sms_messages_usage_idx").on(t.firebaseUid, t.direction, t.createdAt),
   index("trade_sms_messages_job_idx").on(t.firebaseUid, t.workOrderId, t.createdAt),
-  check("trade_sms_messages_direction_check", sql`${t.direction} IN ('inbound', 'outbound')`), check("trade_sms_messages_segments_check", sql`${t.segments} >= 1`)]);
+  check("trade_sms_messages_direction_check", sql`${t.direction} IN ('inbound', 'outbound')`), check("trade_sms_messages_segments_check", sql`${t.segments} >= 1`),
+  check("trade_sms_messages_purpose_check", sql`${t.purpose} IN ('service','marketing')`), check("trade_sms_messages_price_check", sql`${t.priceMicro} >= 0`)]);
+
+export const tradeSmsAccounts = sqliteTable("trade_sms_accounts", {
+  ownerUid: text("owner_uid").primaryKey().notNull(), status: text("status").notNull().default("new"), subaccountId: text("subaccount_id").notNull().default(""),
+  encryptedCredentials: text("encrypted_credentials").notNull().default(""), encryptedRegistration: text("encrypted_registration").notNull().default(""),
+  callbackTokenHash: text("callback_token_hash").notNull().default(""), provisioningOrderId: text("provisioning_order_id").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("trade_sms_accounts_provider_idx").on(t.subaccountId).where(sql`${t.subaccountId} <> ''`)]);
+
+export const tradeSmsLedger = sqliteTable("trade_sms_ledger", {
+  id: text("id").primaryKey().notNull(), ownerUid: text("owner_uid").notNull(), kind: text("kind").notNull(),
+  amountMicro: integer("amount_micro").notNull(), description: text("description").notNull(), createdAt: text("created_at").notNull(),
+}, (t) => [index("trade_sms_ledger_owner_idx").on(t.ownerUid, t.createdAt)]);
+
+export const tradeSmsTopups = sqliteTable("trade_sms_topups", {
+  id: text("id").primaryKey().notNull(), ownerUid: text("owner_uid").notNull(), requestId: text("request_id").notNull(), amountCents: integer("amount_cents").notNull(),
+  status: text("status").notNull().default("creating"), sessionId: text("session_id").notNull().default(""), paymentIntentId: text("payment_intent_id").notNull().default(""),
+  checkoutUrl: text("checkout_url").notNull().default(""), refundedCents: integer("refunded_cents").notNull().default(0),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("trade_sms_topups_request_idx").on(t.ownerUid, t.requestId),
+  uniqueIndex("trade_sms_topups_session_idx").on(t.sessionId).where(sql`${t.sessionId} <> ''`),
+  check("trade_sms_topups_amount_check", sql`${t.amountCents} IN (5000,10000,20000)`)]);
+
+export const tradeSmsNumberOrders = sqliteTable("trade_sms_number_orders", {
+  id: text("id").primaryKey().notNull(), ownerUid: text("owner_uid").notNull(), requestId: text("request_id").notNull(), number: text("number").notNull(),
+  status: text("status").notNull().default("reserved"), setupMicro: integer("setup_micro").notNull(), monthlyMicro: integer("monthly_micro").notNull(),
+  initialReservedMicro: integer("initial_reserved_micro").notNull().default(0), initialChargeMicro: integer("initial_charge_micro").notNull().default(-1),
+  connectionId: text("connection_id").notNull().default(""), renewalAt: text("renewal_at").notNull().default(""),
+  inboundRuleId: text("inbound_rule_id").notNull().default(""), receiptRuleId: text("receipt_rule_id").notNull().default(""), error: text("error").notNull().default(""),
+  leaseToken: text("lease_token").notNull().default(""), leaseExpiresAt: text("lease_expires_at").notNull().default(""),
+  purchaseAttemptedAt: text("purchase_attempted_at").notNull().default(""), providerOwnedAt: text("provider_owned_at").notNull().default(""),
+  inboundRuleAttemptedAt: text("inbound_rule_attempted_at").notNull().default(""), receiptRuleAttemptedAt: text("receipt_rule_attempted_at").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("trade_sms_number_orders_request_idx").on(t.ownerUid, t.requestId),
+  uniqueIndex("trade_sms_number_orders_owner_idx").on(t.ownerUid).where(sql`${t.status} NOT IN ('cancelled','rejected')`),
+  uniqueIndex("trade_sms_number_orders_number_idx").on(t.number).where(sql`${t.status} NOT IN ('cancelled','rejected')`),
+  check("trade_sms_number_orders_setup_check", sql`${t.setupMicro} >= 0`), check("trade_sms_number_orders_monthly_check", sql`${t.monthlyMicro} >= 0`),
+  check("trade_sms_number_orders_reserved_check", sql`${t.initialReservedMicro} >= 0`), check("trade_sms_number_orders_charge_check", sql`${t.initialChargeMicro} >= -1`)]);
+
+export const tradeSmsAutomationRules = sqliteTable("trade_sms_automation_rules", {
+  ownerUid: text("owner_uid").notNull(), kind: text("kind").notNull(), enabled: integer("enabled").notNull().default(0), delayHours: integer("delay_hours").notNull(),
+  body: text("body").notNull(), reviewUrl: text("review_url").notNull().default(""), revision: integer("revision").notNull().default(1),
+  enabledAt: text("enabled_at").notNull().default(""), nextScanAt: text("next_scan_at").notNull().default(""), scanCursor: text("scan_cursor").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [primaryKey({ columns: [t.ownerUid, t.kind] }),
+  check("trade_sms_automation_rules_kind_check", sql`${t.kind} IN ('appointment_reminder','appointment_follow_up','review_request')`),
+  check("trade_sms_automation_rules_enabled_check", sql`${t.enabled} IN (0,1)`),
+  check("trade_sms_automation_rules_delay_check", sql`${t.delayHours} BETWEEN 1 AND 1008`)]);
+
+export const tradeSmsAutomationEvents = sqliteTable("trade_sms_automation_events", {
+  id: text("id").primaryKey().notNull(), ownerUid: text("owner_uid").notNull(), ruleKind: text("rule_kind").notNull(), ruleRevision: integer("rule_revision").notNull(),
+  workOrderId: text("work_order_id").notNull(), customerId: text("customer_id").notNull(), appointmentId: text("appointment_id").notNull(), appointmentStart: text("appointment_start").notNull(),
+  eventKey: text("event_key").notNull().unique(), dueAt: text("due_at").notNull(), status: text("status").notNull(), reason: text("reason").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [index("trade_sms_automation_events_owner_idx").on(t.ownerUid, t.createdAt)]);
 
 export const creditexVoiceConnections = sqliteTable("creditex_voice_connections", {
   id: text("id").primaryKey(), organisationId: text("organisation_id").notNull(), accountKeyHash: text("account_key_hash").notNull(),
