@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import ts from "typescript";
 import { DatabaseSync } from "node:sqlite";
 import { TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL } from "../src/lib/trade-crm-job-index-sql.ts";
 import {
@@ -484,6 +485,66 @@ test("staff checklist controls use the hardened scoped CRM task actions", () => 
   assert.match(route, /if \(action === "add_task"\)/);
   assert.match(route, /if \(action === "update_task"\)/);
   assert.match(route, /if \(!identity\.access\.isOwner\) await assignedJob\(identity\.access, String\(task\.work_order_id\)\)/);
+});
+
+test("job bin confirmation stays inside TLink and supports cancellation and focus recovery", () => {
+  assert.doesNotMatch(crm, /window\.confirm/);
+  assert.match(crm, /if \(archived\) void changeJobBin\(job, true\); else \{ setBinError\(""\); setBinJob\(job\); \}/);
+  assert.match(crm, /dialog && !dialog\.open\) dialog\.showModal\(\);\s*binCancelRef\.current\?\.focus\(\)/);
+  assert.match(crm, /<dialog ref=\{binDialogRef\}[^>]+aria-labelledby=\{binDialogTitleId\}[^>]+aria-describedby=\{binDialogDescriptionId\}[^>]+onCancel=\{event => \{ event\.preventDefault\(\); closeJobBin\(\); \}\}/);
+  assert.match(crm, /<small>\{binJob\.workNumber\}<\/small>/);
+  assert.match(crm, /Its customer, original import and history will be kept\. You can restore this job from the Deleted status filter\./);
+  assert.match(crm, /function closeJobBin\(\) \{\s*if \(binPendingRef\.current\) return;/);
+  assert.match(crm, /\(trigger \|\| crmHeadingRef\.current\)\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(crm, /ref=\{crmHeadingRef\} tabIndex=\{-1\}/);
+  assert.match(crm, /ref=\{binCancelRef\} type="button" disabled=\{busy === `bin:\$\{binJob\.id\}`\}/);
+  assert.match(crm, /<button type="submit" disabled=\{busy === `bin:\$\{binJob\.id\}`\}/);
+  assert.match(crm, /\{binError && <p role="alert">\{binError\}<\/p>\}/);
+});
+
+test("job bin requests require an owner and confirmed job, prevent duplicates and preserve the loaded revision", async () => {
+  const start = crm.indexOf("  async function changeJobBin(");
+  const end = crm.indexOf("  function openCustomerActions(", start);
+  assert.ok(start >= 0 && end > start);
+  const script = ts.transpileModule(crm.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const job = { id: "job-a", revision: 8 };
+  const requests = [], errors = [];
+  let closed = 0, refreshed = 0, failRequest = false, releaseToken;
+  const scope = {
+    staffPermissions: undefined, binJob: job, binPendingRef: { current: false },
+    setBinError: value => errors.push(value), setBusy() {}, setStatus() {},
+    user: { getIdToken: () => new Promise(resolve => { releaseToken = resolve; }) },
+    fetch: async (url, options) => { requests.push({ url, ...options }); return { ok: !failRequest, json: async () => failRequest ? { error: "This job changed. Refresh and try again." } : { ok: true } }; },
+    setRefreshNonce() { refreshed += 1; }, load: async () => {}, closeJobBin() { closed += 1; },
+  };
+  const handler = overrides => {
+    const dependencies = { ...scope, ...overrides };
+    return new Function(...Object.keys(dependencies), `${script}\nreturn changeJobBin;`)(...Object.values(dependencies));
+  };
+  await handler({ staffPermissions: {} })(job, false);
+  await handler({ binJob: null })(job, false);
+  assert.equal(requests.length, 0);
+  const changeJobBin = handler({});
+  const pending = changeJobBin(job, false);
+  assert.equal(scope.binPendingRef.current, true);
+  await changeJobBin(job, false);
+  releaseToken("test-token");
+  await pending;
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "/api/trade-work-orders");
+  assert.deepEqual(JSON.parse(requests[0].body), { action: "archive_crm_job", workOrderId: "job-a", expectedRevision: 8 });
+  assert.equal(closed, 1); assert.equal(refreshed, 1); assert.equal(scope.binPendingRef.current, false);
+  failRequest = true;
+  const retry = changeJobBin(job, false);
+  releaseToken("test-token"); await retry;
+  assert.equal(closed, 1, "a rejected request leaves the confirmation visible");
+  assert.equal(errors.at(-1), "This job changed. Refresh and try again.");
+  assert.equal(scope.binPendingRef.current, false);
+  failRequest = false;
+  const restore = handler({ binJob: null })(job, true);
+  releaseToken("test-token"); await restore;
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { action: "restore_crm_job", workOrderId: "job-a", expectedRevision: 8 });
+  assert.equal(closed, 1, "restore does not open or close an archive confirmation");
 });
 
 test("reviewed installer team members use the same authenticated address suggestions", () => {

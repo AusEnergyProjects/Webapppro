@@ -8,7 +8,7 @@ import { TradeFollowUpDialog } from "./TradeFollowUpDialog";
 import { BookingTrainingLinks, type BookingTrainingModule } from "./BookingTrainingLinks";
 import { TradeCustomerEmailComposer } from "./TradeCustomerEmailComposer";
 
-import { type CSSProperties, FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { User } from "firebase/auth";
@@ -498,6 +498,14 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const [jobColumns, setJobColumns] = useState(() => [...JOB_REGISTER_DEFAULT_COLUMNS]);
   const [jobActionId, setJobActionId] = useState("");
   const [followUpJobId, setFollowUpJobId] = useState("");
+  const [binJob, setBinJob] = useState<Job | null>(null);
+  const [binError, setBinError] = useState("");
+  const binDialogRef = useRef<HTMLDialogElement>(null);
+  const binCancelRef = useRef<HTMLButtonElement>(null);
+  const binPendingRef = useRef(false);
+  const crmHeadingRef = useRef<HTMLHeadingElement>(null);
+  const binDialogTitleId = useId();
+  const binDialogDescriptionId = useId();
   const [jobActionPosition, setJobActionPosition] = useState({ left: 8, top: 8 });
   const [customerActionId, setCustomerActionId] = useState("");
   const [customerActionPosition, setCustomerActionPosition] = useState({ left: 8, top: 8 });
@@ -549,6 +557,14 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     });
     return () => window.cancelAnimationFrame(frame);
   }, [creating]);
+
+  useEffect(() => {
+    if (!binJob) return;
+    const dialog = binDialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    binCancelRef.current?.focus();
+    return () => { dialog?.close(); };
+  }, [binJob]);
 
   useEffect(() => {
     if (!jobActionId) return;
@@ -1170,13 +1186,26 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         {!archived && (!staffPermissions || (staffPermissions.canViewCustomers && staffPermissions.canManageCustomers)) && job.customerSource !== "platform_private" && job.crmCustomerId && <button role="menuitem" type="button" onClick={() => openJobCustomerEditor(job)}>Edit customer</button>}
         {!archived && job.customerSource !== "platform_private" && job.crmCustomerId && (!staffPermissions || (staffPermissions.canViewCustomers && (staffPermissions.canManageCustomers || staffPermissions.canManageJobs || staffPermissions.canSendQuotes || staffPermissions.canManageInvoices))) && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); setFollowUpJobId(job.id); }}>Follow up</button>}
         {!archived && job.stage !== "imported" && canOpenScheduleAction && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "schedule"); }}>Schedule job</button>}
-        {!staffPermissions && job.sourceType !== "opportunity" && ["trade_owned", "public_lead_released"].includes(job.customerSource) && <button role="menuitem" type="button" disabled={busy === `bin:${job.id}`} onClick={() => { setJobActionId(""); void changeJobBin(job, archived); }}>{archived ? "Restore job" : "Move to bin"}</button>}
+        {!staffPermissions && job.sourceType !== "opportunity" && ["trade_owned", "public_lead_released"].includes(job.customerSource) && <button role="menuitem" type="button" disabled={busy.startsWith("bin:")} onClick={() => { setJobActionId(""); if (archived) void changeJobBin(job, true); else { setBinError(""); setBinJob(job); } }}>{archived ? "Restore job" : "Move to bin"}</button>}
       </div>, document.body)}
     </div>;
   }
+  function closeJobBin() {
+    if (binPendingRef.current) return;
+    const jobId = binJob?.id;
+    binDialogRef.current?.close();
+    setBinJob(null); setBinError("");
+    requestAnimationFrame(() => {
+      const trigger = [...document.querySelectorAll<HTMLButtonElement>("[data-job-action-trigger]")].find(button => button.dataset.jobActionTrigger === jobId);
+      (trigger || crmHeadingRef.current)?.focus({ preventScroll: true });
+    });
+  }
   async function changeJobBin(job: Job, restore: boolean) {
-    if (staffPermissions || (!restore && !window.confirm('Move this job to the bin? Its customer, original import and history will be kept. You can restore it from the Deleted status filter.'))) return;
+    if (staffPermissions || binPendingRef.current || (!restore && binJob?.id !== job.id)) return;
+    binPendingRef.current = true;
+    setBinError("");
     setBusy(`bin:${job.id}`);
+    let saved = false;
     try {
       const token = await user.getIdToken();
       const response = await fetch('/api/trade-work-orders', { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: restore ? 'restore_crm_job' : 'archive_crm_job', workOrderId: job.id, expectedRevision: job.revision }) });
@@ -1184,8 +1213,14 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       if (!response.ok || !result.ok) throw new Error(result.error || 'The job could not be updated.');
       setRefreshNonce(value => value + 1); await load();
       setStatus(restore ? 'Job restored.' : 'Job moved to the bin. Restore it from the Deleted status filter.');
-    } catch (error) { setStatus(error instanceof Error ? error.message : 'The job could not be updated.'); }
-    finally { setBusy(''); }
+      saved = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The job could not be updated.';
+      if (restore) setStatus(message); else setBinError(message);
+    } finally {
+      binPendingRef.current = false; setBusy('');
+      if (saved && !restore) closeJobBin();
+    }
   }
   function openCustomerActions(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, customerId: string) {
     if ((event.target as HTMLElement).closest("a, input, select, textarea, button:not(.crm-index-open-button)")) return;
@@ -1404,9 +1439,18 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   }
 
   return <section id="business-hub" className="installer-crm" aria-labelledby="installer-crm-title">
+    {binJob && <dialog ref={binDialogRef} className={registerStyles.paymentDialog} aria-labelledby={binDialogTitleId} aria-describedby={binDialogDescriptionId} onCancel={event => { event.preventDefault(); closeJobBin(); }} onKeyDown={event => event.stopPropagation()}>
+      <form aria-busy={busy === `bin:${binJob.id}`} onSubmit={event => { event.preventDefault(); void changeJobBin(binJob, false); }}>
+        <header><div><small>{binJob.workNumber}</small><h3 id={binDialogTitleId}>Move job to the bin?</h3></div></header>
+        <p><strong>{binJob.title}</strong></p>
+        <p id={binDialogDescriptionId}>Its customer, original import and history will be kept. You can restore this job from the Deleted status filter.</p>
+        {binError && <p role="alert">{binError}</p>}
+        <footer><button ref={binCancelRef} type="button" disabled={busy === `bin:${binJob.id}`} onClick={closeJobBin}>Cancel</button><button type="submit" disabled={busy === `bin:${binJob.id}`}>{busy === `bin:${binJob.id}` ? "Moving..." : "Move to bin"}</button></footer>
+      </form>
+    </dialog>}
     {followUpJobId && <TradeFollowUpDialog user={user} workOrderId={followUpJobId} onClose={() => { const id=followUpJobId; setFollowUpJobId(""); requestAnimationFrame(() => { [...document.querySelectorAll<HTMLButtonElement>("[data-job-action-trigger]")].find(button => button.dataset.jobActionTrigger === id)?.focus(); }); }} />}
     <header className="crm-hero">
-      <div>{!mapWorkspace && <span>Installer business workspace</span>}<h2 id="installer-crm-title">{mapWorkspace ? "Map & quote" : "Run the day from one clear place"}</h2><p>{mapWorkspace ? "Find your jobs and customers, measure a roof or design a solar system. Select Add to quote to include your design and measurements." : "Manage your own customers, jobs, visits, tasks, issues, quotes, invoices and handovers. Australian Energy Assessments customer identities remain protected."}</p></div>
+      <div>{!mapWorkspace && <span>Installer business workspace</span>}<h2 id="installer-crm-title" ref={crmHeadingRef} tabIndex={-1}>{mapWorkspace ? "Map & quote" : "Run the day from one clear place"}</h2><p>{mapWorkspace ? "Find your jobs and customers, measure a roof or design a solar system. Select Add to quote to include your design and measurements." : "Manage your own customers, jobs, visits, tasks, issues, quotes, invoices and handovers. Australian Energy Assessments customer identities remain protected."}</p></div>
       {!mapWorkspace && (canCreateJob || canCreateCustomer) && <div className="crm-primary-actions"><AccessibleMenu className="crm-quick-create" label="New">{(close) => <>{canCreateJob && <button role="menuitem" type="button" onClick={() => { setNewJobSeed(null); setView("jobs"); setCreating("job"); close(); }}>Job</button>}{canCreateCustomer && allowedViews.includes("customers") && <button role="menuitem" type="button" onClick={() => { setView("customers"); setCreating("customer"); close(); }}>Customer</button>}</>}</AccessibleMenu></div>}
     </header>
     <nav className="crm-nav" aria-label={mapWorkspace ? "Map records" : "Installer CRM"}>
