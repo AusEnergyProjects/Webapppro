@@ -27,7 +27,7 @@ function formError(error: unknown) {
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "Field forms are available to installer accounts." }, 403);
   if (code === "JOB_NOT_FOUND" || code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This job is not available to your account." }, 404);
-  if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed and cancelled jobs are locked." }, 409);
+  if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Imported jobs must first be started in TLink. Completed and cancelled jobs are locked." }, 409);
   if (code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job changed elsewhere. Refresh it before saving." }, 409);
   return adminJson({ ok: false, error: "The field form request could not be completed." }, 500);
 }
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
     if (!work) throw new Error("JOB_NOT_FOUND");
     if (Number(work.revision) !== Number(job.revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
-    if (["completed", "cancelled"].includes(String(work.stage))) throw new Error("TERMINAL_JOB_LOCKED");
+    if (["imported", "completed", "cancelled"].includes(String(work.stage))) throw new Error("TERMINAL_JOB_LOCKED");
     const template = await publishedTradeFormTemplate(templateKey, templateVersion, String(work?.service_category || "other"), undefined, access.ownerUid);
     if (!template) return adminJson({ ok: false, error: "Choose a form available for this work type." }, 400);
     const existing = await getD1().prepare(`SELECT id FROM trade_job_forms
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
           WHERE work_order.id = ? AND work_order.firebase_uid = ?
             AND work_order.record_status = 'active'
             AND work_order.stage = ?
-            AND work_order.stage NOT IN ('completed', 'cancelled')
+            AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
             AND work_order.revision = ?
         )
         ON CONFLICT(work_order_id, template_key, template_version) DO NOTHING`)
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
           JSON.stringify(template), now, now, workOrderId, access.ownerUid, jobStage, Number(work.revision)),
       getD1().prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
-          AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+          AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?
           AND EXISTS (
             SELECT 1 FROM trade_job_forms child
             WHERE child.id = ? AND child.work_order_id = trade_work_orders.id
@@ -181,7 +181,7 @@ export async function PATCH(request: Request) {
       .first<Record<string, unknown>>();
     if (!row) return adminJson({ ok: false, error: "Field form not found." }, 404);
     if (Number(row.job_revision) !== Number(job.revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
-    if (["completed", "cancelled"].includes(String(row.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
+    if (["imported", "completed", "cancelled"].includes(String(row.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
     if (row.status === "complete") return adminJson({ ok: false, error: "This completed form is locked. Start a newer template version if the record must be replaced." }, 409);
     const baseRevision = Number(body.baseRevision || row.revision);
     if (!Number.isInteger(baseRevision) || baseRevision !== Number(row.revision)) {
@@ -233,7 +233,7 @@ export async function PATCH(request: Request) {
               AND work_order.firebase_uid = trade_job_forms.firebase_uid
               AND work_order.record_status = 'active'
               AND work_order.stage = ?
-              AND work_order.stage NOT IN ('completed', 'cancelled')
+              AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
               AND work_order.revision = ?
           )`)
         .bind(answerJson, formStatus, formRevision, complete ? access.actorUid : "",
@@ -241,7 +241,7 @@ export async function PATCH(request: Request) {
           jobStage, Number(row.job_revision)),
       getD1().prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
-          AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+          AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?
           AND EXISTS (
             SELECT 1 FROM trade_job_forms child
             WHERE child.id = ? AND child.work_order_id = trade_work_orders.id

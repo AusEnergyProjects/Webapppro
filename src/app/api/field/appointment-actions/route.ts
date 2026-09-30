@@ -38,7 +38,7 @@ async function context(request: Request, workOrderId: string, appointmentId = ''
   if (appointmentId && !appointment) throw new Error('APPOINTMENT_NOT_FOUND');
   if (['reschedule', 'no_show'].includes(action) && !appointmentId && visits.results.length > 1) throw new Error('APPOINTMENT_SELECTION_REQUIRED');
   const protectedJob = job.source_type === 'opportunity' || !['trade_owned', 'public_lead_released'].includes(job.customer_source);
-  const mutable = !protectedJob && !['completed', 'cancelled'].includes(job.stage);
+  const mutable = !protectedJob && !['imported', 'completed', 'cancelled'].includes(job.stage);
   const canReschedule = mutable && canRescheduleWithinScope(access, String(appointment?.assignee_member_id || job.assignee_member_id));
   const active = Boolean(appointment && ['scheduled', 'en_route', 'arrived', 'in_progress'].includes(String(appointment.status)));
   const permissions = { schedule: canReschedule && !active && appointment?.status !== 'no_show',

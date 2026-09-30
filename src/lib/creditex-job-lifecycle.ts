@@ -1,5 +1,5 @@
 export type CreditexJobLifecycle = {
-  status: "unscheduled" | "assigned" | "partial" | "complete" | "reviewed" | "audited" | "correction_required" | "submitted" | "paid" | "failed" | "cancelled" | "deleted" | "no_show";
+  status: "imported" | "unscheduled" | "assigned" | "partial" | "complete" | "reviewed" | "audited" | "correction_required" | "submitted" | "paid" | "failed" | "cancelled" | "deleted" | "no_show";
   label: string;
   detail: string;
 };
@@ -50,6 +50,7 @@ export function deriveCreditexJobLifecycle(input: {
   const submission = creditexJobSubmissionSummary(input.packets);
   const lifecycle = (status: CreditexJobLifecycle["status"], label: string) => ({ status, label, detail: submission.detail });
   if (input.deleted) return lifecycle("deleted", "Deleted");
+  if (input.workStage === "imported") return { status: "imported", label: "Imported", detail: "Original status retained as history." };
   // Local evidence rejection is a correction, not a government failure.
   if (input.packets.some(packet => packet.lodged === 1 && (packet.status === "rejected" || packet.registryStatus === "rejected"))) {
     return lifecycle("failed", "Failed");

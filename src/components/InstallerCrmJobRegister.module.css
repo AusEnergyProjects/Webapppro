@@ -95,7 +95,7 @@
 .audited { background: #eae5ff; color: #4b3595; }
 .certified { background: #d9f8ef; color: #00644f; }
 .cancelled { background: #f1f2f3; color: #555f66; }
-.unscheduled { background: #edf1f3; color: #3f4c54; }
+.unscheduled, .imported { background: #edf1f3; color: #3f4c54; }
 .scheduled { background: #dff4ff; color: #005a78; }
 .partial { background: #fff4ce; color: #715600; }
 .completed { background: #e0f5e9; color: #11643b; }
@@ -809,7 +809,8 @@
   color: #c7d0d5;
 }
 
-:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .unscheduled {
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .unscheduled,
+:global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .imported {
   background: #2a3035;
   color: #c7d0d5;
 }

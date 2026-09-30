@@ -16,7 +16,8 @@ function fixture(t) {
     CREATE TABLE trade_crm_customers(id TEXT PRIMARY KEY,firebase_uid TEXT,record_status TEXT DEFAULT 'active',first_name TEXT);
     CREATE TABLE trade_crm_service_sites(id TEXT PRIMARY KEY,firebase_uid TEXT,record_status TEXT DEFAULT 'active',address_state TEXT);
     CREATE TABLE trade_crm_appointments(id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,starts_at TEXT,status TEXT DEFAULT 'scheduled',completed_at TEXT DEFAULT '');
-    CREATE TABLE trade_dataforce_sources(firebase_uid TEXT,work_order_id TEXT);`);
+    CREATE TABLE trade_dataforce_sources(firebase_uid TEXT,work_order_id TEXT);
+    CREATE TABLE trade_csv_import_sources(firebase_uid TEXT,work_order_id TEXT,entity_type TEXT);`);
   const prepare = (sql, values = []) => ({ bind: (...args) => prepare(sql, args), first: async () => sqlite.prepare(sql).get(...values) || null,
     all: async () => ({ results: sqlite.prepare(sql).all(...values) }), run: async () => ({ meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } }) });
   const db = { prepare, batch: async statements => { sqlite.exec("BEGIN"); try { const results = []; for (const statement of statements) results.push(await statement.run()); sqlite.exec("COMMIT"); return results; } catch (error) { sqlite.exec("ROLLBACK"); throw error; } } };
@@ -64,17 +65,17 @@ test("due reminder uses authoritative job/customer and remains single-use across
 });
 
 test("every SMS automation excludes imported original visits but allows new visits and ignores foreign source claims", async t => {
-  for (const kind of ["appointment_reminder", "appointment_follow_up", "review_request"]) {
+  for (const sourceTable of ["trade_dataforce_sources", "trade_csv_import_sources"]) for (const kind of ["appointment_reminder", "appointment_follow_up", "review_request"]) {
     const f = fixture(t);
     const past = kind !== "appointment_reminder";
     const visit = past
       ? { starts_at: "2026-09-22T10:00", status: "completed", completed_at: "2026-09-22T01:00:00Z" }
       : { starts_at: "2026-09-30T10:00", status: "scheduled", completed_at: "" };
     f.job("imported", "owner", { visit: { ...visit, id: "imported:visit" } });
-    f.insert("trade_dataforce_sources", { firebase_uid: "owner", work_order_id: "imported" });
+    f.insert(sourceTable, { firebase_uid: "owner", work_order_id: "imported", ...(sourceTable === "trade_csv_import_sources" ? { entity_type: "job" } : {}) });
     f.insert("trade_crm_appointments", { ...visit, id: "new-tlink-visit", work_order_id: "imported", firebase_uid: "owner" });
     f.job("normal", "owner", { visit: { ...visit, id: "normal:visit" } });
-    f.insert("trade_dataforce_sources", { firebase_uid: "other", work_order_id: "normal" });
+    f.insert(sourceTable, { firebase_uid: "other", work_order_id: "normal", ...(sourceTable === "trade_csv_import_sources" ? { entity_type: "job" } : {}) });
     f.job("foreign", "other", { visit: { ...visit, id: "foreign:visit" } });
     await f.enable([kind]);
     await scanSmsAutomations(f.db, f.services, NOW);

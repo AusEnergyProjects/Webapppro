@@ -56,8 +56,8 @@ export type TradeDataforceImportRow = {
   job: {
     title: string;
     serviceCategory: TradeDataforceServiceCategory;
-    pipelineStage: "enquiry" | "scheduled" | "in_progress" | "complete";
-    workStage: "backlog" | "ready" | "scheduled" | "in_progress" | "completed";
+    pipelineStage: "imported";
+    workStage: "imported";
     scheduledStart: string;
     scheduledEnd: string;
   };
@@ -146,18 +146,8 @@ function projectRecord(record: DataforceJobCsvRecord, rowNumber: number, service
   const scheduledStart = scheduled ?? "";
   const status = canonical(record.Status);
   const subStatus = canonical(record.SubStatus);
-  let workStage: TradeDataforceImportRow["job"]["workStage"] = "backlog";
-  let pipelineStage: TradeDataforceImportRow["job"]["pipelineStage"] = "enquiry";
-  if (subStatus === "partial") {
-    workStage = "in_progress";
-    pipelineStage = "in_progress";
-  } else if ((status === "audited" || status === "completed") && ["", "passed", "waived", "field"].includes(subStatus)) {
-    workStage = "completed";
-    pipelineStage = "complete";
-  } else if (status === "assigned") {
-    workStage = scheduledStart ? "scheduled" : "ready";
-    pipelineStage = scheduledStart ? "scheduled" : "enquiry";
-  }
+  const workStage = "imported";
+  const pipelineStage = "imported";
   if (!["audited", "completed", "assigned"].includes(status)) issue("SOURCE_STATUS_UNMAPPED", "The source status is retained for review; no completed status was inferred.", "Status");
   if (!["", "passed", "waived", "partial", "field"].includes(subStatus)) issue("SOURCE_SUBSTATUS_UNMAPPED", "The source substatus is retained and needs review.", "SubStatus");
   if (canonical(record.Type) !== "normal") issue("SOURCE_TYPE_UNMAPPED", "The source job type is retained and needs review.", "Type");

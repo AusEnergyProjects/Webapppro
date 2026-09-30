@@ -30,6 +30,7 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_MASTER_INTEGRITY_FAILED: [409, "This form could not pass its saved integrity check. Ask an administrator to review it."],
   ACTIVITY_RECORD_NOT_FOUND: [404, "This activity form was not found."],
   JOB_NOT_FOUND: [404, "Job not found."], JOB_NOT_ASSIGNED: [403, "This job is assigned to another worker."],
+  IMPORTED_JOB_INACTIVE: [409, "Start this imported job in TLink before recording activity work."],
   ACTIVITY_INTENT_NOT_ACTIVE: [409, "This activity is no longer part of the job."],
   ACTIVITY_REVISION_CONFLICT: [409, "The latest changes are being saved. Your work is retained."],
   ACTIVITY_SIGNING_SCOPE_CHANGED: [409, "The work details changed before signing. Check the updated details and sign again."],

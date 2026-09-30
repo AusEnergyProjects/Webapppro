@@ -170,7 +170,7 @@ function errorResponse(error: unknown) {
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next work number could not be reserved. Please try again." }, 503);
   if (code === "TASK_LIMIT_REACHED") return adminJson({ ok: false, error: "This work record has reached its checklist limit." }, 409);
   if (code === "WORK_NOT_FOUND") return adminJson({ ok: false, error: "Work record not found." }, 404);
-  if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed and cancelled jobs are locked." }, 409);
+  if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Imported jobs must first be started in TLink. Completed and cancelled jobs are locked." }, 409);
   if(code.includes("JOB_CANCEL_COMPLETED"))return adminJson({ok:false,error:"A job that has been completed cannot be cancelled. Its completed records must be retained."},409);
   if (code === "RENTAL_SCHEDULE_WORKFLOW_REQUIRED") return adminJson({ ok: false, error: "Use TLink Schedule to change a rental assessment appointment or assessor." }, 409);
   if (code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This work record changed elsewhere. Refresh it before saving." }, 409);
@@ -279,7 +279,7 @@ async function workOrderPayload(identity: TradeIdentity) {
     events = eventRows.results.map((event) => ({ ...event, summary: visibleImportedJobEventSummary(event, event.work_order_id) }));
     handoverPacks = handoverRows.results;
   }
-  const activeCount = orderRows.results.filter((row: Record<string, unknown>) => !["completed", "cancelled"].includes(String(row.stage))).length;
+  const activeCount = orderRows.results.filter((row: Record<string, unknown>) => !["imported", "completed", "cancelled"].includes(String(row.stage))).length;
   return {
     workOrders: orderRows.results.map((row: Record<string, unknown>) => {
       const workTasks = tasks.filter((task) => task.work_order_id === row.id);
@@ -377,7 +377,7 @@ export async function POST(request: Request) {
         FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
         .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
       if (!order) throw new Error("WORK_NOT_FOUND");
-      if (["completed", "cancelled"].includes(String(order.stage))) throw new Error("TERMINAL_JOB_LOCKED");
+      if (["imported", "completed", "cancelled"].includes(String(order.stage))) throw new Error("TERMINAL_JOB_LOCKED");
       const count = await db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ?")
         .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
       if (Number(count?.count || 0) >= MEMBER_TASK_LIMIT) throw new Error("TASK_LIMIT_REACHED");
@@ -393,14 +393,14 @@ export async function POST(request: Request) {
             WHERE work_order.id = ? AND work_order.firebase_uid = ?
               AND work_order.record_status = 'active'
               AND work_order.stage = ?
-              AND work_order.stage NOT IN ('completed', 'cancelled')
+              AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
               AND work_order.revision = ?
           )`)
           .bind(taskId, workOrderId, identity.uid, title, dueAt, Number(count?.count || 0), now, now,
             workOrderId, identity.uid, jobStage, Number(order.revision)),
         db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
-            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+            AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?
             AND EXISTS (
               SELECT 1 FROM trade_work_order_tasks child
               WHERE child.id = ? AND child.work_order_id = trade_work_orders.id
@@ -425,7 +425,7 @@ export async function POST(request: Request) {
 
     if (action !== "create_work_order") return adminJson({ ok: false, error: "Unsupported Business Hub action." }, 400);
     const current = await db.prepare(`SELECT COUNT(*) count FROM trade_work_orders
-      WHERE firebase_uid = ? AND record_status = 'active' AND stage NOT IN ('completed', 'cancelled')`)
+      WHERE firebase_uid = ? AND record_status = 'active' AND stage NOT IN ('imported', 'completed', 'cancelled')`)
       .bind(identity.uid).first<Record<string, unknown>>();
     const activeCount = Number(current?.count || 0);
     if (activeCount >= MEMBER_ACTIVE_LIMIT) throw new Error("MEMBER_LIMIT_REACHED");
@@ -581,7 +581,7 @@ export async function PATCH(request: Request) {
         .bind(taskId, identity.uid, identity.uid).first<Record<string, unknown>>();
       if (!task) throw new Error("WORK_NOT_FOUND");
       if (teamAccess) await assignedJob(teamAccess, String(task.work_order_id));
-      if (["completed", "cancelled"].includes(String(task.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
+      if (["imported", "completed", "cancelled"].includes(String(task.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
       const taskRevision = nextJobRevision(task.revision); const jobRevision = nextJobRevision(task.job_revision);
       const jobStage = String(task.job_stage);
       await guardedOnlineChildMutationBatch(db, [
@@ -593,14 +593,14 @@ export async function PATCH(request: Request) {
                 AND work_order.firebase_uid = trade_work_order_tasks.firebase_uid
                 AND work_order.record_status = 'active'
                 AND work_order.stage = ?
-                AND work_order.stage NOT IN ('completed', 'cancelled')
+                AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
                 AND work_order.revision = ?
             )`)
           .bind(status, status === "done" ? now : "", taskRevision, now, taskId, identity.uid,
             Number(task.revision), jobStage, Number(task.job_revision)),
         db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
-            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+            AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?
             AND EXISTS (
               SELECT 1 FROM trade_work_order_tasks child
               WHERE child.id = ? AND child.work_order_id = trade_work_orders.id
@@ -626,6 +626,42 @@ export async function PATCH(request: Request) {
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
+    if (action === "archive_crm_job" || action === "restore_crm_job") {
+      if (identity.partnerType !== "installer") return adminJson({ ok: false, error: "Only the business owner can change the job bin." }, 403);
+      const previousStatus = action === "archive_crm_job" ? "active" : "archived";
+      const nextStatus = previousStatus === "active" ? "archived" : "active";
+      const job = await db.prepare(`SELECT w.id, w.stage, w.revision, w.assignee_member_id
+        FROM trade_work_orders w JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
+        WHERE w.id=? AND w.firebase_uid=? AND w.partner_type='installer' AND w.record_status=?
+          AND d.customer_source IN ('trade_owned','public_lead_released') AND w.source_type <> 'opportunity'`)
+        .bind(workOrderId, identity.uid, previousStatus).first<Record<string, unknown>>();
+      if (!job) return adminJson({ ok: false, error: "This job is unavailable or its visibility has changed. Refresh the list." }, 409);
+      const expectedRevision = Number(body.expectedRevision);
+      if (!Number.isSafeInteger(expectedRevision) || expectedRevision !== Number(job.revision)) {
+        return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job changed. Refresh it before changing the bin." }, 409);
+      }
+      const revision = nextJobRevision(job.revision);
+      // The event's NOT NULL summary rolls back the whole batch if a concurrent
+      // edit wins. All source, financial and compliance records remain intact.
+      try {
+        await db.batch([
+          db.prepare(`UPDATE trade_work_orders SET record_status=?, revision=?, updated_at=?
+            WHERE id=? AND firebase_uid=? AND record_status=? AND revision=?`)
+            .bind(nextStatus, revision, now, workOrderId, identity.uid, previousStatus, expectedRevision),
+          db.prepare(`INSERT INTO trade_work_order_events(id,work_order_id,firebase_uid,event_type,summary,created_at)
+            VALUES(?,?,?, ?, CASE WHEN changes()=1 THEN ? ELSE NULL END,?)`)
+            .bind(crypto.randomUUID(), workOrderId, identity.uid, nextStatus === "archived" ? "work_archived" : "work_restored",
+              nextStatus === "archived" ? "Moved to the recoverable job bin. Source and audit history retained." : "Restored from the job bin.", now),
+          ...offlineSyncStatements(db, identity, workOrderId, revision, now, String(job.assignee_member_id || ""), "", nextStatus === "archived" ? "delete" : "upsert"),
+        ]);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("trade_work_order_events.summary")) {
+          return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job changed. Refresh it before changing the bin." }, 409);
+        }
+        throw error;
+      }
+      return adminJson({ ok: true, recordStatus: nextStatus, revision });
+    }
     const current = await db.prepare(`SELECT id, stage, priority, scheduled_start, scheduled_end, assignee_member_id, assignee_label, service_category, revision
       FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
       .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
@@ -647,6 +683,7 @@ export async function PATCH(request: Request) {
       ]);
       return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
     }
+    if (String(current.stage) === "imported") return adminJson({ ok: false, code: "IMPORTED_JOB_INACTIVE", error: "Start this imported job in TLink before assigning or recording work." }, 409);
     if (action !== "update_work_order") return adminJson({ ok: false, error: "Unsupported Business Hub update." }, 400);
     if (["completed", "cancelled"].includes(String(current.stage))) throw new Error("TERMINAL_JOB_LOCKED");
     if (String(current.service_category || "") === "rental-inspection"
@@ -702,7 +739,7 @@ export async function PATCH(request: Request) {
       db.prepare(`UPDATE trade_work_orders SET stage = ?, priority = ?, scheduled_start = ?, scheduled_end = ?,
         assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
-          AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?`)
+          AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?`)
         .bind(requestedStage, requestedPriority, scheduledStart, scheduledEnd, assigneeMemberId,
           assigneeLabel, revision, now, workOrderId, identity.uid,
           String(current.stage), Number(current.revision)),

@@ -1953,6 +1953,8 @@ export async function prepareCreditexActivityWorkPackAttachment(
     "WORK_PACK_WORK_ORDER_REQUIRED",
     "Work order",
   );
+  const parent = await database.prepare("SELECT stage FROM trade_work_orders WHERE id=? AND firebase_uid=?").bind(workOrderId, input.ownerUid).first<{stage:string}>();
+  if (parent?.stage === "imported") return fail("IMPORTED_JOB_INACTIVE", 409, "Start this imported job in TLink before opening its work pack.");
   const complianceIntentId = optionalText(input.complianceIntentId, 180);
   const actorUid = text(input.actorUid, 180, "WORK_PACK_ACTOR_REQUIRED", "Actor");
   const createdAt = input.createdAt
@@ -2046,7 +2048,7 @@ export async function prepareCreditexActivityWorkPackAttachment(
     compositionLockId: compositionLock.id,
     compositionSha256: compositionLock.sha256,
     statement,
-    statements: Object.freeze([compositionLock.statement, statement]),
+    statements: Object.freeze([creditexWriteGuard(database, input.ownerUid, "EXISTS (SELECT 1 FROM trade_work_orders work WHERE work.id=? AND work.firebase_uid=? AND work.record_status='active' AND work.stage<>'imported')", [workOrderId, input.ownerUid]), compositionLock.statement, statement]),
   });
 }
 
@@ -2077,6 +2079,7 @@ type WorkPackInstanceRecord = {
   assignee_member_id: string;
   assigned_worker_uid: string;
   work_order_revision: number;
+  work_order_stage: string;
 };
 
 export type CreditexWorkPackTradeScope = Readonly<{
@@ -2633,6 +2636,7 @@ async function assignedInstanceRow(
   database: D1Database,
   scope: CreditexWorkPackTradeScope,
   instanceId: string,
+  mutate = false,
 ) {
   await ensureCreditexWorkPackSchemaGuards(database);
   const row = await database.prepare(`SELECT instance.*,
@@ -2641,7 +2645,7 @@ async function assignedInstanceRow(
       compliance_case.evidence_policy_version_id,
       compliance_case.installer_uid,
       work_order.source_type, work_order.assignee_member_id,
-      work_order.revision work_order_revision,
+      work_order.revision work_order_revision, work_order.stage work_order_stage,
       CASE
         WHEN work_order.assignee_member_id = '' THEN work_order.firebase_uid
         ELSE COALESCE(assigned_member.member_uid, '')
@@ -2688,6 +2692,7 @@ async function assignedInstanceRow(
       "The current assigned activity work pack was not found.",
     );
   }
+  if (mutate && row.work_order_stage === "imported") return fail("IMPORTED_JOB_INACTIVE", 409, "Start this imported job in TLink before recording work-pack activity.");
   return row;
 }
 
@@ -3287,7 +3292,9 @@ async function projectAssignedInstance(
     workPack: resolved.workPack,
     response: completionResponse,
   });
-  const completion = executionContextStale
+  const completion = row.work_order_stage === "imported"
+    ? Object.freeze({ ...evaluatedCompletion, ready: false, blockers: Object.freeze([...evaluatedCompletion.blockers, Object.freeze({ code: "IMPORTED_JOB_INACTIVE", key: "job", message: "Start this imported job in TLink before recording work-pack activity." })]) })
+    : executionContextStale
     ? Object.freeze({
       ...evaluatedCompletion,
       ready: false,
@@ -3414,7 +3421,7 @@ export async function listAssignedCreditexActivityWorkPacks(
       compliance_case.evidence_policy_version_id,
       compliance_case.installer_uid,
       work_order.source_type, work_order.assignee_member_id,
-      work_order.revision work_order_revision,
+      work_order.revision work_order_revision, work_order.stage work_order_stage,
       CASE
         WHEN work_order.assignee_member_id = '' THEN work_order.firebase_uid
         ELSE COALESCE(assigned_member.member_uid, '')
@@ -5261,6 +5268,7 @@ async function runWorkPackMutation(
     statements: readonly D1PreparedStatement[];
   },
 ): Promise<CreditexWorkPackMutationResult> {
+  if (input.row.work_order_stage === "imported") return fail("IMPORTED_JOB_INACTIVE", 409, "Start this imported job in TLink before recording work-pack activity.");
   const idempotency = validateMutationIdempotency(input.idempotency);
   const existing = await mutationReceipt(database, input.scope, idempotency);
   const identityExact = existing
@@ -5298,7 +5306,7 @@ async function runWorkPackMutation(
   const statements: D1PreparedStatement[] = await certificateJobEligibilityGuards(database, certificateAccess);
   statements.push(creditexWriteGuard(database, input.scope.ownerUid,
     `EXISTS (SELECT 1 FROM trade_work_orders guard_work WHERE guard_work.id = ? AND guard_work.firebase_uid = ?
-      AND guard_work.assignee_member_id = ? AND guard_work.revision = ? AND guard_work.record_status = 'active'
+      AND guard_work.assignee_member_id = ? AND guard_work.revision = ? AND guard_work.record_status = 'active' AND guard_work.stage <> 'imported'
       AND (? = 'team' OR ${jobMemberSql("guard_work")}))`,
     [input.row.work_order_id, input.scope.ownerUid, String(input.row.assignee_member_id || ""), Number(input.row.work_order_revision),
       input.scope.scope, input.scope.actorMemberId]));
@@ -5864,7 +5872,7 @@ export async function captureAssignedCreditexActivityWorkPackBrowserUpload(
   database: D1Database,
   input: CreditexWorkPackBrowserUploadInput,
 ): Promise<CreditexWorkPackBrowserUploadResult> {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   if (row.status === "completed" || row.status === "void") {
     return fail(
       "WORK_PACK_INSTANCE_IMMUTABLE",
@@ -6081,8 +6089,9 @@ export async function captureAssignedCreditexActivityWorkPackBrowserUpload(
         prompt_key, purpose, artifact_kind, device_id, object_key, file_name,
         content_type, size_bytes, original_sha256, metadata_snapshot,
         metadata_sha256, captured_at, created_at
-      ) VALUES (?, 'creditex-activity-work-pack-browser-upload/v1', ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      ) SELECT ?, 'creditex-activity-work-pack-browser-upload/v1', ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (
+          SELECT 1 FROM trade_work_orders work WHERE work.id=? AND work.firebase_uid=? AND work.record_status='active' AND work.stage<>'imported')`)
       .bind(
         receipt.id,
         receipt.organisation_id,
@@ -6106,6 +6115,7 @@ export async function captureAssignedCreditexActivityWorkPackBrowserUpload(
         receipt.metadata_sha256,
         receipt.captured_at,
         receipt.created_at,
+        row.work_order_id, input.ownerUid,
       ).run();
     if (Number(result.meta.changes || 0) !== 1) {
       throw new Error("WORK_PACK_BROWSER_UPLOAD_NOT_RECORDED");
@@ -6623,7 +6633,7 @@ export async function commitAssignedCreditexActivityWorkPack(
   }>,
   attempt = 0,
 ): Promise<CreditexWorkPackMutationResult> {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
     row,
@@ -6762,7 +6772,7 @@ export async function commitAssignedCreditexActivityWorkPack(
     // A different writer can append after our read. Re-read and compare the
     // same trusted base again; never turn a same-field conflict into a retry.
     if (attempt < 2) {
-      const latest = await assignedInstanceRow(database, input, input.caseInstanceId);
+      const latest = await assignedInstanceRow(database, input, input.caseInstanceId, true);
       if (latest.id !== row.id || (latest.assignee_member_id === row.assignee_member_id
         && Number(latest.work_order_revision) !== Number(row.work_order_revision))) {
         return commitAssignedCreditexActivityWorkPack(database, input, attempt + 1);
@@ -6785,7 +6795,7 @@ export async function prepareCreditexCorrectionWorkPackStatements(
     const record = object(value, "WORK_PACK_CORRECTION_SOURCE_INVALID", "The review source is invalid.");
     if (record.kind !== "pack") continue;
     const id = text(record.id, 240, "WORK_PACK_CORRECTION_SOURCE_INVALID", "Reviewed work pack");
-    const row = await assignedInstanceRow(database, { ownerUid: input.ownerUid, actorUid: input.actorUid, actorMemberId: "", scope: "team" }, id);
+    const row = await assignedInstanceRow(database, { ownerUid: input.ownerUid, actorUid: input.actorUid, actorMemberId: "", scope: "team" }, id, true);
     if (row.id !== id || row.organisation_id !== input.organisationId || row.work_order_id !== input.workOrderId
       || row.compliance_intent_id !== input.intentId || row.status !== "completed" || Number(row.revision) !== record.revision) {
       return fail("WORK_PACK_CORRECTION_SOURCE_CHANGED", 409, "The reviewed work pack changed. Refresh the job before requesting corrections.");
@@ -6800,8 +6810,9 @@ export async function prepareCreditexCorrectionWorkPackStatements(
         WHERE correction.id=? AND correction.organisation_id=? AND correction.owner_uid=?
           AND correction.work_order_id=? AND correction.intent_id=? AND correction.action='correction_required'
           AND correction.source_snapshot=? AND correction.actor_uid=?)
-        AND NOT EXISTS (SELECT 1 FROM compliance_activity_work_pack_instances successor WHERE successor.supersedes_instance_id=?)`,
-      [input.eventId, input.organisationId, input.ownerUid, input.workOrderId, input.intentId, input.sourceSnapshot, input.actorUid, row.id]),
+        AND NOT EXISTS (SELECT 1 FROM compliance_activity_work_pack_instances successor WHERE successor.supersedes_instance_id=?)
+        AND EXISTS (SELECT 1 FROM trade_work_orders work WHERE work.id=? AND work.firebase_uid=? AND work.record_status='active' AND work.stage<>'imported')`,
+      [input.eventId, input.organisationId, input.ownerUid, input.workOrderId, input.intentId, input.sourceSnapshot, input.actorUid, row.id, input.workOrderId, input.ownerUid]),
       ...await signatureRevocationStatements(database, row, input.now),
       appendInstanceStatement(database, row, {
         id: `work-pack:${row.compliance_case_id}:revision:${Number(row.revision) + 1}`,
@@ -6823,7 +6834,7 @@ export async function selectAssignedCreditexActivityWorkPackScenario(
     now?: string;
   }>,
 ) {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
     row,
@@ -6949,7 +6960,7 @@ export async function selectAssignedCreditexActivityWorkPackOfficialProducts(
     now?: string;
   }>,
 ) {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
     row,
@@ -7245,7 +7256,7 @@ export async function runAssignedCreditexActivityWorkPackCalculator(
     now?: string;
   }>,
 ) {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
     row,
@@ -7440,7 +7451,7 @@ export async function prepareAssignedCreditexActivityWorkPackSigning(
     now?: string;
   }>,
 ) {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
     row,
@@ -7971,7 +7982,7 @@ export async function captureAssignedCreditexActivityWorkPackSignatures(
     now?: string;
   }>,
 ) {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
     row,
@@ -8195,7 +8206,7 @@ export async function updateAssignedCreditexActivityWorkPackCustomerContext(
     now?: string;
   }>,
 ) {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
     row,
@@ -8539,7 +8550,7 @@ export async function refreshAssignedCreditexActivityWorkPackExecutionContext(
     now?: string;
   }>,
 ) {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
     row,
@@ -8758,7 +8769,7 @@ export async function finaliseAssignedCreditexActivityWorkPack(
     now?: string;
   }>,
 ) {
-  const row = await assignedInstanceRow(database, input, input.caseInstanceId);
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
   const replay = await replayAppliedWorkPackMutation(database, {
     scope: input,
     row,
@@ -9451,7 +9462,7 @@ export async function reviewCreditexActivityWorkPackCalculation(
       compliance_case.evidence_policy_version_id,
       compliance_case.installer_uid,
       work_order.source_type, work_order.assignee_member_id,
-      work_order.revision work_order_revision,
+      work_order.revision work_order_revision, work_order.stage work_order_stage,
       CASE
         WHEN work_order.assignee_member_id = '' THEN work_order.firebase_uid
         ELSE COALESCE(assigned_member.member_uid, '')
@@ -9523,6 +9534,7 @@ export async function reviewCreditexActivityWorkPackCalculation(
       "This immutable calculation run already has an independent review.",
     );
   }
+  if (row.work_order_stage === "imported") return fail("IMPORTED_JOB_INACTIVE", 409, "Start this imported job in TLink before reviewing its calculation.");
   const resolved = await resolvePinnedCreditexActivityWorkPack(database, {
     organisationId: row.organisation_id,
     workPackVersionId: row.work_pack_version_id,
@@ -9627,7 +9639,7 @@ export async function reviewCreditexActivityWorkPackCalculation(
         input_sha256, output_sha256, calculator_version_id,
         calculator_source_sha256, engine_receipt_id, reviewer_uid,
         review_note, reviewed_at, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM trade_work_orders work WHERE work.id=? AND work.firebase_uid=? AND work.record_status='active' AND work.stage<>'imported')`)
     .bind(
       id,
       row.organisation_id,
@@ -9645,6 +9657,7 @@ export async function reviewCreditexActivityWorkPackCalculation(
       reviewNote,
       now,
       now,
+      row.work_order_id, row.installer_uid,
     ).run();
   if (Number(result.meta.changes || 0) !== 1) {
     return fail(
@@ -11827,7 +11840,7 @@ async function resolveCreditexActivityWorkPackOutputReadiness(
           THEN COALESCE(work_order.firebase_uid, '')
         ELSE COALESCE(assigned_member.member_uid, '')
       END assigned_worker_uid,
-      COALESCE(work_order.revision, 1) work_order_revision,
+      COALESCE(work_order.revision, 1) work_order_revision, COALESCE(work_order.stage, '') work_order_stage,
       activity.effective_from activity_effective_from,
       activity.effective_to activity_effective_to,
       activity.publish_state activity_publish_state,
@@ -11907,11 +11920,10 @@ async function resolveCreditexActivityWorkPackOutputReadiness(
     LIMIT 1`)
     .bind(activityTemplateIdValue, caseInstanceId, actor.organisationId)
     .first<OutputReadinessInstanceRecord>();
-  if (!row) {
+  if (!row || row.work_order_stage === "imported") {
     const blockers = Object.freeze(Array.from(new Set([
       ...base.blockers,
-      "completed_current_work_pack_response_required",
-      "immutable_final_work_pack_record_required",
+      ...(row?.work_order_stage === "imported" ? ["imported_job_inactive"] : ["completed_current_work_pack_response_required", "immutable_final_work_pack_record_required"]),
     ])).sort(compareText));
     return Object.freeze({
       ...base,

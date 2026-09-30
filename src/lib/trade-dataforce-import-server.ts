@@ -1,11 +1,14 @@
 import { DATAFORCE_JOB_CSV_HEADERS } from "./creditex-dataforce-job-csv.ts";
 import { prepareTradeDataforceImport, TRADE_DATAFORCE_FIELD_MAPPINGS, TRADE_DATAFORCE_IMPORT_LIMITS, type TradeDataforceImportRow } from "./trade-dataforce-import.ts";
 import { reserveTlinkJobNumbers } from "./trade-job-number-server.ts";
+import { prepareTradeImportEntities, tradeImportHash as hash } from "./trade-import-entities-server.ts";
+import { listTradeImportLinkedRecords, pageTradeImportRows, type TradeImportRecordKind } from "./trade-import-review-server.ts";
 
 type Database = D1Database;
 type Stored = Record<string, unknown>;
-type Source = { source_job_id: string; row_sha256: string; work_order_id: string; import_batch_id: string; target_live: number; mapped_service_category: string };
+type Source = { source_job_id: string; row_sha256: string; work_order_id: string; import_batch_id: string; target_live: number; target_removed: number; mapped_service_category: string };
 const SOURCE_QUERY = `SELECT source.source_job_id,source.row_sha256,source.work_order_id,source.import_batch_id,
+  EXISTS(SELECT 1 FROM trade_work_orders removed_work WHERE removed_work.id=source.work_order_id AND removed_work.firebase_uid=source.firebase_uid AND removed_work.record_status='archived') target_removed,
   json_extract(source_receipt.normalized_data,'$.job.serviceCategory') mapped_service_category,
   CASE WHEN work.id IS NOT NULL AND detail.work_order_id IS NOT NULL AND customer.id IS NOT NULL AND site.id IS NOT NULL
     AND detail.crm_customer_id=source.customer_id AND detail.service_site_id=source.service_site_id AND site.customer_id=source.customer_id
@@ -17,7 +20,6 @@ const SOURCE_QUERY = `SELECT source.source_job_id,source.row_sha256,source.work_
   LEFT JOIN trade_crm_customers customer ON customer.id=source.customer_id AND customer.firebase_uid=source.firebase_uid AND customer.record_status='active'
   LEFT JOIN trade_crm_service_sites site ON site.id=source.service_site_id AND site.firebase_uid=source.firebase_uid AND site.record_status='active'
   WHERE source.firebase_uid=? AND source.source_system='dataforce'`;
-const phoneKey = (phone: string) => phone.replace(/\D/g, "").replace(/^61(?=[23478]\d{8}$)/, "0");
 export const DATAFORCE_COMMIT_CHUNK_SIZE = 20;
 export const DATAFORCE_IMPORT_MAX_BYTES = TRADE_DATAFORCE_IMPORT_LIMITS.maximumSourceBytes;
 export const DATAFORCE_IMPORT_MAX_ROWS = TRADE_DATAFORCE_IMPORT_LIMITS.maximumRows;
@@ -27,9 +29,6 @@ export class TradeDataforceImportError extends Error {
   constructor(message: string, status = 400) { super(message); this.status = status; }
 }
 
-async function hash(value: string) {
-  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), byte => byte.toString(16).padStart(2, "0")).join("");
-}
 function rawJson(row: TradeDataforceImportRow) {
   return JSON.stringify(Object.fromEntries(DATAFORCE_JOB_CSV_HEADERS.map(header => [header, row.record[header]])));
 }
@@ -60,7 +59,7 @@ function rowPayload(row: Stored) {
     ? { ...issue, message: String(issue.message).replace(/\bDataforce\b/gi, "source") } : issue) : issues;
   return { id: String(row.id), rowNumber: Number(row.row_number), key: String(row.row_key),
     values: JSON.parse(String(row.normalized_data)), status: String(row.validation_status),
-    issues: visibleIssues, resolution: String(row.resolution), resultStatus: String(row.result_status),
+    issues: visibleIssues, resolution: String(row.resolution), resultStatus: row.target_removed ? "removed" : String(row.result_status),
     targetEntityType: String(row.target_entity_type || ""), targetEntityId: String(row.target_entity_id || ""), error: String(row.error || "").replace(/\bDataforce\b/gi, "source") };
 }
 async function ownedBatch(db: Database, owner: string, batchId: string) {
@@ -74,33 +73,36 @@ async function batchPayload(db: Database, owner: string, batch: Stored) {
     SUM(CASE WHEN result_status='conflict' THEN 1 ELSE 0 END) conflict_count,
     SUM(CASE WHEN result_status='duplicate' THEN 1 ELSE 0 END) duplicate_count,
     SUM(CASE WHEN result_status='invalid' THEN 1 ELSE 0 END) error_count,
-    SUM(CASE WHEN result_status='imported' THEN 1 ELSE 0 END) imported_count,
+    SUM(CASE WHEN result_status='imported' THEN 1 ELSE 0 END) historical_imported_count,
+    SUM(CASE WHEN result_status='imported' AND NOT EXISTS(SELECT 1 FROM trade_work_orders w WHERE w.id=trade_data_import_rows.target_entity_id AND w.firebase_uid=trade_data_import_rows.firebase_uid AND w.record_status='archived') THEN 1 ELSE 0 END) imported_count,
+    SUM(CASE WHEN result_status IN ('skipped','removed') OR EXISTS(SELECT 1 FROM trade_work_orders w WHERE w.id=trade_data_import_rows.target_entity_id AND w.firebase_uid=trade_data_import_rows.firebase_uid AND w.record_status='archived') THEN 1 ELSE 0 END) excluded_count,
     SUM(CASE WHEN result_status IN ('duplicate','invalid','conflict') THEN 1 ELSE 0 END) skipped_count
     FROM trade_data_import_rows WHERE batch_id=? AND firebase_uid=?`).bind(batch.id, owner).first<Stored>();
   return { id: String(batch.id), importType: "dataforce", fileName: String(batch.file_name), rowCount: Number(batch.row_count),
     readyCount: Number(batch.ready_count), warningCount: Number(batch.warning_count), errorCount: Number(counts?.error_count || 0),
     duplicateCount: Number(counts?.duplicate_count || 0), importedCount: Number(counts?.imported_count || 0),
+    historicalImportedCount: Number(counts?.historical_imported_count || 0), excludedCount: Number(counts?.excluded_count || 0),
     skippedCount: Number(counts?.skipped_count || 0), failedCount: Number(batch.failed_count || 0),
     conflictCount: Number(counts?.conflict_count || 0), pendingCount: Number(counts?.pending_count || 0),
     status: String(batch.status), createdAt: String(batch.created_at), updatedAt: String(batch.updated_at),
     committedAt: String(batch.committed_at || ""), rollbackUntil: "" };
 }
 
-export async function getTradeDataforceImport(db: Database, owner: string, batchId = "", offset = 0, limit = 100) {
+export async function getTradeDataforceImport(db: Database, owner: string, batchId = "", offset = 0, limit = 100, rowFilter = "all", records?: TradeImportRecordKind) {
+  if (batchId && records) {
+    const batch = await ownedBatch(db, owner, batchId);
+    return { batch: await batchPayload(db, owner, batch), ...await listTradeImportLinkedRecords(db, owner, batchId, "dataforce", records, offset, limit) };
+  }
   const history = await db.prepare("SELECT * FROM trade_data_import_batches WHERE firebase_uid=? AND import_type='dataforce' ORDER BY created_at DESC LIMIT 30").bind(owner).all<Stored>();
   const batches = await Promise.all(history.results.map(batch => batchPayload(db, owner, batch)));
   if (!batchId) return { batches, fieldMappings: TRADE_DATAFORCE_FIELD_MAPPINGS };
   const stored = await ownedBatch(db, owner, batchId);
-  const safeOffset = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
-  const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(100, limit)) : 100;
-  const rows = await db.prepare("SELECT * FROM trade_data_import_rows WHERE batch_id=? AND firebase_uid=? ORDER BY row_number LIMIT ? OFFSET ?")
-    .bind(batchId, owner, safeLimit, safeOffset).all<Stored>();
-  const total = Number(stored.row_count);
+  const page = await pageTradeImportRows(db, owner, batchId, offset, limit, rowFilter);
   const payload = await batchPayload(db, owner, stored);
   const reconciliation = await reconcileTradeDataforceImport(db, owner, batchId);
   const integrityWarning = reconciliation.brokenLinks || reconciliation.mismatchedSourceRows ? "Some previously imported records have been deleted, archived or relinked, or a source record no longer matches its preview. The original source remains available; review these records before importing again." : "";
-  return { batches, batch: { ...payload, ...(integrityWarning ? { status: "needs_review", integrityWarning } : {}) }, rows: rows.results.map(rowPayload), total, reconciliation,
-    nextOffset: safeOffset + rows.results.length < total ? safeOffset + rows.results.length : null, fieldMappings: TRADE_DATAFORCE_FIELD_MAPPINGS };
+  return { batches, batch: { ...payload, ...(integrityWarning ? { status: "needs_review", integrityWarning } : {}) }, ...page, rows: page.rows.map(rowPayload), reconciliation,
+    fieldMappings: TRADE_DATAFORCE_FIELD_MAPPINGS };
 }
 
 export async function previewTradeDataforceImport(db: Database, owner: string, source: string, suppliedName: unknown, mappingInput: unknown = {}) {
@@ -133,14 +135,14 @@ export async function previewTradeDataforceImport(db: Database, owner: string, s
   const rows = await Promise.all(plan.rows.map(async input => {
     const old = known.get(input.sourceJobId);
     const fingerprint = await hash(rawJson(input));
-    const status = input.status === "error" ? "error" : old ? old.row_sha256 === fingerprint && old.target_live && old.mapped_service_category === input.job.serviceCategory ? "duplicate" : "conflict" : input.status;
+    const status = input.status === "error" ? "error" : old ? old.target_removed ? "removed" : old.row_sha256 === fingerprint && old.target_live && old.mapped_service_category === input.job.serviceCategory ? "duplicate" : "conflict" : input.status;
     const message = status === "duplicate" ? "This exact source job is already imported. The existing job is retained."
       : status === "conflict" ? old && !old.target_live ? "This source was imported previously, but its linked record was deleted, archived or changed. Review it; it will not be recreated automatically."
         : "This source job ID already exists with different source data. Review it before changing the existing job." : "";
     const issues = [...input.issues, ...(message ? [{ code: status === "conflict" ? "SOURCE_CONFLICT" : "SOURCE_DUPLICATE", level: "warning", message, rowNumber: input.rowNumber }] : [])];
     return { id: `${batchId}:${input.rowNumber}`, rowNumber: input.rowNumber, key: input.sourceJobId, data: JSON.stringify(input),
-      status, issues: JSON.stringify(issues), resolution: ["error", "duplicate", "conflict"].includes(status) ? "skip" : "import",
-      result: status === "error" ? "invalid" : status === "duplicate" || status === "conflict" ? status : "pending", target: old?.work_order_id || "" };
+      status, issues: JSON.stringify(issues), resolution: ["error", "duplicate", "conflict", "removed"].includes(status) ? "skip" : "import",
+      result: status === "error" ? "invalid" : status === "duplicate" || status === "conflict" || status === "removed" ? status : "pending", target: old?.work_order_id || "" };
   }));
   const count = (status: string) => rows.filter(row => row.status === status).length;
   const statements = [db.prepare(`INSERT INTO trade_data_import_batches
@@ -175,30 +177,13 @@ export async function previewTradeDataforceImport(db: Database, owner: string, s
   return { ...await getTradeDataforceImport(db, owner, batchId), reused: false };
 }
 
-async function existingCustomer(db: Database, owner: string, input: TradeDataforceImportRow) {
-  // Match every available name/contact field AND address. Shared email or phone alone is not identity.
-  if (!input.customer.email && !input.customer.contactPhone) return "";
-  const rows = await db.prepare(`SELECT id FROM trade_crm_customers WHERE firebase_uid=? AND record_status='active'
-    AND lower(trim(first_name))=? AND lower(trim(last_name))=? AND lower(trim(business_name))=?
-    AND lower(trim(email))=? AND replace(replace(replace(phone,' ',''),'-',''),'+','')=?
-    AND lower(trim(address_line_1))=? AND lower(trim(suburb))=? AND postcode=? LIMIT 2`)
-    .bind(owner, input.customer.firstName.toLowerCase(), input.customer.lastName.toLowerCase(), input.customer.businessName.toLowerCase(),
-      input.customer.email.toLowerCase(), input.customer.contactPhone.replace(/[ +\-]/g, ""), input.site.addressLine1.toLowerCase(), input.site.suburb.toLowerCase(), input.site.postcode).all<{ id: string }>();
-  if (rows.results.length !== 1) return "";
-  const contacts = await db.prepare("SELECT phone FROM trade_crm_customer_contacts WHERE firebase_uid=? AND customer_id=? AND record_status='active'")
-    .bind(owner, rows.results[0].id).all<{ phone: string }>();
-  const existingPhones = new Set([input.customer.contactPhone, ...contacts.results.map(contact => contact.phone)].filter(Boolean).map(phoneKey));
-  if ([input.customer.phone, input.customer.mobile].filter(Boolean).some(phone => !existingPhones.has(phoneKey(phone)))) return "";
-  return rows.results[0].id;
-}
-
 async function existingSource(db: Database, owner: string, sourceJobId: string) {
   return db.prepare(`${SOURCE_QUERY} AND source.source_job_id=?`)
     .bind(owner, sourceJobId).first<Source>();
 }
 async function resolveExistingSource(db: Database, owner: string, batchId: string, row: Stored, old: Source, fingerprint: string, serviceCategory: string) {
   const same = old.row_sha256 === fingerprint && old.target_live && old.mapped_service_category === serviceCategory;
-  const status = same ? old.import_batch_id === batchId ? "imported" : "duplicate" : "conflict";
+  const status = old.target_removed ? "removed" : same ? old.import_batch_id === batchId ? "imported" : "duplicate" : "conflict";
   await db.prepare(`UPDATE trade_data_import_rows SET result_status=?,target_entity_type='work_order',target_entity_id=?,
     error=?,updated_at=? WHERE id=? AND batch_id=? AND firebase_uid=? AND result_status='pending'`)
     .bind(status, old.work_order_id, same ? "" : "Source job already exists with different original data. Existing records were retained.", new Date().toISOString(), row.id, batchId, owner).run();
@@ -218,95 +203,22 @@ async function commitRow(db: Database, owner: string, batchId: string, stored: S
   const old = await existingSource(db, owner, input.sourceJobId);
   if (old) { await resolveExistingSource(db, owner, batchId, stored, old, fingerprint, input.job.serviceCategory); return; }
   const now = new Date().toISOString();
-  const identityHash = await hash(`${owner}\n${input.customerKey}`);
-  const customerId = await existingCustomer(db, owner, input) || `dfc-${identityHash}`;
-  const existingSites = await db.prepare(`SELECT id FROM trade_crm_service_sites WHERE firebase_uid=? AND customer_id=? AND record_status='active'
-    AND lower(trim(address_line_1))=? AND address_line_2='' AND lower(trim(suburb))=? AND address_state=? AND postcode=? LIMIT 2`)
-    .bind(owner, customerId, input.site.addressLine1.toLowerCase(), input.site.suburb.toLowerCase(), input.site.state, input.site.postcode).all<{ id: string }>();
-  const serviceSiteId = existingSites.results.length === 1 ? existingSites.results[0].id : `dfs-${await hash(`${owner}\n${customerId}\n${input.siteKey}`)}`;
-  const savedCustomer = await db.prepare("SELECT record_status,first_name,last_name,business_name,email,phone FROM trade_crm_customers WHERE id=? AND firebase_uid=?").bind(customerId, owner).first<Stored>();
-  const savedSite = await db.prepare("SELECT record_status,customer_id,address_line_1,address_line_2,suburb,address_state,postcode FROM trade_crm_service_sites WHERE id=? AND firebase_uid=?").bind(serviceSiteId, owner).first<Stored>();
-  const equalText = (left: unknown, right: string) => String(left || "").trim().toLowerCase() === right.trim().toLowerCase();
-  const customerChanged = savedCustomer && (savedCustomer.record_status !== "active"
-    || !equalText(savedCustomer.first_name, input.customer.firstName) || !equalText(savedCustomer.last_name, input.customer.lastName)
-    || !equalText(savedCustomer.business_name, input.customer.businessName) || !equalText(savedCustomer.email, input.customer.email)
-    || phoneKey(String(savedCustomer.phone || "")) !== phoneKey(input.customer.contactPhone));
-  const siteChanged = savedSite && (savedSite.record_status !== "active" || savedSite.customer_id !== customerId
-    || !equalText(savedSite.address_line_1, input.site.addressLine1) || savedSite.address_line_2 !== ""
-    || !equalText(savedSite.suburb, input.site.suburb) || !equalText(savedSite.address_state, input.site.state) || savedSite.postcode !== input.site.postcode);
-  if (customerChanged || siteChanged) {
+  const workOrderId = `dfj-${await hash(`${owner}\n${input.sourceJobId}`)}`;
+  const entities = await prepareTradeImportEntities(db, owner, input, { prefix: "df", workOrderId, workNumber, now });
+  if (!entities.ok) {
     await db.prepare(`UPDATE trade_data_import_rows SET result_status='conflict',validation_status='conflict',resolution='skip',error=?,updated_at=?
       WHERE id=? AND batch_id=? AND firebase_uid=? AND result_status='pending'`)
-      .bind("The previously imported customer or service site has changed or been archived. Review its current details before linking this source job.", now, stored.id, batchId, owner).run();
+      .bind(entities.message, now, stored.id, batchId, owner).run();
     return;
   }
-  const workOrderId = `dfj-${await hash(`${owner}\n${input.sourceJobId}`)}`;
-  const statement = (sql: string, ...values: (string | number)[]) => db.prepare(sql).bind(...values);
-  const statements: D1PreparedStatement[] = [
-    statement(`INSERT INTO trade_dataforce_sources
-      (id,firebase_uid,source_system,source_job_id,source_app_id,row_sha256,raw_json,mapping_version,import_batch_id,import_row_id,work_order_id,customer_id,service_site_id,customer_key,site_key,created_at)
-      VALUES (?,?,'dataforce',?,?,?,?,'dataforce-crm-v1',?,?,?,?,?,?,?,?)`, workOrderId, owner, input.sourceJobId, input.sourceAppId,
-      fingerprint, sourceJson, batchId, String(stored.id), workOrderId, customerId, serviceSiteId, input.customerKey, input.siteKey, now),
-    statement(`INSERT INTO trade_crm_customers
-      (id,firebase_uid,customer_number,customer_type,first_name,last_name,business_name,email,phone,address_line_1,address_line_2,suburb,address_state,postcode,tags,private_notes,record_status,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,'',?,?,?,'["Job import"]','','active',?,?) ON CONFLICT(id) DO NOTHING`,
-      customerId, owner, `CUS-DF-${identityHash.slice(0, 16).toUpperCase()}`, input.customer.businessName ? "business" : "residential",
-      input.customer.firstName, input.customer.lastName, input.customer.businessName, input.customer.email, input.customer.contactPhone,
-      input.site.addressLine1, input.site.suburb, input.site.state, input.site.postcode, now, now),
-    statement(`INSERT INTO trade_crm_service_sites
-      (id,firebase_uid,customer_id,site_label,address_line_1,address_line_2,suburb,address_state,postcode,access_instructions,parking_instructions,hazard_notes,is_primary,record_status,created_at,updated_at)
-      SELECT ?,?,?,'Imported service site',?,'',?,?,?,'','','',CASE WHEN EXISTS(SELECT 1 FROM trade_crm_service_sites WHERE firebase_uid=? AND customer_id=? AND record_status='active') THEN 0 ELSE 1 END,'active',?,?
-      ON CONFLICT(id) DO NOTHING`, serviceSiteId, owner, customerId, input.site.addressLine1, input.site.suburb, input.site.state, input.site.postcode, owner, customerId, now, now),
+  const statements = [db.prepare(`INSERT INTO trade_dataforce_sources
+    (id,firebase_uid,source_system,source_job_id,source_app_id,row_sha256,raw_json,mapping_version,import_batch_id,import_row_id,work_order_id,customer_id,service_site_id,customer_key,site_key,created_at)
+    VALUES (?,?,'dataforce',?,?,?,?,'dataforce-crm-v1',?,?,?,?,?,?,?,?)`).bind(workOrderId, owner, input.sourceJobId, input.sourceAppId,
+      fingerprint, sourceJson, batchId, String(stored.id), workOrderId, entities.customerId, entities.serviceSiteId, input.customerKey, input.siteKey, now),
+    ...entities.statements,
+    db.prepare(`UPDATE trade_data_import_rows SET result_status='imported',target_entity_type='work_order',target_entity_id=?,error='',updated_at=?
+      WHERE id=? AND batch_id=? AND firebase_uid=? AND result_status='pending'`).bind(workOrderId, now, String(stored.id), batchId, owner),
   ];
-  const phones = [...new Set([input.customer.mobile, input.customer.phone].filter(Boolean))];
-  if (!phones.length) phones.push("");
-  const previousContacts = savedCustomer ? (await db.prepare(`SELECT id,first_name,last_name,email,phone FROM trade_crm_customer_contacts
-    WHERE firebase_uid=? AND customer_id=? AND record_status='active'`).bind(owner, customerId).all<Stored>()).results : [];
-  for (let index = 0; index < phones.length; index += 1) {
-    const phone = phones[index];
-    const matchingContacts = previousContacts.filter(contact => equalText(contact.first_name, input.customer.firstName)
-      && equalText(contact.last_name, input.customer.lastName) && equalText(contact.email, input.customer.email)
-      && phoneKey(String(contact.phone || "")) === phoneKey(phone));
-    const contactId = matchingContacts.length === 1 ? String(matchingContacts[0].id)
-      : `dfp-${await hash(`${owner}\n${customerId}\n${input.customer.displayName}\n${input.customer.email}\n${phoneKey(phone)}`)}`;
-    const label = phone && phone === input.customer.mobile ? "Mobile" : phone ? "Phone" : "Primary contact";
-    statements.push(statement(`INSERT INTO trade_crm_customer_contacts
-      (id,firebase_uid,customer_id,first_name,last_name,role_label,email,phone,is_primary,record_status,created_at,updated_at)
-      SELECT ?,?,?,?,?,?,?,?,CASE WHEN EXISTS(SELECT 1 FROM trade_crm_customer_contacts WHERE firebase_uid=? AND customer_id=? AND is_primary=1 AND record_status='active') THEN 0 ELSE 1 END,'active',?,?
-      ON CONFLICT(id) DO NOTHING`, contactId, owner, customerId, input.customer.firstName, input.customer.lastName, label,
-      input.customer.email, phone, owner, customerId, now, now));
-    statements.push(statement(`INSERT INTO trade_crm_site_contacts
-      (id,firebase_uid,service_site_id,customer_contact_id,role_label,is_primary,record_status,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,'active',?,?) ON CONFLICT(firebase_uid,service_site_id,customer_contact_id) DO NOTHING`,
-      `${serviceSiteId}:${contactId}`, owner, serviceSiteId, contactId, label, index === 0 ? 1 : 0, now, now));
-  }
-  statements.push(
-    statement(`INSERT INTO trade_work_orders
-      (id,firebase_uid,partner_type,work_type,source_type,source_reference,work_number,title,service_category,site_area,stage,priority,scheduled_start,scheduled_end,assignee_member_id,assignee_label,revision,record_status,created_at,updated_at)
-      VALUES (?,?,'installer','job','import',?,?,?,?,?,?,'standard',?,?,'',?,1,'active',?,?)`, workOrderId, owner, input.sourceJobId,
-      workNumber, input.job.title, input.job.serviceCategory, [input.site.suburb, input.site.postcode].filter(Boolean).join(" "), input.job.workStage,
-      input.job.scheduledStart, input.job.scheduledEnd, input.worker.displayName, now, now),
-    statement(`INSERT INTO trade_crm_job_details
-      (id,work_order_id,firebase_uid,crm_customer_id,service_site_id,customer_source,pipeline_stage,description,customer_reference,next_action,tags,estimated_value_cents,quoted_value_cents,invoiced_value_cents,paid_value_cents,quote_status,invoice_status,payment_due_at,created_at,updated_at)
-      VALUES (?,?,?,?,?,'trade_owned',?, ?,?,'','["Job import"]',0,0,0,0,'not_started','not_started','',?,?)`,
-      `${workOrderId}:detail`, workOrderId, owner, customerId, serviceSiteId, input.job.pipelineStage,
-      `Imported job ${input.sourceJobId}. Original status: ${input.legacy.status}${input.legacy.subStatus ? ` / ${input.legacy.subStatus}` : ""}.`,
-      input.customer.externalReference, now, now),
-  );
-  if (input.job.scheduledStart) statements.push(statement(`INSERT INTO trade_crm_appointments
-    (id,work_order_id,firebase_uid,appointment_type,title,starts_at,ends_at,assignee_member_id,assignee_label,status,notes,revision,created_at,updated_at)
-    VALUES (?,?,?,'site_visit',?,?,?,'',?,?,?,1,?,?)`, `${workOrderId}:visit`, workOrderId, owner, input.job.title,
-    input.job.scheduledStart, input.job.scheduledEnd, input.worker.displayName,
-    input.job.workStage === "completed" ? "completed" : input.job.workStage === "in_progress" ? "in_progress" : "scheduled",
-    `Imported appointment ${input.sourceAppId}. Original time retained; worker assignment needs confirmation in TLink.`, now, now));
-  statements.push(
-    statement(`INSERT INTO trade_work_order_events (id,work_order_id,firebase_uid,event_type,summary,created_at)
-      VALUES (?,?,?,'data_imported',?,?)`, `${workOrderId}:import`, workOrderId, owner, `Imported job ${input.sourceJobId}; source retained without issuing invoices, certificates or customer notifications.`, now),
-    statement(`INSERT INTO trade_team_sync_changes (owner_uid,audience_member_id,entity_type,entity_id,operation,revision,changed_at)
-      VALUES (?,'','job',?,'upsert',1,?)`, owner, workOrderId, now),
-    statement(`UPDATE trade_data_import_rows SET result_status='imported',target_entity_type='work_order',target_entity_id=?,error='',updated_at=?
-      WHERE id=? AND batch_id=? AND firebase_uid=? AND result_status='pending'`, workOrderId, now, String(stored.id), batchId, owner),
-  );
   // The unique source claim, every CRM entity and the row receipt share one D1 transaction.
   try { await db.batch(statements); }
   catch (error) {
@@ -335,7 +247,7 @@ export async function commitTradeDataforceImport(db: Database, owner: string, ba
   const status = current.pendingCount ? "committing" : current.errorCount || current.conflictCount ? "needs_review" : "committed";
   await db.prepare(`UPDATE trade_data_import_batches SET status=?,imported_count=?,skipped_count=?,failed_count=0,
     committed_at=CASE WHEN ?=0 THEN ? ELSE committed_at END,updated_at=? WHERE id=? AND firebase_uid=? AND import_type='dataforce'`)
-    .bind(status, current.importedCount, current.skippedCount, current.pendingCount, now, now, batchId, owner).run();
+    .bind(status, current.historicalImportedCount, current.skippedCount, current.pendingCount, now, now, batchId, owner).run();
   const reconciliation = current.pendingCount ? undefined : await reconcileTradeDataforceImport(db, owner, batchId);
   if (reconciliation && (reconciliation.brokenLinks || reconciliation.mismatchedSourceRows || reconciliation.jobs !== current.importedCount)) {
     throw new TradeDataforceImportError("Import reconciliation found an incomplete link. Saved source records are retained for review.", 409);
@@ -347,9 +259,10 @@ export async function commitTradeDataforceImport(db: Database, owner: string, ba
 export async function reconcileTradeDataforceImport(db: Database, owner: string, batchId: string) {
   await ownedBatch(db, owner, batchId);
   const result = await db.prepare(`SELECT COUNT(DISTINCT source.work_order_id) jobs,
+    COUNT(DISTINCT CASE WHEN work.record_status='archived' THEN source.work_order_id END) removed_count,
     COUNT(DISTINCT source.customer_id) customers,COUNT(DISTINCT source.service_site_id) sites,
     COUNT(DISTINCT appointment.id) appointments,COUNT(DISTINCT contact.id) contacts,
-    COUNT(DISTINCT CASE WHEN work.id IS NULL OR detail.work_order_id IS NULL OR customer.id IS NULL OR site.id IS NULL
+    COUNT(DISTINCT CASE WHEN work.record_status='archived' THEN NULL WHEN work.id IS NULL OR detail.work_order_id IS NULL OR customer.id IS NULL OR site.id IS NULL
       OR work.record_status<>'active' OR customer.record_status<>'active' OR site.record_status<>'active'
       OR detail.crm_customer_id<>source.customer_id OR detail.service_site_id<>source.service_site_id
       OR site.customer_id<>source.customer_id OR receipt.target_entity_id<>source.work_order_id
@@ -364,7 +277,7 @@ export async function reconcileTradeDataforceImport(db: Database, owner: string,
     LEFT JOIN trade_crm_site_contacts site_contact ON site_contact.service_site_id=source.service_site_id AND site_contact.firebase_uid=source.firebase_uid
     LEFT JOIN trade_crm_customer_contacts contact ON contact.id=site_contact.customer_contact_id AND contact.firebase_uid=source.firebase_uid
     WHERE source.firebase_uid=? AND source.import_batch_id=?`).bind(owner, batchId).first<Stored>();
-  const expected = (path: string) => `json_extract(receipt.normalized_data,'$.${path}')`;
+  const expected = (path: string) => path === "job.workStage" || path === "job.pipelineStage" ? "'imported'" : `json_extract(receipt.normalized_data,'$.${path}')`;
   const differentText = (column: string, path: string) => `lower(trim(COALESCE(${column},''))) <> lower(trim(COALESCE(${expected(path)},'')))`;
   const phoneSql = (value: string) => {
     const digits = `replace(replace(replace(replace(replace(COALESCE(${value},''),' ',''),'-',''),'+',''),'(',''),')','')`;
@@ -389,11 +302,11 @@ export async function reconcileTradeDataforceImport(db: Database, owner: string,
     COALESCE(SUM(CASE WHEN receipt.id IS NULL OR (SELECT COUNT(*) FROM json_each(source.raw_json))<>23
       OR EXISTS(SELECT 1 FROM json_each(source.raw_json) cell
         WHERE cell.value IS NOT json_extract(receipt.normalized_data,'$.record.' || json_quote(cell.key))) THEN 1 ELSE 0 END),0) mismatched_source_rows,
-    COALESCE(SUM(CASE WHEN work.stage IS NOT json_extract(receipt.normalized_data,'$.job.workStage')
+    COALESCE(SUM(CASE WHEN work.record_status='archived' THEN 0 WHEN work.stage IS NOT 'imported'
       OR work.scheduled_start IS NOT json_extract(receipt.normalized_data,'$.job.scheduledStart')
       OR (json_extract(receipt.normalized_data,'$.job.scheduledStart')<>''
         AND appointment.starts_at IS NOT json_extract(receipt.normalized_data,'$.job.scheduledStart')) THEN 1 ELSE 0 END),0) changed_jobs,
-    COALESCE(SUM(CASE WHEN ${differences.join(" OR ")} THEN 1 ELSE 0 END),0) mapped_field_mismatches
+    COALESCE(SUM(CASE WHEN work.record_status='archived' THEN 0 WHEN ${differences.join(" OR ")} THEN 1 ELSE 0 END),0) mapped_field_mismatches
     FROM trade_dataforce_sources source
     LEFT JOIN trade_data_import_rows receipt ON receipt.id=source.import_row_id AND receipt.firebase_uid=source.firebase_uid
     LEFT JOIN trade_work_orders work ON work.id=source.work_order_id AND work.firebase_uid=source.firebase_uid
@@ -402,8 +315,10 @@ export async function reconcileTradeDataforceImport(db: Database, owner: string,
     LEFT JOIN trade_crm_service_sites site ON site.id=source.service_site_id AND site.firebase_uid=source.firebase_uid
     LEFT JOIN trade_crm_appointments appointment ON appointment.id=source.work_order_id || ':visit' AND appointment.firebase_uid=source.firebase_uid
     WHERE source.firebase_uid=? AND source.import_batch_id=?`).bind(owner, batchId).first<Stored>();
-  return { jobs: Number(result?.jobs || 0), customers: Number(result?.customers || 0), sites: Number(result?.sites || 0),
-    appointments: Number(result?.appointments || 0), contacts: Number(result?.contacts || 0), brokenLinks: Number(result?.broken_links || 0),
+  const kinds = ["jobs", "customers", "sites", "appointments", "contacts"] as const;
+  const pages = await Promise.all(kinds.map(kind => listTradeImportLinkedRecords(db, owner, batchId, "dataforce", kind, 0, 1)));
+  return { jobs: pages[0].total, customers: pages[1].total, sites: pages[2].total,
+    appointments: pages[3].total, contacts: pages[4].total, removedCount: Number(result?.removed_count || 0), brokenLinks: Number(result?.broken_links || 0),
     sourceRows: Number(fidelity?.source_rows || 0), sourceCells: Number(fidelity?.source_cells || 0),
     mismatchedSourceRows: Number(fidelity?.mismatched_source_rows || 0), changedJobs: Number(fidelity?.changed_jobs || 0),
     mappedFieldMismatches: Number(fidelity?.mapped_field_mismatches || 0) };

@@ -382,7 +382,7 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
   const appointmentStatus = String(job?.appointment_status || "");
   const fieldCompleted = appointmentStatus === "completed" && job?.stage === "completed";
   const action = selectedVisit && controlsVisit(access, selectedVisit, String(job?.assignee_member_id || ""))
-    && !["completed", "cancelled"].includes(String(job?.stage))
+    && !["imported", "completed", "cancelled"].includes(String(job?.stage))
     ? Object.entries(FIELD_TRANSITIONS).find(([, transition]) => transition.from === appointmentStatus) : undefined;
   const fieldJob = job ? { id: job.id, workNumber: job.work_number,
     title: customerContext ? job.title : "Assigned field job", status: appointmentStatus || job.stage,
@@ -393,7 +393,7 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
     visits: visits.map(visit => ({ id: visit.id, memberId: visit.assignee_member_id, memberName: visit.assignee_label, status: visit.status,
       startsAt: visit.starts_at, endsAt: visit.ends_at, instructions: visit.notes, canAdvance: controlsVisit(access, visit, String(job.assignee_member_id || "")) })),
     primaryAction: action ? { action: action[0], label: action[0] === "finish" && collaborativeJob ? "Finish my visit" : action[1].label } : null,
-    actionUnavailableReason: !job.appointment_id ? "Schedule this job before starting travel." : fieldCompleted ? "Field work is complete." : appointmentStatus === "completed" ? "This visit is complete. Other visits and required job items may still be outstanding." : "Only the assigned worker or a job manager can advance this visit.",
+    actionUnavailableReason: job.stage === "imported" ? "Start this imported job in TLink before recording field work." : !job.appointment_id ? "Schedule this job before starting travel." : fieldCompleted ? "Field work is complete." : appointmentStatus === "completed" ? "This visit is complete. Other visits and required job items may still be outstanding." : "Only the assigned worker or a job manager can advance this visit.",
     phone: customerContext ? String(job.customer_phone || "") : "", address, directionsUrl: address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : "",
     timestamps: { travelStartedAt: job.travel_started_at || "", arrivedAt: job.arrived_at || "", workStartedAt: job.work_started_at || "", completedAt: job.completed_at || "" },
     checklist: [
@@ -404,7 +404,7 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
       { key: "compliance", label: "Governed compliance evidence", complete: !counts.compliance, count: counts.compliance, target: "evidence" },
       { key: "rental-report", label: "Rental assessment report issued", complete: !counts.rentalReports, count: counts.rentalReports, target: "rental-assessment" },
       { key: "issues", label: "Open issues or blockers", complete: !counts.issues, count: counts.issues, target: "notes" },
-    ], blockers, completion: { ready: blockers.length === 0, invoiceReady: fieldCompleted, handoverReady: fieldCompleted } } : null;
+    ], blockers, completion: { ready: job.stage !== "imported" && blockers.length === 0, invoiceReady: fieldCompleted, handoverReady: fieldCompleted } } : null;
   return {
     canReviewPhotoRequest: access.isOwner || access.canManageFieldEvidence,
     photoRequestRevision: request && request.status !== "revoked" ? Number(request.revision) : 0,
@@ -583,7 +583,7 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
     creditexWriteGuard(db, access.ownerUid, `EXISTS (SELECT 1 FROM trade_work_orders current_job
       JOIN trade_crm_appointments selected_visit ON selected_visit.work_order_id = current_job.id AND selected_visit.firebase_uid = current_job.firebase_uid
       WHERE current_job.id = ? AND current_job.firebase_uid = ? AND current_job.record_status = 'active'
-        AND current_job.stage = ? AND current_job.stage NOT IN ('completed', 'cancelled') AND current_job.revision = ?
+        AND current_job.stage = ? AND current_job.stage NOT IN ('imported', 'completed', 'cancelled') AND current_job.revision = ?
         AND selected_visit.id = ? AND selected_visit.revision = ? AND selected_visit.status = ? AND selected_visit.assignee_member_id = ?
         AND (? = 1 OR ${jobMemberSql("current_job")})
         AND (SELECT COUNT(*) FROM trade_crm_appointments other_visit WHERE other_visit.work_order_id = current_job.id
@@ -772,6 +772,7 @@ export async function POST(request: Request) {
     const body = parsedBody as Record<string, unknown>;
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const job = await assignedJob(access, workOrderId);
+    if (job.stage === "imported") return adminJson({ ok: false, code: "IMPORTED_JOB_INACTIVE", error: "Start this imported job in TLink before recording field work." }, 409);
     const action = cleanAdminText(body.action, 30);
     if (action === "add_signoff") {
       await assertCertificateJobEligibility(getD1(), { ownerUid: access.ownerUid, actorMemberId: access.memberId,

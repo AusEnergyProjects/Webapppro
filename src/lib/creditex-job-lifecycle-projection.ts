@@ -123,6 +123,7 @@ export function creditexIntentLifecycleStatusSql(workAlias: string, scheduleSql:
   // exhausts planner memory when the register also selects the status rank.
   return `(SELECT CASE
     WHEN ${workAlias}.record_status = 'archived' THEN 'deleted'
+    WHEN ${workAlias}.stage = 'imported' THEN 'imported'
     WHEN ${packetWhere(`${packet('lodged')} = 1 AND (${packet('status')} = 'rejected' OR ${packet('registryStatus')} = 'rejected')`)} THEN 'failed'
     WHEN source.correction OR ${CREDITEX_CASE_CORRECTION_SQL}
       OR ${packetWhere(`${packet('status')} = 'rejected' AND ${packet('lodged')} <> 1`)} THEN 'correction_required'
@@ -153,6 +154,7 @@ export function creditexWholeJobLifecycleSql(workAlias: string, scheduleSql: str
   return `(SELECT CASE
     WHEN COUNT(*) = 0 THEN NULL
     WHEN SUM(status = 'deleted') > 0 THEN 'deleted'
+    WHEN SUM(status = 'imported') > 0 THEN 'imported'
     WHEN SUM(status = 'failed') > 0 THEN 'failed'
     WHEN SUM(status = 'correction_required') > 0 THEN 'correction_required'
     WHEN SUM(status = 'paid') = COUNT(*) THEN 'paid'

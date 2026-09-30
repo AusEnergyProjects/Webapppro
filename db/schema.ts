@@ -2813,6 +2813,41 @@ export const tradeDataforceSources = sqliteTable("trade_dataforce_sources", {
   check("trade_dataforce_sources_json_check", sql`json_valid(${table.rawJson})`),
 ]);
 
+export const tradeCsvImportFiles = sqliteTable("trade_csv_import_files", {
+  id: text("id").primaryKey().notNull(), firebaseUid: text("firebase_uid").notNull(), batchId: text("batch_id").notNull(),
+  fileId: text("file_id").notNull(), fileName: text("file_name").notNull(), fileRole: text("file_role").notNull(),
+  sourceSha256: text("source_sha256").notNull(), mappingJson: text("mapping_json").notNull(), optionsJson: text("options_json").notNull(),
+  rowCount: integer("row_count").notNull(), createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_csv_import_files_batch_idx").on(table.firebaseUid, table.batchId, table.fileId),
+  check("trade_csv_import_files_role_check", sql`${table.fileRole} IN ('customers','jobs')`),
+  check("trade_csv_import_files_hash_check", sql`length(${table.sourceSha256})=64`),
+  check("trade_csv_import_files_mapping_check", sql`json_valid(${table.mappingJson})`),
+  check("trade_csv_import_files_options_check", sql`json_valid(${table.optionsJson})`),
+]);
+export const tradeCsvImportFileChunks = sqliteTable("trade_csv_import_file_chunks", {
+  id: text("id").primaryKey().notNull(), firebaseUid: text("firebase_uid").notNull(), fileId: text("file_id").notNull(),
+  chunkIndex: integer("chunk_index").notNull(), sourceText: text("source_text").notNull(),
+}, (table) => [uniqueIndex("trade_csv_import_file_chunks_order_idx").on(table.firebaseUid, table.fileId, table.chunkIndex)]);
+export const tradeCsvImportSources = sqliteTable("trade_csv_import_sources", {
+  id: text("id").primaryKey().notNull(), firebaseUid: text("firebase_uid").notNull(), sourceNamespace: text("source_namespace").notNull(),
+  entityType: text("entity_type").notNull(), sourceId: text("source_id").notNull(), rowSha256: text("row_sha256").notNull(),
+  mappingSha256: text("mapping_sha256").notNull(), rawJson: text("raw_json").notNull(), importBatchId: text("import_batch_id").notNull(),
+  importRowId: text("import_row_id").notNull(), sourceFileId: text("source_file_id").notNull(), sourceRowNumber: integer("source_row_number").notNull(),
+  workOrderId: text("work_order_id").notNull().default(""), customerId: text("customer_id").notNull(), serviceSiteId: text("service_site_id").notNull().default(""),
+  customerKey: text("customer_key").notNull(), createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_csv_import_sources_identity_idx").on(table.firebaseUid, table.sourceNamespace, table.entityType, table.sourceId),
+  index("trade_csv_import_sources_batch_idx").on(table.firebaseUid, table.importBatchId),
+  index("trade_csv_import_sources_work_idx").on(table.firebaseUid, table.workOrderId),
+  index("trade_csv_import_sources_customer_idx").on(table.firebaseUid, table.customerKey, table.customerId),
+  check("trade_csv_import_sources_entity_check", sql`${table.entityType} IN ('customer','job')`),
+  check("trade_csv_import_sources_id_check", sql`trim(${table.sourceId})<>''`),
+  check("trade_csv_import_sources_row_hash_check", sql`length(${table.rowSha256})=64`),
+  check("trade_csv_import_sources_mapping_hash_check", sql`length(${table.mappingSha256})=64`),
+  check("trade_csv_import_sources_raw_check", sql`json_valid(${table.rawJson})`),
+]);
+
 export const tradeFormTemplates = sqliteTable("trade_form_templates", {
   id: text("id").primaryKey(),
   scopeOwnerUid: text("scope_owner_uid").notNull().default(""),

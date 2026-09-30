@@ -1,6 +1,7 @@
 export { creditexWholeJobLifecycleSql } from "./creditex-job-lifecycle-projection.ts";
 
 export const TRADE_JOB_LIFECYCLE_STATUSES = [
+  "imported",
   "unscheduled",
   "scheduled",
   "partial",
@@ -29,6 +30,7 @@ export const TRADE_JOB_AUDIT_OUTCOMES = [
 export type TradeJobAuditOutcome = typeof TRADE_JOB_AUDIT_OUTCOMES[number];
 
 export const TRADE_JOB_LIFECYCLE_LABELS: Record<TradeJobLifecycleStatus, string> = {
+  imported: "Imported",
   unscheduled: "Unscheduled",
   scheduled: "Assigned",
   partial: "Partial",
@@ -84,11 +86,13 @@ export function normaliseTradeJobAuditOutcome(value: unknown): TradeJobAuditOutc
 
 export function deriveTradeJobLifecycle(input: TradeJobLifecycleInput): TradeJobLifecycle {
   const authoritative = TRADE_JOB_LIFECYCLE_STATUSES.find(status => status === text(input.authoritativeStatus));
+  const workStage = text(input.workStage);
+  const pipelineStage = text(input.pipelineStage);
+  if (authoritative === "deleted") return { status: "deleted", auditOutcome: null };
+  if (workStage === "imported" || pipelineStage === "imported") return { status: "imported", auditOutcome: null };
   if (authoritative) {
     return { status: authoritative, auditOutcome: null };
   }
-  const workStage = text(input.workStage);
-  const pipelineStage = text(input.pipelineStage);
   const auditOutcome = normaliseTradeJobAuditOutcome(input.auditOutcome);
   if (workStage === "cancelled" || pipelineStage === "lost") {
     return { status: "cancelled", auditOutcome: null };
@@ -297,6 +301,7 @@ export function tradeJobLifecycleStatusSql(input: {
   const auditOutcomeSql = input.auditOutcomeSql || tradeJobAuditOutcomeSql(workAlias);
   const hasProgressSql = input.hasProgressSql || tradeJobHasProgressSql(workAlias);
   const fallback = `CASE
+    WHEN ${workAlias}.stage = 'imported' OR ${detailAlias}.pipeline_stage = 'imported' THEN 'imported'
     WHEN ${workAlias}.stage = 'cancelled' OR ${detailAlias}.pipeline_stage = 'lost' THEN 'cancelled'
     WHEN ${workAlias}.stage = 'no_show' THEN 'no_show'
     WHEN COALESCE(${auditOutcomeSql}, '') <> ''
@@ -315,6 +320,7 @@ export function tradeJobLifecycleStatusSql(input: {
 
 export function tradeJobLifecycleRankSql(statusSql: string) {
   return `CASE ${statusSql}
+    WHEN 'imported' THEN 0
     WHEN 'unscheduled' THEN 1
     WHEN 'scheduled' THEN 2
     WHEN 'no_show' THEN 3

@@ -15,14 +15,15 @@ assert.ok(workPackGuard, 'work-pack mutations must guard the job assignment used
 
 for (const [name, predicate] of [['intake', guard[1]], ['work-pack mutation', workPackGuard[1].replace('${jobMemberSql("guard_work")}', jobMemberSql('guard_work'))]]) {
 test(`${name} rolls back if assignment or job revision changes after the training precheck`, () => {
-  for (const change of ["assignee_member_id='untrained-worker'", 'revision=2', "record_status='archived'"]) {
+  for (const change of ["assignee_member_id='untrained-worker'", 'revision=2', "record_status='archived'",
+    ...(name === 'work-pack mutation' ? ["stage='imported'"] : [])]) {
     const database = new DatabaseSync(':memory:');
     try {
       installCreditexTrainingFixture(database, { qualified: false });
-      database.exec(`CREATE TABLE trade_work_orders(id TEXT,firebase_uid TEXT,assignee_member_id TEXT,revision INTEGER,record_status TEXT);
+      database.exec(`CREATE TABLE trade_work_orders(id TEXT,firebase_uid TEXT,assignee_member_id TEXT,revision INTEGER,record_status TEXT,stage TEXT);
         CREATE TABLE trade_crm_appointments(id TEXT,work_order_id TEXT,firebase_uid TEXT,assignee_member_id TEXT,status TEXT);
         CREATE TABLE created_cases(id TEXT);
-        INSERT INTO trade_work_orders VALUES ('job','business','trained-worker',1,'active');`);
+        INSERT INTO trade_work_orders VALUES ('job','business','trained-worker',1,'active','ready');`);
       const d1 = { prepare(sql) { return { bind(...values) { return { run() { return database.prepare(sql).run(...values); } }; } }; } };
       const statement = creditexWriteGuard(d1, 'business', predicate, ['job','business','trained-worker',1,
         ...(name === 'work-pack mutation' ? ['own','trained-worker'] : [])]);

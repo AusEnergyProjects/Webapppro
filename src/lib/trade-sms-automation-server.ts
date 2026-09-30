@@ -83,6 +83,9 @@ export async function scanSmsAutomations(db: D1Database, services: SmsAutomation
       AND NOT EXISTS(SELECT 1 FROM trade_dataforce_sources source
         WHERE source.firebase_uid=ap.firebase_uid AND source.work_order_id=ap.work_order_id
         AND ap.id=source.work_order_id||':visit')
+      AND NOT EXISTS(SELECT 1 FROM trade_csv_import_sources source
+        WHERE source.firebase_uid=ap.firebase_uid AND source.work_order_id=ap.work_order_id AND source.entity_type='job'
+        AND ap.id=source.work_order_id||':visit')
       AND NOT EXISTS(SELECT 1 FROM trade_sms_automation_events e WHERE e.owner_uid=ap.firebase_uid AND e.rule_kind=? AND e.appointment_id=ap.id AND e.appointment_start=ap.starts_at)
       ORDER BY ap.starts_at,ap.id LIMIT 40`)
       .bind(stored.owner_uid, rule.kind === "appointment_reminder" ? "scheduled" : "completed", rule.kind === "appointment_reminder" ? 1 : 0,

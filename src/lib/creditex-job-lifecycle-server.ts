@@ -104,7 +104,7 @@ export async function loadJobLifecycle(db: D1Database, actor: JobLifecycleActor,
     FROM creditex_job_lifecycle_events WHERE organisation_id=? AND work_order_id=? AND owner_uid=?
       AND (intent_id=? OR intent_id='') ORDER BY created_at DESC,id DESC LIMIT 100`)
     .bind(row.organisation_id,row.work_order_id,row.owner_uid,row.intent_id).all<LifecycleEvent>();
-  const access = permissions(actor), active = row.record_status === "active" && row.stage !== "cancelled"
+  const access = permissions(actor), active = row.record_status === "active" && !["cancelled", "imported"].includes(row.stage)
     && ["planned","case_linked"].includes(row.intent_status);
   const latestReview = events.results.find(e=>["reviewed","correction_required"].includes(e.action));
   const reviewed = latestReview?.action==="reviewed"&&latestReview.source_snapshot===row.completion_snapshot;
@@ -152,6 +152,7 @@ export async function mutateJobLifecycle(db:D1Database,actor:JobLifecycleActor,i
   if(!allowed) return fail("JOB_LIFECYCLE_PERMISSION","Your role cannot perform this job action.",403);
   if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision!==row.revision) return fail("JOB_LIFECYCLE_CHANGED","The job changed. Refresh before continuing.");
   if(action==="restored" ? row.record_status!=="archived" : row.record_status!=="active") return fail("JOB_LIFECYCLE_CHANGED","The job visibility changed. Refresh before continuing.");
+  if(!["deleted","restored"].includes(action)&&row.stage==="imported") return fail("JOB_LIFECYCLE_INACTIVE","Start this imported job in TLink before recording operational outcomes.");
   if(!["deleted","restored"].includes(action)&&(row.stage==="cancelled"||!["planned","case_linked"].includes(row.intent_status))) return fail("JOB_LIFECYCLE_INACTIVE","This activity is no longer active.");
   let snapshot="{}",reference="",amount=0,occurredAt=now,recipient="",predicate="1=1"; const extra:unknown[]=[];
   if(action==="reviewed") {
@@ -246,10 +247,10 @@ export async function loadTradeJobReview(db:D1Database,actor:JobLifecycleActor,w
     WHERE work_order_id=? AND owner_uid=? ORDER BY created_at DESC,id DESC LIMIT 5`).bind(workOrderId,rows[0].owner_uid)
     .all<{id:string;status:string;provider_reference:string;last_error:string;recipient_email:string}>();
   const lodged=await everLodged(db,rows), allComplete=rows.every(r=>completed(r.completion_snapshot));
-  const active=rows.every(r=>r.record_status==="active"&&r.stage!=="cancelled");
+  const active=rows.every(r=>r.record_status==="active"&&!["cancelled","imported"].includes(r.stage));
   return {workOrderId,revision:rows[0].revision,sourceSha256:hash(reviewIdentity(rows)),
     canReview:active&&allComplete&&!lodged,reviewed:reviews.every(r=>r.reviewed),
-    reason:!active?"Restore an active job before review.":lodged?"Submission has started or needs reconciliation. Resolve it before changing this review.":!allComplete?"The technician must complete all activity forms before review.":"",
+    reason:rows.some(r=>r.stage==="imported")?"Imported history is not completed work in TLink.":!active?"Restore an active job before review.":lodged?"Submission has started or needs reconciliation. Resolve it before changing this review.":!allComplete?"The technician must complete all activity forms before review.":"",
     activities:rows.map((r,index)=>({intentId:r.intent_id,complete:completed(r.completion_snapshot),reviewed:reviews[index].reviewed,
       records:(JSON.parse(r.completion_snapshot) as {records:Array<{kind:string;id:string}>}).records})),
     history:reviews.flatMap(r=>r.history).filter((event,index,all)=>all.findIndex(e=>e.id===event.id)===index),
@@ -309,7 +310,7 @@ export async function reviewTradeJob(db:D1Database,actor:JobLifecycleActor,input
   if(previous){if(previous.request_sha256!==requestHash) return fail("JOB_REVIEW_REQUEST_CHANGED","This request already records another review.");return loadTradeJobReview(db,actor,workOrderId);}
   if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision!==row.revision||input.expectedSourceSha256!==hash(reviewIdentity(rows)))
     return fail("JOB_REVIEW_SOURCE_CHANGED","The job or its files changed. Refresh and review the current files.");
-  if(rows.some(r=>r.record_status!=="active"||r.stage==="cancelled"||!completed(r.completion_snapshot)))
+  if(rows.some(r=>r.record_status!=="active"||["cancelled","imported"].includes(r.stage)||!completed(r.completion_snapshot)))
     return fail("JOB_REVIEW_INCOMPLETE","Complete all activity forms before business review.");
   if(await everLodged(db,rows)) return fail("JOB_REVIEW_ALREADY_LODGED","Submission has started or needs reconciliation. Resolve it before changing this review.");
   const technician=action==="correction_required"?await db.prepare(`SELECT id,email,display_name FROM trade_team_members
@@ -318,7 +319,7 @@ export async function reviewTradeJob(db:D1Database,actor:JobLifecycleActor,input
     return fail("JOB_CORRECTION_TECHNICIAN_REQUIRED","Assign an active technician with an email address so the correction can be returned to them.");
   const guards=rows.map(()=>`EXISTS (SELECT 1 FROM trade_work_order_compliance_intents intent WHERE intent.id=? AND intent.status IN ('planned','case_linked') AND ${creditexIntentCompletionSnapshotSql()}=?)`).join(" AND ");
   const statements=[db.prepare(`UPDATE trade_work_orders SET stage=?,revision=revision+1,updated_at=?
-    WHERE id=? AND firebase_uid=? AND revision=? AND record_status='active' AND stage<>'cancelled'
+    WHERE id=? AND firebase_uid=? AND revision=? AND record_status='active' AND stage NOT IN ('cancelled','imported')
       AND (SELECT COUNT(*) FROM trade_work_order_compliance_intents i WHERE i.work_order_id=trade_work_orders.id
         AND i.installer_uid=trade_work_orders.firebase_uid AND i.status IN ('planned','case_linked')
         ${actor.kind==="trade"?"":"AND i.compliance_organisation_id=?"})=? AND ${guards}

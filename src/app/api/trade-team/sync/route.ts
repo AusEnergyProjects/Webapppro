@@ -81,7 +81,7 @@ const WORK_STAGE_TRANSITIONS: Readonly<Record<string, ReadonlySet<string>>> = {
   completed: new Set(),
   cancelled: new Set(),
 };
-const TERMINAL_WORK_STAGES = new Set(["completed", "cancelled"]);
+const TERMINAL_WORK_STAGES = new Set(["imported", "completed", "cancelled"]);
 function syncJobCancelledSql(workAlias: string, detailAlias: string) {
   return `(${workAlias}.stage = 'cancelled'
     OR COALESCE(${detailAlias}.pipeline_stage, '') = 'lost')`;
@@ -101,6 +101,7 @@ const ACCESSIBLE_JOB_COHORT_SQL = `SELECT cohort.id
   WHERE cohort.firebase_uid = ?
     AND cohort.partner_type = 'installer'
     AND cohort.record_status = 'active'
+    AND cohort.stage <> 'imported'
     AND (? <> 'own' OR ${jobMemberSql("cohort")})
     AND NOT ${syncJobCancelledSql("cohort", "cohort_detail")}
   ORDER BY CASE WHEN ${syncJobTerminalSql("cohort", "cohort_detail")} THEN 1 ELSE 0 END,
@@ -514,7 +515,7 @@ function terminalJobResult(clientActionId: string) {
     clientActionId,
     status: "rejected",
     code: "JOB_TERMINAL",
-    error: "Completed and cancelled jobs are immutable. Create corrective follow-up work instead.",
+    error: "Imported jobs must first be started in TLink. Completed and cancelled jobs require corrective follow-up work.",
   };
 }
 
@@ -838,6 +839,7 @@ async function accessibleJobs(access: TeamAccess) {
         WHERE latest_delivery.work_order_id = w.id AND latest_delivery.firebase_uid = w.firebase_uid
         ORDER BY latest_delivery.created_at DESC, latest_delivery.delivery_generation DESC LIMIT 1)
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+        AND w.stage <> 'imported'
         AND (? <> 'own' OR ${jobMemberSql("w")})
         AND NOT ${syncJobCancelledSql("w", "d")}
       ORDER BY CASE WHEN ${syncJobTerminalSql("w", "d")} THEN 1 ELSE 0 END,
@@ -2339,7 +2341,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
               AND work_order.record_status = 'active'
               AND work_order.revision = ?
               AND work_order.stage = ?
-              AND work_order.stage NOT IN ('completed', 'cancelled')
+              AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
           )
           AND ${finishBlockerGuard} AND ${visitSetGuard}`)
         .bind(
@@ -2366,7 +2368,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
         revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?
           AND revision = ? AND stage = ?
           AND record_status = 'active'
-          AND stage NOT IN ('completed', 'cancelled')
+          AND stage NOT IN ('imported', 'completed', 'cancelled')
           AND ${appointmentAppliedGuard}
           AND ${finishBlockerGuard} AND ${visitSetGuard}`)
         .bind(parentTransition, parentTransition, resultRevision, now, workOrderId, access.ownerUid,
@@ -2489,7 +2491,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
         clientActionId,
         status: "rejected",
         code: "JOB_TERMINAL",
-        error: "Completed and cancelled jobs are immutable. Create corrective follow-up work instead.",
+        error: "Imported jobs must first be started in TLink. Completed and cancelled jobs require corrective follow-up work.",
       };
     }
     if (stage === "completed") {
@@ -2652,13 +2654,13 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
               AND work_order.record_status = 'active'
               AND work_order.revision = ?
               AND work_order.stage = ?
-              AND work_order.stage NOT IN ('completed', 'cancelled')
+              AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
           )`)
         .bind(status, status === "done" ? now : "", taskRevision, now, taskId,
           access.ownerUid, baseRevision, Number(job.revision), capturedJobStage),
       db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND revision = ?
-          AND stage = ? AND stage NOT IN ('completed', 'cancelled')
+          AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled')
           AND EXISTS (
             SELECT 1 FROM trade_work_order_tasks task
             WHERE task.id = ? AND task.work_order_id = trade_work_orders.id
@@ -2836,14 +2838,14 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
               AND work_order.record_status = 'active'
               AND work_order.revision = ?
               AND work_order.stage = ?
-              AND work_order.stage NOT IN ('completed', 'cancelled')
+              AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
           )`)
         .bind(answerJson, formStatus, formRevision, complete ? access.actorUid : "",
           complete ? now : "", now, formId, workOrderId, access.ownerUid, baseRevision,
           Number(job.revision), capturedJobStage),
       db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND revision = ?
-          AND stage = ? AND stage NOT IN ('completed', 'cancelled')
+          AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled')
           AND EXISTS (
             SELECT 1 FROM trade_job_forms form
             WHERE form.id = ? AND form.work_order_id = trade_work_orders.id
@@ -3001,14 +3003,14 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
             AND work_order.record_status = 'active'
             AND work_order.revision = ?
             AND work_order.stage = ?
-            AND work_order.stage NOT IN ('completed', 'cancelled')
+            AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
         )`)
         .bind(timeEntryId, workOrderId, access.ownerUid, access.displayName, workDate,
           durationMinutes, notes, now, now, workOrderId, access.ownerUid,
           baseRevision, capturedJobStage),
       db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND revision = ?
-          AND stage = ? AND stage NOT IN ('completed', 'cancelled')
+          AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled')
           AND EXISTS (
             SELECT 1 FROM trade_crm_time_entries entry
             WHERE entry.id = ? AND entry.work_order_id = trade_work_orders.id

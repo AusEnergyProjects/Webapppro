@@ -16,6 +16,7 @@ type FieldRecord = { id: string; intentId: string; title: string; programCode: s
   correction?: { note: string; sourceRecordId: string } };
 
 function activityProgressText(item: FieldRecord) {
+  if (item.lifecycleStatus === "imported") return "Original imported history. Start work in TLink before recording new activity work.";
   if (item.lifecycleStatus === "correction_required") return "Correct the requested items in TLink and sign the new revision.";
   if (item.lifecycleStatus === "cancelled") return "Cancelled";
   if (item.lifecycleStatus === "audited") return `Audit outcome: ${tradeJobAuditOutcomeLabel(item.auditOutcome)}`;
@@ -69,13 +70,13 @@ export function TradeActivityFieldRecords({ user, workOrderId, canShare, refresh
     {error ? <p role="alert">{error}</p> : null}
     {records.map((item) => <article key={item.intentId}>
       <div><span>{item.recordNumber || item.programCode} · {tradeJobLifecycleLabel(item.lifecycleStatus)}{item.lifecycleStatus === "audited" && item.auditOutcome ? ` · ${tradeJobAuditOutcomeLabel(item.auditOutcome)}` : ""}</span><strong>{item.title}</strong><p>{activityProgressText(item)}</p></div>
-      {item.correction && item.status === "draft" ? <div><strong>Corrections requested</strong><p>{item.correction.note}</p><p>Open this job in TLink to correct the form and sign the new revision. The original signed report remains in its history.</p><button type="button" disabled={busy} onClick={() => void openReport({ ...item, id: item.correction!.sourceRecordId, recordNumber: `original-${item.recordNumber}` })}>View original signed report</button>{report?.id === item.correction.sourceRecordId ? <a href={report.url} download={report.name}>Download original signed report</a> : null}</div> : null}
+      {item.lifecycleStatus !== "imported" && item.correction && item.status === "draft" ? <div><strong>Corrections requested</strong><p>{item.correction.note}</p><p>Open this job in TLink to correct the form and sign the new revision. The original signed report remains in its history.</p><button type="button" disabled={busy} onClick={() => void openReport({ ...item, id: item.correction!.sourceRecordId, recordNumber: `original-${item.recordNumber}` })}>View original signed report</button>{report?.id === item.correction.sourceRecordId ? <a href={report.url} download={report.name}>Download original signed report</a> : null}</div> : null}
       {item.status === "submitted_for_creditex_review" ? <div>
         <button type="button" disabled={busy} onClick={() => void openReport(item)}>Prepare PDF</button>
         {report?.id === item.id ? <a href={report.url} download={report.name}>Download completed report</a> : null}
-        {canShare ? <button type="button" disabled={busy} onClick={() => void shareReport(item)}>Create share link</button> : null}
+        {canShare && item.lifecycleStatus !== "imported" ? <button type="button" disabled={busy} onClick={() => void shareReport(item)}>Create share link</button> : null}
         {share?.id === item.id ? <p><a href={share.url} target="_blank" rel="noreferrer">Open shareable report</a> · Link expires in 30 days. Previous links for this report are replaced.</p> : null}
-      </div> : <a href={`aeafield://job/${encodeURIComponent(workOrderId)}`}>Open job in TLink app</a>}
+      </div> : item.lifecycleStatus !== "imported" ? <a href={`aeafield://job/${encodeURIComponent(workOrderId)}`}>Open job in TLink app</a> : null}
     </article>)}
     {!busy && !error && !records.length ? <p>No activity forms are attached to this job.</p> : null}
   </section>;

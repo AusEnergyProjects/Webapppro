@@ -129,21 +129,21 @@ test("impossible or ambiguous dates are not converted into fabricated schedules"
   }
 });
 
-test("partially completed work stays in progress; audit facts confer no official approval", () => {
-  for (const [status, subStatus, expected] of [
-    ["audited", "passed", "completed"], ["audited", "waived", "completed"],
-    ["completed", "field", "completed"], ["completed", "partial", "in_progress"],
-    ["assigned", "", "scheduled"],
+test("all imported jobs remain Imported while original lifecycle facts are preserved", () => {
+  for (const [status, subStatus] of [
+    ["audited", "passed"], ["audited", "waived"],
+    ["completed", "field"], ["completed", "partial"], ["assigned", ""],
   ]) {
     const plan = prepareTradeDataforceImport(csv([row({ Status: status, SubStatus: subStatus })]));
-    assert.equal(plan.rows[0].job.workStage, expected);
+    assert.equal(plan.rows[0].job.workStage, "imported");
+    assert.equal(plan.rows[0].job.pipelineStage, "imported");
     assert.equal(plan.rows[0].legacy.status, status);
     assert.equal(plan.rows[0].legacy.subStatus, subStatus);
     assert.equal("auditOutcome" in plan.rows[0].job, false);
     assert.equal("authoritativeStatus" in plan.rows[0].job, false);
   }
   const unscheduled = prepareTradeDataforceImport(csv([row({ Status: "assigned", SubStatus: "", "Scheduled Datetime": "" })]));
-  assert.equal(unscheduled.rows[0].job.workStage, "ready");
+  assert.equal(unscheduled.rows[0].job.workStage, "imported");
 });
 
 test("unknown enums are retained and flagged without inventing their meaning", () => {
@@ -153,12 +153,12 @@ test("unknown enums are retained and flagged without inventing their meaning", (
   assert.equal(plan.valid, true);
   assert.equal(plan.rows[0].status, "warning");
   assert.deepEqual(plan.rows[0].record, original);
-  assert.equal(plan.rows[0].job.workStage, "backlog");
+  assert.equal(plan.rows[0].job.workStage, "imported");
   assert.equal(plan.rows[0].job.serviceCategory, "other");
   assert.equal(plan.rows[0].job.title, "Standard Install");
   assert.equal(plan.rows[0].issues.length, 6);
   const unknownCompletion = prepareTradeDataforceImport(csv([row({ Status: "completed", SubStatus: "new-incomplete-state" })]));
-  assert.equal(unknownCompletion.rows[0].job.workStage, "backlog");
+  assert.equal(unknownCompletion.rows[0].job.workStage, "imported");
 });
 
 test("a reviewed service mapping applies only to this import while preserving the source title and every raw field", () => {

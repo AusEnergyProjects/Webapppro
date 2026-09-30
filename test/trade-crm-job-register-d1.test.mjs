@@ -30,7 +30,8 @@ const countWhere = route.match(/const where = (conditions.map\([\s\S]*?\).join\(
 const cursorBlock = route.slice(route.indexOf("const rowConditions = [...conditions]"), route.indexOf("const rowWhere = rowConditions.join"));
 
 function jobsQuery({ status = "", sort = "updated-desc", cursor = null } = {}) {
-  const conditions = ["w.firebase_uid = ?", "w.partner_type = 'installer'", "w.record_status = 'active'"];
+  const recordStatus = status === "deleted" ? "archived" : "active";
+  const conditions = ["w.firebase_uid = ?", "w.partner_type = 'installer'", `w.record_status = '${recordStatus}'`];
   const bindings = ["owner"];
   if (status) { conditions.push(JSON.parse(statusCondition)); bindings.push(status); }
   const where = new Function("conditions", "JOB_REGISTER_LIFECYCLE_SQL", `return ${countWhere};`)(conditions, constants.JOB_REGISTER_LIFECYCLE_SQL);
@@ -38,7 +39,7 @@ function jobsQuery({ status = "", sort = "updated-desc", cursor = null } = {}) {
   const selectedSort = constants.JOB_SORTS[sort];
   const { rowConditions, rowBindings } = new Function("conditions", "bindings", "cursor", "selectedSort", "sort", "keysetAfter",
     `${cursorBlock}; return {rowConditions,rowBindings};`)(conditions, bindings, cursor, selectedSort, sort, keysetAfter);
-  const values = { ...constants, ...register,
+  const values = { ...constants, ...register, recordStatus,
     rowJoins: `${joins} ${TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL}`,
     rowWhere: rowConditions.join(" AND "), selectedSort,
   };
@@ -136,6 +137,17 @@ test("the complete Trade Jobs query, status filter and status sort fit D1 with p
     assert.deepEqual((await list({ sort: "v-d" })).results.map(row => row.id), ["job-1", "job-0", "job-5", "job-4", "job-3", "job-2"]);
     assert.deepEqual((await list({ sort: "v-a", cursor: [2, "job-0"] })).results.map(row => row.id), ["job-1"]);
     assert.deepEqual((await list({ sort: "v-d", cursor: [2, "job-0"] })).results.map(row => row.id), ["job-5", "job-4", "job-3", "job-2"]);
+    await db.prepare("UPDATE trade_work_orders SET stage='imported' WHERE id='job-4'").run();
+    await db.prepare("UPDATE trade_crm_job_details SET pipeline_stage='imported' WHERE work_order_id='job-4'").run();
+    assert.deepEqual((await list({status:'imported'})).results.map(row=>row.id), ['job-4']);
+    assert.equal((await list({status:'reviewed'})).results.length, 0, 'historical review cannot override Imported');
+    const importedCount=jobsQuery({status:'imported'});
+    assert.equal((await db.prepare(importedCount.countSql).bind(...importedCount.countBindings).first()).total,1);
+    await db.prepare("UPDATE trade_work_orders SET record_status='archived' WHERE id='job-4'").run();
+    assert.equal((await list({status:'imported'})).results.length,0);
+    assert.deepEqual((await list({status:'deleted'})).results.map(row=>[row.id,row.register_lifecycle_status]),[['job-4','deleted']]);
+    const deletedCount=jobsQuery({status:'deleted'});
+    assert.equal((await db.prepare(deletedCount.countSql).bind(...deletedCount.countBindings).first()).total,1);
   } finally { await mf.dispose(); sqlite.close(); }
 });
 

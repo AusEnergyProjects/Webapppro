@@ -333,8 +333,8 @@ test("job register route and UI keep tenant scope, filters, sorting and accessib
 
 test("job register and detail preserve canonical status values with explicit rebate and invoice labels", () => {
   const ui = read("../src/components/InstallerCrmWorkspace.tsx");
-  assert.match(ui, /const jobStatusFilters = JOB_REGISTER_OPERATIONAL_STATUSES\.filter\(status => status !== "deleted"\)/);
-  assert.equal((ui.match(/jobStatusFilters\.map\(\(value\)/g) || []).length, 2);
+  assert.match(ui, /const jobStatusFilters = JOB_REGISTER_OPERATIONAL_STATUSES;/);
+  assert.equal((ui.match(/jobStatusFilters\.filter\(value => !staffPermissions \|\| value !== "deleted"\)\.map\(\(value\)/g) || []).length, 2);
   assert.match(ui, /jobStatusFilters\.some\(option => option === status\)/);
   assert.match(ui, /jobProgressStatusLabel\(status\)/);
   assert.match(ui, /const payment = jobInvoicePaymentStatus\(job\)/);

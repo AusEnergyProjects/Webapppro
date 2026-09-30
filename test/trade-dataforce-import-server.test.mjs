@@ -58,7 +58,7 @@ test("Dataforce migration uses production D1 schema, atomic source claims and fa
       for (const row of rows) {
         assert.deepEqual(JSON.parse(row.raw_json), originals.find(source => source["Job Id"] === row.source_job_id));
         assert.equal(row.scheduled_start, "2026-09-30T09:30"); assert.equal(row.starts_at, row.scheduled_start);
-        assert.equal(row.stage, row.source_job_id === "JOB-2" ? "in_progress" : "completed");
+        assert.equal(row.stage, "imported");
         assert.equal(row.assignee_member_id, ""); assert.equal(row.invoiced_value_cents, 0); assert.equal(row.paid_value_cents, 0);
         assert.deepEqual(JSON.parse(row.job_tags), ["Job import"]);
         assert.deepEqual(JSON.parse(row.customer_tags), ["Job import"]);
@@ -139,6 +139,26 @@ test("Dataforce migration uses production D1 schema, atomic source claims and fa
       const second = await previewTradeDataforceImport(db, "site-owner", csv([record("s2", { Customer: "Same Person" })]), "second.csv");
       const result = await finish(db, "site-owner", second.batch.id);
       assert.equal(result.batch.conflictCount, 1); assert.equal(result.batch.importedCount, 0);
+    });
+    await t.test("intentionally archived imports are excluded while their original receipt and source survive", async () => {
+      const batch = await previewTradeDataforceImport(db, "archived", csv([record("archived-1"), record("archived-2")]), "archived.csv");
+      await finish(db, "archived", batch.batch.id);
+      const target = (await getTradeDataforceImport(db, "archived", batch.batch.id)).rows[0].targetEntityId;
+      await db.prepare("UPDATE trade_work_orders SET record_status='archived' WHERE id=? AND firebase_uid='archived'").bind(target).run();
+      const read = await getTradeDataforceImport(db, "archived", batch.batch.id);
+      assert.equal(read.batch.importedCount, 1); assert.equal(read.batch.historicalImportedCount, 2); assert.equal(read.batch.excludedCount, 1);
+      assert.equal(read.reconciliation.removedCount, 1); assert.equal(read.reconciliation.brokenLinks, 0); assert.equal(read.reconciliation.mappedFieldMismatches, 0);
+      assert.equal(read.reconciliation.sourceRows, 2); assert.equal(read.reconciliation.sourceCells, 46);
+      const excluded = await getTradeDataforceImport(db, "archived", batch.batch.id, 0, 1, "excluded");
+      assert.equal(excluded.total, 1); assert.equal(excluded.rows[0].resultStatus, "removed");
+      for (const kind of ["jobs", "customers", "sites", "appointments", "contacts"]) {
+        const list = await getTradeDataforceImport(db, "archived", batch.batch.id, 0, 1, "all", kind);
+        assert.equal(list.total, read.reconciliation[kind]); assert.equal(list.records.length, 1); assert.equal(list.batch.id, batch.batch.id);
+      }
+      const retry = await previewTradeDataforceImport(db, "archived", `${csv([record("archived-1")])}\n`, "retry.csv");
+      assert.equal(retry.rows[0].resultStatus, "removed"); assert.equal((await finish(db, "archived", retry.batch.id)).batch.importedCount, 0);
+      assert.match((await exportTradeDataforceSource(db, "archived", batch.batch.id)).csv, /JOB-archived-1/);
+      assert.equal((await db.prepare("SELECT imported_count FROM trade_data_import_batches WHERE id=?").bind(batch.batch.id).first()).imported_count, 2);
     });
     await t.test("deleted imports remain explicit tombstones, never automatic recreations", async () => {
       await db.prepare("DELETE FROM trade_work_orders WHERE firebase_uid='other'").run();

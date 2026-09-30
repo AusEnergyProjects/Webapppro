@@ -167,3 +167,16 @@ test("invoicing and customer payment never complete work in JS or SQL",()=>{
   }
   db.close();
 });
+
+test('imported status overrides original dates, progress and completion evidence until intentional activation', () => {
+  for (const authoritativeStatus of ['completed','reviewed','audited','submitted','paid']) {
+    assert.deepEqual(deriveTradeJobLifecycle({workStage:'imported',pipelineStage:'imported',scheduleDate:'2020-01-01',hasProgress:1,auditOutcome:'approved',authoritativeStatus}), {status:'imported',auditOutcome:null});
+  }
+  assert.deepEqual(deriveTradeJobLifecycle({workStage:'imported',authoritativeStatus:'deleted'}),{status:'deleted',auditOutcome:null});
+  const db=new DatabaseSync(':memory:');
+  try {
+    db.exec("CREATE TABLE trade_work_orders(stage TEXT); CREATE TABLE trade_crm_job_details(pipeline_stage TEXT); INSERT INTO trade_work_orders VALUES('imported'); INSERT INTO trade_crm_job_details VALUES('imported');");
+    const sql=tradeJobLifecycleStatusSql({scheduleSql:"'2020-01-01'",auditOutcomeSql:"'passed'",hasProgressSql:'1'});
+    assert.equal(db.prepare('SELECT '+sql+' status FROM trade_work_orders w CROSS JOIN trade_crm_job_details d').get().status,'imported');
+  } finally {db.close();}
+});

@@ -31,6 +31,7 @@ export const CUSTOMER_DISPLAY_NAME_SQL = `CASE
   ELSE c.customer_number END`;
 
 export const CUSTOMER_PIPELINE_STATUS_LABEL_SQL = `CASE COALESCE(js.latest_pipeline_stage, '')
+  WHEN 'imported' THEN 'Imported'
   WHEN 'enquiry' THEN 'Lead'
   WHEN 'qualifying' THEN 'Lead checking'
   WHEN 'quoting' THEN 'Quoted / quoting'

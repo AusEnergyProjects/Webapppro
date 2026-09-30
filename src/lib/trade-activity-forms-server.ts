@@ -203,6 +203,7 @@ export function deriveActivityLifecycle(signals: ActivityLifecycleSignals): {
   const candidate = value(signals.auditOutcome);
   const auditOutcome = (["passed", "failed", "duplicate", "correction_required", "withdrawn"] as const)
     .find((item) => item === candidate) || null;
+  if (value(signals.parentStage) === "imported") return { status: "imported", auditOutcome: null };
   if (value(signals.parentStage) === "cancelled") return { status: "cancelled", auditOutcome: null };
   if (auditOutcome) return { status: "audited", auditOutcome };
   if (value(signals.fieldRecordStatus) === "submitted_for_creditex_review" || Number(signals.completedWorkPack) === 1) {
@@ -513,6 +514,7 @@ export async function loadActivityRecord(access: TeamAccess, id: string, mutate 
   if (!row) throw new Error("ACTIVITY_RECORD_NOT_FOUND");
   const record: ActivityRecord = JSON.parse(row.payload);
   const job = await assignedJob(access, record.workOrderId);
+  if (mutate && job.stage === "imported") throw new Error("IMPORTED_JOB_INACTIVE");
   if (mutate) await assertCertificateJobEligibility(getD1(), { ownerUid: access.ownerUid,
     actorMemberId: access.memberId, assignedMemberId: String(job.assignee_member_id || ""), workOrderId: record.workOrderId });
   const intent = await getD1().prepare(`SELECT id FROM trade_work_order_compliance_intents
@@ -520,7 +522,7 @@ export async function loadActivityRecord(access: TeamAccess, id: string, mutate 
     .bind(record.intentId, access.ownerUid, record.workOrderId, record.organisationId).first();
   if (!intent && mutate && record.status === "draft") throw new Error("ACTIVITY_INTENT_NOT_ACTIVE");
   if (activityHash(record.form) !== record.formSha256) throw new Error("ACTIVITY_FORM_INTEGRITY_FAILED");
-  if (record.status !== "draft") return record;
+  if (record.status !== "draft" || job.stage === "imported") return record;
   const profile = await activityProfileContext(access, job, record.workOrderId, record.form);
   const refresh = refreshableDerivedAnswers(record);
   const profileAnswers = Object.fromEntries(Object.entries(profile.answers).filter(([key]) => refresh.canRefreshField(key)));
@@ -573,7 +575,7 @@ export async function saveActivitySigningProfile(access: TeamAccess, id: string,
         updated_at = ?
       WHERE id = ? AND owner_uid = ? AND status = 'active' AND first_name IS ? AND last_name IS ?
         AND EXISTS (SELECT 1 FROM trade_work_orders work WHERE work.id = ? AND work.firebase_uid = ?
-          AND work.record_status = 'active' AND work.assignee_member_id = trade_team_members.id)
+          AND work.record_status = 'active' AND work.stage <> 'imported' AND work.assignee_member_id = trade_team_members.id)
         AND EXISTS (SELECT 1 FROM trade_activity_field_records record
           JOIN trade_work_order_compliance_intents intent ON intent.id = record.intent_id
           WHERE record.id = ? AND record.owner_uid = ? AND record.status = 'draft'
@@ -653,7 +655,7 @@ export async function listActivityRecords(access: TeamAccess, workOrderId: strin
     if (row.payload) { const record: ActivityRecord = JSON.parse(String(row.payload)); const p = activityPresentation(record);
       return { id: record.id, intentId: record.intentId, activityTemplateId: record.form.activityTemplateId, title: record.form.title,
         programCode: record.form.programCode, status: record.status,
-        lifecycleStatus: record.correction && record.status === "draft" ? "correction_required" : lifecycle.status,
+        lifecycleStatus: lifecycle.status !== "imported" && record.correction && record.status === "draft" ? "correction_required" : lifecycle.status,
         auditOutcome: record.correction && record.status === "draft" ? null : lifecycle.auditOutcome,
         revision: record.revision, progress: p.progress, recordNumber: record.recordNumber, correction: record.correction }; }
     const snapshot = JSON.parse(String(row.intent_snapshot));
@@ -688,9 +690,10 @@ export async function prepareFieldCorrectionStatements(database: D1Database, inp
       correction: { eventId: input.eventId, sourceRecordId: previous.id, sourceRevision: previous.revision, note } };
     statements.push(database.prepare(`INSERT INTO trade_activity_field_records
       (id,intent_id,work_order_id,owner_uid,organisation_id,activity_template_id,revision,status,payload,actor_uid,created_at,updated_at,supersedes_record_id,correction_event_id)
-      VALUES(?,?,?,?,?,?,1,'draft',?,?,?,?,?,?)`)
+      SELECT ?,?,?,?,?,?,1,'draft',?,?,?,?,?,? WHERE EXISTS (
+        SELECT 1 FROM trade_work_orders work WHERE work.id=? AND work.firebase_uid=? AND work.record_status='active' AND work.stage<>'imported')`)
       .bind(id, previous.intentId, previous.workOrderId, previous.ownerUid, previous.organisationId, previous.form.activityTemplateId,
-        activityCanonical(next), input.actorUid, input.now, input.now, previous.id, input.eventId));
+        activityCanonical(next), input.actorUid, input.now, input.now, previous.id, input.eventId, input.workOrderId, input.ownerUid));
   }
   return statements;
 }
@@ -699,6 +702,7 @@ export async function openActivityRecord(access: TeamAccess, workOrderId: string
   assertActivityFieldAccess(access, true);
   await ensureCreditexJobLifecycleSchemaGuards(getD1());
   const job = await assignedJob(access, workOrderId);
+  if (job.stage === "imported") throw new Error("IMPORTED_JOB_INACTIVE");
   await assertCertificateJobEligibility(getD1(), { ownerUid: access.ownerUid, actorMemberId: access.memberId,
     assignedMemberId: String(job.assignee_member_id || ""), workOrderId });
   const current = await getD1().prepare(`SELECT source.id FROM trade_activity_field_records source WHERE source.intent_id = ? AND source.owner_uid = ? AND source.work_order_id = ?
@@ -757,8 +761,10 @@ export async function openActivityRecord(access: TeamAccess, workOrderId: string
     createdAt: now, updatedAt: now, submittedAt: "", reportUrl: "" };
   await getD1().prepare(`INSERT OR IGNORE INTO trade_activity_field_records
     (id, intent_id, work_order_id, owner_uid, organisation_id, activity_template_id, revision, status, payload, actor_uid, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 1, 'draft', ?, ?, ?, ?)`)
-    .bind(id, intentId, workOrderId, access.ownerUid, record.organisationId, form.activityTemplateId, activityCanonical(record), access.actorUid, now, now).run();
+    SELECT ?, ?, ?, ?, ?, ?, 1, 'draft', ?, ?, ?, ? WHERE EXISTS (
+      SELECT 1 FROM trade_work_orders work WHERE work.id = ? AND work.firebase_uid = ?
+        AND work.record_status = 'active' AND work.stage <> 'imported' AND work.revision = ?)`)
+    .bind(id, intentId, workOrderId, access.ownerUid, record.organisationId, form.activityTemplateId, activityCanonical(record), access.actorUid, now, now, workOrderId, access.ownerUid, Number(job.revision)).run();
   const stored = await getD1().prepare(`SELECT source.id FROM trade_activity_field_records source WHERE source.intent_id=? AND source.owner_uid=?
     AND NOT EXISTS(SELECT 1 FROM trade_activity_field_records successor WHERE successor.supersedes_record_id=source.id)`)
     .bind(intentId, access.ownerUid).first<{ id: string }>();
@@ -770,13 +776,14 @@ async function saveRecord(access: TeamAccess, previous: ActivityRecord, next: Ac
   await ensureCreditexJobLifecycleSchemaGuards(getD1());
   // Re-check the current worker assignment at the mutation boundary.
   const job = await assignedJob(access, previous.workOrderId);
+  if (job.stage === "imported") throw new Error("IMPORTED_JOB_INACTIVE");
   const training = await certificateJobEligibilityPredicate(getD1(), { ownerUid: access.ownerUid,
     actorMemberId: access.memberId, assignedMemberId: String(job.assignee_member_id || ""), workOrderId: previous.workOrderId });
   next.revision = previous.revision + 1; next.updatedAt = iso();
   const update = getD1().prepare(`UPDATE trade_activity_field_records SET revision = ?, status = ?, payload = ?, actor_uid = ?, updated_at = ?, submitted_at = ?, pdf_object_key = ?, pdf_sha256 = ?
     WHERE id = ? AND owner_uid = ? AND revision = ? AND status = 'draft'
       AND EXISTS (SELECT 1 FROM trade_work_orders w WHERE w.id = work_order_id AND w.firebase_uid = owner_uid
-        AND w.record_status = 'active' AND (? = 1 OR ${jobMemberSql("w")})
+        AND w.record_status = 'active' AND w.stage <> 'imported' AND (? = 1 OR ${jobMemberSql("w")})
         AND w.assignee_member_id = ? AND w.revision = ?
         AND (? = '' OR w.assignee_member_id = ?))
       AND EXISTS (SELECT 1 FROM trade_work_order_compliance_intents i WHERE i.id = intent_id AND i.status IN ('planned', 'case_linked'))

@@ -468,7 +468,15 @@ test("job summary renders every planned compliance activity without exposing raw
 });
 
 test("staff checklist controls use the hardened scoped CRM task actions", () => {
-  assert.doesNotMatch(crm, /\/api\/trade-work-orders/);
+  const binStart = crm.indexOf("  async function changeJobBin(");
+  const binEnd = crm.indexOf("  function openCustomerActions(", binStart);
+  assert.ok(binStart >= 0 && binEnd > binStart, "the owner-only bin handler has a distinct boundary");
+  const binHandler = crm.slice(binStart, binEnd);
+  assert.match(binHandler, /if \(staffPermissions \|\|[^\n]+\) return;/);
+  assert.match(binHandler, /fetch\('\/api\/trade-work-orders'/);
+  assert.match(binHandler, /action: restore \? 'restore_crm_job' : 'archive_crm_job'/);
+  assert.match(binHandler, /workOrderId: job\.id, expectedRevision: job\.revision/);
+  assert.doesNotMatch(crm.slice(0, binStart) + crm.slice(binEnd), /\/api\/trade-work-orders/);
   assert.match(crm, /onWorkOrder=\{crmRequest\}/);
   assert.match(route, /const manageActions = new Set\(\["create_note", "add_task"\]\)/);
   assert.match(route, /const assignedJobActions = new Set\(\["resend_activity_customer_documents"\]\)/);
@@ -525,7 +533,7 @@ test("My day exposes owner scoped local workload and direct action charts", () =
   assert.match(route, /weekEnd: addSummaryDays\(weekStart, 6\)/);
   assert.match(route, /a\.status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)/);
   assert.match(route, /NOT EXISTS \(SELECT 1 FROM trade_crm_appointments/);
-  assert.match(route, /w\.stage NOT IN \('completed', 'cancelled'\) GROUP BY w\.stage/);
+  assert.match(route, /w\.stage NOT IN \('imported', 'completed', 'cancelled'\) GROUP BY w\.stage/);
   assert.match(route, /if \(!Number\.isFinite\(start\) \|\| !Number\.isFinite\(end\) \|\| end <= start\) return 60/);
   assert.match(route, /Math\.max\(15, Math\.min\(480/);
   assert.match(route, /todayVisits:/);

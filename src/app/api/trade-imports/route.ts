@@ -276,14 +276,14 @@ export async function POST(request: Request) {
             (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title, service_category,
              site_area, stage, priority, scheduled_start, scheduled_end, assignee_label, revision, record_status, created_at, updated_at)
             VALUES (?, ?, 'installer', 'job', 'import', ?, ?, ?, ?, '', ?, ?, ?, ?, '', 1, 'active', ?, ?)`)
-            .bind(id, identity.uid, batchId, numbers[index], values.title, values.serviceCategory, values.workStage, values.priority,
+            .bind(id, identity.uid, batchId, numbers[index], values.title, values.serviceCategory, "imported", values.priority,
               values.scheduledStart, values.scheduledEnd, now, now));
           statements.push(db.prepare(`INSERT INTO trade_crm_job_details
             (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, description, customer_reference,
              next_action, tags, estimated_value_cents, quoted_value_cents, invoiced_value_cents, paid_value_cents, quote_status,
              invoice_status, payment_due_at, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
-            .bind(detailId, id, identity.uid, customerId, customer?.service_site_id || "", customerId ? "trade_owned" : "internal", values.pipelineStage,
+            .bind(detailId, id, identity.uid, customerId, customer?.service_site_id || "", customerId ? "trade_owned" : "internal", "imported",
               values.description, values.nextAction, JSON.stringify(values.tags || []), values.estimatedValueCents, now, now));
           statements.push(db.prepare(`INSERT INTO trade_work_order_events
             (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'data_imported', ?, ?)`)

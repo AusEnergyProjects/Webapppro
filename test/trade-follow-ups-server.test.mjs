@@ -34,6 +34,7 @@ function fixture(t) {
     CREATE TABLE trade_crm_photo_request_deliveries (firebase_uid TEXT,crm_customer_id TEXT,channel TEXT DEFAULT 'email',status TEXT);
     CREATE TABLE trade_crm_appointments (id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,status TEXT DEFAULT 'scheduled',starts_at TEXT,ends_at TEXT DEFAULT '',assignee_member_id TEXT DEFAULT 'member');
     CREATE TABLE trade_dataforce_sources (firebase_uid TEXT,work_order_id TEXT);
+    CREATE TABLE trade_csv_import_sources (firebase_uid TEXT,work_order_id TEXT,entity_type TEXT);
     CREATE TABLE trade_crm_quick_invoices (id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,invoice_number TEXT,due_at TEXT,total_cents INTEGER,status TEXT DEFAULT 'issued',sent_at TEXT DEFAULT '2026-09-26T03:00:00.000Z',provider_message_id TEXT DEFAULT 'provider-id',delivery_status TEXT DEFAULT 'provider_accepted',document_snapshot_json TEXT DEFAULT '{}',created_at TEXT DEFAULT '2026-09-25T03:00:00.000Z');
     CREATE TABLE trade_crm_quick_invoice_credits (invoice_id TEXT,firebase_uid TEXT,status TEXT DEFAULT 'issued',total_cents INTEGER);
     CREATE TABLE trade_crm_accepted_invoices (id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,invoice_number TEXT,due_at TEXT,total_cents INTEGER,status TEXT DEFAULT 'issued',issue_blocker_code TEXT DEFAULT '',commercial_handoff_id TEXT,acceptance_id TEXT,quote_id TEXT,quote_version_id TEXT,document_snapshot_json TEXT DEFAULT '{}',created_at TEXT DEFAULT '2026-09-25T03:00:00.000Z');
@@ -223,16 +224,16 @@ test("automation remains dormant until owner enables it and one appointment send
 });
 
 test("automatic email skips imported original visits while allowing new visits and ignoring foreign source claims", async t => {
-  for (const past of [false, true]) {
+  for (const sourceTable of ["trade_dataforce_sources", "trade_csv_import_sources"]) for (const past of [false, true]) {
     const f = fixture(t);
     const visit = past ? { starts_at: "2026-09-28T09:00", status: "completed" } : {};
     f.appointment("job:visit", "job", visit);
     f.appointment("job-new-visit", "job", visit);
-    f.insert("trade_dataforce_sources", { firebase_uid: "owner", work_order_id: "job" });
+    f.insert(sourceTable, { firebase_uid: "owner", work_order_id: "job", ...(sourceTable === "trade_csv_import_sources" ? { entity_type: "job" } : {}) });
     f.job("normal");
     f.appointment("normal:visit", "normal", visit);
     // A claim belonging to another business cannot suppress this owner's visit.
-    f.insert("trade_dataforce_sources", { firebase_uid: "other", work_order_id: "normal" });
+    f.insert(sourceTable, { firebase_uid: "other", work_order_id: "normal", ...(sourceTable === "trade_csv_import_sources" ? { entity_type: "job" } : {}) });
     f.job("foreign", "other");
     f.appointment("foreign:visit", "foreign", { ...visit, firebase_uid: "other" });
     await saveFollowUpSettings(f.db, "owner", { ...DEFAULT_FOLLOW_UP_SETTINGS, appointmentEnabled: true,

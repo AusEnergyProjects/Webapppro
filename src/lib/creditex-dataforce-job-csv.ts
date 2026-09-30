@@ -282,7 +282,7 @@ function contractError(
   });
 }
 
-function parseCsvMatrix(source: string) {
+function parseCsvMatrix(source: string, maximumColumns: number = DATAFORCE_JOB_CSV_HEADERS.length, maximumCellCharacters: number = DATAFORCE_JOB_CSV_LIMITS.maximumCellCharacters) {
   if (typeof source !== "string") {
     contractError("SOURCE_TYPE_INVALID", "CSV source must be text.");
   }
@@ -314,7 +314,7 @@ function parseCsvMatrix(source: string) {
     field += value;
     recordStarted = true;
     if (
-      field.length > DATAFORCE_JOB_CSV_LIMITS.maximumCellCharacters
+      field.length > maximumCellCharacters
     ) {
       contractError(
         "CSV_CELL_TOO_LONG",
@@ -326,10 +326,10 @@ function parseCsvMatrix(source: string) {
   };
 
   const finishField = () => {
-    if (row.length >= DATAFORCE_JOB_CSV_HEADERS.length) {
+    if (row.length >= maximumColumns) {
       contractError(
         "CSV_TOO_MANY_COLUMNS",
-        "CSV row contains more than 23 columns.",
+        `CSV row contains more than ${maximumColumns} columns.`,
         currentRowNumber(),
         currentColumnNumber(),
       );
@@ -449,6 +449,12 @@ export function parseDataforceJobCsv(
       values,
     })),
   };
+}
+
+/** Shared lossless CSV grammar; the legacy contract keeps its original limits. */
+export function parseStrictImportCsv(source: string): ParsedDataforceJobCsv {
+  const rows = parseCsvMatrix(source, 256, 65_536);
+  return { headers: rows[0] || [], rows: rows.slice(1).map((values, index) => ({ rowNumber: index + 2, values })) };
 }
 
 function emptyDataforceRecord(): DataforceJobCsvRecord {

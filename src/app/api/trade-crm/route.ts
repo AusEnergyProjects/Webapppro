@@ -125,8 +125,8 @@ const MEMBER_ACTIVE_JOB_LIMIT = 500;
 const CRM_CUSTOMER_LIMIT = 5000;
 const CRM_TEMPLATE_LIMIT = 60;
 const CUSTOMER_TYPES = new Set(["residential", "business"]);
-const PIPELINE_STAGES = new Set(["enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress", "complete", "invoiced", "paid", "lost"]);
-const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
+const PIPELINE_STAGES = new Set(["imported", "enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress", "complete", "invoiced", "paid", "lost"]);
+const WORK_STAGES = new Set(["imported", "backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
 const PRIORITIES = new Set(["low", "standard", "high", "urgent"]);
 const SERVICE_CATEGORIES = new Set([
   ...ENERGY_SERVICE_IDS,
@@ -213,14 +213,14 @@ const JOB_REGISTER_ASSIGNEE_SEARCH_SQL = `COALESCE(w.assignee_label, '') || ' ' 
 const JOB_EFFECTIVE_SCHEDULE_SQL = "COALESCE(NULLIF(selected_appointment.starts_at, ''), NULLIF(w.scheduled_start, ''), '')";
 const JOB_REGISTER_AUDIT_OUTCOME_SQL = tradeJobAuditOutcomeSql("w");
 const JOB_REGISTER_HAS_PROGRESS_SQL = tradeJobHasProgressSql("w");
-const JOB_REGISTER_LIFECYCLE_SQL = tradeJobLifecycleStatusSql({
+const JOB_REGISTER_LIFECYCLE_SQL = `CASE WHEN w.record_status = 'archived' THEN 'deleted' ELSE ${tradeJobLifecycleStatusSql({
   workAlias: "w",
   detailAlias: "d",
   scheduleSql: JOB_EFFECTIVE_SCHEDULE_SQL,
   auditOutcomeSql: JOB_REGISTER_AUDIT_OUTCOME_SQL,
   hasProgressSql: JOB_REGISTER_HAS_PROGRESS_SQL,
   activityStatusSql: creditexWholeJobLifecycleSql("w", JOB_EFFECTIVE_SCHEDULE_SQL),
-});
+})} END`;
 const JOB_REGISTER_ACTIVITY_SQL = `(SELECT json_extract(ci.intent_snapshot, '$.activity.title')
   FROM trade_work_order_compliance_intents ci
   WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
@@ -675,7 +675,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
     title: protectedCustomer ? `${String(row.service_category || "Service")} job` : row.title, serviceCategory: row.service_category,
     siteArea: row.site_area, stage: row.stage, priority: row.priority, scheduledStart: row.scheduled_start,
     scheduledEnd: row.scheduled_end, assigneeMemberId: String(row.assignee_member_id || ""),
-    assigneeLabel: row.assignee_label, sourceType, customerSource,
+    assigneeLabel: row.assignee_label, sourceType, recordStatus: String(row.record_status || "active"), customerSource,
     crmCustomerId: protectedCustomer ? "" : String(row.crm_customer_id || ""),
     serviceSiteId: protectedCustomer ? "" : String(row.service_site_id || ""),
     customerDisplayName: protectedCustomer ? "Australian Energy Assessments protected customer" : String(row.customer_name || ""),
@@ -814,7 +814,10 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   const cursorInput = cleanAdminText(url.searchParams.get("cursor"), 2000);
   const bindings: unknown[] = [identity.uid];
   if (resource === "jobs") {
-    const conditions = ["w.firebase_uid = ?", "w.partner_type = 'installer'", "w.record_status = 'active'"];
+    const deleted = url.searchParams.get("operationalStatus") === "deleted";
+    if (deleted && !identity.access.isOwner) throw new Error("JOB_MANAGEMENT_REQUIRED");
+    const recordStatus = deleted ? "archived" : "active";
+    const conditions = ["w.firebase_uid = ?", "w.partner_type = 'installer'", `w.record_status = '${recordStatus}'`];
     if (url.searchParams.get("commercial") === "invoice") {
       if (!identity.access.isOwner && !identity.access.canManageInvoices) throw new Error("INVOICE_MANAGEMENT_REQUIRED");
       conditions.push("w.source_type <> 'opportunity'", "COALESCE(d.customer_source, '') <> 'platform_private'", "w.stage <> 'cancelled'");
@@ -971,9 +974,9 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     }
     if (filter === "platform") conditions.push("w.source_type = 'opportunity'");
     else if (filter === "completed") conditions.push("w.stage IN ('completed', 'cancelled')");
-    else if (filter === "attention") conditions.push(`(w.stage = 'blocked' OR EXISTS (SELECT 1 FROM trade_crm_job_notes n
+    else if (filter === "attention") conditions.push(`w.stage <> 'imported' AND (w.stage = 'blocked' OR EXISTS (SELECT 1 FROM trade_crm_job_notes n
       WHERE n.work_order_id = w.id AND n.firebase_uid = w.firebase_uid AND n.note_type = 'issue' AND n.issue_status = 'open'))`);
-    else if (filter !== "all") conditions.push("w.stage NOT IN ('completed', 'cancelled')");
+    else if (!deleted && filter !== "all" && stage !== "imported" && operationalStatus !== "imported") conditions.push("w.stage NOT IN ('imported', 'completed', 'cancelled')");
     // Rows reuse their computed status alias. COUNT has no projection, so only
     // that query expands the status expression. Keep each statement under D1's limit.
     const where = conditions.map(condition => condition === "register_lifecycle_status = ?"
@@ -998,7 +1001,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       // reuse the status value instead of expanding its correlated plan again.
       db.prepare(`WITH job_lifecycle AS MATERIALIZED (
         SELECT w.id work_order_id, ${JOB_REGISTER_LIFECYCLE_SQL} lifecycle_status
-        ${rowJoins} WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+        ${rowJoins} WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = '${recordStatus}'
       ) SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type,
         d.description, d.customer_reference, df.source_job_id dataforce_source_job_id,
         d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
@@ -1128,7 +1131,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       WHERE d.firebase_uid = ? AND w.record_status = 'active'
     ), customer_job_summary AS (
       SELECT crm_customer_id, COUNT(*) job_count,
-        SUM(CASE WHEN stage NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) active_job_count,
+        SUM(CASE WHEN stage NOT IN ('imported', 'completed', 'cancelled') THEN 1 ELSE 0 END) active_job_count,
         GROUP_CONCAT(DISTINCT service_category) activities,
         MAX(CASE WHEN latest_rank = 1 THEN work_number ELSE '' END) latest_job_number,
         MAX(CASE WHEN latest_rank = 1 THEN pipeline_stage ELSE '' END) latest_pipeline_stage,
@@ -1362,7 +1365,7 @@ async function crmSummary(identity: CrmIdentity) {
   const chartEnd = addSummaryDays(chartStart, 28);
   const [jobMetrics, financialMetrics, visitCount, todayVisitCount, awaitingScheduleCount, overdueCount, issueCount, appointments, overdueTasks, openIssues, workloadAppointments, workStageRows] = await Promise.all([
     db.prepare(`SELECT
-      SUM(CASE WHEN stage NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) open_jobs,
+      SUM(CASE WHEN stage NOT IN ('imported', 'completed', 'cancelled') THEN 1 ELSE 0 END) open_jobs,
       SUM(CASE WHEN stage = 'blocked' THEN 1 ELSE 0 END) waiting_jobs,
       SUM(CASE WHEN stage = 'completed' THEN 1 ELSE 0 END) completed_jobs
       FROM trade_work_orders WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'`)
@@ -1383,7 +1386,7 @@ async function crmSummary(identity: CrmIdentity) {
       .bind(identity.uid, today).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) total FROM trade_work_orders w
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      AND w.stage NOT IN ('completed', 'cancelled')
+      AND w.stage NOT IN ('imported', 'completed', 'cancelled')
       AND NOT EXISTS (SELECT 1 FROM trade_crm_appointments a
         WHERE a.firebase_uid = w.firebase_uid AND a.work_order_id = w.id
         AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?)`)
@@ -1425,7 +1428,7 @@ async function crmSummary(identity: CrmIdentity) {
         identity.access.isOwner ? 1 : 0, identity.access.scheduleScope, identity.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT w.stage, COUNT(*) total FROM trade_work_orders w
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      AND w.stage NOT IN ('completed', 'cancelled') GROUP BY w.stage`)
+      AND w.stage NOT IN ('imported', 'completed', 'cancelled') GROUP BY w.stage`)
       .bind(identity.uid).all<Record<string, unknown>>(),
   ]);
   const workload = weekStarts.map((weekStart) => ({
@@ -1965,7 +1968,7 @@ export async function POST(request: Request) {
         }, 409);
       }
       const activeJobs = await db.prepare(`SELECT COUNT(*) count FROM trade_work_orders
-        WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active' AND stage NOT IN ('completed', 'cancelled')`)
+        WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active' AND stage NOT IN ('imported', 'completed', 'cancelled')`)
         .bind(identity.uid).first<Record<string, unknown>>();
       if (Number(activeJobs?.count || 0) >= MEMBER_ACTIVE_JOB_LIMIT) throw new Error("JOB_LIMIT_REACHED");
       let customerId = cleanAdminText(body.crmCustomerId, 180);
@@ -2649,6 +2652,9 @@ export async function POST(request: Request) {
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const job = await ownedJob(db, identity, workOrderId);
+    if (job.stage === "imported" && ["add_task", "create_appointment", "resend_activity_customer_documents"].includes(action)) {
+      return adminJson({ ok: false, error: "Start work in TLink before scheduling or completing this imported job." }, 409);
+    }
     if (action === "resend_activity_customer_documents") {
       const [appointment, activityRows] = await Promise.all([
         selectedScheduledActivityCustomerDocumentAppointment({
@@ -2928,7 +2934,7 @@ export async function PATCH(request: Request) {
     }
     if (action === "update_job") {
       const hasAny = (keys: string[]) => keys.some((key) => body[key] !== undefined);
-      const operationalFields = ["pipelineStage", "stage", "priority", "buildingType", "description", "nextAction", "tags"];
+      const operationalFields = ["activateImported", "pipelineStage", "stage", "priority", "buildingType", "description", "nextAction", "tags"];
       const quoteFields = ["quoteStatus", "quotedValueCents", "estimatedValueCents"];
       const invoiceFields = ["invoiceStatus", "invoicedValueCents", "paidValueCents", "paymentDueAt"];
       if (hasAny(operationalFields) && !canManageJobs(identity.access)) throw new Error("JOB_MANAGEMENT_REQUIRED");
@@ -2948,6 +2954,7 @@ export async function PATCH(request: Request) {
         .bind(taskId, identity.uid, identity.uid).first<Record<string, unknown>>();
       if (!task) throw new Error("JOB_NOT_FOUND");
       if (!identity.access.isOwner) await assignedJob(identity.access, String(task.work_order_id));
+      if (task.job_stage === "imported") return adminJson({ ok: false, error: "Start work in TLink before completing this imported job." }, 409);
       if (["completed", "cancelled"].includes(String(task.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
       const taskRevision = nextJobRevision(task.revision); const jobRevision = nextJobRevision(task.job_revision);
       await guardedOnlineChildMutationBatch(db, [
@@ -2955,11 +2962,11 @@ export async function PATCH(request: Request) {
           WHERE id = ? AND firebase_uid = ? AND revision = ? AND EXISTS (
             SELECT 1 FROM trade_work_orders work_order WHERE work_order.id = trade_work_order_tasks.work_order_id
               AND work_order.firebase_uid = trade_work_order_tasks.firebase_uid AND work_order.record_status = 'active'
-              AND work_order.stage = ? AND work_order.stage NOT IN ('completed', 'cancelled') AND work_order.revision = ?)`)
+              AND work_order.stage = ? AND work_order.stage NOT IN ('imported', 'completed', 'cancelled') AND work_order.revision = ?)`)
           .bind(status, status === "done" ? now : "", taskRevision, now, taskId, identity.uid,
             Number(task.revision), task.job_stage, Number(task.job_revision)),
         db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?
-          AND record_status = 'active' AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+          AND record_status = 'active' AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?
           AND EXISTS (SELECT 1 FROM trade_work_order_tasks child WHERE child.id = ?
             AND child.work_order_id = trade_work_orders.id AND child.firebase_uid = trade_work_orders.firebase_uid
             AND child.revision = ? AND child.updated_at = ?)`)
@@ -3177,6 +3184,9 @@ export async function PATCH(request: Request) {
         WHERE a.id = ? AND a.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(appointmentId, identity.uid, identity.uid).first<Record<string, unknown>>();
       if (!current) throw new Error("APPOINTMENT_NOT_FOUND");
+      if (current.job_stage === "imported" || current.status === "imported") {
+        return adminJson({ ok: false, error: "This appointment is imported history. Start work in TLink and schedule a new visit." }, 409);
+      }
       if (!identity.access.isOwner) await assignedJob(identity.access, String(current.work_order_id));
       if (!canRescheduleWithinScope(identity.access, String(current.assignee_member_id || ""))) {
         throw new Error("JOB_NOT_ASSIGNED");
@@ -3303,6 +3313,14 @@ export async function PATCH(request: Request) {
       && current?.customer_source === "public_lead_released";
     const pipelineStage = body.pipelineStage === undefined ? String(current?.pipeline_stage || (platformPrivate ? "qualifying" : "enquiry")) : cleanAdminText(body.pipelineStage, 30);
     const workStage = body.stage === undefined ? "" : cleanAdminText(body.stage, 30);
+    const importedJob = job.stage === "imported" || current?.pipeline_stage === "imported";
+    const activatingImport = importedJob && body.activateImported === true && workStage === "backlog" && pipelineStage === "enquiry";
+    if (importedJob && !activatingImport && ((workStage && workStage !== "imported") || pipelineStage !== "imported")) {
+      return adminJson({ ok: false, error: "Use Start work in TLink to activate this imported record. Its original status remains in history." }, 409);
+    }
+    if (!importedJob && (workStage === "imported" || pipelineStage === "imported")) {
+      return adminJson({ ok: false, error: "Imported is reserved for original import records." }, 400);
+    }
     const completingJob = workStage === "completed" || (body.pipelineStage !== undefined && pipelineStage === "complete");
     if (completingJob && await db.prepare(`SELECT id FROM trade_crm_appointments
       WHERE work_order_id = ? AND firebase_uid = ? AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)
@@ -3374,15 +3392,15 @@ export async function PATCH(request: Request) {
       SELECT 1 FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
         AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress'))`, [workOrderId, identity.uid])] : [];
     const statements = [...completionGuards, ...(nextStage==="cancelled"?[tradeJobCancellationGuard(db,identity.uid,workOrderId)]:[]),detailStatement, db.prepare(`UPDATE trade_work_orders SET stage = ?,
-      scheduled_start=CASE WHEN ?='cancelled' THEN '' ELSE scheduled_start END,
-      scheduled_end=CASE WHEN ?='cancelled' THEN '' ELSE scheduled_end END,
+      scheduled_start=CASE WHEN ?='cancelled' OR ?=1 THEN '' ELSE scheduled_start END,
+      scheduled_end=CASE WHEN ?='cancelled' OR ?=1 THEN '' ELSE scheduled_end END,
       priority = COALESCE(NULLIF(?, ''), priority), revision = ?, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
         AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?`)
-      .bind(nextStage,nextStage,nextStage, priority, revision, now, workOrderId, identity.uid, String(job.stage || ""), expectedRevision)];
+      .bind(nextStage,nextStage,activatingImport ? 1 : 0,nextStage,activatingImport ? 1 : 0, priority, revision, now, workOrderId, identity.uid, String(job.stage || ""), expectedRevision)];
     if(nextStage==="cancelled")statements.push(cancelledJobAppointmentsStatement(db,identity.uid,workOrderId,now));
     statements.push(db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-      VALUES (?, ?, ?, 'crm_updated', 'CRM job details updated.', ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, now));
+      VALUES (?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, activatingImport ? 'import_activated' : 'crm_updated', activatingImport ? 'Started work in TLink. Original imported dates and statuses retained as history.' : 'CRM job details updated.', now));
     statements.push(...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision, changedAt: now,
       audienceMemberId: String(job.assignee_member_id || "") }));
     await guardedOnlineJobMutationBatch(db, statements, {

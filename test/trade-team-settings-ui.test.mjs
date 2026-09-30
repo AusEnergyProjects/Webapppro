@@ -242,7 +242,7 @@ test("delegated field work never offers the unsupported handover route", () => {
   assert.match(field, /\{canOpenHandover && <button[^>]+onClick=\{\(\) => onNavigate\("handover"\)\}>Open handover<\/button>\}/);
   assert.match(crm, /canOpenHandover=\{!permissions\}/);
   assert.match(crm, /const moreTabs:[^=]+ = \[\["tasks"/);
-  assert.match(crm, /disabled=\{!canManageJobs \|\| busy === `task-toggle:/);
+  assert.match(crm, /disabled=\{isImported \|\| !canManageJobs \|\| busy === `task-toggle:/);
   assert.match(crm, /\{canManageJobs && <form className="crm-inline-form note"/);
   assert.match(crm, /hideAssets=\{Boolean\(staffPermissions\)\}/);
   assert.match(crm, /\{!permissions && <TradeCommercialHandoffPanel/);
@@ -302,7 +302,7 @@ test("the combined Schedule tab respects own-schedule visibility and remains ava
   assert.match(crm, /const canAddJobAppointment = jobReadyForScheduling && canRescheduleJobs/);
   assert.match(crm, /const canPrepareJobAppointment = jobReadyForScheduling && canRescheduleJobs && \(canAssignJobs \|\| canAddJobAppointment\)/);
   assert.match(crm, /const canStartJobScheduling = canPrepareJobAppointment/);
-  assert.match(crm, /const jobReadyForScheduling = job\.scheduleReady/);
+  assert.match(crm, /const jobReadyForScheduling = !isImported && job\.scheduleReady/);
   assert.match(crm, /Wait for the customer to accept the current quote before adding an appointment/);
   assert.match(crm, /canViewTeamSchedule \|\| appointment\.assigneeMemberId === selfMember\?\.id/);
   assert.match(crm, /if \(canOpenJobSchedule\) mainTabs\.push\(\["schedule", `Schedule \(\$\{visibleJobAppointments\.length\}\)`\]\)/);
@@ -327,7 +327,8 @@ test("the combined Schedule tab respects own-schedule visibility and remains ava
 test("job edits use the exact loaded revision instead of overwriting concurrent changes", () => {
   assert.match(crm, /scheduledEnd: string; revision: number; assigneeMemberId: string/);
   const updateJobPayloads = crm.match(/action: "update_job"[^}]+/g) || [];
-  assert.equal(updateJobPayloads.length, 3);
+  assert.equal(updateJobPayloads.length, 4);
+  assert.equal(updateJobPayloads.filter((payload) => /activateImported: true, stage: "backlog", pipelineStage: "enquiry"/.test(payload)).length, 1);
   for (const payload of updateJobPayloads) {
     assert.match(payload, /workOrderId: job\.id, expectedRevision: job\.revision/);
   }

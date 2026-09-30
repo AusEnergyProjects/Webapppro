@@ -1870,3 +1870,39 @@ test("the assigned technician can resume a correction event exactly once; stale 
     await assert.rejects(server.openActivityRecord({...access,memberId:"unassigned"},"job-a","intent-a"), /JOB_NOT_ASSIGNED|JOB_ACCESS|ASSIGNED/);
   } finally { database.close(); }
 });
+
+test('Imported activity history is readable but cannot create, edit, sign or submit field work', async()=>{
+ const {database,server,access}=fixture();
+ try{
+  const record=await server.openActivityRecord(access,'job-a','intent-a');
+  const before=database.prepare("SELECT payload,revision FROM trade_activity_field_records WHERE id=?").get(record.id);
+  database.exec("UPDATE trade_work_orders SET stage='imported',revision=revision+1 WHERE id='job-a'");
+  assert.equal((await server.loadActivityRecord(access,record.id)).id,record.id);
+  for(const operation of [()=>server.openActivityRecord(access,'job-a','intent-a'),()=>server.saveActivityAnswers(access,record.id,record.revision,{before_name:'Must not save'}),()=>server.signActivityDeclaration(access,record.id,{expectedRevision:record.revision,declarationKey:'before_customer',signerName:'Customer',acknowledged:true,strokes}),()=>server.submitActivityRecord(access,record.id,record.revision)]) await assert.rejects(operation(),/IMPORTED_JOB_INACTIVE/);
+  assert.deepEqual(database.prepare("SELECT payload,revision FROM trade_activity_field_records WHERE id=?").get(record.id),before);
+  assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_team_sync_changes').get().n,0);
+ }finally{database.close();}
+});
+
+test('Imported transition at the activity save boundary rolls back the form and sync writes',async()=>{
+ let armed=false;
+ const {database,server,access}=fixture(form(),{beforeRun({sql,database:db}){if(armed&&/UPDATE trade_activity_field_records SET revision/.test(sql)){armed=false;db.exec("UPDATE trade_work_orders SET stage='imported' WHERE id='job-a'");}}});
+ try{
+  const record=await server.openActivityRecord(access,'job-a','intent-a');
+  const before=database.prepare('SELECT payload,revision FROM trade_activity_field_records WHERE id=?').get(record.id);
+  armed=true;
+  await assert.rejects(server.saveActivityAnswers(access,record.id,record.revision,{before_name:'Must not save'}),/IMPORTED_JOB_INACTIVE/);
+  assert.deepEqual(database.prepare('SELECT payload,revision FROM trade_activity_field_records WHERE id=?').get(record.id),before);
+  assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_team_sync_changes').get().n,0);
+ }finally{database.close();}
+});
+
+test('Imported transition while opening an activity does not create a field record',async()=>{
+ let armed=true;
+ const {database,server,access}=fixture(form(),{beforeRun({sql,database:db}){if(armed&&/INSERT OR IGNORE INTO trade_activity_field_records/.test(sql)){armed=false;db.exec("UPDATE trade_work_orders SET stage='imported' WHERE id='job-a'");}}});
+ try{
+  await assert.rejects(server.openActivityRecord(access,'job-a','intent-a'),/ACTIVITY_SAVE_FAILED/);
+  assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_activity_field_records').get().n,0);
+  assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_team_sync_changes').get().n,0);
+ }finally{database.close();}
+});

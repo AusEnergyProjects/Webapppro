@@ -1216,6 +1216,25 @@ test("bootstrap excludes jobs cancelled through the CRM pipeline", async () => {
   assert.deepEqual(result.payload.changes, []);
 });
 
+test("imported history stays out of field downloads and removes previously cached operational jobs", async () => {
+  const database = syncDatabase("in_progress", 5);
+  try {
+    const { route } = routeHarness(database);
+    const initial = await bootstrap(route);
+    assert.equal(initial.payload.changes.length, 1);
+    database.exec(`UPDATE trade_work_orders SET stage='imported',revision=6;
+      INSERT INTO trade_team_sync_changes(owner_uid,audience_member_id,entity_type,entity_id,operation,revision,changed_at)
+      VALUES('owner-1','member-1','job','job-1','upsert',6,'2026-09-30T10:00:00.000Z')`);
+    const updated = await changesSince(route, initial.payload.nextCursor);
+    assert.equal(updated.response.status, 200);
+    assert.deepEqual(updated.payload.changes.map(change => ({ id: change.entityId, operation: change.operation })),
+      [{ id: "job-1", operation: "delete" }]);
+    const fresh = await bootstrap(route);
+    assert.equal(fresh.response.status, 200);
+    assert.deepEqual(fresh.payload.changes, []);
+  } finally { database.close(); }
+});
+
 test("bootstrap returns every current activity intent with its validated case link and preserves own-job scope", async () => {
   const database = syncDatabase("in_progress", 5);
   seedGovernedComplianceCases(database);
@@ -1909,7 +1928,7 @@ test("superseded governed evidence does not hold field completion open", async (
   );
 });
 
-for (const terminalStage of ["completed", "cancelled"]) {
+for (const terminalStage of ["imported", "completed", "cancelled"]) {
   test(`all offline mutations reject immutable ${terminalStage} jobs`, async () => {
     const database = syncDatabase(terminalStage, 5);
     const { route } = routeHarness(database);

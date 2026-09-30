@@ -360,7 +360,7 @@ function errorResponse(error: unknown) {
   if (code === "ASSIGN_REQUIRED") return adminJson({ ok: false, error: "Your account cannot assign or reassign team jobs." }, 403);
   if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This job is not assigned to your team account." }, 403);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Job record not found." }, 404);
-  if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed and cancelled jobs are locked." }, 409);
+  if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Imported jobs must first be started in TLink. Completed and cancelled jobs are locked." }, 409);
   if (code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job changed elsewhere. Refresh it before saving." }, 409);
   if (code === "RENTAL_ACTIVE_APPOINTMENT") return adminJson({ ok: false, error: "This rental assessment has an active appointment. Move or cancel it in Schedule before changing the assessor." }, 409);
   if (isRentalInspectionAssignmentConflict(error)) return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This rental assessment assignment changed elsewhere. Refresh it before saving." }, 409);
@@ -606,7 +606,7 @@ async function mutableAssignedJobState(
     }>();
   if (!current) throw new Error("JOB_NOT_FOUND");
   if (Number(current.revision) !== Number(assigned.revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
-  if (["completed", "cancelled"].includes(String(current.stage))) throw new Error("TERMINAL_JOB_LOCKED");
+  if (["imported", "completed", "cancelled"].includes(String(current.stage))) throw new Error("TERMINAL_JOB_LOCKED");
   return current;
 }
 
@@ -624,7 +624,7 @@ async function mutableAssignableJobState(db: D1Database, access: TeamAccess, wor
       service_category: string;
     }>();
   if (!current) throw new Error("JOB_NOT_FOUND");
-  if (["completed", "cancelled"].includes(String(current.stage))) throw new Error("TERMINAL_JOB_LOCKED");
+  if (["imported", "completed", "cancelled"].includes(String(current.stage))) throw new Error("TERMINAL_JOB_LOCKED");
   return current;
 }
 
@@ -1043,7 +1043,7 @@ export async function PATCH(request: Request) {
         db.prepare(`UPDATE trade_work_orders
           SET assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
-            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+            AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?
             AND assignee_member_id = ?`)
           .bind(memberId, label, revision, now, workOrderId, access.ownerUid,
             jobStage, Number(job.revision), String(job.assignee_member_id || "")),
@@ -1088,7 +1088,7 @@ export async function PATCH(request: Request) {
       await guardedOnlineJobMutationBatch(db, [
         db.prepare(`UPDATE trade_work_orders SET stage = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
-            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?`)
+            AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?`)
           .bind(stage, revision, now, workOrderId, access.ownerUid,
             String(job.stage), Number(job.revision)),
         ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
@@ -1111,7 +1111,7 @@ export async function PATCH(request: Request) {
         WHERE t.id = ? AND t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(taskId, access.ownerUid, access.ownerUid).first<Record<string, unknown>>();
       if (!task) throw new Error("JOB_NOT_FOUND");
-      if (["completed", "cancelled"].includes(String(task.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
+      if (["imported", "completed", "cancelled"].includes(String(task.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
       const job = await assignedJob(access, String(task.work_order_id));
       if (Number(job.revision) !== Number(task.job_revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
       const taskRevision = nextJobRevision(task.revision); const jobRevision = nextJobRevision(task.job_revision);
@@ -1125,14 +1125,14 @@ export async function PATCH(request: Request) {
                 AND work_order.firebase_uid = trade_work_order_tasks.firebase_uid
                 AND work_order.record_status = 'active'
                 AND work_order.stage = ?
-                AND work_order.stage NOT IN ('completed', 'cancelled')
+                AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
                 AND work_order.revision = ?
             )`)
           .bind(status, status === "done" ? now : "", taskRevision, now, taskId, access.ownerUid,
             Number(task.revision), jobStage, Number(task.job_revision)),
         db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
-            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+            AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?
             AND EXISTS (
               SELECT 1 FROM trade_work_order_tasks child
               WHERE child.id = ? AND child.work_order_id = trade_work_orders.id

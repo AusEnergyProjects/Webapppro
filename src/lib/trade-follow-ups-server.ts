@@ -147,8 +147,11 @@ export async function followUpContext(db: D1Database, services: FollowUpServices
       AND (?=0 OR NOT EXISTS(SELECT 1 FROM trade_dataforce_sources source
         WHERE source.firebase_uid=ap.firebase_uid AND source.work_order_id=ap.work_order_id
         AND ap.id=source.work_order_id||':visit'))
+      AND (?=0 OR NOT EXISTS(SELECT 1 FROM trade_csv_import_sources source
+        WHERE source.firebase_uid=ap.firebase_uid AND source.work_order_id=ap.work_order_id AND source.entity_type='job'
+        AND ap.id=source.work_order_id||':visit'))
       AND (?=1 OR assignee_member_id=?) ORDER BY CASE WHEN ?=1 THEN starts_at END DESC,starts_at LIMIT 1`)
-      .bind(access.ownerUid,workOrderId,past?1:0,options.appointmentId || "",options.appointmentId || "",past?1:0,followUpLocalTime(now,zone),followUpLocalTime(now,zone),options.automatic?1:0,access.isOwner || access.scheduleScope === "team" ? 1 : 0,access.memberId,past?1:0).first<Row>();
+      .bind(access.ownerUid,workOrderId,past?1:0,options.appointmentId || "",options.appointmentId || "",past?1:0,followUpLocalTime(now,zone),followUpLocalTime(now,zone),options.automatic?1:0,options.automatic?1:0,access.isOwner || access.scheduleScope === "team" ? 1 : 0,access.memberId,past?1:0).first<Row>();
     if (appointment) {
       const epoch = followUpAppointmentEpoch(text(appointment.starts_at),zone);
       if (Number.isFinite(epoch) && (past ? epoch <= now.getTime() : epoch > now.getTime())) {
@@ -274,6 +277,9 @@ export async function scanAutomaticFollowUps(db:D1Database, services:FollowUpSer
       WHERE firebase_uid=? AND status IN ('scheduled','completed') AND ?=1 AND starts_at>? AND starts_at<?
       AND NOT EXISTS(SELECT 1 FROM trade_dataforce_sources source
         WHERE source.firebase_uid=ap.firebase_uid AND source.work_order_id=ap.work_order_id
+        AND ap.id=source.work_order_id||':visit')
+      AND NOT EXISTS(SELECT 1 FROM trade_csv_import_sources source
+        WHERE source.firebase_uid=ap.firebase_uid AND source.work_order_id=ap.work_order_id AND source.entity_type='job'
         AND ap.id=source.work_order_id||':visit'))
       SELECT * FROM candidates c WHERE c.event_key>? AND NOT EXISTS
         (SELECT 1 FROM trade_follow_up_messages m WHERE m.owner_uid=? AND m.event_key=c.event_key)

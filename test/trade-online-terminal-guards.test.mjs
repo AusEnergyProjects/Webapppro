@@ -128,6 +128,7 @@ function fixture(stage = "in_progress", revision = 5) {
       work_order_id text PRIMARY KEY NOT NULL,
       firebase_uid text NOT NULL,
       customer_source text NOT NULL DEFAULT 'internal',
+      pipeline_stage text NOT NULL DEFAULT 'enquiry',
       crm_customer_id text NOT NULL DEFAULT '',
       quote_status text NOT NULL DEFAULT 'not_started'
     );
@@ -560,7 +561,7 @@ test("team-scoped checklist management still requires the management permission"
   }))).status, 403);
 });
 
-for (const stage of ["completed", "cancelled"]) {
+for (const stage of ["imported", "completed", "cancelled"]) {
   for (const mutation of onlineMutations) {
     test(`${mutation.name} rejects an initially ${stage} job without writes`, async () => {
       const { database, db } = fixture(stage);
@@ -571,6 +572,63 @@ for (const stage of ["completed", "cancelled"]) {
     });
   }
 }
+
+test("owner job bin preserves records and restores the same job with revision checks", async () => {
+  const { database, db } = fixture("imported");
+  try {
+    database.exec("INSERT INTO trade_crm_job_details(work_order_id,firebase_uid,customer_source,pipeline_stage) VALUES('job-1','owner-1','trade_owned','imported')");
+    const route = workOrdersRoute(db);
+    const change = (action, expectedRevision) => route.PATCH(new Request("https://example.test/api/trade-work-orders", {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, workOrderId: "job-1", expectedRevision }),
+    }));
+    const stale = await change("archive_crm_job", 4);
+    assert.equal(stale.status, 409);
+    assert.equal(database.prepare("SELECT record_status FROM trade_work_orders").get().record_status, "active");
+    const archived = await change("archive_crm_job", 5);
+    assert.equal(archived.status, 200);
+    assert.deepEqual(await archived.json(), { ok: true, recordStatus: "archived", revision: 6 });
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "imported");
+    assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_job_forms").get().n, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_work_order_tasks").get().n, 1);
+    const restored = await change("restore_crm_job", 6);
+    assert.equal(restored.status, 200);
+    assert.deepEqual(await restored.json(), { ok: true, recordStatus: "active", revision: 7 });
+    assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_work_order_events").get().n, 2);
+  } finally { database.close(); }
+});
+
+test("job bin rejects another owner and protected customer work", async () => {
+  for (const [owner, source] of [["other-owner", "trade_owned"], ["owner-1", "platform_private"]]) {
+    const { database, db } = fixture();
+    try {
+      database.prepare("INSERT INTO trade_crm_job_details(work_order_id,firebase_uid,customer_source) VALUES('job-1',?,?)").run(owner, source);
+      const response = await workOrdersRoute(db).PATCH(new Request("https://example.test/api/trade-work-orders", {
+        method: "PATCH", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "archive_crm_job", workOrderId: "job-1", expectedRevision: 5 }),
+      }));
+      assert.equal(response.status, 409);
+      assert.equal(database.prepare("SELECT record_status FROM trade_work_orders").get().record_status, "active");
+      assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_work_order_events").get().n, 0);
+    } finally { database.close(); }
+  }
+});
+
+test("job bin rolls back events and sync when a concurrent edit wins", async () => {
+  const { database, db } = fixture();
+  try {
+    database.exec("INSERT INTO trade_crm_job_details(work_order_id,firebase_uid,customer_source) VALUES('job-1','owner-1','trade_owned')");
+    db.setBeforeBatch(() => database.exec("UPDATE trade_work_orders SET revision=6"));
+    const response = await workOrdersRoute(db).PATCH(new Request("https://example.test/api/trade-work-orders", {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "archive_crm_job", workOrderId: "job-1", expectedRevision: 5 }),
+    }));
+    assert.equal(response.status, 409);
+    assert.equal(database.prepare("SELECT record_status FROM trade_work_orders").get().record_status, "active");
+    assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_work_order_events").get().n, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_team_sync_changes").get().n, 0);
+  } finally { database.close(); }
+});
 
 for (const mutation of onlineMutations) {
   test(`${mutation.name} rolls back child, parent, event and sync writes on a job race`, async () => {
@@ -783,7 +841,7 @@ test("Business Hub schedule update rolls back when eligibility changes after its
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count, 0);
 });
 
-for (const stage of ["completed", "cancelled"]) {
+for (const stage of ["imported", "completed", "cancelled"]) {
   for (const mutation of directJobMutations) {
     test(`${mutation.name} cannot edit or reopen an initially ${stage} job`, async () => {
       const { database, db } = fixture(stage);

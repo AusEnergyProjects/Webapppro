@@ -1597,6 +1597,19 @@ test("assigned work-pack rejects hidden evidence and binds commit, signatures, r
   assert.ok(retainedFinal);
   assert.equal(new TextDecoder().decode(retainedFinal.bytes.slice(0, 4)), "%PDF");
 
+  sqlite.exec("SAVEPOINT imported_history");
+  try {
+    sqlite.prepare("UPDATE trade_work_orders SET stage='imported' WHERE id=?").run(WORK_ORDER_ID);
+    const historical = await server.loadAssignedCreditexActivityWorkPack(database, {...ownerScope(),caseInstanceId:finalised.projection.instance.id});
+    assert.equal(historical.completion.ready,false);
+    assert.ok(historical.completion.blockers.some(item=>item.code==='IMPORTED_JOB_INACTIVE'));
+    const pdf = await server.loadAssignedCreditexActivityWorkPackFinalRecord(database,{...ownerScope(),caseInstanceId:finalised.projection.instance.id});
+    assert.deepEqual(pdf.bytes,retainedFinal.bytes);
+    const inactive = await server.loadCreditexActivityWorkPackOutputReadiness(database,outputActor('governance-author'),{activityTemplateId:ACTIVITY.templateId,caseInstanceId:finalised.projection.instance.id});
+    assert.equal(inactive.outputActionReady,false);assert.equal(inactive.certificateActionEnabled,false);
+    assert.ok(inactive.outputActionBlockers.includes('imported_job_inactive'));
+  } finally {sqlite.exec("ROLLBACK TO imported_history; RELEASE imported_history");}
+
   // Exercise the real correction revision against the completed and signed work pack,
   // then restore this fixture so the independent output-action checks use the original.
   sqlite.exec("SAVEPOINT correction_review");
@@ -2829,4 +2842,36 @@ test("SRES activation binds eight current reviewed gates and invalidates stale s
   assert.throws(() => sqlite.prepare(`UPDATE compliance_sres_activation_snapshots
       SET created_at = created_at WHERE id = ?`).run(frozen.snapshot.snapshotId),
   /COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_IMMUTABLE/);
+});
+
+test('Imported work packs remain readable and reject every assigned execution mutation',async()=>{
+ const {sqlite,database}=await seededRuntime();
+ try{
+  const {projection}=await openAssignedRuntimeWorkPack(database);
+  sqlite.prepare("UPDATE trade_work_orders SET stage='imported' WHERE id=?").run(WORK_ORDER_ID);
+  const before=sqlite.prepare('SELECT * FROM compliance_activity_work_pack_instances ORDER BY id').all();
+  const objectCount=bucket.records.size;
+  const input={...scope(),caseInstanceId:projection.instance.id,expectedResponseSha256:projection.instance.responseSha256,idempotency:idempotency('blocked-imported'),now:'2026-08-15T00:00:03.000Z'};
+  for(const name of ['captureAssignedCreditexActivityWorkPackBrowserUpload','commitAssignedCreditexActivityWorkPack','selectAssignedCreditexActivityWorkPackScenario','selectAssignedCreditexActivityWorkPackOfficialProducts','runAssignedCreditexActivityWorkPackCalculator','prepareAssignedCreditexActivityWorkPackSigning','captureAssignedCreditexActivityWorkPackSignatures','updateAssignedCreditexActivityWorkPackCustomerContext','refreshAssignedCreditexActivityWorkPackExecutionContext','finaliseAssignedCreditexActivityWorkPack']){
+    await assert.rejects(server[name](database,input),error=>error.code==='IMPORTED_JOB_INACTIVE',name);
+  }
+  const historical=await server.loadAssignedCreditexActivityWorkPack(database,input);
+  assert.equal(historical.instance.id,projection.instance.id);assert.equal(historical.completion.ready,false);
+  assert.deepEqual(sqlite.prepare('SELECT * FROM compliance_activity_work_pack_instances ORDER BY id').all(),before);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM trade_offline_actions').get().n,0);
+  assert.equal(bucket.records.size,objectCount);
+ }finally{sqlite.close();}
+});
+
+test('Imported transition at the work-pack write boundary leaves responses and receipts unchanged',async()=>{
+ const {sqlite,database}=await seededRuntime();
+ try{
+  const {projection}=await openAssignedRuntimeWorkPack(database);
+  const before=sqlite.prepare('SELECT * FROM compliance_activity_work_pack_instances ORDER BY id').all();
+  database.interceptNextBatch(statements=>statements.some(statement=>statement.sql.includes('INSERT INTO trade_offline_actions')),()=>sqlite.prepare("UPDATE trade_work_orders SET stage='imported' WHERE id=?").run(WORK_ORDER_ID));
+  await assert.rejects(server.commitAssignedCreditexActivityWorkPack(database,{...scope(),caseInstanceId:projection.instance.id,expectedResponseSha256:projection.instance.responseSha256,sectionPatches:[{sectionKey:'evidence',answers:{'visit-note':'Must not save'}}],idempotency:idempotency('imported-race'),now:'2026-08-15T00:00:03.000Z'}),error=>error.code==='IMPORTED_JOB_INACTIVE');
+  assert.deepEqual(sqlite.prepare('SELECT * FROM compliance_activity_work_pack_instances ORDER BY id').all(),before);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM trade_offline_actions').get().n,0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM trade_team_sync_changes WHERE entity_id=?").get(WORK_ORDER_ID).n,0);
+ }finally{sqlite.close();}
 });

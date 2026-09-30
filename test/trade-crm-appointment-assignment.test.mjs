@@ -1213,3 +1213,24 @@ test("customer payment cannot erase provider-confirmed payment or race an accoun
     assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage,"completed");
   }
 });
+
+test('Imported job edits preserve history and only explicit activation clears the operational schedule', async () => {
+  const {database,d1}=fixture();
+  database.exec("ALTER TABLE trade_crm_service_sites ADD COLUMN created_at TEXT DEFAULT ''; UPDATE trade_work_orders SET source_type='import',stage='imported',scheduled_start='2020-01-01T09:00',scheduled_end='2020-01-01T10:00'; UPDATE trade_crm_job_details SET pipeline_stage='imported';");
+  database.prepare(`INSERT INTO trade_crm_appointments VALUES ('job-1:visit','job-1','owner-1','site_visit','Original visit','2020-01-01T09:00','2020-01-01T10:00','','Original worker','imported','Original history','2020','2020')`).run();
+  const {PATCH}=crmRoute(d1,access({canManageJobs:true}));
+  const request=body=>new Request('https://example.test/api/trade-crm',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({action:'update_job',workOrderId:'job-1',expectedRevision:3,...body})});
+  for(const body of [{stage:'completed',pipelineStage:'complete'},{stage:'backlog',pipelineStage:'enquiry'},{stage:'scheduled'}]) {
+    assert.equal((await PATCH(request(body))).status,409);
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage,'imported');
+  }
+  assert.equal((await PATCH(request({description:'A useful customer note'}))).status,200);
+  assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage,'imported');
+  assert.equal(database.prepare("SELECT pipeline_stage FROM trade_crm_job_details").get().pipeline_stage,'imported');
+  assert.equal((await PATCH(request({activateImported:true,stage:'backlog',pipelineStage:'enquiry',expectedRevision:4}))).status,200);
+  assert.deepEqual({...database.prepare("SELECT stage,scheduled_start,scheduled_end,revision FROM trade_work_orders").get()},{stage:'backlog',scheduled_start:'',scheduled_end:'',revision:5});
+  assert.equal(database.prepare("SELECT pipeline_stage FROM trade_crm_job_details").get().pipeline_stage,'enquiry');
+  assert.deepEqual({...database.prepare("SELECT status,starts_at,notes FROM trade_crm_appointments").get()},{status:'imported',starts_at:'2020-01-01T09:00',notes:'Original history'});
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_work_order_events WHERE event_type='import_activated'").get().n,1);
+  assert.ok(database.prepare("SELECT payload FROM trade_mobile_push_outbox").all().every(row=>JSON.parse(row.payload).reason==='sync_required'));
+});

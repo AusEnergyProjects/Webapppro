@@ -85,7 +85,7 @@ async function payload(uid: string, workOrderId: string) {
       status: rows.length && complete === rows.length ? "completed" : complete ? "in_progress" : "pending", progressPercent: rows.length ? Math.round(complete * 100 / rows.length) : 0 };
   });
   const completionChecks = { scope: scope.every(requirementDone), forms: forms.every(requirementDone), materials: materials.every(requirementDone), proof: proof.ready };
-  const completed = plan.status === "completed";
+  const completed = job.stage !== "imported" && plan.status === "completed";
   return {
     handoff: true, stock: await jobStock(uid,workOrderId),
     plan: { id: plan.id, status: plan.status, sourceKind: plan.source_kind, commercialReference: plan.commercial_reference,
@@ -97,9 +97,9 @@ async function payload(uid: string, workOrderId: string) {
       description: String(row.description), status: String(row.status), quantityMilli: Number(row.quantity_milli), expectedDurationMinutes: Number(row.expected_duration_minutes),
       requiredCapability: String(row.required_capability || ""), totalCostCents: Number(row.total_cost_cents), actualQuantityMilli: Number(row.actual_quantity_milli || 0),
       actualDurationMinutes: Number(row.actual_duration_minutes || 0), actualCostCents: Number(row.actual_total_cost_cents || 0), actualRecorded: Boolean(row.actual_id), actualNote: String(row.actual_note || "") })),
-    readiness: { ...checks, ready: Object.values(checks).every(Boolean), assignedTo: member?.display_name || "" },
+    readiness: { ...checks, ready: job.stage !== "imported" && Object.values(checks).every(Boolean), assignedTo: member?.display_name || "" },
     execution: { actualCostCents, forecastCostCents, forecastMarginCents: Number(plan.accepted_subtotal_cents) - forecastCostCents, varianceCents, varianceStatus },
-    completion: { ...completionChecks, proofRequired: proof.required, ready: Object.values(completionChecks).every(Boolean) && ["ready", "in_progress", "completed"].includes(String(plan.status)),
+    completion: { ...completionChecks, proofRequired: proof.required, ready: job.stage !== "imported" && Object.values(completionChecks).every(Boolean) && ["ready", "in_progress", "completed"].includes(String(plan.status)),
       completed, invoiceReady: completed, handoverReady: completed },
   };
 }
@@ -114,7 +114,8 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const identity = await requireInstallerOperations(request); const body = await request.json() as Row;
-    const workOrderId = cleanAdminText(body.workOrderId, 180); const action = cleanAdminText(body.action, 30); await ownedJob(identity.uid, workOrderId);
+    const workOrderId = cleanAdminText(body.workOrderId, 180); const action = cleanAdminText(body.action, 30); const job = await ownedJob(identity.uid, workOrderId);
+    if (job.stage === "imported") return adminJson({ ok: false, code: "IMPORTED_JOB_INACTIVE", error: "Start this imported job in TLink before preparing or recording work." }, 409);
     const db = getD1(); const now = new Date().toISOString();
     if (action === "prepare") {
       const handoff = await db.prepare(`SELECT * FROM trade_crm_commercial_handovers WHERE firebase_uid = ? AND work_order_id = ? ORDER BY accepted_at DESC LIMIT 1`).bind(identity.uid, workOrderId).first<Row>();

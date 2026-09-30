@@ -513,6 +513,33 @@ function jobState(database) {
   };
 }
 
+test("imported history cannot start or finish field work or create execution records", async () => {
+  const { database, route } = fixture();
+  try {
+    database.exec("UPDATE trade_work_orders SET stage='imported'");
+    const before = jobState(database);
+    const overview = await route.GET(new Request("https://example.test/api/trade-field-work?workOrderId=job-1"));
+    const payload = await overview.json();
+    assert.equal(payload.fieldJob.primaryAction, null);
+    assert.equal(payload.fieldJob.completion.ready, false);
+    assert.match(payload.fieldJob.actionUnavailableReason, /Start this imported job/);
+    for (const body of [
+      { action: "field_transition", transition: "finish", clientActionId: "imported-finish-1" },
+      { action: "field_transition", transition: "start_work", clientActionId: "imported-start-1" },
+      { action: "add_time", workDate: "2026-09-30", durationMinutes: 60 },
+      { action: "add_signoff", signerRole: "technician", signerName: "Technician", confirmed: true },
+    ]) {
+      const response = await route.POST(new Request("https://example.test/api/trade-field-work", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workOrderId: "job-1", ...body }),
+      }));
+      assert.equal(response.status, 409);
+      assert.equal((await response.json()).code, "IMPORTED_JOB_INACTIVE");
+      assert.deepEqual(jobState(database), before);
+    }
+  } finally { database.close(); }
+});
+
 test("field signoff binds the exact assignment and job revision checked for training", async () => {
   for (const change of ["assignee_member_id = 'untrained-worker'", "revision = revision + 1", "record_status = 'archived'"]) {
     const { database, db, route } = fixture();

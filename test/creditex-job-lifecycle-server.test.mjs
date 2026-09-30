@@ -68,3 +68,12 @@ test('dispatching and uncertain registry requests prevent changing completed sou
 test('notification retry enforces real assigned-job scope and selected job association',async t=>{const f=fixture(t);f.intent();const result=await f.service.reviewTradeJob(f.db,trade,await f.input('correction_required'),{...f.options,send:async()=>{throw new Error('No email');}});const manager={...trade,access:{...trade.access,isOwner:false,jobScope:'own',memberId:'other'}};await assert.rejects(f.service.dispatchJobCorrectionEmail(f.db,manager,result.notifications[0].id,f.options),e=>e.status===404);await assert.rejects(f.service.dispatchJobCorrectionEmail(f.db,trade,result.notifications[0].id,{...f.options,expectedWorkOrderId:'other-job'}),e=>e.status===404);assert.equal(f.sent.length,0);});
 test('Australian payout date accepts today after local midnight',async t=>{const f=fixture(t);f.intent();f.packet();await f.service.mutateJobLifecycle(f.db,admin,await f.lifecycle('payout_recorded',{reference:'BANK-1',amount:'100',paidOn:'2026-09-26'}),{now:()=> '2026-09-25T15:00:00.000Z'});assert.equal(f.sqlite.prepare('SELECT occurred_at FROM creditex_job_lifecycle_events').get().occurred_at,'2026-09-26T00:00:00.000Z');});
 test('cancellation is allowed before completion and still denied after stage reversal',async t=>{const f=fixture(t);f.intent();f.sqlite.exec(`UPDATE trade_work_orders SET stage='scheduled';UPDATE trade_activity_field_records SET status='draft',submitted_at='',pdf_object_key='',pdf_sha256=''`);await f.service.mutateJobLifecycle(f.db,admin,await f.lifecycle('cancelled'),f.options);assert.equal(f.sqlite.prepare('SELECT stage FROM trade_work_orders').get().stage,'cancelled');});
+
+test('imported history cannot become reviewed or audited even when original evidence exists',async t=>{
+ const f=fixture(t);f.intent();f.sqlite.exec("UPDATE trade_work_orders SET stage='imported'");
+ const review=await f.service.loadTradeJobReview(f.db,trade,'job');
+ assert.equal(review.canReview,false);
+ await assert.rejects(f.service.reviewTradeJob(f.db,trade,await f.input(),f.options));
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_lifecycle_events').get().n,0);
+ assert.equal(f.sqlite.prepare('SELECT stage FROM trade_work_orders').get().stage,'imported');
+});

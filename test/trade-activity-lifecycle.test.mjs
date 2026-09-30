@@ -19,6 +19,7 @@ function sourceFunction(source, name) {
 
 test("activity lifecycle follows cancellation, audit, completion, progress and schedule precedence", () => {
   const derive = sourceFunction(serverSource, "deriveActivityLifecycle");
+  assert.deepEqual(derive({parentStage:"imported",auditOutcome:"passed",completedWorkPack:1,fieldRecordStatus:"submitted_for_creditex_review",scheduledStart:"2020-01-01"}),{status:"imported",auditOutcome:null});
   assert.deepEqual(derive({}), { status: "unscheduled", auditOutcome: null });
   assert.deepEqual(derive({ scheduledStart: "2026-09-09T09:00:00Z" }), { status: "scheduled", auditOutcome: null });
   assert.deepEqual(derive({ fieldRecordStatus: "draft", scheduledStart: "2026-09-09T09:00:00Z" }), { status: "partial", auditOutcome: null });

@@ -21,8 +21,8 @@ export function defaultTradeDataforceServiceCategory(workType: string): TradeDat
 export const TRADE_DATAFORCE_FIELD_MAPPINGS = [
   { header: "App Id", target: "Source appointment ID", note: "Retained separately from the source job ID." },
   { header: "Job Id", target: "Source job ID", note: "Used to prevent importing the same source job twice in this business." },
-  { header: "Status", target: "Job work stage and source status", note: "Maps the operational stage; does not certify regulatory approval." },
-  { header: "SubStatus", target: "Source substatus", note: "Partial work remains in progress. Audit labels are retained as source facts." },
+  { header: "Status", target: "Original job status", note: "Retained as source history. Every imported job starts in Imported until reviewed." },
+  { header: "SubStatus", target: "Original substatus", note: "Retained as source history without marking work complete or granting approval." },
   { header: "Type", target: "Source job type", note: "Retained without changing the source meaning." },
   { header: "Work Type", target: "Job title and service category", note: "Known assessments map to Assessment. Review any other work type for this import; its original title is always retained." },
   { header: "Scheduled Datetime", target: "Scheduled local date and time", note: "Keeps the Australian local wall-clock time. No end time or duration is invented." },

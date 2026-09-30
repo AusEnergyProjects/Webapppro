@@ -223,11 +223,11 @@ test("AEA lead scheduling requires an accepted current quote while direct jobs r
   db.exec(`
     CREATE TABLE trade_work_orders (
       id TEXT PRIMARY KEY, firebase_uid TEXT NOT NULL, partner_type TEXT NOT NULL,
-      record_status TEXT NOT NULL, source_type TEXT NOT NULL
+      record_status TEXT NOT NULL, source_type TEXT NOT NULL, stage TEXT NOT NULL
     );
     CREATE TABLE trade_crm_job_details (
       work_order_id TEXT NOT NULL, firebase_uid TEXT NOT NULL, customer_source TEXT,
-      quote_status TEXT, crm_customer_id TEXT
+      quote_status TEXT, crm_customer_id TEXT, pipeline_stage TEXT
     );
     CREATE TABLE trade_crm_quotes (
       id TEXT PRIMARY KEY, work_order_id TEXT NOT NULL, firebase_uid TEXT NOT NULL,
@@ -247,10 +247,10 @@ test("AEA lead scheduling requires an accepted current quote while direct jobs r
     );
   `);
   db.exec(`
-    INSERT INTO trade_work_orders VALUES ('direct-job', 'owner-1', 'installer', 'active', 'manual');
-    INSERT INTO trade_crm_job_details VALUES ('direct-job', 'owner-1', 'trade_owned', 'issued', 'customer-direct');
-    INSERT INTO trade_work_orders VALUES ('aea-job', 'owner-1', 'installer', 'active', 'manual');
-    INSERT INTO trade_crm_job_details VALUES ('aea-job', 'owner-1', 'public_lead_released', 'accepted', 'customer-aea');
+    INSERT INTO trade_work_orders VALUES ('direct-job', 'owner-1', 'installer', 'active', 'manual', 'ready');
+    INSERT INTO trade_crm_job_details VALUES ('direct-job', 'owner-1', 'trade_owned', 'issued', 'customer-direct', 'quoting');
+    INSERT INTO trade_work_orders VALUES ('aea-job', 'owner-1', 'installer', 'active', 'manual', 'ready');
+    INSERT INTO trade_crm_job_details VALUES ('aea-job', 'owner-1', 'public_lead_released', 'accepted', 'customer-aea', 'quoting');
     INSERT INTO trade_crm_quotes VALUES ('quote-aea', 'aea-job', 'owner-1', 'customer-aea', 2, 'accepted');
     INSERT INTO trade_crm_quote_versions VALUES ('version-old', 'quote-aea', 'owner-1', 1, 'accepted');
     INSERT INTO trade_crm_quote_acceptances VALUES ('quote-aea', 'version-old', 'aea-job', 'owner-1', 'customer-aea', 'accepted');

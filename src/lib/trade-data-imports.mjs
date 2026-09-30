@@ -65,8 +65,6 @@ const PRODUCT_CATEGORIES = new Set([
   "insulation-draughts", "ev-charging", "electrical", "plumbing",
   "mounting-hardware", "controls", "other",
 ]);
-const PIPELINE_STAGES = new Set(["enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress", "complete", "invoiced", "paid", "lost"]);
-const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
 const PRIORITIES = new Set(["low", "standard", "high", "urgent"]);
 const STOCK_STATUSES = new Set(["in_stock", "limited", "order_in", "unavailable"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -177,8 +175,8 @@ function jobRow(record, customerEmails) {
   const values = {
     title: text(record.title, 160), customerEmail: text(record.customer_email, 180).toLowerCase(),
     serviceCategory: text(record.service_category, 60).toLowerCase() || "other",
-    pipelineStage: text(record.pipeline_stage, 30).toLowerCase() || "enquiry",
-    workStage: text(record.work_stage, 30).toLowerCase() || "backlog",
+    pipelineStage: "imported", workStage: "imported",
+    sourcePipelineStage: String(record.pipeline_stage || ""), sourceWorkStage: String(record.work_stage || ""),
     priority: text(record.priority, 20).toLowerCase() || "standard",
     scheduledStart: text(record.scheduled_start, 10), scheduledEnd: text(record.scheduled_end, 10),
     estimatedValueCents: dollarsToCents(record.estimated_value), description: text(record.description, 3000),
@@ -188,8 +186,6 @@ function jobRow(record, customerEmails) {
   if (!values.title) issues.push({ level: "error", message: "Add a job title." });
   if (values.customerEmail && !EMAIL_PATTERN.test(values.customerEmail)) issues.push({ level: "error", message: "Check the customer email address." });
   if (!OPERATIONAL_SERVICE_CATEGORIES.has(values.serviceCategory)) issues.push({ level: "error", message: "Choose a supported service category." });
-  if (!PIPELINE_STAGES.has(values.pipelineStage)) issues.push({ level: "error", message: "Choose a supported sales stage." });
-  if (!WORK_STAGES.has(values.workStage)) issues.push({ level: "error", message: "Choose a supported work stage." });
   if (!PRIORITIES.has(values.priority)) issues.push({ level: "error", message: "Priority must be low, standard, high or urgent." });
   if (!validDate(values.scheduledStart) || !validDate(values.scheduledEnd)) issues.push({ level: "error", message: "Dates must use YYYY-MM-DD." });
   if (values.scheduledStart && values.scheduledEnd && values.scheduledEnd < values.scheduledStart) issues.push({ level: "error", message: "Scheduled finish cannot be before the start." });
