@@ -7,10 +7,10 @@ import { AppState, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View
 import { DeviceNotificationSettings } from '@/components/device-notification-settings';
 import { FieldButton } from '@/components/field-button';
 import { MessagesConversation } from '@/components/messages-conversation';
-import { customerColour, MessageAvatar, MessageIconButton, MessageKeyboardView, MessageLoading, MessageNotice, messageStyles } from '@/components/messages-ui';
+import { customerColour, MessageAvatar, MessageIconButton, MessageKeyboardView, MessageLoading, MessageNotice, messagePresenceLabel, messageStyles } from '@/components/messages-ui';
 import { Screen } from '@/components/screen';
 import { ApiError } from '@/lib/api';
-import { customerThreads, definitiveMessageFailure, emptyMessageDraft, messageContacts, messagesOverview, messageThread, selectionKey, teamAction, teamThreadName, type CustomerThread, type MessageContacts, type MessageDraft, type MessageMember, type MessageOverview, type MessageSelection, type TeamThread } from '@/lib/messages-client';
+import { acknowledgeTeamDeliveries, customerThreads, definitiveMessageFailure, emptyMessageDraft, messageContacts, messagesOverview, messageThread, selectionKey, teamAction, teamThreadName, type CustomerThread, type MessageContacts, type MessageDraft, type MessageMember, type MessageOverview, type MessageSelection, type TeamThread } from '@/lib/messages-client';
 import { teamNotificationTarget } from '@/lib/team-messages';
 import { colours, radius } from '@/lib/theme';
 import { useApp } from '@/providers/app-provider';
@@ -32,14 +32,20 @@ function NewChat({ overview, online, onSelect, onClose }: { overview: MessageOve
   useEffect(() => { active.current = true; lifetime.current = new AbortController(); return () => { active.current = false; lifetime.current.abort(); }; }, []);
   useEffect(() => {
     const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setLoading(true); setResults(null);
+    let refreshing = false;
+    const refresh = (initial = false) => {
+      if (refreshing || controller.signal.aborted || AppState.currentState !== 'active') return;
+      if (initial) { setLoading(true); setResults(null); }
       if (!online) { setLoading(false); setError('Connect to the internet to find your contacts.'); return; }
+      refreshing = true;
       void messageContacts(search, controller.signal).then(result => { if (!controller.signal.aborted) { setResults(result); setError(''); } })
         .catch(caught => { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Contacts could not load.'); })
-        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    }, search ? 250 : 0);
-    return () => { controller.abort(); clearTimeout(timer); };
+        .finally(() => { refreshing = false; if (!controller.signal.aborted) setLoading(false); });
+    };
+    const timer = setTimeout(() => refresh(true), search ? 250 : 0);
+    const poll = setInterval(() => refresh(), 10000);
+    const app = AppState.addEventListener('change', () => refresh());
+    return () => { controller.abort(); clearTimeout(timer); clearInterval(poll); app.remove(); };
   }, [search, online]);
   async function create() {
     if (inFlight.current || !members.length || !online) return;
@@ -67,7 +73,7 @@ function NewChat({ overview, online, onSelect, onClose }: { overview: MessageOve
         keyExtractor={item => item.key} keyboardShouldPersistTaps="handled" style={styles.fill}
         ListEmptyComponent={!loading && results && !error ? <View style={messageStyles.empty}><Text style={messageStyles.body}>No matching contacts</Text><Text style={messageStyles.muted}>Search another name or saved phone number. Customers are shown only for jobs you can message.</Text></View> : null}
         renderItem={({ item }) => item.member ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: members.some(member => member.id === item.member!.id) }} disabled={busy || Boolean(pending)} onPress={() => { const member = item.member; if (!member) return; setMembers(current => current.some(value => value.id === member.id) ? current.filter(value => value.id !== member.id) : current.length < 24 ? [...current, member] : current); }} style={styles.contact}>
-          <MessageAvatar name={item.member.name} /><View style={messageStyles.grow}><Text style={messageStyles.title}>{item.member.name}</Text><Text style={messageStyles.label}>Team{item.member.isOwner ? ' · Owner' : ''}</Text></View><MaterialCommunityIcons name={members.some(member => member.id === item.member!.id) ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={colours.green} />
+          <MessageAvatar name={item.member.name} presence={item.member.presence} /><View style={messageStyles.grow}><Text style={messageStyles.title}>{item.member.name}</Text><Text style={messageStyles.label}>Team{messagePresenceLabel(item.member.presence) ? ` · ${messagePresenceLabel(item.member.presence)}` : ''}{item.member.isOwner ? ' · Owner' : ''}</Text></View><MaterialCommunityIcons name={members.some(member => member.id === item.member!.id) ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={colours.green} />
         </Pressable> : item.customer ? <Pressable accessibilityRole="button" disabled={busy || Boolean(pending)} onPress={() => { if (item.customer) onSelect({ kind: 'customer', customer: item.customer }); }} style={styles.contact}>
           <MessageAvatar name={item.customer.name} customer /><View style={messageStyles.grow}><Text style={messageStyles.title}>{item.customer.name}</Text><Text style={[messageStyles.label, { color: customerColour }]}>Customer SMS</Text><Text style={messageStyles.muted}>{item.customer.phone}{item.customer.jobNumber ? ` · ${item.customer.jobNumber}` : ''}</Text></View><MaterialCommunityIcons name="chevron-right" size={23} color={colours.muted} />
         </Pressable> : null} />
@@ -92,11 +98,14 @@ function NativeMessages({ online }: { online: boolean }) {
   const [error, setError] = useState('');
   const [drafts, setDrafts] = useState<Record<string, MessageDraft>>({});
   const active = useRef(true);
+  const delivered = useRef(new Map<string, number>());
+  const delivering = useRef(false);
+  const deliveryController = useRef(new AbortController());
   const requestEpoch = useRef(0);
   const lastNotification = useRef('');
   const openInvitationRef = useRef(calls.openInvitation);
   useEffect(() => { openInvitationRef.current = calls.openInvitation; }, [calls.openInvitation]);
-  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  useEffect(() => { active.current = true; deliveryController.current = new AbortController(); return () => { active.current = false; deliveryController.current.abort(); }; }, []);
   const refresh = useCallback(async () => {
     if (!online) { setLoading(false); return; }
     const epoch = ++requestEpoch.current;
@@ -104,6 +113,11 @@ function NativeMessages({ online }: { online: boolean }) {
       const next = await messagesOverview(mode === 'team' ? search : '', mode === 'team' ? page : 1);
       if (!active.current || epoch !== requestEpoch.current) return;
       setOverview(next);
+      if (!delivering.current) {
+        delivering.current = true;
+        void acknowledgeTeamDeliveries(next.threads.map(thread => ({ id: thread.id, sequence: thread.latestSequence || 0 })), delivered.current, deliveryController.current.signal)
+          .finally(() => { delivering.current = false; });
+      }
       if (!next.canUseSms) { setCustomers([]); setMoreCustomers(false); if (mode === 'customers') setMode('team'); }
       if (mode === 'customers' && next.canUseSms) {
         const result = await customerThreads(search, page);
@@ -145,7 +159,7 @@ function NativeMessages({ online }: { online: boolean }) {
   const key = selection ? selectionKey(selection) : '';
   const hasMore = mode === 'team' ? overview?.hasMore : moreCustomers;
   return <Screen scroll={false} style={{ gap: 12 }}>
-    {selection ? <MessagesConversation key={key} selection={selection} memberId={overview?.memberId || ''} online={online} draft={drafts[key] || emptyMessageDraft()} onDraft={value => setDrafts(current => ({ ...current, [key]: value }))} onBack={() => { setSelection(null); }} onRead={() => { setOverview(current => current && selection.kind === 'team' ? { ...current, threads: current.threads.map(thread => thread.id === selection.thread.id ? { ...thread, unread: 0 } : thread) } : current); }} /> : <>
+    {selection ? <MessagesConversation key={key} selection={selection} memberId={overview?.memberId || ''} online={online} draft={drafts[key] || emptyMessageDraft()} onDraft={value => setDrafts(current => ({ ...current, [key]: value }))} onBack={() => { setSelection(null); }} onRead={() => { void refresh(); }} /> : <>
       <View style={messageStyles.row}><View style={messageStyles.grow}><Text style={styles.heading}>Messages</Text><Text style={messageStyles.muted}>Your team and customers, together.</Text></View><MessageIconButton icon="bell-outline" label="Notification settings" onPress={() => setSettings(true)} /><MessageIconButton icon="square-edit-outline" label="New chat" disabled={!online} onPress={() => setCreating(true)} /></View>
       <View style={styles.tabs}>
         <Pressable accessibilityRole="tab" accessibilityState={{ selected: mode === 'team' }} onPress={() => { setMode('team'); setPage(1); setSearch(''); }} style={[styles.tab, mode === 'team' && { backgroundColor: colours.mintStrong }]}><MaterialCommunityIcons name="account-group-outline" size={20} color={colours.green} /><Text style={[styles.tabText, { color: colours.green }]}>Team</Text></Pressable>
@@ -160,8 +174,9 @@ function NativeMessages({ online }: { online: boolean }) {
         ListEmptyComponent={!loading && overview && !error && online ? <View style={messageStyles.empty}><MaterialCommunityIcons name={mode === 'team' ? 'message-text-outline' : 'message-processing-outline'} size={44} color={mode === 'team' ? colours.green : customerColour} /><Text style={messageStyles.title}>{search ? 'No matching conversations' : 'No conversations yet'}</Text><Text style={[messageStyles.muted, { textAlign: 'center' }]}>{mode === 'team' ? 'Start a chat with a teammate, or create a group for the job.' : 'Customer texts appear here when your business has a saved mobile number and you have permission for the job.'}</Text><FieldButton onPress={() => setCreating(true)}>New chat</FieldButton></View> : null}
         renderItem={({ item }) => {
           const name = item.thread ? teamThreadName(item.thread, overview?.memberId || '') : item.customer?.name || '';
+          const presence = item.thread?.kind === 'dm' ? item.thread.members.find(member => member.id !== overview?.memberId)?.presence : undefined;
           return <Pressable accessibilityRole="button" onPress={() => item.thread ? select({ kind: 'team', thread: item.thread }) : item.customer && select({ kind: 'customer', customer: item.customer })} style={({ pressed }) => [styles.contact, pressed && { backgroundColor: colours.surfaceRaised }]}>
-            <MessageAvatar name={name} customer={Boolean(item.customer)} group={item.thread?.kind === 'group'} /><View style={messageStyles.grow}><View style={messageStyles.row}><Text numberOfLines={1} style={[styles.contactTitle, messageStyles.grow]}>{name}</Text>{Boolean(item.thread?.unread) ? <View style={styles.badge}><Text style={styles.badgeText}>{item.thread!.unread > 99 ? '99+' : item.thread!.unread}</Text></View> : null}</View><Text numberOfLines={1} style={messageStyles.muted}>{item.thread ? item.thread.latest ? `${item.thread.latestSender}: ${item.thread.latest}` : 'No messages yet' : item.customer?.latest || 'Start a service text'}</Text>{item.customer ? <Text style={[messageStyles.label, { color: customerColour }]}>{item.customer.jobNumber || item.customer.phone}</Text> : null}</View><MaterialCommunityIcons name="chevron-right" size={22} color={colours.muted} />
+            <MessageAvatar name={name} customer={Boolean(item.customer)} group={item.thread?.kind === 'group'} presence={presence} /><View style={messageStyles.grow}><View style={messageStyles.row}><Text numberOfLines={1} style={[styles.contactTitle, messageStyles.grow]}>{name}</Text>{Boolean(item.thread?.unread) ? <View style={styles.badge}><Text style={styles.badgeText}>{item.thread!.unread > 99 ? '99+' : item.thread!.unread}</Text></View> : null}</View><Text numberOfLines={1} style={messageStyles.muted}>{item.thread ? item.thread.latest ? `${item.thread.latestSender}: ${item.thread.latest}` : 'No messages yet' : item.customer?.latest || 'Start a service text'}</Text>{messagePresenceLabel(presence) ? <Text style={messageStyles.muted}>{messagePresenceLabel(presence)}</Text> : null}{item.customer ? <Text style={[messageStyles.label, { color: customerColour }]}>{item.customer.jobNumber || item.customer.phone}</Text> : null}</View><MaterialCommunityIcons name="chevron-right" size={22} color={colours.muted} />
           </Pressable>;
         }} />
       {(page > 1 || hasMore) ? <View style={messageStyles.row}><FieldButton variant="quiet" disabled={page === 1 || loading} onPress={() => setPage(value => value - 1)}>Previous</FieldButton><Text style={[messageStyles.muted, messageStyles.grow, { textAlign: 'center' }]}>Page {page}</Text><FieldButton variant="quiet" disabled={!hasMore || loading} onPress={() => setPage(value => value + 1)}>Next</FieldButton></View> : null}

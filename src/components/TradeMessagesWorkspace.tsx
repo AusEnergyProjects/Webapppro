@@ -1,6 +1,8 @@
 "use client";
 
 import TradeTeamPresence from "./TradeTeamPresence";
+import TradeTeamStatusDot from "./TradeTeamStatusDot";
+import TradeMessageReceipt from "./TradeMessageReceipt";
 
 import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 
@@ -17,17 +19,18 @@ import { useTradeMessageAlerts } from "./TradeMessageAlerts";
 import TradeMessageSaveToJob from "./TradeMessageSaveToJob";
 import { safeMessageLink } from "@/lib/trade-message-job-files";
 import type { TradeTeamPresenceStatus } from "@/lib/trade-team-presence";
+import type { TradeMessageReceipt as TeamMessageReceipt } from "@/lib/trade-message-receipts";
 import type { MessageAttachment, MessageMediaAuth } from "@/lib/trade-message-media";
 import styles from "./TradeMessagesWorkspace.module.css";
 
 const TradeSmsDashboard = dynamic(() => import("./TradeSmsDashboard").then(module => module.TradeSmsDashboard), { loading: () => <p role="status">Loading SMS account...</p> });
 const TradeCustomerSmsPanel = dynamic(() => import("./TradeCustomerSmsPanel").then(module => module.TradeCustomerSmsPanel), { loading: () => <p role="status">Loading customer conversation...</p> });
 
-type Member = { id: string; name: string; isOwner?: boolean; active?: boolean; avatarRevision?: string; presence?: TradeTeamPresenceStatus };
+type Member = { id: string; name: string; isOwner?: boolean; active?: boolean; avatarRevision?: string; presence?: TradeTeamPresenceStatus | null };
 type Thread = { id: string; kind: string; subject: string; latest: string; latestSender: string; unread: number; members: Member[] };
 type CustomerThread = { customerId: string; name: string; workOrderId: string; jobNumber: string; latest: string; phone: string };
 type QuoteQuestion = { id: string; workOrderId: string; jobNumber: string; question: string; status: string; askedAt: string };
-type TeamMessage = { id: string; sequence: number; senderName: string; senderMemberId: string; mine: boolean; body: string; requestId: string; createdAt: string; attachments: MessageAttachment[] };
+type TeamMessage = { id: string; sequence: number; senderName: string; senderMemberId: string; mine: boolean; body: string; requestId: string; createdAt: string; attachments: MessageAttachment[]; receipt?: TeamMessageReceipt | null };
 type Overview = { memberId: string; canUseSms: boolean; smsReady: boolean; smsBalanceMicro: number | null; canUseQuotes: boolean; canCreateSmsContact: boolean; canManageTeam: boolean; members: Member[]; threads: Thread[]; hasMore: boolean };
 type Result = Partial<Overview> & { ok?: boolean; error?: string; id?: string; thread?: Thread; message?: TeamMessage; messages?: TeamMessage[]; hasOlder?: boolean; customerThreads?: CustomerThread[]; questions?: QuoteQuestion[] };
 type RequestResult = { response: Response; result: Result };
@@ -35,6 +38,12 @@ type ApiCall = (query?: string, payload?: Record<string, unknown>, path?: string
 
 function threadName(thread: Thread, memberId: string) {
   return thread.kind === "group" ? thread.subject : thread.members.find(member => member.id !== memberId)?.name || "Team conversation";
+}
+
+function TeammateStatus({ thread, memberId }: { thread: Thread; memberId: string }) {
+  if (thread.kind === "group") return null;
+  const member = thread.members.find(person => person.id !== memberId);
+  return member ? <TradeTeamStatusDot name={member.name} presence={member.presence} active={member.active} /> : null;
 }
 
 function ChatMark({ locked = false }: { locked?: boolean }) {
@@ -59,7 +68,9 @@ function useVisibleRefresh(refresh: () => Promise<void>, milliseconds = 15000) {
     };
     const interval = window.setInterval(tick, milliseconds);
     document.addEventListener("visibilitychange", tick);
-    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", tick); };
+    window.addEventListener("focus", tick);
+    window.addEventListener("tlink:team-presence-changed", tick);
+    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); window.removeEventListener("tlink:team-presence-changed", tick); };
   }, [refresh, milliseconds]);
 }
 
@@ -134,7 +145,7 @@ function TeamConversation({ thread, call, memberId, onRead, getAuthHeaders, canM
   const [mediaBusy, setMediaBusy] = useState(false);
   const initial = useRef(true), sending = useRef(false), alive = useRef(true), refreshing = useRef(false);
   const history = useRef<HTMLOListElement>(null);
-  const lastRead = useRef(0);
+  const lastRead = useRef(0), reading = useRef(false), lastDelivered = useRef(0);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const merge = useCallback((next: TeamMessage[]) => setMessages(current => [...new Map([...current, ...next].map(message => [message.id, message])).values()].sort((a, b) => a.sequence - b.sequence)), []);
   const refresh = useCallback(async () => {
@@ -148,17 +159,50 @@ function TeamConversation({ thread, call, memberId, onRead, getAuthHeaders, canM
       merge(result.messages);
       if (initial.current) { setHasOlder(Boolean(result.hasOlder)); initial.current = false; }
       const through = result.messages.at(-1)?.sequence || 0;
-      if (through > lastRead.current && document.visibilityState === "visible") {
-        const read = await call("", { action: "read", threadId: thread.id, throughSequence: through });
-        if (read.response.ok && read.result.ok && alive.current) { lastRead.current = through; onRead(); }
+      if (through > lastDelivered.current) {
+        const delivered = await call("", { action: "delivered", threadId: thread.id, throughSequence: through });
+        if (delivered.response.ok && delivered.result.ok && alive.current) lastDelivered.current = through;
       }
     } catch (error) { if (alive.current) setStatus(error instanceof Error ? error.message : "Messages could not be refreshed."); }
     finally { refreshing.current = false; if (alive.current) setLoading(false); }
-  }, [call, thread.id, merge, onRead]);
+  }, [call, thread.id, merge]);
   useEffect(() => { const timer = window.setTimeout(() => void refresh(), 0); return () => window.clearTimeout(timer); }, [refresh]);
   useVisibleRefresh(refresh, 3000);
   const latestSequence = messages.at(-1)?.sequence;
   useEffect(() => { if (history.current) history.current.scrollTop = history.current.scrollHeight; }, [latestSequence]);
+  useEffect(() => {
+    const list = history.current;
+    if (!list || !messages.length) return;
+    let disposed = false;
+    const markVisibleRead = () => {
+      if (disposed || !alive.current || reading.current || document.visibilityState !== "visible" || !document.hasFocus()) return;
+      const obscured = Array.from(document.querySelectorAll<HTMLElement>('dialog:modal, [aria-modal="true"]'))
+        .some(modal => modal.getClientRects().length > 0 && !modal.contains(list));
+      if (obscured) return;
+      const viewport = list.getBoundingClientRect();
+      if (!viewport.width || !viewport.height || viewport.right <= 0 || viewport.left >= window.innerWidth) return;
+      const bottom = Math.min(viewport.bottom, window.innerHeight), top = Math.max(0, viewport.top);
+      let through = 0;
+      for (const element of list.querySelectorAll<HTMLElement>("[data-message-sequence]")) {
+        const bounds = element.getBoundingClientRect();
+        const left = Math.max(0, viewport.left, bounds.left), right = Math.min(window.innerWidth, viewport.right, bounds.right);
+        if (bounds.bottom <= top || bounds.top >= bottom || right <= left) continue;
+        const visiblePoint = document.elementFromPoint((left + right) / 2, (Math.max(top, bounds.top) + Math.min(bottom, bounds.bottom)) / 2);
+        if (visiblePoint && element.contains(visiblePoint)) through = Math.max(through, Number(element.dataset.messageSequence));
+      }
+      if (through <= lastRead.current) return;
+      reading.current = true;
+      void call("", { action: "read", threadId: thread.id, throughSequence: through }).then(read => {
+        if (alive.current && read.response.ok && read.result.ok) { lastRead.current = Math.max(lastRead.current, through); onRead(); }
+      }).catch(() => { /* The next visible refresh retries the unconfirmed acknowledgement. */ })
+        .finally(() => { reading.current = false; });
+    };
+    const frame = window.requestAnimationFrame(markVisibleRead);
+    list.addEventListener("scroll", markVisibleRead, { passive: true });
+    window.addEventListener("focus", markVisibleRead);
+    document.addEventListener("visibilitychange", markVisibleRead);
+    return () => { disposed = true; window.cancelAnimationFrame(frame); list.removeEventListener("scroll", markVisibleRead); window.removeEventListener("focus", markVisibleRead); document.removeEventListener("visibilitychange", markVisibleRead); };
+  }, [messages, call, thread.id, onRead]);
 
   async function older() {
     if (sending.current || !messages.length) return;
@@ -188,13 +232,13 @@ function TeamConversation({ thread, call, memberId, onRead, getAuthHeaders, canM
   }
 
   return <section className={styles.conversation} aria-label="Team conversation">
-    <header className={styles.conversationHeader}><div className={styles.chatTitle}><div><span className={styles.channelLabel}>Team conversation</span><h3>{threadName(thread, memberId)}</h3></div><TradeTeamCallButtons threadId={thread.id} /></div><details className={styles.conversationInfo}><summary>{thread.members.length} participants · Private chat</summary><div className={styles.memberAvatars}>{thread.members.map(member => <TradeTeamAvatar key={member.id} memberId={member.id} name={member.name} revision={member.avatarRevision} editable={member.active !== false && (member.id === memberId || canManageTeam)} getAuthHeaders={getAuthHeaders} onChange={onRead} />)}</div><p>{thread.members.map(member => `${member.name} (${member.active === false ? "inactive" : member.presence === "busy" ? "Busy" : member.presence === "offline" ? "Offline" : "Online"})`).join(", ")}</p><small>Only people in this chat can see these messages.</small></details></header>
+    <header className={styles.conversationHeader}><div className={styles.chatTitle}><div><span className={styles.channelLabel}>Team conversation</span><h3><TeammateStatus thread={thread} memberId={memberId} /> {threadName(thread, memberId)}</h3></div><TradeTeamCallButtons threadId={thread.id} /></div><details className={styles.conversationInfo}><summary>{thread.members.length} participants · Private chat</summary><div className={styles.memberAvatars}>{thread.members.map(member => <span className={styles.participant} key={member.id}><TradeTeamAvatar memberId={member.id} name={member.name} revision={member.avatarRevision} editable={member.active !== false && (member.id === memberId || canManageTeam)} getAuthHeaders={getAuthHeaders} onChange={onRead} /><span>{member.name}<TradeTeamStatusDot name={member.name} presence={member.presence} active={member.active} label /></span></span>)}</div><small>Only people in this chat can see these messages.</small></details></header>
     {status && <p className={styles.notice} role="status">{status}</p>}
     {hasOlder && <button type="button" className={styles.secondary} disabled={busy} onClick={() => void older()}>Load older messages</button>}
     <ol ref={history} className={styles.messages} aria-live="polite" aria-label="Team message history">
       {loading && <li className={styles.empty}>Loading messages...</li>}
       {!loading && !messages.length && <li className={styles.empty}>Start the conversation with your team.</li>}
-      {messages.map(message => <li key={message.id} className={message.mine ? styles.mine : styles.theirs}>{!message.mine && <strong className={styles.senderName}>{message.senderName}</strong>}<div className={styles.bubble}>{message.body && <MessageBody body={message.body} />}{message.attachments?.length > 0 && <TradeMessageAttachmentList attachments={message.attachments} getAuthHeaders={getAuthHeaders} />}</div><footer className={styles.messageMeta}><time dateTime={message.createdAt} title={new Date(message.createdAt).toLocaleString("en-AU")}>{new Date(message.createdAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}</time><TradeMessageSaveToJob threadId={thread.id} message={message} getAuthHeaders={getAuthHeaders} /></footer></li>)}
+      {messages.map(message => <li key={message.id} data-message-sequence={message.sequence} className={message.mine ? styles.mine : styles.theirs}>{!message.mine && <strong className={styles.senderName}>{message.senderName}</strong>}<div className={styles.bubble}>{message.body && <MessageBody body={message.body} />}{message.attachments?.length > 0 && <TradeMessageAttachmentList attachments={message.attachments} getAuthHeaders={getAuthHeaders} />}</div><footer className={styles.messageMeta}><time dateTime={message.createdAt} title={new Date(message.createdAt).toLocaleString("en-AU")}>{new Date(message.createdAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}</time>{message.mine && <TradeMessageReceipt receipt={message.receipt} />}<TradeMessageSaveToJob threadId={thread.id} message={message} getAuthHeaders={getAuthHeaders} /></footer></li>)}
     </ol>
     <form className={styles.composer} onSubmit={event => void send(event)}><div className={styles.composerRow}><label><span className={styles.srOnly}>Message your team</span><textarea rows={1} maxLength={2000} value={body} disabled={busy || !canSend || Boolean(pending)} onChange={event => setBody(event.target.value)} placeholder="Message your team" /></label><button type="submit" className={pending || busy ? styles.primary : styles.sendButton} disabled={busy || mediaBusy || !canSend || (!body.trim() && !attachments.length)}>{busy ? "Sending..." : pending ? "Check this message" : <><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 11 6-6 6 6M12 5v14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg><span className={styles.srOnly}>Send</span></>}</button></div><details className={styles.attachmentTools}><summary>+ Photos & voice{attachments.length ? ` · ${attachments.length} attached` : ""}{mediaBusy ? " · Working..." : ""}</summary><TradeMessageAttachments threadId={thread.id} value={attachments} onChange={setAttachments} getAuthHeaders={getAuthHeaders} disabled={busy || !canSend || Boolean(pending)} onBusyChange={setMediaBusy} /></details></form>
   </section>;
@@ -272,6 +316,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
     return () => { active = false; };
   }, [call, initialThreadId, initialThreadRevision, initialCallId]);
 
+  const selectedId = selected?.id;
   const refresh = useCallback(async () => {
     if (overviewRequests.current.has(queryKey)) return;
     overviewRequests.current.add(queryKey);
@@ -283,7 +328,16 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
       if (!alive.current || activeQuery.current !== queryKey) return;
       if (result.memberId && result.members && result.threads) {
         setOverview({ memberId: result.memberId, members: result.members, threads: result.threads, hasMore: Boolean(result.hasMore), canUseSms: Boolean(result.canUseSms), smsReady: result.smsReady === true, smsBalanceMicro: typeof result.smsBalanceMicro === "number" ? result.smsBalanceMicro : null, canUseQuotes: Boolean(result.canUseQuotes), canCreateSmsContact: Boolean(result.canCreateSmsContact), canManageTeam: Boolean(result.canManageTeam) });
-        if (mode === "team") setSelected(current => current ? result.threads?.find(thread => thread.id === current.id) || current : null);
+        if (mode === "team") {
+          setSelected(current => current ? result.threads?.find(thread => thread.id === current.id) || current : null);
+          // Search and pagination must not freeze the status of an open chat.
+          if (selectedId && !result.threads.some(thread => thread.id === selectedId)) {
+            const detail = await call(`view=thread&threadId=${encodeURIComponent(selectedId)}`);
+            const refreshedThread = detail.result.thread;
+            if (!detail.response.ok || !refreshedThread) throw new Error(detail.result.error || "Conversation status could not refresh.");
+            if (alive.current && activeQuery.current === queryKey) setSelected(current => current?.id === refreshedThread.id ? refreshedThread : current);
+          }
+        }
       }
       if (mode === "customers") {
         if (!result.canUseSms && !result.canUseQuotes) { setMode("team"); return; }
@@ -294,20 +348,26 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
       }
     } catch (error) { if (alive.current && activeQuery.current === queryKey) setStatus(error instanceof Error ? error.message : "Conversations could not be loaded."); }
     finally { overviewRequests.current.delete(queryKey); }
-  }, [call, mode, search, page, queryKey]);
+  }, [call, mode, search, page, queryKey, selectedId]);
   useEffect(() => { const timer = window.setTimeout(() => void refresh(), search ? 250 : 0); return () => window.clearTimeout(timer); }, [refresh, search]);
   useVisibleRefresh(refresh);
   const onRead = useCallback(() => { void refresh(); refreshAlerts(); }, [refresh, refreshAlerts]);
   useEffect(() => {
     if (!creating) return;
-    let active = true;
-    const timer = window.setTimeout(() => {
+    let active = true, pending = false;
+    const refreshContacts = () => {
+      if (!active || pending || document.visibilityState !== "visible") return;
+      pending = true;
       void call(`view=contacts&search=${encodeURIComponent(contactSearch)}`).then(({ response, result }) => {
         if (!response.ok || !result.ok) throw new Error(result.error || "Contacts could not be loaded.");
         if (active) setContactResults({ members: result.members || [], customers: result.customerThreads || [] });
-      }).catch(error => { if (active) setStatus(error instanceof Error ? error.message : "Contacts could not be loaded."); });
-    }, contactSearch ? 250 : 0);
-    return () => { active = false; window.clearTimeout(timer); };
+      }).catch(error => { if (active) setStatus(error instanceof Error ? error.message : "Contacts could not be loaded."); }).finally(() => { pending = false; });
+    };
+    const timer = window.setTimeout(refreshContacts, contactSearch ? 250 : 0);
+    const interval = window.setInterval(refreshContacts, 15000);
+    window.addEventListener("focus", refreshContacts);
+    window.addEventListener("tlink:team-presence-changed", refreshContacts);
+    return () => { active = false; window.clearTimeout(timer); window.clearInterval(interval); window.removeEventListener("focus", refreshContacts); window.removeEventListener("tlink:team-presence-changed", refreshContacts); };
   }, [call, creating, contactSearch]);
 
   async function create(event: FormEvent) {
@@ -379,7 +439,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
     </dialog>}
     {creating && <form className={styles.newChat} onSubmit={event => void create(event)}>
       <h3>New chat</h3><label className={styles.groupName}><span>Name or phone number</span><input type="search" value={contactSearch} disabled={createBusy || contactBusy || Boolean(pendingCreate) || Boolean(pendingCustomer)} onChange={event => setContactSearch(event.target.value)} placeholder={teamOnly ? "Search your team" : "Search customers and your team"} /></label>
-      <fieldset disabled={createBusy || contactBusy || Boolean(pendingCreate) || Boolean(pendingCustomer)}><legend>Choose a teammate, or several for a group</legend><div className={styles.people}>{contactResults.members.map(member => <label key={member.id}><input type="checkbox" checked={members.includes(member.id)} onChange={event => setMembers(current => event.target.checked ? [...current, member.id] : current.filter(id => id !== member.id))} /><TradeTeamAvatar memberId={member.id} name={member.name} revision={member.avatarRevision} getAuthHeaders={authHeaders} /><span>{member.name}{member.isOwner ? " · Business owner" : ""}<small className={styles.internalBadge}>Internal · Team</small></span></label>)}</div>
+      <fieldset disabled={createBusy || contactBusy || Boolean(pendingCreate) || Boolean(pendingCustomer)}><legend>Choose a teammate, or several for a group</legend><div className={styles.people}>{contactResults.members.map(member => <label key={member.id}><input type="checkbox" checked={members.includes(member.id)} onChange={event => setMembers(current => event.target.checked ? [...current, member.id] : current.filter(id => id !== member.id))} /><TradeTeamAvatar memberId={member.id} name={member.name} revision={member.avatarRevision} getAuthHeaders={authHeaders} /><span><TradeTeamStatusDot name={member.name} presence={member.presence} active={member.active} /> {member.name}{member.isOwner ? " · Business owner" : ""}<small className={styles.internalBadge}>Internal · Team</small></span></label>)}</div>
         {members.length > 1 && <label className={styles.groupName}><span>Group name</span><input required maxLength={80} value={subject} onChange={event => setSubject(event.target.value)} placeholder="For example: Installation crew" /></label>}</fieldset>
       {!teamOnly && contactResults.customers.length > 0 && <div className={styles.people}>{contactResults.customers.map(item => <button type="button" key={`${item.customerId}:${item.workOrderId}`} className={styles.contact} disabled={createBusy || contactBusy || Boolean(pendingCreate) || Boolean(pendingCustomer)} onClick={() => { setCustomer(item); setMode("customers"); setPage(1); setSearch(""); setCreating(false); setMembers([]); }}><strong>{item.name}</strong><span>{item.phone}{item.jobNumber ? ` · ${item.jobNumber}` : ""}</span><small className={styles.externalBadge}>External · Customer SMS</small></button>)}</div>}
       {contactSearch && !contactResults.members.length && !contactResults.customers.length && <p className={styles.notice}>No saved contact matches this search. Team members can message customers on jobs they are authorised to access.</p>}
@@ -399,7 +459,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
         <div className={styles.threadList}>
           {mode === "team" ? overview?.threads.map(thread => <button type="button" key={thread.id} className={styles.thread} aria-pressed={selected?.id === thread.id} onClick={() => setSelected(thread)}>
             <span className={styles.avatar}><span>{contactInitials(threadName(thread, overview.memberId))}</span></span>
-            <span className={styles.threadCopy}><strong>{threadName(thread, overview.memberId)}</strong><span>{thread.latest ? thread.latestSender + ": " + thread.latest : "Start a conversation"}</span><small>Team</small></span>
+            <span className={styles.threadCopy}><strong><TeammateStatus thread={thread} memberId={overview.memberId} /> {threadName(thread, overview.memberId)}</strong><span>{thread.latest ? thread.latestSender + ": " + thread.latest : "Start a conversation"}</span><small>Team</small></span>
             {thread.unread > 0 && <span className={styles.unread}>{thread.unread}</span>}
           </button>) : <>
             {questions.map(question => <button type="button" key={question.id} className={styles.thread + " " + styles.externalThread} onClick={() => onOpenQuote ? onOpenQuote(question.workOrderId) : router.push("/direct-trade/dashboard?workspace=work&jobId=" + encodeURIComponent(question.workOrderId) + "&jobTab=quote#quote-questions")}>

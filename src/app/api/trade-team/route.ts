@@ -1,4 +1,5 @@
 import { jobMemberSql } from "@/lib/trade-job-collaboration";
+import { tradeTeamPresenceStatusSql } from "@/lib/trade-team-presence";
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
@@ -457,6 +458,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
       can_view_field_evidence, can_manage_field_evidence, can_run_reports, can_search_customers,
       invited_at, accepted_at, last_active_at, updated_at,
+      CASE WHEN status = 'active' THEN ${tradeTeamPresenceStatusSql("trade_team_members.id", "trade_team_members.owner_uid")} ELSE NULL END presence,
       (SELECT COUNT(*) FROM trade_team_member_files file
         WHERE file.owner_uid = trade_team_members.owner_uid AND file.team_member_id = trade_team_members.id
           AND file.status = 'active') file_count,
@@ -533,6 +535,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       capabilities: parsedList(row.capabilities), staffCode: String(row.id).slice(0, 8).toUpperCase(),
       ...memberServiceStateProjection(row.service_states, businessServiceStates, row.member_uid === access.ownerUid),
       status: row.status,
+      presence: row.presence,
       invitedAt: row.invited_at, acceptedAt: row.accepted_at,
       lastActiveAt: row.last_active_at, updatedAt: row.updated_at, hasLogin: Boolean(row.member_uid),
       invitePending: Boolean(row.invite_pending), isOwner: row.member_uid === access.ownerUid,

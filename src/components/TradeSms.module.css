@@ -116,6 +116,7 @@
 .outbound .bubbleReceipt { justify-content: flex-end; }
 .customerConversation .bubbleReceipt time { font-size: inherit; }
 .bubbleReceipt span[data-attention="true"] { color: var(--trade-danger, #9d382b); font-weight: 700; }
+.bubbleReceipt > span { align-items: center; display: inline-flex; gap: 4px; }
 .replyDetails { color: var(--trade-muted, #536963); font-size: 11px; margin: 8px 10px 0; }
 .replyDetails summary { cursor: pointer; min-height: 24px; }
 .replyDetails .linkReply { margin-top: 0; }

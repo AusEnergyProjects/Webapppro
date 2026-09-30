@@ -19,12 +19,17 @@ function load(path, dependencies) {
 const mediaAccess = load("../src/lib/trade-message-media-access.ts", {});
 const mediaPure = load("../src/lib/trade-message-media.ts", { "./private-image-evidence": load("../src/lib/private-image-evidence.ts", {}) });
 const mediaServer = load("../src/lib/trade-message-media-server.ts", { "./trade-message-media-access": mediaAccess, "./trade-message-media": mediaPure });
+const receiptServer = load("../src/lib/trade-message-receipts-server.ts", { "./trade-message-media-access": mediaAccess });
 const owner = { ownerUid: "business-a", actorUid: "business-a", memberId: "owner", displayName: "Owner", isOwner: true, canSendSms: true };
 const jane = { ...owner, actorUid: "jane-uid", memberId: "jane", displayName: "Jane", isOwner: false };
 const john = { ...owner, actorUid: "john-uid", memberId: "john", displayName: "John", isOwner: false };
 const foreign = { ...owner, ownerUid: "business-b", actorUid: "other-uid", memberId: "other" };
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
+  sqlite.function('strftime', (format, value) => {
+    assert.equal(format, '%Y-%m-%dT%H:%M:%fZ'); assert.equal(value, 'now');
+    return new Date().toISOString();
+  });
   sqlite.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,member_uid TEXT,status TEXT,display_name TEXT,job_scope TEXT,can_send_sms INTEGER,can_view_quotes INTEGER DEFAULT 0,phone TEXT DEFAULT '');
     INSERT INTO trade_team_members VALUES('owner','business-a','business-a','active','Owner','team',1,1,'0412 000 000'),('jane','business-a','jane-uid','active','Jane','own',1,0,'0412 111 111'),('john','business-a','john-uid','active','John','own',1,0,'0412 111 111'),('other','business-b','other-uid','active','Other owner','team',1,1,'0412 000 000'),('inactive','business-a','inactive-uid','suspended','Inactive','own',0,0,'');
@@ -45,11 +50,13 @@ function fixture() {
   sqlite.exec(read("../drizzle/0214_trade_messages.sql").replaceAll("--> statement-breakpoint", ""));
   sqlite.exec(read("../drizzle/0215_trade_message_media.sql").replaceAll("--> statement-breakpoint", ""));
   sqlite.exec(read("../drizzle/0219_trade_team_presence.sql").replaceAll("--> statement-breakpoint", ""));
+  sqlite.exec(read("../drizzle/0222_trade_message_receipts.sql").replaceAll("--> statement-breakpoint", ""));
   const statement = (sql, values = []) => ({ bind: (...params) => statement(sql, params), first: async () => sqlite.prepare(sql).get(...values) || null,
     all: async () => ({ results: sqlite.prepare(sql).all(...values) }), runSync: () => ({ meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } }), run() { return Promise.resolve(this.runSync()); } });
   const db = { prepare: statement, batch: async statements => { sqlite.exec("BEGIN"); try { const out = []; for (const s of statements) out.push(s.runSync()); sqlite.exec("COMMIT"); return out; } catch (error) { sqlite.exec("ROLLBACK"); throw error; } } };
   const server = load("../src/lib/trade-messages-server.ts", { "../../db": { getD1: () => db }, "./trade-messages": pure, "./trade-team-presence": presence,
-    "./trade-message-media-access": mediaAccess, "./trade-message-media": mediaPure, "./trade-message-media-server": mediaServer });
+    "./trade-message-media-access": mediaAccess, "./trade-message-media": mediaPure, "./trade-message-media-server": mediaServer,
+    "./trade-message-receipts-server": receiptServer });
   return { sqlite, db, server, close: () => sqlite.close() };
 }
 const request = number => `message-request-${String(number).padStart(8, "0")}`;
@@ -164,6 +171,189 @@ test("conversation previews distinguish attachments and show the teammate's call
     assert.equal(result.threads[0].latest,"Shared an attachment");
     assert.equal(result.threads[0].members.find(member=>member.id==='jane').presence,'busy');
   }finally{f.close();}
+});
+
+test("overview and contacts expose tenant-correlated presence while inactive thread members have none", async () => {
+  const f = fixture(); try {
+    const thread = await create(f, owner, ["jane", "john"], "Team presence");
+    f.sqlite.exec(`INSERT INTO trade_team_presence VALUES('business-a','jane','busy','2026-09-30'),
+      ('business-a','john','offline','2026-09-30'),('business-b','owner','offline','2026-09-30'),
+      ('business-b','jane','online','2026-09-30')`);
+    const overview = await f.server.messagesWorkspace(owner, "", 1, f.db);
+    assert.deepEqual(Object.fromEntries(overview.members.map(member => [member.id, member.presence])), { jane: "busy", john: "offline", owner: "online" });
+    const contacts = await f.server.searchMessageContacts(owner, "", f.db);
+    assert.deepEqual(contacts.members.map(member => [member.id, member.presence]), [["jane", "busy"], ["john", "offline"]]);
+    f.sqlite.exec("UPDATE trade_team_members SET status='suspended' WHERE id='jane'");
+    const suspended = await f.server.messagesWorkspace(owner, "", 1, f.db, thread.id);
+    assert.equal(suspended.threads[0].members.find(member => member.id === "jane").presence, null);
+    assert.equal(suspended.members.some(member => member.id === "jane"), false);
+    await assert.rejects(f.server.searchMessageContacts(jane, "", f.db), /MESSAGE_ACCESS_REQUIRED/);
+  } finally { f.close(); }
+});
+
+test("delivery requires an explicit device ACK; reads imply delivery with stable first-observed timestamps", async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-30T00:00:00Z') });
+  const f = fixture(); try {
+    const thread = await create(f, owner, ["jane"]);
+    const sent = await f.server.sendTeamMessage(owner, thread.id, "Receipt test", request(8001), f.db);
+    assert.equal(sent.receipt.status, "sent"); assert.equal(sent.receipt.recipientCount, 1);
+    assert.equal(sent.receipt.deliveredAt, null);
+    assert.equal((await f.server.teamConversation(jane, thread.id, 0, f.db)).messages[0].receipt, null);
+    await f.server.messagesWorkspace(jane, "", 1, f.db); await f.server.unreadTeamMessages(jane, f.db);
+    assert.equal((await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt.status, "sent", "GET and push scheduling are not device delivery");
+    assert.equal((await f.server.messagesWorkspace(jane, "", 1, f.db)).threads[0].latestSequence, sent.sequence);
+    t.mock.timers.tick(1000);
+    await f.server.deliveredTeamConversation(jane, thread.id, sent.sequence, f.db);
+    const deliveredAt = '2026-09-30T00:00:01.000Z';
+    let receipt = (await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt;
+    assert.equal(receipt.status, "delivered"); assert.equal(receipt.deliveredAt, deliveredAt); assert.equal(receipt.readAt, null);
+    assert.equal((await f.server.unreadTeamMessages(jane, f.db)).unreadCount, 1);
+    t.mock.timers.tick(1000); await f.server.deliveredTeamConversation(jane, thread.id, 1, f.db);
+    await f.server.readTeamConversation(jane, thread.id, 1, f.db);
+    receipt = (await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt;
+    assert.equal(receipt.status, "read"); assert.equal(receipt.deliveredAt, deliveredAt); assert.equal(receipt.readAt, '2026-09-30T00:00:02.000Z');
+    t.mock.timers.tick(1000); await f.server.readTeamConversation(jane, thread.id, 1, f.db);
+    await f.server.deliveredTeamConversation(jane, thread.id, 0, f.db);
+    const retriedSend = await f.server.sendTeamMessage(owner, thread.id, "Receipt test", request(8001), f.db);
+    assert.deepEqual(retriedSend.receipt, receipt, "idempotent sends retain current receipts and first timestamps");
+    assert.equal((await f.server.unreadTeamMessages(jane, f.db)).unreadCount, 0);
+  } finally { f.close(); }
+});
+
+test("group aggregates require every snapshot recipient and expose partial details only to the sender", async () => {
+  const f = fixture(); try {
+    const thread = await create(f, owner, ["jane", "john"], "Group receipts");
+    const message = await f.server.sendTeamMessage(owner, thread.id, "Everyone", request(8002), f.db);
+    await f.server.readTeamConversation(jane, thread.id, message.sequence, f.db);
+    let receipt = (await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt;
+    assert.equal(receipt.status, "sent"); assert.equal(receipt.recipientCount, 2); assert.equal(receipt.readCount, 1); assert.equal(receipt.deliveredCount, 1);
+    assert.equal(receipt.readAt, null); assert.equal(receipt.recipients.find(person => person.memberId === "jane").status, "read");
+    assert.ok(receipt.recipients.find(person => person.memberId === "jane").readAt);
+    assert.equal((await f.server.teamConversation(john, thread.id, 0, f.db)).messages[0].receipt, null);
+    await f.server.deliveredTeamConversation(john, thread.id, message.sequence, f.db);
+    receipt = (await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt;
+    assert.equal(receipt.status, "delivered"); assert.equal(receipt.readCount, 1);
+    await f.server.readTeamConversation(john, thread.id, message.sequence, f.db);
+    receipt = (await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt;
+    assert.equal(receipt.status, "read"); assert.equal(receipt.readCount, 2); assert.ok(receipt.readAt);
+    assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM trade_message_receipts WHERE message_id=?").get(message.id).n, 2);
+  } finally { f.close(); }
+});
+
+test("receipt ACKs preserve tenant, participant, actor and cursor guards including revocation immediately before commit", async () => {
+  const f = fixture(); try {
+    const thread = await create(f, owner, ["jane"]);
+    const message = await f.server.sendTeamMessage(owner, thread.id, "Private", request(8003), f.db);
+    for (const actor of [foreign, john, { ...jane, ownerUid: 'business-b' }, { ...jane, actorUid: 'wrong-uid' }]) {
+      await assert.rejects(f.server.deliveredTeamConversation(actor, thread.id, message.sequence, f.db), /MESSAGE_ACCESS_REQUIRED/);
+      await assert.rejects(f.server.readTeamConversation(actor, thread.id, message.sequence, f.db), /MESSAGE_ACCESS_REQUIRED/);
+    }
+    for (const cursor of [-1, 1.5, '1', Number.MAX_SAFE_INTEGER + 1]) await assert.rejects(f.server.deliveredTeamConversation(jane, thread.id, cursor, f.db), /MESSAGE_CURSOR_INVALID/);
+    await assert.rejects(f.server.readTeamConversation(jane, thread.id, 2, f.db), /MESSAGE_ACCESS_REQUIRED/);
+    const revokedDb = { ...f.db, batch: statements => {
+      f.sqlite.exec("UPDATE trade_team_members SET status='suspended' WHERE id='jane'");
+      return f.db.batch(statements);
+    } };
+    await assert.rejects(f.server.readTeamConversation(jane, thread.id, 1, revokedDb), /MESSAGE_ACCESS_REQUIRED/);
+    const row = f.sqlite.prepare("SELECT delivered_at,read_at FROM trade_message_receipts WHERE message_id=?").get(message.id);
+    assert.equal(row.delivered_at, ''); assert.equal(row.read_at, '');
+    assert.equal(f.sqlite.prepare("SELECT last_read_sequence FROM trade_message_participants WHERE thread_id=? AND member_id='jane'").get(thread.id).last_read_sequence, 0);
+  } finally { f.close(); }
+});
+
+test("migration preserves historical read knowledge with unknown timestamps even after new ACKs", async () => {
+  const f = fixture(); try {
+    const thread = await create(f, owner, ["jane", "john"], "History receipts");
+    await f.server.sendTeamMessage(owner, thread.id, "Historical", request(8004), f.db);
+    f.sqlite.exec("DROP TRIGGER trade_message_receipts_snapshot; DROP TRIGGER trade_message_receipts_read; DROP TABLE trade_message_receipts");
+    f.sqlite.prepare("UPDATE trade_message_participants SET last_read_sequence=1 WHERE thread_id=? AND member_id='jane'").run(thread.id);
+    f.sqlite.exec(read("../drizzle/0222_trade_message_receipts.sql").replaceAll("--> statement-breakpoint", ""));
+    await f.server.readTeamConversation(jane, thread.id, 1, f.db);
+    await f.server.readTeamConversation(john, thread.id, 1, f.db);
+    const receipt = (await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt;
+    assert.equal(receipt.status, "read"); assert.equal(receipt.readCount, 2); assert.equal(receipt.readAt, null);
+    const historical = receipt.recipients.find(person => person.memberId === 'jane');
+    assert.equal(historical.status, 'read'); assert.equal(historical.readAt, null); assert.equal(historical.deliveredAt, null);
+    assert.ok(receipt.recipients.find(person => person.memberId === 'john').readAt);
+    const next = await f.server.sendTeamMessage(owner, thread.id, "New", request(8005), f.db);
+    await f.server.readTeamConversation(jane, thread.id, next.sequence, f.db);
+    const page = await f.server.teamConversation(owner, thread.id, 0, f.db);
+    assert.ok(page.messages[1].receipt.recipients.find(person => person.memberId === 'jane').readAt);
+    assert.equal(page.messages[0].receipt.recipients.find(person => person.memberId === 'jane').readAt, null);
+  } finally { f.close(); }
+});
+
+test("receipt status remains correct across history pages and newer messages are never acknowledged by an older cursor", async () => {
+  const f = fixture(); try {
+    const thread = await create(f, owner, ["jane"]);
+    for (let i = 1; i <= 45; i++) await f.server.sendTeamMessage(owner, thread.id, `Page message ${i}`, request(8100 + i), f.db);
+    await f.server.readTeamConversation(jane, thread.id, 10, f.db);
+    await f.server.deliveredTeamConversation(jane, thread.id, 40, f.db);
+    const latest = await f.server.teamConversation(owner, thread.id, 0, f.db);
+    assert.equal(latest.messages.length, 40); assert.equal(latest.hasOlder, true);
+    for (const message of latest.messages) assert.equal(message.receipt.status, message.sequence <= 10 ? 'read' : message.sequence <= 40 ? 'delivered' : 'sent');
+    const older = await f.server.teamConversation(owner, thread.id, latest.messages[0].sequence, f.db);
+    assert.equal(older.messages.length, 5); assert.equal(older.hasOlder, false);
+    assert.ok(older.messages.every(message => message.receipt.status === 'read' && message.receipt.readAt));
+    assert.equal((await f.server.unreadTeamMessages(jane, f.db)).unreadCount, 35);
+  } finally { f.close(); }
+});
+
+test("database triggers capture sends and reads from an old Worker during rolling publication", async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-30T03:00:00Z') });
+  const f = fixture(); try {
+    const thread = await create(f, owner, ['jane']);
+    // Match the old Worker's message INSERT and participant cursor UPDATE;
+    // neither statement knows the new receipt table or helper functions.
+    f.sqlite.prepare(`INSERT INTO trade_internal_messages
+      (id,owner_uid,thread_id,sequence,actor_member_id,actor_name,body,request_id,created_at)
+      VALUES('rolling-message','business-a',?,1,'owner','Owner','Old Worker message','old-worker-request',?)`)
+      .run(thread.id, new Date().toISOString());
+    assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM trade_message_receipts WHERE message_id='rolling-message'").get().n, 1);
+    t.mock.timers.tick(1000);
+    f.sqlite.prepare("UPDATE trade_message_participants SET last_read_sequence=MAX(last_read_sequence,1) WHERE thread_id=? AND owner_uid='business-a' AND member_id='jane'").run(thread.id);
+    const receipt = (await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt;
+    assert.equal(receipt.status, 'read'); assert.equal(receipt.readAt, '2026-09-30T03:00:01.000Z'); assert.equal(receipt.deliveredAt, receipt.readAt);
+    t.mock.timers.tick(1000);
+    f.sqlite.prepare("UPDATE trade_message_participants SET last_read_sequence=MAX(last_read_sequence,1) WHERE thread_id=? AND owner_uid='business-a' AND member_id='jane'").run(thread.id);
+    assert.deepEqual((await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt, receipt);
+  } finally { f.close(); }
+});
+
+test("delivered and read API actions acknowledge only the authenticated recipient without returning message contents", async () => {
+  const f = fixture(); try {
+    const thread = await create(f, owner, ['jane']);
+    await f.server.sendTeamMessage(owner, thread.id, 'Private body', request(8200), f.db);
+    let actor = jane, originAllowed = true;
+    const route = load('../src/app/api/trade-messages/route.ts', {
+      '@/lib/admin-server': { sameOrigin: () => originAllowed, mfaErrorResponse: () => null, adminJson: (body, status = 200) => Response.json(body, { status }) },
+      '@/lib/trade-access-server': { TradeAccessError: class extends Error {} },
+      '@/lib/trade-communications-access': { requireTeamCommunicationAccess: async () => actor },
+      'cloudflare:workers': { waitUntil: () => assert.fail('Receipt ACK must not send a push') },
+      '@/lib/trade-push-server': {}, '@/lib/bounded-request-body.mjs': bounded,
+      '@/lib/trade-messages-server': f.server,
+    });
+    const ack = action => route.POST(new Request('https://tlink.test/api/trade-messages', { method: 'POST', body: JSON.stringify({ action, threadId: thread.id, throughSequence: 1 }) }));
+    for (const action of ['delivered', 'read']) { const response = await ack(action); assert.equal(response.status, 200); assert.deepEqual(await response.json(), { ok: true }); }
+    actor = foreign; assert.equal((await ack('delivered')).status, 403);
+    actor = jane; originAllowed = false; assert.equal((await ack('read')).status, 403);
+  } finally { f.close(); }
+});
+
+test("revoking a field session before ACK commit cannot publish delivery or read receipts", async () => {
+  const f = fixture(); try {
+    const thread = await create(f, owner, ['jane']);
+    const message = await f.server.sendTeamMessage(owner, thread.id, 'Field-only', request(8201), f.db);
+    f.sqlite.exec("INSERT INTO trade_field_sessions VALUES('field-session','business-a','jane','active','2099-01-01T00:00:00.000Z')");
+    const fieldActor = { ...jane, actorUid: 'field-principal', fieldSessionId: 'field-session' };
+    const revokedDb = { ...f.db, batch: statements => {
+      f.sqlite.exec("UPDATE trade_field_sessions SET status='revoked' WHERE id='field-session'");
+      return f.db.batch(statements);
+    } };
+    await assert.rejects(f.server.deliveredTeamConversation(fieldActor, thread.id, 1, revokedDb), /MESSAGE_ACCESS_REQUIRED/);
+    assert.equal((await f.server.teamConversation(owner, thread.id, 0, f.db)).messages[0].receipt.status, 'sent');
+    assert.equal(f.sqlite.prepare('SELECT delivered_at FROM trade_message_receipts WHERE message_id=?').get(message.id).delivered_at, '');
+  } finally { f.close(); }
 });
 
 test("a new business team inbox returns HTTP 200 with no threads and its available teammates", async () => {

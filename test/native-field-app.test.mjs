@@ -21,7 +21,7 @@ const readme = read("../mobile/README.md");
 
 test("native field app requires encrypted custom iOS and Android builds", () => {
   assert.match(appConfig, /"name": "TLink"/);
-  assert.match(appConfig, /"version": "1\.2\.2"/);
+  assert.match(appConfig, /"version": "1\.3\.0"/);
   assert.match(appConfig, /"userInterfaceStyle": "dark"/);
   assert.match(appConfig, /"bundleIdentifier": "au\.com\.australianenergyassessments\.field"/);
   assert.match(appConfig, /"package": "au\.com\.australianenergyassessments\.field"/);

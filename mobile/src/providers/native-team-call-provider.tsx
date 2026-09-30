@@ -26,6 +26,7 @@ type CallValue = {
   start: (threadId: string, mode: NativeCallMode) => Promise<void>;
   openInvitation: (target: Invitation) => Promise<void>;
   busy: boolean;
+  presented: boolean;
 };
 type CallResult = {
   ok: boolean; call?: TeamCall | null; calls?: TeamCall[]; memberId?: string;
@@ -283,7 +284,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
         failed: message => { if (session.current === current) stop(message); },
       });
       await current.peers.sync(current.call.participants);
-      if (isCurrent()) { starting.current = false; setOpening(false); }
+      if (isCurrent()) { starting.current = false; setOpening(false); void tickRef.current(); }
     } catch (error) {
       if (!isCurrent()) return;
       const detail = nativeCallError(error, nextMode);
@@ -366,6 +367,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   }, [api, enabled]);
 
   const activeId = active?.id;
+  const pollInterval = activeId ? remotes.length > 0 && remotes.every(peer => peer.state === 'connected') ? 1500 : 300 : 5000;
   const incomingId = incoming[0]?.id;
   const incomingAnswered = incoming[0]?.hasBeenAnswered;
   useEffect(() => {
@@ -501,9 +503,14 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
       } else if (value?.status === 'online') { availableForCalls.current = true; void tick(); }
     });
     void tick();
-    const interval = setInterval(() => void tick(), activeId ? 1500 : 5000);
-    return () => { disposed = true; tickRef.current = async () => undefined; clearInterval(interval); listener.remove(); notification.remove(); presence.remove(); };
+    return () => { disposed = true; tickRef.current = async () => undefined; listener.remove(); notification.remove(); presence.remove(); };
   }, [enabled, api, stop, activeId, ringtone]);
+  useEffect(() => {
+    if (!enabled) return;
+    // Keep the same in-flight guard when negotiation changes the cadence.
+    const interval = setInterval(() => void tickRef.current(), pollInterval);
+    return () => clearInterval(interval);
+  }, [enabled, pollInterval]);
 
   const switchCamera = async () => {
     const current = session.current;
@@ -553,7 +560,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     else if (invitation) decline(invitation);
     else closeNotice();
   };
-  return <Calls.Provider value={{ start: (threadId, nextMode) => begin(threadId, nextMode), openInvitation, busy: opening || Boolean(active) }}>
+  return <Calls.Provider value={{ start: (threadId, nextMode) => begin(threadId, nextMode), openInvitation, busy: opening || Boolean(active), presented: showCallView }}>
     <View style={styles.root}>
     <View style={styles.root} pointerEvents={showCallView ? 'none' : 'auto'} accessibilityElementsHidden={showCallView} importantForAccessibility={showCallView ? 'no-hide-descendants' : 'auto'}>{children}</View>
     {appActive && (active || opening) && minimized && <Pressable accessibilityRole="button" accessibilityLabel="Return to team call" onPress={() => setMinimized(false)} style={styles.returnToCall}>

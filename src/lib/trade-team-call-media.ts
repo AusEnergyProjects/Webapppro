@@ -40,11 +40,25 @@ export class TeamCallRinger {
   private mode: 'incoming' | 'outgoing' = 'incoming';
   private closed = false;
   private resuming: Promise<void> | null = null;
+  private callId: string | undefined;
+  private silenced = new Set<string>();
+  private readonly channel: BroadcastChannel | null;
   private tones = new Set<{ oscillator: OscillatorNode; gain: GainNode }>();
   private readonly changed: (ready: boolean) => void;
   private readonly createContext: () => AudioContext;
-  constructor(changed: (ready: boolean) => void, createContext = () => new AudioContext()) {
+  constructor(changed: (ready: boolean) => void, createContext = () => new AudioContext(),
+    createChannel = () => typeof window !== "undefined" && typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("tlink:team-call-ringing") : null) {
     this.changed = changed; this.createContext = createContext;
+    this.channel = createChannel();
+    if (this.channel) this.channel.onmessage = event => {
+      const message: unknown = event.data;
+      if (!message || typeof message !== "object" || !("type" in message) || message.type !== "silence"
+        || !("callId" in message) || typeof message.callId !== "string" || !/^[a-zA-Z0-9_-]{8,120}$/.test(message.callId)) return;
+      // Another tab can silence this invitation, never authorise media or
+      // change a call session. Retain the ID so stale polls cannot restart it.
+      this.silenced.add(message.callId);
+      if (this.callId === message.callId) this.stop();
+    };
   }
 
   async unlock() {
@@ -93,21 +107,30 @@ export class TeamCallRinger {
     if (!this.ringing) this.tone(0, 0.18, 660, 0.025);
   }
 
-  start(mode: 'incoming' | 'outgoing' = 'incoming') {
-    if (this.closed || this.ringing && this.mode === mode) return;
-    this.stop(); this.mode = mode;
+  start(mode: 'incoming' | 'outgoing' = 'incoming', callId?: string) {
+    if (this.closed || callId && this.silenced.has(callId) || this.ringing && this.mode === mode && this.callId === callId) return;
+    this.stop(); this.mode = mode; this.callId = callId;
     this.ringing = true; this.pulse();
     this.interval = setInterval(() => this.pulse(), 4000);
   }
 
+  silence(callId: string) {
+    if (this.closed || this.silenced.has(callId)) return;
+    this.silenced.add(callId);
+    if (this.callId === callId) this.stop();
+    this.channel?.postMessage({type:"silence",callId});
+  }
+
   stop() {
-    this.ringing = false; clearInterval(this.interval);
+    this.ringing = false; this.callId = undefined; clearInterval(this.interval);
     for (const { oscillator, gain } of this.tones) { oscillator.onended = null; oscillator.stop(); oscillator.disconnect(); gain.disconnect(); }
     this.tones.clear();
   }
 
   close() {
     this.closed = true; this.stop();
+    if (this.channel) { this.channel.onmessage = null; this.channel.close(); }
+    this.silenced.clear();
     if (this.context) { this.context.onstatechange = null; void this.context.close().catch(() => {}); }
   }
 }

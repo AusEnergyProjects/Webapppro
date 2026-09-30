@@ -4,7 +4,7 @@ import { requireTeamCommunicationAccess } from "@/lib/trade-communications-acces
 import { waitUntil } from "cloudflare:workers";
 import { notifyTeamMessage } from "@/lib/trade-push-server";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "@/lib/bounded-request-body.mjs";
-import { createTeamConversation, customerMessageThreads, messagesWorkspace, readTeamConversation, searchMessageContacts, sendTeamMessage, teamConversation, unreadTeamMessages } from "@/lib/trade-messages-server";
+import { createTeamConversation, customerMessageThreads, deliveredTeamConversation, messagesWorkspace, readTeamConversation, searchMessageContacts, sendTeamMessage, teamConversation, unreadTeamMessages } from "@/lib/trade-messages-server";
 
 export const runtime = "edge";
 
@@ -67,6 +67,10 @@ export async function POST(request: Request) {
     }
     if (body.action === "read") {
       await readTeamConversation(actor, String(body.threadId || ""), body.throughSequence);
+      return adminJson({ ok: true });
+    }
+    if (body.action === "delivered") {
+      await deliveredTeamConversation(actor, String(body.threadId || ""), body.throughSequence);
       return adminJson({ ok: true });
     }
     return adminJson({ ok: false, error: "Choose a message action." }, 400);

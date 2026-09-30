@@ -1,4 +1,5 @@
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
+import * as teamPresence from "../src/lib/trade-team-presence.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import test from "node:test";
@@ -319,6 +320,7 @@ function assignedJobFor(db) {
 
 function teamRoute(db) {
   return loadTypescriptModule("../src/app/api/trade-team/route.ts", {
+    "@/lib/trade-team-presence": teamPresence,
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": adminServer,
     "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: "actor-1" }) },

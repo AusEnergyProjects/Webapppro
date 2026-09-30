@@ -18,6 +18,8 @@ import dynamic from "next/dynamic";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import styles from "./TradeTeamSettings.module.css";
+import TradeTeamStatusDot from "./TradeTeamStatusDot";
+import type { TradeTeamPresenceStatus } from "@/lib/trade-team-presence";
 
 const TeamTrainingTodos = dynamic(() => import("./TeamTrainingTodos").then(module => module.TeamTrainingTodos), { loading: () => <p role="status">Loading training to-dos...</p> });
 
@@ -65,6 +67,7 @@ export type TradeTeamMember = {
   fieldUsername: string;
   scheduleColour: ScheduleColour;
   status: MemberStatus;
+  presence?: TradeTeamPresenceStatus | null;
   hasLogin: boolean;
   invitePending: boolean;
   isOwner: boolean;
@@ -318,7 +321,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   const visibleMembers = members;
 
   const tokenHeaders = useCallback(async () => ({ Authorization: `Bearer ${await user.getIdToken()}` }), [user]);
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     const params = new URLSearchParams({
       page: String(page),
       pageSize: "25",
@@ -330,8 +333,11 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
       && handledNavigationNonceRef.current !== navigationTarget.nonce) {
       params.set("memberId", navigationTarget.id);
     }
-    const response = await fetch(`/api/trade-team?${params}`, { headers: await tokenHeaders(), cache: "no-store" });
+    const headers = await tokenHeaders();
+    signal?.throwIfAborted();
+    const response = await fetch(`/api/trade-team?${params}`, { headers, cache: "no-store", signal });
     const result = await response.json().catch(() => ({})) as TeamResult;
+    signal?.throwIfAborted();
     if (!response.ok || !result.ok) throw new Error(result.error || "The team could not be loaded.");
     setTeamAccess(result.access);
     setMembers(result.members || []);
@@ -350,6 +356,22 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     setError("This team member changed while you were editing. The latest details are loaded. Review them and try again.");
     return true;
   }, [load]);
+
+  useEffect(() => {
+    if (editing || busy || loading) return;
+    let pending = false;
+    const controller = new AbortController();
+    const refresh = () => {
+      if (pending || document.visibilityState !== "visible") return;
+      pending = true;
+      void load(controller.signal).catch(caught => { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Team status could not refresh."); })
+        .finally(() => { pending = false; });
+    };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("tlink:team-presence-changed", refresh);
+    return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", refresh); window.removeEventListener("tlink:team-presence-changed", refresh); };
+  }, [load, editing, busy, loading]);
 
   const loadDevices = useCallback(async () => {
     setDevicesLoading(true);
@@ -387,11 +409,12 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     const frame = window.requestAnimationFrame(() => {
-      void load().catch((caught) => active && setError(caught instanceof Error ? caught.message : "The team could not be loaded."))
+      void load(controller.signal).catch((caught) => active && setError(caught instanceof Error ? caught.message : "The team could not be loaded."))
         .finally(() => active && setLoading(false));
     });
-    return () => { active = false; window.cancelAnimationFrame(frame); };
+    return () => { active = false; controller.abort(); window.cancelAnimationFrame(frame); };
   }, [load]);
 
   useEffect(() => {
@@ -787,7 +810,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
             <caption className={styles.srOnly}>Team member contact details, status and schedule colour</caption>
             <thead><tr><th>First name</th><th>Last name</th><th>Phone</th><th>Email</th><th>Status</th><th>Colour</th><th>Actions</th></tr></thead>
             <tbody>{visibleMembers.map((member) => <tr key={member.id} tabIndex={0} onContextMenu={(event) => { if (!member.isOwner || isOwner) showMenu(event, member); }}>
-              <td><strong>{member.firstName || "Not added"}{member.isOwner && <small>Owner</small>}<small>TLink: {member.fieldUsername || "Not set"}</small></strong></td>
+              <td><strong><TradeTeamStatusDot name={memberLabel(member)} presence={member.presence} active={member.status === "active"} /> {member.firstName || "Not added"}{member.isOwner && <small>Owner</small>}<small>TLink: {member.fieldUsername || "Not set"}</small></strong></td>
               <td><strong>{member.lastName || "Not added"}</strong></td>
               <td>{member.phone ? <a href={`tel:${member.phone}`}>{member.phone}</a> : <span>Not added</span>}</td>
               <td>{member.email ? <a href={`mailto:${member.email}`}>{member.email}</a> : <span>Not added</span>}</td>
@@ -798,7 +821,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
           </table>
         </div>
         <div className={styles.mobileCards}>{visibleMembers.map((member) => <article className={styles.memberCard} key={member.id} tabIndex={0} onContextMenu={(event) => { if (!member.isOwner || isOwner) showMenu(event, member); }}>
-        <header className={styles.memberHeader}><div><strong>{member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>TLink username: {member.fieldUsername || "Not set"}</small><small>{statusName(member)}</small></div><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></header>
+        <header className={styles.memberHeader}><div><strong><TradeTeamStatusDot name={memberLabel(member)} presence={member.presence} active={member.status === "active"} /> {member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>TLink username: {member.fieldUsername || "Not set"}</small><small>{statusName(member)}</small></div><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></header>
         <div className={styles.chips}><span><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span><span>{member.permissions.jobScope === "own" ? "Assigned jobs only" : "All team jobs"}</span><span>{member.fileCount || 0} documents</span>{member.capabilities?.length ? <span>{member.capabilities.length} services</span> : null}</div>
         <small>Last active: {member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleString("en-AU") : "Not signed in yet"}</small>
         <div className={styles.actions}><button type="button" disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button></div>

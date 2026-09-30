@@ -79,3 +79,37 @@ test('DM names exclude self and group labels remain the explicit group name', ()
   assert.equal(api.teamThreadName(thread, 'self'), 'John');
   assert.equal(api.teamThreadName({ ...thread, kind: 'group', subject: 'Installers' }, 'self'), 'Installers');
 });
+
+test('unread delivery lookup uses the authenticated endpoint and cancellation signal', async () => {
+  const h = harness(), controller = new AbortController();
+  await h.api.messagesUnread(controller.signal);
+  assert.equal(h.requests[0].path, '/api/trade-messages?view=unread');
+  assert.equal(h.requests[0].init.signal, controller.signal);
+});
+
+test('delivery batches are bounded, continue past failures and advance only confirmed cursors', async () => {
+  let running = 0, peak = 0, fail = true;
+  const h = harness(async (_path, init) => {
+    const body = JSON.parse(init.body); assert.equal(body.action, 'delivered');
+    running++; peak = Math.max(peak, running); await new Promise(resolve => setImmediate(resolve)); running--;
+    if (fail && body.threadId === 'thread-0') throw new Error('Receipt not confirmed');
+    return { ok: true };
+  });
+  const threads = Array.from({ length: 25 }, (_, i) => ({ id: `thread-${i}`, sequence: i + 1 }));
+  const confirmed = new Map(), controller = new AbortController();
+  await h.api.acknowledgeTeamDeliveries(threads, confirmed, controller.signal);
+  assert.equal(h.requests.length, 20); assert.equal(peak, 2); assert.equal(running, 0);
+  assert.equal(confirmed.size, 19); assert.equal(confirmed.has('thread-0'), false);
+  fail = false; await h.api.acknowledgeTeamDeliveries(threads, confirmed, controller.signal);
+  assert.equal(confirmed.size, 25); assert.equal(h.requests.length, 26);
+  await h.api.acknowledgeTeamDeliveries(threads, confirmed, controller.signal); assert.equal(h.requests.length, 26);
+});
+
+test('cancelling a delivery batch prevents later acknowledgements and cursor changes', async () => {
+  const pending = [], h = harness(() => new Promise(resolve => pending.push(resolve)));
+  const confirmed = new Map(), controller = new AbortController();
+  const request = h.api.acknowledgeTeamDeliveries([{ id: 'one', sequence: 1 }, { id: 'two', sequence: 2 }, { id: 'three', sequence: 3 }], confirmed, controller.signal);
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(h.requests.length, 2);
+  controller.abort(); pending.forEach(resolve => resolve({ ok: true })); await request;
+  assert.equal(h.requests.length, 2); assert.equal(confirmed.size, 0);
+});

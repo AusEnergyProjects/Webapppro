@@ -5,6 +5,8 @@ import { messageActorGuard as actorGuard, messageParticipantGuard as participant
 import { loadMessageAttachments, messageAttachmentStatements, teamAvatarRevisions } from "./trade-message-media-server";
 import { messageAttachmentIds, type MessageAttachment } from "./trade-message-media";
 import { tradeTeamPresenceStatusSql, type TradeTeamPresenceStatus } from "./trade-team-presence";
+import { acknowledgeTeamMessages, loadMessageReceipts } from "./trade-message-receipts-server";
+import type { TradeMessageReceipt } from "./trade-message-receipts";
 
 export type MessageActor = Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "displayName" | "isOwner" | "canSendSms" | "fieldSessionId"> & { canViewQuotes?: boolean; canManageTeam?: boolean };
 type Thread = { id: string; kind: "dm" | "group"; subject: string; creation_hash: string };
@@ -14,9 +16,9 @@ async function assertGuard(db: D1Database, guard: ReturnType<typeof actorGuard>)
   if (!await db.prepare(`SELECT 1 allowed WHERE ${guard.sql}`).bind(...guard.values).first()) throw new Error("MESSAGE_ACCESS_REQUIRED");
 }
 
-function publicMessage(row: InternalMessage, actorMemberId: string, attachments: MessageAttachment[] = []) {
+function publicMessage(row: InternalMessage, actorMemberId: string, attachments: MessageAttachment[] = [], receipt: TradeMessageReceipt | null = null) {
   return { id: row.id, sequence: row.sequence, senderName: row.actor_name, mine: row.actor_member_id === actorMemberId,
-    senderMemberId: row.actor_member_id, body: row.body, requestId: row.request_id, createdAt: row.created_at, attachments };
+    senderMemberId: row.actor_member_id, body: row.body, requestId: row.request_id, createdAt: row.created_at, attachments, receipt };
 }
 
 async function hash(value: string) {
@@ -64,7 +66,8 @@ export async function sendTeamMessage(actor: MessageActor, threadId: string, val
     const attachments = (await loadMessageAttachments(db, actor, threadId, [prior.id]))[prior.id] || [];
     if (JSON.stringify(attachments.map(item => item.id).sort()) !== JSON.stringify(ids)) throw new Error("MESSAGE_REQUEST_CONFLICT");
     await assertGuard(db, guard);
-    return publicMessage(prior, actor.memberId, attachments);
+    const receipts = await loadMessageReceipts(db, actor, threadId, [prior]);
+    return publicMessage(prior, actor.memberId, attachments, receipts[prior.id]);
   }
   const id = crypto.randomUUID(), now = new Date().toISOString();
   const media = messageAttachmentStatements(db, actor, threadId, id, ids);
@@ -83,7 +86,8 @@ export async function sendTeamMessage(actor: MessageActor, threadId: string, val
   if (saved.thread_id !== threadId || saved.body !== body) throw new Error("MESSAGE_REQUEST_CONFLICT");
   const attachments = await loadMessageAttachments(db, actor, threadId, [saved.id]);
   if (JSON.stringify((attachments[saved.id] || []).map(item => item.id).sort()) !== JSON.stringify(ids)) throw new Error("MESSAGE_REQUEST_CONFLICT");
-  return publicMessage(saved, actor.memberId, attachments[saved.id] || []);
+  const receipts = await loadMessageReceipts(db, actor, threadId, [saved]);
+  return publicMessage(saved, actor.memberId, attachments[saved.id] || [], receipts[saved.id]);
 }
 
 export async function teamConversation(actor: MessageActor, threadId: string, before = 0, db: D1Database = getD1()) {
@@ -96,16 +100,16 @@ export async function teamConversation(actor: MessageActor, threadId: string, be
   const hasOlder = messages.length > 40;
   const page = messages.slice(0, 40).reverse();
   const attachments = await loadMessageAttachments(db, actor, threadId, page.map(message => message.id));
-  return { messages: page.map(row => publicMessage(row, actor.memberId, attachments[row.id] || [])), hasOlder };
+  const receipts = await loadMessageReceipts(db, actor, threadId, page);
+  return { messages: page.map(row => publicMessage(row, actor.memberId, attachments[row.id] || [], receipts[row.id])), hasOlder };
 }
 
 export async function readTeamConversation(actor: MessageActor, threadId: string, through: unknown, db: D1Database = getD1()) {
-  if (typeof through !== "number" || !Number.isSafeInteger(through) || through < 0) throw new Error("MESSAGE_CURSOR_INVALID");
-  const guard = participantGuard(actor, threadId);
-  const result = await db.prepare(`UPDATE trade_message_participants SET last_read_sequence = MAX(last_read_sequence, ?)
-    WHERE thread_id = ? AND owner_uid = ? AND member_id = ? AND ? <= COALESCE((SELECT MAX(sequence) FROM trade_internal_messages WHERE thread_id = ? AND owner_uid = ?), 0)
-      AND ${guard.sql}`).bind(through, threadId, actor.ownerUid, actor.memberId, through, threadId, actor.ownerUid, ...guard.values).run();
-  if (!result.meta.changes) throw new Error("MESSAGE_ACCESS_REQUIRED");
+  await acknowledgeTeamMessages(db, actor, threadId, through, true);
+}
+
+export async function deliveredTeamConversation(actor: MessageActor, threadId: string, through: unknown, db: D1Database = getD1()) {
+  await acknowledgeTeamMessages(db, actor, threadId, through, false);
 }
 
 export async function unreadTeamMessages(actor: MessageActor, db: D1Database = getD1()) {
@@ -135,20 +139,23 @@ export async function messagesWorkspace(actor: MessageActor, search = "", page =
   await assertGuard(db, guard);
   if (targetThreadId) await assertGuard(db, participantGuard(actor, targetThreadId));
   const term = `%${search.trim().slice(0, 100).replace(/[!%_]/g, character => `!${character}`)}%`;
-  const members = (await db.prepare(`SELECT id, display_name, member_uid FROM trade_team_members WHERE owner_uid = ? AND status = 'active' AND ${guard.sql} ORDER BY display_name LIMIT 250`)
-    .bind(actor.ownerUid, ...guard.values).all<{ id: string; display_name: string; member_uid: string }>()).results;
+  const members = (await db.prepare(`SELECT id, display_name, member_uid,
+    ${tradeTeamPresenceStatusSql('trade_team_members.id', 'trade_team_members.owner_uid')} presence
+    FROM trade_team_members WHERE owner_uid = ? AND status = 'active' AND ${guard.sql} ORDER BY display_name LIMIT 250`)
+    .bind(actor.ownerUid, ...guard.values).all<{ id: string; display_name: string; member_uid: string; presence: TradeTeamPresenceStatus }>()).results;
   const threads = (await db.prepare(`SELECT t.id, t.kind, t.subject,
+    (SELECT COALESCE(MAX(m.sequence),0) FROM trade_internal_messages m WHERE m.thread_id=t.id AND m.owner_uid=t.owner_uid) latest_sequence,
     (SELECT COALESCE(NULLIF(m.body,''),'Shared an attachment') FROM trade_internal_messages m WHERE m.thread_id=t.id AND m.owner_uid=t.owner_uid ORDER BY sequence DESC LIMIT 1) latest,
     (SELECT m.actor_name FROM trade_internal_messages m WHERE m.thread_id=t.id AND m.owner_uid=t.owner_uid ORDER BY sequence DESC LIMIT 1) latest_sender,
     (SELECT COUNT(*) FROM trade_internal_messages m WHERE m.thread_id=t.id AND m.owner_uid=t.owner_uid AND m.sequence>p.last_read_sequence AND m.actor_member_id<>?) unread,
-    (SELECT json_group_array(json_object('id', other.id, 'name', other.display_name, 'active', other.status='active', 'presence', ${tradeTeamPresenceStatusSql('other.id', 'other.owner_uid')})) FROM trade_message_participants tp
+    (SELECT json_group_array(json_object('id', other.id, 'name', other.display_name, 'active', other.status='active', 'presence', CASE WHEN other.status='active' THEN ${tradeTeamPresenceStatusSql('other.id', 'other.owner_uid')} ELSE NULL END)) FROM trade_message_participants tp
       JOIN trade_team_members other ON other.id=tp.member_id AND other.owner_uid=tp.owner_uid WHERE tp.thread_id=t.id AND tp.owner_uid=t.owner_uid) members
     FROM trade_message_threads t JOIN trade_message_participants p ON p.thread_id=t.id AND p.owner_uid=t.owner_uid AND p.member_id=?
     WHERE t.owner_uid=? AND ${guard.sql} ${targetThreadId ? "AND t.id=?" : ""} AND (t.subject LIKE ? ESCAPE '!' OR EXISTS (SELECT 1 FROM trade_message_participants tp
       JOIN trade_team_members person ON person.id=tp.member_id AND person.owner_uid=tp.owner_uid WHERE tp.thread_id=t.id AND tp.owner_uid=t.owner_uid AND person.display_name LIKE ? ESCAPE '!'))
     ORDER BY t.updated_at DESC,t.id DESC LIMIT 51 OFFSET ?`)
     .bind(actor.memberId, actor.memberId, actor.ownerUid, ...guard.values, ...(targetThreadId ? [targetThreadId] : []), term, term, (page - 1) * 50)
-    .all<{ id: string; kind: string; subject: string; latest: string; latest_sender: string; unread: number; members: string }>()).results;
+    .all<{ id: string; kind: string; subject: string; latest: string; latest_sender: string; latest_sequence: number; unread: number; members: string }>()).results;
   const avatars = await teamAvatarRevisions(db, actor);
   const canUseSms = actor.isOwner || Boolean(actor.canSendSms);
   const smsState = canUseSms ? await db.prepare(`SELECT EXISTS (
@@ -165,9 +172,9 @@ export async function messagesWorkspace(actor: MessageActor, search = "", page =
   if (smsState && !Number.isSafeInteger(smsState.sms_balance)) throw new Error("MESSAGE_SMS_BALANCE_INVALID");
   return { memberId: actor.memberId, canUseSms, smsReady: Boolean(smsState?.sms_ready), smsBalanceMicro: smsState ? smsState.sms_balance : null,
     canUseQuotes: actor.isOwner || Boolean(actor.canViewQuotes), canCreateSmsContact: actor.isOwner, canManageTeam: actor.isOwner || Boolean(actor.canManageTeam),
-    members: members.map(member => ({ id: member.id, name: member.display_name, isOwner: member.member_uid === actor.ownerUid, avatarRevision: avatars[member.id] || "" })),
+    members: members.map(member => ({ id: member.id, name: member.display_name, presence: member.presence, isOwner: member.member_uid === actor.ownerUid, avatarRevision: avatars[member.id] || "" })),
     threads: threads.slice(0, 50).map(thread => ({ id: thread.id, kind: thread.kind, subject: thread.subject, latest: thread.latest || "", latestSender: thread.latest_sender || "",
-      unread: Number(thread.unread), members: (JSON.parse(thread.members) as Array<{ id: string; name: string; active: boolean; presence: TradeTeamPresenceStatus }>).map(member => ({ ...member, active: Boolean(member.active), avatarRevision: avatars[member.id] || "" })) })), hasMore: threads.length > 50 };
+      latestSequence: Number(thread.latest_sequence), unread: Number(thread.unread), members: (JSON.parse(thread.members) as Array<{ id: string; name: string; active: boolean; presence: TradeTeamPresenceStatus | null }>).map(member => ({ ...member, active: Boolean(member.active), avatarRevision: avatars[member.id] || "" })) })), hasMore: threads.length > 50 };
 }
 
 export async function customerMessageThreads(actor: MessageActor, search = "", page = 1, db: D1Database = getD1()) {
@@ -215,11 +222,11 @@ export async function searchMessageContacts(actor: MessageActor, search: string,
   const term = `%${value.replace(/[!%_]/g, character => `!${character}`)}%`;
   const digits = /^[+\d().\s-]+$/.test(value) ? value.replace(/\D/g, "") : "";
   const phoneTerm = digits.length >= 3 ? `%${digits.startsWith("04") ? "614" + digits.slice(2) : digits}%` : term;
-  const people = (await db.prepare(`SELECT id,display_name,member_uid FROM trade_team_members WHERE owner_uid=? AND status='active' AND id<>?
+  const people = (await db.prepare(`SELECT id,display_name,member_uid,${tradeTeamPresenceStatusSql('trade_team_members.id', 'trade_team_members.owner_uid')} presence FROM trade_team_members WHERE owner_uid=? AND status='active' AND id<>?
     AND ${guard.sql} AND (display_name LIKE ? ESCAPE '!' OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(CASE WHEN substr(phone,1,2)='04' THEN '614'||substr(phone,3) ELSE phone END,' ',''),'-',''),'(',''),')',''),'+','') LIKE ? ESCAPE '!')
     ORDER BY display_name,id LIMIT 50`).bind(actor.ownerUid, actor.memberId, ...guard.values, term, phoneTerm)
-    .all<{ id: string; display_name: string; member_uid: string }>()).results;
+    .all<{ id: string; display_name: string; member_uid: string; presence: TradeTeamPresenceStatus }>()).results;
   const customers = actor.isOwner || actor.canSendSms ? await customerMessageThreads(actor, value, 1, db) : { customerThreads: [] };
   const avatars = await teamAvatarRevisions(db, actor);
-  return { members: people.map(person => ({ id: person.id, name: person.display_name, isOwner: person.member_uid === actor.ownerUid, avatarRevision: avatars[person.id] || "" })), customerThreads: customers.customerThreads };
+  return { members: people.map(person => ({ id: person.id, name: person.display_name, presence: person.presence, isOwner: person.member_uid === actor.ownerUid, avatarRevision: avatars[person.id] || "" })), customerThreads: customers.customerThreads };
 }

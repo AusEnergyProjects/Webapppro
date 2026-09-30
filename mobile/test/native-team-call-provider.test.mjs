@@ -11,7 +11,7 @@ const invitation = { id: 'call-123456', threadId: 'thread-123456', threadName: '
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 
 function harness({ native = false, platform = 'ios', initialAppState = 'active' } = {}) {
-  const slots = [], effects = [], pendingEffects = [], intervals = new Set(), listeners = new Set(), pushListeners = new Set(), presenceListeners = new Set();
+  const slots = [], effects = [], pendingEffects = [], intervals = new Set(), intervalDelays = new Map(), listeners = new Set(), pushListeners = new Set(), presenceListeners = new Set();
   let cursor = 0, tree;
   const state = { api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0, peers: [], rings:0, ringStops:0, ringbacks:0, ringbackStops:0, notificationMuted:false, audioModes:[], requestLifetimes: [], keyboardDismissals: 0,
     respond: async (url, body) => body?.action === 'start' || body?.action === 'join' ? { ok: true, call: invitation, memberId: 'member-local' }
@@ -75,7 +75,7 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active' 
   const exports = {};
   new Function('require', 'exports', 'setInterval', 'clearInterval', `${compiled}\nexports.TestSession = NativeTeamCallSession; exports.TestTile = CallTile; exports.TestPresentation = CallPresentation; exports.styles = styles;`)(id => {
     assert.ok(id in dependencies, `unexpected dependency ${id}`); return dependencies[id];
-  }, exports, fn => { intervals.add(fn); return fn; }, fn => intervals.delete(fn));
+  }, exports, (fn,delay) => { intervals.add(fn); intervalDelays.set(fn,delay); return fn; }, fn => { intervals.delete(fn); intervalDelays.delete(fn); });
   function render() { cursor = 0; tree = exports.TestSession({ enabled: true, children: 'app' }); while (pendingEffects.length) pendingEffects.shift()(); return tree; }
   function visit(node) { if (!node || typeof node !== 'object') return []; return [node, ...[node.props?.children].flat(2).flatMap(child => visit(child))]; }
   function nodes() { return visit(tree); }
@@ -88,7 +88,7 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active' 
   function appState(value) { for (const listener of [...listeners]) listener(value); }
   function cleanup() { for (const effect of effects) effect?.cleanup?.(); }
   render();
-  return { state, render, nodes, button, hasButton, context, appState, cleanup, intervals,ringtone, system, exports, presentation, underlying,
+  return { state, render, nodes, button, hasButton, context, appState, cleanup, intervals,intervalDelays,ringtone, system, exports, presentation, underlying,
     systemEvent: async event => { for (const listener of [...system.listeners]) await listener(event); },
     receivePush:()=>{for(const listener of pushListeners)listener({request:{content:{data:{type:'team_call',threadId:invitation.threadId,callId:invitation.id}}}});},
     presence:status=>{for(const listener of presenceListeners)listener({status});},
@@ -172,6 +172,36 @@ test('start creates one native session, rejects duplicate taps, and hangup frees
   assert.equal(h.context().busy, false);
   assert.equal(h.state.api.filter(request => request.body?.action === 'leave').length, 1);
   h.cleanup();
+});
+
+test('relay readiness immediately reads signalling, negotiates quickly, and restores normal polling after connection', async () => {
+  const h=harness({native:true});await flush();
+  assert.deepEqual([...h.intervalDelays.values()],[5000]);
+  const normal=h.state.respond;let relayReady;
+  h.state.respond=(url,body)=>body?.action==='ice'?new Promise(resolve=>{relayReady=()=>resolve({ok:true,iceServers:[{urls:'turn:relay.test'}]});}):normal(url,body);
+  const pending=h.context().start(invitation.threadId,'audio');await flush();h.render();await flush();
+  assert.deepEqual([...h.intervalDelays.values()],[300]);
+  const statusReads=()=>h.state.api.filter(request=>request.url.includes('callId=')&&!request.body).length;
+  assert.equal(statusReads(),0,'No signalling starts before the authenticated relay is ready');
+  relayReady();await pending;await flush();
+  assert.equal(statusReads(),1,'Do not wait for the next polling interval after relay setup');
+  h.state.peers[0].changed([{state:'connected',memberId:'member-remote'}]);h.render();await flush();
+  assert.deepEqual([...h.intervalDelays.values()],[1500]);
+  h.state.peers[0].changed([{state:'connected',memberId:'member-remote'},{state:'connecting',memberId:'member-next'}]);h.render();await flush();
+  assert.deepEqual([...h.intervalDelays.values()],[300],'A later group participant still gets prompt signalling');
+  h.button('End call')();h.render();await flush();assert.deepEqual([...h.intervalDelays.values()],[5000]);
+  h.cleanup();assert.equal(h.intervals.size,0);assert.equal(h.intervalDelays.size,0);
+});
+
+test('switching polling cadence preserves the in-flight guard and never duplicates signal processing', async () => {
+  const h=harness({native:true});await flush();await h.context().start(invitation.threadId,'audio');await flush();h.render();await flush();
+  const normal=h.state.respond;let respond,reads=0;
+  h.state.respond=(url,body)=>url.includes('callId=')&&!body?new Promise(resolve=>{reads++;respond=resolve;}):normal(url,body);
+  for(const tick of h.intervals)tick();await flush();assert.equal(reads,1);
+  h.state.peers[0].changed([{state:'connected',memberId:'member-remote'}]);h.render();await flush();
+  for(const tick of h.intervals)tick();await flush();assert.equal(reads,1,'The cadence change must not replace a pending processor');
+  respond({ok:true,call:{...invitation,hasBeenAnswered:true,participants:[{memberId:'member-remote'}]},signals:[]});await flush();h.cleanup();
+  assert.equal(h.intervals.size,0);
 });
 
 test('cancelling before late permission completion cannot create a server call', async () => {

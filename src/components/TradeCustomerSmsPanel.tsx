@@ -7,6 +7,7 @@ import type { User } from "firebase/auth";
 import type { TradeSmsConnection } from "./TradeSmsConnectionPanel";
 import { smsSegments, tradeSmsBody } from "@/lib/trade-sms";
 import styles from "./TradeSms.module.css";
+import { MessageTicks } from "./TradeMessageReceipt";
 
 type SmsMessage = { id: string; requestId: string; direction: "inbound" | "outbound"; body: string; status: string; createdAt: string; workOrderId: string; senderName: string };
 type Conversation = { connection: TradeSmsConnection | null; customerPhone: string; consent: "required" | "allowed" | "opted_out"; messages: SmsMessage[];
@@ -198,7 +199,7 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
       <ol ref={historyRef} className={`${styles.messages} ${styles.conversationHistory}`} aria-label="SMS message history">{conversation.messages.length ? conversation.messages.map((message) => <li key={message.id} className={message.direction === "outbound" ? styles.outbound : styles.inbound}>
         <div className={styles.bubbleSender}>{message.direction === "inbound" ? "Customer" : message.senderName || "Your business"}</div>
         <p className={styles.messageBubble}>{message.body}</p>
-        <div className={styles.bubbleReceipt}><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time><span data-attention={["unknown", "failed", "undelivered"].includes(message.status)}>{message.direction === "inbound" ? "Received" : statusLabels[message.status] || "Status pending"}</span>{conversation.canManageConnection && message.workOrderId && <span>{conversation.jobs.find(job => job.id === message.workOrderId)?.jobNumber || "Linked job"}</span>}</div>
+        <div className={styles.bubbleReceipt}><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time><span data-attention={["unknown", "failed", "undelivered"].includes(message.status)}>{message.direction === "outbound" && (message.status === "sent" || message.status === "delivered") && <MessageTicks status={message.status} />}{message.direction === "inbound" ? "Received" : statusLabels[message.status] || "Status pending"}</span>{conversation.canManageConnection && message.workOrderId && <span>{conversation.jobs.find(job => job.id === message.workOrderId)?.jobNumber || "Linked job"}</span>}</div>
         {conversation.canManageConnection && message.direction === "inbound" && !message.workOrderId && conversation.jobs.length > 0 && <details className={styles.replyDetails}><summary>Link reply to a job</summary><div className={styles.linkReply}>
           <small>Business only. Link this reply to share it with the job&apos;s team.</small>
           <label><span>Job for this reply</span><select aria-label={`Job for reply ${message.id}`} value={replyJobs[message.id] || ""} disabled={Boolean(busy)} onChange={event => setReplyJobs(current => ({ ...current, [message.id]: event.target.value }))}><option value="">Choose job</option>{conversation.jobs.map(job => <option key={job.id} value={job.id}>{job.jobNumber}</option>)}</select></label>

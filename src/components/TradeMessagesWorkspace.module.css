@@ -88,6 +88,8 @@ button.creditButton { cursor: pointer; }
 .conversationInfo p { font-size: 11px; line-height: 1.6; margin-top: 8px; }
 .conversationInfo small { display: block; font-size: 10px; line-height: 1.6; margin-top: 5px; }
 .memberAvatars { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.participant { align-items: center; display: flex; gap: 7px; padding: 5px 8px 5px 0; }
+.participant > span:last-child { display: grid; gap: 3px; }
 .messages { display: flex; flex: 1; flex-direction: column; gap: 15px; list-style: none; margin: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 25px 24px; scrollbar-width: thin; }
 .messages > li:not(.empty) { display: grid; gap: 5px; max-width: 82%; min-width: 0; }
 .mine { align-self: flex-end; justify-items: end; }

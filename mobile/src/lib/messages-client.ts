@@ -1,12 +1,14 @@
 import { randomUUID } from 'expo-crypto';
+import type { TradeTeamPresenceStatus } from '../../../src/lib/trade-team-presence';
+import type { TradeMessageReceipt } from '../../../src/lib/trade-message-receipts';
 
 import { ApiError, apiRequest } from '@/lib/api';
 
-export type MessageMember = { id: string; name: string; active?: boolean; isOwner?: boolean; avatarRevision?: string };
-export type TeamThread = { id: string; kind: string; subject: string; latest: string; latestSender: string; unread: number; members: MessageMember[] };
+export type MessageMember = { id: string; name: string; active?: boolean; isOwner?: boolean; avatarRevision?: string; presence?: TradeTeamPresenceStatus | null };
+export type TeamThread = { id: string; kind: string; subject: string; latest: string; latestSender: string; latestSequence?: number; unread: number; members: MessageMember[] };
 export type CustomerThread = { customerId: string; name: string; workOrderId: string; jobNumber: string; latest: string; phone: string };
 export type MessageAttachment = { id: string; kind: 'image' | 'audio'; contentType: string; sizeBytes: number };
-export type TeamMessage = { id: string; sequence: number; senderName: string; senderMemberId: string; mine: boolean; body: string; requestId: string; createdAt: string; attachments: MessageAttachment[] };
+export type TeamMessage = { id: string; sequence: number; senderName: string; senderMemberId: string; mine: boolean; body: string; requestId: string; createdAt: string; attachments: MessageAttachment[]; receipt?: TradeMessageReceipt | null };
 export type SmsMessage = { id: string; requestId: string; direction: 'inbound' | 'outbound'; body: string; status: string; createdAt: string; workOrderId: string; senderName: string };
 export type MessageOverview = { memberId: string; canUseSms: boolean; canUseQuotes: boolean; canCreateSmsContact: boolean; canManageTeam: boolean; members: MessageMember[]; threads: TeamThread[]; hasMore: boolean };
 export type MessageContacts = { members: MessageMember[]; customerThreads: CustomerThread[] };
@@ -50,6 +52,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export function messagesOverview(search: string, page = 1, signal?: AbortSignal) {
   return request<MessageOverview>(`/api/trade-messages?search=${encodeURIComponent(search)}&page=${page}`, { signal });
 }
+export function messagesUnread(signal?: AbortSignal) {
+  return request<{ unreadCount: number; threads: { id: string; sequence: number }[] }>('/api/trade-messages?view=unread', { signal });
+}
 export function customerThreads(search: string, page = 1, signal?: AbortSignal) {
   return request<{ customerThreads: CustomerThread[]; hasMore: boolean }>(`/api/trade-messages?view=customers&search=${encodeURIComponent(search)}&page=${page}`, { signal });
 }
@@ -64,6 +69,20 @@ export function teamHistory(threadId: string, before = 0, signal?: AbortSignal) 
 }
 export function teamAction<T>(body: Record<string, unknown>, signal?: AbortSignal) {
   return request<T>('/api/trade-messages', { method: 'POST', body: JSON.stringify(body), signal });
+}
+export async function acknowledgeTeamDeliveries(threads: { id: string; sequence: number }[], confirmed: Map<string, number>, signal: AbortSignal) {
+  const pending = threads.filter(thread => thread.sequence > (confirmed.get(thread.id) || 0)).slice(0, 20);
+  let index = 0;
+  const acknowledge = async () => {
+    while (index < pending.length && !signal.aborted) {
+      const thread = pending[index++];
+      try {
+        await teamAction({ action: 'delivered', threadId: thread.id, throughSequence: thread.sequence }, signal);
+        if (!signal.aborted) confirmed.set(thread.id, thread.sequence);
+      } catch { /* Keep this cursor for retry without delaying other conversations. */ }
+    }
+  };
+  await Promise.all([acknowledge(), acknowledge()]);
 }
 export function smsHistory(customer: CustomerThread, signal?: AbortSignal) {
   return request<SmsConversation>(`/api/trade-sms?customerId=${encodeURIComponent(customer.customerId)}&workOrderId=${encodeURIComponent(customer.workOrderId)}`, { signal });

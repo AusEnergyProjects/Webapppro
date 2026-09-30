@@ -21,7 +21,7 @@ function harness(options = {}) {
   let cursor = 0, state = [], effects = [], key, generation = 0, mounted = true, lateWrites = 0;
   let ownerUid = "owner-a", user = { uid: "user-a", getIdToken: async () => "token-a" }, enabled = true, children = "Jobs";
   let getAuthHeaders = options.auth;
-  const pending = [], timers = new Map(), requests = [], events = [], opened = [];
+  const pending = [], timers = new Map(), requests = [], reads = [], receipts = [], events = [], opened = [];
   const listeners = { window: new Map(), document: new Map() };
   const changed = (a, b) => !a || a.length !== b.length || a.some((value, index) => value !== b[index]);
   const react = {
@@ -44,8 +44,18 @@ function harness(options = {}) {
     clearInterval(id) { timers.delete(id); }, dispatchEvent(event) { events.push(event.type); return true; },
   };
   const document = { ...listen("document"), visibilityState: options.hidden ? "hidden" : "visible" };
-  const fetch = async (url, init) => { requests.push({ url, init }); return options.fetch ? options.fetch(requests.length, url, init) : result([]); };
-  const dependencies = { react, "react/jsx-runtime": jsx, "./TradeBusinessProvider": { useTradeBusiness: () => ({ ownerUid }), useTradeBusinessFetch: () => fetch },
+  const scopedRequests = new Map();
+  const businessFetch = owner => {
+    if (!scopedRequests.has(owner)) scopedRequests.set(owner,async (url,init) => {
+      const request = {url,init,owner}; requests.push(request);
+      if (!options.save && init?.method === "POST" && JSON.parse(init.body).action === "delivered") {
+        receipts.push(request); return options.deliver ? options.deliver(receipts.length,url,init) : Response.json({ok:true});
+      }
+      reads.push(request);return options.fetch ? options.fetch(reads.length,url,init) : result([]);
+    });
+    return scopedRequests.get(owner);
+  };
+  const dependencies = { react, "react/jsx-runtime": jsx, "./TradeBusinessProvider": { useTradeBusiness: () => ({ ownerUid }), useTradeBusinessFetch: () => businessFetch(ownerUid) },
     "./TradeMessageAlerts.module.css": { default: {} }, "./TradeMessageSaveToJob.module.css": { default: {} },
     "@/lib/trade-message-job-files": { messageLinks: () => ["https://example.com/"] } };
   const record = { exports: {} };
@@ -67,7 +77,7 @@ function harness(options = {}) {
     for (const effect of pending.splice(0)) effect();
     return tree;
   }
-  return { render, requests, events, opened, lateWrites: () => lateWrites,
+  return { render, requests, reads, receipts, events, opened, lateWrites: () => lateWrites,
     context: () => render().props.value,
     setChildren(value) { children = value; },
     identity({ owner = ownerUid, uid = user.uid } = {}) { ownerUid = owner; user = { uid, getIdToken: async () => `token-${uid}` }; },
@@ -89,8 +99,9 @@ test("global unread refresh remains active across workspace tabs and never write
     h.setChildren(workspace); await h.settle(); h.run(5000); await h.settle();
     assert.equal(h.context().unreadCount, index + 2);
   }
-  assert.equal(h.requests.length, 5);
-  assert.ok(h.requests.every(request => request.url === "/api/trade-messages?view=unread" && !request.init.method && !request.init.body));
+  assert.equal(h.reads.length, 5);
+  assert.ok(h.reads.every(request => request.url === "/api/trade-messages?view=unread" && !request.init.method && !request.init.body));
+  assert.deepEqual(h.receipts.map(request=>JSON.parse(request.init.body).action),Array(5).fill("delivered"));
   assert.equal(h.events.filter(event => event === "tlink:message-received").length, 4);
   h.unmount();
 });
@@ -130,8 +141,9 @@ test("hidden tabs skip polls and visibility restoration refreshes without changi
   await h.settle(); h.run(0); h.run(5000); h.context().refresh(); await h.settle();
   assert.equal(h.requests.length, 0);
   h.visible(true); await h.settle(); assert.equal(h.context().unreadCount, 3);
-  h.visible(false); h.run(5000); await h.settle(); assert.equal(h.requests.length, 1);
-  assert.ok(h.requests.every(request => !request.init.method && !request.init.body)); h.unmount();
+  h.visible(false); h.run(5000); await h.settle(); assert.equal(h.reads.length, 1);
+  assert.ok(h.reads.every(request => !request.init.method && !request.init.body));
+  assert.ok(h.receipts.every(request=>JSON.parse(request.init.body).action==="delivered")); h.unmount();
 });
 
 test("unmount aborts pending polls and late responses cannot update state or alert", async () => {
@@ -173,7 +185,73 @@ test("disabled providers clear prior data and do not continue polling", async ()
   const h = harness({ fetch: async () => result([thread("a", 1, 4)]) });
   await h.settle(); h.run(0); await h.settle(); assert.equal(h.context().unreadCount, 4);
   h.enable(false); await h.settle(); h.run(0); h.run(5000); await h.settle();
-  assert.equal(h.context().unreadCount, 0); assert.equal(h.requests.length, 1); h.unmount();
+  assert.equal(h.context().unreadCount, 0); assert.equal(h.reads.length, 1); assert.equal(h.receipts.length,1); h.unmount();
+});
+
+test("delivery acknowledges only the fetched thread sequences and retains monotonic confirmation without reading",async()=>{
+  let snapshot=[thread("thread-a",5,3),thread("thread-b",2,1)];
+  const h=harness({fetch:async()=>result(snapshot)});await h.settle();h.run(0);await h.settle();
+  assert.deepEqual(h.receipts.map(request=>JSON.parse(request.init.body)),[
+    {action:"delivered",threadId:"thread-a",throughSequence:5},{action:"delivered",threadId:"thread-b",throughSequence:2},
+  ]);
+  assert.ok(h.receipts.every(request=>request.owner==="owner-a"&&request.init.headers.Authorization==="Bearer token-a"&&request.init.signal===h.reads[0].init.signal));
+  h.context().refresh();await h.settle();assert.equal(h.receipts.length,2);
+  snapshot=[thread("thread-a",4,2)];h.context().refresh();await h.settle();assert.equal(h.receipts.length,2);
+  snapshot=[thread("thread-a",6,4)];h.context().refresh();await h.settle();assert.equal(h.receipts.length,3);
+  assert.equal(JSON.parse(h.receipts[2].init.body).throughSequence,6);assert.equal(h.context().unreadCount,4);assert.equal(h.context().unavailable,false);h.unmount();
+});
+
+test("failed delivery acknowledgements retry on the next poll without hiding unread messages or reporting alert failure",async()=>{
+  for(const failure of [()=>Response.json({ok:false},{status:503}),()=>Response.json({ok:false}),()=>{throw new Error("offline");}]){
+    const h=harness({fetch:async()=>result([thread("thread-a",5,3)]),deliver:async count=>count===1?failure():Response.json({ok:true})});
+    await h.settle();h.run(0);await h.settle();assert.equal(h.receipts.length,1);assert.equal(h.context().unreadCount,3);assert.equal(h.context().unavailable,false);
+    h.context().refresh();await h.settle();assert.equal(h.receipts.length,2);assert.equal(h.context().unavailable,false);
+    h.context().refresh();await h.settle();assert.equal(h.receipts.length,2);h.unmount();
+  }
+});
+
+test("delivery batches cap work at twenty threads with at most two requests in flight",async()=>{
+  const waiting=[];let active=0,maximum=0;
+  const h=harness({fetch:async()=>result(Array.from({length:25},(_,i)=>thread(`thread-${i}`,i+1))),deliver:()=>new Promise(resolve=>{
+    active++;maximum=Math.max(maximum,active);waiting.push(()=>{active--;resolve(Response.json({ok:true}));});
+  })});
+  await h.settle();h.run(0);await h.settle();assert.equal(h.receipts.length,2);
+  while(waiting.length){waiting.splice(0).forEach(resolve=>resolve());await h.settle();}
+  assert.equal(h.receipts.length,20);assert.equal(maximum,2);assert.equal(h.context().unreadCount,25);
+  h.context().refresh();await h.settle();while(waiting.length){waiting.splice(0).forEach(resolve=>resolve());await h.settle();}
+  assert.equal(h.receipts.length,25);assert.equal(new Set(h.receipts.map(request=>JSON.parse(request.init.body).threadId)).size,25);h.unmount();
+});
+
+test("delivery timeout shares the poll deadline, retains unread state and ignores its late response",async()=>{
+  const delayed=deferred();let stalled=true;
+  const h=harness({fetch:async()=>result([thread("thread-a",5,3)]),deliver:()=>stalled?delayed.promise:Response.json({ok:true})});
+  await h.settle();h.run(0);await h.settle();const signal=h.receipts[0].init.signal;
+  h.run(12000);await h.settle();assert.equal(signal.aborted,true);assert.equal(h.context().unavailable,false);assert.equal(h.context().unreadCount,3);
+  stalled=false;h.context().refresh();await h.settle();assert.equal(h.receipts.length,2);
+  delayed.resolve(Response.json({ok:true}));await h.settle();h.context().refresh();await h.settle();assert.equal(h.receipts.length,2);h.unmount();
+});
+
+test("unmount cancels delivery and cannot start the remainder of a received batch",async()=>{
+  const delayed=deferred();const h=harness({fetch:async()=>result([thread("thread-a"),thread("thread-b"),thread("thread-c")]),deliver:()=>delayed.promise});
+  await h.settle();h.run(0);await h.settle();assert.equal(h.receipts.length,2);
+  h.unmount();assert.ok(h.receipts.every(request=>request.init.signal.aborted));
+  delayed.resolve(Response.json({ok:true}));await tick();await tick();assert.equal(h.receipts.length,2);assert.equal(h.lateWrites(),0);
+});
+
+test("business or sign-in changes abort old delivery and reset confirmation for the new authenticated scope",async()=>{
+  for(const change of [{owner:"owner-b"},{uid:"user-b"}]){
+    const delayed=deferred();const h=harness({fetch:async()=>result([thread("thread-a",5)]),deliver:count=>count===1?delayed.promise:Response.json({ok:true})});
+    await h.settle();h.run(0);await h.settle();const old=h.receipts[0];
+    h.identity(change);await h.settle();assert.equal(old.init.signal.aborted,true);h.run(0);await h.settle();
+    assert.equal(h.receipts.length,2);assert.equal(h.receipts[1].owner,change.owner||"owner-a");
+    assert.equal(h.receipts[1].init.headers.Authorization,`Bearer token-${change.uid||"user-a"}`);
+    delayed.resolve(Response.json({ok:true}));await h.settle();h.context().refresh();await h.settle();assert.equal(h.receipts.length,2);assert.equal(h.lateWrites(),0);h.unmount();
+  }
+});
+
+test("a failed authenticated unread response cannot create a delivery acknowledgement",async()=>{
+  const h=harness({fetch:async()=>Response.json({ok:false},{status:403})});await h.settle();h.run(0);await h.settle();
+  assert.equal(h.receipts.length,0);assert.equal(h.context().unavailable,true);h.unmount();
 });
 
 test("all entry points preserve repeat-open navigation and native identity remounts", () => {
@@ -185,7 +263,9 @@ test("all entry points preserve repeat-open navigation and native identity remou
   assert.match(read("../src/components/TradeCommunicationPage.tsx"), /<TradeMessageAlerts key={session.access.memberId}/);
   const workspace = read("../src/components/TradeMessagesWorkspace.tsx");
   assert.match(workspace, /\[call, initialThreadId, initialThreadRevision, initialCallId\]/);
-  assert.match(workspace, /document.visibilityState === "visible"/);
+  assert.match(workspace, /document.visibilityState !== "visible"/);
+  assert.match(workspace, /document.hasFocus\(\)/);
+  assert.match(workspace, /getBoundingClientRect\(\)/);
   assert.match(workspace, /setActiveThread\(thread.id\); return \(\) => setActiveThread\(""\)/);
 });
 

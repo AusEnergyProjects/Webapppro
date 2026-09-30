@@ -33,24 +33,28 @@ function MessageAlerts({ children, user, getAuthHeaders, enabled = true, onOpen 
     if (!enabled || (!user && !getAuthHeaders)) return;
     let disposed = false, pending = false;
     let seen: Map<string, number> | null = null;
+    const delivered = new Map<string, number>();
     let controller: AbortController | null = null;
     const poll = async () => {
       if (disposed || pending || document.visibilityState !== "visible") return;
       pending = true;
-      controller = new AbortController();
-      const signal = controller.signal;
-      const timeout = window.setTimeout(() => controller?.abort(), 12000);
+      const currentController = new AbortController(); controller = currentController;
+      const signal = currentController.signal;
+      const timeout = window.setTimeout(() => currentController.abort(), 12000);
+      const aborted = new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(new Error("Message alerts timed out.")), { once: true }));
       try {
         // The deadline includes a stalled token refresh, not just the network request.
-        const result = await Promise.race([
+        const { result, auth, scopedRequest } = await Promise.race([
           (async () => {
-            const auth = latest.current.getAuthHeaders ? await latest.current.getAuthHeaders() : { Authorization: `Bearer ${await latest.current.user!.getIdToken()}` };
+            const current = latest.current;
+            const auth = current.getAuthHeaders ? await current.getAuthHeaders() : { Authorization: `Bearer ${await current.user!.getIdToken()}` };
             signal.throwIfAborted();
-            const response = await latest.current.request("/api/trade-messages?view=unread", { headers: auth, cache: "no-store", signal });
+            const response = await current.request("/api/trade-messages?view=unread", { headers: auth, cache: "no-store", signal });
             if (!response.ok) throw new Error("Message alerts could not be refreshed.");
-            return await response.json() as { ok: boolean; unreadCount: number; threads: UnreadThread[] };
+            const result = await response.json() as { ok: boolean; unreadCount: number; threads: UnreadThread[] };
+            return { result, auth, scopedRequest: current.request };
           })(),
-          new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(new Error("Message alerts timed out.")), { once: true })),
+          aborted,
         ]);
         if (disposed || signal.aborted || !result.ok) return;
         const fresh = result.threads.find(thread => thread.id !== activeThread.current && (seen ? thread.sequence > (seen.get(thread.id) || 0) : true));
@@ -63,6 +67,25 @@ function MessageAlerts({ children, user, getAuthHeaders, enabled = true, onOpen 
         result.threads.forEach(thread => seen!.set(thread.id, Math.max(seen!.get(thread.id) || 0, thread.sequence)));
         setSnapshot({ unreadCount: result.unreadCount, threads: result.threads });
         setUnavailable(false);
+        // Receiving an authenticated unread snapshot confirms delivery, not
+        // reading. Bound both the batch and concurrency; failed acknowledgements
+        // remain unconfirmed and retry on the next poll in this identity scope.
+        const acknowledgements = result.threads.filter(thread => Number.isSafeInteger(thread.sequence)
+          && thread.sequence > (delivered.get(thread.id) || 0)).slice(0,20);
+        let next = 0;
+        const acknowledge = async () => {
+          while (!disposed && !signal.aborted && next < acknowledgements.length) {
+            const thread = acknowledgements[next++];
+            try {
+              const response = await scopedRequest("/api/trade-messages", { method:"POST", headers:{...auth,"Content-Type":"application/json"},
+                body:JSON.stringify({action:"delivered",threadId:thread.id,throughSequence:thread.sequence}), cache:"no-store", signal });
+              if (response.ok && (await response.json() as {ok?:boolean}).ok && !disposed && !signal.aborted)
+                delivered.set(thread.id,Math.max(delivered.get(thread.id) || 0,thread.sequence));
+            } catch { /* Keep this delivery unconfirmed for the next poll. */ }
+          }
+        };
+        try { await Promise.race([Promise.all([acknowledge(),acknowledge()]),aborted]); }
+        catch { /* A receipt timeout must not discard the successfully fetched unread state. */ }
       } catch { if (!disposed) setUnavailable(true); }
       finally { window.clearTimeout(timeout); pending = false; }
     };

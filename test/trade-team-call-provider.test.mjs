@@ -41,12 +41,12 @@ test('call API timeout aborts a hanging fetch and preserves server access errors
 });
 
 function pollFixture({hadRemote=false,elapsed=0,participants=[],online=true,readCall}={}) {
-  const stops=[],incoming=[],active=[];
+  const stops=[],incoming=[],active=[],silenced=[];
   const current={call:{id:'call-1234',createdAt:new Date(Date.now()-elapsed).toISOString()},sessionId:'session-1234',memberId:'member-self',cursor:0,lastSuccess:Date.now(),startedAt:Date.now(),hadRemote,
     peers:{sync:async()=>{},receive:async()=>{}}};
   const tick=operation('tick',{inFlight:false,disposed:false,session:{current},starting:{current:false},navigator:{onLine:online},
-    api:async()=>readCall ? readCall(current.call) : {call:{...current.call,status:'active',participants},signals:[]},TEAM_CALL_RING_SECONDS,stop:(...args)=>stops.push(args),setActive:value=>active.push(value),setIncoming:value=>incoming.push(value),dismissed:{current:new Set()}});
-  return{tick,stops,active,current};
+    api:async()=>readCall ? readCall(current.call) : {call:{...current.call,status:'active',participants},signals:[]},TEAM_CALL_RING_SECONDS,stop:(...args)=>stops.push(args),setActive:value=>active.push(value),setIncoming:value=>incoming.push(value),dismissed:{current:new Set()},ringer:{current:{silence:id=>silenced.push(id)}}});
+  return{tick,stops,active,current,silenced};
 }
 
 test('unanswered calls stop exactly 45 seconds after server creation, not local session setup',async context=>{
@@ -178,15 +178,15 @@ test('changing to busy clears the pending ring without touching an established c
 test('an incoming response started before a presence change cannot restart ringing',async()=>{
   let resolve;const incoming=[],revision={current:0};
   const tick=operation('tick',{inFlight:false,disposed:false,session:{current:null},starting:{current:false},navigator:{onLine:true},presenceRevision:revision,
-    api:async()=>new Promise(done=>{resolve=done;}),setIncoming:value=>incoming.push(value),dismissed:{current:new Set()}});
+    api:async()=>new Promise(done=>{resolve=done;}),setIncoming:value=>incoming.push(value),dismissed:{current:new Set()},generation:{current:0}});
   const pending=tick();revision.current++;
   resolve({memberId:'member-self',calls:[{id:'call-1234',createdByMemberId:'member-other'}]});await pending;
   assert.deepEqual(incoming,[]);
 });
 
 function startFixture({requestMedia,permissionState=async()=> 'unknown',policyBlocked=false}={}) {
-  const order=[],audioEvents=[],state={},session={current:null},media={current:null},mediaRequest={current:null},generation={current:0},starting={current:false};
-  const ringer={current:{stop:()=>audioEvents.push('stop'),unlock:async()=>{audioEvents.push('unlock');return true;}}};
+  const order=[],audioEvents=[],silenced=[],peerOptions=[],state={},session={current:null},media={current:null},mediaRequest={current:null},generation={current:0},starting={current:false},tickRef={current:async()=>{}};
+  const ringer={current:{stop:()=>audioEvents.push('stop'),unlock:async()=>{audioEvents.push('unlock');return true;},silence:id=>silenced.push(id)}};
   const setters=Object.fromEntries(['Busy','Notice','Retry','PermissionHelp','Minimized','OpeningMode','LocalPreview','HasCamera','Active','Incoming','Remotes','Muted','CameraOff','CameraNotice','MultipleCameras','SwitchingCamera'].map(name=>[`set${name}`,value=>{state[name]=value;}]));
   const call={id:'call-1234',threadId:'thread-1234',status:'active',createdAt:new Date().toISOString(),participants:[]};
   const api=async(_query,body)=>{
@@ -195,12 +195,12 @@ function startFixture({requestMedia,permissionState=async()=> 'unknown',policyBl
   };
   const release=operation('release',{generation,starting,mediaRequest,session,media,ringer,changingCamera:{current:false},dismissed:{current:new Set()},api});
   const stop=operation('stop',{release,...setters});
-  const begin=operation('begin',{available:true,starting,session,...setters,generation,mediaRequest,media,ringer,facing:{current:'user'},
+  const begin=operation('begin',{available:true,starting,session,...setters,generation,mediaRequest,media,ringer,tickRef,facing:{current:'user'},
     navigator:{mediaDevices:{getUserMedia(){}}},window:{RTCPeerConnection(){}},teamCallMediaConstraints,
     openTeamCallMedia:(constraints,_request,signal)=>openTeamCallMedia(constraints,value=>{order.push('media');return requestMedia(value);},signal),
     api,stop,teamCallMediaError,teamCallNeedsPermission,teamCallPolicyBlocked:()=>policyBlocked,teamCallPermissionState:permissionState,
-    TeamCallConnections:class{async sync(){}close(){}},dismissed:{current:new Set()}});
-  return {begin,stop,state,order,audioEvents,session,media,generation};
+    TeamCallConnections:class{constructor(options){peerOptions.push(options);}async sync(){}close(){}},dismissed:{current:new Set()}});
+  return {begin,stop,state,order,audioEvents,silenced,peerOptions,session,media,generation,starting,tickRef};
 }
 
 const fakeStream=()=>({stopped:0,getTracks(){return[{stop:()=>this.stopped++}];},getVideoTracks(){return[];}});
@@ -212,10 +212,73 @@ test('start and answer invoke media on the click stack before auth or server wor
     const pending=f.begin('thread-1234','audio',existing);
     assert.deepEqual(f.order,['media']);assert.equal(f.state.Busy,true);
     assert.deepEqual(f.audioEvents,['stop','unlock'],'Starting or answering stops stale tones and unlocks on the click stack');
+    assert.deepEqual(f.silenced,existing?['incoming-1234']:[],'Answer silences other tabs before permission or authentication resolves');
     grant(stream);await pending;
     assert.deepEqual(f.order,['media',existing?'join':'start','ice']);assert.equal(f.state.Active.id,'call-1234');
     f.stop();assert.equal(stream.stopped,1);assert.deepEqual(f.audioEvents,['stop','unlock','stop']);
   }
+});
+
+test('RTC connection silences ringing immediately and obsolete peer callbacks cannot affect a later session',async()=>{
+  const f=startFixture({requestMedia:async()=>fakeStream()});
+  await f.begin('thread-1234','audio');
+  const peers=[{state:'connected',memberId:'member-peer'}];
+  f.peerOptions[0].changed(peers);
+  assert.deepEqual(f.silenced,['call-1234']);assert.equal(f.state.Remotes,peers);
+  f.stop();const count=f.silenced.length;
+  f.peerOptions[0].changed(peers);
+  assert.equal(f.silenced.length,count);assert.deepEqual(f.state.Remotes,[]);
+});
+
+test('ready peers wake signalling immediately and connected calls return to normal polling',async()=>{
+  const f=startFixture({requestMedia:async()=>fakeStream()});
+  let wakes=0;f.tickRef.current=async()=>{wakes++;assert.equal(f.starting.current,false);assert.ok(f.session.current.peers);};
+  await f.begin('thread-1234','audio');assert.equal(wakes,1);
+  for(const [activeId,remotes,expected] of [[undefined,[],5000],['call-1234',[],300],['call-1234',[{state:'connecting'}],300],['call-1234',[{state:'connected'}],1500],['call-1234',[{state:'connected'},{state:'connecting'}],300]]){
+    assert.equal(operation('pollInterval',{activeId,remotes}),expected);
+  }
+  f.stop();
+});
+
+test('polling cannot race the initial peer negotiation while Answer is still setting up',async()=>{
+  const tick=operation('tick',{inFlight:false,disposed:false,session:{current:{peers:{}}},starting:{current:true},
+    api:()=>assert.fail('Peer setup must finish before the polling processor can use it')});
+  await tick();
+});
+
+test('retrying the same incoming call after permission refusal keeps its sound silenced without preventing Join',async()=>{
+  let attempts=0;const existing={id:'call-1234'};
+  const f=startFixture({requestMedia:async()=>{if(!attempts++)throw new DOMException('denied','NotAllowedError');return fakeStream();}});
+  await f.begin('thread-1234','audio',existing);assert.equal(f.state.Retry.existing,existing);assert.deepEqual(f.order,['media']);
+  await f.begin('thread-1234','audio',existing);
+  assert.deepEqual(f.order,['media','media','join','ice']);assert.equal(f.state.Active.id,existing.id);assert.ok(f.silenced.every(id=>id===existing.id));f.stop();
+});
+
+test('authenticated remote join silences ringback before the React render or peer sync',async()=>{
+  const f=pollFixture({participants:[{memberId:'member-peer'}]});
+  f.current.peers.sync=async()=>assert.deepEqual(f.silenced,['call-1234']);
+  await f.tick();assert.deepEqual(f.silenced,['call-1234']);assert.equal(f.stops.length,0);
+});
+
+test('an invitation poll started before Answer cannot restore ringing during setup or after cancellation',async()=>{
+  for(const cancel of [false,true]){
+    let deliver,grant;const incoming=[];
+    const f=startFixture({requestMedia:()=>new Promise(resolve=>{grant=resolve;})});
+    const tick=operation('tick',{inFlight:false,disposed:false,session:f.session,starting:f.starting,navigator:{onLine:true},presenceRevision:{current:0},generation:f.generation,
+      api:async()=>new Promise(resolve=>{deliver=resolve;}),setIncoming:value=>incoming.push(value),dismissed:{current:new Set()},ringer:{current:{silence:()=>assert.fail('A stale poll must be discarded')}}});
+    const polling=tick();const answering=f.begin('thread-1234','audio',{id:'incoming-1234'});
+    if(cancel)f.stop();
+    deliver({memberId:'member-self',calls:[{id:'incoming-1234',createdByMemberId:'member-other'}]});await polling;
+    assert.deepEqual(incoming,[],cancel?'Cancellation must also invalidate the old snapshot':'Permission setup must not repopulate an invitation');
+    grant(fakeStream());await answering;f.stop();
+  }
+});
+
+test('a server-confirmed answered invitation silences other tabs before updating the invitation list',async()=>{
+  const events=[];const invitation={id:'call-1234',createdByMemberId:'member-other',hasBeenAnswered:true};
+  const tick=operation('tick',{inFlight:false,disposed:false,session:{current:null},starting:{current:false},navigator:{onLine:true},presenceRevision:{current:0},generation:{current:0},
+    api:async()=>({memberId:'member-self',calls:[invitation]}),setIncoming:value=>events.push(value),dismissed:{current:new Set()},ringer:{current:{silence:id=>events.push(id)}}});
+  await tick();assert.deepEqual(events,['call-1234',[invitation]]);
 });
 
 test('permission refusal shows retry without contacting the server and voice recovery requests no camera',async()=>{

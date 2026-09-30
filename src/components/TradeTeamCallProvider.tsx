@@ -72,6 +72,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   const facing = useRef<CameraFacing>("user"), changingCamera = useRef(false);
   const session = useRef<CallSession | null>(null), media = useRef<MediaStream | null>(null), generation = useRef(0), dismissed = useRef(new Set<string>()), starting = useRef(false);
   const mediaRequest = useRef<AbortController | null>(null);
+  const tickRef = useRef<() => Promise<void>>(async () => undefined);
   const authentication = useRef({user,getAuthHeaders});
   useEffect(() => { authentication.current = {user,getAuthHeaders}; },[user,getAuthHeaders]);
   const available = enabled && Boolean(user || getAuthHeaders);
@@ -103,7 +104,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
     };
   },[available]);
   const ringingId = !active && !busy && !retry && !incoming[0]?.hasBeenAnswered ? incoming[0]?.id : undefined;
-  const outgoingRingId = active && active.createdByMemberId === session.current?.memberId && !session.current.hadRemote
+  const outgoingRingId = active && !active.hasBeenAnswered && active.createdByMemberId === session.current?.memberId && !session.current.hadRemote
     && !remotes.some(peer => peer.state === 'connected') ? active.id : undefined;
   const ringingCreatedAt = outgoingRingId ? active?.createdAt : ringingId ? incoming[0]?.createdAt : undefined;
   useEffect(() => {
@@ -111,7 +112,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
     const audio = ringer.current;
     const remaining = Date.parse(ringingCreatedAt || "") + TEAM_CALL_RING_SECONDS * 1000 - Date.now();
     if (!(remaining > 0)) { audio?.stop(); return; }
-    audio?.start(outgoingRingId ? 'outgoing' : 'incoming');
+    audio?.start(outgoingRingId ? 'outgoing' : 'incoming',outgoingRingId || ringingId);
     const timer = setTimeout(() => audio?.stop(),remaining);
     return () => { clearTimeout(timer); audio?.stop(); };
   },[ringingId,outgoingRingId,ringingCreatedAt]);
@@ -159,6 +160,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   const begin = useCallback(async (threadId: string, mode: Mode, existing?: TeamCall) => {
     if (!available || starting.current || session.current) return;
     ringer.current?.stop(); void ringer.current?.unlock();
+    if (existing) ringer.current?.silence(existing.id);
     starting.current = true; setBusy(true); setNotice(""); setRetry(null); setPermissionHelp(null); setMinimized(false); setOpeningMode(mode);
     const epoch = ++generation.current, sessionId = crypto.randomUUID();
     try {
@@ -177,14 +179,19 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       if (!result.call || !result.memberId) throw new Error("The call could not start.");
       if (generation.current !== epoch) { local.getTracks().forEach(track => track.stop()); void api("",{action:"leave",callId:result.call.id,sessionId}).catch(() => {}); return; }
       const current: CallSession = {call:result.call,memberId:result.memberId,sessionId,local,peers:null,cursor:0,lastSuccess:Date.now(),startedAt:Date.now(),hadRemote:result.call.participants.some(person => person.memberId !== result.memberId)};
+      if (existing || current.hadRemote || result.call.hasBeenAnswered) ringer.current?.silence(result.call.id);
       session.current = current; setActive(result.call); setIncoming(items => items.filter(item => item.id !== result.call?.id));
       const ice = await api("",{action:"ice",callId:current.call.id,sessionId});
       if (session.current !== current || !ice.iceServers?.length) { if (session.current === current) throw new Error("The call relay is unavailable. Try again shortly."); return; }
       current.peers = new TeamCallConnections({memberId:current.memberId,sessionId,local,iceServers:ice.iceServers,
         send:async (target,type,payload) => { await api("",{action:"signal",callId:current.call.id,sessionId,toMemberId:target.memberId,toSessionId:target.sessionId,requestId:crypto.randomUUID(),type,payload}); },
-        changed:setRemotes, failed:message => { if (session.current === current) stop(message); }});
+        changed:peers => {
+          if (session.current !== current) return;
+          if (peers.some(peer => peer.state === "connected")) ringer.current?.silence(current.call.id);
+          setRemotes(peers);
+        }, failed:message => { if (session.current === current) stop(message); }});
       await current.peers.sync(current.call.participants);
-      if (session.current === current) { starting.current = false; setBusy(false); }
+      if (session.current === current) { starting.current = false; setBusy(false); void tickRef.current(); }
     } catch (error) {
       if (generation.current !== epoch) return;
       const code = error && typeof error === "object" && "code" in error ? error.code : "";
@@ -229,13 +236,14 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   },[available,api,stop]);
 
   const activeId = active?.id;
+  const pollInterval = activeId ? remotes.length > 0 && remotes.every(peer => peer.state === "connected") ? 1500 : 300 : 5000;
   useEffect(() => {
     if (!available) return;
     let inFlight = false, disposed = false;
     const tick = async () => {
       if (inFlight || disposed) return;
       const current = session.current;
-      if (!current && starting.current) return;
+      if (starting.current || (current && !current.peers)) return;
       if (!navigator.onLine) { if (current) stop("Your device is offline. Reconnect to the internet, then call again."); return; }
       inFlight = true;
       let processing = false;
@@ -250,14 +258,19 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
           // A pre-deadline snapshot may arrive after a teammate has answered.
           if (!hasRemote && requestedAt >= Date.parse(current.call.createdAt) + TEAM_CALL_RING_SECONDS * 1000) { stop("No answer. You can call again or send a message."); return; }
           current.hadRemote ||= hasRemote;
+          if (hasRemote || result.call.hasBeenAnswered) ringer.current?.silence(current.call.id);
           current.call = result.call; setActive(result.call); processing = true;
           await current.peers.sync(result.call.participants);
           for (const signal of result.signals || []) { await current.peers.receive(signal); current.cursor = Math.max(current.cursor,signal.sequence); }
           current.lastSuccess = Date.now();
         } else if (!current) {
           const availabilityVersion = presenceRevision.current;
+          const epoch = generation.current;
           const result = await api("view=incoming");
-          if (!disposed && !session.current && availabilityVersion === presenceRevision.current) setIncoming((result.calls || []).filter(call => !dismissed.current.has(call.id) && call.createdByMemberId !== result.memberId));
+          if (!disposed && !session.current && !starting.current && epoch === generation.current && availabilityVersion === presenceRevision.current) {
+            for (const call of result.calls || []) if (call.hasBeenAnswered) ringer.current?.silence(call.id);
+            setIncoming((result.calls || []).filter(call => !dismissed.current.has(call.id) && call.createdByMemberId !== result.memberId));
+          }
         }
       } catch (error) {
         if (disposed || !current || session.current !== current) return;
@@ -266,11 +279,17 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       } finally { inFlight = false; }
     };
     const resume = () => { if (document.visibilityState === "visible") void tick(); };
-    void tick(); const interval = window.setInterval(() => void tick(), activeId ? 1500 : 5000);
+    tickRef.current = tick;
+    void tick();
     window.addEventListener("focus",resume); window.addEventListener("online",resume); document.addEventListener("visibilitychange",resume);
-    return () => { disposed = true; window.clearInterval(interval); window.removeEventListener("focus",resume); window.removeEventListener("online",resume); document.removeEventListener("visibilitychange",resume); };
-  // The call ID changes only on start/end; peer and heartbeat updates do not restart polling.
+    return () => { disposed = true; tickRef.current = async () => undefined; window.removeEventListener("focus",resume); window.removeEventListener("online",resume); document.removeEventListener("visibilitychange",resume); };
   },[available,api,stop,activeId]);
+  useEffect(() => {
+    if (!available) return;
+    // Changing cadence must not replace an in-flight signalling processor.
+    const interval = window.setInterval(() => void tickRef.current(),pollInterval);
+    return () => window.clearInterval(interval);
+  },[available,pollInterval]);
 
   const toggleMuted = () => { const next=!muted; media.current?.getAudioTracks().forEach(track => {track.enabled=!next;}); setMuted(next); };
   const changeCamera = async (nextFacing: CameraFacing) => {

@@ -6796,6 +6796,17 @@ export const tradeInternalMessages = sqliteTable("trade_internal_messages", {
   uniqueIndex("trade_internal_messages_request_idx").on(t.ownerUid,t.actorMemberId,t.requestId),
   check("trade_internal_messages_sequence_check",sql`${t.sequence}>0`), check("trade_internal_messages_body_check",sql`length(${t.body})<=2000`)]);
 
+export const tradeMessageReceipts = sqliteTable("trade_message_receipts", {
+  messageId: text("message_id").notNull().references(() => tradeInternalMessages.id), ownerUid: text("owner_uid").notNull(),
+  threadId: text("thread_id").notNull().references(() => tradeMessageThreads.id), memberId: text("member_id").notNull(),
+  recipientName: text("recipient_name").notNull(), deliveredAt: text("delivered_at").notNull().default(""),
+  readAt: text("read_at").notNull().default(""), legacyRead: integer("legacy_read").notNull().default(0),
+}, t => [primaryKey({ columns: [t.messageId, t.memberId] }),
+  index("trade_message_receipts_recipient_idx").on(t.ownerUid, t.threadId, t.memberId, t.messageId),
+  check("trade_message_receipts_legacy_check", sql`${t.legacyRead} IN (0,1)`),
+  check("trade_message_receipts_read_check", sql`${t.readAt}='' OR ${t.deliveredAt}<>''`),
+  check("trade_message_receipts_legacy_time_check", sql`${t.legacyRead}=0 OR (${t.deliveredAt}='' AND ${t.readAt}='')`)]);
+
 export const tradeMessageMedia = sqliteTable("trade_message_media", {
   id: text("id").primaryKey(), ownerUid: text("owner_uid").notNull(), uploaderMemberId: text("uploader_member_id").notNull(),
   purpose: text("purpose").notNull(), kind: text("kind").notNull(), threadId: text("thread_id").notNull().default(""),

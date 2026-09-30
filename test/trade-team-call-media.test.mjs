@@ -106,14 +106,14 @@ test('successful or denied media requests clear their deadline without hiding th
   context.mock.timers.tick(30001);assert.equal(stopped,0);
 });
 
-function ringFixture({blocked=false,resume}={}) {
+function ringFixture({blocked=false,resume,createChannel}={}) {
   const states=[],tones=[];let created=0,resumes=0;
   const context={state:'suspended',currentTime:0,destination:{},
     async resume(){resumes++;if(blocked)throw new DOMException('blocked','NotAllowedError');await resume?.();this.state='running';this.onstatechange?.();},
     async close(){this.state='closed';},
     createOscillator(){const tone={frequency:{value:0},starts:[],stops:0,disconnects:0,connect(){},start(at){this.starts.push(at);},stop(){this.stops++;},disconnect(){this.disconnects++;}};tones.push(tone);return tone;},
     createGain(){return{gain:{setValueAtTime(){},linearRampToValueAtTime(){}},connect(){},disconnect(){}};}};
-  const ringer=new TeamCallRinger(ready=>states.push(ready),()=>{created++;return context;});
+  const ringer=new TeamCallRinger(ready=>states.push(ready),()=>{created++;return context;},createChannel);
   return{ringer,context,tones,states,get created(){return created;},get resumes(){return resumes;}};
 }
 
@@ -165,4 +165,50 @@ test('overlapping gesture unlocks produce one initial ring pulse while audio per
   assert.equal(f.created,1);assert.equal(f.tones.length,0);grant();
   await Promise.all([first,second]);assert.equal(f.tones.length,2,'pointerdown and click must not double the ringback pulse');
   f.ringer.close();
+});
+
+test('Answer silences the same call in every open tab and stale invitations cannot restart it',async context=>{
+  context.mock.timers.enable({apis:['setInterval']});
+  const channels=[],messages=[];
+  const createChannel=()=>{
+    const channel={onmessage:null,closed:false,postMessage(data){
+      messages.push(data);
+      for(const target of channels)if(target!==this&&!target.closed)target.onmessage?.({data});
+    },close(){this.closed=true;}};
+    channels.push(channel);return channel;
+  };
+  const first=ringFixture({createChannel}),second=ringFixture({createChannel}),other=ringFixture({createChannel});
+  await Promise.all([first.ringer.unlock(),second.ringer.unlock(),other.ringer.unlock()]);
+  first.ringer.start('incoming','call-1234');second.ringer.start('incoming','call-1234');other.ringer.start('incoming','call-5678');
+  first.ringer.silence('call-1234');
+  assert.deepEqual(messages,[{type:'silence',callId:'call-1234'}],'Only a call reference crosses tabs, with no media/auth command');
+  for(const fixture of [first,second])assert.ok(fixture.tones.every(tone=>tone.disconnects===1));
+  assert.ok(other.tones.every(tone=>tone.disconnects===0),'An unrelated invitation must keep ringing');
+  for(const fixture of [first,second]){fixture.ringer.start('incoming','call-1234');fixture.ringer.start('outgoing','call-1234');}
+  context.mock.timers.tick(8000);
+  assert.equal(first.tones.length,2);assert.equal(second.tones.length,2);assert.equal(other.tones.length,6);
+  second.ringer.start('incoming','call-next');assert.equal(second.tones.length,4,'Silencing one call must not mute future calls');
+  for(const fixture of [first,second,other])fixture.ringer.close();
+  assert.ok(channels.every(channel=>channel.closed&&channel.onmessage===null));
+  context.mock.timers.tick(8000);assert.equal(second.tones.length,4);
+});
+
+test('silence while audio permission resumes prevents late ringing and ignores invalid cross-tab commands',async context=>{
+  context.mock.timers.enable({apis:['setInterval']});
+  let grant;const channel={onmessage:null,postMessage(){},close(){}};
+  const f=ringFixture({resume:()=>new Promise(resolve=>{grant=resolve;}),createChannel:()=>channel});
+  f.ringer.start('incoming','call-1234');const unlocking=f.ringer.unlock();
+  f.ringer.silence('call-1234');grant();await unlocking;
+  f.ringer.start('incoming','call-1234');context.mock.timers.tick(8000);assert.equal(f.tones.length,0);
+  f.ringer.start('incoming','call-next');assert.equal(f.tones.length,2);
+  for(const data of [null,{type:'end',callId:'call-next'},{type:'silence',callId:'../invalid'},{type:'silence',callId:4}])channel.onmessage({data});
+  context.mock.timers.tick(4000);assert.equal(f.tones.length,4);
+  f.ringer.close();assert.equal(channel.onmessage,null);
+});
+
+test('closing during an audio resume cannot create a late ringtone',async context=>{
+  context.mock.timers.enable({apis:['setInterval']});
+  let grant;const f=ringFixture({resume:()=>new Promise(resolve=>{grant=resolve;})});
+  f.ringer.start('incoming','call-1234');const unlocking=f.ringer.unlock();f.ringer.close();grant();
+  assert.equal(await unlocking,false);context.mock.timers.tick(8000);assert.equal(f.tones.length,0);
 });

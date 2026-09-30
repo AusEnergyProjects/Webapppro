@@ -1,4 +1,5 @@
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
+import * as teamPresence from "../src/lib/trade-team-presence.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
@@ -56,6 +57,7 @@ function loadRoute(database, aborted, currentAccess = managerAccess, { sent = []
   }).outputText;
   const moduleRecord = { exports: {} }; const databaseBinding = d1(database);
   const mocks = {
+    "@/lib/trade-team-presence": teamPresence,
     "@/lib/trade-job-collaboration": jobCollaboration, "./trade-job-collaboration": jobCollaboration,
     "../../../../db": { getD1: () => databaseBinding },
     "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }),
@@ -146,6 +148,7 @@ function fixture() {
     CREATE TABLE trade_work_orders (id text PRIMARY KEY, firebase_uid text NOT NULL, assignee_member_id text NOT NULL);
   `);
   const columns = permissionColumns.join(", ");
+  database.exec(fs.readFileSync(new URL("../drizzle/0219_trade_team_presence.sql", import.meta.url), "utf8"));
   const zeros = permissionColumns.map(() => "0").join(", ");
   const insertMember = (id, memberUid, status, updatedAt, manageTeam = 0) => {
     const values = permissionColumns.map((column) => column === "can_manage_team" ? manageTeam : 0).join(", ");
@@ -183,6 +186,22 @@ async function post(route, body) {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
   }));
 }
+
+test("roster shows the selected call status within its business and no online status for inactive people", async () => {
+  const database = fixture();
+  try {
+    database.exec("INSERT INTO trade_team_presence VALUES ('owner-1','target-1','busy','2026-09-30T08:00:00Z'),('other-owner','target-1','offline','2026-09-30T08:00:00Z')");
+    const route = loadRoute(database, []);
+    const result = await route.GET(new Request("https://test/api/trade-team"));
+    assert.equal(result.status, 200);
+    const body = await result.json();
+    assert.equal(body.members.find(member => member.id === "target-1").presence, "busy");
+    assert.equal(body.members.find(member => member.id === "owner-member").presence, "online");
+    database.exec("UPDATE trade_team_members SET status='suspended' WHERE id='target-1'");
+    const inactive = await (await route.GET(new Request("https://test/api/trade-team"))).json();
+    assert.equal(inactive.members.find(member => member.id === "target-1").presence, null);
+  } finally { database.close(); }
+});
 
 test("saving canonical personal services independently creates exact training todos without business approval", async () => {
   const database = fixture(); installCreditexTrainingFixture(database, { qualified: false });

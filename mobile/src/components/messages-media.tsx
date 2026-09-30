@@ -40,11 +40,13 @@ function VoicePlayer({ uri, disabled }: { uri: string; disabled: boolean }) {
   return <View><View style={messageStyles.row}><MessageIconButton icon={status.playing ? 'pause' : 'play'} label={status.playing ? 'Pause voice note' : 'Play voice note'} disabled={disabled} onPress={() => void toggle()} /><Text style={messageStyles.body}>Voice note · {Math.floor(status.currentTime)}s / {Math.ceil(status.duration || 0)}s</Text></View>{error ? <MessageNotice error>{error}</MessageNotice> : null}</View>;
 }
 
-export function MessageMedia({ attachment, callsBusy }: { attachment: MessageAttachment; callsBusy: boolean }) {
+export function MessageMedia({ attachment, callsBusy, onVisibilityChange }: { attachment: MessageAttachment; callsBusy: boolean; onVisibilityChange?: (id: string, visible: boolean) => void }) {
   const [uri, setUri] = useState('');
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [retry, setRetry] = useState(0);
+  const showPhoto = (visible: boolean) => { onVisibilityChange?.(attachment.id, visible); setExpanded(visible); };
+  useEffect(() => () => { onVisibilityChange?.(attachment.id, false); }, [attachment.id, onVisibilityChange]);
   useEffect(() => {
     const controller = new AbortController();
     let cached: File | null = null;
@@ -62,8 +64,8 @@ export function MessageMedia({ attachment, callsBusy }: { attachment: MessageAtt
   if (!uri) return <MessageLoading />;
   if (attachment.kind === 'audio') return <VoicePlayer uri={uri} disabled={callsBusy} />;
   return <>
-    <Pressable accessibilityRole="button" accessibilityLabel="Open photo" onPress={() => setExpanded(true)}><Image source={{ uri }} alt="Team message photo" accessibilityLabel="Team message photo" style={styles.photo} resizeMode="cover" /></Pressable>
-    <Modal visible={expanded} animationType="fade" onRequestClose={() => setExpanded(false)}><SafeAreaView style={styles.viewer}><View style={messageStyles.row}><Text style={[messageStyles.title, messageStyles.grow]}>Photo</Text><MessageIconButton icon="close" label="Close photo" onPress={() => setExpanded(false)} /></View><Image source={{ uri }} alt="Expanded team photo" accessibilityLabel="Expanded team photo" style={{ flex: 1 }} resizeMode="contain" /></SafeAreaView></Modal>
+    <Pressable accessibilityRole="button" accessibilityLabel="Open photo" onPress={() => showPhoto(true)}><Image source={{ uri }} alt="Team message photo" accessibilityLabel="Team message photo" style={styles.photo} resizeMode="cover" /></Pressable>
+    <Modal visible={expanded} animationType="fade" onRequestClose={() => showPhoto(false)}><SafeAreaView style={styles.viewer}><View style={messageStyles.row}><Text style={[messageStyles.title, messageStyles.grow]}>Photo</Text><MessageIconButton icon="close" label="Close photo" onPress={() => showPhoto(false)} /></View><Image source={{ uri }} alt="Expanded team photo" accessibilityLabel="Expanded team photo" style={{ flex: 1 }} resizeMode="contain" /></SafeAreaView></Modal>
   </>;
 }
 

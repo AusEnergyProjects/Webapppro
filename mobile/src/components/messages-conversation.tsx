@@ -1,22 +1,24 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, FlatList, Pressable, StyleSheet, Text, TextInput, View, type ViewToken } from 'react-native';
 
 import { ApiError } from '@/lib/api';
-import { definitiveMessageFailure, emptyMessageDraft, mergeTeamMessages, pendingMessage, smsAction, smsHistory, smsSendBlock, smsStatusLabels, teamAction, teamHistory, teamThreadName, type MessageDraft, type MessageSelection, type SmsConversation, type SmsMessage, type TeamMessage } from '@/lib/messages-client';
+import { definitiveMessageFailure, emptyMessageDraft, mergeTeamMessages, messageThread, pendingMessage, smsAction, smsHistory, smsSendBlock, smsStatusLabels, teamAction, teamHistory, teamThreadName, type MessageDraft, type MessageSelection, type SmsConversation, type SmsMessage, type TeamMessage } from '@/lib/messages-client';
 import { colours, radius } from '@/lib/theme';
 import { useNativeTeamCalls } from '@/providers/native-team-call-provider';
 import { FieldButton } from '@/components/field-button';
 import { MessageMedia, MessageMediaComposer } from '@/components/messages-media';
-import { customerColour, MessageAvatar, MessageIconButton, MessageKeyboardView, MessageLoading, MessageNotice, messageStyles } from '@/components/messages-ui';
+import { customerColour, MessageAvatar, MessageIconButton, MessageKeyboardView, MessageLoading, MessageNotice, MessageParticipants, MessageReceipt, SmsMessageReceipt, messagePresenceLabel, messageStyles } from '@/components/messages-ui';
 
-type DisplayMessage = { id: string; sender: string; body: string; mine: boolean; createdAt: string; status?: string; attachments: TeamMessage['attachments'] };
+type DisplayMessage = { id: string; sender: string; body: string; mine: boolean; createdAt: string; status?: string; smsStatus?: string; sequence?: number; receipt?: TeamMessage['receipt']; attachments: TeamMessage['attachments'] };
+const messageViewability = { itemVisiblePercentThreshold: 50, minimumViewTime: 400 };
 
 export function MessagesConversation({ selection, memberId, draft, onDraft, onBack, onRead, online }: {
   selection: MessageSelection; memberId: string; draft: MessageDraft; onDraft: (draft: MessageDraft) => void; onBack: () => void; onRead: () => void; online: boolean;
 }) {
   const calls = useNativeTeamCalls();
   const [messages, setMessages] = useState<TeamMessage[]>([]);
+  const [thread, setThread] = useState(selection.kind === 'team' ? selection.thread : null);
   const [sms, setSms] = useState<SmsConversation | null>(null);
   const [hasOlder, setHasOlder] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -31,12 +33,22 @@ export function MessagesConversation({ selection, memberId, draft, onDraft, onBa
   const loadingRequest = useRef(false);
   const controller = useRef(new AbortController());
   const readSequence = useRef(0);
+  const deliveredSequence = useRef(0);
+  const focused = useRef(false);
+  const visibleSequence = useRef(0);
+  const reading = useRef(false);
+  const obscured = useRef(calls.presented);
+  const expandedMedia = useRef(new Set<string>());
   const draftRef = useRef(draft);
   const updateDraftRef = useRef(onDraft);
   const onReadRef = useRef(onRead);
   useEffect(() => { draftRef.current = draft; updateDraftRef.current = onDraft; onReadRef.current = onRead; }, [draft, onDraft, onRead]);
+  useEffect(() => { obscured.current = calls.presented; }, [calls.presented]);
   const internal = selection.kind === 'team';
-  const name = internal ? teamThreadName(selection.thread, memberId) : selection.customer.name;
+  const currentThread = internal ? thread || selection.thread : null;
+  const threadId = currentThread?.id || '';
+  const name = selection.kind === 'team' ? teamThreadName(thread || selection.thread, memberId) : selection.customer.name;
+  const peerPresence = currentThread?.kind === 'dm' ? currentThread.members.find(member => member.id !== memberId)?.presence : undefined;
   const accent = internal ? colours.green : customerColour;
 
   useEffect(() => {
@@ -55,22 +67,50 @@ export function MessagesConversation({ selection, memberId, draft, onDraft, onBa
       updateDraftRef.current(emptyMessageDraft()); setNotice('Message saved. Check its delivery status below.');
     }
   }, []);
+  const onMediaVisibilityChange = useCallback((id: string, visible: boolean) => {
+    if (visible) expandedMedia.current.add(id);
+    else expandedMedia.current.delete(id);
+  }, []);
+  const acknowledgeRead = useCallback(async () => {
+    const throughSequence = visibleSequence.current;
+    if (!threadId || !online || !alive.current || !focused.current || obscured.current || expandedMedia.current.size || AppState.currentState !== 'active'
+      || reading.current || throughSequence <= readSequence.current) return;
+    reading.current = true;
+    try {
+      await teamAction({ action: 'read', threadId, throughSequence }, controller.current.signal);
+      if (!alive.current) return;
+      readSequence.current = throughSequence;
+      deliveredSequence.current = Math.max(deliveredSequence.current, throughSequence);
+      onReadRef.current();
+    } catch { /* Keep the confirmed cursor; the next visible refresh retries. */ }
+    finally { reading.current = false; }
+  }, [online, threadId]);
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<DisplayMessage>[] }) => {
+    visibleSequence.current = Math.max(0, ...viewableItems.filter(item => item.isViewable).map(item => item.item.sequence || 0));
+    void acknowledgeRead();
+  }, [acknowledgeRead]);
   const load = useCallback(async (before = 0) => {
     if (!online || !alive.current || loadingRequest.current || inFlight.current) return;
     loadingRequest.current = true;
     try {
       if (selection.kind === 'team') {
-        const result = await teamHistory(selection.thread.id, before, controller.current.signal);
+        const [result, metadata] = await Promise.all([
+          teamHistory(selection.thread.id, before, controller.current.signal),
+          messageThread(selection.thread.id, controller.current.signal),
+        ]);
         if (!alive.current) return;
+        setThread(metadata.thread);
         setMessages(current => mergeTeamMessages(current, result.messages));
         if (before || readSequence.current === 0) setHasOlder(result.hasOlder);
         reconcile(result.messages);
         const through = result.messages.at(-1)?.sequence || 0;
-        if (!before && through > readSequence.current && AppState.currentState === 'active') {
-          await teamAction({ action: 'read', threadId: selection.thread.id, throughSequence: through }, controller.current.signal);
-          if (!alive.current) return;
-          readSequence.current = through; onReadRef.current();
+        if (through > deliveredSequence.current) {
+          try {
+            await teamAction({ action: 'delivered', threadId: selection.thread.id, throughSequence: through }, controller.current.signal);
+            if (alive.current) deliveredSequence.current = Math.max(deliveredSequence.current, through);
+          } catch { /* Received content stays visible; a later poll retries the delivery receipt. */ }
         }
+        void acknowledgeRead();
       } else {
         const result = await smsHistory(selection.customer, controller.current.signal);
         if (!alive.current) return;
@@ -79,16 +119,16 @@ export function MessagesConversation({ selection, memberId, draft, onDraft, onBa
       if (alive.current) { setDenied(false); setError(''); }
     } catch (caught) { caughtError(caught); }
     finally { loadingRequest.current = false; if (alive.current) setLoading(false); }
-  }, [selection, online, caughtError, reconcile]);
+  }, [selection, online, caughtError, reconcile, acknowledgeRead]);
 
   useFocusEffect(useCallback(() => {
-    let focused = true;
-    const refresh = () => { if (focused && AppState.currentState === 'active') void load(); };
+    focused.current = true;
+    const refresh = () => { if (focused.current && AppState.currentState === 'active') { void load(); void acknowledgeRead(); } };
     refresh();
     const timer = setInterval(refresh, 3000);
     const app = AppState.addEventListener('change', refresh);
-    return () => { focused = false; clearInterval(timer); app.remove(); };
-  }, [load]));
+    return () => { focused.current = false; clearInterval(timer); app.remove(); };
+  }, [load, acknowledgeRead]));
 
   async function send() {
     if (inFlight.current || mediaBusy || !online || denied || (!draftRef.current.body.trim() && !draftRef.current.attachments.length)) return;
@@ -126,18 +166,19 @@ export function MessagesConversation({ selection, memberId, draft, onDraft, onBa
     finally { inFlight.current = false; if (alive.current) { setBusy(''); void load(); } }
   }
 
-  const display: DisplayMessage[] = internal ? messages.map(message => ({ ...message, sender: message.senderName })) : (sms?.messages || []).map(message => ({ ...message, sender: message.direction === 'inbound' ? name : message.senderName || 'Your business', mine: message.direction === 'outbound', attachments: [], status: smsStatusLabels[message.status] || 'Status pending' }));
+  const display: DisplayMessage[] = internal ? messages.map(message => ({ ...message, sender: message.senderName })) : (sms?.messages || []).map(message => ({ ...message, sender: message.direction === 'inbound' ? name : message.senderName || 'Your business', mine: message.direction === 'outbound', attachments: [], smsStatus: message.status, status: smsStatusLabels[message.status] || 'Status pending' }));
   const sendBlocked = !online || denied || loading || Boolean(busy) || mediaBusy || (!internal && Boolean(smsSendBlock(sms)));
   return <MessageKeyboardView style={styles.container}>
     <View style={styles.header}>
       <MessageIconButton icon="arrow-left" label="All chats" onPress={onBack} />
-      <MessageAvatar name={name} customer={!internal} group={internal && selection.thread.kind === 'group'} />
-      <View style={messageStyles.grow}><Text numberOfLines={2} style={messageStyles.title}>{name}</Text><Text style={[messageStyles.label, { color: accent }]}>{internal ? 'Team chat' : 'Customer SMS'}</Text></View>
+      <MessageAvatar name={name} customer={!internal} group={currentThread?.kind === 'group'} presence={peerPresence} />
+      <View style={messageStyles.grow}><Text numberOfLines={2} style={messageStyles.title}>{name}</Text><Text style={[messageStyles.label, { color: accent }]}>{internal ? `Team chat${messagePresenceLabel(peerPresence) ? ` · ${messagePresenceLabel(peerPresence)}` : ''}` : 'Customer SMS'}</Text></View>
       {internal ? <View style={styles.callButtons}>
         <MessageIconButton surface icon="phone-outline" label="Voice call" disabled={calls.busy || !online || denied || mediaBusy} onPress={() => { void calls.start(selection.thread.id, 'audio'); }} />
         <MessageIconButton surface icon="video-outline" label="Video call" disabled={calls.busy || !online || denied || mediaBusy} onPress={() => { void calls.start(selection.thread.id, 'video'); }} />
       </View> : null}
     </View>
+    {currentThread?.kind === 'group' ? <MessageParticipants members={currentThread.members} /> : null}
     {!internal ? <Text style={styles.context}>{selection.customer.phone}{selection.customer.jobNumber ? ` · ${selection.customer.jobNumber}` : ''}{sms?.connection ? `\nFrom ${sms.connection.number} · Shared with your business` : ''}</Text> : null}
     {!online ? <MessageNotice>You’re offline. Reconnect to load and send messages.</MessageNotice> : null}
     {error ? <View style={styles.noticeRow}><MessageNotice error>{error}</MessageNotice><FieldButton variant="quiet" disabled={Boolean(busy) || !online} onPress={() => { setLoading(true); void load(); }}>Refresh</FieldButton></View> : null}
@@ -151,14 +192,17 @@ export function MessagesConversation({ selection, memberId, draft, onDraft, onBa
     </View> : null}
     {loading && !display.length ? <MessageLoading /> : null}
     <FlatList style={styles.history} inverted data={[...display].reverse()} keyExtractor={item => item.id} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={false}
+      onViewableItemsChanged={onViewableItemsChanged} viewabilityConfig={messageViewability}
       contentContainerStyle={styles.historyContent}
       ListEmptyComponent={!loading && !error ? <Text style={styles.empty}>{internal ? 'No messages yet. Say hello below.' : 'No texts yet. Replies will appear here.'}</Text> : null}
       ListFooterComponent={internal && hasOlder ? <FieldButton variant="quiet" loading={busy === 'older'} onPress={() => { setBusy('older'); void load(messages[0]?.sequence || 0).finally(() => { if (alive.current) setBusy(''); }); }}>Earlier messages</FieldButton> : !internal && display.length >= 100 ? <Text style={styles.context}>Showing the latest 100 texts</Text> : null}
       renderItem={({ item }) => <View style={[styles.bubble, item.mine ? (internal ? styles.mine : styles.customerMine) : styles.theirs]}>
         <Text style={[styles.sender, { color: item.mine ? accent : colours.muted }]}>{item.sender}</Text>
         {item.body ? <Text selectable style={messageStyles.body}>{item.body}</Text> : null}
-        {item.attachments.map(attachment => <MessageMedia key={attachment.id} attachment={attachment} callsBusy={calls.busy} />)}
-        <Text style={styles.time}>{new Date(item.createdAt).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}{item.status ? ` · ${item.status}` : ''}</Text>
+        {item.attachments.map(attachment => <MessageMedia key={attachment.id} attachment={attachment} callsBusy={calls.busy} onVisibilityChange={onMediaVisibilityChange} />)}
+        <Text style={styles.time}>{new Date(item.createdAt).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}{item.status && !(item.mine && (item.smsStatus === 'sent' || item.smsStatus === 'delivered')) ? ` · ${item.status}` : ''}</Text>
+        {internal && item.mine ? <MessageReceipt receipt={item.receipt} /> : null}
+        {!internal && item.mine ? <SmsMessageReceipt status={item.smsStatus || ''} /> : null}
       </View>} />
     <View style={styles.composer}>
       {draft.attachments.length ? <View style={styles.pendingFiles}>{draft.attachments.map((file, index) => <View key={file.id} style={styles.pendingFile}><Text style={messageStyles.muted}>{file.kind === 'image' ? 'Photo' : 'Voice note'} {index + 1}</Text><MessageIconButton icon="close" label={`Remove attachment ${index + 1}`} disabled={Boolean(busy || draft.pending)} onPress={() => onDraft({ ...draft, attachments: draft.attachments.filter(item => item.id !== file.id) })} /></View>)}</View> : null}
