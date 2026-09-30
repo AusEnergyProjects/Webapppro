@@ -2831,7 +2831,9 @@ html[data-tlink-colour-mode="night"] :is(.tlink-call-dock,.tlink-call-buttons) {
 @media(max-width: 560px) {
   .tlink-call-dock { right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); width: calc(100vw - 16px); padding: 14px; border-radius: 20px; }
   .tlink-call-grid { max-height: 40dvh; }
-  .tlink-call-buttons button { padding: 11px 13px; }
+  .tlink-call-buttons { flex: 0 0 auto; flex-wrap: nowrap; }
+  .tlink-call-buttons button { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; }
+  .tlink-call-buttons .tlink-call-entry-label { display: none; }
   .tlink-call-dock .tlink-call-controls button { flex: 1 1 auto; }
 }
 

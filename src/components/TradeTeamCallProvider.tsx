@@ -31,8 +31,8 @@ function CallIcon({ name }: { name: "voice" | "video" | "mic" | "mic-off" | "cam
 export function TradeTeamCallButtons({ threadId }: { threadId: string }) {
   const calls = useContext(CallContext);
   return <div className="tlink-call-buttons" role="group" aria-label="Team calls">
-    <button type="button" className="tlink-call-voice" disabled={!calls || calls.busy} onClick={() => calls?.start(threadId,"audio")} aria-label="Start voice call"><CallIcon name="voice" />Voice call</button>
-    <button type="button" className="tlink-call-video" disabled={!calls || calls.busy} onClick={() => calls?.start(threadId,"video")} aria-label="Start video call"><CallIcon name="video" />Video call</button>
+    <button type="button" className="tlink-call-voice" disabled={!calls || calls.busy} onClick={() => calls?.start(threadId,"audio")} aria-label="Start voice call"><CallIcon name="voice" /><span className="tlink-call-entry-label">Voice call</span></button>
+    <button type="button" className="tlink-call-video" disabled={!calls || calls.busy} onClick={() => calls?.start(threadId,"video")} aria-label="Start video call"><CallIcon name="video" /><span className="tlink-call-entry-label">Video call</span></button>
   </div>;
 }
 
