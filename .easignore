@@ -1,0 +1,84 @@
+# EAS archives this Git repository, including the mobile workspace. Its ignore
+# file must live here; mobile/.easignore is not used by the monorepo packager.
+# Keep the root .gitignore rules below when adding build-only exceptions.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+/.local-fixtures/
+/synthetic-test-output/
+/tmp/
+
+# next.js
+/.next/
+/out/
+
+# production
+/build/*
+!/build/sites-vite-plugin.ts
+/dist/
+/.netlify/
+/.wrangler/
+/.openai/*.tar.gz
+/.sites-release/
+tailwindcss-*.log
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# local environment, with existing public examples preserved
+.env*
+!.env.example
+!mobile/.env.example
+
+# vercel and TypeScript
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# Mobile dependencies, Expo caches and generated outputs
+node_modules/
+.expo/
+.kotlin/
+.gradle/
+/mobile/dist/
+/mobile/web-build/
+/mobile/expo-env.d.ts
+/mobile/ios/
+/mobile/android/
+/mobile/modules/*/android/build/
+/mobile/.metro-health-check*
+/mobile/npm-debug.*
+/mobile/yarn-debug.*
+/mobile/yarn-error.*
+*.orig.*
+
+# Signing material and local credential manifests never enter build archives.
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+credentials.json
+GoogleService-Info.plist
+google-services.json
+
+# The Android client configuration is needed by prebuild. It remains ignored
+# by Git; this exception includes only the mobile app's exact configuration.
+!/mobile/google-services.json
