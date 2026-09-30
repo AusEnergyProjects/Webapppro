@@ -17,6 +17,9 @@
       "bundleIdentifier": "au.com.australianenergyassessments.field",
       "buildNumber": "3",
       "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "UIFileSharingEnabled": false,
         "LSSupportsOpeningDocumentsInPlace": false
