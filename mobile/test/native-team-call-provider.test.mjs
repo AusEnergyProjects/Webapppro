@@ -13,12 +13,12 @@ const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve();
 function harness({ native = false, platform = 'ios', initialAppState = 'active' } = {}) {
   const slots = [], effects = [], pendingEffects = [], intervals = new Set(), listeners = new Set(), pushListeners = new Set(), presenceListeners = new Set();
   let cursor = 0, tree;
-  const state = { api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0, peers: [], rings:0, ringStops:0, ringbacks:0, ringbackStops:0, notificationMuted:false, audioModes:[], requestLifetimes: [],
+  const state = { api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0, peers: [], rings:0, ringStops:0, ringbacks:0, ringbackStops:0, notificationMuted:false, audioModes:[], requestLifetimes: [], keyboardDismissals: 0,
     respond: async (url, body) => body?.action === 'start' || body?.action === 'join' ? { ok: true, call: invitation, memberId: 'member-local' }
       : body?.action === 'ice' ? { ok: true, iceServers: [{ urls: 'turn:relay.test' }] }
         : url.includes('view=incoming') ? { ok: true, calls: [invitation] } : { ok: true, call: invitation },
   };
-  const system = { shown: [], answers: [], ended: [], started: [], connecting: [], connected: [], listeners: new Set(), connect: async () => undefined };
+  const system = { shown: [], answers: [], ended: [], started: [], connecting: [], connected: [], listeners: new Set(), connect: async () => undefined, answer: async () => undefined };
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
   const react = {
     createContext: () => ({ Provider: 'context' }),
@@ -44,10 +44,12 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active' 
     'expo-notifications': {addNotificationReceivedListener:fn=>{pushListeners.add(fn);return {remove:()=>pushListeners.delete(fn)};}},
     '../../assets/sounds/tlink-call-soft.wav':1,
     'react-native': { Platform: { OS: platform }, ActivityIndicator: 'ActivityIndicator', AppState: { currentState: initialAppState, addEventListener: (_event, fn) => { listeners.add(fn); return { remove: () => listeners.delete(fn) }; } },
+      Keyboard: { dismiss: () => { state.keyboardDismissals++; } },
       DeviceEventEmitter:{addListener:(_name,fn)=>{presenceListeners.add(fn);return {remove:()=>presenceListeners.delete(fn)};}},
-      Linking: { openSettings: async () => { state.settings++; } }, Modal: 'Modal', Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View', StyleSheet: { create: value => value, absoluteFill: {} } },
+      Linking: { openSettings: async () => { state.settings++; } }, Modal: 'Modal', Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View', StyleSheet: { create: value => value, absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } } },
     'react-native-incall-manager': { start: value => state.audioStarts.push(value), stop: () => state.stops++, startRingback: () => state.ringbacks++, stopRingback: () => state.ringbackStops++, setKeepScreenOn: () => undefined, setForceSpeakerphoneOn: () => undefined },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+    'react-native-screens': { FullWindowOverlay: 'FullWindowOverlay' },
     'react-native-webrtc': { mediaDevices: { enumerateDevices: async () => [{ kind: 'videoinput' }, { kind: 'videoinput' }] }, RTCView: 'RTCView' },
     '@/components/field-button': { FieldButton: 'FieldButton' },
     '@/lib/api': { ApiError, createTeamCallRequest: signal => { state.requestLifetimes.push(signal); return async (query, options) => {
@@ -61,7 +63,7 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active' 
     '@/lib/native-team-call-media': { acquireNativeCallMedia: (...args) => { state.media.push(args[0]); return state.acquire(...args); }, releaseNativeCallMedia: media => { if (media) state.released.push(media); }, nativeCallError: error => ({ message: error.message, settings: error.name === 'NotAllowedError' }) },
     '@/lib/native-system-calls': {
       nativeSystemCallsAvailable: native, currentSystemCall: event => Date.parse(event.expiresAt) > Date.now(),
-      showSystemCall: async call => system.shown.push(call), answerSystemCall: async id => system.answers.push(id),
+      showSystemCall: async call => system.shown.push(call), answerSystemCall: async id => { system.answers.push(id); await system.answer(id); },
       startSystemCall: async call => system.started.push(call), endSystemCall: async id => system.ended.push(id),
       markSystemCallConnecting: async id => system.connecting.push(id),
       connectSystemCall: async id => { system.connected.push(id); await system.connect(id); }, setSystemCallSpeaker: async () => undefined,
@@ -71,7 +73,7 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active' 
     '@/providers/app-provider': { useApp: () => ({ user: { localOwnerKey: 'owner:member' }, access: { status: 'approved' }, loading: false }) },
   };
   const exports = {};
-  new Function('require', 'exports', 'setInterval', 'clearInterval', `${compiled}\nexports.TestSession = NativeTeamCallSession; exports.TestTile = CallTile; exports.styles = styles;`)(id => {
+  new Function('require', 'exports', 'setInterval', 'clearInterval', `${compiled}\nexports.TestSession = NativeTeamCallSession; exports.TestTile = CallTile; exports.TestPresentation = CallPresentation; exports.styles = styles;`)(id => {
     assert.ok(id in dependencies, `unexpected dependency ${id}`); return dependencies[id];
   }, exports, fn => { intervals.add(fn); return fn; }, fn => intervals.delete(fn));
   function render() { cursor = 0; tree = exports.TestSession({ enabled: true, children: 'app' }); while (pendingEffects.length) pendingEffects.shift()(); return tree; }
@@ -81,10 +83,12 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active' 
   function button(label) { const match = nodes().find(node => hasLabel(node, label)); assert.ok(match, `Missing button ${label}`); return match.props.onPress; }
   function hasButton(label) { return nodes().some(node => hasLabel(node, label)); }
   function context() { return tree.props.value; }
+  function presentation() { const surface = nodes().find(node => node.type?.name === 'CallPresentation'); return surface ? exports.TestPresentation(surface.props) : null; }
+  function underlying() { return nodes().find(node => node.type === 'View' && node.props.children === 'app'); }
   function appState(value) { for (const listener of [...listeners]) listener(value); }
   function cleanup() { for (const effect of effects) effect?.cleanup?.(); }
   render();
-  return { state, render, nodes, button, hasButton, context, appState, cleanup, intervals,ringtone, system, exports,
+  return { state, render, nodes, button, hasButton, context, appState, cleanup, intervals,ringtone, system, exports, presentation, underlying,
     systemEvent: async event => { for (const listener of [...system.listeners]) await listener(event); },
     receivePush:()=>{for(const listener of pushListeners)listener({request:{content:{data:{type:'team_call',threadId:invitation.threadId,callId:invitation.id}}}});},
     presence:status=>{for(const listener of presenceListeners)listener({status});},
@@ -334,8 +338,8 @@ test('backgrounding during an authenticated native Answer preserves preparation 
   assert.equal(h.state.released.length, 0);
   assert.equal(h.state.stream.getAudioTracks()[0].enabled, true);
   assert.equal(h.state.stream.getVideoTracks()[0].enabled, false);
-  h.button('Camera on')();
-  assert.equal(h.state.stream.getVideoTracks()[0].enabled, false, 'a stale UI action cannot enable a hidden camera');
+  assert.equal(h.hasButton('Camera on'), false, 'hidden calls must not mount an invisible control surface');
+  assert.equal(h.presentation(), null);
   h.appState('active'); await flush(); h.render(); h.button('Camera on')();
   assert.equal(h.state.stream.getVideoTracks()[0].enabled, true);
   h.cleanup();
@@ -517,4 +521,120 @@ test('remote cameras occupy the call canvas while self video stays in a small ov
   assert.equal(tile.props.children.find(node => node?.type === 'RTCView').props.zOrder, 1);
   assert.ok(h.button('End call')); assert.ok(h.button('Camera off'));
   h.cleanup();
+});
+
+test('iOS lock-screen Answer mounts no UI while inactive or background and restores reachable controls on return', async () => {
+  for (const initialAppState of ['inactive', 'background']) {
+    const h = harness({ native: true, initialAppState });
+    await h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt }); h.render();
+    assert.equal(h.context().busy, true); assert.equal(h.presentation(), null);
+    assert.equal(h.underlying().props.pointerEvents, 'auto'); assert.equal(h.underlying().props.accessibilityElementsHidden, false);
+    assert.equal(h.hasButton('End call'), false);
+    h.appState('active'); h.render();
+    const surface = h.presentation();
+    assert.equal(surface.type, 'FullWindowOverlay', 'iOS must not use UIViewController Modal presentation');
+    assert.equal(surface.props.children.type, 'View');
+    assert.equal(surface.props.children.props.accessibilityViewIsModal, true);
+    assert.equal(surface.props.children.props.style.position, 'absolute');
+    assert.equal(h.underlying().props.pointerEvents, 'none'); assert.equal(h.underlying().props.importantForAccessibility, 'no-hide-descendants');
+    assert.ok(h.button('End call')); assert.ok(h.button('Mute'));
+    h.appState('inactive'); h.render(); assert.equal(h.presentation(), null);
+    h.appState('background'); h.render(); assert.equal(h.presentation(), null);
+    assert.equal(h.state.released.length, 0, 'UI lifecycle must not stop background audio');
+    h.appState('active'); h.render(); assert.equal(h.presentation().type, 'FullWindowOverlay');
+    assert.equal(h.state.media.length, 1); assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1);
+    h.button('End call')(); h.render();
+    assert.equal(h.presentation(), null); assert.equal(h.underlying().props.pointerEvents, 'auto');
+    assert.equal(h.state.released.length, 1); h.cleanup();
+  }
+});
+
+test('minimizing stays minimized while active, exposes Return to call and automatically expands after foreground reentry', async () => {
+  const h = harness({ native: true }); await h.context().start(invitation.threadId, 'audio'); h.render();
+  h.button('Minimise')(); h.render();
+  assert.equal(h.presentation(), null); assert.equal(h.underlying().props.pointerEvents, 'auto');
+  const returnButton = () => h.nodes().find(node => node.type === 'Pressable' && node.props.accessibilityLabel === 'Return to team call');
+  assert.ok(returnButton());
+  h.appState('active'); h.render(); assert.equal(h.presentation(), null, 'duplicate active events must preserve explicit minimization');
+  returnButton().props.onPress(); h.render(); assert.equal(h.presentation().type, 'FullWindowOverlay');
+  h.button('Minimise')(); h.render(); h.appState('background'); h.render();
+  assert.equal(h.presentation(), null); assert.equal(returnButton(), undefined);
+  h.appState('active'); h.render(); assert.equal(h.presentation().type, 'FullWindowOverlay');
+  assert.ok(h.button('End call')); assert.equal(h.state.released.length, 0); h.cleanup();
+});
+
+test('foreground call presentation dismisses an existing keyboard once so bottom controls stay reachable', async () => {
+  const h = harness({ native: true, initialAppState: 'background' });
+  await h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt }); h.render();
+  assert.equal(h.state.keyboardDismissals, 0, 'background call work must not manipulate the app input');
+  h.appState('active'); h.render(); assert.equal(h.state.keyboardDismissals, 1);
+  h.render(); assert.equal(h.state.keyboardDismissals, 1, 'polling and rerenders must not repeatedly resign unrelated inputs');
+  h.button('Minimise')(); h.render(); assert.equal(h.state.keyboardDismissals, 1);
+  const button = h.nodes().find(node => node.type === 'Pressable' && node.props.accessibilityLabel === 'Return to team call');
+  button.props.onPress(); h.render(); assert.equal(h.state.keyboardDismissals, 2);
+  assert.ok(h.button('End call')); h.cleanup();
+});
+
+test('pending background Answer becomes cancellable on foreground before permission setup finishes', async () => {
+  const h = harness({ native: true, initialAppState: 'background' }); let finish;
+  h.state.acquire = (_mode, current) => new Promise(resolve => { finish = () => resolve(current() ? h.state.stream : null); });
+  const pending = h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
+  await flush(); h.render(); assert.equal(h.presentation(), null);
+  h.appState('active'); h.render(); assert.equal(h.presentation().type, 'FullWindowOverlay');
+  h.button('Cancel')(); h.render(); finish(); await pending;
+  assert.equal(h.context().busy, false); assert.equal(h.presentation(), null);
+  assert.equal(h.underlying().props.pointerEvents, 'auto');
+  assert.equal(h.state.api.some(item => item.body?.action === 'join'), false);
+  assert.ok(h.system.ended.includes(invitation.id)); h.cleanup();
+});
+
+test('Android keeps its native modal and hardware Back minimizes the call without ending audio', async () => {
+  const h = harness({ native: true, platform: 'android' }); await h.context().start(invitation.threadId, 'audio'); h.render();
+  const modal = h.presentation(); assert.equal(modal.type, 'Modal'); assert.equal(modal.props.visible, true);
+  modal.props.onRequestClose(); h.render(); assert.equal(h.presentation(), null);
+  assert.equal(h.context().busy, true); assert.equal(h.state.released.length, 0);
+  h.appState('background'); h.render(); assert.equal(h.presentation(), null);
+  h.appState('active'); h.render(); assert.equal(h.presentation().type, 'Modal');
+  h.button('End call')(); h.render(); assert.equal(h.presentation(), null);
+  assert.equal(h.underlying().props.pointerEvents, 'auto'); h.cleanup();
+});
+
+test('Android hardware Back declines an invitation and cancels a pending opening session', async () => {
+  const h = harness({ native: true, platform: 'android' }); await flush(); h.render();
+  h.presentation().props.onRequestClose(); h.render(); assert.equal(h.presentation(), null);
+  assert.ok(h.system.ended.includes(invitation.id));
+  let finish;
+  h.state.acquire = (_mode, current) => new Promise(resolve => { finish = () => resolve(current() ? h.state.stream : null); });
+  const pending = h.context().start(invitation.threadId, 'audio'); h.render();
+  h.presentation().props.onRequestClose(); h.render(); finish(); await pending;
+  assert.equal(h.context().busy, false); assert.equal(h.presentation(), null);
+  assert.equal(h.state.api.some(item => item.body?.action === 'start'), false); h.cleanup();
+});
+
+test('a stalled native Answer setup releases within 60 seconds and late completion cannot reopen the call', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = harness({ native: true, initialAppState: 'inactive' }); let finish;
+  h.system.answer = () => new Promise(resolve => { finish = resolve; });
+  const pending = h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
+  await flush(); h.render(); assert.equal(h.context().busy, true); assert.equal(h.presentation(), null);
+  h.appState('active'); h.render(); assert.ok(h.button('End call'));
+  t.mock.timers.tick(60_000); await flush(); h.render();
+  assert.equal(h.context().busy, false); assert.equal(h.state.released.length, 1);
+  assert.ok(h.button('Close')); h.button('Close')(); h.render();
+  assert.equal(h.presentation(), null); assert.equal(h.underlying().props.pointerEvents, 'auto');
+  finish(); await pending; h.render();
+  assert.equal(h.context().busy, false); assert.equal(h.presentation(), null);
+  assert.equal(h.state.api.some(item => item.body?.action === 'ice'), false); h.cleanup();
+});
+
+test('completed setup clears its watchdog and missing media cannot leave an opening screen indefinitely', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = harness({ native: true }); await h.context().start(invitation.threadId, 'audio'); h.render();
+  h.state.peers[0].changed([{ memberId: 'member-remote', name: 'Teammate', state: 'connected', stream: null }]);
+  t.mock.timers.tick(60_000); await flush(); h.render(); assert.equal(h.context().busy, true);
+  h.button('End call')(); h.render();
+  h.state.acquire = async () => null;
+  await h.context().start(invitation.threadId, 'audio'); h.render();
+  assert.equal(h.context().busy, false); assert.ok(h.button('Retry')); assert.ok(h.button('Close'));
+  h.button('Close')(); h.render(); assert.equal(h.presentation(), null); h.cleanup();
 });

@@ -4,9 +4,10 @@ import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import softRingtone from '../../assets/sounds/tlink-call-soft.wav';
 import * as Notifications from 'expo-notifications';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
-import { ActivityIndicator, AppState, DeviceEventEmitter, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, DeviceEventEmitter, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FullWindowOverlay } from 'react-native-screens';
 import { mediaDevices, RTCView, type MediaStream } from 'react-native-webrtc';
 
 import { TEAM_CALL_RING_SECONDS, type TeamCall, type TeamCallSignal } from '../../../src/lib/trade-team-calls';
@@ -71,6 +72,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [speaker, setSpeaker] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   const mounted = useRef(true);
   const appState = useRef(AppState.currentState);
   const foreground = useRef(AppState.currentState === 'active');
@@ -84,6 +86,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   const audioStarted = useRef(false);
   const ringbackStarted = useRef(false);
   const ringDeadline = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setupDeadline = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requests = useRef(new Set<AbortController>());
   const callRequests = useRef<{ controller: AbortController; request: ReturnType<typeof createTeamCallRequest> } | null>(null);
   const dismissed = useRef(new Set<string>());
@@ -129,6 +132,8 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     if (mounted.current && !nativeSystemCallsAvailable) ringtone.pause();
     if (ringDeadline.current) clearTimeout(ringDeadline.current);
     ringDeadline.current = null;
+    if (setupDeadline.current) clearTimeout(setupDeadline.current);
+    setupDeadline.current = null;
     if (ringbackStarted.current) { InCallManager.stopRingback(); ringbackStarted.current = false; }
     const current = session.current;
     session.current = null;
@@ -180,6 +185,12 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     const isCurrent = () => mounted.current && (foreground.current || systemAnswer || nativeSystemCallsAvailable) && generation.current === epoch;
     const sessionId = Crypto.randomUUID();
     setOpening(true); setMode(nextMode); setNotice(''); setRetry(null); setShowSettings(false); setMinimized(false);
+    // Permissions and HTTP requests already have shorter individual limits.
+    // Also bound native bridge/setup waits so a stalled operation cannot leave
+    // an uncancellable opening session after returning from the lock screen.
+    setupDeadline.current = setTimeout(() => {
+      if (isCurrent() && starting.current) stop('Call setup took too long. Open TLink and try again.');
+    }, 60_000);
     try {
       // Expo's pause deactivates the shared AVAudioSession asynchronously.
       // Never let the unused legacy player interrupt CallKit-owned audio.
@@ -191,7 +202,10 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
       const request = new AbortController(); mediaRequest.current = request;
       const stream = await acquireNativeCallMedia(nextMode, isCurrent, request.signal);
       if (mediaRequest.current === request) mediaRequest.current = null;
-      if (!stream) return;
+      if (!stream) {
+        if (isCurrent()) throw new Error('The microphone could not open. Try the call again.');
+        return;
+      }
       media.current = stream;
       if (appState.current !== 'active') {
         stream.getVideoTracks().forEach(track => { track.enabled = false; });
@@ -284,6 +298,11 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
           }
         } catch { /* Preserve the useful original failure. */ }
       } else setRetry({ threadId, mode: nextMode, existing });
+    } finally {
+      if (generation.current === epoch) {
+        if (setupDeadline.current) clearTimeout(setupDeadline.current);
+        setupDeadline.current = null;
+      }
     }
   }, [enabled, api, stop, ringtone]);
 
@@ -453,7 +472,10 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
       } finally { inFlight = false; if (confirmDeadline) void tick(); }
     };
     const listener = AppState.addEventListener('change', state => {
+      const previousState = appState.current;
       appState.current = state;
+      setAppActive(state === 'active');
+      if (state === 'active' && previousState !== 'active' && (session.current || starting.current)) setMinimized(false);
       // An iOS permission dialog briefly produces inactive, not background.
       // Native audio ownership keeps an answered call alive. Camera capture
       // stops when hidden and requires an explicit Camera on after returning.
@@ -512,6 +534,12 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   const hasCamera = Boolean(local?.getVideoTracks().length);
   const connected = remotes.some(peer => peer.state === 'connected');
   const visible = Boolean(active || opening || invitation || notice);
+  const showCallView = appActive && visible && !minimized;
+  useEffect(() => {
+    // The window overlay does not present a new controller, so explicitly
+    // resign the previous input without changing its saved or unsent text.
+    if (showCallView) Keyboard.dismiss();
+  }, [showCallView]);
   const closeNotice = () => { setNotice(''); setRetry(null); setShowSettings(false); };
   const decline = (call: TeamCall) => {
     dismissed.current.add(call.id);
@@ -519,14 +547,23 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     setIncoming(items => items.filter(item => item.id !== call.id));
     closeNotice();
   };
+  const closeCallView = () => {
+    if (active) setMinimized(true);
+    else if (opening) stop();
+    else if (invitation) decline(invitation);
+    else closeNotice();
+  };
   return <Calls.Provider value={{ start: (threadId, nextMode) => begin(threadId, nextMode), openInvitation, busy: opening || Boolean(active) }}>
-    {children}
-    {active && minimized && <Pressable accessibilityRole="button" accessibilityLabel="Return to team call" onPress={() => setMinimized(false)} style={styles.returnToCall}>
+    <View style={styles.root}>
+    <View style={styles.root} pointerEvents={showCallView ? 'none' : 'auto'} accessibilityElementsHidden={showCallView} importantForAccessibility={showCallView ? 'no-hide-descendants' : 'auto'}>{children}</View>
+    {appActive && (active || opening) && minimized && <Pressable accessibilityRole="button" accessibilityLabel="Return to team call" onPress={() => setMinimized(false)} style={styles.returnToCall}>
       <MaterialCommunityIcons name="phone-outline" size={24} color={colours.forest} />
-      <Text style={styles.returnText}>Return to {active.threadName || 'team call'}</Text>
+      <Text style={styles.returnText}>Return to {active?.threadName || 'team call'}</Text>
       <MaterialCommunityIcons name="chevron-up" size={24} color={colours.forest} />
     </Pressable>}
-    <Modal visible={visible && !minimized} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => active ? setMinimized(true) : opening ? stop() : invitation ? decline(invitation) : closeNotice()}>
+    {/* Mount only while active. iOS uses a window view, avoiding a UIKit modal
+        transaction while CallKit is activating or another sheet is open. */}
+    {showCallView && <CallPresentation onRequestClose={closeCallView}>
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}><View style={styles.headerText}><Text style={styles.eyebrow}>TLINK TEAM CALL</Text><Text style={styles.title}>{active?.threadName || invitation?.threadName || 'Team call'}</Text>
           <Text style={styles.subtitle}>{active ? `${connected ? 'Connected' : opening || remotes.length ? 'Connecting...' : 'Ringing...'} · ${hasCamera ? 'Video' : 'Voice'}` : 'Private to your team'}</Text></View>
@@ -564,8 +601,16 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
             <CallControl icon="phone-hangup-outline" label="Decline" onPress={() => decline(invitation)} />
           </ScrollView> : null}
       </SafeAreaView>
-    </Modal>
+    </CallPresentation>}
+    </View>
   </Calls.Provider>;
+}
+
+function CallPresentation({ children, onRequestClose }: { children: ReactNode; onRequestClose: () => void }) {
+  if (Platform.OS === 'ios') return <FullWindowOverlay>
+    <View style={styles.callOverlay} accessibilityViewIsModal>{children}</View>
+  </FullWindowOverlay>;
+  return <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onRequestClose}>{children}</Modal>;
 }
 
 function CallControl({ icon, label, onPress, compact = false, primary = false, selected, disabled = false }: {
@@ -594,6 +639,8 @@ function CallTile({ stream, name, status = '', local = false, cameraOff = false,
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
+  callOverlay: { ...StyleSheet.absoluteFill, zIndex: 100, elevation: 20, backgroundColor: colours.cream },
   safe: { flex: 1, backgroundColor: colours.cream },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colours.line },
   headerText: { flex: 1, gap: 5 },
@@ -629,6 +676,6 @@ const styles = StyleSheet.create({
   primaryAction: { backgroundColor: colours.green, borderColor: colours.green },
   actionLabel: { flexShrink: 1, color: colours.ink, fontSize: 16, lineHeight: 24, fontWeight: '700', textAlign: 'center' },
   primaryLabel: { color: colours.forest }, pressed: { opacity: 0.7 }, disabled: { opacity: 0.4 },
-  returnToCall: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: 92, backgroundColor: colours.green, borderRadius: 25, minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: spacing.sm, elevation: 8 },
+  returnToCall: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: 92, backgroundColor: colours.green, borderRadius: 25, minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: spacing.sm, zIndex: 90, elevation: 8 },
   returnText: { flex: 1, color: colours.forest, fontSize: 16, fontWeight: '700', textAlign: 'center' },
 });
