@@ -79,6 +79,7 @@ export type JobRegisterProjectionInput = {
   state?: unknown;
   assigneeMemberId?: unknown;
   assignedWorker?: unknown;
+  importedWorkerLabel?: unknown;
   scheduleDate?: unknown;
   createdAt?: unknown;
   workStage?: unknown;
@@ -142,7 +143,8 @@ export function projectJobRegisterRecord(input: JobRegisterProjectionInput): Job
     postcode: customer ? text(input.postcode) : "",
     suburb: customer ? text(input.suburb) : "",
     state: customer ? text(input.state).toUpperCase() : "",
-    assignedWorker: text(input.assigneeMemberId) ? text(input.assignedWorker) || "Assigned" : "Unassigned",
+    assignedWorker: text(input.assigneeMemberId) ? text(input.assignedWorker) || "Assigned"
+      : customer && text(input.importedWorkerLabel) ? `${text(input.importedWorkerLabel)} (Dataforce)` : "Unassigned",
     scheduleDate: text(input.scheduleDate),
     createdDate: text(input.createdAt),
     operationalStatus: lifecycle.status,

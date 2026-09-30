@@ -637,6 +637,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
     state: row.site_address_state,
     assigneeMemberId: row.assignee_member_id,
     assignedWorker: row.assignee_label,
+    importedWorkerLabel: canViewCustomer && row.dataforce_source_job_id ? row.assignee_label : "",
     scheduleDate: row.effective_scheduled_start || row.appointment_starts_at || row.scheduled_start,
     createdAt: row.created_at,
     workStage: row.stage,

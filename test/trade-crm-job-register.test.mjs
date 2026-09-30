@@ -68,6 +68,23 @@ test("register projection keeps customer fields separate and leaves absent assig
   });
 });
 
+test("imported worker names display as Dataforce history without creating an assignment", () => {
+  const input = { jobId: "TLJ-IMPORT", canViewCustomer: true, assigneeMemberId: "", assignedWorker: "THOMAS", importedWorkerLabel: "THOMAS" };
+  assert.equal(projectJobRegisterRecord(input).assignedWorker, "THOMAS (Dataforce)");
+  assert.equal(input.assigneeMemberId, "");
+  assert.equal(projectJobRegisterRecord({ ...input, assigneeMemberId: "current-member", assignedWorker: "Current worker" }).assignedWorker, "Current worker");
+  assert.equal(projectJobRegisterRecord({ ...input, assigneeMemberId: "current-member", assignedWorker: "" }).assignedWorker, "Assigned");
+});
+
+test("ordinary unassigned jobs and protected customer context never expose imported worker history", () => {
+  const input = { jobId: "TLJ-IMPORT", canViewCustomer: true, assignedWorker: "Stale label" };
+  assert.equal(projectJobRegisterRecord(input).assignedWorker, "Unassigned");
+  assert.equal(projectJobRegisterRecord({ ...input, importedWorkerLabel: " " }).assignedWorker, "Unassigned");
+  assert.equal(projectJobRegisterRecord({ ...input, canViewCustomer: false, importedWorkerLabel: "Private imported worker" }).assignedWorker, "Unassigned");
+  const route = read("../src/app/api/trade-crm/route.ts");
+  assert.match(route, /importedWorkerLabel: canViewCustomer && row\.dataforce_source_job_id \? row\.assignee_label : ""/);
+});
+
 test("quote total matches document defaults and immutable accepted selections", () => {
   const route = read("../src/app/api/trade-crm/route.ts");
   const expression = route.match(/const JOB_REGISTER_QUOTE_TOTAL_SQL = `([\s\S]*?)`;/)?.[1];
