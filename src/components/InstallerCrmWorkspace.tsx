@@ -31,7 +31,7 @@ import type { CustomerDocumentDelivery, CustomerDocumentSendResult } from "./Tra
 import type { DataforceJobCsvRecord } from "@/lib/creditex-dataforce-job-csv";
 import { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES, type JobRegisterRecord } from "@/lib/trade-crm-job-register";
 import { jobCustomerBillingStatus, jobInvoicePaymentStatus, jobInvoiceSettlementStatus, jobProgressStatusLabel } from "@/lib/trade-job-payment-status";
-import { customerMapRecord, jobMapRecord } from "@/lib/trade-crm-map-records";
+import { tradeMapQuery } from "@/lib/trade-map-contract";
 import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import { defaultTradeMapDateRange } from "@/lib/trade-map-date-range";
 import { CUSTOMER_REGISTER_FILTER_VERSION, defaultCustomerCreatedRange } from "@/lib/customer-register-range";
@@ -472,8 +472,6 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const [customerSort, setCustomerSort] = useState("name-asc");
   const [indexedJobs, setIndexedJobs] = useState<Job[]>([]);
   const [indexedCustomers, setIndexedCustomers] = useState<Customer[]>([]);
-  const [jobIndexLoadedKey, setJobIndexLoadedKey] = useState("");
-  const [customerIndexLoadedKey, setCustomerIndexLoadedKey] = useState("");
   const [jobPagination, setJobPagination] = useState<IndexPagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
   const [customerPagination, setCustomerPagination] = useState<IndexPagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
   const jobCursors = useRef<string[]>([""]); const jobTotalReady = useRef(false);
@@ -711,14 +709,13 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     if (signal.aborted) return;
     const items = (result.items || []) as Job[];
     setIndexedJobs(items);
-    setJobIndexLoadedKey(jobIndexKey);
     setJobPagination((current) => {
       const next = { ...current, ...(result.pagination || {}), page: jobPage, pageSize: jobPageSize };
       if (typeof result.pagination?.total === "number") jobTotalReady.current = true;
       if (next.hasNext && next.nextCursor) jobCursors.current[jobPage] = next.nextCursor;
       jobCursors.current.length = Math.max(jobPage, next.hasNext ? jobPage + 1 : jobPage); return next;
     });
-  }, [fetch, jobIndexKey, jobIndexParams, jobPage, jobPageSize, user]);
+  }, [fetch, jobIndexParams, jobPage, jobPageSize, user]);
 
   const downloadAllFilteredJobs = useCallback(async () => {
     if (jobExporting) return;
@@ -825,21 +822,16 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     if (signal.aborted) return;
     const items = (result.items || []) as Customer[];
     setIndexedCustomers(items);
-    setCustomerIndexLoadedKey(customerIndexKey);
     setCustomerPagination((current) => {
       const next = { ...current, ...(result.pagination || {}), page: customerPage, pageSize: customerPageSize };
       if (typeof result.pagination?.total === "number") customerTotalReady.current = true;
       if (next.hasNext && next.nextCursor) customerCursors.current[customerPage] = next.nextCursor;
       customerCursors.current.length = Math.max(customerPage, next.hasNext ? customerPage + 1 : customerPage); return next;
     });
-  }, [fetch, customerIndexKey, customerIndexParams, customerPage, customerPageSize, user]);
+  }, [fetch, customerIndexParams, customerPage, customerPageSize, user]);
 
-  // Match the response to the current filters before exposing any addresses to Google.
-  // A loading flag alone would still expose the old page during the debounce interval.
-  const jobMapLoading = indexLoading || jobIndexLoadedKey !== jobIndexKey;
-  const customerMapLoading = indexLoading || !customerPreferencesReady || customerIndexLoadedKey !== customerIndexKey;
-  const jobMapRecords = useMemo(() => jobMapLoading ? [] : indexedJobs.map(jobMapRecord), [indexedJobs, jobMapLoading]);
-  const customerMapRecords = useMemo(() => customerMapLoading ? [] : indexedCustomers.map(customerMapRecord), [indexedCustomers, customerMapLoading]);
+  const jobMapQuery = useMemo(() => tradeMapQuery("jobs", jobIndexParams(1, 25), refreshNonce), [jobIndexParams, refreshNonce]);
+  const customerMapQuery = useMemo(() => tradeMapQuery("customers", customerIndexParams(), refreshNonce), [customerIndexParams, refreshNonce]);
 
   useEffect(() => {
     jobCursors.current = [""]; jobTotalReady.current = false;
@@ -851,7 +843,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     customerTotalReady.current = false;
   }, [customerBusinessName, customerCreatedFrom, customerCreatedTo, customerEmail, customerFirstName, customerJobId, customerLastName, customerPageSize, customerPhone, customerPipeline, customerPostcode, customerSearch, customerService, customerState, customerStreet, customerSuburb]);
 
-  const usesJobIndex = jobLayout !== "board";
+  const usesJobIndex = !mapWorkspace && jobLayout === "list";
   useEffect(() => {
     if (view !== "jobs" || creating === "job" || !usesJobIndex || focusedJobId) return;
     let active = true;
@@ -860,7 +852,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       if (active) setIndexLoading(true);
       void loadJobIndex(controller.signal).catch((error) => {
         if (!active) return;
-        setIndexedJobs([]); setJobIndexLoadedKey(jobIndexKey);
+        setIndexedJobs([]);
         setStatus(error instanceof Error ? error.message : "The job list could not be loaded.");
       })
         .finally(() => active && setIndexLoading(false));
@@ -873,14 +865,14 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   }, [creating, focusedJobId, jobIndexKey, loadJobIndex, refreshNonce, usesJobIndex, view]);
 
   useEffect(() => {
-    if (view !== "customers" || creating === "customer" || !customerPreferencesReady) return;
+    if (view !== "customers" || creating === "customer" || !customerPreferencesReady || mapWorkspace || customerLayout === "map") return;
     let active = true;
     const controller = new AbortController();
     const run = () => {
       if (active) setIndexLoading(true);
       void loadCustomerIndex(controller.signal).catch((error) => {
         if (!active) return;
-        setIndexedCustomers([]); setCustomerIndexLoadedKey(customerIndexKey);
+        setIndexedCustomers([]);
         setStatus(error instanceof Error ? error.message : "The customer list could not be loaded.");
       })
         .finally(() => active && setIndexLoading(false));
@@ -890,7 +882,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     const timer = delay ? window.setTimeout(run, delay) : 0;
     if (!delay) run();
     return () => { active = false; controller.abort(); if (timer) window.clearTimeout(timer); };
-  }, [creating, customerIndexKey, customerPreferencesReady, loadCustomerIndex, refreshNonce, view]);
+  }, [creating, customerIndexKey, customerLayout, customerPreferencesReady, loadCustomerIndex, mapWorkspace, refreshNonce, view]);
 
   useEffect(() => {
     if (view !== "jobs" || !focusedJobId) return;
@@ -1489,14 +1481,10 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
           <button type="button" onClick={() => { setJobScheduledFrom(""); setJobScheduledTo(""); setJobPage(1); }}>All dates</button>
         </div>
       </div>}
-      <TradeRecordMap onRegisterMapSave={registerMapSave} quoteAccess={mapQuoteAccess} key={`${user.uid}:${view}`} user={user} records={view === "jobs" ? jobMapRecords : customerMapRecords} loading={view === "jobs" ? jobMapLoading : customerMapLoading} total={view === "jobs" ? jobPagination.total : customerPagination.total} onOpenRecord={(record) => {
+      {(view === "jobs" || customerPreferencesReady) && <TradeRecordMap onRegisterMapSave={registerMapSave} quoteAccess={mapQuoteAccess} key={`${user.uid}:${view}`} user={user} query={view === "jobs" ? jobMapQuery : customerMapQuery} onOpenRecord={(record) => {
         if (record.kind === "job") openFocusedJob(record.id);
         else setSelectedCustomerId(record.id);
-      }} />
-      <WorkspaceListControls {...(view === "jobs" ? jobPagination : customerPagination)} saved={false} busy={indexLoading} showViewActions={false}
-        onPage={(page) => view === "jobs" ? setJobPage(page) : setCustomerPage(page)}
-        onPageSize={(size) => { if (view === "jobs") { setJobPageSize(size); setJobPage(1); } else { setCustomerPageSize(size); setCustomerPage(1); } }}
-        onSave={() => void updateListView(view === "jobs" ? "installer-jobs" : "installer-customers", "PATCH")} onReset={() => void updateListView(view === "jobs" ? "installer-jobs" : "installer-customers", "DELETE")} />
+      }} />}
     </div>}
 
     {view === "today" && <div className="crm-view crm-today">
@@ -1557,9 +1545,9 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
           exportDisabled={!jobPagination.total || indexLoading} exportBusy={jobExporting}
           exportLabel="Download all filtered jobs CSV" exportBusyLabel="Downloading all filtered jobs CSV..."
           onExport={() => void downloadAllFilteredJobs()} />}</div>}
-      {jobLayout !== "board" && <WorkspaceListControls page={jobPagination.page} pageCount={jobPagination.pageCount} pageSize={jobPagination.pageSize} total={jobPagination.total} hasNext={jobPagination.hasNext} saved={jobViewSaved} busy={viewBusy || indexLoading}
+      {jobLayout === "list" && <WorkspaceListControls page={jobPagination.page} pageCount={jobPagination.pageCount} pageSize={jobPagination.pageSize} total={jobPagination.total} hasNext={jobPagination.hasNext} saved={jobViewSaved} busy={viewBusy || indexLoading}
         onPage={(page) => setJobPage(page)} onPageSize={(size) => { setJobPageSize(size); setJobPage(1); }} onSave={() => void updateListView("installer-jobs", "PATCH")} onReset={() => void updateListView("installer-jobs", "DELETE")} showViewActions={!staffPermissions} />}
-      {jobLayout === "map" ? <div><p className="crm-filter-notice">Map shows this page of filtered jobs. Use the page controls to see more.</p><TradeRecordMap onRegisterMapSave={registerMapSave} key={user.uid} quoteAccess={mapQuoteAccess} user={user} records={jobMapRecords} loading={jobMapLoading} total={jobPagination.total} onOpenRecord={(record) => openFocusedJob(record.id)} /></div> : jobLayout === "list" ? <div className="crm-jobs-layout">
+      {jobLayout === "map" ? <div><TradeRecordMap onRegisterMapSave={registerMapSave} key={user.uid} quoteAccess={mapQuoteAccess} user={user} query={jobMapQuery} onOpenRecord={(record) => openFocusedJob(record.id)} /></div> : jobLayout === "list" ? <div className="crm-jobs-layout">
         <JobRegisterScroll><div className="crm-record-columns crm-dynamic-columns" style={jobGridStyle} role="row">{jobColumns.map((key) => { const column = jobIndexColumns.find((item) => item.key === key); return column ? <SortableIndexHeading key={key} column={column} current={jobSort} onSort={changeJobRegisterSort} /> : null; })}</div>{indexedJobs.length ? indexedJobs.map((job) => <article key={job.id} tabIndex={0} role="row" className={`${registerStyles.row} crm-row-open crm-record-data-row crm-index-row`} style={jobGridStyle} onContextMenu={(event) => openJobActions(event, job.id)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openJobActions(event, job.id); else if (event.key === "Enter") openFocusedJob(job.id); }} onDoubleClick={(event) => { if ((event.target as HTMLElement).closest("a, button, input, select, textarea")) return; openFocusedJob(job.id); }}>{jobColumns.map((key) => <span className="crm-index-cell" role="cell" key={key}>{jobIndexCell(job, key, (tab) => openFocusedJob(job.id, tab), () => editInvoicePayment(job), jobActionMenu(job), user, staffPermissions)}</span>)}</article>) : <div className="crm-empty"><strong>{indexLoading ? "Loading jobs..." : "No matching jobs"}</strong><span>{indexLoading ? "Fetching this page securely." : "Try another search or filter."}</span></div>}</JobRegisterScroll>
       </div> : <div className="crm-pipeline-board">{[["enquiry", "New"], ["qualifying", "Checking"], ["quoting", "Quoting"], ["approved", "Approved"], ["scheduled", "Scheduled"], ["in_progress", "Underway"]].map(([stage, label]) => { const stageJobs = boardJobs[stage] || []; return <section key={stage}><header><button type="button" onClick={() => { setPipelineFocus(stage); setJobLayout("list"); }}>{label}</button><strong>{boardCounts[stage] || 0}</strong></header><div>{stageJobs.map((job) => <button type="button" key={job.id} onClick={() => openFocusedJob(job.id)}><span>{job.workNumber}</span><strong>{job.customerDisplayName || job.title}</strong><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}</small><em>{job.nextAction || workStageLabels[job.stage] || job.stage}</em></button>)}{!stageJobs.length && <p>No jobs</p>}</div></section>; })}</div>}
     </div>}
@@ -1612,10 +1600,10 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         onCreate={(name) => saveNamedView("installer-customers", name)} onRename={(id, name) => saveNamedView("installer-customers", name, id)} onDelete={(id) => deleteNamedView("installer-customers", id)} />}
         {customerLayout === "list" && <WorkspaceTableTools columns={customerIndexColumns} visibleKeys={customerColumns} onVisibleKeys={(keys) => { setCustomerColumns(safeCustomerRegisterColumns(keys)); setActiveCustomerPresetId(""); }} noun="customers" exportDisabled={!indexedCustomers.length}
           onExport={() => downloadWorkspaceCsv("tlink-customers.csv", customerIndexColumns.filter((column) => customerColumns.includes(column.key)).sort((a, b) => customerColumns.indexOf(a.key) - customerColumns.indexOf(b.key)), indexedCustomers.map((customer) => ({ customer: customer.displayName, firstName: customer.firstName, lastName: customer.lastName, email: customer.email, phone: customer.phone, suburb: customer.suburb, postcode: customer.postcode, jobs: customer.jobCount || 0, createdDate: dateLabel(customer.createdAt), latestJob: customer.latestJobNumber ? `${customer.latestJobNumber} | ${dateLabel(customer.latestJobAt || customer.updatedAt)}` : "No jobs", status: customer.latestPipelineStage ? pipelineLabels[customer.latestPipelineStage] || customer.latestPipelineStage : "No status" })))} />}</div>
-      <WorkspaceListControls page={customerPagination.page} pageCount={customerPagination.pageCount} pageSize={customerPagination.pageSize} total={customerPagination.total} hasNext={customerPagination.hasNext} saved={customerViewSaved} busy={viewBusy || indexLoading}
-        onPage={(page) => { setCustomerPage(page); setSelectedCustomerIds([]); }} onPageSize={(size) => { setCustomerPageSize(size); setCustomerPage(1); setSelectedCustomerIds([]); }} onSave={() => void updateListView("installer-customers", "PATCH")} onReset={() => void updateListView("installer-customers", "DELETE")} showViewActions={!staffPermissions} />
+      {customerLayout === "list" && <WorkspaceListControls page={customerPagination.page} pageCount={customerPagination.pageCount} pageSize={customerPagination.pageSize} total={customerPagination.total} hasNext={customerPagination.hasNext} saved={customerViewSaved} busy={viewBusy || indexLoading}
+        onPage={(page) => { setCustomerPage(page); setSelectedCustomerIds([]); }} onPageSize={(size) => { setCustomerPageSize(size); setCustomerPage(1); setSelectedCustomerIds([]); }} onSave={() => void updateListView("installer-customers", "PATCH")} onReset={() => void updateListView("installer-customers", "DELETE")} showViewActions={!staffPermissions} />}
       {customerLayout === "list" && selectedCustomerIds.length > 0 && <div className="crm-bulk-actions" role="region" aria-label="Selected customer actions"><strong>{selectedCustomerIds.length} customer{selectedCustomerIds.length === 1 ? "" : "s"} selected</strong><span>Only customers with no active jobs can be archived.</span><button type="button" disabled={busy === "bulk-customer-archive"} onClick={() => void bulkRequest({ action: "bulk_archive_customers", ids: selectedCustomerIds }, "bulk-customer-archive", "Selected customers archived.")}>{busy === "bulk-customer-archive" ? "Checking..." : "Archive selected"}</button><button type="button" className="secondary" onClick={() => setSelectedCustomerIds([])}>Clear</button></div>}
-      {customerLayout === "map" ? <div><p className="crm-filter-notice">Map shows this page of filtered customers. Use the page controls to see more.</p><TradeRecordMap onRegisterMapSave={registerMapSave} key={user.uid} quoteAccess={mapQuoteAccess} user={user} records={customerMapRecords} loading={customerMapLoading} total={customerPagination.total} onOpenRecord={(record) => setSelectedCustomerId(record.id)} /></div> : <div className="crm-customers-layout"><section className="crm-customer-list crm-record-table" role="table" aria-label="Customer results">
+      {customerLayout === "map" ? <div><TradeRecordMap onRegisterMapSave={registerMapSave} key={user.uid} quoteAccess={mapQuoteAccess} user={user} query={customerMapQuery} onOpenRecord={(record) => setSelectedCustomerId(record.id)} /></div> : <div className="crm-customers-layout"><section className="crm-customer-list crm-record-table" role="table" aria-label="Customer results">
         <div className="crm-record-columns crm-dynamic-columns" style={customerRecordStyle} role="row"><span role="columnheader"><span className="sr-only">Select</span></span>{customerColumns.map((key) => { const column = customerIndexColumns.find((item) => item.key === key); return column ? <SortableIndexHeading key={key} column={column} current={customerSort} onSort={changeCustomerRegisterSort} /> : null; })}</div>
         {indexedCustomers.length ? indexedCustomers.map((customer) => <article
           key={customer.id}

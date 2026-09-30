@@ -177,7 +177,7 @@ test("customer register defaults to a leap-safe rolling twelve-month window", ()
   const createdFrom = crmUi.indexOf("<span>Created from</span>", customerToolbarStart);
   const search = crmUi.indexOf("<span>Find a customer</span>", customerToolbarStart);
   assert.ok(customerToolbarStart >= 0 && createdFrom > customerToolbarStart && search > createdFrom);
-  assert.match(crmUi, /if \(view !== "customers" \|\| creating === "customer" \|\| !customerPreferencesReady\) return/);
+  assert.match(crmUi, /if \(view !== "customers" \|\| creating === "customer" \|\| !customerPreferencesReady \|\| mapWorkspace \|\| customerLayout === "map"\) return/);
 });
 
 test("installer saved views retain bounded populated job and created-date filters", () => {

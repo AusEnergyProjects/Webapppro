@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from '../src/lib/firebase-mfa.ts';
+import { TradeMapInputError } from '../src/lib/trade-map-dataset-server.ts';
+import { TradeMapLocationInputError } from '../src/lib/trade-map-location-cache.ts';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -44,6 +46,8 @@ function deniedRoute(routeName, error) {
     ComplianceDomainError: OtherDomainError,
     TradeAccessError: OtherDomainError,
     TradeTeamInvitationError: OtherDomainError,
+    TradeMapInputError,
+    TradeMapLocationInputError,
   };
   const names = ['GET', 'POST', 'PATCH', 'errorResponse'];
   if (routeName === 'trade-crm') names.push('crmIdentity');

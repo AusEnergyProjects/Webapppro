@@ -9,6 +9,8 @@ import { certificateTestDependency } from './helpers/creditex-training-fixture.m
 import * as rental from '../src/lib/trade-rental-assessment.mjs';
 import * as tradeJobLifecycle from '../src/lib/trade-job-lifecycle.ts';
 import * as tradeDataforceSource from '../src/lib/trade-dataforce-source.ts';
+import * as tradeMapDataset from '../src/lib/trade-map-dataset-server.ts';
+import * as tradeMapLocationCache from '../src/lib/trade-map-location-cache.ts';
 
 const tradeJobLifecycleDependency = {
   ...tradeJobLifecycle,
@@ -86,6 +88,8 @@ function fixture(overrides = {}) {
     '@/lib/trade-crm-job-index-sql': moduleAt('../src/lib/trade-crm-job-index-sql.ts'),
     '@/lib/trade-job-lifecycle': tradeJobLifecycleDependency,
     '@/lib/trade-dataforce-source': tradeDataforceSource,
+    '@/lib/trade-map-dataset-server': tradeMapDataset,
+    '@/lib/trade-map-location-cache': tradeMapLocationCache,
     '@/lib/creditex-dataforce-job-csv': { projectInstallerWorkOrderToDataforceRecord: input => input },
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access,
       canCreateJobs: current => current.isOwner || current.canCreateJobs,

@@ -9,6 +9,8 @@ import ts from "typescript";
 import { canAssignWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
 import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
 import * as tradeDataforceSource from "../src/lib/trade-dataforce-source.ts";
+import * as tradeMapDataset from "../src/lib/trade-map-dataset-server.ts";
+import * as tradeMapLocationCache from "../src/lib/trade-map-location-cache.ts";
 import { ReportInputError } from "../src/lib/trade-business-reports.ts";
 import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 
@@ -443,6 +445,8 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     "@/lib/trade-team-sync-server": syncHelpers,
     "@/lib/trade-crm-job-register": jobRegisterHelpers,
     "@/lib/trade-dataforce-source": tradeDataforceSource,
+    "@/lib/trade-map-dataset-server": tradeMapDataset,
+    "@/lib/trade-map-location-cache": tradeMapLocationCache,
     "@/lib/trade-crm-register-sort-sql": registerSortHelpers,
     "@/lib/trade-calendar-sync-server": {
       syncCreatedAppointmentToConnectedCalendars: syncAppointment,

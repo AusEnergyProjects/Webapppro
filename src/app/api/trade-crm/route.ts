@@ -113,6 +113,8 @@ import {
   rentalAssessmentTemplateSnapshot,
 } from "@/lib/trade-rental-assessment.mjs";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
+import { loadTradeMapDataset, tradeMapAddressSql, TradeMapInputError, type TradeMapDataset } from "@/lib/trade-map-dataset-server";
+import { claimTradeMapLocations, saveTradeMapLocations, TradeMapLocationInputError } from "@/lib/trade-map-location-cache";
 import { rentalAssignmentRequiredGates, rentalAssignmentCredentialSql } from "@/lib/trade-rental-credentials";
 import {
   isRentalInspectionAssignmentConflict,
@@ -387,6 +389,9 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof TradeMapInputError || error instanceof TradeMapLocationInputError) {
+    return adminJson({ ok: false, error: error.message }, 400);
+  }
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
@@ -804,7 +809,14 @@ function indexedCustomer(row: Record<string, unknown>) {
   };
 }
 
-async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
+type CrmIndexResult = {
+  items: (ReturnType<typeof indexedJob> | ReturnType<typeof indexedCustomer>)[];
+  pagination: { page: number; pageSize: number; total?: number; pageCount?: number; hasNext: boolean; nextCursor: string };
+};
+
+function crmIndex(identity: CrmIdentity, url: URL, resource: string, forMap: true): Promise<TradeMapDataset>;
+function crmIndex(identity: CrmIdentity, url: URL, resource: string, forMap?: false): Promise<CrmIndexResult>;
+async function crmIndex(identity: CrmIdentity, url: URL, resource: string, forMap = false): Promise<CrmIndexResult | TradeMapDataset> {
   const db = getD1();
   const { page, pageSize } = pagination(url);
   const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
@@ -986,6 +998,33 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'
       LEFT JOIN trade_dataforce_sources df ON df.work_order_id = w.id AND df.firebase_uid = w.firebase_uid`;
     const rowJoins = `${joins} ${TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL}`;
+    if (forMap) {
+      const address = tradeMapAddressSql("ss");
+      const mapWhere = conditions.map(condition => condition === "register_lifecycle_status = ?"
+        ? "category = ?" : condition).join(" AND ");
+      // SQLite underestimates the materialized lifecycle size without ANALYZE.
+      // Drive from it once rather than scanning it for every job in a large map.
+      const mapJoins = rowJoins.replace("FROM trade_work_orders w", "FROM job_lifecycle CROSS JOIN trade_work_orders w");
+      // The same conditions above govern both the register and map. A protected
+      // opportunity never supplies a customer title or a geocoding address.
+      return {
+        sql: `WITH job_lifecycle AS MATERIALIZED (
+          SELECT w.id work_order_id, ${JOB_REGISTER_LIFECYCLE_SQL} lifecycle_status
+          ${rowJoins} WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = '${recordStatus}'
+        ) SELECT id, kind, title, reference, address, LOWER(TRIM(address)) address_key, detail, category FROM (
+          SELECT w.id, 'job' kind,
+            CASE WHEN ${JOB_REGISTER_CUSTOMER_CONTEXT_SQL}
+              THEN COALESCE(NULLIF(${CUSTOMER_DISPLAY_NAME_SQL}, ''), NULLIF(w.title, ''), w.work_number)
+              ELSE 'Protected job' END title,
+            w.work_number reference,
+            CASE WHEN ${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} THEN ${address} ELSE '' END address,
+            CASE WHEN ${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} THEN w.service_category ELSE 'Customer location protected' END detail,
+            job_lifecycle.lifecycle_status category
+          ${mapJoins} WHERE w.id = job_lifecycle.work_order_id AND ${mapWhere}
+        )`,
+        bindings: [identity.uid, ...bindings],
+      };
+    }
     const sort = Object.hasOwn(JOB_SORTS, sortValue) ? sortValue : "updated-desc";
     if (sort.startsWith("quote-total-") && !identity.access.canViewQuotes) throw new Error("QUOTE_VIEW_REQUIRED");
     const selectedSort = JOB_SORTS[sort];
@@ -1100,6 +1139,16 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   if (createdFromUtc) { conditions.push("c.created_at >= ?"); bindings.push(createdFromUtc); }
   if (createdToUtc) { conditions.push("c.created_at < ?"); bindings.push(createdToUtc); }
   const where = conditions.join(" AND ");
+  if (forMap) {
+    return {
+      sql: `SELECT id, kind, title, reference, address, LOWER(TRIM(address)) address_key, detail, category FROM (
+        SELECT c.id, 'customer' kind, ${CUSTOMER_DISPLAY_NAME_SQL} title, c.customer_number reference,
+          ${tradeMapAddressSql("c")} address, 'Customer' detail, 'customer' category
+        FROM trade_crm_customers c WHERE ${where}
+      )`,
+      bindings,
+    };
+  }
   const sort = Object.hasOwn(CUSTOMER_REGISTER_SORTS, sortValue) ? sortValue : "name-asc";
   const selectedSort = CUSTOMER_REGISTER_SORTS[sort];
   let cursor;
@@ -1679,6 +1728,15 @@ export async function GET(request: Request) {
       return performanceJson({ ok: true, access: accessPayload, ...result }, { db, routeKey: `trade.crm.${resource}`, startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs,
         resultCount: result.items.length, cursorUsed: Boolean(url.searchParams.get("cursor")) });
     }
+    if (mode === "map" && ["jobs", "customers"].includes(resource)) {
+      if (resource === "customers" && (!identity.access.canViewCustomers
+        || !identity.access.canSearchCustomers)) throw new Error("CUSTOMER_SEARCH_REQUIRED");
+      const db = getD1(); const timer = routeTimer();
+      const dataset = await crmIndex(identity, url, resource, true);
+      const result = await timer.database(loadTradeMapDataset(db, identity.uid, dataset, url));
+      return performanceJson({ ok: true, access: accessPayload, ...result }, { db, routeKey: `trade.crm.map.${resource}`,
+        startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs, resultCount: result.items.length });
+    }
     if (mode === "detail" && ["job", "customer"].includes(resource)) {
       const id = cleanAdminText(url.searchParams.get("id"), 180);
       if (!id) return adminJson({ ok: false, error: "Choose a CRM record." }, 400);
@@ -1698,6 +1756,19 @@ export async function POST(request: Request) {
     catch { return adminJson({ ok: false, error: "Invalid CRM request." }, 400); }
     const db = getD1();
     const requestedAction = cleanAdminText(body.action, 40);
+    if (requestedAction === "claim_map_locations" || requestedAction === "save_map_locations") {
+      const url = new URL(request.url);
+      const resource = cleanAdminText(url.searchParams.get("resource") || body.resource, 20);
+      if (resource !== "jobs" && resource !== "customers") throw new TradeMapInputError("Choose jobs or customers for the map.");
+      if (resource === "customers" && (!identity.access.canViewCustomers
+        || !identity.access.canSearchCustomers)) throw new Error("CUSTOMER_SEARCH_REQUIRED");
+      const dataset = await crmIndex(identity, url, resource, true);
+      if (requestedAction === "claim_map_locations") {
+        if (body.limit !== undefined && typeof body.limit !== "number") throw new TradeMapLocationInputError();
+        return adminJson({ ok: true, ...(await claimTradeMapLocations(db, identity.uid, dataset, { limit: body.limit })) });
+      }
+      return adminJson({ ok: true, ...(await saveTradeMapLocations(db, identity.uid, dataset, body.results)) });
+    }
     const quickQuote = requestedAction === "create_quick_quote_job";
     const action = quickQuote ? "create_job" : requestedAction;
     const quickQuoteRequestId = quickQuote ? cleanAdminText(body.clientRequestId, 120) : "";

@@ -49,6 +49,7 @@ import {
 import { ensureTlinkSchemaGuards } from "../src/lib/tlink-schema-guards";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 import { cleanupUnreferencedTradeIssuedDocuments } from "../src/lib/trade-issued-document-cleanup";
+import { cleanupExpiredTradeMapLocations } from "../src/lib/trade-map-location-cache";
 import { drainTradeCrmJobMediaCleanup } from "../src/lib/trade-crm-job-media-cleanup";
 import {
   drainTradeTeamMemberFileCleanup,
@@ -383,6 +384,9 @@ function queueBackgroundDispatches(
   }
   if (request.method === "GET" && url.pathname === "/api/health" && response.ok) {
     const database = getD1();
+    ctx.waitUntil(cleanupExpiredTradeMapLocations(database).catch((error) => {
+      console.error("Map location retention cleanup failed.", error instanceof Error ? error.message : "Unknown error");
+    }));
     ctx.waitUntil(
       drainTradeQuoteDeliveries({ db: database, limit: 10 })
         .then(() => undefined)
@@ -632,6 +636,9 @@ const worker = {
     if (controller.cron === DAILY_MAINTENANCE_CRON) {
       const db = getD1();
       tasks.push(
+        cleanupExpiredTradeMapLocations(db).catch((error) => {
+          console.error("Map location retention cleanup failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
         generateDueServiceJobs(db, { limit: 200 }).catch((error) => {
           console.error("Recurring service job generation failed.", error instanceof Error ? error.message : "Unknown error");
         }),
