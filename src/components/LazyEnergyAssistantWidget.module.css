@@ -7,6 +7,10 @@
   z-index: 8000;
 }
 
+:global(body:has([data-channel][data-keyboard="true"])) .root {
+  display: none;
+}
+
 .launcher,
 .peek {
   align-items: center;
