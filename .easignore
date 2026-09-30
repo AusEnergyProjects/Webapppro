@@ -1,5 +1,5 @@
 # EAS archives this Git repository, including the mobile workspace. Its ignore
-# file must live here; mobile/.easignore is not used by the monorepo packager.
+# file must live here; nested workspace ignore files are not used by EAS.
 # Keep the root .gitignore rules below when adding build-only exceptions.
 
 # dependencies
