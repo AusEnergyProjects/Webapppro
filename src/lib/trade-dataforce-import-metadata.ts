@@ -20,7 +20,7 @@ export function defaultTradeDataforceServiceCategory(workType: string): TradeDat
 
 export const TRADE_DATAFORCE_FIELD_MAPPINGS = [
   { header: "App Id", target: "Source appointment ID", note: "Retained separately from the source job ID." },
-  { header: "Job Id", target: "Source job ID", note: "Used to prevent importing the same Dataforce job twice in this business." },
+  { header: "Job Id", target: "Source job ID", note: "Used to prevent importing the same source job twice in this business." },
   { header: "Status", target: "Job work stage and source status", note: "Maps the operational stage; does not certify regulatory approval." },
   { header: "SubStatus", target: "Source substatus", note: "Partial work remains in progress. Audit labels are retained as source facts." },
   { header: "Type", target: "Source job type", note: "Retained without changing the source meaning." },
@@ -28,7 +28,7 @@ export const TRADE_DATAFORCE_FIELD_MAPPINGS = [
   { header: "Scheduled Datetime", target: "Scheduled local date and time", note: "Keeps the Australian local wall-clock time. No end time or duration is invented." },
   { header: "Balance", target: "Source balance", note: "Preserved separately; does not create invoices or payments." },
   { header: "Certificates (VEECs)", target: "Source VEEC quantity", note: "Retained as a source quantity, not verified certificate issuance." },
-  { header: "Submission", target: "Source submission status", note: "Retained as reported by Dataforce, without creating an official submission." },
+  { header: "Submission", target: "Source submission status", note: "Retained as reported by the original source, without creating an official submission." },
   { header: "Invoiced", target: "Source invoicing status", note: "Blank means not supplied. Invoice history cannot be inferred from this export." },
   { header: "Field Worker", target: "Source worker ID and name", note: "Preserves the worker label without granting access or assigning a different team account." },
   { header: "Agent", target: "Source agent", note: "Retained for provenance. Records belong to the signed-in importing business." },

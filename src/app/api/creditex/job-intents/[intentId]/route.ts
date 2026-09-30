@@ -7,6 +7,7 @@ import {
   CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL,
 } from "@/lib/creditex-job-audit-sql";
 import { CREDITEX_PARTNER_ORGANISATION_CODE } from "@/lib/trade-compliance-intent";
+import { visibleImportedJobEventSummary } from "@/lib/trade-import-labels";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -112,7 +113,8 @@ function safeRow(row: Row | null, groupKey = "") {
 }
 
 function safeRows(rows: Row[], groupKey: string) {
-  return rows.map((row) => safeRow(row, groupKey) as Row);
+  return rows.map((row) => safeRow(groupKey === "jobEvents"
+    ? { ...row, summary: visibleImportedJobEventSummary(row, row.work_order_id) } : row, groupKey) as Row);
 }
 
 function addressProvenance(serviceSite: Row) {

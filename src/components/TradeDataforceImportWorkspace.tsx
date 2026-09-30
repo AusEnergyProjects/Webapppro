@@ -32,6 +32,10 @@ type DataforceResult = {
 const pageSize = 100;
 const fileSizeLimit = 10 * 1024 * 1024;
 
+function sourceFileLabel(name: string) {
+  return name.replace(/Dataforce/gi, "job-import");
+}
+
 function dateLabel(value: string) {
   return value ? new Date(value).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }) : "Not yet";
 }
@@ -78,7 +82,7 @@ export function TradeDataforceImportWorkspace({ user, initialSource, onBack, onI
     let result: DataforceResult;
     try { result = await response.json() as DataforceResult; }
     catch { throw new Error("TLink returned an unreadable import response. Reload the saved batch before resuming."); }
-    if (!response.ok || result.ok !== true) throw new Error(result.error || "The Dataforce import request could not be completed.");
+    if (!response.ok || result.ok !== true) throw new Error(result.error || "The job import request could not be completed.");
     return result;
   }, [fetch, user]);
 
@@ -100,20 +104,20 @@ export function TradeDataforceImportWorkspace({ user, initialSource, onBack, onI
     setError(""); setSourceFile(null); setWorkTypes([]); setServiceCategoryMappings({});
     setBatch(null); setRows([]); setFieldMappings([]); setReconciliation(null); setOffset(0); setNextOffset(null);
     try {
-      if (new Blob([source.csv]).size > fileSizeLimit) throw new Error("Choose a Dataforce CSV no larger than 10 MB.");
+      if (new Blob([source.csv]).size > fileSizeLimit) throw new Error("Choose a job CSV no larger than 10 MB.");
       const parsed = parseDataforceJobCsv(source.csv);
-      if (!isTradeDataforceImport(parsed.headers)) throw new Error("Choose a Dataforce job export with all 23 original column headings.");
+      if (!isTradeDataforceImport(parsed.headers)) throw new Error("Choose a job export with all 23 original column headings.");
       const workTypeIndex = parsed.headers.indexOf("Work Type");
       const counts = new Map<string, number>();
       for (const row of parsed.rows) {
         const name = row.values[workTypeIndex] || "";
         counts.set(name, (counts.get(name) || 0) + 1);
       }
-      if (!counts.size) throw new Error("The Dataforce CSV must contain at least one job.");
+      if (!counts.size) throw new Error("The job CSV must contain at least one job.");
       setSourceFile(source);
       setWorkTypes([...counts].map(([name, count]) => ({ name, count })));
       setStatus("File ready. Confirm the service category for each work type, then preview your records.");
-    } catch (failure) { setError(failure instanceof Error ? failure.message : "The Dataforce CSV could not be read."); }
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "The job CSV could not be read."); }
     finally { setBusy(""); }
   }, []);
 
@@ -127,7 +131,7 @@ export function TradeDataforceImportWorkspace({ user, initialSource, onBack, onI
       applyBatch(result);
       setStatus(result.reused ? "This file already has a saved batch. Its current progress is shown below." : "Preview saved. Review the mappings and issues before importing.");
     } catch (failure) {
-      if (mounted.current) setError(failure instanceof Error ? failure.message : "The Dataforce CSV could not be checked.");
+      if (mounted.current) setError(failure instanceof Error ? failure.message : "The job CSV could not be checked.");
     } finally { if (mounted.current) setBusy(""); }
   }, [applyBatch, request, serviceCategoryMappings, sourceFile]);
 
@@ -148,7 +152,7 @@ export function TradeDataforceImportWorkspace({ user, initialSource, onBack, onI
   }, [initialSource, prepareSource, request]);
 
   async function chooseFile(file: File) {
-    if (file.size > fileSizeLimit) { setError("Choose a Dataforce CSV no larger than 10 MB."); return; }
+    if (file.size > fileSizeLimit) { setError("Choose a job CSV no larger than 10 MB."); return; }
     setBusy("reading"); setError("");
     try { prepareSource({ name: file.name, csv: await file.text() }); }
     catch (failure) { setError(failure instanceof Error ? failure.message : "The file could not be read."); setBusy(""); }
@@ -193,7 +197,7 @@ export function TradeDataforceImportWorkspace({ user, initialSource, onBack, onI
     try {
       const response = await fetch(`/api/trade-imports/dataforce?batchId=${encodeURIComponent(batch.id)}&format=source`, { headers: { Authorization: `Bearer ${await user.getIdToken()}` }, cache: "no-store" });
       if (!response.ok) throw new Error("The saved source file could not be downloaded.");
-      saveDownload(await response.blob(), batch.fileName.endsWith(".csv") ? batch.fileName : `${batch.fileName}.csv`);
+      saveDownload(await response.blob(), "job-import-source.csv");
     } catch (failure) { setError(failure instanceof Error ? failure.message : "The saved source file could not be downloaded."); }
     finally { setBusy(""); }
   }
@@ -219,8 +223,8 @@ export function TradeDataforceImportWorkspace({ user, initialSource, onBack, onI
         const source = String(value);
         return `"${(/^[\s]*[=+@-]/.test(source) ? `'${source}` : source).replaceAll('"', '""')}"`;
       };
-      const report = [["Source row", "Dataforce Job Id", "Dataforce App Id", "TLink job reference", "Preview status", "Import result", "Issues", "Current batch integrity"], ...allRows.map(row => [row.rowNumber, row.values.record["Job Id"], row.values.record["App Id"], row.targetEntityId, statusLabel(row.status), statusLabel(row.resultStatus), [...row.issues.map(issue => issue.message), row.error].filter(Boolean).join(" "), integrityWarning])];
-      saveDownload(new Blob(["\uFEFF", report.map(row => row.map(cell).join(",")).join("\r\n"), "\r\n"], { type: "text/csv;charset=utf-8" }), `${batch.fileName.replace(/\.csv$/i, "")}-tlink-reconciliation.csv`);
+      const report = [["Source row", "Original job ID", "Original app ID", "TLink job reference", "Preview status", "Import result", "Issues", "Current batch integrity"], ...allRows.map(row => [row.rowNumber, row.values.record["Job Id"], row.values.record["App Id"], row.targetEntityId, statusLabel(row.status), statusLabel(row.resultStatus), [...row.issues.map(issue => issue.message), row.error].filter(Boolean).join(" "), integrityWarning])];
+      saveDownload(new Blob(["\uFEFF", report.map(row => row.map(cell).join(",")).join("\r\n"), "\r\n"], { type: "text/csv;charset=utf-8" }), "job-import-reconciliation.csv");
     } catch (failure) { setError(failure instanceof Error ? failure.message : "The reconciliation report could not be downloaded."); }
     finally { setBusy(""); }
   }
@@ -231,22 +235,22 @@ export function TradeDataforceImportWorkspace({ user, initialSource, onBack, onI
   return <section className="trade-import-workspace" aria-labelledby="dataforce-import-title">
     <div><button className="trade-import-close" type="button" disabled={Boolean(busy)} onClick={onBack}>Other import types</button></div>
     <header className="trade-import-hero">
-      <div><span>Dataforce migration</span><h2 id="dataforce-import-title">Your jobs, customers and history together</h2><p>Upload your Dataforce job export once. TLink maps its 23 columns and links customers, service addresses and jobs while keeping the original values.</p></div>
+      <div><span>Job import</span><h2 id="dataforce-import-title">Your jobs, customers and history together</h2><p>Upload your original job export once. TLink maps its 23 columns and links customers, service addresses and jobs while keeping the original values.</p></div>
       <aside><strong>Review, then import</strong><span>Up to 20,000 rows and 10 MB</span><span>Existing records are protected</span><span>Saved progress can be resumed</span></aside>
     </header>
-    <ol className="trade-import-steps" aria-label="Dataforce import steps">
-      <li className="active"><span>1</span><strong>Upload</strong><small>Original Dataforce CSV</small></li>
+    <ol className="trade-import-steps" aria-label="Job import steps">
+      <li className="active"><span>1</span><strong>Upload</strong><small>Original job CSV</small></li>
       <li className={batch ? "active" : ""}><span>2</span><strong>Review</strong><small>Mappings and row checks</small></li>
       <li className={batch && batch.status !== "preview" ? "active" : ""}><span>3</span><strong>Import</strong><small>Saved in small groups</small></li>
       <li className={batch && ["committed", "needs_review"].includes(batch.status) ? "active" : ""}><span>4</span><strong>Reconcile</strong><small>Account for every row</small></li>
     </ol>
     <label className={`trade-import-dropzone ${busy === "preview" || busy === "reading" ? "busy" : ""}`}>
-      <span>{busy === "preview" ? "Checking Dataforce export..." : "Choose your Dataforce CSV"}</span>
+      <span>{busy === "preview" ? "Checking job export..." : "Choose your job CSV"}</span>
       <small>Keep the original column headings. Choose service categories, then preview without changing your CRM.</small>
-      <input aria-label="Dataforce CSV file" type="file" accept=".csv,text/csv" disabled={Boolean(busy)} onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ""; if (file) void chooseFile(file); }} />
+      <input aria-label="Job CSV file" type="file" accept=".csv,text/csv" disabled={Boolean(busy)} onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ""; if (file) void chooseFile(file); }} />
     </label>
     {sourceFile && !batch && <section className="trade-import-mapping" aria-labelledby="dataforce-service-mapping-title">
-      <header><div><span>{sourceFile.name}</span><h3 id="dataforce-service-mapping-title">Match your work types to TLink services</h3><p>These choices apply only to this import. Original work type labels are kept. Unrecognised work types stay in Other with a review warning until you choose their category.</p></div></header>
+      <header><div><span>{sourceFileLabel(sourceFile.name)}</span><h3 id="dataforce-service-mapping-title">Match your work types to TLink services</h3><p>These choices apply only to this import. Original work type labels are kept. Unrecognised work types stay in Other with a review warning until you choose their category.</p></div></header>
       <div>{workTypes.map(workType => {
         const suggested = defaultTradeDataforceServiceCategory(workType.name);
         const suggestedLabel = TRADE_DATAFORCE_SERVICE_CATEGORY_OPTIONS.find(option => option.value === suggested)?.label || "Other";
@@ -260,13 +264,13 @@ export function TradeDataforceImportWorkspace({ user, initialSource, onBack, onI
           });
         }}><option value="">Suggested: {suggestedLabel}{suggested === "other" ? " (needs review)" : ""}</option>{TRADE_DATAFORCE_SERVICE_CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
       })}</div>
-      <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void preview()}>{busy === "preview" ? "Checking..." : "Preview Dataforce mapping"}</button>
+      <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void preview()}>{busy === "preview" ? "Checking..." : "Preview job mapping"}</button>
     </section>}
     <section className="trade-import-template-card"><div><strong>What your export contains</strong><p>Customer contacts, addresses, job and application references, source statuses, scheduled dates, worker names and historical financial fields are retained. Photos, documents and detailed field forms are not included in this CSV. Imported balances and certificate values remain historical records; importing does not approve certificates or issue invoices.</p><p>Imported appointments do not send automatic reminders or follow-ups. New appointments you create in TLink can use your normal automation settings.</p></div></section>
     {error && <p className="trade-import-status" role="alert">{error}</p>}
     {status && <p role="status" aria-live="polite">{status}</p>}
     {batch && <section className="trade-import-review" aria-labelledby="dataforce-review-title">
-      <header><div><span>{batch.fileName}</span><h3 id="dataforce-review-title">{statusLabel(batch.status)}</h3><p>Saved {dateLabel(batch.updatedAt || batch.createdAt)}. Review all pages before starting.</p></div><div><button className="trade-import-close" type="button" disabled={Boolean(busy)} onClick={() => void openBatch(batch.id, offset)}>Refresh batch</button><button className="trade-import-close" type="button" disabled={Boolean(busy)} onClick={() => void downloadSource()}>Download saved source</button><button className="trade-import-close" type="button" disabled={Boolean(busy)} onClick={() => void downloadReconciliation()}>Download reconciliation</button></div></header>
+      <header><div><span>{sourceFileLabel(batch.fileName)}</span><h3 id="dataforce-review-title">{statusLabel(batch.status)}</h3><p>Saved {dateLabel(batch.updatedAt || batch.createdAt)}. Review all pages before starting.</p></div><div><button className="trade-import-close" type="button" disabled={Boolean(busy)} onClick={() => void openBatch(batch.id, offset)}>Refresh batch</button><button className="trade-import-close" type="button" disabled={Boolean(busy)} onClick={() => void downloadSource()}>Download saved source</button><button className="trade-import-close" type="button" disabled={Boolean(busy)} onClick={() => void downloadReconciliation()}>Download reconciliation</button></div></header>
       <div className="trade-import-summary">
         <article><span>Source rows</span><strong>{batch.rowCount.toLocaleString("en-AU")}</strong></article>
         <article className="ready"><span>{batch.status === "preview" ? "Ready" : "Imported"}</span><strong>{(batch.status === "preview" ? batch.readyCount : batch.importedCount).toLocaleString("en-AU")}</strong></article>
@@ -286,21 +290,21 @@ export function TradeDataforceImportWorkspace({ user, initialSource, onBack, onI
       {reconciliation && batch.importedCount > 0 && typeof reconciliation.mappedFieldMismatches === "number" && <p>{reconciliation.mappedFieldMismatches ? `${reconciliation.mappedFieldMismatches.toLocaleString("en-AU")} linked records now differ from the reviewed mapping. This can include changes made in TLink after import; original source values remain available.` : "Customer details, both contact numbers, addresses, service categories, job stages and scheduled times match the reviewed mapping."}</p>}
       <p>Rows with warnings can be imported. Invalid rows are excluded. Identical jobs already imported are skipped; changed source jobs are held as conflicts so existing work is never silently overwritten. Worker names are retained without granting team access.</p>
       {fieldMappings.length > 0 && <details className="trade-import-mapping"><summary><strong>View all {fieldMappings.length} column mappings</strong></summary><div>{fieldMappings.map(mapping => <div key={mapping.header}><strong>{mapping.header}</strong><p>{mapping.target}</p><small>{mapping.note}</small></div>)}</div></details>}
-      <div className="trade-import-actions"><div><strong>Rows {rows.length ? offset + 1 : 0} to {offset + rows.length} of {batch.rowCount.toLocaleString("en-AU")}</strong><span>Expand a row to compare all original source values.</span></div><nav className="trade-import-filters" aria-label="Dataforce row pages"><button type="button" disabled={Boolean(busy) || offset === 0} onClick={() => void openBatch(batch.id, Math.max(0, offset - pageSize))}>Previous</button><button type="button" disabled={Boolean(busy) || nextOffset === null} onClick={() => nextOffset !== null && void openBatch(batch.id, nextOffset)}>Next</button></nav></div>
+      <div className="trade-import-actions"><div><strong>Rows {rows.length ? offset + 1 : 0} to {offset + rows.length} of {batch.rowCount.toLocaleString("en-AU")}</strong><span>Expand a row to compare all original source values.</span></div><nav className="trade-import-filters" aria-label="Imported row pages"><button type="button" disabled={Boolean(busy) || offset === 0} onClick={() => void openBatch(batch.id, Math.max(0, offset - pageSize))}>Previous</button><button type="button" disabled={Boolean(busy) || nextOffset === null} onClick={() => nextOffset !== null && void openBatch(batch.id, nextOffset)}>Next</button></nav></div>
       <div className="trade-import-row-list">{rows.map(row => <article key={row.id} className={`trade-import-row ${row.status === "conflict" ? "error" : row.status}`}><div>
         <span>Row {row.rowNumber} · {statusLabel(row.resultStatus === "pending" ? row.status : row.resultStatus)}</span>
-        <strong>{row.values.record.Customer || row.values.record["Company Name"] || "Unnamed customer"} · Dataforce job {row.values.record["Job Id"] || "missing"}</strong>
+        <strong>{row.values.record.Customer || row.values.record["Company Name"] || "Unnamed customer"} · Original job ID {row.values.record["Job Id"] || "missing"}</strong>
         <small>{[row.values.record.Address, row.values.record.Suburb, row.values.record.Postcode].filter(Boolean).join(", ")}</small>
         {row.values.job && <small>TLink service: {TRADE_DATAFORCE_SERVICE_CATEGORY_OPTIONS.find(option => option.value === row.values.job!.serviceCategory)?.label || row.values.job.serviceCategory}</small>}
         <small>{row.issues.length ? row.issues.map(issue => issue.message).join(" ") : "Source fields checked."}</small>
         {row.error && <small>{row.error}</small>}
-        {row.targetEntityId && <a href={`/direct-trade/dashboard?workspace=work&crm=jobs&jobId=${encodeURIComponent(row.targetEntityId)}`} aria-label={`Open TLink job for Dataforce ${row.values.record["Job Id"]}`}>Open TLink job</a>}
-        <details><summary>Original source values</summary><dl>{Object.entries(row.values.record).map(([header, value]) => <div key={header}><dt>{header}</dt><dd>{value || "Empty in source"}</dd></div>)}</dl></details>
+        {row.targetEntityId && <a href={`/direct-trade/dashboard?workspace=work&crm=jobs&jobId=${encodeURIComponent(row.targetEntityId)}`} aria-label={`Open TLink job for original job ID ${row.values.record["Job Id"]}`}>Open TLink job</a>}
+        <details><summary>Original imported record</summary><dl>{Object.entries(row.values.record).map(([header, value]) => <div key={header}><dt>{header}</dt><dd>{value || "Empty in source"}</dd></div>)}</dl></details>
       </div></article>)}</div>
-      <footer className="trade-import-actions"><div><strong>{busy === "commit" ? "Importing your records" : canCommit ? "Ready to continue" : "Review your reconciliation"}</strong><span>{processed.toLocaleString("en-AU")} of {batch.rowCount.toLocaleString("en-AU")} rows processed. Completed records stay saved if you leave.</span>{busy === "commit" && <progress aria-label="Dataforce import progress" max={batch.rowCount} value={processed} />}</div>
-        {busy === "commit" ? <button className="trade-import-close" type="button" onClick={() => { stopRequested.current = true; setStatus("Pausing after the current group is saved..."); }}>Pause after this group</button> : canCommit && <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void commit()}>{batch.status === "preview" ? "Import reviewed Dataforce rows" : "Resume import"}</button>}
+      <footer className="trade-import-actions"><div><strong>{busy === "commit" ? "Importing your records" : canCommit ? "Ready to continue" : "Review your reconciliation"}</strong><span>{processed.toLocaleString("en-AU")} of {batch.rowCount.toLocaleString("en-AU")} rows processed. Completed records stay saved if you leave.</span>{busy === "commit" && <progress aria-label="Job import progress" max={batch.rowCount} value={processed} />}</div>
+        {busy === "commit" ? <button className="trade-import-close" type="button" onClick={() => { stopRequested.current = true; setStatus("Pausing after the current group is saved..."); }}>Pause after this group</button> : canCommit && <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void commit()}>{batch.status === "preview" ? "Import reviewed job rows" : "Resume import"}</button>}
       </footer>
     </section>}
-    <section className="trade-import-history"><header><div><span>Dataforce import history</span><h3>Saved batches</h3></div></header>{loading ? <p>Loading import history...</p> : batches.length ? <div>{batches.map(item => <button type="button" key={item.id} disabled={Boolean(busy)} onClick={() => void openBatch(item.id)}><span>{dateLabel(item.createdAt)}</span><strong>{item.fileName}</strong><small>{item.rowCount.toLocaleString("en-AU")} rows · {statusLabel(item.status)} · {item.pendingCount.toLocaleString("en-AU")} pending</small></button>)}</div> : <p>No Dataforce imports have been prepared yet.</p>}</section>
+    <section className="trade-import-history"><header><div><span>Job import history</span><h3>Saved batches</h3></div></header>{loading ? <p>Loading import history...</p> : batches.length ? <div>{batches.map(item => <button type="button" key={item.id} disabled={Boolean(busy)} onClick={() => void openBatch(item.id)}><span>{dateLabel(item.createdAt)}</span><strong>{sourceFileLabel(item.fileName)}</strong><small>{item.rowCount.toLocaleString("en-AU")} rows · {statusLabel(item.status)} · {item.pendingCount.toLocaleString("en-AU")} pending</small></button>)}</div> : <p>No job imports have been prepared yet.</p>}</section>
   </section>;
 }

@@ -40,6 +40,7 @@ test("every Dataforce field has an explicit mapping and its original string surv
   assert.deepEqual(plan.rows[0].record, source);
   assert.deepEqual(TRADE_DATAFORCE_FIELD_MAPPINGS.map((item) => item.header), DATAFORCE_JOB_CSV_HEADERS);
   assert.ok(TRADE_DATAFORCE_FIELD_MAPPINGS.every((item) => item.target && item.note));
+  assert.doesNotMatch(JSON.stringify(TRADE_DATAFORCE_FIELD_MAPPINGS), /dataforce/i);
   const mapped = plan.rows[0];
   assert.equal(mapped.sourceAppId, "APP-100");
   assert.equal(mapped.customer.displayName, source.Customer);

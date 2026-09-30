@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { mergeTradeAssetTimeline } from "@/lib/trade-asset-timeline.mjs";
+import { visibleImportedJobEventSummary } from "@/lib/trade-import-labels";
 import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
@@ -167,7 +168,12 @@ async function timelineRows(uid: string, customerId: string, siteId: string) {
     WHERE se.firebase_uid = ? AND a.crm_customer_id = ? AND (? = '' OR a.service_site_id = ?)
     ORDER BY occurred_at DESC, se.id DESC LIMIT 500`).bind(uid, customerId, siteId, siteId),
   ];
-  const results = await db.batch<Record<string, unknown>>(statements);
+  const resultSets = await db.batch<Record<string, unknown>>(statements);
+  const results = resultSets.map((result) => ({
+    ...result,
+    results: result.results.map((row) => row.source_type === "job"
+      ? { ...row, summary: visibleImportedJobEventSummary(row, row.work_order_id) } : row),
+  }));
   return mergeTradeAssetTimeline(results);
 }
 

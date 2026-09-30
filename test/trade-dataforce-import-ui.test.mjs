@@ -20,7 +20,7 @@ const row = (index, extra = {}) => ({ id: `row-${index}`, rowNumber: index + 2, 
 const preview = (extra = {}) => ({ ok: true, batch: batch(), rows: [row(0)], nextOffset: null, fieldMappings: [{ header: "Job Id", target: "Original source job reference", note: "TLink assigns a separate job number." }], ...extra });
 
 function harness(responder, options = {}) {
-  const state = []; let cursor = 0; const requests = []; const refreshes = []; const downloads = [];
+  const state = []; let cursor = 0; const requests = []; const refreshes = []; const downloads = []; const downloadNames = [];
   const hooks = {
     useState(initial) { const index = cursor++; if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial; return [state[index], value => { state[index] = typeof value === "function" ? value(state[index]) : value; }]; },
     useRef(initial) { const index = cursor++; if (!(index in state)) state[index] = { current: initial }; return state[index]; },
@@ -34,16 +34,16 @@ function harness(responder, options = {}) {
   };
   const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./TradeBusinessProvider" ? { useTradeBusinessFetch: () => scopedFetch } : id === "@/lib/creditex-dataforce-job-csv" ? csvTools : id === "@/lib/trade-dataforce-import-metadata" ? metadata : (() => { throw new Error(`Unexpected import ${id}`); })();
   const exports = {};
-  const document = { createElement: () => ({ click() {} }) };
+  const document = { createElement: () => ({ click() { downloadNames.push(this.download); } }) };
   const urlApi = { createObjectURL(blob) { downloads.push(blob); return "blob:test"; }, revokeObjectURL() {} };
   Function("require", "exports", "document", "URL", "setTimeout", compiled)(require, exports, document, urlApi, fn => fn());
   const user = { getIdToken: options.getIdToken || (async () => "test-token") };
   const render = () => { cursor = 0; return exports.TradeDataforceImportWorkspace({ user, onBack() {}, onImported: async () => { refreshes.push(true); await options.onImported?.(); } }); };
-  return { requests, refreshes, downloads, render,
+  return { requests, refreshes, downloads, downloadNames, render,
     async upload(file = { name: "dataforce.csv", size: 100, text: async () => csvSource() }, prepareOnly = false) {
       nodes(render(), node => node.type === "input" && node.props.type === "file")[0].props.onChange({ target: { files: [file] }, currentTarget: { value: "" } });
       await flush();
-      const previewButton = button(render(), "Preview Dataforce mapping");
+      const previewButton = button(render(), "Preview job mapping");
       if (!prepareOnly && previewButton) { previewButton.props.onClick(); await flush(); }
       return render();
     },
@@ -56,6 +56,41 @@ test("Dataforce is detected before generic column mapping and remains installer-
   assert.ok(importer.indexOf("isTradeDataforceImport(headers)") < importer.indexOf("const normalized = new Map"));
   assert.match(importer, /dataforceMode && partnerType === "installer"/);
   assert.match(importer, /import \{ isTradeDataforceImport \} from "@\/lib\/trade-dataforce-import-metadata"/);
+});
+
+test("job import uses neutral product copy and accessible labels while preserving upload metadata", async () => {
+  for (const [name, contents] of [["TradeDataImportWorkspace.tsx", importer], ["TradeDataforceImportWorkspace.tsx", source]]) {
+    const ast = ts.createSourceFile(name, contents, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const visit = node => {
+      if (ts.isJsxText(node)) assert.doesNotMatch(node.text, /dataforce/i, "Visible product copy must be neutral");
+      ts.forEachChild(node, visit);
+    };
+    visit(ast);
+  }
+  const app = harness(() => preview());
+  let tree = await app.upload(undefined, true);
+  assert.match(text(tree), /job-import\.csv/);
+  assert.doesNotMatch(text(tree), /dataforce/i);
+  tree = await app.click("Preview job mapping");
+  assert.match(text(tree), /Original imported record/);
+  assert.doesNotMatch(text(tree), /dataforce/i);
+  for (const element of nodes(tree, node => typeof node.props?.["aria-label"] === "string")) {
+    assert.doesNotMatch(element.props["aria-label"], /dataforce/i);
+  }
+  assert.equal(app.requests[0].url, "/api/trade-imports/dataforce");
+  assert.equal(app.requests[0].body.fileName, "dataforce.csv");
+  assert.equal(app.requests[0].body.csvText, csvSource());
+  await app.click("Download saved source");
+  assert.deepEqual(app.downloadNames, ["job-import-source.csv"]);
+  assert.equal(await app.downloads[0].text(), "source", "Source download contents must not be rewritten");
+});
+
+test("neutral product wording never rewrites original imported values", async () => {
+  const originalRecord = { "Job Id": "Dataforce-0007", Customer: "Dataforce Electrical", "Work Type": "Dataforce service" };
+  const app = harness(() => preview({ rows: [row(0, { values: { record: originalRecord } })] }));
+  const tree = await app.upload();
+  const sourceValues = nodes(tree, node => node.type === "dd").map(text);
+  assert.deepEqual(sourceValues, Object.values(originalRecord));
 });
 
 test("upload waits for category review and sends only this file's explicit work type selections", async () => {
@@ -73,14 +108,14 @@ test("upload waits for category review and sends only this file's explicit work 
   assert.match(text(nodes(standard, node => node.type === "option" && node.props.value === "")), /Other.*\(needs review\)/);
   assert.doesNotMatch(text(nodes(assessment, node => node.type === "option" && node.props.value === "")), /needs review/);
   standard.props.onChange({ target: { value: "assessment" } });
-  tree = await app.click("Preview Dataforce mapping");
+  tree = await app.click("Preview job mapping");
   assert.deepEqual(app.requests[0].body.serviceCategoryMappings, { "Standard Install": "assessment" });
   assert.equal(app.requests[0].body.csvText, csv);
-  assert.ok(button(tree, "Import reviewed Dataforce rows"));
+  assert.ok(button(tree, "Import reviewed job rows"));
   tree = await app.upload(file, true);
   const nextChoice = nodes(tree, node => node.type === "select" && node.props["aria-label"] === "TLink service category for Standard Install")[0];
   assert.equal(nextChoice.props.value, "", "A category choice must not become a global classification");
-  await app.click("Preview Dataforce mapping");
+  await app.click("Preview job mapping");
   assert.deepEqual(app.requests[1].body.serviceCategoryMappings, {});
 });
 
@@ -94,7 +129,7 @@ test("explicit Other is reviewable and unsupported categories never enter the pr
   choice = nodes(tree, node => node.type === "select")[0];
   assert.equal(choice.props.value, "");
   choice.props.onChange({ target: { value: "other" } });
-  await app.click("Preview Dataforce mapping");
+  await app.click("Preview job mapping");
   assert.deepEqual(app.requests[0].body.serviceCategoryMappings, { "Different trade work": "other" });
 });
 
@@ -105,7 +140,7 @@ test("work type names are treated as data even when they match object property n
   const choice = nodes(tree, node => node.type === "select")[0];
   assert.equal(choice.props.value, "");
   choice.props.onChange({ target: { value: "other" } });
-  await app.click("Preview Dataforce mapping");
+  await app.click("Preview job mapping");
   assert.equal(Object.hasOwn(app.requests[0].body.serviceCategoryMappings, "__proto__"), true);
   assert.equal(app.requests[0].body.serviceCategoryMappings["__proto__"], "other");
 });
@@ -118,8 +153,8 @@ test("reviewed upload previews exact source without committing and shows mapping
   assert.equal(app.requests[0].init.headers.get("Authorization"), "Bearer test-token");
   assert.match(text(tree), /View all 1 column mappings/);
   assert.match(text(tree), /Original source job reference/);
-  assert.match(text(tree), /Dataforce job 1000/);
-  assert.ok(button(tree, "Import reviewed Dataforce rows"));
+  assert.match(text(tree), /Original job ID 1000/);
+  assert.ok(button(tree, "Import reviewed job rows"));
   tree = await app.upload({ name: "too-large.csv", size: 10 * 1024 * 1024 + 1, text() { throw new Error("must not read"); } });
   assert.equal(app.requests.length, 1);
   assert.match(text(nodes(tree, node => node.props?.role === "alert")), /no larger than 10 MB/);
@@ -133,7 +168,7 @@ test("commit processes every group, refreshes saved reconciliation and reports w
     return preview({ batch: batch({ status: "committed", importedCount: 40, pendingCount: 0 }) });
   }, { onImported: async () => { throw new Error("refresh failed"); } });
   await app.upload();
-  const tree = await app.click("Import reviewed Dataforce rows");
+  const tree = await app.click("Import reviewed job rows");
   assert.equal(commits, 2);
   assert.equal(app.refreshes.length, 1);
   assert.match(text(tree), /Import complete/);
@@ -150,7 +185,7 @@ test("network interruption preserves completed progress and exposes resume witho
     return { ok: true, batch: batch({ status: "committing", importedCount: 20, pendingCount: 20 }), processedCount: 20, hasMore: true };
   });
   await app.upload();
-  const tree = await app.click("Import reviewed Dataforce rows");
+  const tree = await app.click("Import reviewed job rows");
   assert.equal(commits, 2);
   assert.match(text(tree), /Connection lost/);
   assert.match(text(tree), /Completed records remain saved/);
@@ -161,7 +196,7 @@ test("network interruption preserves completed progress and exposes resume witho
 test("a non-progressing server response stops the loop and does not pretend completion", async () => {
   const app = harness(({ body }) => body.action === "preview" ? preview() : ({ ok: true, batch: batch({ status: "committing" }), processedCount: 0, hasMore: true }));
   await app.upload();
-  const tree = await app.click("Import reviewed Dataforce rows");
+  const tree = await app.click("Import reviewed job rows");
   assert.equal(app.requests.filter(request => request.body?.action === "commit").length, 1);
   assert.match(text(tree), /no rows progressed/);
   assert.ok(button(tree, "Resume import"));
@@ -182,7 +217,7 @@ test("pause waits for the active group to save, then resumes from its saved batc
     return preview({ batch: current });
   });
   await app.upload();
-  await app.click("Import reviewed Dataforce rows");
+  await app.click("Import reviewed job rows");
   await app.click("Pause after this group");
   assert.equal(commits, 1);
   finishGroup();
@@ -212,17 +247,20 @@ test("reconciliation downloads all pages and protects formula-like source IDs", 
   await app.click("Download reconciliation");
   assert.equal(app.downloads.length, 1);
   const csv = await app.downloads[0].text();
-  assert.match(csv, /Dataforce Job Id/);
+  assert.match(csv, /Original job ID/);
+  assert.match(csv, /Original app ID/);
+  assert.doesNotMatch(csv, /dataforce/i);
+  assert.deepEqual(app.downloadNames, ["job-import-reconciliation.csv"]);
   assert.match(csv, /tlink-job-2/);
   assert.match(csv, /"'=1\+1"/);
   assert.match(csv, /"0007"/);
 });
 
 test("preview API failures are visible and cannot enable an import", async () => {
-  const app = harness(() => ({ ok: false, error: "Unexpected Dataforce columns" }));
+  const app = harness(() => ({ ok: false, error: "Unexpected job export columns" }));
   const tree = await app.upload();
-  assert.match(text(nodes(tree, node => node.props?.role === "alert")), /Unexpected Dataforce columns/);
-  assert.equal(button(tree, "Import reviewed Dataforce rows"), undefined);
+  assert.match(text(nodes(tree, node => node.props?.role === "alert")), /Unexpected job export columns/);
+  assert.equal(button(tree, "Import reviewed job rows"), undefined);
 });
 
 test("a partial reconciliation is rejected instead of downloading a misleading report", async () => {
@@ -238,7 +276,7 @@ test("token failures show an error and never submit data", async () => {
   const tree = await app.upload();
   assert.equal(app.requests.length, 0);
   assert.match(text(tree), /Sign in again/);
-  assert.equal(button(tree, "Import reviewed Dataforce rows"), undefined);
+  assert.equal(button(tree, "Import reviewed job rows"), undefined);
 });
 
 test("saved batches surface broken CRM links instead of presenting historical receipts as current success", async () => {
@@ -257,6 +295,6 @@ test("imported rows open their exact TLink job and source-value reconciliation i
   const tree = await app.upload();
   const link = nodes(tree, node => node.type === "a" && text(node) === "Open TLink job")[0];
   assert.equal(link.props.href, "/direct-trade/dashboard?workspace=work&crm=jobs&jobId=job%2Fone%3Fvalue%3D2");
-  assert.match(link.props["aria-label"], /Dataforce 1000/);
+  assert.match(link.props["aria-label"], /original job ID 1000/);
   assert.match(text(tree), /40 source rows and 920 original field values reconciled/);
 });

@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     if (url.searchParams.get("format") === "source") {
       const source = await exportTradeDataforceSource(getD1(), access.identity.uid, batchId);
       return new Response(source.csv, { headers: { "Content-Type": "text/csv;charset=utf-8", "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="dataforce-source.csv"; filename*=UTF-8''${encodeURIComponent(source.fileName)}` } });
+        "Content-Disposition": `attachment; filename="job-import-source.csv"; filename*=UTF-8''${encodeURIComponent(source.fileName)}` } });
     }
     return adminJson({ ok: true, ...await getTradeDataforceImport(getD1(), access.identity.uid, batchId,
       Number(url.searchParams.get("offset") || 0), Number(url.searchParams.get("limit") || 100)) });
@@ -34,15 +34,15 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
-    if (Number(request.headers.get("Content-Length")) > DATAFORCE_IMPORT_MAX_BYTES * 2) return adminJson({ ok: false, error: "Choose a Dataforce CSV no larger than 10 MB." }, 413);
+    if (Number(request.headers.get("Content-Length")) > DATAFORCE_IMPORT_MAX_BYTES * 2) return adminJson({ ok: false, error: "Choose a jobs CSV no larger than 10 MB." }, 413);
     let body: unknown;
     try { body = await request.json(); } catch { return adminJson({ ok: false, error: "Invalid import request." }, 400); }
     if (!body || typeof body !== "object" || Array.isArray(body)) return adminJson({ ok: false, error: "Invalid import request." }, 400);
     if (!("action" in body)) return adminJson({ ok: false, error: "Choose preview or commit." }, 400);
     if (body.action === "preview") {
-      if (!("csvText" in body) || typeof body.csvText !== "string") return adminJson({ ok: false, error: "Choose a Dataforce CSV file." }, 400);
+      if (!("csvText" in body) || typeof body.csvText !== "string") return adminJson({ ok: false, error: "Choose a jobs CSV file." }, 400);
       return adminJson({ ok: true, ...await previewTradeDataforceImport(getD1(), access.identity.uid, body.csvText,
-        "fileName" in body ? body.fileName : "dataforce-jobs.csv", "serviceCategoryMappings" in body ? body.serviceCategoryMappings : {}) }, 201);
+        "fileName" in body ? body.fileName : "job-import.csv", "serviceCategoryMappings" in body ? body.serviceCategoryMappings : {}) }, 201);
     }
     if (body.action === "commit" && "batchId" in body && typeof body.batchId === "string") {
       return adminJson({ ok: true, ...await commitTradeDataforceImport(getD1(), access.identity.uid, body.batchId.slice(0, 180)) });

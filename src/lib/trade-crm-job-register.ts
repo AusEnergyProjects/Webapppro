@@ -61,6 +61,7 @@ export type JobRegisterRecord = {
   auditOutcome: TradeJobAuditOutcome | null;
   quoteTotalExGstCents: number | null;
   certificates: JobRegisterCertificates;
+  importedVeecCount: number | null;
   service: string;
   quoteStatus: string;
   updatedAt: string;
@@ -88,6 +89,7 @@ export type JobRegisterProjectionInput = {
   auditOutcome?: unknown;
   authoritativeStatus?: unknown;
   certificates?: Partial<Record<"stc" | "veec" | "esc" | "other", unknown>>;
+  importedVeecCount?: unknown;
   service?: unknown;
   quoteStatus?: unknown;
   quoteTotalExGstCents?: unknown;
@@ -144,7 +146,7 @@ export function projectJobRegisterRecord(input: JobRegisterProjectionInput): Job
     suburb: customer ? text(input.suburb) : "",
     state: customer ? text(input.state).toUpperCase() : "",
     assignedWorker: text(input.assigneeMemberId) ? text(input.assignedWorker) || "Assigned"
-      : customer && text(input.importedWorkerLabel) ? `${text(input.importedWorkerLabel)} (Dataforce)` : "Unassigned",
+      : customer && text(input.importedWorkerLabel) ? `${text(input.importedWorkerLabel)} (Imported)` : "Unassigned",
     scheduleDate: text(input.scheduleDate),
     createdDate: text(input.createdAt),
     operationalStatus: lifecycle.status,
@@ -153,6 +155,9 @@ export function projectJobRegisterRecord(input: JobRegisterProjectionInput): Job
       ? null
       : Math.max(0, Math.round(Number(input.quoteTotalExGstCents) || 0)),
     certificates,
+    importedVeecCount: customer && typeof input.importedVeecCount === "number"
+      && Number.isSafeInteger(input.importedVeecCount) && input.importedVeecCount >= 0
+      ? input.importedVeecCount : null,
     service: text(input.service),
     quoteStatus: text(input.quoteStatus),
     updatedAt: text(input.updatedAt),

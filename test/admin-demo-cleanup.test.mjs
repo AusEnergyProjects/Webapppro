@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
+import * as importLabels from "../src/lib/trade-import-labels.ts";
 import { GOVERNMENT_ACTIVITY_TEMPLATES } from "../src/lib/australian-government-program-catalogue.ts";
 
 const read = path => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -61,7 +62,7 @@ function realPilotFixture() {
     INSERT INTO compliance_pilot_runs VALUES ('pilot','creditex-org','synthetic_test','active','v1','v1','VEU','');
     INSERT INTO compliance_pilot_installers VALUES ('pilot','demo-trade','active','v1');`);
   const contract = load("../src/lib/creditex-veu-pilot-contract.ts", { "./australian-government-program-catalogue": { GOVERNMENT_ACTIVITY_TEMPLATES } });
-  const pilot = load("../src/lib/creditex-veu-pilot-server.ts", { "./creditex-veu-pilot-contract": contract });
+  const pilot = load("../src/lib/creditex-veu-pilot-server.ts", { "./creditex-veu-pilot-contract": contract, "./trade-import-labels": importLabels });
   return { ...f, pilot };
 }
 

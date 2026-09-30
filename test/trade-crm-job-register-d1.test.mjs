@@ -19,6 +19,7 @@ const constantBlock = ts.transpileModule(route.slice(route.indexOf("const JOB_RE
 const dependencies = { ...lifecycle, ...register, creditexWholeJobLifecycleSql, crmSort, crmTerm };
 const constants = new Function(...Object.keys(dependencies), `${constantBlock}
   return {JOB_REGISTER_QUOTE_TOTAL_SQL,JOB_REGISTER_QUOTE_SORT_SQL,JOB_EFFECTIVE_SCHEDULE_SQL,
+    JOB_REGISTER_VEEC_COUNT_SQL,JOB_REGISTER_IMPORTED_VEEC_SQL,JOB_REGISTER_VEEC_SORT_SQL,
     JOB_REGISTER_AUDIT_OUTCOME_SQL,JOB_REGISTER_HAS_PROGRESS_SQL,JOB_REGISTER_LIFECYCLE_SQL,
     JOB_REGISTER_ACTIVITY_SQL,JOB_REGISTER_STATUS_RANK_SQL,JOB_SORTS};`)(...Object.values(dependencies));
 const joins = route.match(/const joins = `(FROM trade_work_orders w[\s\S]*?)`;/)[1];
@@ -119,5 +120,49 @@ test("the complete Trade Jobs query, status filter and status sort fit D1 with p
     assert.deepEqual(filteredPage.results.map(row => row.id), ["job-4"]);
     const filteredPreviousPage = await list({ status: "reviewed", sort: "status-desc", cursor: [7, "job-5"] });
     assert.deepEqual(filteredPreviousPage.results.map(row => row.id), ["job-4"]);
+
+    for (const [index, value] of ["2", "10", "0", "", "7", "777", "999"].entries()) {
+      await insert("trade_dataforce_sources", { id: `import-${index}`, firebase_uid: index >= 5 ? "other-owner" : "owner",
+        source_job_id: `source-${index}`, row_sha256: hash, raw_json: JSON.stringify({ "Certificates (VEECs)": value }),
+        import_batch_id: "batch", import_row_id: `row-${index}`, work_order_id: `job-${index}`,
+        customer_id: "customer", service_site_id: "site", customer_key: "customer-key", site_key: "site-key", created_at: now });
+    }
+    await db.prepare("UPDATE trade_work_orders SET source_type='opportunity' WHERE id='job-4'").run();
+    const veecAscending = (await list({ sort: "v-a" })).results;
+    assert.deepEqual(veecAscending.map(row => row.id), ["job-2", "job-3", "job-4", "job-5", "job-0", "job-1"]);
+    assert.deepEqual(veecAscending.map(row => row.imported_veec_count), [0, null, null, null, 2, 10]);
+    assert.deepEqual(veecAscending.map(row => row.veec_display_count), [0, 0, 0, 0, 2, 10]);
+    assert.ok(veecAscending.every(row => row.veec_certificate_count === 0), "historical quantities must not become current certificate issuance");
+    assert.deepEqual((await list({ sort: "v-d" })).results.map(row => row.id), ["job-1", "job-0", "job-5", "job-4", "job-3", "job-2"]);
+    assert.deepEqual((await list({ sort: "v-a", cursor: [2, "job-0"] })).results.map(row => row.id), ["job-1"]);
+    assert.deepEqual((await list({ sort: "v-d", cursor: [2, "job-0"] })).results.map(row => row.id), ["job-5", "job-4", "job-3", "job-2"]);
   } finally { await mf.dispose(); sqlite.close(); }
+});
+
+test("historical VEEC SQL accepts only nonnegative safe whole-number source cells and redacts protected context", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(`CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, source_type TEXT);
+      CREATE TABLE trade_crm_job_details (work_order_id TEXT, customer_source TEXT);
+      CREATE TABLE trade_dataforce_sources (work_order_id TEXT, firebase_uid TEXT, raw_json TEXT);
+      INSERT INTO trade_work_orders VALUES ('job','owner','import');
+      INSERT INTO trade_crm_job_details VALUES ('job','import');
+      INSERT INTO trade_dataforce_sources VALUES ('job','owner','{}');`);
+    const query = db.prepare(`SELECT ${constants.JOB_REGISTER_IMPORTED_VEEC_SQL} imported,
+      ${constants.JOB_REGISTER_VEEC_SORT_SQL} displayed
+      FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id=w.id
+      LEFT JOIN trade_dataforce_sources df ON df.work_order_id=w.id AND df.firebase_uid=w.firebase_uid`);
+    const cases = [["0", 0], ["0002", 2], [" \t2\r\n", 2], ["9007199254740991", Number.MAX_SAFE_INTEGER],
+      ["", null], [" ", null], ["2x", null], ["-1", null], ["2.0", null], ["2e2", null],
+      ["9007199254740992", null], ["9".repeat(100), null], [2, null], [true, null], [null, null], [{ value: 2 }, null]];
+    for (const [value, expected] of cases) {
+      db.prepare("UPDATE trade_dataforce_sources SET raw_json=?").run(JSON.stringify({ "Certificates (VEECs)": value }));
+      assert.deepEqual({ ...query.get() }, { imported: expected, displayed: expected ?? 0 }, String(value));
+    }
+    db.prepare("UPDATE trade_dataforce_sources SET raw_json=?").run(JSON.stringify({ "Certificates (VEECs)": "2" }));
+    db.exec("UPDATE trade_crm_job_details SET customer_source='platform_private'");
+    assert.deepEqual({ ...query.get() }, { imported: null, displayed: 0 });
+    db.exec("UPDATE trade_crm_job_details SET customer_source='import'; UPDATE trade_dataforce_sources SET firebase_uid='other-owner'");
+    assert.deepEqual({ ...query.get() }, { imported: null, displayed: 0 });
+  } finally { db.close(); }
 });

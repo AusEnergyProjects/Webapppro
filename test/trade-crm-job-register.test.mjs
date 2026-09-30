@@ -62,18 +62,43 @@ test("register projection keeps customer fields separate and leaves absent assig
     auditOutcome: null,
     quoteTotalExGstCents: null,
     certificates: { state: "pending", stc: 0, veec: 0, esc: 0, other: 0 },
+    importedVeecCount: null,
     service: "Energy assessment",
     quoteStatus: "draft",
     updatedAt: "",
   });
 });
 
-test("imported worker names display as Dataforce history without creating an assignment", () => {
+test("imported worker names display as history without creating an assignment", () => {
   const input = { jobId: "TLJ-IMPORT", canViewCustomer: true, assigneeMemberId: "", assignedWorker: "THOMAS", importedWorkerLabel: "THOMAS" };
-  assert.equal(projectJobRegisterRecord(input).assignedWorker, "THOMAS (Dataforce)");
+  assert.equal(projectJobRegisterRecord(input).assignedWorker, "THOMAS (Imported)");
   assert.equal(input.assigneeMemberId, "");
   assert.equal(projectJobRegisterRecord({ ...input, assigneeMemberId: "current-member", assignedWorker: "Current worker" }).assignedWorker, "Current worker");
   assert.equal(projectJobRegisterRecord({ ...input, assigneeMemberId: "current-member", assignedWorker: "" }).assignedWorker, "Assigned");
+});
+
+test("imported VEEC history preserves zero and absence without creating verified certificates", () => {
+  const input = { jobId: "TLJ-IMPORT", canViewCustomer: true };
+  for (const value of [0, 2, Number.MAX_SAFE_INTEGER]) {
+    const record = projectJobRegisterRecord({ ...input, importedVeecCount: value });
+    assert.equal(record.importedVeecCount, value);
+    assert.deepEqual(record.certificates, { state: "pending", stc: 0, veec: 0, esc: 0, other: 0 });
+  }
+  for (const value of [undefined, null, "", "2", false, -1, 2.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(projectJobRegisterRecord({ ...input, importedVeecCount: value }).importedVeecCount, null);
+  }
+  assert.equal(projectJobRegisterRecord({ ...input, canViewCustomer: false, importedVeecCount: 2 }).importedVeecCount, null);
+  const verified = projectJobRegisterRecord({ ...input, importedVeecCount: 2, certificates: { veec: 5 } });
+  assert.equal(verified.certificates.veec, 5);
+  assert.equal(verified.certificates.state, "recorded");
+  assert.equal(verified.importedVeecCount, 2);
+  const ui = read("../src/components/InstallerCrmWorkspace.tsx");
+  assert.match(ui, /key === "veec" && record\.certificates\.veec === 0 && record\.importedVeecCount !== null/);
+  assert.match(ui, /Reported in the original import; not verified certificate issuance\./);
+  assert.match(ui, /\{record\.importedVeecCount\} \(Imported\)/);
+  const route = read("../src/app/api/trade-crm/route.ts");
+  assert.match(route, /importedVeecCount: canViewCustomer && row\.dataforce_source_job_id \? row\.imported_veec_count : null/);
+  assert.match(route, /verifiedCertificateIssuance: null/);
 });
 
 test("ordinary unassigned jobs and protected customer context never expose imported worker history", () => {

@@ -1,4 +1,5 @@
 import type { ComplianceIdentity } from "./compliance-access-server";
+import { visibleImportedJobEventSummary } from "./trade-import-labels";
 import {
   CREDITEX_VEU_PILOT_ACTIVITIES,
   CREDITEX_VEU_PILOT_CONFIRMATION,
@@ -2549,7 +2550,7 @@ export async function loadCreditexVeuPilotJobWorkspace(
   const workEvents = workEventsResult.results.map((row) => ({
     id: String(row.id),
     eventType: String(row.event_type),
-    summary: String(row.summary),
+    summary: visibleImportedJobEventSummary(row, workOrderId),
     createdAt: String(row.created_at),
   }));
   const notes = notesResult.results.map((row) => ({

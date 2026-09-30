@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
+import * as importLabels from "../src/lib/trade-import-labels.ts";
 import {
   GOVERNMENT_ACTIVITY_TEMPLATES,
 } from "../src/lib/australian-government-program-catalogue.ts";
@@ -91,6 +92,7 @@ function loadPilotServer() {
   const record = { exports: {} };
   const require = (specifier) => {
     if (specifier === "./creditex-veu-pilot-contract") return pilotContract;
+    if (specifier === "./trade-import-labels") return importLabels;
     throw new Error(`Unexpected pilot server dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(
@@ -196,9 +198,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 223);
+  assert.equal(completeMigrationChain.length, 224);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0223_trade_dataforce_migration\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0224_neutral_job_import_labels\.sql$/);
   assert.ok(
     completeMigrationChain.includes("0190_trade_activity_master_drafts.sql"),
     "the complete migration chain must include activity master drafts",

@@ -49,14 +49,20 @@ test("Dataforce migration uses production D1 schema, atomic source claims and fa
       assert.equal(done.reconciliation.contacts, 46);
       assert.equal(done.reconciliation.brokenLinks, 0);
       const rows = (await db.prepare(`SELECT source.raw_json,source.source_job_id,work.stage,work.scheduled_start,appointment.starts_at,
-        work.assignee_member_id,details.invoiced_value_cents,details.paid_value_cents FROM trade_dataforce_sources source
+        work.assignee_member_id,details.invoiced_value_cents,details.paid_value_cents,
+        details.tags job_tags,details.description,appointment.notes,customer.tags customer_tags,event.summary FROM trade_dataforce_sources source
         JOIN trade_work_orders work ON work.id=source.work_order_id JOIN trade_crm_job_details details ON details.work_order_id=work.id
+        JOIN trade_crm_customers customer ON customer.id=source.customer_id
+        JOIN trade_work_order_events event ON event.work_order_id=work.id AND event.event_type='data_imported'
         JOIN trade_crm_appointments appointment ON appointment.work_order_id=work.id WHERE source.firebase_uid='owner'`).all()).results;
       for (const row of rows) {
         assert.deepEqual(JSON.parse(row.raw_json), originals.find(source => source["Job Id"] === row.source_job_id));
         assert.equal(row.scheduled_start, "2026-09-30T09:30"); assert.equal(row.starts_at, row.scheduled_start);
         assert.equal(row.stage, row.source_job_id === "JOB-2" ? "in_progress" : "completed");
         assert.equal(row.assignee_member_id, ""); assert.equal(row.invoiced_value_cents, 0); assert.equal(row.paid_value_cents, 0);
+        assert.deepEqual(JSON.parse(row.job_tags), ["Job import"]);
+        assert.deepEqual(JSON.parse(row.customer_tags), ["Job import"]);
+        assert.doesNotMatch([row.description, row.notes, row.summary].join("\n"), /dataforce/i);
       }
       assert.equal((await db.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes WHERE owner_uid='owner' AND audience_member_id=''").first()).count, 23);
       for (const table of ["trade_mobile_push_outbox", "trade_team_members", "compliance_cases", "trade_crm_quick_invoices", "trade_crm_accepted_invoices"]) {
@@ -72,6 +78,26 @@ test("Dataforce migration uses production D1 schema, atomic source claims and fa
       assert.equal((await finish(db, "owner", changed.batch.id)).batch.importedCount, 0);
       const differentFile = await previewTradeDataforceImport(db, "owner", `${csv(originals)}\r\n`, "copy.csv");
       assert.equal(differentFile.batch.duplicateCount, 23);
+    });
+    await t.test("legacy receipt messages display neutral labels without rewriting saved source or receipt data", async () => {
+      const original = record("source-label", { Customer: "Dataforce named source customer", Agent: "Dataforce source value" });
+      const batch = await previewTradeDataforceImport(db, "source-label", csv([original]), undefined);
+      assert.equal(batch.batch.fileName, "job-import.csv");
+      const originalIssues = JSON.stringify([{ code: "SOURCE_DUPLICATE", level: "warning", message: "This exact Dataforce job is already imported." }]);
+      const originalError = "Source job already exists with different Dataforce data.";
+      await db.prepare("UPDATE trade_data_import_rows SET issues=?,error=? WHERE batch_id=?").bind(originalIssues, originalError, batch.batch.id).run();
+      const read = await getTradeDataforceImport(db, "source-label", batch.batch.id);
+      assert.doesNotMatch(JSON.stringify(read.rows[0].issues), /dataforce/i);
+      assert.doesNotMatch(read.rows[0].error, /dataforce/i);
+      assert.deepEqual(read.rows[0].values.record, original);
+      const persisted = await db.prepare("SELECT issues,error FROM trade_data_import_rows WHERE batch_id=?").bind(batch.batch.id).first();
+      assert.equal(persisted.issues, originalIssues);
+      assert.equal(persisted.error, originalError);
+      const exported = await exportTradeDataforceSource(db, "source-label", batch.batch.id);
+      assert.equal(exported.fileName, "job-import-source.csv");
+      assert.equal((await getTradeDataforceImport(db, "source-label", batch.batch.id)).batch.fileName, "job-import.csv");
+      assert.match(exported.csv, /Dataforce named source customer/);
+      assert.match(exported.csv, /Dataforce source value/);
     });
     await t.test("source IDs and export remain owner scoped", async () => {
       await assert.rejects(getTradeDataforceImport(db, "other", preview.batch.id), /not found/);
@@ -154,4 +180,7 @@ test("Dataforce endpoint keeps verified owner access, same-origin checks and ded
   assert.equal((route.match(/requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/g) || []).length, 2);
   assert.equal((route.match(/!sameOrigin\(request\)/g) || []).length, 2);
   assert.doesNotMatch(route, /ownerUid.*body|firebaseUid.*body|request\.headers\.get\("X-TLink-Business"\)/);
+  assert.match(route, /filename="job-import-source\.csv"/);
+  assert.match(route, /"job-import\.csv"/);
+  assert.doesNotMatch(route, /Choose a Dataforce|filename="dataforce|"dataforce-jobs\.csv"/);
 });

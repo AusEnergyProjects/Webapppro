@@ -2,6 +2,7 @@ import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard }
 import { assertTradeJobCanCancel,tradeJobCancellationGuard,cancelledJobAppointmentsStatement,reconcileCancelledJobCalendars } from "@/lib/trade-job-cancellation-server";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getD1 } from "../../../../db";
+import { visibleImportedJobEventSummary } from "@/lib/trade-import-labels";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { mfaErrorResponse, adminJson, cleanAdminText, parseJsonList, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
@@ -275,7 +276,7 @@ async function workOrderPayload(identity: TradeIdentity) {
         )`).bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
     ]);
     tasks = taskRows.results;
-    events = eventRows.results;
+    events = eventRows.results.map((event) => ({ ...event, summary: visibleImportedJobEventSummary(event, event.work_order_id) }));
     handoverPacks = handoverRows.results;
   }
   const activeCount = orderRows.results.filter((row: Record<string, unknown>) => !["completed", "cancelled"].includes(String(row.stage))).length;

@@ -1,5 +1,6 @@
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import * as teamPresence from "../src/lib/trade-team-presence.ts";
+import * as importLabels from "../src/lib/trade-import-labels.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
 import test from "node:test";
@@ -373,6 +374,7 @@ function workOrdersRoute(db, staffAccess = null) {
     "./trade-calendar-sync-server": { cancelAppointmentInConnectedCalendars: async () => { throw new Error("Unexpected external calendar call in terminal job guard test"); } },
   });
   return loadTypescriptModule("../src/app/api/trade-work-orders/route.ts", {
+    "@/lib/trade-import-labels": importLabels,
     "@/lib/trade-job-cancellation-server": cancellationServer,
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": adminServer,

@@ -194,6 +194,16 @@ const JOB_REGISTER_QUOTE_TOTAL_SQL = `(
   LIMIT 1
 )`;
 const JOB_REGISTER_QUOTE_SORT_SQL = `COALESCE(${JOB_REGISTER_QUOTE_TOTAL_SQL}, 0)`;
+const JOB_REGISTER_VEEC_COUNT_SQL = "0";
+const JOB_REGISTER_IMPORTED_VEEC_TEXT_SQL = `trim(json_extract(df.raw_json, '$."Certificates (VEECs)"'), char(9, 10, 11, 12, 13, 32))`;
+const JOB_REGISTER_IMPORTED_VEEC_SQL = `CASE WHEN ${JOB_REGISTER_CUSTOMER_CONTEXT_SQL}
+  AND json_type(df.raw_json, '$."Certificates (VEECs)"') = 'text'
+  AND ${JOB_REGISTER_IMPORTED_VEEC_TEXT_SQL} <> ''
+  AND ${JOB_REGISTER_IMPORTED_VEEC_TEXT_SQL} NOT GLOB '*[^0-9]*'
+  AND CAST(${JOB_REGISTER_IMPORTED_VEEC_TEXT_SQL} AS INTEGER) <= 9007199254740991
+  THEN CAST(${JOB_REGISTER_IMPORTED_VEEC_TEXT_SQL} AS INTEGER) ELSE NULL END`;
+const JOB_REGISTER_VEEC_SORT_SQL = `CASE WHEN ${JOB_REGISTER_VEEC_COUNT_SQL} > 0
+  THEN ${JOB_REGISTER_VEEC_COUNT_SQL} ELSE COALESCE(${JOB_REGISTER_IMPORTED_VEEC_SQL}, 0) END`;
 const JOB_REGISTER_ASSIGNEE_SEARCH_SQL = `COALESCE(w.assignee_label, '') || ' ' || COALESCE((
   SELECT GROUP_CONCAT(worker_visit.assignee_label, ' ')
   FROM trade_crm_appointments worker_visit
@@ -244,8 +254,8 @@ const JOB_SORTS: Record<string, CrmSort> = {
   "quote-total-desc": crmSort([crmTerm(`(${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL)`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "desc", "quote_total_sort_cents", true)], "w.id"),
   "s-a": crmSort([crmTerm("0", "asc", "stc_certificate_count", true)], "w.id"),
   "s-d": crmSort([crmTerm("0", "desc", "stc_certificate_count", true)], "w.id"),
-  "v-a": crmSort([crmTerm("0", "asc", "veec_certificate_count", true)], "w.id"),
-  "v-d": crmSort([crmTerm("0", "desc", "veec_certificate_count", true)], "w.id"),
+  "v-a": crmSort([crmTerm(JOB_REGISTER_VEEC_SORT_SQL, "asc", "veec_display_count", true)], "w.id"),
+  "v-d": crmSort([crmTerm(JOB_REGISTER_VEEC_SORT_SQL, "desc", "veec_display_count", true)], "w.id"),
   "e-a": crmSort([crmTerm("0", "asc", "esc_certificate_count", true)], "w.id"),
   "e-d": crmSort([crmTerm("0", "desc", "esc_certificate_count", true)], "w.id"),
   "o-a": crmSort([crmTerm("0", "asc", "other_certificate_count", true)], "w.id"),
@@ -638,6 +648,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
     assigneeMemberId: row.assignee_member_id,
     assignedWorker: row.assignee_label,
     importedWorkerLabel: canViewCustomer && row.dataforce_source_job_id ? row.assignee_label : "",
+    importedVeecCount: canViewCustomer && row.dataforce_source_job_id ? row.imported_veec_count : null,
     scheduleDate: row.effective_scheduled_start || row.appointment_starts_at || row.scheduled_start,
     createdAt: row.created_at,
     workStage: row.stage,
@@ -1017,7 +1028,9 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} quote_total_ex_gst_cents,
         ${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL quote_total_empty,
         ${JOB_REGISTER_QUOTE_SORT_SQL} quote_total_sort_cents,
-        0 stc_certificate_count, 0 veec_certificate_count, 0 esc_certificate_count, 0 other_certificate_count,
+        0 stc_certificate_count, ${JOB_REGISTER_VEEC_COUNT_SQL} veec_certificate_count, 0 esc_certificate_count, 0 other_certificate_count,
+        ${JOB_REGISTER_IMPORTED_VEEC_SQL} imported_veec_count,
+        ${JOB_REGISTER_VEEC_SORT_SQL} veec_display_count,
         trim(w.assignee_member_id) = '' assignment_empty,
         ${JOB_EFFECTIVE_SCHEDULE_SQL} = '' schedule_empty
         ${rowJoins} JOIN job_lifecycle ON job_lifecycle.work_order_id = w.id

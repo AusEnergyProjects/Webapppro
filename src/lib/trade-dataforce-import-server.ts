@@ -34,7 +34,7 @@ function rawJson(row: TradeDataforceImportRow) {
   return JSON.stringify(Object.fromEntries(DATAFORCE_JOB_CSV_HEADERS.map(header => [header, row.record[header]])));
 }
 function fileName(value: unknown) {
-  return String(value || "dataforce-jobs.csv").split(/[\\/]/).at(-1)!.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 160) || "dataforce-jobs.csv";
+  return String(value || "job-import.csv").split(/[\\/]/).at(-1)!.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 160) || "job-import.csv";
 }
 function parsedRow(row: Stored): TradeDataforceImportRow {
   // Revalidate persisted input through the same mapper before any CRM write.
@@ -55,14 +55,17 @@ function parsedRow(row: Stored): TradeDataforceImportRow {
   return { ...input, rowNumber: Number(row.row_number) };
 }
 function rowPayload(row: Stored) {
+  const issues: unknown = JSON.parse(String(row.issues));
+  const visibleIssues = Array.isArray(issues) ? issues.map(issue => issue && typeof issue === "object" && "message" in issue
+    ? { ...issue, message: String(issue.message).replace(/\bDataforce\b/gi, "source") } : issue) : issues;
   return { id: String(row.id), rowNumber: Number(row.row_number), key: String(row.row_key),
     values: JSON.parse(String(row.normalized_data)), status: String(row.validation_status),
-    issues: JSON.parse(String(row.issues)), resolution: String(row.resolution), resultStatus: String(row.result_status),
-    targetEntityType: String(row.target_entity_type || ""), targetEntityId: String(row.target_entity_id || ""), error: String(row.error || "") };
+    issues: visibleIssues, resolution: String(row.resolution), resultStatus: String(row.result_status),
+    targetEntityType: String(row.target_entity_type || ""), targetEntityId: String(row.target_entity_id || ""), error: String(row.error || "").replace(/\bDataforce\b/gi, "source") };
 }
 async function ownedBatch(db: Database, owner: string, batchId: string) {
   const batch = await db.prepare("SELECT * FROM trade_data_import_batches WHERE id=? AND firebase_uid=? AND import_type='dataforce'").bind(batchId, owner).first<Stored>();
-  if (!batch) throw new TradeDataforceImportError("Dataforce import batch not found.", 404);
+  if (!batch) throw new TradeDataforceImportError("Job import batch not found.", 404);
   return batch;
 }
 async function batchPayload(db: Database, owner: string, batch: Stored) {
@@ -101,7 +104,7 @@ export async function getTradeDataforceImport(db: Database, owner: string, batch
 }
 
 export async function previewTradeDataforceImport(db: Database, owner: string, source: string, suppliedName: unknown, mappingInput: unknown = {}) {
-  if (new TextEncoder().encode(source).byteLength > DATAFORCE_IMPORT_MAX_BYTES) throw new TradeDataforceImportError("Choose a Dataforce CSV no larger than 10 MB.", 413);
+  if (new TextEncoder().encode(source).byteLength > DATAFORCE_IMPORT_MAX_BYTES) throw new TradeDataforceImportError("Choose a jobs CSV no larger than 10 MB.", 413);
   if (!mappingInput || typeof mappingInput !== "object" || Array.isArray(mappingInput)
     || Object.values(mappingInput).some(value => typeof value !== "string")) throw new TradeDataforceImportError("Choose a valid service category for each source work type.");
   const serviceCategoryMappings = Object.fromEntries(Object.entries(mappingInput).map(([key, value]) => [key, String(value)]));
@@ -112,8 +115,8 @@ export async function previewTradeDataforceImport(db: Database, owner: string, s
     const issue = plan.issues.find(item => item.code === "CSV_ROW_COLUMN_COUNT" || item.code === "CSV_BLANK_ROW");
     throw new TradeDataforceImportError(`${issue?.rowNumber ? `Row ${issue.rowNumber}: ` : ""}${issue?.message || "Every source row must have the complete 23-column record. Correct the CSV before previewing."}`);
   }
-  if (!plan.rows.length) throw new TradeDataforceImportError(plan.issues[0]?.message || "The file has no importable Dataforce rows.");
-  if (plan.rows.length > DATAFORCE_IMPORT_MAX_ROWS) throw new TradeDataforceImportError("A Dataforce batch supports up to 20,000 jobs.");
+  if (!plan.rows.length) throw new TradeDataforceImportError(plan.issues[0]?.message || "The file has no importable job rows.");
+  if (plan.rows.length > DATAFORCE_IMPORT_MAX_ROWS) throw new TradeDataforceImportError("A job import batch supports up to 20,000 jobs.");
   // File identity includes the owner. A filename change never creates another migration.
   const sortedMappings = Object.fromEntries(Object.entries(serviceCategoryMappings).map(([key, value]) => [key.trim().replace(/\s+/g, " ").toLowerCase(), value])
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0));
@@ -131,9 +134,9 @@ export async function previewTradeDataforceImport(db: Database, owner: string, s
     const old = known.get(input.sourceJobId);
     const fingerprint = await hash(rawJson(input));
     const status = input.status === "error" ? "error" : old ? old.row_sha256 === fingerprint && old.target_live && old.mapped_service_category === input.job.serviceCategory ? "duplicate" : "conflict" : input.status;
-    const message = status === "duplicate" ? "This exact Dataforce job is already imported. The existing job is retained."
-      : status === "conflict" ? old && !old.target_live ? "This Dataforce source was imported previously, but its linked record was deleted, archived or changed. Review it; it will not be recreated automatically."
-        : "This Dataforce job ID already exists with different source data. Review it before changing the existing job." : "";
+    const message = status === "duplicate" ? "This exact source job is already imported. The existing job is retained."
+      : status === "conflict" ? old && !old.target_live ? "This source was imported previously, but its linked record was deleted, archived or changed. Review it; it will not be recreated automatically."
+        : "This source job ID already exists with different source data. Review it before changing the existing job." : "";
     const issues = [...input.issues, ...(message ? [{ code: status === "conflict" ? "SOURCE_CONFLICT" : "SOURCE_DUPLICATE", level: "warning", message, rowNumber: input.rowNumber }] : [])];
     return { id: `${batchId}:${input.rowNumber}`, rowNumber: input.rowNumber, key: input.sourceJobId, data: JSON.stringify(input),
       status, issues: JSON.stringify(issues), resolution: ["error", "duplicate", "conflict"].includes(status) ? "skip" : "import",
@@ -198,7 +201,7 @@ async function resolveExistingSource(db: Database, owner: string, batchId: strin
   const status = same ? old.import_batch_id === batchId ? "imported" : "duplicate" : "conflict";
   await db.prepare(`UPDATE trade_data_import_rows SET result_status=?,target_entity_type='work_order',target_entity_id=?,
     error=?,updated_at=? WHERE id=? AND batch_id=? AND firebase_uid=? AND result_status='pending'`)
-    .bind(status, old.work_order_id, same ? "" : "Source job already exists with different Dataforce data. Existing records were retained.", new Date().toISOString(), row.id, batchId, owner).run();
+    .bind(status, old.work_order_id, same ? "" : "Source job already exists with different original data. Existing records were retained.", new Date().toISOString(), row.id, batchId, owner).run();
 }
 
 async function commitRow(db: Database, owner: string, batchId: string, stored: Stored, workNumber: string) {
@@ -246,7 +249,7 @@ async function commitRow(db: Database, owner: string, batchId: string, stored: S
       fingerprint, sourceJson, batchId, String(stored.id), workOrderId, customerId, serviceSiteId, input.customerKey, input.siteKey, now),
     statement(`INSERT INTO trade_crm_customers
       (id,firebase_uid,customer_number,customer_type,first_name,last_name,business_name,email,phone,address_line_1,address_line_2,suburb,address_state,postcode,tags,private_notes,record_status,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,'',?,?,?,'["Dataforce import"]','','active',?,?) ON CONFLICT(id) DO NOTHING`,
+      VALUES (?,?,?,?,?,?,?,?,?,?,'',?,?,?,'["Job import"]','','active',?,?) ON CONFLICT(id) DO NOTHING`,
       customerId, owner, `CUS-DF-${identityHash.slice(0, 16).toUpperCase()}`, input.customer.businessName ? "business" : "residential",
       input.customer.firstName, input.customer.lastName, input.customer.businessName, input.customer.email, input.customer.contactPhone,
       input.site.addressLine1, input.site.suburb, input.site.state, input.site.postcode, now, now),
@@ -285,9 +288,9 @@ async function commitRow(db: Database, owner: string, batchId: string, stored: S
       input.job.scheduledStart, input.job.scheduledEnd, input.worker.displayName, now, now),
     statement(`INSERT INTO trade_crm_job_details
       (id,work_order_id,firebase_uid,crm_customer_id,service_site_id,customer_source,pipeline_stage,description,customer_reference,next_action,tags,estimated_value_cents,quoted_value_cents,invoiced_value_cents,paid_value_cents,quote_status,invoice_status,payment_due_at,created_at,updated_at)
-      VALUES (?,?,?,?,?,'trade_owned',?, ?,?,'','["Dataforce import"]',0,0,0,0,'not_started','not_started','',?,?)`,
+      VALUES (?,?,?,?,?,'trade_owned',?, ?,?,'','["Job import"]',0,0,0,0,'not_started','not_started','',?,?)`,
       `${workOrderId}:detail`, workOrderId, owner, customerId, serviceSiteId, input.job.pipelineStage,
-      `Imported Dataforce job ${input.sourceJobId}. Original status: ${input.legacy.status}${input.legacy.subStatus ? ` / ${input.legacy.subStatus}` : ""}.`,
+      `Imported job ${input.sourceJobId}. Original status: ${input.legacy.status}${input.legacy.subStatus ? ` / ${input.legacy.subStatus}` : ""}.`,
       input.customer.externalReference, now, now),
   );
   if (input.job.scheduledStart) statements.push(statement(`INSERT INTO trade_crm_appointments
@@ -295,10 +298,10 @@ async function commitRow(db: Database, owner: string, batchId: string, stored: S
     VALUES (?,?,?,'site_visit',?,?,?,'',?,?,?,1,?,?)`, `${workOrderId}:visit`, workOrderId, owner, input.job.title,
     input.job.scheduledStart, input.job.scheduledEnd, input.worker.displayName,
     input.job.workStage === "completed" ? "completed" : input.job.workStage === "in_progress" ? "in_progress" : "scheduled",
-    `Imported Dataforce appointment ${input.sourceAppId}. Original time retained; worker assignment needs confirmation in TLink.`, now, now));
+    `Imported appointment ${input.sourceAppId}. Original time retained; worker assignment needs confirmation in TLink.`, now, now));
   statements.push(
     statement(`INSERT INTO trade_work_order_events (id,work_order_id,firebase_uid,event_type,summary,created_at)
-      VALUES (?,?,?,'data_imported',?,?)`, `${workOrderId}:import`, workOrderId, owner, `Imported Dataforce job ${input.sourceJobId}; source retained without issuing invoices, certificates or customer notifications.`, now),
+      VALUES (?,?,?,'data_imported',?,?)`, `${workOrderId}:import`, workOrderId, owner, `Imported job ${input.sourceJobId}; source retained without issuing invoices, certificates or customer notifications.`, now),
     statement(`INSERT INTO trade_team_sync_changes (owner_uid,audience_member_id,entity_type,entity_id,operation,revision,changed_at)
       VALUES (?,'','job',?,'upsert',1,?)`, owner, workOrderId, now),
     statement(`UPDATE trade_data_import_rows SET result_status='imported',target_entity_type='work_order',target_entity_id=?,error='',updated_at=?
@@ -407,11 +410,11 @@ export async function reconcileTradeDataforceImport(db: Database, owner: string,
 }
 
 export async function exportTradeDataforceSource(db: Database, owner: string, batchId: string) {
-  const batch = await ownedBatch(db, owner, batchId);
+  await ownedBatch(db, owner, batchId);
   const rows = await db.prepare("SELECT normalized_data FROM trade_data_import_rows WHERE batch_id=? AND firebase_uid=? ORDER BY row_number").bind(batchId, owner).all<Stored>();
   const columns = [DATAFORCE_JOB_CSV_HEADERS, ...rows.results.map(row => {
     const value = JSON.parse(String(row.normalized_data)) as TradeDataforceImportRow;
     return DATAFORCE_JOB_CSV_HEADERS.map(header => value.record[header]);
   })];
-  return { fileName: fileName(batch.file_name), csv: `\uFEFF${columns.map(values => values.map(value => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n")}\r\n` };
+  return { fileName: "job-import-source.csv", csv: `\uFEFF${columns.map(values => values.map(value => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n")}\r\n` };
 }
