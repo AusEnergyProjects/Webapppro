@@ -157,6 +157,7 @@ button.creditButton { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .workspace *, .workspace *::before, .workspace *::after { scroll-behavior: auto !important; } }
 
 @media (max-width: 760px) {
+  :global(body):has(.workspace[data-keyboard="true"]) :global(:is([data-surge-loader], [data-energy-assistant])) { display: none; }
   .workspace[data-keyboard="true"] { position: fixed; z-index: 1000; top: var(--message-viewport-top); left: var(--message-viewport-left); width: var(--message-viewport-width); height: var(--message-viewport-height); box-sizing: border-box; display: flex; flex-direction: column; gap: 0; margin: 0 !important; padding: 0; background: var(--trade-surface, #fff); overflow: hidden; }
   .workspace[data-keyboard="true"] > .heading { position: static; flex: 0 0 auto; display: block; border: 0; border-radius: 0; padding: 0; }
   .workspace[data-keyboard="true"] > .heading > div:first-child,
