@@ -1,3 +1,0 @@
-.receipt { align-items: center; color: var(--trade-muted, #667786); display: inline-flex; flex-wrap: wrap; font-size: 10px; gap: 4px; line-height: 1.5; }
-.receipt svg { flex: 0 0 auto; height: 13px; width: 21px; }
-.read { color: var(--trade-accent-readable, #087f68); }

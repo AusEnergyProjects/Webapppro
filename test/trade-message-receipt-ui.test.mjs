@@ -22,7 +22,7 @@ test('persisted sent messages show one tick, delivery two, and read coloured tic
   assert.equal((sent.match(/<path/g) || []).length, 1);
   assert.equal((delivered.match(/<path/g) || []).length, 2);
   assert.equal((read.match(/<path/g) || []).length, 2);
-  assert.match(read, /class="receipt read"/);
+  assert.match(read, /class="tlink-message-receipt read"/);
   assert.match(read, /Read.*30 Sept?/);
   assert.match(read, /Katja: Read/);
 });
@@ -32,13 +32,13 @@ test('unknown old read times are not fabricated and group partial reads do not b
   assert.match(renderToStaticMarkup(jsx.jsx(Receipt, {})), /aria-label="Sent"/);
   const partial = { ...receipt('delivered'), recipientCount: 2, deliveredCount: 2, readCount: 1 };
   const html = renderToStaticMarkup(jsx.jsx(Receipt, { receipt: partial }));
-  assert.match(html, /1\/2 read/); assert.doesNotMatch(html, /class="receipt read"/);
+  assert.match(html, /1\/2 read/); assert.doesNotMatch(html, /class="tlink-message-receipt read"/);
 });
 
 test('status dots expose meaningful labels, exact availability colours, and no invented online status', () => {
   for (const status of ['online', 'busy', 'offline']) {
     const html = renderToStaticMarkup(jsx.jsx(Dot, { presence: status, name: 'Katja' }));
-    assert.match(html, new RegExp(`class="dot ${status}"`));
+    assert.match(html, new RegExp(`class="tlink-team-status-dot ${status}"`));
     assert.match(html, new RegExp(`Katja: Call status: ${status[0].toUpperCase() + status.slice(1)}`));
   }
   assert.match(renderToStaticMarkup(jsx.jsx(Dot, {})), /Status unavailable/);

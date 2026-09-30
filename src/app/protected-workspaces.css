@@ -2929,6 +2929,15 @@ html[data-tlink-colour-mode="night"] :is(.tlink-call-dock,.tlink-call-buttons) {
 .tlink-presence-dot.online { background: #21a676; }
 .tlink-presence-dot.busy { background: #dc8b21; }
 .tlink-presence-dot.offline { background: #8a939c; }
+.tlink-team-status { align-items: center; display: inline-flex; flex: 0 0 auto; gap: 5px; font-size: 11px; font-weight: 500; line-height: 1.4; vertical-align: middle; }
+.tlink-team-status-dot { border-radius: 50%; display: inline-block; flex: 0 0 auto; height: 9px; width: 9px; }
+.tlink-team-status-dot.online { background: #21a676; }
+.tlink-team-status-dot.busy { background: #dc8b21; }
+.tlink-team-status-dot.offline { background: #8a939c; }
+.tlink-team-status-dot.unknown { border: 1.5px solid #8a939c; }
+.tlink-message-receipt { align-items: center; color: var(--trade-muted, #667786); display: inline-flex; flex-wrap: wrap; font-size: 10px; gap: 4px; line-height: 1.5; }
+.tlink-message-receipt svg { flex: 0 0 auto; height: 13px; width: 21px; }
+.tlink-message-receipt.read { color: var(--trade-accent-readable, #087f68); }
 .tlink-presence-label { font-size: 12px; color: var(--trade-muted, #60736c); }
 .tlink-presence-control select { min-width: 76px; min-height: 38px; padding: 0 2px; border: 0; font: inherit; font-weight: 600; color: var(--trade-ink, #163e37); background: var(--trade-surface, #fff); cursor: pointer; }
 .tlink-presence-control select:disabled { opacity: .6; cursor: wait; }

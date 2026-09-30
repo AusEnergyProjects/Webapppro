@@ -1,5 +1,4 @@
 import type { TradeMessageReceipt as TeamMessageReceipt } from "@/lib/trade-message-receipts";
-import styles from "./TradeMessageReceipt.module.css";
 
 function time(value: string) {
   return new Date(value).toLocaleString("en-AU", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
@@ -18,7 +17,7 @@ export default function TradeMessageReceipt({ receipt }: { receipt?: TeamMessage
   const partial = receipt && receipt.recipientCount > 1 && receipt.readCount > 0 && status !== "read"
     ? ` · ${receipt.readCount}/${receipt.recipientCount} read` : "";
   const detail = receipt?.recipients.map(person => `${person.name}: ${person.status === "read" ? `Read${person.readAt ? ` ${time(person.readAt)}` : " (time unavailable)"}` : person.status === "delivered" ? "Delivered" : "Sent"}`).join("\n") || label;
-  return <span className={`${styles.receipt} ${status === "read" ? styles.read : ""}`} role="img" aria-label={label + partial} title={detail}>
+  return <span className={`tlink-message-receipt ${status === "read" ? "read" : ""}`} role="img" aria-label={label + partial} title={detail}>
     <MessageTicks status={status} />
     {status === "read" ? <span aria-hidden="true">{label}</span> : partial ? <span aria-hidden="true">{partial.slice(3)}</span> : null}
   </span>;

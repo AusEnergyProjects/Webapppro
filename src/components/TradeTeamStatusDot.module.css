@@ -1,6 +1,0 @@
-.status { align-items: center; display: inline-flex; flex: 0 0 auto; gap: 5px; font-size: 11px; font-weight: 500; line-height: 1.4; vertical-align: middle; }
-.dot { border-radius: 50%; display: inline-block; flex: 0 0 auto; height: 9px; width: 9px; }
-.online { background: #21a676; }
-.busy { background: #dc8b21; }
-.offline { background: #8a939c; }
-.unknown { border: 1.5px solid #8a939c; }
