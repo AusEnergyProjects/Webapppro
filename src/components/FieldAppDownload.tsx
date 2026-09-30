@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { tradeBrowserDevice } from "@/lib/trade-device-client";
 
 type Platform = "ios" | "android" | "desktop";
-type ReleasePolicy = { platform: "ios" | "android"; latestVersion?: string; updateUrl?: string };
+type ReleasePolicy = { platform: "ios" | "android"; latestVersion?: string; updateUrl?: string; distribution?: "testflight-internal" };
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 function isInstallPrompt(event: Event): event is InstallPrompt {
   return "prompt" in event && typeof event.prompt === "function" && "userChoice" in event && event.userChoice instanceof Promise;
@@ -71,14 +71,21 @@ export function FieldAppDownload() {
   const policy = release?.platform === platform ? release.policy : null;
   const failed = release?.platform === platform && release.failed;
   const url = platform ? fieldAppReleaseUrl(policy?.updateUrl, platform) : "";
+  const internalTestFlight = platform === "ios" && policy?.distribution === "testflight-internal"
+    && /^\d+\.\d+\.\d+$/.test(policy.latestVersion || "");
   const retry = () => { setRelease(null); setAttempt(value => value + 1); };
   return <section className="tlink-install-card" aria-label="Install TLink">
     <div className="tlink-install-devices" aria-label="Choose your device">{([['ios', 'iPhone / iPad'], ['android', 'Android'], ['desktop', 'Computer']] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={platform === value} onClick={() => { if (value !== platform) { setRelease(null); setPlatform(value); } setNotice(""); }}>{label}</button>)}</div>
     {!platform ? <p role="status">Checking your device...</p> : platform === "ios" ? <>
       <span className="tlink-install-tag">iPhone / iPad</span>
-      <h2>{url ? "Get TLink for iPhone" : failed ? "We could not check the iPhone app" : policy ? "iPhone app is not available yet" : "Checking the iPhone app..."}</h2>
-      {url ? <a className="tlink-install-primary" href={url}>Install iPhone app</a> : <p>Use the TLink web portal for your jobs and messages with your existing team login.</p>}
-      <a className={url ? "tlink-install-secondary" : "tlink-install-primary"} href="/direct-trade/dashboard">Open web portal</a>
+      <h2>{internalTestFlight ? `TLink ${policy.latestVersion} is ready in TestFlight` : url ? "Get TLink for iPhone" : failed ? "We could not check the iPhone app" : policy ? "iPhone app is not available yet" : "Checking the iPhone app..."}</h2>
+      {internalTestFlight ? <>
+        <ol><li>Open <strong>TestFlight</strong> on this iPhone or iPad.</li><li>Select <strong>TLink</strong>, then tap <strong>Update</strong> or <strong>Install</strong>.</li><li>If the newer version is not shown, open <strong>Previous Builds</strong> and choose <strong>{policy.latestVersion}</strong>.</li></ol>
+        <p className="tlink-install-hint">Use the Apple Account that accepted your TLink invitation. This release is available to invited testers; if TLink is missing, open your existing invitation.</p>
+        <a className="tlink-install-primary" href="https://apps.apple.com/app/testflight/id899247664">Get TestFlight</a>
+        <p className="tlink-install-hint">Already have TestFlight? Apple’s page will offer Open.</p>
+      </> : url ? <a className="tlink-install-primary" href={url}>Install iPhone app</a> : <p>Use the TLink web portal for your jobs and messages with your existing team login.</p>}
+      <a className={url || internalTestFlight ? "tlink-install-secondary" : "tlink-install-primary"} href="/direct-trade/dashboard">Open web portal</a>
       {failed && <button type="button" className="tlink-install-secondary" onClick={retry}>Try again</button>}
       {webInstalled ? <p className="tlink-install-hint">The web portal is on your Home Screen. This is separate from the native iPhone app.</p> : <details><summary>Save the web portal to your Home Screen</summary><p>This adds the web portal, not the native iPhone app.</p><ol><li>In {browser === "Chrome" || browser === "Safari" ? browser : "your browser"}, tap <strong>Share</strong> <span aria-hidden="true">↑</span> beside the address bar.</li><li>Choose <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li></ol><p>Keep “Open as Web App” on if shown. If the option is missing, open this page in Safari and use Share.</p></details>}
     </> : platform === "android" ? <>

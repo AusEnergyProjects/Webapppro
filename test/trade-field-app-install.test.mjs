@@ -14,7 +14,7 @@ const androidUa='Mozilla/5.0 (Linux; Android 14) Chrome/140.0 Mobile Safari/537.
 const appleLink='https://testflight.apple.com/join/AbC12345';
 const apkLink='https://expo.dev/artifacts/eas/tlink.apk';
 const noRelease='https://ausenergyassessments.com/direct-trade/field-app';
-function fixture({ua='Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 CriOS/140.0 Mobile Safari/604.1',standalone=false,release,releasePlatform,deferred=false}={}) {
+function fixture({ua='Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 CriOS/140.0 Mobile Safari/604.1',standalone=false,release,releasePlatform,releaseVersion='1.0.2',distribution,deferred=false}={}) {
   let cursor=0;const states=[],effects=[],pending=[],frames=[],listeners=new Map(),requests=[];
   const changed=(a,b)=>!a||a.some((v,i)=>v!==b[i]);
   const react={useState(initial){const i=cursor++;if(!(i in states))states[i]=initial;return[states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useRef(initial){const i=cursor++;return states[i]||={current:initial};},useEffect(fn,deps){const i=cursor++;if(!effects[i]||changed(effects[i].deps,deps)){const old=effects[i];effects[i]={deps};pending.push(()=>{old?.cleanup?.();effects[i].cleanup=fn();});}}};
@@ -23,7 +23,7 @@ function fixture({ua='Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 CriOS/140.0 Mobi
   const fetch=(url,init)=>new Promise((resolve,reject)=>{
     const platform=new URL(url,'https://tlink.test').searchParams.get('platform');
     requests.push({url,init,resolve,reject});
-    if(!deferred)resolve(Response.json({policy:{platform:releasePlatform||platform,latestVersion:'1.0.2',updateUrl:release??(platform==='android'?apkLink:noRelease)}}));
+    if(!deferred)resolve(Response.json({policy:{platform:releasePlatform||platform,latestVersion:releaseVersion,distribution,updateUrl:release??(platform==='android'?apkLink:noRelease)}}));
   });
   const deps={react,'react/jsx-runtime':jsx,'@/lib/trade-device-client':{tradeBrowserDevice:()=>tradeBrowserDevice(navigator)}};
   const exports={};Function('require','exports','window','navigator','fetch','requestAnimationFrame','cancelAnimationFrame',compiled)(id=>{assert.ok(deps[id],id);return deps[id];},exports,window,navigator,fetch,fn=>{frames.push(fn);return frames.length;},()=>{});
@@ -49,6 +49,23 @@ test('a published Apple App Store or TestFlight URL produces a native install bu
     const f=fixture({release}),tree=await f.settle();assert.equal(link(tree,'Install iPhone app').props.href,release);
     assert.equal(link(tree,'Open web portal').props.className,'tlink-install-secondary');assert.doesNotMatch(text(tree),/not available yet/);f.dispose();
   }
+});
+
+test('an internal TestFlight release provides the existing tester update path without inventing a public invitation',async()=>{
+  const f=fixture({releaseVersion:'1.1.0',distribution:'testflight-internal'}),tree=await f.settle();
+  assert.match(text(tree),/TLink 1\.1\.0 is ready in TestFlight/);
+  assert.match(text(tree),/Previous Builds/);assert.match(text(tree),/Apple Account that accepted your TLink invitation/);
+  assert.equal(link(tree,'Get TestFlight').props.href,'https://apps.apple.com/app/testflight/id899247664');
+  assert.equal(link(tree,'Install iPhone app'),undefined);assert.doesNotMatch(text(tree),/not available yet/);
+  assert.equal(link(tree,'Open web portal').props.className,'tlink-install-secondary');
+  assert.ok(nodes(tree,n=>n.type==='a').every(n=>!n.props.href.includes('/join/')));f.dispose();
+});
+
+test('internal TestFlight guidance requires a valid iOS release and never replaces the Android installer',async()=>{
+  const bad=fixture({releaseVersion:'unknown',distribution:'testflight-internal'}),badTree=await bad.settle();
+  assert.equal(link(badTree,'Get TestFlight'),undefined);assert.match(text(badTree),/not available yet/);bad.dispose();
+  const android=fixture({ua:androidUa,releaseVersion:'1.1.0',distribution:'testflight-internal'}),androidTree=await android.settle();
+  assert.equal(link(androidTree,'Get TestFlight'),undefined);assert.equal(link(androidTree,'Download Android').props.href,apkLink);android.dispose();
 });
 
 test('iPhone never installs an APK, generic website, Apple lookalike or unverified EAS build',async()=>{

@@ -54,6 +54,8 @@ export function mobileAppPolicy(platform: string) {
     minimumVersion,
     latestVersion,
     updateUrl,
+    ...(normalised === "ios" && configured("AEA_MOBILE_IOS_DISTRIBUTION", "") === "testflight-internal"
+      ? { distribution: "testflight-internal" as const } : {}),
     encryptedStorageRequired: true,
     purgeOnSignOut: true,
     protectedCustomerContactDataAllowed: false,
