@@ -1,6 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
-import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -33,7 +32,8 @@ import {
   queueCounts,
 } from '@/lib/database';
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
-import { forgetPushToken, getDeviceId, getDeviceName, notificationDeviceState, rememberPushToken } from '@/lib/device';
+import { deviceRegistration, forgetPushToken, getDeviceId, getDeviceName, getRememberedPushToken, notificationDeviceState, rememberPushToken, requestNotificationPermissionOnce } from '@/lib/device';
+import { disableNativeCalls, subscribeNativeCallToken } from '@/lib/native-system-calls';
 import type { EvidenceCaptureEnvelope } from '@/lib/evidence';
 import {
   clearFieldSession,
@@ -72,6 +72,7 @@ type AppValue = {
   saveUpload: (input: UploadInput) => Promise<void>;
   pinSignIn: (displayName: string, pin: string) => Promise<void>;
   signOut: () => Promise<void>;
+  waitForNotificationRegistrations: () => Promise<void>;
   businesses: BusinessChoice[];
   choosingBusiness: boolean;
   businessError: string;
@@ -130,6 +131,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const selecting = useRef(false);
   const localWrites = useRef(0);
   const authGeneration = useRef(0);
+  const notificationRegistrations = useRef(new Set<Promise<void>>());
+
+  const waitForNotificationRegistrations = useCallback(async () => {
+    await waitForActiveSync().catch(() => undefined);
+    await Promise.allSettled([...notificationRegistrations.current]);
+  }, []);
+
+  const stopNotificationRegistration = useCallback(async () => {
+    await Promise.allSettled([...notificationRegistrations.current]);
+    await disableNativeCalls();
+  }, []);
 
   const refreshLocal = useCallback(async () => {
     const generation = authGeneration.current;
@@ -150,6 +162,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!isConfirmedFieldAccessLoss(accessError)) return false;
       confirmedLoss = accessError;
     }
+    switching.current = true;
+    authGeneration.current++;
+    await stopNotificationRegistration();
     await purgeLocalData();
     await forgetPushToken().catch(() => undefined);
     await clearFieldSession();
@@ -172,7 +187,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       message: nextAccess.message,
     }));
     return true;
-  }, []);
+  }, [stopNotificationRegistration]);
 
   const syncNow = useCallback(async () => {
     if (switching.current) return;
@@ -228,6 +243,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (generation !== authGeneration.current || switching.current) return;
       if (error instanceof ApiError && error.code.startsWith('BUSINESS_')) {
         switching.current = true;
+        await stopNotificationRegistration();
         pauseBusinessSession(true);
         await unregisterBackgroundSync().catch(() => undefined);
         setAccess(checkingAccess);
@@ -250,7 +266,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }));
       setAccess((value) => value.status === 'approved' ? value : networkVerificationRequired);
     }
-  }, [handleAccessError]);
+  }, [handleAccessError, stopNotificationRegistration]);
 
   const activateBusiness = useCallback(async (identity: FirebaseUser, choice: BusinessChoice) => {
     const principal = businessPrincipal(identity.uid, identity.email || '', choice);
@@ -271,12 +287,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     const previous = await getBusinessSession(identity.uid, true);
     if (previous && previous.business.ownerUid !== choice.ownerUid && !previous.business.manualOnly) {
+      await stopNotificationRegistration();
       // A fresh app launch also needs to retire the last business's push delivery.
       pauseBusinessSession(false);
       try {
         await apiRequest('/api/trade-team/devices', { method: 'POST', body: JSON.stringify({
           deviceId: await getDeviceId(), platform: MOBILE_PLATFORM, appVersion: APP_VERSION,
           deviceName: getDeviceName(), pushToken: '', pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
+          voipPushToken: '', nativeCallCapable: false,
         }) });
       } catch (error) {
         // Revoked membership cannot receive authorised push delivery or unregister its old device.
@@ -296,7 +314,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAccess(checkingAccess);
     await registerBackgroundSync().catch(() => undefined);
     void syncNow();
-  }, [syncNow]);
+  }, [stopNotificationRegistration, syncNow]);
 
   const loadBusinesses = useCallback(async (identity: FirebaseUser) => {
     switching.current = true;
@@ -344,9 +362,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await waitForActiveSync();
       const counts = await queueCounts();
       if (counts.actions || counts.uploads || counts.conflicts) throw new Error('Open Sync and finish or resolve your saved work before changing business.');
+      await stopNotificationRegistration();
       await apiRequest('/api/trade-team/devices', { method: 'POST', body: JSON.stringify({
         deviceId: await getDeviceId(), platform: MOBILE_PLATFORM, appVersion: APP_VERSION,
         deviceName: getDeviceName(), pushToken: '', pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
+        voipPushToken: '', nativeCallCapable: false,
       }) });
       await Notifications.dismissAllNotificationsAsync();
       await Notifications.clearLastNotificationResponseAsync();
@@ -363,7 +383,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBusinessError(error instanceof Error ? error.message : 'Business could not be changed. Try again.');
       await registerBackgroundSync().catch(() => undefined);
     }
-  }, [loadBusinesses, user?.authMode]);
+  }, [loadBusinesses, stopNotificationRegistration, user?.authMode]);
 
   const cancelBusinessChooser = useCallback(() => {
     if (!user) return;
@@ -380,8 +400,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [loadBusinesses]);
 
   useEffect(() => onAuthStateChanged(firebaseAuth, async (nextUser) => {
-    authGeneration.current++;
+    const generation = ++authGeneration.current;
     const fieldPrincipal = await getFieldPrincipal();
+    if (generation !== authGeneration.current) return;
     if (!fieldPrincipal && nextUser) {
       setUser(null);
       setJobs([]);
@@ -391,9 +412,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setUser(fieldPrincipal);
     setChoosingBusiness(false);
     if (!fieldPrincipal) {
+      switching.current = true;
+      await Promise.allSettled([...notificationRegistrations.current]);
+      if (generation !== authGeneration.current) return;
+      await disableNativeCalls();
+      if (generation !== authGeneration.current) return;
       switching.current = false;
       pauseBusinessSession(false);
       await clearBusinessSession();
+      if (generation !== authGeneration.current) return;
       setJobs([]);
       setSync(emptySync);
       setAccess(signedOutAccess);
@@ -408,6 +435,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }), [loadBusinesses, syncNow]);
 
   const signedIn = Boolean(user) && !choosingBusiness;
+
+  const registerNotificationDevice = useCallback(async (options?: { pushToken?: string; refreshNativeCalls?: boolean }) => {
+    if (!signedIn || access.status !== 'approved' || switching.current) return;
+    const generation = authGeneration.current;
+    const expectedBusinessKey = user?.localOwnerKey;
+    const registration = (async () => {
+      if (generation !== authGeneration.current || switching.current) return;
+      const registration = await deviceRegistration(options);
+      const modes = await resolveFieldAccessModes();
+      if (generation !== authGeneration.current || switching.current) return;
+      const results = await Promise.allSettled(modes.map(mode => apiRequest(mode === 'creditex_manual'
+        ? '/api/creditex/manual-field/devices' : '/api/trade-team/devices', {
+        method: 'POST', body: JSON.stringify(registration),
+      }, undefined, { expectedBusinessKey })));
+      const failed = results.find(result => result.status === 'rejected');
+      if (failed?.status === 'rejected') throw failed.reason;
+    })();
+    notificationRegistrations.current.add(registration);
+    try {
+      await registration;
+    } catch (error) {
+      notificationRegistrations.current.delete(registration);
+      if (generation !== authGeneration.current || switching.current) return;
+      if (await handleAccessError(error)) return;
+      setSync(value => ({ ...value, message: 'Notification registration failed. Open Account and retry notifications when connected.' }));
+    } finally { notificationRegistrations.current.delete(registration); }
+  }, [access.status, handleAccessError, signedIn, user?.localOwnerKey]);
+
+  useEffect(() => {
+    if (!signedIn || access.status !== 'approved') return;
+    let cancelled = false;
+    const generation = authGeneration.current;
+    const prepare = async () => {
+      if (AppState.currentState !== 'active' || switching.current) return;
+      await requestNotificationPermissionOnce();
+      if (!cancelled && generation === authGeneration.current && !switching.current) await registerNotificationDevice();
+    };
+    const request = () => void prepare().catch(() => {
+      if (!cancelled) setSync(value => ({ ...value, message: 'Open Account to enable message and call notifications.' }));
+    });
+    request();
+    const foreground = AppState.addEventListener('change', state => { if (state === 'active') request(); });
+    return () => { cancelled = true; foreground.remove(); };
+  }, [access.status, registerNotificationDevice, signedIn]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -432,36 +503,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const token = Notifications.addPushTokenListener(async (nextToken) => {
       if (!signedIn || switching.current) return;
       const generation = authGeneration.current;
-      const expectedBusinessKey = user?.localOwnerKey;
       const state = await notificationDeviceState().catch(() => null);
       if (generation !== authGeneration.current || switching.current) return;
       const pushToken = state?.granted && !state.muted ? String(nextToken.data) : '';
       if (pushToken) await rememberPushToken(pushToken);
       else await forgetPushToken();
-      const modes = await resolveFieldAccessModes().catch(() => []);
-      const deviceId = await getDeviceId();
       if (generation !== authGeneration.current || switching.current) return;
-      void Promise.allSettled(modes.map((mode) =>
-        apiRequest(mode === 'creditex_manual'
-          ? '/api/creditex/manual-field/devices'
-          : '/api/trade-team/devices', {
-          method: 'POST',
-          body: JSON.stringify({
-            deviceId,
-            platform: MOBILE_PLATFORM,
-            appVersion: APP_VERSION,
-            deviceName: getDeviceName(),
-            isPhysicalDevice: Device.isDevice,
-            pushToken,
-            pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
-          }),
-        }, undefined, { expectedBusinessKey }).catch((error) => {
-          if (generation === authGeneration.current && !switching.current) void handleAccessError(error);
-        })
-      ));
+      await registerNotificationDevice({ pushToken, refreshNativeCalls: false });
     });
-    return () => { network(); response.remove(); foreground.remove(); token.remove(); };
-  }, [handleAccessError, signedIn, syncNow, user?.localOwnerKey]);
+    const nativeToken = subscribeNativeCallToken(() => {
+      if (!signedIn || switching.current) return;
+      const generation = authGeneration.current;
+      void getRememberedPushToken().then(pushToken => {
+        if (generation !== authGeneration.current || switching.current) return;
+        return registerNotificationDevice({ pushToken, refreshNativeCalls: false });
+      }).catch(() => undefined);
+    });
+    return () => { network(); response.remove(); foreground.remove(); token.remove(); nativeToken(); };
+  }, [registerNotificationDevice, signedIn, syncNow]);
 
   const savedWorkOwner = useCallback(async () => {
     const expected = user?.localOwnerKey;
@@ -542,7 +601,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [syncNow]);
 
   const signOut = useCallback(async () => {
+    switching.current = true;
+    authGeneration.current++;
     await unregisterBackgroundSync().catch(() => undefined);
+    await waitForActiveSync().catch(() => undefined);
+    await stopNotificationRegistration();
     const fieldToken = await getFieldSessionToken();
     if (fieldToken) {
       await apiRequest('/api/field/session', { method: 'DELETE' }).catch(() => undefined);
@@ -565,6 +628,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               appVersion: APP_VERSION,
               deviceName: getDeviceName(),
               pushToken: '',
+              voipPushToken: '',
+              nativeCallCapable: false,
               pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
             }),
           })
@@ -579,7 +644,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await firebaseSignOut();
     setUser(null);
     setAccess(signedOutAccess);
-  }, []);
+  }, [stopNotificationRegistration]);
 
   const value = useMemo<AppValue>(() => ({
     user,
@@ -595,9 +660,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     saveUpload,
     pinSignIn,
     signOut,
+    waitForNotificationRegistrations,
     businesses, choosingBusiness, businessError, chooseBusiness, openBusinessChooser, cancelBusinessChooser, retryBusinesses,
   }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveActionInBackground, saveUpload, pinSignIn, signOut,
-    businesses, choosingBusiness, businessError, chooseBusiness, openBusinessChooser, cancelBusinessChooser, retryBusinesses]);
+    businesses, choosingBusiness, businessError, chooseBusiness, openBusinessChooser, cancelBusinessChooser, retryBusinesses, waitForNotificationRegistrations]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

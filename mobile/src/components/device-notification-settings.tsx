@@ -1,28 +1,42 @@
 import { useBusinessApi } from '@/lib/use-business-api';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
 
-import { deviceRegistration, getNativePushToken, notificationDeviceState, setNotificationsMuted } from '@/lib/device';
+import { deviceRegistration, getDeviceId, getNativePushToken, notificationDeviceState, setNotificationsMuted } from '@/lib/device';
 import { resolveFieldAccessModes } from '@/lib/sync';
 import { colours, radius, spacing } from '@/lib/theme';
 import { useApp } from '@/providers/app-provider';
 
 export function DeviceNotificationSettings() {
   const apiRequest = useBusinessApi();
-  const { sync } = useApp();
+  const { sync, waitForNotificationRegistrations } = useApp();
   const [state, setState] = useState<Awaited<ReturnType<typeof notificationDeviceState>> | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const refresh = useCallback(() => notificationDeviceState()
-    .then(setState)
-    .catch(() => setMessage('Notification settings could not be read. Try again.')), []);
+  const [delivery, setDelivery] = useState<{ configured: boolean; registered: boolean } | null>(null);
+  const generation = useRef(0);
+  const refresh = useCallback(async () => {
+    const current = ++generation.current;
+    try {
+      const next = await notificationDeviceState();
+      if (current !== generation.current) return;
+      setState(next);
+      const modes = await resolveFieldAccessModes();
+      const result = sync.online && modes.includes('trade_team') ? await apiRequest<{ native: { configured: boolean; registered: boolean } }>(`/api/trade-push?deviceId=${encodeURIComponent(await getDeviceId())}`) : null;
+      if (current === generation.current) setDelivery(result?.native || null);
+    } catch {
+      if (current === generation.current) { setDelivery(null); setMessage('Notification setup could not be checked. Reconnect and try again.'); }
+    }
+  }, [apiRequest, sync.online]);
 
   useEffect(() => {
-    void refresh();
+    let active = true;
+    const requests = generation;
+    void Promise.resolve().then(() => { if (active) return refresh(); });
     const foreground = AppState.addEventListener('change', (value) => { if (value === 'active') void refresh(); });
-    return () => foreground.remove();
+    return () => { active = false; requests.current++; foreground.remove(); };
   }, [refresh]);
 
   async function changeEnabled(enabled: boolean) {
@@ -31,6 +45,7 @@ export function DeviceNotificationSettings() {
     setMessage('');
     try {
       await setNotificationsMuted(!enabled);
+      await waitForNotificationRegistrations();
       if (enabled) {
         const push = await getNativePushToken(true);
         const current = await notificationDeviceState();
@@ -62,6 +77,9 @@ export function DeviceNotificationSettings() {
       <Switch accessibilityLabel="Notifications on this phone" value={enabled} disabled={!state || busy || !state.physicalDevice} onValueChange={(value) => void changeEnabled(value)} trackColor={{ true: colours.green }} />
     </View>
     <Text style={styles.body}>Get work updates and team alerts. Your phone controls sounds and when alerts appear.</Text>
+    {enabled && delivery ? <Text accessibilityLiveRegion="polite" style={styles.body}>{!delivery.registered ? 'This phone is not registered for message alerts yet.' : !delivery.configured ? 'This phone is registered. Message delivery is waiting for the server notification connection.' : 'Message alerts are registered with TLink.'}</Text> : null}
+    {enabled && (!delivery || !delivery.registered) ? <FieldButton variant="secondary" disabled={busy || !sync.online} onPress={() => void changeEnabled(true)}>Retry notification setup</FieldButton> : null}
+    {state?.granted ? <FieldButton variant="secondary" onPress={() => void Linking.openSettings().catch(() => setMessage('Open your phone settings, choose TLink, then Notifications.'))}>Sounds and notification settings</FieldButton> : null}
     {state && !state.physicalDevice ? <Text style={styles.body}>Use an installed app on a physical phone for notifications.</Text> : null}
     {state && !state.granted && !state.canAskAgain ? <FieldButton variant="secondary" onPress={() => void Linking.openSettings().catch(() => setMessage('Open your phone settings, choose TLink, then Notifications.'))}>Open phone settings</FieldButton> : null}
     {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}

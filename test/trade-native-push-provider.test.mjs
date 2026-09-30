@@ -60,3 +60,61 @@ test('only explicit FCM token rejection disables a registration, while failures 
  assert.equal(await provider.sendTradeNativePush('https://evil.test/',payload,authorization,async()=>assert.fail('invalid token sent')),'failed');
  assert.equal(await provider.sendTradeNativePush(token,payload,authorization,async()=>{throw new Error('provider unavailable');}),'failed');
 });
+
+test('Apple authorization validates explicit environment, signs ES256 and reuses the provider token',async()=>{
+ const keys=await jose.generateKeyPair('ES256',{extractable:true});
+ const apple={keyId:'TESTKEY123',teamId:'TESTTEAM12',privateKey:await jose.exportPKCS8(keys.privateKey),environment:'production'};
+ const settings={TLINK_APNS_KEY_ID:apple.keyId,TLINK_APNS_TEAM_ID:apple.teamId,TLINK_APNS_PRIVATE_KEY:apple.privateKey,TLINK_APNS_ENVIRONMENT:apple.environment};
+ assert.deepEqual(provider.tradeApnsCredentials(settings),apple);
+ for(const key of Object.keys(settings))assert.equal(provider.tradeApnsCredentials({...settings,[key]:''}),null,key);
+ assert.equal(provider.tradeApnsCredentials({...settings,TLINK_APNS_ENVIRONMENT:'https://evil.test'}),null);
+ const [first,second]=await Promise.all([provider.authorizeTradeApns(apple),provider.authorizeTradeApns(apple)]);
+ assert.equal(first.token,second.token);
+ const {payload:claims,protectedHeader}=await jose.jwtVerify(first.token,keys.publicKey,{issuer:apple.teamId});
+ assert.equal(protectedHeader.alg,'ES256');assert.equal(protectedHeader.kid,apple.keyId);assert.ok(Math.abs(claims.iat-Date.now()/1000)<5);
+ assert.ok(first.expiresAt>Date.now()+49*60000);
+});
+
+test('iPhone message alerts use APNs, generic content, default sound, bounded expiry and conversation action',async()=>{
+ const appleToken='ab'.repeat(32),auth={token:'synthetic',expiresAt:Date.now()+3600000,environment:'production'};
+ let observed;
+ assert.equal(await provider.sendTradeApns(appleToken,{...payload,kind:'team-message',body:'Private message'},auth,async(url,init)=>{observed={url,init};return new Response(null,{status:200});}),'accepted');
+ assert.equal(observed.url,`https://api.push.apple.com/3/device/${appleToken}`);
+ assert.equal(observed.init.headers['apns-topic'],'au.com.australianenergyassessments.field');
+ assert.equal(observed.init.headers['apns-push-type'],'alert');assert.equal(observed.init.headers['apns-priority'],'10');
+ assert.ok(Number(observed.init.headers['apns-expiration'])<=Date.now()/1000+60);
+ assert.equal(observed.init.redirect,'error');assert.ok(observed.init.signal instanceof AbortSignal);
+ const sent=JSON.parse(observed.init.body);
+ assert.deepEqual(sent.aps,{alert:{title:'TLink',body:'New team message'},sound:'default','thread-id':'thread-1234',category:'team-messages'});
+ assert.equal(sent.type,'team_message');assert.equal(sent.threadId,'thread-1234');assert.equal(sent.eventId,'call-1234');
+ assert.doesNotMatch(observed.init.body,/Private|evil\.test/);
+ const sandbox={...auth,environment:'sandbox'};
+ await provider.sendTradeApns(appleToken,payload,sandbox,async(url)=>{assert.match(url,/^https:\/\/api\.sandbox\.push\.apple\.com\//);return new Response(null,{status:200});});
+});
+
+test('Apple token retirement is explicit, configuration errors do not erase registrations, and expired alerts never send',async()=>{
+ const appleToken='ab'.repeat(32),auth={token:'synthetic',expiresAt:Date.now()+3600000,environment:'production'};
+ assert.equal(await provider.sendTradeApns(appleToken,payload,auth,async()=>Response.json({reason:'Unregistered'},{status:410})),'expired');
+ for(const [status,reason] of [[400,'BadDeviceToken'],[400,'DeviceTokenNotForTopic'],[403,'InvalidProviderToken'],[429,'TooManyRequests'],[410,'Other']])
+  assert.equal(await provider.sendTradeApns(appleToken,payload,auth,async()=>Response.json({reason},{status})),'failed');
+ assert.equal(await provider.sendTradeApns(appleToken,{...payload,expiresAt:'2000-01-01'},auth,async()=>assert.fail('expired sent')),'stale');
+ assert.equal(await provider.sendTradeApns('https://evil.test',payload,auth,async()=>assert.fail('invalid token sent')),'failed');
+});
+
+test('native-capable call delivery uses VoIP or data only; call cancellation never sends a new ringing alert',async()=>{
+ const appleToken='ab'.repeat(32),auth={token:'synthetic',expiresAt:Date.now()+3600000,environment:'production'};
+ for(const ended of [false,true]){
+  await provider.sendTradeApns(appleToken,payload,auth,async(_url,init)=>{
+   const body=JSON.parse(init.body);assert.equal(body.aps.alert,undefined);assert.equal(body.mode,'video');assert.equal(body.hasVideo,true);
+   assert.equal(body.type,ended?'team_call_ended':'team_call');assert.equal(init.headers['apns-push-type'],ended?'background':'voip');
+   assert.equal(init.headers['apns-topic'],`au.com.australianenergyassessments.field${ended?'':'.voip'}`);assert.equal(init.headers['apns-expiration'],'0');
+   if(ended)assert.equal(body.aps['content-available'],1);
+   return new Response(null,{status:200});
+  },{voip:true,ended});
+  await provider.sendTradeNativePush(token,payload,authorization,async(_url,init)=>{
+   const {message}=JSON.parse(init.body);assert.equal(message.notification,undefined);assert.equal(message.android.notification,undefined);
+   assert.equal(message.data.type,ended?'team_call_ended':'team_call');assert.equal(message.data.mode,'video');assert.equal(message.data.hasVideo,'true');
+   return Response.json({name:'projects/australian-energy-assessments/messages/received'});
+  },{nativeCall:true,ended});
+ }
+});

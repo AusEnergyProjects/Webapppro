@@ -2,12 +2,12 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { randomUUID } from 'expo-crypto';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { DeviceNotificationSettings } from '@/components/device-notification-settings';
 import { FieldButton } from '@/components/field-button';
 import { MessagesConversation } from '@/components/messages-conversation';
-import { customerColour, MessageAvatar, MessageIconButton, MessageLoading, MessageNotice, messageStyles } from '@/components/messages-ui';
+import { customerColour, MessageAvatar, MessageIconButton, MessageKeyboardView, MessageLoading, MessageNotice, messageStyles } from '@/components/messages-ui';
 import { Screen } from '@/components/screen';
 import { ApiError } from '@/lib/api';
 import { customerThreads, definitiveMessageFailure, emptyMessageDraft, messageContacts, messagesOverview, messageThread, selectionKey, teamAction, teamThreadName, type CustomerThread, type MessageContacts, type MessageDraft, type MessageMember, type MessageOverview, type MessageSelection, type TeamThread } from '@/lib/messages-client';
@@ -56,7 +56,7 @@ function NewChat({ overview, online, onSelect, onClose }: { overview: MessageOve
     } finally { inFlight.current = false; if (active.current) setBusy(false); }
   }
   return <Modal animationType="slide" onRequestClose={() => { if (!busy) onClose(); }}>
-    <Screen scroll={false}><KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <Screen scroll={false}><MessageKeyboardView style={styles.fill}>
       <View style={messageStyles.row}><Text style={[styles.heading, messageStyles.grow]}>New chat</Text><MessageIconButton icon="close" label="Close new chat" disabled={busy} onPress={onClose} /></View>
       <TextInput autoFocus accessibilityLabel="Find a name or phone number" placeholder="Name or phone number" placeholderTextColor={colours.muted} value={search} onChangeText={setSearch} editable={!busy && !pending} style={messageStyles.input} autoCapitalize="none" />
       {members.length ? <View style={styles.selectedPeople}>{members.map(member => <Pressable key={member.id} accessibilityRole="button" accessibilityLabel={`Remove ${member.name}`} disabled={busy || Boolean(pending)} onPress={() => setMembers(current => current.filter(item => item.id !== member.id))} style={styles.selectedPerson}><Text style={messageStyles.label}>{member.name} ×</Text></Pressable>)}</View> : <Text style={messageStyles.muted}>Choose a teammate, or several for a group.</Text>}
@@ -72,7 +72,7 @@ function NewChat({ overview, online, onSelect, onClose }: { overview: MessageOve
           <MessageAvatar name={item.customer.name} customer /><View style={messageStyles.grow}><Text style={messageStyles.title}>{item.customer.name}</Text><Text style={[messageStyles.label, { color: customerColour }]}>Customer SMS</Text><Text style={messageStyles.muted}>{item.customer.phone}{item.customer.jobNumber ? ` · ${item.customer.jobNumber}` : ''}</Text></View><MaterialCommunityIcons name="chevron-right" size={23} color={colours.muted} />
         </Pressable> : null} />
       {members.length ? <FieldButton disabled={!online || (members.length > 1 && !subject.trim())} loading={busy} onPress={() => void create()}>{pending ? 'Check chat' : members.length > 1 ? 'Start group chat' : 'Start chat'}</FieldButton> : null}
-    </KeyboardAvoidingView></Screen>
+    </MessageKeyboardView></Screen>
   </Modal>;
 }
 

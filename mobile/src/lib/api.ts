@@ -29,7 +29,9 @@ export class ApiError extends Error {
 async function bearer(user?: User | null) {
   const active = user || firebaseAuth.currentUser;
   if (!active) throw new ApiError('Sign in to continue.', 401, 'AUTH_REQUIRED');
-  return active.getIdToken(true);
+  // Firebase refreshes expired tokens itself. Forcing a refresh on each call
+  // signal adds an unnecessary network round trip to every ICE candidate.
+  return active.getIdToken();
 }
 
 async function authenticatedHeaders(init: RequestInit, user?: User | null, discovery = false, expectedBusinessKey?: string) {

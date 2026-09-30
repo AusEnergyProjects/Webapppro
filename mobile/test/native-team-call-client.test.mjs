@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+const clients = new Set();
+test.after(() => { for (const client of clients) client.close(); });
 
 function moduleWithNativeMock(name, native) {
   const source = fs.readFileSync(new URL(`../src/lib/${name}.ts`, import.meta.url), 'utf8');
@@ -42,6 +44,7 @@ function harness(memberId = 'z-member') {
   const { NativeTeamCallConnections } = moduleWithNativeMock('native-team-call-client', { MediaStream: Stream, RTCPeerConnection: Connection });
   const client = new NativeTeamCallConnections({ memberId, sessionId: 'local-session', local: new Stream([track()]), iceServers: [{ urls: 'turn:relay.test', username: 'temporary', credential: 'temporary' }],
     send: async (...args) => sent.push(args), changed: peers => changed.push(peers), failed: message => failures.push(message) });
+  clients.add(client);
   return { client, connections, sent, changed, failures, Connection };
 }
 
@@ -168,7 +171,7 @@ test('voice-only requests no camera; partial media is released with a helpful fa
   const { acquireNativeCallMedia } = moduleWithNativeMock('native-team-call-media', { mediaDevices: { getUserMedia: async value => { constraints.push(value); return streams[constraints.length - 1]; } } });
   assert.equal(await acquireNativeCallMedia('audio', () => true), streams[0]);
   assert.equal(constraints[0].video, false);
-  await assert.rejects(acquireNativeCallMedia('video', () => true), /microphone did not open/);
+  await assert.rejects(acquireNativeCallMedia('video', () => true), error => error.name === 'NotAllowedError' && /microphone and camera/.test(error.message));
   assert.equal(streams[1].released, true);
   assert.equal(streams[1].tracks[0].stopped, true);
 });
@@ -181,4 +184,43 @@ test('denied permissions explain device settings; missing hardware offers voice-
   assert.match(nativeCallError(missing, 'video').message, /voice only/);
   const server = new Error('This call already has six people.');
   assert.equal(nativeCallError(server, 'video').message, server.message);
+});
+
+test('native media permission wait is bounded and releases a stream arriving after timeout', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let resolve;
+  const stream = new Stream([track()]);
+  const { acquireNativeCallMedia } = moduleWithNativeMock('native-team-call-media', { mediaDevices: { getUserMedia: () => new Promise(done => { resolve = done; }) } });
+  const pending = acquireNativeCallMedia('audio', () => true);
+  const failure = assert.rejects(pending, error => error.name === 'NativeCallMediaPermissionTimeout');
+  t.mock.timers.tick(30_000); await failure;
+  resolve(stream); await Promise.resolve();
+  assert.equal(stream.released, true); assert.equal(stream.tracks[0].stopped, true);
+});
+
+test('native media cancellation resolves immediately and cleans a later permission grant', async () => {
+  let resolve;
+  const stream = new Stream([track()]), controller = new AbortController();
+  const { acquireNativeCallMedia } = moduleWithNativeMock('native-team-call-media', { mediaDevices: { getUserMedia: () => new Promise(done => { resolve = done; }) } });
+  const pending = acquireNativeCallMedia('audio', () => true, controller.signal);
+  controller.abort(); assert.equal(await pending, null);
+  resolve(stream); await Promise.resolve();
+  assert.equal(stream.released, true);
+});
+
+test('native peer connection timeout ends a call that would otherwise remain connecting forever', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = harness(); await h.client.sync([person('a-member')]);
+  t.mock.timers.tick(29_999); assert.equal(h.failures.length, 0);
+  t.mock.timers.tick(1); assert.equal(h.failures.length, 1); h.client.close();
+});
+
+test('a transient native disconnect has a grace period which is cleared on recovery', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = harness(); await h.client.sync([person('a-member')]); const peer = h.connections[0];
+  peer.connectionState = 'connected'; peer.onconnectionstatechange();
+  t.mock.timers.tick(30_001); assert.equal(h.failures.length, 0);
+  peer.connectionState = 'disconnected'; peer.onconnectionstatechange();
+  t.mock.timers.tick(14_000); peer.connectionState = 'connected'; peer.onconnectionstatechange();
+  t.mock.timers.tick(2_000); assert.equal(h.failures.length, 0); h.client.close();
 });

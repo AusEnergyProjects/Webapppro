@@ -812,6 +812,8 @@ export const tradeMobileDevices = sqliteTable("trade_mobile_devices", {
   appVersion: text("app_version").notNull(),
   pushProvider: text("push_provider").notNull().default("fcm"),
   pushToken: text("push_token").notNull().default(""),
+  voipPushToken: text("voip_push_token").notNull().default(""),
+  nativeCallCapable: integer("native_call_capable").notNull().default(0),
   pushTokenUpdatedAt: text("push_token_updated_at").notNull().default(""),
   status: text("status").notNull().default("active"),
   registeredAt: text("registered_at").notNull(),
@@ -824,6 +826,7 @@ export const tradeMobileDevices = sqliteTable("trade_mobile_devices", {
   index("trade_mobile_devices_owner_status_idx").on(table.ownerUid, table.status, table.updatedAt),
   index("trade_mobile_devices_actor_status_idx").on(table.actorUid, table.status, table.lastSeenAt),
   index("trade_mobile_devices_member_status_idx").on(table.ownerUid, table.memberId, table.status),
+  check("trade_mobile_devices_native_call_capable_check", sql`${table.nativeCallCapable} IN (0, 1)`),
 ]);
 
 export const tradeMobilePushOutbox = sqliteTable("trade_mobile_push_outbox", {
@@ -5210,6 +5213,8 @@ export const complianceManualFieldDevices = sqliteTable("compliance_manual_field
   deviceName: text("device_name").notNull(),
   appVersion: text("app_version").notNull(),
   isPhysicalDevice: integer("is_physical_device").notNull().default(0),
+  voipPushToken: text("voip_push_token").notNull().default(""),
+  nativeCallCapable: integer("native_call_capable").notNull().default(0),
   status: text("status").notNull().default("active"),
   registeredAt: text("registered_at").notNull(),
   lastSeenAt: text("last_seen_at").notNull(),
@@ -5223,6 +5228,7 @@ export const complianceManualFieldDevices = sqliteTable("compliance_manual_field
   check("compliance_manual_field_device_platform_check", sql`${table.platform} IN ('ios', 'android')`),
   check("compliance_manual_field_device_status_check", sql`${table.status} IN ('active', 'revoked')`),
   check("compliance_manual_field_device_physical_check", sql`${table.isPhysicalDevice} IN (0, 1)`),
+  check("compliance_manual_field_device_native_call_capable_check", sql`${table.nativeCallCapable} IN (0, 1)`),
 ]);
 
 export const complianceManualFieldUploadSessions = sqliteTable("compliance_manual_field_upload_sessions", {

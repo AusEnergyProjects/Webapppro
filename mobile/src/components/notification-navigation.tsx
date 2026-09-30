@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { router, useRootNavigationState } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
-import { teamNotificationTarget } from '@/lib/team-messages';
+import { notificationResponseTarget } from '@/lib/notifications';
 import { useApp } from '@/providers/app-provider';
 
 export function NotificationNavigation() {
@@ -14,7 +14,7 @@ export function NotificationNavigation() {
     function respond(response: Notifications.NotificationResponse) {
       const notificationId = response.notification.request.identifier;
       if (handled.current === notificationId) return;
-      const target = teamNotificationTarget(response.notification.request.content.data);
+      const target = notificationResponseTarget(response.notification.request.content.data, response.actionIdentifier);
       if (!target) return;
       handled.current = notificationId;
       router.push({ pathname: '/messages', params: { ...target, notificationId } });

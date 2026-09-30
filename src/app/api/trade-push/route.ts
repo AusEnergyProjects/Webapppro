@@ -3,7 +3,7 @@ import { TradeAccessError } from '@/lib/trade-access-server';
 import { requireTeamCommunicationAccess } from '@/lib/trade-communications-access';
 import { readBoundedRequestText, RequestBodyTooLargeError } from '@/lib/bounded-request-body.mjs';
 import { pushRecord } from '@/lib/trade-push';
-import { subscribeTradePush, tradePushSettings, unsubscribeTradePush, updateTradePush } from '@/lib/trade-push-server';
+import { subscribeTradePush, tradeNativePushSettings, tradePushSettings, unsubscribeTradePush, updateTradePush } from '@/lib/trade-push-server';
 
 export const runtime = 'edge';
 function failure(error: unknown) {
@@ -22,7 +22,11 @@ function failure(error: unknown) {
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ok:false,error:'Request origin was not accepted.'},403);
-  try { return adminJson({ok:true,...await tradePushSettings(await requireTeamCommunicationAccess(request),new URL(request.url).searchParams.get('subscriptionId') || undefined)}); }
+  try {
+    const actor = await requireTeamCommunicationAccess(request), params = new URL(request.url).searchParams;
+    return adminJson({ok:true,...(params.has('deviceId') ? await tradeNativePushSettings(actor,params.get('deviceId'))
+      : await tradePushSettings(actor,params.get('subscriptionId') || undefined))});
+  }
   catch(error) { return failure(error); }
 }
 

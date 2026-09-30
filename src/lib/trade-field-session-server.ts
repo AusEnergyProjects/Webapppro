@@ -356,8 +356,21 @@ export async function revokeCurrentFieldSession(request: Request) {
   const token = tokenFromRequest(request);
   if (!token) return;
   const now = new Date().toISOString();
-  await getD1().prepare(`UPDATE trade_field_sessions SET status = 'revoked', revoked_at = ?, updated_at = ?
-    WHERE token_hash = ? AND status = 'active'`).bind(now, now, await sha256(token)).run();
+  const tokenHash = await sha256(token);
+  const db = getD1();
+  await db.batch([
+    db.prepare(`UPDATE trade_field_sessions SET status = 'revoked', revoked_at = ?, updated_at = ?
+      WHERE token_hash = ? AND status = 'active'`).bind(now, now, tokenHash),
+    db.prepare(`UPDATE trade_mobile_devices SET push_token = '', voip_push_token = '',
+        native_call_capable = 0, push_token_updated_at = ?, updated_at = ?
+      WHERE changes() = 1 AND actor_uid = 'field-member:' || member_id
+        AND EXISTS (SELECT 1 FROM trade_field_sessions session
+          WHERE session.token_hash = ? AND session.status = 'revoked'
+            AND session.owner_uid = trade_mobile_devices.owner_uid
+            AND session.team_member_id = trade_mobile_devices.member_id
+            AND session.device_id = trade_mobile_devices.device_id)`)
+      .bind(now, now, tokenHash),
+  ]);
 }
 
 export async function revokeMemberFieldAccess(ownerUid: string, teamMemberId: string, actorUid: string) {
@@ -371,7 +384,7 @@ export async function revokeMemberFieldAccess(ownerUid: string, teamMemberId: st
       WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'`).bind(now, ownerUid, teamMemberId),
     db.prepare(`UPDATE trade_field_sessions SET status = 'revoked', revoked_at = ?, updated_at = ?
       WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'`).bind(now, now, ownerUid, teamMemberId),
-    db.prepare(`UPDATE trade_mobile_devices SET status = 'revoked', push_token = '', push_token_updated_at = ?,
+    db.prepare(`UPDATE trade_mobile_devices SET status = 'revoked', push_token = '', voip_push_token = '', native_call_capable = 0, push_token_updated_at = ?,
       revoked_at = ?, revoked_by_uid = ?, updated_at = ?
       WHERE owner_uid = ? AND member_id = ? AND status = 'active'`)
       .bind(now, now, actorUid, now, ownerUid, teamMemberId),

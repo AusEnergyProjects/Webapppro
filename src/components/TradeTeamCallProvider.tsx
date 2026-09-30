@@ -15,11 +15,24 @@ type CallSession = { call: TeamCall; sessionId: string; memberId: string; local:
 type RetryCall = { threadId: string; mode: Mode; existing?: TeamCall };
 const CallContext = createContext<{ start: (threadId: string, mode: Mode) => void; busy: boolean } | null>(null);
 
+function CallIcon({ name }: { name: "voice" | "video" | "mic" | "mic-off" | "camera-off" | "switch" | "expand" | "minimise" | "end" }) {
+  return <svg className="tlink-call-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    {name === "voice" && <path d="M8 3H5a2 2 0 0 0-2 2c0 8.8 7.2 16 16 16a2 2 0 0 0 2-2v-3l-5-2-2 2a13 13 0 0 1-6-6l2-2-2-5Z" />}
+    {name === "video" && <><rect x="3" y="6" width="12" height="12" rx="3" /><path d="m15 10 6-3v10l-6-3" /></>}
+    {name === "camera-off" && <><path d="M9 6h3a3 3 0 0 1 3 3v1l6-3v10l-3-1.5M15 15v.5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 3 15.5v-7c0-.6.2-1.2.6-1.6M3 3l18 18" /></>}
+    {(name === "mic" || name === "mic-off") && <><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6" />{name === "mic-off" && <path d="m3 3 18 18" />}</>}
+    {name === "switch" && <><path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5M4 16a8 8 0 0 0 14 3l3-3m0 5v-5h-5" /></>}
+    {name === "expand" && <path d="M8 3H3v5m0-5 6 6m7 12h5v-5m0 5-6-6" />}
+    {name === "minimise" && <path d="M3 9h6V3M9 9 3 3m18 12h-6v6m0-6 6 6" />}
+    {name === "end" && <path d="M3 15v-4a16 16 0 0 1 18 0v4l-5 1v-4a13 13 0 0 0-8 0v4l-5-1Z" />}
+  </svg>;
+}
+
 export function TradeTeamCallButtons({ threadId }: { threadId: string }) {
   const calls = useContext(CallContext);
-  return <div className="tlink-call-buttons" aria-label="Team calls">
-    <button type="button" disabled={!calls || calls.busy} onClick={() => calls?.start(threadId,"audio")} aria-label="Start voice call"><span aria-hidden="true">☎</span> Voice call</button>
-    <button type="button" disabled={!calls || calls.busy} onClick={() => calls?.start(threadId,"video")} aria-label="Start video call"><span aria-hidden="true">▣</span> Video call</button>
+  return <div className="tlink-call-buttons" role="group" aria-label="Team calls">
+    <button type="button" className="tlink-call-voice" disabled={!calls || calls.busy} onClick={() => calls?.start(threadId,"audio")} aria-label="Start voice call"><CallIcon name="voice" />Voice call</button>
+    <button type="button" className="tlink-call-video" disabled={!calls || calls.busy} onClick={() => calls?.start(threadId,"video")} aria-label="Start video call"><CallIcon name="video" />Video call</button>
   </div>;
 }
 
@@ -290,10 +303,10 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   const openDirectInNewTab = browser.embedded || typeof window !== "undefined" && window.top !== window;
   return <CallContext.Provider value={{start:(threadId,mode) => void begin(threadId,mode),busy:busy || Boolean(active)}}>{children}
     {(active || busy || invitation || notice) && <aside className={`tlink-call-dock ${minimized ? "tlink-call-minimized" : ""}`} aria-label="Internal team call">
-      {active ? <><header><div><strong>{active.threadName || "Team call"}</strong><span role="status">{connected ? "Connected" : busy || remotes.length ? "Connecting..." : "Waiting for answer..."} · Internal · {hasCamera ? "Video" : "Voice"}</span></div><button type="button" onClick={() => setMinimized(value => !value)}>{minimized ? "Expand" : "Minimise"}</button></header>
+      {active ? <><header><div><strong>{active.threadName || "Team call"}</strong><span role="status">{connected ? "Connected" : busy || remotes.length ? "Connecting..." : "Waiting for answer..."} · Internal · {hasCamera ? "Video" : "Voice"}</span></div><button type="button" onClick={() => setMinimized(value => !value)}><CallIcon name={minimized ? "expand" : "minimise"} />{minimized ? "Expand" : "Minimise"}</button></header>
         {!minimized && <div className="tlink-call-grid"><StreamTile stream={localPreview} name={muted ? "You · Muted" : "You"} local cameraOff={cameraOff || !hasCamera} />{remotes.map(peer => <StreamTile key={peer.memberId} stream={peer.stream} name={peer.name} state={peer.state} />)}</div>}
         {cameraNotice && <p role="status" className="tlink-call-help">{cameraNotice}</p>}
-        <div className="tlink-call-controls"><button type="button" aria-pressed={muted} onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button>{hasCamera && <><button type="button" disabled={switchingCamera} aria-pressed={cameraOff} onClick={toggleCamera}>{cameraOff ? "Camera on" : "Camera off"}</button>{multipleCameras && <button type="button" disabled={switchingCamera} onClick={() => void changeCamera(facing.current === "user" ? "environment" : "user")}>{switchingCamera ? "Switching..." : "Switch camera"}</button>}</>}<button type="button" className="tlink-call-hangup" onClick={() => stop()}>Hang up</button></div>
+        <div className="tlink-call-controls"><button type="button" aria-pressed={muted} onClick={toggleMuted}><CallIcon name={muted ? "mic-off" : "mic"} />{muted ? "Unmute" : "Mute"}</button>{hasCamera && <><button type="button" disabled={switchingCamera} aria-pressed={cameraOff} onClick={toggleCamera}><CallIcon name={cameraOff ? "camera-off" : "video"} />{cameraOff ? "Camera on" : "Camera off"}</button>{multipleCameras && <button type="button" disabled={switchingCamera} onClick={() => void changeCamera(facing.current === "user" ? "environment" : "user")}><CallIcon name="switch" />{switchingCamera ? "Switching..." : "Switch camera"}</button>}</>}<button type="button" className="tlink-call-hangup" onClick={() => stop()}><CallIcon name="end" />End call</button></div>
       </> : busy ? <><strong>Opening your {openingMode === "video" ? "video" : "voice"} call</strong><p role="status">Choose Allow if your browser asks for {openingMode === "video" ? "microphone and camera" : "microphone"} access.</p><button type="button" onClick={() => stop()}>Cancel</button></>
         : notice && (retry || !invitation) ? <>
           <strong>{permissionHelp ? permissionHelp.mode === "video" ? "Microphone and camera access" : "Microphone access" : "Team call"}</strong>
@@ -306,10 +319,10 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
             {retry && (permissionHelp?.policyBlocked ? <a className="tlink-call-direct-link" href={`/direct-trade/messages?threadId=${encodeURIComponent(retry.threadId)}${retry.existing ? `&callId=${encodeURIComponent(retry.existing.id)}` : ""}`} target={openDirectInNewTab ? "_blank" : undefined} rel="noopener noreferrer">Open TLink calls</a>
               : <><button type="button" className="tlink-call-answer" onClick={() => void begin(retry.threadId,retry.mode,retry.existing)}>
               {permissionHelp && !permissionHelp.denied ? retry.mode === "video" ? "Allow mic & camera" : "Allow microphone" : "Try again"}
-            </button>{retry.mode === "video" && <button type="button" onClick={() => void begin(retry.threadId,"audio",retry.existing)}>Use voice only</button>}</>)}
+            <CallIcon name={retry.mode === "video" ? "video" : "voice"} /></button>{retry.mode === "video" && <button type="button" onClick={() => void begin(retry.threadId,"audio",retry.existing)}><CallIcon name="voice" />Use voice only</button>}</>)}
             <button type="button" onClick={() => stop()}>Close</button>
           </div>
-        </> : invitation ? <><strong>{invitation.threadName || "Team call"}</strong><p role="status">Incoming {invitation.mode === "video" ? "video" : "voice"} call · Internal</p><p className="tlink-call-help">Your microphone{invitation.mode === "video" ? " and camera turn" : " turns"} on when you answer.</p>{!ringReady && <button type="button" onClick={() => void ringer.current?.unlock()}>Enable ring sound</button>}<div className="tlink-call-controls"><button type="button" className="tlink-call-answer" onClick={() => void begin(invitation.threadId,invitation.mode,invitation)}>Answer</button>{invitation.mode === "video" && <button type="button" onClick={() => void begin(invitation.threadId,"audio",invitation)}>Voice only</button>}<button type="button" onClick={() => {dismissed.current.add(invitation.id);setIncoming(items=>items.filter(item=>item.id!==invitation.id));}}>Decline</button></div></> : null}
+        </> : invitation ? <><strong>{invitation.threadName || "Team call"}</strong><p role="status">Incoming {invitation.mode === "video" ? "video" : "voice"} call · Internal</p><p className="tlink-call-help">Your microphone{invitation.mode === "video" ? " and camera turn" : " turns"} on when you answer.</p>{!ringReady && <button type="button" onClick={() => void ringer.current?.unlock()}>Enable ring sound</button>}<div className="tlink-call-controls"><button type="button" className="tlink-call-answer" onClick={() => void begin(invitation.threadId,invitation.mode,invitation)}>Answer<CallIcon name={invitation.mode === "video" ? "video" : "voice"} /></button>{invitation.mode === "video" && <button type="button" onClick={() => void begin(invitation.threadId,"audio",invitation)}><CallIcon name="voice" />Voice only</button>}<button type="button" onClick={() => {dismissed.current.add(invitation.id);setIncoming(items=>items.filter(item=>item.id!==invitation.id));}}><CallIcon name="end" />Decline</button></div></> : null}
     </aside>}
   </CallContext.Provider>;
 }

@@ -8,6 +8,7 @@ import ts from "typescript";
 import * as boundedJsonRequest from "../src/lib/bounded-json-request.ts";
 import { verifyJpegExif } from "../src/lib/jpeg-exif-verifier.ts";
 import { normaliseDeviceListQuery } from "../src/lib/trade-mobile-device-list-policy.mjs";
+import { nativePushRegistration } from "../src/lib/trade-push.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const mediaRouteSource = read("../src/app/api/trade-team/media/route.ts");
@@ -246,6 +247,8 @@ function evidenceDatabase() {
       app_version text NOT NULL,
       push_provider text NOT NULL,
       push_token text NOT NULL,
+      voip_push_token text NOT NULL DEFAULT '',
+      native_call_capable integer NOT NULL DEFAULT 0 CHECK (native_call_capable IN (0,1)),
       push_token_updated_at text NOT NULL,
       status text NOT NULL,
       registered_at text NOT NULL,
@@ -582,6 +585,7 @@ function deviceRouteHarness(database, storage, options = {}) {
       mobileErrorResponse: () => null,
     },
     "@/lib/trade-mobile-device-revocation": deviceRevocation,
+    "@/lib/trade-push": { nativePushRegistration },
     "@/lib/trade-mobile-device-list-policy.mjs": {
       normaliseDeviceListQuery,
     },

@@ -8,24 +8,50 @@ export function releaseNativeCallMedia(stream: MediaStream | null) {
   stream.release();
 }
 
-export async function acquireNativeCallMedia(mode: NativeCallMode, isCurrent: () => boolean) {
-  const stream = await mediaDevices.getUserMedia({ audio: true,
-    video: mode === 'video' ? { facingMode: 'user', width: 640, height: 480, frameRate: 24 } : false });
+export async function acquireNativeCallMedia(mode: NativeCallMode, isCurrent: () => boolean, signal?: AbortSignal) {
+  if (signal?.aborted) return null;
+  let expired = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let abort: (() => void) | undefined;
+  const request = mediaDevices.getUserMedia({ audio: true,
+    video: mode === 'video' ? { facingMode: 'user', width: 640, height: 480, frameRate: 24 } : false }).then(stream => {
+    if (expired || !isCurrent()) { releaseNativeCallMedia(stream); return null; }
+    return stream;
+  });
+  let stream: MediaStream | null;
+  try {
+    stream = await Promise.race([request, new Promise<null>((resolve, reject) => {
+      abort = () => { expired = true; resolve(null); };
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) { abort(); return; }
+      timeout = setTimeout(() => {
+        expired = true;
+        const error = new Error('Microphone or camera access was not completed. Allow access when your device asks, then retry.');
+        error.name = 'NativeCallMediaPermissionTimeout';
+        reject(error);
+      }, 30_000);
+    })]);
+  } finally { clearTimeout(timeout); if (abort) signal?.removeEventListener('abort', abort); }
+  if (!stream) return null;
   if (!isCurrent()) {
     releaseNativeCallMedia(stream);
     return null;
   }
   if (!stream.getAudioTracks().length || (mode === 'video' && !stream.getVideoTracks().length)) {
     releaseNativeCallMedia(stream);
-    throw new Error(mode === 'video' ? 'The camera or microphone did not open. Try voice only, or check device permissions.' : 'The microphone did not open. Check device permissions.');
+    // react-native-webrtc returns a partial stream when only one requested
+    // permission is granted. Treat it as a permission failure, not a call.
+    const error = new Error(mode === 'video' ? 'Allow microphone and camera access, or try voice only.' : 'Allow microphone access to answer.');
+    error.name = 'NotAllowedError';
+    throw error;
   }
   return stream;
 }
 
 export function nativeCallError(error: unknown, mode: NativeCallMode) {
-  const name = error instanceof Error ? error.name : '';
-  const message = error instanceof Error ? error.message : 'The call could not connect. Please try again.';
-  if (['NotAllowedError', 'SecurityError', 'PermissionDeniedError'].includes(name) || /permission.*denied|not authorized/i.test(message)) {
+  const name = error && typeof error === 'object' && 'name' in error && typeof error.name === 'string' ? error.name : '';
+  const message = error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'The call could not connect. Please try again.';
+  if (['NotAllowedError', 'SecurityError', 'PermissionDeniedError', 'NativeCallMediaPermissionTimeout'].includes(name) || /permission.*denied|not authorized/i.test(message)) {
     return { message: `Allow TLink to use your microphone${mode === 'video' ? ' and camera' : ''} in device settings, then retry.`, settings: true };
   }
   if (['NotFoundError', 'DevicesNotFoundError'].includes(name)) {

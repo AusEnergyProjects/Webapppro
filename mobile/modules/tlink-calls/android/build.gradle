@@ -1,0 +1,24 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'au.com.australianenergyassessments.calls'
+version = '1.0.0'
+android {
+  namespace 'au.com.australianenergyassessments.calls'
+  defaultConfig { versionCode 1; versionName '1.0.0' }
+}
+dependencies {
+  // SDK 57 can link Expo packages as prebuilt Maven artifacts rather than
+  // Gradle projects. Use the installed package's exact publication metadata.
+  def notificationsProject = findProject(':expo-notifications')
+  if (notificationsProject != null) {
+    implementation notificationsProject
+  } else {
+    def publication = new groovy.json.JsonSlurper().parse(file('../../../node_modules/expo-notifications/expo-module.config.json')).android.publication
+    implementation "${publication.groupId}:${publication.artifactId}:${publication.version}"
+  }
+  implementation 'com.google.firebase:firebase-messaging:25.0.1'
+  implementation 'androidx.core:core:1.17.0'
+  implementation 'androidx.lifecycle:lifecycle-runtime:2.9.3'
+}

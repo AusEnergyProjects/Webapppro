@@ -127,7 +127,8 @@ function fixture() {
       token_hash text NOT NULL, expires_at text NOT NULL, consumed_at text NOT NULL, created_at text NOT NULL);
     CREATE TABLE trade_mobile_devices (id text PRIMARY KEY, owner_uid text NOT NULL, member_id text NOT NULL,
       status text NOT NULL, push_token text NOT NULL, push_token_updated_at text NOT NULL, revoked_at text NOT NULL,
-      revoked_by_uid text NOT NULL, updated_at text NOT NULL);
+      revoked_by_uid text NOT NULL, updated_at text NOT NULL,
+      voip_push_token text NOT NULL DEFAULT '', native_call_capable integer NOT NULL DEFAULT 0);
     CREATE TABLE trade_field_access_codes (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
       status text NOT NULL, updated_at text NOT NULL);
     CREATE TABLE trade_field_sessions (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
@@ -159,7 +160,7 @@ function fixture() {
   insertMember("target-1", "target-uid", "active", "2026-08-12T00:00:00.000Z");
   database.exec(`
     INSERT INTO trade_accounts VALUES ('owner-1', '[]');
-    INSERT INTO trade_mobile_devices VALUES ('device-1', 'owner-1', 'target-1', 'active', 'push-secret', '', '', '', '2026-08-12T00:00:00.000Z');
+    INSERT INTO trade_mobile_devices VALUES ('device-1', 'owner-1', 'target-1', 'active', 'push-secret', '', '', '', '2026-08-12T00:00:00.000Z', 'private-voip-token', 1);
     INSERT INTO trade_field_access_codes VALUES ('field-code-1', 'owner-1', 'target-1', 'active', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_field_sessions VALUES ('field-session-1', 'owner-1', 'target-1', 'active', '', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_team_invites VALUES ('invite-1', 'target-1', 'owner-1', 'hash', '2026-09-12T00:00:00.000Z', '', '2026-08-12T00:00:00.000Z');
@@ -444,6 +445,8 @@ test("delegated Team PATCH lifecycle is stale-safe, bounded, destructive only on
   assert.equal(database.prepare("SELECT status FROM trade_team_members WHERE id='target-1'").get().status, "suspended");
   assert.equal(database.prepare("SELECT status FROM trade_mobile_devices").get().status, "revoked");
   assert.equal(database.prepare("SELECT push_token FROM trade_mobile_devices").get().push_token, "");
+  assert.deepEqual({ ...database.prepare("SELECT voip_push_token, native_call_capable FROM trade_mobile_devices").get() },
+    { voip_push_token: "", native_call_capable: 0 });
   assert.equal(database.prepare("SELECT status FROM trade_field_access_codes").get().status, "revoked");
   assert.equal(database.prepare("SELECT status FROM trade_field_sessions").get().status, "revoked");
   assert.notEqual(database.prepare("SELECT revoked_at FROM trade_field_sessions").get().revoked_at, "");
@@ -455,6 +458,8 @@ test("delegated Team PATCH lifecycle is stale-safe, bounded, destructive only on
   assert.equal(database.prepare("SELECT status FROM trade_team_members WHERE id='target-1'").get().status, "active");
   assert.equal(database.prepare("SELECT status FROM trade_mobile_devices").get().status, "revoked");
   assert.equal(database.prepare("SELECT push_token FROM trade_mobile_devices").get().push_token, "");
+  assert.deepEqual({ ...database.prepare("SELECT voip_push_token, native_call_capable FROM trade_mobile_devices").get() },
+    { voip_push_token: "", native_call_capable: 0 });
   assert.equal(database.prepare("SELECT status FROM trade_field_access_codes").get().status, "revoked");
   assert.equal(database.prepare("SELECT status FROM trade_field_sessions").get().status, "revoked");
   assert.notEqual(database.prepare("SELECT consumed_at FROM trade_team_invites").get().consumed_at, "");

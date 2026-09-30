@@ -10,10 +10,9 @@ import {
 } from "@/lib/trade-mobile-server";
 import { abortDeviceUploads } from "@/lib/trade-mobile-device-revocation";
 import { normaliseDeviceListQuery } from "@/lib/trade-mobile-device-list-policy.mjs";
+import { nativePushRegistration } from "@/lib/trade-push";
 
 export const runtime = "edge";
-
-const PUSH_PROVIDERS = new Set(["fcm", "apns"]);
 
 function deviceError(error: unknown) {
   const mfa = mfaErrorResponse(error);
@@ -22,6 +21,7 @@ function deviceError(error: unknown) {
   if (mobile) return adminJson({ ok: false, code: mobile.code, error: mobile.error,
     ...(mobile.minimumVersion ? { minimumVersion: mobile.minimumVersion } : {}) }, mobile.status);
   const code = error instanceof Error ? error.message : "";
+  if (code === "PUSH_INPUT_INVALID") return adminJson({ ok: false, code, error: "This phone's notification registration is invalid. Retry notification setup." }, 400);
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active installer team access was found." }, 404);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Mobile devices require team access on the installer account." }, 403);
@@ -109,9 +109,7 @@ export async function POST(request: Request) {
     const platform = cleanAdminText(body.platform, 20);
     const appVersion = cleanAdminText(body.appVersion, 40);
     const deviceName = cleanAdminText(body.deviceName, 100) || "Field device";
-    const pushProviderValue = cleanAdminText(body.pushProvider, 20);
-    const pushProvider = PUSH_PROVIDERS.has(pushProviderValue) ? pushProviderValue : "fcm";
-    const pushToken = cleanAdminText(body.pushToken, 4096);
+    const push = nativePushRegistration(body, platform);
     if (!MOBILE_CLIENT_ID_PATTERN.test(deviceId) || !MOBILE_PLATFORMS.has(platform)) {
       return adminJson({ ok: false, error: "Add a stable device ID and choose iOS or Android." }, 400);
     }
@@ -127,17 +125,21 @@ export async function POST(request: Request) {
     if (current && (current.actor_uid !== access.actorUid || current.member_id !== access.memberId)) {
       throw new Error("DEVICE_REAUTHORISATION_REQUIRED");
     }
-    await db.prepare(`INSERT INTO trade_mobile_devices
-      (id, owner_uid, actor_uid, member_id, device_id, platform, device_name, app_version, push_provider,
+    const saved = await db.prepare(`INSERT INTO trade_mobile_devices
+      (id, owner_uid, actor_uid, member_id, device_id, platform, device_name, app_version, push_provider, voip_push_token, native_call_capable,
        push_token, push_token_updated_at, status, registered_at, last_seen_at, revoked_at, revoked_by_uid, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, '', '', ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, '', '', ?)
       ON CONFLICT(owner_uid, device_id) DO UPDATE SET platform = excluded.platform,
         device_name = excluded.device_name, app_version = excluded.app_version,
         push_provider = excluded.push_provider, push_token = excluded.push_token,
+        voip_push_token = excluded.voip_push_token, native_call_capable = excluded.native_call_capable,
         push_token_updated_at = CASE WHEN excluded.push_token <> trade_mobile_devices.push_token THEN excluded.updated_at ELSE trade_mobile_devices.push_token_updated_at END,
-        last_seen_at = excluded.last_seen_at, updated_at = excluded.updated_at`)
+        last_seen_at = excluded.last_seen_at, updated_at = excluded.updated_at
+        WHERE trade_mobile_devices.status='active' AND trade_mobile_devices.actor_uid=excluded.actor_uid
+          AND trade_mobile_devices.member_id=excluded.member_id`)
       .bind(current?.id || crypto.randomUUID(), access.ownerUid, access.actorUid, access.memberId, deviceId,
-        platform, deviceName, appVersion, pushProvider, pushToken, pushToken ? now : "", now, now, now).run();
+        platform, deviceName, appVersion, push.provider, push.voipToken, Number(push.nativeCallCapable), push.token, push.token ? now : "", now, now, now).run();
+    if (!saved.meta.changes) throw new Error("DEVICE_REAUTHORISATION_REQUIRED");
     return adminJson({ ok: true, registered: true, policy: mobileAppPolicy(platform),
       ...(await devicePayload(access.ownerUid, access.actorUid, canManageTeam(access))) }, 201);
   } catch (error) { return deviceError(error); }
@@ -151,7 +153,7 @@ export async function PATCH(request: Request) {
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "The device update is invalid." }, 400); }
     const action = cleanAdminText(body.action, 40); const id = cleanAdminText(body.id, 180);
-    const current = await getD1().prepare(`SELECT id, actor_uid, member_id, status FROM trade_mobile_devices
+    const current = await getD1().prepare(`SELECT id, actor_uid, member_id, status, platform FROM trade_mobile_devices
       WHERE id = ? AND owner_uid = ?`).bind(id, access.ownerUid).first<Record<string, unknown>>();
     if (!current) throw new Error("DEVICE_NOT_FOUND");
     const ownDevice = current.actor_uid === access.actorUid;
@@ -161,7 +163,7 @@ export async function PATCH(request: Request) {
       const device = await getD1().prepare(`SELECT device_id FROM trade_mobile_devices WHERE id = ? AND owner_uid = ?`)
         .bind(id, access.ownerUid).first<Record<string, unknown>>();
       const changed = await getD1().prepare(`UPDATE trade_mobile_devices
-        SET status = 'revoked', push_token = '', push_token_updated_at = ?,
+        SET status = 'revoked', push_token = '', voip_push_token = '', native_call_capable = 0, push_token_updated_at = ?,
           revoked_at = ?, revoked_by_uid = ?, updated_at = ?
         WHERE id = ? AND owner_uid = ? AND (actor_uid = ? OR ? = 1 OR EXISTS (
           SELECT 1 FROM trade_team_members actor WHERE actor.id = ? AND actor.owner_uid = ?
@@ -187,12 +189,10 @@ export async function PATCH(request: Request) {
       if (!changed.meta.changes) throw new Error("OWNER_REQUIRED");
     } else if (action === "update_push_token") {
       if (!ownDevice || current.status !== "active") throw new Error("DEVICE_REVOKED");
-      const pushToken = cleanAdminText(body.pushToken, 4096);
-      const pushProviderValue = cleanAdminText(body.pushProvider, 20);
-      if (!PUSH_PROVIDERS.has(pushProviderValue)) return adminJson({ ok: false, error: "Choose a supported push provider." }, 400);
-      await getD1().prepare(`UPDATE trade_mobile_devices SET push_provider = ?, push_token = ?, push_token_updated_at = ?,
+      const push = nativePushRegistration(body, current.platform);
+      await getD1().prepare(`UPDATE trade_mobile_devices SET push_provider = ?, push_token = ?, voip_push_token = ?, native_call_capable = ?, push_token_updated_at = ?,
         last_seen_at = ?, updated_at = ? WHERE id = ? AND owner_uid = ? AND actor_uid = ? AND status = 'active'`)
-        .bind(pushProviderValue, pushToken, now, now, now, id, access.ownerUid, access.actorUid).run();
+        .bind(push.provider, push.token, push.voipToken, Number(push.nativeCallCapable), now, now, now, id, access.ownerUid, access.actorUid).run();
     } else return adminJson({ ok: false, error: "Unsupported device update." }, 400);
     return adminJson({ ok: true, ...(await devicePayload(access.ownerUid, access.actorUid, canManageTeam(access))) });
   } catch (error) { return deviceError(error); }

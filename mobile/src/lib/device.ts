@@ -6,10 +6,13 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
+import { disableNativeCalls, getNativeCallRegistration } from '@/lib/native-system-calls';
 
 const DEVICE_ID_KEY = 'aea-field-device-id-v1';
 const PUSH_TOKEN_KEY = 'aea-field-native-push-token-v1';
 const NOTIFICATIONS_MUTED_KEY = 'aea-field-notifications-muted-v1';
+const NOTIFICATION_PROMPT_KEY = 'aea-field-notification-prompt-v1';
+let notificationPermissionRequest: Promise<void> | undefined;
 
 export async function getDeviceId() {
   const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
@@ -33,7 +36,7 @@ export async function setNotificationsMuted(muted: boolean) {
   await SecureStore.setItemAsync(NOTIFICATIONS_MUTED_KEY, String(muted), {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
-  if (muted) await forgetPushToken();
+  if (muted) { await forgetPushToken(); await disableNativeCalls(true); }
 }
 
 export async function notificationDeviceState() {
@@ -42,6 +45,8 @@ export async function notificationDeviceState() {
 }
 
 export async function configureNotificationChannels() {
+  await Notifications.setNotificationCategoryAsync('team-messages', [{ identifier: 'open-conversation', buttonTitle: 'Open conversation', options: { opensAppToForeground: true } }]);
+  await Notifications.setNotificationCategoryAsync('team-calls', [{ identifier: 'open-call', buttonTitle: 'Open call', options: { opensAppToForeground: true } }]);
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('field-sync', {
       name: 'Field work updates',
@@ -51,7 +56,7 @@ export async function configureNotificationChannels() {
     });
     await Notifications.setNotificationChannelAsync('team-messages', {
       name: 'Team messages',
-      importance: Notifications.AndroidImportance.DEFAULT,
+      importance: Notifications.AndroidImportance.HIGH,
       sound: 'default',
     });
     await Notifications.setNotificationChannelAsync('team-calls', {
@@ -61,6 +66,18 @@ export async function configureNotificationChannels() {
       vibrationPattern: [0, 250, 250, 250],
     });
   }
+}
+
+/** Called once after approved sign-in; background sync never requests permission. */
+export function requestNotificationPermissionOnce() {
+  if (notificationPermissionRequest) return notificationPermissionRequest;
+  notificationPermissionRequest = (async () => {
+    if (!Device.isDevice || await notificationsMuted() || await SecureStore.getItemAsync(NOTIFICATION_PROMPT_KEY)) return;
+    const permission = await Notifications.getPermissionsAsync();
+    await SecureStore.setItemAsync(NOTIFICATION_PROMPT_KEY, 'true', { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+    if (permission.status === 'undetermined' && permission.canAskAgain) await getNativePushToken(true);
+  })().finally(() => { notificationPermissionRequest = undefined; });
+  return notificationPermissionRequest;
 }
 
 export async function getNativePushToken(requestPermission = false) {
@@ -101,15 +118,30 @@ export function forgetPushToken() {
   return SecureStore.deleteItemAsync(PUSH_TOKEN_KEY);
 }
 
-export async function deviceRegistration() {
-  const push = await getNativePushToken();
+export async function getRememberedPushToken() { return await SecureStore.getItemAsync(PUSH_TOKEN_KEY) || ''; }
+
+export async function deviceRegistration(options: { pushToken?: string; refreshNativeCalls?: boolean } = {}) {
+  const deviceId = await getDeviceId();
+  const permission = await notificationDeviceState();
+  const enabled = permission.physicalDevice && permission.granted && !permission.muted;
+  const push = options.pushToken === undefined ? await getNativePushToken()
+    : { token: enabled ? options.pushToken : '', provider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm' };
+  let calls = enabled && !await notificationsMuted() ? await getNativeCallRegistration(options.refreshNativeCalls !== false)
+    : { voipPushToken: '', nativeCallCapable: false };
+  const current = await notificationDeviceState();
+  if (!current.granted || current.muted || !current.physicalDevice) {
+    await disableNativeCalls(true);
+    push.token = '';
+    calls = { voipPushToken: '', nativeCallCapable: false };
+  }
   return {
-    deviceId: await getDeviceId(),
+    deviceId,
     platform: MOBILE_PLATFORM,
     appVersion: APP_VERSION,
     deviceName: getDeviceName(),
     isPhysicalDevice: Device.isDevice,
     pushToken: push.token,
     pushProvider: push.provider,
+    ...calls,
   };
 }

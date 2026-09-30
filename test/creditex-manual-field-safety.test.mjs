@@ -162,6 +162,9 @@ function setupDatabase() {
     );
   `);
   database.exec(migration);
+  database.exec(fs.readFileSync(new URL("../drizzle/0027_handy_the_anarchist.sql", import.meta.url), "utf8")
+    .split("CREATE TABLE `trade_mobile_push_outbox`")[0]);
+  database.exec(fs.readFileSync(new URL("../drizzle/0221_native_call_devices.sql", import.meta.url), "utf8"));
   const activity = GOVERNMENT_ACTIVITY_TEMPLATES.find(
     (candidate) => candidate.programCode === "VEU",
   );
@@ -474,6 +477,8 @@ test("manual-device sign-out is owner-scoped and idempotent", async () => {
       'android', 'Current handset', '1.0.0', 1, 'active', ?, ?, '', ?
     )`)
     .run(now, now, now);
+  database.prepare("UPDATE compliance_manual_field_devices SET voip_push_token = ?, native_call_capable = 1 WHERE id = 'device-row-1'")
+    .run("ab".repeat(32));
   const revoked = await revokeManualFieldDevice(
     d1,
     currentTester,
@@ -484,6 +489,8 @@ test("manual-device sign-out is owner-scoped and idempotent", async () => {
     reused: false,
     mode: "creditex_manual",
   });
+  assert.deepEqual({ ...database.prepare("SELECT voip_push_token, native_call_capable FROM compliance_manual_field_devices WHERE id = 'device-row-1'").get() },
+    { voip_push_token: "", native_call_capable: 0 });
   const replay = await revokeManualFieldDevice(
     d1,
     currentTester,

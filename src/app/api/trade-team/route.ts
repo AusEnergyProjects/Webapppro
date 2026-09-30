@@ -966,7 +966,7 @@ export async function PATCH(request: Request) {
         ] : []),
         ...(lifecycleChanged && status === "suspended" ? [
           db.prepare(`UPDATE trade_mobile_devices
-            SET status = 'revoked', push_token = '', push_token_updated_at = ?, revoked_at = ?,
+            SET status = 'revoked', push_token = '', voip_push_token = '', native_call_capable = 0, push_token_updated_at = ?, revoked_at = ?,
               revoked_by_uid = ?, updated_at = ?
             WHERE owner_uid = ? AND member_id = ? AND status = 'active'
               AND EXISTS (SELECT 1 FROM trade_team_members member

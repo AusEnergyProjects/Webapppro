@@ -57,10 +57,14 @@ test("push-token refresh updates both authorised field lanes", () => {
   );
   assert.ok(listenerStart >= 0 && listenerEnd > listenerStart);
   const listener = provider.slice(listenerStart, listenerEnd);
-  assert.match(listener, /resolveFieldAccessModes\(\)/);
-  assert.match(listener, /Promise\.allSettled\(modes\.map/);
-  assert.match(listener, /\/api\/creditex\/manual-field\/devices/);
-  assert.match(listener, /\/api\/trade-team\/devices/);
+  assert.match(listener, /registerNotificationDevice\(\{ pushToken, refreshNativeCalls: false \}\)/);
+  const registrationStart = provider.indexOf('const registerNotificationDevice = useCallback');
+  assert.ok(registrationStart >= 0 && registrationStart < listenerStart);
+  const registration = provider.slice(registrationStart, provider.indexOf('useEffect(', registrationStart));
+  assert.match(registration, /resolveFieldAccessModes\(\)/);
+  assert.match(registration, /Promise\.allSettled\(modes\.map/);
+  assert.match(registration, /\/api\/creditex\/manual-field\/devices/);
+  assert.match(registration, /\/api\/trade-team\/devices/);
 });
 
 test("manual device revocation is a protected bounded endpoint", () => {

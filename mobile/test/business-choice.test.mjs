@@ -51,8 +51,8 @@ test('corrupt or mismatched stored principal cannot unlock another cache', async
 });
 
 function apiHarness() {
-  const state = { session: null, field: '', requests: [], revision: 0, beforeToken: null };
-  const user = { uid: 'alex', getIdToken: async () => { state.beforeToken?.(); return 'firebase-token'; } };
+  const state = { session: null, field: '', requests: [], revision: 0, beforeToken: null, tokenRefreshArguments: [] };
+  const user = { uid: 'alex', getIdToken: async (...args) => { state.tokenRefreshArguments.push(args); state.beforeToken?.(); return 'firebase-token'; } };
   const dependencies = {
     'expo-crypto': {}, 'expo/fetch': {}, '@/lib/config': { API_BASE_URL: 'https://tlink.test', APP_VERSION: '1.0.2', MOBILE_PLATFORM: 'android' },
     '@/lib/device': { getDeviceId: async () => 'phone-1' }, '@/lib/auth': { firebaseAuth: { currentUser: user } },
@@ -82,6 +82,14 @@ test('API cannot override active business and PIN sessions remain bound to the t
   await h.apiRequest('/api/trade-team', { headers: { 'X-TLink-Business': 'business-b' } });
   assert.equal(h.state.requests[1].init.headers.has('X-TLink-Business'), false);
   assert.equal(h.state.requests[1].init.headers.get('Authorization'), 'TLinkField pin-token');
+});
+
+test('call polling and signals use Firebase automatic expiry refresh instead of forcing a network refresh per request', async () => {
+  const h = apiHarness(); h.state.session = { business: choice('business-a') };
+  await h.apiRequest('/api/trade-team-calls');
+  await h.apiRequest('/api/trade-team-calls', { method: 'POST', body: JSON.stringify({ action: 'signal' }) });
+  assert.deepEqual(h.state.tokenRefreshArguments, [[], []]);
+  assert.equal(h.state.requests[1].init.headers.get('Authorization'), 'Bearer firebase-token');
 });
 
 test('compliance-only fallback has a distinct cache and no trade selector header', async () => {

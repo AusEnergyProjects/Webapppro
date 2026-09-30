@@ -15,6 +15,17 @@ export type TradePushPayload = {
   expiresAt: string;
 };
 
+export function nativePushRegistration(input: { pushProvider?: unknown; pushToken?: unknown; voipPushToken?: unknown; nativeCallCapable?: unknown }, platform: unknown) {
+  if (platform !== 'ios' && platform !== 'android') throw new Error('PUSH_INPUT_INVALID');
+  const provider = platform === 'ios' ? 'apns' : 'fcm';
+  if (input.pushProvider !== undefined && input.pushProvider !== provider) throw new Error('PUSH_INPUT_INVALID');
+  const token = input.pushToken ?? '', voipToken = input.voipPushToken ?? '', nativeCallCapable = input.nativeCallCapable ?? false;
+  if (typeof token !== 'string' || typeof voipToken !== 'string' || typeof nativeCallCapable !== 'boolean'
+    || (token && !(provider === 'apns' ? /^(?:[A-Fa-f0-9]{2}){16,2048}$/ : /^[A-Za-z0-9_:.-]{16,4096}$/).test(token))
+    || (voipToken && (platform !== 'ios' || !nativeCallCapable || !/^(?:[A-Fa-f0-9]{2}){16,2048}$/.test(voipToken)))) throw new Error('PUSH_INPUT_INVALID');
+  return { provider, token, voipToken, nativeCallCapable };
+}
+
 export function pushRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('PUSH_INPUT_INVALID');
   return value as Record<string, unknown>;

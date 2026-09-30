@@ -1,15 +1,62 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import type { ComponentProps, ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, View, type KeyboardEvent, type StyleProp, type ViewStyle } from 'react-native';
 
 import { colours, radius } from '@/lib/theme';
 
 export const customerColour = '#c7a8ff';
-export function MessageIconButton({ icon, label, onPress, disabled, colour = colours.green }: {
-  icon: ComponentProps<typeof MaterialCommunityIcons>['name']; label: string; onPress: () => void; disabled?: boolean; colour?: string;
+
+/** The outer frame stays unchanged by the inset, including under Android adjustResize. */
+export function MessageKeyboardView({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const viewport = useRef<View>(null);
+  const measure = useRef(() => {});
+  const [bottomInset, setBottomInset] = useState(0);
+  useEffect(() => {
+    let active = true;
+    let generation = 0;
+    let frame: number | undefined;
+    let keyboard = Keyboard.metrics();
+    const update = () => {
+      const ticket = ++generation;
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        viewport.current?.measureInWindow((_x, y, _width, height) => {
+          if (!active || ticket !== generation || height <= 0) return;
+          // Measure in the keyboard's window coordinates, not a guessed header/tab offset.
+          setBottomInset(keyboard && keyboard.height > 0
+            ? Math.min(height, Math.max(0, y + height - keyboard.screenY)) : 0);
+        });
+      });
+    };
+    const changed = (event: KeyboardEvent) => { keyboard = event.endCoordinates; update(); };
+    const hidden = () => { keyboard = undefined; update(); };
+    measure.current = update;
+    const subscriptions = [
+      Keyboard.addListener('keyboardWillChangeFrame', changed),
+      Keyboard.addListener('keyboardDidShow', changed),
+      Keyboard.addListener('keyboardDidChangeFrame', changed),
+      Keyboard.addListener('keyboardWillHide', hidden),
+      Keyboard.addListener('keyboardDidHide', hidden),
+    ];
+    update();
+    return () => {
+      active = false; generation++;
+      measure.current = () => {};
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      subscriptions.forEach(subscription => subscription.remove());
+    };
+  }, []);
+  return <View ref={viewport} collapsable={false} onLayout={() => measure.current()} style={messageStyles.keyboardViewport}>
+    <View style={[messageStyles.keyboardViewport, style, { marginBottom: bottomInset }]}>{children}</View>
+  </View>;
+}
+
+export function MessageIconButton({ icon, label, onPress, disabled, colour = colours.green, surface = false }: {
+  icon: ComponentProps<typeof MaterialCommunityIcons>['name']; label: string; onPress: () => void; disabled?: boolean; colour?: string; surface?: boolean;
 }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress}
-    style={({ pressed }) => [messageStyles.iconButton, pressed && { opacity: 0.65 }, disabled && { opacity: 0.35 }]}>
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: Boolean(disabled) }} disabled={disabled} onPress={onPress}
+    style={({ pressed }) => [messageStyles.iconButton, surface && messageStyles.iconSurface, pressed && { opacity: 0.65 }, disabled && { opacity: 0.35 }]}>
     <MaterialCommunityIcons name={icon} size={24} color={colour} />
   </Pressable>;
 }
@@ -23,6 +70,7 @@ export function MessageNotice({ children, error = false }: { children: ReactNode
 }
 export function MessageLoading() { return <ActivityIndicator color={colours.green} style={{ padding: 24 }} />; }
 export const messageStyles = StyleSheet.create({
+  keyboardViewport: { flex: 1, minHeight: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   grow: { flex: 1, minWidth: 0 },
   title: { color: colours.ink, fontSize: 18, fontWeight: '700' },
@@ -31,6 +79,7 @@ export const messageStyles = StyleSheet.create({
   label: { color: colours.green, fontSize: 12, fontWeight: '700' },
   input: { minHeight: 48, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 12, color: colours.ink, fontSize: 16, backgroundColor: colours.surface },
   iconButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  iconSurface: { backgroundColor: colours.mintStrong, borderRadius: 16, borderWidth: 1, borderColor: colours.line },
   avatar: { width: 46, height: 46, borderRadius: 16, backgroundColor: colours.mintStrong, justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: colours.green, fontWeight: '700', fontSize: 18 },
   notice: { color: colours.muted, backgroundColor: colours.surfaceRaised, borderRadius: radius.sm, padding: 12, fontSize: 14, lineHeight: 20 },

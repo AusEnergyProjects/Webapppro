@@ -2777,46 +2777,61 @@ html[data-tlink-colour-mode=night] .tlink-install-tag { color: #d1b9e0; }
 html[data-tlink-colour-mode=night] .tlink-install-secondary { color: #ecf5f1; background: #18323a; border-color: #3f5960; }
 
 /* Internal team calls, shared by the protected TLink workspaces. */
+.tlink-call-buttons, .tlink-call-dock { --tlink-call-mint: #d8f5e6; --tlink-call-navy: #143441; --tlink-call-green: #278665; --tlink-call-end: #163441; --tlink-call-end-ink: #f0fbf6; }
 .tlink-call-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
-.tlink-call-buttons button, .tlink-call-dock button { font: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 10px 14px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 10px; background: var(--trade-surface, #fff); color: var(--trade-ink, #163e37); cursor: pointer; touch-action: manipulation; }
-.tlink-call-buttons button:disabled, .tlink-call-dock button:disabled { opacity: .55; cursor: default; }
-.tlink-call-dock { position: fixed; z-index: 1100; right: 22px; bottom: max(22px, env(safe-area-inset-bottom)); box-sizing: border-box; width: min(580px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 18px; background: var(--trade-surface, #fff); color: var(--trade-ink, #163e37); box-shadow: 0 18px 70px #0004; padding: 16px; font-family: inherit; line-height: 1.45; }
-.tlink-call-dock header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.tlink-call-buttons button, .tlink-call-dock button, .tlink-call-dock .tlink-call-direct-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-sizing: border-box; font: inherit; font-size: 14px; font-weight: 600; line-height: 1.25; min-height: 44px; min-width: 44px; padding: 11px 15px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 999px; background: var(--trade-surface-soft, #f1f7f4); color: var(--trade-ink, #163441); cursor: pointer; touch-action: manipulation; text-decoration: none; transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.tlink-call-icon { flex: 0 0 20px; order: -1; width: 20px; height: 20px; }
+.tlink-call-buttons .tlink-call-voice, .tlink-call-dock .tlink-call-answer, .tlink-call-dock .tlink-call-direct-link { background: var(--tlink-call-mint); border-color: color-mix(in srgb, var(--tlink-call-green) 30%, var(--tlink-call-mint)); color: var(--tlink-call-navy); }
+.tlink-call-buttons .tlink-call-video { border-color: color-mix(in srgb, var(--tlink-call-green) 55%, var(--trade-line, #c9ddd8)); background: var(--trade-surface, #fff); }
+.tlink-call-buttons .tlink-call-video .tlink-call-icon { color: var(--trade-accent-readable, #147857); }
+.tlink-call-buttons button:disabled, .tlink-call-dock button:disabled { background: var(--trade-surface-soft, #edf2f0); border-color: var(--trade-line, #c9ddd8); color: var(--trade-muted, #60736c); cursor: not-allowed; box-shadow: none; }
+.tlink-call-buttons button:disabled .tlink-call-icon { color: inherit; }
+.tlink-call-dock { position: fixed; z-index: 1100; right: 22px; bottom: max(22px, env(safe-area-inset-bottom)); box-sizing: border-box; width: min(580px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 24px; background: var(--trade-surface, #fff); color: var(--trade-ink, #163441); box-shadow: 0 18px 70px #071a2b38; padding: 18px; font-family: inherit; line-height: 1.45; }
+.tlink-call-dock header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .tlink-call-dock header > div { min-width: 0; }
+.tlink-call-dock header > button { flex-shrink: 0; }
 .tlink-call-dock strong { font-size: 16px; overflow-wrap: anywhere; }
 .tlink-call-dock header span { display: block; font-size: 13px; color: var(--trade-muted, #60736c); margin-top: 3px; }
-.tlink-call-dock button:focus-visible, .tlink-call-buttons button:focus-visible { outline: 3px solid var(--trade-accent-readable, #087f68); outline-offset: 3px; }
+.tlink-call-dock button:focus-visible, .tlink-call-buttons button:focus-visible, .tlink-call-dock .tlink-call-direct-link:focus-visible { outline: 3px solid var(--trade-accent-readable, #087f68); outline-offset: 3px; }
 .tlink-call-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 55dvh; overflow: auto; }
-.tlink-call-tile { position: relative; aspect-ratio: 16/10; background: #23344c; border-radius: 10px; overflow: hidden; display: grid; place-items: center; }
+.tlink-call-tile { position: relative; aspect-ratio: 16/10; background: var(--tlink-call-navy); border-radius: 16px; overflow: hidden; display: grid; place-items: center; }
 .tlink-call-tile video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
 .tlink-call-tile .tlink-call-hidden-video { opacity: 0; }
-.tlink-call-initial { font-size: 36px; color: #e1e9fb; }
-.tlink-call-caption { position: absolute; bottom: 7px; left: 8px; right: 8px; background: #0b152bd9; color: #fff; border-radius: 5px; padding: 3px 6px; font-size: 12px; overflow-wrap: anywhere; }
+.tlink-call-initial { font-size: 36px; color: var(--tlink-call-mint); }
+.tlink-call-caption { position: absolute; bottom: 8px; left: 8px; right: 8px; background: #0c2334df; color: #f0fbf6; border-radius: 8px; padding: 4px 8px; font-size: 12px; overflow-wrap: anywhere; }
 .tlink-call-play { position: absolute; }
-.tlink-call-controls { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.tlink-call-dock .tlink-call-hangup { background: #b5283d; border-color: #b5283d; color: #fff; }
-.tlink-call-dock .tlink-call-answer { background: #087859; border-color: #087859; color: #fff; }
-.tlink-call-dock .tlink-call-direct-link { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 44px; padding: 10px 14px; border-radius: 10px; background: #087859; color: #fff; font-size: 14px; font-weight: 600; text-decoration: none; }
-.tlink-call-dock .tlink-call-direct-link:focus-visible { outline: 3px solid var(--trade-accent-readable, #087f68); outline-offset: 3px; }
+.tlink-call-controls { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.tlink-call-dock .tlink-call-controls button[aria-pressed="true"] { background: var(--tlink-call-mint); border-color: var(--tlink-call-green); color: var(--tlink-call-navy); box-shadow: inset 0 0 0 1px var(--tlink-call-green); }
+.tlink-call-dock .tlink-call-hangup { background: var(--tlink-call-end); border-color: color-mix(in srgb, var(--tlink-call-end) 60%, #a2c5c4); color: var(--tlink-call-end-ink); }
 .tlink-call-minimized { width: min(420px, calc(100vw - 32px)); }
 .tlink-call-dock p { margin: 8px 0; font-size: 14px; }
 .tlink-call-dock .tlink-call-help { color: var(--trade-muted, #60736c); font-size: 13px; }
-.tlink-call-permission-help { margin-top: 12px; padding: 12px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 10px; font-size: 13px; }
+.tlink-call-permission-help { margin-top: 12px; padding: 12px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 14px; font-size: 13px; }
 .tlink-call-permission-help summary { cursor: pointer; font-weight: 600; }
 .tlink-call-permission-help summary:focus-visible { outline: 3px solid var(--trade-accent-readable, #087f68); outline-offset: 3px; }
 .tlink-call-permission-help ol { padding-left: 20px; margin: 10px 0 0; color: var(--trade-muted, #60736c); }
 .tlink-call-permission-help li + li { margin-top: 8px; }
-html[data-tlink-colour-mode="night"] .tlink-call-dock {
+html[data-tlink-colour-mode="night"] :is(.tlink-call-dock,.tlink-call-buttons) {
   --trade-surface: #102027;
+  --trade-surface-soft: #162a31;
   --trade-ink: #e4efed;
   --trade-muted: #a9c0bd;
   --trade-line: #345057;
   --trade-accent-readable: #7ce5c5;
+  --tlink-call-mint: #bfead8;
+}
+@media (hover: hover) {
+  .tlink-call-buttons button:not(:disabled):hover, .tlink-call-dock button:not(:disabled):hover, .tlink-call-dock .tlink-call-direct-link:hover { border-color: var(--tlink-call-green); box-shadow: 0 2px 8px #0d4e391a; background: color-mix(in srgb, var(--trade-surface-soft, #f1f7f4) 82%, var(--tlink-call-mint)); }
+  .tlink-call-buttons .tlink-call-voice:not(:disabled):hover, .tlink-call-dock .tlink-call-answer:not(:disabled):hover, .tlink-call-dock .tlink-call-direct-link:hover, .tlink-call-dock .tlink-call-controls button[aria-pressed="true"]:not(:disabled):hover { background: color-mix(in srgb, var(--tlink-call-mint) 90%, var(--tlink-call-green)); }
+  .tlink-call-dock .tlink-call-hangup:not(:disabled):hover { background: color-mix(in srgb, var(--tlink-call-end) 82%, #47706d); border-color: #7ba6a0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tlink-call-buttons button, .tlink-call-dock button, .tlink-call-dock .tlink-call-direct-link { transition: none; }
 }
 @media(max-width: 560px) {
-  .tlink-call-dock { right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); width: calc(100vw - 16px); padding: 12px; }
+  .tlink-call-dock { right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); width: calc(100vw - 16px); padding: 14px; border-radius: 20px; }
   .tlink-call-grid { max-height: 40dvh; }
-  .tlink-call-buttons button { padding: 10px; }
+  .tlink-call-buttons button { padding: 11px 13px; }
   .tlink-call-dock .tlink-call-controls button { flex: 1 1 auto; }
 }
 

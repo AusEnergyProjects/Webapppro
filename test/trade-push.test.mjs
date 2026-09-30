@@ -40,19 +40,19 @@ function fixture() {
     INSERT INTO trade_team_members VALUES('owner','business-a','owner-uid','active'),('jane','business-a','jane-uid','active'),('john','business-a','john-uid','active'),('foreign','business-b','foreign-uid','active');
     CREATE TABLE trade_field_sessions(id TEXT PRIMARY KEY,owner_uid TEXT,team_member_id TEXT,status TEXT,expires_at TEXT,device_id TEXT);
     INSERT INTO trade_field_sessions VALUES('field-john','business-a','john','active','2099-01-01','mobile-john');
-    CREATE TABLE trade_mobile_devices(id TEXT PRIMARY KEY,owner_uid TEXT,member_id TEXT,device_id TEXT,actor_uid TEXT,status TEXT,platform TEXT DEFAULT 'android',push_provider TEXT DEFAULT 'fcm',push_token TEXT DEFAULT '',push_token_updated_at TEXT DEFAULT '',updated_at TEXT DEFAULT '2026-01-01');
+    CREATE TABLE trade_mobile_devices(id TEXT PRIMARY KEY,owner_uid TEXT,member_id TEXT,device_id TEXT,actor_uid TEXT,status TEXT,platform TEXT DEFAULT 'android',push_provider TEXT DEFAULT 'fcm',push_token TEXT DEFAULT '',push_token_updated_at TEXT DEFAULT '',updated_at TEXT DEFAULT '2026-01-01',voip_push_token TEXT NOT NULL DEFAULT '',native_call_capable INTEGER NOT NULL DEFAULT 0);
     INSERT INTO trade_mobile_devices(id,owner_uid,member_id,device_id,actor_uid,status) VALUES('base-field-john','business-a','john','mobile-john','field-member:john','active');`);
   for (const migration of ['0214_trade_messages','0216_trade_team_calls','0217_trade_web_push','0219_trade_team_presence']) sqlite.exec(read(`../drizzle/${migration}.sql`).replaceAll('--> statement-breakpoint',''));
   const now = new Date().toISOString();
   sqlite.prepare(`INSERT INTO trade_message_threads(id,owner_uid,kind,subject,created_by_member_id,request_id,creation_hash,created_at,updated_at) VALUES('thread-a','business-a','group','Private team','owner','request-create','hash',?,?)`).run(now,now);
   for(const member of ['owner','jane','john']) sqlite.prepare("INSERT INTO trade_message_participants(thread_id,owner_uid,member_id) VALUES('thread-a','business-a',?)").run(member);
-  const sends = [], nativeSends = [], state = {configured:true,providerStatus:'accepted',nativeConfigured:false,nativeAuthReady:true,nativeProviderStatus:'accepted',beforeNativeSend:()=>{},beforeRun:()=>{},beforeRead:()=>{}};
+  const sends = [], nativeSends = [], state = {configured:true,providerStatus:'accepted',nativeConfigured:false,apnsConfigured:false,nativeAuthReady:true,nativeProviderStatus:'accepted',beforeNativeSend:()=>{},beforeRun:()=>{},beforeRead:()=>{}};
   const statement = (sql,values=[]) => ({bind:(...params)=>statement(sql,params),first:async()=>{state.beforeRead(sql);return sqlite.prepare(sql).get(...values)||null;},
     all:async()=>({results:sqlite.prepare(sql).all(...values)}),run:async()=>{state.beforeRun(sql);return {meta:{changes:Number(sqlite.prepare(sql).run(...values).changes)}};}});
   const db = {prepare:statement};
   const server = load('../src/lib/trade-push-server.ts',{'../../db':{getD1:()=>db},'./trade-message-media-access':access,'./trade-access-server':account,'./trade-push':pure,'./trade-team-presence':presence,
     './trade-push-provider':{tradePushCredentials:()=>state.configured?credentials:null,sendTradePush:async(subscription,payload)=>{sends.push({subscription,payload});return state.providerStatus;}},
-    './trade-native-push-provider':{tradeNativePushCredentials:()=>state.nativeConfigured?{clientEmail:'synthetic',privateKey:'synthetic'}:null,authorizeTradeNativePush:async()=>state.nativeAuthReady?{accessToken:'synthetic',expiresAt:Date.now()+3600000}:null,sendTradeNativePush:async(token,payload)=>{nativeSends.push({token,payload});await state.beforeNativeSend();return state.nativeProviderStatus;}}});
+    './trade-native-push-provider':{tradeApnsCredentials:()=>state.apnsConfigured?{}:null,authorizeTradeApns:async()=>state.nativeAuthReady?{token:'synthetic',expiresAt:Date.now()+3600000}:null,sendTradeApns:async(token,payload,_auth,_fetch,options)=>{nativeSends.push({token,payload,provider:'apns',options});await state.beforeNativeSend();return state.nativeProviderStatus;},tradeNativePushCredentials:()=>state.nativeConfigured?{clientEmail:'synthetic',privateKey:'synthetic'}:null,authorizeTradeNativePush:async()=>state.nativeAuthReady?{accessToken:'synthetic',expiresAt:Date.now()+3600000}:null,sendTradeNativePush:async(token,payload,_auth,_fetch,options)=>{nativeSends.push({token,payload,provider:'fcm',options});await state.beforeNativeSend();return state.nativeProviderStatus;}}});
   const subscribe = (actor,suffix=actor.memberId,options={}) => server.subscribeTradePush(actor,{subscription:browserSubscription(suffix),messages:true,calls:true,...options},db);
   const message = (id='message-1',ageMs=0) => sqlite.prepare(`INSERT INTO trade_internal_messages(id,owner_uid,thread_id,sequence,actor_member_id,actor_name,body,request_id,created_at)
     VALUES(?,'business-a','thread-a',(SELECT COUNT(*)+1 FROM trade_internal_messages),'owner','Sensitive name','Private customer address',?,?)`).run(id,id,new Date(Date.now()-ageMs).toISOString());
@@ -65,7 +65,7 @@ function fixture() {
     const id=actor.fieldSessionId?'base-field-john':`native-${suffix}`,deviceId=actor.fieldSessionId?'mobile-john':`native-device-${suffix}`,token=`synthetic_android_token_${suffix}`;
     sqlite.prepare(`INSERT OR REPLACE INTO trade_mobile_devices(id,owner_uid,member_id,device_id,actor_uid,status,platform,push_provider,push_token,updated_at) VALUES(?,?,?,?,?,'active',?,?,?,?)`)
       .run(id,actor.ownerUid,actor.memberId,options.deviceId||deviceId,actor.actorUid,options.platform||'android',options.provider||'fcm',options.token??token,options.updatedAt||new Date().toISOString());
-    return {id,deviceId,token};
+    return {id,deviceId,token:options.token??token};
   };
   return {sqlite,db,server,subscribe,native,message,call,sends,nativeSends,state,close:()=>sqlite.close()};
 }
@@ -306,7 +306,7 @@ test('native fanout rechecks recipient permissions and presence both at claim an
     const f=fixture();try{
       f.state.nativeConfigured=true;const recipient=f.native(jane);f.message();f.call();
       const mutate=sql=>{
-        const relevant=stage==='claim'?sql.startsWith('INSERT OR IGNORE INTO trade_push_deliveries'):sql.startsWith('SELECT d.id,d.owner_uid,d.member_id,d.push_token FROM trade_mobile_devices d WHERE d.id=');
+        const relevant=stage==='claim'?sql.startsWith('INSERT OR IGNORE INTO trade_push_deliveries'):sql.includes('FROM trade_mobile_devices d WHERE d.id=') && sql.startsWith('SELECT');
         if(!relevant)return;
         if(change==='revoke')f.sqlite.exec("UPDATE trade_team_members SET status='suspended' WHERE id='jane'");
         if(change==='busy')f.sqlite.exec("INSERT OR REPLACE INTO trade_team_presence VALUES('business-a','jane','busy','2026-09-29')");
@@ -359,4 +359,76 @@ test('one native device failure still waits for and records every other device d
     assert.equal(result.failed,1);assert.equal(result.accepted,1);assert.equal(finished,true);
     assert.equal(f.sqlite.prepare("SELECT COUNT(*) count FROM trade_push_deliveries WHERE status='accepted'").get().count,1);
   }finally{f.close();}
+});
+
+test('iOS messages and owner recipients use APNs without requiring Android credentials',async()=>{
+ const f=fixture();try{
+  f.state.configured=false;f.state.apnsConfigured=true;
+  const recipient=f.native(owner,'owner-ios',{platform:'ios',provider:'apns',token:'ab'.repeat(32)});
+  f.native(jane,'sender-ios',{platform:'ios',provider:'apns',token:'cd'.repeat(32)});
+  f.message();f.sqlite.exec("UPDATE trade_internal_messages SET actor_member_id='jane' WHERE id='message-1'");
+  assert.equal((await f.server.notifyTeamMessage(jane,'thread-a','message-1',f.db)).accepted,1);
+  assert.equal(f.nativeSends[0].token,recipient.token);assert.equal(f.nativeSends[0].provider,'apns');
+  assert.equal((await f.server.notifyTeamMessage(jane,'thread-a','message-1',f.db)).attempted,0);
+  assert.equal(f.nativeSends.length,1);
+ }finally{f.close();}
+});
+
+test('unconfigured Apple delivery is explicit and does not consume the future delivery claim',async()=>{
+ const f=fixture();try{
+  f.state.configured=false;
+  f.native(jane,'ios',{platform:'ios',provider:'apns',token:'ab'.repeat(32)});f.message();
+  assert.deepEqual(await f.server.notifyTeamMessage(owner,'thread-a','message-1',f.db),{attempted:0,accepted:0,failed:1,skipped:true});
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_push_deliveries').get().n,0);
+  f.state.apnsConfigured=true;
+  assert.equal((await f.server.notifyTeamMessage(owner,'thread-a','message-1',f.db)).accepted,1);
+ }finally{f.close();}
+});
+
+test('VoIP-capable iPhones receive one call push with their separate token, while messages still use the alert token',async()=>{
+ const f=fixture();try{
+  f.state.apnsConfigured=true;
+  const device=f.native(jane,'ios',{platform:'ios',provider:'apns',token:'ab'.repeat(32)});
+  f.sqlite.prepare('UPDATE trade_mobile_devices SET native_call_capable=1,voip_push_token=? WHERE id=?').run('cd'.repeat(32),device.id);
+  f.call();f.message();
+  assert.equal((await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db)).accepted,1);
+  assert.equal(f.nativeSends[0].token,'cd'.repeat(32));assert.equal(f.nativeSends[0].options.voip,true);
+  assert.equal((await f.server.notifyTeamMessage(owner,'thread-a','message-1',f.db)).accepted,1);
+  assert.equal(f.nativeSends[1].token,device.token);assert.equal(f.nativeSends[1].options.voip,false);
+ }finally{f.close();}
+});
+
+test('call cancellation is authorized, bounded, once per current native device and uses regular Apple tokens',async()=>{
+ const f=fixture();try{
+  f.state.apnsConfigured=true;f.state.nativeConfigured=true;
+  const ios=f.native(jane,'ios',{platform:'ios',provider:'apns',token:'ab'.repeat(32)});f.native(john);
+  f.sqlite.exec('UPDATE trade_mobile_devices SET native_call_capable=1');
+  f.call();const call={id:'call-1',threadId:'thread-a'};
+  assert.equal((await f.server.notifyTeamCallEnded(owner,call,f.db)).attempted,0);
+  f.sqlite.prepare("UPDATE trade_team_calls SET status='ended',ended_at=?").run(new Date().toISOString());
+  f.sqlite.exec("INSERT INTO trade_team_presence VALUES('business-a','jane','busy','2026-09-29')");
+  assert.equal((await f.server.notifyTeamCallEnded(foreign,call,f.db)).attempted,0);
+  assert.equal((await f.server.notifyTeamCallEnded(jane,call,f.db)).attempted,0,'thread membership alone cannot issue cancellation');
+  assert.equal((await f.server.notifyTeamCallEnded(owner,call,f.db)).accepted,2);
+  assert.equal(f.nativeSends.find(send=>send.provider==='apns').token,ios.token);
+  assert.ok(f.nativeSends.every(send=>send.options.ended));
+  assert.equal((await f.server.notifyTeamCallEnded(owner,call,f.db)).attempted,0);
+ }finally{f.close();}
+});
+
+test('native settings expose only own registration and provider readiness, never tokens',async()=>{
+ const f=fixture();try{
+  f.state.apnsConfigured=true;const device=f.native(jane,'ios',{platform:'ios',provider:'apns',token:'ab'.repeat(32)});
+  assert.deepEqual(await f.server.tradeNativePushSettings(jane,device.deviceId,f.db),{native:{provider:'apns',configured:true,registered:true}});
+  assert.equal((await f.server.tradeNativePushSettings(owner,device.deviceId,f.db)).native.registered,false);
+  f.sqlite.exec("UPDATE trade_team_members SET status='suspended' WHERE id='jane'");
+  await assert.rejects(f.server.tradeNativePushSettings(jane,device.deviceId,f.db),/PUSH_ACCESS_REQUIRED/);
+ }finally{f.close();}
+});
+
+test('native registration accepts only matching provider tokens and explicit native capability',()=>{
+ assert.deepEqual(pure.nativePushRegistration({},'ios'),{provider:'apns',token:'',voipToken:'',nativeCallCapable:false});
+ assert.equal(pure.nativePushRegistration({pushToken:'ab'.repeat(32),voipPushToken:'cd'.repeat(32),nativeCallCapable:true},'ios').nativeCallCapable,true);
+ for(const input of [{pushProvider:'fcm'},{pushToken:'https://evil.test'},{nativeCallCapable:'true'},{voipPushToken:'ab'.repeat(32)}])assert.throws(()=>pure.nativePushRegistration(input,'ios'),/PUSH_INPUT_INVALID/);
+ assert.throws(()=>pure.nativePushRegistration({voipPushToken:'ab'.repeat(32),nativeCallCapable:true},'android'),/PUSH_INPUT_INVALID/);
 });

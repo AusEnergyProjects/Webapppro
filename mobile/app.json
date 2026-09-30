@@ -2,7 +2,7 @@
   "expo": {
     "name": "TLink",
     "slug": "aea-field",
-    "version": "1.0.2",
+    "version": "1.1.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -91,6 +91,7 @@
       "expo-background-task",
       "expo-image",
       "expo-web-browser",
+      "./plugins/with-tlink-calls",
       [
         "expo-audio",
         {

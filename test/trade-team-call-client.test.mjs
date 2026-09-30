@@ -15,7 +15,7 @@ function fixture(memberId='a') {
   const client=new TeamCallConnections({memberId,sessionId:`session-${memberId}`,local,iceServers:[{urls:'turn:example.test'}],
     send:async(target,type,payload)=>sent.push({target,type,payload}),changed:value=>changes.push(value),failed:message=>failures.push(message),
     createPeer:configuration=>{const pc={configuration,connectionState:'new',signalingState:'stable',tracks:[],candidates:[],closed:false,
-      senders:[],addTrack(track){this.tracks.push(track);this.senders.push({track,async replaceTrack(next){this.track=next;}});},getSenders(){return this.senders;},async createOffer(){return{type:'offer',sdp:'v=0 offer'};},async createAnswer(){return{type:'answer',sdp:'v=0 answer'};},
+      senders:[],addTrack(track){this.tracks.push(track);this.senders.push({track,async replaceTrack(next){this.track=next;}});},getSenders(){return this.senders;},async createOffer(options){this.offerOptions=options;return{type:'offer',sdp:'v=0 offer'};},async createAnswer(){return{type:'answer',sdp:'v=0 answer'};},
       async setLocalDescription(description){this.localDescription=description;this.signalingState=description.type==='offer'?'have-local-offer':'stable';},
       async setRemoteDescription(description){this.remoteDescription=description;this.signalingState=description.type==='offer'?'have-remote-offer':'stable';},
       async addIceCandidate(candidate){this.candidates.push(candidate);},close(){this.closed=true;this.connectionState='closed';}};connections.push(pc);return pc;}});
@@ -34,6 +34,12 @@ test('ICE arriving before the offer is queued until the remote description and a
   const f=fixture('b');await f.client.sync(people);await f.client.receive(signal());assert.equal(f.connections[0].candidates.length,0);
   await f.client.receive(signal({type:'offer',payload:{type:'offer',sdp:'v=0 offer'}}));
   assert.equal(f.connections[0].candidates.length,1);assert.equal(f.sent.length,1);assert.equal(f.sent[0].type,'answer');f.client.close();
+});
+
+test('a voice-only browser offer still accepts video from the answering native teammate',async()=>{
+  const f=fixture();f.local.removeTrack(f.local.getVideoTracks()[0]);await f.client.sync(people);
+  assert.deepEqual(f.connections[0].tracks.map(track=>track.kind),['audio']);
+  assert.deepEqual(f.connections[0].offerOptions,{offerToReceiveAudio:true,offerToReceiveVideo:true});f.client.close();
 });
 test('stale sender or recipient sessions cannot renegotiate a rejoined call',async()=>{
   const f=fixture('b');await f.client.sync(people);

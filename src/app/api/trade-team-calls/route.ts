@@ -2,7 +2,7 @@ import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { requireTeamCommunicationAccess } from "@/lib/trade-communications-access";
 import { waitUntil } from "cloudflare:workers";
-import { notifyTeamCall } from "@/lib/trade-push-server";
+import { notifyTeamCall, notifyTeamCallEnded } from "@/lib/trade-push-server";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "@/lib/bounded-request-body.mjs";
 import { assertTeamCallJoined, incomingTeamCalls, joinTeamCall, leaveTeamCall, reserveTeamCallIce, sendTeamCallSignal, startTeamCall, teamCallStatus } from "@/lib/trade-team-calls-server";
 import { teamCallIceServers, teamCallTurnCredentials } from "@/lib/trade-team-calls-provider";
@@ -75,8 +75,11 @@ export async function POST(request: Request) {
         }
         if (body.action === 'join')
             return adminJson({ ok: true, memberId: actor.memberId, call: await joinTeamCall(actor, body.callId, body.sessionId) });
-        if (body.action === 'leave')
-            return adminJson({ ok: true, memberId: actor.memberId, call: await leaveTeamCall(actor, body.callId, body.sessionId) });
+        if (body.action === 'leave') {
+            const call = await leaveTeamCall(actor, body.callId, body.sessionId);
+            if (call.status === 'ended') waitUntil(notifyTeamCallEnded(actor, call));
+            return adminJson({ ok: true, memberId: actor.memberId, call });
+        }
         if (body.action === 'signal') {
             await sendTeamCallSignal(actor, body);
             return adminJson({ ok: true });

@@ -8,6 +8,7 @@ import {
   type ManualEvidenceResponse,
 } from "./creditex-manual-evidence-lab.ts";
 import { requireFirebaseIdentity } from "./firebase-server.ts";
+import { nativePushRegistration } from "./trade-push.ts";
 
 export const CREDITEX_MANUAL_FIELD_CONTRACT_VERSION = 1;
 export const CREDITEX_MANUAL_FIELD_PART_BYTES = 5 * 1024 * 1024;
@@ -469,6 +470,15 @@ export async function registerManualFieldDevice(
       "Update TLink before registering this test device.",
     );
   }
+  let callRegistration: ReturnType<typeof nativePushRegistration>;
+  try {
+    callRegistration = nativePushRegistration(input, platform);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "PUSH_INPUT_INVALID") throw error;
+    throw new CreditexManualFieldError(
+      "MANUAL_FIELD_DEVICE_INVALID", 400, "The device call registration is invalid.",
+    );
+  }
   const current = await database.prepare(`SELECT id, status
     FROM compliance_manual_field_devices
     WHERE organisation_id = ? AND firebase_uid = ? AND device_id = ?
@@ -483,18 +493,21 @@ export async function registerManualFieldDevice(
     );
   }
   const now = new Date().toISOString();
-  await database.prepare(`INSERT INTO compliance_manual_field_devices (
+  const registered = await database.prepare(`INSERT INTO compliance_manual_field_devices (
       id, organisation_id, firebase_uid, device_id, platform, device_name,
       app_version, is_physical_device, status, registered_at, last_seen_at,
-      revoked_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, '', ?)
+      revoked_at, updated_at, voip_push_token, native_call_capable
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, '', ?, ?, ?)
     ON CONFLICT(organisation_id, firebase_uid, device_id) DO UPDATE SET
       platform = excluded.platform,
       device_name = excluded.device_name,
       app_version = excluded.app_version,
       is_physical_device = excluded.is_physical_device,
       last_seen_at = excluded.last_seen_at,
-      updated_at = excluded.updated_at`)
+      updated_at = excluded.updated_at,
+      voip_push_token = excluded.voip_push_token,
+      native_call_capable = excluded.native_call_capable
+    WHERE compliance_manual_field_devices.status = 'active'`)
     .bind(
       current?.id || crypto.randomUUID(),
       member.organisationId,
@@ -507,8 +520,16 @@ export async function registerManualFieldDevice(
       now,
       now,
       now,
+      callRegistration.voipToken,
+      callRegistration.nativeCallCapable ? 1 : 0,
     )
     .run();
+  if (Number(registered.meta.changes || 0) !== 1) {
+    throw new CreditexManualFieldError(
+      "DEVICE_REAUTHORISATION_REQUIRED", 403,
+      "This test device was revoked and must be reauthorised in Creditex.",
+    );
+  }
   return {
     registered: true,
     mode: "creditex_manual",
@@ -553,7 +574,8 @@ export async function revokeManualFieldDevice(
   const now = new Date().toISOString();
   const updated = await database.prepare(`UPDATE
       compliance_manual_field_devices
-    SET status = 'revoked', revoked_at = ?, updated_at = ?
+    SET status = 'revoked', revoked_at = ?, updated_at = ?,
+      voip_push_token = '', native_call_capable = 0
     WHERE id = ? AND organisation_id = ? AND firebase_uid = ?
       AND device_id = ? AND status = 'active'`)
     .bind(
@@ -612,7 +634,8 @@ export async function requireManualFieldDevice(
       "Register a stable TLink device ID.",
     );
   }
-  const device = await database.prepare(`SELECT *
+  const device = await database.prepare(`SELECT id, organisation_id, firebase_uid,
+      device_id, platform, device_name, app_version, is_physical_device, status
     FROM compliance_manual_field_devices
     WHERE organisation_id = ? AND firebase_uid = ? AND device_id = ?
     LIMIT 1`)

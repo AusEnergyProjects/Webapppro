@@ -11,9 +11,9 @@ function fixture({error='',authenticated=true}={}){
   class AccessError extends Error { status=403; }
   const subscription={id:'subscription-1',messages:true,calls:true,enabled:true};
   const server={};
-  for(const name of ['tradePushSettings','subscribeTradePush','updateTradePush','unsubscribeTradePush'])server[name]=async(...args)=>{
+  for(const name of ['tradeNativePushSettings','tradePushSettings','subscribeTradePush','updateTradePush','unsubscribeTradePush'])server[name]=async(...args)=>{
     calls.push({name,args});if(error)throw new Error(error);
-    return name==='tradePushSettings'?{configured:true,publicKey:'public-only',subscription}:subscription;
+    return name==='tradeNativePushSettings'?{native:{provider:'apns',configured:false,registered:true}}:name==='tradePushSettings'?{configured:true,publicKey:'public-only',subscription}:subscription;
   };
   const deps={
     '@/lib/admin-server':{sameOrigin:request=>!request.headers.get('origin')||new URL(request.url).origin===request.headers.get('origin'),mfaErrorResponse:()=>null,adminJson:(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}})},
@@ -31,6 +31,13 @@ test('push route rejects foreign origins and missing current team authentication
     let f=fixture();assert.equal((await f.route[method](request(method,method==='GET'?undefined:{},{origin:'https://foreign.test'}))).status,403);assert.deepEqual(f.calls,[]);
     f=fixture({authenticated:false});assert.equal((await f.route[method](request(method,method==='GET'?undefined:{}))).status,401);assert.deepEqual(f.calls,[{name:'authenticate'}]);
   }
+});
+
+test('native setup status uses the authenticated actor and exposes no provider credentials',async()=>{
+ const f=fixture();const response=await f.route.GET(new Request('https://tlink.test/api/trade-push?deviceId=device-1234&ownerUid=forged'));
+ assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
+ assert.deepEqual(await response.json(),{ok:true,native:{provider:'apns',configured:false,registered:true}});
+ assert.deepEqual(f.calls.at(-1),{name:'tradeNativePushSettings',args:[{ownerUid:'owner',memberId:'member',actorUid:'actor'},'device-1234']});
 });
 
 test('push route refuses oversized bytes and malformed object bodies before any subscription mutation',async()=>{

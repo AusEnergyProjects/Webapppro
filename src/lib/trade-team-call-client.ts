@@ -66,7 +66,9 @@ export class TeamCallConnections {
         if (!this.closed && connection.connectionState === "failed") this.options.failed("A teammate could not connect. Check your connection and call again.");
       };
       if (this.options.memberId < person.memberId) {
-        await connection.setLocalDescription(await connection.createOffer());
+        // A voice-only participant must still negotiate a video receiver so
+        // the teammate answering with their camera can be seen.
+        await connection.setLocalDescription(await connection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true }));
         if (!this.closed && connection.localDescription) await this.send(peer, "offer", { type: "offer", sdp: connection.localDescription.sdp });
       }
     }

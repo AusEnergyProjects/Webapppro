@@ -4,12 +4,14 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as bounded from '../src/lib/bounded-request-body.mjs';
 const source=fs.readFileSync(new URL('../src/app/api/trade-team-calls/route.ts',import.meta.url),'utf8');
-function fixture({denied=false,configured=true,revokeAfterProvider=false,deferStart=false,startFails=false,deferPush=false,operationError=''}={}){
+function fixture({denied=false,configured=true,revokeAfterProvider=false,deferStart=false,startFails=false,deferPush=false,operationError='',leaveStatus='active'}={}){
  const events=[],background=[],diagnostics=[];let persisted=false,releaseStart,releasePush;class AccessError extends Error{status=403;}
  const server={};for(const name of ['incomingTeamCalls','joinTeamCall','leaveTeamCall','reserveTeamCallIce','sendTeamCallSignal','startTeamCall','teamCallStatus','assertTeamCallJoined'])server[name]=async()=>{events.push(name);if(operationError)throw new Error(operationError);if(denied)throw new Error('CALL_ACCESS_REQUIRED');if(name==='assertTeamCallJoined'&&revokeAfterProvider)throw new Error('CALL_ACCESS_REQUIRED');if(name==='startTeamCall'){if(deferStart)await new Promise(resolve=>{releaseStart=resolve;});if(startFails)throw new Error('CALL_RATE_LIMIT');persisted=true;events.push('persisted');}return name==='reserveTeamCallIce'?{ttl:300,expiresAt:'2099-01-01'}:name==='incomingTeamCalls'?[]:name==='teamCallStatus'?{call:null,signals:[]}:{id:'call-1234',threadId:'thread-1234'};};
  const dependencies={'@/lib/admin-server':{sameOrigin:request=>!request.headers.get('origin')||request.headers.get('origin')===new URL(request.url).origin,adminJson:(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}}),mfaErrorResponse:()=>null},'@/lib/trade-access-server':{TradeAccessError:AccessError},'@/lib/trade-communications-access':{requireTeamCommunicationAccess:async request=>{events.push('access');if(!request.headers.get('authorization'))throw new Error('AUTH_REQUIRED');return{memberId:'member-0001'};}},
  'cloudflare:workers':{waitUntil:promise=>{events.push('waitUntil');background.push(promise);}},'@/lib/trade-push-server':{notifyTeamCall:async(actor,call)=>{assert.equal(persisted,true,'Call must persist before notification');assert.equal(actor.memberId,'member-0001');assert.deepEqual(call,{id:'call-1234',threadId:'thread-1234'});events.push('notifyTeamCall');if(deferPush)await new Promise(resolve=>{releasePush=resolve;});return {attempted:0,accepted:0,failed:1,skipped:true};}},
  '@/lib/bounded-request-body.mjs':bounded,'@/lib/trade-team-calls-server':server,'@/lib/trade-team-calls-provider':{teamCallTurnCredentials:()=>{events.push('credentials');if(!configured)throw new Error('CALL_UNAVAILABLE');return{accountSid:'server-only-sid',authToken:'server-only-token'};},teamCallIceServers:async()=>{events.push('provider');return[{urls:'turn:global.turn.twilio.com:3478',username:'ephemeral',credential:'temporary'}];}}};
+ const leave=server.leaveTeamCall;server.leaveTeamCall=async(...args)=>({...await leave(...args),status:leaveStatus});
+ dependencies['@/lib/trade-push-server'].notifyTeamCallEnded=async(actor,call)=>{assert.equal(actor.memberId,'member-0001');assert.equal(call.status,'ended');events.push('notifyTeamCallEnded');};
  const output=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,record={exports:{}};
  new Function('require','module','exports','console',output)(name=>{assert.ok(Object.hasOwn(dependencies,name),name);return dependencies[name];},record,record.exports,{warn:(tag,fields)=>diagnostics.push({tag,...fields})});return{route:record.exports,events,background,diagnostics,releaseStart:()=>releaseStart(),releasePush:()=>releasePush()};
 }
@@ -40,6 +42,16 @@ test('call notification starts only after persistence and remains background wor
 test('denied, failed or unconfigured call starts never dispatch notifications',async()=>{
  for(const [options,status] of [[{denied:true},403],[{startFails:true},429],[{configured:false},503]]){
   const f=fixture(options);assert.equal((await f.route.POST(req({action:'start'}))).status,status);assert.ok(!f.events.includes('notifyTeamCall'));assert.equal(f.background.length,0);
+ }
+});
+
+test('terminal hangup dispatches cancellation only after authorized leave ends the call',async()=>{
+ for(const [options,expected] of [[{leaveStatus:'ended'},true],[{leaveStatus:'active'},false],[{leaveStatus:'ended',denied:true},false]]){
+  const f=fixture(options);const response=await f.route.POST(req({action:'leave',callId:'call-1234',sessionId:'session-1234'}));
+  assert.equal(response.status,options.denied?403:200);assert.equal(f.events.includes('notifyTeamCallEnded'),expected);
+  assert.equal(f.background.length,expected?1:0);
+  if(expected)assert.ok(f.events.indexOf('leaveTeamCall')<f.events.indexOf('notifyTeamCallEnded'));
+  await Promise.all(f.background);
  }
 });
 

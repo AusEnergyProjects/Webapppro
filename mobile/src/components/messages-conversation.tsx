@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ApiError } from '@/lib/api';
 import { definitiveMessageFailure, emptyMessageDraft, mergeTeamMessages, pendingMessage, smsAction, smsHistory, smsSendBlock, smsStatusLabels, teamAction, teamHistory, teamThreadName, type MessageDraft, type MessageSelection, type SmsConversation, type SmsMessage, type TeamMessage } from '@/lib/messages-client';
@@ -8,7 +8,7 @@ import { colours, radius } from '@/lib/theme';
 import { useNativeTeamCalls } from '@/providers/native-team-call-provider';
 import { FieldButton } from '@/components/field-button';
 import { MessageMedia, MessageMediaComposer } from '@/components/messages-media';
-import { customerColour, MessageAvatar, MessageIconButton, MessageLoading, MessageNotice, messageStyles } from '@/components/messages-ui';
+import { customerColour, MessageAvatar, MessageIconButton, MessageKeyboardView, MessageLoading, MessageNotice, messageStyles } from '@/components/messages-ui';
 
 type DisplayMessage = { id: string; sender: string; body: string; mine: boolean; createdAt: string; status?: string; attachments: TeamMessage['attachments'] };
 
@@ -128,14 +128,14 @@ export function MessagesConversation({ selection, memberId, draft, onDraft, onBa
 
   const display: DisplayMessage[] = internal ? messages.map(message => ({ ...message, sender: message.senderName })) : (sms?.messages || []).map(message => ({ ...message, sender: message.direction === 'inbound' ? name : message.senderName || 'Your business', mine: message.direction === 'outbound', attachments: [], status: smsStatusLabels[message.status] || 'Status pending' }));
   const sendBlocked = !online || denied || loading || Boolean(busy) || mediaBusy || (!internal && Boolean(smsSendBlock(sms)));
-  return <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+  return <MessageKeyboardView style={styles.container}>
     <View style={styles.header}>
       <MessageIconButton icon="arrow-left" label="All chats" onPress={onBack} />
       <MessageAvatar name={name} customer={!internal} group={internal && selection.thread.kind === 'group'} />
       <View style={messageStyles.grow}><Text numberOfLines={2} style={messageStyles.title}>{name}</Text><Text style={[messageStyles.label, { color: accent }]}>{internal ? 'Team chat' : 'Customer SMS'}</Text></View>
       {internal ? <View style={styles.callButtons}>
-        <MessageIconButton icon="phone-outline" label="Voice call" disabled={calls.busy || !online || denied || mediaBusy} onPress={() => { void calls.start(selection.thread.id, 'audio'); }} />
-        <MessageIconButton icon="video-outline" label="Video call" disabled={calls.busy || !online || denied || mediaBusy} onPress={() => { void calls.start(selection.thread.id, 'video'); }} />
+        <MessageIconButton surface icon="phone-outline" label="Voice call" disabled={calls.busy || !online || denied || mediaBusy} onPress={() => { void calls.start(selection.thread.id, 'audio'); }} />
+        <MessageIconButton surface icon="video-outline" label="Video call" disabled={calls.busy || !online || denied || mediaBusy} onPress={() => { void calls.start(selection.thread.id, 'video'); }} />
       </View> : null}
     </View>
     {!internal ? <Text style={styles.context}>{selection.customer.phone}{selection.customer.jobNumber ? ` · ${selection.customer.jobNumber}` : ''}{sms?.connection ? `\nFrom ${sms.connection.number} · Shared with your business` : ''}</Text> : null}
@@ -150,7 +150,7 @@ export function MessagesConversation({ selection, memberId, draft, onDraft, onBa
       <FieldButton disabled={consent.trim().length < 8 || !online} loading={busy === 'consent'} onPress={() => void recordConsent()}>Save permission</FieldButton>
     </View> : null}
     {loading && !display.length ? <MessageLoading /> : null}
-    <FlatList style={styles.history} inverted data={[...display].reverse()} keyExtractor={item => item.id} keyboardShouldPersistTaps="handled"
+    <FlatList style={styles.history} inverted data={[...display].reverse()} keyExtractor={item => item.id} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={false}
       contentContainerStyle={styles.historyContent}
       ListEmptyComponent={!loading && !error ? <Text style={styles.empty}>{internal ? 'No messages yet. Say hello below.' : 'No texts yet. Replies will appear here.'}</Text> : null}
       ListFooterComponent={internal && hasOlder ? <FieldButton variant="quiet" loading={busy === 'older'} onPress={() => { setBusy('older'); void load(messages[0]?.sequence || 0).finally(() => { if (alive.current) setBusy(''); }); }}>Earlier messages</FieldButton> : !internal && display.length >= 100 ? <Text style={styles.context}>Showing the latest 100 texts</Text> : null}
@@ -169,13 +169,13 @@ export function MessagesConversation({ selection, memberId, draft, onDraft, onBa
       {internal ? <MessageMediaComposer threadId={selection.thread.id} disabled={Boolean(busy || draft.pending) || !online || denied} callsBusy={calls.busy} count={draft.attachments.length}
         onAdd={attachment => onDraft({ ...draftRef.current, attachments: [...draftRef.current.attachments, attachment] })} onBusyChange={setMediaBusy} onError={setError} /> : <Text style={styles.smsHint}>{draft.body.length}/480 · Business name, job reference and STOP instructions are added automatically.</Text>}
     </View>
-  </KeyboardAvoidingView>;
+  </MessageKeyboardView>;
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, minHeight: 0, gap: 8 }, header: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colours.line },
-  callButtons: { flexDirection: 'row' }, context: { color: colours.muted, fontSize: 12, lineHeight: 18, paddingHorizontal: 8 }, noticeRow: { gap: 2 },
-  consent: { gap: 8, padding: 10, borderRadius: radius.sm, backgroundColor: colours.surfaceRaised }, history: { flex: 1 }, historyContent: { padding: 6, gap: 10 },
+  callButtons: { flexDirection: 'row', gap: 6 }, context: { color: colours.muted, fontSize: 12, lineHeight: 18, paddingHorizontal: 8 }, noticeRow: { gap: 2 },
+  consent: { gap: 8, padding: 10, borderRadius: radius.sm, backgroundColor: colours.surfaceRaised }, history: { flex: 1, minHeight: 0 }, historyContent: { padding: 6, gap: 10 },
   bubble: { maxWidth: '90%', minWidth: 130, borderRadius: 16, padding: 12, gap: 6, borderWidth: 1 }, mine: { alignSelf: 'flex-end', backgroundColor: '#153e36', borderColor: '#28634f' }, customerMine: { alignSelf: 'flex-end', backgroundColor: '#312642', borderColor: '#61467c' }, theirs: { alignSelf: 'flex-start', backgroundColor: colours.surfaceRaised, borderColor: colours.line },
   sender: { fontSize: 12, fontWeight: '700' }, time: { color: colours.muted, fontSize: 10, lineHeight: 15 }, empty: { textAlign: 'center', color: colours.muted, padding: 30 },
   composer: { borderTopWidth: 1, borderTopColor: colours.line, paddingTop: 10, gap: 6 }, entry: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' }, messageInput: { flex: 1, minHeight: 48, maxHeight: 116, padding: 12, borderWidth: 1, borderColor: colours.line, borderRadius: 16, color: colours.ink, backgroundColor: colours.surface, fontSize: 16 }, send: { minHeight: 48, minWidth: 64, borderRadius: 14, paddingHorizontal: 12, justifyContent: 'center' }, sendText: { color: colours.forest, fontSize: 14, fontWeight: '800' },

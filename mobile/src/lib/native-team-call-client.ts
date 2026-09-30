@@ -16,6 +16,7 @@ type Peer = {
   candidates: Candidate[];
   stream: MediaStream | null;
   detach: () => void;
+  deadline?: ReturnType<typeof setTimeout>;
 };
 
 // Uses the same session fences and designated offerer as the web client, so
@@ -56,10 +57,20 @@ export class NativeTeamCallConnections {
   }
 
   private remove(peer: Peer) {
+    clearTimeout(peer.deadline);
     peer.detach();
     peer.connection.close();
     peer.stream?.release(false);
     this.peers.delete(peer.person.memberId);
+  }
+
+  private deadline(peer: Peer, milliseconds: number) {
+    clearTimeout(peer.deadline);
+    peer.deadline = setTimeout(() => {
+      if (this.current(peer) && peer.connection.connectionState !== 'connected') {
+        this.options.failed('The call could not connect. Check both devices have internet access, then call again.');
+      }
+    }, milliseconds);
   }
 
   async sync(people: TeamCallParticipant[]) {
@@ -75,6 +86,7 @@ export class NativeTeamCallConnections {
       const connection = new RTCPeerConnection({ iceServers: this.options.iceServers });
       const peer: Peer = { person, connection, candidates: [], stream: null, detach: () => undefined };
       this.peers.set(person.memberId, peer);
+      this.deadline(peer, 30_000);
       for (const track of this.options.local.getTracks()) connection.addTrack(track, this.options.local);
       connection.ontrack = (event: { streams: MediaStream[]; track: MediaStreamTrack | null }) => {
         if (!this.current(peer)) return;
@@ -91,6 +103,8 @@ export class NativeTeamCallConnections {
       };
       connection.onconnectionstatechange = () => {
         if (!this.current(peer)) return;
+        if (['connected', 'failed', 'closed'].includes(connection.connectionState)) clearTimeout(peer.deadline);
+        if (connection.connectionState === 'disconnected') this.deadline(peer, 15_000);
         this.changed();
         if (connection.connectionState === 'failed') this.options.failed('A teammate could not connect. Check your connection and call again.');
       };
