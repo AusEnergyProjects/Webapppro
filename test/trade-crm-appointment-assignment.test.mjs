@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { canAssignWithinScope } from "../src/lib/trade-team-permission-policy.mjs";
 import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
+import * as tradeDataforceSource from "../src/lib/trade-dataforce-source.ts";
 import { ReportInputError } from "../src/lib/trade-business-reports.ts";
 import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 
@@ -360,6 +361,7 @@ function fixture() {
     ALTER TABLE trade_team_members ADD COLUMN can_view_field_evidence integer NOT NULL DEFAULT 0;
     UPDATE trade_team_members SET can_view_field_evidence=1;
   `);
+  database.exec(read("../drizzle/0223_trade_dataforce_migration.sql"));
   installCreditexTrainingFixture(database);
   return { database, d1: testD1(database) };
 }
@@ -440,6 +442,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     },
     "@/lib/trade-team-sync-server": syncHelpers,
     "@/lib/trade-crm-job-register": jobRegisterHelpers,
+    "@/lib/trade-dataforce-source": tradeDataforceSource,
     "@/lib/trade-crm-register-sort-sql": registerSortHelpers,
     "@/lib/trade-calendar-sync-server": {
       syncCreatedAppointmentToConnectedCalendars: syncAppointment,

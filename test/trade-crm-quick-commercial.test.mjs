@@ -8,6 +8,7 @@ import ts from 'typescript';
 import { certificateTestDependency } from './helpers/creditex-training-fixture.mjs';
 import * as rental from '../src/lib/trade-rental-assessment.mjs';
 import * as tradeJobLifecycle from '../src/lib/trade-job-lifecycle.ts';
+import * as tradeDataforceSource from '../src/lib/trade-dataforce-source.ts';
 
 const tradeJobLifecycleDependency = {
   ...tradeJobLifecycle,
@@ -55,6 +56,7 @@ function fixture(overrides = {}) {
     trade_crm_quote_choices: 'id quote_version_id firebase_uid choice_kind group_key recommended position subtotal_cents',
   };
   for (const [name, columns] of Object.entries(tables)) database.exec(`CREATE TABLE ${name} (${columns.split(' ').map(column => `${column} TEXT ${column === 'id' ? 'PRIMARY KEY' : ''} DEFAULT ''`).join(',')})`);
+  database.exec(read('../drizzle/0223_trade_dataforce_migration.sql'));
   database.exec("INSERT INTO trade_accounts VALUES ('owner-1', 'VIC'), ('owner-2', 'VIC')");
   const queries = [];
   function statement(sql, values = []) {
@@ -83,6 +85,7 @@ function fixture(overrides = {}) {
     '@/lib/keyset-pagination': moduleAt('../src/lib/keyset-pagination.ts'),
     '@/lib/trade-crm-job-index-sql': moduleAt('../src/lib/trade-crm-job-index-sql.ts'),
     '@/lib/trade-job-lifecycle': tradeJobLifecycleDependency,
+    '@/lib/trade-dataforce-source': tradeDataforceSource,
     '@/lib/creditex-dataforce-job-csv': { projectInstallerWorkOrderToDataforceRecord: input => input },
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access,
       canCreateJobs: current => current.isOwner || current.canCreateJobs,

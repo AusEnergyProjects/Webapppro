@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { IMPORT_DEFINITIONS, importTemplateCsv, mappedImportCsv, parseImportCsv } from "@/lib/trade-data-imports.mjs";
 import { workbookToCsv } from "@/lib/xlsx-import";
+import { isTradeDataforceImport } from "@/lib/trade-dataforce-import-metadata";
+import { TradeDataforceImportWorkspace, type DataforceSourceFile } from "./TradeDataforceImportWorkspace";
 
 type ImportType = "customers" | "enquiries" | "jobs" | "products";
 type SelectableImportType = Exclude<ImportType, "enquiries">;
@@ -57,6 +59,8 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
   const [sourceFile, setSourceFile] = useState<{ name: string; size: number; csv: string } | null>(null);
   const [sourceHeaders, setSourceHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [dataforceMode, setDataforceMode] = useState(false);
+  const [dataforceSource, setDataforceSource] = useState<DataforceSourceFile | null>(null);
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const token = await user.getIdToken();
@@ -101,9 +105,16 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
     setBusy("prepare");
     setStatus("Reading the file and preparing column mapping...");
     try {
+      if (file.size > 10 * 1024 * 1024) throw new Error("Choose a file no larger than 10 MB. Standard imports support up to 2 MB; Dataforce exports support up to 10 MB.");
       const csv = /\.xlsx$/i.test(file.name) ? await workbookToCsv(file) : await file.text();
       const headers = parseImportCsv(csv)[0] || [];
       if (!headers.length) throw new Error("The file needs a header row.");
+      if (partnerType === "installer" && isTradeDataforceImport(headers)) {
+        setDataforceSource({ name: file.name, csv });
+        setDataforceMode(true);
+        setStatus("");
+        return;
+      }
       const normalized = new Map(headers.map((header: string) => [header.trim().toLowerCase().replaceAll(" ", "_"), header]));
       setSourceFile({ name: file.name, size: file.size, csv });
       setSourceHeaders(headers);
@@ -187,6 +198,8 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
   const canCommit = activeBatch?.status === "preview" && includeCount > 0;
   const canRollback = activeBatch && ["committed", "failed", "rollback_partial"].includes(activeBatch.status) && (activeBatch.status === "failed" || Boolean(activeBatch.rollbackUntil));
 
+  if (dataforceMode && partnerType === "installer") return <TradeDataforceImportWorkspace user={user} initialSource={dataforceSource} onImported={onImported} onBack={() => { setDataforceMode(false); setDataforceSource(null); }} />;
+
   return <section className="trade-import-workspace" aria-labelledby="trade-import-title">
     <header className="trade-import-hero">
       <div><span>Guided migration</span><h2 id="trade-import-title">Bring your business records across safely</h2><p>Use a clear template, check every row, decide what to do with duplicates, then import. A preview never changes your CRM.</p></div>
@@ -201,7 +214,7 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
     </ol>
 
     <section className="trade-import-choose">
-      <div className="trade-import-type-grid">{availableTypes.map((type) => <button key={type} type="button" className={importType === type ? "active" : ""} onClick={() => { setImportType(type); setActiveBatch(null); setRows([]); setSourceFile(null); setSourceHeaders([]); setMapping({}); setStatus(""); }}><span>{labels[type].eyebrow}</span><strong>{labels[type].title}</strong><small>{labels[type].description}</small></button>)}</div>
+      <div className="trade-import-type-grid">{partnerType === "installer" && <button type="button" onClick={() => { setDataforceSource(null); setDataforceMode(true); }}><span>Complete job export</span><strong>Dataforce</strong><small>Import up to 20,000 jobs with linked customers, service addresses, scheduling and all 23 original columns.</small></button>}{availableTypes.map((type) => <button key={type} type="button" className={importType === type ? "active" : ""} onClick={() => { setImportType(type); setActiveBatch(null); setRows([]); setSourceFile(null); setSourceHeaders([]); setMapping({}); setStatus(""); }}><span>{labels[type].eyebrow}</span><strong>{labels[type].title}</strong><small>{labels[type].description}</small></button>)}</div>
       <div className="trade-import-template-card"><div><span>Start with the correct columns</span><strong>{IMPORT_DEFINITIONS[importType].label} template</strong><p>The examples are fictional. Remove them before adding business data.</p></div><div><button type="button" onClick={downloadTemplate}>Download CSV template</button><a href="/downloads/aea-business-data-import-templates.xlsx" download>Download all templates in Excel</a></div></div>
       <label className={`trade-import-dropzone ${busy === "prepare" ? "busy" : ""}`}><span>{busy === "prepare" ? "Reading file..." : `Choose completed ${labels[importType].title.toLowerCase()} CSV or Excel file`}</span><small>CSV or .xlsx, up to 2 MB and 500 rows. Previewing makes no changes.</small><input type="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={Boolean(busy)} onChange={(event) => { const file = event.target.files?.[0]; if (file) void prepareFile(file); event.currentTarget.value = ""; }} /></label>
       {sourceFile && !activeBatch && <section className="trade-import-mapping"><header><div><span>{sourceFile.name}</span><strong>Map file columns</strong><p>Confirm each Australian Energy Assessments field. Unmapped optional fields stay blank and validation will flag missing required data.</p></div></header><div>{IMPORT_DEFINITIONS[importType].headers.map((target: string) => <label key={target}><span>{readable(target)}</span><select value={mapping[target] || ""} onChange={(event) => setMapping((current) => ({ ...current, [target]: event.target.value }))}><option value="">Not mapped</option>{sourceHeaders.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void previewMapped()}>{busy === "preview" ? "Checking..." : "Preview mapped rows"}</button></section>}

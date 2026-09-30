@@ -123,6 +123,8 @@ type Job = {
   invoiceStatus: string; paymentDueAt: string; handoverStatus: string; tasks: Task[];
   appointments: Appointment[]; notes: Note[]; complianceCases: ComplianceCase[]; complianceIntents: ComplianceIntent[]; complianceIntent: ComplianceIntent | null; customerDocuments?: CustomerDocumentDelivery | null; customerDisplayName?: string; createdAt: string; updatedAt: string;
   dataforceRecord: DataforceJobCsvRecord;
+  sourceReference?: string;
+  importedDataforce?: DataforceJobCsvRecord | null;
   jobRegister: JobRegisterRecord;
 };
 type CrmResult = { ok?: boolean; customers?: Customer[]; jobs?: Job[]; templates?: JobTemplate[]; teamMembers?: TeamMember[]; teamAccess?: boolean; error?: string };
@@ -342,7 +344,7 @@ function jobIndexCell(job: Job, key: string, onOpen: (tab?: JobTab) => void, onP
   const canViewQuote = !permissions || permissions.canViewQuotes;
   const edit = (content: ReactNode, label: string, onClick: () => void) => <button type="button" className={registerStyles.cellEdit} aria-label={label + " for " + record.jobId} onClick={onClick}>{content}</button>;
   if (key === "actions") return actionNode;
-  if (key === "jobId") return <button type="button" className="crm-index-open-button" onClick={() => onOpen()} aria-label={`Open job ${record.jobId}`}><strong>{record.jobId}</strong></button>;
+  if (key === "jobId") return <button type="button" className="crm-index-open-button" onClick={() => onOpen()} aria-label={`Open job ${record.jobId}`}><strong>{record.jobId}</strong>{job.sourceReference && <small>Dataforce {job.sourceReference}</small>}</button>;
   if (key === "contactNumber") return record.contactNumber ? <a className="crm-index-phone-link" href={phoneHref(record.contactNumber)}>{record.contactNumber}</a> : <span>Not added</span>;
   if (key === "email") return record.email ? <TradeCustomerEmailComposer user={user} workOrderId={job.id} recipient={record.email} className="crm-index-email-link" /> : <span>Not added</span>;
   if (key === "scheduleDate") return edit(record.scheduleDate ? dateLabel(record.scheduleDate, record.scheduleDate.includes("T")) : "Unassigned", "Edit schedule", () => onOpen("schedule"));
@@ -1884,6 +1886,11 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     <nav className="crm-job-tabs" aria-label="Job card sections">{mainTabs.map(([value, label]) => <button key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}<AccessibleMenu className="crm-job-more" active={moreActive} label={moreActive ? activeTab[0].toUpperCase() + activeTab.slice(1) : "More"}>{(close) => moreTabs.map(([value, label]) => <button role="menuitem" key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => { setTab(value); close(); }}>{label}</button>)}</AccessibleMenu></nav>
     {activeTab === "messages" && !isProtected && (!permissions || permissions.canSendSms) && <TradeCustomerSmsPanel key={`${job.id}:${customer?.id || ""}`} user={user} workOrderId={job.id} customerId={customer?.id || ""} onOpenIntegrations={permissions ? undefined : onOpenIntegrations} />}
     {activeTab === "summary" && <section className="crm-job-section crm-summary-workspace">
+        {job.importedDataforce && <details className={registerStyles.detailSection}>
+          <summary>Imported Dataforce record {job.sourceReference}</summary>
+          <p>Original values from your export. Current work is managed in TLink. Source balances, audit and submission statuses, and certificate quantities are historical records, not new invoices or verified certificate issuance. Photos, forms and documents were not included in this CSV.</p>
+          <dl className={registerStyles.detailGrid}>{Object.entries(job.importedDataforce).map(([header, value]) => <div key={header}><dt>{header}</dt><dd>{value || "Not supplied"}</dd></div>)}</dl>
+        </details>}
         <section className={registerStyles.detailSection} aria-labelledby={`job-information-${job.id}`}>
           <h4 id={`job-information-${job.id}`}>Job information</h4>
           <dl className={registerStyles.detailGrid}>

@@ -82,7 +82,7 @@ function rowPayload(row: Record<string, unknown>) {
 }
 
 async function ownedBatch(uid: string, id: string) {
-  const row = await getD1().prepare("SELECT * FROM trade_data_import_batches WHERE id = ? AND firebase_uid = ?")
+  const row = await getD1().prepare("SELECT * FROM trade_data_import_batches WHERE id = ? AND firebase_uid = ? AND import_type <> 'dataforce'")
     .bind(id, uid).first<Record<string, unknown>>();
   if (!row) throw new Error("BATCH_NOT_FOUND");
   return row;
@@ -161,7 +161,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const batchId = cleanAdminText(url.searchParams.get("batchId"), 180);
     const db = getD1();
-    const batches = await db.prepare(`SELECT * FROM trade_data_import_batches WHERE firebase_uid = ?
+    const batches = await db.prepare(`SELECT * FROM trade_data_import_batches WHERE firebase_uid = ? AND import_type <> 'dataforce'
       ORDER BY created_at DESC LIMIT 20`).bind(identity.uid).all<Record<string, unknown>>();
     let rows: Record<string, unknown>[] = [];
     if (batchId) {

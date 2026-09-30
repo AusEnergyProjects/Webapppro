@@ -58,6 +58,7 @@ import {
   previousTradeScheduleMutationGuardStatement,
 } from "@/lib/trade-compliance-intent-replan-server";
 import { projectInstallerWorkOrderToDataforceRecord } from "@/lib/creditex-dataforce-job-csv";
+import { visibleDataforceSource } from "@/lib/trade-dataforce-source";
 import { integrationEnvironment } from "@/lib/trade-integrations-server";
 import { TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL } from "@/lib/trade-crm-job-index-sql";
 import {
@@ -657,6 +658,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
   });
   return {
     id: row.id, workNumber: row.work_number,
+    sourceReference: !protectedCustomer ? String(row.dataforce_source_job_id || "") : "",
     revision: Number(row.revision || 1),
     title: protectedCustomer ? `${String(row.service_category || "Service")} job` : row.title, serviceCategory: row.service_category,
     siteArea: row.site_area, stage: row.stage, priority: row.priority, scheduledStart: row.scheduled_start,
@@ -818,7 +820,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
           ${protectedJobCustomerText("ss.suburb")} || ' ' || ${protectedJobCustomerText("ss.address_state")} || ' ' || ${protectedJobCustomerText("ss.postcode")} || ' '`;
       const normalizedPhoneSearch = /^[+\d\s().-]+$/.test(search) ? search.replace(/\D/g, "") : "";
       conditions.push(`(LOWER(
-        COALESCE(w.work_number, '') || ' ' || ${searchableJobTitleSql}
+        COALESCE(w.work_number, '') || ' ' || COALESCE(df.source_job_id, '') || ' ' || ${searchableJobTitleSql}
         ${JOB_REGISTER_ASSIGNEE_SEARCH_SQL} || ' ' || COALESCE(w.stage, '') || ' ' || ${JOB_EFFECTIVE_SCHEDULE_SQL} || ' ' ||
         ${searchableCustomerSql} ||
         COALESCE((SELECT GROUP_CONCAT(
@@ -833,18 +835,23 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     }
     const appointmentId = cleanAdminText(url.searchParams.get("appointmentId"), 180).toLowerCase();
     if (appointmentId) {
-      conditions.push(`EXISTS (
+      conditions.push(`(EXISTS (
         SELECT 1 FROM trade_crm_appointments filter_appointment
         WHERE filter_appointment.work_order_id = w.id
           AND filter_appointment.firebase_uid = w.firebase_uid
           AND LOWER(filter_appointment.id) LIKE ?
-      )`);
-      bindings.push(`%${appointmentId}%`);
+      ) OR EXISTS (
+        SELECT 1 FROM trade_dataforce_sources import_source
+        WHERE import_source.work_order_id = w.id
+          AND import_source.firebase_uid = w.firebase_uid
+          AND LOWER(import_source.source_app_id) LIKE ?
+      ))`);
+      bindings.push(`%${appointmentId}%`, `%${appointmentId}%`);
     }
     const jobId = cleanAdminText(url.searchParams.get("jobId"), 180).toLowerCase();
     if (jobId) {
-      conditions.push("(LOWER(w.id) LIKE ? OR LOWER(w.work_number) LIKE ?)");
-      bindings.push(`%${jobId}%`, `%${jobId}%`);
+      conditions.push("(LOWER(w.id) LIKE ? OR LOWER(w.work_number) LIKE ? OR LOWER(df.source_job_id) LIKE ?)");
+      bindings.push(`%${jobId}%`, `%${jobId}%`, `%${jobId}%`);
     }
     const customer = cleanAdminText(url.searchParams.get("customer"), 100).toLowerCase();
     if (customer) {
@@ -961,7 +968,8 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       ? `(${JOB_REGISTER_LIFECYCLE_SQL}) = ?` : condition).join(" AND ");
     const joins = `FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
-      LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'`;
+      LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'
+      LEFT JOIN trade_dataforce_sources df ON df.work_order_id = w.id AND df.firebase_uid = w.firebase_uid`;
     const rowJoins = `${joins} ${TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL}`;
     const sort = Object.hasOwn(JOB_SORTS, sortValue) ? sortValue : "updated-desc";
     if (sort.startsWith("quote-total-") && !identity.access.canViewQuotes) throw new Error("QUOTE_VIEW_REQUIRED");
@@ -980,7 +988,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         SELECT w.id work_order_id, ${JOB_REGISTER_LIFECYCLE_SQL} lifecycle_status
         ${rowJoins} WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
       ) SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type,
-        d.description, d.customer_reference,
+        d.description, d.customer_reference, df.source_job_id dataforce_source_job_id,
         d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
         d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
         ${protectedJobCustomerText("c.first_name")} first_name,
@@ -1242,6 +1250,10 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
       .all<Record<string, unknown>>(),
   ]);
   const job = indexedJob(row, identity.access);
+  const importedSource = !protectedCustomer
+    ? await db.prepare("SELECT raw_json, source_job_id FROM trade_dataforce_sources WHERE work_order_id = ? AND firebase_uid = ?")
+      .bind(id, identity.uid).first<{ raw_json: string; source_job_id: string }>()
+    : null;
   const projectedComplianceIntents =
     complianceIntents.results.map(indexedComplianceIntent).filter(Boolean);
   const scheduledDocumentActivities = scheduledCustomerDocumentActivities(complianceIntents.results);
@@ -1261,6 +1273,8 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
   });
   return { customer: customer ? indexedCustomer(customer) : null,
     sites: sites.results.map((site: Record<string, unknown>) => indexedServiceSite(site, siteContacts.results)), job: { ...job,
+    sourceReference: importedSource?.source_job_id || "",
+    importedDataforce: visibleDataforceSource(importedSource?.raw_json, { protectedCustomer, canViewInvoices: identity.access.canViewInvoices }),
     tasks: tasks.results.map((item: Record<string, unknown>) => ({ id: item.id, title: item.title, dueAt: item.due_at, status: item.status, completedAt: item.completed_at })),
     appointments: appointments.results.map((item: Record<string, unknown>) => ({ id: item.id, appointmentType: item.appointment_type,
       title: protectedCustomer ? "Job appointment" : item.title, startsAt: item.starts_at, endsAt: item.ends_at,

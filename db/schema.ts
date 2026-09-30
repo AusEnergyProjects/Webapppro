@@ -2793,6 +2793,26 @@ export const complianceMasterSaveSchema = sqliteTable("compliance_master_save_sc
   version: integer("version").notNull(),
 });
 
+export const tradeDataforceSources = sqliteTable("trade_dataforce_sources", {
+  id: text("id").primaryKey().notNull(), firebaseUid: text("firebase_uid").notNull(),
+  sourceSystem: text("source_system").notNull().default("dataforce"), sourceJobId: text("source_job_id").notNull(),
+  sourceAppId: text("source_app_id").notNull().default(""), rowSha256: text("row_sha256").notNull(),
+  rawJson: text("raw_json").notNull(), mappingVersion: text("mapping_version").notNull().default("dataforce-crm-v1"),
+  importBatchId: text("import_batch_id").notNull(), importRowId: text("import_row_id").notNull(),
+  workOrderId: text("work_order_id").notNull(), customerId: text("customer_id").notNull(),
+  serviceSiteId: text("service_site_id").notNull(), customerKey: text("customer_key").notNull(),
+  siteKey: text("site_key").notNull(), createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_dataforce_sources_owner_job_idx").on(table.firebaseUid, table.sourceSystem, table.sourceJobId),
+  uniqueIndex("trade_dataforce_sources_work_order_idx").on(table.workOrderId),
+  index("trade_dataforce_sources_customer_idx").on(table.firebaseUid, table.customerKey),
+  index("trade_dataforce_sources_batch_idx").on(table.firebaseUid, table.importBatchId),
+  check("trade_dataforce_sources_system_check", sql`${table.sourceSystem} = 'dataforce'`),
+  check("trade_dataforce_sources_job_check", sql`trim(${table.sourceJobId}) <> ''`),
+  check("trade_dataforce_sources_hash_check", sql`length(${table.rowSha256}) = 64`),
+  check("trade_dataforce_sources_json_check", sql`json_valid(${table.rawJson})`),
+]);
+
 export const tradeFormTemplates = sqliteTable("trade_form_templates", {
   id: text("id").primaryKey(),
   scopeOwnerUid: text("scope_owner_uid").notNull().default(""),

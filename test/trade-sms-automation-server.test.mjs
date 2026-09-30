@@ -15,7 +15,8 @@ function fixture(t) {
     CREATE TABLE trade_crm_job_details(work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,service_site_id TEXT,customer_source TEXT DEFAULT 'trade_owned');
     CREATE TABLE trade_crm_customers(id TEXT PRIMARY KEY,firebase_uid TEXT,record_status TEXT DEFAULT 'active',first_name TEXT);
     CREATE TABLE trade_crm_service_sites(id TEXT PRIMARY KEY,firebase_uid TEXT,record_status TEXT DEFAULT 'active',address_state TEXT);
-    CREATE TABLE trade_crm_appointments(id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,starts_at TEXT,status TEXT DEFAULT 'scheduled',completed_at TEXT DEFAULT '');`);
+    CREATE TABLE trade_crm_appointments(id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,starts_at TEXT,status TEXT DEFAULT 'scheduled',completed_at TEXT DEFAULT '');
+    CREATE TABLE trade_dataforce_sources(firebase_uid TEXT,work_order_id TEXT);`);
   const prepare = (sql, values = []) => ({ bind: (...args) => prepare(sql, args), first: async () => sqlite.prepare(sql).get(...values) || null,
     all: async () => ({ results: sqlite.prepare(sql).all(...values) }), run: async () => ({ meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } }) });
   const db = { prepare, batch: async statements => { sqlite.exec("BEGIN"); try { const results = []; for (const statement of statements) results.push(await statement.run()); sqlite.exec("COMMIT"); return results; } catch (error) { sqlite.exec("ROLLBACK"); throw error; } } };
@@ -60,6 +61,31 @@ test("due reminder uses authoritative job/customer and remains single-use across
   assert.equal(f.sends[0][1], "job-customer"); assert.equal(f.sends[0][4], "job"); assert.equal(f.sends[0][5], "service"); assert.match(f.sends[0][3], /^sms-auto-/);
   const data = await readSmsAutomationSettings(actor(), f.db); data.rules[0].body = "Hi {customer_first_name}, see you soon.";
   await saveSmsAutomationSettings(actor(), data.rules, f.db, NOW); await scanSmsAutomations(f.db, f.services, NOW); assert.equal(f.sends.length, 1);
+});
+
+test("every SMS automation excludes imported original visits but allows new visits and ignores foreign source claims", async t => {
+  for (const kind of ["appointment_reminder", "appointment_follow_up", "review_request"]) {
+    const f = fixture(t);
+    const past = kind !== "appointment_reminder";
+    const visit = past
+      ? { starts_at: "2026-09-22T10:00", status: "completed", completed_at: "2026-09-22T01:00:00Z" }
+      : { starts_at: "2026-09-30T10:00", status: "scheduled", completed_at: "" };
+    f.job("imported", "owner", { visit: { ...visit, id: "imported:visit" } });
+    f.insert("trade_dataforce_sources", { firebase_uid: "owner", work_order_id: "imported" });
+    f.insert("trade_crm_appointments", { ...visit, id: "new-tlink-visit", work_order_id: "imported", firebase_uid: "owner" });
+    f.job("normal", "owner", { visit: { ...visit, id: "normal:visit" } });
+    f.insert("trade_dataforce_sources", { firebase_uid: "other", work_order_id: "normal" });
+    f.job("foreign", "other", { visit: { ...visit, id: "foreign:visit" } });
+    await f.enable([kind]);
+    await scanSmsAutomations(f.db, f.services, NOW);
+    assert.deepEqual(f.events().map(event => event.appointment_id).sort(), ["new-tlink-visit", "normal:visit"], kind);
+    assert.deepEqual(f.calls.map(args => args[6].appointmentId).sort(), ["new-tlink-visit", "normal:visit"], "only injected synthetic transport is called");
+    f.sqlite.prepare("UPDATE trade_crm_appointments SET starts_at=? WHERE id='imported:visit'")
+      .run(past ? "2026-09-22T10:05" : "2026-09-30T10:05");
+    await scanSmsAutomations(f.db, f.services, new Date(NOW.getTime() + 6 * 60_000));
+    assert.equal(f.events().length, 2, "editing the original imported visit must never enable automatic outreach");
+    assert.equal(f.calls.length, 2);
+  }
 });
 test("separate follow-up and review rules both send once and reviews request marketing consent", async t => {
   const f = fixture(t); f.job("past", "owner", { visit: { starts_at: "2026-09-22T10:00", status: "completed", completed_at: "2026-09-22T01:00:00Z" } });

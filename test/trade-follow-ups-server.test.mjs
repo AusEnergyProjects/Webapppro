@@ -33,6 +33,7 @@ function fixture(t) {
     CREATE TABLE trade_crm_quote_deliveries (firebase_uid TEXT,crm_customer_id TEXT,channel TEXT DEFAULT 'email',status TEXT);
     CREATE TABLE trade_crm_photo_request_deliveries (firebase_uid TEXT,crm_customer_id TEXT,channel TEXT DEFAULT 'email',status TEXT);
     CREATE TABLE trade_crm_appointments (id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,status TEXT DEFAULT 'scheduled',starts_at TEXT,ends_at TEXT DEFAULT '',assignee_member_id TEXT DEFAULT 'member');
+    CREATE TABLE trade_dataforce_sources (firebase_uid TEXT,work_order_id TEXT);
     CREATE TABLE trade_crm_quick_invoices (id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,invoice_number TEXT,due_at TEXT,total_cents INTEGER,status TEXT DEFAULT 'issued',sent_at TEXT DEFAULT '2026-09-26T03:00:00.000Z',provider_message_id TEXT DEFAULT 'provider-id',delivery_status TEXT DEFAULT 'provider_accepted',document_snapshot_json TEXT DEFAULT '{}',created_at TEXT DEFAULT '2026-09-25T03:00:00.000Z');
     CREATE TABLE trade_crm_quick_invoice_credits (invoice_id TEXT,firebase_uid TEXT,status TEXT DEFAULT 'issued',total_cents INTEGER);
     CREATE TABLE trade_crm_accepted_invoices (id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,invoice_number TEXT,due_at TEXT,total_cents INTEGER,status TEXT DEFAULT 'issued',issue_blocker_code TEXT DEFAULT '',commercial_handoff_id TEXT,acceptance_id TEXT,quote_id TEXT,quote_version_id TEXT,document_snapshot_json TEXT DEFAULT '{}',created_at TEXT DEFAULT '2026-09-25T03:00:00.000Z');
@@ -219,6 +220,47 @@ test("automation remains dormant until owner enables it and one appointment send
   await scanAutomaticFollowUps(f.db, f.services, later);
   await drainFollowUps(f.db, f.services, later);
   assert.equal(f.sends.length, 1);
+});
+
+test("automatic email skips imported original visits while allowing new visits and ignoring foreign source claims", async t => {
+  for (const past of [false, true]) {
+    const f = fixture(t);
+    const visit = past ? { starts_at: "2026-09-28T09:00", status: "completed" } : {};
+    f.appointment("job:visit", "job", visit);
+    f.appointment("job-new-visit", "job", visit);
+    f.insert("trade_dataforce_sources", { firebase_uid: "owner", work_order_id: "job" });
+    f.job("normal");
+    f.appointment("normal:visit", "normal", visit);
+    // A claim belonging to another business cannot suppress this owner's visit.
+    f.insert("trade_dataforce_sources", { firebase_uid: "other", work_order_id: "normal" });
+    f.job("foreign", "other");
+    f.appointment("foreign:visit", "foreign", { ...visit, firebase_uid: "other" });
+    await saveFollowUpSettings(f.db, "owner", { ...DEFAULT_FOLLOW_UP_SETTINGS, appointmentEnabled: true,
+      ...(past ? { appointmentTemplateId: "appointment-follow-up", appointmentTiming: { amount: 2, unit: "hours", direction: "after" } } : {}) }, ENABLED);
+    await scanAutomaticFollowUps(f.db, f.services, NOW);
+    assert.deepEqual(f.rows().map(item => JSON.parse(item.context_json).appointmentId).sort(), ["job-new-visit", "normal:visit"]);
+    const automatic = await f.preview("job", past ? "appointment-follow-up" : "appointment-reminder", { now: NOW, automatic: true, appointmentId: "job:visit" });
+    assert.equal(automatic.context.appointmentId, "");
+    const manual = await f.preview("job", past ? "appointment-follow-up" : "appointment-reminder", { now: NOW, appointmentId: "job:visit" });
+    assert.equal(manual.context.appointmentId, "job:visit");
+    f.sqlite.prepare("UPDATE trade_crm_appointments SET starts_at=? WHERE id='job:visit'")
+      .run(past ? "2026-09-28T10:00" : "2026-09-29T10:00");
+    await scanAutomaticFollowUps(f.db, f.services, new Date(NOW.getTime() + 10 * 60_000));
+    assert.equal(f.rows().length, 2, "editing the imported original appointment must not opt it into automatic outreach");
+    assert.equal(f.sends.length, 0, "selection tests must not invoke transport");
+  }
+});
+
+test("automatic email rechecks source provenance before draining an already queued original visit", async t => {
+  const f = fixture(t);
+  f.appointment("job:visit");
+  await saveFollowUpSettings(f.db, "owner", { ...DEFAULT_FOLLOW_UP_SETTINGS, appointmentEnabled: true }, ENABLED);
+  await scanAutomaticFollowUps(f.db, f.services, NOW);
+  assert.equal(f.rows().length, 1);
+  f.insert("trade_dataforce_sources", { firebase_uid: "owner", work_order_id: "job" });
+  await drainFollowUps(f.db, f.services, NOW);
+  assert.equal(f.rows()[0].status, "cancelled");
+  assert.equal(f.sends.length, 0);
 });
 
 test("switching automation off cancels work queued before the switch", async t => {
