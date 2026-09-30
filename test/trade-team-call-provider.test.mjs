@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 import {openTeamCallMedia,teamCallMediaConstraints,teamCallMediaError,teamCallNeedsPermission} from '../src/lib/trade-team-call-media.ts';
+import {TEAM_CALL_RING_SECONDS} from '../src/lib/trade-team-calls.ts';
 
 const source=fs.readFileSync(new URL('../src/components/TradeTeamCallProvider.tsx',import.meta.url),'utf8');
 const tree=ts.createSourceFile('TradeTeamCallProvider.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
@@ -39,19 +40,41 @@ test('call API timeout aborts a hanging fetch and preserves server access errors
   await assert.rejects(denied(),error=>error.status===403&&error.code==='CALL_ACCESS_REQUIRED');
 });
 
-function pollFixture({hadRemote=false,elapsed=0,participants=[],online=true}={}) {
+function pollFixture({hadRemote=false,elapsed=0,participants=[],online=true,readCall}={}) {
   const stops=[],incoming=[],active=[];
-  const current={call:{id:'call-1234'},sessionId:'session-1234',memberId:'member-self',cursor:0,lastSuccess:Date.now(),startedAt:Date.now()-elapsed,hadRemote,
+  const current={call:{id:'call-1234',createdAt:new Date(Date.now()-elapsed).toISOString()},sessionId:'session-1234',memberId:'member-self',cursor:0,lastSuccess:Date.now(),startedAt:Date.now(),hadRemote,
     peers:{sync:async()=>{},receive:async()=>{}}};
   const tick=operation('tick',{inFlight:false,disposed:false,session:{current},starting:{current:false},navigator:{onLine:online},
-    api:async()=>({call:{id:'call-1234',status:'active',participants},signals:[]}),stop:(...args)=>stops.push(args),setActive:value=>active.push(value),setIncoming:value=>incoming.push(value),dismissed:{current:new Set()}});
+    api:async()=>readCall ? readCall(current.call) : {call:{...current.call,status:'active',participants},signals:[]},TEAM_CALL_RING_SECONDS,stop:(...args)=>stops.push(args),setActive:value=>active.push(value),setIncoming:value=>incoming.push(value),dismissed:{current:new Set()}});
   return{tick,stops,active,current};
 }
 
-test('unanswered calls stop after a minute and a joined teammate leaving is distinct',async()=>{
-  let f=pollFixture({elapsed:60001});await f.tick();assert.match(f.stops[0][0],/No answer/);
-  f=pollFixture({hadRemote:true});await f.tick();assert.match(f.stops[0][0],/teammate left/);
-  f=pollFixture({elapsed:10000});await f.tick();assert.equal(f.stops.length,0);
+test('unanswered calls stop exactly 45 seconds after server creation, not local session setup',async context=>{
+  context.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,8,30)});
+  assert.equal(TEAM_CALL_RING_SECONDS,45);
+  const f=pollFixture({elapsed:44999,participants:[{memberId:'member-self'}]});
+  await f.tick();assert.equal(f.stops.length,0);
+  context.mock.timers.tick(1);await f.tick();assert.match(f.stops[0][0],/No answer/);
+  assert.equal(Date.now()-f.current.startedAt,1,'Local setup cannot extend the call ringing deadline');
+});
+
+test('a delayed pre-deadline snapshot cannot end a call answered just before the deadline',async context=>{
+  context.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,8,30)});
+  let deliver,requests=0;
+  const f=pollFixture({elapsed:44800,readCall:call=>{
+    requests++;
+    if(requests===1)return new Promise(resolve=>{deliver=()=>resolve({call:{...call,status:'active',participants:[{memberId:'member-self'}]},signals:[]});});
+    return {call:{...call,status:'active',hasBeenAnswered:true,participants:[{memberId:'member-self'},{memberId:'member-peer'}]},signals:[]};
+  }});
+  const pending=f.tick();
+  context.mock.timers.tick(250);deliver();await pending;
+  assert.equal(f.stops.length,0,'A 44.8-second snapshot delivered at 45.05 seconds is not evidence of no answer');
+  await f.tick();
+  assert.equal(requests,2);assert.equal(f.stops.length,0);assert.equal(f.current.hadRemote,true);
+});
+
+test('a joined teammate leaving reports a departure rather than no answer',async()=>{
+  const f=pollFixture({hadRemote:true});await f.tick();assert.match(f.stops[0][0],/teammate left/);
 });
 
 test('a joined call is not timed out as unanswered and offline calls release media',async()=>{
@@ -63,8 +86,85 @@ test('ring tone and message audio are stopped on session cleanup without auto-an
   assert.match(source,/window\.addEventListener\("tlink:message-received",message\)/);
   assert.match(source,/if \(!session\.current && !starting\.current\) audio\.message\(\)/);
   assert.match(source,/window\.removeEventListener\("tlink:message-received",message\)/);
-  assert.match(source,/return \(\) => audio\?\.stop\(\)/);
-  assert.match(source,/onClick=\{\(\) => void begin\(invitation\.threadId,invitation\.mode,invitation\)\}>Answer/);
+  assert.match(source,/onClick=\{\(\) => void begin\(invitation\.threadId,invitation\.mode,invitation\)\}>\{invitation\.hasBeenAnswered \? "Join call" : "Answer"\}/);
+});
+
+function ringEffect(dependencies) {
+  dependencies={TEAM_CALL_RING_SECONDS,ringingCreatedAt:new Date().toISOString(),...dependencies};
+  let expression;
+  const visit=node=>{
+    if(ts.isCallExpression(node)&&node.expression.getText(tree)==='useEffect'
+      &&ts.isArrayLiteralExpression(node.arguments[1])&&node.arguments[1].elements.some(item=>item.getText(tree)==='outgoingRingId'))expression=node.arguments[0];
+    ts.forEachChild(node,visit);
+  };
+  visit(tree);assert.ok(expression,'Missing incoming/outgoing ring effect');
+  const compiled=ts.transpileModule(`const extracted=${expression.getText(tree)};`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+  return new Function(...Object.keys(dependencies),`${compiled}; return extracted;`)(...Object.values(dependencies))();
+}
+
+test('incoming and outgoing tones stop at the absolute deadline without ending the call or awaiting a poll',context=>{
+  context.mock.timers.enable({apis:['Date','setTimeout'],now:Date.UTC(2026,8,30)});
+  for(const mode of ['incoming','outgoing']){
+    const events=[],ringer={current:{start:value=>events.push(value),stop:()=>events.push('stop')}};
+    const cleanup=ringEffect({ringingId:mode==='incoming'?'call-1234':undefined,outgoingRingId:mode==='outgoing'?'call-1234':undefined,
+      ringingCreatedAt:new Date(Date.now()-39999).toISOString(),ringer,stop:()=>assert.fail('Ringing deadline must not end the call')});
+    assert.deepEqual(events,[mode]);
+    context.mock.timers.tick(5000);assert.deepEqual(events,[mode]);
+    context.mock.timers.tick(1);assert.deepEqual(events,[mode,'stop']);
+    cleanup();
+  }
+});
+
+test('ring cleanup cancels the previous deadline and expired invitations never restart tones',context=>{
+  context.mock.timers.enable({apis:['Date','setTimeout'],now:Date.UTC(2026,8,30)});
+  const events=[],ringer={current:{start:value=>events.push(value),stop:()=>events.push('stop')}};
+  const cleanup=ringEffect({ringingId:'call-old',outgoingRingId:undefined,ringingCreatedAt:new Date(Date.now()-44000).toISOString(),ringer});
+  cleanup();
+  const nextCleanup=ringEffect({ringingId:undefined,outgoingRingId:'call-next',ringer});
+  context.mock.timers.tick(1000);assert.deepEqual(events,['incoming','stop','outgoing'],'Old timer must not silence a later call');
+  context.mock.timers.tick(44000);assert.deepEqual(events,['incoming','stop','outgoing','stop']);nextCleanup();
+  events.length=0;
+  ringEffect({ringingId:'call-expired',outgoingRingId:undefined,ringingCreatedAt:new Date(Date.now()-45000).toISOString(),ringer});
+  assert.deepEqual(events,['stop']);
+});
+
+test('outgoing ringback stops when a remote connects or joins and never rings the answering side',()=>{
+  for(const remoteState of ['connected','joined']){
+    const events=[],ringer={current:{start:mode=>events.push(mode),stop:()=>events.push('stop')}};
+    const active={id:'call-1234',createdByMemberId:'member-self'},session={current:{memberId:'member-self',hadRemote:false}};
+    const state={active,session,remotes:[]};
+    const outgoingRingId=operation('outgoingRingId',state);assert.equal(outgoingRingId,active.id);
+    const cleanup=ringEffect({ringingId:undefined,outgoingRingId,ringer});assert.deepEqual(events,['outgoing']);
+    if(remoteState==='connected')state.remotes=[{state:'connected'}];else session.current.hadRemote=true;
+    const next=operation('outgoingRingId',state);assert.equal(next,undefined);
+    cleanup();ringEffect({ringingId:undefined,outgoingRingId:next,ringer});assert.deepEqual(events,['outgoing','stop']);
+    assert.equal(operation('outgoingRingId',{active:{...active,createdByMemberId:'member-other'},session:{current:{memberId:'member-self',hadRemote:false}},remotes:[]}),undefined);
+  }
+});
+
+test('incoming ring mode is cleared when the invitation is answered, dismissed or a call is active',()=>{
+  const events=[],ringer={current:{start:mode=>events.push(mode),stop:()=>events.push('stop')}};
+  const state={active:null,busy:false,retry:null,incoming:[{id:'call-1234'}]};
+  assert.equal(operation('ringingId',state),'call-1234');
+  const cleanup=ringEffect({ringingId:'call-1234',outgoingRingId:undefined,ringer});assert.deepEqual(events,['incoming']);
+  for(const changes of [{busy:true},{incoming:[]},{active:{id:'active-1234'}},{retry:{threadId:'thread-1234'}}])assert.equal(operation('ringingId',{...state,...changes}),undefined);
+  cleanup();assert.deepEqual(events,['incoming','stop']);
+});
+
+test('a group call answered by another teammate stops ringing and stays silent on later polls',()=>{
+  const events=[],ringer={current:{start:mode=>events.push(mode),stop:()=>events.push('stop')}};
+  const invitation={id:'call-1234',hasBeenAnswered:false};
+  const state={active:null,busy:false,retry:null,incoming:[invitation]};
+  const ringingId=operation('ringingId',state);
+  const cleanup=ringEffect({ringingId,outgoingRingId:undefined,ringer});
+  assert.deepEqual(events,['incoming']);
+  state.incoming=[{...invitation,hasBeenAnswered:true}];
+  const answeredRingId=operation('ringingId',state);assert.equal(answeredRingId,undefined);
+  cleanup();ringEffect({ringingId:answeredRingId,outgoingRingId:undefined,ringer});
+  assert.deepEqual(events,['incoming','stop']);
+  state.incoming=[{...invitation,hasBeenAnswered:true}];
+  ringEffect({ringingId:operation('ringingId',state),outgoingRingId:undefined,ringer});
+  assert.deepEqual(events,['incoming','stop'],'Polling an answered group call cannot restart the ringtone');
 });
 
 test('changing to busy clears the pending ring without touching an established call',()=>{
@@ -85,21 +185,22 @@ test('an incoming response started before a presence change cannot restart ringi
 });
 
 function startFixture({requestMedia,permissionState=async()=> 'unknown',policyBlocked=false}={}) {
-  const order=[],state={},session={current:null},media={current:null},mediaRequest={current:null},generation={current:0},starting={current:false};
+  const order=[],audioEvents=[],state={},session={current:null},media={current:null},mediaRequest={current:null},generation={current:0},starting={current:false};
+  const ringer={current:{stop:()=>audioEvents.push('stop'),unlock:async()=>{audioEvents.push('unlock');return true;}}};
   const setters=Object.fromEntries(['Busy','Notice','Retry','PermissionHelp','Minimized','OpeningMode','LocalPreview','HasCamera','Active','Incoming','Remotes','Muted','CameraOff','CameraNotice','MultipleCameras','SwitchingCamera'].map(name=>[`set${name}`,value=>{state[name]=value;}]));
-  const call={id:'call-1234',threadId:'thread-1234',status:'active',participants:[]};
+  const call={id:'call-1234',threadId:'thread-1234',status:'active',createdAt:new Date().toISOString(),participants:[]};
   const api=async(_query,body)=>{
     order.push(body.action);
     return body.action==='ice'?{iceServers:[{urls:'stun:example.test'}]}:{call,memberId:'member-self'};
   };
-  const release=operation('release',{generation,starting,mediaRequest,session,media,changingCamera:{current:false},dismissed:{current:new Set()},api});
+  const release=operation('release',{generation,starting,mediaRequest,session,media,ringer,changingCamera:{current:false},dismissed:{current:new Set()},api});
   const stop=operation('stop',{release,...setters});
-  const begin=operation('begin',{available:true,starting,session,...setters,generation,mediaRequest,media,facing:{current:'user'},
+  const begin=operation('begin',{available:true,starting,session,...setters,generation,mediaRequest,media,ringer,facing:{current:'user'},
     navigator:{mediaDevices:{getUserMedia(){}}},window:{RTCPeerConnection(){}},teamCallMediaConstraints,
     openTeamCallMedia:(constraints,_request,signal)=>openTeamCallMedia(constraints,value=>{order.push('media');return requestMedia(value);},signal),
     api,stop,teamCallMediaError,teamCallNeedsPermission,teamCallPolicyBlocked:()=>policyBlocked,teamCallPermissionState:permissionState,
     TeamCallConnections:class{async sync(){}close(){}},dismissed:{current:new Set()}});
-  return {begin,stop,state,order,session,media,generation};
+  return {begin,stop,state,order,audioEvents,session,media,generation};
 }
 
 const fakeStream=()=>({stopped:0,getTracks(){return[{stop:()=>this.stopped++}];},getVideoTracks(){return[];}});
@@ -110,9 +211,10 @@ test('start and answer invoke media on the click stack before auth or server wor
     const f=startFixture({requestMedia:()=>new Promise(resolve=>{grant=resolve;})});
     const pending=f.begin('thread-1234','audio',existing);
     assert.deepEqual(f.order,['media']);assert.equal(f.state.Busy,true);
+    assert.deepEqual(f.audioEvents,['stop','unlock'],'Starting or answering stops stale tones and unlocks on the click stack');
     grant(stream);await pending;
     assert.deepEqual(f.order,['media',existing?'join':'start','ice']);assert.equal(f.state.Active.id,'call-1234');
-    f.stop();assert.equal(stream.stopped,1);
+    f.stop();assert.equal(stream.stopped,1);assert.deepEqual(f.audioEvents,['stop','unlock','stop']);
   }
 });
 

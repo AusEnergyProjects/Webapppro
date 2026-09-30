@@ -7,7 +7,7 @@ import type { User } from "firebase/auth";
 import { TeamCallConnections, type CallRemote } from "@/lib/trade-team-call-client";
 import { openTeamCallMedia, TeamCallRinger, teamCallCameraConstraints, teamCallMediaConstraints, teamCallMediaError, teamCallNeedsPermission, teamCallPolicyBlocked, teamCallPermissionState, teamCallPermissionSteps, type CameraFacing } from "@/lib/trade-team-call-media";
 import { tradeBrowserDevice } from "@/lib/trade-device-client";
-import type { TeamCall, TeamCallSignal } from "@/lib/trade-team-calls";
+import { TEAM_CALL_RING_SECONDS, type TeamCall, type TeamCallSignal } from "@/lib/trade-team-calls";
 
 type Mode = "audio" | "video";
 type CallResult = { ok: boolean; error?: string; code?: string; call?: TeamCall | null; calls?: TeamCall[]; memberId?: string; signals?: TeamCallSignal[]; iceServers?: RTCIceServer[] };
@@ -102,12 +102,19 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       window.removeEventListener("tlink:team-presence-changed",presenceChanged);
     };
   },[available]);
-  const ringingId = !active && !busy && !retry ? incoming[0]?.id : undefined;
+  const ringingId = !active && !busy && !retry && !incoming[0]?.hasBeenAnswered ? incoming[0]?.id : undefined;
+  const outgoingRingId = active && active.createdByMemberId === session.current?.memberId && !session.current.hadRemote
+    && !remotes.some(peer => peer.state === 'connected') ? active.id : undefined;
+  const ringingCreatedAt = outgoingRingId ? active?.createdAt : ringingId ? incoming[0]?.createdAt : undefined;
   useEffect(() => {
-    if (!ringingId) return;
-    const audio = ringer.current; audio?.start();
-    return () => audio?.stop();
-  },[ringingId]);
+    if (!ringingId && !outgoingRingId) return;
+    const audio = ringer.current;
+    const remaining = Date.parse(ringingCreatedAt || "") + TEAM_CALL_RING_SECONDS * 1000 - Date.now();
+    if (!(remaining > 0)) { audio?.stop(); return; }
+    audio?.start(outgoingRingId ? 'outgoing' : 'incoming');
+    const timer = setTimeout(() => audio?.stop(),remaining);
+    return () => { clearTimeout(timer); audio?.stop(); };
+  },[ringingId,outgoingRingId,ringingCreatedAt]);
   const api = useCallback(async (query = "", body?: Record<string,unknown>): Promise<CallResult> => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -130,6 +137,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
 
   const release = useCallback((notify = true) => {
     generation.current++; starting.current = false;
+    ringer.current?.stop();
     mediaRequest.current?.abort(); mediaRequest.current = null;
     const current = session.current; session.current = null;
     current?.peers?.close();
@@ -150,6 +158,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
 
   const begin = useCallback(async (threadId: string, mode: Mode, existing?: TeamCall) => {
     if (!available || starting.current || session.current) return;
+    ringer.current?.stop(); void ringer.current?.unlock();
     starting.current = true; setBusy(true); setNotice(""); setRetry(null); setPermissionHelp(null); setMinimized(false); setOpeningMode(mode);
     const epoch = ++generation.current, sessionId = crypto.randomUUID();
     try {
@@ -232,12 +241,14 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       let processing = false;
       try {
         if (current && current.peers) {
+          const requestedAt = Date.now();
           const result = await api(`callId=${encodeURIComponent(current.call.id)}&sessionId=${encodeURIComponent(current.sessionId)}&after=${current.cursor}`);
           if (disposed || session.current !== current) return;
           if (!result.call || result.call.status !== "active") { stop("Call ended.",false); return; }
           const hasRemote = result.call.participants.some(person => person.memberId !== current.memberId);
           if (current.hadRemote && !hasRemote) { stop("Your teammate left the call."); return; }
-          if (!hasRemote && Date.now()-current.startedAt >= 60000) { stop("No answer. You can call again or send a message."); return; }
+          // A pre-deadline snapshot may arrive after a teammate has answered.
+          if (!hasRemote && requestedAt >= Date.parse(current.call.createdAt) + TEAM_CALL_RING_SECONDS * 1000) { stop("No answer. You can call again or send a message."); return; }
           current.hadRemote ||= hasRemote;
           current.call = result.call; setActive(result.call); processing = true;
           await current.peers.sync(result.call.participants);
@@ -304,7 +315,13 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
   return <CallContext.Provider value={{start:(threadId,mode) => void begin(threadId,mode),busy:busy || Boolean(active)}}>{children}
     {(active || busy || invitation || notice) && <aside className={`tlink-call-dock ${minimized ? "tlink-call-minimized" : ""}`} aria-label="Internal team call">
       {active ? <><header><div><strong>{active.threadName || "Team call"}</strong><span role="status">{connected ? "Connected" : busy || remotes.length ? "Connecting..." : "Waiting for answer..."} · Internal · {hasCamera ? "Video" : "Voice"}</span></div><button type="button" onClick={() => setMinimized(value => !value)}><CallIcon name={minimized ? "expand" : "minimise"} />{minimized ? "Expand" : "Minimise"}</button></header>
-        {!minimized && <div className="tlink-call-grid"><StreamTile stream={localPreview} name={muted ? "You · Muted" : "You"} local cameraOff={cameraOff || !hasCamera} />{remotes.map(peer => <StreamTile key={peer.memberId} stream={peer.stream} name={peer.name} state={peer.state} />)}</div>}
+        {!minimized && <div className="tlink-call-stage">
+          <div className="tlink-call-grid" data-remotes={remotes.length > 1 ? 'many' : '1'}>
+            {remotes.length ? remotes.map(peer => <StreamTile key={peer.memberId} stream={peer.stream} name={peer.name} state={peer.state} />)
+              : <div className="tlink-call-waiting"><span className="tlink-call-initial" aria-hidden="true">{active.threadName.slice(0,1)}</span><span>{active.threadName || 'Your teammate'}</span><span>{busy ? 'Connecting...' : 'Ringing...'}</span></div>}
+          </div>
+          <div className="tlink-call-self-preview"><StreamTile stream={localPreview} name={muted ? "You · Muted" : "You"} local cameraOff={cameraOff || !hasCamera} /></div>
+        </div>}
         {cameraNotice && <p role="status" className="tlink-call-help">{cameraNotice}</p>}
         <div className="tlink-call-controls"><button type="button" aria-pressed={muted} onClick={toggleMuted}><CallIcon name={muted ? "mic-off" : "mic"} />{muted ? "Unmute" : "Mute"}</button>{hasCamera && <><button type="button" disabled={switchingCamera} aria-pressed={cameraOff} onClick={toggleCamera}><CallIcon name={cameraOff ? "camera-off" : "video"} />{cameraOff ? "Camera on" : "Camera off"}</button>{multipleCameras && <button type="button" disabled={switchingCamera} onClick={() => void changeCamera(facing.current === "user" ? "environment" : "user")}><CallIcon name="switch" />{switchingCamera ? "Switching..." : "Switch camera"}</button>}</>}<button type="button" className="tlink-call-hangup" onClick={() => stop()}><CallIcon name="end" />End call</button></div>
       </> : busy ? <><strong>Opening your {openingMode === "video" ? "video" : "voice"} call</strong><p role="status">Choose Allow if your browser asks for {openingMode === "video" ? "microphone and camera" : "microphone"} access.</p><button type="button" onClick={() => stop()}>Cancel</button></>
@@ -322,7 +339,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
             <CallIcon name={retry.mode === "video" ? "video" : "voice"} /></button>{retry.mode === "video" && <button type="button" onClick={() => void begin(retry.threadId,"audio",retry.existing)}><CallIcon name="voice" />Use voice only</button>}</>)}
             <button type="button" onClick={() => stop()}>Close</button>
           </div>
-        </> : invitation ? <><strong>{invitation.threadName || "Team call"}</strong><p role="status">Incoming {invitation.mode === "video" ? "video" : "voice"} call · Internal</p><p className="tlink-call-help">Your microphone{invitation.mode === "video" ? " and camera turn" : " turns"} on when you answer.</p>{!ringReady && <button type="button" onClick={() => void ringer.current?.unlock()}>Enable ring sound</button>}<div className="tlink-call-controls"><button type="button" className="tlink-call-answer" onClick={() => void begin(invitation.threadId,invitation.mode,invitation)}>Answer<CallIcon name={invitation.mode === "video" ? "video" : "voice"} /></button>{invitation.mode === "video" && <button type="button" onClick={() => void begin(invitation.threadId,"audio",invitation)}><CallIcon name="voice" />Voice only</button>}<button type="button" onClick={() => {dismissed.current.add(invitation.id);setIncoming(items=>items.filter(item=>item.id!==invitation.id));}}><CallIcon name="end" />Decline</button></div></> : null}
+        </> : invitation ? <><strong>{invitation.threadName || "Team call"}</strong><p role="status">{invitation.hasBeenAnswered ? "Join" : "Incoming"} {invitation.mode === "video" ? "video" : "voice"} call · Internal</p><p className="tlink-call-help">Your microphone{invitation.mode === "video" ? " and camera turn" : " turns"} on when you {invitation.hasBeenAnswered ? "join" : "answer"}.</p>{!invitation.hasBeenAnswered && !ringReady && <button type="button" onClick={() => void ringer.current?.unlock()}>Enable ring sound</button>}<div className="tlink-call-controls"><button type="button" className="tlink-call-answer" onClick={() => void begin(invitation.threadId,invitation.mode,invitation)}>{invitation.hasBeenAnswered ? "Join call" : "Answer"}<CallIcon name={invitation.mode === "video" ? "video" : "voice"} /></button>{invitation.mode === "video" && <button type="button" onClick={() => void begin(invitation.threadId,"audio",invitation)}><CallIcon name="voice" />Voice only</button>}<button type="button" onClick={() => {dismissed.current.add(invitation.id);setIncoming(items=>items.filter(item=>item.id!==invitation.id));}}><CallIcon name="end" />{invitation.hasBeenAnswered ? "Dismiss" : "Decline"}</button></div></> : null}
     </aside>}
   </CallContext.Provider>;
 }

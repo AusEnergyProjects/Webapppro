@@ -47,3 +47,56 @@ test('expired or malformed native invitations cannot be answered', () => {
   assert.equal(bridge.currentSystemCall(event('answer', { callId: 'invalid' })), false);
   assert.equal(bridge.currentSystemCall(event('answer', { mode: 'screen' })), false);
 });
+
+test('an accepted Answer keeps bounded connection grace without extending an unanswered invitation', () => {
+  const bridge = load(null);
+  const began = Date.parse('2026-09-30T00:00:00.000Z');
+  const incoming = event('incoming', { expiresAt: new Date(began + 45_000).toISOString() });
+  // Native accepted Answer at44 seconds and allows45 seconds for JS/RTC setup.
+  const answer = event('answer', { expiresAt: new Date(began + 44_000 + 45_000).toISOString() });
+  assert.equal(bridge.currentSystemCall(incoming, began + 46_000), false);
+  assert.equal(bridge.currentSystemCall(answer, began + 46_000), true);
+  assert.equal(bridge.currentSystemCall(answer, began + 89_000), false);
+});
+
+test('authenticated connecting is separate from media connected and tolerates earlier native modules', async () => {
+  const seen = [], id = event('answer').callId;
+  const bridge = load({ connecting: async value => seen.push(['connecting', value]), connected: async value => seen.push(['connected', value]) });
+  await bridge.markSystemCallConnecting(id);
+  assert.deepEqual(seen, [['connecting', id]]);
+  await bridge.connectSystemCall(id);
+  assert.deepEqual(seen, [['connecting', id], ['connected', id]]);
+  await load({}).markSystemCallConnecting(id);
+  await load(null).markSystemCallConnecting(id);
+});
+
+test('native call sound resources are packaged, audible PCM with quiet gaps and no clipped samples', () => {
+  const root = new URL('../modules/tlink-calls/ios/', import.meta.url);
+  const podspec = fs.readFileSync(new URL('TLinkCalls.podspec', root), 'utf8');
+  assert.match(podspec, /s\.resources = 'Resources\/\*\.wav'/);
+  const swift = fs.readFileSync(new URL('TLinkCallsModule.swift', root), 'utf8');
+  assert.match(swift, /configuration\.ringtoneSound = "TLinkIncoming\.wav"/);
+  assert.match(swift, /forResource: "TLinkRingback", withExtension: "wav"/);
+  for (const name of ['TLinkIncoming.wav', 'TLinkRingback.wav']) {
+    const wav = fs.readFileSync(new URL(`Resources/${name}`, root));
+    assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
+    assert.equal(wav.toString('ascii', 8, 12), 'WAVE');
+    assert.equal(wav.readUInt16LE(20), 1, 'uncompressed PCM');
+    assert.equal(wav.readUInt16LE(22), 1, 'mono');
+    assert.equal(wav.readUInt16LE(34), 16);
+    assert.equal(wav.readUInt32LE(40), wav.length - 44);
+    const frames = (wav.length - 44) / 2;
+    const duration = frames / wav.readUInt32LE(24);
+    assert.ok(duration >= 2 && duration < 30, 'CallKit ringtone stays below 30 seconds');
+    let energy = 0, silent = 0, peak = 0;
+    for (let i = 0; i < frames; i++) {
+      const sample = wav.readInt16LE(44 + i * 2);
+      energy += sample * sample;
+      peak = Math.max(peak, Math.abs(sample));
+      if (sample === 0) silent++;
+    }
+    assert.ok(Math.sqrt(energy / frames) > 3000, 'tone is audible');
+    assert.ok(peak < 32767, 'no clipping');
+    assert.ok(silent / frames > .4, 'recognisable ringing cadence, not a continuous alarm');
+  }
+});

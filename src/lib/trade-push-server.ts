@@ -3,7 +3,7 @@ import { tradeTeamCallAvailabilitySql } from './trade-team-presence';
 import { messageActorGuard, messageParticipantGuard } from './trade-message-media-access';
 import { verifiedTradeAccountPredicate } from './trade-access-server';
 import type { MessageActor } from './trade-messages-server';
-import type { TeamCall } from './trade-team-calls';
+import { TEAM_CALL_RING_SECONDS, type TeamCall } from './trade-team-calls';
 import { pushBoolean, pushId, pushSubscriptionInput, type TradePushPayload, type TradePushSubscriptionStatus } from './trade-push';
 import { sendTradePush, tradePushCredentials } from './trade-push-provider';
 import { authorizeTradeApns, authorizeTradeNativePush, sendTradeApns, sendTradeNativePush, tradeApnsCredentials, tradeNativePushCredentials } from './trade-native-push-provider';
@@ -122,10 +122,10 @@ function sourceGuard(actor: MessageActor, kind: TradePushPayload['kind'], thread
     AND event.thread_id=? AND event.actor_member_id=? AND event.created_at>=? AND event.created_at<=?)`,
     values: [...guard.values,eventId,actor.ownerUid,threadId,actor.memberId,recent(15*60000),now] }
     : { sql: `${guard.sql} AND EXISTS (SELECT 1 FROM trade_team_calls event WHERE event.id=? AND event.owner_uid=? AND event.thread_id=?
-      AND event.created_by_member_id=? AND event.status='active' AND event.expires_at>? AND event.created_at>=? AND event.created_at<=?
+      AND event.created_by_member_id=? AND event.status='active' AND event.expires_at>? AND event.created_at>? AND event.created_at<=?
       AND EXISTS (SELECT 1 FROM trade_team_call_participants caller WHERE caller.call_id=event.id AND caller.owner_uid=event.owner_uid
         AND caller.member_id=event.created_by_member_id AND caller.left_at='' AND caller.last_seen_at>=?))`,
-      values: [...guard.values,eventId,actor.ownerUid,threadId,actor.memberId,now,recent(90000),now,recent(45000)] };
+      values: [...guard.values,eventId,actor.ownerUid,threadId,actor.memberId,now,recent(TEAM_CALL_RING_SECONDS * 1000),now,recent(45000)] };
 }
 
 function deliveryGuard(actor: MessageActor, kind: TradePushPayload['kind'], threadId: string, eventId: string): Guard {
@@ -214,7 +214,7 @@ async function dispatch(actor: MessageActor, kind: TradePushPayload['kind'], thr
     : await db.prepare(`SELECT created_at FROM trade_internal_messages WHERE id=? AND owner_uid=? AND ${source.sql}`)
       .bind(eventId,actor.ownerUid,...source.values).first<{ created_at:string; expires_at?:string; mode?:string }>();
   if (!event) return { ...result, skipped: true };
-  const expiresAt = new Date(kind === 'team-call' ? Math.min(Date.parse(event.created_at) + 90000, Date.parse(event.expires_at || '')) : Date.parse(event.created_at) + 86400000).toISOString();
+  const expiresAt = new Date(kind === 'team-call' ? Math.min(Date.parse(event.created_at) + TEAM_CALL_RING_SECONDS * 1000, Date.parse(event.expires_at || '')) : Date.parse(event.created_at) + 86400000).toISOString();
   const payload: TradePushPayload = { v:1, kind, id:eventId, threadId, title:'TLink', body: kind === 'team-message' ? 'New team message' : event.mode === 'video' ? 'Incoming team video call' : 'Incoming team voice call',
     url: `/direct-trade/messages?threadId=${encodeURIComponent(threadId)}${kind === 'team-call' ? `&callId=${encodeURIComponent(eventId)}` : ''}`, expiresAt };
   const guard = deliveryGuard(actor,kind,threadId,eventId);

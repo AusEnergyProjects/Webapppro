@@ -13,6 +13,7 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
   s.dependency 'react-native-webrtc'
   s.source_files = '**/*.{h,m,swift}'
+  s.resources = 'Resources/*.wav'
   s.frameworks = 'CallKit', 'PushKit', 'AVFoundation'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
 end

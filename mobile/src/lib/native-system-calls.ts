@@ -13,6 +13,7 @@ type NativeCallsModule = {
   incoming: (call: SystemCall) => Promise<void>;
   answer: (callId: string) => Promise<void>;
   outgoing: (call: SystemCall) => Promise<void>;
+  connecting?: (callId: string) => Promise<void>;
   connected: (callId: string) => Promise<void>;
   end: (callId: string) => Promise<void>;
   speaker: (enabled: boolean) => Promise<void>;
@@ -34,6 +35,8 @@ export function subscribeNativeCallToken(listener: () => void) {
 export async function showSystemCall(call: SystemCall) { await native?.incoming(call); }
 export async function answerSystemCall(callId: string) { await native?.answer(callId); }
 export async function startSystemCall(call: SystemCall) { await native?.outgoing(call); }
+/** Call only after the authenticated server confirms a remote participant joined. */
+export async function markSystemCallConnecting(callId: string) { await native?.connecting?.(callId); }
 export async function connectSystemCall(callId: string) { await native?.connected(callId); }
 export async function endSystemCall(callId: string) { await native?.end(callId); }
 export async function setSystemCallSpeaker(enabled: boolean) { await native?.speaker(enabled); }

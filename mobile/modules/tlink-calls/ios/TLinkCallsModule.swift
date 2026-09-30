@@ -12,6 +12,11 @@ private struct TLinkCall {
   var payload: [String: Any] {
     ["callId": uuid.uuidString.lowercased(), "threadId": threadId, "mode": mode, "expiresAt": expiresAt]
   }
+  func connecting() -> TLinkCall {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return TLinkCall(uuid: uuid, threadId: threadId, mode: mode, expiresAt: formatter.string(from: Date().addingTimeInterval(45)))
+  }
   static func parse(_ data: [String: Any]) -> TLinkCall? {
     guard let callId = data["callId"] as? String, let uuid = UUID(uuidString: callId),
       let threadId = data["threadId"] as? String,
@@ -36,13 +41,15 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
   private let controller = CXCallController(queue: .main)
   private var registry: PKPushRegistry?
   private var calls: [UUID: TLinkCall] = [:]
-  private var answers: [UUID: CXAnswerCallAction] = [:]
   private var timers: [UUID: Timer] = [:]
   private var events: [[String: Any]] = []
   private var connectedCalls: Set<UUID> = []
   private var outgoingCalls: Set<UUID> = []
+  private var ringExpiredCalls: Set<UUID> = []
   private var acceptedCalls: Set<UUID> = []
   private var heartbeat: Timer?
+  private var ringback: AVAudioPlayer?
+  private var audioActive = false
   var notify: (() -> Void)?
   var tokenChanged: (() -> Void)?
   private(set) var token = ""
@@ -55,10 +62,12 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     configuration.maximumCallsPerCallGroup = 1
     configuration.supportedHandleTypes = [.generic]
     configuration.includesCallsInRecents = false
+    configuration.ringtoneSound = "TLinkIncoming.wav"
     provider = CXProvider(configuration: configuration)
     super.init()
     provider.setDelegate(self, queue: .main)
     RTCAudioSession.sharedInstance().useManualAudio = true
+    RTCAudioSession.sharedInstance().isAudioEnabled = false
   }
 
   func start() {
@@ -147,10 +156,7 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
       if error != nil { self.calls.removeValue(forKey: call.uuid) }
       else {
         self.enqueue("incoming", call)
-        let delay = max(1, min(90, TLinkCall.date(call.expiresAt)!.timeIntervalSinceNow))
-        self.timers[call.uuid] = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
-          if !self.connectedCalls.contains(call.uuid) { self.end(call.uuid, reason: .unanswered) }
-        }
+        self.expireUnconnected(call, after: min(45, TLinkCall.date(call.expiresAt)!.timeIntervalSinceNow))
       }
       completion()
     }
@@ -161,6 +167,15 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     calls[call.uuid] = call
     let action = CXStartCallAction(call: call.uuid, handle: CXHandle(type: .generic, value: "TLink team"))
     outgoingCalls.insert(call.uuid)
+    timers[call.uuid] = Timer.scheduledTimer(withTimeInterval: max(1, min(45, TLinkCall.date(call.expiresAt)!.timeIntervalSinceNow)), repeats: false) { _ in
+      guard self.calls[call.uuid] != nil, !self.acceptedCalls.contains(call.uuid), !self.connectedCalls.contains(call.uuid) else { return }
+      // Stop audible ringing at45 seconds, but let the final authenticated
+      // status response confirm an Answer that happened just before deadline.
+      self.ringExpiredCalls.insert(call.uuid)
+      self.refreshRingback()
+      self.expireUnconnected(call, after: 5)
+      self.enqueue("heartbeat", call)
+    }
     action.isVideo = call.mode == "video"
     controller.request(CXTransaction(action: action)) { error in
       if error != nil { self.end(call.uuid, reason: .failed) }
@@ -168,7 +183,9 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
   }
   func answer(_ value: String) throws {
     guard let uuid = UUID(uuidString: value), calls[uuid] != nil else { throw CallError.invalid }
-    if let action = answers.removeValue(forKey: uuid) { action.fulfill(); return }
+    // The lock-screen action already completed before JS restored its account.
+    // Do not submit another transaction or wait for microphone capture here.
+    if acceptedCalls.contains(uuid) { return }
     controller.request(CXTransaction(action: CXAnswerCallAction(call: uuid))) { error in
       if error != nil { self.end(uuid, reason: .failed) }
     }
@@ -184,27 +201,58 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     }
     // CallKit activates the audio session. Do not call setActive here.
   }
+  private func expireUnconnected(_ call: TLinkCall, after seconds: TimeInterval) {
+    timers.removeValue(forKey: call.uuid)?.invalidate()
+    timers[call.uuid] = Timer.scheduledTimer(withTimeInterval: max(1, seconds), repeats: false) { _ in
+      if !self.connectedCalls.contains(call.uuid) { self.end(call.uuid, reason: .unanswered) }
+    }
+  }
+  private func prepareRingback() throws {
+    guard let url = Bundle.main.url(forResource: "TLinkRingback", withExtension: "wav") else { throw CallError.missingSound }
+    ringback = try AVAudioPlayer(contentsOf: url)
+    ringback?.numberOfLoops = -1
+    ringback?.volume = 0.65
+    // prepareToPlay activates AVAudioSession too. Let play prepare it only
+    // after CallKit's didActivate callback has granted the call audio session.
+  }
+  private func refreshRingback() {
+    if audioActive && outgoingCalls.contains(where: { !ringExpiredCalls.contains($0) && !acceptedCalls.contains($0) && !connectedCalls.contains($0) }) { ringback?.play() }
+    else { ringback?.pause() }
+  }
+  func connecting(_ value: String) {
+    guard let id = UUID(uuidString: value), let call = calls[id],
+      outgoingCalls.contains(id), !acceptedCalls.contains(id), !connectedCalls.contains(id) else { return }
+    acceptedCalls.insert(id)
+    let joining = call.connecting()
+    calls[id] = joining
+    expireUnconnected(joining, after: 45)
+    refreshRingback()
+  }
   func connected(_ value: String) {
     guard let id = UUID(uuidString: value), calls[id] != nil else { return }
     connectedCalls.insert(id)
     timers.removeValue(forKey: id)?.invalidate()
-    answers.removeValue(forKey: id)?.fulfill()
+    let update = CXCallUpdate()
+    update.localizedCallerName = "TLink"
+    provider.reportCall(with: id, updated: update)
+    refreshRingback()
     if outgoingCalls.contains(id) { provider.reportOutgoingCall(with: id, connectedAt: Date()) }
   }
   func end(_ value: String) { if let id = UUID(uuidString: value) { end(id, reason: .remoteEnded) } }
   private func end(_ id: UUID, reason: CXCallEndedReason) {
     guard let call = calls.removeValue(forKey: id) else { return }
     timers.removeValue(forKey: id)?.invalidate()
-    answers.removeValue(forKey: id)?.fail()
     connectedCalls.remove(id)
     outgoingCalls.remove(id)
+    ringExpiredCalls.remove(id)
     acceptedCalls.remove(id)
+    refreshRingback()
     provider.reportCall(with: id, endedAt: Date(), reason: reason)
     enqueue("end", call)
-    if calls.isEmpty { heartbeat?.invalidate(); heartbeat = nil }
+    if calls.isEmpty { heartbeat?.invalidate(); heartbeat = nil; ringback = nil }
   }
   func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
-    do { try prepareAudio(); action.fulfill(); provider.reportOutgoingCall(with: action.callUUID, startedConnectingAt: Date()) }
+    do { try prepareAudio(); try prepareRingback(); action.fulfill(); provider.reportOutgoingCall(with: action.callUUID, startedConnectingAt: Date()); refreshRingback() }
     catch { action.fail(); end(action.callUUID, reason: .failed) }
   }
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
@@ -216,8 +264,15 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
       update.localizedCallerName = "Unlock iPhone and open TLink to answer"
       provider.reportCall(with: call.uuid, updated: update)
     }
-    answers[action.callUUID] = action
-    enqueue("answer", call)
+    // Fulfilling activates CallKit's audio session. Waiting for JS getUserMedia
+    // before this creates a deadlock with WebRTC's manual audio activation.
+    // This permits audio setup only; JS still verifies authenticated membership
+    // before it captures media, joins the server call, or exchanges signaling.
+    action.fulfill()
+    let joining = call.connecting()
+    calls[call.uuid] = joining
+    expireUnconnected(joining, after: 45)
+    enqueue("answer", joining)
   }
   func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
     end(action.callUUID, reason: .remoteEnded)
@@ -235,15 +290,19 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     for id in Array(calls.keys) { end(id, reason: .failed) }
   }
   func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+    audioActive = true
     RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
     RTCAudioSession.sharedInstance().isAudioEnabled = true
+    refreshRingback()
   }
   func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
+    audioActive = false
+    refreshRingback()
     RTCAudioSession.sharedInstance().isAudioEnabled = false
     RTCAudioSession.sharedInstance().audioSessionDidDeactivate(audioSession)
   }
   func speaker(_ enabled: Bool) throws { try AVAudioSession.sharedInstance().overrideOutputAudioPort(enabled ? .speaker : .none) }
-  enum CallError: Error { case invalid }
+  enum CallError: Error { case invalid, missingSound }
 }
 
 public final class TLinkCallsAppDelegateSubscriber: ExpoAppDelegateSubscriber {
@@ -274,6 +333,7 @@ public final class TLinkCallsModule: Module {
     AsyncFunction("drainEvents") { TLinkCallCoordinator.shared.drain() }.runOnQueue(.main)
     AsyncFunction("incoming") { (call: [String: Any]) in try TLinkCallCoordinator.shared.incoming(call) }.runOnQueue(.main)
     AsyncFunction("outgoing") { (call: [String: Any]) in try TLinkCallCoordinator.shared.outgoing(call) }.runOnQueue(.main)
+    AsyncFunction("connecting") { (id: String) in TLinkCallCoordinator.shared.connecting(id) }.runOnQueue(.main)
     AsyncFunction("answer") { (id: String) in try TLinkCallCoordinator.shared.answer(id) }.runOnQueue(.main)
     AsyncFunction("connected") { (id: String) in TLinkCallCoordinator.shared.connected(id) }.runOnQueue(.main)
     AsyncFunction("end") { (id: String) in TLinkCallCoordinator.shared.end(id) }.runOnQueue(.main)

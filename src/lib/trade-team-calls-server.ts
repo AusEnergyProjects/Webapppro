@@ -1,7 +1,7 @@
 import { getD1 } from "../../db";
 import type { MessageActor } from "./trade-messages-server";
 import { messageActorGuard, messageParticipantGuard } from "./trade-message-media-access";
-import { teamCallCursor, teamCallId, teamCallMode, teamCallSignalInput, type TeamCall, type TeamCallSignal } from "./trade-team-calls";
+import { TEAM_CALL_RING_SECONDS, teamCallCursor, teamCallId, teamCallMode, teamCallSignalInput, type TeamCall, type TeamCallSignal } from "./trade-team-calls";
 import { tradeTeamCallAvailabilitySql } from "./trade-team-presence";
 type CallRow = {
     id: string;
@@ -13,6 +13,7 @@ type CallRow = {
     request_id: string;
     created_at: string;
     expires_at: string;
+    had_peer: number;
 };
 type Guard = {
     sql: string;
@@ -40,13 +41,13 @@ async function assertGuard(db: D1Database, guard: Guard) {
 // Every entry point first authenticates its current actor, then bounds cleanup to that business.
 async function cleanup(actor: MessageActor, db: D1Database) {
     await assertGuard(db, messageActorGuard(actor));
-    const now = stamp(), stale = before(45), unanswered = before(90);
+    const now = stamp(), stale = before(45), unanswered = before(TEAM_CALL_RING_SECONDS);
     await db.batch([
         db.prepare(`UPDATE trade_team_call_participants SET left_at=? WHERE owner_uid=? AND left_at='' AND (last_seen_at<? OR NOT EXISTS
       (SELECT 1 FROM trade_team_members member WHERE member.id=trade_team_call_participants.member_id AND member.owner_uid=? AND member.status='active'))`)
             .bind(now, actor.ownerUid, stale, actor.ownerUid),
         db.prepare(`UPDATE trade_team_calls SET status='ended',ended_at=? WHERE owner_uid=? AND status='active' AND
-      (expires_at<=? OR (had_peer=0 AND created_at<?) OR NOT EXISTS (SELECT 1 FROM trade_team_call_participants participant WHERE participant.call_id=trade_team_calls.id AND participant.owner_uid=? AND participant.left_at=''))`)
+      (expires_at<=? OR (had_peer=0 AND created_at<=?) OR NOT EXISTS (SELECT 1 FROM trade_team_call_participants participant WHERE participant.call_id=trade_team_calls.id AND participant.owner_uid=? AND participant.left_at=''))`)
             .bind(now, actor.ownerUid, now, unanswered, actor.ownerUid),
         db.prepare(`DELETE FROM trade_team_call_signals WHERE owner_uid=? AND (created_at<? OR EXISTS
       (SELECT 1 FROM trade_team_calls call WHERE call.id=trade_team_call_signals.call_id AND call.owner_uid=? AND call.status='ended') OR NOT EXISTS
@@ -92,7 +93,7 @@ async function publicCall(actor: MessageActor, call: CallRow, db: D1Database): P
     if (!thread) throw new Error("CALL_ACCESS_REQUIRED");
     const participants: TeamCall['participants'] = JSON.parse(thread.participants_json);
     return { id: call.id, threadId: call.thread_id, threadName: thread.kind === "group" ? thread.subject : thread.names || "Team call", mode: call.mode, status: call.status,
-        createdByMemberId: call.created_by_member_id, createdAt: call.created_at, expiresAt: call.expires_at,
+        createdByMemberId: call.created_by_member_id, createdAt: call.created_at, expiresAt: call.expires_at, hasBeenAnswered: Boolean(call.had_peer),
         participants };
 }
 export async function startTeamCall(actor: MessageActor, input: {
@@ -140,10 +141,10 @@ export async function joinTeamCall(actor: MessageActor, value: unknown, sessionV
     const guard = messageParticipantGuard(actor, call.thread_id), available = ownAvailabilityGuard(actor), now = stamp();
     const result = await db.batch([
         db.prepare(`INSERT INTO trade_team_call_participants(call_id,owner_uid,member_id,session_id,joined_at,last_seen_at)
-      SELECT ?,?,?,?,?,? WHERE ${guard.sql} AND ${available.sql} AND EXISTS(SELECT 1 FROM trade_team_calls WHERE id=? AND owner_uid=? AND status='active' AND expires_at>?)
+      SELECT ?,?,?,?,?,? WHERE ${guard.sql} AND ${available.sql} AND EXISTS(SELECT 1 FROM trade_team_calls WHERE id=? AND owner_uid=? AND status='active' AND expires_at>? AND (had_peer=1 OR created_at>?))
       AND (SELECT COUNT(*) FROM trade_team_call_participants WHERE call_id=? AND owner_uid=? AND left_at='' AND member_id<>?)<6
       ON CONFLICT(call_id,member_id) DO UPDATE SET session_id=excluded.session_id,joined_at=CASE WHEN session_id=excluded.session_id AND left_at='' THEN joined_at ELSE excluded.joined_at END,last_seen_at=excluded.last_seen_at,left_at=''`)
-            .bind(call.id, actor.ownerUid, actor.memberId, sessionId, now, now, ...guard.values, ...available.values, call.id, actor.ownerUid, now, call.id, actor.ownerUid, actor.memberId),
+            .bind(call.id, actor.ownerUid, actor.memberId, sessionId, now, now, ...guard.values, ...available.values, call.id, actor.ownerUid, now, before(TEAM_CALL_RING_SECONDS), call.id, actor.ownerUid, actor.memberId),
         db.prepare(`DELETE FROM trade_team_call_signals WHERE call_id=? AND owner_uid=? AND ((from_member_id=? AND from_session_id<>?) OR (to_member_id=? AND to_session_id<>?))
         AND EXISTS(SELECT 1 FROM trade_team_call_participants joined WHERE joined.call_id=? AND joined.owner_uid=? AND joined.member_id=? AND joined.session_id=? AND joined.left_at='')`)
             .bind(call.id, actor.ownerUid, actor.memberId, sessionId, actor.memberId, sessionId, call.id, actor.ownerUid, actor.memberId, sessionId),
@@ -153,6 +154,9 @@ export async function joinTeamCall(actor: MessageActor, value: unknown, sessionV
     if (!result[0].meta.changes) {
         await assertGuard(db, guard);
         if (!await db.prepare(`SELECT 1 available WHERE ${available.sql}`).bind(...available.values).first()) throw new Error("CALL_PRESENCE_UNAVAILABLE");
+        const current = await callRow(actor, call.id, db);
+        if (current.status !== 'active' || Date.parse(current.expires_at) <= Date.now()
+            || (!current.had_peer && Date.parse(current.created_at) + TEAM_CALL_RING_SECONDS * 1000 <= Date.now())) throw new Error('CALL_ENDED');
         throw new Error("CALL_FULL");
     }
     return publicCall(actor, await callRow(actor, call.id, db), db);

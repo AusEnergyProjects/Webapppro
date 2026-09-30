@@ -37,7 +37,9 @@ export class TeamCallRinger {
   private context: AudioContext | null = null;
   private interval?: ReturnType<typeof setInterval>;
   private ringing = false;
+  private mode: 'incoming' | 'outgoing' = 'incoming';
   private closed = false;
+  private resuming: Promise<void> | null = null;
   private tones = new Set<{ oscillator: OscillatorNode; gain: GainNode }>();
   private readonly changed: (ready: boolean) => void;
   private readonly createContext: () => AudioContext;
@@ -52,19 +54,23 @@ export class TeamCallRinger {
         this.context = this.createContext();
         this.context.onstatechange = () => { if (!this.closed) this.changed(this.context?.state === "running"); };
       }
-      if (this.context.state !== "running") await this.context.resume();
+      const wasRunning = this.context.state === "running";
+      const beganResume = !wasRunning && !this.resuming;
+      if (beganResume) this.resuming = this.context.resume().finally(() => { this.resuming = null; });
+      if (this.resuming) await this.resuming;
       if (this.closed) return false;
       const ready = this.context.state === "running";
       this.changed(ready);
-      if (ready && this.ringing) this.pulse();
+      if (ready && this.ringing && beganResume) this.pulse();
       return ready;
     } catch { if (!this.closed) this.changed(false); return false; }
   }
 
   private pulse() {
     if (!this.ringing) return;
-    this.tone(0, 0.38, 440, 0.045);
-    this.tone(0.45, 0.38, 554.37, 0.045);
+    const outgoing = this.mode === 'outgoing';
+    this.tone(0, 0.38, outgoing ? 425 : 440, outgoing ? 0.07 : 0.1);
+    this.tone(0.58, 0.38, outgoing ? 425 : 554.37, outgoing ? 0.07 : 0.1);
   }
 
   private tone(delay: number, duration: number, frequency: number, volume: number) {
@@ -87,8 +93,9 @@ export class TeamCallRinger {
     if (!this.ringing) this.tone(0, 0.18, 660, 0.025);
   }
 
-  start() {
-    if (this.ringing || this.closed) return;
+  start(mode: 'incoming' | 'outgoing' = 'incoming') {
+    if (this.closed || this.ringing && this.mode === mode) return;
+    this.stop(); this.mode = mode;
     this.ringing = true; this.pulse();
     this.interval = setInterval(() => this.pulse(), 4000);
   }

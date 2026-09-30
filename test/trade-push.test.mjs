@@ -1,4 +1,5 @@
 import * as presence from '../src/lib/trade-team-presence.ts';
+import * as calls from '../src/lib/trade-team-calls.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -50,7 +51,7 @@ function fixture() {
   const statement = (sql,values=[]) => ({bind:(...params)=>statement(sql,params),first:async()=>{state.beforeRead(sql);return sqlite.prepare(sql).get(...values)||null;},
     all:async()=>({results:sqlite.prepare(sql).all(...values)}),run:async()=>{state.beforeRun(sql);return {meta:{changes:Number(sqlite.prepare(sql).run(...values).changes)}};}});
   const db = {prepare:statement};
-  const server = load('../src/lib/trade-push-server.ts',{'../../db':{getD1:()=>db},'./trade-message-media-access':access,'./trade-access-server':account,'./trade-push':pure,'./trade-team-presence':presence,
+  const server = load('../src/lib/trade-push-server.ts',{'../../db':{getD1:()=>db},'./trade-message-media-access':access,'./trade-access-server':account,'./trade-push':pure,'./trade-team-presence':presence,'./trade-team-calls':calls,
     './trade-push-provider':{tradePushCredentials:()=>state.configured?credentials:null,sendTradePush:async(subscription,payload)=>{sends.push({subscription,payload});return state.providerStatus;}},
     './trade-native-push-provider':{tradeApnsCredentials:()=>state.apnsConfigured?{}:null,authorizeTradeApns:async()=>state.nativeAuthReady?{token:'synthetic',expiresAt:Date.now()+3600000}:null,sendTradeApns:async(token,payload,_auth,_fetch,options)=>{nativeSends.push({token,payload,provider:'apns',options});await state.beforeNativeSend();return state.nativeProviderStatus;},tradeNativePushCredentials:()=>state.nativeConfigured?{clientEmail:'synthetic',privateKey:'synthetic'}:null,authorizeTradeNativePush:async()=>state.nativeAuthReady?{accessToken:'synthetic',expiresAt:Date.now()+3600000}:null,sendTradeNativePush:async(token,payload,_auth,_fetch,options)=>{nativeSends.push({token,payload,provider:'fcm',options});await state.beforeNativeSend();return state.nativeProviderStatus;}}});
   const subscribe = (actor,suffix=actor.memberId,options={}) => server.subscribeTradePush(actor,{subscription:browserSubscription(suffix),messages:true,calls:true,...options},db);
@@ -139,14 +140,14 @@ test('mute preferences apply separately to calls and messages',async()=>{
     assert.equal(f.sends[0].subscription.endpoint,browserSubscription('john').endpoint);
     assert.equal((await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db)).accepted,1);
     assert.equal(f.sends[1].subscription.endpoint,browserSubscription('jane').endpoint);assert.equal(f.sends[1].payload.body,'Incoming team video call');
-    assert.match(f.sends[1].payload.url,/callId=call-1/);assert.ok(Date.parse(f.sends[1].payload.expiresAt)<=Date.now()+90000);
+    assert.match(f.sends[1].payload.url,/callId=call-1/);assert.ok(Date.parse(f.sends[1].payload.expiresAt)<=Date.now()+45000);
   }finally{f.close();}
 });
 
 test('expired, ended, abandoned and already-joined calls never produce new ringing pushes',async()=>{
   for(const change of ['old','ended','caller-left','caller-stale','callee-joined']){
     const f=fixture();try{
-      await f.subscribe(jane);f.call('call-1',change==='old'?91000:0);
+      await f.subscribe(jane);f.call('call-1',change==='old'?45000:0);
       if(change==='ended')f.sqlite.exec("UPDATE trade_team_calls SET status='ended'");
       if(change==='caller-left')f.sqlite.exec("UPDATE trade_team_call_participants SET left_at='2026-01-01'");
       if(change==='caller-stale')f.sqlite.exec("UPDATE trade_team_call_participants SET last_seen_at='2026-01-01'");
@@ -252,7 +253,7 @@ test('native calls respect busy, offline and already-joined state while messages
 test('native delivery never revives an expired, ended or abandoned call',async()=>{
   for(const change of ['old','expired','ended','caller-left','caller-stale']){
     const f=fixture();try{
-      f.state.nativeConfigured=true;f.native(jane);f.call('call-1',change==='old'?91000:0);
+      f.state.nativeConfigured=true;f.native(jane);f.call('call-1',change==='old'?45000:0);
       if(change==='expired')f.sqlite.exec("UPDATE trade_team_calls SET expires_at='2026-01-01'");
       if(change==='ended')f.sqlite.exec("UPDATE trade_team_calls SET status='ended'");
       if(change==='caller-left')f.sqlite.exec("UPDATE trade_team_call_participants SET left_at='2026-01-01'");

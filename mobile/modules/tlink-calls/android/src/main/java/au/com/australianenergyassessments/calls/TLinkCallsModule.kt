@@ -12,6 +12,7 @@ import android.graphics.drawable.RippleDrawable
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.RingtoneManager
+import android.media.ToneGenerator
 import android.os.*
 import android.view.Gravity
 import android.widget.*
@@ -45,14 +46,19 @@ private fun expiryMillis(value: String): Long {
 
 internal data class Call(val callId: String, val threadId: String, val mode: String, val expiresAt: String) {
   fun json() = JSONObject(mapOf("callId" to callId, "threadId" to threadId, "mode" to mode, "expiresAt" to expiresAt))
+  fun connecting(): Call {
+    val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSX", Locale.US)
+    formatter.timeZone = java.util.TimeZone.getTimeZone("UTC")
+    return copy(expiresAt = formatter.format(java.util.Date(System.currentTimeMillis() + 45_000)))
+  }
   companion object {
-    fun parse(value: JSONObject): Call? = try {
+    fun parse(value: JSONObject, allowExpired: Boolean = false): Call? = try {
       val id = value.getString("callId")
       val thread = value.getString("threadId")
       val mode = value.getString("mode")
       val expires = value.getString("expiresAt")
       if (UUID.fromString(id).toString() != id.lowercase() || !Regex("^[a-zA-Z0-9_-]{8,120}$").matches(thread)
-        || mode !in listOf("audio", "video") || expiryMillis(expires) <= System.currentTimeMillis()) null
+        || mode !in listOf("audio", "video") || (!allowExpired && expiryMillis(expires) <= System.currentTimeMillis())) null
       else Call(id, thread, mode, expires)
     } catch (_: Exception) { null }
   }
@@ -62,6 +68,10 @@ internal object Calls {
   var changed: (() -> Unit)? = null
   private val handler = Handler(Looper.getMainLooper())
   private var initialized = false
+  private var ringback: ToneGenerator? = null
+  private var outgoingId: String? = null
+  private var awaitingAnswerId: String? = null
+  private var connectingId: String? = null
   @Synchronized private fun prefs(context: Context): android.content.SharedPreferences {
     val storage = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     if (!initialized) {
@@ -70,13 +80,21 @@ internal object Calls {
       // pending incoming/Answer events, but never let a dead ongoing call block
       // new invitations for the remainder of its one-hour server lease.
       if (storage.getBoolean("ongoing", false)) {
-        storage.edit().remove("call").remove("events").putBoolean("ongoing", false).apply()
+        storage.edit().remove("call").remove("events").remove("answerUntil").putBoolean("ongoing", false).apply()
         context.getSystemService(NotificationManager::class.java).cancel(ONGOING_ID)
       }
     }
     return storage
   }
-  fun current(context: Context): Call? = try { Call.parse(JSONObject(prefs(context).getString("call", "")!!)) } catch (_: Exception) { null }
+  private fun stored(context: Context): Call? = try {
+    Call.parse(JSONObject(prefs(context).getString("call", "")!!), allowExpired = true)
+  } catch (_: Exception) { null }
+  fun current(context: Context): Call? {
+    val storage = prefs(context)
+    // expiresAt is the invitation deadline, not a connected call's lifetime.
+    return stored(context)?.takeIf { expiryMillis(it.expiresAt) > System.currentTimeMillis()
+      || storage.getBoolean("ongoing", false) || storage.getLong("answerUntil", 0) > System.currentTimeMillis() }
+  }
   fun enabled(context: Context) = prefs(context).getBoolean("enabled", false)
   @Synchronized fun enqueue(context: Context, type: String, call: Call) {
     val queue = JSONArray(prefs(context).getString("events", "[]"))
@@ -95,7 +113,7 @@ internal object Calls {
       value.keys().asSequence().associateWith { value.get(it) }
     }
   }
-  fun configure(context: Context, enabled: Boolean, preserveActiveCalls: Boolean) {
+  @Synchronized fun configure(context: Context, enabled: Boolean, preserveActiveCalls: Boolean) {
     prefs(context).edit().putBoolean("enabled", enabled).apply()
     if (!enabled && !(preserveActiveCalls && prefs(context).getBoolean("ongoing", false))) {
       current(context)?.let { end(context, it.callId) }
@@ -119,7 +137,7 @@ internal object Calls {
   }
   private fun endAction(context: Context, call: Call): PendingIntent = PendingIntent.getBroadcast(context, 3,
     Intent(context, TLinkCallActionReceiver::class.java).setAction(END).putExtra("callId", call.callId), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-  fun incoming(context: Context, call: Call, fromPush: Boolean = false) {
+  @Synchronized fun incoming(context: Context, call: Call, fromPush: Boolean = false) {
     if (fromPush && !enabled(context)) return
     val current = current(context)
     if (current != null && current.callId == call.callId) {
@@ -128,11 +146,11 @@ internal object Calls {
     }
     if (current != null) return // One system call owns the phone's audio session.
     channels(context)
-    prefs(context).edit().putString("call", call.json().toString()).putBoolean("ongoing", false).apply()
+    prefs(context).edit().putString("call", call.json().toString()).putBoolean("ongoing", false).remove("answerUntil").apply()
     val answer = activity(context, call, ANSWER, 1)
     val open = activity(context, call, "tlink.call.SHOW", 2)
     val person = Person.Builder().setName("TLink team").setImportant(true).build()
-    val remaining = (expiryMillis(call.expiresAt) - System.currentTimeMillis()).coerceIn(1, 90_000)
+    val remaining = (expiryMillis(call.expiresAt) - System.currentTimeMillis()).coerceIn(1, 45_000)
     val builder = NotificationCompat.Builder(context, CHANNEL)
       .setSmallIcon(context.applicationInfo.icon).setContentTitle("TLink")
       .setContentText(if (call.mode == "video") "Incoming team video call" else "Incoming team voice call")
@@ -143,16 +161,24 @@ internal object Calls {
     // Android 14+ can refuse full-screen access. A high-importance call
     // notification remains available; do not claim the full-screen UI opened.
     if (Build.VERSION.SDK_INT < 34 || manager.canUseFullScreenIntent()) builder.setFullScreenIntent(open, true)
-    manager.notify(NOTIFICATION_ID, builder.build())
+    val notification = builder.build().apply { flags = flags or Notification.FLAG_INSISTENT }
+    manager.notify(NOTIFICATION_ID, notification)
     enqueue(context, "incoming", call)
     handler.postDelayed({
-      if (current(context)?.callId == call.callId && !prefs(context).getBoolean("ongoing", false)) end(context, call.callId)
+      if (stored(context)?.callId == call.callId && !prefs(context).getBoolean("ongoing", false)
+        && prefs(context).getLong("answerUntil", 0) <= System.currentTimeMillis()) end(context, call.callId)
     }, remaining)
   }
-  fun answer(context: Context, call: Call) {
+  @Synchronized fun answer(context: Context, call: Call) {
     if (current(context)?.callId != call.callId) return
+    prefs(context).edit().putLong("answerUntil", System.currentTimeMillis() + 45_000).apply()
     context.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
-    enqueue(context, "answer", call)
+    // An explicit Answer at the end of the ringing window remains usable while
+    // JS resumes; the authenticated server still decides whether it can join.
+    enqueue(context, "answer", call.connecting())
+    handler.postDelayed({
+      if (stored(context)?.callId == call.callId && !prefs(context).getBoolean("ongoing", false)) end(context, call.callId)
+    }, 45_000)
   }
   fun launchApp(context: Activity) {
     val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
@@ -160,12 +186,58 @@ internal object Calls {
     context.startActivity(launch)
     context.finish()
   }
-  fun ongoing(context: Context, call: Call) {
+  @Synchronized fun ongoing(context: Context, call: Call) {
     check(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { "Allow microphone access before answering." }
     channels(context)
     prefs(context).edit().putString("call", call.json().toString()).putBoolean("ongoing", true).apply()
     ContextCompat.startForegroundService(context, Intent(context, TLinkOngoingCallService::class.java))
     context.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+  }
+  @Synchronized fun outgoing(context: Context, call: Call) {
+    ongoing(context, call)
+    stopRingback()
+    outgoingId = call.callId
+    try {
+      ringback = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 65)
+      check(ringback!!.startTone(ToneGenerator.TONE_SUP_RINGTONE)) { "Your phone could not play the call tone." }
+    } catch (error: RuntimeException) {
+      end(context, call.callId)
+      throw error
+    }
+    handler.postDelayed({ expireOutgoing(context, call.callId) },
+      (expiryMillis(call.expiresAt) - System.currentTimeMillis()).coerceIn(1, 45_000))
+  }
+  @Synchronized private fun expireOutgoing(context: Context, id: String) {
+    if (outgoingId != id) return
+    stopRingback()
+    awaitingAnswerId = id
+    current(context)?.let { enqueue(context, "heartbeat", it) }
+    handler.postDelayed({ expireAnswerConfirmation(context, id) }, 5_000)
+  }
+  @Synchronized private fun expireAnswerConfirmation(context: Context, id: String) {
+    if (awaitingAnswerId == id) end(context, id)
+  }
+  private fun stopRingback() {
+    ringback?.stopTone()
+    ringback?.release()
+    ringback = null
+    outgoingId = null
+  }
+  @Synchronized fun connecting(context: Context, id: String) {
+    if (current(context)?.callId != id || (outgoingId != id && awaitingAnswerId != id)) return
+    stopRingback()
+    awaitingAnswerId = null
+    connectingId = id
+    handler.postDelayed({ expireConnecting(context, id) }, 45_000)
+  }
+  @Synchronized private fun expireConnecting(context: Context, id: String) {
+    if (connectingId == id) end(context, id)
+  }
+  @Synchronized fun connected(context: Context, id: String) {
+    if (current(context)?.callId != id) return
+    stopRingback()
+    awaitingAnswerId = null
+    connectingId = null
   }
   fun ongoingNotification(context: Context, call: Call): Notification {
     val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
@@ -175,12 +247,15 @@ internal object Calls {
       .setCategory(NotificationCompat.CATEGORY_CALL).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .setStyle(NotificationCompat.CallStyle.forOngoingCall(Person.Builder().setName("TLink team").build(), endAction(context, call))).build()
   }
-  fun end(context: Context, id: String) {
-    val call = current(context)
+  @Synchronized fun end(context: Context, id: String) {
+    val call = stored(context)
     if (call != null && call.callId != id) return
+    stopRingback()
+    awaitingAnswerId = null
+    connectingId = null
     context.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
     context.stopService(Intent(context, TLinkOngoingCallService::class.java))
-    prefs(context).edit().remove("call").putBoolean("ongoing", false).apply()
+    prefs(context).edit().remove("call").remove("answerUntil").putBoolean("ongoing", false).apply()
     if (call != null) enqueue(context, "end", call)
   }
 }
@@ -303,9 +378,10 @@ class TLinkCallsModule : Module() {
     AsyncFunction("outgoing") { value: Map<String, Any> ->
       val call = Call.parse(JSONObject(value)) ?: throw IllegalArgumentException("This call has expired.")
       check(activityIsResumed()) { "Open TLink to start this call." }
-      Calls.ongoing(context(), call)
+      Calls.outgoing(context(), call)
     }
-    AsyncFunction("connected") { _: String -> Unit }
+    AsyncFunction("connected") { id: String -> Calls.connected(context(), id) }
+    AsyncFunction("connecting") { id: String -> Calls.connecting(context(), id) }
     AsyncFunction("end") { id: String -> Calls.end(context(), id) }
     AsyncFunction("speaker") { enabled: Boolean ->
       @Suppress("DEPRECATION")

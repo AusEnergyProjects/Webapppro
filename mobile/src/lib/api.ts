@@ -153,6 +153,69 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
   return body as T;
 }
 
+/** In-memory authorization for one mounted calling session, never field-data storage. */
+export function createTeamCallRequest(lifetime: AbortSignal) {
+  const revision = businessSessionRevision(), identity = firebaseAuth.currentUser?.uid;
+  let prepared: Headers | null = null;
+  let preparing: Promise<Headers> | null = null;
+  const clear = () => { prepared = null; preparing = null; };
+  lifetime.addEventListener('abort', clear, { once: true });
+  const assertSession = () => {
+    if (lifetime.aborted) throw new ApiError('This call session has closed.', 409, 'CALL_SESSION_CLOSED');
+    if (revision !== businessSessionRevision() || identity !== firebaseAuth.currentUser?.uid) {
+      clear();
+      throw new ApiError('Your account or business changed. Reopen the call.', 409, 'BUSINESS_CHANGED');
+    }
+  };
+  return async function request<T>(query = '', init: RequestInit = {}): Promise<T> {
+    assertSession();
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    lifetime.addEventListener('abort', abort, { once: true });
+    init.signal?.addEventListener('abort', abort, { once: true });
+    if (init.signal?.aborted) controller.abort();
+    let cancel: (() => void) | undefined;
+    const cancelled = new Promise<never>((_, reject) => {
+      cancel = () => reject(new ApiError('The call request was cancelled.', 408, 'CALL_REQUEST_CANCELLED'));
+      controller.signal.addEventListener('abort', cancel, { once: true });
+      if (controller.signal.aborted) cancel();
+    });
+    const check = () => {
+      assertSession();
+      if (controller.signal.aborted) throw new ApiError('The call request was cancelled.', 408, 'CALL_REQUEST_CANCELLED');
+    };
+    const perform = async () => {
+      check();
+      if (!prepared) {
+        preparing ||= authenticatedHeaders({}).then(headers => {
+          assertSession(); prepared = headers; return headers;
+        }).finally(() => { preparing = null; });
+        await preparing;
+      }
+      check();
+      const headers = new Headers(prepared || undefined);
+      // Field sessions are verified by the server on every operation. Firebase
+      // refreshes its bearer in memory without reopening the locked keychain.
+      if (headers.get('Authorization')?.startsWith('Bearer ')) headers.set('Authorization', `Bearer ${await bearer()}`);
+      check();
+      if (init.body) headers.set('Content-Type', 'application/json');
+      const response = await fetchJson(`${API_BASE_URL}/api/trade-team-calls${query ? `?${query}` : ''}`, {
+        ...init, headers, signal: controller.signal,
+      });
+      const body = await responseBody(response);
+      check();
+      if (!response.ok) throw new ApiError(String(body.error || 'The call could not connect.'), response.status, String(body.code || ''));
+      return body as T;
+    };
+    try { return await Promise.race([perform(), cancelled]); }
+    finally {
+      lifetime.removeEventListener('abort', abort);
+      init.signal?.removeEventListener('abort', abort);
+      if (cancel) controller.signal.removeEventListener('abort', cancel);
+    }
+  };
+}
+
 export async function publicApiRequest<T>(path: string, init: RequestInit = {}) {
   const headers = await deviceHeaders(init);
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');

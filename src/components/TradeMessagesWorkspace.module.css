@@ -158,7 +158,7 @@ button.creditButton { cursor: pointer; }
 
 @media (max-width: 760px) {
   :global(body):has(.workspace[data-keyboard="true"]) :global(:is([data-surge-loader], [data-energy-assistant])) { display: none; }
-  .workspace[data-keyboard="true"] { position: fixed; z-index: 1000; top: var(--message-viewport-top); left: var(--message-viewport-left); width: var(--message-viewport-width); height: var(--message-viewport-height); box-sizing: border-box; display: flex; flex-direction: column; gap: 0; margin: 0 !important; padding: 0; background: var(--trade-surface, #fff); overflow: hidden; }
+  .workspace[data-keyboard="true"] { position: fixed; z-index: 1000; top: var(--message-viewport-top); left: var(--message-viewport-left); width: var(--message-viewport-width); height: var(--message-viewport-height); box-sizing: border-box; display: flex; flex-direction: column; gap: 0; margin: 0 !important; padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); background: var(--trade-surface, #fff); overflow: hidden; }
   .workspace[data-keyboard="true"] > .heading { position: static; flex: 0 0 auto; display: block; border: 0; border-radius: 0; padding: 0; }
   .workspace[data-keyboard="true"] > .heading > div:first-child,
   .workspace[data-keyboard="true"] .notifications,
@@ -166,10 +166,17 @@ button.creditButton { cursor: pointer; }
   .workspace[data-keyboard="true"] .creditButton { min-height: 36px; border: 0; border-radius: 0; padding: 5px 14px; }
   .workspace[data-keyboard="true"] > .notice { flex: 0 1 auto; max-height: 15%; overflow-y: auto; }
   .workspace[data-keyboard="true"] > .layout { flex: 1 1 0; height: auto; min-height: 0; border-radius: 0; border: 0; }
-  .workspace[data-keyboard="true"] .detail { overflow-y: auto; overscroll-behavior: contain; }
+  .workspace[data-keyboard="true"] .detail { position: relative; overflow: hidden; }
+  .workspace[data-keyboard="true"] .back { position: absolute; top: 0; left: 0; z-index: 2; justify-content: center; min-height: 44px; width: 44px; padding: 0; }
+  .workspace[data-keyboard="true"] .back span { display: none; }
   .workspace[data-keyboard="true"] .conversationHeader,
-  .workspace[data-keyboard="true"] .customerHeader { padding-top: 2px; padding-bottom: 6px; }
-  .workspace[data-keyboard="true"] .conversationInfo { max-height: 72px; overflow-y: auto; }
+  .workspace[data-keyboard="true"] .customerHeader { padding: 4px 12px 4px 48px; min-height: 44px; box-sizing: border-box; }
+  .workspace[data-keyboard="true"] .channelLabel,
+  .workspace[data-keyboard="true"] .conversationInfo { display: none; }
+  .workspace[data-keyboard="true"] .chatTitle h3,
+  .workspace[data-keyboard="true"] .customerHeader h3,
+  .workspace[data-keyboard="true"] .customerHeader p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .workspace[data-keyboard="true"] .customerHeader .avatar { flex-basis: 32px; height: 32px; width: 32px; }
   .workspace[data-keyboard="true"] .messages { padding-top: 8px; padding-bottom: 8px; }
   .workspace[data-keyboard="true"] .composer { padding-top: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); max-height: 55%; overflow-y: auto; }
   .workspace[data-keyboard="true"] [data-message-detail] textarea { font-size: 16px; }

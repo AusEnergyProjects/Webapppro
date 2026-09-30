@@ -63,17 +63,16 @@ function useVisibleRefresh(refresh: () => Promise<void>, milliseconds = 15000) {
   }, [refresh, milliseconds]);
 }
 
-// Mobile keyboards resize the visual viewport independently of CSS viewport
-// units. Keep the same conversation DOM/draft in a fitted frame while typing.
+// Focus can arrive after the keyboard has resized the viewport. Fit the editor
+// directly instead of trying to reconstruct its pre-keyboard height. Keeping the
+// frame until focus leaves also avoids moving the draft when the keyboard closes.
 function useConversationViewport(active: boolean) {
   const container = useRef<HTMLElement>(null);
   useEffect(() => {
     const element = container.current, viewport = window.visualViewport;
-    if (!active || !element || !viewport) return;
+    if (!active || !element) return;
     const mobile = window.matchMedia('(max-width: 760px)');
     let editor: Element | null = null;
-    let baseline = Math.max(window.innerHeight, document.documentElement.clientHeight, viewport.height);
-    let width = window.innerWidth;
     let frame: number | undefined;
     const clear = () => {
       delete element.dataset.keyboard;
@@ -81,43 +80,35 @@ function useConversationViewport(active: boolean) {
     };
     const update = () => {
       frame = undefined;
-      if (width !== window.innerWidth) {
-        width = window.innerWidth;
-        baseline = Math.max(window.innerHeight, document.documentElement.clientHeight, viewport.height);
+      const target = document.activeElement;
+      if (!element.contains(target)) editor = null;
+      else if (target?.matches('textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"])')) {
+        editor = target.closest('[data-message-detail]') ? target : null;
       }
-      if (!element.contains(document.activeElement)) editor = null;
-      if (!editor) baseline = Math.max(window.innerHeight, document.documentElement.clientHeight, viewport.height);
-      if (!mobile.matches || !editor || viewport.scale !== 1 || viewport.height >= baseline - 1) { clear(); return; }
+      if (!mobile.matches || !editor || (viewport && viewport.scale !== 1)) { clear(); return; }
       element.dataset.keyboard = 'true';
-      element.style.setProperty('--message-viewport-top', `${viewport.offsetTop}px`);
-      element.style.setProperty('--message-viewport-left', `${viewport.offsetLeft}px`);
-      element.style.setProperty('--message-viewport-width', `${viewport.width}px`);
-      element.style.setProperty('--message-viewport-height', `${viewport.height}px`);
+      element.style.setProperty('--message-viewport-top', `${viewport?.offsetTop ?? 0}px`);
+      element.style.setProperty('--message-viewport-left', `${viewport?.offsetLeft ?? 0}px`);
+      element.style.setProperty('--message-viewport-width', `${viewport?.width ?? window.innerWidth}px`);
+      element.style.setProperty('--message-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
     };
     const schedule = () => {
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(update);
     };
-    const focus = () => {
-      const target = document.activeElement;
-      if (target?.matches('textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"])')) {
-        editor = target.closest('[data-message-detail]') && element.contains(target) ? target : null;
-      }
-      schedule();
-    };
-    element.addEventListener('focusin', focus);
+    element.addEventListener('focusin', schedule);
     element.addEventListener('focusout', schedule);
-    viewport.addEventListener('resize', schedule);
-    viewport.addEventListener('scroll', schedule);
+    viewport?.addEventListener('resize', schedule);
+    viewport?.addEventListener('scroll', schedule);
     window.addEventListener('resize', schedule);
     mobile.addEventListener('change', schedule);
-    focus();
+    schedule();
     return () => {
       if (frame !== undefined) window.cancelAnimationFrame(frame);
-      element.removeEventListener('focusin', focus);
+      element.removeEventListener('focusin', schedule);
       element.removeEventListener('focusout', schedule);
-      viewport.removeEventListener('resize', schedule);
-      viewport.removeEventListener('scroll', schedule);
+      viewport?.removeEventListener('resize', schedule);
+      viewport?.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', schedule);
       mobile.removeEventListener('change', schedule);
       clear();
@@ -424,7 +415,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
         <footer className={styles.listFooter}><span className={styles.channelDot} />{mode === "team" ? "Private team messages" : overview?.smsReady ? "Two-way customer texts" : "Customer texting locked"}{!teamOnly && isBusinessOwner && <button type="button" onClick={openSmsAccount}>SMS account</button>}{teamOnly && overview && <TradeTeamPresence getAuthHeaders={authHeaders} />}</footer>
       </aside>
       <div className={styles.detail} data-message-detail>
-        <button type="button" className={styles.back} onClick={() => { setSelected(null); setCustomer(null); }}>‹ <span>Messages</span></button>
+        <button type="button" className={styles.back} aria-label="Back to conversations" onClick={() => { setSelected(null); setCustomer(null); }}>‹ <span>Messages</span></button>
         {mode === "team" ? selected && overview
           ? <TeamConversation key={selected.id} thread={selected} call={call} memberId={overview.memberId} onRead={onRead} getAuthHeaders={authHeaders} canManageTeam={overview.canManageTeam} />
           : <div className={styles.welcome}><span className={styles.welcomeIcon}><ChatMark /></span><h3>Keep your team close.</h3><p>A quick question, a photo from site, or the next job. It all starts with a message.</p><button type="button" className={styles.primary} onClick={startNewChat}>New chat</button><span className={styles.welcomeNote}>Private to the people in each conversation.</span></div>

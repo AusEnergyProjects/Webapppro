@@ -106,15 +106,15 @@ test('successful or denied media requests clear their deadline without hiding th
   context.mock.timers.tick(30001);assert.equal(stopped,0);
 });
 
-function ringFixture({blocked=false}={}) {
-  const states=[],tones=[];let created=0;
+function ringFixture({blocked=false,resume}={}) {
+  const states=[],tones=[];let created=0,resumes=0;
   const context={state:'suspended',currentTime:0,destination:{},
-    async resume(){if(blocked)throw new DOMException('blocked','NotAllowedError');this.state='running';this.onstatechange?.();},
+    async resume(){resumes++;if(blocked)throw new DOMException('blocked','NotAllowedError');await resume?.();this.state='running';this.onstatechange?.();},
     async close(){this.state='closed';},
     createOscillator(){const tone={frequency:{value:0},starts:[],stops:0,disconnects:0,connect(){},start(at){this.starts.push(at);},stop(){this.stops++;},disconnect(){this.disconnects++;}};tones.push(tone);return tone;},
     createGain(){return{gain:{setValueAtTime(){},linearRampToValueAtTime(){}},connect(){},disconnect(){}};}};
   const ringer=new TeamCallRinger(ready=>states.push(ready),()=>{created++;return context;});
-  return{ringer,context,tones,states,get created(){return created;}};
+  return{ringer,context,tones,states,get created(){return created;},get resumes(){return resumes;}};
 }
 
 test('incoming ringing never opens audio before interaction and stops every tone when answered',async context=>{
@@ -140,4 +140,29 @@ test('message sound uses the unlocked audio context and stays silent while ringi
   await f.ringer.unlock();f.ringer.message();assert.equal(f.tones.length,1);assert.equal(f.tones[0].frequency.value,660);assert.equal(f.tones[0].type,'sine');
   f.ringer.start();const count=f.tones.length;f.ringer.message();assert.equal(f.tones.length,count);
   f.ringer.close();f.ringer.message();assert.equal(f.tones.length,count);
+});
+
+test('outgoing ringback uses 425Hz pulses, preserves its cadence on repeated unlock and switches incoming modes cleanly',async context=>{
+  context.mock.timers.enable({apis:['setInterval']});
+  const f=ringFixture();await f.ringer.unlock();f.ringer.start('outgoing');
+  assert.deepEqual(f.tones.map(tone=>tone.frequency.value),[425,425]);
+  assert.deepEqual(f.tones.map(tone=>tone.starts[0]),[0,0.58]);
+  await f.ringer.unlock();await f.ringer.unlock();f.ringer.start('outgoing');
+  assert.equal(f.resumes,1);assert.equal(f.created,1);assert.equal(f.tones.length,2);
+  context.mock.timers.tick(3999);assert.equal(f.tones.length,2);
+  context.mock.timers.tick(1);assert.equal(f.tones.length,4);
+  f.ringer.start('incoming');assert.ok(f.tones.slice(0,4).every(tone=>tone.stops===2&&tone.disconnects===1));
+  assert.deepEqual(f.tones.slice(4).map(tone=>tone.frequency.value),[440,554.37]);
+  context.mock.timers.tick(4000);assert.equal(f.tones.length,8,'Mode switch replaces the interval rather than adding a second cadence');
+  f.ringer.stop();const count=f.tones.length;context.mock.timers.tick(8000);assert.equal(f.tones.length,count);f.ringer.close();
+});
+
+test('overlapping gesture unlocks produce one initial ring pulse while audio permission resumes',async context=>{
+  context.mock.timers.enable({apis:['setInterval']});
+  let grant;const resumed=new Promise(resolve=>{grant=resolve;});
+  const f=ringFixture({resume:()=>resumed});f.ringer.start('outgoing');
+  const first=f.ringer.unlock(),second=f.ringer.unlock();
+  assert.equal(f.created,1);assert.equal(f.tones.length,0);grant();
+  await Promise.all([first,second]);assert.equal(f.tones.length,2,'pointerdown and click must not double the ringback pulse');
+  f.ringer.close();
 });

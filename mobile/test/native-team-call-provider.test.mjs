@@ -5,18 +5,20 @@ import ts from 'typescript';
 
 const source = fs.readFileSync(new URL('../src/providers/native-team-call-provider.tsx', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-const invitation = { id: 'call-123456', threadId: 'thread-123456', threadName: 'Install team', mode: 'video', status: 'active', participants: [], createdByMemberId: 'member-remote', createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
+const contract = {};
+new Function('exports', ts.transpileModule(fs.readFileSync(new URL('../../src/lib/trade-team-calls.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText)(contract);
+const invitation = { id: 'call-123456', threadId: 'thread-123456', threadName: 'Install team', mode: 'video', status: 'active', hasBeenAnswered: false, participants: [], createdByMemberId: 'member-remote', createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 
-function harness({ native = false } = {}) {
+function harness({ native = false, platform = 'ios', initialAppState = 'active' } = {}) {
   const slots = [], effects = [], pendingEffects = [], intervals = new Set(), listeners = new Set(), pushListeners = new Set(), presenceListeners = new Set();
   let cursor = 0, tree;
-  const state = { api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0, rings:0, ringStops:0, notificationMuted:false, audioModes:[],
+  const state = { api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0, peers: [], rings:0, ringStops:0, ringbacks:0, ringbackStops:0, notificationMuted:false, audioModes:[], requestLifetimes: [],
     respond: async (url, body) => body?.action === 'start' || body?.action === 'join' ? { ok: true, call: invitation, memberId: 'member-local' }
       : body?.action === 'ice' ? { ok: true, iceServers: [{ urls: 'turn:relay.test' }] }
         : url.includes('view=incoming') ? { ok: true, calls: [invitation] } : { ok: true, call: invitation },
   };
-  const system = { shown: [], answers: [], ended: [], started: [], listeners: new Set() };
+  const system = { shown: [], answers: [], ended: [], started: [], connecting: [], connected: [], listeners: new Set(), connect: async () => undefined };
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
   const react = {
     createContext: () => ({ Provider: 'context' }),
@@ -31,39 +33,45 @@ function harness({ native = false } = {}) {
   state.acquire = async (mode, isCurrent) => isCurrent() ? stream : null;
   class ApiError extends Error {}
   let audioReleased = false;
-  const ringtone = {pause:()=>{assert.equal(audioReleased,false,'released audio player used during cleanup');state.ringStops++;},play:()=>state.rings++,seekTo:async()=>{},loop:false,volume:1};
+  const ringtone = {pause:()=>{assert.equal(native,false,'Expo pause must not deactivate CallKit audio');assert.equal(audioReleased,false,'released audio player used during cleanup');state.ringStops++;},play:()=>{assert.equal(native,false,'native ringing is system-owned');state.rings++;},seekTo:async()=>{},loop:false,volume:1};
   const dependencies = {
     react,
+    '../../../src/lib/trade-team-calls': contract,
     '@expo/vector-icons/MaterialCommunityIcons': 'MaterialCommunityIcons',
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     'expo-crypto': { randomUUID: () => 'random-session-123456' },
     'expo-audio': {useAudioPlayer:()=>{react.useEffect(()=>()=>{audioReleased=true;},[]);return ringtone;},setAudioModeAsync:async value=>{state.audioModes.push(value);}},
     'expo-notifications': {addNotificationReceivedListener:fn=>{pushListeners.add(fn);return {remove:()=>pushListeners.delete(fn)};}},
     '../../assets/sounds/tlink-call-soft.wav':1,
-    'react-native': { Platform: { OS: 'ios' }, ActivityIndicator: 'ActivityIndicator', AppState: { currentState: 'active', addEventListener: (_event, fn) => { listeners.add(fn); return { remove: () => listeners.delete(fn) }; } },
+    'react-native': { Platform: { OS: platform }, ActivityIndicator: 'ActivityIndicator', AppState: { currentState: initialAppState, addEventListener: (_event, fn) => { listeners.add(fn); return { remove: () => listeners.delete(fn) }; } },
       DeviceEventEmitter:{addListener:(_name,fn)=>{presenceListeners.add(fn);return {remove:()=>presenceListeners.delete(fn)};}},
       Linking: { openSettings: async () => { state.settings++; } }, Modal: 'Modal', Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View', StyleSheet: { create: value => value, absoluteFill: {} } },
-    'react-native-incall-manager': { start: value => state.audioStarts.push(value), stop: () => state.stops++, setKeepScreenOn: () => undefined, setForceSpeakerphoneOn: () => undefined },
+    'react-native-incall-manager': { start: value => state.audioStarts.push(value), stop: () => state.stops++, startRingback: () => state.ringbacks++, stopRingback: () => state.ringbackStops++, setKeepScreenOn: () => undefined, setForceSpeakerphoneOn: () => undefined },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     'react-native-webrtc': { mediaDevices: { enumerateDevices: async () => [{ kind: 'videoinput' }, { kind: 'videoinput' }] }, RTCView: 'RTCView' },
     '@/components/field-button': { FieldButton: 'FieldButton' },
-    '@/lib/api': { ApiError, apiRequest: async (url, options) => { const body = options.body ? JSON.parse(options.body) : null; state.api.push({ url, body, signal: options.signal }); return state.respond(url, body); } },
+    '@/lib/api': { ApiError, createTeamCallRequest: signal => { state.requestLifetimes.push(signal); return async (query, options) => {
+      assert.equal(signal.aborted, false, 'an invalidated call identity cannot send');
+      const url = `/api/trade-team-calls${query ? `?${query}` : ''}`;
+      const body = options.body ? JSON.parse(options.body) : null; state.api.push({ url, body, signal: options.signal }); return state.respond(url, body);
+    }; } },
     '@/lib/device':{notificationsMuted:async()=>state.notificationMuted},
     '@/lib/team-messages':{teamNotificationTarget:value=>value?.type==='team_call'?{threadId:value.threadId,callId:value.callId}:null},
-    '@/lib/native-team-call-client': { NativeTeamCallConnections: class { async sync() {} async receive() {} close() { state.peerCloses++; } } },
+    '@/lib/native-team-call-client': { NativeTeamCallConnections: class { constructor(options) { state.peers.push(options); } async sync() {} async receive() {} close() { state.peerCloses++; } } },
     '@/lib/native-team-call-media': { acquireNativeCallMedia: (...args) => { state.media.push(args[0]); return state.acquire(...args); }, releaseNativeCallMedia: media => { if (media) state.released.push(media); }, nativeCallError: error => ({ message: error.message, settings: error.name === 'NotAllowedError' }) },
     '@/lib/native-system-calls': {
       nativeSystemCallsAvailable: native, currentSystemCall: event => Date.parse(event.expiresAt) > Date.now(),
       showSystemCall: async call => system.shown.push(call), answerSystemCall: async id => system.answers.push(id),
       startSystemCall: async call => system.started.push(call), endSystemCall: async id => system.ended.push(id),
-      connectSystemCall: async () => undefined, setSystemCallSpeaker: async () => undefined,
+      markSystemCallConnecting: async id => system.connecting.push(id),
+      connectSystemCall: async id => { system.connected.push(id); await system.connect(id); }, setSystemCallSpeaker: async () => undefined,
       subscribeSystemCalls: listener => { system.listeners.add(listener); return () => system.listeners.delete(listener); },
     },
     '@/lib/theme': { colours: {}, radius: {}, spacing: {} },
     '@/providers/app-provider': { useApp: () => ({ user: { localOwnerKey: 'owner:member' }, access: { status: 'approved' }, loading: false }) },
   };
   const exports = {};
-  new Function('require', 'exports', 'setInterval', 'clearInterval', `${compiled}\nexports.TestSession = NativeTeamCallSession;`)(id => {
+  new Function('require', 'exports', 'setInterval', 'clearInterval', `${compiled}\nexports.TestSession = NativeTeamCallSession; exports.TestTile = CallTile; exports.styles = styles;`)(id => {
     assert.ok(id in dependencies, `unexpected dependency ${id}`); return dependencies[id];
   }, exports, fn => { intervals.add(fn); return fn; }, fn => intervals.delete(fn));
   function render() { cursor = 0; tree = exports.TestSession({ enabled: true, children: 'app' }); while (pendingEffects.length) pendingEffects.shift()(); return tree; }
@@ -76,7 +84,7 @@ function harness({ native = false } = {}) {
   function appState(value) { for (const listener of [...listeners]) listener(value); }
   function cleanup() { for (const effect of effects) effect?.cleanup?.(); }
   render();
-  return { state, render, nodes, button, hasButton, context, appState, cleanup, intervals,ringtone, system,
+  return { state, render, nodes, button, hasButton, context, appState, cleanup, intervals,ringtone, system, exports,
     systemEvent: async event => { for (const listener of [...system.listeners]) await listener(event); },
     receivePush:()=>{for(const listener of pushListeners)listener({request:{content:{data:{type:'team_call',threadId:invitation.threadId,callId:invitation.id}}}});},
     presence:status=>{for(const listener of presenceListeners)listener({status});},
@@ -108,13 +116,13 @@ test('returning Online refreshes call availability after Busy dismissed a ringin
   assert.ok(h.button('Answer'));assert.equal(h.state.rings,2);assert.deepEqual(h.state.media,[]);h.cleanup();
 });
 
-test('unanswered foreground ringtone stops after 45 seconds while leaving the invitation visible', async t => {
+test('unanswered foreground ringtone and invitation expire after 45 seconds', async t => {
   t.mock.timers.enable({apis:['setTimeout']});
   const h = harness();
   await h.context().openInvitation({threadId:invitation.threadId,callId:invitation.id});h.render();await flush();
   const stopped = h.state.ringStops;
   t.mock.timers.tick(45_000);await flush();h.render();
-  assert.ok(h.state.ringStops>stopped);assert.ok(h.button('Answer'));assert.deepEqual(h.state.media,[]);h.cleanup();
+  assert.ok(h.state.ringStops>stopped);assert.equal(h.hasButton('Answer'),false);assert.deepEqual(h.state.media,[]);assert.ok(h.system.ended.includes(invitation.id));h.cleanup();
 });
 
 test('incoming polling and notification opening show an invitation without accessing microphone or camera', async () => {
@@ -279,6 +287,19 @@ test('system End during permission acquisition cancels the pending answer before
   assert.equal(h.state.api.some(item => item.body?.action === 'join'), false); h.cleanup();
 });
 
+test('an invitation timer cannot end an explicit Answer while its microphone request is pending', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse(invitation.createdAt) + 44_000 });
+  const h = harness({ native: true }); await flush(); h.render(); await flush();
+  let finish;
+  h.state.acquire = (_mode, current) => new Promise(resolve => { finish = () => resolve(current() ? h.state.stream : null); });
+  const pending = h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
+  await flush(); t.mock.timers.tick(1_000);
+  assert.deepEqual(h.system.ended, []);
+  finish(); await pending;
+  assert.deepEqual(h.system.answers, [invitation.id]);
+  h.cleanup();
+});
+
 test('system End during invitation authorization prevents a late Answer from reopening media', async () => {
   const h = harness({ native: true }); await flush(); let resolve;
   h.state.respond = () => new Promise(done => { resolve = done; });
@@ -293,4 +314,207 @@ test('native heartbeat polls an active background call so the server lease does 
   h.appState('background'); await flush(); const before = h.state.api.filter(item => item.url.includes('callId=')).length;
   await h.systemEvent({ type: 'heartbeat', callId: invitation.id });
   assert.equal(h.state.api.filter(item => item.url.includes('callId=')).length, before + 1); h.cleanup();
+});
+
+test('a system Answer while iOS is inactive requests voice, never a locked camera', async () => {
+  const h = harness({ native: true, initialAppState: 'inactive' });
+  await h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
+  assert.deepEqual(h.state.media, ['audio']);
+  assert.deepEqual(h.state.audioModes, []);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1);
+  h.cleanup();
+});
+
+test('backgrounding during an authenticated native Answer preserves preparation and keeps late camera tracks disabled', async () => {
+  const h = harness({ native: true }); let finish;
+  h.state.acquire = (_mode, current) => new Promise(resolve => { finish = () => resolve(current() ? h.state.stream : null); });
+  const pending = h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
+  await flush(); h.appState('inactive'); h.appState('background'); finish(); await pending; h.render();
+  assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1);
+  assert.equal(h.state.released.length, 0);
+  assert.equal(h.state.stream.getAudioTracks()[0].enabled, true);
+  assert.equal(h.state.stream.getVideoTracks()[0].enabled, false);
+  h.button('Camera on')();
+  assert.equal(h.state.stream.getVideoTracks()[0].enabled, false, 'a stale UI action cannot enable a hidden camera');
+  h.appState('active'); await flush(); h.render(); h.button('Camera on')();
+  assert.equal(h.state.stream.getVideoTracks()[0].enabled, true);
+  h.cleanup();
+});
+
+test('Android native calls keep microphone capture across backgrounding and leave ringback to the service', async () => {
+  const h = harness({ native: true, platform: 'android' });
+  await h.context().start(invitation.threadId, 'video'); h.render(); await flush();
+  h.appState('background'); h.render(); await flush();
+  assert.equal(h.context().busy, true);
+  assert.equal(h.state.released.length, 0);
+  assert.equal(h.state.stream.getAudioTracks()[0].enabled, true);
+  assert.equal(h.state.stream.getVideoTracks()[0].enabled, false);
+  assert.equal(h.state.ringbacks, 0);
+  h.cleanup();
+});
+
+test('outgoing unanswered calls stop at the server-created 45-second deadline, including setup time', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse(invitation.createdAt) + 15_000 });
+  const h = harness({ native: true });
+  await h.context().start(invitation.threadId, 'audio'); h.render(); await flush();
+  assert.equal(h.system.started[0].expiresAt, new Date(Date.parse(invitation.createdAt) + 45_000).toISOString());
+  t.mock.timers.tick(29_999); h.render(); assert.equal(h.context().busy, true);
+  t.mock.timers.tick(1); await flush(); h.render();
+  assert.equal(h.context().busy, false);
+  assert.equal(h.state.released.length, 1);
+  assert.ok(h.nodes().some(node => node.type === 'Text' && String(node.props.children).startsWith('No answer.')));
+  assert.equal(h.state.api.filter(item => item.body?.action === 'leave').length, 1);
+  h.cleanup();
+});
+
+test('legacy outgoing ringback stops on connection and connected calls survive the ringing deadline', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse(invitation.createdAt) });
+  const h = harness();
+  await h.context().start(invitation.threadId, 'audio'); h.render(); await flush();
+  assert.equal(h.state.ringbacks, 1);
+  h.state.peers[0].changed([{ memberId: 'member-remote', name: 'Teammate', state: 'connected', stream: null }]);
+  assert.equal(h.state.ringbackStops, 1);
+  t.mock.timers.tick(45_000); await flush(); h.render();
+  assert.equal(h.context().busy, true);
+  assert.deepEqual(h.system.connected, [invitation.id]);
+  h.cleanup();
+});
+
+test('an authenticated answer just before 45 seconds enters native connection grace without claiming RTC connected', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse(invitation.createdAt) });
+  const h = harness({ native: true }); const normal = h.state.respond;
+  await h.context().start(invitation.threadId, 'audio'); h.render(); await flush();
+  t.mock.timers.tick(44_000);
+  h.state.respond = (url, body) => url.includes('callId=') ? Promise.resolve({ ok: true, call: { ...invitation,
+    participants: [{ memberId: 'member-remote', sessionId: 'remote-session', name: 'Teammate', joinedAt: new Date().toISOString() }] }, signals: [] }) : normal(url, body);
+  await h.systemEvent({ type: 'heartbeat' });
+  assert.deepEqual(h.system.connecting, [invitation.id]); assert.deepEqual(h.system.connected, []);
+  t.mock.timers.tick(2_000); h.render();
+  assert.equal(h.context().busy, true);
+  await h.systemEvent({ type: 'heartbeat' });
+  assert.equal(h.system.connecting.length, 1, 'status polling cannot keep extending native connection grace');
+  h.state.peers[0].changed([{ memberId: 'member-remote', name: 'Teammate', state: 'connected', stream: null }]);
+  assert.deepEqual(h.system.connected, [invitation.id]);
+  h.cleanup();
+});
+
+test('a pending status response for an answer at 44.9 seconds wins over the 45-second caller timer', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse(invitation.createdAt) });
+  const h = harness({ native: true }); const normal = h.state.respond;
+  await h.context().start(invitation.threadId, 'audio'); h.render(); await flush();
+  t.mock.timers.tick(44_900);
+  let finish;
+  h.state.respond = (url, body) => url.includes('callId=') ? new Promise(resolve => { finish = () => resolve({ ok: true, call: { ...invitation,
+    participants: [{ memberId: 'member-remote', sessionId: 'remote-session', name: 'Teammate', joinedAt: new Date(Date.parse(invitation.createdAt) + 44_900).toISOString() }] }, signals: [] }); }) : normal(url, body);
+  const status = h.systemEvent({ type: 'heartbeat' }); await flush();
+  t.mock.timers.tick(100); h.render();
+  assert.equal(h.context().busy, true); assert.deepEqual(h.system.ended, []);
+  t.mock.timers.tick(500); finish(); await status; h.render();
+  assert.equal(h.context().busy, true);
+  assert.deepEqual(h.system.connecting, [invitation.id]); assert.deepEqual(h.system.connected, []);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'leave').length, 0);
+  h.cleanup();
+});
+
+test('a stale predeadline no-answer response arriving after 45 seconds triggers fresh confirmation', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse(invitation.createdAt) });
+  const h = harness({ native: true }); const normal = h.state.respond;
+  await h.context().start(invitation.threadId, 'audio'); h.render(); await flush();
+  t.mock.timers.tick(44_000);
+  let finish, statusReads = 0;
+  h.state.respond = (url, body) => {
+    if (!url.includes('callId=')) return normal(url, body);
+    statusReads++;
+    if (statusReads === 1) return new Promise(resolve => { finish = () => resolve({ ok: true, call: invitation, signals: [] }); });
+    return Promise.resolve({ ok: true, call: { ...invitation, hasBeenAnswered: true,
+      participants: [{ memberId: 'member-remote', sessionId: 'remote-session', name: 'Teammate', joinedAt: new Date(Date.parse(invitation.createdAt) + 44_900).toISOString() }] }, signals: [] });
+  };
+  const status = h.systemEvent({ type: 'heartbeat' }); await flush();
+  t.mock.timers.tick(1_100); finish(); await status; await flush(); h.render();
+  assert.equal(statusReads, 2);
+  assert.equal(h.context().busy, true); assert.deepEqual(h.system.ended, []);
+  assert.deepEqual(h.system.connecting, [invitation.id]); h.cleanup();
+});
+
+test('an already answered group call remains manually joinable after 45 seconds without ringing again', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse(invitation.createdAt) + 120_000 });
+  for (const native of [false, true]) {
+    const h = harness({ native }); const normal = h.state.respond;
+    const running = { ...invitation, hasBeenAnswered: true,
+      participants: [{ memberId: 'member-remote', name: 'Teammate', sessionId: 'remote-session', joinedAt: invitation.createdAt }] };
+    h.state.respond = (url, body) => url.includes('view=incoming') ? Promise.resolve({ ok: true, calls: [running] })
+      : body?.action === 'join' ? Promise.resolve({ ok: true, call: running, memberId: 'member-local' }) : normal(url, body);
+    await h.context().openInvitation({ threadId: invitation.threadId, callId: invitation.id }); h.render(); await flush();
+    assert.equal(h.state.rings, 0); assert.deepEqual(h.system.shown, []);
+    assert.ok(h.button('Join call')); assert.ok(h.button('Join with voice only'));
+    t.mock.timers.tick(10_000); h.render(); assert.ok(h.button('Join call'));
+    await h.button('Join with voice only')(); await flush(); h.render();
+    assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1);
+    assert.equal(h.context().busy, true); assert.equal(h.state.rings, 0);
+    assert.deepEqual(h.system.connecting, [invitation.id]); h.cleanup();
+  }
+});
+
+test('failed authoritative confirmation after the ring deadline releases a legacy call and stops its tone', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse(invitation.createdAt) });
+  const h = harness(); const normal = h.state.respond;
+  await h.context().start(invitation.threadId, 'audio'); h.render(); await flush();
+  h.state.respond = (url, body) => url.includes('callId=') ? Promise.reject(new Error('Network unavailable')) : normal(url, body);
+  t.mock.timers.tick(45_000); await flush(); h.render();
+  assert.equal(h.state.ringbackStops, 1); assert.equal(h.context().busy, false);
+  assert.equal(h.state.released.length, 1); h.cleanup();
+});
+
+test('legacy outgoing ringback stops on setup failure and never plays for the answerer', async () => {
+  const h = harness(); const normal = h.state.respond;
+  h.state.respond = (url, body) => body?.action === 'ice' ? Promise.reject(new Error('Relay unavailable')) : normal(url, body);
+  await h.context().start(invitation.threadId, 'audio'); h.render();
+  assert.equal(h.state.ringbacks, 1); assert.equal(h.state.ringbackStops, 1); assert.equal(h.context().busy, false);
+  h.state.respond = normal;
+  await h.context().openInvitation({ threadId: invitation.threadId, callId: invitation.id }); h.render();
+  await h.button('Answer with voice only')(); await flush();
+  assert.equal(h.state.ringbacks, 1, 'answering must not play caller ringback');
+  h.cleanup();
+});
+
+test('a stale system audio failure cannot terminate a replacement call', async () => {
+  const h = harness({ native: true }); let reject;
+  h.system.connect = () => new Promise((_resolve, fail) => { reject = fail; });
+  await h.context().start(invitation.threadId, 'audio'); h.render();
+  h.state.peers[0].changed([{ memberId: 'member-remote', name: 'Teammate', state: 'connected', stream: null }]);
+  h.button('End call')(); h.render();
+  await h.context().start(invitation.threadId, 'audio'); h.render();
+  reject(new Error('Old CallKit transaction failed')); await flush(); h.render();
+  assert.equal(h.context().busy, true);
+  assert.equal(h.state.released.length, 1);
+  h.cleanup();
+});
+
+test('all call requests share one bounded identity lifetime, aborted on principal teardown', async () => {
+  const h = harness({ native: true }); await flush();
+  await h.context().start(invitation.threadId, 'audio'); h.render(); await flush();
+  h.appState('background'); await h.systemEvent({ type: 'heartbeat' });
+  assert.equal(h.state.requestLifetimes.length, 1);
+  assert.equal(h.state.requestLifetimes[0].aborted, false);
+  h.cleanup();
+  assert.equal(h.state.requestLifetimes[0].aborted, true);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'leave').length, 0);
+});
+
+test('remote cameras occupy the call canvas while self video stays in a small overlay outside the remote scroll', async () => {
+  const h = harness({ native: true }); await h.context().start(invitation.threadId, 'video');
+  h.state.peers[0].changed(['One', 'Two'].map((name, i) => ({ memberId: `remote-${i}`, name, state: 'connected', stream: null })));
+  h.render();
+  const scroll = h.nodes().find(node => node.type === 'ScrollView' && node.props.style === h.exports.styles.remoteScroll);
+  const remoteTiles = scroll.props.children.flat(2).filter(node => node?.type?.name === 'CallTile');
+  assert.deepEqual(remoteTiles.map(node => node.props.name), ['One', 'Two']);
+  assert.ok(remoteTiles.every(node => !node.props.local));
+  const preview = h.nodes().find(node => node.props.style === h.exports.styles.selfPreview);
+  assert.equal(preview.props.children.props.local, true);
+  assert.equal(preview.props.style.position, 'absolute');
+  assert.equal(preview.props.style.width, 104); assert.equal(preview.props.style.height, 144);
+  const tile = h.exports.TestTile({ stream: { ...h.state.stream, toURL: () => 'local-stream' }, name: 'You', local: true });
+  assert.equal(tile.props.children.find(node => node?.type === 'RTCView').props.zOrder, 1);
+  assert.ok(h.button('End call')); assert.ok(h.button('Camera off'));
+  h.cleanup();
 });

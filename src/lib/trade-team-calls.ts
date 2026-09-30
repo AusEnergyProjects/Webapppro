@@ -13,6 +13,7 @@ export type TeamCall = {
     createdByMemberId: string;
     createdAt: string;
     expiresAt: string;
+    hasBeenAnswered: boolean;
     participants: TeamCallParticipant[];
 };
 export type TeamCallSignalPayload = {
@@ -37,6 +38,7 @@ export type TeamCallSignal = {
 export const TEAM_CALL_MAX_PARTICIPANTS = 6;
 export const TEAM_CALL_MAX_SECONDS = 3600;
 export const TEAM_CALL_HEARTBEAT_SECONDS = 45;
+export const TEAM_CALL_RING_SECONDS = 45;
 export function teamCallId(value: unknown): string {
     if (typeof value !== "string" || !/^[a-zA-Z0-9_-]{8,120}$/.test(value))
         throw new Error("CALL_INPUT_INVALID");

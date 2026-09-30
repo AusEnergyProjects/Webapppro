@@ -81,6 +81,48 @@ test('one-hour expiry and unanswered timeout end calls and purge sensitive signa
  let result=await f.server.teamCallStatus(owner,{callId:call.id,sessionId:session(1)},f.db);assert.equal(result.call.status,'ended');assert.deepEqual(result.signals,[]);assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_signals').get().n,0);
  call=await start(f,owner,3);f.sqlite.prepare("UPDATE trade_team_calls SET created_at='2020-01-01' WHERE id=?").run(call.id);result=await f.server.teamCallStatus(owner,{callId:call.id},f.db);assert.equal(result.call.status,'ended');
 }finally{f.close();}});
+test('unanswered calls reject joins at 45 seconds even with a healthy caller heartbeat',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,8,30,4)});
+ const f=fixture();try{
+  const call=await start(f);
+  t.mock.timers.tick(44000);
+  assert.equal((await f.server.teamCallStatus(owner,{callId:call.id,sessionId:session(1)},f.db)).call.status,'active');
+  assert.equal((await f.server.incomingTeamCalls(member(1),f.db)).length,1);
+  t.mock.timers.tick(1000);
+  await assert.rejects(join(f,call,member(1),2),/CALL_ENDED/);
+  assert.deepEqual(await f.server.incomingTeamCalls(member(1),f.db),[]);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_participants WHERE member_id=?').get(member(1).memberId).n,0);
+ }finally{f.close();}
+});
+
+test('an answer before 45 seconds keeps the established call alive beyond the ring deadline',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,8,30,5)});
+ const f=fixture();try{
+  const call=await start(f); t.mock.timers.tick(44000);
+  await f.server.teamCallStatus(owner,{callId:call.id,sessionId:session(1)},f.db);
+  await join(f,call,member(1),2); t.mock.timers.tick(2000);
+  const result=await f.server.teamCallStatus(member(1),{callId:call.id,sessionId:session(2)},f.db);
+  assert.equal(result.call.status,'active'); assert.equal(result.call.participants.length,2); assert.equal(result.call.hasBeenAnswered,true);
+  const invited=await f.server.incomingTeamCalls(member(2),f.db);
+  assert.equal(invited[0].hasBeenAnswered,true);
+  assert.equal((await join(f,call,member(2),3)).participants.length,3);
+  assert.equal(f.sqlite.prepare('SELECT had_peer FROM trade_team_calls WHERE id=?').get(call.id).had_peer,1);
+ }finally{f.close();}
+});
+
+test('the atomic join guard rejects a call whose ring deadline expired after the initial read',async()=>{
+ const f=fixture();try{
+  const call=await start(f); const original=f.db.batch;
+  f.db.batch=async statements=>{
+   if(statements[0].sql.startsWith('INSERT INTO trade_team_call_participants'))
+    f.sqlite.prepare('UPDATE trade_team_calls SET created_at=? WHERE id=?').run(new Date(Date.now()-46000).toISOString(),call.id);
+   return original(statements);
+  };
+  await assert.rejects(join(f,call,member(1),2),/CALL_ENDED/);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_participants WHERE member_id=?').get(member(1).memberId).n,0);
+ }finally{f.close();}
+});
+
 test('transaction rollback and membership revocation never partially create calls',async()=>{const f=fixture();try{
  f.beforeBatch(()=>{});f.failNextBatch();await assert.rejects(start(f),/forced rollback/);assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_calls').get().n,0);
  let batches=0;const original=f.db.batch;f.db.batch=async statements=>{batches++;if(statements.some(s=>s.sql.startsWith('INSERT OR IGNORE INTO trade_team_calls')))f.sqlite.exec("UPDATE trade_team_members SET status='suspended' WHERE id='owner-0001'");return original(statements);};
