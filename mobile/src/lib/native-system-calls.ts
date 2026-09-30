@@ -6,6 +6,13 @@ export type SystemCallEvent = SystemCall & {
   type: 'incoming' | 'answer' | 'end' | 'mute' | 'heartbeat';
   muted?: boolean;
 };
+export type AndroidCallNotificationStatus = {
+  notificationsAllowed: boolean;
+  channelImportance: number;
+  channelSoundEnabled: boolean;
+  fullScreenAllowed: boolean;
+};
+export type AndroidCallSettingsTarget = 'app' | 'channel' | 'fullScreen';
 type NativeCallsModule = {
   configure: (enabled: boolean, preserveActiveCalls: boolean) => Promise<void>;
   registration: () => Promise<{ voipPushToken: string; nativeCallCapable: boolean }>;
@@ -17,10 +24,23 @@ type NativeCallsModule = {
   connected: (callId: string) => Promise<void>;
   end: (callId: string) => Promise<void>;
   speaker: (enabled: boolean) => Promise<void>;
+  callNotificationStatus?: () => Promise<AndroidCallNotificationStatus>;
+  openCallNotificationSettings?: (target: AndroidCallSettingsTarget) => Promise<void>;
   addListener: (name: 'callEvent' | 'tokenChanged', listener: () => void) => { remove: () => void };
 };
 const native = requireOptionalNativeModule<NativeCallsModule>('TLinkCalls');
 export const nativeSystemCallsAvailable = Boolean(native);
+
+// Optional Android methods keep earlier binaries and iOS compatible. Reading
+// settings must never enable calls or request notification permission.
+export async function getAndroidCallNotificationStatus(): Promise<AndroidCallNotificationStatus | null> {
+  return native?.callNotificationStatus ? native.callNotificationStatus() : null;
+}
+export async function openAndroidCallNotificationSettings(target: AndroidCallSettingsTarget): Promise<boolean> {
+  if (!native?.openCallNotificationSettings) return false;
+  await native.openCallNotificationSettings(target);
+  return true;
+}
 
 export async function getNativeCallRegistration(configure = true) {
   if (!native) return { voipPushToken: '', nativeCallCapable: false };

@@ -20,6 +20,23 @@ test('older binaries do not claim native call capability', async () => {
   assert.equal(bridge.nativeSystemCallsAvailable, false);
   assert.deepEqual(await bridge.getNativeCallRegistration(), { voipPushToken: '', nativeCallCapable: false });
 });
+
+test('Android call settings checks cannot enable calls, and unsupported binaries report unavailable', async () => {
+  for (const native of [null, {}]) {
+    const bridge = load(native);
+    assert.equal(await bridge.getAndroidCallNotificationStatus(), null);
+    assert.equal(await bridge.openAndroidCallNotificationSettings('fullScreen'), false);
+  }
+  const targets = [], status = { notificationsAllowed: true, channelImportance: 4, channelSoundEnabled: true, fullScreenAllowed: false };
+  const bridge = load({
+    configure: () => assert.fail('reading call settings must not enable incoming calls'),
+    callNotificationStatus: async () => status,
+    openCallNotificationSettings: async target => targets.push(target),
+  });
+  assert.deepEqual(await bridge.getAndroidCallNotificationStatus(), status);
+  assert.equal(await bridge.openAndroidCallNotificationSettings('fullScreen'), true);
+  assert.deepEqual(targets, ['fullScreen']);
+});
 test('token refresh reads registration without reconfiguring PushKit', async () => {
   const configured = [];
   const bridge = load({ configure: async (...value) => configured.push(value), registration: async () => ({ voipPushToken: 'synthetic', nativeCallCapable: true }) });

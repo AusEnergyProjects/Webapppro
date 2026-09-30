@@ -13,7 +13,9 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.RingtoneManager
 import android.media.ToneGenerator
+import android.net.Uri
 import android.os.*
+import android.provider.Settings
 import android.view.Gravity
 import android.widget.*
 import androidx.core.app.NotificationCompat
@@ -25,6 +27,7 @@ import com.google.firebase.messaging.RemoteMessage
 import expo.modules.notifications.service.ExpoFirebaseMessagingService
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.functions.Queues
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -114,6 +117,7 @@ internal object Calls {
     }
   }
   @Synchronized fun configure(context: Context, enabled: Boolean, preserveActiveCalls: Boolean) {
+    if (enabled) channels(context)
     prefs(context).edit().putBoolean("enabled", enabled).apply()
     if (!enabled && !(preserveActiveCalls && prefs(context).getBoolean("ongoing", false))) {
       current(context)?.let { end(context, it.callId) }
@@ -129,6 +133,27 @@ internal object Calls {
     channel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
     manager.createNotificationChannel(channel)
     manager.createNotificationChannel(NotificationChannel(ONGOING_CHANNEL, "Ongoing team calls", NotificationManager.IMPORTANCE_LOW))
+  }
+  fun notificationStatus(context: Context): Map<String, Any> {
+    channels(context)
+    val manager = context.getSystemService(NotificationManager::class.java)
+    val channel = if (Build.VERSION.SDK_INT >= 26) manager.getNotificationChannel(CHANNEL) else null
+    return mapOf(
+      "notificationsAllowed" to manager.areNotificationsEnabled(),
+      "channelImportance" to (channel?.importance ?: NotificationManager.IMPORTANCE_HIGH),
+      "channelSoundEnabled" to (if (Build.VERSION.SDK_INT >= 26) channel?.sound != null else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE) != null),
+      "fullScreenAllowed" to (Build.VERSION.SDK_INT < 34 || manager.canUseFullScreenIntent())
+    )
+  }
+  fun notificationSettings(context: Activity, target: String) {
+    val intent = when (target) {
+      "fullScreen" -> if (Build.VERSION.SDK_INT >= 34) Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}")) else null
+      "channel" -> if (Build.VERSION.SDK_INT >= 26) Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL) else null
+      "app" -> if (Build.VERSION.SDK_INT >= 26) Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName) else null
+      else -> throw IllegalArgumentException("Unknown call notification setting.")
+    } ?: Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+    context.startActivity(intent)
   }
   private fun activity(context: Context, call: Call, action: String, request: Int): PendingIntent {
     val intent = Intent(context, TLinkIncomingCallActivity::class.java).setAction(action).putExtra("call", call.json().toString())
@@ -155,12 +180,16 @@ internal object Calls {
       .setSmallIcon(context.applicationInfo.icon).setContentTitle("TLink")
       .setContentText(if (call.mode == "video") "Incoming team video call" else "Incoming team voice call")
       .setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX)
+      // Before Android 8 there is no channel to supply the ringtone/vibration.
+      // On newer phones the user's channel settings remain authoritative.
+      .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+      .setVibrate(longArrayOf(0, 500, 500))
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setOngoing(true).setTimeoutAfter(remaining)
       .setContentIntent(open).setStyle(NotificationCompat.CallStyle.forIncomingCall(person, endAction(context, call), answer))
     val manager = context.getSystemService(NotificationManager::class.java)
-    // Android 14+ can refuse full-screen access. A high-importance call
-    // notification remains available; do not claim the full-screen UI opened.
-    if (Build.VERSION.SDK_INT < 34 || manager.canUseFullScreenIntent()) builder.setFullScreenIntent(open, true)
+    // Android enforces full-screen access. Retain the intent when access is
+    // denied so it can show its expanded lock-screen / screen-off fallback.
+    builder.setFullScreenIntent(open, true)
     val notification = builder.build().apply { flags = flags or Notification.FLAG_INSISTENT }
     manager.notify(NOTIFICATION_ID, notification)
     enqueue(context, "incoming", call)
@@ -363,6 +392,12 @@ class TLinkCallsModule : Module() {
     OnDestroy { Calls.changed = null }
     AsyncFunction("configure") { enabled: Boolean, preserveActiveCalls: Boolean -> Calls.configure(context(), enabled, preserveActiveCalls) }
     AsyncFunction("registration") { mapOf("voipPushToken" to "", "nativeCallCapable" to true) }
+    AsyncFunction("callNotificationStatus") { Calls.notificationStatus(context()) }
+    AsyncFunction("openCallNotificationSettings") { target: String ->
+      check(activityIsResumed()) { "Open TLink to change call notification settings." }
+      val activity = appContext.currentActivity ?: throw IllegalStateException("Open TLink to change call notification settings.")
+      Calls.notificationSettings(activity, target)
+    }.runOnQueue(Queues.MAIN)
     AsyncFunction("drainEvents") { Calls.drain(context()) }
     AsyncFunction("incoming") { value: Map<String, Any> ->
       val call = Call.parse(JSONObject(value)) ?: throw IllegalArgumentException("This call has expired.")

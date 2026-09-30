@@ -123,8 +123,9 @@ test('settings mute waits for in-flight registration to settle before posting th
  const api=loadModule('../src/components/device-notification-settings.tsx',{
   'react':{useCallback:value=>value,useEffect:()=>{},useRef:value=>({current:value}),useState:initial=>[stateIndex++===0?{granted:true,muted:false,physicalDevice:true,canAskAgain:true}:initial,()=>{}]},
   'react/jsx-runtime':{jsx,jsxs:jsx},
-  'react-native':{AppState:{addEventListener:()=>({remove(){}})},Linking:{},StyleSheet:{create:value=>value},Switch:'Switch',Text:'Text',View:'View'},
+  'react-native':{Platform:{OS:'android'},AppState:{addEventListener:()=>({remove(){}})},Linking:{},StyleSheet:{create:value=>value},Switch:'Switch',Text:'Text',View:'View'},
   '@/components/field-button':{FieldButton:'Button'},
+  '@/lib/native-system-calls':{getAndroidCallNotificationStatus:async()=>null},
   '@/lib/use-business-api':{useBusinessApi:()=>async(_path,init)=>{if(init?.method==='POST'){events.push('post-disabled');assert.equal(JSON.parse(init.body).pushToken,'');}return {native:{configured:true,registered:false}};}},
   '@/providers/app-provider':{useApp:()=>({sync:{online:true},waitForNotificationRegistrations:async()=>{events.push('wait');await barrier;}})},
   '@/lib/device':{setNotificationsMuted:async value=>{events.push(`muted:${value}`);},deviceRegistration:async()=>{events.push('registration');return {pushToken:'',voipPushToken:'',nativeCallCapable:false};},notificationDeviceState:async()=>({granted:true,muted:true,physicalDevice:true,canAskAgain:true}),getDeviceId:async()=>'device-1234',getNativePushToken:async()=>assert.fail('muting must not request token')},

@@ -11,7 +11,9 @@ module.exports = function withTLinkCalls(config) {
     const manifest = value.modResults;
     manifest.manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
     for (const permission of ['android.permission.POST_NOTIFICATIONS', 'android.permission.USE_FULL_SCREEN_INTENT', 'android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_MICROPHONE', 'android.permission.RECORD_AUDIO', 'android.permission.VIBRATE']) {
-      AndroidConfig.Permissions.addPermission(manifest, permission);
+      if (!manifest.manifest['uses-permission']?.some(item => item.$?.['android:name'] === permission)) {
+        AndroidConfig.Permissions.addPermission(manifest, permission);
+      }
     }
     const application = AndroidConfig.Manifest.getMainApplicationOrThrow(manifest);
     application.service ||= [];

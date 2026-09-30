@@ -1,10 +1,11 @@
 import { useBusinessApi } from '@/lib/use-business-api';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Linking, StyleSheet, Switch, Text, View } from 'react-native';
+import { AppState, Linking, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
 
 import { deviceRegistration, getDeviceId, getNativePushToken, notificationDeviceState, setNotificationsMuted } from '@/lib/device';
+import { getAndroidCallNotificationStatus, openAndroidCallNotificationSettings, type AndroidCallNotificationStatus, type AndroidCallSettingsTarget } from '@/lib/native-system-calls';
 import { resolveFieldAccessModes } from '@/lib/sync';
 import { colours, radius, spacing } from '@/lib/theme';
 import { useApp } from '@/providers/app-provider';
@@ -16,13 +17,18 @@ export function DeviceNotificationSettings() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [delivery, setDelivery] = useState<{ configured: boolean; registered: boolean } | null>(null);
+  const [callSettings, setCallSettings] = useState<AndroidCallNotificationStatus | null>(null);
   const generation = useRef(0);
   const refresh = useCallback(async () => {
     const current = ++generation.current;
     try {
-      const next = await notificationDeviceState();
+      const [next, calls] = await Promise.all([
+        notificationDeviceState(),
+        Platform.OS === 'android' ? getAndroidCallNotificationStatus().catch(() => null) : null,
+      ]);
       if (current !== generation.current) return;
       setState(next);
+      setCallSettings(calls);
       const modes = await resolveFieldAccessModes();
       const result = sync.online && modes.includes('trade_team') ? await apiRequest<{ native: { configured: boolean; registered: boolean } }>(`/api/trade-push?deviceId=${encodeURIComponent(await getDeviceId())}`) : null;
       if (current === generation.current) setDelivery(result?.native || null);
@@ -38,6 +44,14 @@ export function DeviceNotificationSettings() {
     const foreground = AppState.addEventListener('change', (value) => { if (value === 'active') void refresh(); });
     return () => { active = false; requests.current++; foreground.remove(); };
   }, [refresh]);
+
+  async function openCallSettings(target: AndroidCallSettingsTarget) {
+    try {
+      if (!await openAndroidCallNotificationSettings(target)) await Linking.openSettings();
+    } catch {
+      setMessage('Open your phone settings, choose TLink, then allow notifications, incoming call sounds and full-screen alerts.');
+    }
+  }
 
   async function changeEnabled(enabled: boolean) {
     if (busy) return;
@@ -79,6 +93,23 @@ export function DeviceNotificationSettings() {
     <Text style={styles.body}>Get work updates and team alerts. Your phone controls sounds and when alerts appear.</Text>
     {enabled && delivery ? <Text accessibilityLiveRegion="polite" style={styles.body}>{!delivery.registered ? 'This phone is not registered for message alerts yet.' : !delivery.configured ? 'This phone is registered. Message delivery is waiting for the server notification connection.' : 'Message alerts are registered with TLink.'}</Text> : null}
     {enabled && (!delivery || !delivery.registered) ? <FieldButton variant="secondary" disabled={busy || !sync.online} onPress={() => void changeEnabled(true)}>Retry notification setup</FieldButton> : null}
+    {Platform.OS === 'android' && enabled && state?.physicalDevice ? <View style={styles.calls}>
+      <Text style={styles.subtitle}>Incoming calls</Text>
+      {!callSettings ? <Text style={styles.body}>Call settings could not be checked. Update TLink and reopen this page.</Text> : <>
+        {!callSettings.notificationsAllowed ? <>
+          <Text style={styles.body}>Android is blocking TLink notifications, including incoming calls.</Text>
+          <FieldButton variant="secondary" onPress={() => void openCallSettings('app')}>Allow call notifications</FieldButton>
+        </> : callSettings.channelImportance < 4 || !callSettings.channelSoundEnabled ? <>
+          <Text style={styles.body}>{callSettings.channelImportance < 4 ? 'Allow incoming calls to pop up on screen and play a ringtone.' : 'The incoming call ringtone is muted. Choose a sound to hear calls.'}</Text>
+          <FieldButton variant="secondary" onPress={() => void openCallSettings('channel')}>Incoming call alerts</FieldButton>
+        </> : <Text style={styles.body}>Incoming call pop-ups and ringtone are enabled.</Text>}
+        {!callSettings.fullScreenAllowed ? <>
+          <Text style={styles.body}>Allow full-screen alerts so incoming calls can open over your lock screen.</Text>
+          <FieldButton variant="secondary" onPress={() => void openCallSettings('fullScreen')}>Allow lock-screen calls</FieldButton>
+        </> : <Text style={styles.body}>Lock-screen call access is allowed.</Text>}
+        <Text style={styles.body}>Silent mode, Do Not Disturb and your phone&apos;s battery restrictions can still silence or delay calls.</Text>
+      </>}
+    </View> : null}
     {state?.granted ? <FieldButton variant="secondary" onPress={() => void Linking.openSettings().catch(() => setMessage('Open your phone settings, choose TLink, then Notifications.'))}>Sounds and notification settings</FieldButton> : null}
     {state && !state.physicalDevice ? <Text style={styles.body}>Use an installed app on a physical phone for notifications.</Text> : null}
     {state && !state.granted && !state.canAskAgain ? <FieldButton variant="secondary" onPress={() => void Linking.openSettings().catch(() => setMessage('Open your phone settings, choose TLink, then Notifications.'))}>Open phone settings</FieldButton> : null}
@@ -91,6 +122,8 @@ const styles = StyleSheet.create({
   heading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   flex: { flex: 1 },
   title: { color: colours.ink, fontSize: 19, fontWeight: '800' },
+  subtitle: { color: colours.ink, fontSize: 16, fontWeight: '700' },
+  calls: { borderTopWidth: 1, borderColor: colours.line, paddingTop: spacing.md, gap: spacing.sm },
   body: { color: colours.muted, lineHeight: 21 },
   message: { color: colours.ink, backgroundColor: colours.mint, borderRadius: radius.sm, padding: spacing.sm, lineHeight: 20 },
 });
