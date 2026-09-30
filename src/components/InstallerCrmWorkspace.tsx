@@ -1211,7 +1211,9 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       const response = await fetch('/api/trade-work-orders', { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: restore ? 'restore_crm_job' : 'archive_crm_job', workOrderId: job.id, expectedRevision: job.revision }) });
       const result = await response.json() as { ok?: boolean; error?: string };
       if (!response.ok || !result.ok) throw new Error(result.error || 'The job could not be updated.');
-      setRefreshNonce(value => value + 1); await load();
+      setIndexedJobs(current => current.filter(item => item.id !== job.id));
+      jobCursors.current = [""]; jobTotalReady.current = false;
+      setJobPage(1); setRefreshNonce(value => value + 1);
       setStatus(restore ? 'Job restored.' : 'Job moved to the bin. Restore it from the Deleted status filter.');
       saved = true;
     } catch (error) {

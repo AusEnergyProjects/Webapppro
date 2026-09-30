@@ -508,14 +508,17 @@ test("job bin requests require an owner and confirmed job, prevent duplicates an
   assert.ok(start >= 0 && end > start);
   const script = ts.transpileModule(crm.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const job = { id: "job-a", revision: 8 };
-  const requests = [], errors = [];
+  const requests = [], errors = [], statuses = [];
   let closed = 0, refreshed = 0, failRequest = false, releaseToken;
+  let indexedJobs = [job, { id: "job-b", revision: 3 }], page = 3;
   const scope = {
     staffPermissions: undefined, binJob: job, binPendingRef: { current: false },
-    setBinError: value => errors.push(value), setBusy() {}, setStatus() {},
+    jobCursors: { current: ["", "old-cursor-2", "old-cursor-3"] }, jobTotalReady: { current: true },
+    setBinError: value => errors.push(value), setBusy() {}, setStatus: value => statuses.push(value),
+    setIndexedJobs: update => { indexedJobs = update(indexedJobs); }, setJobPage: value => { page = value; },
     user: { getIdToken: () => new Promise(resolve => { releaseToken = resolve; }) },
     fetch: async (url, options) => { requests.push({ url, ...options }); return { ok: !failRequest, json: async () => failRequest ? { error: "This job changed. Refresh and try again." } : { ok: true } }; },
-    setRefreshNonce() { refreshed += 1; }, load: async () => {}, closeJobBin() { closed += 1; },
+    setRefreshNonce() { refreshed += 1; }, load: async () => { throw new Error("Unrelated bootstrap unavailable"); }, closeJobBin() { closed += 1; },
   };
   const handler = overrides => {
     const dependencies = { ...scope, ...overrides };
@@ -534,17 +537,28 @@ test("job bin requests require an owner and confirmed job, prevent duplicates an
   assert.equal(requests[0].url, "/api/trade-work-orders");
   assert.deepEqual(JSON.parse(requests[0].body), { action: "archive_crm_job", workOrderId: "job-a", expectedRevision: 8 });
   assert.equal(closed, 1); assert.equal(refreshed, 1); assert.equal(scope.binPendingRef.current, false);
+  assert.deepEqual(indexedJobs.map(item => item.id), ["job-b"], "the confirmed job disappears before the asynchronous list refresh");
+  assert.equal(page, 1); assert.deepEqual(scope.jobCursors.current, [""]);
+  assert.equal(scope.jobTotalReady.current, false, "the next list fetch must recount the filtered jobs");
+  assert.equal(statuses.at(-1), "Job moved to the bin. Restore it from the Deleted status filter.", "unrelated bootstrap failure must not disguise a confirmed mutation");
+  indexedJobs = [job]; page = 2; scope.jobTotalReady.current = true; scope.jobCursors.current = ["", "retry-cursor"];
   failRequest = true;
   const retry = changeJobBin(job, false);
   releaseToken("test-token"); await retry;
   assert.equal(closed, 1, "a rejected request leaves the confirmation visible");
   assert.equal(errors.at(-1), "This job changed. Refresh and try again.");
   assert.equal(scope.binPendingRef.current, false);
+  assert.deepEqual(indexedJobs, [job], "a rejected mutation keeps the row");
+  assert.equal(page, 2); assert.equal(scope.jobTotalReady.current, true); assert.deepEqual(scope.jobCursors.current, ["", "retry-cursor"]);
+  assert.equal(refreshed, 1);
   failRequest = false;
   const restore = handler({ binJob: null })(job, true);
   releaseToken("test-token"); await restore;
   assert.deepEqual(JSON.parse(requests.at(-1).body), { action: "restore_crm_job", workOrderId: "job-a", expectedRevision: 8 });
   assert.equal(closed, 1, "restore does not open or close an archive confirmation");
+  assert.deepEqual(indexedJobs, [], "a restored job immediately leaves the Deleted list");
+  assert.equal(page, 1); assert.deepEqual(scope.jobCursors.current, [""]); assert.equal(scope.jobTotalReady.current, false);
+  assert.equal(refreshed, 2); assert.equal(statuses.at(-1), "Job restored.");
 });
 
 test("reviewed installer team members use the same authenticated address suggestions", () => {
