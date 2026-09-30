@@ -30,7 +30,7 @@ test('native credentials prefer dedicated connection, validate project, and perm
 test('OAuth uses signed short-lived assertion with only Firebase messaging scope and fixed Google endpoint',async()=>{
  let observed;
  const result=await provider.authorizeTradeNativePush(credentials,async(url,init)=>{observed={url,init};return Response.json({token_type:'Bearer',access_token:'test-token',expires_in:3600});});
- assert.equal(observed.url,'https://oauth2.googleapis.com/token');assert.equal(observed.init.redirect,'error');assert.ok(observed.init.signal instanceof AbortSignal);
+ assert.equal(observed.url,'https://oauth2.googleapis.com/token');assert.equal(observed.init.redirect,'manual');assert.ok(observed.init.signal instanceof AbortSignal);
  assert.equal(observed.init.body.get('grant_type'),'urn:ietf:params:oauth:grant-type:jwt-bearer');
  const {payload:claims}=await jose.jwtVerify(observed.init.body.get('assertion'),publicKey,{issuer:serviceAccount.client_email,audience:observed.url});
  assert.equal(claims.scope,'https://www.googleapis.com/auth/firebase.messaging');assert.equal(claims.exp-claims.iat,300);
@@ -42,7 +42,7 @@ test('Android push has generic private notification, existing app routing, prope
  let observed;
  assert.equal(await provider.sendTradeNativePush(token,payload,authorization,async(url,init)=>{observed={url,init};return Response.json({name:'projects/australian-energy-assessments/messages/received'});}),'accepted');
  assert.equal(observed.url,'https://fcm.googleapis.com/v1/projects/australian-energy-assessments/messages:send');
- assert.equal(observed.init.redirect,'error');assert.ok(observed.init.signal instanceof AbortSignal);
+ assert.equal(observed.init.redirect,'manual');assert.ok(observed.init.signal instanceof AbortSignal);
  const {message}=JSON.parse(observed.init.body);assert.equal(message.token,token);assert.equal(message.notification.title,'TLink');assert.equal(message.notification.body,'Incoming team video call');
  assert.deepEqual(message.data,{type:'team_call',threadId:'thread-1234',eventId:'call-1234',callId:'call-1234',expiresAt:payload.expiresAt});
  assert.equal(message.android.priority,'HIGH');assert.equal(message.android.notification.channel_id,'team-calls');assert.equal(message.android.notification.visibility,'PRIVATE');assert.ok(parseInt(message.android.ttl)<=60);
@@ -83,7 +83,7 @@ test('iPhone message alerts use APNs, generic content, default sound, bounded ex
  assert.equal(observed.init.headers['apns-topic'],'au.com.australianenergyassessments.field');
  assert.equal(observed.init.headers['apns-push-type'],'alert');assert.equal(observed.init.headers['apns-priority'],'10');
  assert.ok(Number(observed.init.headers['apns-expiration'])<=Date.now()/1000+60);
- assert.equal(observed.init.redirect,'error');assert.ok(observed.init.signal instanceof AbortSignal);
+ assert.equal(observed.init.redirect,'manual');assert.ok(observed.init.signal instanceof AbortSignal);
  const sent=JSON.parse(observed.init.body);
  assert.deepEqual(sent.aps,{alert:{title:'TLink',body:'New team message'},sound:'default','thread-id':'thread-1234',category:'team-messages'});
  assert.equal(sent.type,'team_message');assert.equal(sent.threadId,'thread-1234');assert.equal(sent.eventId,'call-1234');

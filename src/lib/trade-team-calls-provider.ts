@@ -20,14 +20,16 @@ export async function teamCallIceServers(credentials: {
     let response: Response;
     try {
         response = await fetcher(`https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/Tokens.json`, {
-            method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12000), headers: { Authorization: `Basic ${btoa(`${credentials.accountSid}:${credentials.authToken}`)}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ Ttl: String(ttl) })
+            method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(12000), headers: { Authorization: `Basic ${btoa(`${credentials.accountSid}:${credentials.authToken}`)}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ Ttl: String(ttl) })
         });
     }
     catch {
         throw new Error('CALL_RELAY_UNAVAILABLE');
     }
-    if (!response.ok)
+    if (!response.ok) {
+        await response.body?.cancel();
         throw new Error('CALL_RELAY_UNAVAILABLE');
+    }
     const raw: unknown = await response.json().catch(() => null);
     if (!raw || typeof raw !== 'object' || !('ice_servers' in raw) || !Array.isArray(raw.ice_servers) || raw.ice_servers.length < 1 || raw.ice_servers.length > 10)
         throw new Error('CALL_RELAY_UNAVAILABLE');

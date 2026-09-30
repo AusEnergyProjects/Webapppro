@@ -19,7 +19,7 @@ export async function sendTradePush(subscription: TradePushSubscriptionInput, pa
   try {
     const checked = pushSubscriptionInput(subscription);
     const request = await buildPushPayload({ data: JSON.stringify(payload), options: { ttl, urgency: payload.kind === 'team-call' ? 'high' : 'normal' } }, checked, credentials);
-    const response = await fetcher(checked.endpoint, { ...request, redirect: 'error', signal: AbortSignal.timeout(12000) });
+    const response = await fetcher(checked.endpoint, { ...request, redirect: 'manual', signal: AbortSignal.timeout(12000) });
     // Provider response bodies contain no application data and are not needed. Release the connection without retaining diagnostics or endpoint tokens.
     await response.body?.cancel();
     if (response.status === 404 || response.status === 410) return 'expired';

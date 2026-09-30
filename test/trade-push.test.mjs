@@ -203,7 +203,7 @@ test('actual provider encrypts payload, signs valid VAPID and bounds TTL with re
   const payload={v:1,kind:'team-call',id:'call-1',threadId:'thread-a',title:'TLink',body:'Incoming team video call',url:'/direct-trade/messages?threadId=thread-a&callId=call-1',expiresAt:new Date(Date.now()+60000).toISOString()};
   let request;
   assert.equal(await provider.sendTradePush(browserSubscription(),payload,credentials,async(endpoint,init)=>{request={endpoint,init};return new Response('',{status:201});}),'accepted');
-  assert.equal(request.endpoint,browserSubscription().endpoint);assert.equal(request.init.redirect,'error');assert.ok(request.init.signal instanceof AbortSignal);
+  assert.equal(request.endpoint,browserSubscription().endpoint);assert.equal(request.init.redirect,'manual');assert.ok(request.init.signal instanceof AbortSignal);
   const headers=new Headers(request.init.headers);assert.equal(headers.get('content-encoding'),'aes128gcm');assert.ok(Number(headers.get('ttl'))<=60);assert.equal(headers.get('urgency'),'high');
   assert.equal(request.init.body.byteLength,4096);assert.ok(!new TextDecoder().decode(request.init.body).includes('Incoming team video call'));
   const token=headers.get('authorization').match(/^vapid t=([^,]+), k=/)[1],parts=token.split('.');

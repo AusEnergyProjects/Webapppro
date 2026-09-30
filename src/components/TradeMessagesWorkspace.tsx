@@ -63,6 +63,69 @@ function useVisibleRefresh(refresh: () => Promise<void>, milliseconds = 15000) {
   }, [refresh, milliseconds]);
 }
 
+// Mobile keyboards resize the visual viewport independently of CSS viewport
+// units. Keep the same conversation DOM/draft in a fitted frame while typing.
+function useConversationViewport(active: boolean) {
+  const container = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const element = container.current, viewport = window.visualViewport;
+    if (!active || !element || !viewport) return;
+    const mobile = window.matchMedia('(max-width: 760px)');
+    let editor: Element | null = null;
+    let baseline = Math.max(window.innerHeight, document.documentElement.clientHeight, viewport.height);
+    let width = window.innerWidth;
+    let frame: number | undefined;
+    const clear = () => {
+      delete element.dataset.keyboard;
+      for (const key of ['top', 'left', 'width', 'height']) element.style.removeProperty(`--message-viewport-${key}`);
+    };
+    const update = () => {
+      frame = undefined;
+      if (width !== window.innerWidth) {
+        width = window.innerWidth;
+        baseline = Math.max(window.innerHeight, document.documentElement.clientHeight, viewport.height);
+      }
+      if (!element.contains(document.activeElement)) editor = null;
+      if (!editor) baseline = Math.max(window.innerHeight, document.documentElement.clientHeight, viewport.height);
+      if (!mobile.matches || !editor || viewport.scale !== 1 || viewport.height >= baseline - 1) { clear(); return; }
+      element.dataset.keyboard = 'true';
+      element.style.setProperty('--message-viewport-top', `${viewport.offsetTop}px`);
+      element.style.setProperty('--message-viewport-left', `${viewport.offsetLeft}px`);
+      element.style.setProperty('--message-viewport-width', `${viewport.width}px`);
+      element.style.setProperty('--message-viewport-height', `${viewport.height}px`);
+    };
+    const schedule = () => {
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(update);
+    };
+    const focus = () => {
+      const target = document.activeElement;
+      if (target?.matches('textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"])')) {
+        editor = target.closest('[data-message-detail]') && element.contains(target) ? target : null;
+      }
+      schedule();
+    };
+    element.addEventListener('focusin', focus);
+    element.addEventListener('focusout', schedule);
+    viewport.addEventListener('resize', schedule);
+    viewport.addEventListener('scroll', schedule);
+    window.addEventListener('resize', schedule);
+    mobile.addEventListener('change', schedule);
+    focus();
+    return () => {
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      element.removeEventListener('focusin', focus);
+      element.removeEventListener('focusout', schedule);
+      viewport.removeEventListener('resize', schedule);
+      viewport.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      mobile.removeEventListener('change', schedule);
+      clear();
+    };
+  }, [active]);
+  return container;
+}
+
 function TeamConversation({ thread, call, memberId, onRead, getAuthHeaders, canManageTeam }: {
   thread: Thread; call: ApiCall; memberId: string; onRead: () => void; getAuthHeaders: MessageMediaAuth; canManageTeam: boolean;
 }) {
@@ -161,6 +224,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Thread | null>(null);
   const [customer, setCustomer] = useState<CustomerThread | null>(null);
+  const conversationViewport = useConversationViewport(Boolean(mode === 'team' ? selected : customer));
   const [smsOpen, setSmsOpen] = useState(false);
   const [smsVisited, setSmsVisited] = useState(false);
   const smsDialog = useRef<HTMLDialogElement>(null);
@@ -306,7 +370,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
     {isBusinessOwner && smsLocked ? <button type="button" className={styles.primary} onClick={openSmsAccount}>Set up customer texting</button> : !smsLocked && <button type="button" className={styles.primary} onClick={startNewChat}>New chat</button>}
     {smsLocked && <span className={styles.welcomeNote}>Team chat is always available.</span>}
   </div>;
-  return <section className={styles.workspace} data-channel={mode} aria-label="Messages workspace">
+  return <section ref={conversationViewport} className={styles.workspace} data-channel={mode} aria-label="Messages workspace">
     <header className={styles.heading}>
       <div><h2>Messages</h2><p>{teamOnly ? "Your team, connected." : "Customer texts and team chat."}</p></div>
       <div className={styles.actions}>
@@ -359,7 +423,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
         {(page > 1 || hasMore) && <div className={styles.pagination}><button type="button" className={styles.secondary} disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page}</span><button type="button" className={styles.secondary} disabled={!hasMore} onClick={() => setPage(value => value + 1)}>Next</button></div>}
         <footer className={styles.listFooter}><span className={styles.channelDot} />{mode === "team" ? "Private team messages" : overview?.smsReady ? "Two-way customer texts" : "Customer texting locked"}{!teamOnly && isBusinessOwner && <button type="button" onClick={openSmsAccount}>SMS account</button>}{teamOnly && overview && <TradeTeamPresence getAuthHeaders={authHeaders} />}</footer>
       </aside>
-      <div className={styles.detail}>
+      <div className={styles.detail} data-message-detail>
         <button type="button" className={styles.back} onClick={() => { setSelected(null); setCustomer(null); }}>‹ <span>Messages</span></button>
         {mode === "team" ? selected && overview
           ? <TeamConversation key={selected.id} thread={selected} call={call} memberId={overview.memberId} onRead={onRead} getAuthHeaders={authHeaders} canManageTeam={overview.canManageTeam} />
