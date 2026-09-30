@@ -15,6 +15,7 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+credentials.json
 GoogleService-Info.plist
 
 # The Android Firebase client config is required by the remote build, but remains
