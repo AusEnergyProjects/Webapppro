@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import ts from "typescript";
 
 import { runApiHealthMonitor } from "../src/lib/api-health-monitor.mjs";
 import {
@@ -389,6 +390,74 @@ test("Sites exposes a no-store service identity endpoint for independent availab
   assert.match(route, /service: "aea-energy"/);
   assert.match(route, /energyAssistantKnowledgeHealth/);
   assert.match(route, /ok: energyAssistantKnowledge\.ready/);
+  assert.match(route, /runtime: \{ ok: true \}/);
   assert.match(route, /"Cache-Control": "no-store"/);
   assert.doesNotMatch(route, /process\.env|request|email|postcode|NMI/i);
+});
+
+test("health response preserves failed knowledge readiness alongside explicit runtime availability", async () => {
+  const source = fs.readFileSync(new URL("../src/app/api/health/route.ts", import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const ready of [true, false]) {
+    const record = { exports: {} };
+    const knowledge = { ready, overdueOfficialSourceIds: ready ? [] : ["official-source"] };
+    new Function("require", "exports", compiled)(name => {
+      if (name === "next/server") return { NextResponse: Response };
+      assert.equal(name, "@/lib/energy-assistant");
+      return { energyAssistantKnowledgeHealth: () => knowledge };
+    }, record.exports);
+    const response = record.exports.GET();
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.equal(body.ok, ready);
+    assert.deepEqual(body.runtime, { ok: true });
+    assert.deepEqual(body.energyAssistantKnowledge, knowledge);
+  }
+});
+
+test("runtime monitoring uses explicit runtime health and falls back only when that field is absent", async () => {
+  const cases = [
+    [{ service: "aea-energy", ok: false, runtime: { ok: true } }, 200, true],
+    [{ service: "aea-energy", ok: true, runtime: { ok: false } }, 200, false],
+    [{ service: "aea-energy", ok: true, runtime: null }, 200, false],
+    [{ service: "aea-energy", ok: true, runtime: {} }, 200, false],
+    [{ service: "aea-energy", ok: true, runtime: { ok: "true" } }, 200, false],
+    [{ service: "aea-energy", ok: true }, 200, true],
+    [{ service: "aea-energy", ok: false }, 200, false],
+    [{ service: "wrong-service", ok: true, runtime: { ok: true } }, 200, false],
+    [{ service: "aea-energy", ok: true, runtime: { ok: true } }, 503, false],
+    [null, 200, false],
+  ];
+  for (const [body, status, expected] of cases) {
+    const result = await runApiHealthMonitor({
+      siteUrl: "https://example.test", leadProbeToken: "test", stateStore: createStateStore(), logger: quietLogger(),
+      async fetchImpl(url) { return String(url).includes("/api/health") ? jsonResponse(body, status) : healthyCheckResponse(url); },
+    });
+    assert.equal(result.checks[0].ok, expected, JSON.stringify({ body, status }));
+    assert.equal(result.status, expected ? "healthy" : "unhealthy");
+  }
+});
+
+test("expired knowledge stays visible in a structured advisory and recovery report without reporting runtime down", async () => {
+  const alerts = [];
+  const knowledge = { ready: false, overdueOfficialSourceIds: ["source-a", "source-b"], uncoveredTopics: ["trades"], topicsReady: 16, topicCount: 17 };
+  const store = createStateStore({ status: "unhealthy", checkedAt: 100, lastAlertAt: 100 });
+  const options = {
+    siteUrl: "https://example.test", leadProbeToken: "test", alertWebhookUrl: "https://alerts.example.test/hook", stateStore: store, logger: quietLogger(),
+    async fetchImpl(url, options) {
+      if (String(url).includes("/api/health")) return jsonResponse({ service: "aea-energy", ok: false, runtime: { ok: true }, energyAssistantKnowledge: knowledge });
+      const healthy = healthyCheckResponse(url);
+      if (healthy) return healthy;
+      alerts.push(JSON.parse(options.body));
+      return new Response(null, { status: 204 });
+    },
+  };
+  const result = await runApiHealthMonitor(options);
+  assert.equal(result.status, "healthy");
+  assert.deepEqual(result.checks[0].advisory, { name: "energy_assistant_knowledge", status: "review_required", reason: "source_review_required", overdueSourceCount: 2, uncoveredTopicCount: 1, topicsReady: 16, topicCount: 17 });
+  assert.match(alerts[0].text, /knowledge review required: 2 overdue official sources; 16\/17 topics current/);
+  assert.equal(alerts[0].eventType, "ops.health_recovered");
+  assert.equal((await runApiHealthMonitor(options)).alert.attempted, false);
+  assert.equal(alerts.length, 1);
 });

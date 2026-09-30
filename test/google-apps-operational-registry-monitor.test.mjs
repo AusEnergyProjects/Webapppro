@@ -49,6 +49,8 @@ function appsScriptHarness({
   registries = healthyRegistries(),
   initialState = null,
   now = 1_787_000_000_000,
+  health = { ok: true, service: "aea-energy" },
+  healthStatus = 200,
 } = {}) {
   let activeRegistries = registries;
   let currentNow = now;
@@ -89,7 +91,7 @@ function appsScriptHarness({
         const value = String(url);
         requests.push(value);
         if (value.endsWith("/api/health")) {
-          return jsonResponse({ ok: true, service: "aea-energy" });
+          return jsonResponse(health, healthStatus);
         }
         if (value.includes("/api/creditex/official-products")) {
           return jsonResponse({ ok: true, registries: activeRegistries });
@@ -161,6 +163,45 @@ test("production Apps Script monitors every required official product registry",
       "lead_delivery",
     ],
   );
+});
+
+test("Apps Script requires explicit runtime health when present and keeps the legacy contract strict", () => {
+  const cases = [
+    [{ service: "aea-energy", ok: false, runtime: { ok: true } }, 200, true],
+    [{ service: "aea-energy", ok: true, runtime: { ok: false } }, 200, false],
+    [{ service: "aea-energy", ok: true, runtime: null }, 200, false],
+    [{ service: "aea-energy", ok: true, runtime: {} }, 200, false],
+    [{ service: "aea-energy", ok: true, runtime: { ok: "true" } }, 200, false],
+    [{ service: "aea-energy", ok: true }, 200, true],
+    [{ service: "aea-energy", ok: false }, 200, false],
+    [{ service: "wrong-service", ok: true, runtime: { ok: true } }, 200, false],
+    [{ service: "aea-energy", ok: true, runtime: { ok: true } }, 503, false],
+    [null, 200, false],
+  ];
+  for (const [health, healthStatus, expected] of cases) {
+    const result = appsScriptHarness({ health, healthStatus }).run();
+    assert.equal(result.checks[0].ok, expected, JSON.stringify({ health, healthStatus }));
+    assert.equal(result.status, expected ? "healthy" : "unhealthy");
+  }
+});
+
+test("Apps Script retains knowledge advisories in reports and recovery email without repeated outage alerts", () => {
+  const harness = appsScriptHarness({
+    initialState: { status: "unhealthy", checkedAt: 100, lastAlertAt: 100 },
+    health: { ok: false, runtime: { ok: true }, service: "aea-energy", energyAssistantKnowledge: {
+      ready: false, overdueOfficialSourceIds: ["source-a", "source-b"], uncoveredTopics: ["trades"], topicsReady: 16, topicCount: 17,
+    } },
+  });
+  const result = harness.run();
+  assert.equal(result.status, "healthy");
+  assert.deepEqual(JSON.parse(JSON.stringify(result.checks[0].advisory)), {
+    name: "energy_assistant_knowledge", status: "review_required", reason: "source_review_required", overdueSourceCount: 2, uncoveredTopicCount: 1, topicsReady: 16, topicCount: 17,
+  });
+  assert.match(harness.emails[0].body, /site_runtime: healthy/);
+  assert.match(harness.emails[0].body, /Advisory: Energy assistant knowledge review required: 2 overdue official sources; 16\/17 topics current/);
+  assert.match(harness.emails[0].subject, /recovered/);
+  assert.equal(harness.run().alertSent, false);
+  assert.equal(harness.emails.length, 1);
 });
 
 test("production Apps Script fails closed for every unsafe required-registry state", () => {

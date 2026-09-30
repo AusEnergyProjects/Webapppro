@@ -58,8 +58,7 @@ export default function TradeTeamPresence({ getAuthHeaders }: { getAuthHeaders: 
 
   return <div className="tlink-presence-presence">
     <label className="tlink-presence-control" title="Online: available for calls. Busy or Offline: no incoming calls. Messages still arrive.">
-      <span className={`tlink-presence-dot ${status ? `tlink-presence-${status}` : ""}`} aria-hidden="true" />
-      <span className="tlink-presence-label">My status</span>
+      <span className={`tlink-presence-dot ${status || "unknown"}`} aria-hidden="true" />
       <select aria-label="My call status" value={status || ""} disabled={saving || status === null} onChange={event => void change(tradeTeamPresenceStatus(event.target.value))}>
         {status === null && <option value="">Loading...</option>}
         <option value="online">Online</option><option value="busy">Busy</option><option value="offline">Offline</option>

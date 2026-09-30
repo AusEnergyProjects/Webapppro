@@ -261,6 +261,13 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(input, select, text
   color: #829791;
 }
 
+/* Call availability is a header control, including while its value is saving. */
+html[data-tlink-colour-mode="night"] .trade-portal-shell .tlink-presence-control select,
+html[data-tlink-colour-mode="night"] .trade-portal-shell .tlink-presence-control select:disabled {
+  background: transparent;
+  color: inherit;
+}
+
 /* Search, notifications and dialogs belong to the portal chrome, not documents. */
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .tlink-notification-popover,

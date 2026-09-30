@@ -28,10 +28,22 @@ function fixture(options={}){
   return {render,requests,events,focus:()=>listeners.get('focus')?.(),setServer:value=>{status=value;},failSave:()=>{failSave=true;},delayNextRead:value=>{delayedRead=value;},expire:()=>{for(const[id,callback]of [...timers]){timers.delete(id);callback();}},unmount:()=>{for(const effect of effects)effect?.cleanup?.();},async settle(){let tree;for(let i=0;i<5;i++){tree=render();await tick();}return tree;}};
 }
 const select=tree=>nodes(tree,node=>node.type==='select')[0];
+const styles=readFileSync(new URL('../src/app/protected-workspaces.css',import.meta.url),'utf8');
+function dotColour(tree){
+  const dot=nodes(tree,node=>node.props?.className?.split(' ').includes('tlink-presence-dot'))[0];
+  const classes=new Set(dot.props.className.split(' '));
+  let colour;
+  for(const match of styles.matchAll(/(\.tlink-presence-dot(?:\.[\w-]+)?)\s*\{([^}]+)\}/g)){
+    if(match[1].slice(1).split('.').every(name=>classes.has(name)))colour=match[2].match(/background:\s*([^;]+)/)?.[1];
+  }
+  return colour;
+}
 
 test('dropdown loads explicit availability and saves only the chosen status before notifying call UI',async()=>{
   const f=fixture();let tree=await f.settle();assert.equal(select(tree).props.value,'online');assert.match(text(tree),/Available for calls/);
+  assert.equal(dotColour(tree),'#21a676');
   select(tree).props.onChange({target:{value:'busy'}});tree=await f.settle();assert.equal(select(tree).props.value,'busy');assert.match(text(tree),/Calls off. Messages on/);
+  assert.equal(dotColour(tree),'#dc8b21');
   assert.deepEqual(JSON.parse(f.requests.find(item=>item.init.method==='PATCH').init.body),{status:'busy'});
   assert.equal(f.events[0].type,'tlink:team-presence-changed');assert.deepEqual(f.events[0].detail,{status:'busy'});f.unmount();
 });
@@ -43,7 +55,7 @@ test('failed save preserves the real status and emits no successful presence eve
 
 test('focus restores a change made on another device without writing over it',async()=>{
   const f=fixture();await f.settle();f.setServer('offline');f.focus();const tree=await f.settle();
-  assert.equal(select(tree).props.value,'offline');assert.equal(f.requests.filter(item=>item.init.method==='PATCH').length,0);f.unmount();
+  assert.equal(select(tree).props.value,'offline');assert.equal(dotColour(tree),'#8a939c');assert.equal(f.requests.filter(item=>item.init.method==='PATCH').length,0);f.unmount();
 });
 
 test('an earlier read cannot overwrite a newly saved status',async()=>{

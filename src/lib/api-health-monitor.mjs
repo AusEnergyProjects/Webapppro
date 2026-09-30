@@ -9,6 +9,34 @@ const STATE_KEY = "api-health/v1";
 const REQUIRED_OFFICIAL_PRODUCT_REGISTRIES =
   CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES;
 
+function siteRuntimeOk(body) {
+  return body?.service === "aea-energy" && (
+    Object.hasOwn(body, "runtime") ? body.runtime?.ok === true : body.ok === true
+  );
+}
+
+function knowledgeAdvisory(body) {
+  const knowledge = body?.energyAssistantKnowledge;
+  if (body?.service !== "aea-energy" || knowledge?.ready !== false) return null;
+  const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  return {
+    name: "energy_assistant_knowledge",
+    status: "review_required",
+    reason: "source_review_required",
+    overdueSourceCount: Array.isArray(knowledge.overdueOfficialSourceIds) ? knowledge.overdueOfficialSourceIds.length : null,
+    uncoveredTopicCount: Array.isArray(knowledge.uncoveredTopics) ? knowledge.uncoveredTopics.length : null,
+    topicsReady: count(knowledge.topicsReady),
+    topicCount: count(knowledge.topicCount),
+  };
+}
+
+function advisoryText(advisory) {
+  return "Energy assistant knowledge review required: "
+    + `${advisory.overdueSourceCount ?? "unknown"} overdue official sources; `
+    + `${advisory.topicsReady ?? "unknown"}/${advisory.topicCount ?? "unknown"} topics current. `
+    + "This is a source-review advisory, not a runtime outage.";
+}
+
 async function checkSiteAvailability({ fetchImpl, siteUrl, now }) {
   const startedAt = now();
   try {
@@ -18,11 +46,13 @@ async function checkSiteAvailability({ fetchImpl, siteUrl, now }) {
       cache: "no-store",
     });
     const body = await response.json().catch(() => null);
+    const advisory = knowledgeAdvisory(body);
     return {
       name: "site_runtime",
-      ok: response.ok && body?.ok === true && body?.service === "aea-energy",
+      ok: response.ok && siteRuntimeOk(body),
       status: response.status,
       durationMs: now() - startedAt,
+      ...(advisory ? { advisory } : {}),
     };
   } catch (error) {
     return {
@@ -267,9 +297,10 @@ async function sendAlert({ alertWebhookUrl, checks, fetchImpl, monitorId, siteUr
   if (!alertWebhookUrl) return { attempted: false, sent: false, reason: "alert_webhook_missing" };
   try {
     const failed = checks.filter((check) => !check.ok).map((check) => check.name);
-    const text = status === "healthy"
+    const summary = status === "healthy"
       ? "Australian Energy Assessments API monitoring recovered."
       : `Australian Energy Assessments API monitoring failed: ${failed.join(", ")}.`;
+    const text = [summary, ...checks.filter(check => check.advisory).map(check => advisoryText(check.advisory))].join("\n");
     const response = await fetchWithTimeout(fetchImpl, alertWebhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

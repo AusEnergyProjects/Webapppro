@@ -10,6 +10,7 @@ export function GET() {
     {
       ok: energyAssistantKnowledge.ready,
       service: "aea-energy",
+      runtime: { ok: true },
       checkedAt: checkedAt.toISOString(),
       energyAssistantKnowledge,
     },

@@ -68,9 +68,7 @@ function runOperationalHealthCheck() {
   const properties = PropertiesService.getScriptProperties();
   const probeToken = properties.getProperty("AEA_LEAD_WEBHOOK_TEST_TOKEN") || "";
   const checks = [
-    opsJsonCheck_("site_runtime", OPS_SITE_URL + "/api/health", function(body) {
-      return body && body.ok === true && body.service === "aea-energy";
-    }),
+    opsJsonCheck_("site_runtime", OPS_SITE_URL + "/api/health", opsSiteRuntimeOk_),
     opsJsonCheck_("official_product_registries", OPS_SITE_URL + "/api/creditex/official-products", opsOfficialProductRegistriesOk_),
     opsJsonCheck_("electricity_plans", OPS_SITE_URL + "/api/electricity-plans?postcode=3000&customerType=RESIDENTIAL&monitor=" + encodeURIComponent(monitorId), opsPlanResponseOk_),
     opsJsonCheck_("gas_plans", OPS_SITE_URL + "/api/gas-plans?postcode=3000&annualMj=58000&usageProfile=heating&includeConditional=false&monitor=" + encodeURIComponent(monitorId), opsPlanResponseOk_),
@@ -102,10 +100,43 @@ function opsJsonCheck_(name, url, validator) {
     const response = UrlFetchApp.fetch(url, { method: "get", muteHttpExceptions: true, headers: { Accept: "application/json", "Cache-Control": "no-cache" } });
     const status = response.getResponseCode();
     const body = JSON.parse(response.getContentText() || "null");
-    return { name: name, ok: status >= 200 && status < 300 && validator(body), status: status, durationMs: Date.now() - startedAt };
+    const check = { name: name, ok: status >= 200 && status < 300 && validator(body), status: status, durationMs: Date.now() - startedAt };
+    const advisory = name === "site_runtime" ? opsKnowledgeAdvisory_(body) : null;
+    if (advisory) check.advisory = advisory;
+    return check;
   } catch (error) {
     return { name: name, ok: false, status: 0, durationMs: Date.now() - startedAt, errorType: error && error.name || "UnknownError" };
   }
+}
+
+function opsSiteRuntimeOk_(body) {
+  return Boolean(body && body.service === "aea-energy" && (
+    Object.prototype.hasOwnProperty.call(body, "runtime")
+      ? body.runtime && body.runtime.ok === true : body.ok === true
+  ));
+}
+
+function opsKnowledgeAdvisory_(body) {
+  const knowledge = body && body.energyAssistantKnowledge;
+  if (!body || body.service !== "aea-energy" || !knowledge || knowledge.ready !== false) return null;
+  const count = function(value) { return Number.isSafeInteger(value) && value >= 0 ? value : null; };
+  return {
+    name: "energy_assistant_knowledge",
+    status: "review_required",
+    reason: "source_review_required",
+    overdueSourceCount: Array.isArray(knowledge.overdueOfficialSourceIds) ? knowledge.overdueOfficialSourceIds.length : null,
+    uncoveredTopicCount: Array.isArray(knowledge.uncoveredTopics) ? knowledge.uncoveredTopics.length : null,
+    topicsReady: count(knowledge.topicsReady),
+    topicCount: count(knowledge.topicCount),
+  };
+}
+
+function opsAdvisoryText_(advisory) {
+  const count = function(value) { return value === null ? "unknown" : value; };
+  return "Energy assistant knowledge review required: "
+    + count(advisory.overdueSourceCount) + " overdue official sources; "
+    + count(advisory.topicsReady) + "/" + count(advisory.topicCount) + " topics current. "
+    + "This is a source-review advisory, not a runtime outage.";
 }
 
 function opsPlanResponseOk_(body) {
@@ -165,7 +196,8 @@ function opsSendAlert_(status, checks, monitorId, occurredAt) {
     const subject = status === "healthy" ? "Australian Energy Assessments services recovered" : "Australian Energy Assessments service alert";
     const summary = status === "healthy" ? "All monitored services are healthy." : "Checks requiring attention: " + failed.join(", ") + ".";
     const rows = checks.map(function(check) {
-      return check.name + ": " + (check.ok ? "healthy" : "failed") + " | HTTP " + check.status + " | " + check.durationMs + " ms";
+      return check.name + ": " + (check.ok ? "healthy" : "failed") + " | HTTP " + check.status + " | " + check.durationMs + " ms"
+        + (check.advisory ? "\nAdvisory: " + opsAdvisoryText_(check.advisory) : "");
     }).join("\n");
     MailApp.sendEmail({
       to: OPS_ALERT_EMAIL,
