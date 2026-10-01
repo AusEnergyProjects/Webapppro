@@ -844,6 +844,15 @@ function DirectTradeDashboardContent() {
       : dashboardWorkspaceFromSearch(window.location.search)
   );
   const [mapNavigation] = useState(createMapNavigationGuard);
+  const observePortalHeader = useCallback((header: HTMLElement | null) => {
+    const shell = header?.parentElement;
+    if (!header || !shell) return;
+    const measure = () => shell.style.setProperty("--trade-header-height", `${header.offsetHeight}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => { observer.disconnect(); shell.style.removeProperty("--trade-header-height"); };
+  }, []);
   const registerMapSave = useCallback((save: (() => Promise<unknown>) | null) => mapNavigation.register(save), [mapNavigation]);
   const setWorkspace = useCallback((next: SetStateAction<DashboardWorkspace>, after?: () => void) => {
     return mapNavigation.run(() => { setWorkspaceState(next); after?.(); });
@@ -2363,6 +2372,7 @@ function DirectTradeDashboardContent() {
         >
           <header
             className="dashboard-hero"
+            ref={observePortalHeader}
             style={{
               background: tradeBusinessThemeGradient(profile.brandThemeKey),
             }}
@@ -2489,7 +2499,7 @@ function DirectTradeDashboardContent() {
                 }}><TLinkNavigationIcon name="map" /><span>Customer &amp; job map</span><small>Map locations and find nearby work</small></button>
                 <button type="button" aria-current={workspace === "design" ? "page" : undefined} className={workspace === "design" ? "active" : ""} onClick={() => {
                   setWorkspace("design", () => setCommandTarget(null));
-                }}><TLinkNavigationIcon name="design" /><span>Solar &amp; measurements</span><small>Solar drafts, saved designs and insulation</small></button>
+                }}><TLinkNavigationIcon name="design" /><span>Design &amp; Measure</span><small>Solar drafts, saved designs and insulation</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "active" : ""} onClick={() => {
                   setWorkspace("work", () => {
                     setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });

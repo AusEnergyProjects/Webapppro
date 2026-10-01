@@ -71,10 +71,10 @@ test("Solar tool bookmarks preserve the dedicated workspace and ignore stale job
   assert.equal(helpers.dashboardWorkspaceFromSearch("?workspace=map&crm=customers"), "map");
 });
 
-test("Solar and measurements navigation waits for the current design to save", async () => {
+test("Design & Measure navigation waits for the current design to save", async () => {
   const button = find(dashboard, node => ts.isJsxElement(node)
     && node.openingElement.tagName.getText(dashboard) === "button"
-    && node.getText(dashboard).includes('<span>Solar &amp; measurements</span>'));
+    && node.getText(dashboard).includes('<span>Design &amp; Measure</span>'));
   const guard = createMapNavigationGuard(), state = { workspace: "map", target: "old-job" };
   const context = { require: () => jsx, exports: {}, TLinkNavigationIcon() {}, workspace: "design",
     setCommandTarget: value => { state.target = value; },
