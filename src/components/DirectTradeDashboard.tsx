@@ -847,15 +847,21 @@ function DirectTradeDashboardContent() {
   const observePortalHeader = useCallback((header: HTMLElement | null) => {
     const shell = header?.parentElement;
     if (!header || !shell) return;
-    // Include the business switcher above this page. Document coordinates stay
-    // stable when the main workspace scrolls and the rail becomes sticky.
-    const measure = () => shell.style.setProperty("--trade-rail-top-offset", `${Math.max(0, header.getBoundingClientRect().bottom + window.scrollY)}px`);
+    const businessSwitcher = document.querySelector<HTMLElement>("[data-tlink-business-switcher]");
+    const measure = () => {
+      const businessBarHeight = businessSwitcher?.offsetHeight || 0;
+      shell.style.setProperty("--trade-business-bar-height", `${businessBarHeight}px`);
+      shell.style.setProperty("--trade-header-stack-height", `${businessBarHeight + header.offsetHeight}px`);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(header);
-    const businessSwitcher = header.closest(".direct-trade-dashboard-page")?.previousElementSibling;
     if (businessSwitcher) observer.observe(businessSwitcher);
-    return () => { observer.disconnect(); shell.style.removeProperty("--trade-rail-top-offset"); };
+    return () => {
+      observer.disconnect();
+      shell.style.removeProperty("--trade-business-bar-height");
+      shell.style.removeProperty("--trade-header-stack-height");
+    };
   }, []);
   const registerMapSave = useCallback((save: (() => Promise<unknown>) | null) => mapNavigation.register(save), [mapNavigation]);
   const setWorkspace = useCallback((next: SetStateAction<DashboardWorkspace>, after?: () => void) => {
@@ -1429,6 +1435,12 @@ function DirectTradeDashboardContent() {
     profile.addressState &&
     /^\d{4}$/.test(profile.postcode),
   );
+  const workspaceVisible = Boolean(authReady && !loading && user && !error && profile?.accountStatus !== "closed" && profileComplete && profile?.entitlements.verified);
+  const dashboardFooter = <SiteFooter>
+    Free TLink access does not replace trade licensing, government
+    accreditation, scheme approval, insurance, product compliance or
+    customer obligations.
+  </SiteFooter>;
   const offeredCount = opportunities.filter((item) =>
     ["offered", "viewed"].includes(item.matchStatus),
   ).length;
@@ -3099,13 +3111,10 @@ function DirectTradeDashboardContent() {
             </>
           )}
 
+          {dashboardFooter}
         </div>
       )}
-      <SiteFooter>
-        Free TLink access does not replace trade licensing, government
-        accreditation, scheme approval, insurance, product compliance or
-        customer obligations.
-      </SiteFooter>
+      {!workspaceVisible && dashboardFooter}
     </main></TradeTeamCallProvider></TradeMessageAlerts>
   );
 }

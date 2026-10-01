@@ -6,10 +6,11 @@
 .choices button { position: relative; display: grid; gap: .35rem; text-align: left; min-height: 86px; padding: 1rem 3rem 1rem 1rem; border: 1px solid var(--trade-line, #cfdfda); border-radius: 12px; background: var(--trade-surface-soft, #f4faf7); color: inherit; cursor: pointer; }
 .choices strong { font-size: 1.05rem; }.choices span { font-size: .9rem; color: var(--trade-muted, #56716b); }.choices b { position: absolute; right: 1.1rem; top: 50%; transform: translateY(-50%); }
 .choices button:hover, .choices button:focus-visible { border-color: #087f67; outline: 2px solid #087f6744; }
-.switcher { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .65rem clamp(1rem, 3vw, 2rem); border-bottom: 1px solid var(--trade-line, #cfdfda); background: var(--trade-surface, #fff); color: var(--trade-ink, #163b39); }
+.switcher { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .65rem clamp(1rem, 3vw, 2rem); border-bottom: 1px solid var(--trade-line, #cfdfda); background: var(--trade-surface, #fff); color: var(--trade-ink, #163b39); position: sticky; top: 0; z-index: 70; }
 .switcher > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .75rem; }.switcher strong { font-size: 1rem; }.switcher small { font-size: .85rem; color: var(--trade-muted, #56716b); }
 .switcher button, .state button { min-height: 44px; border: 1px solid var(--trade-line, #cfdfda); border-radius: 9px; padding: .6rem .9rem; background: var(--trade-surface-soft, #f4faf7); color: inherit; font-weight: 650; cursor: pointer; white-space: nowrap; }
 @media (max-width: 600px) { .switcher > div { display: grid; gap: .15rem; }.switcher small { display: none; }.chooser { margin-top: 1.5rem; } }
+.switcher small[data-tlink-welcome] { display: inline; }
 
 .switcher button:disabled { opacity: .65; cursor: wait; }
 .switcher p { flex-basis: 100%; margin: .25rem 0 0; font-size: .85rem; }

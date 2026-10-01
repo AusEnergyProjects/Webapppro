@@ -21,10 +21,15 @@ const headerObserver = find(dashboard, node => ts.isVariableDeclaration(node) &&
 const context = { require: () => jsx, exports: {}, workspace: "account", activeWorkView: "today", offeredCount: 0,
   TLinkNavigationIcon: () => jsx.jsx("svg", { className: "tlink-navigation-icon", "aria-hidden": true }), TradeMessageUnreadBadge: () => null };
 const markup = renderToStaticMarkup(Function(...Object.keys(context), `${compile(`const navigation = (${navigation.getText(dashboard)});`)}\nreturn navigation;`)(...Object.values(context)));
-const styles = ["../src/app/globals.css", "../src/app/protected-workspaces.css", "../src/components/TLinkChrome.css", "../src/app/tlink-colour-mode.css"].map(read).join("\n");
+const styles = ["../src/app/globals.css", "../src/app/protected-workspaces.css", "../src/components/TLinkChrome.css", "../src/app/tlink-colour-mode.css", "../src/components/TradeBusinessProvider.module.css"].map(read).join("\n");
 const browserPath = [process.env.TEST_BROWSER_PATH, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "/usr/bin/chromium", "/usr/bin/google-chrome"].find(path => path && existsSync(path));
 
-test("desktop rail scrolls independently through Business and mobile keeps its horizontal navigation", { skip: !browserPath && "No installed browser is available for layout checks" }, async t => {
+test("verified dashboard footer remains inside the shell containing the sticky header and rail", () => {
+  const shell = find(dashboard, node => ts.isJsxElement(node) && node.openingElement.getText(dashboard).includes('className={`trade-portal-shell '));
+  assert.ok(shell.children.some(node => ts.isJsxExpression(node) && node.expression?.getText(dashboard) === "dashboardFooter"));
+});
+
+test("both top bars remain visible and the independently scrolling rail fills the viewport through the footer", { skip: !browserPath && "No installed browser is available for layout checks" }, async t => {
   const browser = await chromium.launch({ executablePath: browserPath, headless: true });
   try {
     for (const scenario of [
@@ -34,18 +39,31 @@ test("desktop rail scrolls independently through Business and mobile keeps its h
       { name: "125 percent zoom equivalent CSS viewport", width: 1093, height: 614, headerHeight: 72 },
       { name: "wrapped narrow desktop header", width: 900, height: 600, headerHeight: 124 },
       { name: "mobile horizontal rail", width: 390, height: 844, headerHeight: 190, mobile: true },
+      { name: "short mobile screen", width: 390, height: 600, headerHeight: 190, mobile: true },
+      { name: "landscape screen", width: 844, height: 390, headerHeight: 124 },
     ]) await t.test(scenario.name, async () => {
       const page = await browser.newPage({ viewport: { width: scenario.width, height: scenario.height } });
       await page.route("**/*", route => route.abort());
-      await page.setContent(`<style>* { box-sizing: border-box; } html, body { margin: 0; font-family: Arial, sans-serif; } ${styles}</style><div id="business-context" style="height:46px">Working with Australian Energy Assessments</div><main class="direct-trade-dashboard-page"><div class="trade-portal-shell is-installer"><header class="dashboard-hero" style="height:${scenario.headerHeight}px">TLink</header>${markup}<section style="height:2400px;min-width:0">Business workspace</section></div></main>`);
+      await page.setContent(`<style>* { box-sizing: border-box; } html, body { margin: 0; font-family: Arial, sans-serif; } ${styles}</style><div id="business-context" data-tlink-business-switcher class="switcher" style="height:46px"><div><small data-tlink-welcome>Welcome James</small><strong>Australian Energy Assessments</strong></div></div><main class="direct-trade-dashboard-page"><div class="trade-portal-shell is-installer"><header class="dashboard-hero" style="height:${scenario.headerHeight}px">TLink</header>${markup}<section style="height:2400px;min-width:0">Business workspace</section><footer class="site-footer" style="min-height:520px"><p>Free TLink access does not replace trade licensing or customer obligations.</p><p><a href="/privacy">Privacy and analytics</a></p><p>Australian Energy Assessments</p></footer></div></main>`);
       const initialScroll = scenario.initialScroll || 0;
       await page.evaluate(y => window.scrollTo(0, y), initialScroll);
       await page.evaluate(compile(`const observe = ${headerObserver.getText(dashboard)}; window.cleanupHeaderObserver = observe(document.querySelector('.dashboard-hero'));`));
       const rail = page.locator('.dashboard-workspace-nav');
       const business = rail.getByRole('button', { name: /^Business\b/ });
       assert.equal(await rail.getByRole('button', { name: /^Design & Measure\b/ }).count(), 1);
-      await page.waitForFunction(() => document.querySelector('.trade-portal-shell').style.getPropertyValue('--trade-rail-top-offset'));
+      await page.waitForFunction(() => document.querySelector('.trade-portal-shell').style.getPropertyValue('--trade-header-stack-height'));
+      const assertStickyBars = async () => {
+        const bar = await page.locator('#business-context').boundingBox();
+        const header = await page.locator('.dashboard-hero').boundingBox();
+        const bounds = await rail.boundingBox();
+        assert.ok(Math.abs(bar.y) <= 1, `Business bar stays at viewport top, received ${bar.y}`);
+        assert.ok(Math.abs(header.y - bar.height) <= 1, "Dashboard header stays immediately below the business bar");
+        assert.ok(Math.abs(bounds.y - header.y - header.height) <= 1, "Navigation starts directly below both bars");
+        if (!scenario.mobile) assert.ok(Math.abs(bounds.y + bounds.height - scenario.height) <= 1, `Rail fills to viewport bottom, received ${bounds.y + bounds.height}`);
+      };
+      await assertStickyBars();
       if (scenario.mobile) {
+        assert.equal(await page.locator('[data-tlink-welcome]').isVisible(), true, "The greeting remains visible on mobile");
         assert.equal(await rail.evaluate(node => getComputedStyle(node).flexDirection), "row");
         assert.equal(await rail.evaluate(node => getComputedStyle(node).overflowX), "auto");
         assert.ok(await rail.evaluate(node => node.scrollWidth > node.clientWidth));
@@ -71,7 +89,7 @@ test("desktop rail scrolls independently through Business and mobile keeps its h
         assert.ok(await rail.evaluate(node => node.scrollTop > 0), "Keyboard focus reveals the bottom destination inside the menu");
         assert.equal(await page.evaluate(() => window.scrollY), initialScroll);
         await page.locator('#business-context').evaluate(node => { node.style.height = '80px'; });
-        await page.waitForFunction(expected => Number.parseFloat(document.querySelector('.trade-portal-shell').style.getPropertyValue('--trade-rail-top-offset')) === expected, scenario.headerHeight + 80);
+        await page.waitForFunction(expected => Number.parseFloat(document.querySelector('.trade-portal-shell').style.getPropertyValue('--trade-header-stack-height')) === expected, scenario.headerHeight + 80);
         const resizedBounds = await rail.boundingBox();
         assert.ok(resizedBounds.y + resizedBounds.height <= scenario.height + 1, "A growing business context bar cannot push the rail below the viewport");
         await page.evaluate(() => window.scrollTo(0, 300));
@@ -82,8 +100,15 @@ test("desktop rail scrolls independently through Business and mobile keeps its h
         const stickyLast = await business.boundingBox();
         assert.ok(stickyLast.y >= 0 && stickyLast.y + stickyLast.height <= scenario.height, "Business stays visible in the sticky rail");
       }
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForTimeout(100);
+      assert.ok(await page.evaluate(() => window.scrollY > 2000), "The check reaches the real document footer");
+      await assertStickyBars();
+      const footer = await page.locator('.site-footer').boundingBox();
+      assert.ok(footer.y < scenario.height && footer.y + footer.height <= scenario.height + 1, "The footer is included in the scroll boundary");
       await page.evaluate(() => window.cleanupHeaderObserver());
-      assert.equal(await page.locator('.trade-portal-shell').evaluate(node => node.style.getPropertyValue('--trade-rail-top-offset')), "");
+      assert.equal(await page.locator('.trade-portal-shell').evaluate(node => node.style.getPropertyValue('--trade-header-stack-height')), "");
+      assert.equal(await page.locator('.trade-portal-shell').evaluate(node => node.style.getPropertyValue('--trade-business-bar-height')), "");
       await page.close();
     });
   } finally { await browser.close(); }

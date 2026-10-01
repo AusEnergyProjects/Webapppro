@@ -1,6 +1,6 @@
 "use client";
 
-import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusinessFetch, useTradeManagerNameUpdate } from "./TradeBusinessProvider";
 
 import {
   type CSSProperties,
@@ -54,6 +54,7 @@ export type TradeBusinessSettingsProfile = {
   addressState: string;
   postcode: string;
   contactName?: string;
+  managerName?: string;
   phone?: string;
   businessWebsite?: string;
   googleBusinessProfileUrl?: string;
@@ -257,6 +258,8 @@ export function TradeBusinessSettingsWorkspace({
   onAccountClosed,
 }: Props) {
   const fetch = useTradeBusinessFetch();
+  const updateManagerName = useTradeManagerNameUpdate();
+  const [managerName, setManagerName] = useState(profile.managerName || "");
   const [availabilityStatus, setAvailabilityStatus] =
     useState<AvailabilityStatus>(profile.availabilityStatus);
   const [emailOpportunities, setEmailOpportunities] = useState(
@@ -427,6 +430,9 @@ export function TradeBusinessSettingsWorkspace({
   }
 
   function validateSettings(targetSection: string) {
+    if (targetSection === "manager" && managerName.trim().length > 120) {
+      return "Keep the manager's name to 120 characters or fewer.";
+    }
     if (targetSection === "service") {
       if (profile.partnerType === "installer" && !capabilities.length) {
         return "Choose at least one business service.";
@@ -499,7 +505,9 @@ export function TradeBusinessSettingsWorkspace({
     setSaveBusy(true);
     setSaveStatus("Saving business settings...");
     const payload: Partial<TradeBusinessSettingsProfile> =
-      targetSection === "appearance"
+      targetSection === "manager"
+        ? { managerName: managerName.trim() }
+        : targetSection === "appearance"
         ? {
             brandThemeKey,
             brandBorderStyle,
@@ -568,6 +576,10 @@ export function TradeBusinessSettingsWorkspace({
         | Partial<TradeBusinessSettingsProfile>
         | undefined;
       onProfileChange(savedSettings || payload);
+      if (targetSection === "manager" && typeof savedSettings?.managerName === "string") {
+        setManagerName(savedSettings.managerName);
+        updateManagerName?.(savedSettings.managerName);
+      }
       if (savedSettings?.capabilities) {
         setCapabilities(savedEnergyServiceIds(savedSettings.capabilities));
       }
@@ -821,6 +833,15 @@ export function TradeBusinessSettingsWorkspace({
                 </a>
               )}
             </div>
+            <form data-settings-section="manager" onSubmit={saveSettings} style={{ display: "grid", gap: 12 }}>
+              <label style={fieldStyle}>
+                <span>Manager&apos;s name (optional)</span>
+                <input name="managerName" autoComplete="name" maxLength={120} value={managerName} onChange={event => setManagerName(event.target.value)} style={controlStyle} aria-describedby="business-manager-name-help" />
+                <small id="business-manager-name-help">The first name appears in the welcome message for this business account.</small>
+              </label>
+              <button className="btn" disabled={saveBusy} style={{ justifySelf: "start" }}>{saveBusy && saveSection === "manager" ? "Saving..." : "Save manager's name"}</button>
+              {saveStatus && saveSection === "manager" && <p role="status">{saveStatus}</p>}
+            </form>
             {profile.partnerType === "installer" && <TradeEmailSettings user={user} />}
             <div className="dashboard-account-links">
               <a href="/direct-trade/partners">

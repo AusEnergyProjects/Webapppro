@@ -10,6 +10,7 @@ export type TradeBusinessChoice = {
   role: "owner" | "member";
   memberId: string;
   displayName: string;
+  managerName?: string;
 };
 
 export class TradeBusinessContextError extends Error {
@@ -39,12 +40,12 @@ export async function listTradeBusinesses(identity: FirebaseIdentity): Promise<T
       COALESCE((SELECT own_member.id FROM trade_team_members own_member
         WHERE own_member.owner_uid = owner.firebase_uid AND own_member.member_uid = owner.firebase_uid
         ORDER BY own_member.id LIMIT 1), '') AS memberId,
-      owner.business_name AS displayName
+      owner.business_name AS displayName, owner.manager_name AS managerName
     FROM trade_accounts owner
     WHERE owner.firebase_uid = ? AND owner.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("owner")}
     UNION ALL
     SELECT owner.firebase_uid AS ownerUid, owner.business_name AS businessName, 'member' AS role,
-      member.id AS memberId, member.display_name AS displayName
+      member.id AS memberId, member.display_name AS displayName, NULL AS managerName
     FROM trade_team_members member JOIN trade_accounts owner ON owner.firebase_uid = member.owner_uid
     WHERE member.member_uid = ? AND member.status = 'active' AND member.owner_uid <> ?
       AND owner.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("owner")}
@@ -53,6 +54,7 @@ export async function listTradeBusinesses(identity: FirebaseIdentity): Promise<T
   const businesses = results || [];
   const owners = new Set<string>();
   for (const business of businesses) {
+    if (business.role !== "owner" || !business.managerName) delete business.managerName;
     if (owners.has(business.ownerUid)) throw new TradeBusinessContextError("BUSINESS_ACCESS_REQUIRED", 403,
       "Your team access needs checking. Ask the business administrator to review your membership.");
     owners.add(business.ownerUid);

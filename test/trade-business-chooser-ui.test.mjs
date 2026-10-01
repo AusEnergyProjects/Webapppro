@@ -100,6 +100,37 @@ test("single membership auto-opens and owner choice routes to the own-business d
   assert.equal(businessClient.readTradeBusinessSelection("person", multiple.store), "person");
 });
 
+test("the welcome message uses the owner's optional manager or the signed-in team member's first name", async () => {
+  for (const [business, expected] of [
+    [{ ...choice("person", "owner"), managerName: "  James Morris " }, "Welcome James"],
+    [{ ...choice("employer"), displayName: "Katja Rosic", managerName: "Another manager" }, "Welcome Katja"],
+    [{ ...choice("person", "owner"), displayName: "Australian Energy Assessments" }, "Welcome"],
+  ]) {
+    const tree = await harness([business], { destination: "messages" }).settle();
+    assert.equal(text(nodes(tree, node => node.props?.["data-tlink-welcome"] !== undefined)[0]), expected);
+  }
+});
+
+test("saved manager names refresh the welcome immediately without replacing a subsequently selected business", async () => {
+  const h = harness([choice("person", "owner"), { ...choice("employer"), displayName: "Katja Rosic" }], { destination: "messages", saved: "person" });
+  let tree = await h.settle();
+  tree.props.onManagerNameChange("James Morris");
+  tree = h.render();
+  assert.match(text(tree), /Welcome James/);
+  tree.props.onManagerNameChange("");
+  tree = h.render();
+  assert.equal(text(nodes(tree, node => node.props?.["data-tlink-welcome"] !== undefined)[0]), "Welcome");
+  const delayedUpdate = tree.props.onManagerNameChange;
+  nodes(tree, node => node.type === "button" && text(node) === "Switch business")[0].props.onClick();
+  await tick();
+  tree = h.render();
+  nodes(tree, node => node.type === "button" && text(node).includes("Business employer"))[0].props.onClick();
+  delayedUpdate("Updated manager");
+  tree = h.render();
+  assert.equal(tree.props.business.ownerUid, "employer");
+  assert.match(text(tree), /Welcome Katja/);
+});
+
 test("a message notification keeps owners and members in the scoped messages destination", async () => {
   for (const business of [choice("person", "owner"), choice("employer")]) {
     const h = harness([business], { destination: "messages" });

@@ -4,6 +4,7 @@ export type TradeBusinessChoice = {
   role: "owner" | "member";
   memberId: string;
   displayName: string;
+  managerName?: string;
 };
 
 const selectionKey = (uid: string) => `tlink-business:${uid}`;

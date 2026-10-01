@@ -19,8 +19,14 @@ const routeSource = read("../src/app/api/trade-profile/route.ts");
 const compile = (source) => ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
 } }).outputText;
-const uiCompiled = compile(uiSource).replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
+const uiCompiled = compile(uiSource).replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null, useTradeManagerNameUpdate: () => () => {} })');
 const routeCompiled = compile(routeSource);
+const accessTree = ts.createSourceFile("trade-access-server.ts", read("../src/lib/trade-access-server.ts"), ts.ScriptTarget.Latest, true);
+const ownerDeclarations = accessTree.statements.filter(node => (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node))
+  && ["assertTradeOwnerContext", "TradeAccessError"].includes(node.name?.text));
+assert.equal(ownerDeclarations.length, 2);
+const ownerAccess = {};
+Function("exports", compile(ownerDeclarations.map(node => node.getText()).join("\n")))(ownerAccess);
 const text = (node) => node == null || typeof node === "boolean" ? ""
   : typeof node === "string" || typeof node === "number" ? String(node)
     : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
@@ -62,8 +68,10 @@ function businessHarness(capabilities, serviceStates = ["VIC"], addressState = "
 }
 const renderBusiness = (capabilities) => businessHarness(capabilities).render();
 
-function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"]) {
+function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"], actorUid = "owner-1") {
   const database = new DatabaseSync(":memory:");
+  let databaseReads = 0;
+  let beforeNextBatch;
   const textColumns = ["email", "business_name", "abn", "address_line_1", "suburb", "address_state", "postcode",
     "contact_name", "phone", "partner_type", "business_website", "google_business_profile_url", "service_states", "capabilities", "summary",
     "account_status", "verification_status", "verified_abn", "verification_review_id", "verification_reviewed_at",
@@ -80,6 +88,7 @@ function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"]) {
     banner_crop_width_basis_points INTEGER DEFAULT 10000, banner_crop_height_basis_points INTEGER DEFAULT 10000);
     CREATE TABLE trade_account_service_areas(id TEXT PRIMARY KEY, firebase_uid TEXT, position INTEGER, postcode TEXT,
       radius_km INTEGER, record_status TEXT, created_at TEXT, updated_at TEXT);`);
+  database.exec(read("../drizzle/0230_trade_manager_name.sql"));
   database.prepare(`INSERT INTO trade_accounts(firebase_uid, email, business_name, phone, partner_type, postcode,
     capabilities, availability_status, account_status, verification_status, service_states, abn) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run("owner-1", "owner@example.test", "Test trade", "0412345678", "installer", "3000", JSON.stringify(capabilities), "open", "active", "approved", JSON.stringify(serviceStates), "51824753556");
@@ -93,15 +102,16 @@ function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"]) {
     run() { return { success: true, meta: { changes: database.prepare(this.sql).run(...this.values).changes } }; }
   }
   const d1 = { prepare: (sql) => new Statement(sql), async batch(statements) {
+    beforeNextBatch?.(); beforeNextBatch = undefined;
     database.exec("BEGIN");
     try { const result = statements.map((statement) => statement.run()); database.exec("COMMIT"); return result; }
     catch (error) { database.exec("ROLLBACK"); throw error; }
   } };
   const dependencies = {
-    "../../../../db": { getD1: () => d1 },
-    "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: "owner-1", email: "owner@example.test", emailVerified: true }) },
+    "../../../../db": { getD1: () => { databaseReads++; return d1; } },
+    "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: actorUid, email: "owner@example.test", emailVerified: true }) },
     "@/lib/trade-access-server": { requireVerifiedTradeIdentity: async () => {}, approvedAbnAccess: () => true,
-      assertTradeOwnerContext: () => {}, TradeAccessError: class extends Error {},
+      ...ownerAccess,
       approvedTradeReviewPredicate: () => "1 = 1" },
     "@/lib/postcode-distance": { postcodeCoordinate: (postcode) => ({ "3000": [-37.81, 144.96], "2000": [-33.86, 151.20] })[postcode] || null },
     "@/lib/admin-notifications": {}, "@/lib/direct-trade-entitlements": entitlements,
@@ -114,16 +124,77 @@ function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"]) {
     assert.ok(Object.hasOwn(dependencies, id), `Unexpected route dependency: ${id}`);
     return dependencies[id];
   }, exports);
-  return { database, async patch(body) {
+  return { database, databaseReads: () => databaseReads, beforeNextBatch: callback => { beforeNextBatch = callback; }, async patch(body, headers = {}) {
     return exports.PATCH(new Request("https://tlink.test/api/trade-profile", {
-      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      method: "PATCH", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body),
     }));
   }, async post(body) {
     return exports.POST(new Request("https://tlink.test/api/trade-profile", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     }));
-  }, async get() { return exports.GET(new Request("https://tlink.test/api/trade-profile")); } };
+  }, async get(headers = {}) { return exports.GET(new Request("https://tlink.test/api/trade-profile", { headers })); } };
 }
+
+test("manager name saves canonically, reloads, survives unrelated settings and clears explicitly", async () => {
+  const f = routeFixture();
+  try {
+    assert.equal((await (await f.get()).json()).profile.managerName, "");
+    f.database.exec("UPDATE trade_accounts SET contact_name='Registered contact',document_business_name='Invoice business'");
+    const saved = await f.patch({ managerName: "  James\r\n\tMorris  " });
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).settings.managerName, "James Morris");
+    assert.equal((await (await f.get()).json()).profile.managerName, "James Morris");
+    assert.equal((await f.patch({ availabilityStatus: "limited" })).status, 200);
+    assert.equal(f.database.prepare("SELECT manager_name FROM trade_accounts").get().manager_name, "James Morris");
+    const identity = f.database.prepare("SELECT contact_name,business_name,document_business_name FROM trade_accounts").get();
+    assert.deepEqual({ ...identity }, { contact_name: "Registered contact", business_name: "Test trade", document_business_name: "Invoice business" });
+    assert.equal((await f.patch({ managerName: "" })).status, 200);
+    assert.equal((await (await f.get()).json()).profile.managerName, "");
+  } finally { f.database.close(); }
+});
+
+test("invalid manager names reject the whole settings mutation without truncating or clearing the saved name", async () => {
+  const f = routeFixture();
+  try {
+    assert.equal((await f.patch({ managerName: "J".repeat(120) })).status, 200);
+    for (const managerName of [null, false, 123, {}, [], "J".repeat(121), "James\u0000Morris", "James\u007fMorris"]) {
+      const response = await f.patch({ managerName, availabilityStatus: "paused" });
+      assert.equal(response.status, 400);
+      const row = f.database.prepare("SELECT manager_name,availability_status FROM trade_accounts").get();
+      assert.equal(row.manager_name, "J".repeat(120));
+      assert.equal(row.availability_status, "open");
+    }
+  } finally { f.database.close(); }
+});
+
+test("an unrelated settings save cannot overwrite a manager name changed after its profile read", async () => {
+  const f = routeFixture();
+  try {
+    assert.equal((await f.patch({ managerName: "James Morris" })).status, 200);
+    f.beforeNextBatch(() => f.database.prepare("UPDATE trade_accounts SET manager_name=? WHERE firebase_uid=?").run("Katja Rosic", "owner-1"));
+    const response = await f.patch({ emailWeeklySummary: false });
+    assert.equal(response.status, 200);
+    assert.equal(Object.hasOwn((await response.json()).settings, "managerName"), false,
+      "An unrelated response must not reset the greeting with a stale pre-write value");
+    assert.equal(f.database.prepare("SELECT manager_name FROM trade_accounts").get().manager_name, "Katja Rosic");
+  } finally { f.database.close(); }
+});
+
+test("selected team members cannot read or change a business manager name", async () => {
+  for (const actorUid of ["team-member", "owner-1"]) {
+    const f = routeFixture(["solar"], ["VIC"], actorUid);
+    const selected = actorUid === "team-member" ? "owner-1" : "another-employer";
+    try {
+      const headers = { "X-TLink-Business": selected };
+      const changed = await f.patch({ managerName: "Unauthorised manager", ownerUid: selected }, headers);
+      assert.equal(changed.status, 403);
+      assert.equal((await changed.json()).code, "BUSINESS_OWNER_CONTEXT_REQUIRED");
+      assert.equal((await f.get(headers)).status, 403);
+      assert.equal(f.databaseReads(), 0, "Owner context is checked before accessing profile records");
+      assert.equal(f.database.prepare("SELECT manager_name FROM trade_accounts").get().manager_name, "");
+    } finally { f.database.close(); }
+  }
+});
 
 test("Business and Team expose the identical authoritative service catalogue", () => {
   const tree = renderBusiness([]);

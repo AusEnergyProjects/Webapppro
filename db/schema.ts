@@ -59,6 +59,7 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   addressState: text("address_state").notNull().default(""),
   postcode: text("postcode").notNull().default(""),
   contactName: text("contact_name").notNull(),
+  managerName: text("manager_name").notNull().default(""),
   phone: text("phone").notNull().default(""),
   partnerType: text("partner_type").notNull().default("installer"),
   businessWebsite: text("business_website").notNull().default(""),

@@ -281,7 +281,7 @@ export async function GET(request: Request) {
   const record = await db.prepare(`
     SELECT account.email, account.business_name, account.abn, account.address_line_1,
            account.suburb, account.address_state, account.postcode,
-           account.contact_name, account.phone, account.partner_type,
+           account.contact_name, account.manager_name, account.phone, account.partner_type,
            account.business_website, account.google_business_profile_url, account.service_states, account.capabilities,
            account.summary, account.account_status, account.verification_status,
            account.verified_abn, account.verification_review_id,
@@ -341,6 +341,7 @@ export async function GET(request: Request) {
       addressState: record.address_state,
       postcode: record.postcode,
       contactName: record.contact_name,
+      managerName: String(record.manager_name || ""),
       phone: record.phone,
       partnerType: record.partner_type,
       businessWebsite,
@@ -396,6 +397,7 @@ export async function GET(request: Request) {
 }
 
 type SettingsPayload = {
+  managerName?: unknown;
   capabilities?: unknown;
   serviceStates?: unknown;
   availabilityStatus?: unknown;
@@ -447,7 +449,7 @@ export async function PATCH(request: Request) {
   }
 
   const db = getD1();
-  const account = await db.prepare(`SELECT email, business_name, phone, partner_type, postcode, capabilities, service_states, service_base_postcode,
+  const account = await db.prepare(`SELECT email, business_name, manager_name, phone, partner_type, postcode, capabilities, service_states, service_base_postcode,
       service_radius_km, availability_status, email_opportunities,
       email_weekly_summary, brand_theme_key, brand_border_style,
       quote_email_subject_template, quote_email_intro, quote_default_terms,
@@ -459,6 +461,13 @@ export async function PATCH(request: Request) {
     FROM trade_accounts WHERE firebase_uid = ?`)
     .bind(identity.uid).first<Record<string, unknown>>();
   if (!account) return json({ ok: false, error: "Complete the business profile first." }, 404);
+
+  const managerName = raw.managerName === undefined
+    ? String(account.manager_name || "")
+    : optionalSingleLine(raw.managerName, 120);
+  if (managerName === null) {
+    return json({ ok: false, error: "Enter a manager's name of up to 120 characters, or leave it blank." }, 400);
+  }
 
   const availabilityStatus = raw.availabilityStatus === undefined
     ? String(account.availability_status || "open")
@@ -667,7 +676,7 @@ export async function PATCH(request: Request) {
         invoice_payment_account_name = ?, invoice_payment_bsb = ?,
         invoice_payment_account_number = ?, invoice_payment_reference = ?,
         invoice_default_terms = ?,
-        service_states = ?, settings_updated_at = ?, updated_at = ?
+        service_states = ?, settings_updated_at = ?, updated_at = ?, manager_name = COALESCE(?, manager_name)
     WHERE firebase_uid = ?
   `).bind(
     JSON.stringify(capabilities),
@@ -697,6 +706,7 @@ export async function PATCH(request: Request) {
     raw.serviceStates === undefined ? String(account.service_states || "[]") : JSON.stringify(serviceStates),
     now,
     now,
+    raw.managerName === undefined ? null : managerName,
     identity.uid,
   )];
 
@@ -727,6 +737,7 @@ export async function PATCH(request: Request) {
   return json({
     ok: true,
     settings: {
+      ...(raw.managerName === undefined ? {} : { managerName }),
       capabilities,
       serviceStates,
       availabilityStatus,
@@ -1084,6 +1095,7 @@ export async function DELETE(request: Request) {
           document_business_name = '',
           document_phone = '',
           document_email = '',
+          manager_name = '',
           google_business_profile_url = '',
           banner_crop_x_basis_points = 0,
           banner_crop_y_basis_points = 0,

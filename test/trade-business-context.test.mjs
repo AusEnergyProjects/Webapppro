@@ -37,6 +37,7 @@ function fixture(t, options = {}) {
       job_scope TEXT NOT NULL DEFAULT 'own', schedule_scope TEXT NOT NULL DEFAULT 'own',
       accepted_at TEXT NOT NULL DEFAULT '', invited_at TEXT NOT NULL DEFAULT '', last_active_at TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT '');`);
+  database.exec(fs.readFileSync(new URL("../drizzle/0230_trade_manager_name.sql", import.meta.url), "utf8"));
   const identity = { uid: "person-1", email: "person@example.invalid", emailVerified: true,
     authTime: 1, signInProvider: "password", ...options.identity };
   const calls = { mfa: [], schema: [] };
@@ -109,6 +110,20 @@ test("business choices include eligible own business and memberships, dedupe own
     { ownerUid: f.identity.uid, businessName: "Own company", role: "owner", memberId: "own-member", displayName: "Own company" },
     { ownerUid: "business-a", businessName: "Employer", role: "member", memberId: "staff-a", displayName: "staff-a name" },
   ]);
+});
+
+test("manager name is available only on the owner's choice while member and business display names remain unchanged", async t => {
+  const f = fixture(t); f.owner(f.identity.uid, "Own company"); f.owner("business-a", "Employer");
+  f.member("staff-a", "business-a");
+  f.database.prepare("UPDATE trade_accounts SET manager_name=? WHERE firebase_uid=?").run("James Morris", f.identity.uid);
+  f.database.prepare("UPDATE trade_accounts SET manager_name=? WHERE firebase_uid=?").run("Employer manager", "business-a");
+  const [owner, member] = await f.context.listTradeBusinesses(f.identity);
+  assert.equal(owner.managerName, "James Morris");
+  assert.equal(owner.displayName, "Own company");
+  assert.equal(owner.businessName, "Own company");
+  assert.equal(Object.hasOwn(member, "managerName"), false);
+  assert.equal(member.displayName, "staff-a name");
+  assert.equal(member.businessName, "Employer");
 });
 
 test("membership enumeration excludes revoked, unapproved, inactive, supplier and fabricated approvals", async t => {
