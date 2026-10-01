@@ -32,8 +32,8 @@ const providerNotes: Record<Provider["provider"], string> = {
   xero: "Customer accepts, TLink creates the invoice and syncs it to Xero automatically. Choose your income account once if asked.",
   myob: "Customer accepts, TLink creates the invoice and syncs it to MYOB automatically. Connect with your authenticator and choose your income account once if asked.",
   quickbooks: "Customer accepts, TLink creates the invoice and syncs it to QuickBooks automatically. Choose your sales product or service once if asked.",
-  google_calendar: "Mirror TLink appointments to Google Calendar. TLink stays authoritative and protected customer details are withheld.",
-  microsoft_calendar: "Mirror TLink appointments to Outlook. TLink stays authoritative and protected customer details are withheld.",
+  google_calendar: "Send TLink appointments to Google Calendar and see your accepted calendar events privately in Schedule. Protected customer details stay withheld.",
+  microsoft_calendar: "Send TLink appointments to Outlook and see your accepted events, including Teams meetings, privately in Schedule. Protected customer details stay withheld.",
 };
 
 export function TradeIntegrationCentre({ user }: { user: User }) {

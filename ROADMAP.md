@@ -16,7 +16,13 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
-## Current shared-job operational proof gate
+## Current product direction: a simpler business home
+
+Prioritise a permission-aware Home dashboard, clear next actions, useful financial/workload charts and connected-calendar visibility. Keep customers informed through existing email updates and secure account-free document links. Do not build a customer portal or require customer accounts.
+
+After this dashboard release, prioritise reliable quote/job preparation through signed-in Wattzun and measure time saved per completed job. Broader ERP claims require evidence for accounting, organisation controls, reporting accuracy and operational reliability; do not substitute a growing menu for completed workflows.
+
+## Previous shared-job operational proof gate
 
 Publish and inspect independent worker visits on a shared job, per-visit completion and durable shared-form conflict handling. Retain existing rental, training and professional-signature requirements. Server concurrency tests must prove simultaneous edits preserve both workers' contributions and prevent early whole-job completion. Publish the compatible runtime 1.0.2 native update and distinguish release evidence from physical-device installation. Evidence: C:/Webproject/outputs/tlink-multi-trade-2026-09-30/.
 

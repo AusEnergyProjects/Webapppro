@@ -1,6 +1,8 @@
 "use client";
 
 import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { externalCalendarEventOnDay, externalCalendarLastDay, type ExternalCalendarResult } from "@/lib/trade-calendar-events";
+import calendarStyles from "./TradeCalendarEvents.module.css";
 
 import { BookingTrainingLinks, type BookingTrainingModule } from "./BookingTrainingLinks";
 import { TradeCustomerEmailComposer } from "./TradeCustomerEmailComposer";
@@ -158,6 +160,10 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   const [data, setData] = useState<ScheduleResult>({});
   const [focusRequestVersion, setFocusRequestVersion] = useState(0);
   const [calendars, setCalendars] = useState<CalendarConnection[]>([]);
+  const [externalCalendar, setExternalCalendar] = useState<{ fetcher: typeof fetch; result: ExternalCalendarResult } | null>(null);
+  const [externalLoading, setExternalLoading] = useState(false);
+  const [externalError, setExternalError] = useState("");
+  const [externalRefresh, setExternalRefresh] = useState(0);
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(""); const [status, setStatus] = useState(""); const [bookingTraining, setBookingTraining] = useState<BookingTrainingModule[]>([]); const [loadError, setLoadError] = useState(""); const [failedWeekStart, setFailedWeekStart] = useState(""); const [loadAttemptNonce, setLoadAttemptNonce] = useState(0);
   const [memberFilter, setMemberFilter] = useState(() => jobCalendar ? focusedMemberId || proposal?.assigneeMemberId || "" : ""); const [jobFilter, setJobFilter] = useState(""); const [serviceFilter, setServiceFilter] = useState(""); const [siteFilter, setSiteFilter] = useState(""); const [statusFilter, setStatusFilter] = useState("");
   const [hoursMember, setHoursMember] = useState(""); const [hourEdits, setHourEdits] = useState<Record<number, WorkingHours>>({});
@@ -192,6 +198,33 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   const canManageAvailability = Boolean(data.access?.memberId) || !permissions;
   const canManageTeamAvailability = Boolean(data.access?.isOwner || data.access?.permissions?.canManageTeam);
   const memberLabel = (member: Member) => scheduleMemberLabel(member, data.access?.memberId || "");
+  const canReadExternalCalendar = data.access?.isOwner === true && !permissions;
+  const visibleExternalCalendar = canReadExternalCalendar && externalCalendar?.fetcher === fetch && externalCalendar.result.rangeStart === activeWeekStart ? externalCalendar.result : null;
+  const externalEvents = useMemo(() => (visibleExternalCalendar?.events || []).filter(event => !memberFilter || event.memberId === memberFilter), [visibleExternalCalendar, memberFilter]);
+  const externalTimedSegments = useMemo(() => scheduleWeekDays(activeWeekStart).flatMap(day => externalEvents.filter(event => !event.allDay && !event.clockChange).flatMap(event => {
+    const segment = externalCalendarEventOnDay(event, day); return segment ? [segment] : [];
+  })), [activeWeekStart, externalEvents]);
+
+  useEffect(() => {
+    if (!canReadExternalCalendar) return;
+    const controller = new AbortController();
+    const frame = window.requestAnimationFrame(() => {
+      setExternalLoading(true); setExternalError(""); setExternalCalendar(null);
+      void (async () => {
+        try {
+          const token = await user.getIdToken();
+          const query = new URLSearchParams({ rangeStart: activeWeekStart, rangeEnd: addDays(activeWeekStart, 7) });
+          const response = await fetch(`/api/trade-calendar-events?${query}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal, cache: "no-store" });
+          const result = await response.json() as ExternalCalendarResult & { ok?: boolean; error?: string };
+          if (controller.signal.aborted) return;
+          if (!response.ok || !result.ok) throw new Error(result.error || "Your external calendar could not be loaded.");
+          setExternalCalendar({ fetcher: fetch, result });
+        } catch (error) { if (!controller.signal.aborted) setExternalError(error instanceof Error ? error.message : "Your external calendar could not be loaded."); }
+        finally { if (!controller.signal.aborted) setExternalLoading(false); }
+      })();
+    });
+    return () => { controller.abort(); window.cancelAnimationFrame(frame); };
+  }, [activeWeekStart, canReadExternalCalendar, externalRefresh, fetch, refreshNonce, user]);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true); setLoadError(""); setFailedWeekStart("");
@@ -483,7 +516,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     if (!proposal?.startsAt || !proposalEndsAt || (memberFilter && memberFilter !== proposal.assigneeMemberId) || proposal.startsAt.slice(0, 10) < activeWeekStart || proposal.startsAt.slice(0, 10) >= addDays(activeWeekStart, 7)) return displayItems;
     return [...displayItems, { id: "job-schedule-proposal", startsAt: proposal.startsAt, endsAt: proposalEndsAt }];
   }, [activeWeekAppointments, activeWeekStart, activeWeekUnavailability, memberFilter, proposal, proposalEndsAt]);
-  const gridWindow = useMemo(() => scheduleDisplayWindow(activeWeekDisplayAppointments), [activeWeekDisplayAppointments]);
+  const gridWindow = useMemo(() => scheduleDisplayWindow([...activeWeekDisplayAppointments, ...externalTimedSegments], 7 * 60, 19 * 60, "exact"), [activeWeekDisplayAppointments, externalTimedSegments]);
   const gridStartMinute = gridWindow.startMinute;
   const gridEndMinute = gridWindow.endMinute;
   const gridHeight = ((gridEndMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT;
@@ -926,6 +959,15 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     })}</div></details>}
     {pendingScheduleChangeCount > 0 && <section className={`schedule-pending-actions${pendingScheduleHasConflict ? " conflict" : ""}`} aria-label="Unsaved schedule changes"><div><strong>{pendingScheduleChangeCount} unsaved {pendingScheduleChangeCount === 1 ? "schedule change" : "schedule changes"}</strong><span>{pendingScheduleHasConflict ? "Resolve the highlighted unavailable time before saving." : "Review every moved appointment, then save them together."}</span></div><button type="button" onClick={discardScheduleChanges} disabled={busy === "schedule-batch"}>Discard</button><button type="button" className="primary" onClick={() => void saveScheduleChanges()} disabled={pendingScheduleHasConflict || loading || Boolean(loadError) || busy === "schedule-batch"}>{busy === "schedule-batch" ? "Saving..." : "Save schedule changes"}</button></section>}
     <p className="schedule-drag-note" id={jobCalendar ? proposalStatusId : undefined} role={jobCalendar ? "status" : undefined} aria-live={jobCalendar ? "polite" : undefined}>{jobCalendar ? proposalGuidance : canRescheduleJobs ? "Drag appointments into the best order, then save all schedule changes together." : "This schedule is read only for your access."} {!jobCalendar && "Tap or press Enter for exact details."} {jobCalendar && onProposalChange && "Double-click an open time to select one hour. Drag the proposed booking to move it, or drag its bottom edge to change its length in 15 minute steps."} {calendarCanReschedule && " On a phone, tap a job to change its day, start time, worker or duration."} {jobCalendar && proposalValidation.status === "not_visible" && proposal?.startsAt && <button type="button" onClick={showProposal}>Show selected booking</button>} {jobCalendar && proposalValidation.status === "load_error" && <button type="button" onClick={retryProposalWeek}>Retry selected week</button>}</p>
+    {canReadExternalCalendar && <section className={calendarStyles.panel} aria-label="My connected calendars">
+      <div className={calendarStyles.heading}><strong>My connected calendars</strong><button type="button" disabled={externalLoading} onClick={() => setExternalRefresh(value => value + 1)}>{externalLoading ? "Refreshing..." : "Refresh calendars"}</button></div>
+      <p>Accepted invitations and events you organise appear here, visible only to you. Edit them in Google Calendar or Outlook. They do not change job availability.{visibleExternalCalendar && ` Times shown in ${visibleExternalCalendar.timeZone.replaceAll("_", " ")}.`}</p>
+      {externalError && <p className={calendarStyles.error} role="alert">{externalError}</p>}
+      {visibleExternalCalendar?.providers.map(provider => provider.error && <p key={provider.provider} className={calendarStyles.error} role="status">{provider.provider === "google_calendar" ? "Google Calendar" : "Outlook Calendar"}: {provider.error}</p>)}
+      {!externalLoading && visibleExternalCalendar && !visibleExternalCalendar.providers.length && <p>Connect Google Calendar or Outlook in Calendar apps {jobCalendar ? "on the main Schedule page" : "below"} to show your accepted events, including Teams meetings.</p>}
+      {!externalLoading && visibleExternalCalendar && visibleExternalCalendar.providers.length > 0 && visibleExternalCalendar.providers.every(provider => provider.complete) && !externalEvents.length && <p>No accepted external events for this person in the displayed week.</p>}
+      {externalEvents.some(event => event.allDay || event.clockChange) && <ul className={calendarStyles.allDay}>{externalEvents.filter(event => event.allDay || event.clockChange).map(event => <li key={event.id}><strong>{event.title}</strong><small>{event.provider === "google_calendar" ? "Google Calendar" : "Outlook Calendar"} | {event.allDay ? `All day | ${formatDay(event.startsAt.slice(0, 10))}${externalCalendarLastDay(event) > event.startsAt.slice(0, 10) ? ` to ${formatDay(externalCalendarLastDay(event))}` : ""}` : event.timeDetail}</small>{event.sourceUrl && <a href={event.sourceUrl} target="_blank" rel="noopener noreferrer">Open in calendar</a>}{event.joinUrl && <a href={event.joinUrl} target="_blank" rel="noopener noreferrer">Join meeting</a>}</li>)}</ul>}
+    </section>}
     <div className="schedule-week-viewport" onTouchStart={startWeekSwipe} onTouchEnd={(event) => finishWeekSwipe(event, true)} onTouchCancel={() => { weekSwipeStartRef.current = null; }} onDragOver={(event) => { if (draggingId) autoScrollDuringDrag(event.clientX, event.clientY); }}>
       {draggingId && <><span className={`schedule-drag-edge previous${dragEdgeDirection === -1 ? " active" : ""}`}>Hold for previous week</span><span className={`schedule-drag-edge next${dragEdgeDirection === 1 ? " active" : ""}`}>Hold for next week</span></>}
       <div className="schedule-week-pages" style={{ transform: `translateX(-${activeWeekIndex * 100}%)` }}>
@@ -941,11 +983,12 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
           const dayIsToday = date === todayDate;
           const dayAppointments = appointmentsByDate.get(date) || [];
           const dayUnavailability = activeWeekUnavailability.filter((item) => item.startsAt.slice(0, 10) === date);
+          const dayExternalEvents = pageIsActive ? externalTimedSegments.filter(item => item.startsAt.slice(0, 10) === date) : [];
           const proposalOnDay = proposal?.startsAt.slice(0, 10) === date && proposalEndsAt && proposal.assigneeMemberId && (!memberFilter || memberFilter === proposal.assigneeMemberId)
             ? { id: "job-schedule-proposal", startsAt: proposal.startsAt, endsAt: proposalEndsAt }
             : null;
-          const laneItems = [...dayAppointments, ...dayUnavailability, ...(proposalOnDay ? [proposalOnDay] : [])];
-          const appointmentLanes = scheduleAppointmentLanes(laneItems);
+          const laneItems = [...dayAppointments, ...dayUnavailability, ...dayExternalEvents, ...(proposalOnDay ? [proposalOnDay] : [])];
+          const appointmentLanes = scheduleAppointmentLanes(laneItems, "exact");
           return <section key={date} aria-label={`${dayIsToday ? "Today, " : ""}${formatDay(date)}`} className={`schedule-day-track${dropTarget === date ? " drop-target" : ""}${dayIsPast ? " past" : ""}${dayIsToday ? " today" : ""}`}>
             <header aria-current={dayIsToday ? "date" : undefined}><strong>{dayIsToday ? "Today" : shortDays[new Date(`${date}T00:00:00Z`).getUTCDay()]}</strong><span>{date.slice(5)}</span></header>
             <div data-schedule-date={date} className={`schedule-day-grid${jobCalendar && onProposalChange && !dayIsPast ? " proposal-selectable" : ""}`} style={{ height: `${gridHeight}px` }}
@@ -968,6 +1011,14 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
                 const lane = appointmentLanes.get(item.id) || { lane: 0, laneCount: 1 };
                 const label = members.find((member) => member.id === item.teamMemberId)?.displayName || "Team member";
                 return <article key={item.id} aria-label={`${label} unavailable from ${formatTime(item.startsAt)}`} className="schedule-block unavailable" style={{ top: `${Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT)}px`, height: `${Math.max(44, (duration / 15) * GRID_QUARTER_HEIGHT)}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}><strong>Unavailable</strong><small>{label}</small><span>{formatTime(item.startsAt)} | busy time</span></article>;
+              })}
+              {dayExternalEvents.map(item => {
+                const startMinute = minuteValue(item.startsAt.slice(11, 16));
+                const duration = Math.max(1, (Date.parse(`${item.endsAt}:00Z`) - Date.parse(`${item.startsAt}:00Z`)) / 60_000);
+                const height = Math.max(1, duration / 15 * GRID_QUARTER_HEIGHT);
+                const lane = appointmentLanes.get(item.id) || { lane: 0, laneCount: 1 };
+                const source = item.provider === "google_calendar" ? "Google Calendar" : "Outlook Calendar";
+                return <a key={item.id} href={item.sourceUrl || undefined} target="_blank" rel="noopener noreferrer" tabIndex={pageIsActive && item.sourceUrl ? 0 : -1} className={`schedule-block ${calendarStyles.externalBlock}`} aria-label={`${item.title}, ${source}, ${formatTime(item.startsAt)} to ${formatTime(item.endsAt)}. Open read-only event in calendar.`} title={`${item.title} | ${source} | ${formatTime(item.startsAt)} to ${formatTime(item.endsAt)}`} onDoubleClick={event => event.stopPropagation()} style={{ top: `${Math.max(0, (startMinute - gridStartMinute) / 15 * GRID_QUARTER_HEIGHT)}px`, height: `${height}px`, padding: height < 24 ? "0 3px" : undefined, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}>{height >= 16 && <strong>{item.title}</strong>}{height >= 44 && <small>{source}</small>}{height >= 60 && <span>{formatTime(item.startsAt)} | {item.busy ? "Busy" : "Available"}</span>}{height >= 80 && item.sourceUrl && <small>Open in calendar</small>}</a>;
               })}
               {dayAppointments.map((item) => {
                 const startMinute = minuteValue(item.startsAt.slice(11, 16)); const duration = appointmentDurationMinutes(item.startsAt, item.endsAt); const top = Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT); const height = scheduleAppointmentBlockHeight(duration, GRID_QUARTER_HEIGHT);

@@ -2,6 +2,7 @@ import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard }
 import { assertTradeJobCanCancel,tradeJobCancellationGuard,cancelledJobAppointmentsStatement,reconcileCancelledJobCalendars } from "@/lib/trade-job-cancellation-server";
 import { getD1 } from "../../../../db";
 import { loadBusinessReport } from "@/lib/trade-business-reports-server";
+import { loadHomeDashboard } from "@/lib/trade-home-dashboard-server";
 import { ReportInputError } from "@/lib/trade-business-reports";
 import { assertCertificateActivityEligibility, certificateActivityEligibilityGuardStatement } from "@/lib/trade-training-server";
 import { certificateActivityIds, assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
@@ -1712,6 +1713,11 @@ export async function GET(request: Request) {
       canRunReports: identity.access.canRunReports,
     } };
     if (mode === "bootstrap") return adminJson({ ok: true, access: accessPayload, ...(await crmBootstrap(identity)) });
+    if (mode === "home") {
+      try { return adminJson({ ok: true, dashboard: await loadHomeDashboard(getD1(), identity.uid, identity.access,
+        url.searchParams, identity.addressState) }); }
+      catch (error) { if (error instanceof ReportInputError) return adminJson({ ok: false, error: error.message }, 400); throw error; }
+    }
     if (mode === "summary") {
       if (!identity.access.canRunReports) throw new Error("REPORTS_REQUIRED");
       return adminJson({ ok: true, access: accessPayload, ...(await crmSummary(identity)) });

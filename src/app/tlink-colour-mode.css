@@ -181,7 +181,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .trade-portal-intro > span,
   .crm-metrics span,
-  .crm-dashboard-chart > header span,
   .crm-wizard-panel > header > span,
   .crm-field-job-heading > span,
   .crm-today-checklist > header span,
@@ -357,7 +356,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .crm-customer-detail,
   .crm-job-card,
   .crm-schedule-board,
-  .crm-dashboard-chart,
   .crm-create-card,
   .crm-create-popover > form,
   .crm-record-table,
@@ -377,12 +375,10 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .crm-card > header,
   .crm-job-card-header,
   .crm-customer-detail > header,
-  .crm-dashboard-chart > header,
   .crm-create-panel,
   .crm-template-picker,
   .crm-template-library article,
   .crm-today-action,
-  .crm-today-actions,
   .crm-loading,
   .crm-system-id-note,
   .crm-readonly-id,
@@ -421,8 +417,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-create-guidance st
   color: var(--trade-accent-soft-ink);
 }
 
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-create-guidance p,
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-agenda time {
+html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-create-guidance p {
   color: var(--trade-muted);
 }
 
@@ -599,7 +594,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .crm-quick-create > div,
   .crm-quick-create button,
   .crm-template-library article button,
-  .crm-today-actions button:not(.primary),
   .crm-job-toolbar button.active,
   .crm-job-list > article.active,
   .crm-customer-list > article.active,
@@ -612,31 +606,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   color: var(--trade-ink);
 }
 
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-bar,
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-bar::-webkit-meter-bar {
-  background: #263f44;
-}
 
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-dashboard-chart > header small {
-  background: var(--trade-accent-soft);
-  color: var(--trade-accent-soft-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-row:hover {
-  background: var(--trade-surface-raised);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-label strong {
-  color: var(--trade-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-label small {
-  color: var(--trade-muted);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-chart-value {
-  color: var(--trade-accent-readable);
-}
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .crm-inline-form,

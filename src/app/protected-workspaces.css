@@ -78,49 +78,11 @@
 .crm-metrics span, .crm-metrics small { color: var(--color-aea-muted); display: block; font-size: .57rem; }
 .crm-metrics span { font-weight: 850; text-transform: uppercase; }
 .crm-metrics strong { color: var(--color-aea-ink); display: block; font-size: 1.25rem; margin: 4px 0; }
-.crm-dashboard-insights { display: grid; gap: 14px; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); margin-bottom: 18px; }
-.crm-dashboard-chart { background: linear-gradient(145deg, #fff 0%, #f7fbf9 100%); border: 1px solid var(--color-aea-line); border-radius: 15px; box-shadow: 0 8px 24px rgba(12, 55, 56, .055); min-width: 0; overflow: hidden; }
-.crm-dashboard-chart > header { align-items: flex-start; border-bottom: 1px solid #e2ebe7; display: flex; gap: 16px; justify-content: space-between; padding: 16px 17px 13px; }
-.crm-dashboard-chart > header span { color: #07845b; display: block; font-size: .55rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
-.crm-dashboard-chart > header h3 { color: var(--color-aea-ink); font-size: .9rem; margin: 4px 0 0; }
-.crm-dashboard-chart > header small { background: #e9f6f1; border-radius: 999px; color: #3d675b; font-size: .53rem; font-weight: 800; padding: 6px 8px; white-space: nowrap; }
-.crm-chart-list { display: grid; list-style: none; margin: 0; padding: 8px; }
-.crm-chart-row { align-items: center; background: transparent; border: 0; border-radius: 10px; color: inherit; cursor: pointer; display: grid; gap: 12px; grid-template-columns: minmax(105px, .75fr) minmax(110px, 1fr) minmax(70px, auto); min-height: 54px; padding: 8px 9px; text-align: left; width: 100%; }
-.crm-chart-row:hover { background: #edf8f4; }
-.crm-chart-row:focus-visible { outline: 3px solid rgba(18, 169, 120, .3); outline-offset: 1px; }
-.crm-chart-label { display: grid; gap: 2px; min-width: 0; }
-.crm-chart-label strong { color: #183f36; font-size: .63rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.crm-chart-label small { color: #6d827c; font-size: .52rem; }
-.crm-chart-bar { appearance: none; background: #dfece7; border: 0; border-radius: 999px; height: 10px; overflow: hidden; width: 100%; }
-.crm-chart-bar::-webkit-meter-bar { background: #dfece7; border: 0; border-radius: 999px; box-shadow: none; }
-.crm-chart-bar::-webkit-meter-optimum-value { background: linear-gradient(90deg, #10aa78, #45c79c); border-radius: 999px; }
-.crm-chart-bar::-moz-meter-bar { background: linear-gradient(90deg, #10aa78, #45c79c); border-radius: 999px; }
-.crm-work-status-chart .crm-chart-bar::-webkit-meter-optimum-value { background: linear-gradient(90deg, #0b6c65, #2c9fa0); }
-.crm-work-status-chart .crm-chart-bar::-moz-meter-bar { background: linear-gradient(90deg, #0b6c65, #2c9fa0); }
-.crm-chart-value { color: #315f53; font-size: .53rem; font-weight: 850; text-align: right; white-space: nowrap; }
-.crm-today-actions { background: #eff8f4; border: 1px solid #cce5da; border-radius: 13px; display: grid; gap: 7px; grid-template-columns: repeat(6, minmax(0, 1fr)); margin-top: 16px; padding: 8px; }
-.crm-today-actions button { background: #fff; border: 1px solid #c9ddd5; border-radius: 9px; color: #155942; cursor: pointer; font: inherit; font-size: .59rem; font-weight: 850; min-height: 40px; padding: 8px 10px; }
-.crm-today-actions button:hover { border-color: #79bea7; box-shadow: 0 4px 12px rgba(12, 55, 56, .06); }
-.crm-today-actions button:focus-visible { outline: 3px solid rgba(18, 169, 120, .3); outline-offset: 1px; }
-.crm-today-actions button.primary { background: #0b8d63; border-color: #0b8d63; color: #fff; }
-.crm-today-actions button:disabled { cursor: not-allowed; opacity: .5; }
-.crm-today-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .crm-card, .crm-customer-detail { background: #fff; border: 1px solid var(--color-aea-line); border-radius: 14px; overflow: hidden; }
 .crm-card > header { align-items: center; border-bottom: 1px solid var(--color-aea-line); display: flex; justify-content: space-between; padding: 15px 17px; }
 .crm-card header h3, .crm-page-heading h3, .crm-section-heading h4, .crm-customer-detail > header h3 { color: var(--color-aea-ink); font-size: .9rem; margin-top: 3px; }
 .crm-card > header > button { background: transparent; border: 0; color: var(--color-aea-green-dark); cursor: pointer; font-size: .6rem; font-weight: 850; }
-.crm-agenda, .crm-schedule-board ol, .crm-notes-list, .crm-job-appointments { list-style: none; margin: 0; padding: 0; }
-.crm-agenda li { align-items: stretch; border-bottom: 1px solid #eef2f0; display: grid; grid-template-columns: 110px 1fr; }
-.crm-agenda li:last-child { border-bottom: 0; }
-.crm-agenda time { color: #53716a; font-size: .58rem; font-weight: 800; padding: 13px 15px; }
-.crm-agenda button { background: transparent; border: 0; border-left: 1px solid #eef2f0; cursor: pointer; display: grid; gap: 2px; padding: 11px 14px; text-align: left; }
-.crm-agenda button strong { color: var(--color-aea-ink); font-size: .66rem; }
-.crm-agenda button span { color: var(--color-aea-muted); font-size: .57rem; }
-.crm-attention-list { list-style: none; margin: 0; padding: 8px 14px 14px; }
-.crm-attention-list li { align-items: center; border-bottom: 1px solid #eef2f0; display: grid; gap: 10px; grid-template-columns: 90px 1fr; padding: 9px 0; }
-.crm-attention-list li > span { background: #fff3d7; border-radius: 999px; color: #765718; font-size: .54rem; font-weight: 850; padding: 5px 7px; text-align: center; }
-.crm-attention-list button { background: transparent; border: 0; color: var(--color-aea-ink); cursor: pointer; font-size: .62rem; font-weight: 750; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-.crm-attention-list small { color: var(--color-aea-muted); display: block; font-size: .52rem; margin-top: 2px; }
+.crm-schedule-board ol, .crm-notes-list, .crm-job-appointments { list-style: none; margin: 0; padding: 0; }
 .crm-empty { color: var(--color-aea-muted); display: grid; font-size: .62rem; gap: 4px; padding: 24px; text-align: center; }
 .crm-empty strong { color: var(--color-aea-ink); font-size: .72rem; }
 .crm-create-panel { background: #f7faf9; border: 1px solid var(--color-aea-line); border-radius: 14px; margin-top: 18px; }
@@ -652,9 +614,7 @@
   .crm-privacy-line { align-items: flex-start; display: grid; gap: 5px; padding: 10px 18px; }
   .crm-privacy-line span + span { border-left: 0; padding-left: 0; }
   .crm-view { padding: 18px 14px 24px; }
-  .crm-metrics, .crm-today-grid, .crm-finance-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .crm-dashboard-insights { grid-template-columns: 1fr; }
-  .crm-today-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .crm-metrics, .crm-finance-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .crm-form-grid { grid-template-columns: 1fr; }
   .crm-form-grid label.wide { grid-column: auto; }
   .crm-customer-lookup { grid-template-columns: 1fr; }
@@ -808,10 +768,6 @@
 @media (max-width: 440px) {
   .crm-hero { flex-direction: column; }
   .crm-metrics, .crm-finance-summary { grid-template-columns: 1fr 1fr; }
-  .crm-agenda li { grid-template-columns: 92px 1fr; }
-  .crm-chart-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .crm-chart-row .crm-chart-bar { grid-column: 1 / -1; grid-row: 2; }
-  .crm-today-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .trade-business-hub { margin-bottom: 16px; }
@@ -1871,14 +1827,20 @@
 .trade-portal-shell .dashboard-workspace-nav button:hover { background: var(--trade-rail-hover); }
 .trade-portal-shell .dashboard-workspace-nav button.active { background: var(--trade-rail-active); border-color: var(--trade-rail-line); color: #fff; }
 .trade-portal-shell .dashboard-workspace-nav button:focus-visible { outline: 2px solid var(--trade-rail-ink); outline-offset: 2px; }
+.trade-portal-shell .tlink-more-tools { border-top: 1px solid var(--trade-rail-line); margin-top: 8px; padding-top: 8px; }
+.trade-portal-shell .tlink-more-tools > summary { border-radius: 10px; color: var(--trade-rail-muted); cursor: pointer; font-size: .68rem; font-weight: 750; padding: 13px 14px; }
+.trade-portal-shell .tlink-more-tools > summary:focus-visible { outline: 2px solid var(--trade-rail-ink); outline-offset: -2px; }
+.trade-portal-shell .tlink-more-tools > div { display: grid; gap: 4px; }
+.trade-portal-shell .tlink-more-tools button { width: 100%; }
+.trade-portal-shell > .installer-crm { margin-top: 22px; }
+@media (max-width: 780px) {
+  .trade-portal-shell .tlink-more-tools { border: 0; margin: 0; min-width: 125px; padding: 0; }
+  .trade-portal-shell .tlink-more-tools[open] { min-width: 220px; }
+  .trade-portal-shell .tlink-more-tools > div { max-height: 50dvh; overflow-y: auto; }
+}
 .trade-portal-shell .dashboard-workspace-nav .tlink-navigation-icon { color: currentColor; display: block; grid-row: 1 / span 2; height: 20px; width: 20px; }
 .trade-portal-shell .dashboard-workspace-nav button span { font-size: .7rem; }
 .trade-portal-shell .dashboard-workspace-nav button small { color: var(--trade-rail-muted); font-size: .55rem; line-height: 1.25; }
-.trade-portal-shell .dashboard-workspace-shortcuts { display: grid; gap: 3px; margin: -2px 4px 5px 38px; }
-.trade-portal-shell .dashboard-workspace-shortcuts button { align-items: center; border-radius: 7px; display: flex; gap: 8px; padding: 7px 9px; text-align: left; }
-.trade-portal-shell .dashboard-workspace-shortcuts .tlink-navigation-icon { flex: 0 0 16px; height: 16px; width: 16px; }
-.trade-portal-shell .dashboard-workspace-shortcuts button span { color: var(--trade-rail-ink); font-size: .59rem; font-weight: 800; }
-.trade-portal-shell .dashboard-workspace-shortcuts button:hover span, .trade-portal-shell .dashboard-workspace-shortcuts button:focus-visible span { color: #fff; }
 
 .trade-portal-shell .dashboard-panel,
 .trade-portal-shell .dashboard-access-overview,
@@ -2085,7 +2047,6 @@
   .trade-portal-shell .supplier-catalogue-layout { grid-template-columns: 1fr; }
   .trade-portal-shell .supplier-status-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .trade-portal-shell .supplier-product-library-focused .supplier-product-list { grid-template-columns: 1fr; }
-  .trade-portal-shell .crm-today-grid,
   .tlink-command-launcher { max-width: 360px; }
   .tlink-command-launcher kbd { display: none; }
   .trade-portal-shell .dashboard-account-actions > .dashboard-account-summary { display: none; }
@@ -2111,8 +2072,6 @@
   .trade-portal-intro h1 { font-size: 2rem; }
   .trade-portal-shell > .dashboard-workspace-nav { display: flex; flex-direction: row; height: auto; max-width: 100vw; min-height: auto; overflow-x: auto; overflow-y: hidden; overscroll-behavior-y: auto; padding: 8px 12px; position: sticky; scrollbar-gutter: auto; width: 100%; z-index: 30; }
   .trade-portal-shell .dashboard-workspace-nav button { flex: 0 0 150px; padding: 10px; }
-  .trade-portal-shell .dashboard-workspace-shortcuts { display: flex; flex: 0 0 auto; gap: 4px; margin: 0; }
-  .trade-portal-shell .dashboard-workspace-shortcuts button { flex: 0 0 auto; padding: 10px 12px; }
   .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { margin-left: 14px; margin-right: 14px; }
   .trade-portal-shell .crm-hero { gap: 14px; padding: 20px 18px 17px; }
   .trade-portal-shell .crm-hero h2 { font-size: 1.3rem; }

@@ -41,7 +41,7 @@ type Invitation = { email: string; displayName: string; businessName: string; ex
 
 const stages = [["backlog", "Planning"], ["ready", "Ready"], ["scheduled", "Scheduled"], ["in_progress", "On site"], ["blocked", "Waiting"], ["completed", "Complete"], ["cancelled", "Cancelled"]];
 type PortalView = "work" | "business" | "map" | "team" | "training" | "messages";
-type CrmShortcut = "jobs" | "customers" | "schedule" | "pricebook";
+type CrmShortcut = "today" | "jobs" | "customers" | "schedule" | "pricebook";
 
 function teamCrmShortcuts(permissions: TradeTeamPermissions) {
   const shortcuts: { id: CrmShortcut; label: string; icon: "jobs" | "customers" | "schedule" | "products" }[] = [{ id: "jobs", label: "Jobs", icon: "jobs" }];
@@ -56,6 +56,7 @@ function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm }: 
   onView: (view: PortalView) => void; onCrm: (view: CrmShortcut) => void;
 }) {
   return <nav className="tlink-team-navigation" aria-label="Staff workspace">
+    <button type="button" aria-current={view === "business" && crmView === "today" ? "page" : undefined} onClick={() => onCrm("today")}><TLinkNavigationIcon name="home" /><span>Home dashboard</span></button>
     <button type="button" aria-current={view === "work" ? "page" : undefined} onClick={() => onView("work")}><TLinkNavigationIcon name="work" /><span>My work</span></button>
     <button type="button" aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
     {teamCrmShortcuts(permissions).map(item => <button type="button" key={item.id} aria-current={view === "business" && crmView === item.id ? "page" : undefined} onClick={() => onCrm(item.id)}><TLinkNavigationIcon name={item.icon} /><span>{item.label}</span></button>)}
@@ -117,12 +118,12 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       setData({}); setStatus(""); clearPasswordFields();
     } catch (failure) { setStatus(failure instanceof Error ? failure.message : "Sign out could not be completed. Try again."); }
   }
-  const [portalView, setPortalViewState] = useState<PortalView>("work");
+  const [portalView, setPortalViewState] = useState<PortalView>("business");
   const [mapNavigation] = useState(createMapNavigationGuard);
   const registerMapSave = useCallback((save: (() => Promise<unknown>) | null) => mapNavigation.register(save), [mapNavigation]);
   const setPortalView = useCallback((view: PortalView) => { void mapNavigation.run(() => setPortalViewState(view)); }, [mapNavigation, setPortalViewState]);
   const [crmTarget, setCrmTarget] = useState<TLinkCommandTarget | null>(null);
-  const [crmView, setCrmView] = useState("jobs");
+  const [crmView, setCrmView] = useState("today");
   const [colourMode, setColourMode] = useState<TLinkColourMode>("day");
   const teamReady = Boolean(user && emailVerified && data.access && invitationReady && !invitationError && !resolver && !mfaRequired);
   const [assigneeSearch, setAssigneeSearch] = useState("");

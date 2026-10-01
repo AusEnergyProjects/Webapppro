@@ -1,5 +1,22 @@
 # Next task handover
 
+Status: Home dashboard and private connected-calendar implementation and validation.
+Prepared: 1 October 2026
+
+## Active contract: Home dashboard and connected schedule
+
+Prepared: 1 October 2026. Baseline Sites 720, application source `5496340`, documentation source `58c7f4a`. Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`.
+
+Outcome: an uncluttered Home dashboard shows each user the work, finances and next actions they are authorised to see. Owners can see accepted meetings from their connected Google or Outlook calendar alongside TLink appointments.
+
+Scope: replace My day with the Home dashboard, simplify primary navigation, reuse canonical invoice/report/job records for financial charts and four-week workload, preserve staff job and schedule scope, and add an owner-private read-only external-calendar overlay. Customers receive email updates and account-free document links; no customer portal or account journey is planned. Reuse existing email delivery and follow-up features. Voice Wattzun, full accounting/tax lodgement, native app changes, new provider credentials and personal staff calendar connections are outside this release.
+
+Acceptance: actual data only; no fabricated empty/loading financials; invoice GST is labelled separately from tax liability; completed-job costs are not combined with a different revenue cohort; apprentices without financial/report permission receive no financial payload; tenant and collaborator/own-job boundaries hold. All dashboard actions open the relevant existing workflow. Calendar events are bounded to the visible window, read-only, deduplicated against outbound TLink mirrors, timezone-aware and private to the connected owner; provider failures do not imply an empty calendar or prevent TLink work. Day/night and phone/desktop layouts remain usable.
+
+Validation: executed Home permission/aggregation tests, existing report and calendar regressions, focused UI/navigation checks, typecheck, scoped lint, full validation because access-sensitive aggregation is affected, publication build and exact Git/Sites provenance. Live read-only desktop/mobile checks; no real customer emails, calendar mutations or test payments. Stop for new provider consent/credentials, conflicting source, or an unrequested expansion of staff/private-calendar authority. Evidence lives outside source under `C:/Webproject/outputs/tlink-home-dashboard-20261001/`.
+
+## Previous contract
+
 Status: Multi-trade job collaboration implementation and validation.
 Prepared: 30 September 2026
 

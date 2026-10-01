@@ -57,13 +57,13 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
     tokenUrl: "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer", scopes: ["com.intuit.quickbooks.accounting"],
   };
   if (provider === "google_calendar") return {
-    provider, label: "Google Calendar", purpose: "One-way TLink appointment sync",
+    provider, label: "Google Calendar", purpose: "TLink appointments and private calendar view",
     clientId: values.GOOGLE_CALENDAR_CLIENT_ID || "", clientSecret: values.GOOGLE_CALENDAR_CLIENT_SECRET || "",
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth", tokenUrl: "https://oauth2.googleapis.com/token",
     scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/calendar.events"],
   };
   return {
-    provider, label: "Outlook Calendar", purpose: "One-way TLink appointment sync",
+    provider, label: "Outlook Calendar", purpose: "TLink appointments and private calendar view",
     clientId: values.MICROSOFT_CALENDAR_CLIENT_ID || "", clientSecret: values.MICROSOFT_CALENDAR_CLIENT_SECRET || "",
     authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",

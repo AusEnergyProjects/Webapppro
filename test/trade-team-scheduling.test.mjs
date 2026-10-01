@@ -205,8 +205,8 @@ test("the installer dashboard exposes stable one-week scheduling with adjacent d
   assert.match(ui, /const SCHEDULE_BUFFER_WEEKS = 3/);
   assert.match(ui, /const days = scheduleWeekDays\(bufferedWeekStart\)/);
   assert.match(ui, /appointmentsByDate = useMemo/);
-  assert.match(ui, /const laneItems = \[\.\.\.dayAppointments, \.\.\.dayUnavailability, \.\.\.\(proposalOnDay \? \[proposalOnDay\] : \[\]\)\]/);
-  assert.match(ui, /scheduleAppointmentLanes\(laneItems\)/);
+  assert.match(ui, /const laneItems = \[\.\.\.dayAppointments, \.\.\.dayUnavailability, \.\.\.dayExternalEvents, \.\.\.\(proposalOnDay \? \[proposalOnDay\] : \[\]\)\]/);
+  assert.match(ui, /scheduleAppointmentLanes\(laneItems, "exact"\)/);
   assert.match(ui, /new AbortController\(\)/);
   assert.match(ui, /schedule-dialog-status/);
   assert.match(ui, /className="schedule-week-pages" style=\{\{ transform: `translateX/);
@@ -238,7 +238,7 @@ test("the installer dashboard exposes stable one-week scheduling with adjacent d
   assert.match(ui, /Outside this week/);
   assert.match(ui, /aria-current=\{dayIsToday \? "date" : undefined\}/);
   assert.match(ui, /className="schedule-now-line"/);
-  assert.match(ui, /scheduleDisplayWindow\(activeWeekDisplayAppointments\)/);
+  assert.match(ui, /scheduleDisplayWindow\(\[\.\.\.activeWeekDisplayAppointments, \.\.\.externalTimedSegments\], 7 \* 60, 19 \* 60, "exact"\)/);
   assert.match(ui, /expectedRevision: change\.appointment\.revision/);
   assert.match(route, /scheduleConflictIds\(/);
   assert.match(ui, /min=\{minimumStart\}/);

@@ -241,8 +241,13 @@ test("installer Map navigation is explicit, independently active and clears the 
   const installerNav = find(dashboard, node => ts.isJsxElement(node)
     && node.openingElement.tagName.getText(dashboard) === "nav"
     && node.openingElement.getText(dashboard).includes('aria-label="TLink installer account"'));
-  const firstButton = installerNav.children.find(node => ts.isJsxElement(node) && node.openingElement.tagName.getText(dashboard) === "button");
-  assert.equal(firstButton, button, "Map stays visible first in the compact navigation");
+  const navigation = evaluate(installerNav, dashboard, { ...context, activeWorkView: "today", offeredCount: 0, TradeMessageUnreadBadge() {} });
+  assert.deepEqual(nodes(navigation, node => node.type === "button").slice(0, 4).map(node => text(node).trim()),
+    ["Home dashboard", "Jobs", "Schedule", "Customers"]);
+  const more = nodes(navigation, node => node.type === "details")[0];
+  assert.ok(more, "Additional tools remain in the navigation disclosure");
+  assert.equal(more.props.open, true, "The current Map workspace keeps its tools visible");
+  assert.equal(nodes(more, node => node.type === "button" && text(node).includes("Customer & job map")).length, 1);
 });
 
 test("Map button retains its current record when saving fails and waits for a successful retry", async () => {
@@ -494,6 +499,40 @@ test("owner Work removes duplicate finance tabs while authorised staff retain th
   const permissions = { canViewPriceBook: true, canRunReports: true };
   const staffViews = evaluate(declaration.initializer.arguments[0], crm, { staffPermissions: permissions })();
   const staffFilter = evaluate(filter.arguments[0], crm, { mapWorkspace: false, onOpenFinance: undefined });
-  assert.deepEqual(staffViews.filter(staffFilter), ["jobs", "pricebook", "reports"]);
-  const restrictedViews = evaluate(declaration.initializer.arguments[0], crm, { staffPermissions: {} })(); assert.deepEqual(restrictedViews.filter(staffFilter), ["jobs"]);
+  assert.deepEqual(staffViews.filter(staffFilter), ["today", "jobs", "pricebook", "reports"]);
+  const restrictedViews = evaluate(declaration.initializer.arguments[0], crm, { staffPermissions: {} })(); assert.deepEqual(restrictedViews.filter(staffFilter), ["today", "jobs"]);
+});
+
+test("Home job actions replace stale filters and board layout with the requested active job list", () => {
+  const openJobs = find(crm, node => ts.isFunctionDeclaration(node) && node.name?.text === "openJobsForStage");
+  const clearFilters = find(crm, node => ts.isFunctionDeclaration(node) && node.name?.text === "clearJobFilters");
+  const indexParams = find(crm, node => ts.isVariableDeclaration(node) && node.name.getText(crm) === "jobIndexParams").initializer.arguments[0];
+  const filterFields = ["jobFilter", "search", "jobCustomer", "jobService", "jobPipeline", "jobStage", "jobAssignee", "jobLocation", "jobAppointmentId", "jobId",
+    "jobScheduledFrom", "jobScheduledTo", "jobCreatedFrom", "jobCreatedTo", "jobInvoiceStatus", "jobCustomerReference", "jobEmail", "jobPhone", "jobSuburb", "jobPostcode",
+    "jobFirstName", "jobLastName", "jobStreet", "jobState", "jobOperationalStatus", "jobQuoteTotalMin", "jobQuoteTotalMax", "pipelineFocus", "jobPage"];
+  for (const [stage, staffPermissions] of [["blocked", undefined], ["", { canViewInvoices: false, canViewQuotes: false }]]) {
+    const state = Object.fromEntries(filterFields.map(key => [key, "stale"]));
+    Object.assign(state, { jobLayout: "board", view: "today", creating: "job", focusedJobId: "previous-job" });
+    const context = { staffPermissions, homeJobStage: { current: null }, jobPreferencesLoaded: { current: false } };
+    for (const key of [...filterFields, "jobLayout", "view", "creating", "focusedJobId", "jobReturnTarget"]) {
+      context[`set${key[0].toUpperCase()}${key.slice(1)}`] = value => { state[key] = value; };
+    }
+    context.clearJobFilters = evaluate(clearFilters, crm, context);
+    evaluate(openJobs, crm, context)(stage);
+    assert.equal(state.jobLayout, "list"); assert.equal(state.view, "jobs");
+    assert.equal(state.creating, ""); assert.equal(state.focusedJobId, "");
+    assert.deepEqual(state.jobReturnTarget, { kind: "jobs" });
+    assert.equal(context.homeJobStage.current, staffPermissions ? null : stage, "A first owner visit must survive saved preferences loading");
+    const params = evaluate(indexParams, crm, { ...state, staffPermissions, jobSort: "updated-desc", URLSearchParams,
+      localDateBoundary() { assert.fail("The previous date filters must be cleared"); } })(1, 25);
+    assert.equal(params.get("filter"), "active"); assert.equal(params.get("stage"), stage);
+    for (const key of ["search", "customer", "service", "pipeline", "assignee", "location", "appointmentId", "jobId", "scheduledFrom", "scheduledTo", "operationalStatus"]) {
+      assert.equal(params.get(key), "", `${key} must not hide the Home action's matching jobs`);
+    }
+    assert.equal(params.has("invoiceStatus"), !staffPermissions);
+    assert.equal(params.has("quoteTotalMin"), !staffPermissions);
+    context.clearJobFilters();
+    assert.equal(evaluate(indexParams, crm, { ...state, staffPermissions, jobSort: "updated-desc", URLSearchParams })(1, 25).get("filter"), "all",
+      "Clearing filters returns the full authorised register");
+  }
 });

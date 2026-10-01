@@ -1,0 +1,13 @@
+.panel { margin: 14px 0; padding: 14px 16px; border: 1px solid var(--trade-line, #cadfda); border-radius: 12px; background: var(--trade-surface, #fff); color: var(--trade-ink, #163d41); }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.heading strong { font-size: 14px; }
+.heading button { border: 1px solid var(--trade-line, #cadfda); border-radius: 8px; background: var(--trade-surface-soft, #eef7f4); color: inherit; padding: 8px 12px; cursor: pointer; }
+.panel p { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--trade-muted, #546d70); }
+.panel .error { color: var(--trade-danger, #a54328); }
+.allDay { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 12px 0 0; list-style: none; }
+.allDay li { display: grid; gap: 4px; border: 1px solid var(--trade-line, #cadfda); border-radius: 8px; padding: 9px 12px; max-width: 100%; font-size: 12px; overflow-wrap: anywhere; }
+.allDay small { color: var(--trade-muted, #546d70); }
+.allDay a { color: inherit; text-decoration: underline; }
+.externalBlock { --schedule-block-colour: #7889c6; border-left-color: #7889c6 !important; border-style: dashed !important; background: var(--trade-surface-soft, #f0f3fa) !important; color: inherit; text-decoration: none; }
+.externalBlock strong { overflow: hidden; text-overflow: ellipsis; }
+.externalBlock:focus-visible { outline: 2px solid #7889c6; outline-offset: 2px; }

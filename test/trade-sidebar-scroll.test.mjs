@@ -84,7 +84,7 @@ test("both top bars remain visible and the independently scrolling rail fills th
         assert.equal(await page.evaluate(() => window.scrollY), initialScroll, "Wheel input at the menu boundary must not chain to the page");
         await rail.evaluate(node => { node.scrollTop = 0; });
         await rail.getByRole('button').first().focus();
-        for (let index = 1; index < await rail.getByRole('button').count(); index++) await page.keyboard.press('Tab');
+        for (let index = 1; index < await rail.locator('button, summary').count(); index++) await page.keyboard.press('Tab');
         assert.equal(await business.evaluate(node => document.activeElement === node), true);
         assert.ok(await rail.evaluate(node => node.scrollTop > 0), "Keyboard focus reveals the bottom destination inside the menu");
         assert.equal(await page.evaluate(() => window.scrollY), initialScroll);

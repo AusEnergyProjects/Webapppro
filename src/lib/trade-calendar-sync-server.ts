@@ -59,6 +59,14 @@ async function activeCredentials(provider: CalendarProvider, connection: Row) {
   return next;
 }
 
+/** Reuse encrypted calendar credentials without exposing the credential record to callers. */
+export async function calendarAccessToken(provider: CalendarProvider, connection: Row): Promise<string> {
+  const credentials = await activeCredentials(provider, connection);
+  const token = String(credentials.access_token || "");
+  if (!token) throw new Error("CALENDAR_RECONNECT_REQUIRED");
+  return token;
+}
+
 function eventText(value: unknown, maximum = 500) {
   return String(value || "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ").trim().slice(0, maximum);
 }

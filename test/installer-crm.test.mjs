@@ -16,6 +16,7 @@ const customerCreatedIndexMigration = read("../drizzle/0167_trade_customer_creat
 const route = read("../src/app/api/trade-crm/route.ts");
 const customerSortSql = read("../src/lib/trade-crm-register-sort-sql.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
+const home = read("../src/components/TradeHomeDashboard.tsx");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
 const recoverableWorkspace = read("../src/components/RecoverableTradeWorkspace.tsx");
 const hub = read("../src/components/TradeBusinessHub.tsx");
@@ -96,13 +97,13 @@ test("direct customers have full addresses while global TLink job IDs are read o
 test("verified installers receive the complete progressive CRM", () => {
   assert.match(hub, /props\.partnerType === "installer" && props\.fullAccess/);
   assert.match(hub, /BusinessHubFoundation/);
-  for (const label of ["My day", "Jobs", "Schedule", "Customers", "Reports", "Files", "Quote", "Invoice", "Notes", "Handover"]) {
+  for (const label of ["Home dashboard", "Jobs", "Schedule", "Customers", "Reports", "Files", "Quote", "Invoice", "Notes", "Handover"]) {
     assert.match(crm, new RegExp(label));
   }
   assert.match(crm, /NewJobForm/);
   assert.match(crm, /CustomerForm/);
   assert.match(crm, /TradeHandoverCentre/);
-  assert.match(crm, /outstandingCents/);
+  assert.match(home, /outstandingCents/);
   assert.match(crm, /min=\{minimumStart\}/);
   assert.match(route, /assertFutureAppointment/);
   assert.match(route, /PAST_APPOINTMENT/);
@@ -423,7 +424,7 @@ test("bulk CRM actions are bounded, owner scoped and protect active customer wor
 });
 
 test("installer dashboard and reports use compact server-owned read models", () => {
-  for (const mode of ["bootstrap", "summary", "reports"]) {
+  for (const mode of ["bootstrap", "summary", "home", "reports"]) {
     assert.match(route, new RegExp(`mode === "${mode}"`));
   }
   assert.match(route, /async function crmBootstrap/);
@@ -432,7 +433,7 @@ test("installer dashboard and reports use compact server-owned read models", () 
   assert.match(route, /SUM\(CASE WHEN stage NOT IN/);
   assert.match(route, /loadBusinessReport\(getD1\(\), identity\.uid/);
   assert.match(crm, /trade-crm\?mode=bootstrap/);
-  assert.match(crm, /trade-crm\?mode=summary/);
+  assert.match(home, /trade-crm\?mode=home/);
   assert.match(crm, /<TradeBusinessReports user=\{user\}/);
   assert.match(read("../src/components/TradeBusinessReports.tsx"), /trade-crm\?mode=reports/);
   for (const legacyState of ["CrmScheduleResult", "scheduleItems", "schedulePage", "schedulePagination", "scheduleCursors", 'mode: "schedule"']) {
@@ -443,7 +444,7 @@ test("installer dashboard and reports use compact server-owned read models", () 
 test("all installer Schedule entry paths use the one permanent CRM dispatch workspace", () => {
   assert.match(crm, /const TradeScheduleWorkspace = recoverableTradeWorkspace\(\(\) => import\("\.\/TradeScheduleWorkspace"\)/);
   assert.match(crm, /if \(item === "schedule"\) \{ openVisualSchedule\(\); return; \}/);
-  assert.match(crm, /onClick=\{\(\) => openVisualSchedule\(\)\} aria-label=\{`Open today's \$\{metrics\.todayVisits\} scheduled visits`\}/);
+  assert.match(crm, /onOpenSchedule=\{openVisualSchedule\}/);
   assert.match(crm, /view === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\} permissions=\{staffPermissions\} initialWeekStart=\{scheduleWeekStart\}/);
   assert.match(crm, /onOpenQuote=\{\(!staffPermissions \|\| staffPermissions\.canViewQuotes\) \? \(id\) => openFocusedJob\(id, "quote"\) : undefined\}/);
   assert.match(hub, /onOpenSchedule=\{props\.onOpenSchedule\}/);
@@ -602,7 +603,7 @@ test("new job and schedule loaders recover instead of leaving stale chunks blank
   assert.match(crm, /<h3 ref=\{newJobHeadingRef\} tabIndex=\{-1\}>Create job<\/h3>/);
 });
 
-test("My day exposes owner scoped local workload and direct action charts", () => {
+test("Home dashboard preserves direct work and finance navigation", () => {
   assert.match(route, /australiaLocalDateTime\(identity\.addressState\)\.slice\(0, 10\)/);
   assert.match(route, /Array\.from\(\{ length: 4 \}/);
   assert.match(route, /weekEnd: addSummaryDays\(weekStart, 6\)/);
@@ -614,15 +615,11 @@ test("My day exposes owner scoped local workload and direct action charts", () =
   assert.match(route, /todayVisits:/);
   assert.match(route, /awaitingSchedule:/);
   assert.match(route, /workStages:/);
-  for (const label of ["Today visits", "Awaiting schedule", "Overdue tasks", "Waiting jobs", "Booked work", "Work status", "New job", "Common jobs", "Invoices"]) {
-    assert.match(crm, new RegExp(label));
-  }
-  assert.match(crm, /className="crm-dashboard-chart crm-workload-chart"/);
-  assert.match(crm, /className="crm-dashboard-chart crm-work-status-chart"/);
-  assert.match(crm, /className="crm-chart-row"/);
-  assert.match(crm, /aria-label=\{`Open schedule for/);
-  assert.match(crm, /openJobsForStage\(item\.stage\)/);
-  assert.match(crm, /openPriceBook\("packets"\)/);
+  assert.match(crm, /<TradeHomeDashboard user=\{user\} staffPermissions=\{staffPermissions\}/);
+  assert.match(crm, /onOpenJob=\{openFocusedJob\} onOpenSchedule=\{openVisualSchedule\}/);
+  assert.match(crm, /onNewJob=\{canCreateJob/);
+  assert.match(crm, /onOpenInvoices=\{\(!staffPermissions \|\| staffPermissions.canViewInvoices\)/);
+  assert.doesNotMatch(crm, /CrmSummaryResult|crm-dashboard-insights|My day/);
   assert.match(crm, /onOpenFinance\("pricebook", next\)/);
   assert.match(crm, /initialView=\{priceBookView\}/);
   assert.match(crm, /key=\{priceBookView\}/);

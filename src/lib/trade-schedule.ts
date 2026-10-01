@@ -240,11 +240,17 @@ export function appointmentDurationMinutes(startsAt: string, endsAt: string, fal
   } catch { return normaliseAppointmentDuration(fallback); }
 }
 
-export function scheduleAppointmentLanes(items: ScheduleLaneItem[]) {
+function scheduleItemDuration(item: ScheduleLaneItem, mode: "appointment" | "exact") {
+  if (mode === "appointment") return appointmentDurationMinutes(item.startsAt, item.endsAt);
+  const minutes = (Date.parse(`${normaliseLocalDateTime(item.endsAt)}:00Z`) - Date.parse(`${normaliseLocalDateTime(item.startsAt)}:00Z`)) / 60_000;
+  return Math.max(1, minutes);
+}
+
+export function scheduleAppointmentLanes(items: ScheduleLaneItem[], durationMode: "appointment" | "exact" = "appointment") {
   const layout = new Map<string, ScheduleLane>();
   const ordered = items.map((item) => {
     const start = Date.parse(`${normaliseLocalDateTime(item.startsAt)}:00Z`);
-    return { ...item, start, end: start + appointmentDurationMinutes(item.startsAt, item.endsAt) * 60_000 };
+    return { ...item, start, end: start + scheduleItemDuration(item, durationMode) * 60_000 };
   }).sort((a, b) => a.start - b.start || a.end - b.end || a.id.localeCompare(b.id));
   let cluster: typeof ordered = [];
   let clusterEnd = Number.NEGATIVE_INFINITY;
@@ -275,12 +281,12 @@ export function scheduleConflictIds(items: ScheduleConflictItem[]) {
   return new Set<string>();
 }
 
-export function scheduleDisplayWindow(items: ScheduleLaneItem[], defaultStartMinute = 7 * 60, defaultEndMinute = 19 * 60): ScheduleDisplayWindow {
+export function scheduleDisplayWindow(items: ScheduleLaneItem[], defaultStartMinute = 7 * 60, defaultEndMinute = 19 * 60, durationMode: "appointment" | "exact" = "appointment"): ScheduleDisplayWindow {
   let startMinute = defaultStartMinute;
   let endMinute = defaultEndMinute;
   for (const item of items) {
     const start = localDayAndMinute(item.startsAt).minute;
-    const duration = appointmentDurationMinutes(item.startsAt, item.endsAt);
+    const duration = scheduleItemDuration(item, durationMode);
     startMinute = Math.min(startMinute, Math.floor(Math.max(0, start - 30) / 60) * 60);
     endMinute = Math.max(endMinute, Math.ceil(Math.min(24 * 60, start + duration + 30) / 60) * 60);
   }

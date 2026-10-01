@@ -90,14 +90,15 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-71/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-70/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 30 September 2026/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 1 October 2026/);
   assert.match(
     handover,
     /Status: system audit and polish[^\n]*Customer self-service accounts[^\n]*\r?\nPrepared: 9 September 2026/,
   );
   assert.match(handover, /Current production: Sites version 499/);
-  assert.match(releaseTruth, /Last reconciled locally: 30 September 2026/);
-  assert.match(releaseTruth, /## Current implementation: multiple workers on one job/);
+  assert.match(releaseTruth, /Last reconciled locally: 1 October 2026/);
+  assert.match(releaseTruth, /## Current implementation: Home dashboard and connected calendars/);
+  assert.match(releaseTruth, /## Previous implementation: multiple workers on one job/);
   assert.match(releaseTruth, /## Previous implementation: team communication usability and device notifications/);
   assert.match(releaseTruth, /Migrations 0210 through 0216 are additive/);
   assert.match(releaseTruth, /Migration 0209/);
@@ -1086,7 +1087,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Multi-trade job collaboration/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Home dashboard and private connected-calendar/);
   assert.match(currentHandover, /Direct regulator transmission remains dependent on approved interfaces and delegated access/);
   assert.match(currentHandover, /external provider registration and live OAuth acceptance remain in progress/);
   assert.match(currentHandover, /Milestone ID: `PUBLIC-MEASUREMENT-PROVENANCE-86`/);

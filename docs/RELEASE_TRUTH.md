@@ -4,13 +4,23 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 30 September 2026
+Last reconciled locally: 1 October 2026
+
+## Current implementation: Home dashboard and connected calendars
+
+The installer and team Home dashboard replaces My day. The main installer navigation is Home dashboard, Jobs, Schedule, Customers, Connect and Finance; secondary tools remain available in More tools. Old summary panels, fetch state and styles are removed. The dashboard shows actual scoped weekly job counts, four-week workload, upcoming visits and direct next actions. Invoice/report permissions are checked on the server before returning financial data; job costs require the existing price-book permission as well. Staff invoices remain inside their authorised jobs.
+
+Revenue is issued TLink invoicing less credits, excluding GST. Outstanding balances include GST. Recorded invoice GST is not a tax-liability or BAS calculation. Costs and gross margin use the existing completed-job cohort, which is explicitly separate from the invoice-period revenue chart. Incomplete cost or invoice records suppress margin.
+
+The owner's connected primary Google and default Outlook calendars can appear read-only in Schedule. Accepted invitations, including Teams meetings in Outlook, are expanded for the visible week and deduplicated against TLink's outbound events. External events do not change job availability. Owner identity is rechecked server-side and personal events are never shared with staff. Provider errors and partial results remain visible. No new scopes, credentials, migrations or customer accounts are introduced. Customer communication stays with existing emails and account-free document links.
+
+Release evidence, exact Git/Sites identity and live checks belong in `C:/Webproject/outputs/tlink-home-dashboard-20261001/`. This source record precedes publication and does not assert a completed live provider connection. Native Home changes and personal staff calendar connections are outside this release.
 
 Deployment baseline for shared job visits: Sites 682, source `6462cb311747adcb9a158e65014022468e3fa627`. Shared-job publication evidence belongs in C:/Webproject/outputs/tlink-multi-trade-2026-09-30/. Exact publication identities and checks belong in C:/Webproject/outputs/tlink-managed-sms-2026-09-29/. Prior native publication evidence remains in C:/Webproject/outputs/tlink-native-comms-2026-09-28/.
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current implementation: multiple workers on one job
+## Previous implementation: multiple workers on one job
 
 The existing appointment is now the durable worker visit. A job retains one lead while other assigned team members receive shared job access through scheduled, travelling, arrived, in-progress or completed visits. Cancelled/no-show visits stop granting access. Each visit has its own worker, time, instructions, status and revision. Overlapping visits and different appointment times are supported; rental-assessment single-active-visit and credential rules remain intact.
 

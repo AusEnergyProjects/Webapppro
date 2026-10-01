@@ -31,14 +31,26 @@ function render(permissions = {}, view = 'work', crmView = 'jobs') {
   return { tree, buttons, destinations, button: name => buttons.find(node => label(node) === name) };
 }
 
-test('field staff see direct work, messages, jobs and their schedule without restricted tools', () => {
+test('field staff see Home, work, Connect, jobs and their schedule without restricted tools', () => {
   const ui = render();
-  assert.deepEqual(ui.buttons.map(label), ['My work', 'Messages ', 'Jobs', 'Schedule', 'To do & training']);
+  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'My work', 'Connect ', 'Jobs', 'Schedule', 'To do & training']);
   assert.equal(ui.tree.props['aria-label'], 'Staff workspace');
   assert.equal(ui.button('My work').props['aria-current'], 'page');
   assert.equal(flatten(ui.tree).filter(node => node.type === 'UnreadBadge').length, 1);
   ui.button('Schedule').props.onClick();
   assert.deepEqual(ui.destinations, [['crm', 'schedule']]);
+});
+
+test('Home selects the scoped dashboard and Connect keeps its communication destination', () => {
+  const ui = render({}, 'business', 'today');
+  assert.equal(ui.button('Home dashboard').props['aria-current'], 'page');
+  assert.equal(ui.button('My work').props['aria-current'], undefined);
+  ui.button('Home dashboard').props.onClick();
+  ui.button('Connect ').props.onClick();
+  assert.deepEqual(ui.destinations, [['crm', 'today'], ['portal', 'messages']]);
+  assert.equal(flatten(ui.button('Connect ')).find(node => node.type === 'Icon').props.name, 'connect');
+  assert.equal(render({ canViewInvoices: true, canRunReports: true }).button('Invoices'), undefined,
+    'staff use scoped job invoices, not the owner-only invoice register');
 });
 
 test('customer directory requires both existing view and search permissions', () => {

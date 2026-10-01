@@ -1,13 +1,14 @@
 import { TRADE_INVOICE_REGISTER_HANDOFF_JOIN_SQL } from "./trade-invoice-register.ts";
 import { addReportDays, ReportInputError, reportTrendWindows, resolveReportPeriod, type BusinessReport, type ReportMeasures } from "./trade-business-reports.ts";
 import { australiaLocalDateTime } from "./trade-schedule.ts";
+import { jobMemberSql } from "./trade-job-collaboration.ts";
 
-type ReportAccess = { isOwner: boolean; memberId: string; jobScope: string; scheduleScope: string; canViewInvoices: boolean; canViewQuotes: boolean; canViewPriceBook?: boolean };
+export type ReportAccess = { isOwner: boolean; memberId: string; jobScope: string; scheduleScope: string; canViewInvoices: boolean; canViewQuotes: boolean; canViewPriceBook?: boolean };
 type Row = Record<string, unknown>;
 const number = (value: unknown) => Number(value || 0);
 const ISSUED = "('issued','part_credited','credited')";
 const base = `WITH all_jobs AS (
-  SELECT w.*, COALESCE(NULLIF(s.address_state,''),'unknown') region,
+  SELECT w.*, d.customer_source, COALESCE(NULLIF(s.address_state,''),'unknown') region,
     COALESCE(d.pipeline_stage,'enquiry') pipeline_stage, COALESCE(d.invoice_status,'not_started') invoice_status,
     COALESCE(d.invoiced_value_cents,0) invoiced_value_cents, COALESCE(d.paid_value_cents,0) paid_value_cents,
     COALESCE(d.payment_due_at,'') payment_due_at
@@ -15,15 +16,15 @@ const base = `WITH all_jobs AS (
   LEFT JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
   LEFT JOIN trade_crm_service_sites s ON s.id=d.service_site_id AND s.firebase_uid=w.firebase_uid
   WHERE w.firebase_uid=? AND w.partner_type='installer' AND w.record_status='active'
-    AND (?=1 OR w.assignee_member_id=?)
+    AND (?=1 OR ${jobMemberSql("w")})
 ), jobs AS (SELECT * FROM all_jobs WHERE (?='' OR service_category=?) AND (?='' OR region=?))`;
 const native = `, native_invoices AS MATERIALIZED (
   SELECT q.id, q.work_order_id, q.firebase_uid, q.sent_at issued_at, q.total_cents-q.tax_cents net_cents,
-    q.total_cents, q.due_at, 'quick' source
+    q.total_cents, q.tax_cents, q.due_at, 'quick' source
   FROM trade_crm_quick_invoices q JOIN jobs j ON j.id=q.work_order_id AND j.firebase_uid=q.firebase_uid
   WHERE q.status IN ${ISSUED} AND q.sent_at<>'' AND q.currency='AUD'
   UNION ALL
-  SELECT a.id, a.work_order_id, a.firebase_uid, a.created_at, a.total_cents-a.tax_cents, a.total_cents, a.due_at, 'accepted'
+  SELECT a.id, a.work_order_id, a.firebase_uid, a.created_at, a.total_cents-a.tax_cents, a.total_cents, a.tax_cents, a.due_at, 'accepted'
   FROM trade_crm_accepted_invoices a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid
   WHERE a.status='issued' AND a.currency='AUD' AND NOT EXISTS (
     SELECT 1 FROM trade_crm_quick_invoices q WHERE q.work_order_id=a.work_order_id AND q.firebase_uid=a.firebase_uid AND q.status IN ${ISSUED} AND q.sent_at<>'')
@@ -40,6 +41,8 @@ const events = `${native}, job_events AS MATERIALIZED (
   SELECT work_order_id job_id, 'invoicedCents' kind, issued_at at, net_cents value FROM native_invoices
   UNION ALL SELECT work_order_id, 'invoiceCount', issued_at, 1 FROM native_invoices
   UNION ALL SELECT work_order_id, 'creditCents', created_at, total_cents-tax_cents FROM credits
+  UNION ALL SELECT work_order_id, 'invoiceGstCents', issued_at, tax_cents FROM native_invoices
+  UNION ALL SELECT work_order_id, 'creditGstCents', created_at, tax_cents FROM credits
 ), quote_events AS MATERIALIZED (
   SELECT q.work_order_id job_id, 'quoteIssues' kind, MIN(v.issued_at) at, 1 value FROM trade_crm_quotes q JOIN jobs j ON j.id=q.work_order_id AND j.firebase_uid=q.firebase_uid JOIN trade_crm_quote_versions v ON v.quote_id=q.id AND v.firebase_uid=q.firebase_uid WHERE v.issued_at<>'' GROUP BY q.id
   UNION ALL SELECT a.work_order_id, CASE WHEN a.decision='accepted' THEN 'wonQuotes' ELSE 'declinedQuotes' END, a.decided_at, 1 FROM trade_crm_quote_acceptances a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid WHERE a.decision IN ('accepted','declined')
@@ -84,7 +87,8 @@ requirements AS (
   FROM selected_plans p JOIN trade_crm_job_actuals a ON a.job_plan_id=p.plan_id AND a.work_order_id=p.job_id AND a.firebase_uid=p.firebase_uid
   JOIN trade_crm_job_plan_requirements r ON r.id=a.job_plan_requirement_id AND r.job_plan_id=p.plan_id AND r.firebase_uid=p.firebase_uid AND r.status<>'not_needed' GROUP BY p.job_id
 ), profits AS (
-  SELECT j.id,j.work_number,j.title,c.completed_at,COALESCE(v.revenue,0)-COALESCE(k.credits,0) revenue,
+  SELECT j.id,j.work_number,CASE WHEN j.source_type='opportunity' OR j.customer_source='platform_private' THEN 'Protected job' ELSE j.title END title,
+    c.completed_at,COALESCE(v.revenue,0)-COALESCE(k.credits,0) revenue,
     COALESCE(a.labour,0) labour,COALESCE(a.material,0) material,COALESCE(a.other,0) other,COALESCE(a.minutes,0) minutes,COALESCE(r.missing_costs,0) missing_costs,
     CASE WHEN COALESCE(v.invoice_count,0)=0 THEN 'invoice_needed' WHEN p.plan_id IS NULL THEN 'plan_needed'
       WHEN EXISTS(SELECT 1 FROM trade_crm_job_actuals old WHERE old.work_order_id=j.id AND old.firebase_uid=j.firebase_uid AND old.job_plan_id<>p.plan_id) THEN 'scope_review'
@@ -102,7 +106,7 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
   const teamSchedule = access.isOwner || access.scheduleScope === "team" ? 1 : 0;
   if (period.preset === "all") {
     const history = await db.prepare(`${base}${events} SELECT
-      (SELECT datetime(MIN(julianday(at))) FROM events WHERE julianday(at)<=julianday(?) AND (kind NOT IN ('invoicedCents','invoiceCount','creditCents') OR ?=1) AND (kind NOT IN ('quoteIssues','wonQuotes','declinedQuotes','wonCents') OR ?=1)) first_utc,
+      (SELECT datetime(MIN(julianday(at))) FROM events WHERE julianday(at)<=julianday(?) AND (kind NOT IN ('invoicedCents','invoiceCount','creditCents','invoiceGstCents','creditGstCents') OR ?=1) AND (kind NOT IN ('quoteIssues','wonQuotes','declinedQuotes','wonCents') OR ?=1)) first_utc,
       (SELECT MIN(substr(a.starts_at,1,10)) FROM trade_crm_appointments a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid WHERE j.stage<>'cancelled' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND date(a.starts_at) IS NOT NULL AND substr(a.starts_at,1,10)<=? AND (?=1 OR a.assignee_member_id=?)) first_visit`).bind(...args, now.toISOString(), access.canViewInvoices ? 1 : 0, access.canViewQuotes ? 1 : 0, period.today, teamSchedule, access.memberId).first<Row>();
     const firstUtc = history?.first_utc ? australiaLocalDateTime(state, new Date(`${String(history.first_utc).replace(" ", "T")}Z`)).slice(0, 10) : period.today;
     const firstDay = [firstUtc, String(history?.first_visit || period.today)].sort()[0];
@@ -179,7 +183,9 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
   }
   const work = results[4].results[0] || {}; const balances = results[2].results;
   const sumBalance = (key: string) => balances.reduce((total, row) => total + number(row[key]), 0);
+  const recordedTax = (kind: string) => number(results[0].results.find(row => row.id === "current" && row.kind === kind)?.value);
   return { generatedAt: now.toISOString(), period, service, state: region, permissions: { invoices: access.canViewInvoices, quotes: access.canViewQuotes },
+    recordedGst: access.canViewInvoices ? { invoiceGstCents: recordedTax("invoiceGstCents"), creditGstCents: recordedTax("creditGstCents"), netGstCents: recordedTax("invoiceGstCents") - recordedTax("creditGstCents") } : null,
     options: { services: [...new Set(results[6].results.map(row => String(row.service)))], states: [...new Set(results[6].results.map(row => String(row.region)))].sort() },
     profitability: canViewCosts ? (() => {
       const row = results[7].results[0] || {}; const completeJobs = number(row.complete_jobs); const margin = completeJobs ? number(row.margin) : null;

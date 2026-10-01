@@ -188,10 +188,11 @@ test("installer and wholesaler dashboards share the clean operations shell", () 
   assert.match(styles, /grid-template-columns: 244px minmax\(0, 1fr\)/);
   assert.match(styles, /@media \(max-width: 780px\)/);
   assert.match(styles, /dashboard-workspace-nav button\.active/);
-  assert.match(dashboard, /dashboard-workspace-shortcuts/);
+  assert.match(dashboard, /tlink-more-tools/);
+  assert.match(dashboard, /\['today', 'Home dashboard', 'home'\]/);
   for (const shortcut of ["Jobs", "Customers"]) assert.match(dashboard, new RegExp(`'${shortcut}'`));
   assert.match(dashboard, /kind: "crm-view"/);
-  assert.match(styles, /dashboard-workspace-shortcuts/);
+  assert.match(styles, /tlink-more-tools/);
 });
 
 test("schedule remains inside the permanent installer CRM navigation", () => {

@@ -62,6 +62,7 @@ const TradeQuotePanel = dynamic(() => import("./TradeQuotePanel").then((module) 
 const TradePhotoRequestPanel = dynamic(() => import("./TradePhotoRequestPanel").then((module) => module.TradePhotoRequestPanel));
 const TradePhotoTemplateLibrary = dynamic(() => import("./TradePhotoTemplateLibrary").then((module) => module.TradePhotoTemplateLibrary));
 const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace").then((module) => module.TradePriceBookWorkspace));
+const TradeHomeDashboard = dynamic(() => import("./TradeHomeDashboard").then((module) => module.TradeHomeDashboard));
 const TradeBusinessReports = dynamic(() => import("./TradeBusinessReports").then((module) => module.TradeBusinessReports));
 const TradeJobReadinessPanel = dynamic(() => import("./TradeJobReadinessPanel").then((module) => module.TradeJobReadinessPanel));
 const TradeNewJobForm = recoverableTradeWorkspace(() => import("./TradeNewJobForm").then((module) => module.TradeNewJobForm));
@@ -137,16 +138,6 @@ type CreateJobResult = {
 type IndexPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type CrmIndexResult = { ok?: boolean; items?: Job[] | Customer[]; pagination?: IndexPagination; error?: string };
 type CrmDetailResult = { ok?: boolean; job?: Job; customer?: Customer | null; sites?: ServiceSite[]; jobs?: Job[]; error?: string };
-type ActivityJob = { id: string; workNumber: string; title: string };
-type ActivityAppointment = Appointment & { job: ActivityJob };
-type ActivityTask = Task & { job: ActivityJob };
-type ActivityNote = Note & { job: ActivityJob };
-type CrmMetrics = {
-  openJobs: number; nextVisits: number; todayVisits: number; awaitingSchedule: number; overdueTasks: number; openIssues: number; waitingJobs: number;
-  completedJobs: number; quotedCents: number; invoicedCents: number; paidCents: number; outstandingCents: number;
-};
-type WorkloadBucket = { weekStart: string; weekEnd: string; visits: number; bookedMinutes: number };
-type CrmSummaryResult = { ok?: boolean; metrics?: CrmMetrics; workload?: WorkloadBucket[]; workStages?: Record<string, number>; upcomingAppointments?: ActivityAppointment[]; overdueTasks?: ActivityTask[]; openIssues?: ActivityNote[]; error?: string };
 type View = "today" | "leads" | "jobs" | "schedule" | "customers" | "pricebook" | "assets" | "templates" | "reports" | "import" | "integrations";
 type JobTab = "summary" | "schedule" | "quote" | "field" | "invoice" | "review";
 type JobDetailTab = JobTab | "files" | "forms" | "tasks" | "notes" | "handover" | "messages";
@@ -194,15 +185,6 @@ const dateLabel = (value: string, includeTime = false) => value
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(cents / 100);
 const registerMoney = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
 const cents = (value: FormDataEntryValue | null) => Math.round(Math.max(0, Number(value || 0)) * 100);
-const shortDateLabel = (value: string) => value
-  ? new Date(`${value}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short" })
-  : "Not set";
-const bookedTimeLabel = (minutes: number) => {
-  const safeMinutes = Math.max(0, Math.round(Number(minutes) || 0));
-  const hours = Math.floor(safeMinutes / 60);
-  const remainder = safeMinutes % 60;
-  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
-};
 const localDateBoundary = (value: string, endExclusive = false) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return "";
@@ -408,7 +390,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const fetch = useTradeBusinessFetch();
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [view, setViewState] = useState<View>(() => mapWorkspace || staffPermissions ? "jobs" : "today");
+  const [view, setViewState] = useState<View>(() => mapWorkspace ? "jobs" : "today");
   const [scheduleWeekStart, setScheduleWeekStart] = useState("");
   const [priceBookView, setPriceBookView] = useState<"items" | "packets">("items");
   const [creating, setCreatingState] = useState<"" | "job" | "customer">("");
@@ -484,7 +466,6 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [customerPagination, setCustomerPagination] = useState<IndexPagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
   const jobCursors = useRef<string[]>([""]); const jobTotalReady = useRef(false);
   const customerCursors = useRef<string[]>([""]); const customerTotalReady = useRef(false);
-  const [summary, setSummary] = useState<CrmSummaryResult>({});
   const [boardJobs, setBoardJobs] = useState<Record<string, Job[]>>({});
   const [boardCounts, setBoardCounts] = useState<Record<string, number>>({});
   const [selectedJobDetail, setSelectedJobDetail] = useState<Job | null>(null);
@@ -529,13 +510,14 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const newJobHeadingRef = useRef<HTMLHeadingElement>(null);
   const bootstrapStarted = useRef(false);
   const jobPreferencesLoaded = useRef(false);
+  const homeJobStage = useRef<string | null>(null);
   const customerPreferencesLoaded = useRef(false);
   const jobIndexRequested = useRef(false);
   const customerIndexRequested = useRef(false);
   const appliedNavigationTargetNonce = useRef(0);
   const allowedViews = useMemo<View[]>(() => {
     if (!staffPermissions) return ["today", "leads", "jobs", "schedule", "customers", "pricebook", "assets", "templates", "reports", "import", "integrations"];
-    const views: View[] = ["jobs"];
+    const views: View[] = ["today", "jobs"];
     if (staffPermissions.scheduleScope) views.push("schedule");
     if (staffPermissions.canViewCustomers && staffPermissions.canSearchCustomers) views.push("customers");
     if (staffPermissions.canViewPriceBook) views.push("pricebook");
@@ -658,6 +640,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         setJobSort(preferences.sort || "updated-desc"); setJobPageSize(Number(preferences.pageSize) || 25);
         setJobColumns(safeJobRegisterColumns(preferences.jobColumnOrderVersion === 5 ? preferences.columns : undefined));
         setJobPresets((result.presets || []) as NamedWorkspaceListView[]); setJobViewSaved(Boolean(result.saved));
+        if (homeJobStage.current !== null) {
+          clearJobFilters(); setJobFilter("active"); setJobStage(homeJobStage.current); homeJobStage.current = null;
+        }
       } else {
         setCustomerSearch(preferences.search || ""); setCustomerFirstName(preferences.firstName || ""); setCustomerLastName(preferences.lastName || "");
         setCustomerBusinessName(preferences.businessName || ""); setCustomerEmail(preferences.email || ""); setCustomerStreet(preferences.street || "");
@@ -684,7 +669,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
 
   const jobIndexParams = useCallback((page: number, pageSize: number, cursor = "", includeTotal = true) => {
     const params = new URLSearchParams({ mode: "index", resource: "jobs", service: jobService,
-      pipeline: pipelineFocus || jobPipeline, stage: jobStage, assignee: jobAssignee, filter: "all", sort: jobSort,
+      pipeline: pipelineFocus || jobPipeline, stage: jobStage, assignee: jobAssignee, filter: jobFilter === "active" ? "active" : "all", sort: jobSort,
       appointmentId: jobAppointmentId, jobId, scheduledFrom: jobScheduledFrom, scheduledTo: jobScheduledTo,
       page: String(page), pageSize: String(pageSize) });
     params.set("search", search); params.set("customer", jobCustomer); params.set("location", jobLocation);
@@ -701,7 +686,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     if (cursor) params.set("cursor", cursor);
     if (!includeTotal) params.set("total", "0");
     return params;
-  }, [jobAppointmentId, jobAssignee, jobCreatedFrom, jobCreatedTo, jobCustomer, jobCustomerReference, jobEmail, jobFirstName, jobId, jobInvoiceStatus, jobLastName, jobLocation, jobOperationalStatus, jobPhone, jobPipeline, jobPostcode, jobQuoteTotalMax, jobQuoteTotalMin, jobScheduledFrom, jobScheduledTo, jobService, jobSort, jobStage, jobState, jobStreet, jobSuburb, pipelineFocus, search, staffPermissions]);
+  }, [jobAppointmentId, jobAssignee, jobCreatedFrom, jobCreatedTo, jobCustomer, jobCustomerReference, jobEmail, jobFilter, jobFirstName, jobId, jobInvoiceStatus, jobLastName, jobLocation, jobOperationalStatus, jobPhone, jobPipeline, jobPostcode, jobQuoteTotalMax, jobQuoteTotalMin, jobScheduledFrom, jobScheduledTo, jobService, jobSort, jobStage, jobState, jobStreet, jobSuburb, pipelineFocus, search, staffPermissions]);
 
   const jobIndexKey = `${user.uid}:${refreshNonce}:${jobIndexParams(jobPage, jobPageSize)}`;
   const loadJobIndex = useCallback(async (signal: AbortSignal) => {
@@ -944,20 +929,6 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   }, [fetch, refreshNonce, selectedCustomerId, user, view]);
 
   useEffect(() => {
-    if (view !== "today") return;
-    let active = true;
-    void user.getIdToken().then((token) => fetch("/api/trade-crm?mode=summary", {
-      headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
-    })).then(async (response) => {
-      const result = await response.json().catch(() => ({})) as CrmSummaryResult;
-      if (isMfaRequiredResponse(result)) setMfaRequired(true);
-      if (!response.ok || !result.ok) throw new Error(result.error || "The workday summary could not be loaded.");
-      if (active) setSummary(result);
-    }).catch((error) => active && setStatus(error instanceof Error ? error.message : "The workday summary could not be loaded."));
-    return () => { active = false; };
-  }, [fetch, refreshNonce, user, view]);
-
-  useEffect(() => {
     if (view !== "jobs" || jobLayout !== "board") return;
     let active = true;
     const stages = ["enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress"];
@@ -1108,14 +1079,6 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     finally { setBusy(""); }
   }
 
-  const metrics: CrmMetrics = summary.metrics || { openJobs: 0, nextVisits: 0, todayVisits: 0, awaitingSchedule: 0, overdueTasks: 0, openIssues: 0, waitingJobs: 0, completedJobs: 0, quotedCents: 0, invoicedCents: 0, paidCents: 0, outstandingCents: 0 };
-  const workload: Array<WorkloadBucket & { fallbackLabel?: string }> = summary.workload?.length === 4 ? summary.workload : Array.from({ length: 4 }, (_, index) => ({ weekStart: "", weekEnd: "", visits: 0, bookedMinutes: 0, fallbackLabel: index === 0 ? "This week" : `Week ${index + 1}` }));
-  const workStages = (["backlog", "ready", "scheduled", "in_progress", "blocked"] as const).map((stage) => ({ stage, label: workStageLabels[stage], count: Number(summary.workStages?.[stage] || 0) }));
-  const workloadMax = Math.max(1, ...workload.map((item) => item.bookedMinutes));
-  const workStageMax = Math.max(1, ...workStages.map((item) => item.count));
-  const upcomingAppointments = summary.upcomingAppointments || [];
-  const overdueTasks = summary.overdueTasks || [];
-  const openIssues = summary.openIssues || [];
   const jobGridStyle = indexGridStyle(jobColumns, jobIndexColumns);
   const customerGridStyle = indexGridStyle(customerColumns, customerIndexColumns);
   const customerRecordStyle: CSSProperties = {
@@ -1267,12 +1230,10 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       }}>{selected ? "Deselect customer" : "Select customer"}</button>
     </div>, document.body);
   }
+  function clearJobFilters() { setJobFilter("all"); setSearch(""); setJobCustomer(""); setJobService(""); setJobPipeline(""); setJobStage(""); setJobAssignee(""); setJobLocation(""); setJobAppointmentId(""); setJobId(""); setJobScheduledFrom(""); setJobScheduledTo(""); setJobCreatedFrom(""); setJobCreatedTo(""); setJobInvoiceStatus(""); setJobCustomerReference(""); setJobEmail(""); setJobPhone(""); setJobSuburb(""); setJobPostcode(""); setJobFirstName(""); setJobLastName(""); setJobStreet(""); setJobState(""); setJobOperationalStatus(""); setJobQuoteTotalMin(""); setJobQuoteTotalMax(""); setPipelineFocus(""); setJobPage(1); }
   function openJobsForStage(stage: string) {
-    setCreating(""); setFocusedJobId(""); setJobReturnTarget({ kind: "jobs" }); setJobFilter("active"); setJobStage(stage); setJobPage(1); setView("jobs");
-  }
-  function openOverdueWork() {
-    if (overdueTasks[0]) { openFocusedJob(overdueTasks[0].job.id); return; }
-    setCreating(""); setFocusedJobId(""); setJobReturnTarget({ kind: "jobs" }); setJobFilter("active"); setJobStage(""); setJobPage(1); setView("jobs");
+    homeJobStage.current = jobPreferencesLoaded.current || staffPermissions ? null : stage;
+    clearJobFilters(); setCreating(""); setFocusedJobId(""); setJobReturnTarget({ kind: "jobs" }); setJobFilter("active"); setJobStage(stage); setJobLayout("list"); setView("jobs");
   }
   function currentListPreferences(viewKey: "installer-jobs" | "installer-customers"): WorkspaceListPreferences {
     return viewKey === "installer-jobs"
@@ -1437,7 +1398,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     if (saved) form.reset();
   }
 
-  return <section id="business-hub" className="installer-crm" aria-labelledby="installer-crm-title">
+  return <section id="business-hub" className="installer-crm" aria-label={view === "today" ? "Home dashboard" : undefined} aria-labelledby={view === "today" ? undefined : "installer-crm-title"}>
     {binJob && <dialog ref={binDialogRef} className={registerStyles.paymentDialog} aria-labelledby={binDialogTitleId} aria-describedby={binDialogDescriptionId} onCancel={event => { event.preventDefault(); closeJobBin(); }} onKeyDown={event => event.stopPropagation()}>
       <form aria-busy={busy === `bin:${binJob.id}`} onSubmit={event => { event.preventDefault(); void changeJobBin(binJob, false); }}>
         <header><div><small>{binJob.workNumber}</small><h3 id={binDialogTitleId}>Move job to the bin?</h3></div></header>
@@ -1448,11 +1409,11 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       </form>
     </dialog>}
     {followUpJobId && <TradeFollowUpDialog user={user} workOrderId={followUpJobId} onClose={() => { const id=followUpJobId; setFollowUpJobId(""); requestAnimationFrame(() => { [...document.querySelectorAll<HTMLButtonElement>("[data-job-action-trigger]")].find(button => button.dataset.jobActionTrigger === id)?.focus(); }); }} />}
-    <header className="crm-hero">
-      <div>{!mapWorkspace && <span>Installer business workspace</span>}<h2 id="installer-crm-title" ref={crmHeadingRef} tabIndex={-1}>{mapWorkspace ? "Jobs & customer map" : "Run the day from one clear place"}</h2><p>{mapWorkspace ? "Find your jobs and customers by location. Open Design & Measure from the menu for solar designs and insulation tools." : "Manage your own customers, jobs, visits, tasks, issues, quotes, invoices and handovers. Australian Energy Assessments customer identities remain protected."}</p></div>
+    {view !== "today" && <header className="crm-hero">
+      <div>{!mapWorkspace && <span>Installer business workspace</span>}<h2 id="installer-crm-title" ref={crmHeadingRef} tabIndex={-1}>{mapWorkspace ? "Jobs & customer map" : view === "jobs" ? "Jobs" : view === "customers" ? "Customers" : view === "schedule" ? "Schedule" : "Business workspace"}</h2><p>{mapWorkspace ? "Find your jobs and customers by location. Open Design & Measure from the menu for solar designs and insulation tools." : "Your records and next actions, together."}</p></div>
       {!mapWorkspace && (canCreateJob || canCreateCustomer) && <div className="crm-primary-actions"><AccessibleMenu className="crm-quick-create" label="New">{(close) => <>{canCreateJob && <button role="menuitem" type="button" onClick={() => { setNewJobSeed(null); setView("jobs"); setCreating("job"); close(); }}>Job</button>}{canCreateCustomer && allowedViews.includes("customers") && <button role="menuitem" type="button" onClick={() => { setView("customers"); setCreating("customer"); close(); }}>Customer</button>}</>}</AccessibleMenu></div>}
-    </header>
-    <nav className="crm-nav" aria-label={mapWorkspace ? "Map records" : "Installer CRM"}>
+    </header>}
+    {view !== "today" && <nav className="crm-nav" aria-label={mapWorkspace ? "Map records" : "Installer CRM"}>
       {allowedViews.filter((item) => mapWorkspace ? item === "jobs" || item === "customers" : !onOpenFinance || (item !== "pricebook" && item !== "reports")).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} aria-current={view === item ? "page" : undefined} onClick={() => void mapNavigation.run(() => {
         if (mapWorkspace) { setFocusedJobId(""); setSelectedCustomerIdState(""); setSelectedCustomerDetail(null); }
         if (item === "schedule") { openVisualSchedule(); return; }
@@ -1460,9 +1421,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         if (item === "jobs") { setFocusedJobId(""); setJobReturnTarget({ kind: "jobs" }); }
         if (item === "customers") { setSelectedCustomerIdState(""); setSelectedCustomerDetail(null); }
         setCreatingState(""); setViewState(item);
-      })}>{item === "today" ? "My day" : item === "pricebook" ? "Price book" : item === "import" ? "Import data" : item[0].toUpperCase() + item.slice(1)}</button>)}
-    </nav>
-    {!mapWorkspace && <div className="crm-privacy-line"><strong>Clear privacy boundary</strong><span><b>Australian Energy Assessments protected:</b> reference and region only</span><span><b>Your customer:</b> contacts your business already owns</span></div>}
+      })}>{item === "today" ? "Home dashboard" : item === "pricebook" ? "Price book" : item === "import" ? "Import data" : item[0].toUpperCase() + item.slice(1)}</button>)}
+    </nav>}
+    {!mapWorkspace && view !== "today" && <div className="crm-privacy-line"><strong>Clear privacy boundary</strong><span><b>Australian Energy Assessments protected:</b> reference and region only</span><span><b>Your customer:</b> contacts your business already owns</span></div>}
 
     {mapWorkspace && (view === "jobs" || view === "customers") && !creating && (view === "jobs" ? !focusedJobId : !selectedCustomerId) && <div className="crm-view">
       <div className={mapWorkspaceStyles.toolbar}>
@@ -1492,23 +1453,13 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       }} />}
     </div>}
 
-    {view === "today" && <div className="crm-view crm-today">
-      <section className="crm-metrics" aria-label="Workday shortcuts">
-        <article><button type="button" onClick={() => openVisualSchedule()} aria-label={`Open today's ${metrics.todayVisits} scheduled visits`}><span>Today visits</span><strong>{metrics.todayVisits}</strong><small>Appointments today</small></button></article>
-        <article className={metrics.awaitingSchedule ? "attention" : ""}><button type="button" onClick={() => openVisualSchedule()} aria-label={`Open schedule for ${metrics.awaitingSchedule} jobs awaiting a visit`}><span>Awaiting schedule</span><strong>{metrics.awaitingSchedule}</strong><small>Jobs without a future visit</small></button></article>
-        <article className={metrics.overdueTasks ? "attention" : ""}><button type="button" onClick={openOverdueWork} aria-label={`Open ${metrics.overdueTasks} overdue tasks`}><span>Overdue tasks</span><strong>{metrics.overdueTasks}</strong><small>Tasks needing action</small></button></article>
-        <article className={metrics.waitingJobs ? "attention" : ""}><button type="button" onClick={() => openJobsForStage("blocked")} aria-label={`Open ${metrics.waitingJobs} waiting jobs`}><span>Waiting jobs</span><strong>{metrics.waitingJobs}</strong><small>Jobs marked waiting</small></button></article>
-      </section>
-      <section className="crm-dashboard-insights" aria-label="Workload and work status">
-        <article className="crm-dashboard-chart crm-workload-chart"><header><div><span>Four week outlook</span><h3>Booked work</h3></div><small>Monday to Sunday</small></header><ol className="crm-chart-list">{workload.map((item, index) => { const weekLabel = item.weekStart ? `${shortDateLabel(item.weekStart)} to ${shortDateLabel(item.weekEnd)}` : item.fallbackLabel || `Week ${index + 1}`; const timeLabel = bookedTimeLabel(item.bookedMinutes); return <li key={item.weekStart || index}><button type="button" className="crm-chart-row" onClick={() => openVisualSchedule(item.weekStart || undefined)} aria-label={`Open schedule for ${weekLabel}. ${item.visits} visits and ${timeLabel} booked.`}><span className="crm-chart-label"><strong>{weekLabel}</strong><small>{item.visits} {item.visits === 1 ? "visit" : "visits"}</small></span><meter className="crm-chart-bar" min={0} max={workloadMax} value={item.bookedMinutes}>{item.bookedMinutes}</meter><span className="crm-chart-value">{timeLabel} booked</span></button></li>; })}</ol></article>
-        <article className="crm-dashboard-chart crm-work-status-chart"><header><div><span>Current jobs</span><h3>Work status</h3></div><small>{metrics.openJobs} open</small></header><ol className="crm-chart-list">{workStages.map((item) => <li key={item.stage}><button type="button" className="crm-chart-row" onClick={() => openJobsForStage(item.stage)} aria-label={`Open ${item.count} jobs with ${item.label} status`}><span className="crm-chart-label"><strong>{item.label}</strong><small>{item.count} {item.count === 1 ? "job" : "jobs"}</small></span><meter className="crm-chart-bar" min={0} max={workStageMax} value={item.count}>{item.count}</meter><span className="crm-chart-value">{item.count}</span></button></li>)}</ol></article>
-      </section>
-      <div className="crm-today-grid">
-        <section className="crm-card"><header><div><span>Next up</span><h3>Schedule</h3></div><button type="button" onClick={() => openVisualSchedule()}>Open schedule</button></header>{upcomingAppointments.length ? <ol className="crm-agenda">{upcomingAppointments.slice(0, 6).map((item) => <li key={item.id}><time>{dateLabel(item.startsAt, true)}</time><button type="button" onClick={() => openFocusedJob(item.job.id)}><strong>{item.title}</strong><span>{item.job.workNumber} | {item.job.title}</span></button></li>)}</ol> : <div className="crm-empty"><strong>No upcoming visits</strong><span>Add an appointment from any job.</span></div>}</section>
-        <section className="crm-card"><header><div><span>Attention</span><h3>Things to clear</h3></div></header>{!overdueTasks.length && !openIssues.length ? <div className="crm-empty"><strong>You are up to date</strong><span>No overdue tasks or open issues.</span></div> : <ul className="crm-attention-list">{overdueTasks.slice(0, 4).map((item) => <li key={item.id}><span>Overdue task</span><button type="button" onClick={() => openFocusedJob(item.job.id)}>{item.title}<small>{item.job.workNumber}</small></button></li>)}{openIssues.slice(0, 4).map((item) => <li key={item.id}><span>Open issue</span><button type="button" onClick={() => openFocusedJob(item.job.id)}>{item.body}<small>{item.job.workNumber}</small></button></li>)}</ul>}</section>
-      </div>
-      <nav className="crm-today-actions" aria-label="Quick actions"><button type="button" className="primary" onClick={() => { setNewJobSeed(null); setFocusedJobId(""); setView("jobs"); setCreating("job"); }}>New job</button><button type="button" onClick={() => openVisualSchedule()}>Schedule</button><button type="button" onClick={() => { setCreating(""); setView("customers"); }}>Customers</button><button type="button" onClick={() => openPriceBook()}>Price book</button><button type="button" onClick={() => openPriceBook("packets")}>Common jobs</button><button type="button" onClick={() => onOpenInvoices?.()} disabled={!onOpenInvoices}>Invoices</button></nav>
-    </div>}
+    {view === "today" && <TradeHomeDashboard user={user} staffPermissions={staffPermissions} refreshKey={refreshNonce}
+      onOpenJob={openFocusedJob} onOpenSchedule={openVisualSchedule}
+      onOpenJobs={(filter) => { if (filter === "awaiting_schedule") { openVisualSchedule(); return; } openJobsForStage(filter === "blocked" ? "blocked" : ""); }}
+      onNewJob={canCreateJob ? () => { setNewJobSeed(null); setFocusedJobId(""); setView("jobs"); setCreating("job"); } : undefined}
+      onOpenInvoices={(!staffPermissions || staffPermissions.canViewInvoices) ? onOpenInvoices : undefined}
+      onOpenReports={(!staffPermissions || staffPermissions.canRunReports) ? () => { if (onOpenFinance) onOpenFinance("reports"); else setView("reports"); } : undefined}
+    />}
     {view === "jobs" && creating === "job" && <div className="crm-view crm-create-screen">
       <div className="crm-page-heading"><div><h3 ref={newJobHeadingRef} tabIndex={-1}>Create job</h3></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>Back to all jobs</button></div>
       <section className="crm-create-card"><TradeNewJobForm key={newJobSeed?.sourceEnquiryId || "blank-job"} user={user} templates={templates} teamMembers={teamMembers} allowCustomerSearch={canSearchCustomerDirectory} canAssignJobs={!staffPermissions || staffPermissions.canAssignJobs} assignmentScope={staffPermissions?.jobScope || "team"} busy={busy === "create-job"} initial={newJobSeed || undefined} onSubmit={createJob} /></section>
@@ -1539,8 +1490,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         <label><span>Created to</span><input type="date" value={jobCreatedTo} data-date-range-group="installer-job-created" data-date-range-role="end" onChange={(event) => { setJobCreatedTo(event.target.value); setJobPage(1); }} /></label>
         {canSearchCustomerFields && <><label><span>Email</span><input type="email" value={jobEmail} onChange={(event) => { setJobEmail(event.target.value); setJobPage(1); }} /></label><label><span>Contact number</span><input type="tel" inputMode="tel" value={jobPhone} onChange={(event) => { setJobPhone(event.target.value.replace(/[^\d+()\s-]/g, "")); setJobPage(1); }} /></label><label><span>Suburb</span><input value={jobSuburb} onChange={(event) => { setJobSuburb(event.target.value); setJobPage(1); }} /></label><label><span>Postcode</span><input inputMode="numeric" value={jobPostcode} onChange={(event) => { setJobPostcode(event.target.value.replace(/\D/g, "").slice(0, 4)); setJobPage(1); }} /></label><label><span>State</span><select value={jobState} onChange={(event) => { setJobState(event.target.value); setJobPage(1); }}><option value="">All states</option>{["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"].map((value) => <option key={value}>{value}</option>)}</select></label></>}
         {(!staffPermissions || staffPermissions.canViewQuotes) && <><label><span>Quote total ex GST from</span><input type="number" min="0" step="0.01" value={jobQuoteTotalMin} onChange={(event) => { setJobQuoteTotalMin(event.target.value); setJobPage(1); }} /></label><label><span>Quote total ex GST to</span><input type="number" min="0" step="0.01" value={jobQuoteTotalMax} onChange={(event) => { setJobQuoteTotalMax(event.target.value); setJobPage(1); }} /></label></>}
-        <button type="button" onClick={() => { setSearch(""); setJobCustomer(""); setJobService(""); setJobPipeline(""); setJobStage(""); setJobAssignee(""); setJobLocation(""); setJobAppointmentId(""); setJobId(""); setJobScheduledFrom(""); setJobScheduledTo(""); setJobCreatedFrom(""); setJobCreatedTo(""); setJobInvoiceStatus(""); setJobCustomerReference(""); setJobEmail(""); setJobPhone(""); setJobSuburb(""); setJobPostcode(""); setJobFirstName(""); setJobLastName(""); setJobStreet(""); setJobState(""); setJobOperationalStatus(""); setJobQuoteTotalMin(""); setJobQuoteTotalMax(""); setPipelineFocus(""); setJobPage(1); }}>Clear filters</button>
+        <button type="button" onClick={clearJobFilters}>Clear filters</button>
       </div></details>}
+      {jobFilter === "active" && <div className="crm-filter-notice"><span>Showing open jobs</span><button type="button" onClick={() => setJobFilter("all")}>Show all jobs</button></div>}
       {pipelineFocus && <div className="crm-filter-notice"><span>Showing {pipelineLabels[pipelineFocus] || pipelineFocus}</span><button type="button" onClick={() => setPipelineFocus("")}>Clear stage</button></div>}
       {jobLayout !== "board" && <div className="crm-index-view-tools">{!staffPermissions && <WorkspaceSavedViews presets={jobPresets} activeId={activeJobPresetId} busy={viewBusy}
         onApply={(preset) => { applyListPreferences("installer-jobs", preset.preferences); setActiveJobPresetId(preset.id); setStatus(`${preset.name} view applied.`); }}

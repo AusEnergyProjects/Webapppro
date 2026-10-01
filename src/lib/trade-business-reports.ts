@@ -11,6 +11,8 @@ export type ProfitabilityReport = { jobs: number; completeJobs: number; revenueC
 export type BusinessReport = {
   generatedAt: string; period: ReportPeriod; service: string; state: string;
   permissions: { invoices: boolean; quotes: boolean };
+  /** Recorded GST on issued TLink invoices less issued credits in this period, not total tax payable. */
+  recordedGst: null | { invoiceGstCents: number; creditGstCents: number; netGstCents: number };
   profitability: ProfitabilityReport | null;
   options: { services: string[]; states: string[] };
   current: ReportMeasures; previous: ReportMeasures | null;
@@ -119,6 +121,12 @@ export function reportCsvRows(report: BusinessReport) {
     put("Receivables", "Outstanding", (report.receivables.outstandingCents / 100).toFixed(2), "", "Today, AUD including GST");
     put("Receivables", "Recorded payments", (report.receivables.paidCents / 100).toFixed(2), "", "Current cumulative balance, AUD including GST, not period receipts");
     for (const bucket of report.receivables.buckets) put("Ageing", bucket.key, (bucket.cents / 100).toFixed(2), "", "Today, AUD including GST");
+  }
+  if (report.recordedGst) {
+    const basis = "Selected period, recorded TLink GST only; excludes purchase credits and other tax liabilities";
+    put("Recorded GST", "Invoice GST", (report.recordedGst.invoiceGstCents / 100).toFixed(2), "", basis);
+    put("Recorded GST", "Credit note GST", (report.recordedGst.creditGstCents / 100).toFixed(2), "", basis);
+    put("Recorded GST", "Net recorded GST", (report.recordedGst.netGstCents / 100).toFixed(2), "", basis);
   }
   const workLabels: Record<string, string> = { openJobs: "Open jobs", waitingJobs: "Waiting jobs", unassignedJobs: "Unassigned jobs", awaitingSchedule: "Jobs needing a future visit", overdueTasks: "Overdue tasks", openIssues: "Open issues", completedUninvoiced: "Completed, not invoiced" };
   if (report.profitability) {

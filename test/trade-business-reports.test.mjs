@@ -123,6 +123,39 @@ test("issued invoices count once, drafts and accounting exports do not inflate p
   f.insert("trade_crm_accounting_documents",{id:"export",firebase_uid:"owner",work_order_id:"one",document_type:"invoice",currency:"AUD",status:"issued",amount_cents:11000,paid_amount_cents:0});
   const report=await f.report(); assert.equal(report.current.invoicedCents,10000); assert.equal(report.current.invoiceCount,1); assert.equal(report.receivables.outstandingCents,11000);
 });
+
+test("recorded GST uses issued invoice and credit event dates without duplicates, drafts, foreign records or inferred tax", async t => {
+  const f = fixture(); t.after(() => f.db.close());
+  f.job("quick"); f.invoice("quick", { sent_at: "2026-08-12T12:00Z", tax_cents: 1000 });
+  f.insert("trade_crm_accepted_invoices", { id: "quick-duplicate", firebase_uid: "owner", work_order_id: "quick", status: "issued", currency: "AUD", created_at: "2026-09-12T12:00Z", total_cents: 55000, tax_cents: 5000 });
+  f.insert("trade_crm_quick_invoice_credits", { id: "credit", firebase_uid: "owner", work_order_id: "quick", invoice_id: "i-quick", status: "issued", created_at: "2026-09-12T12:00Z", total_cents: 2200, tax_cents: 200 });
+  f.insert("trade_crm_quick_invoice_credits", { id: "draft-credit", firebase_uid: "owner", work_order_id: "quick", invoice_id: "i-quick", status: "draft", created_at: "2026-09-12T12:00Z", total_cents: 2200, tax_cents: 200 });
+  f.job("accepted");
+  f.insert("trade_crm_accepted_invoices", { id: "accepted", firebase_uid: "owner", work_order_id: "accepted", status: "issued", currency: "AUD", created_at: "2026-09-12T12:00Z", total_cents: 33000, tax_cents: 3000 });
+  f.job("draft"); f.invoice("draft", { status: "draft", tax_cents: 9000 });
+  f.job("foreign", { firebase_uid: "other" }); f.invoice("foreign", { firebase_uid: "other", tax_cents: 8000 });
+  f.job("manual", {}, { invoice_status: "issued", invoiced_value_cents: 99000 });
+  const report = await f.report();
+  assert.deepEqual(report.recordedGst, { invoiceGstCents: 3000, creditGstCents: 200, netGstCents: 2800 });
+  assert.deepEqual((await f.report({ anchor: "2026-08-20" })).recordedGst, { invoiceGstCents: 1000, creditGstCents: 0, netGstCents: 1000 });
+  const csv = reportCsvRows(report).filter(row => row.section === "Recorded GST");
+  assert.equal(csv.find(row => row.metric === "Net recorded GST").value, "28.00");
+  assert.ok(csv.every(row => row.basis.includes("excludes purchase credits and other tax liabilities")));
+  const restricted = await f.report({}, { isOwner: false, canViewInvoices: false });
+  assert.equal(restricted.recordedGst, null); assert.ok(!reportCsvRows(restricted).some(row => row.section === "Recorded GST"));
+});
+
+test("own-scope reports include durable collaborating assignments and redact protected profitability titles", async t => {
+  const f = fixture(); t.after(() => f.db.close());
+  costJob(f, "collaborative"); costJob(f, "unrelated");
+  f.db.prepare("UPDATE trade_work_orders SET assignee_member_id='other', title='Sensitive name and address', source_type='opportunity'").run();
+  f.insert("trade_crm_appointments", { id: "assigned", firebase_uid: "owner", work_order_id: "collaborative", assignee_member_id: "me", status: "completed", starts_at: "2026-09-10T09:00", ends_at: "2026-09-10T10:00" });
+  f.insert("trade_crm_appointments", { id: "cancelled", firebase_uid: "owner", work_order_id: "unrelated", assignee_member_id: "me", status: "cancelled", starts_at: "2026-09-10T09:00", ends_at: "2026-09-10T10:00" });
+  const report = await f.report({}, { isOwner: false, memberId: "me", jobScope: "own", scheduleScope: "own", canViewPriceBook: true });
+  assert.equal(report.current.invoiceCount, 1); assert.equal(report.current.invoicedCents, 10000);
+  assert.equal(report.profitability.jobs, 1); assert.equal(report.profitability.items[0].id, "collaborative");
+  assert.equal(report.profitability.items[0].title, "Protected job"); assert.doesNotMatch(JSON.stringify(report), /Sensitive name/);
+});
 test("later credits reduce their own period and today's balance, retaining prior invoice issue", async () => {
   const f=fixture(); f.job("one"); f.invoice("one",{sent_at:"2026-08-12T12:00Z",status:"part_credited"});
   f.insert("trade_crm_quick_invoice_credits",{id:"credit",invoice_id:"i-one",work_order_id:"one",firebase_uid:"owner",status:"issued",total_cents:2200,tax_cents:200,created_at:"2026-09-15T12:00Z"});
