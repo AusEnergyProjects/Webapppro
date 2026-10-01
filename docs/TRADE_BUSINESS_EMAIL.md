@@ -30,14 +30,16 @@ An account that has never connected a mailbox retains the existing platform rout
 
 ## Platform activation
 
-Use dedicated email OAuth clients. Calendar client credentials and permissions are separate. Keep secrets out of Git, logs, screenshots and documentation.
+Google email uses its dedicated OAuth client. Microsoft calendar can reuse the Microsoft email app registration, with separate calendar consent and token storage. Keep secrets out of Git, logs, screenshots and documentation.
 
 | Provider | Exact production callback | Protected runtime configuration |
 | --- | --- | --- |
 | Google | `https://ausenergyassessments.com/api/trade-email/callback/google` | `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, `GOOGLE_EMAIL_ENABLED=true` |
 | Microsoft | `https://ausenergyassessments.com/api/trade-email/callback/microsoft` | `MICROSOFT_EMAIL_CLIENT_ID`, `MICROSOFT_EMAIL_CLIENT_SECRET`, `MICROSOFT_EMAIL_ENABLED=true` |
 
-Both use the existing `CRM_INTEGRATION_ENCRYPTION_KEY`. Preserve that key: replacing it without migrating encrypted records breaks existing integrations. Public provider availability requires its enable switch, both credentials and the encryption key.
+Both use the existing `CRM_INTEGRATION_ENCRYPTION_KEY`. Preserve that key: replacing it without migrating encrypted records breaks existing integrations. Public mailbox provider availability requires its enable switch, both credentials and the encryption key.
+
+For Outlook Calendar, an explicit `MICROSOFT_CALENDAR_CLIENT_ID` and `MICROSOFT_CALENDAR_CLIENT_SECRET` pair takes priority. If either calendar value is supplied, both are required; incomplete overrides never borrow the email app's other value. Only when neither calendar value is supplied does calendar use the complete `MICROSOFT_EMAIL_CLIENT_ID` and `MICROSOFT_EMAIL_CLIENT_SECRET` pair. `MICROSOFT_EMAIL_ENABLED` controls mailbox sending only. The shared Microsoft registration must also register `https://ausenergyassessments.com/api/trade-integrations/callback/microsoft_calendar` as a Web redirect and support delegated `Calendars.ReadWrite` consent. Reusing an app registration does not connect the calendar automatically or combine its consent and stored tokens with the mailbox connection.
 
 For Google's required pre-approval demonstration only, `GOOGLE_EMAIL_TEST_OWNER_UIDS` can contain explicitly authorised test business owner UIDs, separated by commas. Exact owner matching permits those businesses while `GOOGLE_EMAIL_ENABLED=false`; an absent or empty list permits nobody. This enables real sending for that business's already authorised team, not just the test button, so use only an approved test business. It never bypasses account eligibility, customer access or team permissions. Remove the list when testing ends. No test owner is configured as part of the registration preparation above.
 

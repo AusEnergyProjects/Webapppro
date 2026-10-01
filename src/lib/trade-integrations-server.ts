@@ -27,6 +27,8 @@ type IntegrationEnvironment = {
   GOOGLE_CALENDAR_CLIENT_SECRET?: string;
   MICROSOFT_CALENDAR_CLIENT_ID?: string;
   MICROSOFT_CALENDAR_CLIENT_SECRET?: string;
+  MICROSOFT_EMAIL_CLIENT_ID?: string;
+  MICROSOFT_EMAIL_CLIENT_SECRET?: string;
 };
 
 export function integrationEnvironment() {
@@ -62,9 +64,12 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth", tokenUrl: "https://oauth2.googleapis.com/token",
     scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/calendar.events"],
   };
+  // Reuse the Microsoft app only as a complete pair; never mix registrations.
+  const hasCalendarCredentials = Boolean(values.MICROSOFT_CALENDAR_CLIENT_ID || values.MICROSOFT_CALENDAR_CLIENT_SECRET);
   return {
     provider, label: "Outlook Calendar", purpose: "TLink appointments and private calendar view",
-    clientId: values.MICROSOFT_CALENDAR_CLIENT_ID || "", clientSecret: values.MICROSOFT_CALENDAR_CLIENT_SECRET || "",
+    clientId: (hasCalendarCredentials ? values.MICROSOFT_CALENDAR_CLIENT_ID : values.MICROSOFT_EMAIL_CLIENT_ID) || "",
+    clientSecret: (hasCalendarCredentials ? values.MICROSOFT_CALENDAR_CLIENT_SECRET : values.MICROSOFT_EMAIL_CLIENT_SECRET) || "",
     authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scopes: ["openid", "profile", "email", "offline_access", "User.Read", "Calendars.ReadWrite"],

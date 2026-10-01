@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import ts from "typescript";
 import { DatabaseSync } from "node:sqlite";
 import { calendarIntegrationState, calendarIntegrationStateWeekStart } from "../src/lib/trade-integration-state.ts";
 import { readIntegrationReturn } from "../src/lib/trade-integration-return.ts";
@@ -24,6 +25,42 @@ const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
 const fieldUi = read("../src/components/TradeFieldWorkPanel.tsx");
 const fieldMigration = read("../drizzle/0023_petite_the_phantom.sql");
 const propertyRetirementMigration = read("../drizzle/0024_lethal_purifiers.sql");
+
+function providerSettings(values) {
+  const compiled = ts.transpileModule(providerLayer, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const loaded = { exports: {} };
+  new Function("require", "module", "exports", compiled)(id => {
+    if (id === "cloudflare:workers") return { env: values };
+    if (id === "@/lib/trade-access-server") return { requireVerifiedTradeAccess: () => { throw new Error("Unexpected account access"); } };
+    throw new Error(`Unexpected dependency ${id}`);
+  }, loaded, loaded.exports);
+  return loaded.exports;
+}
+
+test("Microsoft calendar explicit credentials win and partial overrides never mix with the email app", () => {
+  const shared = { MICROSOFT_EMAIL_CLIENT_ID: "email-client", MICROSOFT_EMAIL_CLIENT_SECRET: "email-secret", CRM_INTEGRATION_ENCRYPTION_KEY: "fixture-key" };
+  for (const [id, secret] of [["calendar-client", "calendar-secret"], ["calendar-client", ""], ["", "calendar-secret"]]) {
+    const config = providerSettings({ ...shared, MICROSOFT_CALENDAR_CLIENT_ID: id, MICROSOFT_CALENDAR_CLIENT_SECRET: secret });
+    const setting = config.providerSetting("microsoft_calendar");
+    assert.equal(setting.clientId, id); assert.equal(setting.clientSecret, secret);
+    assert.equal(config.providerConfigured("microsoft_calendar"), Boolean(id && secret));
+  }
+});
+
+test("Microsoft calendar reuses a complete email app pair independently of the mailbox enable flag", () => {
+  for (const enabled of [undefined, "false", "true"]) {
+    const config = providerSettings({ MICROSOFT_EMAIL_CLIENT_ID: "email-client", MICROSOFT_EMAIL_CLIENT_SECRET: "email-secret", MICROSOFT_EMAIL_ENABLED: enabled, CRM_INTEGRATION_ENCRYPTION_KEY: "fixture-key" });
+    const setting = config.providerSetting("microsoft_calendar");
+    assert.equal(setting.clientId, "email-client"); assert.equal(setting.clientSecret, "email-secret");
+    assert.equal(config.providerConfigured("microsoft_calendar"), true);
+    assert.deepEqual(setting.scopes, ["openid", "profile", "email", "offline_access", "User.Read", "Calendars.ReadWrite"]);
+    assert.equal(config.integrationCallbackUri(new Request("https://ausenergyassessments.com/api/trade-integrations"), "microsoft_calendar"), "https://ausenergyassessments.com/api/trade-integrations/callback/microsoft_calendar");
+  }
+  for (const values of [{}, { MICROSOFT_EMAIL_CLIENT_ID: "email-client" }, { MICROSOFT_EMAIL_CLIENT_SECRET: "email-secret" }]) {
+    assert.equal(providerSettings({ ...values, CRM_INTEGRATION_ENCRYPTION_KEY: "fixture-key" }).providerConfigured("microsoft_calendar"), false);
+  }
+  assert.equal(providerSettings({ MICROSOFT_EMAIL_CLIENT_ID: "email-client", MICROSOFT_EMAIL_CLIENT_SECRET: "email-secret" }).providerConfigured("microsoft_calendar"), false);
+});
 
 test("calendar OAuth preserves only a validated selected week", () => {
   const nonce = "a".repeat(43);
