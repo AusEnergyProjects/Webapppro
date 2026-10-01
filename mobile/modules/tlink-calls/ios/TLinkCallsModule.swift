@@ -39,6 +39,54 @@ private struct TLinkCall {
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
   }
+  static func rejectionReason(_ data: [String: Any]) -> TLinkCallDiagnostic.Rejection? {
+    // Explain the same ordered checks as parse above. This diagnostic never
+    // decides whether a call is accepted or changes the existing expiry check.
+    guard let id = data["callId"] as? String, UUID(uuidString: id) != nil else { return .invalidCallId }
+    guard let thread = data["threadId"] as? String,
+      thread.range(of: "^[a-zA-Z0-9_-]{8,120}$", options: .regularExpression) != nil else { return .invalidThreadId }
+    guard let mode = data["mode"] as? String, ["audio", "video"].contains(mode) else { return .invalidMode }
+    guard let expiry = data["expiresAt"] as? String, let deadline = date(expiry) else { return .invalidExpiry }
+    return deadline > Date() ? nil : .expired
+  }
+}
+
+// This short local history survives a locked-screen launch without reading any
+// account credentials. Only these fixed facts can cross the diagnostics bridge.
+private struct TLinkCallDiagnostic: Codable {
+  enum Stage: String, Codable {
+    case nativeStart = "native_start", configurationChanged = "configuration_changed"
+    case pushReceived = "push_received", pushRejected = "push_rejected"
+    case callReported = "call_reported", callReportFailed = "call_report_failed"
+    case duplicateReported = "duplicate_reported", duplicateReportFailed = "duplicate_report_failed"
+  }
+  enum Rejection: String, Codable {
+    case disabled, invalidCallId = "invalid_call_id", invalidThreadId = "invalid_thread_id"
+    case invalidMode = "invalid_mode", invalidExpiry = "invalid_expiry", expired
+  }
+  enum AppState: String, Codable { case active, inactive, background, unknown }
+  enum ErrorDomain: String, Codable { case callkitIncoming = "callkit_incoming", other }
+  let timestamp: String
+  let stage: Stage
+  let localEnabled: Bool
+  let appState: AppState
+  let managedCallCount: Int
+  let managedConnectedCount: Int
+  let systemCallCount: Int
+  let systemConnectedCount: Int
+  let rejectionReason: Rejection?
+  let errorDomain: ErrorDomain?
+  let errorCode: Int?
+  var payload: [String: Any] {
+    var value: [String: Any] = ["timestamp": timestamp, "stage": stage.rawValue,
+      "localEnabled": localEnabled, "appState": appState.rawValue,
+      "managedCallCount": managedCallCount, "managedConnectedCount": managedConnectedCount,
+      "systemCallCount": systemCallCount, "systemConnectedCount": systemConnectedCount]
+    if let rejectionReason { value["rejectionReason"] = rejectionReason.rawValue }
+    if let errorDomain { value["errorDomain"] = errorDomain.rawValue }
+    if let errorCode { value["errorCode"] = errorCode }
+    return value
+  }
 }
 
 // Created before the React Native bridge. PushKit must report CallKit promptly,
@@ -64,6 +112,56 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
   var tokenChanged: (() -> Void)?
   private(set) var token = ""
   private var enabled: Bool { UserDefaults.standard.bool(forKey: "tlink.nativeCalls.enabled") }
+  private let diagnosticsKey = "tlink.nativeCalls.diagnostics.v1"
+
+  private func recentDiagnostics() -> [TLinkCallDiagnostic] {
+    let saved = UserDefaults.standard.data(forKey: diagnosticsKey)
+      .flatMap { try? JSONDecoder().decode([TLinkCallDiagnostic].self, from: $0) } ?? []
+    let now = Date()
+    return Array(saved.filter {
+      guard let date = TLinkCall.date($0.timestamp) else { return false }
+      return date <= now && now.timeIntervalSince(date) <= 24 * 60 * 60
+    }.suffix(12))
+  }
+  private func saveDiagnostics(_ events: [TLinkCallDiagnostic]) {
+    if let data = try? JSONEncoder().encode(events) { UserDefaults.standard.set(data, forKey: diagnosticsKey) }
+  }
+  func diagnostics() -> [[String: Any]] {
+    return recentDiagnostics().map { $0.payload }
+  }
+  private func recordDiagnostic(_ stage: TLinkCallDiagnostic.Stage,
+    rejection: TLinkCallDiagnostic.Rejection? = nil, error: Error? = nil) {
+    let timestamp = Date()
+    // Reporting CallKit and completing PushKit must never wait for preference
+    // storage. Main-queue FIFO preserves event order after those immediate calls.
+    DispatchQueue.main.async {
+      self.persistDiagnostic(stage, timestamp: timestamp, rejection: rejection, error: error)
+    }
+  }
+  private func persistDiagnostic(_ stage: TLinkCallDiagnostic.Stage, timestamp: Date,
+    rejection: TLinkCallDiagnostic.Rejection?, error: Error?) {
+    // PushKit, the module bridge and CallKit's delegate/completion queue are
+    // all main. Keep UIKit reads and this bounded history on that same queue.
+    let state: TLinkCallDiagnostic.AppState
+    switch UIApplication.shared.applicationState {
+    case .active: state = .active
+    case .inactive: state = .inactive
+    case .background: state = .background
+    @unknown default: state = .unknown
+    }
+    let systemCalls = controller.callObserver.calls.filter { !$0.hasEnded }
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let failure = error.map { $0 as NSError }
+    let event = TLinkCallDiagnostic(timestamp: formatter.string(from: timestamp), stage: stage,
+      localEnabled: enabled, appState: state,
+      managedCallCount: min(32, calls.count), managedConnectedCount: min(32, connectedCalls.count),
+      systemCallCount: min(32, systemCalls.count), systemConnectedCount: min(32, systemCalls.filter { $0.hasConnected }.count),
+      rejectionReason: rejection,
+      errorDomain: failure.map { $0.domain == CXErrorDomainIncomingCall ? .callkitIncoming : .other },
+      errorCode: failure.map { (0...100).contains($0.code) ? $0.code : -1 })
+    saveDiagnostics(Array((recentDiagnostics() + [event]).suffix(12)))
+  }
 
   private override init() {
     let configuration = CXProviderConfiguration()
@@ -86,11 +184,14 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     registry.delegate = self
     self.registry = registry
     if enabled { registry.desiredPushTypes = [.voIP] }
+    recordDiagnostic(.nativeStart)
   }
   func configure(_ enabled: Bool, preserveActiveCalls: Bool) {
+    let changed = self.enabled != enabled
     UserDefaults.standard.set(enabled, forKey: "tlink.nativeCalls.enabled")
     start()
     registry?.desiredPushTypes = enabled ? [.voIP] : []
+    if changed { recordDiagnostic(.configurationChanged) }
     if !enabled {
       for id in Array(calls.keys) {
         if !preserveActiveCalls || (!acceptedCalls.contains(id) && !outgoingCalls.contains(id)) { end(id, reason: .remoteEnded) }
@@ -113,13 +214,16 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
       if let key = entry.key as? String { result[key] = entry.value }
     }
     guard type == .voIP else { completion(); return }
+    recordDiagnostic(.pushReceived)
     guard enabled, let call = TLinkCall.parse(data) else {
+      recordDiagnostic(.pushRejected, rejection: enabled ? TLinkCall.rejectionReason(data) : .disabled)
       // Even an expired VoIP notification must be reported to CallKit. End it
       // immediately and never queue an answer or access protected account data.
       let id = UUID(uuidString: data["callId"] as? String ?? "") ?? UUID()
       let update = CXCallUpdate()
       update.remoteHandle = CXHandle(type: .generic, value: "TLink")
-      provider.reportNewIncomingCall(with: id, update: update) { _ in
+      provider.reportNewIncomingCall(with: id, update: update) { error in
+        self.recordDiagnostic(error == nil ? .callReported : .callReportFailed, error: error)
         self.provider.reportCall(with: id, endedAt: Date(), reason: .remoteEnded)
         completion()
       }
@@ -166,11 +270,15 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     if calls[call.uuid] != nil {
       // Every PushKit delivery is reported, including a duplicate UUID. The
       // system rejects duplicate presentation; do not queue a second answer.
-      provider.reportNewIncomingCall(with: call.uuid, update: update) { _ in completion() }
+      provider.reportNewIncomingCall(with: call.uuid, update: update) { error in
+        self.recordDiagnostic(error == nil ? .duplicateReported : .duplicateReportFailed, error: error)
+        completion()
+      }
       return
     }
     calls[call.uuid] = call
     provider.reportNewIncomingCall(with: call.uuid, update: update) { error in
+      self.recordDiagnostic(error == nil ? .callReported : .callReportFailed, error: error)
       if error != nil { self.calls.removeValue(forKey: call.uuid) }
       else {
         self.enqueue("incoming", call)
@@ -360,6 +468,7 @@ public final class TLinkCallsModule: Module {
     }
     AsyncFunction("configure") { (enabled: Bool, preserveActiveCalls: Bool) in TLinkCallCoordinator.shared.configure(enabled, preserveActiveCalls: preserveActiveCalls) }.runOnQueue(.main)
     AsyncFunction("registration") { ["voipPushToken": TLinkCallCoordinator.shared.token, "nativeCallCapable": true] as [String: Any] }.runOnQueue(.main)
+    AsyncFunction("diagnostics") { TLinkCallCoordinator.shared.diagnostics() }.runOnQueue(.main)
     AsyncFunction("drainEvents") { TLinkCallCoordinator.shared.drain() }.runOnQueue(.main)
     AsyncFunction("acknowledgeEvents") { (ids: [String]) in TLinkCallCoordinator.shared.acknowledge(ids) }.runOnQueue(.main)
     AsyncFunction("incoming") { (call: [String: Any]) in try TLinkCallCoordinator.shared.incoming(call) }.runOnQueue(.main)

@@ -125,6 +125,37 @@ test('Apple token retirement is explicit, configuration errors do not erase regi
  assert.equal(await provider.sendTradeApns('https://evil.test',payload,auth,async()=>assert.fail('invalid token sent')),'failed');
 });
 
+test('APNs response diagnostics retain only validated Apple request IDs and safe route metadata',async t=>{
+ const diagnostics=t.mock.method(console,'info',()=>{});
+ const warnings=t.mock.method(console,'warn',()=>{});
+ const appleToken='ab'.repeat(32),auth={token:'private-provider-authorization',expiresAt:Date.now()+3600000,environment:'production'};
+ const named={...payload,callerName:'Private caller',answerToken:`v1.c3ludGhldGlj.${'a'.repeat(64)}`};
+ const uuid='AABBCCDD-1122-3344-5566-778899AABBCC';
+ const scenarios=[
+  {status:200,options:{voip:true},environment:'production',route:'apns_voip',header:uuid,outcome:'accepted'},
+  {status:403,options:{voip:true},environment:'sandbox',route:'apns_voip',header:uuid.toLowerCase(),outcome:'failed'},
+  {status:200,options:{},environment:'production',route:'apns_alert',header:undefined,outcome:'accepted'},
+  {status:200,options:{ended:true},environment:'production',route:'apns_background',header:'private-header-token',outcome:'accepted'},
+  {status:400,options:{voip:true},environment:'production',route:'apns_voip',header:`${uuid}-private-suffix`,outcome:'failed'},
+ ];
+ for(const scenario of scenarios){
+  const before=diagnostics.mock.calls.length;
+  assert.equal(await provider.sendTradeApns(appleToken,named,{...auth,environment:scenario.environment},async()=>new Response(
+   scenario.status===200?null:JSON.stringify({reason:'private-provider-body'}),
+   {status:scenario.status,headers:scenario.header===undefined?{}:{'apns-id':scenario.header}}),scenario.options),scenario.outcome);
+  assert.equal(diagnostics.mock.calls.length,before+1);
+  assert.deepEqual(diagnostics.mock.calls[before].arguments,['tlink_apns_response',{
+   route:scenario.route,environment:scenario.environment,status:scenario.status,
+   ...([uuid,uuid.toLowerCase()].includes(scenario.header)?{apnsId:uuid.toLowerCase()}:{}),
+  }]);
+ }
+ const logged=JSON.stringify([...diagnostics.mock.calls,...warnings.mock.calls].map(call=>call.arguments));
+ for(const secret of [appleToken,auth.token,named.callerName,named.answerToken,'private-header-token','private-suffix','private-provider-body',payload.id,payload.threadId])assert.ok(!logged.includes(secret),secret);
+ const before=diagnostics.mock.calls.length;
+ assert.equal(await provider.sendTradeApns(appleToken,named,auth,async()=>{throw new Error('private-transport-error');},{voip:true}),'failed');
+ assert.equal(diagnostics.mock.calls.length,before,'no APNs response is invented for a network failure');
+});
+
 test('native-capable call delivery uses VoIP or data only; call cancellation never sends a new ringing alert',async()=>{
  const appleToken='ab'.repeat(32),auth={token:'synthetic',expiresAt:Date.now()+3600000,environment:'production'};
  for(const ended of [false,true]){

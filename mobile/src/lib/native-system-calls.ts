@@ -18,9 +18,28 @@ export type AndroidCallNotificationStatus = {
   fullScreenAllowed: boolean;
 };
 export type AndroidCallSettingsTarget = 'app' | 'channel' | 'fullScreen';
+const diagnosticStages = ['native_start', 'configuration_changed', 'push_received', 'push_rejected',
+  'call_reported', 'call_report_failed', 'duplicate_reported', 'duplicate_report_failed'] as const;
+const diagnosticRejections = ['disabled', 'invalid_call_id', 'invalid_thread_id', 'invalid_mode', 'invalid_expiry', 'expired'] as const;
+const diagnosticAppStates = ['active', 'inactive', 'background', 'unknown'] as const;
+const diagnosticErrorDomains = ['callkit_incoming', 'other'] as const;
+export type NativeCallDiagnostic = {
+  timestamp: string;
+  stage: typeof diagnosticStages[number];
+  localEnabled: boolean;
+  appState: typeof diagnosticAppStates[number];
+  managedCallCount: number;
+  managedConnectedCount: number;
+  systemCallCount: number;
+  systemConnectedCount: number;
+  rejectionReason?: typeof diagnosticRejections[number];
+  errorDomain?: typeof diagnosticErrorDomains[number];
+  errorCode?: number;
+};
 type NativeCallsModule = {
   configure: (enabled: boolean, preserveActiveCalls: boolean) => Promise<void>;
   registration: () => Promise<{ voipPushToken: string; nativeCallCapable: boolean }>;
+  diagnostics?: () => Promise<unknown>;
   drainEvents: () => Promise<SystemCallEvent[]>;
   acknowledgeEvents?: (ids: string[]) => Promise<void>;
   incoming: (call: SystemCall) => Promise<void>;
@@ -36,6 +55,60 @@ type NativeCallsModule = {
 };
 const native = requireOptionalNativeModule<NativeCallsModule>('TLinkCalls');
 export const nativeSystemCallsAvailable = Boolean(native);
+
+function diagnosticChoice<T extends string>(value: unknown, choices: readonly T[]): T | undefined {
+  return choices.find(choice => choice === value);
+}
+function diagnosticRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+function diagnosticCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 32;
+}
+/** Optional and read-only: older binaries and Android have no iOS snapshot. */
+export async function getNativeCallDiagnostics(): Promise<NativeCallDiagnostic[]> {
+  if (!native?.diagnostics) return [];
+  let snapshot: unknown;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    snapshot = await Promise.race([
+      native.diagnostics(),
+      new Promise<undefined>(resolve => { timeout = setTimeout(() => resolve(undefined), 250); }),
+    ]);
+  } catch { return []; }
+  finally { if (timeout !== undefined) clearTimeout(timeout); }
+  if (!Array.isArray(snapshot)) return [];
+  const now = Date.now();
+  const events: NativeCallDiagnostic[] = [];
+  for (const entry of snapshot.slice(-12)) {
+    if (!diagnosticRecord(entry) || typeof entry.timestamp !== 'string' || entry.timestamp.length > 40
+      || typeof entry.localEnabled !== 'boolean') continue;
+    const at = Date.parse(entry.timestamp);
+    const stage = diagnosticChoice(entry.stage, diagnosticStages);
+    const appState = diagnosticChoice(entry.appState, diagnosticAppStates);
+    if (!stage || !appState || !Number.isFinite(at) || at > now || now - at > 24 * 60 * 60 * 1000
+      || !diagnosticCount(entry.managedCallCount) || !diagnosticCount(entry.managedConnectedCount)
+      || !diagnosticCount(entry.systemCallCount) || !diagnosticCount(entry.systemConnectedCount)
+      || entry.managedConnectedCount > entry.managedCallCount || entry.systemConnectedCount > entry.systemCallCount) continue;
+    const rejectionReason = diagnosticChoice(entry.rejectionReason, diagnosticRejections);
+    const errorDomain = diagnosticChoice(entry.errorDomain, diagnosticErrorDomains);
+    const failure = stage === 'call_report_failed' || stage === 'duplicate_report_failed';
+    if (stage === 'push_rejected' && !rejectionReason) continue;
+    if (failure && (!errorDomain || typeof entry.errorCode !== 'number'
+      || !Number.isInteger(entry.errorCode) || entry.errorCode < -1 || entry.errorCode > 100)) continue;
+    // Construct the result explicitly. Native payloads and unknown properties
+    // must never be copied into a device registration or a diagnostic log.
+    const event: NativeCallDiagnostic = {
+      timestamp: new Date(at).toISOString(), stage, localEnabled: entry.localEnabled, appState,
+      managedCallCount: entry.managedCallCount, managedConnectedCount: entry.managedConnectedCount,
+      systemCallCount: entry.systemCallCount, systemConnectedCount: entry.systemConnectedCount,
+    };
+    if (stage === 'push_rejected') event.rejectionReason = rejectionReason;
+    if (failure && typeof entry.errorCode === 'number') { event.errorDomain = errorDomain; event.errorCode = entry.errorCode; }
+    events.push(event);
+  }
+  return events;
+}
 
 // Optional Android methods keep earlier binaries and iOS compatible. Reading
 // settings must never enable calls or request notification permission.

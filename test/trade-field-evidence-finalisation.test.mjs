@@ -9,6 +9,7 @@ import * as boundedJsonRequest from "../src/lib/bounded-json-request.ts";
 import { verifyJpegExif } from "../src/lib/jpeg-exif-verifier.ts";
 import { normaliseDeviceListQuery } from "../src/lib/trade-mobile-device-list-policy.mjs";
 import { nativePushRegistration } from "../src/lib/trade-push.ts";
+import * as nativeCallDiagnostics from "../src/lib/trade-native-call-diagnostics.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const mediaRouteSource = read("../src/app/api/trade-team/media/route.ts");
@@ -586,6 +587,7 @@ function deviceRouteHarness(database, storage, options = {}) {
     },
     "@/lib/trade-mobile-device-revocation": deviceRevocation,
     "@/lib/trade-push": { nativePushRegistration },
+    "@/lib/trade-native-call-diagnostics": nativeCallDiagnostics,
     "@/lib/trade-mobile-device-list-policy.mjs": {
       normaliseDeviceListQuery,
     },

@@ -65,6 +65,12 @@ export async function sendTradeApns(token: string, payload: TradePushPayload, au
         category: call ? 'team-calls' : 'team-messages' },
         type: ended ? 'team_call_ended' : call ? 'team_call' : 'team_message', threadId, eventId: id, expiresAt: payload.expiresAt,
         ...(call ? { callId: id, ...(callerName ? { callerName } : {}), ...(answerToken ? { answerToken } : {}), mode: payload.body === 'Incoming team video call' ? 'video' : 'audio', hasVideo: payload.body === 'Incoming team video call' } : {}) }) });
+    const responseId = response.headers.get('apns-id') || '';
+    const apnsId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(responseId) ? responseId.toLowerCase() : '';
+    // Apple's request ID supports delivery investigation without logging a
+    // recipient, device token, call credential or notification payload.
+    console.info('tlink_apns_response', { route: ended ? 'apns_background' : voip ? 'apns_voip' : 'apns_alert',
+      environment: authorization.environment, status: response.status, ...(apnsId ? { apnsId } : {}) });
     if (response.status >= 300 && response.status < 400) { await response.body?.cancel(); return 'failed'; }
     if (response.status === 200) { await response.body?.cancel(); return 'accepted'; }
     const result: unknown = await response.json();

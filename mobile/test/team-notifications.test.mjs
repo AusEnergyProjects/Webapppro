@@ -16,7 +16,7 @@ function loadModule(file, dependencies) {
   return exports;
 }
 
-function deviceHarness({ permission = { granted: true, canAskAgain: true }, muted = false, tokenError = false, permissionError = false } = {}) {
+function deviceHarness({ permission = { granted: true, canAskAgain: true }, muted = false, tokenError = false, permissionError = false, platform = 'android', diagnostics = [] } = {}) {
   const store = new Map([['aea-field-native-push-token-v1', 'old-token'], ['aea-field-device-id-v1', 'device-test-123']]);
   if (muted) store.set('aea-field-notifications-muted-v1', 'true');
   const calls = { requests: 0, tokens: 0, channels: [], categories: [], nativeConfigure: [], nativeDisable: [] };
@@ -35,9 +35,9 @@ function deviceHarness({ permission = { granted: true, canAskAgain: true }, mute
       setItemAsync: async (key, value) => { store.set(key, value); },
       deleteItemAsync: async (key) => { store.delete(key); },
     },
-    'react-native': { Platform: { OS: 'android' } },
-    '@/lib/native-system-calls': {disableNativeCalls:async preserveActiveCalls=>{calls.nativeDisable.push(preserveActiveCalls);},getNativeCallRegistration:async(configure)=>{calls.nativeConfigure.push(configure);return {voipPushToken:'',nativeCallCapable:true};}},
-    '@/lib/config': { APP_VERSION: '1.0.1', MOBILE_PLATFORM: 'android' },
+    'react-native': { Platform: { OS: platform } },
+    '@/lib/native-system-calls': {disableNativeCalls:async preserveActiveCalls=>{calls.nativeDisable.push(preserveActiveCalls);},getNativeCallRegistration:async(configure)=>{calls.nativeConfigure.push(configure);return {voipPushToken:'',nativeCallCapable:true};},getNativeCallDiagnostics:async()=>diagnostics},
+    '@/lib/config': { APP_VERSION: '1.0.1', MOBILE_PLATFORM: platform },
   });
   return { api, calls, store };
 }
@@ -97,6 +97,22 @@ test('token callbacks can persist full registration without registering for push
  const muted=await h.api.deviceRegistration({pushToken:'rotated-token',refreshNativeCalls:false});
  assert.equal(muted.pushToken,'');assert.equal(muted.voipPushToken,'');assert.equal(muted.nativeCallCapable,false);
  assert.deepEqual(h.calls.nativeDisable,[true,true], 'both mute and late registration cleanup preserve the active call');
+});
+
+test('iOS registration carries native diagnostic evidence without changing notification eligibility', async () => {
+  const diagnostics = [{ timestamp: new Date().toISOString(), stage: 'push_received', localEnabled: true }];
+  const ios = deviceHarness({ platform: 'ios', diagnostics });
+  const active = await ios.api.deviceRegistration({ pushToken: 'rotated-token', refreshNativeCalls: false });
+  assert.deepEqual(active.nativeCallDiagnostics, diagnostics);
+  assert.equal(active.pushToken, 'rotated-token');
+  assert.equal(active.nativeCallCapable, true);
+  await ios.api.setNotificationsMuted(true);
+  const muted = await ios.api.deviceRegistration({ pushToken: 'rotated-token', refreshNativeCalls: false });
+  assert.deepEqual(muted.nativeCallDiagnostics, diagnostics);
+  assert.equal(muted.pushToken, '');
+  assert.equal(muted.nativeCallCapable, false);
+  const android = await deviceHarness({ diagnostics }).api.deviceRegistration({ pushToken: 'rotated-token' });
+  assert.equal('nativeCallDiagnostics' in android, false);
 });
 
 test('foreground alerts respect mute and expiry; notification actions route only to validated conversations',async()=>{

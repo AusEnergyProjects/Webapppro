@@ -6,7 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
-import { disableNativeCalls, getNativeCallRegistration } from '@/lib/native-system-calls';
+import { disableNativeCalls, getNativeCallDiagnostics, getNativeCallRegistration } from '@/lib/native-system-calls';
 
 const DEVICE_ID_KEY = 'aea-field-device-id-v1';
 const PUSH_TOKEN_KEY = 'aea-field-native-push-token-v1';
@@ -143,5 +143,6 @@ export async function deviceRegistration(options: { pushToken?: string; refreshN
     pushToken: push.token,
     pushProvider: push.provider,
     ...calls,
+    ...(MOBILE_PLATFORM === 'ios' ? { nativeCallDiagnostics: await getNativeCallDiagnostics() } : {}),
   };
 }

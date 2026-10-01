@@ -11,6 +11,7 @@ import {
 import { abortDeviceUploads } from "@/lib/trade-mobile-device-revocation";
 import { normaliseDeviceListQuery } from "@/lib/trade-mobile-device-list-policy.mjs";
 import { nativePushRegistration } from "@/lib/trade-push";
+import { nativeCallDiagnosticSnapshot } from "@/lib/trade-native-call-diagnostics";
 
 export const runtime = "edge";
 
@@ -140,6 +141,9 @@ export async function POST(request: Request) {
       .bind(current?.id || crypto.randomUUID(), access.ownerUid, access.actorUid, access.memberId, deviceId,
         platform, deviceName, appVersion, push.provider, push.voipToken, Number(push.nativeCallCapable), push.token, push.token ? now : "", now, now, now).run();
     if (!saved.meta.changes) throw new Error("DEVICE_REAUTHORISATION_REQUIRED");
+    const diagnostics = platform === "ios"
+      ? nativeCallDiagnosticSnapshot(body.nativeCallDiagnostics, body.appVersion, Date.parse(now)) : null;
+    if (diagnostics) console.info("tlink_native_call_diagnostics", diagnostics);
     return adminJson({ ok: true, registered: true, policy: mobileAppPolicy(platform),
       ...(await devicePayload(access.ownerUid, access.actorUid, canManageTeam(access))) }, 201);
   } catch (error) { return deviceError(error); }
