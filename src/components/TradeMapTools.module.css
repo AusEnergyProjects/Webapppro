@@ -1,5 +1,10 @@
 .tools { border-bottom: 1px solid var(--trade-line, #dbe5e2); padding: 14px 22px; }
 .toolbar { align-items: end; display: flex; flex-wrap: wrap; gap: 12px; }
+.toolSection { border-top: 1px solid var(--trade-line, #dbe5e2); margin-top: 16px; padding-top: 14px; }
+.toolSection h3 { color: var(--trade-ink, #16372f); font-size: 1rem; margin: 0 0 10px; }
+.measureHeading { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.measureHeading h3 { margin-bottom: 4px; }
+.measureHeading p { color: var(--trade-muted, #5b716a); font-size: .875rem; line-height: 1.5; margin: 0; }
 .tools label { display: grid; gap: 6px; font-size: .875rem; font-weight: 650; min-width: 0; }
 .tools input, .tools select, .tools button { background: var(--trade-field, #fff); border: 1px solid var(--trade-line, #dbe5e2); border-radius: 9px; color: var(--trade-ink, #16372f); font: inherit; font-size: .875rem; min-height: 44px; padding: 10px 12px; }
 .tools button { cursor: pointer; font-weight: 650; white-space: nowrap; }

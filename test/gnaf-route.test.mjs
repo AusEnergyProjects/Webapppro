@@ -177,9 +177,45 @@ test("maintenance body limits reject oversized bytes and JSON even with a false 
     const upload = await route.upload(adminUpload(f.part, new Uint8Array(GNAF_MAX_COMPRESSED_BYTES + 1), { headers: { "content-length": "1" } }));
     assert.equal(upload.status, 413);
     const action = await route.provision(adminPost({ action: "activate", version: VERSION, padding: "x".repeat(16 * 1024) }, { "content-length": "1" }));
-    assert.equal(action.status, 400);
+    assert.equal(action.status, 413);
   });
   assert.equal(route.bucketCalls(), 0); assert.deepEqual(f.writes, []);
+});
+
+test("maintenance distinguishes invalid incoming data from storage failures without leaking backend errors", async () => {
+  const f = await fixture();
+  await withMaintenance(async () => {
+    for (const [part, bytes] of [[f.part, new Uint8Array(20)], [f.part, gzipSync(encode({ wrong: true }))], ["manifest.json", encode({ wrong: true })]]) {
+      const response = await route.upload(adminUpload(part, bytes));
+      assert.equal(response.status, 400);
+      assert.equal(response.headers.get("X-TLink-Directory-Error"), "invalid_input");
+      assert.deepEqual(await response.json(), { ok: false, error: part === "manifest.json" ? "Invalid directory manifest." : "Invalid directory partition data.",
+        category: "invalid_input", operation: "upload", part });
+    }
+    for (const method of ["head", "put", "get"]) {
+      const original = f.bucket[method];
+      f.objects.delete(`${GNAF_PREFIX}${VERSION}/${f.part}`);
+      f.bucket[method] = async () => { throw new Error(`Private backend failure with ${TOKEN}`); };
+      try {
+        const response = method === "get" ? await route.provision(adminPost({ action: "verify", version: VERSION, offset: 0 })) : await route.upload(adminUpload(f.part, f.bytes));
+        assert.equal(response.status, 503, method);
+        assert.equal(response.headers.get("X-TLink-Directory-Error"), "backend_failure");
+        const text = await response.text();
+        assert.equal(text.includes(TOKEN), false); assert.doesNotMatch(text, /Private backend/);
+        const body = JSON.parse(text);
+        assert.equal(body.category, "backend_failure");
+        assert.equal(body.operation, method === "get" ? "verify" : "upload");
+        if (method === "get") assert.equal(body.offset, 0); else assert.equal(body.part, f.part);
+      } finally { f.bucket[method] = original; }
+    }
+    const malformedAction = await route.provision(request("/api/admin/address-directory", { body: "{", headers: { authorization: `Bearer ${TOKEN}` } }));
+    assert.equal(malformedAction.status, 400);
+    assert.equal((await malformedAction.json()).category, "invalid_input");
+    f.objects.set(`${GNAF_PREFIX}${VERSION}/manifest.json`, { bytes: encode({ corrupt: true }), metadata: {} });
+    const corruptStored = await route.provision(adminPost({ action: "verify", version: VERSION, offset: 0 }));
+    assert.equal(corruptStored.status, 503, "Previously stored corruption is a backend failure, not invalid current input");
+    assert.equal((await corruptStored.json()).category, "backend_failure");
+  });
 });
 
 test("activation cannot replace the active directory until every immutable partition is verified", async () => {

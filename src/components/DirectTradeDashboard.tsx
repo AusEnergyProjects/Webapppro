@@ -62,6 +62,7 @@ const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace"
 const TradeEmailTemplatesWorkspace = dynamic(() => import("./TradeEmailTemplatesWorkspace").then((module) => module.TradeEmailTemplatesWorkspace));
 const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then((module) => module.TradeMessagesWorkspace), { loading: () => <p role="status">Loading messages...</p> });
 const TradeNetworkWorkspace = dynamic(() => import("./TradeNetworkWorkspace").then((module) => module.TradeNetworkWorkspace), { loading: () => <p role="status">Loading trade network...</p> });
+const TradeDesignWorkspace = dynamic(() => import("./TradeRoofDesignMap").then((module) => module.TradeDesignWorkspace), { ssr: false, loading: () => <p role="status">Loading solar and measurement tools...</p> });
 const InstallerPlatformQuote = dynamic(() => import("./InstallerPlatformQuote").then((module) => module.InstallerPlatformQuote));
 const InstallerArrivalWindows = dynamic(() => import("./InstallerArrivalWindows").then((module) => module.InstallerArrivalWindows));
 const TradePurchasingWorkspace = dynamic(() => import("./TradePurchasingWorkspace").then((module) => module.TradePurchasingWorkspace));
@@ -237,10 +238,11 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "map" | "network" | "messages" | "email-templates" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "map" | "design" | "network" | "messages" | "email-templates" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "map",
+  "design",
   "network",
   "email-templates",
   "messages",
@@ -1328,7 +1330,7 @@ function DirectTradeDashboardContent() {
   }, [fetch, user]);
 
   useEffect(() => {
-    if (profile?.partnerType === "supplier" && (workspace === "calculator" || workspace === "map")) {
+    if (profile?.partnerType === "supplier" && (workspace === "calculator" || workspace === "map" || workspace === "design")) {
       setWorkspace("work");
     }
   }, [profile?.partnerType, workspace, setWorkspace]);
@@ -2425,7 +2427,7 @@ function DirectTradeDashboardContent() {
             </div>
           </header>
 
-          {workspace !== "map" && workspace !== "network" && workspace !== "email-templates" && workspace !== "messages" && <div className="trade-portal-intro">
+          {workspace !== "map" && workspace !== "design" && workspace !== "network" && workspace !== "email-templates" && workspace !== "messages" && <div className="trade-portal-intro">
             <span>{isSupplier ? "Wholesale operations" : "Business operations"}</span>
             <h1>{isSupplier ? "Products, orders and supply in one place" : "Your workday, without the clutter"}</h1>
             <p>
@@ -2485,7 +2487,10 @@ function DirectTradeDashboardContent() {
               >
                 <button type="button" aria-current={workspace === "map" ? "page" : undefined} className={workspace === "map" ? "active" : ""} onClick={() => {
                   setWorkspace("map", () => { setCommandTarget(null); setMapNavigationNonce((current) => current + 1); });
-                }}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span><small>Measure roofs and design systems</small></button>
+                }}><TLinkNavigationIcon name="map" /><span>Customer &amp; job map</span><small>Map locations and find nearby work</small></button>
+                <button type="button" aria-current={workspace === "design" ? "page" : undefined} className={workspace === "design" ? "active" : ""} onClick={() => {
+                  setWorkspace("design", () => setCommandTarget(null));
+                }}><TLinkNavigationIcon name="design" /><span>Solar &amp; measurements</span><small>Solar drafts, saved designs and insulation</small></button>
                 <button type="button" aria-current={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView !== "schedule" && activeWorkView !== "leads" ? "active" : ""} onClick={() => {
                   setWorkspace("work", () => {
                     setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
@@ -2522,6 +2527,8 @@ function DirectTradeDashboardContent() {
 
               {workspace === "email-templates" && <TradeEmailTemplatesWorkspace user={user} />}
               {workspace === "messages" && <TradeMessagesWorkspace user={user} initialThreadId={messageTarget.id} initialThreadRevision={messageTarget.revision} onOpenAutomations={() => setWorkspace("email-templates")} onOpenQuote={workOrderId => { void setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() })); }} onOpenIntegrations={() => setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() }))} />}
+
+              {workspace === "design" && (hasBusinessOperations ? <TradeDesignWorkspace user={user} onRegisterMapSave={registerMapSave} onOpenMap={() => setWorkspace("map", () => { setCommandTarget(null); setMapNavigationNonce(current => current + 1); })} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to open solar designs and measurement tools.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
               {(workspace === "work" || workspace === "map") && <TradeBusinessHub
                 key={`${user.uid}:${workspace}:${workspace === "map" ? mapNavigationNonce : 0}`}

@@ -29,7 +29,7 @@ function fixture(t, count = 5) {
     manifest.shards[part] = { sha256: sha256(bytes), bytes: bytes.length, decodedBytes: decoded.length, entries: 1 };
   }
   writeFileSync(join(directory, "manifest.json"), encode(manifest));
-  const logs = [], calls = [], stored = new Map();
+  const logs = [], calls = [], waits = [], stored = new Map();
   let active = 0, maximumActive = 0, hook;
   async function request(url, options) {
     assert.equal(url.origin, ORIGIN); assert.equal(url.pathname, "/api/admin/address-directory");
@@ -60,18 +60,18 @@ function fixture(t, count = 5) {
       return reply({ ok: true, version: manifest.version, records: manifest.recordCount, partitions: Object.keys(manifest.shards).length });
     } finally { active--; }
   }
-  return { directory, manifest, logs, calls, stored, options: { origin: ORIGIN, directory, version: manifest.version, token: TOKEN },
-    dependencies: { request, log: value => logs.push(value) }, setHook(value) { hook = value; }, maximumActive: () => maximumActive };
+  return { directory, manifest, logs, calls, waits, stored, options: { origin: ORIGIN, directory, version: manifest.version, token: TOKEN },
+    dependencies: { request, log: value => logs.push(value), wait: async milliseconds => { waits.push(milliseconds); } }, setHook(value) { hook = value; }, maximumActive: () => maximumActive };
 }
 
-test("uploads four verified partitions concurrently, then the manifest, verification and activation", async t => {
-  const f = fixture(t), result = await uploadGnafDirectory(f.options, f.dependencies);
-  assert.equal(f.maximumActive(), 4);
-  assert.equal(result.stage, "active"); assert.equal(result.records, 5); assert.equal(result.partitions, 5);
+test("uploads at most sixteen verified partitions concurrently, then the manifest, verification and activation", async t => {
+  const f = fixture(t, 17), result = await uploadGnafDirectory(f.options, f.dependencies);
+  assert.equal(f.maximumActive(), 16);
+  assert.equal(result.stage, "active"); assert.equal(result.records, 17); assert.equal(result.partitions, 17);
   assert.deepEqual(f.calls.slice(-3).map(call => call.part || call.action), ["manifest.json", "verify", "activate"]);
   assert.equal(f.calls.slice(0, -3).every(call => call.method === "PUT" && call.part !== "manifest.json"), true);
   const journal = readFileSync(result.journalPath, "utf8"), saved = JSON.parse(journal);
-  assert.equal(saved.stage, "active"); assert.equal(Object.keys(saved.uploaded).length, 5);
+  assert.equal(saved.stage, "active"); assert.equal(Object.keys(saved.uploaded).length, 17);
   assert.equal(saved.origin, ORIGIN); assert.equal(saved.version, "aug2026");
   assert.equal(saved.manifestSha256, sha256(readFileSync(join(f.directory, "manifest.json"))));
   assert.equal(JSON.stringify(f.logs).includes(TOKEN), false); assert.equal(journal.includes(TOKEN), false);
@@ -82,6 +82,9 @@ test("an interrupted upload keeps acknowledged hashes and resumes only missing p
   const f = fixture(t, 4), failed = Object.keys(f.manifest.shards).sort()[3];
   f.setHook(({ part }) => part === failed ? reply({ ok: false, token: TOKEN }, 503) : null);
   await assert.rejects(uploadGnafDirectory(f.options, f.dependencies), /HTTP 503/);
+  assert.equal(f.calls.filter(call => call.part === failed).length, 2, "A failed idempotent PUT is retried once only");
+  assert.deepEqual(f.waits, [1000]);
+  assert.deepEqual(f.logs.find(log => log.stage === "request_failed"), { stage: "request_failed", operation: "upload", part: failed, category: "backend_failure", status: 503 });
   assert.equal(f.calls.some(call => call.part === "manifest.json" || call.action === "activate"), false);
   const journalFile = readdirSync(f.directory).find(name => name.startsWith(".upload-"));
   const journal = JSON.parse(readFileSync(join(f.directory, journalFile), "utf8"));
@@ -90,6 +93,52 @@ test("an interrupted upload keeps acknowledged hashes and resumes only missing p
   await uploadGnafDirectory(f.options, f.dependencies);
   assert.deepEqual(f.calls.slice(start).filter(call => call.method === "PUT").map(call => call.part), [failed, "manifest.json"]);
   assert.equal(f.logs.findLast(log => log.stage === "starting").resumed, 3);
+});
+
+test("one logged idempotent PUT retry can recover a temporary storage failure", async t => {
+  const f = fixture(t, 1), part = Object.keys(f.manifest.shards)[0];
+  let failed = false;
+  f.setHook(({ part: incoming }) => {
+    if (incoming !== part || failed) return null;
+    failed = true;
+    return new Response(TOKEN, { status: 503, headers: { "X-TLink-Directory-Error": "backend_failure" } });
+  });
+  const result = await uploadGnafDirectory(f.options, f.dependencies);
+  assert.equal(result.stage, "active");
+  assert.equal(f.calls.filter(call => call.part === part).length, 2);
+  assert.deepEqual(f.waits, [1000]);
+  assert.deepEqual(f.logs.find(log => log.stage === "request_retry"), { stage: "request_retry", operation: "upload", part,
+    category: "backend_failure", status: 503, nextAttempt: 2 });
+  assert.equal(JSON.stringify(f.logs).includes(TOKEN), false);
+});
+
+test("validation, auth and conflict responses never retry and preserve safe partition diagnostics", async t => {
+  const categories = new Map([[400, "invalid_input"], [401, "unauthorised"], [403, "unauthorised"], [409, "conflict"], [413, "payload_too_large"]]);
+  for (const [status, category] of categories) {
+    const f = fixture(t, 1), part = Object.keys(f.manifest.shards)[0];
+    f.setHook(() => new Response(TOKEN, { status, headers: { "X-TLink-Directory-Error": TOKEN } }));
+    await assert.rejects(uploadGnafDirectory(f.options, f.dependencies), error => {
+      assert.ok(error.message.includes(part)); assert.ok(error.message.includes(`HTTP ${status}`));
+      assert.ok(error.message.includes(category)); assert.equal(error.message.includes(TOKEN), false); return true;
+    });
+    assert.equal(f.calls.length, 1); assert.deepEqual(f.waits, []);
+    assert.deepEqual(f.logs.find(log => log.stage === "request_failed"), { stage: "request_failed", operation: "upload", part, category, status });
+  }
+});
+
+test("verification and activation failures report their stage without automatic POST retries", async t => {
+  for (const action of ["verify", "activate"]) {
+    const f = fixture(t, 1);
+    f.setHook(({ body }) => body?.action === action ? new Response(TOKEN, { status: 503 }) : null);
+    await assert.rejects(uploadGnafDirectory(f.options, f.dependencies), error => {
+      assert.match(error.message, /HTTP 503/); assert.ok(error.message.includes(action)); assert.equal(error.message.includes(TOKEN), false); return true;
+    });
+    assert.equal(f.calls.filter(call => call.action === action).length, 1); assert.deepEqual(f.waits, []);
+    const failure = f.logs.find(log => log.stage === "request_failed");
+    assert.equal(failure.operation, action); assert.equal(failure.status, 503);
+    if (action === "verify") { assert.equal(failure.offset, 0); assert.equal(f.calls.some(call => call.action === "activate"), false); }
+    assert.equal(JSON.stringify(f.logs).includes(TOKEN), false);
+  }
 });
 
 test("a completed retry is idempotent and still verifies every server partition", async t => {
@@ -117,6 +166,7 @@ test("transport failures and provider error bodies never disclose the maintenanc
   await assert.rejects(uploadGnafDirectory(f.options, f.dependencies), error => {
     assert.match(error.message, /connection failed/); assert.equal(error.message.includes(TOKEN), false); return true;
   });
+  assert.equal(f.calls.length, 1); assert.deepEqual(f.waits, [], "Unknown transport failures require inspection, not automatic replay");
   f.setHook(() => new Response(`Provider echoed ${TOKEN}`, { status: 401 }));
   await assert.rejects(uploadGnafDirectory(f.options, f.dependencies), error => {
     assert.match(error.message, /HTTP 401/); assert.equal(error.message.includes(TOKEN), false); return true;

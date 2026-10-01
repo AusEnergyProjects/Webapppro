@@ -102,7 +102,7 @@ export function TradeMapTools({ user, onRegisterMapSave, context, linkedDesign, 
       addressPin.current = marker;
       map.setCenter(result.position);
       map.setZoom(imageryZoom ?? 20);
-      setAddressMessage(result.approximate ? "Approximate location. Check the building before measuring." : "Address located. Choose Satellite, then Measure to trace the roof.");
+      setAddressMessage(result.approximate ? "Approximate location. Check the building before measuring." : "Address located. Add solar panels or choose Measure area to trace an insulation area.");
     } else if (result.status === "error") {
       setAddressMessage(result.reason === "quota" ? "Address lookup has reached its limit. Try again later." : "Address lookup is unavailable. Try again shortly.");
     } else {
@@ -142,15 +142,19 @@ export function TradeMapTools({ user, onRegisterMapSave, context, linkedDesign, 
         <button type="submit" disabled={searching || capturing}>{searching ? "Finding…" : "Find address"}</button>
       </form>
       <label className={styles.view}><span>View</span><select disabled={capturing} value={view} onChange={(event) => { onExplore(); setView(event.target.value); }} aria-label="Map view">{VIEWS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <button type="button" disabled={searching || capturing} aria-pressed={Boolean(mode)} onClick={() => {
-        if (mode) setMode(null);
-        else { setView("satellite"); startMeasure("area"); }
-      }}>Measure</button>
     </div>
+    {addressMessage && <p className={styles.addressMessage} role="status">{addressMessage}</p>}
+    <section className={styles.toolSection} aria-label="Solar designs">
+    <h3>Solar designs</h3>
     <TradeMapSolarTools user={user} onRegisterMapSave={onRegisterMapSave} context={locatedAddress ? { title: locatedAddress, customerId: "", workOrderId: "" } : context} linkedDesign={linkedDesign} api={api} map={map} active={solarEditing} disabled={searching || capturing} onCapturing={(value) => { setCapturing(value); drawing.current?.setCapturing(value); }} onQuote={onQuote} onActivate={() => {
       onExplore(); setMode(null); setSolarEditing(true); setView("satellite");
     }} onClose={() => setSolarEditing(false)} />
-    {addressMessage && <p className={styles.addressMessage} role="status">{addressMessage}</p>}
+    </section>
+    <section className={styles.toolSection} aria-label="Insulation measurements">
+    <div className={styles.measureHeading}><div><h3>Insulation measurements</h3><p>Trace an area in m² or measure a distance, then add it to your quote.</p></div><button type="button" disabled={searching || capturing} aria-pressed={Boolean(mode)} onClick={() => {
+      if (mode) setMode(null);
+      else { setView("satellite"); startMeasure("area"); }
+    }}>Measure area</button></div>
     {mode && <div className={styles.measurement} aria-label="Map measurement">
       <div className={styles.measurementTop}>
         <div className={styles.modes} role="group" aria-label="Measurement type">
@@ -176,5 +180,6 @@ export function TradeMapTools({ user, onRegisterMapSave, context, linkedDesign, 
       <p className={styles.note}>Approximate {mode === "area" ? "flat area" : "map distance"} only. Roof pitch, overhangs and image accuracy can affect actual measurements. Add to quote includes this map image.</p>
       {captureMessage && <p className={styles.note} role="status">{captureMessage}</p>}
     </div>}
+    </section>
   </div>;
 }

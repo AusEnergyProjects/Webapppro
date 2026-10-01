@@ -60,12 +60,17 @@ export async function uploadGnafPart(bucket: GnafProvisionBucket, version: strin
   const prefix = versionPrefix(version), sha256 = await gnafSha256(bytes);
   let metadata: Record<string, string> = { sha256, version };
   if (part === "manifest.json") {
-    const manifest = parseGnafManifest(bytes);
+    let manifest;
+    try { manifest = parseGnafManifest(bytes); }
+    catch { throw new GnafProvisionError("Invalid directory manifest."); }
     if (manifest.version !== version) throw new GnafProvisionError("Manifest version differs.");
     metadata = { ...metadata, attribution: manifest.attribution };
   } else {
     if (!/^\d{4}\/[0-3]\.json\.gz$/.test(part) || bytes.length > GNAF_MAX_COMPRESSED_BYTES) throw new GnafProvisionError("Invalid directory partition.");
-    const { shard, decodedBytes } = parseGnafShard(bytes, version, part);
+    let parsed;
+    try { parsed = parseGnafShard(bytes, version, part); }
+    catch { throw new GnafProvisionError("Invalid directory partition data."); }
+    const { shard, decodedBytes } = parsed;
     metadata = { ...metadata, decodedBytes: String(decodedBytes), entries: String(Object.keys(shard.entries).length) };
   }
   await immutablePut(bucket, `${prefix}${part}`, bytes, metadata);

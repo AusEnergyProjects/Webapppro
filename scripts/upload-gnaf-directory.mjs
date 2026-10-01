@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import { GNAF_MAX_MANIFEST_BYTES, parseGnafManifest, parseGnafShard } from "../src/lib/gnaf-directory.ts";
 
 const ORIGINS = new Set(["https://ausenergyassessments.com", "https://aea-energy-comparison.info294029.chatgpt.site"]);
@@ -9,6 +10,7 @@ const REPOSITORY = realpathSync(fileURLToPath(new URL("../", import.meta.url)));
 const VERIFY_BATCH = 250;
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
+const SERVER_ERROR_CATEGORIES = new Set(["invalid_input", "unauthorised", "conflict", "payload_too_large", "backend_failure"]);
 
 function within(parent, path) {
   const location = relative(parent, path);
@@ -55,7 +57,7 @@ async function smallJson(response) {
 }
 
 /** Local data stays outside Git; the journal contains only acknowledged partition hashes. */
-export async function uploadGnafDirectory(input, { request = fetch, log = value => process.stdout.write(`${JSON.stringify(value)}\n`) } = {}) {
+export async function uploadGnafDirectory(input, { request = fetch, log = value => process.stdout.write(`${JSON.stringify(value)}\n`), wait = delay } = {}) {
   const options = uploadOptions(input);
   const manifestPath = localFile(options.directory, "manifest.json");
   if (statSync(manifestPath).size > GNAF_MAX_MANIFEST_BYTES) throw new Error("Local manifest exceeds the size limit.");
@@ -84,21 +86,41 @@ export async function uploadGnafDirectory(input, { request = fetch, log = value 
       renameSync(temporary, journalPath);
     } finally { if (existsSync(temporary)) unlinkSync(temporary); }
   }
-  async function call(method, parameters, body) {
+  function requestFailure(context, category, status, message) {
+    log({ stage: "request_failed", ...context, category, status });
+    const location = context.part || (context.offset !== undefined ? `offset ${context.offset}` : "directory");
+    return new Error(`${message} (${context.operation}: ${location}; ${category}${status === null ? "" : `; HTTP ${status}`}). Saved progress is retained.`);
+  }
+  async function call(method, parameters, body, context) {
     const url = new URL("/api/admin/address-directory", options.origin);
     for (const [key, value] of Object.entries(parameters)) url.searchParams.set(key, value);
-    let response;
-    try {
-      response = await request(url, { method, redirect: "error", signal: AbortSignal.timeout(60_000),
-        headers: { Authorization: `Bearer ${options.token}`, "Content-Type": method === "PUT" ? "application/octet-stream" : "application/json" }, body });
-    } catch { throw new Error("Directory upload connection failed. Rerun with the same directory and version to resume."); }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error(`Directory ${method === "PUT" ? "upload" : "verification"} failed (HTTP ${response.status}). Saved progress is retained.`);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      let response;
+      try {
+        response = await request(url, { method, redirect: "error", signal: AbortSignal.timeout(60_000),
+          headers: { Authorization: `Bearer ${options.token}`, "Content-Type": method === "PUT" ? "application/octet-stream" : "application/json" }, body });
+      } catch {
+        throw requestFailure(context, "transport_failure", null, "Directory upload connection failed");
+      }
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        const supplied = response.headers.get("X-TLink-Directory-Error");
+        const category = SERVER_ERROR_CATEGORIES.has(supplied) ? supplied : response.status >= 500 ? "backend_failure"
+          : response.status === 401 || response.status === 403 ? "unauthorised" : response.status === 409 ? "conflict"
+            : response.status === 400 ? "invalid_input" : response.status === 413 ? "payload_too_large" : "http_failure";
+        if (method === "PUT" && response.status === 503 && attempt === 1) {
+          log({ stage: "request_retry", ...context, category, status: response.status, nextAttempt: 2 });
+          await wait(1000); continue;
+        }
+        throw requestFailure(context, category, response.status, "Directory request failed");
+      }
+      let result;
+      try { result = await smallJson(response); }
+      catch { throw requestFailure(context, "invalid_response", response.status, "Directory server returned an invalid response"); }
+      if (!object(result) || result.ok !== true) throw requestFailure(context, "invalid_response", response.status, "Directory server did not confirm the operation");
+      return result;
     }
-    const result = await smallJson(response);
-    if (!object(result) || result.ok !== true) throw new Error("Directory server did not confirm the operation.");
-    return result;
+    throw new Error("Directory request attempts exhausted.");
   }
   async function uploadPart(part) {
     const expected = manifest.shards[part], file = localFile(options.directory, part);
@@ -107,7 +129,7 @@ export async function uploadGnafDirectory(input, { request = fetch, log = value 
     if (sha256(bytes) !== expected.sha256) throw new Error(`Local partition checksum differs: ${part}`);
     const { shard, decodedBytes } = parseGnafShard(bytes, options.version, part);
     if (decodedBytes !== expected.decodedBytes || Object.keys(shard.entries).length !== expected.entries) throw new Error(`Local partition content differs: ${part}`);
-    const result = await call("PUT", { version: options.version, part }, bytes);
+    const result = await call("PUT", { version: options.version, part }, bytes, { operation: "upload", part });
     if (result.sha256 !== expected.sha256 || result.bytes !== expected.bytes) throw new Error(`Directory server did not confirm the partition checksum: ${part}`);
     completed.add(part);
     if (completed.size % 32 === 0) { checkpoint("uploading"); log({ stage: "uploading", uploaded: completed.size, total: parts.length }); }
@@ -122,19 +144,19 @@ export async function uploadGnafDirectory(input, { request = fetch, log = value 
       catch (error) { failure ??= error; }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(4, pending.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(16, pending.length) }, worker));
   checkpoint(failure ? "paused" : "uploaded");
   if (failure) throw failure;
-  const uploadedManifest = await call("PUT", { version: options.version, part: "manifest.json" }, manifestBytes);
+  const uploadedManifest = await call("PUT", { version: options.version, part: "manifest.json" }, manifestBytes, { operation: "upload_manifest", part: "manifest.json" });
   if (uploadedManifest.sha256 !== manifestSha256 || uploadedManifest.bytes !== manifestBytes.length) throw new Error("Directory server did not confirm the manifest checksum.");
   for (let offset = 0; offset < parts.length; offset += VERIFY_BATCH) {
-    const result = await call("POST", {}, JSON.stringify({ action: "verify", version: options.version, offset }));
+    const result = await call("POST", {}, JSON.stringify({ action: "verify", version: options.version, offset }), { operation: "verify", offset });
     const verified = Math.min(offset + VERIFY_BATCH, parts.length), nextOffset = verified < parts.length ? verified : null;
     if (result.verified !== verified || result.total !== parts.length || result.nextOffset !== nextOffset) throw new Error("Directory verification returned an unexpected partition count.");
     log({ stage: "verifying", verified, total: parts.length });
   }
   checkpoint("verified");
-  const activated = await call("POST", {}, JSON.stringify({ action: "activate", version: options.version }));
+  const activated = await call("POST", {}, JSON.stringify({ action: "activate", version: options.version }), { operation: "activate" });
   if (activated.version !== options.version || activated.records !== manifest.recordCount || activated.partitions !== parts.length) throw new Error("Directory activation was not confirmed.");
   checkpoint("active");
   const result = { stage: "active", version: options.version, records: activated.records, partitions: activated.partitions, journalPath };

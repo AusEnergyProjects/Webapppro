@@ -65,6 +65,73 @@ test("Map bookmarks select their own workspace without restoring stale Work job 
   assert.equal(helpers.dashboardCommandTargetFromSearch("?workspace=map&jobId=old-job&jobTab=quote"), null);
 });
 
+test("Solar tool bookmarks preserve the dedicated workspace and ignore stale job targets", () => {
+  assert.equal(helpers.dashboardWorkspaceFromSearch("?workspace=design"), "design");
+  assert.equal(helpers.dashboardCommandTargetFromSearch("?workspace=design&jobId=old-job&jobTab=quote"), null);
+  assert.equal(helpers.dashboardWorkspaceFromSearch("?workspace=map&crm=customers"), "map");
+});
+
+test("Solar and measurements navigation waits for the current design to save", async () => {
+  const button = find(dashboard, node => ts.isJsxElement(node)
+    && node.openingElement.tagName.getText(dashboard) === "button"
+    && node.getText(dashboard).includes('<span>Solar &amp; measurements</span>'));
+  const guard = createMapNavigationGuard(), state = { workspace: "map", target: "old-job" };
+  const context = { require: () => jsx, exports: {}, TLinkNavigationIcon() {}, workspace: "design",
+    setCommandTarget: value => { state.target = value; },
+    setWorkspace: guardedWorkspaceSetter(value => { state.workspace = value; }, guard) };
+  const entry = evaluate(button, dashboard, context);
+  assert.equal(entry.props["aria-current"], "page");
+  let finish;
+  guard.register(() => new Promise(resolve => { finish = resolve; }));
+  entry.props.onClick();
+  assert.deepEqual(state, { workspace: "map", target: "old-job" });
+  finish(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(state, { workspace: "design", target: null });
+  guard.register(async () => { throw new Error("offline"); });
+  state.workspace = "work"; state.target = "keep-job";
+  entry.props.onClick(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(state, { workspace: "work", target: "keep-job" });
+});
+
+test("explicit solar navigation opens the existing design tools without mounting customer maps", () => {
+  const expression = find(dashboard, node => ts.isJsxExpression(node)
+    && node.expression?.getText(dashboard).startsWith('workspace === "design" && (hasBusinessOperations'));
+  const context = { require: () => jsx, exports: {}, workspace: "design", hasBusinessOperations: true,
+    user: { uid: "owner" }, registerMapSave() {}, TradeDesignWorkspace() {},
+    setWorkspace() {}, setCommandTarget() {}, setMapNavigationNonce() {} };
+  const view = evaluate(expression.expression, dashboard, context);
+  assert.equal(view.type, context.TradeDesignWorkspace);
+  assert.equal(view.props.onRegisterMapSave, context.registerMapSave);
+  assert.equal(evaluate(expression.expression, dashboard, { ...context, workspace: "map" }), false);
+  const blocked = evaluate(expression.expression, dashboard, { ...context, hasBusinessOperations: false });
+  assert.match(text(blocked), /Verification required/);
+  assert.equal(nodes(blocked, node => node.type === context.TradeDesignWorkspace).length, 0);
+});
+
+test("the dedicated design view remounts for each business and retains quote and save handoffs", () => {
+  const roof = ts.createSourceFile("TradeRoofDesignMap.tsx", read("TradeRoofDesignMap"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const execute = (name, context) => {
+    const declaration = find(roof, node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    return Function("exports", ...Object.keys(context), `${compile(declaration.getText(roof).replace(/^export /, ""))}\nreturn ${name};`)({}, ...Object.values(context));
+  };
+  const context = { require: () => jsx, TradeDesignWorkspaceView() {}, useTradeBusiness: () => ({ ownerUid: "business-a" }) };
+  const props = { user: { uid: "actor" }, onRegisterMapSave() {}, onOpenMap() {} };
+  assert.equal(execute("TradeDesignWorkspace", context)(props).key, "actor:business-a");
+  assert.equal(execute("TradeDesignWorkspace", { ...context, useTradeBusiness: () => ({ ownerUid: "business-b" }) })(props).key, "actor:business-b");
+  const measurement = { kind: "area", quantity: 120 }, setters = [() => {}, () => {}];
+  let hook = 0;
+  const viewContext = { require: () => jsx, TradeRoofDesignMap() {}, TradeMapQuoteDialog() {}, useState: () => [hook === 0 ? measurement : null, setters[hook++]] };
+  const view = execute("TradeDesignWorkspaceView", viewContext)(props);
+  const tools = nodes(view, node => node.type === viewContext.TradeRoofDesignMap)[0];
+  assert.equal(tools.props.onRegisterMapSave, props.onRegisterMapSave);
+  assert.equal(tools.props.onQuote, setters[0]);
+  const dialog = nodes(view, node => node.type === viewContext.TradeMapQuoteDialog)[0];
+  assert.equal(dialog.props.measurement, measurement);
+  assert.equal(dialog.props.onDesignLinked, setters[1]);
+  const ownerGate = find(dashboard, node => ts.isJsxOpeningElement(node) && node.tagName.getText(dashboard) === "TradeBusinessGate");
+  assert.match(ownerGate.getText(dashboard), /destination="owner"/);
+});
+
 test("network bookmarks accept an exact UUID only in the network workspace", () => {
   const id = "ea82d208-35a7-4783-af2c-85c5c8465e1e";
   assert.equal(helpers.networkPostFromSearch(`?workspace=network&networkPostId=${id}`), id);
@@ -124,7 +191,7 @@ test("Products and Trade network have direct workspaces and preserve pending map
 test("installer Map navigation is explicit, independently active and clears the previous command", () => {
   const button = find(dashboard, node => ts.isJsxElement(node)
     && node.openingElement.tagName.getText(dashboard) === "button"
-    && node.getText(dashboard).includes('<span>Map &amp; quote</span>'));
+    && node.getText(dashboard).includes('<span>Customer &amp; job map</span>'));
   const captured = {};
   const context = {
     require: () => jsx, exports: {}, TLinkNavigationIcon() {}, workspace: "map",
@@ -151,7 +218,7 @@ test("installer Map navigation is explicit, independently active and clears the 
 test("Map button retains its current record when saving fails and waits for a successful retry", async () => {
   const button = find(dashboard, node => ts.isJsxElement(node)
     && node.openingElement.tagName.getText(dashboard) === "button"
-    && node.getText(dashboard).includes('<span>Map &amp; quote</span>'));
+    && node.getText(dashboard).includes('<span>Customer &amp; job map</span>'));
   const guard = createMapNavigationGuard();
   const state = { workspace: "map", target: { kind: "job", id: "current-job" }, nonce: 1 };
   const tree = evaluate(button, dashboard, {

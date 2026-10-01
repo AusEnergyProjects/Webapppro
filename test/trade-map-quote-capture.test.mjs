@@ -67,7 +67,7 @@ function harness(t, component, captureImage, options = {}) {
 
 test("solar capture also hides an active measurement's vertex handles", (t) => {
   const h = harness(t, "TradeMapTools", async () => ({ dataUrl: "data:image/png;base64,UE5H" }));
-  h.render(); button(h.render(), "Measure").props.onClick(); h.render();
+  h.render(); button(h.render(), "Measure area").props.onClick(); h.render();
   const solar = nodes(h.render(), (node) => typeof node.props?.onCapturing === "function")[0];
   solar.props.onCapturing(true);
   assert.deepEqual(h.controls, [true]);
@@ -85,7 +85,7 @@ test("an unfinished valid insulation area goes straight to quote and finishes it
     prepare(); restore();
     return image;
   }, { measurement: { finished: false } });
-  h.render(); button(h.render(), "Measure").props.onClick(); h.render();
+  h.render(); button(h.render(), "Measure area").props.onClick(); h.render();
   const tree = h.render();
   assert.ok(button(tree, "Finish"), "the drawn area is still unfinished");
   assert.ok(button(tree, "Add to quote"), "a valid area must not require an extra Finish click");
@@ -97,7 +97,7 @@ test("an unfinished valid insulation area goes straight to quote and finishes it
 for (const measurement of [{ points: 2, finished: false }, { crossed: true, finished: false }, { areaM2: 0, finished: false }]) {
   test(`invalid area ${JSON.stringify(measurement)} cannot enter the quote or capture pipeline`, (t) => {
     const h = harness(t, "TradeMapTools", () => { throw new Error("Invalid area must not capture"); }, { measurement });
-    h.render(); button(h.render(), "Measure").props.onClick(); h.render();
+    h.render(); button(h.render(), "Measure area").props.onClick(); h.render();
     assert.equal(button(h.render(), "Add to quote"), undefined);
     assert.deepEqual(h.quoted, []); assert.deepEqual(h.events, []);
   });
@@ -153,7 +153,7 @@ test("camera invalidation aborts a pending solar capture and suppresses a late i
 });
 
 for (const component of ["TradeMapSolarTools", "TradeMapTools"]) {
-  const start = (h) => { h.render(); let tree = h.render(); if (component === "TradeMapTools") { button(tree, "Measure").props.onClick(); h.render(); tree = h.render(); } return tree; };
+  const start = (h) => { h.render(); let tree = h.render(); if (component === "TradeMapTools") { button(tree, "Measure area").props.onClick(); h.render(); tree = h.render(); } return tree; };
 
   test(`${component} carries the roof image only after capture and control restoration`, async (t) => {
     let finish;

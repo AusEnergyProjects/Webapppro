@@ -64,13 +64,20 @@ export function parseGnafShard(bytes: Uint8Array, version: string, path: string)
   return { shard: value as GnafShard, decodedBytes: size };
 }
 
+function lookupAddressKey(address: string): string | null {
+  // Normalise explicit unit slashes after aliases such as FLAT become UNIT,
+  // including units preceded by a building name. Keep the immutable directory
+  // key format unchanged and preserve every unit, level and street component.
+  return gnafAddressKey(address)?.replace(/\bUNIT ([A-Z]?\d+[A-Z]?)\s*\/\s*(\d)/g, "UNIT $1 $2") ?? null;
+}
+
 /** Each request reads only the postcode partitions needed for its bounded batch. */
 export function createGnafDirectory(bucket: GnafBucketReader, manifest: GnafManifest): GnafDirectory {
   return { version: manifest.version, attribution: manifest.attribution, async resolve(addresses) {
     if (addresses.length > 200) throw new GnafDirectoryUnavailableError();
     const results: GnafMatch[] = addresses.map(() => ({ status: "unlocated", reason: "invalid_address" }));
     const groups = new Map<string, { key: string; index: number }[]>();
-    addresses.forEach((address, index) => { const key = gnafAddressKey(address); if (!key) return;
+    addresses.forEach((address, index) => { const key = lookupAddressKey(address); if (!key) return;
       const shard = gnafShardForKey(key); const list = groups.get(shard) || []; list.push({ key, index }); groups.set(shard, list); });
     // Serial partitions keep maximum live decoded memory bounded, even for 200 different postcodes.
     for (const [path, items] of groups) {

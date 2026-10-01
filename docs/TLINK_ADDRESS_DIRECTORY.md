@@ -36,6 +36,6 @@ Directory maintenance requires all three runtime settings:
 
 Apply the settings through a Sites deployment. Run `scripts/upload-gnaf-directory.mjs` with Node type stripping and a terminal; it requests hidden JSON stdin containing `origin`, `directory`, `token` and `version`. Never put the token in shell arguments or a file.
 
-The uploader validates local hashes, sends four partitions concurrently, uploads the manifest last, verifies every partition in bounded batches, then activates the release. Its non-secret local journal permits safe resume. Versioned objects are immutable. Activation cannot replace `address-directory/current.json` until all verification receipts match the manifest. Remove the three maintenance settings and apply that environment revision after provisioning.
+The uploader validates local hashes, sends at most sixteen partitions concurrently, uploads the manifest last, verifies every partition in bounded batches, then activates the release. Its non-secret local journal permits safe resume. Versioned objects are immutable. Activation cannot replace `address-directory/current.json` until all verification receipts match the manifest. Remove the three maintenance settings and apply that environment revision after provisioning.
 
 Provider test fixtures and 100,000-record scale tests are synthetic and make no paid geocoding calls. Cloud storage, application database usage, map sessions and explicitly opened Google design tools still follow their respective hosting/provider plans.

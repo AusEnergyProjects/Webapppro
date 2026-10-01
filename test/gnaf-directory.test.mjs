@@ -6,8 +6,8 @@ import { createGnafDirectory, parseGnafManifest, parseGnafShard, gnafSha256, GNA
 import { uploadGnafPart, verifyGnafBatch, activateGnafDirectory, gnafProvisionAuthorized, readGnafUpload } from "../src/lib/gnaf-provision.ts";
 
 const encode = value => new TextEncoder().encode(JSON.stringify(value));
-async function fixture() {
-  const key = gnafAddressKey("12 Smith St, Melbourne VIC 3000, Australia"), path = gnafShardForKey(key);
+async function fixture(address = "12 Smith St, Melbourne VIC 3000, Australia") {
+  const key = gnafAddressKey(address), path = gnafShardForKey(key);
   const shard = { schema: 1, version: "aug2026", postcode: "3000", bucket: path.split('/')[1][0], entries: { [key]: [-37.81, 144.96, "GAVIC123", "PC"] } };
   const decoded = encode(shard), bytes = gzipSync(decoded);
   const manifest = { schema: 1, version: "aug2026", sourceUrl: "https://data.gov.au/data/gnaf.zip", sourceSha256: "1".repeat(64), attribution: GNAF_ATTRIBUTION, datum: "GDA2020", createdAt: "2026-10-01T00:00:00Z", recordCount: 1,
@@ -34,6 +34,41 @@ test("directory resolves repeated addresses once per shard without external call
   assert.equal(result.length,200); assert.equal(f.reads(),1); assert.equal(result[0].sourceId,"GAVIC123"); assert.equal(result[0].approximate,true);
   assert.equal((await directory.resolve(["missing"] ))[0].reason,"invalid_address");
   await assert.rejects(directory.resolve(Array(201).fill(f.key)));
+});
+test("lookup accepts explicit unit slashes after aliases without changing stored canonical keys", async () => {
+  const f=await fixture("Unit 3M 15 Smith Street Melbourne VIC 3000");
+  await uploadGnafPart(f.bucket,"aug2026",f.path,f.bytes);
+  const addresses=["Flat", "Apartment", "APT", "U", "Villa", "Townhouse"].map(type=>`${type} 3M/15 Smith St, Melbourne VIC 3000`);
+  assert.equal(gnafAddressKey(addresses[0]),"UNIT 3M/15 SMITH STREET MELBOURNE VIC 3000","the immutable builder normalizer is unchanged");
+  const results=await createGnafDirectory(f.bucket,f.manifest).resolve(addresses);
+  assert.ok(results.every(result=>result.status==="located"&&result.sourceId==="GAVIC123"));
+  assert.equal(f.reads(),1,"all equivalent inputs use the existing canonical shard");
+});
+test("unit slash lookup preserves building names, unit suffixes and street ranges", async () => {
+  const f=await fixture("The Lodge Unit 3M 15-17 Smith Street Melbourne VIC 3000");
+  await uploadGnafPart(f.bucket,"aug2026",f.path,f.bytes);
+  const directory=createGnafDirectory(f.bucket,f.manifest);
+  const results=await directory.resolve([
+    "The Lodge Flat 3M/15-17 Smith St, Melbourne VIC 3000",
+    "The Lodge Unit 3M / 15-17 Smith St, Melbourne VIC 3000",
+    "Flat 3M/15-17 Smith St, Melbourne VIC 3000",
+    "The Lodge Flat 3/15-17 Smith St, Melbourne VIC 3000",
+    "The Lodge Flat 3M/15 Smith St, Melbourne VIC 3000",
+    "Another Lodge Flat 3M/15-17 Smith St, Melbourne VIC 3000",
+    "The Lodge Flat 3M/15-17 Smith St, Melbourne VIC 3000, private@example.test",
+  ]);
+  assert.deepEqual(results.map(result=>result.status),["located","located","unlocated","unlocated","unlocated","unlocated","unlocated"]);
+  assert.equal(results.at(-1).reason,"invalid_address");
+});
+test("unit slash lookup never drops a required level or a different subaddress type", async () => {
+  const f=await fixture("The Lodge Unit 3 Level 2 15 Smith Street Melbourne VIC 3000");
+  await uploadGnafPart(f.bucket,"aug2026",f.path,f.bytes);
+  const results=await createGnafDirectory(f.bucket,f.manifest).resolve([
+    f.key,
+    "The Lodge Flat 3/15 Smith St, Melbourne VIC 3000",
+    "The Lodge STR 3/15 Smith St, Melbourne VIC 3000",
+  ]);
+  assert.deepEqual(results.map(result=>result.status),["located","unlocated","unlocated"]);
 });
 test("missing or corrupt partition fails the request instead of caching false no-match results", async()=>{
   const f=await fixture(), directory=createGnafDirectory(f.bucket,f.manifest);
