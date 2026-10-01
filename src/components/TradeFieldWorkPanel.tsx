@@ -8,6 +8,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import type { User } from "firebase/auth";
 import { PHOTO_RETAKE_REASONS, type PhotoRequirementReview, type PhotoRetakeReason } from "@/lib/photo-request-review";
 import { TradeActivityWorkPackPanel } from "./TradeActivityWorkPackPanel";
+import { TradeSwmsPanel } from "./TradeSwmsPanel";
 
 type TimeEntry = { id: string; staffLabel: string; workDate: string; durationMinutes: number; notes: string; createdAt: string };
 type Media = { id: string; category: string; fileName: string; contentType: string; sizeBytes: number; caption: string; source: string; photoRequirementId: string; requestRevision: number; checklistVersion: string; customerAcknowledgedAt: string; createdAt: string };
@@ -297,6 +298,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
   if (loading) return <div className="crm-empty"><strong>Opening field tools</strong><span>Loading time, files and sign-offs...</span></div>;
 
   if (readOnly) return <div className="crm-field-work" aria-readonly="true">
+    {embedded && <TradeSwmsPanel key={workOrderId} user={user} workOrderId={workOrderId} readOnly onChanged={onChanged} />}
     {embedded && readiness}
     {visitPicker}
     {!embedded && data.fieldJob && <header className="crm-field-job-header"><div className="crm-field-job-heading"><span>{data.fieldJob.workNumber} | {data.fieldJob.collaborativeJob ? "Visit: " : ""}{data.fieldJob.status.replaceAll("_", " ")}</span><h3>{data.fieldJob.title}</h3><p>{data.fieldJob.customerName} | {data.fieldJob.serviceSite}</p>{data.fieldJob.scheduledStart && <small>{new Date(data.fieldJob.scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small>}</div><div className="crm-field-job-primary"><strong>View only</strong><span className="crm-sync-state">Read only</span></div></header>}
@@ -316,6 +318,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
   </div>;
 
   return <div className="crm-field-work">
+    {embedded && <TradeSwmsPanel key={workOrderId} user={user} workOrderId={workOrderId} onChanged={onChanged} />}
     {readiness}
     {visitPicker}
         {!embedded && data.fieldJob && <><header className="crm-field-job-header"><div className="crm-field-job-heading"><span>{data.fieldJob.workNumber} | {data.fieldJob.collaborativeJob ? "Visit: " : ""}{data.fieldJob.status.replaceAll("_", " ")}</span><h3>{data.fieldJob.title}</h3><p>{data.fieldJob.customerName} | {data.fieldJob.serviceSite}</p>{data.fieldJob.scheduledStart && <small>{new Date(data.fieldJob.scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small>}</div><div className="crm-field-job-primary"><strong>{data.fieldJob.actionUnavailableReason}</strong><span className={`crm-sync-state ${!online ? "offline" : status && status !== "Saved" && status !== "Syncing" ? "attention" : ""}`}>{!online ? "Offline" : busy ? "Syncing" : status && status !== "Saved" ? "Action required" : "Saved"}</span></div></header><div className="crm-field-contact-actions">{data.fieldJob.phone && <a href={`tel:${data.fieldJob.phone.replace(/[^+\d]/g, "")}`}>Call</a>}{data.fieldJob.directionsUrl && <a href={data.fieldJob.directionsUrl} target="_blank" rel="noreferrer">Get directions</a>}</div></>}

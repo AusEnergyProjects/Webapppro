@@ -1,14 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import dynamic from "next/dynamic";
 import type { User } from "firebase/auth";
 import type { SwmsAnswers, SwmsPayload, SwmsRecord, SwmsSignatureStroke } from "@/lib/trade-swms";
 import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { TradeWorkPackSignaturePad } from "./TradeWorkPackSignaturePad";
 import { useFormTimeTracking, WorkTimeStatus } from "./TradeWorkTimeTracking";
 import styles from "./TradeSwmsPanel.module.css";
-
-const TradeWorkPackSignaturePad = dynamic(() => import("./TradeWorkPackSignaturePad").then(module => module.TradeWorkPackSignaturePad));
 
 export function TradeSwmsPanel({ user, workOrderId, readOnly = false, onChanged }: {
   user: User; workOrderId: string; readOnly?: boolean; onChanged?: () => Promise<void>;

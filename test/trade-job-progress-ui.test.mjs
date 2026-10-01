@@ -57,6 +57,7 @@ function panelHarness(name, initialProps, request) {
     "./TradeBusinessProvider": { useTradeBusinessFetch: () => fetch },
     "@/lib/photo-request-review": { PHOTO_RETAKE_REASONS: {} },
     "./TradeActivityWorkPackPanel": { TradeActivityWorkPackPanel: "TradeActivityWorkPackPanel" },
+    "./TradeSwmsPanel": { TradeSwmsPanel: "TradeSwmsPanel" },
     "./TradeBusinessFormEditor": { TradeBusinessFormEditor: "TradeBusinessFormEditor" },
     "./TradeWorkTimeTracking": { WorkTimeStatus: "WorkTimeStatus", useFormTimeTracking: () => ({ bind: {}, markCompleted() {} }) },
   };
@@ -104,6 +105,7 @@ test("lost archive can retain recorded evidence without requirements or completi
   assert.equal(byId(tree, "today-checklist-title"), undefined);
   assert.ok(byId(tree, "field-evidence"));
   assert.equal(child(tree, "TradeActivityWorkPackPanel").props.readOnly, true);
+  assert.equal(child(tree, "TradeSwmsPanel").props.readOnly, true);
   assert.equal(nodes(tree, node => node.type === "form").length, 0);
 });
 
@@ -129,9 +131,12 @@ test("embedded mode keeps readiness and the pack editor outside collapsed option
   assert.equal(byId(tree, "field-evidence").type, "details"); assert.equal(byId(tree, "field-evidence").props.open, undefined);
   assert.ok(nodes(byId(tree, "field-evidence"), node => node.type === "form").length > 0);
   assert.equal(child(byId(tree, "field-evidence"), "TradeActivityWorkPackPanel"), undefined);
+  assert.ok(child(tree, "TradeSwmsPanel"));
+  assert.equal(child(byId(tree, "field-evidence"), "TradeSwmsPanel"), undefined);
   assert.doesNotMatch(text(tree), /Existing job title|Customer name|Private site/);
   const standalone = await h.refresh({ embedded: false });
   assert.equal(byId(standalone, "field-evidence").type, "div"); assert.match(text(standalone), /Existing job title/);
+  assert.equal(child(standalone, "TradeSwmsPanel"), undefined);
 });
 
 test("commercial and read-only restrictions hold in embedded readiness", async () => {
