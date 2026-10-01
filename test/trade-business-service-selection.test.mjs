@@ -19,7 +19,7 @@ const routeSource = read("../src/app/api/trade-profile/route.ts");
 const compile = (source) => ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
 } }).outputText;
-const uiCompiled = compile(uiSource).replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null, useTradeManagerNameUpdate: () => () => {} })');
+const uiCompiled = compile(uiSource).replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null, useTradePersonalNameUpdate: () => () => {} })');
 const routeCompiled = compile(routeSource);
 const accessTree = ts.createSourceFile("trade-access-server.ts", read("../src/lib/trade-access-server.ts"), ts.ScriptTarget.Latest, true);
 const ownerDeclarations = accessTree.statements.filter(node => (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node))

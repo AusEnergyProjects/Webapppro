@@ -21,7 +21,7 @@ const readme = read("../mobile/README.md");
 
 test("native field app requires encrypted custom iOS and Android builds", () => {
   assert.match(appConfig, /"name": "TLink"/);
-  assert.match(appConfig, /"version": "1\.3\.0"/);
+  assert.match(appConfig, /"version": "1\.3\.1"/);
   assert.match(appConfig, /"userInterfaceStyle": "dark"/);
   assert.match(appConfig, /"bundleIdentifier": "au\.com\.australianenergyassessments\.field"/);
   assert.match(appConfig, /"package": "au\.com\.australianenergyassessments\.field"/);
@@ -96,7 +96,8 @@ test("post-PIN access verification cannot stall before the secure API", () => {
   const accessGate = syncNow.slice(verifyAccess, approveAccess);
   assert.match(accessGate, /generation !== authGeneration\.current \|\| switching\.current/);
   assert.match(accessGate, /verified\.ownerUid !== principal\.ownerId/);
-  assert.match(provider, /updateFieldPrincipalDisplayName\(verified\.fieldUsername\)/);
+  assert.match(accessGate, /updateFieldPrincipalDisplayName\(verified\.displayName, localOwnerKey,\s*\(\) => generation === authGeneration\.current && !switching\.current\)/);
+  assert.doesNotMatch(accessGate, /updateFieldPrincipalDisplayName\(verified\.fieldUsername/);
   assert.match(provider, /setLoading\(false\);[\s\S]{0,120}void syncNow\(\);/);
   assert.match(api, /JSON_REQUEST_TIMEOUT_MS = 20_000/);
   assert.match(api, /controller\.abort\(\)/);
