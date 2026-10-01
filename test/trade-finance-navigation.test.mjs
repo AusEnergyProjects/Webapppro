@@ -244,10 +244,9 @@ test("installer Map navigation is explicit, independently active and clears the 
   const navigation = evaluate(installerNav, dashboard, { ...context, activeWorkView: "today", offeredCount: 0, TradeMessageUnreadBadge() {} });
   assert.deepEqual(nodes(navigation, node => node.type === "button").slice(0, 4).map(node => text(node).trim()),
     ["Home dashboard", "Jobs", "Schedule", "Customers"]);
-  const more = nodes(navigation, node => node.type === "details")[0];
-  assert.ok(more, "Additional tools remain in the navigation disclosure");
-  assert.equal(more.props.open, true, "The current Map workspace keeps its tools visible");
-  assert.equal(nodes(more, node => node.type === "button" && text(node).includes("Customer & job map")).length, 1);
+  assert.equal(nodes(navigation, node => node.type === "details").length, 0, "Workspaces remain discoverable without expanding a menu");
+  assert.equal(nodes(navigation, node => node.type === "button" && text(node).includes("Customer & job map")).length, 1);
+  assert.equal(nodes(navigation, node => node.type === "button").length, 16, "Every existing destination remains available once");
 });
 
 test("Map button retains its current record when saving fails and waits for a successful retry", async () => {

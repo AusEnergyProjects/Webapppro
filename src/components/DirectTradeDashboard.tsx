@@ -2502,34 +2502,40 @@ function DirectTradeDashboardContent() {
             </>
           ) : (
             <>
-              <nav className="dashboard-workspace-nav" aria-label="TLink installer account">
-                {([['today', 'Home dashboard', 'home'], ['jobs', 'Jobs', 'jobs'], ['schedule', 'Schedule', 'schedule'], ['customers', 'Customers', 'customers']] as const).map(([view, label, icon]) => <button type="button" key={view} aria-current={workspace === "work" && activeWorkView === view ? "page" : undefined} className={workspace === "work" && activeWorkView === view ? "active" : ""} onClick={() => {
-                  setWorkspace("work", () => { setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() }); setActiveWorkView(view); });
-                }}><TLinkNavigationIcon name={icon} /><span>{label}</span></button>)}
-                <button type="button" aria-current={workspace === "messages" ? "page" : undefined} className={workspace === "messages" ? "active" : ""} onClick={() => setWorkspace("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span><small>Calls, customers and team chats</small></button>
-                <button type="button" aria-current={workspace === "finance" ? "page" : undefined} className={workspace === "finance" ? "active" : ""} onClick={() => setWorkspace("finance")}><TLinkNavigationIcon name="finance" /><span>Finance</span><small>Quotes, invoices, pricing and reports</small></button>
-                <details className="tlink-more-tools" open={!['work','messages','finance'].includes(workspace) || (workspace === 'work' && activeWorkView === 'leads')}>
-                  <summary>More tools</summary>
-                  <div><button type="button" aria-current={workspace === "map" ? "page" : undefined} className={workspace === "map" ? "active" : ""} onClick={() => {
-                  setWorkspace("map", () => { setCommandTarget(null); setMapNavigationNonce((current) => current + 1); });
-                }}><TLinkNavigationIcon name="map" /><span>Customer &amp; job map</span><small>Map locations and find nearby work</small></button>
-                  <button type="button" aria-current={workspace === "design" ? "page" : undefined} className={workspace === "design" ? "active" : ""} onClick={() => {
-                  setWorkspace("design", () => setCommandTarget(null));
-                }}><TLinkNavigationIcon name="design" /><span>Design &amp; Measure</span><small>Solar drafts, saved designs and insulation</small></button>
-                  <button type="button" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><TLinkNavigationIcon name="team" /><span>Team</span><small>People, access and files</small></button>
-                  <button type="button" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span><small>Training and rebate registrations</small></button>
-                  <button type="button" aria-current={workspace === "work" && activeWorkView === "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView === "leads" ? "active" : ""} onClick={() => {
-                  setWorkspace("work", () => {
-                    setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
-                    setActiveWorkView("leads");
-                  });
-                }}><TLinkNavigationIcon name="leads" /><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
-                  <button type="button" aria-current={workspace === "network" ? "page" : undefined} className={workspace === "network" ? "active" : ""} onClick={() => setWorkspace("network", () => { setNetworkPostId(""); setNetworkNavigationNonce(value => value + 1); })}><TLinkNavigationIcon name="network" /><span>Trade network</span><small>Local leads and subcontractors</small></button>
-                  <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products", () => setCommandTarget(null))}><TLinkNavigationIcon name="products" /><span>Products</span><small>Your items, prices and PDFs</small></button>
-                  <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><TLinkNavigationIcon name="calculator" /><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
-                  <button type="button" aria-current={workspace === "email-templates" ? "page" : undefined} className={workspace === "email-templates" ? "active" : ""} onClick={() => setWorkspace("email-templates")}><TLinkNavigationIcon name="email" /><span>Follow-ups</span><small>SMS and email reminders</small></button>
-                  <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business</span><small>Settings and verification</small></button></div>
-                </details>
+              <nav className="dashboard-workspace-nav tlink-workspace-nav" aria-label="TLink installer account">
+                <div className="tlink-nav-group" role="group" aria-labelledby="tlink-nav-daily">
+                  <h2 id="tlink-nav-daily" className="tlink-nav-heading">Daily work</h2>
+                  {([['today', 'Home dashboard', 'home'], ['jobs', 'Jobs', 'jobs'], ['schedule', 'Schedule', 'schedule'], ['customers', 'Customers', 'customers']] as const).map(([view, label, icon]) => <button type="button" key={view} aria-current={workspace === "work" && activeWorkView === view ? "page" : undefined} className={workspace === "work" && activeWorkView === view ? "active" : ""} onClick={() => {
+                    setWorkspace("work", () => { setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() }); setActiveWorkView(view); });
+                  }}><TLinkNavigationIcon name={icon} /><span>{label}</span></button>)}
+                  <button type="button" title="Calls, customers and team chats" aria-current={workspace === "messages" ? "page" : undefined} className={workspace === "messages" ? "active" : ""} onClick={() => setWorkspace("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
+                  <button type="button" title="Quotes, invoices, pricing and reports" aria-current={workspace === "finance" ? "page" : undefined} className={workspace === "finance" ? "active" : ""} onClick={() => setWorkspace("finance")}><TLinkNavigationIcon name="finance" /><span>Finance</span></button>
+                </div>
+                <div className="tlink-nav-group" role="group" aria-labelledby="tlink-nav-business">
+                  <h2 id="tlink-nav-business" className="tlink-nav-heading">Business tools</h2>
+                  <button type="button" title="Australian Energy Assessments protected opportunities" aria-current={workspace === "work" && activeWorkView === "leads" ? "page" : undefined} className={workspace === "work" && activeWorkView === "leads" ? "active" : ""} onClick={() => {
+                    setWorkspace("work", () => {
+                      setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
+                      setActiveWorkView("leads");
+                    });
+                  }}><TLinkNavigationIcon name="leads" /><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span></button>
+                  <button type="button" title="People, access and files" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><TLinkNavigationIcon name="team" /><span>Team</span></button>
+                  <button type="button" title="Training and rebate registrations" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span></button>
+                  <button type="button" title="SMS and email reminders" aria-current={workspace === "email-templates" ? "page" : undefined} className={workspace === "email-templates" ? "active" : ""} onClick={() => setWorkspace("email-templates")}><TLinkNavigationIcon name="email" /><span>Follow-ups</span></button>
+                  <button type="button" title="Your items, prices and PDFs" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products", () => setCommandTarget(null))}><TLinkNavigationIcon name="products" /><span>Products</span></button>
+                </div>
+                <div className="tlink-nav-group" role="group" aria-labelledby="tlink-nav-specialist">
+                  <h2 id="tlink-nav-specialist" className="tlink-nav-heading">Specialist tools</h2>
+                  <button type="button" title="Map locations and find nearby work" aria-current={workspace === "map" ? "page" : undefined} className={workspace === "map" ? "active" : ""} onClick={() => {
+                    setWorkspace("map", () => { setCommandTarget(null); setMapNavigationNonce((current) => current + 1); });
+                  }}><TLinkNavigationIcon name="map" /><span>Customer &amp; job map</span></button>
+                  <button type="button" title="Solar drafts, saved designs and insulation" aria-current={workspace === "design" ? "page" : undefined} className={workspace === "design" ? "active" : ""} onClick={() => {
+                    setWorkspace("design", () => setCommandTarget(null));
+                  }}><TLinkNavigationIcon name="design" /><span>Design &amp; Measure</span></button>
+                  <button type="button" title="Rebates for quotes and invoices" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><TLinkNavigationIcon name="calculator" /><span>Calculator</span></button>
+                  <button type="button" title="Local leads and subcontractors" aria-current={workspace === "network" ? "page" : undefined} className={workspace === "network" ? "active" : ""} onClick={() => setWorkspace("network", () => { setNetworkPostId(""); setNetworkNavigationNonce(value => value + 1); })}><TLinkNavigationIcon name="network" /><span>Trade network</span></button>
+                </div>
+                <button type="button" title="Settings and verification" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "tlink-nav-settings active" : "tlink-nav-settings"} onClick={() => setWorkspace("account")}><TLinkNavigationIcon name="business" /><span>Business settings</span></button>
               </nav>
 
               {workspace === "email-templates" && <TradeEmailTemplatesWorkspace user={user} />}

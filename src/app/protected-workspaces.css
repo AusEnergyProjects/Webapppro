@@ -1827,20 +1827,23 @@
 .trade-portal-shell .dashboard-workspace-nav button:hover { background: var(--trade-rail-hover); }
 .trade-portal-shell .dashboard-workspace-nav button.active { background: var(--trade-rail-active); border-color: var(--trade-rail-line); color: #fff; }
 .trade-portal-shell .dashboard-workspace-nav button:focus-visible { outline: 2px solid var(--trade-rail-ink); outline-offset: 2px; }
-.trade-portal-shell .tlink-more-tools { border-top: 1px solid var(--trade-rail-line); margin-top: 8px; padding-top: 8px; }
-.trade-portal-shell .tlink-more-tools > summary { border-radius: 10px; color: var(--trade-rail-muted); cursor: pointer; font-size: .68rem; font-weight: 750; padding: 13px 14px; }
-.trade-portal-shell .tlink-more-tools > summary:focus-visible { outline: 2px solid var(--trade-rail-ink); outline-offset: -2px; }
-.trade-portal-shell .tlink-more-tools > div { display: grid; gap: 4px; }
-.trade-portal-shell .tlink-more-tools button { width: 100%; }
+.trade-portal-shell > .tlink-workspace-nav { gap: 12px; padding-top: 16px; }
+.trade-portal-shell .tlink-nav-group { display: grid; gap: 2px; }
+.trade-portal-shell .tlink-nav-heading { color: var(--trade-rail-muted); font-size: .75rem; font-weight: 650; letter-spacing: .035em; line-height: 1.4; margin: 0; padding: 4px 11px 6px; }
+.trade-portal-shell .tlink-workspace-nav button { min-height: 44px; padding: 9px 11px; }
+.trade-portal-shell .tlink-workspace-nav .tlink-nav-settings { border-top-color: var(--trade-rail-line); }
 .trade-portal-shell > .installer-crm { margin-top: 22px; }
 @media (max-width: 780px) {
-  .trade-portal-shell .tlink-more-tools { border: 0; margin: 0; min-width: 125px; padding: 0; }
-  .trade-portal-shell .tlink-more-tools[open] { min-width: 220px; }
-  .trade-portal-shell .tlink-more-tools > div { max-height: 50dvh; overflow-y: auto; }
+  .trade-portal-shell > .tlink-workspace-nav { gap: 6px; padding-top: 8px; }
+  .trade-portal-shell .tlink-nav-group { display: contents; }
+  .trade-portal-shell .tlink-nav-heading { display: none; }
+  .trade-portal-shell .tlink-workspace-nav .tlink-nav-settings { border-top-color: transparent; }
 }
 .trade-portal-shell .dashboard-workspace-nav .tlink-navigation-icon { color: currentColor; display: block; grid-row: 1 / span 2; height: 20px; width: 20px; }
 .trade-portal-shell .dashboard-workspace-nav button span { font-size: .7rem; }
 .trade-portal-shell .dashboard-workspace-nav button small { color: var(--trade-rail-muted); font-size: .55rem; line-height: 1.25; }
+.trade-portal-shell .tlink-workspace-nav button span { font-size: .875rem; font-weight: 750; }
+.trade-portal-shell .tlink-workspace-nav .tlink-navigation-icon { grid-row: 1; }
 
 .trade-portal-shell .dashboard-panel,
 .trade-portal-shell .dashboard-access-overview,
