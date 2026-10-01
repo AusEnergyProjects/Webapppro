@@ -28,7 +28,7 @@ import { getBusinessServiceStates, memberServiceStateProjection, validateMemberS
 export const runtime = "edge";
 
 const MEMBER_LIFECYCLE_STATUSES = new Set(["active", "suspended"]);
-const ROSTER_STATUS_FILTERS = new Set(["active", "invited", "suspended"]);
+const ROSTER_STATUS_FILTERS = new Set(["active", "invited", "suspended", "archived"]);
 const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_ALLOWED_PATTERN = /^[+0-9() .-]+$/;
@@ -310,6 +310,37 @@ function conditionalMemberAuditStatement(db: D1Database, access: TeamAccess, mem
       eventType, JSON.stringify(metadata), updatedAt, memberId, access.ownerUid, updatedAt);
 }
 
+function memberAccessRevocationStatements(db: D1Database, access: TeamAccess, memberId: string,
+  status: "suspended" | "archived", now: string) {
+  return [
+    db.prepare(`UPDATE trade_mobile_devices
+      SET status = 'revoked', push_token = '', voip_push_token = '', native_call_capable = 0, push_token_updated_at = ?, revoked_at = ?,
+        revoked_by_uid = ?, updated_at = ?
+      WHERE owner_uid = ? AND member_id = ? AND status = 'active'
+        AND EXISTS (SELECT 1 FROM trade_team_members member
+          WHERE member.id = ? AND member.owner_uid = ? AND member.status = ? AND member.updated_at = ?)`)
+      .bind(now, now, access.actorUid, now, access.ownerUid, memberId, memberId, access.ownerUid, status, now),
+    db.prepare(`UPDATE trade_team_invites SET consumed_at = ?
+      WHERE owner_uid = ? AND team_member_id = ? AND consumed_at = ''
+        AND EXISTS (SELECT 1 FROM trade_team_members member
+          WHERE member.id = trade_team_invites.team_member_id AND member.owner_uid = trade_team_invites.owner_uid
+            AND member.status = ? AND member.updated_at = ?)`)
+      .bind(now, access.ownerUid, memberId, status, now),
+    db.prepare(`UPDATE trade_field_access_codes SET status = 'revoked', updated_at = ?
+      WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'
+        AND EXISTS (SELECT 1 FROM trade_team_members member
+          WHERE member.id = trade_field_access_codes.team_member_id AND member.owner_uid = trade_field_access_codes.owner_uid
+            AND member.status = ? AND member.updated_at = ?)`)
+      .bind(now, access.ownerUid, memberId, status, now),
+    db.prepare(`UPDATE trade_field_sessions SET status = 'revoked', revoked_at = ?, updated_at = ?
+      WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'
+        AND EXISTS (SELECT 1 FROM trade_team_members member
+          WHERE member.id = trade_field_sessions.team_member_id AND member.owner_uid = trade_field_sessions.owner_uid
+            AND member.status = ? AND member.updated_at = ?)`)
+      .bind(now, now, access.ownerUid, memberId, status, now),
+  ];
+}
+
 function inviteReplacementStatements(db: D1Database, access: TeamAccess, memberId: string,
   inviteId: string, inviteTokenHash: string, expiresAt: string, now: string) {
   return [
@@ -415,7 +446,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const assigneePageSize = Math.min(50, Math.max(1, Math.floor(Number(options.assigneePageSize) || 25)));
   const assigneeSearch = cleanAdminText(options.assigneeSearch, 120).toLowerCase();
   const assigneeCapability = cleanAdminText(options.assigneeCapability, 80);
-  const conditions = ["owner_uid = ?"];
+  const conditions = ["owner_uid = ?", rosterStatus === "archived" ? "status = 'archived'" : "status <> 'archived'"];
   const bindings: unknown[] = [access.ownerUid];
   if (rosterMemberId) {
     conditions.push("id = ?");
@@ -740,6 +771,7 @@ export async function POST(request: Request) {
         FROM trade_team_members
         WHERE id = ? AND owner_uid = ?`).bind(memberId, access.ownerUid).first<Record<string, unknown>>();
       if (!existing) throw new Error("MEMBER_NOT_FOUND");
+      if (existing.status === "archived") return adminJson({ ok: false, error: "This person is archived. Their access remains revoked." }, 409);
       const expectedUpdatedAt = cleanAdminText(body.expectedUpdatedAt, 80);
       if (!expectedUpdatedAt || expectedUpdatedAt !== String(existing.updated_at || "")) {
         throw new Error("MEMBER_CONFLICT");
@@ -768,7 +800,7 @@ export async function POST(request: Request) {
         return adminJson({ ok: false, error: "Add a valid name, email and phone number." }, 400);
       }
       if (memberId) {
-        const current = await db.prepare(`SELECT id, member_uid, updated_at, field_username, field_username_normalized, schedule_colour, service_states,
+        const current = await db.prepare(`SELECT id, member_uid, status, updated_at, field_username, field_username_normalized, schedule_colour, service_states,
             can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
             can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_view_invoices, can_manage_invoices,
             can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
@@ -777,6 +809,7 @@ export async function POST(request: Request) {
           FROM trade_team_members WHERE id = ? AND owner_uid = ?`)
           .bind(memberId, access.ownerUid).first<Record<string, unknown>>();
         if (!current) throw new Error("MEMBER_NOT_FOUND");
+        if (current.status === "archived") return adminJson({ ok: false, error: "This person is archived. Their access remains revoked." }, 409);
         serviceStates = await memberServiceStates(db, access.ownerUid, body.serviceStates, current.service_states, current.member_uid === access.ownerUid);
         const expectedUpdatedAt = cleanAdminText(body.expectedUpdatedAt, 80);
         if (!expectedUpdatedAt || expectedUpdatedAt !== String(current.updated_at || "")) {
@@ -869,7 +902,7 @@ export async function PATCH(request: Request) {
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "Invalid team update." }, 400); }
     const action = cleanAdminText(body.action, 30); const db = getD1(); const now = new Date().toISOString();
-    if (action === "update_member") {
+    if (action === "update_member" || action === "archive_member") {
       if (!canManageTeam(access)) throw new Error("OWNER_REQUIRED");
       const memberId = cleanAdminText(body.memberId, 180);
       const current = await db.prepare(`SELECT member_uid, email, display_name, first_name, last_name, phone, field_username, field_username_normalized, schedule_colour,
@@ -886,8 +919,10 @@ export async function PATCH(request: Request) {
       if (!expectedUpdatedAt || expectedUpdatedAt !== String(current.updated_at || "")) {
         throw new Error("MEMBER_CONFLICT");
       }
-      const status = body.status === undefined ? String(current.status) : cleanAdminText(body.status, 20);
-      if (!MEMBER_LIFECYCLE_STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid account status." }, 400);
+      if (current.status === "archived") return adminJson({ ok: false, error: "This person is archived. Their details and access cannot be changed." }, 409);
+      const archiving = action === "archive_member";
+      const status = archiving ? "archived" : body.status === undefined ? String(current.status) : cleanAdminText(body.status, 20);
+      if (!archiving && !MEMBER_LIFECYCLE_STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid account status." }, 400);
       const lifecycleChanged = status !== String(current.status);
       if (lifecycleChanged) {
         const decision = memberLifecycleDecision(access, { memberId, memberUid: String(current.member_uid || "") });
@@ -896,6 +931,20 @@ export async function PATCH(request: Request) {
           if (decision.reason === "owner_protected") return adminJson({ ok: false, error: "The business owner remains active." }, 409);
           throw new Error("OWNER_REQUIRED");
         }
+      }
+      if (archiving) {
+        const permissions = memberPermissions({}, current);
+        const actorGuard = memberMutationActorGuard(access, permissions, permissions, false);
+        const results = await db.batch([
+          db.prepare(`UPDATE trade_team_members SET status = 'archived', updated_at = ?
+            WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`)
+            .bind(now, memberId, access.ownerUid, current.updated_at, ...actorGuard.bindings),
+          conditionalMemberAuditStatement(db, access, memberId, "member.archived", { previousStatus: current.status, status: "archived" }, now),
+          ...memberAccessRevocationStatements(db, access, memberId, "archived", now),
+        ]);
+        if (!results[0]?.meta.changes) throw new Error("MEMBER_CONFLICT");
+        await abortMemberDeviceUploads(access.ownerUid, memberId);
+        return adminJson({ ok: true, ...(await teamPayload(access)) });
       }
       const firstName = body.firstName === undefined ? String(current.first_name || "") : cleanAdminText(body.firstName, 80);
       const lastName = body.lastName === undefined ? String(current.last_name || "") : cleanAdminText(body.lastName, 80);
@@ -967,38 +1016,7 @@ export async function PATCH(request: Request) {
                   AND member.updated_at = ?)`)
             .bind(now, access.ownerUid, memberId, now),
         ] : []),
-        ...(lifecycleChanged && status === "suspended" ? [
-          db.prepare(`UPDATE trade_mobile_devices
-            SET status = 'revoked', push_token = '', voip_push_token = '', native_call_capable = 0, push_token_updated_at = ?, revoked_at = ?,
-              revoked_by_uid = ?, updated_at = ?
-            WHERE owner_uid = ? AND member_id = ? AND status = 'active'
-              AND EXISTS (SELECT 1 FROM trade_team_members member
-                WHERE member.id = ? AND member.owner_uid = ? AND member.status = 'suspended'
-                  AND member.updated_at = ?)`)
-            .bind(now, now, access.actorUid, now, access.ownerUid, memberId,
-              memberId, access.ownerUid, now),
-          db.prepare(`UPDATE trade_team_invites SET consumed_at = ?
-            WHERE owner_uid = ? AND team_member_id = ? AND consumed_at = ''
-              AND EXISTS (SELECT 1 FROM trade_team_members member
-                WHERE member.id = trade_team_invites.team_member_id
-                  AND member.owner_uid = trade_team_invites.owner_uid
-                  AND member.status = 'suspended' AND member.updated_at = ?)`)
-            .bind(now, access.ownerUid, memberId, now),
-          db.prepare(`UPDATE trade_field_access_codes SET status = 'revoked', updated_at = ?
-            WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'
-              AND EXISTS (SELECT 1 FROM trade_team_members member
-                WHERE member.id = trade_field_access_codes.team_member_id
-                  AND member.owner_uid = trade_field_access_codes.owner_uid
-                  AND member.status = 'suspended' AND member.updated_at = ?)`)
-            .bind(now, access.ownerUid, memberId, now),
-          db.prepare(`UPDATE trade_field_sessions SET status = 'revoked', revoked_at = ?, updated_at = ?
-            WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'
-              AND EXISTS (SELECT 1 FROM trade_team_members member
-                WHERE member.id = trade_field_sessions.team_member_id
-                  AND member.owner_uid = trade_field_sessions.owner_uid
-                  AND member.status = 'suspended' AND member.updated_at = ?)`)
-            .bind(now, now, access.ownerUid, memberId, now),
-        ] : []),
+        ...(lifecycleChanged && status === "suspended" ? memberAccessRevocationStatements(db, access, memberId, status, now) : []),
       ]);
       if (!results[0]?.meta.changes) throw new Error("MEMBER_CONFLICT");
       if (lifecycleChanged && status === "suspended") {

@@ -24,8 +24,8 @@ import type { TradeTeamPresenceStatus } from "@/lib/trade-team-presence";
 const TeamTrainingTodos = dynamic(() => import("./TeamTrainingTodos").then(module => module.TeamTrainingTodos), { loading: () => <p role="status">Loading training to-dos...</p> });
 
 type Scope = "own" | "team";
-type MemberStatus = "active" | "suspended";
-type RosterStatus = "all" | "active" | "invited" | "suspended";
+type MemberStatus = "active" | "suspended" | "archived";
+type RosterStatus = "all" | "active" | "invited" | "suspended" | "archived";
 type ScheduleColour = "emerald" | "teal" | "blue" | "violet" | "amber" | "rose";
 type AccessPreset = "manager" | "office" | "field";
 
@@ -342,7 +342,11 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     setTeamAccess(result.access);
     setMembers(result.members || []);
     setBusinessServiceStates(result.businessServiceStates || []);
-    if (result.roster) setRoster(result.roster);
+    if (result.roster) {
+      setRoster(result.roster);
+      const totalPages = Math.max(1, result.roster.totalPages);
+      setPage(current => Math.min(current, totalPages));
+    }
     return result;
   }, [fetch, appliedQuery, capabilityFilter, navigationTarget, page, statusFilter, tokenHeaders]);
   const handleMemberConflict = useCallback(async (response: Response) => {
@@ -476,6 +480,16 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     event.preventDefault(); setPage(1); setAppliedQuery(query.trim());
   }
 
+  function changeRosterView(archived: boolean) {
+    if (busy) return;
+    if ((statusFilter === "archived") === archived) return;
+    setLoading(true); setMembers([]);
+    setPage(1); setQuery(""); setAppliedQuery(""); setCapabilityFilter("");
+    setStatusFilter(archived ? "archived" : "all");
+    setMenu(null); setInviteUrl(""); setInviteDelivery(undefined);
+    setError(""); setMessage("");
+  }
+
   function openEdit(member: TradeTeamMember) {
     if (busy) return;
     setError(""); setMessage("");
@@ -518,6 +532,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
 
   async function saveMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (editing && editing !== "new" && editing.status === "archived") return;
     const form = event.currentTarget; const data = new FormData(form);
     const isNew = editing === "new";
     setBusy("member"); setError(""); setMessage("Saving team member...");
@@ -578,6 +593,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }
 
   async function createLogin(member: TradeTeamMember) {
+    if (member.status === "archived") return;
     if (!member.email) { openEdit(member); setMessage("Add an email and save the member, then send their invitation."); return; }
     setMenu(null); setInviteUrl(""); setInviteDelivery(undefined);
     setBusy(`invite:${member.id}`); setError(""); setMessage("Sending invitation email...");
@@ -601,21 +617,24 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }
 
   async function updateMemberStatus(member: TradeTeamMember, nextStatus: MemberStatus) {
-    if (member.isOwner || member.status === nextStatus) return;
+    if (busy || member.isOwner || isCurrentMember(member) || member.status === "archived" || member.status === nextStatus) return;
+    const archiving = nextStatus === "archived";
     const actionLabel = nextStatus === "active" ? "Reactivate" : "Deactivate";
-    if (!window.confirm(`${actionLabel} access for ${memberLabel(member)}? Their job history, files and compliance records will remain saved. Reactivation restores login eligibility, but revoked devices stay revoked and old invitation links stay invalid.`)) return;
-    setBusy(`status:${member.id}`); setError(""); setMessage(`${actionLabel.slice(0, -1)}ing team access...`);
+    if (!window.confirm(archiving
+      ? `Delete ${memberLabel(member)} from your team? Their access will be revoked and they will move to Archived team. Their job history, documents and audit records will remain saved.`
+      : `${actionLabel} access for ${memberLabel(member)}? Their job history, files and compliance records will remain saved. Reactivation restores login eligibility, but revoked devices stay revoked and old invitation links stay invalid.`)) return;
+    setBusy(`status:${member.id}`); setError(""); setMessage(archiving ? "Archiving team member..." : `${actionLabel.slice(0, -1)}ing team access...`);
     try {
       const response = await fetch("/api/trade-team", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...(await tokenHeaders()) },
-        body: JSON.stringify({ action: "update_member", memberId: member.id, status: nextStatus, expectedUpdatedAt: member.updatedAt }),
+        body: JSON.stringify({ action: archiving ? "archive_member" : "update_member", memberId: member.id, ...(!archiving && { status: nextStatus }), expectedUpdatedAt: member.updatedAt }),
       });
       if (await handleMemberConflict(response)) return;
       const result = await response.json().catch(() => ({})) as TeamResult;
       if (!response.ok || !result.ok) throw new Error(result.error || "Team access could not be updated.");
-      setMenu(null); setEditing(null); await load();
-      setMessage(nextStatus === "active" ? "Team access reactivated. Revoked devices remain revoked and a fresh invitation is required when no login is linked." : "Team access deactivated. History, files and job records remain saved.");
+      setMenu(null); setEditing(null); await load(); await loadDevices();
+      setMessage(archiving ? "Team member archived and access revoked. Their records are available in Archived team." : nextStatus === "active" ? "Team access reactivated. Revoked devices remain revoked and a fresh invitation is required when no login is linked." : "Team access deactivated. History, files and job records remain saved.");
     } catch (caught) {
       setMessage(""); setError(caught instanceof Error ? caught.message : "Team access could not be updated.");
     } finally {
@@ -634,6 +653,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }
 
   async function createFieldPin(member: TradeTeamMember) {
+    if (member.status === "archived") return;
     setMenu(null); setBusy(`field-pin:${member.id}`); setError(""); setMessage("Creating a one-time field app PIN...");
     try {
       const response = await fetch("/api/trade-team/field-access", {
@@ -658,6 +678,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }
 
   async function revokeFieldAccess(member: TradeTeamMember) {
+    if (member.status === "archived") return;
     setMenu(null);
     if (!window.confirm(`Sign ${memberLabel(member)} out of every field device and cancel unused PINs?`)) return;
     setBusy(`field-revoke:${member.id}`); setError(""); setMessage("Revoking field app access...");
@@ -677,6 +698,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }
 
   async function updateDevice(device: TeamDevice, action: "revoke_device" | "authorise_device") {
+    if (device.memberStatus === "archived") return;
     if (action === "revoke_device" && !window.confirm(`Revoke field access for ${device.deviceName}?`)) return;
     setBusy(`device:${device.id}`); setError("");
     try {
@@ -714,7 +736,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }
 
   async function uploadFile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!filesMember) return;
+    event.preventDefault(); if (!filesMember || filesMember.status === "archived") return;
     const form = event.currentTarget; const data = new FormData(form); data.set("action", "upload"); data.set("memberId", filesMember.id);
     setBusy("file-upload"); setError("");
     try {
@@ -741,7 +763,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }
 
   async function deleteFile(file: MemberFile) {
-    if (!filesMember || !window.confirm(`Delete ${file.title}? This cannot be undone.`)) return;
+    if (!filesMember || filesMember.status === "archived" || !window.confirm(`Delete ${file.title}? This cannot be undone.`)) return;
     setBusy(`delete:${file.id}`); setError("");
     try {
       const response = await fetch(`/api/trade-team/member-files?memberId=${encodeURIComponent(filesMember.id)}&fileId=${encodeURIComponent(file.id)}`, { method: "DELETE", headers: await tokenHeaders() });
@@ -773,9 +795,10 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     || Boolean(member.email && member.email.trim().toLowerCase() === (user.email || "").trim().toLowerCase());
   const statusName = (member: TradeTeamMember) => member.status === "active"
     ? member.hasLogin ? "Login active" : member.invitePending ? "Invitation pending" : "Roster only"
-    : "Former or inactive";
+    : member.status === "archived" ? "Archived" : "Former or inactive";
   const editingOwnAccess = editing !== null && editing !== "new" && isCurrentMember(editing);
   const editingOwner = editing !== null && editing !== "new" && editing.isOwner;
+  const archivedView = statusFilter === "archived";
   const unsavedServices = Boolean(editing && editing !== "new" && !editing.isOwner
     && (JSON.stringify([...memberServices].sort()) !== JSON.stringify([...(editing.capabilities || [])].sort())
       || JSON.stringify(memberServiceStates === null ? null : [...memberServiceStates].sort()) !== JSON.stringify(editing.assignedServiceStates == null ? null : [...editing.assignedServiceStates].sort())));
@@ -792,18 +815,19 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   const invitationPanel = inviteUrl && <section className={styles.invitePanel} aria-label="Team invitation"><div><strong>{inviteDelivery?.status === "sent" ? "Invitation emailed" : "Invitation ready"}</strong><p>{inviteDelivery?.message || "Email delivery has not been confirmed."} This new link lasts 7 days and replaces the previous invitation.</p></div><input aria-label="Private login link" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} /><button type="button" className={styles.secondary} onClick={() => void copyInvite()}>Copy invitation link</button></section>;
 
   return <div className={styles.workspace}>
-    <div className={styles.heading}><div><h4>Your team</h4><p>Keep each person&apos;s contact details, access, availability and documents in one place.</p></div><button type="button" className={styles.primary} disabled={Boolean(busy)} onClick={openNew}>Add team member</button></div>
-    <section className={styles.setupGuide} aria-label="Set up TLink for a team member">
+    <div className={styles.heading}><div><h4>{archivedView ? "Archived team" : "Your team"}</h4><p>{archivedView ? "Former team members with access revoked. Their details, documents and history remain saved." : "Keep each person's contact details, access, availability and documents in one place."}</p></div>{!archivedView && <button type="button" className={styles.primary} disabled={Boolean(busy)} onClick={openNew}>Add team member</button>}</div>
+    <nav className={styles.actions} aria-label="Team views"><button type="button" className={archivedView ? styles.secondary : styles.primary} aria-pressed={!archivedView} disabled={Boolean(busy)} onClick={() => changeRosterView(false)}>Your team</button><button type="button" className={archivedView ? styles.primary : styles.secondary} aria-pressed={archivedView} disabled={Boolean(busy)} onClick={() => changeRosterView(true)}>Archived team</button></nav>
+    {!archivedView && <section className={styles.setupGuide} aria-label="Set up TLink for a team member">
       <div><span>1</span><strong>Add the person</strong><small>Enter their email and choose their access.</small></div>
       <div><span>2</span><strong>Invitation sent</strong><small>They set their password from the email.</small></div>
       <div><span>3</span><strong>Using the field app?</strong><small>Generate PIN below. TLink emails the username and PIN.</small></div>
-    </section>
+    </section>}
     {message && <p className={styles.status} role="status">{message}</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}
     {!editing && invitationPanel}
-    <section className={styles.list} aria-label="Team members"><header className={styles.listHeader}><strong>People</strong><span>{roster.total} team members</span></header>
-      <form className={styles.filters} onSubmit={searchMembers}><label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, email or service" /></label><label>Status<select value={statusFilter} onChange={(event) => { setPage(1); setStatusFilter(event.target.value as RosterStatus); }}><option value="all">All statuses</option><option value="active">Active</option><option value="invited">Invited</option><option value="suspended">Former or inactive</option></select></label><label>Service<select value={capabilityFilter} onChange={(event) => { setPage(1); setCapabilityFilter(event.target.value); }}><option value="">All services</option>{ENERGY_SERVICE_CATALOGUE.map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}</select></label><button className={styles.secondary}>Search</button></form>
-      <p className={styles.hint}>Deactivating access stops future sign-in and assignment. Job history and member documents remain saved. Reactivation restores login eligibility, but revoked devices and old invitation links remain inactive.</p>
+    <section className={styles.list} aria-label={archivedView ? "Archived team members" : "Team members"}><header className={styles.listHeader}><strong>{archivedView ? "Archived people" : "People"}</strong><span>{roster.total} {archivedView ? "archived team members" : "team members"}</span></header>
+      <form className={styles.filters} onSubmit={searchMembers}><label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, email or service" /></label>{!archivedView && <label>Status<select value={statusFilter} onChange={(event) => { setPage(1); setStatusFilter(event.target.value as RosterStatus); }}><option value="all">All statuses</option><option value="active">Active</option><option value="invited">Invited</option><option value="suspended">Former or inactive</option></select></label>}<label>Service<select value={capabilityFilter} onChange={(event) => { setPage(1); setCapabilityFilter(event.target.value); }}><option value="">All services</option>{ENERGY_SERVICE_CATALOGUE.map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}</select></label><button className={styles.secondary}>Search</button></form>
+      <p className={styles.hint}>{archivedView ? "Archived records are read-only. Open a person to view their details and saved documents. Archived people cannot sign in or be assigned new work." : "Deactivating access stops future sign-in and assignment. Job history and member documents remain saved. Reactivation restores login eligibility, but revoked devices and old invitation links remain inactive. Delete moves a person out of your team and into Archived team."}</p>
       {visibleMembers.length ? <>
         <div className={styles.tableShell}>
           <table className={styles.memberTable}>
@@ -816,7 +840,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
               <td>{member.email ? <a href={`mailto:${member.email}`}>{member.email}</a> : <span>Not added</span>}</td>
               <td><span className={`${styles.state} ${member.status === "active" ? styles.current : styles.expired}`}>{statusName(member)}</span></td>
               <td><span className={styles.colourName}><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span></td>
-              <td><div className={styles.actions}><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" className={styles.memberMenuButton} disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}</div></td>
+              <td><div className={styles.actions}><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" className={styles.memberMenuButton} disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status !== "archived" && <button type="button" className={styles.danger} aria-label={`Delete ${memberLabel(member)} from team`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "archived")}>Delete</button>}</div></td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -824,15 +848,25 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
         <header className={styles.memberHeader}><div><strong><TradeTeamStatusDot name={memberLabel(member)} presence={member.presence} active={member.status === "active"} /> {member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>TLink username: {member.fieldUsername || "Not set"}</small><small>{statusName(member)}</small></div><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></header>
         <div className={styles.chips}><span><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span><span>{member.permissions.jobScope === "own" ? "Assigned jobs only" : "All team jobs"}</span><span>{member.fileCount || 0} documents</span>{member.capabilities?.length ? <span>{member.capabilities.length} services</span> : null}</div>
         <small>Last active: {member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleString("en-AU") : "Not signed in yet"}</small>
-        <div className={styles.actions}><button type="button" disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button></div>
+        <div className={styles.actions}><button type="button" disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button>{!member.isOwner && !isCurrentMember(member) && member.status !== "archived" && <button type="button" className={styles.danger} aria-label={`Delete ${memberLabel(member)} from team`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "archived")}>Delete</button>}</div>
       </article>)}</div></> : <p className={styles.empty}>No team members match these filters.</p>}
       {roster.totalPages > 1 && <nav className={styles.pagination} aria-label="Team member pages"><button type="button" className={styles.secondary} disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {roster.page} of {roster.totalPages}</span><button type="button" className={styles.secondary} disabled={page >= roster.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Next</button></nav>}
     </section>
 
     {menu && <><button aria-label="Close team member menu" style={{ background: "transparent", border: 0, inset: 0, padding: 0, position: "fixed", zIndex: 1299 }} onClick={closeMenu} /><div ref={menuRef} className={styles.contextMenu} role="menu" style={{ left: menu.x, top: menu.y }} onKeyDown={handleMenuKey}><button type="button" role="menuitem" onClick={() => openEdit(menu.member)}>{menu.member.isOwner ? "Set up my TLink app" : "Open member details"}</button><button type="button" role="menuitem" onClick={() => void openFiles(menu.member)}>Open documents</button></div></>}
 
-    {editing && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeMemberDialog(); }}><div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="team-member-dialog-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeMemberDialog)}><header className={styles.dialogHeader}><div><span>{editing === "new" ? "Add team member" : "Edit team member"}</span><h4 id="team-member-dialog-title">Person and access</h4></div><button type="button" className={styles.iconButton} aria-label="Close" disabled={Boolean(busy)} onClick={closeMemberDialog}>X</button></header>
-      <form className={styles.form} onSubmit={saveMember}>
+    {editing && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeMemberDialog(); }}><div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="team-member-dialog-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeMemberDialog)}><header className={styles.dialogHeader}><div><span>{editing === "new" ? "Add team member" : editing.status === "archived" ? "Archived team member" : "Edit team member"}</span><h4 id="team-member-dialog-title">Person and access</h4></div><button type="button" className={styles.iconButton} aria-label="Close" disabled={Boolean(busy)} onClick={closeMemberDialog}>X</button></header>
+      {editing !== "new" && editing.status === "archived" ? <div className={styles.form} aria-label="Archived member details">
+        <p className={styles.status}>This person is archived. Their access is revoked and they cannot be assigned new work. Their records are read-only.</p>
+        <div className={`${styles.grid} ${styles.contactGrid}`}>
+          <div><strong>Name</strong><p>{memberLabel(editing)}</p></div>
+          <div><strong>Email</strong><p>{editing.email || "Not added"}</p></div>
+          <div><strong>Phone</strong><p>{editing.phone || "Not added"}</p></div>
+          <div><strong>TLink username</strong><p>{editing.fieldUsername || "Not set"}</p></div>
+        </div>
+        <p className={styles.hint}>Job history, audit records and {editing.fileCount || 0} saved documents remain available to authorised business managers.</p>
+        <div className={styles.actions}><button type="button" className={styles.primary} disabled={Boolean(busy)} onClick={() => { setEditing(null); void openFiles(editing); }}>Open documents</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={closeMemberDialog}>Done</button></div>
+      </div> : <form className={styles.form} onSubmit={saveMember}>
         {error && <p className={styles.error} role="alert">{error}</p>}
         {message && <p className={styles.status} role="status">{message}</p>}
         {editingOwner ? <><p className={styles.status}>This is your main business account. TLink will email the app username and one-time PIN to <strong>{editing.email}</strong>.</p><div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing.lastName} /></label></div><p className={styles.hint}>Your personal name is used for technician sign-off when a job is assigned to you. TLink will not use the business name as the signer.</p></> : <div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email for invitation<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>Adding a person with an email sends their team invitation automatically. Leave it blank for a roster-only person.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>}
@@ -887,17 +921,17 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
           {permissionGroups.map((group) => <fieldset className={styles.permissionGroup} key={group.label}><legend>{group.label}</legend>{group.items.map((item) => <label className={styles.check} key={item.key}><input type="checkbox" disabled={!isOwner && !actorPermissions[item.key]} checked={Boolean(formPermissions[item.key])} onChange={(event) => setPermission(item.key, event.target.checked)} /><span>{item.label}<small>{!isOwner && !actorPermissions[item.key] ? "You cannot grant access you do not have." : item.detail}</small></span></label>)}</fieldset>)}
         </> : <p className={styles.status}>{editingOwnAccess ? "You cannot edit your own access permissions." : "You can update this person's contact details and status. Only the owner or a delegated access manager can change permissions."}</p>}</>}
         <div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy === "member"}>{busy === "member" ? "Saving..." : editing === "new" ? "Add team member" : editingOwner ? "Save my details" : "Save changes"}</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={closeMemberDialog}>{editing === "new" ? "Cancel" : "Done"}</button></div>
-      </form></div></div>}
+      </form>}</div></div>}
 
-    <section className={styles.devices} aria-label="Field devices"><header className={styles.listHeader}><div><strong>Field devices</strong><p className={styles.hint}>Find and revoke any lost or replaced phone or tablet. Authorising again lets its active user register securely.</p></div><span>{deviceRoster.total} devices | {pendingPushEvents} alerts queued</span></header>
+    {!archivedView && <section className={styles.devices} aria-label="Field devices"><header className={styles.listHeader}><div><strong>Field devices</strong><p className={styles.hint}>Find and revoke any lost or replaced phone or tablet. Authorising again lets its active user register securely.</p></div><span>{deviceRoster.total} devices | {pendingPushEvents} alerts queued</span></header>
       <form className={styles.filters} onSubmit={(event) => { event.preventDefault(); setDevicePage(1); setAppliedDeviceQuery(deviceQuery.trim()); }}><label>Find a device<input type="search" value={deviceQuery} onChange={(event) => setDeviceQuery(event.target.value)} placeholder="Device, ID, member or email" /></label><label>Status<select value={deviceStatus} onChange={(event) => { setDeviceStatus(event.target.value as "" | "active" | "revoked"); setDevicePage(1); }}><option value="">All device states</option><option value="active">Active</option><option value="revoked">Revoked</option></select></label><label>Team member<select value={deviceMemberId} onChange={(event) => { setDeviceMemberId(event.target.value); setDevicePage(1); }}><option value="">Everyone</option>{members.map((member) => <option value={member.id} key={member.id}>{memberLabel(member)}</option>)}</select></label><button type="submit" className={styles.secondary} disabled={devicesLoading}>{devicesLoading ? "Searching..." : "Search"}</button></form>
-      {devices.length ? <div className={styles.deviceList}>{devices.map((device) => <article key={device.id} className={styles.deviceRow}><div><strong>{device.deviceName}</strong><span>{[device.memberName, device.memberEmail].filter(Boolean).join(" | ")}</span><small>{device.platform === "ios" ? "iPhone or iPad" : "Android"} | App {device.appVersion || "unknown"} | Push {device.pushConnected ? "ready" : "not connected"} | {device.lastSeenAt ? `Last used ${new Date(device.lastSeenAt).toLocaleString("en-AU")}` : "Not used yet"}</small></div><span className={`${styles.state} ${device.status === "active" ? styles.current : styles.expired}`}>{device.status}</span>{device.status === "active" ? <button type="button" className={styles.danger} disabled={busy === `device:${device.id}`} onClick={() => void updateDevice(device, "revoke_device")}>{busy === `device:${device.id}` ? "Saving..." : "Revoke access"}</button> : device.memberStatus === "suspended" ? <small>Reactivate this team member before authorising a device.</small> : <button type="button" className={styles.secondary} disabled={busy === `device:${device.id}`} onClick={() => void updateDevice(device, "authorise_device")}>{busy === `device:${device.id}` ? "Saving..." : "Authorise again"}</button>}</article>)}</div> : <p className={styles.empty}>{devicesLoading ? "Loading field devices..." : "No field devices match these filters."}</p>}
+      {devices.length ? <div className={styles.deviceList}>{devices.map((device) => <article key={device.id} className={styles.deviceRow}><div><strong>{device.deviceName}</strong><span>{[device.memberName, device.memberEmail].filter(Boolean).join(" | ")}</span><small>{device.platform === "ios" ? "iPhone or iPad" : "Android"} | App {device.appVersion || "unknown"} | Push {device.pushConnected ? "ready" : "not connected"} | {device.lastSeenAt ? `Last used ${new Date(device.lastSeenAt).toLocaleString("en-AU")}` : "Not used yet"}</small></div><span className={`${styles.state} ${device.status === "active" ? styles.current : styles.expired}`}>{device.status}</span>{device.memberStatus === "archived" ? <small>Archived team member. Access is revoked.</small> : device.status === "active" ? <button type="button" className={styles.danger} disabled={busy === `device:${device.id}`} onClick={() => void updateDevice(device, "revoke_device")}>{busy === `device:${device.id}` ? "Saving..." : "Revoke access"}</button> : device.memberStatus === "suspended" ? <small>Reactivate this team member before authorising a device.</small> : <button type="button" className={styles.secondary} disabled={busy === `device:${device.id}`} onClick={() => void updateDevice(device, "authorise_device")}>{busy === `device:${device.id}` ? "Saving..." : "Authorise again"}</button>}</article>)}</div> : <p className={styles.empty}>{devicesLoading ? "Loading field devices..." : "No field devices match these filters."}</p>}
       {deviceRoster.totalPages > 1 && <nav className={styles.pagination} aria-label="Field device pages"><button type="button" className={styles.secondary} disabled={devicePage <= 1 || devicesLoading} onClick={() => setDevicePage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {deviceRoster.page} of {deviceRoster.totalPages}</span><button type="button" className={styles.secondary} disabled={devicePage >= deviceRoster.totalPages || devicesLoading} onClick={() => setDevicePage((current) => current + 1)}>Next</button></nav>}
-    </section>
+    </section>}
 
     {filesMember && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeFiles(); }}><div ref={filesDialogRef} className={styles.filesDialog} role="dialog" aria-modal="true" aria-labelledby="member-files-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeFiles)}><header className={styles.dialogHeader}><div><span>Private member documents</span><h4 id="member-files-title">{memberLabel(filesMember)}</h4></div><button type="button" className={styles.iconButton} aria-label="Close member documents" disabled={Boolean(busy)} onClick={closeFiles}>X</button></header>
       <div className={styles.filesBody}><aside className={styles.filesSidebar}>
-        <form className={styles.uploadForm} onSubmit={uploadFile}>
+        {filesMember.status === "archived" ? <p className={styles.status}>Archived member documents are read-only. You can view and download saved files.</p> : <form className={styles.uploadForm} onSubmit={uploadFile}>
           <strong>Upload a document or credential</strong>
           <label>Credential use<select name="rentalGate" value={uploadRentalGate} onChange={(event) => setUploadRentalGate(event.target.value)}>
             <option value="">General team document</option>
@@ -929,8 +963,8 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
           <label>Supporting document or photo<input name="file" type="file" required accept="image/jpeg,image/png,application/pdf" /></label>
           <small className={styles.hint}>{uploadRentalGate ? "TLink reuses the saved credential details in field forms and prevents sign-off after the credential or supporting file expires. The business owner is notified 30 days before expiry." : "PDF, JPEG or PNG. Maximum 12 MB. The business owner is notified 30 days before a saved expiry."}</small>
           <button className={styles.primary} disabled={busy === "file-upload"}>{busy === "file-upload" ? "Uploading..." : uploadRentalGate ? "Save credential" : "Upload document"}</button>
-        </form>
-        {filesLoading ? <p className={styles.status}>Loading documents...</p> : <div className={styles.fileList}>{files.map((file) => <article key={file.id} className={`${styles.fileRow} ${preview?.file.id === file.id ? styles.selected : ""}`}><div><strong>{file.title}</strong><small>{file.credential ? `${file.credential.name} | ${file.credential.number} | ${file.credential.jurisdiction}` : file.category === "insurance" ? "Insurance" : file.category === "licence" ? "Licence" : file.category === "training" ? "Training" : file.category === "compliance" ? "Compliance document" : file.category === "id" ? "Identification" : "General document"}</small><small>{bytesLabel(file.sizeBytes)} | {file.expiresAt ? `Expires ${new Date(`${file.expiresAt}T00:00:00`).toLocaleDateString("en-AU")}` : "No expiry"}</small>{file.expiresAt && <span className={`${styles.state} ${file.expiryStatus === "expired" ? styles.expired : file.expiryStatus === "expiring" ? styles.expiring : styles.current}`}>{file.expiryStatus === "expired" ? "Expired: renewal needed" : file.expiryStatus === "expiring" ? "Renewal due within 30 days" : "Current"}</span>}</div><div className={styles.fileRowActions}><button type="button" disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file)}>View</button><button type="button" aria-label={`Download ${file.title}`} disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file, true)}>Download</button><button type="button" aria-label={`Delete ${file.title}`} disabled={busy === `delete:${file.id}`} onClick={() => void deleteFile(file)}>Delete</button></div></article>)}{!files.length && <p className={styles.empty}>No documents or credentials saved.</p>}</div>}
+        </form>}
+        {filesLoading ? <p className={styles.status}>Loading documents...</p> : <div className={styles.fileList}>{files.map((file) => <article key={file.id} className={`${styles.fileRow} ${preview?.file.id === file.id ? styles.selected : ""}`}><div><strong>{file.title}</strong><small>{file.credential ? `${file.credential.name} | ${file.credential.number} | ${file.credential.jurisdiction}` : file.category === "insurance" ? "Insurance" : file.category === "licence" ? "Licence" : file.category === "training" ? "Training" : file.category === "compliance" ? "Compliance document" : file.category === "id" ? "Identification" : "General document"}</small><small>{bytesLabel(file.sizeBytes)} | {file.expiresAt ? `Expires ${new Date(`${file.expiresAt}T00:00:00`).toLocaleDateString("en-AU")}` : "No expiry"}</small>{file.expiresAt && <span className={`${styles.state} ${file.expiryStatus === "expired" ? styles.expired : file.expiryStatus === "expiring" ? styles.expiring : styles.current}`}>{file.expiryStatus === "expired" ? "Expired: renewal needed" : file.expiryStatus === "expiring" ? "Renewal due within 30 days" : "Current"}</span>}</div><div className={styles.fileRowActions}><button type="button" disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file)}>View</button><button type="button" aria-label={`Download ${file.title}`} disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file, true)}>Download</button>{filesMember.status !== "archived" && <button type="button" aria-label={`Delete ${file.title}`} disabled={busy === `delete:${file.id}`} onClick={() => void deleteFile(file)}>Delete</button>}</div></article>)}{!files.length && <p className={styles.empty}>No documents or credentials saved.</p>}</div>}
       </aside><section className={styles.preview} aria-label="Member document preview">{preview ? preview.file.contentType.startsWith("image/") ? <img src={preview.url} alt={preview.file.title} /> : preview.file.contentType === "application/pdf" ? <iframe src={preview.url} title={preview.file.title} /> : <p className={styles.previewMessage}>This document cannot be previewed here. Use download to open it.</p> : <p className={styles.previewMessage}>Select View to open the image or PDF. Documents remain private to authorised business access.</p>}</section></div>
     </div></div>}
   </div>;

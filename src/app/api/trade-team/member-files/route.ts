@@ -98,6 +98,7 @@ function errorResponse(error: unknown) {
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "TEAM_DOCUMENT_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Your team access does not include private member documents." }, 403);
   if (code === "MEMBER_NOT_FOUND") return adminJson({ ok: false, error: "Team member not found." }, 404);
+  if (code === "MEMBER_ARCHIVED") return adminJson({ ok: false, error: "Archived team documents are read-only. You can still view and download them." }, 409);
   if (code === "FILE_NOT_FOUND") return adminJson({ ok: false, error: "Team member file not found." }, 404);
   if (code === "FILE_LIMIT_REACHED") return adminJson({ ok: false, error: `This team member already has ${TEAM_MEMBER_FILE_LIMIT} active files.` }, 409);
   if (code === "STORAGE_UNAVAILABLE") return adminJson({ ok: false, error: "Private file storage is temporarily unavailable." }, 503);
@@ -114,11 +115,12 @@ async function documentAccess(request: Request) {
   return access;
 }
 
-async function ownedMember(access: TeamAccess, memberId: string) {
+async function ownedMember(access: TeamAccess, memberId: string, editable = false) {
   const member = await getD1().prepare(`SELECT id, display_name, status
     FROM trade_team_members WHERE id = ? AND owner_uid = ? AND status <> 'removed'`)
     .bind(memberId, access.ownerUid).first<Record<string, unknown>>();
   if (!member) throw new Error("MEMBER_NOT_FOUND");
+  if (editable && member.status === "archived") throw new Error("MEMBER_ARCHIVED");
   return member;
 }
 
@@ -272,7 +274,7 @@ export async function POST(request: Request) {
     catch { return adminJson({ ok: false, error: "The team member file upload could not be read." }, 400); }
     const action = cleanAdminText(form.get("action"), 30) || "upload";
     const memberId = cleanAdminText(form.get("memberId"), 180);
-    await ownedMember(access, memberId);
+    await ownedMember(access, memberId, true);
     if (action === "retry_cleanup") {
       const fileId = cleanAdminText(form.get("fileId"), 180);
       const result = await sweepCleanup(access, fileId);
@@ -344,7 +346,10 @@ export async function POST(request: Request) {
       });
       const results = await getD1().batch([
         getD1().prepare(`UPDATE trade_team_member_files SET status = 'active', updated_at = ?
-          WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'uploading'`)
+          WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'uploading'
+            AND EXISTS (SELECT 1 FROM trade_team_members member
+              WHERE member.id = trade_team_member_files.team_member_id
+                AND member.owner_uid = trade_team_member_files.owner_uid AND member.status NOT IN ('archived', 'removed'))`)
           .bind(now, id, access.ownerUid, memberId),
         ...(rentalGate ? [getD1().prepare(`INSERT INTO trade_team_member_credentials
           (id, owner_uid, team_member_id, credential_type, rental_gate, name, credential_number,
@@ -407,7 +412,7 @@ export async function DELETE(request: Request) {
     await sweepCleanup(access);
     const search = new URL(request.url).searchParams;
     const memberId = cleanAdminText(search.get("memberId"), 180);
-    await ownedMember(access, memberId);
+    await ownedMember(access, memberId, true);
     const fileId = cleanAdminText(search.get("fileId"), 180);
     const current = await getD1().prepare(`SELECT * FROM trade_team_member_files
       WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'active'`)
@@ -417,7 +422,10 @@ export async function DELETE(request: Request) {
     const results = await getD1().batch([
       getD1().prepare(`UPDATE trade_team_member_files SET status = 'cleanup_pending',
         next_cleanup_at = ?, last_cleanup_error = 'delete_requested', updated_at = ?
-        WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'active'`)
+        WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'active'
+          AND EXISTS (SELECT 1 FROM trade_team_members member
+            WHERE member.id = trade_team_member_files.team_member_id
+              AND member.owner_uid = trade_team_member_files.owner_uid AND member.status NOT IN ('archived', 'removed'))`)
         .bind(now, now, fileId, access.ownerUid, memberId),
       getD1().prepare(`UPDATE trade_team_member_credentials SET status = 'archived', file_id = '', updated_at = ?
         WHERE owner_uid = ? AND team_member_id = ? AND file_id = ?

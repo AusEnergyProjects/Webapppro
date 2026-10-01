@@ -408,3 +408,165 @@ test("a pending invitation cannot be displayed against another member", () => {
   assert.match(settings, /disabled=\{Boolean\(busy\)\} onClick=\{openNew\}/);
   assert.doesNotMatch(settings, /(?<!disabled=\{Boolean\(busy\)\} )onClick=\{\(\) => openEdit\(member\)\}/);
 });
+
+const settingsAst = ts.createSourceFile("TradeTeamSettings.tsx", settings, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const settingsComponent = settingsAst.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "TradeTeamSettings");
+function teamHandler(name, context) {
+  const declaration = settingsComponent.body.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  assert.ok(declaration, `Production handler ${name} exists`);
+  const script = ts.transpileModule(declaration.getText(settingsAst), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  return runInNewContext(`${script}; ${name}`, context);
+}
+
+const archiveMember = { id: "staff-1", firstName: "Katja", lastName: "Rosic", email: "katja@example.test", phone: "0400000000", fieldUsername: "katja", status: "active", isOwner: false, hasLogin: true, updatedAt: "loaded-revision", fileCount: 2, permissions: { jobScope: "own" } };
+const memberLabel = member => `${member.firstName} ${member.lastName}`;
+
+test("Delete archives the exact loaded member revision after confirmation and refreshes roster and revoked devices", async () => {
+  const requests = []; const confirmations = []; const messages = []; const refreshes = [];
+  const archive = teamHandler("updateMemberStatus", {
+    busy: "", isCurrentMember: () => false, memberLabel,
+    window: { confirm: text => { confirmations.push(text); return true; } },
+    setBusy() {}, setError() {}, setMessage: value => messages.push(value), setMenu() {}, setEditing() {},
+    tokenHeaders: async () => ({ Authorization: "Bearer fixture" }),
+    fetch: async (url, options) => { requests.push({ url, method: options.method, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; },
+    handleMemberConflict: async () => false,
+    load: async () => refreshes.push("roster"), loadDevices: async () => refreshes.push("devices"),
+  });
+  await archive(archiveMember, "archived");
+  assert.deepEqual(requests, [{ url: "/api/trade-team", method: "PATCH", body: { action: "archive_member", memberId: "staff-1", expectedUpdatedAt: "loaded-revision" } }]);
+  assert.match(confirmations[0], /access will be revoked.*Archived team.*history, documents and audit records will remain saved/);
+  assert.deepEqual(refreshes, ["roster", "devices"]);
+  assert.match(messages.at(-1), /archived and access revoked/);
+});
+
+test("archive cancellation, owner, self, archived records and pending mutations cannot dispatch a deletion", async () => {
+  for (const fixture of [
+    { member: archiveMember, confirmed: false },
+    { member: { ...archiveMember, isOwner: true } },
+    { member: archiveMember, current: true },
+    { member: { ...archiveMember, status: "archived" } },
+    { member: archiveMember, busy: "member" },
+  ]) {
+    const archive = teamHandler("updateMemberStatus", {
+      busy: fixture.busy || "", isCurrentMember: () => fixture.current || false, memberLabel,
+      window: { confirm: () => fixture.confirmed ?? true },
+      // Any state change or request would fail: none should be reached.
+    });
+    await archive(fixture.member, "archived");
+  }
+});
+
+test("a stale archive response does not report success or hide the current member", async () => {
+  let conflictHandled = false; const messages = []; let cleared = false;
+  const archive = teamHandler("updateMemberStatus", {
+    busy: "", isCurrentMember: () => false, memberLabel, window: { confirm: () => true },
+    setBusy() {}, setError() {}, setMessage: value => messages.push(value), setMenu() { cleared = true; }, setEditing() { cleared = true; },
+    tokenHeaders: async () => ({}), fetch: async () => ({ status: 409 }),
+    handleMemberConflict: async response => { assert.equal(response.status, 409); conflictHandled = true; return true; },
+  });
+  await archive(archiveMember, "archived");
+  assert.equal(conflictHandled, true);
+  assert.equal(cleared, false);
+  assert.equal(messages.some(message => /access revoked/.test(message)), false);
+});
+
+test("switching between team and archive explicitly resets stale results and filters", () => {
+  const changes = {};
+  const context = { busy: "", statusFilter: "all" };
+  for (const name of ["Loading", "Members", "Page", "Query", "AppliedQuery", "CapabilityFilter", "StatusFilter", "Menu", "InviteUrl", "InviteDelivery", "Error", "Message"]) {
+    context[`set${name}`] = value => { changes[name] = value; };
+  }
+  teamHandler("changeRosterView", context)(true);
+  assert.equal(changes.StatusFilter, "archived");
+  assert.equal(changes.Loading, true);
+  assert.equal(changes.Members.length, 0);
+  assert.equal(changes.Page, 1);
+  assert.equal(changes.AppliedQuery, "");
+  assert.equal(changes.CapabilityFilter, "");
+  context.statusFilter = "archived";
+  teamHandler("changeRosterView", context)(false);
+  assert.equal(changes.StatusFilter, "all");
+});
+
+test("archived records cannot issue invitations, PINs, profile edits or document/device mutations", async () => {
+  const member = { ...archiveMember, status: "archived" };
+  for (const name of ["createLogin", "createFieldPin", "revokeFieldAccess"]) {
+    await teamHandler(name, {})(member);
+  }
+  await teamHandler("updateDevice", {})({ memberStatus: "archived" }, "authorise_device");
+  const event = { preventDefault() {}, currentTarget: {} };
+  await teamHandler("saveMember", { editing: member })(event);
+  await teamHandler("uploadFile", { filesMember: member })(event);
+  await teamHandler("deleteFile", { filesMember: member })({ id: "file-1" });
+});
+
+// Evaluate the production JSX with plain element nodes. This exercises the same
+// branches used on desktop and mobile without network requests or a browser.
+const settingsRender = settingsComponent.body.statements.filter(ts.isReturnStatement).at(-1).expression.getText(settingsAst);
+const settingsRenderScript = ts.transpileModule(`function renderFixture() { return (${settingsRender}); }`, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React },
+}).outputText;
+function renderTeam(overrides = {}) {
+  const context = {
+    React: { createElement: (type, props, ...children) => ({ type, props: props || {}, children: children.flat(Infinity).filter(child => child !== false && child != null) }) },
+    styles: new Proxy({}, { get: (_, key) => key }),
+    archivedView: false, busy: "", error: "", message: "", editing: null, invitationPanel: null,
+    roster: { total: 0, totalPages: 1 }, page: 1, loading: false, query: "", statusFilter: "all", capabilityFilter: "",
+    ENERGY_SERVICE_CATALOGUE: [], visibleMembers: [], members: [], isOwner: true,
+    memberLabel, isCurrentMember: member => member.id === "self", statusName: member => member.status,
+    TradeTeamStatusDot() {}, scheduleColours: [], menu: null, filesMember: null,
+    deviceRoster: { total: 0, totalPages: 1 }, devices: [], pendingPushEvents: 0, deviceQuery: "", deviceStatus: "", deviceMemberId: "", devicesLoading: false,
+    openNew() {}, searchMembers() {}, closeMemberDialog() {}, dialogRef: {}, filesDialogRef: {}, closeFiles() {},
+    filesLoading: false, files: [], preview: null, bytesLabel: value => `${value} bytes`,
+    ...overrides,
+  };
+  return runInNewContext(`${settingsRenderScript}; renderFixture()`, context);
+}
+function elements(node) {
+  if (!node || typeof node !== "object") return [];
+  return [node, ...node.children.flatMap(elements)];
+}
+function textContent(node) {
+  if (node == null) return "";
+  return typeof node === "object" ? node.children.map(textContent).join("") : String(node);
+}
+
+test("desktop and mobile show Delete for ordinary staff and never for the owner, current user or archived staff", () => {
+  for (const member of [archiveMember, { ...archiveMember, status: "suspended" }, { ...archiveMember, isOwner: true }, { ...archiveMember, id: "self" }, { ...archiveMember, status: "archived" }]) {
+    const calls = [];
+    const tree = renderTeam({ visibleMembers: [member], updateMemberStatus: (person, state) => calls.push([person.id, state]) });
+    const buttons = elements(tree).filter(node => node.type === "button" && textContent(node) === "Delete");
+    const expected = !member.isOwner && member.id !== "self" && member.status !== "archived" ? 2 : 0;
+    assert.equal(buttons.length, expected);
+    for (const button of buttons) button.props.onClick();
+    assert.deepEqual(calls, Array.from({ length: expected }, () => [member.id, "archived"]));
+  }
+});
+
+test("archived details render identity and document access without forms, invitations, PINs or reactivation", () => {
+  const member = { ...archiveMember, status: "archived" };
+  const opened = []; const selected = [];
+  const tree = renderTeam({ archivedView: true, statusFilter: "archived", editing: member, visibleMembers: [member], openFiles: person => opened.push(person.id), setEditing: value => selected.push(value) });
+  const nodes = elements(tree);
+  const dialog = nodes.find(node => node.props.role === "dialog");
+  assert.match(textContent(dialog), /Katja Rosic.*katja@example.test.*0400000000/);
+  assert.match(textContent(dialog), /read-only/);
+  assert.equal(elements(dialog).some(node => ["form", "input", "select"].includes(node.type)), false);
+  assert.doesNotMatch(textContent(tree), /Add team member|Re-invite|Reactivate access|Generate and email PIN|Authorise again|Delete/);
+  elements(dialog).find(node => node.type === "button" && textContent(node) === "Open documents").props.onClick();
+  assert.deepEqual(selected, [null]);
+  assert.deepEqual(opened, ["staff-1"]);
+});
+
+test("archived documents keep View and Download while upload and Delete are absent", () => {
+  const file = { id: "file-1", memberId: "staff-1", title: "Retained licence", contentType: "application/pdf", category: "licence", sizeBytes: 10 };
+  const calls = [];
+  const tree = renderTeam({ archivedView: true, filesMember: { ...archiveMember, status: "archived" }, files: [file], fetchFile: (record, download = false) => calls.push([record.id, download]) });
+  const dialog = elements(tree).find(node => node.props["aria-labelledby"] === "member-files-title");
+  assert.match(textContent(dialog), /read-only/);
+  assert.equal(elements(dialog).some(node => node.type === "form"), false);
+  const actions = elements(dialog).filter(node => node.type === "button" && ["View", "Download", "Delete"].includes(textContent(node)));
+  assert.deepEqual(actions.map(textContent), ["View", "Download"]);
+  actions.forEach(button => button.props.onClick());
+  assert.deepEqual(calls, [["file-1", false], ["file-1", true]]);
+});

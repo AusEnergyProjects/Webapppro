@@ -67,8 +67,8 @@ export async function connectSystemCall(callId: string) { await native?.connecte
 export async function endSystemCall(callId: string) { await native?.end(callId); }
 export async function setSystemCallSpeaker(enabled: boolean) { await native?.speaker(enabled); }
 
-// Native events are drained only after authentication is restored. Native code
-// retains lock-screen answers while JS starts; an event never supplies access.
+// Native code retains lock-screen answers while JS starts. A scoped invitation
+// can authorise its call before workspace restoration; deferred events stay queued.
 export function subscribeSystemCalls(receive: (event: SystemCallEvent) => Promise<void | false>) {
   if (!native) return () => undefined;
   let closed = false;

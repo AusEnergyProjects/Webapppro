@@ -241,6 +241,88 @@ test("member documents allow owner and delegated manager access without crossing
   assert.equal(audits, 2);
 });
 
+test("archived member documents remain readable and downloadable only within authorised business access", async () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`
+    CREATE TABLE trade_team_members (id TEXT PRIMARY KEY, owner_uid TEXT, display_name TEXT, status TEXT);
+    CREATE TABLE trade_team_member_files (id TEXT PRIMARY KEY, owner_uid TEXT, team_member_id TEXT, category TEXT, description TEXT,
+      title TEXT, expires_at TEXT, file_name TEXT, content_type TEXT, size_bytes INTEGER, sha256 TEXT, object_key TEXT,
+      status TEXT, cleanup_attempts INTEGER, next_cleanup_at TEXT, last_cleanup_error TEXT, uploaded_by_uid TEXT,
+      created_at TEXT, updated_at TEXT, deleted_at TEXT);
+    CREATE TABLE trade_team_member_credentials (id TEXT PRIMARY KEY, file_id TEXT, owner_uid TEXT, team_member_id TEXT,
+      credential_type TEXT, name TEXT, credential_number TEXT, issuer TEXT, jurisdiction TEXT, rental_gate TEXT, status TEXT, updated_at TEXT);
+    CREATE TABLE trade_team_member_events (id TEXT, owner_uid TEXT, team_member_id TEXT, actor_uid TEXT, entity_type TEXT,
+      entity_id TEXT, event_type TEXT, metadata TEXT, created_at TEXT);
+    INSERT INTO trade_team_members VALUES ('member-1','owner-1','Former Staff','archived'),('member-2','owner-2','Other Business','archived');
+    INSERT INTO trade_team_member_files VALUES ('file-1','owner-1','member-1','insurance','','Insurance','2027-01-31',
+      'insurance.pdf','application/pdf',100,'hash','team/file-1','active',0,'','','owner-1','2026-08-13','2026-08-13','');
+    INSERT INTO trade_team_member_credentials VALUES ('credential-1','file-1','owner-1','member-1','licence','Licence','L123','Issuer','VIC','','active','2026-08-13');
+  `);
+  let access = { ownerUid: "owner-1", actorUid: "owner-1", isOwner: true, canManageTeam: false };
+  let beforeBatch; let deletedObjects = 0; let uploadedObjects = 0;
+  class FileStatement {
+    constructor(sql, values = []) { this.sql = sql; this.values = values; }
+    bind(...values) { return new FileStatement(this.sql, values); }
+    async first() { return database.prepare(this.sql).get(...this.values) || null; }
+    async all() { return { results: database.prepare(this.sql).all(...this.values) }; }
+    run() { return { success: true, meta: { changes: Number(database.prepare(this.sql).run(...this.values).changes) } }; }
+  }
+  const binding = { prepare: sql => new FileStatement(sql), batch: async statements => {
+    beforeBatch?.(); database.exec("BEGIN");
+    try { const results = statements.map(statement => statement.run()); database.exec("COMMIT"); return results; }
+    catch (error) { database.exec("ROLLBACK"); throw error; }
+  } };
+  const route = transpileRoute("../src/app/api/trade-team/member-files/route.ts", {
+    "cloudflare:workers": { env: { EVIDENCE: { put: async () => { uploadedObjects++; }, delete: async () => { deletedObjects++; },
+      get: async key => key === "team/file-1" ? { body: "private PDF content", httpMetadata: { contentType: "application/pdf" } } : null } } },
+    "../../../../../db": { getD1: () => binding },
+    "@/lib/admin-server": adminServer,
+    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access },
+    "@/lib/trade-team-member-files-server": { inspectTeamMemberFile: async () => { throw Error("Archived uploads must not be inspected"); },
+      safeTeamMemberFileName: value => value, TEAM_MEMBER_FILE_LIMIT: 20, TeamMemberFileError: class extends Error {} },
+    "@/lib/trade-team-document-expiry-server": { tradeTeamDocumentExpiryStatus },
+    "@/lib/trade-team-member-file-cleanup": { drainTradeTeamMemberFileCleanup: async () => ({ completed: 0, pending: 0 }) },
+  });
+  try {
+    const url = "https://test/api/trade-team/member-files?memberId=member-1";
+    const filesBefore = database.prepare("SELECT * FROM trade_team_member_files").all();
+    const credentialsBefore = database.prepare("SELECT * FROM trade_team_member_credentials").all();
+    for (const actor of [{ actorUid: "owner-1", isOwner: true, canManageTeam: false }, { actorUid: "manager-1", isOwner: false, canManageTeam: true }]) {
+      access = { ownerUid: "owner-1", ...actor };
+      const listed = await route.GET(new Request(url));
+      assert.equal(listed.status, 200);
+      assert.equal((await listed.json()).files[0].credential.number, "L123");
+      const downloaded = await route.GET(new Request(`${url}&fileId=file-1&download=1`));
+      assert.equal(downloaded.status, 200);
+      assert.match(downloaded.headers.get("content-disposition"), /attachment/);
+      assert.equal(downloaded.headers.get("cache-control"), "private, no-store");
+      assert.equal(await downloaded.text(), "private PDF content");
+      assert.equal((await route.DELETE(new Request(`${url}&fileId=file-1`, { method: "DELETE" }))).status, 409);
+    }
+    const form = new FormData(); form.set("memberId", "member-1"); form.set("title", "Must not upload");
+    form.set("file", new Blob(["private"], { type: "application/pdf" }), "new.pdf");
+    const upload = new Request("https://test/api/trade-team/member-files", { method: "POST", body: form });
+    upload.headers.set("Content-Length", "1024");
+    assert.equal((await route.POST(upload)).status, 409);
+
+    access = { ownerUid: "owner-1", actorUid: "staff-1", isOwner: false, canManageTeam: false };
+    assert.equal((await route.GET(new Request(url))).status, 403);
+    access = { ownerUid: "owner-2", actorUid: "owner-2", isOwner: true, canManageTeam: false };
+    assert.equal((await route.GET(new Request(url))).status, 404);
+    assert.equal((await route.GET(new Request("https://test/api/trade-team/member-files?memberId=member-2&fileId=file-1&download=1"))).status, 404);
+
+    // A concurrent archive fences the actual DELETE even after the read check.
+    access = { ownerUid: "owner-1", actorUid: "owner-1", isOwner: true, canManageTeam: false };
+    database.exec("UPDATE trade_team_members SET status='active' WHERE id='member-1'");
+    beforeBatch = () => database.exec("UPDATE trade_team_members SET status='archived' WHERE id='member-1'");
+    assert.equal((await route.DELETE(new Request(`${url}&fileId=file-1`, { method: "DELETE" }))).status, 404);
+    assert.deepEqual(database.prepare("SELECT * FROM trade_team_member_files").all(), filesBefore);
+    assert.deepEqual(database.prepare("SELECT * FROM trade_team_member_credentials").all(), credentialsBefore);
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events WHERE event_type='file.delete_requested'").get().count, 0);
+    assert.equal(deletedObjects, 0); assert.equal(uploadedObjects, 0);
+  } finally { database.close(); }
+});
+
 test("member document and expiry migrations match schema and run with the Sites semicolon splitter", () => {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
