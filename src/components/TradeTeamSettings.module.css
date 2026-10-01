@@ -279,7 +279,7 @@
   color: #294f46;
   font-size: .82rem;
   min-width: 1040px;
-  table-layout: fixed;
+  table-layout: auto;
   width: 100%;
 }
 
@@ -307,7 +307,7 @@
 .memberTable th:nth-child(4) { width: 25%; }
 .memberTable th:nth-child(5) { width: 14%; }
 .memberTable th:nth-child(6) { width: 12%; }
-.memberTable th:nth-child(7) { width: 8%; }
+.memberTable th:nth-child(7) { width: 1%; }
 
 .memberTable tbody tr:last-child td {
   border-bottom: 0;
@@ -453,6 +453,16 @@
 .actions {
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.memberTable .actions {
+  flex-wrap: nowrap;
+}
+
+.memberTable .actions button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  white-space: nowrap;
 }
 
 .contextMenu {
