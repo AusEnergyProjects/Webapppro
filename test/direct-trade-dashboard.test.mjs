@@ -95,6 +95,22 @@ test("Business settings expose bounded branding, service, template and closure c
   assert.doesNotMatch(businessSettings, /CreditexOnboardingReviewWorkspace|creditex-training-governance/);
 });
 
+test("installer owners can open the existing accounting connections workspace from Business settings", () => {
+  const accountSections = [...dashboard.matchAll(/\{workspace === "account" && \(([\s\S]*?)\n              \)\}/g)].map(match => match[1]);
+  assert.equal(accountSections.length, 2, "Supplier and installer settings remain separate");
+  assert.doesNotMatch(accountSections[0], /business-accounting-connections-title|Manage accounting connections/);
+  const installerSettings = accountSections[1];
+  assert.match(dashboard, /<TradeBusinessGate destination="owner">/);
+  assert.match(installerSettings, /hasBusinessOperations && <section[^>]+aria-labelledby="business-accounting-connections-title"/);
+  assert.match(installerSettings, /Connect MYOB, Xero or QuickBooks/);
+  assert.match(installerSettings, /onClick=\{\(\) => setWorkspace\("work", \(\) => setCommandTarget\(\{ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date\.now\(\) \}\)\)\}>Manage accounting connections/);
+  assert.doesNotMatch(dashboard, /<TradeIntegrationCentre/);
+  const allowedViews = installerCrm.slice(installerCrm.indexOf("const allowedViews = useMemo"), installerCrm.indexOf("function openPriceBook"));
+  assert.match(allowedViews, /if \(!staffPermissions\) return \[[^;]+"integrations"\]/);
+  assert.doesNotMatch(allowedViews, /views\.push\("integrations"\)/);
+  assert.match(installerCrm, /view === "integrations" && <div className="crm-view"><TradeIntegrationCentre/);
+});
+
 test("closed accounts receive a terminal dashboard state without profile recreation", () => {
   const closedStateStart = dashboard.indexOf(
     'profile?.accountStatus === "closed"',

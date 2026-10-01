@@ -2611,6 +2611,14 @@ function DirectTradeDashboardContent() {
               ))}
 
               {workspace === "account" && (
+                <>
+                {hasBusinessOperations && <section className="dashboard-panel" aria-labelledby="business-accounting-connections-title">
+                  <div className="dashboard-panel-heading">
+                    <h2 id="business-accounting-connections-title">Accounting connections</h2>
+                    <p>Connect MYOB, Xero or QuickBooks and manage the accounting connection for this business.</p>
+                  </div>
+                  <button type="button" className="btn" onClick={() => setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() }))}>Manage accounting connections</button>
+                </section>}
                 <TradeBusinessSettingsWorkspace
                   user={user}
                   profile={profile}
@@ -2624,6 +2632,7 @@ function DirectTradeDashboardContent() {
                     void leaveAccount();
                   }}
                 />
+                </>
               )}
 
               {workspace === "work" && activeWorkView === "leads" && <>
