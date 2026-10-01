@@ -273,7 +273,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       };
       if (!entry) {
         const element = document.createElement("button"); element.type = "button"; element.className = styles.pinButton;
-        const badge = document.createElement("span"); badge.className = styles.pin;
+        const badge = document.createElement("span"); badge.className = styles.pin; badge.setAttribute("aria-hidden", "true");
         element.append(badge);
         const marker = new runtime.api.Marker({ element, anchor: "bottom" }).setLngLat([pin.position.lng, pin.position.lat]).addTo(runtime.map);
         entry = { marker, element, badge, click }; markers.set(pin.id, entry);
@@ -282,7 +282,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       entry.marker.setLngLat([pin.position.lng, pin.position.lat]);
       const title = `${number(pin.count)} ${pin.count === 1 ? "record" : "records"}. ${TRADE_MAP_PIN_LABELS[pin.category]}. ${pin.count === 1 ? "Select to view details." : pin.addressKey ? "Select to browse this address." : "Select to zoom in."}`;
       entry.element.title = title; entry.element.setAttribute("aria-label", title);
-      entry.badge.textContent = pin.count > 1 ? number(pin.count) : query.resource === "jobs" ? "J" : "C";
+      entry.badge.textContent = pin.count > 1 ? number(pin.count) : "";
       entry.badge.dataset.category = pin.category;
       entry.badge.dataset.cluster = String(pin.count > 1);
       const isSelected = Boolean((selected && pin.record && recordKey(selected) === recordKey(pin.record)) || (view.addressKey && view.addressKey === pin.addressKey));
@@ -314,7 +314,9 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       if (value.result.status === "located") {
         interactedRef.current = true;
         const position = value.result.position;
-        addressMarkerRef.current = new runtime.api.Marker({ color: "#087567" }).setLngLat([position.lng, position.lat]).addTo(runtime.map);
+        const element = document.createElement("div"); element.className = styles.pinButton; element.setAttribute("role", "img"); element.setAttribute("aria-label", "Matched address");
+        const badge = document.createElement("span"); badge.className = styles.pin; badge.dataset.category = "customer"; badge.dataset.selected = "true"; badge.setAttribute("aria-hidden", "true"); element.append(badge);
+        addressMarkerRef.current = new runtime.api.Marker({ element, anchor: "bottom" }).setLngLat([position.lng, position.lat]).addTo(runtime.map);
         runtime.map.easeTo({ center: [position.lng, position.lat], zoom: 17 });
         setSearchState({ scope, busy: false, message: value.result.approximate ? "Approximate address found. Confirm its location before travelling." : "Address found in the Australian address directory." });
       } else setSearchState({ scope, busy: false, message: value.result.status === "unlocated" ? value.result.reason === "ambiguous" ? "This address has more than one location. Add the unit number and check the full address." : "No exact address match. Enter the street number, street, suburb, state and postcode." : "The address directory is temporarily unavailable. Try again." });
