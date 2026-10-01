@@ -89,6 +89,8 @@ function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"], actorUi
     CREATE TABLE trade_account_service_areas(id TEXT PRIMARY KEY, firebase_uid TEXT, position INTEGER, postcode TEXT,
       radius_km INTEGER, record_status TEXT, created_at TEXT, updated_at TEXT);`);
   database.exec(read("../drizzle/0230_trade_manager_name.sql"));
+  database.exec(`CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,member_uid TEXT,display_name TEXT,updated_at TEXT);
+    INSERT INTO trade_team_members VALUES('owner-member','owner-1','owner-1','Test trade',''),('staff-member','owner-1','staff-1','Katja Rosic','');`);
   database.prepare(`INSERT INTO trade_accounts(firebase_uid, email, business_name, phone, partner_type, postcode,
     capabilities, availability_status, account_status, verification_status, service_states, abn) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run("owner-1", "owner@example.test", "Test trade", "0412345678", "installer", "3000", JSON.stringify(capabilities), "open", "active", "approved", JSON.stringify(serviceStates), "51824753556");
@@ -143,6 +145,8 @@ test("manager name saves canonically, reloads, survives unrelated settings and c
     const saved = await f.patch({ managerName: "  James\r\n\tMorris  " });
     assert.equal(saved.status, 200);
     assert.equal((await saved.json()).settings.managerName, "James Morris");
+    assert.equal(f.database.prepare("SELECT display_name FROM trade_team_members WHERE id='owner-member'").get().display_name, "James Morris");
+    assert.equal(f.database.prepare("SELECT display_name FROM trade_team_members WHERE id='staff-member'").get().display_name, "Katja Rosic");
     assert.equal((await (await f.get()).json()).profile.managerName, "James Morris");
     assert.equal((await f.patch({ availabilityStatus: "limited" })).status, 200);
     assert.equal(f.database.prepare("SELECT manager_name FROM trade_accounts").get().manager_name, "James Morris");
@@ -150,6 +154,7 @@ test("manager name saves canonically, reloads, survives unrelated settings and c
     assert.deepEqual({ ...identity }, { contact_name: "Registered contact", business_name: "Test trade", document_business_name: "Invoice business" });
     assert.equal((await f.patch({ managerName: "" })).status, 200);
     assert.equal((await (await f.get()).json()).profile.managerName, "");
+    assert.equal(f.database.prepare("SELECT display_name FROM trade_team_members WHERE id='owner-member'").get().display_name, "Test trade");
   } finally { f.database.close(); }
 });
 

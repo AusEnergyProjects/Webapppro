@@ -21,13 +21,15 @@ const identity = { uid: 'alex', email: 'alex@example.test' };
 const business = { ownerUid: 'business-a', memberId: 'member-a', businessName: 'Synthetic business', role: 'member' };
 
 function harness(overrides = {}) {
-  const state = { events: [], requests: [], registrations: [], nativeEnabled: true, serverToken: '', modes: ['trade_team'], sync: {}, tokenListener: null };
+  const state = { events: [], requests: [], registrations: [], invalidations: 0, nativeEnabled: true, serverToken: '', modes: ['trade_team'], sync: {}, tokenListener: null };
   const refs = { switching: { current: false }, authGeneration: { current: 1 }, notificationRegistrations: { current: new Set() }, localWrites: { current: 0 } };
   const dependencies = {
     ...refs, signedIn: true, access: { status: 'approved' }, user: principal,
     APP_VERSION: '1.0.2', MOBILE_PLATFORM: 'ios', firebaseAuth: { currentUser: identity },
     checkingAccess: { status: 'checking' }, approvedAccess: { status: 'approved' }, signedOutAccess: { status: 'signed_out' }, emptySync: {},
     ApiError: class extends Error {},
+    DeviceEventEmitter: { emit: event => { assert.equal(event, 'tlink:call-identity-invalidated'); state.invalidations++; } },
+    networkVerificationRequired: { status: 'network_verification_required' },
     deviceRegistration: async options => { state.registrations.push(options); return { pushToken: 'message-token', voipPushToken: 'call-token', nativeCallCapable: true }; },
     resolveFieldAccessModes: async () => state.modes,
     apiRequest: async (path, init = {}, _user, options) => {
@@ -70,7 +72,7 @@ function harness(overrides = {}) {
   assert.ok(auth && tokens && permission);
   const api = new Function(...Object.keys(dependencies), compile(`${bodies}
     return { ${names.join(',')}, authEffect: ${auth}, tokenEffect: ${tokens}, permissionEffect: ${permission} };`))(...Object.values(dependencies));
-  return { state, ...refs, api };
+  return { state, ...refs, api, dependencies };
 }
 
 test('sign-out drains an already sent registration before disabling native calls and clearing server tokens', async () => {
@@ -83,6 +85,7 @@ test('sign-out drains an already sent registration before disabling native calls
   } });
   const registering = h.api.registerNotificationDevice(); await settle();
   const logout = h.api.signOut(); await settle();
+  assert.ok(h.state.invalidations > 0, 'call session is stopped before account credentials can change');
   assert.deepEqual(h.state.events, ['registration-started']);
   request.resolve(); await Promise.all([registering, logout]);
   assert.ok(h.state.events.indexOf('registered') < h.state.events.indexOf('native-disabled'));
@@ -142,6 +145,32 @@ test('an obsolete signed-out auth callback cannot disable the newer authenticate
   h.api.authEffect(); const obsolete = h.state.authCallback(null);
   await h.state.authCallback(identity); oldRead.resolve(null); await obsolete;
   assert.deepEqual(h.state.events, ['businesses-loaded']); assert.equal(h.state.nativeEnabled, true);
+});
+
+test('locked cold launch defers private workspace reads and retains native calls until unlock', async () => {
+  let reads = 0;
+  const h = harness({ getFieldPrincipal: async () => { reads++; return { ...principal, authMode: 'field_pin' }; } });
+  h.dependencies.AppState.currentState = 'background';
+  const cleanup = h.api.authEffect();
+  await h.state.authCallback(null);
+  assert.equal(reads, 0);
+  assert.equal(h.state.nativeEnabled, true);
+  h.dependencies.AppState.currentState = 'active';
+  h.state.foreground('active'); await settle();
+  assert.equal(reads, 1);
+  assert.equal(h.state.user.memberId, principal.memberId);
+  assert.equal(h.state.nativeEnabled, true);
+  cleanup();
+});
+
+test('an obsolete failed private restore cannot overwrite a newer authenticated session', async () => {
+  const oldRead = deferred(); let reads = 0;
+  const h = harness({ getFieldPrincipal: () => ++reads === 1 ? oldRead.promise : Promise.resolve(null) });
+  const cleanup = h.api.authEffect(); const obsolete = h.state.authCallback(null);
+  await h.state.authCallback(identity); oldRead.reject(new Error('Keychain locked')); await obsolete;
+  assert.equal(h.state.access?.status === 'network_verification_required', false);
+  assert.equal(h.state.nativeEnabled, true);
+  cleanup();
 });
 
 test('native token events reuse cached ordinary tokens and never reconfigure native registration recursively', async () => {

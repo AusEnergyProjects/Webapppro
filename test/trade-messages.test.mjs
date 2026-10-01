@@ -1,4 +1,5 @@
 import * as presence from '../src/lib/trade-team-presence.ts';
+import * as personalNames from '../src/lib/trade-team-personal-name.ts';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -31,6 +32,8 @@ function fixture() {
     return new Date().toISOString();
   });
   sqlite.exec(`PRAGMA foreign_keys=ON;
+    CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,manager_name TEXT NOT NULL DEFAULT '');
+    INSERT INTO trade_accounts VALUES('business-a',''),('business-b','');
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,member_uid TEXT,status TEXT,display_name TEXT,job_scope TEXT,can_send_sms INTEGER,can_view_quotes INTEGER DEFAULT 0,phone TEXT DEFAULT '');
     INSERT INTO trade_team_members VALUES('owner','business-a','business-a','active','Owner','team',1,1,'0412 000 000'),('jane','business-a','jane-uid','active','Jane','own',1,0,'0412 111 111'),('john','business-a','john-uid','active','John','own',1,0,'0412 111 111'),('other','business-b','other-uid','active','Other owner','team',1,1,'0412 000 000'),('inactive','business-a','inactive-uid','suspended','Inactive','own',0,0,'');
     CREATE TABLE trade_field_sessions(id TEXT,owner_uid TEXT,team_member_id TEXT,status TEXT,expires_at TEXT);
@@ -56,11 +59,31 @@ function fixture() {
   const db = { prepare: statement, batch: async statements => { sqlite.exec("BEGIN"); try { const out = []; for (const s of statements) out.push(s.runSync()); sqlite.exec("COMMIT"); return out; } catch (error) { sqlite.exec("ROLLBACK"); throw error; } } };
   const server = load("../src/lib/trade-messages-server.ts", { "../../db": { getD1: () => db }, "./trade-messages": pure, "./trade-team-presence": presence,
     "./trade-message-media-access": mediaAccess, "./trade-message-media": mediaPure, "./trade-message-media-server": mediaServer,
-    "./trade-message-receipts-server": receiptServer });
+    "./trade-message-receipts-server": receiptServer, "./trade-team-personal-name": personalNames });
   return { sqlite, db, server, close: () => sqlite.close() };
 }
 const request = number => `message-request-${String(number).padStart(8, "0")}`;
 const create = (f, actor, memberIds, subject = "", requestId = request(1)) => f.server.createTeamConversation(actor, { memberIds, subject, requestId }, f.db);
+
+test('saved owner personal names appear to staff immediately in threads, member search and unread labels without owner login or rewriting history', async () => {
+  const f=fixture();try {
+    const thread=await create(f,owner,['jane']);
+    await f.server.sendTeamMessage(owner,thread.id,'Earlier message',request(990),f.db);
+    f.sqlite.prepare("UPDATE trade_accounts SET manager_name='James Morris' WHERE firebase_uid='business-a'").run();
+    const workspace=await f.server.messagesWorkspace(jane,'James',1,f.db);
+    assert.equal(workspace.members.find(member=>member.id===owner.memberId).name,'James Morris');
+    assert.equal(workspace.threads.length,1);
+    assert.equal(workspace.threads[0].members.find(member=>member.id===owner.memberId).name,'James Morris');
+    assert.equal((await f.server.searchMessageContacts(jane,'James',f.db)).members[0].name,'James Morris');
+    assert.equal((await f.server.unreadTeamMessages(jane,f.db)).threads[0].name,'James Morris');
+    assert.equal((await f.server.teamConversation(jane,thread.id,0,f.db)).messages[0].senderName,'Owner');
+    assert.equal(f.sqlite.prepare("SELECT display_name FROM trade_team_members WHERE id='owner'").get().display_name,'Owner');
+    f.sqlite.prepare("UPDATE trade_accounts SET manager_name='Other owner' WHERE firebase_uid='business-b'").run();
+    assert.equal((await f.server.messagesWorkspace(jane,'Other owner',1,f.db)).threads.length,0);
+    f.sqlite.prepare("UPDATE trade_accounts SET manager_name='' WHERE firebase_uid='business-a'").run();
+    assert.equal((await f.server.messagesWorkspace(jane,'Owner',1,f.db)).members.find(member=>member.id===owner.memberId).name,'Owner');
+  }finally{f.close();}
+});
 
 function managedSms(f) {
   f.sqlite.exec(`INSERT INTO trade_sms_connections VALUES('sms-connection','business-a','clicksend','connected','+61400000001','123');

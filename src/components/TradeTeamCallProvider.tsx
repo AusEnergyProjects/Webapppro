@@ -254,7 +254,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
           if (disposed || session.current !== current) return;
           if (!result.call || result.call.status !== "active") { stop("Call ended.",false); return; }
           const hasRemote = result.call.participants.some(person => person.memberId !== current.memberId);
-          if (current.hadRemote && !hasRemote) { stop("Your teammate left the call."); return; }
+          if ((current.hadRemote || result.call.hasBeenAnswered) && !hasRemote) { stop("Your teammate left the call."); return; }
           // A pre-deadline snapshot may arrive after a teammate has answered.
           if (!hasRemote && requestedAt >= Date.parse(current.call.createdAt) + TEAM_CALL_RING_SECONDS * 1000) { stop("No answer. You can call again or send a message."); return; }
           current.hadRemote ||= hasRemote;

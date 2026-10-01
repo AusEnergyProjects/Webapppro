@@ -51,7 +51,7 @@ function fixture() {
   const statement = (sql,values=[]) => ({bind:(...params)=>statement(sql,params),first:async()=>{state.beforeRead(sql);return sqlite.prepare(sql).get(...values)||null;},
     all:async()=>({results:sqlite.prepare(sql).all(...values)}),run:async()=>{state.beforeRun(sql);return {meta:{changes:Number(sqlite.prepare(sql).run(...values).changes)}};}});
   const db = {prepare:statement};
-  const server = load('../src/lib/trade-push-server.ts',{'../../db':{getD1:()=>db},'./trade-message-media-access':access,'./trade-access-server':account,'./trade-push':pure,'./trade-team-presence':presence,'./trade-team-calls':calls,
+  const server = load('../src/lib/trade-push-server.ts',{'./trade-call-answer-access':{createTeamCallAnswerToken:async({callId,threadId,deviceRegistrationId})=>`scoped:${callId}:${threadId}:${deviceRegistrationId}`},'../../db':{getD1:()=>db},'./trade-message-media-access':access,'./trade-access-server':account,'./trade-push':pure,'./trade-team-presence':presence,'./trade-team-calls':calls,
     './trade-push-provider':{tradePushCredentials:()=>state.configured?credentials:null,sendTradePush:async(subscription,payload)=>{sends.push({subscription,payload});return state.providerStatus;}},
     './trade-native-push-provider':{tradeApnsCredentials:()=>state.apnsConfigured?{}:null,authorizeTradeApns:async()=>state.nativeAuthReady?{token:'synthetic',expiresAt:Date.now()+3600000}:null,sendTradeApns:async(token,payload,_auth,_fetch,options)=>{nativeSends.push({token,payload,provider:'apns',options});await state.beforeNativeSend();return state.nativeProviderStatus;},tradeNativePushCredentials:()=>state.nativeConfigured?{clientEmail:'synthetic',privateKey:'synthetic'}:null,authorizeTradeNativePush:async()=>state.nativeAuthReady?{accessToken:'synthetic',expiresAt:Date.now()+3600000}:null,sendTradeNativePush:async(token,payload,_auth,_fetch,options)=>{nativeSends.push({token,payload,provider:'fcm',options});await state.beforeNativeSend();return state.nativeProviderStatus;}}});
   const subscribe = (actor,suffix=actor.memberId,options={}) => server.subscribeTradePush(actor,{subscription:browserSubscription(suffix),messages:true,calls:true,...options},db);
@@ -394,8 +394,12 @@ test('VoIP-capable iPhones receive one call push with their separate token, whil
   f.call();f.message();
   assert.equal((await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db)).accepted,1);
   assert.equal(f.nativeSends[0].token,'cd'.repeat(32));assert.equal(f.nativeSends[0].options.voip,true);
+  assert.equal(f.nativeSends[0].payload.answerToken,`scoped:call-1:thread-a:${device.id}`);
+  assert.equal(f.nativeSends[0].payload.callerName,'Owner');
   assert.equal((await f.server.notifyTeamMessage(owner,'thread-a','message-1',f.db)).accepted,1);
   assert.equal(f.nativeSends[1].token,device.token);assert.equal(f.nativeSends[1].options.voip,false);
+  assert.equal(f.nativeSends[1].payload.answerToken,undefined);
+  assert.equal(f.nativeSends[1].payload.callerName,undefined);
  }finally{f.close();}
 });
 
@@ -413,7 +417,20 @@ test('call cancellation is authorized, bounded, once per current native device a
   assert.equal((await f.server.notifyTeamCallEnded(owner,call,f.db)).accepted,2);
   assert.equal(f.nativeSends.find(send=>send.provider==='apns').token,ios.token);
   assert.ok(f.nativeSends.every(send=>send.options.ended));
+  assert.ok(f.nativeSends.every(send=>send.payload.answerToken===undefined));
   assert.equal((await f.server.notifyTeamCallEnded(owner,call,f.db)).attempted,0);
+ }finally{f.close();}
+});
+
+test('answer grants are unique per native recipient and never delivered to browsers',async()=>{
+ const f=fixture();try{
+  f.state.nativeConfigured=true;
+  const first=f.native(jane),second=f.native(john);
+  f.sqlite.exec('UPDATE trade_mobile_devices SET native_call_capable=1');
+  await f.subscribe(jane);f.call();
+  assert.equal((await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db)).accepted,3);
+  assert.deepEqual(f.nativeSends.map(send=>send.payload.answerToken).sort(),[first,second].map(device=>`scoped:call-1:thread-a:${device.id}`).sort());
+  assert.equal(f.sends.length,1);assert.equal(f.sends[0].payload.answerToken,undefined);
  }finally{f.close();}
 });
 

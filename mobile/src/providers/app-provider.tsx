@@ -3,10 +3,10 @@ import * as Crypto from 'expo-crypto';
 import * as Notifications from 'expo-notifications';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, DeviceEventEmitter } from 'react-native';
 
 import { ApiError, apiRequest, publicApiRequest } from '@/lib/api';
-import { businessPrincipal, clearBusinessSession, getBusinessSession, pauseBusinessSession, saveBusinessSession, type BusinessChoice } from '@/lib/business-session';
+import { businessPrincipal, clearBusinessSession, getBusinessSession, pauseBusinessSession, saveBusinessSession, updateBusinessPersonalName, type BusinessChoice } from '@/lib/business-session';
 import { subscribeAllRentalSaves } from '@/lib/rental-save-queue';
 import {
   accessStateForServerError,
@@ -72,6 +72,7 @@ type AppValue = {
   saveUpload: (input: UploadInput) => Promise<void>;
   pinSignIn: (displayName: string, pin: string) => Promise<void>;
   signOut: () => Promise<void>;
+  updatePersonalName: (name: string) => Promise<string>;
   waitForNotificationRegistrations: () => Promise<void>;
   businesses: BusinessChoice[];
   choosingBusiness: boolean;
@@ -139,6 +140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const stopNotificationRegistration = useCallback(async () => {
+    DeviceEventEmitter.emit('tlink:call-identity-invalidated');
     await Promise.allSettled([...notificationRegistrations.current]);
     await disableNativeCalls();
   }, []);
@@ -217,8 +219,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const verified = await verifyFieldAccess(principal.localOwnerKey);
       if (generation !== authGeneration.current || switching.current) return;
-      if (fieldPrincipal && verified.fieldUsername) {
-        const updatedPrincipal = await updateFieldPrincipalDisplayName(verified.fieldUsername);
+      if (fieldPrincipal && verified.displayName) {
+        const updatedPrincipal = await updateFieldPrincipalDisplayName(verified.displayName, localOwnerKey,
+          () => generation === authGeneration.current && !switching.current);
+        if (generation !== authGeneration.current || switching.current) return;
         if (updatedPrincipal) setUser(updatedPrincipal);
       }
       if (!fieldPrincipal && currentUser && business) {
@@ -229,7 +233,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           businessName: verified.businessName || principal.businessName,
           displayName: verified.displayName || principal.displayName,
           permissions: verified.permissions || principal.permissions };
-        await saveBusinessSession(currentUser.uid, business.business, updated);
+        await saveBusinessSession(currentUser.uid, business.business, updated,
+          () => generation === authGeneration.current && !switching.current && firebaseAuth.currentUser?.uid === currentUser.uid);
+        if (generation !== authGeneration.current || switching.current) return;
         setUser(updated);
       }
       setAccess(approvedAccess);
@@ -399,10 +405,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (firebaseAuth.currentUser) await loadBusinesses(firebaseAuth.currentUser);
   }, [loadBusinesses]);
 
-  useEffect(() => onAuthStateChanged(firebaseAuth, async (nextUser) => {
+  useEffect(() => {
+    let disposed = false;
+    let restoreOnUnlock = false;
+    const restore = async (nextUser: FirebaseUser | null) => {
     const generation = ++authGeneration.current;
+    // A VoIP push can launch the process while private field storage is locked.
+    // Calls authenticate separately; restore the full workspace on foreground.
+    if (AppState.currentState !== 'active') { restoreOnUnlock = true; return; }
+    restoreOnUnlock = false;
     const fieldPrincipal = await getFieldPrincipal();
-    if (generation !== authGeneration.current) return;
+    if (disposed || generation !== authGeneration.current) return;
     if (!fieldPrincipal && nextUser) {
       setUser(null);
       setJobs([]);
@@ -432,7 +445,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLoading(false);
     void registerBackgroundSync().catch(() => undefined);
     void syncNow();
-  }), [loadBusinesses, syncNow]);
+    };
+    const hydrate = async (nextUser: FirebaseUser | null) => {
+      const expectedGeneration = authGeneration.current + 1;
+      try { await restore(nextUser); }
+      catch (error) {
+        if (disposed || expectedGeneration !== authGeneration.current) return;
+        restoreOnUnlock = true;
+        setLoading(false);
+        setAccess(networkVerificationRequired);
+        setSync(value => ({ ...value, message: error instanceof Error ? error.message : 'Unlock your phone to open saved field work.' }));
+      }
+    };
+    const unsubscribe = onAuthStateChanged(firebaseAuth, hydrate);
+    const foreground = AppState.addEventListener('change', state => {
+      if (state === 'active' && restoreOnUnlock) void hydrate(firebaseAuth.currentUser);
+    });
+    return () => { disposed = true; unsubscribe(); foreground.remove(); };
+  }, [loadBusinesses, syncNow]);
 
   const signedIn = Boolean(user) && !choosingBusiness;
 
@@ -601,6 +631,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [syncNow]);
 
   const signOut = useCallback(async () => {
+    DeviceEventEmitter.emit('tlink:call-identity-invalidated');
     switching.current = true;
     authGeneration.current++;
     await unregisterBackgroundSync().catch(() => undefined);
@@ -646,6 +677,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAccess(signedOutAccess);
   }, [stopNotificationRegistration]);
 
+  const updatePersonalName = useCallback(async (name: string) => {
+    if (!user || switching.current) throw new Error('Open your business before updating your name.');
+    const generation = authGeneration.current;
+    const identityUid = firebaseAuth.currentUser?.uid;
+    const isCurrent = () => generation === authGeneration.current && !switching.current
+      && (user.authMode === 'field_pin' || firebaseAuth.currentUser?.uid === identityUid);
+    const result = await apiRequest<{ ok: boolean; name: string; isOwner: boolean }>('/api/trade-personal-profile', {
+      method: 'PATCH', body: JSON.stringify({ name }),
+    }, undefined, { expectedBusinessKey: user.localOwnerKey });
+    if (!isCurrent()) throw new Error('Your business changed. Reopen Account to update your name.');
+    const displayName = result.name || user.businessName;
+    if (user.authMode === 'field_pin') await updateFieldPrincipalDisplayName(displayName, user.localOwnerKey, isCurrent);
+    else {
+      if (!identityUid) throw new Error('Your business changed. Reopen Account to update your name.');
+      await updateBusinessPersonalName(identityUid, user.localOwnerKey, result.name, isCurrent);
+    }
+    if (!isCurrent()) throw new Error('Your business changed. Reopen Account to update your name.');
+    setUser(current => current?.localOwnerKey === user.localOwnerKey ? { ...current, displayName } : current);
+    return result.name;
+  }, [user]);
+
   const value = useMemo<AppValue>(() => ({
     user,
     loading,
@@ -660,9 +712,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     saveUpload,
     pinSignIn,
     signOut,
+    updatePersonalName,
     waitForNotificationRegistrations,
     businesses, choosingBusiness, businessError, chooseBusiness, openBusinessChooser, cancelBusinessChooser, retryBusinesses,
-  }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveActionInBackground, saveUpload, pinSignIn, signOut,
+  }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveActionInBackground, saveUpload, pinSignIn, signOut, updatePersonalName,
     businesses, choosingBusiness, businessError, chooseBusiness, openBusinessChooser, cancelBusinessChooser, retryBusinesses, waitForNotificationRegistrations]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

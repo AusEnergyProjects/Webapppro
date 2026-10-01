@@ -67,3 +67,14 @@ test('incoming notification retains Android denied-FSI fallback and pre-channel 
   assert.match(incoming, /Notification\.FLAG_INSISTENT/);
   assert.match(incoming, /getLong\("answerUntil", 0\) <= System\.currentTimeMillis\(\)/);
 });
+
+test('Android carries caller identity without persisting the invitation capability', () => {
+  assert.match(native, /Person\.Builder\(\)\.setName\(call\.callerName\)/);
+  assert.match(native, /setContentTitle\(call\.callerName\)/);
+  assert.match(native, /text = invitation\.callerName/);
+  const json = native.slice(native.indexOf('fun json()'), native.indexOf('fun connecting()'));
+  assert.match(json, /"callerName" to callerName/);
+  assert.doesNotMatch(json, /answerToken/);
+  assert.match(native, /answerTokens\.remove\(id\)/);
+  assert.match(native, /AsyncFunction\("acknowledgeEvents"\)/);
+});

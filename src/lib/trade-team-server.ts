@@ -110,7 +110,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
   const selected = await selectTradeBusiness(request, identity);
   if (selected.role === "owner") {
     const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"] });
-    const displayName = verified.businessName || "Business owner";
+    const displayName = selected.managerName?.trim() || verified.businessName || "Business owner";
     const memberId = await ensureOwnerTeamMember(identity.uid, identity.email, displayName);
     return { identity, ownerUid: identity.uid, actorUid: identity.uid, actorEmail: identity.email, memberId,
       displayName, isOwner: true,

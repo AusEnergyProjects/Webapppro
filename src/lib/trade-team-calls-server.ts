@@ -3,6 +3,7 @@ import type { MessageActor } from "./trade-messages-server";
 import { messageActorGuard, messageParticipantGuard } from "./trade-message-media-access";
 import { TEAM_CALL_RING_SECONDS, teamCallCursor, teamCallId, teamCallMode, teamCallSignalInput, type TeamCall, type TeamCallSignal } from "./trade-team-calls";
 import { tradeTeamCallAvailabilitySql } from "./trade-team-presence";
+import { tradeTeamPersonalNameSql } from "./trade-team-personal-name";
 type CallRow = {
     id: string;
     owner_uid: string;
@@ -76,10 +77,10 @@ async function publicCall(actor: MessageActor, call: CallRow, db: D1Database): P
     const guard = messageParticipantGuard(actor, call.thread_id);
     // Read the permission-guarded call projection in one database round trip.
     // Signalling polls must not wait for three separate reads of the same call.
-    const thread = await db.prepare(`SELECT t.kind,t.subject,(SELECT group_concat(m.display_name, ', ') FROM trade_message_participants p JOIN trade_team_members m ON m.id=p.member_id AND m.owner_uid=p.owner_uid
+    const thread = await db.prepare(`SELECT t.kind,t.subject,(SELECT group_concat(${tradeTeamPersonalNameSql('m')}, ', ') FROM trade_message_participants p JOIN trade_team_members m ON m.id=p.member_id AND m.owner_uid=p.owner_uid
     WHERE p.thread_id=t.id AND p.owner_uid=t.owner_uid AND p.member_id<>?) names,
     CASE WHEN ?='active' THEN (SELECT json_group_array(json_object('memberId',member_id,'name',display_name,'sessionId',session_id,'joinedAt',joined_at)) FROM (
-      SELECT p.member_id,p.session_id,p.joined_at,m.display_name FROM trade_team_call_participants p
+      SELECT p.member_id,p.session_id,p.joined_at,${tradeTeamPersonalNameSql('m')} display_name FROM trade_team_call_participants p
       JOIN trade_team_members m ON m.id=p.member_id AND m.owner_uid=p.owner_uid AND m.status='active'
       WHERE p.call_id=? AND p.owner_uid=? AND p.left_at='' AND p.last_seen_at>=? ORDER BY p.joined_at,p.member_id
     )) ELSE '[]' END participants_json

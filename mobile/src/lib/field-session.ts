@@ -2,6 +2,15 @@ import * as SecureStore from 'expo-secure-store';
 
 const FIELD_TOKEN_KEY = 'aea.field.session-token.v1';
 const FIELD_PRINCIPAL_KEY = 'aea.field.principal.v1';
+let fieldWrites: Promise<unknown> = Promise.resolve();
+
+// Clear, sign-in and name changes must finish in order. A delayed name write
+// must never restore a principal after logout or overwrite the next login.
+function writeFieldSession<T>(operation: () => Promise<T>): Promise<T> {
+  const result = fieldWrites.then(operation, operation);
+  fieldWrites = result.then(() => undefined, () => undefined);
+  return result;
+}
 
 export type FieldPrincipal = {
   ownerId: string;
@@ -34,36 +43,42 @@ export async function getFieldPrincipal() {
   }
 }
 
-export async function saveFieldSession(token: string, principal: Omit<FieldPrincipal, 'authMode' | 'localOwnerKey'>) {
+export function saveFieldSession(token: string, principal: Omit<FieldPrincipal, 'authMode' | 'localOwnerKey'>) {
   const saved: FieldPrincipal = {
     ...principal,
     authMode: 'field_pin',
     localOwnerKey: `field:${principal.ownerId}:${principal.memberId}`,
   };
-  await SecureStore.setItemAsync(FIELD_TOKEN_KEY, token, {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  return writeFieldSession(async () => {
+    await SecureStore.setItemAsync(FIELD_TOKEN_KEY, token, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+    await SecureStore.setItemAsync(FIELD_PRINCIPAL_KEY, JSON.stringify(saved), {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+    return saved;
   });
-  await SecureStore.setItemAsync(FIELD_PRINCIPAL_KEY, JSON.stringify(saved), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-  });
-  return saved;
 }
 
-export async function updateFieldPrincipalDisplayName(displayName: string) {
-  const principal = await getFieldPrincipal();
-  const nextDisplayName = displayName.trim();
-  if (!principal || principal.authMode !== 'field_pin' || !nextDisplayName
-    || principal.displayName === nextDisplayName) return null;
-  const updated = { ...principal, displayName: nextDisplayName };
-  await SecureStore.setItemAsync(FIELD_PRINCIPAL_KEY, JSON.stringify(updated), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+export function updateFieldPrincipalDisplayName(displayName: string, expectedOwnerKey: string, isCurrent: () => boolean) {
+  return writeFieldSession(async () => {
+    const principal = await getFieldPrincipal();
+    if (!principal || principal.authMode !== 'field_pin' || principal.localOwnerKey !== expectedOwnerKey || !isCurrent()) {
+      throw new Error('Your account changed. Reopen Account to update your name.');
+    }
+    const nextDisplayName = displayName.trim();
+    if (!nextDisplayName || principal.displayName === nextDisplayName) return null;
+    const updated = { ...principal, displayName: nextDisplayName };
+    await SecureStore.setItemAsync(FIELD_PRINCIPAL_KEY, JSON.stringify(updated), {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+    return updated;
   });
-  return updated;
 }
 
-export async function clearFieldSession() {
-  await Promise.all([
+export function clearFieldSession() {
+  return writeFieldSession(async () => { await Promise.all([
     SecureStore.deleteItemAsync(FIELD_TOKEN_KEY),
     SecureStore.deleteItemAsync(FIELD_PRINCIPAL_KEY),
-  ]);
+  ]); });
 }

@@ -154,7 +154,9 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
 }
 
 /** In-memory authorization for one mounted calling session, never field-data storage. */
-export function createTeamCallRequest(lifetime: AbortSignal) {
+export type TeamCallAnswerAccess = { answerToken: string; callId: string; threadId: string };
+
+export function createTeamCallRequest(lifetime: AbortSignal, invitation?: TeamCallAnswerAccess) {
   const revision = businessSessionRevision(), identity = firebaseAuth.currentUser?.uid;
   let prepared: Headers | null = null;
   let preparing: Promise<Headers> | null = null;
@@ -162,13 +164,37 @@ export function createTeamCallRequest(lifetime: AbortSignal) {
   lifetime.addEventListener('abort', clear, { once: true });
   const assertSession = () => {
     if (lifetime.aborted) throw new ApiError('This call session has closed.', 409, 'CALL_SESSION_CLOSED');
-    if (revision !== businessSessionRevision() || identity !== firebaseAuth.currentUser?.uid) {
+    // A cold lock-screen answer uses only the server's invitation capability.
+    // Restoring the ordinary workspace after unlock must not cancel that call;
+    // its provider fences the returned owner/member and aborts on account changes.
+    if (!invitation && (revision !== businessSessionRevision() || identity !== firebaseAuth.currentUser?.uid)) {
       clear();
       throw new ApiError('Your account or business changed. Reopen the call.', 409, 'BUSINESS_CHANGED');
     }
   };
   return async function request<T>(query = '', init: RequestInit = {}): Promise<T> {
     assertSession();
+    if (invitation) {
+      if (!invitation.answerToken || invitation.answerToken.length > 4096
+        || !/^[a-zA-Z0-9_-]{8,120}$/.test(invitation.callId)
+        || !/^[a-zA-Z0-9_-]{8,120}$/.test(invitation.threadId)) {
+        throw new ApiError('This call invitation is invalid.', 403, 'CALL_ACCESS_REQUIRED');
+      }
+      const params = new URLSearchParams(query);
+      if ((params.has('callId') && params.get('callId') !== invitation.callId)
+        || (params.has('threadId') && params.get('threadId') !== invitation.threadId)) {
+        throw new ApiError('This invitation belongs to another call.', 403, 'CALL_ACCESS_REQUIRED');
+      }
+      if (init.body) {
+        const body = typeof init.body === 'string' ? JSON.parse(init.body) : null;
+        if (!body || !['join', 'leave', 'signal', 'ice'].includes(body.action) || body.callId !== invitation.callId) {
+          throw new ApiError('This invitation cannot perform that operation.', 403, 'CALL_ACCESS_REQUIRED');
+        }
+      }
+      params.set('callId', invitation.callId);
+      params.set('threadId', invitation.threadId);
+      query = params.toString();
+    }
     const controller = new AbortController();
     const abort = () => controller.abort();
     lifetime.addEventListener('abort', abort, { once: true });
@@ -187,7 +213,11 @@ export function createTeamCallRequest(lifetime: AbortSignal) {
     const perform = async () => {
       check();
       if (!prepared) {
-        preparing ||= authenticatedHeaders({}).then(headers => {
+        preparing ||= (invitation ? Promise.resolve(new Headers({
+          'X-TLink-Call-Answer': invitation.answerToken,
+          'x-aea-platform': MOBILE_PLATFORM,
+          'x-aea-app-version': APP_VERSION,
+        })) : authenticatedHeaders({})).then(headers => {
           assertSession(); prepared = headers; return headers;
         }).finally(() => { preparing = null; });
         await preparing;

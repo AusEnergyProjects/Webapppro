@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { importPKCS8, SignJWT } from 'jose';
-import { pushId, type TradePushPayload } from './trade-push';
+import { pushAnswerToken, pushCallerName, pushId, type TradePushPayload } from './trade-push';
 
 const PROJECT = 'australian-energy-assessments';
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
@@ -52,17 +52,19 @@ export async function sendTradeApns(token: string, payload: TradePushPayload, au
     const threadId = pushId(payload.threadId), id = pushId(payload.id), call = payload.kind === 'team-call';
     if (!call && payload.kind !== 'team-message') return 'failed';
     const body = call ? payload.body === 'Incoming team video call' ? 'Incoming team video call' : 'Incoming team voice call' : 'New team message';
+    const callerName = call && payload.callerName !== undefined ? pushCallerName(payload.callerName) : undefined;
     const ended = call && options.ended, voip = call && options.voip && !ended;
+    const answerToken = voip ? pushAnswerToken(payload.answerToken) : undefined;
     const host = authorization.environment === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com';
     // Workers supports manual redirects; never forward credentials or tokens.
     const response = await fetcher(`https://${host}/3/device/${token}`, { method: 'POST', redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10000),
       headers: { authorization: `bearer ${authorization.token}`, 'content-type': 'application/json', 'apns-topic': `${TRADE_APNS_TOPIC}${voip ? '.voip' : ''}`,
         'apns-push-type': ended ? 'background' : voip ? 'voip' : 'alert', 'apns-priority': ended ? '5' : '10',
         'apns-expiration': voip || ended ? '0' : String(Math.floor(Date.now() / 1000) + ttl) },
-      body: JSON.stringify({ aps: ended ? { 'content-available': 1 } : voip ? {} : { alert: { title: 'TLink', body }, sound: 'default', 'thread-id': threadId,
+      body: JSON.stringify({ aps: ended ? { 'content-available': 1 } : voip ? {} : { alert: { title: callerName || 'TLink', body }, sound: 'default', 'thread-id': threadId,
         category: call ? 'team-calls' : 'team-messages' },
         type: ended ? 'team_call_ended' : call ? 'team_call' : 'team_message', threadId, eventId: id, expiresAt: payload.expiresAt,
-        ...(call ? { callId: id, mode: payload.body === 'Incoming team video call' ? 'video' : 'audio', hasVideo: payload.body === 'Incoming team video call' } : {}) }) });
+        ...(call ? { callId: id, ...(callerName ? { callerName } : {}), ...(answerToken ? { answerToken } : {}), mode: payload.body === 'Incoming team video call' ? 'video' : 'audio', hasVideo: payload.body === 'Incoming team video call' } : {}) }) });
     if (response.status >= 300 && response.status < 400) { await response.body?.cancel(); return 'failed'; }
     if (response.status === 200) { await response.body?.cancel(); return 'accepted'; }
     const result: unknown = await response.json();
@@ -120,11 +122,13 @@ export async function sendTradeNativePush(token: string, payload: TradePushPaylo
     const threadId = pushId(payload.threadId), id = pushId(payload.id), call = payload.kind === 'team-call';
     if (!call && payload.kind !== 'team-message') return 'failed';
     const body = call ? payload.body === 'Incoming team video call' ? 'Incoming team video call' : 'Incoming team voice call' : 'New team message';
+    const callerName = call && payload.callerName !== undefined ? pushCallerName(payload.callerName) : undefined;
+    const answerToken = call && options.nativeCall && !options.ended ? pushAnswerToken(payload.answerToken) : undefined;
     const response = await fetcher(SEND_ENDPOINT, { method: 'POST', redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10000),
       headers: { Authorization: `Bearer ${authorization.accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: { token, ...(!call || (!options.nativeCall && !options.ended) ? { notification: { title: 'TLink', body } } : {}),
+      body: JSON.stringify({ message: { token, ...(!call || (!options.nativeCall && !options.ended) ? { notification: { title: callerName || 'TLink', body } } : {}),
         data: { type: call && options.ended ? 'team_call_ended' : call ? 'team_call' : 'team_message', threadId, eventId: id, expiresAt: payload.expiresAt,
-          ...(call ? { callId: id, ...(options.nativeCall || options.ended ? { mode: payload.body === 'Incoming team video call' ? 'video' : 'audio', hasVideo: String(payload.body === 'Incoming team video call') } : {}) } : {}) },
+          ...(call ? { callId: id, ...(callerName ? { callerName } : {}), ...(answerToken ? { answerToken } : {}), ...(options.nativeCall || options.ended ? { mode: payload.body === 'Incoming team video call' ? 'video' : 'audio', hasVideo: String(payload.body === 'Incoming team video call') } : {}) } : {}) },
         android: { priority: 'HIGH', ttl: `${ttl}s`, ...(!call || (!options.nativeCall && !options.ended) ? { notification: { channel_id: call ? 'team-calls' : 'team-messages',
           tag: `tlink-${payload.kind}-${id}`, default_sound: true, visibility: 'PRIVATE' } } : {}) } } }) });
     if (response.status >= 300 && response.status < 400) { await response.body?.cancel(); return 'failed'; }

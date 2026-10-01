@@ -5,6 +5,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as pure from '../src/lib/trade-team-calls.ts';
 import * as presence from '../src/lib/trade-team-presence.ts';
+import * as personalNames from '../src/lib/trade-team-personal-name.ts';
 const read=path=>fs.readFileSync(new URL(path,import.meta.url),'utf8');
 function load(path,dependencies){const output=ts.transpileModule(read(path),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const record={exports:{}};new Function('require','module','exports',output)(name=>{assert.ok(Object.hasOwn(dependencies,name),`Unexpected dependency ${name}`);return dependencies[name];},record,record.exports);return record.exports;}
 const owner={ownerUid:'business-a',actorUid:'owner-uid',memberId:'owner-0001',displayName:'Owner',isOwner:true};
@@ -14,6 +15,7 @@ const session=i=>`session-${String(i).padStart(8,'0')}`;
 const request=i=>`request-${String(i).padStart(8,'0')}`;
 function fixture(){
  const sqlite=new DatabaseSync(':memory:');
+ sqlite.exec("CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,manager_name TEXT NOT NULL DEFAULT ''); INSERT INTO trade_accounts VALUES('business-a',''),('business-b','')");
  sqlite.exec(`PRAGMA foreign_keys=ON;CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,member_uid TEXT,status TEXT,display_name TEXT);CREATE TABLE trade_field_sessions(id TEXT,owner_uid TEXT,team_member_id TEXT,status TEXT,expires_at TEXT);
  INSERT INTO trade_team_members VALUES('owner-0001','business-a','owner-uid','active','Owner'),('other-0001','business-b','other-uid','active','Other');`);
  for(let i=1;i<=8;i++)sqlite.prepare('INSERT INTO trade_team_members VALUES(?,?,?,?,?)').run(member(i).memberId,owner.ownerUid,member(i).actorUid,'active',member(i).displayName);
@@ -27,13 +29,27 @@ function fixture(){
  const statement=(sql,values=[])=>({sql,bind:(...next)=>statement(sql,next),first:async()=>sqlite.prepare(sql).get(...values)||null,all:async()=>({results:sqlite.prepare(sql).all(...values)}),runSync:()=>({meta:{changes:Number(sqlite.prepare(sql).run(...values).changes)}}),run(){return Promise.resolve(this.runSync());}});
  const db={prepare:statement,batch:async statements=>{if(beforeBatch){const action=beforeBatch;beforeBatch=null;action(statements);}sqlite.exec('BEGIN');try{const output=[];for(const [i,s]of statements.entries()){output.push(s.runSync());if(failBatch&&i===0&&statements[0].sql.startsWith('INSERT OR IGNORE INTO trade_team_calls')){failBatch=false;throw new Error('forced rollback');}}sqlite.exec('COMMIT');return output;}catch(error){sqlite.exec('ROLLBACK');throw error;}}};
  const guards=load('../src/lib/trade-message-media-access.ts',{});
- const server=load('../src/lib/trade-team-calls-server.ts',{'../../db':{getD1:()=>db},'./trade-team-calls':pure,'./trade-message-media-access':guards,'./trade-team-presence':presence});
+ const server=load('../src/lib/trade-team-calls-server.ts',{'../../db':{getD1:()=>db},'./trade-team-calls':pure,'./trade-message-media-access':guards,'./trade-team-presence':presence,'./trade-team-personal-name':personalNames});
  return{sqlite,db,server,failNextBatch(){failBatch=true;},beforeBatch(action){beforeBatch=action;},close:()=>sqlite.close()};
 }
 const start=(f,actor=owner,n=1,threadId='thread-demo-1')=>f.server.startTeamCall(actor,{threadId,requestId:request(n),sessionId:session(n),mode:'video'},f.db);
 const join=(f,call,actor,n)=>f.server.joinTeamCall(actor,call.id,session(n),f.db);
 const signal=(f,call,overrides={})=>f.server.sendTeamCallSignal(owner,{callId:call.id,sessionId:session(1),toMemberId:member(1).memberId,toSessionId:session(2),requestId:request(100),type:'offer',payload:{type:'offer',sdp:'v=0\r\ns=Test\r\n'},...overrides},f.db);
 const setPresence=(f,actor,status)=>f.sqlite.prepare('INSERT OR REPLACE INTO trade_team_presence(owner_uid,member_id,status,updated_at) VALUES(?,?,?,?)').run(actor.ownerUid,actor.memberId,status,new Date().toISOString());
+
+test('incoming call projects the personal caller name from its owner account even before the owner team row is updated',async()=>{
+ const f=fixture();try {
+  const caller={...owner,actorUid:owner.ownerUid};
+  f.sqlite.prepare('UPDATE trade_team_members SET member_uid=? WHERE id=?').run(owner.ownerUid,owner.memberId);
+  const call=await start(f,caller);
+  f.sqlite.prepare("UPDATE trade_accounts SET manager_name='James Morris' WHERE firebase_uid='business-a'").run();
+  f.sqlite.prepare("UPDATE trade_message_threads SET kind='dm',subject='' WHERE id=?").run(call.threadId);
+  const incoming=await f.server.incomingTeamCalls(member(1),f.db);
+  assert.equal(incoming[0].participants.find(person=>person.memberId===owner.memberId).name,'James Morris');
+  assert.match(incoming[0].threadName,/James Morris/);
+  assert.equal(f.sqlite.prepare('SELECT display_name FROM trade_team_members WHERE id=?').get(owner.memberId).display_name,'Owner');
+ }finally{f.close();}
+});
 
 test('input bounds and SDP/ICE shapes reject arbitrary data and excessive payloads',()=>{
  assert.equal(pure.teamCallMode('audio'),'audio');assert.equal(pure.teamCallCursor('12'),12);

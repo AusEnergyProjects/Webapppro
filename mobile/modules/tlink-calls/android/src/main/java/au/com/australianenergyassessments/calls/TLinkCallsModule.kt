@@ -47,8 +47,11 @@ private fun expiryMillis(value: String): Long {
   return formatter.parse(value)?.time ?: 0L
 }
 
-internal data class Call(val callId: String, val threadId: String, val mode: String, val expiresAt: String) {
-  fun json() = JSONObject(mapOf("callId" to callId, "threadId" to threadId, "mode" to mode, "expiresAt" to expiresAt))
+internal data class Call(val callId: String, val threadId: String, val mode: String, val expiresAt: String,
+  val callerName: String, val answerToken: String? = null) {
+  // Capability tokens remain process-local; preferences and intents contain
+  // only invitation metadata. Android restores normal auth after unlocking.
+  fun json() = JSONObject(mapOf("callId" to callId, "threadId" to threadId, "mode" to mode, "expiresAt" to expiresAt, "callerName" to callerName))
   fun connecting(): Call {
     val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSX", Locale.US)
     formatter.timeZone = java.util.TimeZone.getTimeZone("UTC")
@@ -62,7 +65,9 @@ internal data class Call(val callId: String, val threadId: String, val mode: Str
       val expires = value.getString("expiresAt")
       if (UUID.fromString(id).toString() != id.lowercase() || !Regex("^[a-zA-Z0-9_-]{8,120}$").matches(thread)
         || mode !in listOf("audio", "video") || (!allowExpired && expiryMillis(expires) <= System.currentTimeMillis())) null
-      else Call(id, thread, mode, expires)
+      else Call(id, thread, mode, expires,
+        value.optString("callerName", "").replace(Regex("\\s+"), " ").trim().take(120).ifEmpty { "Team call" },
+        value.optString("answerToken", "").takeIf { it.isNotBlank() && it.length <= 4096 })
     } catch (_: Exception) { null }
   }
 }
@@ -75,6 +80,7 @@ internal object Calls {
   private var outgoingId: String? = null
   private var awaitingAnswerId: String? = null
   private var connectingId: String? = null
+  private val answerTokens = mutableMapOf<String, String>()
   @Synchronized private fun prefs(context: Context): android.content.SharedPreferences {
     val storage = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     if (!initialized) {
@@ -110,11 +116,22 @@ internal object Calls {
   }
   @Synchronized fun drain(context: Context): List<Map<String, Any>> {
     val queue = JSONArray(prefs(context).getString("events", "[]"))
-    prefs(context).edit().remove("events").apply()
     return (0 until queue.length()).map { index ->
       val value = queue.getJSONObject(index)
-      value.keys().asSequence().associateWith { value.get(it) }
+      value.keys().asSequence().associateWith { value.get(it) }.toMutableMap().apply {
+        answerTokens[value.optString("callId")]?.let { put("answerToken", it) }
+      }
     }
+  }
+  @Synchronized fun acknowledge(context: Context, ids: List<String>) {
+    val delivered = ids.toSet()
+    val queue = JSONArray(prefs(context).getString("events", "[]"))
+    val remaining = JSONArray()
+    for (index in 0 until queue.length()) {
+      val event = queue.getJSONObject(index)
+      if (event.optString("id") !in delivered) remaining.put(event)
+    }
+    prefs(context).edit().putString("events", remaining.toString()).apply()
   }
   @Synchronized fun configure(context: Context, enabled: Boolean, preserveActiveCalls: Boolean) {
     if (enabled) channels(context)
@@ -166,18 +183,20 @@ internal object Calls {
     if (fromPush && !enabled(context)) return
     val current = current(context)
     if (current != null && current.callId == call.callId) {
+      call.answerToken?.let { answerTokens[call.callId] = it }
       if (!prefs(context).getBoolean("ongoing", false)) prefs(context).edit().putString("call", call.json().toString()).apply()
       return
     }
     if (current != null) return // One system call owns the phone's audio session.
+    call.answerToken?.let { answerTokens[call.callId] = it }
     channels(context)
     prefs(context).edit().putString("call", call.json().toString()).putBoolean("ongoing", false).remove("answerUntil").apply()
     val answer = activity(context, call, ANSWER, 1)
     val open = activity(context, call, "tlink.call.SHOW", 2)
-    val person = Person.Builder().setName("TLink team").setImportant(true).build()
+    val person = Person.Builder().setName(call.callerName).setImportant(true).build()
     val remaining = (expiryMillis(call.expiresAt) - System.currentTimeMillis()).coerceIn(1, 45_000)
     val builder = NotificationCompat.Builder(context, CHANNEL)
-      .setSmallIcon(context.applicationInfo.icon).setContentTitle("TLink")
+      .setSmallIcon(context.applicationInfo.icon).setContentTitle(call.callerName)
       .setContentText(if (call.mode == "video") "Incoming team video call" else "Incoming team voice call")
       .setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX)
       // Before Android 8 there is no channel to supply the ringtone/vibration.
@@ -272,9 +291,9 @@ internal object Calls {
     val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
     val pending = PendingIntent.getActivity(context, 4, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     return NotificationCompat.Builder(context, ONGOING_CHANNEL).setSmallIcon(context.applicationInfo.icon)
-      .setContentTitle("TLink call").setContentText("Call in progress").setContentIntent(pending).setOngoing(true)
+      .setContentTitle(call.callerName).setContentText("TLink call").setContentIntent(pending).setOngoing(true)
       .setCategory(NotificationCompat.CATEGORY_CALL).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-      .setStyle(NotificationCompat.CallStyle.forOngoingCall(Person.Builder().setName("TLink team").build(), endAction(context, call))).build()
+      .setStyle(NotificationCompat.CallStyle.forOngoingCall(Person.Builder().setName(call.callerName).build(), endAction(context, call))).build()
   }
   @Synchronized fun end(context: Context, id: String) {
     val call = stored(context)
@@ -282,6 +301,7 @@ internal object Calls {
     stopRingback()
     awaitingAnswerId = null
     connectingId = null
+    answerTokens.remove(id)
     context.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
     context.stopService(Intent(context, TLinkOngoingCallService::class.java))
     prefs(context).edit().remove("call").remove("answerUntil").putBoolean("ongoing", false).apply()
@@ -331,7 +351,7 @@ class TLinkIncomingCallActivity : Activity() {
     }
     val mint = Color.rgb(84, 227, 178)
     val navy = Color.rgb(7, 24, 43)
-    layout.addView(TextView(this).apply { text = "TLink"; textSize = 34f; setTextColor(mint); gravity = Gravity.CENTER })
+    layout.addView(TextView(this).apply { text = invitation.callerName; textSize = 34f; setTextColor(mint); gravity = Gravity.CENTER })
     layout.addView(TextView(this).apply { text = if (invitation.mode == "video") "Incoming team video call" else "Incoming team voice call"; textSize = 20f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, dp(24), 0, dp(40)) })
     fun action(label: String, primary: Boolean, pressed: () -> Unit) = Button(this).apply {
       text = label; contentDescription = label; textSize = 17f; isAllCaps = false; minimumHeight = dp(56)
@@ -399,6 +419,7 @@ class TLinkCallsModule : Module() {
       Calls.notificationSettings(activity, target)
     }.runOnQueue(Queues.MAIN)
     AsyncFunction("drainEvents") { Calls.drain(context()) }
+    AsyncFunction("acknowledgeEvents") { ids: List<String> -> Calls.acknowledge(context(), ids) }
     AsyncFunction("incoming") { value: Map<String, Any> ->
       val call = Call.parse(JSONObject(value)) ?: throw IllegalArgumentException("This call has expired.")
       Calls.incoming(context(), call)

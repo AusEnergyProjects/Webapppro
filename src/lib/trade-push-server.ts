@@ -2,9 +2,10 @@ import { getD1 } from '../../db';
 import { tradeTeamCallAvailabilitySql } from './trade-team-presence';
 import { messageActorGuard, messageParticipantGuard } from './trade-message-media-access';
 import { verifiedTradeAccountPredicate } from './trade-access-server';
+import { createTeamCallAnswerToken } from './trade-call-answer-access';
 import type { MessageActor } from './trade-messages-server';
 import { TEAM_CALL_RING_SECONDS, type TeamCall } from './trade-team-calls';
-import { pushBoolean, pushId, pushSubscriptionInput, type TradePushPayload, type TradePushSubscriptionStatus } from './trade-push';
+import { pushBoolean, pushCallerName, pushId, pushSubscriptionInput, type TradePushPayload, type TradePushSubscriptionStatus } from './trade-push';
 import { sendTradePush, tradePushCredentials } from './trade-push-provider';
 import { authorizeTradeApns, authorizeTradeNativePush, sendTradeApns, sendTradeNativePush, tradeApnsCredentials, tradeNativePushCredentials } from './trade-native-push-provider';
 
@@ -188,9 +189,11 @@ async function dispatchNative(actor: MessageActor, payload: TradePushPayload, db
     const current = await db.prepare(`SELECT ${nativeColumns} FROM trade_mobile_devices d WHERE d.id=? AND d.push_token=? AND d.voip_push_token=? AND d.native_call_capable=? AND d.push_provider=? AND ${latest.sql}`)
       .bind(device.id,device.push_token,device.voip_push_token,device.native_call_capable,device.push_provider,...latest.values).first<NativeDeviceRow>();
     const voip = Boolean(current && payload.kind === 'team-call' && !ended && current.native_call_capable && current.voip_push_token);
+    const nativePayload: TradePushPayload = current && payload.kind === 'team-call' && !ended && current.native_call_capable
+      ? { ...payload, answerToken: await createTeamCallAnswerToken({ callId: payload.id, threadId: payload.threadId, deviceRegistrationId: current.id }, db) } : payload;
     const outcome = !current ? 'stale' : current.push_provider === 'apns'
-      ? apns ? await sendTradeApns(voip ? current.voip_push_token : current.push_token,payload,apns,undefined,{voip,ended}) : 'failed'
-      : fcm ? await sendTradeNativePush(current.push_token,payload,fcm,undefined,{nativeCall:Boolean(current.native_call_capable),ended}) : 'failed';
+      ? apns ? await sendTradeApns(voip ? current.voip_push_token : current.push_token,nativePayload,apns,undefined,{voip,ended}) : 'failed'
+      : fcm ? await sendTradeNativePush(current.push_token,nativePayload,fcm,undefined,{nativeCall:Boolean(current.native_call_capable),ended}) : 'failed';
     const deliveryStatus = outcome === 'stale' ? 'expired' : outcome;
     if (deliveryStatus === 'accepted') result.accepted++; else result.failed++;
     await db.prepare('UPDATE trade_push_deliveries SET status=?,updated_at=? WHERE event_kind=? AND event_id=? AND endpoint_hash=? AND owner_uid=?')
@@ -216,7 +219,8 @@ async function dispatch(actor: MessageActor, kind: TradePushPayload['kind'], thr
   if (!event) return { ...result, skipped: true };
   const expiresAt = new Date(kind === 'team-call' ? Math.min(Date.parse(event.created_at) + TEAM_CALL_RING_SECONDS * 1000, Date.parse(event.expires_at || '')) : Date.parse(event.created_at) + 86400000).toISOString();
   const payload: TradePushPayload = { v:1, kind, id:eventId, threadId, title:'TLink', body: kind === 'team-message' ? 'New team message' : event.mode === 'video' ? 'Incoming team video call' : 'Incoming team voice call',
-    url: `/direct-trade/messages?threadId=${encodeURIComponent(threadId)}${kind === 'team-call' ? `&callId=${encodeURIComponent(eventId)}` : ''}`, expiresAt };
+    url: `/direct-trade/messages?threadId=${encodeURIComponent(threadId)}${kind === 'team-call' ? `&callId=${encodeURIComponent(eventId)}` : ''}`, expiresAt,
+    ...(kind === 'team-call' ? { callerName: pushCallerName(actor.displayName) } : {}) };
   const guard = deliveryGuard(actor,kind,threadId,eventId);
   // Groups are bounded to 25 members, each with at most five registered browsers.
   const subscriptions = credentials ? (await db.prepare(`SELECT s.* FROM trade_push_subscriptions s WHERE ${guard.sql} ORDER BY s.member_id,s.id LIMIT 125`)

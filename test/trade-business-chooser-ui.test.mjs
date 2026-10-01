@@ -114,13 +114,13 @@ test("the welcome message uses the owner's optional manager or the signed-in tea
 test("saved manager names refresh the welcome immediately without replacing a subsequently selected business", async () => {
   const h = harness([choice("person", "owner"), { ...choice("employer"), displayName: "Katja Rosic" }], { destination: "messages", saved: "person" });
   let tree = await h.settle();
-  tree.props.onManagerNameChange("James Morris");
+  tree.props.onPersonalNameChange("James Morris");
   tree = h.render();
   assert.match(text(tree), /Welcome James/);
-  tree.props.onManagerNameChange("");
+  tree.props.onPersonalNameChange("");
   tree = h.render();
   assert.equal(text(nodes(tree, node => node.props?.["data-tlink-welcome"] !== undefined)[0]), "Welcome");
-  const delayedUpdate = tree.props.onManagerNameChange;
+  const delayedUpdate = tree.props.onPersonalNameChange;
   nodes(tree, node => node.type === "button" && text(node) === "Switch business")[0].props.onClick();
   await tick();
   tree = h.render();
@@ -137,6 +137,16 @@ test("a message notification keeps owners and members in the scoped messages des
     assert.equal((await h.settle()).props.business.ownerUid, business.ownerUid);
     assert.deepEqual(h.redirects, []);
   }
+});
+
+test("a staff personal-name change updates only that member's greeting", async () => {
+  const h = harness([{ ...choice("employer"), displayName: "Katja Rosic" }], { destination: "messages" });
+  let tree = await h.settle();
+  tree.props.onPersonalNameChange("Katja Smith");
+  tree = h.render();
+  assert.equal(tree.props.business.displayName, "Katja Smith");
+  assert.equal(tree.props.business.managerName, undefined);
+  assert.match(text(tree), /Welcome Katja/);
 });
 
 test("messages gates normal Firebase entry while preserving an existing or fresh native handoff", () => {

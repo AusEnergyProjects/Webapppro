@@ -13,7 +13,7 @@ function load(native) {
   return record.exports;
 }
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
-const event = (type, overrides = {}) => ({ id: 'event', type, callId: 'f1346c80-a1af-4ef5-901e-5bf21a068a11', threadId: 'thread-123456', mode: 'audio', expiresAt: new Date(Date.now() + 60_000).toISOString(), ...overrides });
+const event = (type, overrides = {}) => ({ id: `event-${type}`, type, callId: 'f1346c80-a1af-4ef5-901e-5bf21a068a11', threadId: 'thread-123456', mode: 'audio', expiresAt: new Date(Date.now() + 60_000).toISOString(), ...overrides });
 
 test('older binaries do not claim native call capability', async () => {
   const bridge = load(null);
@@ -63,6 +63,43 @@ test('expired or malformed native invitations cannot be answered', () => {
   assert.equal(bridge.currentSystemCall(event('answer', { expiresAt: '2000-01-01T00:00:00.000Z' })), false);
   assert.equal(bridge.currentSystemCall(event('answer', { callId: 'invalid' })), false);
   assert.equal(bridge.currentSystemCall(event('answer', { mode: 'screen' })), false);
+});
+
+test('native Answer remains queued across subscription replacement and is acknowledged only after handling', async () => {
+  let pendingRead, acknowledgements = [], seen = [];
+  const queued = event('answer', { callerName: 'James Morris', answerToken: 'synthetic-call-only-capability' });
+  let first = true;
+  const bridge = load({
+    addListener: () => ({ remove() {} }),
+    drainEvents: async () => first ? (first = false, new Promise(resolve => { pendingRead = resolve; })) : [queued],
+    acknowledgeEvents: async ids => acknowledgements.push(...ids),
+  });
+  const remove = bridge.subscribeSystemCalls(async value => { seen.push(value); });
+  await flush(); remove(); pendingRead([queued]); await flush();
+  assert.deepEqual(seen, []); assert.deepEqual(acknowledgements, []);
+  const next = bridge.subscribeSystemCalls(async value => { seen.push(value); });
+  await flush(); assert.deepEqual(seen, [queued]); assert.deepEqual(acknowledgements, [queued.id]); next();
+});
+
+test('a handler awaiting account restore keeps Answer queued, while End still interrupts it', async () => {
+  let listener, queue = [event('answer')]; const acknowledged = [], seen = [];
+  const bridge = load({ addListener: (_name, fn) => { listener = fn; return { remove() {} }; },
+    drainEvents: async () => queue, acknowledgeEvents: async ids => { acknowledged.push(...ids); queue = queue.filter(value => !ids.includes(value.id)); } });
+  const remove = bridge.subscribeSystemCalls(async value => { seen.push(value.type); return value.type === 'answer' ? false : undefined; });
+  await flush(); assert.deepEqual(acknowledged, []);
+  queue.push(event('end')); listener(); await flush();
+  assert.deepEqual(seen, ['answer', 'end']); assert.deepEqual(new Set(acknowledged), new Set(['event-answer', 'event-end'])); remove();
+});
+
+test('native caller name is retained for ringing, answered and ongoing presentation', () => {
+  const swift = fs.readFileSync(new URL('../modules/tlink-calls/ios/TLinkCallsModule.swift', import.meta.url), 'utf8');
+  assert.match(swift, /update\.localizedCallerName = call\.callerName/g);
+  assert.doesNotMatch(swift, /localizedCallerName = "TLink"|Unlock iPhone and open TLink/);
+  assert.match(swift, /pendingAnswers\[call\.uuid\] = action/);
+  assert.match(swift, /pendingAnswers\.removeValue\(forKey: uuid\).*action\.fulfill/);
+  assert.match(swift, /serverJoinedCalls\.contains\(call\.uuid\)/);
+  assert.match(swift, /pendingAnswers\.removeValue\(forKey: id\)\?\.fail\(\)/);
+  assert.match(swift, /AsyncFunction\("acknowledgeEvents"\)/);
 });
 
 test('an accepted Answer keeps bounded connection grace without extending an unanswered invitation', () => {

@@ -13,7 +13,21 @@ export type TradePushPayload = {
   body: string;
   url: string;
   expiresAt: string;
+  callerName?: string;
+  answerToken?: string;
 };
+
+export function pushCallerName(value: unknown): string {
+  return typeof value === 'string'
+    ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Team member'
+    : 'Team member';
+}
+
+export function pushAnswerToken(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length > 3072 || !/^v1\.[A-Za-z0-9_-]+\.[a-f0-9]{64}$/.test(value)) throw new Error('PUSH_INPUT_INVALID');
+  return value;
+}
 
 export function nativePushRegistration(input: { pushProvider?: unknown; pushToken?: unknown; voipPushToken?: unknown; nativeCallCapable?: unknown }, platform: unknown) {
   if (platform !== 'ios' && platform !== 'android') throw new Error('PUSH_INPUT_INVALID');

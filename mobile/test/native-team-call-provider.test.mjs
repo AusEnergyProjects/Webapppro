@@ -8,12 +8,13 @@ const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.Scri
 const contract = {};
 new Function('exports', ts.transpileModule(fs.readFileSync(new URL('../../src/lib/trade-team-calls.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText)(contract);
 const invitation = { id: 'call-123456', threadId: 'thread-123456', threadName: 'Install team', mode: 'video', status: 'active', hasBeenAnswered: false, participants: [], createdByMemberId: 'member-remote', createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
-const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+const flush = async () => { for (let i = 0; i < 32; i++) await Promise.resolve(); };
 
-function harness({ native = false, platform = 'ios', initialAppState = 'active' } = {}) {
+function harness({ native = false, platform = 'ios', initialAppState = 'active', enabled = true, principal = null } = {}) {
   const slots = [], effects = [], pendingEffects = [], intervals = new Set(), intervalDelays = new Map(), listeners = new Set(), pushListeners = new Set(), presenceListeners = new Set();
   let cursor = 0, tree;
-  const state = { api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0, peers: [], rings:0, ringStops:0, ringbacks:0, ringbackStops:0, notificationMuted:false, audioModes:[], requestLifetimes: [], keyboardDismissals: 0,
+  const identityListeners = new Set();
+  const state = { enabled, principal, capabilities: [], api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0, peers: [], rings:0, ringStops:0, ringbacks:0, ringbackStops:0, notificationMuted:false, audioModes:[], requestLifetimes: [], keyboardDismissals: 0,
     respond: async (url, body) => body?.action === 'start' || body?.action === 'join' ? { ok: true, call: invitation, memberId: 'member-local' }
       : body?.action === 'ice' ? { ok: true, iceServers: [{ urls: 'turn:relay.test' }] }
         : url.includes('view=incoming') ? { ok: true, calls: [invitation] } : { ok: true, call: invitation },
@@ -45,14 +46,14 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active' 
     '../../assets/sounds/tlink-call-soft.wav':1,
     'react-native': { Platform: { OS: platform }, ActivityIndicator: 'ActivityIndicator', AppState: { currentState: initialAppState, addEventListener: (_event, fn) => { listeners.add(fn); return { remove: () => listeners.delete(fn) }; } },
       Keyboard: { dismiss: () => { state.keyboardDismissals++; } },
-      DeviceEventEmitter:{addListener:(_name,fn)=>{presenceListeners.add(fn);return {remove:()=>presenceListeners.delete(fn)};}},
+      DeviceEventEmitter:{addListener:(name,fn)=>{const listeners=name==='tlink:call-identity-invalidated'?identityListeners:presenceListeners;listeners.add(fn);return {remove:()=>listeners.delete(fn)};}},
       Linking: { openSettings: async () => { state.settings++; } }, Modal: 'Modal', Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View', StyleSheet: { create: value => value, absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } } },
     'react-native-incall-manager': { start: value => state.audioStarts.push(value), stop: () => state.stops++, startRingback: () => state.ringbacks++, stopRingback: () => state.ringbackStops++, setKeepScreenOn: () => undefined, setForceSpeakerphoneOn: () => undefined },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     'react-native-screens': { FullWindowOverlay: 'FullWindowOverlay' },
     'react-native-webrtc': { mediaDevices: { enumerateDevices: async () => [{ kind: 'videoinput' }, { kind: 'videoinput' }] }, RTCView: 'RTCView' },
     '@/components/field-button': { FieldButton: 'FieldButton' },
-    '@/lib/api': { ApiError, createTeamCallRequest: signal => { state.requestLifetimes.push(signal); return async (query, options) => {
+    '@/lib/api': { ApiError, createTeamCallRequest: (signal, capability) => { state.requestLifetimes.push(signal); state.capabilities.push(capability); return async (query, options) => {
       assert.equal(signal.aborted, false, 'an invalidated call identity cannot send');
       const url = `/api/trade-team-calls${query ? `?${query}` : ''}`;
       const body = options.body ? JSON.parse(options.body) : null; state.api.push({ url, body, signal: options.signal }); return state.respond(url, body);
@@ -76,7 +77,7 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active' 
   new Function('require', 'exports', 'setInterval', 'clearInterval', `${compiled}\nexports.TestSession = NativeTeamCallSession; exports.TestTile = CallTile; exports.TestPresentation = CallPresentation; exports.styles = styles;`)(id => {
     assert.ok(id in dependencies, `unexpected dependency ${id}`); return dependencies[id];
   }, exports, (fn,delay) => { intervals.add(fn); intervalDelays.set(fn,delay); return fn; }, fn => { intervals.delete(fn); intervalDelays.delete(fn); });
-  function render() { cursor = 0; tree = exports.TestSession({ enabled: true, children: 'app' }); while (pendingEffects.length) pendingEffects.shift()(); return tree; }
+  function render() { cursor = 0; tree = exports.TestSession({ enabled: state.enabled, principal: state.principal, children: 'app' }); while (pendingEffects.length) pendingEffects.shift()(); return tree; }
   function visit(node) { if (!node || typeof node !== 'object') return []; return [node, ...[node.props?.children].flat(2).flatMap(child => visit(child))]; }
   function nodes() { return visit(tree); }
   const hasLabel = (node, label) => (node.type === 'FieldButton' && node.props.children === label) || (node.type?.name === 'CallControl' && node.props.label === label);
@@ -92,6 +93,7 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active' 
     systemEvent: async event => { for (const listener of [...system.listeners]) await listener(event); },
     receivePush:()=>{for(const listener of pushListeners)listener({request:{content:{data:{type:'team_call',threadId:invitation.threadId,callId:invitation.id}}}});},
     presence:status=>{for(const listener of presenceListeners)listener({status});},
+    invalidate:()=>{for(const listener of identityListeners)listener();},
   };
 }
 
@@ -313,12 +315,14 @@ test('system Answer cannot acquire media for a stale notification or unauthorize
   assert.deepEqual(h.state.media, []); assert.ok(h.system.ended.includes(invitation.id)); h.cleanup();
 });
 
-test('system End during permission acquisition cancels the pending answer before server join', async () => {
+test('system End during permission acquisition leaves the accepted session and never opens late media', async () => {
   const h = harness({ native: true }); let resolve;
   h.state.acquire = (_mode, current) => new Promise(done => { resolve = () => done(current() ? h.state.stream : null); });
   const pending = h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
   await flush(); await h.systemEvent({ type: 'end', callId: invitation.id }); resolve(); await pending;
-  assert.equal(h.state.api.some(item => item.body?.action === 'join'), false); h.cleanup();
+  assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'leave').length, 1);
+  assert.deepEqual(h.state.peers, []); h.cleanup();
 });
 
 test('an invitation timer cannot end an explicit Answer while its microphone request is pending', async t => {
@@ -470,6 +474,15 @@ test('a stale predeadline no-answer response arriving after 45 seconds triggers 
   assert.deepEqual(h.system.connecting, [invitation.id]); h.cleanup();
 });
 
+test('caller stops ringing when a teammate answered and left between status polls', async () => {
+  const h = harness(); const normal = h.state.respond;
+  await h.context().start(invitation.threadId, 'audio'); h.render(); await flush();
+  h.state.respond = (url, body) => url.includes('callId=') ? Promise.resolve({ ok: true, call: { ...invitation, hasBeenAnswered: true }, signals: [] }) : normal(url, body);
+  await h.systemEvent({ type: 'heartbeat' }); h.render();
+  assert.equal(h.context().busy, false); assert.equal(h.state.ringbackStops, 1);
+  assert.ok(h.nodes().some(node => node.type === 'Text' && node.props.children === 'Your teammate left the call.')); h.cleanup();
+});
+
 test('an already answered group call remains manually joinable after 45 seconds without ringing again', async t => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse(invitation.createdAt) + 120_000 });
   for (const native of [false, true]) {
@@ -477,7 +490,7 @@ test('an already answered group call remains manually joinable after 45 seconds 
     const running = { ...invitation, hasBeenAnswered: true,
       participants: [{ memberId: 'member-remote', name: 'Teammate', sessionId: 'remote-session', joinedAt: invitation.createdAt }] };
     h.state.respond = (url, body) => url.includes('view=incoming') ? Promise.resolve({ ok: true, calls: [running] })
-      : body?.action === 'join' ? Promise.resolve({ ok: true, call: running, memberId: 'member-local' }) : normal(url, body);
+      : body?.action === 'join' || url.includes('callId=') ? Promise.resolve({ ok: true, call: running, memberId: 'member-local' }) : normal(url, body);
     await h.context().openInvitation({ threadId: invitation.threadId, callId: invitation.id }); h.render(); await flush();
     assert.equal(h.state.rings, 0); assert.deepEqual(h.system.shown, []);
     assert.ok(h.button('Join call')); assert.ok(h.button('Join with voice only'));
@@ -614,7 +627,8 @@ test('pending background Answer becomes cancellable on foreground before permiss
   h.button('Cancel')(); h.render(); finish(); await pending;
   assert.equal(h.context().busy, false); assert.equal(h.presentation(), null);
   assert.equal(h.underlying().props.pointerEvents, 'auto');
-  assert.equal(h.state.api.some(item => item.body?.action === 'join'), false);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'leave').length, 1);
   assert.ok(h.system.ended.includes(invitation.id)); h.cleanup();
 });
 
@@ -647,9 +661,10 @@ test('a stalled native Answer setup releases within 60 seconds and late completi
   h.system.answer = () => new Promise(resolve => { finish = resolve; });
   const pending = h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
   await flush(); h.render(); assert.equal(h.context().busy, true); assert.equal(h.presentation(), null);
-  h.appState('active'); h.render(); assert.ok(h.button('End call'));
+  h.appState('active'); h.render(); assert.ok(h.button('Cancel'));
   t.mock.timers.tick(60_000); await flush(); h.render();
-  assert.equal(h.context().busy, false); assert.equal(h.state.released.length, 1);
+  assert.equal(h.context().busy, false); assert.equal(h.state.released.length, 0, 'native Answer is acknowledged before requesting microphone');
+  assert.equal(h.state.api.filter(item => item.body?.action === 'leave').length, 1);
   assert.ok(h.button('Close')); h.button('Close')(); h.render();
   assert.equal(h.presentation(), null); assert.equal(h.underlying().props.pointerEvents, 'auto');
   finish(); await pending; h.render();
@@ -667,4 +682,89 @@ test('completed setup clears its watchdog and missing media cannot leave an open
   await h.context().start(invitation.threadId, 'audio'); h.render();
   assert.equal(h.context().busy, false); assert.ok(h.button('Retry')); assert.ok(h.button('Close'));
   h.button('Close')(); h.render(); assert.equal(h.presentation(), null); h.cleanup();
+});
+
+const pushAnswer = () => ({ type: 'answer', callId: invitation.id, threadId: invitation.threadId,
+  expiresAt: invitation.expiresAt, answerToken: 'synthetic-call-only-capability', callerName: 'James Morris' });
+const restoredPrincipal = { ownerId: 'business-owner', memberId: 'member-local', localOwnerKey: 'field:business-owner:member-local' };
+function callCapabilityResponses(h) {
+  const normal = h.state.respond;
+  h.state.respond = async (url, body) => ({ ...await normal(url, body), ownerUid: restoredPrincipal.ownerId, memberId: restoredPrincipal.memberId });
+}
+
+test('cold locked Answer connects through invitation capability before the private workspace restores', async () => {
+  const h = harness({ native: true, enabled: false, initialAppState: 'background' });
+  callCapabilityResponses(h);
+  h.state.acquire = async (_mode, current) => {
+    assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1, 'authenticated acceptance precedes capture');
+    assert.deepEqual(h.system.answers, [invitation.id], 'CallKit activation is acknowledged before WebRTC capture');
+    return current() ? h.state.stream : null;
+  };
+  await flush(); assert.deepEqual(h.state.api, [], 'locked workspace cannot cause ordinary call polling');
+  await h.systemEvent(pushAnswer()); h.render(); await flush();
+  assert.equal(h.context().busy, true); assert.deepEqual(h.state.media, ['audio']);
+  assert.equal(h.state.capabilities.length, 1); assert.equal(h.state.capabilities[0].answerToken, pushAnswer().answerToken);
+  assert.deepEqual(h.system.connected, [], 'accepted does not claim peer media connected');
+  h.state.peers[0].changed([{ memberId: 'member-remote', name: 'James Morris', state: 'connected', stream: null }]);
+  assert.deepEqual(h.system.connected, [invitation.id]);
+  h.state.enabled = true; h.state.principal = restoredPrincipal; h.appState('active'); h.render(); await flush();
+  assert.equal(h.context().busy, true); assert.equal(h.state.released.length, 0, 'unlock must preserve this recipient call');
+  assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1);
+  assert.ok(h.button('End call')); h.cleanup();
+});
+
+test('an invitation capability cannot join for a different restored principal and never opens media', async () => {
+  const h = harness({ native: true, enabled: true, principal: { ...restoredPrincipal, memberId: 'another-member' }, initialAppState: 'background' });
+  callCapabilityResponses(h); await h.systemEvent(pushAnswer()); h.render();
+  assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 0);
+  assert.deepEqual(h.state.media, []); assert.ok(h.system.ended.includes(invitation.id)); h.cleanup();
+});
+
+test('a replaced foreground invitation lookup cannot end the newer capability Answer', async () => {
+  const h = harness({ native: true }); await flush(); let rejectIncoming;
+  const normal = h.state.respond; let lookups = 0;
+  h.state.respond = (url, body) => {
+    if (url.includes('view=incoming') && lookups++ === 0) return new Promise((_resolve, reject) => { rejectIncoming = reject; });
+    return normal(url, body).then(result => ({ ...result, ownerUid: restoredPrincipal.ownerId, memberId: restoredPrincipal.memberId }));
+  };
+  const incoming = h.systemEvent({ ...pushAnswer(), type: 'incoming' }); await flush();
+  await h.systemEvent(pushAnswer()); h.render();
+  rejectIncoming(new Error('Previous workspace request aborted')); await incoming; h.render();
+  assert.equal(h.context().busy, true); assert.deepEqual(h.system.ended, []);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1); h.cleanup();
+});
+
+test('explicit sign-out cancels a pending capability lookup before it can join or capture', async () => {
+  const h = harness({ native: true, enabled: false, initialAppState: 'background' }); let finish;
+  h.state.respond = () => new Promise(resolve => { finish = resolve; });
+  const pending = h.systemEvent(pushAnswer()); await flush(); h.invalidate();
+  finish({ ok: true, calls: [invitation], ownerUid: restoredPrincipal.ownerId, memberId: restoredPrincipal.memberId });
+  await pending; h.render();
+  assert.deepEqual(h.state.media, []); assert.equal(h.state.api.some(item => item.body?.action === 'join'), false);
+  assert.equal(h.state.requestLifetimes[0].aborted, true); h.cleanup();
+});
+
+test('identity invalidation clears visible invitations retained by the stable provider', async () => {
+  const h = harness({ native: true, principal: restoredPrincipal }); await flush(); h.render();
+  assert.ok(h.button('Answer'));
+  h.state.enabled = false; h.state.principal = null; h.invalidate(); h.render();
+  assert.equal(h.hasButton('Answer'), false); assert.equal(h.presentation(), null); h.cleanup();
+});
+
+test('a restored different business ends a call accepted before unlock', async () => {
+  const h = harness({ native: true, enabled: false, initialAppState: 'background' }); callCapabilityResponses(h);
+  await h.systemEvent(pushAnswer()); h.render(); assert.equal(h.context().busy, true);
+  h.state.enabled = true; h.state.principal = { ...restoredPrincipal, ownerId: 'different-business' }; h.render(); h.render();
+  assert.equal(h.context().busy, false); assert.equal(h.state.released.length, 1); assert.equal(h.state.requestLifetimes[0].aborted, true); h.cleanup();
+});
+
+test('native incoming presentations carry the actual caller name and outgoing carries the conversation name', async () => {
+  const h = harness({ native: true }); const normal = h.state.respond;
+  const named = { ...invitation, participants: [{ memberId: invitation.createdByMemberId, sessionId: 'remote-session', name: 'James Morris', joinedAt: invitation.createdAt }] };
+  h.state.respond = async (url, body) => url.includes('view=incoming') ? { ok: true, calls: [named] } : normal(url, body);
+  await h.context().openInvitation({ threadId: invitation.threadId, callId: invitation.id }); h.render(); await flush();
+  assert.equal(h.system.shown.at(-1).callerName, 'James Morris');
+  h.button('Decline')(); h.render();
+  await h.context().start(invitation.threadId, 'audio'); h.render();
+  assert.equal(h.system.started.at(-1).callerName, invitation.threadName); h.cleanup();
 });

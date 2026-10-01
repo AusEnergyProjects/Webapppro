@@ -6,7 +6,7 @@ import ts from 'typescript';
 const source = fs.readFileSync(new URL('../src/lib/api.ts', import.meta.url), 'utf8');
 const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
-function fixture({ firebase = false } = {}) {
+function fixture({ firebase = false, invitation } = {}) {
   const state = { locked: false, revision: 0, reads: 0, bearer: 'first', gate: null, status: 200, fetchGate: null, requests: [] };
   const auth = { currentUser: firebase ? { uid: 'user-a', getIdToken: async () => state.bearer } : null };
   const stored = async value => { state.reads++; if (state.gate) await state.gate.promise; if (state.locked) throw new Error('Keychain locked'); return value; };
@@ -28,7 +28,7 @@ function fixture({ firebase = false } = {}) {
     assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
   }, loaded, loaded.exports, fetch);
   const lifetime = new AbortController();
-  return { state, auth, lifetime, request: loaded.exports.createTeamCallRequest(lifetime.signal) };
+  return { state, auth, lifetime, request: loaded.exports.createTeamCallRequest(lifetime.signal, invitation) };
 }
 
 test('a warm field call keeps its authorized device session when the keychain locks', async () => {
@@ -48,6 +48,49 @@ test('a cold locked call fails closed without dispatching an unauthenticated req
   const f = fixture(); f.state.locked = true;
   await assert.rejects(f.request(), /Keychain locked/);
   assert.equal(f.state.requests.length, 0);
+  f.lifetime.abort();
+});
+
+const invitation = { answerToken: 'signed-one-call-grant', callId: 'call-123456', threadId: 'thread-123456' };
+test('a scoped lock-screen answer does not read private keychain credentials', async () => {
+  const f = fixture({ invitation }); f.state.locked = true;
+  await f.request('view=incoming');
+  await f.request('', { method: 'POST', body: JSON.stringify({ action: 'join', callId: invitation.callId, sessionId: 'session-1234' }) });
+  assert.equal(f.state.reads, 0);
+  assert.equal(f.state.requests.length, 2);
+  for (const { url, init } of f.state.requests) {
+    assert.equal(new URL(url).pathname, '/api/trade-team-calls');
+    assert.equal(new URL(url).searchParams.get('callId'), invitation.callId);
+    assert.equal(init.headers.get('X-TLink-Call-Answer'), invitation.answerToken);
+    assert.equal(init.headers.has('Authorization'), false);
+    assert.equal(init.headers.has('x-aea-device-id'), false);
+  }
+  // Normal auth may hydrate after unlocking; the call provider checks that
+  // returned owner/member match before retaining this narrowly scoped session.
+  f.state.revision++;
+  f.auth.currentUser = { uid: 'restored-user', getIdToken: async () => { throw new Error('Not needed'); } };
+  await f.request(`callId=${invitation.callId}&sessionId=session-1234`);
+  assert.equal(f.state.reads, 0);
+  f.lifetime.abort();
+  await assert.rejects(f.request('view=incoming'), { code: 'CALL_SESSION_CLOSED' });
+});
+
+test('a call invitation cannot start or address another call or thread', async () => {
+  const f = fixture({ invitation }); f.state.locked = true;
+  for (const [query, body] of [
+    ['callId=other-1234', undefined], ['threadId=other-1234', undefined],
+    ['', { action: 'start', callId: invitation.callId }],
+    ['', { action: 'join', callId: 'other-1234' }],
+  ]) await assert.rejects(f.request(query, body ? { method: 'POST', body: JSON.stringify(body) } : {}), { code: 'CALL_ACCESS_REQUIRED' });
+  assert.equal(f.state.requests.length, 0);
+  f.lifetime.abort();
+});
+
+test('revoked scoped invitations fail instead of falling back to broader account auth', async () => {
+  const f = fixture({ invitation }); f.state.locked = true; f.state.status = 403;
+  await assert.rejects(f.request('view=incoming'), { code: 'CALL_ACCESS_REQUIRED' });
+  assert.equal(f.state.reads, 0);
+  assert.equal(f.state.requests.length, 1);
   f.lifetime.abort();
 });
 

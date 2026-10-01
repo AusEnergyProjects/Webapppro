@@ -9,13 +9,17 @@ private struct TLinkCall {
   let threadId: String
   let mode: String
   let expiresAt: String
+  let callerName: String
+  let answerToken: String?
   var payload: [String: Any] {
-    ["callId": uuid.uuidString.lowercased(), "threadId": threadId, "mode": mode, "expiresAt": expiresAt]
+    var value: [String: Any] = ["callId": uuid.uuidString.lowercased(), "threadId": threadId, "mode": mode, "expiresAt": expiresAt, "callerName": callerName]
+    if let answerToken { value["answerToken"] = answerToken }
+    return value
   }
   func connecting() -> TLinkCall {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return TLinkCall(uuid: uuid, threadId: threadId, mode: mode, expiresAt: formatter.string(from: Date().addingTimeInterval(45)))
+    return TLinkCall(uuid: uuid, threadId: threadId, mode: mode, expiresAt: formatter.string(from: Date().addingTimeInterval(45)), callerName: callerName, answerToken: answerToken)
   }
   static func parse(_ data: [String: Any]) -> TLinkCall? {
     guard let callId = data["callId"] as? String, let uuid = UUID(uuidString: callId),
@@ -24,7 +28,11 @@ private struct TLinkCall {
       let mode = data["mode"] as? String, ["audio", "video"].contains(mode),
       let expiresAt = data["expiresAt"] as? String, let expiry = date(expiresAt), expiry > Date()
     else { return nil }
-    return TLinkCall(uuid: uuid, threadId: threadId, mode: mode, expiresAt: expiresAt)
+    let name = (data["callerName"] as? String ?? "").components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+    let token = (data["answerToken"] as? String).flatMap { $0.isEmpty || $0.count > 4096 ? nil : $0 }
+    return TLinkCall(uuid: uuid, threadId: threadId, mode: mode, expiresAt: expiresAt,
+      callerName: name.isEmpty ? "Team call" : String(name.prefix(120)),
+      answerToken: token)
   }
   static func date(_ value: String) -> Date? {
     let formatter = ISO8601DateFormatter()
@@ -47,6 +55,8 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
   private var outgoingCalls: Set<UUID> = []
   private var ringExpiredCalls: Set<UUID> = []
   private var acceptedCalls: Set<UUID> = []
+  private var pendingAnswers: [UUID: CXAnswerCallAction] = [:]
+  private var serverJoinedCalls: Set<UUID> = []
   private var heartbeat: Timer?
   private var ringback: AVAudioPlayer?
   private var audioActive = false
@@ -127,19 +137,27 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     notify?()
   }
   func drain() -> [[String: Any]] {
-    let pending = events
-    events.removeAll()
-    return pending
+    return events
+  }
+  func acknowledge(_ ids: [String]) {
+    let delivered = Set(ids)
+    events.removeAll { event in (event["id"] as? String).map { delivered.contains($0) } ?? false }
   }
   func incoming(_ data: [String: Any]) throws {
     guard let call = TLinkCall.parse(data) else { throw CallError.invalid }
-    if calls[call.uuid] != nil { calls[call.uuid] = call; return }
+    if calls[call.uuid] != nil {
+      // A JS refresh must not replace the accepted deadline or the push token.
+      let update = CXCallUpdate()
+      update.localizedCallerName = call.callerName
+      provider.reportCall(with: call.uuid, updated: update)
+      return
+    }
     incoming(call, completion: {})
   }
   private func incoming(_ call: TLinkCall, completion: @escaping () -> Void) {
     let update = CXCallUpdate()
-    update.remoteHandle = CXHandle(type: .generic, value: "TLink team")
-    update.localizedCallerName = "TLink"
+    update.remoteHandle = CXHandle(type: .generic, value: call.callerName)
+    update.localizedCallerName = call.callerName
     update.hasVideo = call.mode == "video"
     update.supportsHolding = false
     update.supportsGrouping = false
@@ -165,7 +183,7 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     guard let call = TLinkCall.parse(data) else { throw CallError.invalid }
     if calls[call.uuid] != nil { return }
     calls[call.uuid] = call
-    let action = CXStartCallAction(call: call.uuid, handle: CXHandle(type: .generic, value: "TLink team"))
+    let action = CXStartCallAction(call: call.uuid, handle: CXHandle(type: .generic, value: call.callerName))
     outgoingCalls.insert(call.uuid)
     timers[call.uuid] = Timer.scheduledTimer(withTimeInterval: max(1, min(45, TLinkCall.date(call.expiresAt)!.timeIntervalSinceNow)), repeats: false) { _ in
       guard self.calls[call.uuid] != nil, !self.acceptedCalls.contains(call.uuid), !self.connectedCalls.contains(call.uuid) else { return }
@@ -183,8 +201,10 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
   }
   func answer(_ value: String) throws {
     guard let uuid = UUID(uuidString: value), calls[uuid] != nil else { throw CallError.invalid }
-    // The lock-screen action already completed before JS restored its account.
-    // Do not submit another transaction or wait for microphone capture here.
+    serverJoinedCalls.insert(uuid)
+    // JS calls this after the authenticated server accepts the join. Only then
+    // fulfill a queued lock-screen action and allow CallKit to activate audio.
+    if let action = pendingAnswers.removeValue(forKey: uuid) { action.fulfill(); return }
     if acceptedCalls.contains(uuid) { return }
     controller.request(CXTransaction(action: CXAnswerCallAction(call: uuid))) { error in
       if error != nil { self.end(uuid, reason: .failed) }
@@ -229,11 +249,11 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     refreshRingback()
   }
   func connected(_ value: String) {
-    guard let id = UUID(uuidString: value), calls[id] != nil else { return }
+    guard let id = UUID(uuidString: value), let call = calls[id] else { return }
     connectedCalls.insert(id)
     timers.removeValue(forKey: id)?.invalidate()
     let update = CXCallUpdate()
-    update.localizedCallerName = "TLink"
+    update.localizedCallerName = call.callerName
     provider.reportCall(with: id, updated: update)
     refreshRingback()
     if outgoingCalls.contains(id) { provider.reportOutgoingCall(with: id, connectedAt: Date()) }
@@ -246,6 +266,8 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     outgoingCalls.remove(id)
     ringExpiredCalls.remove(id)
     acceptedCalls.remove(id)
+    serverJoinedCalls.remove(id)
+    pendingAnswers.removeValue(forKey: id)?.fail()
     refreshRingback()
     provider.reportCall(with: id, endedAt: Date(), reason: reason)
     enqueue("end", call)
@@ -259,16 +281,11 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     guard let call = calls[action.callUUID], let date = TLinkCall.date(call.expiresAt), date > Date() else { action.fail(); return }
     acceptedCalls.insert(call.uuid)
     do { try prepareAudio() } catch { action.fail(); end(action.callUUID, reason: .failed); return }
-    if !UIApplication.shared.isProtectedDataAvailable {
-      let update = CXCallUpdate()
-      update.localizedCallerName = "Unlock iPhone and open TLink to answer"
-      provider.reportCall(with: call.uuid, updated: update)
-    }
-    // Fulfilling activates CallKit's audio session. Waiting for JS getUserMedia
-    // before this creates a deadlock with WebRTC's manual audio activation.
-    // This permits audio setup only; JS still verifies authenticated membership
-    // before it captures media, joins the server call, or exchanges signaling.
-    action.fulfill()
+    // Keep the native UI in its connecting state until the server accepts the
+    // join. JS acknowledges before requesting audio tracks, preventing a manual
+    // WebRTC audio activation wait from blocking CallKit's activation callback.
+    if serverJoinedCalls.contains(call.uuid) { action.fulfill() }
+    else { pendingAnswers[call.uuid] = action }
     let joining = call.connecting()
     calls[call.uuid] = joining
     expireUnconnected(joining, after: 45)
@@ -331,6 +348,7 @@ public final class TLinkCallsModule: Module {
     AsyncFunction("configure") { (enabled: Bool, preserveActiveCalls: Bool) in TLinkCallCoordinator.shared.configure(enabled, preserveActiveCalls: preserveActiveCalls) }.runOnQueue(.main)
     AsyncFunction("registration") { ["voipPushToken": TLinkCallCoordinator.shared.token, "nativeCallCapable": true] as [String: Any] }.runOnQueue(.main)
     AsyncFunction("drainEvents") { TLinkCallCoordinator.shared.drain() }.runOnQueue(.main)
+    AsyncFunction("acknowledgeEvents") { (ids: [String]) in TLinkCallCoordinator.shared.acknowledge(ids) }.runOnQueue(.main)
     AsyncFunction("incoming") { (call: [String: Any]) in try TLinkCallCoordinator.shared.incoming(call) }.runOnQueue(.main)
     AsyncFunction("outgoing") { (call: [String: Any]) in try TLinkCallCoordinator.shared.outgoing(call) }.runOnQueue(.main)
     AsyncFunction("connecting") { (id: String) in TLinkCallCoordinator.shared.connecting(id) }.runOnQueue(.main)

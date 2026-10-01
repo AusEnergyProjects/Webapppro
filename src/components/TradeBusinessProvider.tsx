@@ -7,20 +7,20 @@ import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { createTradeBusinessFetch, readTradeBusinessSelection, resolveTradeBusinessSelection, saveTradeBusinessSelection, type TradeBusinessChoice } from "@/lib/trade-business-client";
 import styles from "./TradeBusinessProvider.module.css";
 
-type BusinessContext = { business: TradeBusinessChoice; request: typeof fetch; updateManagerName?: (name: string) => void };
+type BusinessContext = { business: TradeBusinessChoice; request: typeof fetch; updatePersonalName?: (name: string) => void };
 const Context = createContext<BusinessContext | null>(null);
 const unscopedFetch: typeof fetch = (input, init) => fetch(input, init);
 
 export function useTradeBusinessFetch(): typeof fetch { return useContext(Context)?.request || unscopedFetch; }
 export function useTradeBusiness(): TradeBusinessChoice | null { return useContext(Context)?.business || null; }
-export function useTradeManagerNameUpdate() { return useContext(Context)?.updateManagerName; }
+export function useTradePersonalNameUpdate() { return useContext(Context)?.updatePersonalName; }
 
-export function TradeBusinessProvider({ business, children, onAccessLost, onManagerNameChange }: { business: TradeBusinessChoice; children: ReactNode; onAccessLost?: () => void; onManagerNameChange?: (name: string) => void }) {
+export function TradeBusinessProvider({ business, children, onAccessLost, onPersonalNameChange }: { business: TradeBusinessChoice; children: ReactNode; onAccessLost?: () => void; onPersonalNameChange?: (name: string) => void }) {
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const reportAccessLost = useCallback(() => { if (active.current) onAccessLost?.(); }, [onAccessLost]);
   const request = useCallback<typeof fetch>((input, init) => createTradeBusinessFetch(business.ownerUid, window.location.origin, fetch, reportAccessLost)(input, init), [business.ownerUid, reportAccessLost]);
-  const value = useMemo(() => ({ business, request, updateManagerName: onManagerNameChange }), [business, request, onManagerNameChange]);
+  const value = useMemo(() => ({ business, request, updatePersonalName: onPersonalNameChange }), [business, request, onPersonalNameChange]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
@@ -60,11 +60,12 @@ export function TradeBusinessGate({ destination, children }: { destination: "own
     setSelected(null); setBusinesses([]); setLoading(true); setError(""); setRetry(value => value + 1);
   }, [user]);
 
-  const updateManagerName = useCallback((managerName: string) => {
-    if (selected?.role !== "owner") return;
-    const ownerUid = selected.ownerUid;
-    setSelected(current => current?.ownerUid === ownerUid ? { ...current, managerName } : current);
-    setBusinesses(current => current.map(business => business.ownerUid === ownerUid ? { ...business, managerName } : business));
+  const updatePersonalName = useCallback((name: string) => {
+    if (!selected) return;
+    const matches = (business: TradeBusinessChoice) => business.ownerUid === selected.ownerUid && business.role === selected.role && business.memberId === selected.memberId;
+    const update = (business: TradeBusinessChoice) => matches(business) ? { ...business, ...(business.role === "owner" ? { managerName: name } : { displayName: name }) } : business;
+    setSelected(current => current ? update(current) : current);
+    setBusinesses(current => current.map(update));
   }, [selected]);
 
   async function switchBusiness() {
@@ -106,5 +107,5 @@ export function TradeBusinessGate({ destination, children }: { destination: "own
   if (!selected) return <section className={styles.chooser}><span>TLink workspace</span><h1>Which business are you working with?</h1><p>Choose a business to open its jobs, customers and team.</p><div className={styles.choices}>{businesses.map(business => <button type="button" key={business.ownerUid} onClick={() => choose(business, true)}><strong>{business.businessName}</strong><span>{business.role === "owner" ? "Your business" : "Team member"}</span><b aria-hidden="true">→</b></button>)}</div></section>;
   const personalName = selected.role === "owner" ? selected.managerName : selected.displayName;
   const firstName = personalName?.trim().split(/\s+/)[0] || "";
-  return <TradeBusinessProvider key={`${user.uid}:${selected.ownerUid}`} business={selected} onAccessLost={refreshAccess} onManagerNameChange={updateManagerName}><div className={styles.switcher} data-tlink-business-switcher><div><span>Working with</span><strong>{selected.businessName}</strong><small data-tlink-welcome>{firstName ? `Welcome ${firstName}` : "Welcome"}</small>{switchError && <p role="alert">{switchError}</p>}</div>{businesses.length > 1 && <button type="button" disabled={switching} onClick={() => void switchBusiness()}>{switching ? "Switching..." : "Switch business"}</button>}</div>{children}</TradeBusinessProvider>;
+  return <TradeBusinessProvider key={`${user.uid}:${selected.ownerUid}`} business={selected} onAccessLost={refreshAccess} onPersonalNameChange={updatePersonalName}><div className={styles.switcher} data-tlink-business-switcher><div><span>Working with</span><strong>{selected.businessName}</strong><small data-tlink-welcome>{firstName ? `Welcome ${firstName}` : "Welcome"}</small>{switchError && <p role="alert">{switchError}</p>}</div>{businesses.length > 1 && <button type="button" disabled={switching} onClick={() => void switchBusiness()}>{switching ? "Switching..." : "Switch business"}</button>}</div>{children}</TradeBusinessProvider>;
 }

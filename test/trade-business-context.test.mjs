@@ -126,6 +126,17 @@ test("manager name is available only on the owner's choice while member and busi
   assert.equal(member.businessName, "Employer");
 });
 
+test("owner communications use their personal name and keep the business identity separate", async t => {
+  const f = fixture(t); f.owner(f.identity.uid, "Own company");
+  f.database.prepare("UPDATE trade_accounts SET manager_name=? WHERE firebase_uid=?").run("James Morris", f.identity.uid);
+  const access = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+  assert.equal(access.displayName, "James Morris");
+  assert.equal(access.businessName, "Own company");
+  assert.equal(f.database.prepare("SELECT display_name FROM trade_team_members WHERE id=?").get(access.memberId).display_name, "James Morris");
+  f.database.prepare("UPDATE trade_accounts SET manager_name='' WHERE firebase_uid=?").run(f.identity.uid);
+  assert.equal((await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid))).displayName, "Own company");
+});
+
 test("membership enumeration excludes revoked, unapproved, inactive, supplier and fabricated approvals", async t => {
   const f = fixture(t);
   for (const name of ["valid", "revoked", "pending", "inactive", "supplier", "unreviewed"]) { f.owner(name); f.member(`member-${name}`, name); }

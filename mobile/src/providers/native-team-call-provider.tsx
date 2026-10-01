@@ -30,6 +30,7 @@ type CallValue = {
 };
 type CallResult = {
   ok: boolean; call?: TeamCall | null; calls?: TeamCall[]; memberId?: string;
+  ownerUid?: string;
   signals?: TeamCallSignal[]; iceServers?: NativeIceServer[];
 };
 type Session = {
@@ -41,6 +42,9 @@ type Retry = { threadId: string; mode: NativeCallMode; existing?: TeamCall };
 const Calls = createContext<CallValue | null>(null);
 const validId = (value: string) => /^[a-zA-Z0-9_-]{8,120}$/.test(value);
 const ringingUntil = (call: TeamCall) => Math.min(Date.parse(call.expiresAt), Date.parse(call.createdAt) + TEAM_CALL_RING_SECONDS * 1000);
+const callerName = (call: TeamCall) => call.participants.find(person => person.memberId === call.createdByMemberId)?.name || call.threadName;
+type Principal = { ownerId: string; memberId: string; localOwnerKey: string };
+type AnswerAuthorization = { answerToken: string; callId: string; threadId: string; ownerUid?: string; memberId?: string };
 
 export function useNativeTeamCalls() {
   const calls = useContext(Calls);
@@ -51,12 +55,12 @@ export function useNativeTeamCalls() {
 export function NativeTeamCallProvider({ children }: { children: ReactNode }) {
   const { user, access, loading } = useApp();
   const enabled = Boolean(user) && access.status === 'approved' && !loading;
-  // Remounting on principal/access changes closes all media before another
-  // account can see or participate in the preceding account's call.
-  return <NativeTeamCallSession key={`${user?.localOwnerKey || 'signed-out'}:${enabled}`} enabled={enabled}>{children}</NativeTeamCallSession>;
+  // A PushKit answer can precede workspace restoration. Keep that call alive
+  // while the matching principal unlocks; explicit identity changes end it.
+  return <NativeTeamCallSession enabled={enabled} principal={user}>{children}</NativeTeamCallSession>;
 }
 
-function NativeTeamCallSession({ children, enabled }: { children: ReactNode; enabled: boolean }) {
+function NativeTeamCallSession({ children, enabled, principal = null }: { children: ReactNode; enabled: boolean; principal?: Principal | null }) {
   const [active, setActive] = useState<TeamCall | null>(null);
   const [incoming, setIncoming] = useState<TeamCall[]>([]);
   const [opening, setOpening] = useState(false);
@@ -80,6 +84,11 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   const generation = useRef(0);
   const starting = useRef(false);
   const joiningCall = useRef<string | null>(null);
+  const answerLookup = useRef<string | null>(null);
+  const joinedPending = useRef<{ callId: string; sessionId: string } | null>(null);
+  const answerAuthorization = useRef<AnswerAuthorization | null>(null);
+  const principalRef = useRef(principal);
+  principalRef.current = principal;
   const session = useRef<Session | null>(null);
   const media = useRef<MediaStream | null>(null);
   const mediaRequest = useRef<AbortController | null>(null);
@@ -108,7 +117,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     try {
       if (!callRequests.current) {
         const lifetime = new AbortController();
-        callRequests.current = { controller: lifetime, request: createTeamCallRequest(lifetime.signal) };
+        callRequests.current = { controller: lifetime, request: createTeamCallRequest(lifetime.signal, answerAuthorization.current || undefined) };
       }
       const result = await callRequests.current.request<CallResult>(query, {
         method: body ? 'POST' : 'GET', signal: controller.signal,
@@ -125,8 +134,9 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   const release = useCallback((notify = true) => {
     generation.current++;
     starting.current = false;
-    const pendingCallId = joiningCall.current;
+    const pendingCallId = joiningCall.current || answerLookup.current;
     joiningCall.current = null;
+    answerLookup.current = null;
     cameraChanging.current = false;
     mediaRequest.current?.abort(); mediaRequest.current = null;
     // expo-audio releases the player itself during unmount, before this cleanup.
@@ -137,21 +147,34 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     setupDeadline.current = null;
     if (ringbackStarted.current) { InCallManager.stopRingback(); ringbackStarted.current = false; }
     const current = session.current;
+    const pendingJoined = joinedPending.current;
+    joinedPending.current = null;
     session.current = null;
     current?.peers?.close();
     releaseNativeCallMedia(media.current);
     media.current = null;
     if (audioStarted.current) { InCallManager.stop(); audioStarted.current = false; }
+    let leaving: Promise<unknown> | null = null;
     if (current) {
       void endSystemCall(current.call.id).catch(() => undefined);
       dismissed.current.add(current.call.id);
-      if (notify && mounted.current) void api('', { action: 'leave', callId: current.call.id, sessionId: current.sessionId }).catch(() => {
+      if (notify && mounted.current) leaving = api('', { action: 'leave', callId: current.call.id, sessionId: current.sessionId }).catch(() => {
         // Media is already stopped. The server's 45-second heartbeat lease
         // removes disconnected participants even when this request cannot send.
       });
     } else if (pendingCallId) {
       dismissed.current.add(pendingCallId);
       void endSystemCall(pendingCallId).catch(() => undefined);
+      if (pendingJoined && notify && mounted.current) leaving = api('', { action: 'leave', callId: pendingJoined.callId, sessionId: pendingJoined.sessionId }).catch(() => undefined);
+    }
+    // Leave above captures the existing request synchronously; invalidate the
+    // capability after it settles so another call cannot reuse the invitation.
+    if (answerAuthorization.current) {
+      const previous = callRequests.current;
+      answerAuthorization.current = null;
+      callRequests.current = null;
+      if (leaving) void leaving.finally(() => previous?.controller.abort());
+      else previous?.controller.abort();
     }
   }, [api, ringtone]);
 
@@ -162,6 +185,28 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     setMuted(false); setCameraOff(false); setNotice(message); setRetry(null);
     setShowSettings(false); setSwitchingCamera(false); setCanSwitchCamera(false); setMinimized(false);
   }, [release]);
+
+  const previousPrincipal = useRef(principal);
+  useEffect(() => {
+    const previous = previousPrincipal.current;
+    previousPrincipal.current = principal;
+    const capability = answerAuthorization.current;
+    const changed = previous && (!principal || previous.ownerId !== principal.ownerId || previous.memberId !== principal.memberId);
+    const wrongRestoration = principal && capability?.ownerUid && (principal.ownerId !== capability.ownerUid || principal.memberId !== capability.memberId);
+    if (changed || wrongRestoration) {
+      callRequests.current?.controller.abort(); callRequests.current = null;
+      stop('', false); answerAuthorization.current = null;
+      setIncoming([]); dismissed.current.clear(); availableForCalls.current = true;
+    }
+  }, [principal, stop]);
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('tlink:call-identity-invalidated', () => {
+      callRequests.current?.controller.abort(); callRequests.current = null;
+      stop('', false); answerAuthorization.current = null;
+      setIncoming([]); dismissed.current.clear(); availableForCalls.current = true;
+    });
+    return () => subscription.remove();
+  }, [stop]);
 
   useEffect(() => {
     mounted.current = true;
@@ -178,7 +223,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   }, [release]);
 
   const begin = useCallback(async (threadId: string, nextMode: NativeCallMode, existing?: TeamCall, systemAnswer = false) => {
-    if (!enabled || (!foreground.current && !systemAnswer) || starting.current || session.current) return;
+    if ((!enabled && !(systemAnswer && answerAuthorization.current)) || (!foreground.current && !systemAnswer) || starting.current || session.current) return;
     if (!validId(threadId)) { setNotice('Open the conversation again before calling.'); return; }
     starting.current = true;
     joiningCall.current = existing?.id || null;
@@ -198,6 +243,24 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
       if (!nativeSystemCallsAvailable) ringtone.pause();
       if (ringtoneMode.current) await ringtoneMode.current;
       if (!isCurrent()) return;
+      // Accept an authenticated incoming call before opening device media. This
+      // stops the caller's ringback and releases CallKit's pending Answer before
+      // WebRTC needs its audio session, including a locked cold start.
+      let joined: CallResult | null = null;
+      if (existing) {
+        joined = await api('', { action: 'join', callId: existing.id, sessionId });
+        if (!joined.call || !joined.memberId) throw new Error('The call did not start. Try again.');
+        if (!isCurrent()) {
+          if (mounted.current) void api('', { action: 'leave', callId: existing.id, sessionId }).catch(() => undefined);
+          return;
+        }
+        joinedPending.current = { callId: existing.id, sessionId };
+        if (Platform.OS === 'ios' && nativeSystemCallsAvailable) {
+          await showSystemCall({ callId: existing.id, threadId, mode: nextMode, expiresAt: joined.call.expiresAt, callerName: callerName(joined.call) });
+          await answerSystemCall(existing.id);
+          if (!isCurrent()) return;
+        }
+      }
       // This function is reached only through Start, Answer, or Retry. Neither
       // notification handling nor foreground polling acquires device media.
       const request = new AbortController(); mediaRequest.current = request;
@@ -224,8 +287,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
       if (nextMode === 'video') void mediaDevices.enumerateDevices().then(devices => {
         if (isCurrent() && Array.isArray(devices)) setCanSwitchCamera(devices.filter(device => device && typeof device === 'object' && 'kind' in device && device.kind === 'videoinput').length > 1);
       }).catch(() => { /* The main call remains available without a second camera. */ });
-      const result = await api('', existing ? { action: 'join', callId: existing.id, sessionId }
-        : { action: 'start', threadId, mode: nextMode, sessionId, requestId: Crypto.randomUUID() });
+      const result = joined || await api('', { action: 'start', threadId, mode: nextMode, sessionId, requestId: Crypto.randomUUID() });
       if (!result.call || !result.memberId) throw new Error('The call did not start. Try again.');
       if (!isCurrent()) {
         if (mounted.current) void api('', { action: 'leave', callId: result.call.id, sessionId }).catch(() => undefined);
@@ -233,13 +295,15 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
       }
       const current: Session = { call: result.call, memberId: result.memberId, sessionId, local: stream, peers: null, cursor: 0, lastSuccess: Date.now(), hadRemote: result.call.participants.some(person => person.memberId !== result.memberId), connected: false };
       session.current = current;
+      joinedPending.current = null;
       setActive(current.call); setIncoming(items => items.filter(item => item.id !== current.call.id));
       const systemCall: SystemCall = { callId: current.call.id, threadId, mode: nextMode,
+        callerName: existing ? callerName(current.call) : current.call.threadName,
         expiresAt: existing ? current.call.expiresAt : new Date(ringingUntil(current.call)).toISOString() };
-      if (existing) {
+      if (existing && !(Platform.OS === 'ios' && nativeSystemCallsAvailable)) {
         await showSystemCall(systemCall);
         await answerSystemCall(current.call.id);
-      } else await startSystemCall(systemCall);
+      } else if (!existing) await startSystemCall(systemCall);
       if (!isCurrent()) return;
       if (current.hadRemote) {
         await markSystemCallConnecting(current.call.id);
@@ -308,14 +372,13 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   }, [enabled, api, stop, ringtone]);
 
   useEffect(() => {
-    if (!enabled) return;
     return subscribeSystemCalls(async event => {
       if (!mounted.current) return;
       if (event.type === 'heartbeat') { await tickRef.current(); return; }
       if (event.type === 'end') {
         dismissed.current.add(event.callId);
         setIncoming(items => items.filter(item => item.id !== event.callId));
-        if (session.current?.call.id === event.callId || joiningCall.current === event.callId) stop();
+        if (session.current?.call.id === event.callId || joiningCall.current === event.callId || answerLookup.current === event.callId) stop();
         return;
       }
       if (event.type === 'mute') {
@@ -328,8 +391,19 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
       if (!currentSystemCall(event) || dismissed.current.has(event.callId)) {
         await endSystemCall(event.callId); return;
       }
-      if (session.current?.call.id === event.callId || starting.current) return;
+      if (session.current?.call.id === event.callId || starting.current || answerLookup.current) return;
+      if (!enabled && !(event.type === 'answer' && event.answerToken)) return false;
       if (event.type === 'incoming' && !foreground.current) return;
+      if (event.type === 'answer') {
+        answerLookup.current = event.callId;
+        // Invalidate any slower foreground invitation lookup before switching
+        // from workspace auth to the narrowly scoped push capability.
+        generation.current++;
+        if (event.answerToken) {
+          callRequests.current?.controller.abort(); callRequests.current = null;
+          answerAuthorization.current = { answerToken: event.answerToken, callId: event.callId, threadId: event.threadId };
+        }
+      }
       const epoch = generation.current;
       try {
         // A system Answer is explicit consent, but push data never authenticates
@@ -337,13 +411,22 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
         const result = await api('view=incoming');
         if (!mounted.current || epoch !== generation.current || session.current || starting.current || dismissed.current.has(event.callId)) return;
         const invitation = result.calls?.find(call => call.id === event.callId && call.threadId === event.threadId && call.status === 'active');
-        if (!invitation) { await endSystemCall(event.callId); return; }
+        if (!invitation) throw new Error('This call is no longer available.');
+        const capability = answerAuthorization.current;
+        if (capability) {
+          const signedIn = principalRef.current;
+          if (!result.ownerUid || !result.memberId || (signedIn && (signedIn.ownerId !== result.ownerUid || signedIn.memberId !== result.memberId))) {
+            throw new Error('This call belongs to a different account.');
+          }
+          capability.ownerUid = result.ownerUid; capability.memberId = result.memberId;
+        }
         if (event.type === 'answer') await begin(invitation.threadId, appState.current === 'active' ? invitation.mode : 'audio', invitation, true);
         else { setIncoming([invitation]); setNotice(''); }
       } catch {
+        if (!mounted.current || epoch !== generation.current) return;
         await endSystemCall(event.callId);
-        if (mounted.current) setNotice('Unlock your phone and open TLink to answer. If the call has ended, call your teammate back.');
-      }
+        if (mounted.current && epoch === generation.current) stop('The call could not connect. Please call your teammate again.');
+      } finally { if (answerLookup.current === event.callId) answerLookup.current = null; }
     });
   }, [api, begin, enabled, stop]);
 
@@ -393,6 +476,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
       void (async () => {
         if (await notificationsMuted() || cancelled || !foreground.current || session.current || starting.current) return;
         await showSystemCall({ callId: invitation.id, threadId: invitation.threadId, mode: invitation.mode,
+          callerName: callerName(invitation),
           expiresAt: new Date(ringingUntil(invitation)).toISOString() });
       })().catch(() => {
         if (mounted.current) setNotice('Your phone could not display the incoming call. Open Messages to call your teammate back.');
@@ -417,11 +501,10 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
   }, [activeId, enabled, incomingId, incomingAnswered, opening, ringtone]);
 
   useEffect(() => {
-    if (!enabled) return;
     let disposed = false;
     let inFlight = false;
     const tick = async () => {
-      if (disposed || inFlight || (!foreground.current && !(nativeSystemCallsAvailable && session.current))) return;
+      if (disposed || inFlight || (!enabled && !session.current) || (!foreground.current && !(nativeSystemCallsAvailable && session.current))) return;
       const current = session.current;
       if (starting.current || (current && !current.peers)) return;
       inFlight = true;
@@ -434,7 +517,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
           if (disposed || session.current !== current) return;
           if (!result.call || result.call.status !== 'active') { stop('Call ended.', false); return; }
           const hasRemote = result.call.participants.some(person => person.memberId !== current.memberId);
-          if (current.hadRemote && !hasRemote) { stop('Your teammate left the call.'); return; }
+          if ((current.hadRemote || result.call.hasBeenAnswered) && !hasRemote) { stop('Your teammate left the call.'); return; }
           if (!hasRemote && !current.connected && Date.now() >= ringingUntil(current.call)) {
             // A response sampled before the deadline cannot prove nobody
             // answered afterwards. Reconcile once with a fresh server read.
@@ -506,7 +589,7 @@ function NativeTeamCallSession({ children, enabled }: { children: ReactNode; ena
     return () => { disposed = true; tickRef.current = async () => undefined; listener.remove(); notification.remove(); presence.remove(); };
   }, [enabled, api, stop, activeId, ringtone]);
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled && !activeId) return;
     // Keep the same in-flight guard when negotiation changes the cadence.
     const interval = setInterval(() => void tickRef.current(), pollInterval);
     return () => clearInterval(interval);

@@ -466,7 +466,7 @@ export async function PATCH(request: Request) {
     ? String(account.manager_name || "")
     : optionalSingleLine(raw.managerName, 120);
   if (managerName === null) {
-    return json({ ok: false, error: "Enter a manager's name of up to 120 characters, or leave it blank." }, 400);
+    return json({ ok: false, error: "Enter your name using up to 120 characters, or leave it blank." }, 400);
   }
 
   const availabilityStatus = raw.availabilityStatus === undefined
@@ -709,6 +709,14 @@ export async function PATCH(request: Request) {
     raw.managerName === undefined ? null : managerName,
     identity.uid,
   )];
+
+  // The owner's team row is the shared name used in conversations and calls.
+  // Keep that projection in the same transaction as the optional personal name.
+  if (raw.managerName !== undefined) {
+    statements.push(db.prepare(`UPDATE trade_team_members SET display_name = ?, updated_at = ?
+      WHERE owner_uid = ? AND member_uid = ?`)
+      .bind(managerName || String(account.business_name || "Business owner"), now, identity.uid, identity.uid));
+  }
 
   if (requestedAreas || hasLegacyAreaChange || (!currentAreas.length && serviceAreas.length)) {
     statements.push(

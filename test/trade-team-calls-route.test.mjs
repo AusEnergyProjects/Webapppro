@@ -7,7 +7,7 @@ const source=fs.readFileSync(new URL('../src/app/api/trade-team-calls/route.ts',
 function fixture({denied=false,configured=true,revokeAfterProvider=false,deferStart=false,startFails=false,deferPush=false,operationError='',leaveStatus='active'}={}){
  const events=[],background=[],diagnostics=[];let persisted=false,releaseStart,releasePush;class AccessError extends Error{status=403;}
  const server={};for(const name of ['incomingTeamCalls','joinTeamCall','leaveTeamCall','reserveTeamCallIce','sendTeamCallSignal','startTeamCall','teamCallStatus','assertTeamCallJoined'])server[name]=async()=>{events.push(name);if(operationError)throw new Error(operationError);if(denied)throw new Error('CALL_ACCESS_REQUIRED');if(name==='assertTeamCallJoined'&&revokeAfterProvider)throw new Error('CALL_ACCESS_REQUIRED');if(name==='startTeamCall'){if(deferStart)await new Promise(resolve=>{releaseStart=resolve;});if(startFails)throw new Error('CALL_RATE_LIMIT');persisted=true;events.push('persisted');}return name==='reserveTeamCallIce'?{ttl:300,expiresAt:'2099-01-01'}:name==='incomingTeamCalls'?[]:name==='teamCallStatus'?{call:null,signals:[]}:{id:'call-1234',threadId:'thread-1234'};};
- const dependencies={'@/lib/admin-server':{sameOrigin:request=>!request.headers.get('origin')||request.headers.get('origin')===new URL(request.url).origin,adminJson:(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}}),mfaErrorResponse:()=>null},'@/lib/trade-access-server':{TradeAccessError:AccessError},'@/lib/trade-communications-access':{requireTeamCommunicationAccess:async request=>{events.push('access');if(!request.headers.get('authorization'))throw new Error('AUTH_REQUIRED');return{memberId:'member-0001'};}},
+ const dependencies={'@/lib/trade-call-answer-access':{CALL_ANSWER_HEADER:'x-tlink-call-answer',requireTeamCallAnswerAccess:async(request,input)=>{events.push('answer-access');if(!['join','leave','signal','ice','status','incoming'].includes(input.action)||input.callId!=='call-1234'||(input.threadId&&input.threadId!=='thread-1234')||denied||(revokeAfterProvider&&events.includes('provider')))throw new Error('CALL_ACCESS_REQUIRED');return{actor:{ownerUid:'owner-1234',memberId:'member-0001'},callId:'call-1234',threadId:'thread-1234'};}},'@/lib/admin-server':{sameOrigin:request=>!request.headers.get('origin')||request.headers.get('origin')===new URL(request.url).origin,adminJson:(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}}),mfaErrorResponse:()=>null},'@/lib/trade-access-server':{TradeAccessError:AccessError},'@/lib/trade-communications-access':{requireTeamCommunicationAccess:async request=>{events.push('access');if(!request.headers.get('authorization'))throw new Error('AUTH_REQUIRED');return{memberId:'member-0001'};}},
  'cloudflare:workers':{waitUntil:promise=>{events.push('waitUntil');background.push(promise);}},'@/lib/trade-push-server':{notifyTeamCall:async(actor,call)=>{assert.equal(persisted,true,'Call must persist before notification');assert.equal(actor.memberId,'member-0001');assert.deepEqual(call,{id:'call-1234',threadId:'thread-1234'});events.push('notifyTeamCall');if(deferPush)await new Promise(resolve=>{releasePush=resolve;});return {attempted:0,accepted:0,failed:1,skipped:true};}},
  '@/lib/bounded-request-body.mjs':bounded,'@/lib/trade-team-calls-server':server,'@/lib/trade-team-calls-provider':{teamCallTurnCredentials:()=>{events.push('credentials');if(!configured)throw new Error('CALL_UNAVAILABLE');return{accountSid:'server-only-sid',authToken:'server-only-token'};},teamCallIceServers:async()=>{events.push('provider');return[{urls:'turn:global.turn.twilio.com:3478',username:'ephemeral',credential:'temporary'}];}}};
  const leave=server.leaveTeamCall;server.leaveTeamCall=async(...args)=>({...await leave(...args),status:leaveStatus});
@@ -75,4 +75,22 @@ test('unexpected errors and unrecognised actions cannot put arbitrary text in ca
  let f=fixture({operationError:'private-provider-token'});await f.route.POST(req({action:'ice',callId:'private-call'}));
  assert.equal(f.diagnostics[0].code,'CALL_REQUEST_FAILED');assert.doesNotMatch(JSON.stringify(f.diagnostics),/private/);
  f=fixture();await f.route.POST(req({action:'private-action'}));assert.equal(f.diagnostics[0].action,'unknown');assert.doesNotMatch(JSON.stringify(f.diagnostics),/private/);
+});
+
+test('native answer grant cannot start calls or list other invitations and returns scoped identity',async()=>{
+ const headers={'X-TLink-Call-Answer':'opaque-synthetic'};
+ let f=fixture(); let response=await f.route.POST(req({action:'start',callId:'call-1234'},headers));
+ assert.equal(response.status,403);assert.deepEqual(f.events,['answer-access']);
+ f=fixture();response=await f.route.POST(req({action:'join',callId:'call-1234'},headers));
+ assert.equal(response.status,200);assert.equal((await response.json()).ownerUid,'owner-1234');assert.deepEqual(f.events,['answer-access','joinTeamCall']);
+ f=fixture();response=await f.route.GET(new Request('https://tlink.test/api/trade-team-calls?view=incoming&callId=call-1234&threadId=thread-1234',{headers}));
+ assert.equal(response.status,200);assert.deepEqual(await response.json(),{ok:true,memberId:'member-0001',ownerUid:'owner-1234',calls:[]});
+ assert.deepEqual(f.events,['answer-access','teamCallStatus']);
+ f=fixture();response=await f.route.GET(new Request('https://tlink.test/api/trade-team-calls?view=incoming',{headers}));assert.equal(response.status,403);assert.deepEqual(f.events,['answer-access']);
+});
+
+test('answer grant is rechecked after relay issuance so revoked credentials receive no relay secrets',async()=>{
+ const f=fixture({revokeAfterProvider:true});const response=await f.route.POST(req({action:'ice',callId:'call-1234',sessionId:'session-1234'},{'X-TLink-Call-Answer':'opaque-synthetic'}));
+ assert.equal(response.status,403);assert.doesNotMatch(JSON.stringify(await response.json()),/ephemeral|temporary/);
+ assert.deepEqual(f.events,['answer-access','credentials','reserveTeamCallIce','provider','answer-access']);
 });

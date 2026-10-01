@@ -77,6 +77,20 @@ test('a joined teammate leaving reports a departure rather than no answer',async
   const f=pollFixture({hadRemote:true});await f.tick();assert.match(f.stops[0][0],/teammate left/);
 });
 
+test('a teammate who answered and left between polls ends the waiting call immediately',async()=>{
+  for(const elapsed of [2_000,46_000]) {
+    const f=pollFixture({elapsed,hadRemote:false,readCall:call=>({call:{...call,status:'active',hasBeenAnswered:true,
+      participants:[{memberId:'member-self'}]},signals:[]})});
+    await f.tick();
+    assert.deepEqual(f.stops,[['Your teammate left the call.']]);
+    assert.equal(f.active.length,0,'An answered but empty call cannot remain in the waiting screen');
+  }
+  const group=pollFixture({readCall:call=>({call:{...call,status:'active',hasBeenAnswered:true,
+    participants:[{memberId:'member-self'},{memberId:'another-teammate'}]},signals:[]})});
+  await group.tick();assert.deepEqual(group.stops,[],'A group call continues while another teammate remains');
+  assert.deepEqual(group.silenced,['call-1234']);
+});
+
 test('a joined call is not timed out as unanswered and offline calls release media',async()=>{
   const f=pollFixture({elapsed:60001,participants:[{memberId:'member-peer'}]});await f.tick();assert.equal(f.stops.length,0);assert.equal(f.current.hadRemote,true);
   const offline=pollFixture({online:false});await offline.tick();assert.match(offline.stops[0][0],/offline/);

@@ -10,6 +10,7 @@ export type BusinessChoice = {
   role: 'owner' | 'member';
   memberId: string;
   displayName: string;
+  managerName?: string;
   manualOnly?: boolean;
 };
 
@@ -17,6 +18,13 @@ type BusinessSession = { firebaseUid: string; business: BusinessChoice; principa
 let paused = false;
 let revision = 0;
 let sessionIdentity = '';
+let businessWrites: Promise<unknown> = Promise.resolve();
+
+function writeBusinessSession<T>(operation: () => Promise<T>): Promise<T> {
+  const result = businessWrites.then(operation, operation);
+  businessWrites = result.then(() => undefined, () => undefined);
+  return result;
+}
 
 export function businessSessionRevision() { return revision; }
 export function pauseBusinessSession(value: boolean) { if (paused !== value) revision++; paused = value; }
@@ -25,7 +33,7 @@ export function businessPrincipal(firebaseUid: string, email: string, business: 
   return {
     ownerId: business.ownerUid,
     memberId: business.memberId || business.ownerUid,
-    displayName: business.displayName || email,
+    displayName: (business.role === 'owner' ? business.managerName?.trim() : '') || business.displayName || email,
     email,
     businessName: business.businessName,
     permissions: { canCreateJobs: false, canManageCustomers: false, canViewCustomers: false },
@@ -49,15 +57,38 @@ export async function getBusinessSession(firebaseUid: string, includePaused = fa
   } catch { return null; }
 }
 
-export async function saveBusinessSession(firebaseUid: string, business: BusinessChoice, principal: FieldPrincipal) {
-  const identity = `${firebaseUid}:${principal.localOwnerKey}`;
-  if (sessionIdentity !== identity) { revision++; sessionIdentity = identity; }
-  await SecureStore.setItemAsync(BUSINESS_SESSION_KEY, JSON.stringify({ firebaseUid, business, principal }), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+export function saveBusinessSession(firebaseUid: string, business: BusinessChoice, principal: FieldPrincipal, isCurrent?: () => boolean) {
+  return writeBusinessSession(async () => {
+    if (isCurrent && !isCurrent()) throw new Error('Your account changed. Reopen your business.');
+    const identity = `${firebaseUid}:${principal.localOwnerKey}`;
+    if (sessionIdentity !== identity) { revision++; sessionIdentity = identity; }
+    await SecureStore.setItemAsync(BUSINESS_SESSION_KEY, JSON.stringify({ firebaseUid, business, principal }), {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
   });
 }
 
-export async function clearBusinessSession() {
+export function updateBusinessPersonalName(firebaseUid: string, expectedOwnerKey: string, name: string, isCurrent: () => boolean) {
+  return writeBusinessSession(async () => {
+    const saved = await getBusinessSession(firebaseUid);
+    if (!saved || saved.principal.localOwnerKey !== expectedOwnerKey || paused || !isCurrent()) {
+      throw new Error('Your business changed. Reopen Account to update your name.');
+    }
+    const business: BusinessChoice = saved.business.role === 'owner'
+      ? { ...saved.business, managerName: name }
+      : { ...saved.business, displayName: name };
+    const principal = { ...saved.principal, displayName: name || saved.business.businessName };
+    await SecureStore.setItemAsync(BUSINESS_SESSION_KEY, JSON.stringify({ firebaseUid, business, principal }), {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+    return principal;
+  });
+}
+
+export function clearBusinessSession() {
   revision++; sessionIdentity = '';
-  await SecureStore.deleteItemAsync(BUSINESS_SESSION_KEY);
+  return writeBusinessSession(async () => {
+    sessionIdentity = '';
+    await SecureStore.deleteItemAsync(BUSINESS_SESSION_KEY);
+  });
 }

@@ -1,19 +1,41 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Updates from 'expo-updates';
 import { useEffect, useState } from 'react';
-import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
 import { DeviceNotificationSettings } from '@/components/device-notification-settings';
 import { Screen } from '@/components/screen';
 import { APP_VERSION } from '@/lib/config';
+import { apiRequest } from '@/lib/api';
 import { getDeviceId, getDeviceName } from '@/lib/device';
 import { colours, radius, spacing } from '@/lib/theme';
 import { checkForAppUpdate, restartIntoUpdate } from '@/lib/updates';
 import { useApp } from '@/providers/app-provider';
 
 export default function SettingsScreen() {
-  const { user, signOut, businesses, openBusinessChooser } = useApp();
+  const { user, signOut, businesses, openBusinessChooser, updatePersonalName } = useApp();
+  const [name, setName] = useState('');
+  const [nameReady, setNameReady] = useState(false);
+  const [savingName, setSavingName] = useState(false);
+  const [nameMessage, setNameMessage] = useState('');
+  const businessKey = user?.localOwnerKey;
+  useEffect(() => {
+    if (!businessKey) return;
+    let current = true;
+    const controller = new AbortController();
+    setNameReady(false); setNameMessage('');
+    void apiRequest<{ name: string }>('/api/trade-personal-profile', { signal: controller.signal }, undefined, { expectedBusinessKey: businessKey })
+      .then(profile => { if (current) { setName(profile.name); setNameReady(true); } })
+      .catch(error => { if (current) setNameMessage(error instanceof Error ? error.message : 'Your name could not be loaded. Reopen Account to try again.'); });
+    return () => { current = false; controller.abort(); };
+  }, [businessKey]);
+  async function saveName() {
+    setSavingName(true); setNameMessage('');
+    try { setName(await updatePersonalName(name)); setNameMessage('Your name is saved.'); }
+    catch (error) { setNameMessage(error instanceof Error ? error.message : 'Your name could not be saved.'); }
+    finally { setSavingName(false); }
+  }
   const [deviceId, setDeviceId] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateMessage, setUpdateMessage] = useState('');
@@ -45,6 +67,15 @@ export default function SettingsScreen() {
         <Text style={styles.label}>CURRENT BUSINESS</Text>
         <Text style={styles.title}>{user?.businessName || 'Your team'}</Text>
         {user?.authMode === 'firebase' && businesses.length > 1 ? <FieldButton variant="quiet" onPress={() => void openBusinessChooser()}>Switch business</FieldButton> : null}
+      </View>
+      <View style={styles.card}>
+        <Text style={styles.label}>MY NAME</Text>
+        <Text style={styles.body}>The name your teammates see in messages and incoming calls.</Text>
+        <TextInput accessibilityLabel="My name" value={name} onChangeText={setName} maxLength={120}
+          autoComplete="name" autoCapitalize="words" editable={nameReady && !savingName}
+          placeholder={nameReady ? 'Your name' : 'Loading your name...'} placeholderTextColor={colours.muted} style={styles.nameInput} />
+        {nameMessage ? <Text accessibilityLiveRegion="polite" style={styles.body}>{nameMessage}</Text> : null}
+        <FieldButton disabled={!nameReady} loading={savingName} onPress={() => void saveName()}>Save my name</FieldButton>
       </View>
       <DeviceNotificationSettings />
       <View style={styles.card}>
@@ -78,6 +109,7 @@ const styles = StyleSheet.create({
   icon: { width: 54, height: 54, borderRadius: 18, backgroundColor: colours.forest, alignItems: 'center', justifyContent: 'center' },
   title: { color: colours.ink, fontSize: 19, fontWeight: '800' },
   body: { color: colours.muted, lineHeight: 21 },
+  nameInput: { borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, padding: spacing.md, color: colours.ink, fontSize: 17, backgroundColor: colours.cream },
   label: { color: colours.green, fontSize: 12, fontWeight: '800', letterSpacing: 1 },
   fact: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, borderTopWidth: 1, borderTopColor: colours.line, paddingTop: spacing.sm },
   value: { flex: 1, textAlign: 'right', color: colours.ink, fontWeight: '700' },

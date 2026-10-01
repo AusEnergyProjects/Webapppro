@@ -1,6 +1,11 @@
 import { requireOptionalNativeModule } from 'expo';
 
-export type SystemCall = { callId: string; threadId: string; mode: 'audio' | 'video'; expiresAt: string };
+export type SystemCall = {
+  callId: string; threadId: string; mode: 'audio' | 'video'; expiresAt: string;
+  callerName?: string;
+  /** Short-lived permission for this invitation only, never workspace access. */
+  answerToken?: string;
+};
 export type SystemCallEvent = SystemCall & {
   id: string;
   type: 'incoming' | 'answer' | 'end' | 'mute' | 'heartbeat';
@@ -17,6 +22,7 @@ type NativeCallsModule = {
   configure: (enabled: boolean, preserveActiveCalls: boolean) => Promise<void>;
   registration: () => Promise<{ voipPushToken: string; nativeCallCapable: boolean }>;
   drainEvents: () => Promise<SystemCallEvent[]>;
+  acknowledgeEvents?: (ids: string[]) => Promise<void>;
   incoming: (call: SystemCall) => Promise<void>;
   answer: (callId: string) => Promise<void>;
   outgoing: (call: SystemCall) => Promise<void>;
@@ -63,11 +69,12 @@ export async function setSystemCallSpeaker(enabled: boolean) { await native?.spe
 
 // Native events are drained only after authentication is restored. Native code
 // retains lock-screen answers while JS starts; an event never supplies access.
-export function subscribeSystemCalls(receive: (event: SystemCallEvent) => Promise<void>) {
+export function subscribeSystemCalls(receive: (event: SystemCallEvent) => Promise<void | false>) {
   if (!native) return () => undefined;
   let closed = false;
   let draining = false;
   let requested = false;
+  const delivering = new Set<string>();
   const drain = async () => {
     requested = true;
     if (draining) return;
@@ -79,10 +86,17 @@ export function subscribeSystemCalls(receive: (event: SystemCallEvent) => Promis
         const ended = new Set(events.filter(event => event.type === 'end').map(event => event.callId));
         for (const event of events) {
           if (closed) return;
-          if (event.type !== 'end' && ended.has(event.callId)) continue;
+          if (event.type !== 'end' && ended.has(event.callId)) {
+            await native.acknowledgeEvents?.([event.id]);
+            continue;
+          }
+          if (delivering.has(event.id)) continue;
+          delivering.add(event.id);
           // End must interrupt a pending permission/authentication wait, rather
           // than waiting for Answer to finish and briefly opening stale media.
-          void receive(event).catch(() => undefined);
+          void receive(event).then(async handled => {
+            if (!closed && handled !== false) await native.acknowledgeEvents?.([event.id]);
+          }).catch(() => undefined).finally(() => { delivering.delete(event.id); });
         }
       }
     } finally { draining = false; }

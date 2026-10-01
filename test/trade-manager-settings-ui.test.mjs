@@ -19,7 +19,7 @@ test("manager form saves only its name and refreshes the welcome from the succes
       managerName: " James   Morris ", validateSettings: () => "", setSaveSection() {}, setSaveBusy() {}, setSaveStatus: value => statuses.push(value),
       user: { getIdToken: async () => "test-identity" },
       fetch: async (url, init) => { requests.push([url, init]); return Response.json(succeeds ? { ok: true, settings: { managerName: "James Morris" } } : { ok: false, error: "Could not save." }, { status: succeeds ? 200 : 503 }); },
-      onProfileChange: value => changes.push(value), setManagerName() {}, updateManagerName: value => greetings.push(value), statusMessage: error => error.message,
+      onProfileChange: value => changes.push(value), setManagerName() {}, updatePersonalName: value => greetings.push(value), statusMessage: error => error.message,
     };
     const submit = Function(...Object.keys(bindings), `${compiled}\nreturn saveSettings;`)(...Object.values(bindings));
     await submit({ preventDefault() {}, currentTarget: { dataset: { settingsSection: "manager" } } });

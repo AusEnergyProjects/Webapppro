@@ -19,6 +19,30 @@ const authorization={accessToken:'synthetic-oauth-token',expiresAt:Date.now()+36
 const payload={v:1,kind:'team-call',id:'call-1234',threadId:'thread-1234',title:'Private name',body:'Incoming team video call',url:'https://evil.test/',expiresAt:new Date(Date.now()+60000).toISOString()};
 const token='synthetic:android_registration_token_123456789';
 
+test('native incoming calls carry bounded personal caller name and call-only answer credential',async()=>{
+ const answerToken=`v1.c3ludGhldGlj.${'a'.repeat(64)}`;
+ const named={...payload,callerName:'  James\n Morris  ',answerToken};
+ const appleToken='ab'.repeat(32),appleAuth={token:'synthetic',expiresAt:Date.now()+3600000,environment:'production'};
+ const apple=async(variant,options)=>{let sent;assert.equal(await provider.sendTradeApns(appleToken,variant,appleAuth,async(_url,init)=>{sent=JSON.parse(init.body);return new Response(null,{status:200});},options),'accepted');return sent;};
+ const android=async(variant,options)=>{let sent;assert.equal(await provider.sendTradeNativePush(token,variant,authorization,async(_url,init)=>{sent=JSON.parse(init.body).message;return Response.json({name:'projects/australian-energy-assessments/messages/received'});},options),'accepted');return sent;};
+ const appleIncoming=await apple(named,{voip:true}),androidIncoming=await android(named,{nativeCall:true});
+ assert.equal(appleIncoming.callerName,'James Morris');assert.equal(appleIncoming.answerToken,answerToken);
+ assert.equal(androidIncoming.data.callerName,'James Morris');assert.equal(androidIncoming.data.answerToken,answerToken);
+ assert.equal((await apple(named,{})).aps.alert.title,'James Morris');
+ assert.equal((await android(named,{})).notification.title,'James Morris');
+ for(const options of [{},{ended:true},{voip:true,ended:true}])assert.equal((await apple(named,options)).answerToken,undefined);
+ for(const options of [{},{ended:true},{nativeCall:true,ended:true}])assert.equal((await android(named,options)).data.answerToken,undefined);
+ for(const invalid of ['wrong',`v1.x.${'a'.repeat(63)}`,`v1.${'x'.repeat(3072)}.${'a'.repeat(64)}`]) {
+  assert.equal(await provider.sendTradeApns(appleToken,{...named,answerToken:invalid},appleAuth,async()=>assert.fail('invalid call credential sent'),{voip:true}),'failed');
+  assert.equal(await provider.sendTradeNativePush(token,{...named,answerToken:invalid},authorization,async()=>assert.fail('invalid call credential sent'),{nativeCall:true}),'failed');
+ }
+ const message={...named,kind:'team-message'};
+ const appleMessage=await apple(message,{voip:true}),androidMessage=await android(message,{nativeCall:true});
+ assert.equal(appleMessage.callerName,undefined);assert.equal(appleMessage.answerToken,undefined);assert.equal(appleMessage.aps.alert.title,'TLink');
+ assert.equal(androidMessage.data.callerName,undefined);assert.equal(androidMessage.data.answerToken,undefined);assert.equal(androidMessage.notification.title,'TLink');
+ assert.equal((await apple({...named,callerName:'J'.repeat(200)},{voip:true})).callerName.length,120);
+});
+
 test('native credentials prefer dedicated connection, validate project, and permit explicitly configured existing connection reuse',()=>{
  assert.equal(provider.tradeNativePushCredentials({}),null);
  assert.deepEqual(provider.tradeNativePushCredentials({TLINK_FCM_SERVICE_ACCOUNT_JSON:JSON.stringify(serviceAccount)}),credentials);

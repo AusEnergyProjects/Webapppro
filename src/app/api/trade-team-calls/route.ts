@@ -1,6 +1,7 @@
 import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { requireTeamCommunicationAccess } from "@/lib/trade-communications-access";
+import { CALL_ANSWER_HEADER, requireTeamCallAnswerAccess } from "@/lib/trade-call-answer-access";
 import { waitUntil } from "cloudflare:workers";
 import { notifyTeamCall, notifyTeamCallEnded } from "@/lib/trade-push-server";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "@/lib/bounded-request-body.mjs";
@@ -41,11 +42,19 @@ export async function GET(request: Request) {
     const trace = callTrace("GET", new URL(request.url).searchParams.get('view') === 'incoming' ? "incoming" : "status");
     let failureError: unknown;
     try {
-        const actor = await requireTeamCommunicationAccess(request), params = new URL(request.url).searchParams;
+        const params = new URL(request.url).searchParams;
+        const grant = request.headers.has(CALL_ANSWER_HEADER) ? await requireTeamCallAnswerAccess(request, {
+            action: params.get('view') === 'incoming' ? 'incoming' : 'status',
+            callId: params.get('callId') || undefined, threadId: params.get('threadId') || undefined,
+        }) : null;
+        const actor = grant?.actor || await requireTeamCommunicationAccess(request);
+        const identity = { memberId: actor.memberId, ...(grant ? { ownerUid: actor.ownerUid } : {}) };
         trace.state.stage = trace.state.action;
-        if (params.get('view') === 'incoming')
-            return adminJson({ ok: true, memberId: actor.memberId, calls: await incomingTeamCalls(actor) });
-        return adminJson({ ok: true, memberId: actor.memberId, ...await teamCallStatus(actor, { callId: params.get('callId') || undefined, threadId: params.get('threadId') || undefined, sessionId: params.get('sessionId') || undefined, after: params.get('after') || '0' }) });
+        if (params.get('view') === 'incoming') {
+            const scoped = grant ? await teamCallStatus(actor, { callId: grant.callId, threadId: grant.threadId }) : null;
+            return adminJson({ ok: true, ...identity, calls: grant ? scoped?.call?.status === 'active' ? [scoped.call] : [] : await incomingTeamCalls(actor) });
+        }
+        return adminJson({ ok: true, ...identity, ...await teamCallStatus(actor, { callId: params.get('callId') || undefined, threadId: params.get('threadId') || undefined, sessionId: params.get('sessionId') || undefined, after: params.get('after') || '0' }) });
     }
     catch (error) {
         failureError = error;
@@ -59,30 +68,34 @@ export async function POST(request: Request) {
     const trace = callTrace("POST", "unknown");
     let failureError: unknown;
     try {
-        const actor = await requireTeamCommunicationAccess(request);
+        const ordinaryActor = request.headers.has(CALL_ANSWER_HEADER) ? null : await requireTeamCommunicationAccess(request);
         trace.state.stage = "input";
         const raw: unknown = JSON.parse(await readBoundedRequestText(request, 70000));
         if (!raw || typeof raw !== 'object' || Array.isArray(raw))
             throw new Error('CALL_INPUT_INVALID');
         const body = raw as Record<string, unknown>;
+        const grant = ordinaryActor ? null : await requireTeamCallAnswerAccess(request, { action: typeof body.action === 'string' ? body.action : '', callId: body.callId, threadId: body.threadId });
+        const actor = ordinaryActor || grant?.actor;
+        if (!actor) throw new Error('CALL_ACCESS_REQUIRED');
+        const identity = { memberId: actor.memberId, ...(grant ? { ownerUid: actor.ownerUid } : {}) };
         if (typeof body.action === "string" && ["start","join","leave","signal","ice"].includes(body.action)) trace.state.action = body.action;
         trace.state.stage = trace.state.action;
         if (body.action === 'start') {
             teamCallTurnCredentials(); // A missing relay must not create a ringing call.
             const call = await startTeamCall(actor, body);
             waitUntil(notifyTeamCall(actor, call));
-            return adminJson({ ok: true, memberId: actor.memberId, call });
+            return adminJson({ ok: true, ...identity, call });
         }
         if (body.action === 'join')
-            return adminJson({ ok: true, memberId: actor.memberId, call: await joinTeamCall(actor, body.callId, body.sessionId) });
+            return adminJson({ ok: true, ...identity, call: await joinTeamCall(actor, body.callId, body.sessionId) });
         if (body.action === 'leave') {
             const call = await leaveTeamCall(actor, body.callId, body.sessionId);
             if (call.status === 'ended') waitUntil(notifyTeamCallEnded(actor, call));
-            return adminJson({ ok: true, memberId: actor.memberId, call });
+            return adminJson({ ok: true, ...identity, call });
         }
         if (body.action === 'signal') {
             await sendTeamCallSignal(actor, body);
-            return adminJson({ ok: true });
+            return adminJson({ ok: true, ...identity });
         }
         if (body.action === 'ice') {
             trace.state.stage = "reserve-relay";
@@ -90,8 +103,9 @@ export async function POST(request: Request) {
             trace.state.stage = "relay-provider";
             const iceServers = await teamCallIceServers(credentials, reservation.ttl);
             trace.state.stage = "relay-recheck";
+            if (grant) await requireTeamCallAnswerAccess(request, { action: 'ice', callId: body.callId, threadId: body.threadId });
             await assertTeamCallJoined(actor, body.callId, body.sessionId); // Auth/session can change while the provider responds.
-            return adminJson({ ok: true, iceServers, expiresAt: reservation.expiresAt });
+            return adminJson({ ok: true, ...identity, iceServers, expiresAt: reservation.expiresAt });
         }
         throw new Error('CALL_INPUT_INVALID');
     }

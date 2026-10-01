@@ -1,6 +1,6 @@
 "use client";
 
-import { useTradeBusinessFetch, useTradeManagerNameUpdate } from "./TradeBusinessProvider";
+import { useTradeBusinessFetch, useTradePersonalNameUpdate } from "./TradeBusinessProvider";
 
 import {
   type CSSProperties,
@@ -258,7 +258,7 @@ export function TradeBusinessSettingsWorkspace({
   onAccountClosed,
 }: Props) {
   const fetch = useTradeBusinessFetch();
-  const updateManagerName = useTradeManagerNameUpdate();
+  const updatePersonalName = useTradePersonalNameUpdate();
   const [managerName, setManagerName] = useState(profile.managerName || "");
   const [availabilityStatus, setAvailabilityStatus] =
     useState<AvailabilityStatus>(profile.availabilityStatus);
@@ -431,7 +431,7 @@ export function TradeBusinessSettingsWorkspace({
 
   function validateSettings(targetSection: string) {
     if (targetSection === "manager" && managerName.trim().length > 120) {
-      return "Keep the manager's name to 120 characters or fewer.";
+      return "Keep your name to 120 characters or fewer.";
     }
     if (targetSection === "service") {
       if (profile.partnerType === "installer" && !capabilities.length) {
@@ -578,7 +578,7 @@ export function TradeBusinessSettingsWorkspace({
       onProfileChange(savedSettings || payload);
       if (targetSection === "manager" && typeof savedSettings?.managerName === "string") {
         setManagerName(savedSettings.managerName);
-        updateManagerName?.(savedSettings.managerName);
+        updatePersonalName?.(savedSettings.managerName);
       }
       if (savedSettings?.capabilities) {
         setCapabilities(savedEnergyServiceIds(savedSettings.capabilities));
@@ -835,11 +835,11 @@ export function TradeBusinessSettingsWorkspace({
             </div>
             <form data-settings-section="manager" onSubmit={saveSettings} style={{ display: "grid", gap: 12 }}>
               <label style={fieldStyle}>
-                <span>Manager&apos;s name (optional)</span>
+                <span>My name (optional)</span>
                 <input name="managerName" autoComplete="name" maxLength={120} value={managerName} onChange={event => setManagerName(event.target.value)} style={controlStyle} aria-describedby="business-manager-name-help" />
-                <small id="business-manager-name-help">The first name appears in the welcome message for this business account.</small>
+                <small id="business-manager-name-help">Your teammates see this name in messages and incoming calls. Your first name appears in the welcome message.</small>
               </label>
-              <button className="btn" disabled={saveBusy} style={{ justifySelf: "start" }}>{saveBusy && saveSection === "manager" ? "Saving..." : "Save manager's name"}</button>
+              <button className="btn" disabled={saveBusy} style={{ justifySelf: "start" }}>{saveBusy && saveSection === "manager" ? "Saving..." : "Save my name"}</button>
               {saveStatus && saveSection === "manager" && <p role="status">{saveStatus}</p>}
             </form>
             {profile.partnerType === "installer" && <TradeEmailSettings user={user} />}
