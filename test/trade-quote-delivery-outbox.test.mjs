@@ -48,7 +48,7 @@ const notifications = fs.readFileSync(
 );
 
 const callbackUpdateSql = callback.match(/db\.prepare\(`(UPDATE trade_crm_quote_deliveries SET[\s\S]*?updated_at = \? WHERE id = \?)`\)/)?.[1];
-const issueClaimSql = route.match(/const issueClaim = await db\.prepare\(`(UPDATE trade_crm_quote_versions[\s\S]*?updated_at = \?)`\)/)?.[1];
+const issueClaimSql = route.match(/const issueClaim = await db\.prepare\(`(UPDATE trade_crm_quote_versions[\s\S]*?)`\)/)?.[1];
 const replacementDraftInsertSql = route.match(/db\.prepare\(`(INSERT OR IGNORE INTO trade_crm_quote_versions[\s\S]*?)`\)\.bind\(versionId/)?.[1];
 const revokeLinkSql = route.match(/db\.prepare\(`(UPDATE trade_crm_quote_links[\s\S]*?NOT EXISTS \([\s\S]*?\n        \))`\)\s*\.bind\(now, now, row\.link_id/)?.[1];
 const priorDeliverySettledSql = route.match(/const priorDeliverySettled = `(NOT EXISTS \([\s\S]*?\))`;/)?.[1];
@@ -130,11 +130,11 @@ function fixture() {
     current_version_number integer, status text
   );
   CREATE TABLE trade_work_orders (
-    id text PRIMARY KEY, firebase_uid text, record_status text, source_type text
+    id text PRIMARY KEY, firebase_uid text, record_status text, source_type text, stage text DEFAULT 'backlog'
   );
   CREATE TABLE trade_crm_job_details (
     work_order_id text, firebase_uid text, crm_customer_id text,
-    customer_source text, accepted_disclosure_sha256 text,
+    customer_source text, pipeline_stage text DEFAULT 'quoting', accepted_disclosure_sha256 text,
     accepted_disclosure_snapshot text
   );
   CREATE TABLE trade_crm_customers (
@@ -433,6 +433,19 @@ async function preparedPdfDelivery({ revision = 3, sizeBytes, mismatchedPdf = fa
   };
   return { database, content, options, drain: exports.drainTradeQuoteDeliveries, pdfReads: () => pdfReads };
 }
+
+test("lost or cancelled opportunity blocks a previously queued quote email before transport", async () => {
+  for (const state of [{ pipeline_stage: "lost" }, { work_stage: "cancelled" }]) {
+    const f = await preparedPdfDelivery({ sizeBytes: 100 });
+    const loadContext = f.options.loadContext;
+    let sends = 0;
+    const result = await f.drain({ ...f.options, loadContext: async () => ({ ...await loadContext(), ...state }),
+      sendEmail: async () => { sends++; } });
+    assert.equal(sends, 0);
+    assert.equal(result.outcomes[0].code, "QUOTE_DELIVERY_REVISION_INACTIVE");
+    f.database.close();
+  }
+});
 
 test("v3 secure review wording remains accurate with or without a PDF attachment", async () => {
   const snapshot = rendererSnapshot();

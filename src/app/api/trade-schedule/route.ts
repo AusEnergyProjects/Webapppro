@@ -204,6 +204,8 @@ async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeek
       JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       WHERE r.firebase_uid = ? AND r.status IN ('pending', 'alternative_proposed')
+        AND w.record_status = 'active' AND w.stage NOT IN ('completed', 'cancelled')
+        AND COALESCE(d.pipeline_stage, '') <> 'lost' AND a.status = 'scheduled'
         AND (? = 0 OR a.assignee_member_id IN (SELECT value FROM json_each(?)))
       ORDER BY r.requested_at LIMIT 100`).bind(ownerUid, ownOnly ? 1 : 0, scheduleMembersJson).all<Record<string, unknown>>(),
   ]);

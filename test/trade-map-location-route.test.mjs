@@ -5,6 +5,7 @@ import ts from "typescript";
 import { TradeMapInputError } from "../src/lib/trade-map-dataset-server.ts";
 import { TradeMapLocationInputError } from "../src/lib/trade-map-location-cache.ts";
 import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
+import { jobSalesOutcomeFixture } from "./helpers/trade-job-sales-outcome-fixture.mjs";
 
 const source = ts.createSourceFile("route.ts", fs.readFileSync(new URL("../src/app/api/trade-crm/route.ts", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
 const selected = source.statements.filter(node => ts.isFunctionDeclaration(node) && ["POST", "errorResponse"].includes(node.name?.text));
@@ -23,6 +24,7 @@ function fixture(options = {}) {
   const db = {};
   class OtherDomainError extends Error {}
   const dependencies = {
+    ...jobSalesOutcomeFixture,
     adminJson: (body, status = 200) => Response.json(body, { status }),
     sameOrigin: () => options.origin !== false,
     crmIdentity: async () => { calls.identity++; if (options.authError) throw options.authError; return identity; },

@@ -6,7 +6,15 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 2 October 2026
 
-## Current implementation: form timing and scoped crews
+## Current implementation: quote-aware work queues and Lost archive
+
+Home and its Jobs drill-down share the same scheduling definition: accepted current quotes, or explicitly approved direct work that needs no quote, without a current/future visit. Draft, unanswered and declined quotes do not create scheduling pressure. Intentional quote/site visits remain bookable through Schedule.
+
+Authorised job managers can mark an unwon opportunity as lost with an optional reason. Lost is separate from the Bin: quotes, files and history stay readable, operational prompts and queued follow-ups stop, and old quote links are revoked. Reopening is explicit and does not revive links or send messages. Current server permissions, job revision, financial/work evidence and active visits are checked again atomically; awarded or performed work cannot be hidden as a lost sale. Crew membership grants no sales-outcome authority.
+
+This source record precedes publication. Validation, exact Git/Sites identity and affected live checks are recorded under `C:/Webproject/outputs/tlink-sales-flow-20261002/`. The remaining ranked improvements in ROADMAP.md are proposals, not delivered capabilities. No schema or native application update is part of this slice.
+
+## Previous implementation: form timing and scoped crews
 
 Migrations 0231 and 0232 add owner-managed crews and tenant/member-scoped work activity. Owners group their own staff and subcontractor workers under a lead. Crew membership limits job, schedule, customer, finance, directory and new Connect recipient discovery; existing explicitly joined conversations retain their participant authority. Leads see their crew's assigned work. Assignment, revocation and cache-removal paths use the same live crew boundary. The established runtime schema guard installer owns the crew integrity triggers because Sites migration splitting cannot carry trigger bodies.
 

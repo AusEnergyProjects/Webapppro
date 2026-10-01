@@ -51,13 +51,26 @@ function fixture() {
     id, work_order_id: jobId, firebase_uid: "owner", status: "issued", currency: "AUD", sent_at: "2026-10-01T00:00:00Z",
     total_cents: 11000, tax_cents: 1000, due_at: "2026-09-30", ...values,
   });
+  const quote = (jobId, options = {}) => {
+    const ownerUid = options.ownerUid || "owner";
+    const customerId = options.customerId || `customer-${jobId}`;
+    const quoteId = `quote-${jobId}`;
+    const versionId = `version-${jobId}`;
+    insert("trade_crm_quotes", { id: quoteId, work_order_id: jobId, firebase_uid: ownerUid,
+      crm_customer_id: customerId, status: "accepted", current_version_number: 1, ...options.quote });
+    insert("trade_crm_quote_versions", { id: versionId, quote_id: quoteId, firebase_uid: ownerUid,
+      version_number: 1, status: "accepted", ...options.version });
+    if (options.acceptance !== false) insert("trade_crm_quote_acceptances", { id: `acceptance-${jobId}`,
+      quote_id: quoteId, quote_version_id: versionId, work_order_id: jobId, firebase_uid: ownerUid,
+      crm_customer_id: customerId, decision: "accepted", ...options.acceptance });
+  };
   const prepare = (sql, values = []) => ({ sql, values, bind: (...args) => prepare(sql, args),
     first: async () => { queries.push(sql); return database.prepare(sql).get(...values) || null; },
     all: async () => { queries.push(sql); return { results: database.prepare(sql).all(...values) }; } });
   const db = { prepare, async batch(statements) {
     return statements.map(statement => { queries.push(statement.sql); return { results: database.prepare(statement.sql).all(...statement.values) }; });
   } };
-  return { database, db, queries, insert, job, visit, task, issue, invoice,
+  return { database, db, queries, insert, job, visit, task, issue, invoice, quote,
     home: (permissions = {}, query = {}, date = now) => loadHomeDashboard(db, "owner", { ...defaultAccess, ...permissions }, new URLSearchParams(query), "VIC", date) };
 }
 
@@ -160,6 +173,113 @@ test("full Home aggregates are not capped by previews and ignore invalid or unda
   assert.equal(result.metrics.awaitingSchedule, 0);
 });
 
+test("scheduling attention requires accepted or explicitly approved work, not a quote awaiting response", async t => {
+  const cases = [
+    { name: "new enquiry", pipeline: "enquiry", expected: 0 },
+    { name: "qualifying", pipeline: "qualifying", expected: 0 },
+    { name: "quoting", pipeline: "quoting", expected: 0 },
+    { name: "ready work-board label only", stage: "ready", pipeline: "enquiry", expected: 0 },
+    { name: "scheduled work-board label only", stage: "scheduled", pipeline: "quoting", expected: 0 },
+    { name: "explicitly approved without a quote", pipeline: "approved", expected: 1 },
+    { name: "approved return visit", stage: "scheduled", pipeline: "scheduled", expected: 1 },
+    { name: "started follow-on work", stage: "in_progress", pipeline: "in_progress", expected: 1 },
+    { name: "approved label with draft quote", pipeline: "approved", quoteStatus: "draft", quote: { quote: { status: "draft" }, version: { status: "draft" }, acceptance: false }, expected: 0 },
+    { name: "approved label with unanswered quote", pipeline: "approved", quoteStatus: "issued", quote: { quote: { status: "issued" }, version: { status: "issued" }, acceptance: false }, expected: 0 },
+    { name: "sent quote without response", pipeline: "scheduled", quoteStatus: "sent", expected: 0 },
+    { name: "declined quote", pipeline: "approved", quoteStatus: "declined", expected: 0 },
+    { name: "accepted quote still on enquiry board", pipeline: "enquiry", quoteStatus: "accepted", quote: {}, expected: 1 },
+    { name: "accepted quote still on quoting board", pipeline: "quoting", quoteStatus: "accepted", quote: {}, expected: 1 },
+    { name: "CRM accepted label without acceptance", pipeline: "approved", quoteStatus: "accepted", quote: { acceptance: false }, expected: 0 },
+    { name: "new draft after accepted version", pipeline: "approved", quoteStatus: "accepted", quote: { quote: { current_version_number: 2 } }, expected: 0 },
+    { name: "current version is not accepted", pipeline: "approved", quoteStatus: "accepted", quote: { version: { status: "issued" } }, expected: 0 },
+    { name: "completed work", stage: "completed", pipeline: "approved", quoteStatus: "accepted", quote: {}, expected: 0 },
+    { name: "cancelled work", stage: "cancelled", pipeline: "approved", expected: 0 },
+    { name: "imported work", stage: "imported", pipeline: "approved", expected: 0 },
+    { name: "imported pipeline", pipeline: "imported", quoteStatus: "accepted", quote: {}, expected: 0 },
+    { name: "complete pipeline", pipeline: "complete", quoteStatus: "accepted", quote: {}, expected: 0 },
+    { name: "invoiced pipeline", pipeline: "invoiced", quoteStatus: "accepted", quote: {}, expected: 0 },
+    { name: "paid pipeline", pipeline: "paid", quoteStatus: "accepted", quote: {}, expected: 0 },
+    { name: "lost pipeline", pipeline: "lost", quoteStatus: "accepted", quote: {}, expected: 0 },
+    { name: "archived work", pipeline: "approved", recordStatus: "archived", expected: 0 },
+  ];
+  for (const item of cases) await t.test(item.name, async () => {
+    const f = fixture();
+    try {
+      f.job("one", { stage: item.stage || "backlog", record_status: item.recordStatus || "active" }, {
+        crm_customer_id: "customer-one", pipeline_stage: item.pipeline, quote_status: item.quoteStatus || "not_started",
+      });
+      if (item.quote) f.quote("one", item.quote);
+      assert.equal((await f.home()).metrics.awaitingSchedule, item.expected);
+    } finally { f.database.close(); }
+  });
+});
+
+test("released public leads require the accepted current quote for the same owner, job and customer", async t => {
+  const cases = [
+    { name: "accepted current quote", expected: 1 },
+    { name: "arbitrary approved board stage", quoteStatus: "not_started", quote: false, expected: 0 },
+    { name: "manual accepted label only", quote: false, expected: 0 },
+    { name: "unanswered quote", quote: { quote: { status: "issued" }, version: { status: "issued" }, acceptance: false }, expected: 0 },
+    { name: "superseded acceptance", quote: { quote: { current_version_number: 2 } }, expected: 0 },
+    { name: "foreign quote owner", quote: { ownerUid: "foreign" }, expected: 0 },
+    { name: "foreign acceptance owner", quote: { acceptance: { firebase_uid: "foreign" } }, expected: 0 },
+    { name: "other job acceptance", quote: { acceptance: { work_order_id: "other-job" } }, expected: 0 },
+    { name: "other customer acceptance", quote: { acceptance: { crm_customer_id: "other-customer" } }, expected: 0 },
+    { name: "old customer quote", quote: { customerId: "previous-customer" }, expected: 0 },
+    { name: "declined acceptance", quote: { acceptance: { decision: "declined" } }, expected: 0 },
+  ];
+  for (const item of cases) await t.test(item.name, async () => {
+    const f = fixture();
+    try {
+      f.job("one", { source_type: "public_lead" }, { customer_source: "public_lead_released",
+        crm_customer_id: "customer-one", pipeline_stage: "approved", quote_status: item.quoteStatus || "accepted" });
+      if (item.quote !== false) f.quote("one", item.quote);
+      assert.equal((await f.home()).metrics.awaitingSchedule, item.expected);
+    } finally { f.database.close(); }
+  });
+});
+
+test("future visits suppress approved-work suggestions; intentional enquiry visits remain on Home", async t => {
+  const f = fixture(); t.after(() => f.database.close());
+  for (const id of ["approved", "follow-on", "invalid", "cancelled-visit"]) {
+    f.job(id, {}, { pipeline_stage: "approved" });
+  }
+  f.visit("future-other-worker", "approved", "2026-10-02T09:00", { assignee_member_id: "other" });
+  f.visit("finished-visit", "follow-on", "2026-09-30T09:00", { status: "completed" });
+  f.visit("invalid", "invalid", "bad");
+  f.visit("cancelled", "cancelled-visit", undefined, { status: "cancelled" });
+  f.job("quote-visit", {}, { pipeline_stage: "quoting", quote_status: "issued" });
+  f.visit("intentional-quote-visit", "quote-visit", undefined, { appointment_type: "site_visit" });
+  const result = await f.home();
+  assert.equal(result.metrics.awaitingSchedule, 3);
+  assert.equal(result.metrics.openJobs, 5, "Sales jobs still belong in the open-jobs total");
+  assert.equal(result.metrics.todayVisits, 1);
+  assert.equal(result.metrics.thisWeekVisits, 2);
+  assert.deepEqual(result.upcomingAppointments.map(item => item.id), ["intentional-quote-visit"]);
+});
+
+test("lost jobs leave operational attention and workload even with lingering records, while finance remains intact", async t => {
+  const f = fixture(); t.after(() => f.database.close());
+  f.job("active", {}, { pipeline_stage: "approved" });
+  f.task("active", "active"); f.issue("active", "active"); f.visit("active", "active");
+  for (const stage of ["backlog", "blocked", "cancelled"]) {
+    f.job(`lost-${stage}`, { stage }, { pipeline_stage: "lost" });
+    f.task(`lost-${stage}`, `lost-${stage}`); f.issue(`lost-${stage}`, `lost-${stage}`);
+    f.visit(`lost-${stage}`, `lost-${stage}`); f.invoice(`lost-${stage}`, `lost-${stage}`);
+  }
+  const result = await f.home({ canRunReports: true, canViewInvoices: true });
+  assert.equal(result.metrics.openJobs, 1); assert.equal(result.metrics.waitingJobs, 0);
+  assert.equal(result.metrics.awaitingSchedule, 0); assert.equal(result.metrics.overdueTasks, 1); assert.equal(result.metrics.openIssues, 1);
+  assert.equal(result.metrics.todayJobs, 1); assert.equal(result.metrics.todayVisits, 1);
+  assert.deepEqual(result.workStages, { backlog: 1 });
+  assert.equal(result.workload[0].jobs, 1); assert.equal(result.workload[0].visits, 1);
+  for (const items of [result.upcomingAppointments, result.overdueTasks, result.openIssues]) {
+    assert.deepEqual(items.map(item => item.job.id), ["active"]);
+  }
+  assert.equal(result.financial.current.invoicedCents, 30000);
+  assert.equal(result.financial.receivables.outstandingCents, 33000);
+});
+
 test("imported, archived and cancelled work does not become operational work; protected previews redact free text", async t => {
   const f = fixture(); t.after(() => f.database.close());
   f.job("protected", { title: "Private customer name", source_type: "opportunity" });
@@ -250,6 +370,8 @@ test("Home query batches execute within Cloudflare D1 limits with SQLite-equival
   try {
     f.job("one"); f.visit("one", "one"); f.task("one", "one"); f.issue("one", "one"); f.invoice("one", "one");
     f.job("other", { assignee_member_id: "other" }); f.visit("other", "other", undefined, { assignee_member_id: "other" });
+    f.job("accepted", {}, { crm_customer_id: "customer-accepted", pipeline_stage: "quoting", quote_status: "accepted" });
+    f.quote("accepted");
     const db = await runtime.getD1Database("DB");
     for (const table of f.database.prepare("SELECT name,sql FROM sqlite_master WHERE type='table'").all()) {
       await db.prepare(table.sql).run();

@@ -1,6 +1,7 @@
 import { TRADE_INVOICE_REGISTER_HANDOFF_JOIN_SQL } from "./trade-invoice-register.ts";
 import { addReportDays, ReportInputError, reportTrendWindows, resolveReportPeriod, type BusinessReport, type ReportMeasures } from "./trade-business-reports.ts";
 import { australiaLocalDateTime } from "./trade-schedule.ts";
+import { tradeJobNeedsSchedulingSql } from "./trade-job-scheduling-attention.ts";
 import { jobMemberSql } from "./trade-job-collaboration.ts";
 
 export type ReportAccess = { isOwner: boolean; memberId: string; jobScope: string; scheduleScope: string; canViewInvoices: boolean; canViewQuotes: boolean; canViewPriceBook?: boolean;
@@ -9,7 +10,7 @@ type Row = Record<string, unknown>;
 const number = (value: unknown) => Number(value || 0);
 const ISSUED = "('issued','part_credited','credited')";
 const base = `WITH all_jobs AS (
-  SELECT w.*, d.customer_source, COALESCE(NULLIF(s.address_state,''),'unknown') region,
+  SELECT w.*, d.customer_source, d.quote_status, d.crm_customer_id, COALESCE(NULLIF(s.address_state,''),'unknown') region,
     COALESCE(d.pipeline_stage,'enquiry') pipeline_stage, COALESCE(d.invoice_status,'not_started') invoice_status,
     COALESCE(d.invoiced_value_cents,0) invoiced_value_cents, COALESCE(d.paid_value_cents,0) paid_value_cents,
     COALESCE(d.payment_due_at,'') payment_due_at
@@ -108,7 +109,7 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
   if (period.preset === "all") {
     const history = await db.prepare(`${base}${events} SELECT
       (SELECT datetime(MIN(julianday(at))) FROM events WHERE julianday(at)<=julianday(?) AND (kind NOT IN ('invoicedCents','invoiceCount','creditCents','invoiceGstCents','creditGstCents') OR ?=1) AND (kind NOT IN ('quoteIssues','wonQuotes','declinedQuotes','wonCents') OR ?=1)) first_utc,
-      (SELECT MIN(substr(a.starts_at,1,10)) FROM trade_crm_appointments a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid WHERE j.stage<>'cancelled' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND date(a.starts_at) IS NOT NULL AND substr(a.starts_at,1,10)<=? AND (?=1 OR a.assignee_member_id=?)) first_visit`).bind(...args, now.toISOString(), access.canViewInvoices ? 1 : 0, access.canViewQuotes ? 1 : 0, period.today, teamSchedule, access.memberId).first<Row>();
+      (SELECT MIN(substr(a.starts_at,1,10)) FROM trade_crm_appointments a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid WHERE j.stage<>'cancelled' AND j.pipeline_stage<>'lost' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND date(a.starts_at) IS NOT NULL AND substr(a.starts_at,1,10)<=? AND (?=1 OR a.assignee_member_id=?)) first_visit`).bind(...args, now.toISOString(), access.canViewInvoices ? 1 : 0, access.canViewQuotes ? 1 : 0, period.today, teamSchedule, access.memberId).first<Row>();
     const firstUtc = history?.first_utc ? australiaLocalDateTime(state, new Date(`${String(history.first_utc).replace(" ", "T")}Z`)).slice(0, 10) : period.today;
     const firstDay = [firstUtc, String(history?.first_visit || period.today)].sort()[0];
     period = resolveReportPeriod(params, state, now, firstDay);
@@ -130,22 +131,22 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
       SELECT bucket, COUNT(CASE WHEN balance>0 THEN 1 END) count, SUM(balance) cents, SUM(MAX(0,paid)) paid, SUM(undated) undated_count, SUM(CASE WHEN undated=1 THEN total ELSE 0 END) undated_cents FROM aged GROUP BY bucket`).bind(...args, period.today, period.today, period.today, period.today),
     db.prepare(`${base}, windows AS (SELECT json_extract(value,'$.id') id, json_extract(value,'$.start') start, json_extract(value,'$.end') end FROM json_each(?)), visits AS (
       SELECT a.*, MAX(0,ROUND((julianday(a.ends_at)-julianday(a.starts_at))*1440)) minutes FROM trade_crm_appointments a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid
-      WHERE j.stage<>'cancelled' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND (?=1 OR a.assignee_member_id=?)
+      WHERE j.stage<>'cancelled' AND j.pipeline_stage<>'lost' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND (?=1 OR a.assignee_member_id=?)
     ) SELECT r.id period, a.assignee_member_id member, MAX(COALESCE(NULLIF(m.display_name,''),NULLIF(a.assignee_label,''),'Unassigned')) label,
       COUNT(*) visits, SUM(CASE WHEN a.status='completed' THEN 1 ELSE 0 END) completed,
       SUM(COALESCE(a.minutes,0)) minutes, SUM(CASE WHEN a.minutes IS NULL OR a.minutes<=0 THEN 1 ELSE 0 END) missing
       FROM windows r JOIN visits a ON substr(a.starts_at,1,10)>=r.start AND substr(a.starts_at,1,10)<r.end AND (r.id<>'upcoming' OR a.status<>'completed')
       LEFT JOIN trade_team_members m ON m.id=a.assignee_member_id AND m.owner_uid=a.firebase_uid GROUP BY r.id,a.assignee_member_id`).bind(...args, scheduleRanges, access.isOwner || access.scheduleScope === "team" ? 1 : 0, access.memberId),
     db.prepare(`${base}${native} SELECT
-      SUM(CASE WHEN stage NOT IN ('completed','cancelled') THEN 1 ELSE 0 END) open_jobs,
-      SUM(CASE WHEN stage='blocked' THEN 1 ELSE 0 END) waiting,
-      SUM(CASE WHEN stage NOT IN ('completed','cancelled') AND assignee_member_id='' THEN 1 ELSE 0 END) unassigned,
-      SUM(CASE WHEN stage NOT IN ('completed','cancelled') AND NOT EXISTS (SELECT 1 FROM trade_crm_appointments a WHERE a.work_order_id=j.id AND a.firebase_uid=j.firebase_uid AND a.status IN ('scheduled','en_route','arrived','in_progress') AND substr(a.starts_at,1,10)>=?) THEN 1 ELSE 0 END) awaiting,
-      SUM(CASE WHEN stage='completed' AND invoice_status IN ('not_started','draft') AND NOT EXISTS (SELECT 1 FROM native_invoices n WHERE n.work_order_id=j.id) AND NOT EXISTS (SELECT 1 FROM trade_crm_accounting_documents a WHERE a.work_order_id=j.id AND a.firebase_uid=j.firebase_uid AND a.document_type='invoice' AND a.status IN ('issued','part_paid','paid','overdue')) THEN 1 ELSE 0 END) uninvoiced,
-      (SELECT COUNT(*) FROM trade_work_order_tasks t JOIN jobs k ON k.id=t.work_order_id AND k.firebase_uid=t.firebase_uid WHERE k.stage NOT IN ('completed','cancelled') AND t.status='pending' AND t.due_at<>'' AND substr(t.due_at,1,10)<?) overdue_tasks,
-      (SELECT COUNT(*) FROM trade_crm_job_notes n JOIN jobs k ON k.id=n.work_order_id AND k.firebase_uid=n.firebase_uid WHERE k.stage<>'cancelled' AND n.note_type='issue' AND n.issue_status='open') issues
+      SUM(CASE WHEN stage NOT IN ('completed','cancelled') AND pipeline_stage<>'lost' THEN 1 ELSE 0 END) open_jobs,
+      SUM(CASE WHEN stage='blocked' AND pipeline_stage<>'lost' THEN 1 ELSE 0 END) waiting,
+      SUM(CASE WHEN stage NOT IN ('completed','cancelled') AND pipeline_stage<>'lost' AND assignee_member_id='' THEN 1 ELSE 0 END) unassigned,
+      SUM(CASE WHEN ${tradeJobNeedsSchedulingSql("j", "j")} THEN 1 ELSE 0 END) awaiting,
+      SUM(CASE WHEN stage='completed' AND pipeline_stage<>'lost' AND invoice_status IN ('not_started','draft') AND NOT EXISTS (SELECT 1 FROM native_invoices n WHERE n.work_order_id=j.id) AND NOT EXISTS (SELECT 1 FROM trade_crm_accounting_documents a WHERE a.work_order_id=j.id AND a.firebase_uid=j.firebase_uid AND a.document_type='invoice' AND a.status IN ('issued','part_paid','paid','overdue')) THEN 1 ELSE 0 END) uninvoiced,
+      (SELECT COUNT(*) FROM trade_work_order_tasks t JOIN jobs k ON k.id=t.work_order_id AND k.firebase_uid=t.firebase_uid WHERE k.stage NOT IN ('completed','cancelled') AND k.pipeline_stage<>'lost' AND t.status='pending' AND t.due_at<>'' AND substr(t.due_at,1,10)<?) overdue_tasks,
+      (SELECT COUNT(*) FROM trade_crm_job_notes n JOIN jobs k ON k.id=n.work_order_id AND k.firebase_uid=n.firebase_uid WHERE k.stage<>'cancelled' AND k.pipeline_stage<>'lost' AND n.note_type='issue' AND n.issue_status='open') issues
       FROM jobs j`).bind(...args, period.today, period.today),
-    db.prepare(`${base} SELECT stage,COUNT(*) count FROM jobs GROUP BY stage`).bind(...args),
+    db.prepare(`${base} SELECT stage,COUNT(*) count FROM jobs WHERE pipeline_stage<>'lost' GROUP BY stage`).bind(...args),
     db.prepare(`${base} SELECT DISTINCT service_category service,region FROM all_jobs ORDER BY service,region`).bind(...args),
     ...(canViewCosts ? [
       db.prepare(`${base}${profitability} SELECT COUNT(*) jobs,COUNT(CASE WHEN status='complete' THEN 1 END) complete_jobs,

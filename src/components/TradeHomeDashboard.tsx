@@ -106,7 +106,7 @@ export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSc
         {financial && financial.current.invoicedCents !== null ? <SummaryCard label="Net invoiced" value={money(financial.current.invoicedCents)} detail={`${periods.find(item => item.value === period)?.label} · ex GST`} icon="chart" onClick={canSeeReports ? onOpenReports : undefined} />
           : <SummaryCard label="Open jobs" value={String(dashboard.metrics.openJobs)} detail="Your active work" icon="briefcase" onClick={() => onOpenJobs("all")} />}
         {financial?.receivables ? <SummaryCard label="Outstanding" value={money(financial.receivables.outstandingCents)} detail={`${money(overdue ?? 0)} overdue · incl GST`} icon="wallet" onClick={onOpenInvoices} attention={Boolean(overdue && overdue > 0)} />
-          : <SummaryCard label="Needs scheduling" value={String(dashboard.metrics.awaitingSchedule)} detail="Jobs awaiting a future visit" icon="calendar" onClick={() => onOpenJobs("awaiting_schedule")} />}
+          : <SummaryCard label="Needs scheduling" value={String(dashboard.metrics.awaitingSchedule)} detail="Accepted or approved work awaiting a visit" icon="calendar" onClick={() => onOpenJobs("awaiting_schedule")} />}
         <SummaryCard label="Jobs this week" value={String(dashboard.metrics.thisWeekJobs)} detail={`${plural(dashboard.metrics.thisWeekVisits, "visit")} scheduled`} icon="calendar" onClick={() => onOpenSchedule(dashboard.workload[0]?.weekStart)} />
         <SummaryCard label="Jobs next week" value={String(dashboard.metrics.nextWeekJobs)} detail={`${plural(dashboard.metrics.nextWeekVisits, "visit")} scheduled`} icon="briefcase" onClick={() => onOpenSchedule(dashboard.workload[1]?.weekStart)} />
       </div>
@@ -137,7 +137,7 @@ export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSc
         <section className={styles.card} aria-label="Next actions">
           <div className={styles.cardHeading}><div><span className={styles.eyebrow}>Keep work moving</span><h3>Needs attention</h3></div></div>
           <div className={styles.actionList}>
-            {dashboard.metrics.awaitingSchedule > 0 && <ActionRow count={dashboard.metrics.awaitingSchedule} title="Needs scheduling" detail="Plan the next visit in Schedule" onClick={() => onOpenJobs("awaiting_schedule")} />}
+            {dashboard.metrics.awaitingSchedule > 0 && <ActionRow count={dashboard.metrics.awaitingSchedule} title="Needs scheduling" detail="View accepted or approved work to book" onClick={() => onOpenJobs("awaiting_schedule")} />}
             {dashboard.metrics.waitingJobs > 0 && <ActionRow count={dashboard.metrics.waitingJobs} title="Waiting jobs" detail="Check what is holding work up" onClick={() => onOpenJobs("blocked")} />}
           </div>
           {dashboard.metrics.overdueTasks > 0 && <p className={styles.attentionHeading}>{plural(dashboard.metrics.overdueTasks, "overdue task")}</p>}

@@ -2,6 +2,7 @@ import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { installEmptyTradeCrews } from './helpers/trade-crews-fixture.mjs';
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
+import { jobSalesOutcomeFixture } from "./helpers/trade-job-sales-outcome-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -83,6 +84,7 @@ function fixture(overrides = {}) {
   class DomainError extends Error {}
   let numbers = 0;
   const route = moduleAt('../src/app/api/trade-crm/route.ts', {
+    '@/lib/trade-job-sales-outcome-server': jobSalesOutcomeFixture,
     '../../../../db': { getD1: () => d1 },
     '@/lib/admin-server': { mfaErrorResponse, adminJson: (body, status = 200) => Response.json(body, { status }), cleanAdminText: clean, sameOrigin: () => true },
     '@/lib/trade-access-server': { TradeAccessError: DomainError },

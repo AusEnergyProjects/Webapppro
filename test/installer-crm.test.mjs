@@ -14,6 +14,7 @@ const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0019_melodic_unus.sql");
 const customerCreatedIndexMigration = read("../drizzle/0167_trade_customer_created_index.sql");
 const route = read("../src/app/api/trade-crm/route.ts");
+const schedulingAttention = read("../src/lib/trade-job-scheduling-attention.ts");
 const customerSortSql = read("../src/lib/trade-crm-register-sort-sql.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const home = read("../src/components/TradeHomeDashboard.tsx");
@@ -369,7 +370,7 @@ test("job and customer directories open focused records without automatic or inl
   assert.match(crm, /onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
   assert.match(crm, /crm-view crm-job-workspace/);
   assert.match(crm, /crm-view crm-customer-focus/);
-  assert.match(crm, /mapWorkspace \? "Back to map" : "Back to all jobs"/);
+  assert.match(crm, /mapWorkspace \? "Back to map" : jobFilter === "lost" \? "Back to Lost archive" : "Back to all jobs"/);
   assert.match(crm, /mapWorkspace \? "Back to map" : "Back to all customers"/);
   assert.match(crm, /jobReturnTarget\.kind === "customer"/);
   assert.match(crm, /kind: "customer", customerId: selectedCustomerDetail\.id, customerName: selectedCustomerDetail\.displayName/);
@@ -457,7 +458,7 @@ test("all installer Schedule entry paths use the one permanent CRM dispatch work
 test("job Files renders every planned compliance activity without exposing raw governance copy", () => {
   assert.match(crm, /complianceIntents: ComplianceIntent\[\]/);
   assert.match(crm, /const complianceIntents = job\.complianceIntents\?\.length \? job\.complianceIntents : job\.complianceIntent \? \[job\.complianceIntent\] : \[\]/);
-  assert.match(crm, /formsOpen && complianceIntents\.length > 0 && <TradeActivityFieldRecords/);
+  assert.match(crm, /\(complianceIntents\.length > 0 \|\| activityRecordsRequested\) && <div id="job-files-activity-records" tabIndex=\{-1\}><TradeActivityFieldRecords/);
   const fieldRecords = fs.readFileSync(new URL("../src/components/TradeActivityFieldRecords.tsx", import.meta.url), "utf8");
   assert.match(fieldRecords, /records\.map\(\(item\) => <article key=\{item\.intentId\}>/);
   assert.match(crm, /const canOpenDirectCustomerCompliance = !permissions\s+&& canManageFieldEvidence\s+&& job\.sourceType === "internal"\s+&& job\.customerSource === "trade_owned"/);
@@ -608,7 +609,11 @@ test("Home dashboard preserves direct work and finance navigation", () => {
   assert.match(route, /Array\.from\(\{ length: 4 \}/);
   assert.match(route, /weekEnd: addSummaryDays\(weekStart, 6\)/);
   assert.match(route, /a\.status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)/);
-  assert.match(route, /NOT EXISTS \(SELECT 1 FROM trade_crm_appointments/);
+  assert.match(route, /conditions\.push\(tradeJobNeedsSchedulingSql\("w", "d"\)\)/);
+  assert.match(schedulingAttention, /NOT EXISTS \(\s+SELECT 1 FROM trade_crm_appointments attention_visit/);
+  assert.match(schedulingAttention, /attention_visit\.work_order_id = \$\{workOrderAlias\}\.id/);
+  assert.match(schedulingAttention, /attention_visit\.firebase_uid = \$\{workOrderAlias\}\.firebase_uid/);
+  assert.match(schedulingAttention, /attention_visit\.status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)/);
   assert.match(route, /w\.stage NOT IN \('imported', 'completed', 'cancelled'\) GROUP BY w\.stage/);
   assert.match(route, /if \(!Number\.isFinite\(start\) \|\| !Number\.isFinite\(end\) \|\| end <= start\) return 60/);
   assert.match(route, /Math\.max\(15, Math\.min\(480/);

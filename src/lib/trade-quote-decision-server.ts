@@ -165,6 +165,7 @@ export async function authoriseTradeQuoteDecisionLink(
     WHERE link.id = ?
       AND (link.status <> 'active' OR (
         work.record_status = 'active'
+        AND work.stage <> 'cancelled' AND detail.pipeline_stage <> 'lost'
         AND detail.work_order_id IS NOT NULL
         AND detail.customer_source IN ('trade_owned', 'public_lead_released')
       ))

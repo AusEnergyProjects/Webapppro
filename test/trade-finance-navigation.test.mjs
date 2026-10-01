@@ -509,7 +509,10 @@ test("Home job actions replace stale filters and board layout with the requested
   const filterFields = ["jobFilter", "search", "jobCustomer", "jobService", "jobPipeline", "jobStage", "jobAssignee", "jobLocation", "jobAppointmentId", "jobId",
     "jobScheduledFrom", "jobScheduledTo", "jobCreatedFrom", "jobCreatedTo", "jobInvoiceStatus", "jobCustomerReference", "jobEmail", "jobPhone", "jobSuburb", "jobPostcode",
     "jobFirstName", "jobLastName", "jobStreet", "jobState", "jobOperationalStatus", "jobQuoteTotalMin", "jobQuoteTotalMax", "pipelineFocus", "jobPage"];
-  for (const [stage, staffPermissions] of [["blocked", undefined], ["", { canViewInvoices: false, canViewQuotes: false }]]) {
+  for (const [stage, filter, staffPermissions] of [
+    ["blocked", "active", undefined], ["", "active", { canViewInvoices: false, canViewQuotes: false }],
+    ["", "awaiting_schedule", undefined], ["", "awaiting_schedule", { canViewInvoices: false, canViewQuotes: false }],
+  ]) {
     const state = Object.fromEntries(filterFields.map(key => [key, "stale"]));
     Object.assign(state, { jobLayout: "board", view: "today", creating: "job", focusedJobId: "previous-job" });
     const context = { staffPermissions, homeJobStage: { current: null }, jobPreferencesLoaded: { current: false } };
@@ -517,14 +520,14 @@ test("Home job actions replace stale filters and board layout with the requested
       context[`set${key[0].toUpperCase()}${key.slice(1)}`] = value => { state[key] = value; };
     }
     context.clearJobFilters = evaluate(clearFilters, crm, context);
-    evaluate(openJobs, crm, context)(stage);
+    evaluate(openJobs, crm, context)(stage, filter);
     assert.equal(state.jobLayout, "list"); assert.equal(state.view, "jobs");
     assert.equal(state.creating, ""); assert.equal(state.focusedJobId, "");
     assert.deepEqual(state.jobReturnTarget, { kind: "jobs" });
-    assert.equal(context.homeJobStage.current, staffPermissions ? null : stage, "A first owner visit must survive saved preferences loading");
+    assert.deepEqual(context.homeJobStage.current, staffPermissions ? null : { stage, filter }, "A first owner visit must preserve both its stage and cohort through saved preferences loading");
     const params = evaluate(indexParams, crm, { ...state, staffPermissions, jobSort: "updated-desc", URLSearchParams,
       localDateBoundary() { assert.fail("The previous date filters must be cleared"); } })(1, 25);
-    assert.equal(params.get("filter"), "active"); assert.equal(params.get("stage"), stage);
+    assert.equal(params.get("filter"), filter); assert.equal(params.get("stage"), stage);
     for (const key of ["search", "customer", "service", "pipeline", "assignee", "location", "appointmentId", "jobId", "scheduledFrom", "scheduledTo", "operationalStatus"]) {
       assert.equal(params.get(key), "", `${key} must not hide the Home action's matching jobs`);
     }

@@ -339,15 +339,16 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
     actor.values.push(access.memberId, access.ownerUid);
   }
   const job = await db.prepare(`SELECT current_job.id, current_job.stage, current_job.revision, current_job.assignee_member_id,
+      (SELECT pipeline_stage FROM trade_crm_job_details d WHERE d.work_order_id=current_job.id AND d.firebase_uid=current_job.firebase_uid) pipeline_stage,
       ${VISIT_SNAPSHOT_SQL} visit_snapshot
     FROM trade_work_orders current_job WHERE current_job.id = ? AND current_job.firebase_uid = ?
       AND current_job.record_status = 'active' AND current_job.partner_type = 'installer'
       AND (? = 1 OR ${jobMemberSql("current_job")}) AND ${actor.sql}`)
     .bind(workOrderId, access.ownerUid, workOrderId, access.ownerUid,
       access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId, ...actor.values)
-    .first<{ id: string; stage: string; revision: number; assignee_member_id: string; visit_snapshot: string }>();
+    .first<{ id: string; stage: string; pipeline_stage: string; revision: number; assignee_member_id: string; visit_snapshot: string }>();
   if (!job) return blocked("", "access", "The job or worker assignment changed.");
-  if (["imported", "completed", "cancelled"].includes(job.stage)) return { changed: false, stage: job.stage, blockers: [] };
+  if (["imported", "completed", "cancelled"].includes(job.stage) || job.pipeline_stage === "lost") return { changed: false, stage: job.stage, blockers: [] };
   const visits: ProgressVisit[] = JSON.parse(job.visit_snapshot);
   const selection = automaticFormVisit(visits, access.memberId, job.assignee_member_id);
   const form = await db.prepare(`SELECT 1 present WHERE
@@ -392,6 +393,7 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
       AND current_job.partner_type = 'installer' AND current_job.record_status = 'active'
       AND current_job.stage = ? AND current_job.revision = ? AND current_job.assignee_member_id = ?
       AND current_job.stage NOT IN ('imported', 'completed', 'cancelled')
+      AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details d WHERE d.work_order_id=current_job.id AND d.firebase_uid=current_job.firebase_uid AND d.pipeline_stage='lost')
       AND (? = 1 OR ${jobMemberSql("current_job")})) AND ${actor.sql}
       AND ${VISIT_SNAPSHOT_SQL} = ?
       ${ready ? `AND ${completion.sql}` : ""}

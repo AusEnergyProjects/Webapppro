@@ -185,12 +185,12 @@ function fixture() {
       invoice_payment_account_number TEXT NOT NULL DEFAULT '', invoice_payment_reference TEXT NOT NULL DEFAULT '',
       invoice_default_terms TEXT NOT NULL DEFAULT ''
     );
-    CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT NOT NULL, record_status TEXT NOT NULL, partner_type TEXT NOT NULL DEFAULT 'installer');
+    CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT NOT NULL, record_status TEXT NOT NULL, partner_type TEXT NOT NULL DEFAULT 'installer', stage TEXT NOT NULL DEFAULT 'backlog');
     CREATE TABLE trade_crm_job_details (
       work_order_id TEXT PRIMARY KEY, firebase_uid TEXT NOT NULL, crm_customer_id TEXT NOT NULL,
       customer_source TEXT NOT NULL, quoted_value_cents INTEGER NOT NULL, quote_status TEXT NOT NULL,
       invoiced_value_cents INTEGER NOT NULL DEFAULT 0, paid_value_cents INTEGER NOT NULL DEFAULT 0,
-      invoice_status TEXT NOT NULL DEFAULT 'not_started',
+      invoice_status TEXT NOT NULL DEFAULT 'not_started', pipeline_stage TEXT NOT NULL DEFAULT 'quoting',
       payment_due_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
     );
     CREATE TABLE trade_crm_quotes (
@@ -269,7 +269,7 @@ function fixture() {
   database.prepare(`INSERT INTO trade_accounts VALUES (?, 'installer', 'active',
     'Australian Energy Assessments', '063-000', '12345678', 'Quote acceptance', 'Payment due in 7 days')`).run(ids.owner);
   database.prepare("INSERT INTO trade_work_orders (id,firebase_uid,record_status) VALUES (?, ?, 'active')").run(ids.work, ids.owner);
-  database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, 'public_lead_released', 0, 'sent', 0, 0, 'not_started', '', '')")
+  database.prepare("INSERT INTO trade_crm_job_details VALUES (?, ?, ?, 'public_lead_released', 0, 'sent', 0, 0, 'not_started', 'quoting', '', '')")
     .run(ids.work, ids.owner, ids.customer);
   database.prepare("INSERT INTO trade_crm_quotes VALUES (?, ?, ?, ?, 1, 'issued', '')")
     .run(ids.quote, ids.work, ids.owner, ids.customer);
@@ -549,6 +549,22 @@ test("the actual public POST route accepts the production-shaped signed STC adju
   assert.equal(invoice.status, "issued");
   assert.equal(JSON.parse(invoice.payment_snapshot_json).accountNumber, "12345678");
   database.close();
+});
+
+test("a lost opportunity rejects an old active quote token before acceptance and during the decision transaction", async () => {
+  for (const racing of [false, true]) {
+    const database = fixture();
+    const lose = current => current.exec("UPDATE trade_crm_job_details SET pipeline_stage='lost'; UPDATE trade_work_orders SET stage='cancelled'");
+    if (!racing) lose(database);
+    const route = loadRoute(database, targetSnapshot, racing ? lose : undefined);
+    const response = await route.POST(decisionRequest(), context);
+    assert.ok(response.status >= 400 && response.status < 500, `lost ${racing ? "during" : "before"} acceptance`);
+    assert.equal(count(database, "trade_crm_quote_acceptances"), 0);
+    assert.equal(count(database, "trade_crm_commercial_handovers"), 0);
+    assert.equal(count(database, "trade_crm_accepted_invoices"), 0);
+    assert.equal(database.prepare("SELECT pipeline_stage FROM trade_crm_job_details").get().pipeline_stage, "lost");
+    database.close();
+  }
 });
 
 test("an unreconciled snapshot returns a safe public conflict before the actual POST route writes anything", async () => {

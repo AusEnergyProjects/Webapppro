@@ -248,7 +248,7 @@ async function quotePdfFilename(snapshot: TradeQuoteDocumentSnapshot) {
 
 async function directJob(ownerUid: string, workOrderId: string) {
   const row = await getD1().prepare(`SELECT w.id, w.work_number, w.title, w.service_categories,
-      w.source_type, w.source_reference work_source_reference,
+      w.source_type, w.source_reference work_source_reference, w.stage work_stage, d.pipeline_stage,
       d.crm_customer_id, d.service_site_id, d.description, d.customer_reference, d.customer_source,
       d.accepted_disclosure_snapshot, d.accepted_disclosure_sha256, d.accepted_disclosure_at,
       c.customer_number, c.first_name, c.last_name, c.business_name, c.email customer_email,
@@ -578,6 +578,9 @@ export async function POST(request: Request) {
       return adminJson({ ok: true, revoked: true });
     }
     const job = await directJob(access.ownerUid, workOrderId);
+    if (job.work_stage === "cancelled" || job.pipeline_stage === "lost") {
+      return adminJson({ ok: false, error: "Reopen this opportunity before changing or sending its quote." }, 409);
+    }
     if (action === "add_quote_recipient") {
       if (!access.isOwner && !access.canManageCustomers) throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
       if (job.public_lead_enquiry) {
@@ -957,7 +960,11 @@ export async function POST(request: Request) {
           issued_at = CASE WHEN issued_at = '' THEN ? ELSE issued_at END,
           updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND status = 'draft'
-          AND updated_at = ?`)
+          AND updated_at = ? AND EXISTS (SELECT 1 FROM trade_crm_quotes active_quote
+            JOIN trade_work_orders active_work ON active_work.id=active_quote.work_order_id AND active_work.firebase_uid=active_quote.firebase_uid
+            JOIN trade_crm_job_details active_detail ON active_detail.work_order_id=active_work.id AND active_detail.firebase_uid=active_work.firebase_uid
+            WHERE active_quote.id=trade_crm_quote_versions.quote_id AND active_quote.firebase_uid=trade_crm_quote_versions.firebase_uid
+              AND active_work.record_status='active' AND active_work.stage<>'cancelled' AND active_detail.pipeline_stage<>'lost')`)
         .bind(issueClaimToken, issueTimestamp, now, version.id, access.ownerUid,
           body.expectedUpdatedAt === undefined ? version.updated_at : body.expectedUpdatedAt)
         .run();
@@ -1316,6 +1323,10 @@ export async function POST(request: Request) {
             SET token_hash = ?, encrypted_token = ?, token_issue = ?, status = 'active',
               expires_at = ?, revoked_at = '', updated_at = ?
             WHERE id = ? AND firebase_uid = ? AND token_issue = ? AND updated_at = ?
+              AND EXISTS (SELECT 1 FROM trade_work_orders active_work JOIN trade_crm_job_details active_detail
+                ON active_detail.work_order_id=active_work.id AND active_detail.firebase_uid=active_work.firebase_uid
+                WHERE active_work.id=trade_crm_quote_links.work_order_id AND active_work.firebase_uid=trade_crm_quote_links.firebase_uid
+                  AND active_work.record_status='active' AND active_work.stage<>'cancelled' AND active_detail.pipeline_stage<>'lost')
               AND NOT EXISTS (
                 SELECT 1 FROM trade_crm_quote_deliveries delivery
                 WHERE delivery.quote_link_id = trade_crm_quote_links.id

@@ -2,6 +2,7 @@ import { addReportDays, resolveReportPeriod } from "./trade-business-reports.ts"
 import { loadBusinessReport, type ReportAccess } from "./trade-business-reports-server.ts";
 import { jobMemberSql } from "./trade-job-collaboration.ts";
 import { crewScheduleMemberIds } from "./trade-crews.ts";
+import { tradeJobNeedsSchedulingSql } from "./trade-job-scheduling-attention.ts";
 import type { HomeDashboard, HomeJobReference } from "./trade-home-dashboard.ts";
 
 type HomeAccess = ReportAccess & { canRunReports: boolean };
@@ -10,10 +11,12 @@ const number = (value: unknown) => Number(value || 0);
 const activeStages = "('imported','completed','cancelled')";
 const activeVisits = "('scheduled','en_route','arrived','in_progress')";
 const base = `WITH jobs AS MATERIALIZED (
-  SELECT w.id,w.firebase_uid,w.work_number,w.title job_title,w.stage,w.source_type,d.customer_source
+  SELECT w.id,w.firebase_uid,w.work_number,w.title job_title,w.stage,w.source_type,d.customer_source,
+    d.crm_customer_id,d.pipeline_stage,d.quote_status
   FROM trade_work_orders w
   LEFT JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
   WHERE w.firebase_uid=? AND w.partner_type='installer' AND w.record_status='active'
+    AND COALESCE(d.pipeline_stage,'') <> 'lost'
     AND (?=1 OR ${jobMemberSql("w")})
 )`;
 const visits = `, visits AS MATERIALIZED (
@@ -48,10 +51,7 @@ export async function loadHomeDashboard(db: Pick<D1Database, "prepare" | "batch"
     db.prepare(`${base} SELECT
       COUNT(CASE WHEN stage NOT IN ${activeStages} THEN 1 END) open_jobs,
       COUNT(CASE WHEN stage='blocked' THEN 1 END) waiting_jobs,
-      COUNT(CASE WHEN stage NOT IN ${activeStages} AND NOT EXISTS (
-        SELECT 1 FROM trade_crm_appointments a WHERE a.work_order_id=j.id AND a.firebase_uid=j.firebase_uid
-          AND a.status IN ${activeVisits} AND date(a.starts_at) IS NOT NULL AND substr(a.starts_at,1,10)>=?
-      ) THEN 1 END) awaiting_schedule,
+      COUNT(CASE WHEN ${tradeJobNeedsSchedulingSql("j", "j")} THEN 1 END) awaiting_schedule,
       (SELECT COUNT(*) FROM trade_work_order_tasks t JOIN jobs k ON k.id=t.work_order_id AND k.firebase_uid=t.firebase_uid
         WHERE k.stage NOT IN ${activeStages} AND t.status='pending' AND date(t.due_at) IS NOT NULL AND substr(t.due_at,1,10)<?) overdue_tasks,
       (SELECT COUNT(*) FROM trade_crm_job_notes n JOIN jobs k ON k.id=n.work_order_id AND k.firebase_uid=n.firebase_uid

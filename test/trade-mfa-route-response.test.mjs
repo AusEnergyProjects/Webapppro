@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from '../src/lib/firebase-mfa.ts';
 import { TradeMapInputError } from '../src/lib/trade-map-dataset-server.ts';
 import { TradeMapLocationInputError } from '../src/lib/trade-map-location-cache.ts';
+import { jobSalesOutcomeFixture } from './helpers/trade-job-sales-outcome-fixture.mjs';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -34,6 +35,7 @@ function deniedRoute(routeName, error) {
   let databaseCalls = 0;
   class OtherDomainError extends Error {}
   const dependencies = {
+    ...jobSalesOutcomeFixture,
     ...admin,
     requireInstallerTeamAccess: async () => { guardCalls += 1; throw error; },
     getD1: () => { databaseCalls += 1; throw new Error('Financial storage must not be touched'); },

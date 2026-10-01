@@ -1,4 +1,6 @@
 import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
+import { changeJobSalesOutcome, JobSalesOutcomeError, loadJobSalesOutcomes } from "@/lib/trade-job-sales-outcome-server";
+import { tradeJobNeedsSchedulingSql } from "@/lib/trade-job-scheduling-attention";
 import { canAccessCrewMember, crewScheduleMemberIds, crewMutationGuard } from "@/lib/trade-crews";
 import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
 import { assertTradeJobCanCancel,tradeJobCancellationGuard,cancelledJobAppointmentsStatement,reconcileCancelledJobCalendars } from "@/lib/trade-job-cancellation-server";
@@ -396,6 +398,7 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof JobSalesOutcomeError) return adminJson({ ok: false, code: "JOB_SALES_OUTCOME_BLOCKED", error: error.message }, error.status);
   if (error instanceof GnafDirectoryUnavailableError) return adminJson({ ok: false, error: error.message }, 503);
   if (error instanceof TradeMapInputError || error instanceof TradeMapLocationInputError) {
     return adminJson({ ok: false, error: error.message }, 400);
@@ -683,6 +686,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
   });
   return {
     id: row.id, workNumber: row.work_number,
+    salesOutcome: row.sales_outcome,
     sourceReference: !protectedCustomer ? String(row.dataforce_source_job_id || "") : "",
     revision: Number(row.revision || 1),
     title: protectedCustomer ? `${String(row.service_category || "Service")} job` : row.title, serviceCategory: row.service_category,
@@ -992,11 +996,17 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string, forMa
       conditions.push(`${JOB_REGISTER_QUOTE_TOTAL_SQL} <= ?`);
       bindings.push(cents);
     }
-    if (filter === "platform") conditions.push("w.source_type = 'opportunity'");
+    if (filter === "lost") conditions.push("d.pipeline_stage = 'lost'");
+    else if (!deleted) conditions.push("COALESCE(d.pipeline_stage, '') <> 'lost'");
+    if (filter === "awaiting_schedule") {
+      conditions.push(tradeJobNeedsSchedulingSql("w", "d"));
+      bindings.push(australiaLocalDateTime(identity.addressState).slice(0, 10));
+    }
+    else if (filter === "platform") conditions.push("w.source_type = 'opportunity'");
     else if (filter === "completed") conditions.push("w.stage IN ('completed', 'cancelled')");
     else if (filter === "attention") conditions.push(`w.stage <> 'imported' AND (w.stage = 'blocked' OR EXISTS (SELECT 1 FROM trade_crm_job_notes n
       WHERE n.work_order_id = w.id AND n.firebase_uid = w.firebase_uid AND n.note_type = 'issue' AND n.issue_status = 'open'))`);
-    else if (!deleted && filter !== "all" && stage !== "imported" && operationalStatus !== "imported") conditions.push("w.stage NOT IN ('imported', 'completed', 'cancelled')");
+    else if (!deleted && filter !== "all" && filter !== "lost" && stage !== "imported" && operationalStatus !== "imported") conditions.push("w.stage NOT IN ('imported', 'completed', 'cancelled')");
     // Rows reuse their computed status alias. COUNT has no projection, so only
     // that query expands the status expression. Keep each statement under D1's limit.
     const where = conditions.map(condition => condition === "register_lifecycle_status = ?"
@@ -1089,6 +1099,8 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string, forMa
     ]);
     const total = countRow ? Number(countRow.total || 0) : undefined;
     const hasNext = rows.results.length > pageSize; const pageRows = rows.results.slice(0, pageSize);
+    const salesOutcomes = await loadJobSalesOutcomes(db, identity.access, pageRows.map(row => String(row.id)));
+    for (const row of pageRows) row.sales_outcome = salesOutcomes[String(row.id)];
     const nextCursor = hasNext && pageRows.length ? encodeKeysetCursor(`jobs:${sort}`, selectedSort.terms.map((item) => item.numeric ? Number(pageRows.at(-1)![item.rowKey]) : String(pageRows.at(-1)![item.rowKey] || ""))) : "";
     return { items: pageRows.map((row: Record<string, unknown>) => indexedJob(row, identity.access)), pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor } };
   }
@@ -1324,6 +1336,8 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
       .bind(id, identity.uid)
       .all<Record<string, unknown>>(),
   ]);
+  const salesOutcomes = await loadJobSalesOutcomes(db, identity.access, [id]);
+  row.sales_outcome = salesOutcomes[id];
   const job = indexedJob(row, identity.access);
   const importedSource = !protectedCustomer
     ? await db.prepare("SELECT raw_json, source_job_id FROM trade_dataforce_sources WHERE work_order_id = ? AND firebase_uid = ?")
@@ -1426,7 +1440,7 @@ async function crmSummary(identity: CrmIdentity) {
       SUM(CASE WHEN stage NOT IN ('imported', 'completed', 'cancelled') THEN 1 ELSE 0 END) open_jobs,
       SUM(CASE WHEN stage = 'blocked' THEN 1 ELSE 0 END) waiting_jobs,
       SUM(CASE WHEN stage = 'completed' THEN 1 ELSE 0 END) completed_jobs
-      FROM trade_work_orders WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'`)
+      FROM trade_work_orders w WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost')`)
       .bind(identity.uid).first<Record<string, unknown>>(),
     db.prepare(`SELECT
       COALESCE(SUM(d.quoted_value_cents), 0) quoted_cents,
@@ -1436,56 +1450,53 @@ async function crmSummary(identity: CrmIdentity) {
       FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id AND w.firebase_uid = d.firebase_uid
       WHERE d.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`).bind(identity.uid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?`)
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost') AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?`)
       .bind(identity.uid, today).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-      WHERE a.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      WHERE a.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost')
       AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) = ?`)
       .bind(identity.uid, today).first<Record<string, unknown>>(),
-    db.prepare(`SELECT COUNT(*) total FROM trade_work_orders w
-      WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      AND w.stage NOT IN ('imported', 'completed', 'cancelled')
-      AND NOT EXISTS (SELECT 1 FROM trade_crm_appointments a
-        WHERE a.firebase_uid = w.firebase_uid AND a.work_order_id = w.id
-        AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?)`)
+    db.prepare(`SELECT COUNT(*) total FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
+      WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost')
+      AND ${tradeJobNeedsSchedulingSql("w", "d")}`)
       .bind(identity.uid, today).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) total FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id AND w.firebase_uid = t.firebase_uid
-      WHERE t.firebase_uid = ? AND w.record_status = 'active' AND t.status = 'pending' AND t.due_at <> '' AND t.due_at < ?`)
+      WHERE t.firebase_uid = ? AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost') AND t.status = 'pending' AND t.due_at <> '' AND t.due_at < ?`)
       .bind(identity.uid, today).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) total FROM trade_crm_job_notes n JOIN trade_work_orders w ON w.id = n.work_order_id AND w.firebase_uid = n.firebase_uid
-      WHERE n.firebase_uid = ? AND w.record_status = 'active' AND n.note_type = 'issue' AND n.issue_status = 'open'`)
+      WHERE n.firebase_uid = ? AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost') AND n.note_type = 'issue' AND n.issue_status = 'open'`)
       .bind(identity.uid).first<Record<string, unknown>>(),
     db.prepare(`SELECT a.*, w.id work_order_id, w.work_number, w.title job_title, w.source_type, d.customer_source
       FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
-      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost') AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?
         AND (? = 1 OR ? = 'team' OR a.assignee_member_id = ?)
       ORDER BY a.starts_at, a.created_at LIMIT 6`).bind(identity.uid, today,
         identity.access.isOwner ? 1 : 0, identity.access.scheduleScope, identity.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT t.*, w.id work_order_id, w.work_number, w.title job_title, w.assignee_member_id, w.source_type, d.customer_source
       FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id AND w.firebase_uid = t.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
-      WHERE t.firebase_uid = ? AND w.record_status = 'active' AND t.status = 'pending' AND t.due_at <> '' AND t.due_at < ?
+      WHERE t.firebase_uid = ? AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost') AND t.status = 'pending' AND t.due_at <> '' AND t.due_at < ?
         AND (? = 1 OR ? = 'team' OR ${jobMemberSql("w")})
       ORDER BY t.due_at, t.created_at LIMIT 4`).bind(identity.uid, today,
         identity.access.isOwner ? 1 : 0, identity.access.jobScope, identity.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT n.*, w.id work_order_id, w.work_number, w.title job_title, w.assignee_member_id, w.source_type, d.customer_source
       FROM trade_crm_job_notes n JOIN trade_work_orders w ON w.id = n.work_order_id AND w.firebase_uid = n.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
-      WHERE n.firebase_uid = ? AND w.record_status = 'active' AND n.note_type = 'issue' AND n.issue_status = 'open'
+      WHERE n.firebase_uid = ? AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost') AND n.note_type = 'issue' AND n.issue_status = 'open'
         AND (? = 1 OR ? = 'team' OR ${jobMemberSql("w")})
       ORDER BY n.updated_at DESC LIMIT 4`).bind(identity.uid,
         identity.access.isOwner ? 1 : 0, identity.access.jobScope, identity.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT a.starts_at, a.ends_at, a.assignee_member_id
       FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-      WHERE a.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      WHERE a.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost')
       AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
       AND SUBSTR(a.starts_at, 1, 10) >= ? AND SUBSTR(a.starts_at, 1, 10) < ?
       AND (? = 1 OR ? = 'team' OR a.assignee_member_id = ?)
       ORDER BY a.starts_at`).bind(identity.uid, chartStart, chartEnd,
         identity.access.isOwner ? 1 : 0, identity.access.scheduleScope, identity.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT w.stage, COUNT(*) total FROM trade_work_orders w
-      WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active' AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details lost WHERE lost.work_order_id=w.id AND lost.firebase_uid=w.firebase_uid AND lost.pipeline_stage='lost')
       AND w.stage NOT IN ('imported', 'completed', 'cancelled') GROUP BY w.stage`)
       .bind(identity.uid).all<Record<string, unknown>>(),
   ]);
@@ -3016,7 +3027,7 @@ export async function PATCH(request: Request) {
       "bulk_archive_customers", "update_customer_contact", "update_service_site", "update_customer",
     ]);
     const jobMutationActions = new Set([
-      "bulk_set_job_priority", "resolve_issue", "archive_template", "update_task",
+      "bulk_set_job_priority", "resolve_issue", "archive_template", "update_task", "mark_job_lost", "reopen_lost_job",
     ]);
     if (customerMutationActions.has(action) && !identity.access.canManageCustomers) {
       throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
@@ -3044,6 +3055,12 @@ export async function PATCH(request: Request) {
       if (hasAny(invoiceFields) && !identity.access.isOwner && !identity.access.canManageInvoices) throw new Error("INVOICE_MANAGEMENT_REQUIRED");
     }
     const now = new Date().toISOString();
+
+    if (action === "mark_job_lost" || action === "reopen_lost_job") {
+      const result = await changeJobSalesOutcome(db, identity.access, { action, workOrderId: scopedJobId,
+        expectedRevision: body.expectedRevision, reason: cleanAdminText(body.reason, 500) }, now);
+      return adminJson({ ok: true, ...result });
+    }
 
     if (action === "update_task") {
       const taskId = cleanAdminText(body.taskId, 180);
@@ -3418,6 +3435,9 @@ export async function PATCH(request: Request) {
     const releasedPublicLead = job.source_type === "public_lead"
       && current?.customer_source === "public_lead_released";
     const pipelineStage = body.pipelineStage === undefined ? String(current?.pipeline_stage || (platformPrivate ? "qualifying" : "enquiry")) : cleanAdminText(body.pipelineStage, 30);
+    if (pipelineStage === "lost" || current?.pipeline_stage === "lost") {
+      throw new JobSalesOutcomeError("Use Mark as lost or Reopen opportunity to change a lost job.");
+    }
     const workStage = body.stage === undefined ? "" : cleanAdminText(body.stage, 30);
     if (identity.access.crewId && (workStage === "cancelled" || pipelineStage === "lost")) throw new Error("JOB_MANAGEMENT_REQUIRED");
     const importedJob = job.stage === "imported" || current?.pipeline_stage === "imported";

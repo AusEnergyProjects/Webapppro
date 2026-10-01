@@ -260,6 +260,14 @@ test("AEA lead scheduling requires an accepted current quote while direct jobs r
   const { d1, server } = scheduleServerHarness(db);
 
   await assert.doesNotReject(() => server.assertTradeJobReadyForScheduling("owner-1", "direct-job"));
+  db.exec("UPDATE trade_crm_job_details SET pipeline_stage='lost' WHERE work_order_id='direct-job'");
+  await assert.rejects(() => server.assertTradeJobReadyForScheduling("owner-1", "direct-job"), /JOB_SCHEDULE_ACCEPTANCE_REQUIRED/);
+  await assert.rejects(async () => (await server.tradeJobScheduleEligibilityGuardStatement(d1, {
+    ownerUid: "owner-1", actorMemberId: "owner-member", assignedMemberId: "owner-member",
+    workOrderId: "direct-job", changedAt: "2026-08-14T10:00:00.000Z",
+  })).run(), "the atomic schedule guard also rejects historical lost jobs");
+  db.exec("UPDATE trade_crm_job_details SET pipeline_stage='quoting' WHERE work_order_id='direct-job'");
+  await assert.doesNotReject(() => server.assertTradeJobReadyForScheduling("owner-1", "direct-job"));
   await assert.rejects(
     () => server.assertTradeJobReadyForScheduling("owner-1", "aea-job"),
     /JOB_SCHEDULE_ACCEPTANCE_REQUIRED/,

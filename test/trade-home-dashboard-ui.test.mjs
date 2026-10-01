@@ -71,7 +71,7 @@ test("period selection clears stale numbers and routes all Home actions", async 
 
 test("attention actions retain the task or issue destination and do not imply scheduling eligibility", async () => {
   const h = harness(async () => response(fixture())); const tree = await h.mount();
-  assert.match(text(tree), /Needs scheduling/); assert.match(text(tree), /Plan the next visit in Schedule/);
+  assert.match(text(tree), /Needs scheduling/); assert.match(text(tree), /View accepted or approved work to book/);
   assert.doesNotMatch(text(tree), /Ready to schedule/);
   const actions = nodes(tree, node => node.type === "ul" && node.props.className === "attentionList")[0];
   const targets = nodes(actions, node => node.type === "button");

@@ -775,6 +775,7 @@ export async function authoriseTradeQuoteLink(
         AND trade.partner_type = 'installer'
         AND ${tradeAccessPredicate}
       WHERE link.id = ?
+        AND (link.status <> 'active' OR (work.stage <> 'cancelled' AND detail.pipeline_stage <> 'lost'))
       LIMIT 1`,
     )
     .bind(linkId)

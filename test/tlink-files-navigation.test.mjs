@@ -74,7 +74,7 @@ const tabButton = (tree, label) => nodes(jobTabs(tree), node => node.type === "b
 
 function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides = {} } = {}) {
   const hooks = hookState();
-  const frames = [], scrolled = [], focused = [], reloads = [];
+  const frames = [], scrolled = [], focused = [], reloads = [], outcomes = [];
   const job = {
     id: "job-1", workNumber: "TLJ-1", revision: 4, title: "Test job", serviceCategory: "rental-inspection",
     customerSource: "trade_owned", sourceType: "internal", stage: "backlog", pipelineStage: "enquiry",
@@ -97,13 +97,54 @@ function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides
   const props = {
     job, initialTab, permissions, sites: [], teamMembers: [], busy: "", user: { uid: "owner", getIdToken: async () => "test-token" },
     onReload: async () => { reloads.push(job.id); },
+    onSalesOutcome: job => outcomes.push(job.id),
   };
   return {
     render() { hooks.reset(); return renderJob(props); },
     runFrames() { frames.splice(0).forEach(callback => callback()); },
-    scrolled, focused, reloads,
+    scrolled, focused, reloads, outcomes,
   };
 }
+
+test("unanswered quotes show the customer decision and an authorised lost action without field-work nags", () => {
+  const h = workspaceHarness({ initialTab: "summary", job: { quoteStatus: "sent", pipelineStage: "quoting", salesOutcome: { canMarkLost: true, canReopen: false } } });
+  const tree = h.render();
+  assert.match(text(tree), /Waiting for the customer/);
+  assert.equal(nodes(tree, node => node.props?.["aria-label"] === "Job next steps").length, 0);
+  const mark = nodes(tree, node => node.type === "button" && text(node) === "Mark as lost")[0];
+  mark.props.onClick(); assert.deepEqual(h.outcomes, ["job-1"]);
+  assert.ok(tabButton(tree, "Files")); assert.ok(tabButton(tree, "Schedule (0)"));
+});
+
+test("draft quotes offer preparation instead of field-work prompts", () => {
+  const tree = workspaceHarness({ initialTab: "summary", job: { quoteStatus: "draft", pipelineStage: "quoting" } }).render();
+  assert.match(text(tree), /Prepare the quote/);
+  assert.equal(nodes(tree, node => node.props?.["aria-label"] === "Job next steps").length, 0);
+});
+
+test("lost records keep read-only files and history without operational prompts or commercial mutations", () => {
+  const h = workspaceHarness({ initialTab: "summary", job: { stage: "cancelled", pipelineStage: "lost", salesOutcome: { canMarkLost: false, canReopen: true }, tasks: [{ id: "task", status: "pending" }] } });
+  let tree = h.render();
+  assert.match(text(tree), /No further action is required/);
+  assert.equal(nodes(tree, node => node.props?.["aria-label"] === "Job next steps").length, 0);
+  assert.equal(tabButton(tree, "Messages"), undefined); assert.equal(tabButton(tree, "Review"), undefined);
+  nodes(tree, node => node.type === "button" && text(node) === "Reopen opportunity")[0].props.onClick();
+  assert.deepEqual(h.outcomes, ["job-1"]);
+  tabButton(tree, "Files").props.onClick(); tree = h.render();
+  assert.equal(component(tree, "TradeFieldWorkPanel").props.showProgress, false);
+  assert.equal(component(tree, "TradeFieldWorkPanel").props.readOnly, true);
+  tabButton(tree, "Quote").props.onClick(); tree = h.render();
+  assert.equal(component(tree, "TradeQuotePanel").props.readOnly, true);
+  assert.equal(component(tree, "TradeQuotePanel").props.canSend, false);
+  tabButton(tree, "Invoice").props.onClick(); tree = h.render();
+  assert.equal(component(tree, "TradeQuickInvoicePanel").props.readOnly, true);
+  assert.equal(component(tree, "TradeCommercialHandoffPanel"), undefined);
+});
+
+test("a lost record without server authority has no reopen action", () => {
+  const tree = workspaceHarness({ initialTab: "summary", job: { stage: "cancelled", pipelineStage: "lost", salesOutcome: { canMarkLost: false, canReopen: false } } }).render();
+  assert.equal(nodes(tree, node => node.type === "button" && text(node) === "Reopen opportunity").length, 0);
+});
 
 test("legacy Field entry opens Files and neither navigation menu retains Field or Forms tabs", () => {
   const h = workspaceHarness();

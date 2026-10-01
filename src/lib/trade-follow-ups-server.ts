@@ -68,7 +68,7 @@ export async function followUpContext(db: D1Database, services: FollowUpServices
   kind: FollowUpTemplate["kind"], options: { appointmentId?: string; now?: Date; automatic?: boolean; pastAppointment?: boolean } = {}): Promise<Context> {
   const now = options.now || new Date();
   const recipient = await services.recipient(access, workOrderId);
-  const row = await db.prepare(`SELECT w.title,w.work_number,w.stage,w.source_type,d.crm_customer_id,d.invoice_status,d.invoiced_value_cents,d.paid_value_cents,
+  const row = await db.prepare(`SELECT w.title,w.work_number,w.stage,w.source_type,d.pipeline_stage,d.crm_customer_id,d.invoice_status,d.invoiced_value_cents,d.paid_value_cents,
     d.accepted_disclosure_sha256,d.accepted_disclosure_snapshot,
     c.first_name,c.last_name,c.business_name,c.email,a.business_name trade_name,
     s.address_line_1,s.address_line_2,s.suburb,s.address_state,s.postcode
@@ -80,7 +80,7 @@ export async function followUpContext(db: D1Database, services: FollowUpServices
     AND w.source_type<>'opportunity' AND d.customer_source IN ('trade_owned','public_lead_released')
     AND (?=1 OR w.assignee_member_id=?)`)
     .bind(workOrderId, access.ownerUid, access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId).first<Row>();
-  if (!row || row.stage === "cancelled") invalid("EMAIL_RECIPIENT_UNAVAILABLE");
+  if (!row || row.stage === "cancelled" || row.pipeline_stage === "lost") invalid("EMAIL_RECIPIENT_UNAVAILABLE");
   if (row.source_type === "public_lead") {
     const snapshot = text(row.accepted_disclosure_snapshot);
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(snapshot));

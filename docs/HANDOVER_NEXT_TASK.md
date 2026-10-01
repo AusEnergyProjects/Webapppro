@@ -1,9 +1,19 @@
 # Next task handover
 
-Status: Form timing, automatic work progress and scoped crews implementation and release validation.
+Status: Quote-aware work queues and Lost archive implementation and release validation.
 Prepared: 2 October 2026
 
-## Active contract: forms record work and crews stay scoped
+## Active contract: separate customer decisions from committed work
+
+Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Baseline source `ca7ce51e78cf58ae1bba6945416a8459ba92f61e`, Sites 729.
+
+Outcome: unanswered quotes do not create scheduling pressure. Home and its filtered Jobs destination share a definition of accepted/approved work. An easy Mark as lost action keeps unwon opportunities searchable in a quiet archive, preserves history, cancels queued follow-ups and revokes old quote links. Reopen is explicit. Current permissions, revisions, recorded work, active appointments and money protect against closing actual committed work as a lost sale.
+
+Validation: real SQLite boundary/concurrency tests, permission and communication regressions, UI handlers, full release checks with pre-existing failures reported separately, publication build and exact Git/Sites provenance. Evidence belongs in `C:/Webproject/outputs/tlink-sales-flow-20261002/`. Do not send real customer messages for testing. No native or migration release is required.
+
+After this slice is validated and published, the next bounded candidate is the existing Quotes workspace's preparation/awaiting-customer/accepted views. The wider sequence and acceptance criteria are in ROADMAP.md; these are not claims of delivered functionality. Ascora research records official sources and availability limitations in the evidence directory.
+
+## Previous contract: forms record work and crews stay scoped
 
 Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Navigation baseline: Sites 726, source `30ac81ebaadd5255f2b3891fb78634e5d9b89184`.
 

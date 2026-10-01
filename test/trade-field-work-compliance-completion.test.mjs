@@ -798,7 +798,19 @@ function jobState(database) {
     },
     receipts: database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count,
     events: database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count,
-  };
+};
+
+test("form reconciliation never restarts historical lost jobs even when their old work stage is active", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("UPDATE trade_crm_job_details SET pipeline_stage='lost'; UPDATE trade_job_forms SET status='complete'");
+    for (const startOnly of [true, false]) {
+      assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db, startOnly })).changed, false);
+    }
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "scheduled");
+    assert.equal(database.prepare("SELECT pipeline_stage FROM trade_crm_job_details").get().pipeline_stage, "lost");
+  } finally { database.close(); }
+});
 }
 
 test("imported history cannot start or finish field work or create execution records", async () => {

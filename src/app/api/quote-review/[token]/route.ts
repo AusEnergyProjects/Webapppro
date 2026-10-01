@@ -419,11 +419,12 @@ export async function POST(request: Request, context: Context) {
           AND quote.current_version_number = version.version_number
         JOIN trade_work_orders work
           ON work.id = link.work_order_id AND work.firebase_uid = link.firebase_uid
-          AND work.record_status = 'active'
+          AND work.record_status = 'active' AND work.stage <> 'cancelled'
         JOIN trade_crm_job_details detail
           ON detail.work_order_id = link.work_order_id AND detail.firebase_uid = link.firebase_uid
           AND detail.crm_customer_id = link.crm_customer_id
           AND detail.customer_source IN ('trade_owned', 'public_lead_released')
+          AND detail.pipeline_stage <> 'lost'
         JOIN trade_accounts trade
           ON trade.firebase_uid = link.firebase_uid AND trade.partner_type = 'installer'
           AND ${verifiedTradeAccountPredicate("trade")}

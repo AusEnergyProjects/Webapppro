@@ -116,7 +116,7 @@ async function deliveryContext(db: D1Database, deliveryId: string) {
       version.document_snapshot_json, version.issued_pdf_object_key,
       version.issued_pdf_sha256, version.issued_pdf_size_bytes,
       quote.quote_number, quote.current_version_number, quote.status quote_status,
-      work.record_status work_status, work.source_type,
+      work.record_status work_status, work.source_type, work.stage work_stage, detail.pipeline_stage,
       detail.customer_source, detail.accepted_disclosure_sha256,
       detail.accepted_disclosure_snapshot, customer.email customer_email,
       customer.record_status customer_status
@@ -189,6 +189,7 @@ function validateContext(row: Row, now: Date) {
     : initialIdempotencyKey;
   if (
     row.work_status !== "active"
+    || row.work_stage === "cancelled" || row.pipeline_stage === "lost"
     || row.customer_status !== "active"
     || row.version_status !== "issued"
     || row.quote_status !== "issued"

@@ -27,7 +27,7 @@ function fixture(t) {
   sqlite.exec(`
     CREATE TABLE trade_accounts (firebase_uid TEXT PRIMARY KEY, business_name TEXT);
     CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY,firebase_uid TEXT,partner_type TEXT DEFAULT 'installer',record_status TEXT DEFAULT 'active',source_type TEXT DEFAULT 'internal',title TEXT,work_number TEXT,stage TEXT DEFAULT 'scheduled',assignee_member_id TEXT DEFAULT 'member');
-    CREATE TABLE trade_crm_job_details (work_order_id TEXT PRIMARY KEY,firebase_uid TEXT,crm_customer_id TEXT,service_site_id TEXT,customer_source TEXT DEFAULT 'trade_owned',invoice_status TEXT DEFAULT 'not_started',invoiced_value_cents INTEGER DEFAULT 0,paid_value_cents INTEGER DEFAULT 0,accepted_disclosure_sha256 TEXT DEFAULT '',accepted_disclosure_snapshot TEXT DEFAULT '');
+    CREATE TABLE trade_crm_job_details (work_order_id TEXT PRIMARY KEY,firebase_uid TEXT,crm_customer_id TEXT,service_site_id TEXT,customer_source TEXT DEFAULT 'trade_owned',pipeline_stage TEXT DEFAULT 'enquiry',invoice_status TEXT DEFAULT 'not_started',invoiced_value_cents INTEGER DEFAULT 0,paid_value_cents INTEGER DEFAULT 0,accepted_disclosure_sha256 TEXT DEFAULT '',accepted_disclosure_snapshot TEXT DEFAULT '');
     CREATE TABLE trade_crm_customers (id TEXT PRIMARY KEY,firebase_uid TEXT,record_status TEXT DEFAULT 'active',first_name TEXT,last_name TEXT,business_name TEXT DEFAULT '',email TEXT);
     CREATE TABLE trade_crm_service_sites (id TEXT PRIMARY KEY,firebase_uid TEXT,record_status TEXT DEFAULT 'active',address_line_1 TEXT,address_line_2 TEXT DEFAULT '',suburb TEXT,address_state TEXT,postcode TEXT);
     CREATE TABLE trade_crm_quote_deliveries (firebase_uid TEXT,crm_customer_id TEXT,channel TEXT DEFAULT 'email',status TEXT);
@@ -130,6 +130,16 @@ test("preview prefills customer and job without sending", async t => {
   assert.deepEqual(draft.missing, []);
   assert.equal(f.sends.length, 0);
   assert.equal(f.rows().length, 0);
+});
+
+test("legacy lost pipeline stops queued and failed follow-ups before transport without deleting history", async t => {
+  const f = fixture(t);
+  const { id } = await f.manual();
+  f.sqlite.exec("UPDATE trade_crm_job_details SET pipeline_stage='lost'");
+  await assert.rejects(f.preview(), /EMAIL_RECIPIENT_UNAVAILABLE/);
+  assert.equal(await deliverFollowUp(f.db, f.services, id, ownerAccess()), "cancelled");
+  assert.equal(f.sends.length, 0);
+  assert.equal(f.rows().length, 1);
 });
 
 test("job context excludes other businesses, protected jobs and unassigned own scope", async t => {

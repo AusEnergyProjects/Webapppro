@@ -4,7 +4,7 @@ import { certificateJobEligibilityPredicate } from "./trade-certificate-eligibil
 export function tradeJobScheduleEligibilitySql(workOrderAlias: string, jobDetailAlias: string) {
   return `${workOrderAlias}.source_type <> 'opportunity'
     AND ${workOrderAlias}.stage <> 'imported'
-    AND COALESCE(${jobDetailAlias}.pipeline_stage, '') <> 'imported'
+    AND COALESCE(${jobDetailAlias}.pipeline_stage, '') NOT IN ('imported', 'lost')
     AND COALESCE(${jobDetailAlias}.customer_source, 'internal') <> 'platform_private'
     AND (COALESCE(${jobDetailAlias}.customer_source, 'internal') <> 'public_lead_released' OR (
       ${jobDetailAlias}.quote_status = 'accepted' AND EXISTS (

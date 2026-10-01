@@ -31,7 +31,7 @@ type RetakeDialog = { review: PhotoRequirementReview; reasonCode: PhotoRetakeRea
 const day = () => new Date().toISOString().slice(0, 10);
 const timeLabel = (minutes: number) => minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? `${minutes % 60}m` : ""}`.trim() : `${minutes}m`;
 
-export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly = false, embedded = false, canOpenInvoice = true, canOpenHandover = true, refreshKey = 0, onNavigate, onChanged }: { user: User; workOrderId: string; isProtected: boolean; readOnly?: boolean; embedded?: boolean; canOpenInvoice?: boolean; canOpenHandover?: boolean; refreshKey?: number; onNavigate?: (target: "forms" | "tasks" | "notes" | "invoice" | "handover" | "rental-assessment" | "activity-forms") => void; onChanged?: () => Promise<void> }) {
+export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly = false, embedded = false, showProgress = true, canOpenInvoice = true, canOpenHandover = true, refreshKey = 0, onNavigate, onChanged }: { user: User; workOrderId: string; isProtected: boolean; readOnly?: boolean; embedded?: boolean; showProgress?: boolean; canOpenInvoice?: boolean; canOpenHandover?: boolean; refreshKey?: number; onNavigate?: (target: "forms" | "tasks" | "notes" | "invoice" | "handover" | "rental-assessment" | "activity-forms") => void; onChanged?: () => Promise<void> }) {
   const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<Result>({ protectedJob: isProtected, timeEntries: [], media: [], signoffs: [] });
   const [loading, setLoading] = useState(true);
@@ -264,7 +264,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
     return "";
   }
 
-  const readiness = data.fieldJob && <section className="crm-today-checklist" aria-labelledby="today-checklist-title">
+  const readiness = showProgress && data.fieldJob && <section className="crm-today-checklist" aria-labelledby="today-checklist-title">
     <header><span>Job progress</span><h4 id="today-checklist-title">What must happen on this job</h4></header>
     {embedded && <p>{readOnly ? "View only. " : ""}{data.fieldJob.actionUnavailableReason}</p>}
     <ol>{data.fieldJob.checklist.map((item) => {

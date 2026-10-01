@@ -98,6 +98,15 @@ const blockers = [
   ["sync", "Pending sync", "sync"], ["future", "Future requirement", "future-target"],
 ].map(([key, label, target]) => ({ key, label, target }));
 
+test("lost archive can retain recorded evidence without requirements or completion prompts", async () => {
+  const h = panelHarness("TradeFieldWorkPanel", { user, workOrderId: "job", embedded: true, readOnly: true, showProgress: false }, async () => Response.json(fieldData({ blockers })));
+  const tree = await h.ready();
+  assert.equal(byId(tree, "today-checklist-title"), undefined);
+  assert.ok(byId(tree, "field-evidence"));
+  assert.equal(child(tree, "TradeActivityWorkPackPanel").props.readOnly, true);
+  assert.equal(nodes(tree, node => node.type === "form").length, 0);
+});
+
 test("embedded readiness routes every actionable blocker and explains sync or unknown requirements", async () => {
   const navigated = [];
   const data = fieldData({ blockers });

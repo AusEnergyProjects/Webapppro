@@ -4,6 +4,7 @@ import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { appointmentEndsAt } from "../src/lib/trade-schedule.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
+import { jobSalesOutcomeFixture } from "./helpers/trade-job-sales-outcome-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -426,6 +427,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
   });
   const rentalCredentialHelpers = loadTypescriptModule("../src/lib/trade-rental-credentials.ts", {});
   return loadTypescriptModule("../src/app/api/trade-crm/route.ts", {
+    "@/lib/trade-job-sales-outcome-server": jobSalesOutcomeFixture,
     "@/lib/trade-business-reports-server": { loadBusinessReport: reportLoader },
     "@/lib/trade-business-reports": { ReportInputError },
     "../../../../db": { getD1: () => d1 },

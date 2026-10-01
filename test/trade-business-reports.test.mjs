@@ -39,6 +39,25 @@ function costJob(f, id, actual = true) {
   }
 }
 
+test("lost records leave operational report queues while quote and invoice history remains reportable", async t => {
+  const f = fixture(); t.after(() => f.db.close());
+  f.job("lost", { stage: "blocked" }, { pipeline_stage: "lost" });
+  f.invoice("lost");
+  f.insert("trade_work_order_tasks", { id: "task", work_order_id: "lost", firebase_uid: "owner", status: "pending", due_at: "2026-09-01" });
+  f.insert("trade_crm_job_notes", { id: "issue", work_order_id: "lost", firebase_uid: "owner", note_type: "issue", issue_status: "open" });
+  f.job("pending-quote", {}, { pipeline_stage: "quoting", quote_status: "issued" });
+  f.job("approved", { source_type: "internal" }, { pipeline_stage: "approved", quote_status: "not_started", customer_source: "trade_owned" });
+  const report = await f.report();
+  assert.equal(report.work.openJobs, 2);
+  assert.equal(report.work.awaitingSchedule, 1);
+  assert.equal(report.work.waitingJobs, 0);
+  assert.equal(report.work.overdueTasks, 0);
+  assert.equal(report.work.openIssues, 0);
+  assert.equal(report.work.stages.some(stage => stage.key === "blocked"), false);
+  assert.equal(report.current.invoiceCount, 1);
+  assert.equal(report.receivables.outstandingCents, 11000);
+});
+
 test("job margin uses whole-job invoices less credits and separately aggregated actual costs", async () => {
   const f = fixture(); costJob(f, "complete");
   f.db.exec("UPDATE trade_crm_quick_invoices SET sent_at='2026-08-12T12:00Z'");
