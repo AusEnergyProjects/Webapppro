@@ -847,11 +847,15 @@ function DirectTradeDashboardContent() {
   const observePortalHeader = useCallback((header: HTMLElement | null) => {
     const shell = header?.parentElement;
     if (!header || !shell) return;
-    const measure = () => shell.style.setProperty("--trade-header-height", `${header.offsetHeight}px`);
+    // Include the business switcher above this page. Document coordinates stay
+    // stable when the main workspace scrolls and the rail becomes sticky.
+    const measure = () => shell.style.setProperty("--trade-rail-top-offset", `${Math.max(0, header.getBoundingClientRect().bottom + window.scrollY)}px`);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(header);
-    return () => { observer.disconnect(); shell.style.removeProperty("--trade-header-height"); };
+    const businessSwitcher = header.closest(".direct-trade-dashboard-page")?.previousElementSibling;
+    if (businessSwitcher) observer.observe(businessSwitcher);
+    return () => { observer.disconnect(); shell.style.removeProperty("--trade-rail-top-offset"); };
   }, []);
   const registerMapSave = useCallback((save: (() => Promise<unknown>) | null) => mapNavigation.register(save), [mapNavigation]);
   const setWorkspace = useCallback((next: SetStateAction<DashboardWorkspace>, after?: () => void) => {
