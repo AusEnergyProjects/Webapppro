@@ -32,7 +32,8 @@ import {
   queueCounts,
 } from '@/lib/database';
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
-import { deviceRegistration, forgetPushToken, getDeviceId, getDeviceName, getRememberedPushToken, notificationDeviceState, rememberPushToken, requestNotificationPermissionOnce } from '@/lib/device';
+import { forgetPushToken, getDeviceId, getDeviceName, getRememberedPushToken, notificationDeviceState, rememberPushToken, requestNotificationPermissionOnce } from '@/lib/device';
+import { persistDeviceRegistration, waitForDeviceRegistrations } from '@/lib/device-registration';
 import { disableNativeCalls, subscribeNativeCallToken } from '@/lib/native-system-calls';
 import type { EvidenceCaptureEnvelope } from '@/lib/evidence';
 import {
@@ -137,11 +138,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const waitForNotificationRegistrations = useCallback(async () => {
     await waitForActiveSync().catch(() => undefined);
     await Promise.allSettled([...notificationRegistrations.current]);
+    await waitForDeviceRegistrations();
   }, []);
 
   const stopNotificationRegistration = useCallback(async () => {
     DeviceEventEmitter.emit('tlink:call-identity-invalidated');
     await Promise.allSettled([...notificationRegistrations.current]);
+    await waitForDeviceRegistrations();
     await disableNativeCalls();
   }, []);
 
@@ -427,6 +430,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!fieldPrincipal) {
       switching.current = true;
       await Promise.allSettled([...notificationRegistrations.current]);
+      await waitForDeviceRegistrations();
       if (generation !== authGeneration.current) return;
       await disableNativeCalls();
       if (generation !== authGeneration.current) return;
@@ -470,9 +474,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!signedIn || access.status !== 'approved' || switching.current) return;
     const generation = authGeneration.current;
     const expectedBusinessKey = user?.localOwnerKey;
-    const registration = (async () => {
-      if (generation !== authGeneration.current || switching.current) return;
-      const registration = await deviceRegistration(options);
+    const registration = persistDeviceRegistration(async registration => {
       const modes = await resolveFieldAccessModes();
       if (generation !== authGeneration.current || switching.current) return;
       const results = await Promise.allSettled(modes.map(mode => apiRequest(mode === 'creditex_manual'
@@ -481,7 +483,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }, undefined, { expectedBusinessKey })));
       const failed = results.find(result => result.status === 'rejected');
       if (failed?.status === 'rejected') throw failed.reason;
-    })();
+    }, options, () => generation === authGeneration.current && !switching.current);
     notificationRegistrations.current.add(registration);
     try {
       await registration;

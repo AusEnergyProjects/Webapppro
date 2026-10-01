@@ -64,6 +64,13 @@ function harness(overrides = {}) {
     onAuthStateChanged: (_auth, callback) => { state.authCallback = callback; return () => {}; },
     ...overrides,
   };
+  const registrationExports = {};
+  const registrationSource = readFileSync(new URL('../src/lib/device-registration.ts', import.meta.url), 'utf8');
+  new Function('require', 'exports', compile(registrationSource))(id => {
+    assert.equal(id, '@/lib/device');
+    return { deviceRegistration: options => dependencies.deviceRegistration(options) };
+  }, registrationExports);
+  Object.assign(dependencies, registrationExports);
   const names = ['stopNotificationRegistration', 'registerNotificationDevice', 'signOut', 'openBusinessChooser', 'activateBusiness'];
   const bodies = names.map(name => { assert.ok(callbacks.has(name), name); return `const ${name} = ${callbacks.get(name)};`; }).join('\n');
   const auth = effects.find(code => code.includes('onAuthStateChanged'));
@@ -97,7 +104,7 @@ test('sign-out drains an already sent registration before disabling native calls
 test('business switching waits for delayed device preparation, then disables it without posting old-scope tokens', async () => {
   const prepare = deferred(); let h;
   h = harness({ deviceRegistration: async () => { await prepare.promise; h.state.nativeEnabled = true; h.state.events.push('native-enabled'); return { pushToken: 'stale-token' }; } });
-  const registration = h.api.registerNotificationDevice();
+  const registration = h.api.registerNotificationDevice(); await settle();
   const switching = h.api.openBusinessChooser(); await settle(); assert.equal(h.state.requests.length, 0);
   prepare.resolve(); await Promise.all([registration, switching]);
   assert.equal(h.state.nativeEnabled, false); assert.equal(h.state.serverToken, '');

@@ -185,15 +185,26 @@ async function dispatchNative(actor: MessageActor, payload: TradePushPayload, db
       .bind(payload.kind,payload.id,hash,now,now,device.id,device.push_token,device.voip_push_token,device.native_call_capable,device.push_provider,...fresh.values).run();
     if (!claimed.meta.changes) return;
     result.attempted++;
-    const latest = nativeDeliveryGuard(actor,payload,ended);
-    const current = await db.prepare(`SELECT ${nativeColumns} FROM trade_mobile_devices d WHERE d.id=? AND d.push_token=? AND d.voip_push_token=? AND d.native_call_capable=? AND d.push_provider=? AND ${latest.sql}`)
-      .bind(device.id,device.push_token,device.voip_push_token,device.native_call_capable,device.push_provider,...latest.values).first<NativeDeviceRow>();
-    const voip = Boolean(current && payload.kind === 'team-call' && !ended && current.native_call_capable && current.voip_push_token);
-    const nativePayload: TradePushPayload = current && payload.kind === 'team-call' && !ended && current.native_call_capable
-      ? { ...payload, answerToken: await createTeamCallAnswerToken({ callId: payload.id, threadId: payload.threadId, deviceRegistrationId: current.id }, db) } : payload;
-    const outcome = !current ? 'stale' : current.push_provider === 'apns'
-      ? apns ? await sendTradeApns(voip ? current.voip_push_token : current.push_token,nativePayload,apns,undefined,{voip,ended}) : 'failed'
-      : fcm ? await sendTradeNativePush(current.push_token,nativePayload,fcm,undefined,{nativeCall:Boolean(current.native_call_capable),ended}) : 'failed';
+    let current: NativeDeviceRow | null = null, voip = false;
+    let outcome: Awaited<ReturnType<typeof sendTradeApns>> = 'failed';
+    let stage: 'registration_check' | 'answer_grant' | 'provider_send' = 'registration_check';
+    try {
+      const latest = nativeDeliveryGuard(actor,payload,ended);
+      current = await db.prepare(`SELECT ${nativeColumns} FROM trade_mobile_devices d WHERE d.id=? AND d.push_token=? AND d.voip_push_token=? AND d.native_call_capable=? AND d.push_provider=? AND ${latest.sql}`)
+        .bind(device.id,device.push_token,device.voip_push_token,device.native_call_capable,device.push_provider,...latest.values).first<NativeDeviceRow>();
+      voip = Boolean(current && payload.kind === 'team-call' && !ended && current.native_call_capable && current.voip_push_token);
+      stage = 'answer_grant';
+      const nativePayload: TradePushPayload = current && payload.kind === 'team-call' && !ended && current.native_call_capable
+        ? { ...payload, answerToken: await createTeamCallAnswerToken({ callId: payload.id, threadId: payload.threadId, deviceRegistrationId: current.id }, db) } : payload;
+      stage = 'provider_send';
+      outcome = !current ? 'stale' : current.push_provider === 'apns'
+        ? apns ? await sendTradeApns(voip ? current.voip_push_token : current.push_token,nativePayload,apns,undefined,{voip,ended}) : 'failed'
+        : fcm ? await sendTradeNativePush(current.push_token,nativePayload,fcm,undefined,{nativeCall:Boolean(current.native_call_capable),ended}) : 'failed';
+    } catch {
+      // A denied grant or preparation error must settle the durable claim too.
+      // Log only fixed stages, never credentials, recipient details or payloads.
+      console.warn('tlink_native_push_dispatch_failed', { provider: device.push_provider, kind: payload.kind, stage, ended });
+    }
     const deliveryStatus = outcome === 'stale' ? 'expired' : outcome;
     if (deliveryStatus === 'accepted') result.accepted++; else result.failed++;
     await db.prepare('UPDATE trade_push_deliveries SET status=?,updated_at=? WHERE event_kind=? AND event_id=? AND endpoint_hash=? AND owner_uid=?')
@@ -267,8 +278,15 @@ export async function notifyTeamMessage(actor: MessageActor, threadId: string, m
 }
 
 export async function notifyTeamCall(actor: MessageActor, call: Pick<TeamCall,'id'|'threadId'>, db: D1Database = getD1()): Promise<TradePushDeliveryResult> {
-  try { return await dispatch(actor,'team-call',pushId(call.threadId),pushId(call.id),db); }
-  catch { return { attempted:0,accepted:0,failed:1,skipped:true }; }
+  try {
+    const result = await dispatch(actor,'team-call',pushId(call.threadId),pushId(call.id),db);
+    console.info('tlink_call_push_dispatch', { phase: 'incoming', ...result });
+    return result;
+  } catch {
+    const result = { attempted:0,accepted:0,failed:1,skipped:true };
+    console.warn('tlink_call_push_dispatch', { phase: 'incoming', stage: 'dispatch', ...result });
+    return result;
+  }
 }
 
 export async function notifyTeamCallEnded(actor: MessageActor, call: Pick<TeamCall,'id'|'threadId'>, db: D1Database = getD1()): Promise<TradePushDeliveryResult> {

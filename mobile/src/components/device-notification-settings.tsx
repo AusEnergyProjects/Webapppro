@@ -4,7 +4,8 @@ import { AppState, Linking, Platform, StyleSheet, Switch, Text, View } from 'rea
 
 import { FieldButton } from '@/components/field-button';
 
-import { deviceRegistration, getDeviceId, getNativePushToken, notificationDeviceState, setNotificationsMuted } from '@/lib/device';
+import { getDeviceId, getNativePushToken, notificationDeviceState, setNotificationsMuted } from '@/lib/device';
+import { persistDeviceRegistration } from '@/lib/device-registration';
 import { getAndroidCallNotificationStatus, openAndroidCallNotificationSettings, type AndroidCallNotificationStatus, type AndroidCallSettingsTarget } from '@/lib/native-system-calls';
 import { resolveFieldAccessModes } from '@/lib/sync';
 import { colours, radius, spacing } from '@/lib/theme';
@@ -69,12 +70,15 @@ export function DeviceNotificationSettings() {
       if (!sync.online) setMessage('Reconnect to finish applying this notification setting.');
       else {
         const modes = await resolveFieldAccessModes();
-        const registration = await deviceRegistration();
         if (!modes.length) throw new Error('Reconnect and check your team access to update notifications.');
-        await Promise.all(modes.map((mode) => apiRequest(mode === 'creditex_manual'
-          ? '/api/creditex/manual-field/devices' : '/api/trade-team/devices', {
-          method: 'POST', body: JSON.stringify(registration),
-        })));
+        await persistDeviceRegistration(async registration => {
+          const results = await Promise.allSettled(modes.map((mode) => apiRequest(mode === 'creditex_manual'
+            ? '/api/creditex/manual-field/devices' : '/api/trade-team/devices', {
+            method: 'POST', body: JSON.stringify(registration),
+          })));
+          const failed = results.find(result => result.status === 'rejected');
+          if (failed?.status === 'rejected') throw failed.reason;
+        });
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'This setting could not be updated. Try again.');

@@ -47,11 +47,11 @@ function fixture() {
   const now = new Date().toISOString();
   sqlite.prepare(`INSERT INTO trade_message_threads(id,owner_uid,kind,subject,created_by_member_id,request_id,creation_hash,created_at,updated_at) VALUES('thread-a','business-a','group','Private team','owner','request-create','hash',?,?)`).run(now,now);
   for(const member of ['owner','jane','john']) sqlite.prepare("INSERT INTO trade_message_participants(thread_id,owner_uid,member_id) VALUES('thread-a','business-a',?)").run(member);
-  const sends = [], nativeSends = [], state = {configured:true,providerStatus:'accepted',nativeConfigured:false,apnsConfigured:false,nativeAuthReady:true,nativeProviderStatus:'accepted',beforeNativeSend:()=>{},beforeRun:()=>{},beforeRead:()=>{}};
+  const sends = [], nativeSends = [], state = {configured:true,providerStatus:'accepted',nativeConfigured:false,apnsConfigured:false,nativeAuthReady:true,nativeProviderStatus:'accepted',beforeAnswerGrant:()=>{},beforeNativeSend:()=>{},beforeRun:()=>{},beforeRead:()=>{}};
   const statement = (sql,values=[]) => ({bind:(...params)=>statement(sql,params),first:async()=>{state.beforeRead(sql);return sqlite.prepare(sql).get(...values)||null;},
     all:async()=>({results:sqlite.prepare(sql).all(...values)}),run:async()=>{state.beforeRun(sql);return {meta:{changes:Number(sqlite.prepare(sql).run(...values).changes)}};}});
   const db = {prepare:statement};
-  const server = load('../src/lib/trade-push-server.ts',{'./trade-call-answer-access':{createTeamCallAnswerToken:async({callId,threadId,deviceRegistrationId})=>`scoped:${callId}:${threadId}:${deviceRegistrationId}`},'../../db':{getD1:()=>db},'./trade-message-media-access':access,'./trade-access-server':account,'./trade-push':pure,'./trade-team-presence':presence,'./trade-team-calls':calls,
+  const server = load('../src/lib/trade-push-server.ts',{'./trade-call-answer-access':{createTeamCallAnswerToken:async({callId,threadId,deviceRegistrationId})=>{await state.beforeAnswerGrant();return `scoped:${callId}:${threadId}:${deviceRegistrationId}`;}},'../../db':{getD1:()=>db},'./trade-message-media-access':access,'./trade-access-server':account,'./trade-push':pure,'./trade-team-presence':presence,'./trade-team-calls':calls,
     './trade-push-provider':{tradePushCredentials:()=>state.configured?credentials:null,sendTradePush:async(subscription,payload)=>{sends.push({subscription,payload});return state.providerStatus;}},
     './trade-native-push-provider':{tradeApnsCredentials:()=>state.apnsConfigured?{}:null,authorizeTradeApns:async()=>state.nativeAuthReady?{token:'synthetic',expiresAt:Date.now()+3600000}:null,sendTradeApns:async(token,payload,_auth,_fetch,options)=>{nativeSends.push({token,payload,provider:'apns',options});await state.beforeNativeSend();return state.nativeProviderStatus;},tradeNativePushCredentials:()=>state.nativeConfigured?{clientEmail:'synthetic',privateKey:'synthetic'}:null,authorizeTradeNativePush:async()=>state.nativeAuthReady?{accessToken:'synthetic',expiresAt:Date.now()+3600000}:null,sendTradeNativePush:async(token,payload,_auth,_fetch,options)=>{nativeSends.push({token,payload,provider:'fcm',options});await state.beforeNativeSend();return state.nativeProviderStatus;}}});
   const subscribe = (actor,suffix=actor.memberId,options={}) => server.subscribeTradePush(actor,{subscription:browserSubscription(suffix),messages:true,calls:true,...options},db);
@@ -431,6 +431,55 @@ test('answer grants are unique per native recipient and never delivered to brows
   assert.equal((await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db)).accepted,3);
   assert.deepEqual(f.nativeSends.map(send=>send.payload.answerToken).sort(),[first,second].map(device=>`scoped:call-1:thread-a:${device.id}`).sort());
   assert.equal(f.sends.length,1);assert.equal(f.sends[0].payload.answerToken,undefined);
+ }finally{f.close();}
+});
+
+test('a claimed native call grant failure is recorded, remains fail-closed and logs no private data',async t=>{
+ const f=fixture();
+ const warnings=t.mock.method(console,'warn',()=>{}),summaries=t.mock.method(console,'info',()=>{});
+ try{
+  f.state.configured=false;f.state.apnsConfigured=true;
+  const device=f.native(jane,'ios',{platform:'ios',provider:'apns',token:'ab'.repeat(32)});
+  f.sqlite.prepare('UPDATE trade_mobile_devices SET native_call_capable=1 WHERE id=?').run(device.id);
+  f.state.beforeAnswerGrant=()=>{throw new Error('CALL_ACCESS_REQUIRED private recipient jane-uid ab'.repeat(32));};
+  f.call();
+  const result=await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db);
+  assert.deepEqual(result,{attempted:1,accepted:0,failed:1,skipped:false});
+  assert.equal(f.sqlite.prepare('SELECT status FROM trade_push_deliveries').get().status,'failed');
+  assert.equal(f.nativeSends.length,0,'a denied grant cannot fall back to an unscoped call push');
+  assert.equal(f.sqlite.prepare('SELECT push_token FROM trade_mobile_devices WHERE id=?').get(device.id).push_token,device.token);
+  assert.deepEqual(warnings.mock.calls.map(call=>call.arguments),[['tlink_native_push_dispatch_failed',{provider:'apns',kind:'team-call',stage:'answer_grant',ended:false}]]);
+  assert.deepEqual(summaries.mock.calls.map(call=>call.arguments),[['tlink_call_push_dispatch',{phase:'incoming',...result}]]);
+  assert.equal((await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db)).attempted,0);
+  assert.equal(warnings.mock.calls.length,1,'the failed durable claim prevents duplicate preparation');
+ }finally{f.close();}
+});
+
+test('exceptions after a native delivery claim settle it without blocking other recipients',async t=>{
+ const f=fixture();t.mock.method(console,'warn',()=>{});
+ try{
+  f.state.configured=false;f.state.nativeConfigured=true;f.native(jane);f.native(john);f.message();
+  let sent=0;
+  f.state.beforeNativeSend=()=>{if(sent++===0)throw new Error('Synthetic provider exception');};
+  assert.deepEqual(await f.server.notifyTeamMessage(owner,'thread-a','message-1',f.db),{attempted:2,accepted:1,failed:1,skipped:false});
+  assert.deepEqual(f.sqlite.prepare('SELECT status FROM trade_push_deliveries ORDER BY status').all().map(row=>row.status),['accepted','failed']);
+  assert.equal((await f.server.notifyTeamMessage(owner,'thread-a','message-1',f.db)).attempted,0);
+  assert.equal(f.nativeSends.length,2);
+ }finally{f.close();}
+});
+
+test('call dispatch logs distinguish no recipients from an unexpected dispatch failure without payloads',async t=>{
+ const f=fixture();
+ const summaries=t.mock.method(console,'info',()=>{}),warnings=t.mock.method(console,'warn',()=>{});
+ try{
+  f.call();
+  const empty=await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db);
+  assert.deepEqual(empty,{attempted:0,accepted:0,failed:0,skipped:false});
+  assert.deepEqual(summaries.mock.calls[0].arguments,['tlink_call_push_dispatch',{phase:'incoming',...empty}]);
+  f.state.beforeRead=()=>{throw new Error('Private database failure jane-uid');};
+  const failed=await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db);
+  assert.deepEqual(failed,{attempted:0,accepted:0,failed:1,skipped:true});
+  assert.deepEqual(warnings.mock.calls[0].arguments,['tlink_call_push_dispatch',{phase:'incoming',stage:'dispatch',...failed}]);
  }finally{f.close();}
 });
 

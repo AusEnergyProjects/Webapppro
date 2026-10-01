@@ -128,7 +128,8 @@ test('settings mute waits for in-flight registration to settle before posting th
   '@/lib/native-system-calls':{getAndroidCallNotificationStatus:async()=>null},
   '@/lib/use-business-api':{useBusinessApi:()=>async(_path,init)=>{if(init?.method==='POST'){events.push('post-disabled');assert.equal(JSON.parse(init.body).pushToken,'');}return {native:{configured:true,registered:false}};}},
   '@/providers/app-provider':{useApp:()=>({sync:{online:true},waitForNotificationRegistrations:async()=>{events.push('wait');await barrier;}})},
-  '@/lib/device':{setNotificationsMuted:async value=>{events.push(`muted:${value}`);},deviceRegistration:async()=>{events.push('registration');return {pushToken:'',voipPushToken:'',nativeCallCapable:false};},notificationDeviceState:async()=>({granted:true,muted:true,physicalDevice:true,canAskAgain:true}),getDeviceId:async()=>'device-1234',getNativePushToken:async()=>assert.fail('muting must not request token')},
+  '@/lib/device-registration':{persistDeviceRegistration:async persist=>{events.push('registration');await persist({pushToken:'',voipPushToken:'',nativeCallCapable:false});}},
+  '@/lib/device':{setNotificationsMuted:async value=>{events.push(`muted:${value}`);},notificationDeviceState:async()=>({granted:true,muted:true,physicalDevice:true,canAskAgain:true}),getDeviceId:async()=>'device-1234',getNativePushToken:async()=>assert.fail('muting must not request token')},
   '@/lib/sync':{resolveFieldAccessModes:async()=>['trade_team']},'@/lib/theme':{colours:{},radius:{},spacing:{}},
  });
  const view=api.DeviceNotificationSettings();

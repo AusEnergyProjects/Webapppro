@@ -13,7 +13,8 @@ import {
   resolveAction,
   setSetting,
 } from '@/lib/database';
-import { deviceRegistration, forgetPushToken, getDeviceId } from '@/lib/device';
+import { forgetPushToken, getDeviceId } from '@/lib/device';
+import { persistDeviceRegistration } from '@/lib/device-registration';
 import type { FieldAccessMode, FieldJobState, WorkPackAnswerConflictState, OfflineAction, SyncResponse } from '@/lib/types';
 import { processUploadQueue } from '@/lib/uploads';
 import { processRentalSaveQueue, purgeDeletedRentalJob, restoreRentalJobAccess } from '@/lib/rental-save-queue';
@@ -102,11 +103,12 @@ function syncPath(mode: FieldAccessMode) {
     : '/api/trade-team/sync';
 }
 
-async function registerDevice(mode: FieldAccessMode) {
-  const registration = await deviceRegistration();
-  await apiRequest(devicePath(mode), {
-    method: 'POST',
-    body: JSON.stringify(registration),
+async function registerDevice(mode: FieldAccessMode, expectedBusinessKey: string) {
+  await persistDeviceRegistration(async registration => {
+    await apiRequest(devicePath(mode), {
+      method: 'POST',
+      body: JSON.stringify(registration),
+    }, undefined, { expectedBusinessKey });
   });
 }
 
@@ -183,7 +185,7 @@ async function performSync(verifiedModes?: FieldAccessMode[]): Promise<SyncOutco
     await setSetting('field_access_mode', modes[0]);
     await purgeExpiredAddresses();
     for (const mode of modes) {
-      await registerDevice(mode);
+      await registerDevice(mode, principal.localOwnerKey);
       if (mode === 'trade_team') await processActivityFormCompletionQueue();
       // A large photo backlog must not hold up new assignments, ordinary actions or the next job.
       if (mode === 'trade_team') void processRentalSaveQueue().catch(() => {

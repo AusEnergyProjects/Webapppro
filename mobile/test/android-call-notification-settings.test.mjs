@@ -82,11 +82,11 @@ function harness({ platform = 'android', muted = false, status = allowed, native
     '@/lib/use-business-api': { useBusinessApi: () => request },
     '@/providers/app-provider': { useApp: () => ({ sync: { online: true }, waitForNotificationRegistrations: async () => undefined }) },
     '@/lib/native-system-calls': bridge,
+    '@/lib/device-registration': { persistDeviceRegistration: () => assert.fail('Settings reads must not register a device') },
     '@/lib/device': {
       notificationDeviceState: async () => { observed.deviceReads++; return { granted: true, muted, physicalDevice: true, canAskAgain: true }; },
       getDeviceId: async () => 'device-123456',
       getNativePushToken: () => assert.fail('Settings reads must not request notification permission'),
-      deviceRegistration: () => assert.fail('Settings reads must not register a device'),
       setNotificationsMuted: () => assert.fail('Call settings buttons must not change the notification mute preference'),
     },
     '@/lib/sync': { resolveFieldAccessModes: async () => ['trade_team'] },
