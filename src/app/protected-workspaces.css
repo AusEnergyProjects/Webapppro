@@ -1699,7 +1699,7 @@
 .tlink-command-status { color: #5e7772; font-size: .56rem; margin-top: 10px; }
 .tlink-command-dialog > footer { align-items: center; background: #eef5f2; border-top: 1px solid #d6e4df; color: #687f7a; display: flex; gap: 14px; padding: 8px 18px; }
 .tlink-command-dialog > footer span { align-items: center; display: flex; font-size: .49rem; gap: 4px; }
-.trade-portal-shell .dashboard-account-actions { align-items: center; display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; gap: 10px; min-width: 0; text-align: left; }
+.trade-portal-shell .dashboard-account-actions { align-items: center; display: flex; flex: 0 0 auto; flex-direction: row; flex-wrap: nowrap; gap: 10px; min-width: 0; text-align: left; }
 .trade-portal-shell .dashboard-account-actions > div { display: grid; gap: 2px; max-width: 270px; }
 .trade-portal-shell .dashboard-account-actions .dashboard-account-summary { flex: 1 1 160px; min-width: 0; }
 .trade-portal-shell .dashboard-account-actions small { color: #d4dfde; font-size: .52rem; letter-spacing: .04em; text-transform: uppercase; }
@@ -1707,6 +1707,7 @@
 .trade-portal-shell .dashboard-account-actions a,
 .trade-portal-shell .dashboard-account-actions button { background: color-mix(in srgb, var(--trade-header-control) 72%, transparent); border: 1px solid var(--trade-header-control-border); border-radius: 9px; color: #fff; font-size: .61rem; font-weight: 800; margin: 0; min-height: 44px; padding: 8px 11px; text-decoration: none; }
 .trade-portal-shell .dashboard-account-actions :is(a, button):focus-visible { outline: 3px solid #b1eee0; outline-offset: 3px; }
+.trade-portal-shell .dashboard-account-actions > button { flex: 0 0 auto; white-space: nowrap; }
 .trade-portal-shell .dashboard-account-actions a:hover,
 .trade-portal-shell .dashboard-account-actions button:hover { background: var(--trade-header-control-hover); border-color: #ffffff99; }
 .trade-portal-shell .dashboard-account-actions .tlink-get-app { align-items: center; background: #0a2936; display: flex; gap: 7px; padding: 6px 9px; white-space: nowrap; }
@@ -1945,6 +1946,7 @@
 }
 
 @media (max-width: 1100px) {
+  .trade-portal-shell .dashboard-account-actions { flex-wrap: wrap; }
   .trade-portal-shell { grid-template-columns: 210px minmax(0, 1fr); }
   .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { margin-left: 24px; margin-right: 24px; }
   .trade-portal-intro { padding-left: 24px; padding-right: 24px; }

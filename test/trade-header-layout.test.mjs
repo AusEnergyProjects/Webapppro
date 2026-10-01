@@ -25,9 +25,9 @@ const context = {
   tradeBusinessThemeGradient: () => "linear-gradient(135deg,#093d45,#0d635b)",
   TLinkBrand: ({ context }) => jsx.jsxs("span", { className: "tlink-brand", children: [jsx.jsx("svg", { className: "tlink-brand-mark" }), jsx.jsxs("span", { children: [jsx.jsx("strong", { children: "TLink" }), jsx.jsx("small", { children: context })] })] }),
   AeaProductLink: () => jsx.jsxs("a", { className: "tlink-aea-product-link", href: "/", children: [jsx.jsx("span", { className: "tlink-aea-product-mark" }), jsx.jsx("span", { className: "tlink-aea-product-name", children: "Australian Energy Assessments" })] }),
-  TLinkCommandCentre: () => jsx.jsxs("button", { className: "tlink-command-launcher", children: [jsx.jsx("span", { className: "tlink-command-search-icon" }), jsx.jsx("span", { children: "Search TLink" })] }),
+  TLinkCommandCentre: () => jsx.jsxs("button", { className: "tlink-command-launcher", children: [jsx.jsx("span", { className: "tlink-command-search-icon" }), jsx.jsx("span", { children: "Search TLink" }), jsx.jsx("kbd", { children: "Ctrl K" })] }),
   TradeJobNotifications: () => jsx.jsx("div", { className: "tlink-job-notifications", children: jsx.jsx("button", { "aria-label": "Work updates", children: "!" }) }),
-  TradeTeamPresence: () => jsx.jsx("div", { className: "tlink-presence-presence", children: jsx.jsx("button", { className: "tlink-presence-control", children: "Available" }) }),
+  TradeTeamPresence: () => jsx.jsx("div", { className: "tlink-presence-presence", children: jsx.jsxs("label", { className: "tlink-presence-control", children: [jsx.jsx("span", { className: "tlink-presence-dot online" }), jsx.jsx("select", { "aria-label": "My call status", children: jsx.jsx("option", { value: "online", children: "Online" }) })] }) }),
   Image: ({ alt, width, height }) => jsx.jsx("span", { "aria-label": alt, style: { display: "inline-block", width, height } }),
 };
 const renderHeader = overrides => {
@@ -40,9 +40,9 @@ const executablePath = [process.env.TEST_BROWSER_PATH, "C:/Program Files/Google/
 test("business header shows identity and account controls directly without a menu at desktop and phone widths", { skip: !executablePath }, async () => {
   const browser = await chromium.launch({ executablePath, headless: true });
   try {
-    for (const [width, isSupplier] of [320, 390, 768, 960, 1280, 1920].flatMap(width => [[width, false], [width, true]])) {
+    for (const [width, isSupplier] of [320, 390, 768, 960, 1280, 1601, 1920, 2276].flatMap(width => [[width, false], [width, true]])) {
       const page = await browser.newPage({ viewport: { width, height: 850 } });
-      await page.setContent(`<style>${styles}</style><div class="trade-portal-shell ${isSupplier ? "is-supplier" : "is-installer"}">${renderHeader({ isSupplier })}<main>Jobs and forms</main></div>`);
+      await page.setContent(`<style>${styles}</style><body class="aea-platform"><main class="wrap direct-trade-dashboard-page"><div class="trade-portal-shell ${isSupplier ? "is-supplier" : "is-installer"}">${renderHeader({ isSupplier })}<section>Jobs and forms</section></div></main></body>`);
       const bounds = await page.locator(".dashboard-hero").boundingBox();
       if (width < 780) assert.ok(bounds.height < 360, `Header uses ${bounds.height}px at ${width}px`);
       else assert.ok(bounds.height < 200, `Header only occupies its content height at ${width}px (${bounds.height}px)`);
@@ -65,12 +65,27 @@ test("business header shows identity and account controls directly without a men
           || left.y + left.height <= right.y + 1 || right.y + right.height <= left.y + 1, "Header controls do not overlap");
       }
       const labels = ["Business settings", "Sign out", "Australian Energy Assessments", context.profile.businessName];
-      if (!isSupplier) labels.push("Available", "Get the app");
+      if (!isSupplier) labels.push("Get the app");
       for (const label of labels) {
         assert.equal(await page.getByText(label, { exact: true }).isVisible(), true, label);
       }
+      const actionFontSize = width <= 720 ? "13px" : "14px";
+      assert.equal(await page.getByRole("button", { name: "Business settings" }).evaluate(element => getComputedStyle(element).fontSize), actionFontSize, "Use production platform action typography");
+      if (!isSupplier) {
+        assert.equal(await page.getByRole("combobox", { name: "My call status" }).isVisible(), true);
+        assert.equal(await page.getByRole("combobox", { name: "My call status" }).evaluate(element => getComputedStyle(element).fontSize), actionFontSize);
+      }
+      if (width > 1100) {
+        const actions = await page.locator(".dashboard-account-actions").boundingBox();
+        assert.ok(actions.height <= 70, `Business actions stay together at ${width}px (${actions.height}px)`);
+        const settings = await page.getByRole("button", { name: "Business settings" }).boundingBox();
+        const signOut = await page.getByRole("button", { name: "Sign out" }).boundingBox();
+        assert.ok(settings.height <= 44 && signOut.height <= 44, "Desktop action labels stay on one line");
+        assert.ok(Math.abs(settings.y - signOut.y) < 1, "Sign out cannot wrap onto an orphan row");
+        if (width >= 1920) assert.ok(bounds.height < 90, `Wide header stays on one row at ${width}px (${bounds.height}px)`);
+      }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "Header does not cause horizontal scrolling");
-      if (process.env.TEST_HEADER_SCREENSHOT_DIR && !isSupplier && [390, 1280].includes(width)) {
+      if (process.env.TEST_HEADER_SCREENSHOT_DIR && !isSupplier && [390, 1280, 2276].includes(width)) {
         await page.screenshot({ path: `${process.env.TEST_HEADER_SCREENSHOT_DIR}/header-${width}.png` });
       }
       await page.close();
