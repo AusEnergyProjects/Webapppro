@@ -421,9 +421,9 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
     {isBusinessOwner && smsLocked ? <button type="button" className={styles.primary} onClick={openSmsAccount}>Set up customer texting</button> : !smsLocked && <button type="button" className={styles.primary} onClick={startNewChat}>New chat</button>}
     {smsLocked && <span className={styles.welcomeNote}>Team chat is always available.</span>}
   </div>;
-  return <section ref={conversationViewport} className={styles.workspace} data-channel={mode} aria-label="Messages workspace">
+  return <section ref={conversationViewport} className={styles.workspace} data-channel={mode} aria-label="Connect workspace">
     <header className={styles.heading}>
-      <div><h2>Messages</h2><p>{teamOnly ? "Your team, connected." : "Customer texts and team chat."}</p></div>
+      <div><h2>Connect</h2><p>{teamOnly ? "Your team, connected." : "Customer texts, team chats and calls."}</p></div>
       <div className={styles.actions}>
         {!teamOnly && (isBusinessOwner || overview?.canUseSms) && (isBusinessOwner
           ? <button type="button" className={styles.creditButton} onClick={openSmsAccount} aria-label={"SMS credit " + balanceLabel + ". Top up credit"}><span><small>Available SMS credit</small><strong>{balanceLabel}</strong></span><span className={styles.topUpLabel}>Top up <b aria-hidden="true">+</b></span></button>
@@ -475,7 +475,7 @@ export function TradeMessagesWorkspace({ user, getAuthHeaders, onOpenIntegration
         <footer className={styles.listFooter}><span className={styles.channelDot} />{mode === "team" ? "Private team messages" : overview?.smsReady ? "Two-way customer texts" : "Customer texting locked"}{!teamOnly && isBusinessOwner && <button type="button" onClick={openSmsAccount}>SMS account</button>}{teamOnly && overview && <TradeTeamPresence getAuthHeaders={authHeaders} />}</footer>
       </aside>
       <div className={styles.detail} data-message-detail>
-        <button type="button" className={styles.back} aria-label="Back to conversations" onClick={() => { setSelected(null); setCustomer(null); }}>‹ <span>Messages</span></button>
+        <button type="button" className={styles.back} aria-label="Back to conversations" onClick={() => { setSelected(null); setCustomer(null); }}>‹ <span>Connect</span></button>
         {mode === "team" ? selected && overview
           ? <TeamConversation key={selected.id} thread={selected} call={call} memberId={overview.memberId} onRead={onRead} getAuthHeaders={authHeaders} canManageTeam={overview.canManageTeam} />
           : <div className={styles.welcome}><span className={styles.welcomeIcon}><ChatMark /></span><h3>Keep your team close.</h3><p>A quick question, a photo from site, or the next job. It all starts with a message.</p><button type="button" className={styles.primary} onClick={startNewChat}>New chat</button><span className={styles.welcomeNote}>Private to the people in each conversation.</span></div>

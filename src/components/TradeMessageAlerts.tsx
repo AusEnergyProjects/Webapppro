@@ -117,5 +117,5 @@ function MessageAlerts({ children, user, getAuthHeaders, enabled = true, onOpen 
 export function TradeMessageUnreadBadge() {
   const { unreadCount, unavailable } = useTradeMessageAlerts();
   if (!unreadCount && !unavailable) return null;
-  return <b className="tlink-message-alert-badge" title={unavailable ? "Message count could not refresh. Open Messages to check." : `${unreadCount} unread team messages`} aria-label={unavailable ? "Message count needs refreshing" : `${unreadCount} unread team messages`}>{unreadCount > 99 ? "99+" : unreadCount || "!"}</b>;
+  return <b className="tlink-message-alert-badge" title={unavailable ? "Message count could not refresh. Open Connect to check." : `${unreadCount} unread team messages`} aria-label={unavailable ? "Message count needs refreshing" : `${unreadCount} unread team messages`}>{unreadCount > 99 ? "99+" : unreadCount || "!"}</b>;
 }

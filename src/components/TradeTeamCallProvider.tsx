@@ -227,7 +227,7 @@ function TradeTeamCallSession({ user, getAuthHeaders, enabled = true, children }
       // verifies current membership and an explicit Answer requests media.
       void api(`threadId=${encodeURIComponent(threadId)}`).then(result => {
         if (disposed || session.current || starting.current || availabilityVersion !== presenceRevision.current) return;
-        if (result.call?.id !== callId || result.call.status !== "active") { setNotice("This call has ended. You can call your teammate back from Messages."); return; }
+        if (result.call?.id !== callId || result.call.status !== "active") { setNotice("This call has ended. You can call your teammate back from Connect."); return; }
         dismissed.current.delete(callId); stop("",false); setMinimized(false); setIncoming([result.call]);
       }).catch(error => { if (!disposed) setNotice(error instanceof Error ? error.message : "This call is no longer available."); });
     };

@@ -107,7 +107,11 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
 
   function openChecklist(target: string) {
     if (target === "evidence") document.getElementById("field-evidence")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    else if (target === "work-plan") document.getElementById("field-work-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (target === "work-plan") {
+      const workPlan = document.getElementById("field-work-plan");
+      if (workPlan instanceof HTMLDetailsElement) workPlan.open = true;
+      workPlan?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
     else if (["forms", "tasks", "notes", "invoice", "handover"].includes(target)) onNavigate?.(target as "forms" | "tasks" | "notes" | "invoice" | "handover");
   }
 
@@ -145,6 +149,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
       if (!response.ok) throw new Error(result.error || "The field record could not be saved.");
       if (selectedVisitId) await load(); else setData(result);
       form.reset(); setStatus(success);
+      await onChanged?.();
     } catch (error) { setStatus(error instanceof Error ? error.message : "The field record could not be saved."); }
     finally { setBusy(""); }
   }
@@ -159,6 +164,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
       if (!response.ok) throw new Error(result.error || "The job file could not be uploaded.");
       if (selectedVisitId) await load(); else setData(result);
       form.reset(); setStatus("Job photo or document added.");
+      await onChanged?.();
     } catch (error) { setStatus(error instanceof Error ? error.message : "The job file could not be uploaded."); }
     finally { setBusy(""); }
   }

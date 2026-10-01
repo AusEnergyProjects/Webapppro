@@ -138,7 +138,7 @@ test("asset list, review and split timeline SQL execute against the production m
 test("the CRM exposes asset search, warranty filters, review and customer timeline", () => {
   for (const label of ["Installed asset register", "Search installed assets", "All warranties", "Ends within 90 days", "Installer review required", "Confirm link", "Customer and site timeline", "Add installed asset"]) assert.match(workspace, new RegExp(label));
   assert.match(crmWorkspace, /"assets"/);
-  assert.match(crmWorkspace, /<TradeAssetWorkspace user=\{user\} customerId=\{customer\.id\}/);
+  assert.match(crmWorkspace, /view === "assets"[\s\S]*<TradeAssetWorkspace user=\{user\}/);
   assert.match(styles, /\.asset-list \{[^}]*grid-template-columns: repeat\(2/);
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.asset-list \{ grid-template-columns: 1fr; \}/);
 });

@@ -57,7 +57,7 @@ function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm }: 
 }) {
   return <nav className="tlink-team-navigation" aria-label="Staff workspace">
     <button type="button" aria-current={view === "work" ? "page" : undefined} onClick={() => onView("work")}><TLinkNavigationIcon name="work" /><span>My work</span></button>
-    <button type="button" aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="messages" /><span>Messages <TradeMessageUnreadBadge /></span></button>
+    <button type="button" aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
     {teamCrmShortcuts(permissions).map(item => <button type="button" key={item.id} aria-current={view === "business" && crmView === item.id ? "page" : undefined} onClick={() => onCrm(item.id)}><TLinkNavigationIcon name={item.icon} /><span>{item.label}</span></button>)}
     {permissions.canViewQuotes && permissions.canManageQuotes && <button type="button" aria-current={view === "map" ? "page" : undefined} onClick={() => onView("map")}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span></button>}
     <button type="button" aria-current={view === "training" ? "page" : undefined} onClick={() => onView("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span></button>

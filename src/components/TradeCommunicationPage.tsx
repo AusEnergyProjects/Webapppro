@@ -92,7 +92,7 @@ function TradeCommunicationContent() {
       const response = await fetch("/api/trade-team-handoff",{method:"DELETE",headers:await getAuthHeaders(),signal:AbortSignal.timeout(15000)});
       if (!response.ok) throw new Error("Could not close this session. Try again.");
       try { sessionStorage.removeItem("tlink-team-handoff"); } catch { /* The server session has already been closed. */ }
-      setSession(null); setError("This Messages session is closed. Open Messages again from the TLink app when you need it.");
+      setSession(null); setError("This Connect session is closed. Open Connect again from the TLink app when you need it.");
     } catch(failure) { setError(failure instanceof Error ? failure.message : "Could not close this session."); }
   }
   return <main className={`${styles.page} trade-portal-shell is-installer`}>
@@ -100,6 +100,6 @@ function TradeCommunicationContent() {
     {error && <p className={styles.notice} role="status">{error}</p>}
     {loading ? <p role="status">Opening your team messages...</p> : session ? <TradeMessageAlerts key={session.access.memberId} user={session.user} getAuthHeaders={getAuthHeaders} onOpen={threadId => setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 }))}><TradeTeamCallProvider key={session.access.memberId} user={session.user} getAuthHeaders={getAuthHeaders}>
       <TradeMessagesWorkspace key={session.access.memberId} user={session.user || undefined} getAuthHeaders={getAuthHeaders} initialThreadId={messageTarget.id || session.threadId} initialThreadRevision={messageTarget.revision} initialCallId={session.callId} teamOnly={!session.user} />
-    </TradeTeamCallProvider></TradeMessageAlerts> : <section className={styles.signin}><h1>Team messages</h1><p>Sign in with your team account, or open Messages from the TLink field app.</p><a href={signInUrl}>Sign in to TLink</a></section>}
+    </TradeTeamCallProvider></TradeMessageAlerts> : <section className={styles.signin}><h1>Team messages</h1><p>Sign in with your team account, or open Connect from the TLink field app.</p><a href={signInUrl}>Sign in to TLink</a></section>}
   </main>;
 }

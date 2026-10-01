@@ -130,7 +130,7 @@ test("job workspace appointment creation commits assignment and booking before c
 });
 
 test("optional summary notes have one editable owner in the Notes tab", () => {
-  const overview = workspace.slice(workspace.indexOf('{activeTab === "summary"'), workspace.indexOf('{activeTab === "field"'));
+  const overview = workspace.slice(workspace.indexOf('{activeTab === "summary"'), workspace.indexOf('aria-label="Job files and forms"'));
   const notes = workspace.slice(workspace.indexOf('{activeTab === "notes"'), workspace.indexOf('{activeTab === "handover"'));
   assert.doesNotMatch(overview, /name="nextAction"|name="description"|name="tags"/);
   for (const field of ["nextAction", "description", "tags"]) assert.match(notes, new RegExp(`name="${field}"`));

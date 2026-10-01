@@ -96,7 +96,7 @@ test("direct customers have full addresses while global TLink job IDs are read o
 test("verified installers receive the complete progressive CRM", () => {
   assert.match(hub, /props\.partnerType === "installer" && props\.fullAccess/);
   assert.match(hub, /BusinessHubFoundation/);
-  for (const label of ["My day", "Jobs", "Schedule", "Customers", "Reports", "Field work", "Quote", "Invoice", "Notes", "Handover"]) {
+  for (const label of ["My day", "Jobs", "Schedule", "Customers", "Reports", "Files", "Quote", "Invoice", "Notes", "Handover"]) {
     assert.match(crm, new RegExp(label));
   }
   assert.match(crm, /NewJobForm/);
@@ -453,10 +453,10 @@ test("all installer Schedule entry paths use the one permanent CRM dispatch work
   assert.match(dashboard, /onOpenSchedule=\{\(weekStart\) => \{[\s\S]*id: "schedule"[\s\S]*query: weekStart \|\| ""[\s\S]*setWorkspace\("work"\)/);
 });
 
-test("job summary renders every planned compliance activity without exposing raw governance copy", () => {
+test("job Files renders every planned compliance activity without exposing raw governance copy", () => {
   assert.match(crm, /complianceIntents: ComplianceIntent\[\]/);
   assert.match(crm, /const complianceIntents = job\.complianceIntents\?\.length \? job\.complianceIntents : job\.complianceIntent \? \[job\.complianceIntent\] : \[\]/);
-  assert.match(crm, /complianceIntents\.length > 0 && canViewFieldEvidence && <TradeActivityFieldRecords/);
+  assert.match(crm, /formsOpen && complianceIntents\.length > 0 && <TradeActivityFieldRecords/);
   const fieldRecords = fs.readFileSync(new URL("../src/components/TradeActivityFieldRecords.tsx", import.meta.url), "utf8");
   assert.match(fieldRecords, /records\.map\(\(item\) => <article key=\{item\.intentId\}>/);
   assert.match(crm, /const canOpenDirectCustomerCompliance = !permissions\s+&& canManageFieldEvidence\s+&& job\.sourceType === "internal"\s+&& job\.customerSource === "trade_owned"/);

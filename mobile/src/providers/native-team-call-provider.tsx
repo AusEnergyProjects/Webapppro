@@ -452,7 +452,7 @@ function NativeTeamCallSession({ children, enabled, principal = null }: { childr
       if (!mounted.current || epoch !== generation.current || session.current || starting.current || !availableForCalls.current) return;
       const invitation = result.calls?.find(call => call.id === callId && call.threadId === threadId && call.status === 'active');
       if (!invitation) {
-        setNotice('This call is no longer available. Check your call status or call your teammate from Messages.'); return;
+        setNotice('This call is no longer available. Check your call status or call your teammate from Connect.'); return;
       }
       dismissed.current.delete(callId);
       setIncoming([invitation]); setNotice(''); setRetry(null); setMinimized(false);
@@ -491,7 +491,7 @@ function NativeTeamCallSession({ children, enabled, principal = null }: { childr
           callerName: callerName(invitation),
           expiresAt: new Date(ringingUntil(invitation)).toISOString() });
       })().catch(() => {
-        if (mounted.current) setNotice('Your phone could not display the incoming call. Open Messages to call your teammate back.');
+        if (mounted.current) setNotice('Your phone could not display the incoming call. Open Connect to call your teammate back.');
       });
       return cleanup;
     }

@@ -63,18 +63,13 @@ test("contact and site APIs enforce the account owner boundary", () => {
   assert.match(route, /ownedServiceSite\(db, identity, serviceSiteId, customerId\)/);
 });
 
-test("the customer editor shows primary data once and progressively discloses additional records", () => {
-  for (const label of ["Customer details", "Main site instructions", "Additional contacts", "Add contact", "Additional service sites", "Add service site", "Access instructions", "Parking instructions", "Hazards and controls", "Assets and history"]) {
-    assert.match(workspace, new RegExp(label));
-  }
-  assert.match(workspace, /const primarySite = sites\.find\(\(site\) => site\.isPrimary\)/);
-  assert.match(workspace, /const additionalContacts = contacts\.filter\(\(contact\) => !contact\.isPrimary\)/);
-  assert.match(workspace, /const additionalSites = sites\.filter\(\(site\) => !site\.isPrimary\)/);
-  assert.match(workspace, /additionalContacts\.map/);
-  assert.match(workspace, /additionalSites\.map/);
-  assert.doesNotMatch(workspace, /Primary account contact/);
-  assert.match(workspace, /action: "update_customer", customerId: customer\.id/);
-  assert.equal((workspace.match(/<CrmAddressFields/g) || []).length, 4);
+test("the customer editor keeps details and jobs without obsolete category panels", () => {
+  const customerEditor = workspace.slice(workspace.indexOf("function CustomerDetail("));
+  for (const label of ["Customer details", "Jobs"]) assert.match(customerEditor, new RegExp(label));
+  for (const label of ["Main site instructions", "Additional contacts", "Additional service sites", "Assets and history"]) assert.ok(!customerEditor.includes(label));
+  assert.match(customerEditor, /action: "update_customer", customerId: customer\.id/);
+  assert.match(customerEditor, /onOpenJob\(job\.id\)/);
+  assert.equal((workspace.match(/<CrmAddressFields/g) || []).length, 2);
   assert.match(workspace, /function CrmAddressFields/);
   assert.match(workspace, /function CustomerForm[\s\S]*?<CrmAddressFields user=\{user\}/);
   assert.match(workspace, /action: "create_customer"[\s\S]*?\.\.\.addressFormPayload\(data\)/);
@@ -83,9 +78,6 @@ test("the customer editor shows primary data once and progressively discloses ad
   assert.match(workspace, /addressEntryMode: "provider_selected"[\s\S]*addressSelectionProof: selection\.selectionProof \|\| ""/);
   assert.match(workspace, /function manual[\s\S]*addressEntryMode: "manual_pending_review"[\s\S]*addressSelectionProof: ""/);
   assert.match(workspace, /name="addressSelectionProof"/);
-  assert.match(workspace, /if \(!site\.isPrimary\) \{\s*Object\.assign\(update, addressFormPayload\(data\)\)/s);
-  assert.match(workspace, /action: "link_site_contact"/);
-  assert.match(styles, /\.customerForm input,[\s\S]*\.linkContactForm select \{/);
   assert.match(styles, /\.customerForm textarea \{[\s\S]*min-height: 74px/);
   assert.match(styles, /@media \(max-width: 560px\)[\s\S]*\.customerFormGrid \{ grid-template-columns: 1fr; \}/);
 });

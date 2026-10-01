@@ -78,10 +78,6 @@ type Customer = {
   privateNotes: string; jobCount?: number; activeJobCount?: number; activities?: string[];
   latestJobNumber?: string; latestJobAt?: string; latestPipelineStage?: string; createdAt: string; updatedAt: string;
 };
-type CustomerContact = {
-  id: string; customerId: string; firstName: string; lastName: string; roleLabel: string;
-  email: string; phone: string; isPrimary: boolean; createdAt: string; updatedAt: string;
-};
 type SiteContact = { id: string; customerContactId: string; roleLabel: string; isPrimary: boolean; displayName: string; email: string; phone: string };
 type ServiceSite = {
   id: string; customerId: string; siteLabel: string; addressLine1: string; addressLine2: string;
@@ -140,7 +136,7 @@ type CreateJobResult = {
 };
 type IndexPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type CrmIndexResult = { ok?: boolean; items?: Job[] | Customer[]; pagination?: IndexPagination; error?: string };
-type CrmDetailResult = { ok?: boolean; job?: Job; customer?: Customer | null; contacts?: CustomerContact[]; sites?: ServiceSite[]; jobs?: Job[]; error?: string };
+type CrmDetailResult = { ok?: boolean; job?: Job; customer?: Customer | null; sites?: ServiceSite[]; jobs?: Job[]; error?: string };
 type ActivityJob = { id: string; workNumber: string; title: string };
 type ActivityAppointment = Appointment & { job: ActivityJob };
 type ActivityTask = Task & { job: ActivityJob };
@@ -497,7 +493,6 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [selectedJobSites, setSelectedJobSites] = useState<ServiceSite[]>([]);
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
   const [selectedCustomerJobs, setSelectedCustomerJobs] = useState<Job[]>([]);
-  const [selectedCustomerContacts, setSelectedCustomerContacts] = useState<CustomerContact[]>([]);
   const [selectedCustomerSites, setSelectedCustomerSites] = useState<ServiceSite[]>([]);
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   const [indexLoading, setIndexLoading] = useState(false);
@@ -942,7 +937,6 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       if (active) {
         setSelectedCustomerDetail(result.customer);
         setSelectedCustomerJobs(result.jobs || []);
-        setSelectedCustomerContacts(result.contacts || []);
         setSelectedCustomerSites(result.sites || []);
       }
     }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The customer record could not be loaded."));
@@ -1521,7 +1515,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     </div>}
 
     {view === "jobs" && creating !== "job" && focusedJobId && <div className="crm-view crm-job-workspace">
-      <div className="crm-page-heading"><div><span>Job workspace</span><h3>{selectedJobDetail?.id === focusedJobId ? selectedJobDetail.workNumber : "Opening job"}</h3><p>Edit the job, schedule, quote, field record and invoice from one focused page.</p></div><button type="button" className="crm-back-button" onClick={closeFocusedJob}>{jobReturnTarget.kind === "customer" ? `Back to ${jobReturnTarget.customerName}` : mapWorkspace ? "Back to map" : "Back to all jobs"}</button></div>
+      <div className="crm-page-heading"><div><span>Job workspace</span><h3>{selectedJobDetail?.id === focusedJobId ? selectedJobDetail.workNumber : "Opening job"}</h3><p>Manage the job, schedule, files, quote and invoice in one place.</p></div><button type="button" className="crm-back-button" onClick={closeFocusedJob}>{jobReturnTarget.kind === "customer" ? `Back to ${jobReturnTarget.customerName}` : mapWorkspace ? "Back to map" : "Back to all jobs"}</button></div>
       {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} refreshing={focusedJobRefreshing} teamMembers={teamMembers} permissions={staffPermissions} initialTab={focusedJobTab} onEditPayment={() => editInvoicePayment(selectedJobDetail)} onCrm={crmRequest} onWorkOrder={crmRequest} onOpenJob={(workOrderId) => openFocusedJob(workOrderId, "schedule")} onOpenPriceBook={() => openPriceBook()} onOpenCustomer={(customerId) => { setFocusedJobId(""); setSelectedJobDetail(null); setSelectedCustomerId(customerId); setView("customers"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => { setFocusedJobRefreshing(true); setRefreshNonce((value) => value + 1); }} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
     </div>}
 
@@ -1572,8 +1566,8 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     </div>}
 
     {view === "customers" && creating !== "customer" && selectedCustomerId && <div className="crm-view crm-customer-focus">
-      <div className="crm-page-heading"><div><span>Customer workspace</span><h3>{selectedCustomerDetail?.id === selectedCustomerId ? selectedCustomerDetail.displayName : "Opening customer"}</h3><p>Contact, service sites and linked jobs stay together without lengthening the customer directory.</p></div><button type="button" className="crm-back-button" onClick={() => { setSelectedCustomerId(""); setSelectedCustomerDetail(null); }}>{mapWorkspace ? "Back to map" : "Back to all customers"}</button></div>
-      {selectedCustomerDetail?.id === selectedCustomerId ? <CustomerDetail key={`${selectedCustomerDetail.id}:${refreshNonce}`} user={user} customer={selectedCustomerDetail} contacts={selectedCustomerContacts} sites={selectedCustomerSites} jobs={selectedCustomerJobs} busy={busy} readOnly={Boolean(staffPermissions && !staffPermissions.canManageCustomers)} hideAssets={Boolean(staffPermissions)} canUseSms={!staffPermissions} onOpenIntegrations={() => setView("integrations")} onSave={crmRequest} onOpenJob={(id) => openFocusedJob(id, "summary", { kind: "customer", customerId: selectedCustomerDetail.id, customerName: selectedCustomerDetail.displayName })} /> : <div className="crm-empty"><strong>Loading customer...</strong><span>The private customer record will open here.</span></div>}
+      <div className="crm-page-heading"><div><span>Customer workspace</span><h3>{selectedCustomerDetail?.id === selectedCustomerId ? selectedCustomerDetail.displayName : "Opening customer"}</h3><p>Contact details and linked jobs in one place.</p></div><button type="button" className="crm-back-button" onClick={() => { setSelectedCustomerId(""); setSelectedCustomerDetail(null); }}>{mapWorkspace ? "Back to map" : "Back to all customers"}</button></div>
+      {selectedCustomerDetail?.id === selectedCustomerId ? <CustomerDetail key={`${selectedCustomerDetail.id}:${refreshNonce}`} user={user} customer={selectedCustomerDetail} sites={selectedCustomerSites} jobs={selectedCustomerJobs} busy={busy} readOnly={Boolean(staffPermissions && !staffPermissions.canManageCustomers)} canUseSms={!staffPermissions} onOpenIntegrations={() => setView("integrations")} onSave={crmRequest} onOpenJob={(id) => openFocusedJob(id, "summary", { kind: "customer", customerId: selectedCustomerDetail.id, customerName: selectedCustomerDetail.displayName })} /> : <div className="crm-empty"><strong>Loading customer...</strong><span>The private customer record will open here.</span></div>}
     </div>}
 
     {!mapWorkspace && view === "customers" && creating !== "customer" && !selectedCustomerId && <div className="crm-view">
@@ -1779,6 +1773,10 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     .join("|");
   const hasActiveJobAppointment = Boolean(activeJobAppointmentKey);
   const [tab, setTab] = useState<JobDetailTab>(initialTab);
+  const [formsOpen, setFormsOpen] = useState(initialTab === "field");
+  const [photoRequestOpen, setPhotoRequestOpen] = useState(false);
+  const [filesRevision, setFilesRevision] = useState(0);
+  const refreshJobFiles = async () => { setFilesRevision((value) => value + 1); await onReload(); };
   const [rentalAttached, setRentalAttached] = useState(job.serviceCategory === "rental-inspection");
   const [appointmentDuration, setAppointmentDuration] = useState(60);
   const [appointmentStartsAt, setAppointmentStartsAt] = useState(() => nextAppointmentSlot());
@@ -1932,22 +1930,21 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   if (!isProtected && (!permissions || permissions.canSendSms)) mainTabs.push(["messages", "Messages"]);
   if (canOpenJobSchedule) mainTabs.push(["schedule", `Schedule (${visibleJobAppointments.length})`]);
   if (canViewQuotes) mainTabs.push(["quote", "Quote"]);
-  if (canViewFieldEvidence) mainTabs.push(["field", job.serviceCategory === "rental-inspection" ? "Assessment" : "Field work"]);
   if (canViewFieldEvidence) mainTabs.push(["files", "Files"]);
   if (canManageJobs && canViewFieldEvidence && canManageFieldEvidence) mainTabs.push(["review", "Review"]);
   if (canViewInvoices) mainTabs.push(["invoice", "Invoice"]);
   const moreTabs: Array<readonly [JobDetailTab, string]> = [["tasks", `Tasks (${job.tasks.filter((task) => task.status === "pending").length})`], ["notes", `Notes${openIssues ? ` (${openIssues})` : ""}`]];
-  if (canViewFieldEvidence) moreTabs.unshift(["forms", job.serviceCategory === "rental-inspection" ? "Other forms" : "Forms"]);
   if (!permissions && canManageFieldEvidence) moreTabs.push(["handover", "Handover"]);
   const allowedTabs = [...mainTabs, ...moreTabs].map(([value]) => value);
-  const activeTab = allowedTabs.includes(tab) ? tab : "summary";
+  const requestedTab = tab === "field" || tab === "forms" ? "files" : tab;
+  const activeTab = allowedTabs.includes(requestedTab) ? requestedTab : "summary";
   const moreActive = moreTabs.some(([value]) => value === activeTab);
   useEffect(() => {
     if (!canAssignJobs || activeTab !== "schedule") return;
     const frame = window.requestAnimationFrame(() => void loadAllJobAssignees());
     return () => window.cancelAnimationFrame(frame);
   }, [activeTab, canAssignJobs, loadAllJobAssignees]);
-  return <article className="crm-job-card"><header className="crm-job-card-header"><div><span>{job.workNumber}</span><h3>{job.title}</h3><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}{job.siteArea ? ` | ${job.siteArea}` : ""}</small></div><div className="crm-job-header-actions"><strong>{displayedLifecycle}</strong><span className={isProtected ? "protected" : "owned"}>{isProtected ? "Australian Energy Assessments protected" : customer ? "Your customer" : "Internal"}</span>{canViewFieldEvidence && !isProtected && customer && <button type="button" className="crm-request-info-button" onClick={() => setTab("field")}>Request info</button>}</div></header>
+  return <article className="crm-job-card"><header className="crm-job-card-header"><div><span>{job.workNumber}</span><h3>{job.title}</h3><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}{job.siteArea ? ` | ${job.siteArea}` : ""}</small></div><div className="crm-job-header-actions"><strong>{displayedLifecycle}</strong><span className={isProtected ? "protected" : "owned"}>{isProtected ? "Australian Energy Assessments protected" : customer ? "Your customer" : "Internal"}</span>{canViewFieldEvidence && canManageFieldEvidence && !permissions && !isProtected && customer && <button type="button" className="crm-request-info-button" onClick={() => { setTab("files"); setPhotoRequestOpen(true); }}>Request info</button>}</div></header>
     <nav className="crm-job-tabs" aria-label="Job card sections">{mainTabs.map(([value, label]) => <button key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}<AccessibleMenu className="crm-job-more" active={moreActive} label={moreActive ? activeTab[0].toUpperCase() + activeTab.slice(1) : "More"}>{(close) => moreTabs.map(([value, label]) => <button role="menuitem" key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => { setTab(value); close(); }}>{label}</button>)}</AccessibleMenu></nav>
     {activeTab === "messages" && !isProtected && (!permissions || permissions.canSendSms) && <TradeCustomerSmsPanel key={`${job.id}:${customer?.id || ""}`} user={user} workOrderId={job.id} customerId={customer?.id || ""} onOpenIntegrations={permissions ? undefined : onOpenIntegrations} />}
     {activeTab === "summary" && <section className="crm-job-section crm-summary-workspace">
@@ -1961,7 +1958,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
           <h4 id={`job-information-${job.id}`}>Job information</h4>
           <dl className={registerStyles.detailGrid}>
             <div><dt>Job ID</dt><dd>{job.workNumber}</dd></div>
-            <div><dt>Job / compliance</dt><dd className={registerStyles.detailAction}><span>{displayedLifecycle}</span>{canOpenJobSchedule && <button type="button" onClick={() => setTab("schedule")}>Schedule</button>}{canViewFieldEvidence && <button type="button" onClick={() => setTab("field")}>Update work</button>}{canManageJobs && canManageFieldEvidence && <button type="button" onClick={() => setTab("review")}>Review</button>}</dd></div>
+            <div><dt>Job / compliance</dt><dd className={registerStyles.detailAction}><span>{displayedLifecycle}</span>{canOpenJobSchedule && <button type="button" onClick={() => setTab("schedule")}>Schedule</button>}{canViewFieldEvidence && <button type="button" onClick={() => { setTab("files"); setFormsOpen(true); }}>Open forms</button>}{canManageJobs && canManageFieldEvidence && <button type="button" onClick={() => setTab("review")}>Review</button>}</dd></div>
             {(canViewQuotes || canViewInvoices) && <div><dt>Customer billing</dt><dd className={registerStyles.detailAction}><span>{jobCustomerBillingStatus(job) || "Restricted"}</span>{canViewQuotes && <button type="button" onClick={() => setTab("quote")}>Edit quote</button>}{canViewInvoices && <button type="button" onClick={() => setTab("invoice")}>Edit invoice</button>}</dd></div>}
             {canViewInvoices && <div><dt>Invoice payment</dt><dd className={registerStyles.detailAction}><JobInvoiceStatus job={job} />{canManageInvoices && <button type="button" onClick={onEditPayment}>Edit payment</button>}</dd></div>}
             <div><dt>Work type</dt><dd>{serviceLabels[job.serviceCategory] || job.serviceCategory || "Not added"}</dd></div>
@@ -1987,7 +1984,6 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
           </> : <p className={registerStyles.contextNote}>No customer is linked to this internal job.</p>}
         </section>
       {requiresBookingDocuments && <TradeCustomerDocumentDeliveryPanel delivery={job.customerDocuments} jobId={job.id} onReload={onReload} user={user} />}
-      {complianceIntents.length > 0 && canViewFieldEvidence && <TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} />}
       <form className="crm-form" onSubmit={saveSummary}><fieldset disabled={!canManageJobs} style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}>
         <div className="crm-form-grid">{canSearchCustomerRecords && !isProtected && !isReleasedLead && <CustomerLookupSelect user={user} initialCustomer={customer} />}{!isProtected && !isReleasedLead && customer && <label><span>Authoritative service site</span><select name="serviceSiteId" defaultValue={job.serviceSiteId}><option value="">Choose later</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel} | {[site.suburb, site.addressState, site.postcode].filter(Boolean).join(" ") || "Address not added"}</option>)}</select></label>}<label><span>Building type</span><select name="buildingType" defaultValue={job.buildingType || "not_sure"}>{[["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]].map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" defaultValue={job.priority}><option value="low">Low</option><option value="standard">Standard</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>
         <details className={registerStyles.planningDetails}><summary>Board and work planning</summary><p>These organise your work board. Billing comes from the quote and invoice; compliance follows the completed work and review.</p><div className="crm-form-grid"><label><span>Board stage</span><select name="pipelineStage" disabled={isImported} defaultValue={job.pipelineStage}>{Object.entries(pipelineLabels).filter(([value]) => (value !== "imported" || isImported) && (!["invoiced", "paid"].includes(value) || value === job.pipelineStage)).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Work planning</span><select name="stage" disabled={isImported} defaultValue={job.stage}>{Object.entries(workStageLabels).filter(([value]) => value !== "imported" || isImported).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></div></details>
@@ -1997,11 +1993,27 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
       {canOpenDirectCustomerCompliance && customer && complianceIntents.length === 0 && complianceCases.length === 0 && <TradeComplianceIntake user={user} workOrderId={job.id} onChanged={onReload} />}
       {complianceCases.length > 0 && <section className="crm-job-compliance"><header><div><span>Compliance intake</span><h4>{complianceCases.length} linked case{complianceCases.length === 1 ? "" : "s"}</h4></div><strong>Compliance review required</strong></header><div>{complianceCases.map((item) => <article key={item.id}><div><span>{item.caseNumber} | activity date {item.activityDate}</span><strong>{item.programCode} | {item.registryActivityCode || item.activityKey} | {item.title} | v{item.version}</strong><p>{[item.productCategory, item.scenarioCode ? `scenario ${item.scenarioCode}` : "", item.scenario].filter(Boolean).join(" | ")}</p></div><dl><div><dt>Case</dt><dd>{item.status.replaceAll("_", " ")}</dd></div><div><dt>Evidence</dt><dd>{item.evidenceStatus.replaceAll("_", " ")}</dd></div></dl>{item.officialSourceUrl && <a href={item.officialSourceUrl} target="_blank" rel="noreferrer">Open official {item.officialSourceVersion || item.officialSourceTitle || "activity"} source</a>}</article>)}</div><p>TLink has preserved the selected rule version for intake. This is not an eligibility decision, certificate calculation, evidence acceptance or rebate promise.</p></section>}
     </section>}
-    {canViewFieldEvidence && <TradeRentalActivityPicker key={job.id} user={user} workOrderId={job.id} refreshKey={job.revision} active={activeTab === "field"} readOnly={!canManageFieldEvidence} initiallyAttached={job.serviceCategory === "rental-inspection"} onChanged={onReload} onAttachmentChanged={setRentalAttached} />}
-    {activeTab === "field" && canViewFieldEvidence && <section className="crm-job-section">{complianceIntents.length > 0 && <TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} />}{job.serviceCategory === "rental-inspection" ? <details className="crm-field-secondary"><summary>Travel, time, signatures and general job files</summary><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => setTab(next)} onChanged={onReload} /></details> : <TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => setTab(next)} onChanged={onReload} />}{!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary"><summary>Customer photo request</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}{!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan" open><summary>Work plan and actuals</summary><TradeJobReadinessPanel key={job.id} user={user} workOrderId={job.id} completionAction={false} onChanged={onReload} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} /></details>}</section>}
-    {activeTab === "files" && canViewFieldEvidence && <section className="crm-job-section"><TradeJobFilesPanel user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} /></section>}
+    {canViewFieldEvidence && <section className="crm-job-section" hidden={activeTab !== "files"} aria-label="Job files and forms">
+      {activeTab === "files" && <TradeJobFilesPanel key={`${job.revision}:${filesRevision}`} user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} />}
+      <details className="crm-field-secondary" id="job-files-forms" open={formsOpen} onToggle={(event) => setFormsOpen(event.currentTarget.open)}>
+        <summary>Forms and assessments</summary>
+        <TradeRentalActivityPicker key={job.id} user={user} workOrderId={job.id} refreshKey={job.revision} active={activeTab === "files"} readOnly={!canManageFieldEvidence} initiallyAttached={job.serviceCategory === "rental-inspection"} onChanged={refreshJobFiles} onAttachmentChanged={setRentalAttached} />
+        {formsOpen && complianceIntents.length > 0 && <TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} />}
+        <TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} />
+      </details>
+      {activeTab === "files" && <>
+        <details className="crm-field-secondary"><summary>Time, sign-offs and uploads</summary><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => {
+          if (next === "forms") {
+            setTab("files");
+            setFormsOpen(true);
+            window.requestAnimationFrame(() => document.getElementById("job-files-forms")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+          } else setTab(next);
+        }} onChanged={refreshJobFiles} /></details>
+        {!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary" open={photoRequestOpen} onToggle={(event) => setPhotoRequestOpen(event.currentTarget.open)}><summary>Request customer photos</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}
+        {!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan"><summary>Work plan and actuals</summary><TradeJobReadinessPanel key={job.id} user={user} workOrderId={job.id} completionAction={false} onChanged={onReload} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} /></details>}
+      </>}
+    </section>}
     {activeTab === "review" && canManageJobs && canViewFieldEvidence && canManageFieldEvidence && <section className="crm-job-section" aria-label="Business job review"><TradeJobReviewPanel user={user} workOrderId={job.id} onChanged={onReload} /><TradeJobFilesPanel user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} /></section>}
-    {canViewFieldEvidence && <section className="crm-job-section" hidden={activeTab !== "forms"}>{canManageFieldEvidence && <button type="button" className="btn" onClick={() => setTab("field")}>Add activity or safety visit</button>}<TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} /></section>}
     {activeTab === "schedule" && canOpenJobSchedule && <section className="crm-job-section crm-job-schedule-workspace">
       <div className="crm-job-schedule-layout">
         <TradeScheduleWorkspace
@@ -2044,70 +2056,18 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   </article>;
 }
 
-function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly = false, hideAssets = false, canUseSms, onOpenIntegrations, onSave, onOpenJob }: {
-  user: User; customer: Customer; contacts: CustomerContact[]; sites: ServiceSite[]; jobs: Job[]; busy: string; readOnly?: boolean; hideAssets?: boolean; canUseSms: boolean; onOpenIntegrations: () => void;
+function CustomerDetail({ user, customer, sites, jobs, busy, readOnly = false, canUseSms, onOpenIntegrations, onSave, onOpenJob }: {
+  user: User; customer: Customer; sites: ServiceSite[]; jobs: Job[]; busy: string; readOnly?: boolean; canUseSms: boolean; onOpenIntegrations: () => void;
   onSave: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>;
   onOpenJob: (id: string) => void;
 }) {
-  const [newSiteAddressRevision, setNewSiteAddressRevision] = useState(0);
   async function saveAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
     await onSave("PATCH", { action: "update_customer", customerId: customer.id, firstName: data.get("firstName"), lastName: data.get("lastName"), businessName: data.get("businessName"), email: data.get("email"), phone: data.get("phone"), ...addressFormPayload(data), tags: data.get("tags"), privateNotes: data.get("privateNotes") }, `customer:${customer.id}`, "Customer account saved.");
   }
-  async function createContact(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
-    const saved = await onSave("POST", { action: "create_customer_contact", customerId: customer.id, firstName: data.get("firstName"), lastName: data.get("lastName"), roleLabel: data.get("roleLabel"), email: data.get("email"), phone: data.get("phone"), serviceSiteId: data.get("serviceSiteId") }, `contact-new:${customer.id}`, "Customer contact added.");
-    if (saved) form.reset();
-  }
-  async function saveContact(event: FormEvent<HTMLFormElement>, contactId: string) {
-    event.preventDefault(); const data = new FormData(event.currentTarget);
-    await onSave("PATCH", { action: "update_customer_contact", customerId: customer.id, contactId, firstName: data.get("firstName"), lastName: data.get("lastName"), roleLabel: data.get("roleLabel"), email: data.get("email"), phone: data.get("phone") }, `contact:${contactId}`, "Customer contact saved.");
-  }
-  async function createSite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
-    const saved = await onSave("POST", { action: "create_service_site", customerId: customer.id, siteLabel: data.get("siteLabel"), ...addressFormPayload(data), accessInstructions: data.get("accessInstructions"), parkingInstructions: data.get("parkingInstructions"), hazardNotes: data.get("hazardNotes"), customerContactId: data.get("customerContactId") }, `site-new:${customer.id}`, "Service site added.");
-    if (saved) { form.reset(); setNewSiteAddressRevision((current) => current + 1); }
-  }
-  async function saveSite(event: FormEvent<HTMLFormElement>, site: ServiceSite) {
-    event.preventDefault(); const data = new FormData(event.currentTarget);
-    const update: Record<string, unknown> = {
-      action: "update_service_site",
-      customerId: customer.id,
-      serviceSiteId: site.id,
-      siteLabel: data.get("siteLabel"),
-      accessInstructions: data.get("accessInstructions"),
-      parkingInstructions: data.get("parkingInstructions"),
-      hazardNotes: data.get("hazardNotes"),
-    };
-    if (!site.isPrimary) {
-      Object.assign(update, addressFormPayload(data));
-    }
-    await onSave("PATCH", update, `site:${site.id}`, "Service site saved.");
-  }
-  async function linkContact(event: FormEvent<HTMLFormElement>, siteId: string) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
-    const saved = await onSave("POST", { action: "link_site_contact", customerId: customer.id, serviceSiteId: siteId, customerContactId: data.get("customerContactId"), roleLabel: data.get("roleLabel") }, `site-contact:${siteId}`, "Service contact assigned.");
-    if (saved) form.reset();
-  }
-  const primarySite = sites.find((site) => site.isPrimary);
-  const additionalContacts = contacts.filter((contact) => !contact.isPrimary);
-  const additionalSites = sites.filter((site) => !site.isPrimary);
   const customerKind = customer.customerType === "business" ? "Business customer" : "Residential customer";
-  const serviceContactEditor = (site: ServiceSite) => {
-    const availableContacts = contacts.filter((contact) => !site.contacts.some((assigned) => assigned.customerContactId === contact.id));
-    return <div className={registerStyles.serviceContacts}>
-      <strong>Service contacts</strong>
-      {site.contacts.length ? <ul>{site.contacts.map((contact) => <li key={contact.id}><span>{contact.displayName}</span><small>{contact.roleLabel}{contact.phone ? ` | ${contact.phone}` : ""}</small></li>)}</ul> : <p>No service contact assigned.</p>}
-      {!readOnly && availableContacts.length > 0 && <form className={registerStyles.linkContactForm} onSubmit={(event) => void linkContact(event, site.id)}>
-        <label><span>Contact</span><select name="customerContactId" required defaultValue=""><option value="" disabled>Choose contact</option>{availableContacts.map((contact) => <option key={contact.id} value={contact.id}>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Customer contact"}</option>)}</select></label>
-        <label><span>Site role</span><input name="roleLabel" placeholder="Owner, tenant, site manager" /></label>
-        <button disabled={busy === `site-contact:${site.id}`}>{busy === `site-contact:${site.id}` ? "Assigning..." : "Assign"}</button>
-      </form>}
-    </div>;
-  };
-
   return <section className={`crm-customer-detail ${registerStyles.customerEditor}`}>
-    <header><div><span>{customer.customerNumber}</span><h3>{customer.displayName}</h3><small>{customerKind} | {additionalContacts.length} additional contact{additionalContacts.length === 1 ? "" : "s"} | {sites.length} service site{sites.length === 1 ? "" : "s"}</small></div><div className="crm-customer-header-actions"><strong>Private installer record</strong><div className="crm-customer-contact-actions">{customer.phone && <a className="crm-customer-call-action" href={phoneHref(customer.phone)}>Call {customer.phone}</a>}{customer.email && <TradeCustomerEmailComposer user={user} customerId={customer.id} recipient={customer.email} recipientName={customer.displayName} label="Email customer" className="crm-customer-email-action" />}</div></div></header>
+    <header><div><span>{customer.customerNumber}</span><h3>{customer.displayName}</h3><small>{customerKind}</small></div><div className="crm-customer-header-actions"><strong>Private installer record</strong><div className="crm-customer-contact-actions">{customer.phone && <a className="crm-customer-call-action" href={phoneHref(customer.phone)}>Call {customer.phone}</a>}{customer.email && <TradeCustomerEmailComposer user={user} customerId={customer.id} recipient={customer.email} recipientName={customer.displayName} label="Email customer" className="crm-customer-email-action" />}</div></div></header>
     <fieldset className={registerStyles.customerFieldset} disabled={readOnly}>
     {canUseSms && <TradeCustomerSmsPanel user={user} customerId={customer.id} onOpenIntegrations={onOpenIntegrations} />}
 
@@ -2131,70 +2091,9 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
       </div>
     </details>
 
-    {primarySite && <details className={registerStyles.customerPanel}>
-      <summary><span><strong>Main site instructions</strong><small>Access, parking and hazards for {primarySite.siteLabel}</small></span><b>Optional</b></summary>
-      <div className={registerStyles.panelBody}>
-        <form className={registerStyles.customerForm} onSubmit={(event) => void saveSite(event, primarySite)}>
-          <div className={registerStyles.customerFormGrid}>
-            <label><span>Site name</span><input name="siteLabel" defaultValue={primarySite.siteLabel} required maxLength={100} /></label>
-            <label className={registerStyles.wideField}><span>Access instructions</span><textarea name="accessInstructions" defaultValue={primarySite.accessInstructions} rows={2} maxLength={2000} /></label>
-            <label className={registerStyles.wideField}><span>Parking instructions</span><textarea name="parkingInstructions" defaultValue={primarySite.parkingInstructions} rows={2} maxLength={1000} /></label>
-            <label className={registerStyles.wideField}><span>Hazards and controls</span><textarea name="hazardNotes" defaultValue={primarySite.hazardNotes} rows={3} maxLength={2000} placeholder="Record site hazards only. Confirm controls before work starts." /></label>
-          </div>
-          {!readOnly && <div className={registerStyles.formActions}><button disabled={busy === `site:${primarySite.id}`}>{busy === `site:${primarySite.id}` ? "Saving..." : "Save site instructions"}</button></div>}
-        </form>
-        {serviceContactEditor(primarySite)}
-      </div>
-    </details>}
-
-    <details className={registerStyles.customerPanel}>
-      <summary><span><strong>Additional contacts</strong><small>Billing, tenants and other people for this customer</small></span><b>{additionalContacts.length}</b></summary>
-      <div className={registerStyles.panelBody}>
-        {additionalContacts.length ? <div className={registerStyles.entityList}>{additionalContacts.map((contact) => <details key={contact.id} className={registerStyles.entityDetails}>
-          <summary><span><strong>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Customer contact"}</strong><small>{contact.roleLabel || "Additional contact"}</small></span><em>{contact.phone || contact.email || "Open to edit"}</em></summary>
-          <div className={registerStyles.entityBody}><form className={registerStyles.customerForm} onSubmit={(event) => void saveContact(event, contact.id)}><div className={registerStyles.customerFormGrid}>
-            <label><span>First name</span><input name="firstName" defaultValue={contact.firstName} maxLength={80} /></label>
-            <label><span>Last name</span><input name="lastName" defaultValue={contact.lastName} maxLength={80} /></label>
-            <label><span>Role</span><input name="roleLabel" defaultValue={contact.roleLabel} maxLength={80} placeholder="Owner, accounts, tenant" /></label>
-            <label className={registerStyles.spanTwo}><span>Email</span><input type="email" name="email" defaultValue={contact.email} maxLength={180} /></label>
-            <label><span>Phone</span><input type="tel" name="phone" defaultValue={contact.phone} maxLength={40} inputMode="tel" /></label>
-          </div>{!readOnly && <div className={registerStyles.formActions}><button disabled={busy === `contact:${contact.id}`}>{busy === `contact:${contact.id}` ? "Saving..." : "Save contact"}</button></div>}</form></div>
-        </details>)}</div> : <p className={registerStyles.emptyMessage}>No additional contacts. The customer details above are the main contact record.</p>}
-        {!readOnly && <details className={registerStyles.addPanel}><summary>Add contact</summary><div className={registerStyles.entityBody}><form className={registerStyles.customerForm} onSubmit={createContact}><div className={registerStyles.customerFormGrid}>
-          <label><span>First name</span><input name="firstName" required maxLength={80} /></label><label><span>Last name</span><input name="lastName" maxLength={80} /></label><label><span>Role</span><input name="roleLabel" maxLength={80} placeholder="Owner, accounts, tenant" /></label><label className={registerStyles.spanTwo}><span>Email</span><input type="email" name="email" maxLength={180} /></label><label><span>Phone</span><input type="tel" name="phone" maxLength={40} inputMode="tel" /></label><label><span>Assign to site</span><select name="serviceSiteId"><option value="">Not yet</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel}</option>)}</select></label>
-        </div><div className={registerStyles.formActions}><button disabled={busy === `contact-new:${customer.id}`}>{busy === `contact-new:${customer.id}` ? "Adding..." : "Add contact"}</button></div></form></div></details>}
-      </div>
-    </details>
-
-    <details className={registerStyles.customerPanel}>
-      <summary><span><strong>Additional service sites</strong><small>Other properties with their own address and work instructions</small></span><b>{additionalSites.length}</b></summary>
-      <div className={registerStyles.panelBody}>
-        {additionalSites.length ? <div className={registerStyles.entityList}>{additionalSites.map((site) => <details key={site.id} className={registerStyles.entityDetails}>
-          <summary><span><strong>{site.siteLabel}</strong><small>Additional service site</small></span><em>{[site.addressLine1, site.suburb, site.addressState, site.postcode].filter(Boolean).join(", ") || "Address not added"}</em></summary>
-          <div className={registerStyles.entityBody}>
-            <form className={registerStyles.customerForm} onSubmit={(event) => void saveSite(event, site)}><div className={registerStyles.customerFormGrid}>
-              <label><span>Site name</span><input name="siteLabel" defaultValue={site.siteLabel} required maxLength={100} /></label>
-              <CrmAddressFields user={user} initialValue={site} />
-              <label className={registerStyles.wideField}><span>Access instructions</span><textarea name="accessInstructions" defaultValue={site.accessInstructions} rows={2} maxLength={2000} /></label>
-              <label className={registerStyles.wideField}><span>Parking instructions</span><textarea name="parkingInstructions" defaultValue={site.parkingInstructions} rows={2} maxLength={1000} /></label>
-              <label className={registerStyles.wideField}><span>Hazards and controls</span><textarea name="hazardNotes" defaultValue={site.hazardNotes} rows={3} maxLength={2000} placeholder="Record site hazards only. Confirm controls before work starts." /></label>
-            </div>{!readOnly && <div className={registerStyles.formActions}><button disabled={busy === `site:${site.id}`}>{busy === `site:${site.id}` ? "Saving..." : "Save site"}</button></div>}</form>
-            {serviceContactEditor(site)}
-          </div>
-        </details>)}</div> : <p className={registerStyles.emptyMessage}>No additional sites. The main address is saved in Customer details.</p>}
-        {!readOnly && <details className={registerStyles.addPanel}><summary>Add service site</summary><div className={registerStyles.entityBody}><form className={registerStyles.customerForm} onSubmit={createSite}><div className={registerStyles.customerFormGrid}>
-          <label><span>Site name</span><input name="siteLabel" required maxLength={100} placeholder="Warehouse, rental, northern office" /></label><label className={registerStyles.spanTwo}><span>Service contact</span><select name="customerContactId"><option value="">Not yet</option>{contacts.map((contact) => <option key={contact.id} value={contact.id}>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Customer contact"}</option>)}</select></label><CrmAddressFields key={newSiteAddressRevision} user={user} /><label className={registerStyles.wideField}><span>Access instructions</span><textarea name="accessInstructions" rows={2} maxLength={2000} /></label><label className={registerStyles.wideField}><span>Parking instructions</span><textarea name="parkingInstructions" rows={2} maxLength={1000} /></label><label className={registerStyles.wideField}><span>Hazards and controls</span><textarea name="hazardNotes" rows={3} maxLength={2000} /></label>
-        </div><div className={registerStyles.formActions}><button disabled={busy === `site-new:${customer.id}`}>{busy === `site-new:${customer.id}` ? "Adding..." : "Add service site"}</button></div></form></div></details>}
-      </div>
-    </details>
-
     <details className={registerStyles.customerPanel}>
       <summary><span><strong>Jobs</strong><small>Work linked to this customer</small></span><b>{jobs.length}</b></summary>
       <div className={registerStyles.panelBody}>{jobs.length ? <div className={registerStyles.customerJobs}>{jobs.map((job) => <button type="button" key={job.id} onClick={() => onOpenJob(job.id)}><span>{job.workNumber}</span><strong>{job.title}</strong><small>{sites.find((site) => site.id === job.serviceSiteId)?.siteLabel || "Site not selected"} | {pipelineLabels[job.pipelineStage] || job.pipelineStage} | {job.scheduledStart ? `Scheduled ${dateLabel(job.scheduledStart)}` : `Created ${dateLabel(job.createdAt)}`}</small></button>)}</div> : <p className={registerStyles.emptyMessage}>No jobs linked yet.</p>}</div>
     </details>
-    {!readOnly && !hideAssets && <details className={registerStyles.customerPanel}>
-      <summary><span><strong>Assets and history</strong><small>Installed products, warranties and the private customer timeline</small></span><b>Open</b></summary>
-      <div className={registerStyles.assetPanel}><TradeAssetWorkspace user={user} customerId={customer.id} sites={sites} compact onOpenJob={onOpenJob} /></div>
-    </details>}
   </fieldset></section>;
 }

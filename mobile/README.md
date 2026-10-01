@@ -7,7 +7,7 @@ TLink is the native iOS and Android app for technicians, trades and assessors us
 - TLink-issued one-time setup PIN sign-in using the worker's exact name, with a device-bound 90-day field session stored in the secure store.
 - Optional Firebase email and password sign-in for office users who need the broader web account path.
 - Registered installation-specific devices with app-version enforcement, native push tokens and owner-controlled revocation.
-- A native Messages inbox keeps team chats, groups, permitted customer SMS, photos, voice notes and internal voice/video calls inside TLink, using the app's dark theme. Requests use the existing device-bound authentication directly.
+- A native Connect inbox keeps team chats, groups, permitted customer SMS, photos, voice notes and internal voice/video calls inside TLink, using the app's dark theme. Requests use the existing device-bound authentication directly.
 - Explicit notification permission setup, phone-settings recovery, per-device mute and safe team-conversation routing from notification taps.
 - A worker-specific week calendar, day schedule, assigned-job cards and one-tap workflow launch.
 - A simple plus flow for workers who are allowed to create a new self-assigned rental or safety job.
