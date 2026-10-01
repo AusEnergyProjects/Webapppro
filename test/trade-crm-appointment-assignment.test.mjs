@@ -448,6 +448,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     "@/lib/trade-dataforce-source": tradeDataforceSource,
     "@/lib/trade-map-dataset-server": tradeMapDataset,
     "@/lib/trade-map-location-cache": tradeMapLocationCache,
+    "@/lib/tlink-schema-guards": { ensureTlinkSchemaGuards: async () => {} },
     "@/lib/gnaf-directory-server": { GnafDirectoryUnavailableError },
     "@/lib/trade-crm-register-sort-sql": registerSortHelpers,
     "@/lib/trade-calendar-sync-server": {

@@ -79,7 +79,9 @@ test("permission migration rejects malformed booleans and privilege dependencies
   apply(db, base);
   apply(db, roster);
   apply(db, migration);
-  for (const definition of TLINK_SCHEMA_GUARD_DEFINITIONS.slice(0, 2)) db.exec(definition.sql);
+  for (const definition of TLINK_SCHEMA_GUARD_DEFINITIONS.filter(definition => [
+    "trade_team_members_permissions_insert_guard", "trade_team_members_permissions_update_guard",
+  ].includes(definition.name))) db.exec(definition.sql);
   const now = "2026-08-12T00:00:00.000Z";
   db.prepare(`INSERT INTO trade_team_members
     (id, owner_uid, email, display_name, role, status, invited_at, created_at, updated_at)

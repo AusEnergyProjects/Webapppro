@@ -21,7 +21,7 @@ function fixture(overrides = {}) {
   const calls = [], errors = [], pending = [], database = { name: "sms-test-database" }, dependencies = new Map();
   const invoke = name => (...args) => {
     calls.push({ name, args });
-    return overrides[name] ? overrides[name](...args) : Promise.resolve();
+    return overrides[name] ? overrides[name](...args) : Promise.resolve(name === "drainTradeMapPreparation" ? { failed: 0 } : undefined);
   };
   for (const statement of parsed.statements) {
     if (!ts.isImportDeclaration(statement) || !statement.importClause) continue;
@@ -36,6 +36,7 @@ function fixture(overrides = {}) {
     dependencies.set(statement.moduleSpecifier.text, dependency);
   }
   dependencies.get("../db").getD1 = () => database;
+  dependencies.get("../src/lib/gnaf-directory-server").getGnafDirectory = async () => null;
   dependencies.get("../src/lib/service-reminder-delivery").serviceReminderProviderConfiguration = () => ({ email: { configured: false } });
   dependencies.get("../src/lib/creditex-product-registry-maintenance").creditexAutomaticProductRegistryMaintenanceTargets = () => [];
   const record = { exports: {} };

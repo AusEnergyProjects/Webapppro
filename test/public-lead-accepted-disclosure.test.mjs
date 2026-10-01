@@ -267,6 +267,7 @@ function workflowFixture() {
   applyMigration(database, acceptedDisclosureMigration);
   applyMigration(database, acceptedJobFilesMigration);
   applyMigration(database, customerDocumentDeliveryMigration);
+  applyMigration(database, read("../drizzle/0229_trade_map_preparation.sql"));
   installMissingDraftDeletionContext(database);
   const now = "2026-08-12T01:00:00.000Z";
   const matchId = "39c16039-4acd-4664-a2e5-3d8ad0dd7dd6";
@@ -354,7 +355,9 @@ const workflowServer = loadTypescriptModule(
             .results.map((row) => String(row.name)),
         );
         const definitions = (await import("../src/lib/tlink-schema-guards.ts"))
-          .TLINK_SCHEMA_GUARD_DEFINITIONS.slice(2);
+          .TLINK_SCHEMA_GUARD_DEFINITIONS.filter(definition => ![
+            "trade_team_members_permissions_insert_guard", "trade_team_members_permissions_update_guard",
+          ].includes(definition.name));
         const missing = definitions.filter((definition) => !installed.has(definition.name));
         if (missing.length) await db.batch(missing.map((definition) => db.prepare(definition.sql)));
       },
@@ -733,7 +736,8 @@ test("accepted disclosure migration rejects missing, mutable and malformed snaps
     customer_source text NOT NULL
   )`);
   applyMigration(database, acceptedDisclosureMigration);
-  for (const definition of (await import("../src/lib/tlink-schema-guards.ts")).TLINK_SCHEMA_GUARD_DEFINITIONS.slice(2, 4)) {
+  for (const definition of (await import("../src/lib/tlink-schema-guards.ts")).TLINK_SCHEMA_GUARD_DEFINITIONS
+    .filter(definition => ["trade_crm_job_details_accepted_disclosure_insert_guard", "trade_crm_job_details_accepted_disclosure_update_guard"].includes(definition.name))) {
     database.exec(definition.sql);
   }
   assert.throws(() => database.prepare(`INSERT INTO trade_crm_job_details

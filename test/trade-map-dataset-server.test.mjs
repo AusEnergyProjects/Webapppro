@@ -111,7 +111,7 @@ test("GET and location mutation paths enforce customer view and search permissio
   const mutation = route.slice(route.indexOf('if (requestedAction === "locate_map_records"'), route.indexOf('const quickQuote ='));
   assert.match(mutation, /!identity\.access\.canViewCustomers[\s\S]*!identity\.access\.canSearchCustomers/);
   assert.match(mutation, /crmIndex\(identity, url, resource, true\)/);
-  assert.match(mutation, /locateTradeMapRecords\(db, identity.uid, dataset, \{ limit: body.limit, directory: await getGnafDirectory\(\) \}\)/);
+  assert.match(mutation, /locateTradeMapRecords\(db, identity.uid, dataset, \{\s*limit: Math\.min\(body\.limit \?\? TRADE_MAP_PREPARATION_BATCH_SIZE, TRADE_MAP_PREPARATION_BATCH_SIZE\), directory: await getGnafDirectory\(\),\s*\}\)/);
   assert.doesNotMatch(mutation, /body\.results|saveTradeMapLocations/);
   assert.match(route, /error instanceof TradeMapInputError \|\| error instanceof TradeMapLocationInputError/);
 });

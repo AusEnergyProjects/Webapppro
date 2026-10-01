@@ -91,6 +91,7 @@ function fixture(overrides = {}) {
     '@/lib/trade-dataforce-source': tradeDataforceSource,
     '@/lib/trade-map-dataset-server': tradeMapDataset,
     '@/lib/trade-map-location-cache': tradeMapLocationCache,
+    '@/lib/tlink-schema-guards': { ensureTlinkSchemaGuards: async () => {} },
     '@/lib/gnaf-directory-server': { GnafDirectoryUnavailableError },
     '@/lib/creditex-dataforce-job-csv': { projectInstallerWorkOrderToDataforceRecord: input => input },
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access,
