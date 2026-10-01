@@ -244,8 +244,8 @@ function NativeTeamCallSession({ children, enabled, principal = null }: { childr
       if (ringtoneMode.current) await ringtoneMode.current;
       if (!isCurrent()) return;
       // Accept an authenticated incoming call before opening device media. This
-      // stops the caller's ringback and releases CallKit's pending Answer before
-      // WebRTC needs its audio session, including a locked cold start.
+      // stops the caller's ringback and authorizes CallKit's pending Answer.
+      // Native CallKit fulfils it only after WebRTC's transport is connected.
       let joined: CallResult | null = null;
       if (existing) {
         joined = await api('', { action: 'join', callId: existing.id, sessionId });
@@ -264,16 +264,28 @@ function NativeTeamCallSession({ children, enabled, principal = null }: { childr
       // This function is reached only through Start, Answer, or Retry. Neither
       // notification handling nor foreground polling acquires device media.
       const request = new AbortController(); mediaRequest.current = request;
-      const stream = await acquireNativeCallMedia(nextMode, isCurrent, request.signal);
+      // Once join is authorized, relay setup and microphone preparation are
+      // independent. Do not add the relay round trip after media initialization.
+      // Register media immediately so cancellation also releases a stream that
+      // arrives while the relay request is still pending.
+      const mediaReady = acquireNativeCallMedia(nextMode, isCurrent, request.signal).then(stream => {
+        if (!isCurrent()) { releaseNativeCallMedia(stream); return null; }
+        media.current = stream;
+        if (stream && appState.current !== 'active') {
+          stream.getVideoTracks().forEach(track => { track.enabled = false; });
+          setCameraOff(true);
+        }
+        return stream;
+      });
+      const [stream, preparedIce] = await Promise.all([
+        mediaReady,
+        existing ? api('', { action: 'ice', callId: existing.id, sessionId }) : Promise.resolve(null),
+      ]);
       if (mediaRequest.current === request) mediaRequest.current = null;
+      if (!isCurrent()) return;
       if (!stream) {
         if (isCurrent()) throw new Error('The microphone could not open. Try the call again.');
         return;
-      }
-      media.current = stream;
-      if (appState.current !== 'active') {
-        stream.getVideoTracks().forEach(track => { track.enabled = false; });
-        setCameraOff(true);
       }
       setLocal(stream); setFrontCamera(true);
       // CallKit owns iOS audio activation. InCallManager would deactivate or
@@ -322,7 +334,7 @@ function NativeTeamCallSession({ children, enabled, principal = null }: { childr
         // system call. Older builds use their existing InCallManager session.
         if (!nativeSystemCallsAvailable) { InCallManager.startRingback('_DEFAULT_'); ringbackStarted.current = true; }
       }
-      const ice = await api('', { action: 'ice', callId: current.call.id, sessionId });
+      const ice = preparedIce || await api('', { action: 'ice', callId: current.call.id, sessionId });
       if (!isCurrent() || session.current !== current) return;
       if (!ice.iceServers?.length) throw new Error('The call connection service is unavailable. Try again shortly.');
       current.peers = new NativeTeamCallConnections({

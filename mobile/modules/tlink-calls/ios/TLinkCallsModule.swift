@@ -202,13 +202,23 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
   func answer(_ value: String) throws {
     guard let uuid = UUID(uuidString: value), calls[uuid] != nil else { throw CallError.invalid }
     serverJoinedCalls.insert(uuid)
-    // JS calls this after the authenticated server accepts the join. Only then
-    // fulfill a queued lock-screen action and allow CallKit to activate audio.
-    if let action = pendingAnswers.removeValue(forKey: uuid) { action.fulfill(); return }
+    // Acceptance stops the caller's ringback, but SDP/ICE may still be pending.
+    // Return to JS immediately so it can create tracks and negotiate transport.
+    // Fulfilling here would start the system call timer before a connection.
+    completeAnswerIfReady(uuid)
     if acceptedCalls.contains(uuid) { return }
     controller.request(CXTransaction(action: CXAnswerCallAction(call: uuid))) { error in
       if error != nil { self.end(uuid, reason: .failed) }
     }
+  }
+  private func completeAnswerIfReady(_ id: UUID) {
+    guard serverJoinedCalls.contains(id), connectedCalls.contains(id),
+      let action = pendingAnswers.removeValue(forKey: id) else { return }
+    timers.removeValue(forKey: id)?.invalidate()
+    // This is transport readiness, not an audio-activation callback. CallKit
+    // can now activate audio in didActivate; waiting for captured/received audio
+    // before fulfilling would deadlock manual WebRTC audio on a locked phone.
+    action.fulfill(withDateConnected: Date())
   }
   private func prepareAudio() throws {
     let session = AVAudioSession.sharedInstance()
@@ -250,13 +260,14 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
   }
   func connected(_ value: String) {
     guard let id = UUID(uuidString: value), let call = calls[id] else { return }
-    connectedCalls.insert(id)
+    guard connectedCalls.insert(id).inserted else { return }
     timers.removeValue(forKey: id)?.invalidate()
     let update = CXCallUpdate()
     update.localizedCallerName = call.callerName
     provider.reportCall(with: id, updated: update)
     refreshRingback()
     if outgoingCalls.contains(id) { provider.reportOutgoingCall(with: id, connectedAt: Date()) }
+    else { completeAnswerIfReady(id) }
   }
   func end(_ value: String) { if let id = UUID(uuidString: value) { end(id, reason: .remoteEnded) } }
   private func end(_ id: UUID, reason: CXCallEndedReason) {
@@ -281,15 +292,17 @@ private final class TLinkCallCoordinator: NSObject, PKPushRegistryDelegate, CXPr
     guard let call = calls[action.callUUID], let date = TLinkCall.date(call.expiresAt), date > Date() else { action.fail(); return }
     acceptedCalls.insert(call.uuid)
     do { try prepareAudio() } catch { action.fail(); end(action.callUUID, reason: .failed); return }
-    // Keep the native UI in its connecting state until the server accepts the
-    // join. JS acknowledges before requesting audio tracks, preventing a manual
-    // WebRTC audio activation wait from blocking CallKit's activation callback.
-    if serverJoinedCalls.contains(call.uuid) { action.fulfill() }
-    else { pendingAnswers[call.uuid] = action }
+    // Keep both lock-screen and in-app answers pending until authenticated
+    // acceptance and WebRTC transport readiness. Track creation and SDP/ICE
+    // negotiation do not require the audio unit to be activated first.
+    pendingAnswers[call.uuid] = action
     let joining = call.connecting()
     calls[call.uuid] = joining
     expireUnconnected(joining, after: 45)
     enqueue("answer", joining)
+    // Transport can become ready before an in-app CXAnswerCallAction reaches
+    // this delegate. Reconcile here too instead of leaving that action pending.
+    completeAnswerIfReady(call.uuid)
   }
   func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
     end(action.callUUID, reason: .remoteEnded)

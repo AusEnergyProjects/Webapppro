@@ -24,7 +24,8 @@ type Peer = {
 export class NativeTeamCallConnections {
   private readonly peers = new Map<string, Peer>();
   private closed = false;
-  private outgoing: Promise<void> = Promise.resolve();
+  private readonly iceQueue: { peer: Peer; payload: Candidate }[] = [];
+  private activeIceRequests = 0;
 
   constructor(private readonly options: {
     memberId: string;
@@ -47,28 +48,61 @@ export class NativeTeamCallConnections {
     })));
   }
 
-  private send(peer: Peer, type: TeamCallSignal['type'], payload: TeamCallSignalPayload) {
-    this.outgoing = this.outgoing.then(async () => {
-      if (this.current(peer)) await this.options.send(peer.person, type, payload);
-    }).catch(() => {
-      if (this.current(peer)) this.options.failed('The call connection was interrupted. Call again when connected.');
-    });
-    return this.outgoing;
+  private fail(peer: Peer, message: string) {
+    if (!this.current(peer)) return;
+    this.close();
+    this.options.failed(message);
+  }
+
+  private async send(peer: Peer, type: TeamCallSignal['type'], payload: TeamCallSignalPayload) {
+    if (!this.current(peer)) return;
+    try {
+      await this.options.send(peer.person, type, payload);
+    } catch {
+      this.fail(peer, 'The call connection was interrupted. Call again when connected.');
+    }
+  }
+
+  private queueIce(peer: Peer, payload: Candidate) {
+    if (!this.current(peer)) return;
+    if (this.iceQueue.length >= 128) {
+      this.fail(peer, 'The call connection was interrupted. Call again when connected.');
+      return;
+    }
+    this.iceQueue.push({ peer, payload });
+    this.sendQueuedIce();
+  }
+
+  private sendQueuedIce() {
+    // SDP bypasses this queue: slow candidate requests must never hold up an
+    // offer or answer. Four concurrent requests keep trickle ICE bounded.
+    while (!this.closed && this.activeIceRequests < 4 && this.iceQueue.length) {
+      const next = this.iceQueue.shift();
+      if (!next || !this.current(next.peer)) continue;
+      this.activeIceRequests += 1;
+      void this.send(next.peer, 'ice', next.payload).finally(() => {
+        this.activeIceRequests -= 1;
+        this.sendQueuedIce();
+      });
+    }
   }
 
   private remove(peer: Peer) {
+    this.peers.delete(peer.person.memberId);
+    for (let index = this.iceQueue.length - 1; index >= 0; index -= 1) {
+      if (this.iceQueue[index].peer === peer) this.iceQueue.splice(index, 1);
+    }
     clearTimeout(peer.deadline);
     peer.detach();
     peer.connection.close();
     peer.stream?.release(false);
-    this.peers.delete(peer.person.memberId);
   }
 
   private deadline(peer: Peer, milliseconds: number) {
     clearTimeout(peer.deadline);
     peer.deadline = setTimeout(() => {
       if (this.current(peer) && peer.connection.connectionState !== 'connected') {
-        this.options.failed('The call could not connect. Check both devices have internet access, then call again.');
+        this.fail(peer, 'The call could not connect. Check both devices have internet access, then call again.');
       }
     }, milliseconds);
   }
@@ -98,7 +132,7 @@ export class NativeTeamCallConnections {
       };
       connection.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
         if (!this.current(peer) || !event.candidate) return;
-        void this.send(peer, 'ice', { candidate: event.candidate.candidate,
+        this.queueIce(peer, { candidate: event.candidate.candidate,
           sdpMid: event.candidate.sdpMid ?? null, sdpMLineIndex: event.candidate.sdpMLineIndex ?? null });
       };
       connection.onconnectionstatechange = () => {
@@ -106,7 +140,7 @@ export class NativeTeamCallConnections {
         if (['connected', 'failed', 'closed'].includes(connection.connectionState)) clearTimeout(peer.deadline);
         if (connection.connectionState === 'disconnected') this.deadline(peer, 15_000);
         this.changed();
-        if (connection.connectionState === 'failed') this.options.failed('A teammate could not connect. Check your connection and call again.');
+        if (connection.connectionState === 'failed') this.fail(peer, 'A teammate could not connect. Check your connection and call again.');
       };
       peer.detach = () => {
         connection.ontrack = null;
@@ -147,6 +181,7 @@ export class NativeTeamCallConnections {
       if (!this.current(peer)) return;
       await connection.addIceCandidate(candidate);
     }
+    if (!this.current(peer)) return;
     if (signal.type === 'offer') {
       const answer = await connection.createAnswer();
       if (!this.current(peer)) return;
@@ -160,6 +195,7 @@ export class NativeTeamCallConnections {
   close() {
     if (this.closed) return;
     this.closed = true;
+    this.iceQueue.length = 0;
     for (const peer of this.peers.values()) this.remove(peer);
     this.peers.clear();
   }

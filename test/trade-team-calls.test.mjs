@@ -26,11 +26,12 @@ function fixture(){
  for(const actor of [owner,...Array.from({length:8},(_,i)=>member(i+1))])for(const id of ['thread-demo-1','thread-demo-2'])sqlite.prepare('INSERT INTO trade_message_participants(thread_id,owner_uid,member_id)VALUES(?,?,?)').run(id,owner.ownerUid,actor.memberId);
  sqlite.prepare('INSERT INTO trade_message_participants(thread_id,owner_uid,member_id)VALUES(?,?,?)').run('thread-private',owner.ownerUid,member(1).memberId);
  let failBatch=false,beforeBatch;
- const statement=(sql,values=[])=>({sql,bind:(...next)=>statement(sql,next),first:async()=>sqlite.prepare(sql).get(...values)||null,all:async()=>({results:sqlite.prepare(sql).all(...values)}),runSync:()=>({meta:{changes:Number(sqlite.prepare(sql).run(...values).changes)}}),run(){return Promise.resolve(this.runSync());}});
- const db={prepare:statement,batch:async statements=>{if(beforeBatch){const action=beforeBatch;beforeBatch=null;action(statements);}sqlite.exec('BEGIN');try{const output=[];for(const [i,s]of statements.entries()){output.push(s.runSync());if(failBatch&&i===0&&statements[0].sql.startsWith('INSERT OR IGNORE INTO trade_team_calls')){failBatch=false;throw new Error('forced rollback');}}sqlite.exec('COMMIT');return output;}catch(error){sqlite.exec('ROLLBACK');throw error;}}};
+ const roundTrips=[];
+ const statement=(sql,values=[])=>({sql,bind:(...next)=>statement(sql,next),first:async()=>{roundTrips.push({type:'first',sql});return sqlite.prepare(sql).get(...values)||null;},all:async()=>{roundTrips.push({type:'all',sql});return{results:sqlite.prepare(sql).all(...values)};},runSync:()=>sql.trimStart().startsWith('SELECT ')?{meta:{changes:0},results:sqlite.prepare(sql).all(...values)}:{meta:{changes:Number(sqlite.prepare(sql).run(...values).changes)},results:[]},run(){roundTrips.push({type:'run',sql});return Promise.resolve(this.runSync());}});
+ const db={prepare:statement,batch:async statements=>{roundTrips.push({type:'batch',sql:statements.map(s=>s.sql).join('\n')});if(beforeBatch){const action=beforeBatch;beforeBatch=null;action(statements);}sqlite.exec('BEGIN');try{const output=[];for(const [i,s]of statements.entries()){output.push(s.runSync());if(failBatch&&i===0&&statements[0].sql.startsWith('INSERT OR IGNORE INTO trade_team_calls')){failBatch=false;throw new Error('forced rollback');}}sqlite.exec('COMMIT');return output;}catch(error){sqlite.exec('ROLLBACK');throw error;}}};
  const guards=load('../src/lib/trade-message-media-access.ts',{});
  const server=load('../src/lib/trade-team-calls-server.ts',{'../../db':{getD1:()=>db},'./trade-team-calls':pure,'./trade-message-media-access':guards,'./trade-team-presence':presence,'./trade-team-personal-name':personalNames});
- return{sqlite,db,server,failNextBatch(){failBatch=true;},beforeBatch(action){beforeBatch=action;},close:()=>sqlite.close()};
+ return{sqlite,db,server,roundTrips,failNextBatch(){failBatch=true;},beforeBatch(action){beforeBatch=action;},close:()=>sqlite.close()};
 }
 const start=(f,actor=owner,n=1,threadId='thread-demo-1')=>f.server.startTeamCall(actor,{threadId,requestId:request(n),sessionId:session(n),mode:'video'},f.db);
 const join=(f,call,actor,n)=>f.server.joinTeamCall(actor,call.id,session(n),f.db);
@@ -92,6 +93,107 @@ test('signalling is recipient-only, retry-safe, session-fenced and deleted on le
  await f.server.leaveTeamCall(member(1),call.id,session(2),f.db);assert.ok((await f.server.teamCallStatus(owner,{callId:call.id,sessionId:session(1)},f.db)).call.participants.some(p=>p.sessionId===session(22)));
  await f.server.leaveTeamCall(member(1),call.id,session(22),f.db);assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_signals').get().n,0);
 }finally{f.close();}});
+test('individual ICE delivery uses two round trips while polling retains lifecycle cleanup',async()=>{const f=fixture();try{
+ const call=await start(f);await join(f,call,member(1),2);
+ const unrelated=await start(f,owner,3,'thread-demo-2');
+ f.sqlite.prepare("UPDATE trade_team_calls SET created_at='2020-01-01' WHERE id=?").run(unrelated.id);
+ f.roundTrips.length=0;
+ await signal(f,call,{type:'ice',payload:{candidate:'candidate:1 1 UDP 123 127.0.0.1 1234 typ host'}});
+ assert.deepEqual(f.roundTrips.map(trip=>trip.type),['first','batch']);
+ assert.equal(f.sqlite.prepare('SELECT status FROM trade_team_calls WHERE id=?').get(unrelated.id).status,'active');
+ f.roundTrips.length=0;
+ const result=await f.server.teamCallStatus(member(1),{callId:call.id,sessionId:session(2)},f.db);
+ assert.equal(result.signals.length,1);
+ assert.equal(f.roundTrips.length,5);
+ assert.ok(f.roundTrips.some(trip=>trip.type==='batch'&&trip.sql.includes('SET last_seen_at=')&&trip.sql.includes('SELECT s.* FROM trade_team_call_signals')));
+ assert.equal(f.sqlite.prepare('SELECT status FROM trade_team_calls WHERE id=?').get(unrelated.id).status,'ended');
+}finally{f.close();}});
+
+test('signal writes recheck sender, recipient and lifecycle authority after the initial call read',async()=>{
+ const cases=[
+  ['sender suspended',f=>f.sqlite.exec("UPDATE trade_team_members SET status='suspended' WHERE id='owner-0001'")],
+  ['sender removed from thread',f=>f.sqlite.exec("DELETE FROM trade_message_participants WHERE member_id='owner-0001'")],
+  ['sender session replaced',f=>f.sqlite.exec("UPDATE trade_team_call_participants SET session_id='replacement-session' WHERE member_id='owner-0001'")],
+  ['sender left',f=>f.sqlite.exec("UPDATE trade_team_call_participants SET left_at='2020-01-01' WHERE member_id='owner-0001'")],
+  ['sender stale',f=>f.sqlite.exec("UPDATE trade_team_call_participants SET last_seen_at='2020-01-01' WHERE member_id='owner-0001'")],
+  ['recipient suspended',f=>f.sqlite.exec("UPDATE trade_team_members SET status='suspended' WHERE id='member-001'")],
+  ['recipient removed from thread',f=>f.sqlite.exec("DELETE FROM trade_message_participants WHERE member_id='member-001'")],
+  ['recipient session replaced',f=>f.sqlite.exec("UPDATE trade_team_call_participants SET session_id='replacement-session' WHERE member_id='member-001'")],
+  ['recipient left',f=>f.sqlite.exec("UPDATE trade_team_call_participants SET left_at='2020-01-01' WHERE member_id='member-001'")],
+  ['recipient stale',f=>f.sqlite.exec("UPDATE trade_team_call_participants SET last_seen_at='2020-01-01' WHERE member_id='member-001'")],
+  ['call ended',f=>f.sqlite.exec("UPDATE trade_team_calls SET status='ended'")],
+  ['call expired',f=>f.sqlite.exec("UPDATE trade_team_calls SET expires_at='2020-01-01'")],
+  ['unanswered deadline expired',f=>f.sqlite.exec("UPDATE trade_team_calls SET had_peer=0,created_at='2020-01-01'")],
+ ];
+ for(const [name,revoke] of cases){const f=fixture();try{
+  const call=await start(f);await join(f,call,member(1),2);
+  f.beforeBatch(()=>revoke(f));
+  await assert.rejects(signal(f,call),/CALL_ACCESS_REQUIRED/,name);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_signals').get().n,0,name);
+  assert.equal(f.sqlite.prepare('SELECT next_signal_sequence n FROM trade_team_calls').get().n,0,name);
+ }finally{f.close();}}
+});
+
+test('signal retries cannot acknowledge delivery to a revoked or replaced recipient',async()=>{
+ for(const sql of ["UPDATE trade_team_members SET status='suspended' WHERE id='member-001'","UPDATE trade_team_call_participants SET session_id='replacement-session' WHERE member_id='member-001'","UPDATE trade_team_call_participants SET left_at='2020-01-01' WHERE member_id='member-001'"]){const f=fixture();try{
+  const call=await start(f);await join(f,call,member(1),2);await signal(f,call);
+  f.beforeBatch(()=>f.sqlite.exec(sql));
+  await assert.rejects(signal(f,call),/CALL_ACCESS_REQUIRED/);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_signals').get().n,1);
+ }finally{f.close();}}
+});
+
+test('signals reject cross-business actors and field sessions revoked or expired during delivery',async()=>{
+ for(const update of ["status='revoked'","expires_at='2020-01-01'"]){const f=fixture();try{
+  const call=await start(f);await join(f,call,member(1),2);
+  const input={callId:call.id,sessionId:session(1),toMemberId:member(1).memberId,toSessionId:session(2),requestId:request(100),type:'offer',payload:{type:'offer',sdp:'v=0'}};
+  await assert.rejects(f.server.sendTeamCallSignal(foreign,input,f.db),/CALL_ACCESS_REQUIRED/);
+  const field={...owner,actorUid:'unused',fieldSessionId:'field-session'};
+  f.sqlite.prepare('INSERT INTO trade_field_sessions VALUES(?,?,?,?,?)').run(field.fieldSessionId,owner.ownerUid,owner.memberId,'active',new Date(Date.now()+60000).toISOString());
+  f.beforeBatch(()=>f.sqlite.exec(`UPDATE trade_field_sessions SET ${update}`));
+  await assert.rejects(f.server.sendTeamCallSignal(field,input,f.db),/CALL_ACCESS_REQUIRED/);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_signals').get().n,0);
+ }finally{f.close();}}
+});
+
+test('parallel ICE candidates keep atomic rate limits, unique order and idempotent acknowledgements',async()=>{const f=fixture();try{
+ const call=await start(f);await join(f,call,member(1),2);
+ const input=index=>({requestId:request(1000+index),type:'ice',payload:{candidate:`candidate:${index} 1 UDP 123 127.0.0.1 1234 typ host`}});
+ const results=await Promise.allSettled(Array.from({length:125},(_,i)=>signal(f,call,input(i))));
+ assert.equal(results.filter(result=>result.status==='fulfilled').length,120);
+ for(const result of results.filter(result=>result.status==='rejected'))assert.match(result.reason.message,/CALL_RATE_LIMIT/);
+ const rows=f.sqlite.prepare('SELECT sequence FROM trade_team_call_signals ORDER BY sequence').all();
+ assert.deepEqual(rows.map(row=>row.sequence),Array.from({length:120},(_,i)=>i+1));
+ await Promise.all(Array.from({length:8},()=>signal(f,call,input(0))));
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_signals').get().n,120);
+ assert.equal(f.sqlite.prepare('SELECT next_signal_sequence n FROM trade_team_calls').get().n,120);
+ await assert.rejects(signal(f,call,{...input(0),payload:input(1).payload}),/CALL_REQUEST_CONFLICT/);
+}finally{f.close();}});
+
+test('the total per-call signal limit stays atomic even when no cleanup runs between sends',async()=>{const f=fixture();try{
+ const call=await start(f);await join(f,call,member(1),2);
+ const seed=f.sqlite.prepare('INSERT INTO trade_team_call_signals(id,owner_uid,call_id,sequence,from_member_id,from_session_id,to_member_id,to_session_id,request_id,type,payload,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
+ for(let i=1;i<=999;i++)seed.run(`signal-${i}`,owner.ownerUid,call.id,i,owner.memberId,session(1),member(1).memberId,session(2),request(i),'ice',JSON.stringify({candidate:'candidate:seed'}),new Date(Date.now()-61000).toISOString());
+ f.sqlite.prepare('UPDATE trade_team_calls SET next_signal_sequence=999 WHERE id=?').run(call.id);
+ const results=await Promise.allSettled([1000,1001].map(i=>signal(f,call,{requestId:request(i)})));
+ assert.equal(results.filter(result=>result.status==='fulfilled').length,1);
+ assert.match(results.find(result=>result.status==='rejected').reason.message,/CALL_RATE_LIMIT/);
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_signals').get().n,1000);
+ assert.equal(f.sqlite.prepare('SELECT next_signal_sequence n FROM trade_team_calls').get().n,1000);
+}finally{f.close();}});
+
+test('batched status cannot refresh or disclose signals for a revoked or replaced recipient',async()=>{
+ for(const update of ["UPDATE trade_team_members SET status='suspended' WHERE id='member-001'","UPDATE trade_team_call_participants SET session_id='replacement-session' WHERE member_id='member-001'","UPDATE trade_team_call_participants SET last_seen_at='2020-01-01' WHERE member_id='member-001'"]){const f=fixture();try{
+  const call=await start(f);await join(f,call,member(1),2);await signal(f,call);
+  const original=f.db.batch;
+  f.db.batch=async statements=>{
+   if(statements[0].sql.startsWith('UPDATE trade_team_call_participants SET last_seen_at='))f.sqlite.exec(update);
+   return original(statements);
+  };
+  await assert.rejects(f.server.teamCallStatus(member(1),{callId:call.id,sessionId:session(2)},f.db),/CALL_SESSION_REPLACED/);
+ }finally{f.close();}}
+});
+
 test('one-hour expiry and unanswered timeout end calls and purge sensitive signalling',async()=>{const f=fixture();try{
  let call=await start(f);await join(f,call,member(1),2);await signal(f,call);f.sqlite.prepare("UPDATE trade_team_calls SET expires_at='2020-01-01' WHERE id=?").run(call.id);
  let result=await f.server.teamCallStatus(owner,{callId:call.id,sessionId:session(1)},f.db);assert.equal(result.call.status,'ended');assert.deepEqual(result.signals,[]);assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_team_call_signals').get().n,0);

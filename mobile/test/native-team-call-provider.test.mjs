@@ -318,6 +318,59 @@ test('system Answer cannot acquire media for a stale notification or unauthorize
   assert.deepEqual(h.state.media, []); assert.ok(h.system.ended.includes(invitation.id)); h.cleanup();
 });
 
+test('an accepted incoming call prepares its relay while microphone initialization is pending', async () => {
+  const h = harness({ native: true, initialAppState: 'background' });
+  let finishMedia;
+  h.state.acquire = (_mode, current) => new Promise(resolve => { finishMedia = () => resolve(current() ? h.state.stream : null); });
+  const pending = h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
+  await flush();
+  assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'ice').length, 1, 'relay does not wait for microphone');
+  assert.deepEqual(h.system.connected, [], 'acceptance never claims the transport connected');
+  finishMedia(); await pending;
+  assert.equal(h.state.api.filter(item => item.body?.action === 'ice').length, 1, 'reuse the prepared relay');
+  assert.equal(h.state.peers.length, 1); h.cleanup();
+});
+
+test('cancellation releases ready media while relay setup is pending and cannot reopen the call', async () => {
+  const h = harness({ native: true, initialAppState: 'background' });
+  const normal = h.state.respond; let finishRelay;
+  h.state.respond = (url, body) => body?.action === 'ice' ? new Promise(resolve => { finishRelay = resolve; }) : normal(url, body);
+  const pending = h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
+  await flush();
+  await h.systemEvent({ type: 'end', callId: invitation.id });
+  assert.deepEqual(h.state.released, [h.state.stream]);
+  finishRelay({ ok: true, iceServers: [{ urls: 'turn:relay.test' }] }); await pending;
+  assert.deepEqual(h.state.peers, []); assert.deepEqual(h.system.connected, []);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'leave').length, 1); h.cleanup();
+});
+
+test('video acquired after backgrounding is disabled immediately while relay setup is pending', async () => {
+  const h = harness({ native: true });
+  const normal = h.state.respond; let finishRelay, finishMedia;
+  h.state.acquire = (_mode, current) => new Promise(resolve => { finishMedia = () => resolve(current() ? h.state.stream : null); });
+  h.state.respond = (url, body) => body?.action === 'ice' ? new Promise(resolve => { finishRelay = resolve; }) : normal(url, body);
+  const pending = h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
+  await flush(); h.appState('background'); h.render();
+  finishMedia(); await flush();
+  assert.equal(h.state.stream.getVideoTracks()[0].enabled, false, 'background camera must not wait for relay');
+  assert.equal(h.state.peers.length, 0);
+  finishRelay({ ok: true, iceServers: [{ urls: 'turn:relay.test' }] }); await pending;
+  assert.equal(h.state.stream.getVideoTracks()[0].enabled, false); h.cleanup();
+});
+
+test('relay failure cancels pending microphone initialization and leaves the accepted session', async () => {
+  const h = harness({ native: true, initialAppState: 'background' });
+  const normal = h.state.respond; let finishMedia, mediaSignal;
+  h.state.acquire = (_mode, current, signal) => new Promise(resolve => { mediaSignal = signal; finishMedia = () => resolve(current() ? h.state.stream : null); });
+  h.state.respond = (url, body) => body?.action === 'ice' ? Promise.reject(new Error('Relay unavailable')) : normal(url, body);
+  await h.systemEvent({ type: 'answer', callId: invitation.id, threadId: invitation.threadId, expiresAt: invitation.expiresAt });
+  assert.equal(mediaSignal.aborted, true);
+  finishMedia(); await flush();
+  assert.deepEqual(h.state.peers, []); assert.deepEqual(h.system.connected, []);
+  assert.equal(h.state.api.filter(item => item.body?.action === 'leave').length, 1); h.cleanup();
+});
+
 test('system End during permission acquisition leaves the accepted session and never opens late media', async () => {
   const h = harness({ native: true }); let resolve;
   h.state.acquire = (_mode, current) => new Promise(done => { resolve = () => done(current() ? h.state.stream : null); });
@@ -700,7 +753,7 @@ test('cold locked Answer connects through invitation capability before the priva
   callCapabilityResponses(h);
   h.state.acquire = async (_mode, current) => {
     assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1, 'authenticated acceptance precedes capture');
-    assert.deepEqual(h.system.answers, [invitation.id], 'CallKit activation is acknowledged before WebRTC capture');
+    assert.deepEqual(h.system.answers, [invitation.id], 'authenticated acceptance is acknowledged before WebRTC negotiation');
     return current() ? h.state.stream : null;
   };
   await flush(); assert.deepEqual(h.state.api, [], 'locked workspace cannot cause ordinary call polling');

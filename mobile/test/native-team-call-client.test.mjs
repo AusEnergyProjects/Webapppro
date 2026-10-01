@@ -29,7 +29,7 @@ const track = (kind = 'audio') => ({ id: `track-${kind}`, kind, stopped: false, 
 const signal = (type, payload, overrides = {}) => ({ id: 'signal', sequence: 1, fromMemberId: 'a-member', fromSessionId: 'a-member-session', toSessionId: 'local-session', requestId: 'request', type, payload, ...overrides });
 const ice = { candidate: 'candidate:one', sdpMid: '0', sdpMLineIndex: 0 };
 
-function harness(memberId = 'z-member') {
+function harness(memberId = 'z-member', send = async () => {}) {
   const connections = [], sent = [], changed = [], failures = [];
   class Connection {
     constructor(configuration) { this.configuration = configuration; this.connectionState = 'new'; this.signalingState = 'stable'; this.remoteDescription = null; this.localDescription = null; this.candidates = []; this.added = []; connections.push(this); }
@@ -43,10 +43,115 @@ function harness(memberId = 'z-member') {
   }
   const { NativeTeamCallConnections } = moduleWithNativeMock('native-team-call-client', { MediaStream: Stream, RTCPeerConnection: Connection });
   const client = new NativeTeamCallConnections({ memberId, sessionId: 'local-session', local: new Stream([track()]), iceServers: [{ urls: 'turn:relay.test', username: 'temporary', credential: 'temporary' }],
-    send: async (...args) => sent.push(args), changed: peers => changed.push(peers), failed: message => failures.push(message) });
+    send: async (...args) => { sent.push(args); await send(...args); }, changed: peers => changed.push(peers), failed: message => failures.push(message) });
   clients.add(client);
   return { client, connections, sent, changed, failures, Connection };
 }
+
+const flushSends = () => new Promise(resolve => setImmediate(resolve));
+function delayedIce() {
+  const pending = [];
+  return { pending, send: async (_target, type) => {
+    if (type === 'ice') await new Promise((resolve, reject) => pending.push({ resolve, reject }));
+  } };
+}
+
+for (const descriptionType of ['offer', 'answer']) test(`native ${descriptionType} completes while four ICE requests remain unresolved`, async () => {
+  const transport = delayedIce();
+  const h = harness(descriptionType === 'offer' ? 'a-member' : 'z-member', transport.send);
+  const setLocal = h.Connection.prototype.setLocalDescription;
+  h.Connection.prototype.setLocalDescription = async function(description) {
+    for (let index = 0; index < 12; index += 1) this.onicecandidate({ candidate: { ...ice, candidate: `candidate:${index}` } });
+    await setLocal.call(this, description);
+  };
+  let completed = false;
+  const work = descriptionType === 'offer'
+    ? h.client.sync([person('z-member')])
+    : h.client.sync([person('a-member')]).then(() => h.client.receive(signal('offer', { type: 'offer', sdp: 'v=0' })));
+  void work.then(() => { completed = true; });
+  await flushSends();
+  assert.equal(transport.pending.length, 4);
+  assert.deepEqual(h.sent.map(item => item[1]), ['ice', 'ice', 'ice', 'ice', descriptionType]);
+  assert.equal(completed, true, 'SDP completes before any candidate request resolves');
+  h.client.close();
+  for (const item of transport.pending.splice(0)) item.resolve();
+  await work;
+});
+
+test('native ICE sends four immediately and drains a bounded number concurrently', async () => {
+  const transport = delayedIce(), h = harness('z-member', transport.send);
+  await h.client.sync([person('a-member')]);
+  for (let index = 0; index < 20; index += 1) h.connections[0].onicecandidate({ candidate: { ...ice, candidate: `candidate:${index}` } });
+  assert.equal(h.sent.length, 4);
+  transport.pending.shift().resolve();
+  await flushSends();
+  assert.equal(h.sent.length, 5);
+  assert.equal(transport.pending.length, 4);
+  while (transport.pending.length) {
+    assert.ok(transport.pending.length <= 4);
+    transport.pending.shift().resolve();
+    await flushSends();
+  }
+  assert.deepEqual(h.sent.map(item => item[2].candidate), Array.from({ length: 20 }, (_, index) => `candidate:${index}`));
+});
+
+test('native rejoin discards queued old-session ICE and ignores late old-session failures', async () => {
+  const transport = delayedIce(), h = harness('z-member', transport.send);
+  await h.client.sync([person('a-member')]);
+  const oldHandler = h.connections[0].onicecandidate;
+  for (let index = 0; index < 12; index += 1) oldHandler({ candidate: ice });
+  await h.client.sync([person('a-member', 'new-session')]);
+  oldHandler({ candidate: ice });
+  h.connections[1].onicecandidate({ candidate: ice });
+  await h.client.receive(signal('offer', { type: 'offer', sdp: 'v=0' }, { fromSessionId: 'new-session' }));
+  for (const item of transport.pending.splice(0)) item.reject(new Error('Old session request failed'));
+  await flushSends();
+  assert.equal(h.failures.length, 0);
+  assert.equal(h.sent.filter(item => item[0].sessionId === 'a-member-session').length, 4);
+  assert.deepEqual(h.sent.filter(item => item[0].sessionId === 'new-session').map(item => item[1]), ['answer', 'ice']);
+  h.client.close();
+  for (const item of transport.pending.splice(0)) item.resolve();
+});
+
+test('native close discards queued ICE and suppresses late send failures', async () => {
+  const transport = delayedIce(), h = harness('z-member', transport.send);
+  await h.client.sync([person('a-member')]);
+  const handler = h.connections[0].onicecandidate;
+  for (let index = 0; index < 12; index += 1) handler({ candidate: ice });
+  h.client.close();
+  handler({ candidate: ice });
+  for (const item of transport.pending.splice(0)) item.reject(new Error('Closed request'));
+  await flushSends();
+  assert.equal(h.sent.length, 4);
+  assert.equal(h.failures.length, 0);
+});
+
+test('native send failure reports once and discards queued traffic', async () => {
+  const transport = delayedIce(), h = harness('z-member', transport.send);
+  await h.client.sync([person('a-member')]);
+  for (let index = 0; index < 12; index += 1) h.connections[0].onicecandidate({ candidate: ice });
+  for (const item of transport.pending.splice(0)) item.reject(new Error('Network failed'));
+  await flushSends();
+  assert.equal(h.sent.length, 4);
+  assert.equal(h.failures.length, 1);
+  assert.equal(h.connections[0].closed, true);
+});
+
+test('native outgoing ICE queue is limited to 128 waiting requests', async () => {
+  const transport = delayedIce(), h = harness('z-member', transport.send);
+  await h.client.sync([person('a-member')]);
+  const handler = h.connections[0].onicecandidate;
+  for (let index = 0; index < 132; index += 1) handler({ candidate: ice });
+  assert.equal(h.failures.length, 0);
+  handler({ candidate: ice });
+  handler({ candidate: ice });
+  assert.equal(h.failures.length, 1);
+  assert.equal(h.sent.length, 4);
+  assert.equal(h.connections[0].closed, true);
+  for (const item of transport.pending.splice(0)) item.resolve();
+  await flushSends();
+  assert.equal(h.sent.length, 4);
+});
 
 test('the lower member ID offers using server TURN, including receive video for voice-only callers', async () => {
   const h = harness('a-member');
@@ -133,6 +238,19 @@ test('closing during remote SDP prevents answers and releases all event handlers
   assert.equal(h.sent.length, 0);
   assert.equal(h.connections[0].onicecandidate, null);
   assert.equal(h.connections[0].onconnectionstatechange, null);
+});
+
+test('closing during the last buffered ICE operation prevents answer creation', async () => {
+  const h = harness(); await h.client.sync([person('a-member')]);
+  await h.client.receive(signal('ice', ice));
+  const pc = h.connections[0]; let finish, answers = 0;
+  pc.addIceCandidate = () => new Promise(resolve => { finish = resolve; });
+  pc.createAnswer = async () => { answers += 1; return { type: 'answer', sdp: 'v=0' }; };
+  const pending = h.client.receive(signal('offer', { type: 'offer', sdp: 'v=0' }));
+  await flushSends();
+  h.client.close(); finish(); await pending;
+  assert.equal(answers, 0);
+  assert.equal(h.sent.length, 0);
 });
 
 test('ICE buffering and group size are bounded', async () => {

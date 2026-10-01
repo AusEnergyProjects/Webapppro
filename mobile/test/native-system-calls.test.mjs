@@ -4,6 +4,14 @@ import test from 'node:test';
 import ts from 'typescript';
 
 const source = fs.readFileSync(new URL('../src/lib/native-system-calls.ts', import.meta.url), 'utf8');
+const swift = fs.readFileSync(new URL('../modules/tlink-calls/ios/TLinkCallsModule.swift', import.meta.url), 'utf8');
+function swiftMethod(signature) {
+  const start = swift.indexOf(signature);
+  assert.notEqual(start, -1, `Missing native method: ${signature}`);
+  const end = swift.indexOf('\n  }', start);
+  assert.ok(end > start, `Missing native method body: ${signature}`);
+  return swift.slice(start, end);
+}
 function load(native) {
   const record = { exports: {} };
   const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -92,14 +100,70 @@ test('a handler awaiting account restore keeps Answer queued, while End still in
 });
 
 test('native caller name is retained for ringing, answered and ongoing presentation', () => {
-  const swift = fs.readFileSync(new URL('../modules/tlink-calls/ios/TLinkCallsModule.swift', import.meta.url), 'utf8');
   assert.match(swift, /update\.localizedCallerName = call\.callerName/g);
   assert.doesNotMatch(swift, /localizedCallerName = "TLink"|Unlock iPhone and open TLink/);
   assert.match(swift, /pendingAnswers\[call\.uuid\] = action/);
-  assert.match(swift, /pendingAnswers\.removeValue\(forKey: uuid\).*action\.fulfill/);
-  assert.match(swift, /serverJoinedCalls\.contains\(call\.uuid\)/);
   assert.match(swift, /pendingAnswers\.removeValue\(forKey: id\)\?\.fail\(\)/);
   assert.match(swift, /AsyncFunction\("acknowledgeEvents"\)/);
+});
+
+test('iOS answers require authenticated acceptance and ready transport before the system timer starts', () => {
+  const acceptance = swiftMethod('func answer(_ value: String)');
+  const nativeAnswer = swiftMethod('func provider(_ provider: CXProvider, perform action: CXAnswerCallAction)');
+  const ready = swiftMethod('private func completeAnswerIfReady(_ id: UUID)');
+  const connected = swiftMethod('func connected(_ value: String)');
+  assert.match(acceptance, /serverJoinedCalls\.insert\(uuid\)/);
+  assert.match(acceptance, /completeAnswerIfReady\(uuid\)/);
+  assert.doesNotMatch(acceptance, /action\.fulfill|pendingAnswers\.removeValue/);
+  assert.match(nativeAnswer, /pendingAnswers\[call\.uuid\] = action/);
+  assert.doesNotMatch(nativeAnswer, /action\.fulfill/);
+  assert.match(ready, /guard serverJoinedCalls\.contains\(id\), connectedCalls\.contains\(id\),\s*let action = pendingAnswers\.removeValue\(forKey: id\) else \{ return \}/);
+  assert.match(ready, /action\.fulfill\(withDateConnected: Date\(\)\)/);
+  assert.equal((swift.match(/\.fulfill\(withDateConnected:/g) || []).length, 1, 'one authoritative incoming connection timestamp');
+  assert.match(connected, /guard connectedCalls\.insert\(id\)\.inserted else \{ return \}/);
+  assert.match(connected, /else \{ completeAnswerIfReady\(id\) \}/);
+  assert.match(nativeAnswer, /enqueue\("answer", joining\)[\s\S]*completeAnswerIfReady\(call\.uuid\)/, 'transport readiness preceding in-app CallKit action arrival is reconciled');
+});
+
+test('iOS pending answers stay bounded and audio activation cannot gate their completion', () => {
+  const nativeAnswer = swiftMethod('func provider(_ provider: CXProvider, perform action: CXAnswerCallAction)');
+  const prepareAudio = swiftMethod('private func prepareAudio()');
+  const ready = swiftMethod('private func completeAnswerIfReady(_ id: UUID)');
+  const activated = swiftMethod('func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession)');
+  const ended = swiftMethod('private func end(_ id: UUID, reason: CXCallEndedReason)');
+  const timedOut = swiftMethod('func provider(_ provider: CXProvider, timedOutPerforming action: CXAction)');
+  assert.match(nativeAnswer, /try prepareAudio\(\)/);
+  assert.match(nativeAnswer, /expireUnconnected\(joining, after: 45\)/);
+  assert.doesNotMatch(prepareAudio, /\.setActive\(/, 'CallKit owns activation');
+  assert.doesNotMatch(ready, /audioActive|isAudioEnabled|didActivate\(/, 'ready transport must fulfill before audio activation, never wait for it');
+  assert.match(activated, /audioSessionDidActivate\(audioSession\)/);
+  assert.match(activated, /isAudioEnabled = true/);
+  assert.doesNotMatch(activated, /completeAnswerIfReady|\.fulfill\(/);
+  assert.match(timedOut, /end\(callAction\.callUUID, reason: \.failed\)/);
+  assert.match(ended, /connectedCalls\.remove\(id\)/);
+  assert.match(ended, /serverJoinedCalls\.remove\(id\)/);
+  assert.match(ended, /pendingAnswers\.removeValue\(forKey: id\)\?\.fail\(\)/);
+  assert.match(ended, /enqueue\("end", call\)/);
+});
+
+test('accepting a native answer returns control for negotiation without reporting a connected call', async () => {
+  const seen = []; const incoming = event('answer'); let nativeListener;
+  const bridge = load({
+    addListener: (_name, callback) => { nativeListener = callback; return { remove() {} }; },
+    drainEvents: async () => [incoming], acknowledgeEvents: async ids => seen.push(['acknowledged', ...ids]),
+    answer: async id => seen.push(['accepted', id]),
+    connected: async id => seen.push(['transport-ready', id]),
+  });
+  const remove = bridge.subscribeSystemCalls(async value => {
+    await bridge.answerSystemCall(value.callId);
+    seen.push(['negotiation-can-start', value.callId]);
+  });
+  await flush();
+  assert.equal(typeof nativeListener, 'function');
+  assert.deepEqual(seen, [['accepted', incoming.callId], ['negotiation-can-start', incoming.callId], ['acknowledged', incoming.id]]);
+  await bridge.connectSystemCall(incoming.callId);
+  assert.deepEqual(seen.at(-1), ['transport-ready', incoming.callId]);
+  remove();
 });
 
 test('an accepted Answer keeps bounded connection grace without extending an unanswered invitation', () => {

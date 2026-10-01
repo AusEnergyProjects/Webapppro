@@ -8,12 +8,12 @@ const record={exports:{}};
 new Function('module','exports',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(record,record.exports);
 const {TeamCallConnections}=record.exports;
 const people=[{memberId:'a',name:'Alex',sessionId:'session-a',joinedAt:''},{memberId:'b',name:'Blake',sessionId:'session-b',joinedAt:''}];
-function fixture(memberId='a') {
+function fixture(memberId='a',send=async()=>{}) {
   const connections=[],sent=[],changes=[],failures=[];
   const localTracks=[{id:'mic',kind:'audio'},{id:'camera',kind:'video'}];
   const local={getTracks:()=>[...localTracks],getVideoTracks:()=>localTracks.filter(t=>t.kind==='video'),removeTrack:track=>localTracks.splice(localTracks.indexOf(track),1),addTrack:track=>localTracks.push(track)};
   const client=new TeamCallConnections({memberId,sessionId:`session-${memberId}`,local,iceServers:[{urls:'turn:example.test'}],
-    send:async(target,type,payload)=>sent.push({target,type,payload}),changed:value=>changes.push(value),failed:message=>failures.push(message),
+    send:async(target,type,payload)=>{sent.push({target,type,payload});await send(target,type,payload);},changed:value=>changes.push(value),failed:message=>failures.push(message),
     createPeer:configuration=>{const pc={configuration,connectionState:'new',signalingState:'stable',tracks:[],candidates:[],closed:false,
       senders:[],addTrack(track){this.tracks.push(track);this.senders.push({track,async replaceTrack(next){this.track=next;}});},getSenders(){return this.senders;},async createOffer(options){this.offerOptions=options;return{type:'offer',sdp:'v=0 offer'};},async createAnswer(){return{type:'answer',sdp:'v=0 answer'};},
       async setLocalDescription(description){this.localDescription=description;this.signalingState=description.type==='offer'?'have-local-offer':'stable';},
@@ -22,6 +22,152 @@ function fixture(memberId='a') {
   return{client,connections,sent,changes,failures,local};
 }
 const signal=(overrides={})=>({id:'signal',sequence:1,fromMemberId:'a',fromSessionId:'session-a',toSessionId:'session-b',requestId:'request',type:'ice',payload:{candidate:'candidate:test',sdpMid:'0',sdpMLineIndex:0},...overrides});
+
+const flushSends = () => new Promise(resolve => setImmediate(resolve));
+function delayedIce() {
+  const pending = [];
+  return { pending, send: async (_target, type) => {
+    if (type === 'ice') await new Promise((resolve, reject) => pending.push({ resolve, reject }));
+  } };
+}
+
+for (const descriptionType of ['offer', 'answer']) test(`browser ${descriptionType} completes while four ICE requests remain unresolved`, async context => {
+  const transport = delayedIce(), f = fixture(descriptionType === 'offer' ? 'a' : 'b', transport.send);
+  context.after(() => f.client.close());
+  const syncing = f.client.sync(people), pc = f.connections[0];
+  const setLocal = pc.setLocalDescription;
+  pc.setLocalDescription = async function(description) {
+    for (let index = 0; index < 12; index += 1) this.onicecandidate({ candidate: { ...signal().payload, candidate: `candidate:${index}` } });
+    await setLocal.call(this, description);
+  };
+  let completed = false;
+  const work = descriptionType === 'offer' ? syncing
+    : syncing.then(() => f.client.receive(signal({ type: 'offer', payload: { type: 'offer', sdp: 'v=0' } })));
+  void work.then(() => { completed = true; });
+  await flushSends();
+  assert.equal(transport.pending.length, 4);
+  assert.deepEqual(f.sent.map(item => item.type), ['ice', 'ice', 'ice', 'ice', descriptionType]);
+  assert.equal(completed, true, 'SDP completes before any candidate request resolves');
+  f.client.close();
+  for (const item of transport.pending.splice(0)) item.resolve();
+  await work;
+});
+
+test('browser ICE sends four immediately and drains a bounded number concurrently', async context => {
+  const transport = delayedIce(), f = fixture('b', transport.send);
+  context.after(() => f.client.close());
+  await f.client.sync(people);
+  for (let index = 0; index < 20; index += 1) f.connections[0].onicecandidate({ candidate: { ...signal().payload, candidate: `candidate:${index}` } });
+  assert.equal(f.sent.length, 4);
+  transport.pending.shift().resolve();
+  await flushSends();
+  assert.equal(f.sent.length, 5);
+  assert.equal(transport.pending.length, 4);
+  while (transport.pending.length) {
+    assert.ok(transport.pending.length <= 4);
+    transport.pending.shift().resolve();
+    await flushSends();
+  }
+  assert.deepEqual(f.sent.map(item => item.payload.candidate), Array.from({ length: 20 }, (_, index) => `candidate:${index}`));
+});
+
+test('browser rejoin discards queued old-session ICE and ignores late old-session failures', async context => {
+  const transport = delayedIce(), f = fixture('b', transport.send);
+  context.after(() => f.client.close());
+  await f.client.sync(people);
+  const oldHandler = f.connections[0].onicecandidate;
+  for (let index = 0; index < 12; index += 1) oldHandler({ candidate: signal().payload });
+  await f.client.sync([{ ...people[0], sessionId: 'new-session' }, people[1]]);
+  assert.equal(f.connections[0].onicecandidate, null);
+  oldHandler({ candidate: signal().payload });
+  f.connections[1].onicecandidate({ candidate: signal().payload });
+  await f.client.receive(signal({ fromSessionId: 'new-session', type: 'offer', payload: { type: 'offer', sdp: 'v=0' } }));
+  for (const item of transport.pending.splice(0)) item.reject(new Error('Old session request failed'));
+  await flushSends();
+  assert.equal(f.failures.length, 0);
+  assert.equal(f.sent.filter(item => item.target.sessionId === 'session-a').length, 4);
+  assert.deepEqual(f.sent.filter(item => item.target.sessionId === 'new-session').map(item => item.type), ['answer', 'ice']);
+  f.client.close();
+  for (const item of transport.pending.splice(0)) item.resolve();
+});
+
+test('browser close discards queued ICE and suppresses late send failures', async () => {
+  const transport = delayedIce(), f = fixture('b', transport.send);
+  await f.client.sync(people);
+  const handler = f.connections[0].onicecandidate;
+  for (let index = 0; index < 12; index += 1) handler({ candidate: signal().payload });
+  f.client.close();
+  handler({ candidate: signal().payload });
+  for (const item of transport.pending.splice(0)) item.reject(new Error('Closed request'));
+  await flushSends();
+  assert.equal(f.sent.length, 4);
+  assert.equal(f.failures.length, 0);
+});
+
+test('browser send failure reports once and discards queued traffic', async context => {
+  const transport = delayedIce(), f = fixture('b', transport.send);
+  context.after(() => f.client.close());
+  await f.client.sync(people);
+  for (let index = 0; index < 12; index += 1) f.connections[0].onicecandidate({ candidate: signal().payload });
+  for (const item of transport.pending.splice(0)) item.reject(new Error('Network failed'));
+  await flushSends();
+  assert.equal(f.sent.length, 4);
+  assert.equal(f.failures.length, 1);
+  assert.equal(f.connections[0].closed, true);
+});
+
+test('browser outgoing ICE queue is limited to 128 waiting requests', async context => {
+  const transport = delayedIce(), f = fixture('b', transport.send);
+  context.after(() => f.client.close());
+  await f.client.sync(people);
+  const handler = f.connections[0].onicecandidate;
+  for (let index = 0; index < 132; index += 1) handler({ candidate: signal().payload });
+  assert.equal(f.failures.length, 0);
+  handler({ candidate: signal().payload });
+  handler({ candidate: signal().payload });
+  assert.equal(f.failures.length, 1);
+  assert.equal(f.sent.length, 4);
+  assert.equal(f.connections[0].closed, true);
+  for (const item of transport.pending.splice(0)) item.resolve();
+  await flushSends();
+  assert.equal(f.sent.length, 4);
+});
+
+test('browser session replacement during offer creation cannot publish stale local SDP', async context => {
+  const f = fixture(); context.after(() => f.client.close());
+  await f.client.sync(people);
+  await f.client.sync([people[0]]);
+  // Pause the next offer immediately after peer creation, before it resolves.
+  const pending = f.client.sync(people), old = f.connections[1];
+  await f.client.sync([people[0]]);
+  await pending;
+  assert.equal(old.localDescription, undefined);
+  assert.equal(f.sent.length, 1);
+});
+
+test('browser close during remote SDP cannot create or send an answer', async () => {
+  const f = fixture('b'); await f.client.sync(people);
+  const pc = f.connections[0]; let finish, answers = 0;
+  pc.setRemoteDescription = () => new Promise(resolve => { finish = resolve; });
+  pc.createAnswer = async () => { answers += 1; return { type: 'answer', sdp: 'v=0' }; };
+  const pending = f.client.receive(signal({ type: 'offer', payload: { type: 'offer', sdp: 'v=0' } }));
+  f.client.close(); finish(); await pending;
+  assert.equal(answers, 0);
+  assert.equal(f.sent.length, 0);
+});
+
+test('browser close during the last buffered ICE operation prevents answer creation', async () => {
+  const f = fixture('b'); await f.client.sync(people);
+  await f.client.receive(signal());
+  const pc = f.connections[0]; let finish, answers = 0;
+  pc.addIceCandidate = () => new Promise(resolve => { finish = resolve; });
+  pc.createAnswer = async () => { answers += 1; return { type: 'answer', sdp: 'v=0' }; };
+  const pending = f.client.receive(signal({ type: 'offer', payload: { type: 'offer', sdp: 'v=0' } }));
+  await flushSends();
+  f.client.close(); finish(); await pending;
+  assert.equal(answers, 0);
+  assert.equal(f.sent.length, 0);
+});
 
 test('only one side offers, adds both media tracks and uses supplied relay configuration',async()=>{
   const a=fixture('a'),b=fixture('b');await a.client.sync(people);await b.client.sync(people);

@@ -39,7 +39,8 @@ async function assertGuard(db: D1Database, guard: Guard) {
     if (!await db.prepare(`SELECT 1 allowed WHERE ${guard.sql}`).bind(...guard.values).first())
         throw new Error("CALL_ACCESS_REQUIRED");
 }
-// Every entry point first authenticates its current actor, then bounds cleanup to that business.
+// Lifecycle reads/writes authenticate the current actor before business-scoped cleanup.
+// Individual signals use current guarded writes instead of repeating this sweep for every ICE candidate.
 async function cleanup(actor: MessageActor, db: D1Database) {
     await assertGuard(db, messageActorGuard(actor));
     const now = stamp(), stale = before(45), unanswered = before(TEAM_CALL_RING_SECONDS);
@@ -70,8 +71,9 @@ function joinedGuard(actor: MessageActor, call: CallRow, sessionId: string): Gua
     const guard = messageParticipantGuard(actor, call.thread_id);
     return { sql: `${guard.sql} AND EXISTS (SELECT 1 FROM trade_team_calls active_call JOIN trade_team_call_participants joined ON joined.call_id=active_call.id AND joined.owner_uid=active_call.owner_uid
     WHERE active_call.id=? AND active_call.owner_uid=? AND active_call.status='active' AND active_call.expires_at>?
+      AND (active_call.had_peer=1 OR active_call.created_at>?)
       AND joined.member_id=? AND joined.session_id=? AND joined.left_at='' AND joined.last_seen_at>=?)`,
-        values: [...guard.values, call.id, actor.ownerUid, stamp(), actor.memberId, sessionId, before(45)] };
+        values: [...guard.values, call.id, actor.ownerUid, stamp(), before(TEAM_CALL_RING_SECONDS), actor.memberId, sessionId, before(45)] };
 }
 async function publicCall(actor: MessageActor, call: CallRow, db: D1Database): Promise<TeamCall> {
     const guard = messageParticipantGuard(actor, call.thread_id);
@@ -194,12 +196,7 @@ export async function teamCallStatus(actor: MessageActor, input: {
     const signals: TeamCallSignal[] = [];
     if (input.sessionId && call.status === 'active') {
         const sessionId = teamCallId(input.sessionId), cursor = teamCallCursor(input.after ?? 0), guard = joinedGuard(actor, call, sessionId);
-        const heartbeat = await db.prepare(`UPDATE trade_team_call_participants SET last_seen_at=? WHERE call_id=? AND owner_uid=? AND member_id=? AND session_id=? AND ${guard.sql}`)
-            .bind(stamp(), call.id, actor.ownerUid, actor.memberId, sessionId, ...guard.values).run();
-        if (!heartbeat.meta.changes)
-            throw new Error("CALL_SESSION_REPLACED");
-        const rows = (await db.prepare(`SELECT s.* FROM trade_team_call_signals s WHERE s.call_id=? AND s.owner_uid=? AND s.to_member_id=? AND s.to_session_id=? AND s.sequence>? AND ${guard.sql} ORDER BY s.sequence LIMIT 100`)
-            .bind(call.id, actor.ownerUid, actor.memberId, sessionId, cursor, ...guard.values).all<{
+        const [heartbeat, received] = await db.batch<{
             id: string;
             sequence: number;
             from_member_id: string;
@@ -208,8 +205,15 @@ export async function teamCallStatus(actor: MessageActor, input: {
             request_id: string;
             type: TeamCallSignal['type'];
             payload: string;
-        }>()).results;
-        signals.push(...rows.map(s => ({ id: s.id, sequence: s.sequence, fromMemberId: s.from_member_id, fromSessionId: s.from_session_id, toSessionId: s.to_session_id, requestId: s.request_id, type: s.type, payload: JSON.parse(s.payload) })));
+        }>([
+            db.prepare(`UPDATE trade_team_call_participants SET last_seen_at=? WHERE call_id=? AND owner_uid=? AND member_id=? AND session_id=? AND ${guard.sql}`)
+                .bind(stamp(), call.id, actor.ownerUid, actor.memberId, sessionId, ...guard.values),
+            db.prepare(`SELECT s.* FROM trade_team_call_signals s WHERE s.call_id=? AND s.owner_uid=? AND s.to_member_id=? AND s.to_session_id=? AND s.sequence>? AND ${guard.sql} ORDER BY s.sequence LIMIT 100`)
+                .bind(call.id, actor.ownerUid, actor.memberId, sessionId, cursor, ...guard.values),
+        ]);
+        if (!heartbeat.meta.changes)
+            throw new Error("CALL_SESSION_REPLACED");
+        signals.push(...received.results.map(s => ({ id: s.id, sequence: s.sequence, fromMemberId: s.from_member_id, fromSessionId: s.from_session_id, toSessionId: s.to_session_id, requestId: s.request_id, type: s.type, payload: JSON.parse(s.payload) })));
     }
     return { call: await publicCall(actor, call, db), signals };
 }
@@ -231,9 +235,7 @@ export async function sendTeamCallSignal(actor: MessageActor, input: {
 }, db: D1Database = getD1()) {
     const sessionId = teamCallId(input.sessionId), toMemberId = teamCallId(input.toMemberId), toSessionId = teamCallId(input.toSessionId), requestId = teamCallId(input.requestId);
     const signal = teamCallSignalInput(input.type, input.payload), payload = JSON.stringify(signal.payload);
-    await cleanup(actor, db);
     const call = await callRow(actor, input.callId, db), guard = joinedGuard(actor, call, sessionId);
-    await assertGuard(db, guard);
     if (toMemberId === actor.memberId)
         throw new Error("CALL_SIGNAL_INVALID");
     const targetSql = `EXISTS(SELECT 1 FROM trade_team_call_participants target JOIN trade_team_members member ON member.id=target.member_id AND member.owner_uid=target.owner_uid AND member.status='active'
@@ -243,20 +245,23 @@ export async function sendTeamCallSignal(actor: MessageActor, input: {
     const rateSql = `(SELECT COUNT(*) FROM trade_team_call_signals WHERE call_id=? AND owner_uid=? AND from_member_id=? AND created_at>=?)<120 AND
     (SELECT COUNT(*) FROM trade_team_call_signals WHERE call_id=? AND owner_uid=?)<1000`;
     const rateValues = [call.id, actor.ownerUid, actor.memberId, before(60), call.id, actor.ownerUid];
-    await db.batch([
+    // Allocation, delivery and acknowledgement share one transaction. The guards on each
+    // statement recheck current access even if it changed after the initial call read.
+    const results = await db.batch<{
+        to_member_id: string;
+        to_session_id: string;
+        type: string;
+        payload: string;
+    }>([
         db.prepare(`UPDATE trade_team_calls SET next_signal_sequence=next_signal_sequence+1 WHERE id=? AND owner_uid=? AND ${guard.sql} AND ${targetSql} AND ${rateSql}`)
             .bind(call.id, actor.ownerUid, ...guard.values, ...targetValues, ...rateValues),
         db.prepare(`INSERT OR IGNORE INTO trade_team_call_signals(id,owner_uid,call_id,sequence,from_member_id,from_session_id,to_member_id,to_session_id,request_id,type,payload,created_at)
       SELECT ?,owner_uid,id,next_signal_sequence,?,?,?,?,?,?,?,? FROM trade_team_calls WHERE id=? AND owner_uid=? AND ${guard.sql} AND ${targetSql} AND ${rateSql}`)
             .bind(crypto.randomUUID(), actor.memberId, sessionId, toMemberId, toSessionId, requestId, signal.type, payload, stamp(), call.id, actor.ownerUid, ...guard.values, ...targetValues, ...rateValues),
+        db.prepare(`SELECT to_member_id,to_session_id,type,payload FROM trade_team_call_signals WHERE call_id=? AND owner_uid=? AND from_member_id=? AND from_session_id=? AND request_id=? AND ${guard.sql} AND ${targetSql}`)
+            .bind(call.id, actor.ownerUid, actor.memberId, sessionId, requestId, ...guard.values, ...targetValues),
     ]);
-    const row = await db.prepare(`SELECT to_member_id,to_session_id,type,payload FROM trade_team_call_signals WHERE call_id=? AND owner_uid=? AND from_member_id=? AND from_session_id=? AND request_id=? AND ${guard.sql}`)
-        .bind(call.id, actor.ownerUid, actor.memberId, sessionId, requestId, ...guard.values).first<{
-        to_member_id: string;
-        to_session_id: string;
-        type: string;
-        payload: string;
-    }>();
+    const row = results[2].results[0];
     if (!row) {
         await assertGuard(db, guard);
         await assertGuard(db, { sql: targetSql, values: targetValues });

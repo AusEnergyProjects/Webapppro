@@ -3,18 +3,24 @@ import type { TeamCallParticipant, TeamCallSignal, TeamCallSignalPayload } from 
 export type CallRemote = { memberId: string; name: string; stream: MediaStream | null; state: RTCPeerConnectionState };
 type Peer = { person: TeamCallParticipant; connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; stream: MediaStream | null; deadline?: ReturnType<typeof setTimeout> };
 type SignalSender = (target: TeamCallParticipant, type: TeamCallSignal["type"], payload: TeamCallSignalPayload) => Promise<void>;
+type Candidate = Extract<TeamCallSignalPayload, { candidate: string }>;
 
 // One session owns all peer connections. Session IDs fence late packets from a
 // previous tab or rejoin; the lower member ID makes the offer, avoiding glare.
 export class TeamCallConnections {
   private peers = new Map<string, Peer>();
   private closed = false;
-  private outgoing: Promise<void> = Promise.resolve();
+  private readonly iceQueue: { peer: Peer; payload: Candidate }[] = [];
+  private activeIceRequests = 0;
   constructor(private readonly options: {
     memberId: string; sessionId: string; local: MediaStream; iceServers: RTCIceServer[];
     send: SignalSender; changed: (peers: CallRemote[]) => void; failed: (message: string) => void;
     createPeer?: (configuration: RTCConfiguration) => RTCPeerConnection;
   }) {}
+
+  private current(peer: Peer) {
+    return !this.closed && this.peers.get(peer.person.memberId) === peer;
+  }
 
   private changed() {
     if (!this.closed) this.options.changed([...this.peers.values()].map(peer => ({ memberId: peer.person.memberId, name: peer.person.name,
@@ -24,24 +30,68 @@ export class TeamCallConnections {
   private connectionDeadline(peer: Peer, milliseconds: number) {
     clearTimeout(peer.deadline);
     peer.deadline = setTimeout(() => {
-      if (!this.closed && this.peers.get(peer.person.memberId) === peer && peer.connection.connectionState !== "connected") {
-        this.options.failed("The call could not connect. Check both devices have internet access, then call again.");
+      if (this.current(peer) && peer.connection.connectionState !== "connected") {
+        this.fail(peer, "The call could not connect. Check both devices have internet access, then call again.");
       }
     }, milliseconds);
   }
 
-  private send(peer: Peer, type: TeamCallSignal["type"], payload: TeamCallSignalPayload) {
-    this.outgoing = this.outgoing.then(async () => {
-      if (!this.closed && this.peers.get(peer.person.memberId) === peer) await this.options.send(peer.person, type, payload);
-    }).catch(() => { if (!this.closed) this.options.failed("The call connection was interrupted. Hang up and call again."); });
-    return this.outgoing;
+  private fail(peer: Peer, message: string) {
+    if (!this.current(peer)) return;
+    this.close();
+    this.options.failed(message);
+  }
+
+  private async send(peer: Peer, type: TeamCallSignal["type"], payload: TeamCallSignalPayload) {
+    if (!this.current(peer)) return;
+    try {
+      await this.options.send(peer.person, type, payload);
+    } catch {
+      this.fail(peer, "The call connection was interrupted. Hang up and call again.");
+    }
+  }
+
+  private queueIce(peer: Peer, payload: Candidate) {
+    if (!this.current(peer)) return;
+    if (this.iceQueue.length >= 128) {
+      this.fail(peer, "The call connection was interrupted. Hang up and call again.");
+      return;
+    }
+    this.iceQueue.push({ peer, payload });
+    this.sendQueuedIce();
+  }
+
+  private sendQueuedIce() {
+    // SDP bypasses this queue: slow candidate requests must never hold up an
+    // offer or answer. Four concurrent requests keep trickle ICE bounded.
+    while (!this.closed && this.activeIceRequests < 4 && this.iceQueue.length) {
+      const next = this.iceQueue.shift();
+      if (!next || !this.current(next.peer)) continue;
+      this.activeIceRequests += 1;
+      void this.send(next.peer, "ice", next.payload).finally(() => {
+        this.activeIceRequests -= 1;
+        this.sendQueuedIce();
+      });
+    }
+  }
+
+  private remove(peer: Peer) {
+    this.peers.delete(peer.person.memberId);
+    for (let index = this.iceQueue.length - 1; index >= 0; index -= 1) {
+      if (this.iceQueue[index].peer === peer) this.iceQueue.splice(index, 1);
+    }
+    clearTimeout(peer.deadline);
+    peer.connection.ontrack = null;
+    peer.connection.onicecandidate = null;
+    peer.connection.onconnectionstatechange = null;
+    peer.connection.close();
   }
 
   async sync(people: TeamCallParticipant[]) {
     if (this.closed) return;
     const remote = people.filter(person => person.memberId !== this.options.memberId);
     for (const [id, peer] of this.peers) if (!remote.some(person => person.memberId === id && person.sessionId === peer.person.sessionId)) {
-      clearTimeout(peer.deadline); peer.connection.close(); this.peers.delete(id);
+      this.remove(peer);
     }
     for (const person of remote) {
       if (this.peers.has(person.memberId) || this.closed) continue;
@@ -52,24 +102,26 @@ export class TeamCallConnections {
       this.connectionDeadline(peer, 30000);
       for (const track of this.options.local.getTracks()) connection.addTrack(track, this.options.local);
       connection.ontrack = event => {
-        if (this.closed || this.peers.get(person.memberId) !== peer) return;
+        if (!this.current(peer)) return;
         peer.stream = event.streams[0] || peer.stream || new MediaStream();
         if (!peer.stream.getTracks().some(track => track.id === event.track.id)) peer.stream.addTrack(event.track);
         this.changed();
       };
-      connection.onicecandidate = event => { if (event.candidate) void this.send(peer, "ice", {candidate:event.candidate.candidate,sdpMid:event.candidate.sdpMid,sdpMLineIndex:event.candidate.sdpMLineIndex,usernameFragment:event.candidate.usernameFragment}); };
+      connection.onicecandidate = event => { if (event.candidate) this.queueIce(peer, {candidate:event.candidate.candidate,sdpMid:event.candidate.sdpMid,sdpMLineIndex:event.candidate.sdpMLineIndex,usernameFragment:event.candidate.usernameFragment}); };
       connection.onconnectionstatechange = () => {
-        if (this.closed || this.peers.get(person.memberId) !== peer) return;
+        if (!this.current(peer)) return;
         if (connection.connectionState === "connected" || connection.connectionState === "closed" || connection.connectionState === "failed") clearTimeout(peer.deadline);
         if (connection.connectionState === "disconnected") this.connectionDeadline(peer, 15000);
         this.changed();
-        if (!this.closed && connection.connectionState === "failed") this.options.failed("A teammate could not connect. Check your connection and call again.");
+        if (connection.connectionState === "failed") this.fail(peer, "A teammate could not connect. Check your connection and call again.");
       };
       if (this.options.memberId < person.memberId) {
         // A voice-only participant must still negotiate a video receiver so
         // the teammate answering with their camera can be seen.
-        await connection.setLocalDescription(await connection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true }));
-        if (!this.closed && connection.localDescription) await this.send(peer, "offer", { type: "offer", sdp: connection.localDescription.sdp });
+        const offer = await connection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+        if (!this.current(peer)) return;
+        await connection.setLocalDescription(offer);
+        if (this.current(peer) && connection.localDescription) await this.send(peer, "offer", { type: "offer", sdp: connection.localDescription.sdp });
       }
     }
     this.changed();
@@ -91,10 +143,17 @@ export class TeamCallConnections {
     if (signal.type === "offer" && this.options.memberId < signal.fromMemberId) return;
     if (signal.type === "answer" && connection.signalingState !== "have-local-offer") return;
     await connection.setRemoteDescription(signal.payload);
-    for (const candidate of peer.candidates.splice(0)) await connection.addIceCandidate(candidate);
+    if (!this.current(peer)) return;
+    for (const candidate of peer.candidates.splice(0)) {
+      if (!this.current(peer)) return;
+      await connection.addIceCandidate(candidate);
+    }
+    if (!this.current(peer)) return;
     if (signal.type === "offer") {
-      await connection.setLocalDescription(await connection.createAnswer());
-      if (!this.closed && connection.localDescription) await this.send(peer, "answer", { type: "answer", sdp: connection.localDescription.sdp });
+      const answer = await connection.createAnswer();
+      if (!this.current(peer)) return;
+      await connection.setLocalDescription(answer);
+      if (this.current(peer) && connection.localDescription) await this.send(peer, "answer", { type: "answer", sdp: connection.localDescription.sdp });
     }
   }
 
@@ -122,8 +181,10 @@ export class TeamCallConnections {
   }
 
   close() {
+    if (this.closed) return;
     this.closed = true;
-    for (const peer of this.peers.values()) { clearTimeout(peer.deadline); peer.connection.ontrack = null; peer.connection.onicecandidate = null; peer.connection.onconnectionstatechange = null; peer.connection.close(); }
+    this.iceQueue.length = 0;
+    for (const peer of this.peers.values()) this.remove(peer);
     this.peers.clear();
   }
 }
