@@ -18,6 +18,39 @@ const widget = read("../src/components/EnergyAssistantWidget.tsx");
 const styles = read("../src/components/EnergyAssistantWidget.module.css");
 const lazyWidget = read("../src/components/LazyEnergyAssistantWidget.tsx");
 const lazyStyles = read("../src/components/LazyEnergyAssistantWidget.module.css");
+
+test("shared assistant loader preserves dedicated, popup and hidden route behaviour", () => {
+  const compiled = ts.transpileModule(lazyWidget, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
+  } }).outputText;
+  const render = (pathname, quickChatMounted = false) => {
+    let stateIndex = 0;
+    const dependencies = {
+      react: { lazy: () => "Assistant", Suspense: "Suspense", useEffect() {},
+        useState: initial => [stateIndex++ === 1 ? quickChatMounted : initial, () => {}] },
+      "react/jsx-runtime": { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
+      "next/navigation": { usePathname: () => pathname },
+      "./LazyEnergyAssistantWidget.module.css": { default: { dedicatedLoading: "dedicated" } },
+    };
+    const exported = {};
+    new Function("require", "exports", compiled)(name => {
+      assert.ok(Object.hasOwn(dependencies, name), name);
+      return dependencies[name];
+    }, exported);
+    return exported.LazyEnergyAssistantWidget();
+  };
+  const dedicated = render("/wattzun");
+  assert.equal(dedicated.type, "Suspense");
+  assert.equal(dedicated.props.children.type, "Assistant");
+  assert.equal(dedicated.props.children.props.initialOpen, false);
+  assert.equal(dedicated.props.fallback.props.className, "dedicated");
+  const popup = render("/direct-trade/dashboard", true);
+  assert.equal(popup.type, "Suspense");
+  assert.equal(popup.props.children.props.initialOpen, true);
+  assert.equal(popup.props.fallback.type.name, "QuickChatLoader");
+  assert.equal(render("/direct-trade/dashboard").props["data-surge-loader"], true);
+  for (const pathname of ["/job/print", "/job/pdf", "/reset-password"]) assert.equal(render(pathname, true), null);
+});
 const profileSource = read("../src/lib/surge-assessor-profile.ts");
 const plannerSchemaSource = read("../src/lib/home-energy-planner-schema.ts");
 const layout = read("../src/app/layout.tsx");
@@ -247,10 +280,10 @@ test("page Surge actions open the full guide while the floating mascot retains q
   assert.match(surgeOpenButton, /storePendingSurgeDraft\(draft\)/);
   assert.doesNotMatch(surgeOpenButton, /EnergyAssistantWidget/);
   assert.doesNotMatch(surgeOpenButton, /\bfetch\(/);
-  assert.match(lazyWidget, /if \(dedicated\)[\s\S]*<DeferredEnergyAssistantWidget \/>/);
+  assert.match(lazyWidget, /if \(dedicated \|\| quickChatMounted\)/);
   assert.doesNotMatch(lazyWidget, /href="\/wattzun"|router\.prefetch|storePendingSurgeDraft/);
   assert.match(lazyWidget, /const \[quickChatMounted, setQuickChatMounted\] = useState\(false\)/);
-  assert.match(lazyWidget, /if \(quickChatMounted\)[\s\S]*<DeferredEnergyAssistantWidget initialOpen \/>/);
+  assert.match(lazyWidget, /<DeferredEnergyAssistantWidget initialOpen=\{!dedicated\} \/>/);
   assert.match(lazyWidget, /onPointerEnter=\{loadEnergyAssistant\}/);
   assert.match(lazyWidget, /onFocusCapture=\{loadEnergyAssistant\}/);
   assert.match(lazyWidget, /onTouchStart=\{loadEnergyAssistant\}/);

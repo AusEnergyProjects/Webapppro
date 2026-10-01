@@ -66,18 +66,10 @@ export function LazyEnergyAssistantWidget() {
 
   if (hiddenRoute(pathname)) return null;
 
-  if (dedicated) {
+  if (dedicated || quickChatMounted) {
     return (
-      <Suspense fallback={<div className={styles.dedicatedLoading} role="status">Loading Wattzun AI...</div>}>
-        <DeferredEnergyAssistantWidget />
-      </Suspense>
-    );
-  }
-
-  if (quickChatMounted) {
-    return (
-      <Suspense fallback={<QuickChatLoader />}>
-        <DeferredEnergyAssistantWidget initialOpen />
+      <Suspense fallback={dedicated ? <div className={styles.dedicatedLoading} role="status">Loading Wattzun AI...</div> : <QuickChatLoader />}>
+        <DeferredEnergyAssistantWidget initialOpen={!dedicated} />
       </Suspense>
     );
   }
