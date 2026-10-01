@@ -122,6 +122,29 @@ test('provider refresh replaces cancelled or moved-out events instead of retaini
   });
 });
 
+test('Google omitted items is a successful empty page and does not stop pagination', async () => {
+  const loaded = server();
+  await withFetch(async () => Response.json({}), async () => {
+    const result = await loaded.readExternalCalendarProvider({ provider: 'google_calendar' }, window, 'owner-member', mirrors());
+    assert.deepEqual(result.events, []); assert.equal(result.complete, true); assert.equal(result.error, '');
+  });
+  const requests = [];
+  await withFetch(async url => { requests.push(url); return Response.json(requests.length === 1 ? { nextPageToken: 'after-empty' } : { items: [google()] }); }, async () => {
+    const result = await loaded.readExternalCalendarProvider({ provider: 'google_calendar' }, window, 'owner-member', mirrors());
+    assert.equal(result.complete, true); assert.equal(result.events.length, 1); assert.equal(requests.length, 2); assert.match(requests[1], /pageToken=after-empty/);
+  });
+});
+
+test('malformed Google results and missing Graph collections remain failures', async () => {
+  const loaded = server();
+  for (const [provider, payload] of [['google_calendar', null], ['google_calendar', []], ['google_calendar', { items: null }], ['google_calendar', { items: {} }], ['google_calendar', { error: { message: 'private provider detail' } }], ['microsoft_calendar', {}]]) {
+    await withFetch(async () => Response.json(payload), async () => {
+      const result = await loaded.readExternalCalendarProvider({ provider }, window, 'owner-member', mirrors());
+      assert.equal(result.complete, false); assert.deepEqual(result.events, []); assert.match(result.error, /unreadable response/); assert.doesNotMatch(result.error, /private provider detail/);
+    });
+  }
+});
+
 test('pagination is bounded and reports incomplete results, and Graph never follows an untrusted next URL', async () => {
   const loaded = server(); let requests = 0;
   await withFetch(async () => { requests += 1; return Response.json({ items: [google({ id: String(requests) })], nextPageToken: String(requests) }); }, async () => {
@@ -137,9 +160,10 @@ test('pagination is bounded and reports incomplete results, and Graph never foll
 
 test('provider authentication, missing consent, timeout and server failures remain explicit', async () => {
   const loaded = server();
-  for (const [status, message] of [[401, /Reconnect/], [403, /access was not granted/], [503, /could not be read/]]) await withFetch(async () => new Response(null, { status }), async () => {
+  for (const [status, message] of [[400, /HTTP 400/], [401, /Reconnect/], [403, /access was not granted/], [429, /HTTP 429/], [503, /HTTP 503/]]) await withFetch(async () => Response.json({ error: { message: 'private provider detail', token: 'secret-token' } }, { status }), async () => {
     const result = await loaded.readExternalCalendarProvider({ provider: 'google_calendar' }, window, 'owner-member', mirrors());
     assert.equal(result.complete, false); assert.equal(result.events.length, 0); assert.match(result.error, message);
+    assert.doesNotMatch(JSON.stringify(result), /private provider detail|secret-token/);
   });
   await withFetch(async () => { throw new DOMException('timeout', 'TimeoutError'); }, async () => {
     assert.match((await loaded.readExternalCalendarProvider({ provider: 'google_calendar' }, window, 'owner-member', mirrors())).error, /too long/);

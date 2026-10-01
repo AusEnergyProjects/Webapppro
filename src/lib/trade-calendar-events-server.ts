@@ -24,6 +24,11 @@ function providerError(error: unknown) {
   if (code === "CALENDAR_RECONNECT_REQUIRED") return "Reconnect this calendar to read its events.";
   if (code === "CALENDAR_ACCESS_REQUIRED") return "Calendar access was not granted. Reconnect and approve calendar access.";
   if (["CALENDAR_PROVIDER_TIMEOUT", "AbortError", "TimeoutError"].includes(code) || error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)) return "This calendar took too long to respond. Refresh to try again.";
+  if (code === "CALENDAR_INVALID_RESPONSE") return "This calendar returned an unreadable response. Refresh or contact TLink support.";
+  const httpStatus = /^CALENDAR_PROVIDER_HTTP_(\d{3})$/.exec(code)?.[1];
+  if (httpStatus === "400") return "The calendar request was rejected (HTTP 400). Contact TLink support.";
+  if (httpStatus === "429") return "This calendar is limiting requests (HTTP 429). Wait a moment, then refresh.";
+  if (httpStatus) return `This calendar could not be read (HTTP ${httpStatus}). Refresh to try again.`;
   return "This calendar could not be read. Refresh to try again.";
 }
 export async function readExternalCalendarProvider(connection: Connection, window: CalendarWindow, memberId: string, mirrors: { externalIds: Set<string>; appointmentIds: Set<string> }) {
@@ -36,8 +41,14 @@ export async function readExternalCalendarProvider(connection: Connection, windo
       if (visited.has(url)) throw new Error("CALENDAR_INVALID_PAGINATION");
       visited.add(url);
       const response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(provider === "microsoft_calendar" ? { Prefer: 'outlook.timezone="UTC"' } : {}) }, signal, redirect: "error", cache: "no-store" });
-      if (!response.ok) throw new Error(response.status === 401 ? "CALENDAR_RECONNECT_REQUIRED" : response.status === 403 ? "CALENDAR_ACCESS_REQUIRED" : "CALENDAR_PROVIDER_FAILED");
-      const body = calendarRecord(await response.json()); const records = provider === "google_calendar" ? body.items : body.value;
+      // Only status codes enter diagnostics; provider error bodies can contain private data.
+      if (!response.ok) throw new Error(response.status === 401 ? "CALENDAR_RECONNECT_REQUIRED" : response.status === 403 ? "CALENDAR_ACCESS_REQUIRED" : `CALENDAR_PROVIDER_HTTP_${response.status}`);
+      const payload: unknown = await response.json();
+      if (payload === null || typeof payload !== "object" || Array.isArray(payload)) throw new Error("CALENDAR_INVALID_RESPONSE");
+      const body = calendarRecord(payload);
+      if (Object.hasOwn(body, "error")) throw new Error("CALENDAR_INVALID_RESPONSE");
+      // Google's partial response omits items on empty pages, including pages with a next token.
+      const records = provider === "google_calendar" ? Object.hasOwn(body, "items") ? body.items : [] : body.value;
       if (!Array.isArray(records)) throw new Error("CALENDAR_INVALID_RESPONSE");
       for (const record of records) { const event = normalizeExternalCalendarEvent(provider, record, window, memberId, mirrors); if (event) events.set(event.id, event); }
       const next = provider === "google_calendar" ? body.nextPageToken : body["@odata.nextLink"];
