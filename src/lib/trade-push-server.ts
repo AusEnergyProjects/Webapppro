@@ -140,6 +140,10 @@ function deliveryGuard(actor: MessageActor, kind: TradePushPayload['kind'], thre
 
 type NativeDeviceRow = { id: string; owner_uid: string; member_id: string; push_token: string; push_provider: 'fcm' | 'apns'; voip_push_token: string; native_call_capable: number };
 const nativeColumns = 'd.id,d.owner_uid,d.member_id,d.push_token,d.push_provider,d.voip_push_token,d.native_call_capable';
+function nativeCallPushRoute(device: NativeDeviceRow, ended: boolean) {
+  return device.push_provider === 'fcm' ? 'fcm' : ended ? 'apns_background'
+    : device.native_call_capable && device.voip_push_token ? 'apns_voip' : 'apns_alert';
+}
 function nativeDeliveryGuard(actor: MessageActor, payload: TradePushPayload, ended = false): Guard {
   const source = sourceGuard(actor,payload.kind,payload.threadId,payload.id,ended);
   return { sql: `${source.sql} AND d.owner_uid=? AND d.member_id<>? AND d.status='active'
@@ -165,6 +169,11 @@ async function dispatchNative(actor: MessageActor, payload: TradePushPayload, db
   const guard = nativeDeliveryGuard(actor,payload,ended);
   const devices = (await db.prepare(`SELECT ${nativeColumns} FROM trade_mobile_devices d WHERE ${guard.sql} ORDER BY d.member_id,d.id LIMIT 125`)
     .bind(...guard.values).all<NativeDeviceRow>()).results;
+  if (payload.kind === 'team-call') {
+    const routes = { apns_voip:0,apns_alert:0,apns_background:0,fcm:0 };
+    for (const device of devices) routes[nativeCallPushRoute(device,ended)]++;
+    console.info('tlink_native_call_push_eligibility', { phase: ended ? 'ended' : 'incoming', eligible: devices.length, ...routes });
+  }
   if (!devices.length) return result;
   const fcmCredentials = tradeNativePushCredentials(), apnsCredentials = tradeApnsCredentials();
   const [fcm, apns] = await Promise.all([
@@ -172,8 +181,15 @@ async function dispatchNative(actor: MessageActor, payload: TradePushPayload, db
     apnsCredentials && devices.some(device => device.push_provider === 'apns') ? authorizeTradeApns(apnsCredentials) : null,
   ]);
   const deliveries = await Promise.allSettled(devices.map(async device => {
+    const logCallOutcome = (outcome: Awaited<ReturnType<typeof sendTradeApns>> | 'unavailable' | 'not_claimed',
+      stage: 'authorization' | 'claim' | 'registration_check' | 'answer_grant' | 'provider_send') => {
+      if (payload.kind === 'team-call') console.info('tlink_native_call_push_outcome', {
+        phase: ended ? 'ended' : 'incoming', route: nativeCallPushRoute(device,ended), stage, outcome,
+      });
+    };
     if (device.push_provider === 'apns' ? !apns : !fcm) {
       console.warn('tlink_push_authorization_unavailable', { provider: device.push_provider, configured: Boolean(device.push_provider === 'apns' ? apnsCredentials : fcmCredentials) });
+      logCallOutcome('unavailable','authorization');
       result.failed++; result.skipped = true; return;
     }
     // A token may rotate while the same phone remains registered. The durable
@@ -183,7 +199,7 @@ async function dispatchNative(actor: MessageActor, payload: TradePushPayload, db
     const claimed = await db.prepare(`INSERT OR IGNORE INTO trade_push_deliveries(event_kind,event_id,endpoint_hash,owner_uid,member_id,created_at,updated_at)
       SELECT ?,?,?,d.owner_uid,d.member_id,?,? FROM trade_mobile_devices d WHERE d.id=? AND d.push_token=? AND d.voip_push_token=? AND d.native_call_capable=? AND d.push_provider=? AND ${fresh.sql}`)
       .bind(payload.kind,payload.id,hash,now,now,device.id,device.push_token,device.voip_push_token,device.native_call_capable,device.push_provider,...fresh.values).run();
-    if (!claimed.meta.changes) return;
+    if (!claimed.meta.changes) { logCallOutcome('not_claimed','claim'); return; }
     result.attempted++;
     let current: NativeDeviceRow | null = null, voip = false;
     let outcome: Awaited<ReturnType<typeof sendTradeApns>> = 'failed';
@@ -205,6 +221,7 @@ async function dispatchNative(actor: MessageActor, payload: TradePushPayload, db
       // Log only fixed stages, never credentials, recipient details or payloads.
       console.warn('tlink_native_push_dispatch_failed', { provider: device.push_provider, kind: payload.kind, stage, ended });
     }
+    logCallOutcome(outcome,stage);
     const deliveryStatus = outcome === 'stale' ? 'expired' : outcome;
     if (deliveryStatus === 'accepted') result.accepted++; else result.failed++;
     await db.prepare('UPDATE trade_push_deliveries SET status=?,updated_at=? WHERE event_kind=? AND event_id=? AND endpoint_hash=? AND owner_uid=?')

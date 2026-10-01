@@ -449,7 +449,9 @@ test('a claimed native call grant failure is recorded, remains fail-closed and l
   assert.equal(f.nativeSends.length,0,'a denied grant cannot fall back to an unscoped call push');
   assert.equal(f.sqlite.prepare('SELECT push_token FROM trade_mobile_devices WHERE id=?').get(device.id).push_token,device.token);
   assert.deepEqual(warnings.mock.calls.map(call=>call.arguments),[['tlink_native_push_dispatch_failed',{provider:'apns',kind:'team-call',stage:'answer_grant',ended:false}]]);
-  assert.deepEqual(summaries.mock.calls.map(call=>call.arguments),[['tlink_call_push_dispatch',{phase:'incoming',...result}]]);
+  assert.deepEqual(summaries.mock.calls.filter(call=>call.arguments[0]==='tlink_call_push_dispatch').map(call=>call.arguments),[['tlink_call_push_dispatch',{phase:'incoming',...result}]]);
+  assert.deepEqual(summaries.mock.calls.find(call=>call.arguments[0]==='tlink_native_call_push_outcome').arguments,
+    ['tlink_native_call_push_outcome',{phase:'incoming',route:'apns_alert',stage:'answer_grant',outcome:'failed'}]);
   assert.equal((await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db)).attempted,0);
   assert.equal(warnings.mock.calls.length,1,'the failed durable claim prevents duplicate preparation');
  }finally{f.close();}
@@ -475,11 +477,41 @@ test('call dispatch logs distinguish no recipients from an unexpected dispatch f
   f.call();
   const empty=await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db);
   assert.deepEqual(empty,{attempted:0,accepted:0,failed:0,skipped:false});
-  assert.deepEqual(summaries.mock.calls[0].arguments,['tlink_call_push_dispatch',{phase:'incoming',...empty}]);
+  assert.deepEqual(summaries.mock.calls.find(call=>call.arguments[0]==='tlink_call_push_dispatch').arguments,['tlink_call_push_dispatch',{phase:'incoming',...empty}]);
   f.state.beforeRead=()=>{throw new Error('Private database failure jane-uid');};
   const failed=await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db);
   assert.deepEqual(failed,{attempted:0,accepted:0,failed:1,skipped:true});
   assert.deepEqual(warnings.mock.calls[0].arguments,['tlink_call_push_dispatch',{phase:'incoming',stage:'dispatch',...failed}]);
+ }finally{f.close();}
+});
+
+test('an accepted browser call push cannot appear as native acceptance when no native device is eligible',async t=>{
+ const f=fixture();const summaries=t.mock.method(console,'info',()=>{});
+ try{
+  await f.subscribe(jane);f.call();
+  assert.equal((await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db)).accepted,1);
+  assert.equal(f.sends.length,1);assert.equal(f.nativeSends.length,0);
+  assert.deepEqual(summaries.mock.calls.find(call=>call.arguments[0]==='tlink_native_call_push_eligibility').arguments,
+    ['tlink_native_call_push_eligibility',{phase:'incoming',eligible:0,apns_voip:0,apns_alert:0,apns_background:0,fcm:0}]);
+  assert.equal(summaries.mock.calls.filter(call=>call.arguments[0]==='tlink_native_call_push_outcome').length,0);
+ }finally{f.close();}
+});
+
+test('native call diagnostics distinguish accepted Apple VoIP, Apple alert and FCM routes without identifiers',async t=>{
+ const f=fixture();const summaries=t.mock.method(console,'info',()=>{});
+ try{
+  f.state.configured=false;f.state.apnsConfigured=true;f.state.nativeConfigured=true;
+  const voip=f.native(jane,'voip',{platform:'ios',provider:'apns',token:'ab'.repeat(32)});
+  f.sqlite.prepare('UPDATE trade_mobile_devices SET native_call_capable=1,voip_push_token=? WHERE id=?').run('cd'.repeat(32),voip.id);
+  f.native(jane,'alert',{platform:'ios',provider:'apns',token:'ef'.repeat(32)});
+  f.native(john,'android');f.call();
+  assert.equal((await f.server.notifyTeamCall(owner,{id:'call-1',threadId:'thread-a'},f.db)).accepted,3);
+  assert.deepEqual(summaries.mock.calls.find(call=>call.arguments[0]==='tlink_native_call_push_eligibility').arguments,
+    ['tlink_native_call_push_eligibility',{phase:'incoming',eligible:3,apns_voip:1,apns_alert:1,apns_background:0,fcm:1}]);
+  assert.deepEqual(summaries.mock.calls.filter(call=>call.arguments[0]==='tlink_native_call_push_outcome').map(call=>call.arguments[1]).sort((a,b)=>a.route.localeCompare(b.route)),
+    ['apns_alert','apns_voip','fcm'].map(route=>({phase:'incoming',route,stage:'provider_send',outcome:'accepted'})));
+  assert.equal(f.nativeSends.find(send=>send.token==='cd'.repeat(32)).options.voip,true);
+  assert.equal(f.nativeSends.find(send=>send.token==='ef'.repeat(32)).options.voip,false);
  }finally{f.close();}
 });
 
