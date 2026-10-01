@@ -6,7 +6,7 @@ Reviewed 1 October 2026. TLink source baseline: `5e63cf0e467492990cf2cc97008935d
 
 TLink should win on an easy, complete job journey: a customer asks for work, the business quotes and books it, the right person completes the required evidence, the customer receives the result, and the business gets paid. Customers, compliance, sole traders and larger companies must all use the same records. The default interface should expose only what the current person needs next.
 
-The first investment should be making that existing journey coherent. Follow with a single customer job link, a practical action queue, guided compliance closeout and narrowly scoped AI drafting. A generic chatbot or a larger menu would not create a durable advantage.
+The first investment should be making that existing journey coherent. Extend Wattzun into signed-in TLink as the business assistant, alongside a single customer job link, a practical action queue and guided compliance closeout. A generic chatbot or a larger menu would not create a durable advantage.
 
 TLink already has substantial operational capability. It does not yet have verified evidence for replacing every external subscription or acting as a full enterprise ERP. Preserve the goal of one operational platform while measuring and closing those gaps.
 
@@ -76,6 +76,16 @@ The native app includes persisted queues, encrypted local data, resumable upload
 
 ## Implementation sequence
 
+### Wattzun inside signed-in TLink
+
+Use the existing Wattzun identity rather than introduce another branded assistant. Its business mode should work with the selected business, current staff permissions and current job. Public household guidance and private business assistance need explicit context boundaries; signing in alone must not grant an AI model unrestricted database access.
+
+The target capabilities are job briefings, typed or dictated work summaries, quote/invoice drafts, customer-reply drafts, evidence-gap explanations, business questions and scheduling suggestions. Reuse the existing deterministic APIs and calculations through narrow authorised actions. Retrieve only the records needed for the question, include source links and timestamps, and say when data is missing.
+
+Start with **Prepare this job**: assemble the customer/job history the worker is entitled to see, show missing required evidence, and prepare useful drafts. Staff review any message, booking, charge or important record change. Governed compliance rules and authorised reviewers remain the approval authority. AI output is not evidence that work occurred or a certificate was approved.
+
+This can address the same classes of work Lightning advertises and exploit TLink's customer/compliance context. Feature parity, better outcomes and lower cost still require implementation and measurement; they are not established by the existing public Wattzun assistant.
+
 These are proposed priorities, not a claim that new AI or enterprise features were implemented in this cleanup.
 
 | Order | Small complete product slice | Acceptance evidence |
@@ -86,7 +96,7 @@ These are proposed priorities, not a claim that new AI or enterprise features we
 | 3 | Guided closeout | Required evidence, assigned reviewer and completion readiness are visible; incomplete evidence blocks only the appropriate next step |
 | 4 | Record-grounded job summary and customer-message drafts | Referenced source records and unknowns are visible; user reviews before sending, booking, charging or making a compliance decision |
 | 5 | Guided onboarding and import | Test an initial target of first customer/job within ten minutes; preview, deduplication, useful errors and preserved source history |
-| 6 | Permission-scoped Ask TLink and scheduling suggestions | Defined calculations, source links, business/role boundaries, skills/training/conflict checks and an explainable suggestion |
+| 6 | Permission-scoped Ask Wattzun and scheduling suggestions | Defined calculations, source links, business/role boundaries, skills/training/conflict checks and an explainable suggestion |
 | 7 | Enterprise organisation structure | Branch/entity boundaries, approval thresholds, shared resources, group reports and representative multi-team load tested independently |
 
 A sole trader should see today's work and the next useful action. A larger organisation should reveal additional controls when needed. This does not mean deleting the enterprise data model or asking a sole trader to configure departments before creating a job.
@@ -104,3 +114,17 @@ Measure time to first job, duplicate entry per job, time to complete documentati
 ## Scope and limits
 
 The audit used current source, relevant contracts/tests, public official Simpro material and the supplied screenshots. It was a focused product and architecture review, not a full penetration test, regulatory coverage certification, performance benchmark or paid competitor trial. No customer messages, calls, charges or certificate submissions were performed. The accompanying implementation is the requested interface cleanup only; the roadmap above remains proposed.
+
+## Cleanup release evidence
+
+- Web application source: `5496340ae9cc5144f5f6d0a5b2c46f76c342443c`, branch `codex/tlink-simplify-connect`. GitHub and the Sites source branch were verified against that exact SHA. Sites version 720 deployment `appgdep_6abe58dbcad0819193421c4996f9a069` succeeded with environment revision 207.
+- Native compatibility patch: `178686d26fcc6cd407e8fd37022714c7633fc39a`, branch `codex/tlink-connect-native-133`, based on the existing 1.3.3 binary source. Only native Connect wording/icon and adjacent documentation changed there.
+- Expo iOS 1.3.4 production update: group `e4c93175-733e-4ff0-aa8f-111ff5b25694`, source `5496340`.
+- Expo Android 1.3.3 preview update: group `1b124faf-38d6-498f-9c4b-d6f9c339f5a0`, source `178686d`.
+- Expo iOS 1.3.3 production update: group `641eb00d-23d5-4cb8-805f-0e6cbef51540`, source `178686d`. The first export crashed; the subsequent bounded retry completed and published successfully.
+- Focused web regression command used `node --experimental-strip-types --test` across the CRM, customer, Files/navigation, forms, field-completion and message-files tests: 150 passed, none failed/skipped. This includes nine new executed TSX/event-handler regressions for Files navigation, collapsed-form retention, permissions and file-list refresh.
+- Native communication tests: 49 passed on 1.3.4; the same relevant set had 48 tests on the older 1.3.3 baseline and all passed. Web and both native typechecks passed. Scoped ESLint and `git diff --check` passed.
+- `npm.cmd run export:verify` produced Android and iOS bundles. `npm.cmd run package:sites -- C:/Webproject/_site-artifacts/tlink-simplify-connect-20261001.tar` passed the production build, Worker bundle audit, 230-migration archive check and public performance budgets. No migrations were added or changed.
+- Removed obsolete customer panel handlers, client contact state/types and unused CSS. No customer records, files, consent rules or backend APIs were deleted. Full repository validation and physical-device call/update acceptance were not performed.
+
+This report's subsequent Wattzun recommendation and release-evidence edits are documentation only. They do not change the application source identity above.
