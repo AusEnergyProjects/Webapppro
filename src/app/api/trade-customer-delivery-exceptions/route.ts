@@ -2,7 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { tradeEmailApiError } from "@/lib/trade-email-api";
-import { loadCustomerDeliveryExceptions } from "@/lib/trade-customer-delivery-exceptions-server";
+import { customerDeliveryFailureDiagnostic, loadCustomerDeliveryExceptions } from "@/lib/trade-customer-delivery-exceptions-server";
 
 export const runtime = "edge";
 
@@ -16,5 +16,9 @@ export async function GET(request: Request) {
     if (workOrderId.length > 180 || /[\u0000-\u001f\u007f]/.test(workOrderId)) throw new Error("EMAIL_INPUT_INVALID");
     const result = await loadCustomerDeliveryExceptions(getD1(), access, { workOrderId, page: Number(params.get("page") || 1) });
     return adminJson({ ok: true, ...result });
-  } catch (error) { return tradeEmailApiError(error); }
+  } catch (error) {
+    const response = tradeEmailApiError(error);
+    if (response.status >= 500) console.error("trade_customer_delivery_exceptions_failed", customerDeliveryFailureDiagnostic(error));
+    return response;
+  }
 }

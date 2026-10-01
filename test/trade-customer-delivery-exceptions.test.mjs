@@ -1,11 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { migratedDataforceSqlite } from "./helpers/trade-dataforce-database.mjs";
-import { loadCustomerDeliveryExceptions } from "../src/lib/trade-customer-delivery-exceptions-server.ts";
+import { customerDeliveryFailureDiagnostic, loadCustomerDeliveryExceptions } from "../src/lib/trade-customer-delivery-exceptions-server.ts";
 
 const now = "2026-10-02T03:00:00.000Z";
 const later = "2026-10-02T04:00:00.000Z";
 const owner = { ownerUid: "owner", isOwner: true };
+test("delivery diagnostics classify nested D1 failures without exposing SQL or customer data", () => {
+  const secret = "customer@example.test token=private-secret SELECT * FROM invoices";
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error(secret, { cause: new Error("D1_ERROR: no such column: w.customer_email: SQLITE_ERROR") })), { code: "missing_column" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error("D1_ERROR: no such table: trade_follow_up_messages")), { code: "missing_table" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error("D1_ERROR: no such column: private_customer_name")), { code: "missing_column" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error(`D1_ERROR: too many SQL variables ${secret}`)), { code: "sql_variable_limit" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error(`D1_ERROR: not authorized ${secret}`)), { code: "database_authorization" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error(`malformed JSON ${secret}`)), { code: "malformed_json" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error(`D1_TYPE_ERROR: unsupported type ${secret}`)), { code: "database_type" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error(`D1_ERROR: incorrect number of bindings ${secret}`)), { code: "database_binding" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error(`SQLITE_CONSTRAINT: constraint failed ${secret}`)), { code: "database_constraint" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic(new Error(secret)), { code: "unexpected_error" });
+  assert.deepEqual(customerDeliveryFailureDiagnostic({ message: secret }), { code: "unexpected_error" });
+});
 function fixture(t) {
   const { sqlite } = migratedDataforceSqlite(); t.after(() => sqlite.close());
   function insert(table, values) {
@@ -45,6 +59,19 @@ test("only latest undecided quote delivery failures need action; resolved and au
   const uncertain = result.items.find(item => item.workOrderId === "uncertain");
   assert.equal(uncertain.status, "uncertain"); assert.match(uncertain.message, /Check the outgoing mailbox/);
   assert.equal(uncertain.tab, "quote");
+});
+
+test("customer-role quote receipts follow the latest send rather than an older retry generation", async t => {
+  const f = fixture(t); f.job("roles"); f.quote("roles");
+  f.delivery("original-primary", "roles", "failed", { recipient_role: "primary_customer", delivery_generation: 4 });
+  assert.equal((await f.load()).total, 1, "the current primary customer role is included");
+  f.delivery("replacement-contact", "roles", "provider_accepted", { recipient_role: "authorised_contact", delivery_generation: 1, created_at: later });
+  assert.equal((await f.load()).total, 0, "a later replacement send supersedes an older retry chain");
+  const newest = "2026-10-02T05:00:00.000Z";
+  f.delivery("contact-uncertain", "roles", "reconciliation_required", { recipient_role: "authorised_contact", delivery_generation: 2, created_at: newest });
+  f.delivery("business-copy", "roles", "provider_accepted", { recipient_role: "business_copy", delivery_generation: 9, created_at: "2026-10-02T06:00:00.000Z" });
+  const result = await f.load(); assert.equal(result.total, 1); assert.equal(result.items[0].id, "quote:contact-uncertain");
+  assert.equal(result.items[0].status, "uncertain", "a business copy never clears uncertain customer delivery");
 });
 
 test("quiet Lost excludes sales emails while unsent invoice and cancellation obligations remain", async t => {

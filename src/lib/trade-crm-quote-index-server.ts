@@ -104,8 +104,8 @@ export async function loadTradeQuoteIndex(db: D1Database, access: QuoteAccess, p
         AND issued_decision.quote_id=quotes.quote_id AND issued_decision.work_order_id=quotes.id AND issued_decision.firebase_uid=issued.firebase_uid
       LEFT JOIN trade_crm_quote_deliveries delivery ON delivery.id=(SELECT latest.id FROM trade_crm_quote_deliveries latest
         WHERE latest.quote_version_id=issued.id AND latest.work_order_id=quotes.id AND latest.firebase_uid=issued.firebase_uid
-          AND latest.channel='email' AND latest.recipient_role='acceptance'
-        ORDER BY latest.delivery_generation DESC,latest.created_at DESC,latest.id DESC LIMIT 1) AND delivery.firebase_uid=issued.firebase_uid
+          AND latest.channel='email' AND latest.recipient_role IN ('acceptance','primary_customer','authorised_contact')
+        ORDER BY latest.created_at DESC,latest.delivery_generation DESC,latest.id DESC LIMIT 1) AND delivery.firebase_uid=issued.firebase_uid
       WHERE quotes.quote_view=? ${after ? `AND (${after.sql})` : ""}
       ORDER BY quotes.updated_at DESC,quotes.id DESC LIMIT ?`)
       .bind(...bindings, access.ownerUid, view, ...(after?.bindings || []), pageSize + 1).all<Row>(),

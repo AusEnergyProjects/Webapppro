@@ -5,6 +5,28 @@ type Row = { id: string; work_order_id: string; work_number: string; title: stri
 const CURRENT_SALES = "w.stage<>'cancelled' AND COALESCE(w.pipeline_stage,'')<>'lost'";
 const FAILED_DELIVERY = "('failed','bounced','complained','opted_out','suppressed','reconciliation_required','waiting_for_channel')";
 
+/** Structural diagnostics only: never log SQL, bindings, recipients or provider error text. */
+export function customerDeliveryFailureDiagnostic(error: unknown): { code: string } {
+  const causes: string[] = [];
+  for (let current = error, depth = 0; current instanceof Error && depth < 3; current = current.cause, depth++) causes.push(current.message.slice(0, 2000));
+  const message = causes.join(" ");
+  for (const [pattern, code] of [
+    [/no such table/i, "missing_table"], [/no such column/i, "missing_column"],
+    [/malformed JSON/i, "malformed_json"], [/too many SQL variables/i, "sql_variable_limit"],
+    [/too many terms in compound SELECT/i, "compound_select_limit"], [/too many (?:tables|joins)/i, "join_limit"],
+    [/expression tree is too large|parser stack overflow/i, "expression_depth_limit"],
+    [/SQLITE_TOOBIG|statement (?:is )?too long|string or blob too big/i, "statement_size_limit"],
+    [/not authorized|authorization denied|SQLITE_AUTH/i, "database_authorization"],
+    [/syntax error/i, "sql_syntax"], [/no such function/i, "sql_function_unavailable"],
+    [/SQLITE_BUSY|database is locked/i, "database_busy"], [/D1.*(?:timed out|timeout)|query.*(?:timed out|timeout)/i, "database_timeout"],
+    [/D1_TYPE_ERROR|D1_COLUMN_NOTFOUND|datatype mismatch|unsupported type/i, "database_type"],
+    [/D1.*(?:BIND|PARAM)|SQLITE_RANGE|bind(?:ing)? (?:parameter|count)|incorrect number of bindings/i, "database_binding"],
+    [/SQLITE_CONSTRAINT|constraint failed/i, "database_constraint"],
+    [/D1_ERROR|SQLITE_ERROR/i, "database_error"],
+  ] as const) if (pattern.test(message)) return { code };
+  return { code: "unexpected_error" };
+}
+
 /** Read-only projection of current source receipts. No send or retry is performed. */
 export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pick<TeamAccess, "ownerUid" | "isOwner">,
   options: { workOrderId?: string; page?: number } = {}): Promise<CustomerDeliveryExceptions> {
@@ -27,8 +49,8 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
       AND version.version_number=quote.current_version_number AND version.status='issued'
     JOIN trade_crm_quote_deliveries delivery ON delivery.id=(SELECT latest.id FROM trade_crm_quote_deliveries latest
       WHERE latest.quote_version_id=version.id AND latest.firebase_uid=w.firebase_uid AND latest.work_order_id=w.id
-        AND latest.channel='email' AND latest.recipient_role='acceptance'
-      ORDER BY latest.delivery_generation DESC,latest.created_at DESC,latest.id DESC LIMIT 1)
+        AND latest.channel='email' AND latest.recipient_role IN ('acceptance','primary_customer','authorised_contact')
+      ORDER BY latest.created_at DESC,latest.delivery_generation DESC,latest.id DESC LIMIT 1)
     WHERE ${CURRENT_SALES} AND delivery.status IN ${FAILED_DELIVERY}
       AND (delivery.status<>'failed' OR delivery.next_attempt_at='')
       AND NOT EXISTS(SELECT 1 FROM trade_crm_quote_acceptances a WHERE a.quote_version_id=version.id AND a.firebase_uid=w.firebase_uid AND a.work_order_id=w.id AND a.decision IN ('accepted','declined'))

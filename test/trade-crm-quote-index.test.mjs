@@ -75,6 +75,19 @@ test("issued-version changes do not inherit old decisions or delivery receipts",
   assert.equal(item.status, "issued"); assert.equal(item.versionNumber, 2); assert.equal(item.latestIssued.versionNumber, 2); assert.equal(item.delivery, null);
 });
 
+test("current customer roles and later sends determine quote delivery, not an older retry generation", async t => {
+  const f = fixture(t); f.job("delivery"); f.quote("delivery", "issued");
+  const delivery = (id, role, status, generation, createdAt) => f.insert("trade_crm_quote_deliveries", {
+    id, quote_version_id: "v-delivery", work_order_id: "delivery", firebase_uid: "owner", channel: "email",
+    recipient_role: role, status, delivery_generation: generation, idempotency_key: id, created_at: createdAt,
+  });
+  delivery("primary", "primary_customer", "reconciliation_required", 2, now);
+  assert.equal((await f.index({ view: "awaiting" })).items[0].delivery.status, "reconciliation_required");
+  delivery("contact", "authorised_contact", "delivered", 1, "2026-10-02T04:00:00.000Z");
+  delivery("copy", "business_copy", "failed", 3, "2026-10-02T05:00:00.000Z");
+  assert.equal((await f.index({ view: "awaiting" })).items[0].delivery.status, "delivered");
+});
+
 test("quote totals include default required choices and accepted zero totals remain exact", async t => {
   const f = fixture(t); f.job("choices"); f.quote("choices");
   for (const [id, kind, recommended, total, position] of [["basic", "package", 0, 11000, 1], ["better", "package", 1, 22000, 2], ["extra", "addon", 1, 5500, 3]]) {
