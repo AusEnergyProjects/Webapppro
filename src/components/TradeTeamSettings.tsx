@@ -617,24 +617,33 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   }
 
   async function updateMemberStatus(member: TradeTeamMember, nextStatus: MemberStatus) {
-    if (busy || member.isOwner || isCurrentMember(member) || member.status === "archived" || member.status === nextStatus) return;
+    const restoring = member.status === "archived" && nextStatus === "active";
+    if (busy || member.isOwner || isCurrentMember(member) || (member.status === "archived" && !restoring) || member.status === nextStatus) return;
     const archiving = nextStatus === "archived";
     const actionLabel = nextStatus === "active" ? "Reactivate" : "Deactivate";
     if (!window.confirm(archiving
       ? `Delete ${memberLabel(member)} from your team? Their access will be revoked and they will move to Archived team. Their job history, documents and audit records will remain saved.`
+      : restoring ? `Reinstate access for ${memberLabel(member)}? They will return to Your team with their saved permissions. Previous device authorisations, PINs and invitation links will stay revoked. No invitation will be sent automatically.`
       : `${actionLabel} access for ${memberLabel(member)}? Their job history, files and compliance records will remain saved. Reactivation restores login eligibility, but revoked devices stay revoked and old invitation links stay invalid.`)) return;
-    setBusy(`status:${member.id}`); setError(""); setMessage(archiving ? "Archiving team member..." : `${actionLabel.slice(0, -1)}ing team access...`);
+    setBusy(`status:${member.id}`); setError(""); setMessage(archiving ? "Archiving team member..." : restoring ? "Reinstating team access..." : `${actionLabel.slice(0, -1)}ing team access...`);
     try {
       const response = await fetch("/api/trade-team", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...(await tokenHeaders()) },
-        body: JSON.stringify({ action: archiving ? "archive_member" : "update_member", memberId: member.id, ...(!archiving && { status: nextStatus }), expectedUpdatedAt: member.updatedAt }),
+        body: JSON.stringify({ action: archiving ? "archive_member" : restoring ? "restore_member" : "update_member", memberId: member.id, ...(!archiving && !restoring && { status: nextStatus }), expectedUpdatedAt: member.updatedAt }),
       });
       if (await handleMemberConflict(response)) return;
       const result = await response.json().catch(() => ({})) as TeamResult;
       if (!response.ok || !result.ok) throw new Error(result.error || "Team access could not be updated.");
-      setMenu(null); setEditing(null); await load(); await loadDevices();
-      setMessage(archiving ? "Team member archived and access revoked. Their records are available in Archived team." : nextStatus === "active" ? "Team access reactivated. Revoked devices remain revoked and a fresh invitation is required when no login is linked." : "Team access deactivated. History, files and job records remain saved.");
+      setMenu(null); setEditing(null);
+      if (restoring) {
+        const alreadyDefaultView = statusFilter === "all" && page === 1 && !appliedQuery && !capabilityFilter;
+        setPage(1); setQuery(""); setAppliedQuery(""); setCapabilityFilter(""); setStatusFilter("all");
+        if (alreadyDefaultView) await load();
+        else { setMembers([]); setLoading(true); }
+      } else await load();
+      await loadDevices();
+      setMessage(archiving ? "Team member archived and access revoked. Their records are available in Archived team." : restoring ? `Access reinstated for ${memberLabel(member)}. They are back in Your team with their saved permissions and records. Previous device authorisations, PINs and invitations remain revoked. Use a fresh app setup or invitation if needed. No invitation was sent automatically.` : nextStatus === "active" ? "Team access reactivated. Revoked devices remain revoked and a fresh invitation is required when no login is linked." : "Team access deactivated. History, files and job records remain saved.");
     } catch (caught) {
       setMessage(""); setError(caught instanceof Error ? caught.message : "Team access could not be updated.");
     } finally {
@@ -840,7 +849,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
               <td>{member.email ? <a href={`mailto:${member.email}`}>{member.email}</a> : <span>Not added</span>}</td>
               <td><span className={`${styles.state} ${member.status === "active" ? styles.current : styles.expired}`}>{statusName(member)}</span></td>
               <td><span className={styles.colourName}><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span></td>
-              <td><div className={styles.actions}><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" className={styles.memberMenuButton} disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status !== "archived" && <button type="button" className={styles.danger} aria-label={`Delete ${memberLabel(member)} from team`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "archived")}>Delete</button>}</div></td>
+              <td><div className={styles.actions}><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" className={styles.memberMenuButton} disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "archived" && <button type="button" className={styles.secondary} aria-label={`Reinstate access for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "active")}>{busy === `status:${member.id}` ? "Reinstating..." : "Reinstate access"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status !== "archived" && <button type="button" className={styles.danger} aria-label={`Delete ${memberLabel(member)} from team`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "archived")}>Delete</button>}</div></td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -848,7 +857,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
         <header className={styles.memberHeader}><div><strong><TradeTeamStatusDot name={memberLabel(member)} presence={member.presence} active={member.status === "active"} /> {member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>TLink username: {member.fieldUsername || "Not set"}</small><small>{statusName(member)}</small></div><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></header>
         <div className={styles.chips}><span><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span><span>{member.permissions.jobScope === "own" ? "Assigned jobs only" : "All team jobs"}</span><span>{member.fileCount || 0} documents</span>{member.capabilities?.length ? <span>{member.capabilities.length} services</span> : null}</div>
         <small>Last active: {member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleString("en-AU") : "Not signed in yet"}</small>
-        <div className={styles.actions}><button type="button" disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button>{!member.isOwner && !isCurrentMember(member) && member.status !== "archived" && <button type="button" className={styles.danger} aria-label={`Delete ${memberLabel(member)} from team`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "archived")}>Delete</button>}</div>
+        <div className={styles.actions}><button type="button" disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button>{!member.isOwner && !isCurrentMember(member) && member.status === "archived" && <button type="button" className={styles.secondary} aria-label={`Reinstate access for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "active")}>{busy === `status:${member.id}` ? "Reinstating..." : "Reinstate access"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status !== "archived" && <button type="button" className={styles.danger} aria-label={`Delete ${memberLabel(member)} from team`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "archived")}>Delete</button>}</div>
       </article>)}</div></> : <p className={styles.empty}>No team members match these filters.</p>}
       {roster.totalPages > 1 && <nav className={styles.pagination} aria-label="Team member pages"><button type="button" className={styles.secondary} disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {roster.page} of {roster.totalPages}</span><button type="button" className={styles.secondary} disabled={page >= roster.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Next</button></nav>}
     </section>
@@ -857,6 +866,8 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
 
     {editing && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeMemberDialog(); }}><div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="team-member-dialog-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeMemberDialog)}><header className={styles.dialogHeader}><div><span>{editing === "new" ? "Add team member" : editing.status === "archived" ? "Archived team member" : "Edit team member"}</span><h4 id="team-member-dialog-title">Person and access</h4></div><button type="button" className={styles.iconButton} aria-label="Close" disabled={Boolean(busy)} onClick={closeMemberDialog}>X</button></header>
       {editing !== "new" && editing.status === "archived" ? <div className={styles.form} aria-label="Archived member details">
+        {error && <p className={styles.error} role="alert">{error}</p>}
+        {message && <p className={styles.status} role="status">{message}</p>}
         <p className={styles.status}>This person is archived. Their access is revoked and they cannot be assigned new work. Their records are read-only.</p>
         <div className={`${styles.grid} ${styles.contactGrid}`}>
           <div><strong>Name</strong><p>{memberLabel(editing)}</p></div>
@@ -865,7 +876,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
           <div><strong>TLink username</strong><p>{editing.fieldUsername || "Not set"}</p></div>
         </div>
         <p className={styles.hint}>Job history, audit records and {editing.fileCount || 0} saved documents remain available to authorised business managers.</p>
-        <div className={styles.actions}><button type="button" className={styles.primary} disabled={Boolean(busy)} onClick={() => { setEditing(null); void openFiles(editing); }}>Open documents</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={closeMemberDialog}>Done</button></div>
+        <div className={styles.actions}><button type="button" className={styles.primary} disabled={Boolean(busy)} onClick={() => { setEditing(null); void openFiles(editing); }}>Open documents</button>{!editing.isOwner && !isCurrentMember(editing) && <button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(editing, "active")}>{busy === `status:${editing.id}` ? "Reinstating..." : "Reinstate access"}</button>}<button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={closeMemberDialog}>Done</button></div>
       </div> : <form className={styles.form} onSubmit={saveMember}>
         {error && <p className={styles.error} role="alert">{error}</p>}
         {message && <p className={styles.status} role="status">{message}</p>}

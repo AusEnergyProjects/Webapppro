@@ -58,7 +58,7 @@ function loadRoute(database, aborted, currentAccess = managerAccess, { sent = []
   const moduleRecord = { exports: {} }; const databaseBinding = d1(database);
   if (beforeBatch) {
     const batch = databaseBinding.batch;
-    databaseBinding.batch = async statements => { beforeBatch(); return batch(statements); };
+    databaseBinding.batch = async statements => { beforeBatch(statements); return batch(statements); };
   }
   const mocks = {
     "@/lib/trade-team-presence": teamPresence,
@@ -676,3 +676,111 @@ test("archive rechecks the manager at commit and rolls back a failed access revo
     } finally { database.close(); }
   }
 });
+
+for (const actor of ["owner", "manager"]) {
+  for (const linkedLogin of [true, false]) {
+    test(`${actor} reinstates an archived ${linkedLogin ? "linked" : "roster-only"} member without reviving old credentials`, async () => {
+      const database = fixture(); const aborted = []; const sent = [];
+      try {
+        database.exec(`UPDATE trade_team_members SET can_manage_team=1, can_edit_team_permissions=1, can_view_quotes=1,
+          field_username='Saved Name', field_username_normalized='saved name' WHERE id='target-1'`);
+        if (!linkedLogin) database.exec("UPDATE trade_team_members SET member_uid='' WHERE id='target-1'");
+        const access = actor === "owner"
+          ? { ...managerAccess, actorUid: "owner-1", memberId: "owner-member", isOwner: true }
+          : managerAccess;
+        const route = loadRoute(database, aborted, access, { sent });
+        const original = { ...database.prepare("SELECT * FROM trade_team_members WHERE id='target-1'").get() };
+        const archive = await patch(route, { action: "archive_member", memberId: "target-1", expectedUpdatedAt: original.updated_at });
+        assert.equal(archive.status, 200, JSON.stringify(await archive.json()));
+        const archived = database.prepare("SELECT * FROM trade_team_members WHERE id='target-1'").get();
+        const retainedTables = ["trade_work_orders", "trade_team_member_files", "trade_team_member_credentials",
+          "trade_mobile_devices", "trade_field_access_codes", "trade_field_sessions", "trade_team_invites"];
+        const retained = retainedTables.map(table => database.prepare(`SELECT * FROM ${table} ORDER BY id`).all());
+
+        // Restoring is lifecycle-only: even a supplied profile or permission edit is ignored.
+        const restored = await patch(route, { action: "restore_member", memberId: "target-1", expectedUpdatedAt: archived.updated_at,
+          status: "archived", displayName: "Must not change", fieldUsername: "Must not change", permissions: { canManageTeam: false, canSendSms: true } });
+        const body = await restored.json();
+        assert.equal(restored.status, 200, body.error);
+        const member = { ...database.prepare("SELECT * FROM trade_team_members WHERE id='target-1'").get() };
+        assert.deepEqual(member, { ...original, updated_at: member.updated_at });
+        assert.equal(body.members.find(member => member.id === "target-1").status, "active");
+        assert.equal(body.members.find(member => member.id === "target-1").hasLogin, linkedLogin);
+        assert.equal(body.members.find(member => member.id === "target-1").invitePending, false);
+        assert.deepEqual(retainedTables.map(table => database.prepare(`SELECT * FROM ${table} ORDER BY id`).all()), retained);
+        assert.equal(database.prepare("SELECT status FROM trade_mobile_devices").get().status, "revoked");
+        assert.equal(database.prepare("SELECT status FROM trade_field_access_codes").get().status, "revoked");
+        assert.equal(database.prepare("SELECT status FROM trade_field_sessions").get().status, "revoked");
+        assert.ok(database.prepare("SELECT consumed_at FROM trade_team_invites").get().consumed_at);
+        assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_members").get().count, 3);
+        assert.deepEqual(aborted, [{ ownerUid: "owner-1", memberId: "target-1" }]);
+        assert.equal(sent.length, 0);
+        const event = database.prepare("SELECT actor_uid,metadata FROM trade_team_member_events WHERE event_type='member.restored'").get();
+        assert.equal(event.actor_uid, access.actorUid);
+        assert.deepEqual(JSON.parse(event.metadata), { previousStatus: "archived", status: "active" });
+
+        const owner = loadRoute(database, [], { ...managerAccess, actorUid: "owner-1", memberId: "owner-member", isOwner: true });
+        const roster = await (await owner.GET(new Request("https://test/api/trade-team"))).json();
+        assert.ok(roster.assignees.some(member => member.id === "target-1"));
+        assert.ok(roster.members.some(member => member.id === "target-1"));
+        const past = await (await owner.GET(new Request("https://test/api/trade-team?status=archived"))).json();
+        assert.equal(past.members.some(member => member.id === "target-1"), false);
+        assert.equal((await patch(route, { action: "restore_member", memberId: "target-1", expectedUpdatedAt: member.updated_at })).status, 409);
+        assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events WHERE event_type='member.restored'").get().count, 1);
+      } finally { database.close(); }
+    });
+  }
+}
+
+for (const denied of [
+  { name: "stale revision", expectedUpdatedAt: "stale", status: 409 },
+  { name: "missing revision", expectedUpdatedAt: "", status: 409 },
+  { name: "active member", sql: "UPDATE trade_team_members SET status='active' WHERE id='target-1'", status: 409 },
+  { name: "suspended member", sql: "UPDATE trade_team_members SET status='suspended' WHERE id='target-1'", status: 409 },
+  { name: "owner account", sql: "UPDATE trade_team_members SET member_uid='owner-1' WHERE id='target-1'", status: 409 },
+  { name: "self account", sql: "UPDATE trade_team_members SET member_uid='manager-uid' WHERE id='target-1'", status: 403 },
+  { name: "another business", access: { ...managerAccess, ownerUid: "owner-2", isOwner: true }, status: 404 },
+  { name: "missing team permission", access: { ...managerAccess, canManageTeam: false }, status: 403 },
+]) {
+  test(`reinstatement rejects ${denied.name} without changes or audit`, async () => {
+    const database = fixture(); const aborted = [];
+    try {
+      database.exec("UPDATE trade_team_members SET status='archived' WHERE id='target-1'");
+      if (denied.sql) database.exec(denied.sql);
+      const tables = ["trade_team_members", "trade_team_member_events", "trade_mobile_devices", "trade_field_sessions", "trade_team_invites"];
+      const snapshot = () => tables.map(table => database.prepare(`SELECT * FROM ${table} ORDER BY id`).all());
+      const before = snapshot();
+      const route = loadRoute(database, aborted, denied.access || managerAccess);
+      const response = await patch(route, { action: "restore_member", memberId: "target-1",
+        expectedUpdatedAt: denied.expectedUpdatedAt ?? "2026-08-12T00:00:00.000Z" });
+      assert.equal(response.status, denied.status, JSON.stringify(await response.json()));
+      assert.deepEqual(snapshot(), before);
+      assert.deepEqual(aborted, []);
+    } finally { database.close(); }
+  });
+}
+
+for (const race of ["manager_revoked", "member_changed", "already_restored_same_timestamp", "audit_failure"]) {
+  test(`reinstatement handles ${race} atomically without a false restored event`, async () => {
+    const database = fixture(); const aborted = [];
+    try {
+      database.exec("UPDATE trade_team_members SET status='archived' WHERE id='target-1'");
+      if (race === "audit_failure") database.exec(`CREATE TRIGGER fail_restore_audit BEFORE INSERT ON trade_team_member_events
+        WHEN NEW.event_type='member.restored' BEGIN SELECT RAISE(ABORT, 'test audit failure'); END;`);
+      let concurrentMember;
+      const beforeBatch = statements => {
+        if (race === "manager_revoked") database.exec("UPDATE trade_team_members SET can_manage_team=0 WHERE id='manager-1'");
+        if (race === "member_changed") database.exec("UPDATE trade_team_members SET display_name='New details', updated_at='new-revision' WHERE id='target-1'");
+        if (race === "already_restored_same_timestamp") database.prepare("UPDATE trade_team_members SET status='active', updated_at=? WHERE id='target-1'")
+          .run(statements[0].values[1]);
+        concurrentMember = { ...database.prepare("SELECT * FROM trade_team_members WHERE id='target-1'").get() };
+      };
+      const route = loadRoute(database, aborted, managerAccess, { beforeBatch });
+      const response = await patch(route, { action: "restore_member", memberId: "target-1", expectedUpdatedAt: "2026-08-12T00:00:00.000Z" });
+      assert.equal(response.status, race === "audit_failure" ? 500 : 409);
+      assert.deepEqual({ ...database.prepare("SELECT * FROM trade_team_members WHERE id='target-1'").get() }, concurrentMember);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events").get().count, 0);
+      assert.deepEqual(aborted, []);
+    } finally { database.close(); }
+  });
+}

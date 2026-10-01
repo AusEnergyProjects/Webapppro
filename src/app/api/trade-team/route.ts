@@ -301,11 +301,11 @@ function memberCreateActorGuard(access: TeamAccess, permissions: MemberPermissio
 }
 
 function conditionalMemberAuditStatement(db: D1Database, access: TeamAccess, memberId: string,
-  eventType: string, metadata: Record<string, unknown>, updatedAt: string) {
+  eventType: string, metadata: Record<string, unknown>, updatedAt: string, afterPreviousChange = false) {
   return db.prepare(`INSERT INTO trade_team_member_events
     (id, owner_uid, team_member_id, actor_uid, entity_type, entity_id, event_type, metadata, created_at)
     SELECT ?, ?, ?, ?, 'member', ?, ?, ?, ?
-    WHERE EXISTS (SELECT 1 FROM trade_team_members WHERE id = ? AND owner_uid = ? AND updated_at = ?)`)
+    WHERE ${afterPreviousChange ? "changes() = 1 AND " : ""}EXISTS (SELECT 1 FROM trade_team_members WHERE id = ? AND owner_uid = ? AND updated_at = ?)`)
     .bind(crypto.randomUUID(), access.ownerUid, memberId, access.actorUid, memberId,
       eventType, JSON.stringify(metadata), updatedAt, memberId, access.ownerUid, updatedAt);
 }
@@ -902,7 +902,7 @@ export async function PATCH(request: Request) {
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "Invalid team update." }, 400); }
     const action = cleanAdminText(body.action, 30); const db = getD1(); const now = new Date().toISOString();
-    if (action === "update_member" || action === "archive_member") {
+    if (action === "update_member" || action === "archive_member" || action === "restore_member") {
       if (!canManageTeam(access)) throw new Error("OWNER_REQUIRED");
       const memberId = cleanAdminText(body.memberId, 180);
       const current = await db.prepare(`SELECT member_uid, email, display_name, first_name, last_name, phone, field_username, field_username_normalized, schedule_colour,
@@ -919,9 +919,11 @@ export async function PATCH(request: Request) {
       if (!expectedUpdatedAt || expectedUpdatedAt !== String(current.updated_at || "")) {
         throw new Error("MEMBER_CONFLICT");
       }
-      if (current.status === "archived") return adminJson({ ok: false, error: "This person is archived. Their details and access cannot be changed." }, 409);
       const archiving = action === "archive_member";
-      const status = archiving ? "archived" : body.status === undefined ? String(current.status) : cleanAdminText(body.status, 20);
+      const restoring = action === "restore_member";
+      if (current.status === "archived" && !restoring) return adminJson({ ok: false, error: "This person is archived. Reinstate access before editing their details." }, 409);
+      if (restoring && current.status !== "archived") return adminJson({ ok: false, error: "Only archived team members can be reinstated." }, 409);
+      const status = archiving ? "archived" : restoring ? "active" : body.status === undefined ? String(current.status) : cleanAdminText(body.status, 20);
       if (!archiving && !MEMBER_LIFECYCLE_STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid account status." }, 400);
       const lifecycleChanged = status !== String(current.status);
       if (lifecycleChanged) {
@@ -932,18 +934,18 @@ export async function PATCH(request: Request) {
           throw new Error("OWNER_REQUIRED");
         }
       }
-      if (archiving) {
+      if (archiving || restoring) {
         const permissions = memberPermissions({}, current);
         const actorGuard = memberMutationActorGuard(access, permissions, permissions, false);
         const results = await db.batch([
-          db.prepare(`UPDATE trade_team_members SET status = 'archived', updated_at = ?
-            WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`)
-            .bind(now, memberId, access.ownerUid, current.updated_at, ...actorGuard.bindings),
-          conditionalMemberAuditStatement(db, access, memberId, "member.archived", { previousStatus: current.status, status: "archived" }, now),
-          ...memberAccessRevocationStatements(db, access, memberId, "archived", now),
+          db.prepare(`UPDATE trade_team_members SET status = ?, updated_at = ?
+            WHERE id = ? AND owner_uid = ? AND status = ? AND updated_at = ?${actorGuard.sql}`)
+            .bind(status, now, memberId, access.ownerUid, current.status, current.updated_at, ...actorGuard.bindings),
+          conditionalMemberAuditStatement(db, access, memberId, restoring ? "member.restored" : "member.archived", { previousStatus: current.status, status }, now, true),
+          ...(archiving ? memberAccessRevocationStatements(db, access, memberId, "archived", now) : []),
         ]);
         if (!results[0]?.meta.changes) throw new Error("MEMBER_CONFLICT");
-        await abortMemberDeviceUploads(access.ownerUid, memberId);
+        if (archiving) await abortMemberDeviceUploads(access.ownerUid, memberId);
         return adminJson({ ok: true, ...(await teamPayload(access)) });
       }
       const firstName = body.firstName === undefined ? String(current.first_name || "") : cleanAdminText(body.firstName, 80);

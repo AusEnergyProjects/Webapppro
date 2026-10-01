@@ -543,7 +543,7 @@ test("desktop and mobile show Delete for ordinary staff and never for the owner,
   }
 });
 
-test("archived details render identity and document access without forms, invitations, PINs or reactivation", () => {
+test("archived details keep identity and documents read-only until access is explicitly reinstated", () => {
   const member = { ...archiveMember, status: "archived" };
   const opened = []; const selected = [];
   const tree = renderTeam({ archivedView: true, statusFilter: "archived", editing: member, visibleMembers: [member], openFiles: person => opened.push(person.id), setEditing: value => selected.push(value) });
@@ -556,6 +556,119 @@ test("archived details render identity and document access without forms, invita
   elements(dialog).find(node => node.type === "button" && textContent(node) === "Open documents").props.onClick();
   assert.deepEqual(selected, [null]);
   assert.deepEqual(opened, ["staff-1"]);
+});
+
+test("Reinstate access sends an exact restore request with saved revision and never sends an automatic invitation", async () => {
+  for (const { hasLogin, defaultView } of [{ hasLogin: false, defaultView: false }, { hasLogin: true, defaultView: true }]) {
+    const member = { ...archiveMember, status: "archived", hasLogin };
+    const before = JSON.stringify(member);
+    const requests = []; const confirmations = []; const messages = []; const refreshes = []; const busy = []; const changes = {};
+    const rosterSetters = Object.fromEntries(["Page", "Query", "AppliedQuery", "CapabilityFilter", "StatusFilter", "Members", "Loading"].map(name => [`set${name}`, value => { changes[name] = value; }]));
+    const restore = teamHandler("updateMemberStatus", {
+      busy: "", isCurrentMember: () => false, memberLabel,
+      statusFilter: defaultView ? "all" : "archived", page: defaultView ? 1 : 3, appliedQuery: defaultView ? "" : "Katja", capabilityFilter: defaultView ? "" : "solar", ...rosterSetters,
+      window: { confirm: text => { confirmations.push(text); return true; } },
+      setBusy: value => busy.push(value), setError() {}, setMessage: value => messages.push(value), setMenu() {}, setEditing() {},
+      tokenHeaders: async () => ({ Authorization: "Bearer fixture" }),
+      fetch: async (url, options) => { requests.push({ url, method: options.method, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; },
+      handleMemberConflict: async () => false,
+      load: async () => refreshes.push("roster"), loadDevices: async () => refreshes.push("devices"),
+    });
+    await restore(member, "active");
+    assert.deepEqual(requests, [{ url: "/api/trade-team", method: "PATCH", body: { action: "restore_member", memberId: "staff-1", expectedUpdatedAt: "loaded-revision" } }]);
+    assert.match(confirmations[0], /Reinstate access for Katja Rosic.*saved permissions.*device authorisations, PINs and invitation links will stay revoked.*No invitation will be sent automatically/);
+    assert.deepEqual(refreshes, defaultView ? ["roster", "devices"] : ["devices"], "the new default-view effect reloads the roster instead of refetching archived records");
+    assert.equal(changes.StatusFilter, "all"); assert.equal(changes.Page, 1);
+    assert.equal(changes.Query, ""); assert.equal(changes.AppliedQuery, ""); assert.equal(changes.CapabilityFilter, "");
+    if (defaultView) assert.equal(changes.Loading, undefined, "an unchanged view reloads directly without leaving a pending loading state");
+    else { assert.equal(changes.Loading, true); assert.equal(changes.Members.length, 0); }
+    assert.deepEqual(busy, ["status:staff-1", ""]);
+    assert.match(messages.at(-1), /Access reinstated for Katja Rosic.*Your team.*Previous device authorisations, PINs and invitations remain revoked.*fresh app setup or invitation.*No invitation was sent automatically/);
+    assert.doesNotMatch(messages.at(-1), /must sign in again/);
+    assert.equal(JSON.stringify(member), before, "restoration does not rewrite the loaded identity, permissions or document state");
+  }
+});
+
+test("reinstate confirmation, owner, self, pending mutation and archived transition guards cannot be bypassed", async () => {
+  for (const fixture of [
+    { member: { ...archiveMember, status: "archived" }, confirmed: false, next: "active" },
+    { member: { ...archiveMember, status: "archived", isOwner: true }, next: "active" },
+    { member: { ...archiveMember, status: "archived" }, current: true, next: "active" },
+    { member: { ...archiveMember, status: "archived" }, busy: "member", next: "active" },
+    { member: { ...archiveMember, status: "archived" }, next: "suspended" },
+    { member: archiveMember, next: "active" },
+  ]) {
+    const restore = teamHandler("updateMemberStatus", {
+      busy: fixture.busy || "", isCurrentMember: () => fixture.current || false, memberLabel,
+      window: { confirm: () => fixture.confirmed ?? true },
+    });
+    await restore(fixture.member, fixture.next);
+  }
+});
+
+test("failed or stale reinstatement leaves records archived without reporting success", async () => {
+  for (const stale of [false, true]) {
+    const messages = []; const errors = []; const busy = []; let closed = false; let refreshed = false;
+    const restore = teamHandler("updateMemberStatus", {
+      busy: "", isCurrentMember: () => false, memberLabel, window: { confirm: () => true },
+      setBusy: value => busy.push(value), setError: value => errors.push(value), setMessage: value => messages.push(value),
+      setMenu() { closed = true; }, setEditing() { closed = true; },
+      tokenHeaders: async () => ({}),
+      fetch: async () => ({ ok: false, status: stale ? 409 : 403, json: async () => ({ error: "Your permission to manage this team changed." }) }),
+      handleMemberConflict: async response => { assert.equal(response.status, stale ? 409 : 403); return stale; },
+      load: async () => { refreshed = true; }, loadDevices: async () => { refreshed = true; },
+    });
+    await restore({ ...archiveMember, status: "archived" }, "active");
+    assert.equal(messages.some(message => message.startsWith("Access reinstated")), false);
+    assert.equal(closed, false); assert.equal(refreshed, false);
+    assert.equal(busy.at(-1), "");
+    if (!stale) assert.equal(errors.at(-1), "Your permission to manage this team changed.");
+  }
+});
+
+test("suspended Reactivate access retains its existing update action", async () => {
+  const requests = [];
+  const reactivate = teamHandler("updateMemberStatus", {
+    busy: "", isCurrentMember: () => false, memberLabel, window: { confirm: () => true },
+    setBusy() {}, setError() {}, setMessage() {}, setMenu() {}, setEditing() {},
+    tokenHeaders: async () => ({}),
+    fetch: async (url, options) => { requests.push(JSON.parse(options.body)); return { ok: true, json: async () => ({ ok: true }) }; },
+    handleMemberConflict: async () => false, load: async () => {}, loadDevices: async () => {},
+  });
+  await reactivate({ ...archiveMember, status: "suspended" }, "active");
+  assert.deepEqual(requests, [{ action: "update_member", memberId: "staff-1", status: "active", expectedUpdatedAt: "loaded-revision" }]);
+});
+
+test("archived desktop and mobile rows offer Reinstate access beside Open details only for eligible staff", () => {
+  for (const member of [{ ...archiveMember, status: "archived" }, { ...archiveMember, status: "archived", isOwner: true }, { ...archiveMember, status: "archived", id: "self" }, archiveMember]) {
+    const calls = [];
+    const tree = renderTeam({ archivedView: true, visibleMembers: [member], updateMemberStatus: (person, status) => calls.push([person.id, status]) });
+    const buttons = elements(tree).filter(node => node.type === "button" && textContent(node) === "Reinstate access");
+    const expected = member.status === "archived" && !member.isOwner && member.id !== "self" ? 2 : 0;
+    assert.equal(buttons.length, expected);
+    for (const button of buttons) {
+      const actionGroup = elements(tree).find(node => node.children.includes(button));
+      assert.ok(actionGroup.children.some(node => node.type === "button" && textContent(node) === "Open details"));
+      button.props.onClick();
+    }
+    assert.deepEqual(calls, Array.from({ length: expected }, () => [member.id, "active"]));
+  }
+});
+
+test("archived details expose a confirmed reinstatement action and keep its loading or error state visible", () => {
+  const member = { ...archiveMember, status: "archived" }; const calls = [];
+  const overrides = { archivedView: true, editing: member, updateMemberStatus: (person, status) => calls.push([person.id, status]) };
+  const tree = renderTeam(overrides);
+  const dialog = elements(tree).find(node => node.props.role === "dialog");
+  elements(dialog).find(node => node.type === "button" && textContent(node) === "Reinstate access").props.onClick();
+  assert.deepEqual(calls, [["staff-1", "active"]]);
+  const pending = renderTeam({ ...overrides, busy: "status:staff-1", message: "Reinstating team access..." });
+  const pendingButton = elements(pending).find(node => node.type === "button" && textContent(node) === "Reinstating...");
+  assert.equal(pendingButton.props.disabled, true);
+  const failed = renderTeam({ ...overrides, error: "Your permission to manage this team changed." });
+  const failedDialog = elements(failed).find(node => node.props.role === "dialog");
+  assert.ok(elements(failedDialog).some(node => node.props.role === "alert" && textContent(node) === "Your permission to manage this team changed."));
+  assert.equal(elements(failedDialog).some(node => ["form", "input", "select"].includes(node.type)), false);
 });
 
 test("archived documents keep View and Download while upload and Delete are absent", () => {
