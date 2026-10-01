@@ -187,7 +187,7 @@ function RevenueCard({ report, period, onPeriodChange, onOpenReports }: { report
       <div className={styles.revenueLegend}>
         {chartGroups.length ? <ul>{chartGroups.map((group, index) => <li key={group.key}><span className={styles.legendDot} style={{ background: hasNegative ? "var(--trade-muted, #637a7b)" : chartColours[index] }} /><span>{group.key === "remaining-services" ? "Other services" : serviceNames[group.key] || group.key}</span><strong title={exactMoney(group.invoicedCents ?? 0)}>{money(group.invoicedCents ?? 0)}</strong></li>)}</ul> : <p>No issued invoices or credits in this period.</p>}
         {hasNegative && <p className={styles.chartNote}>Credits exceed invoicing in one or more services. Signed totals are shown without a proportional split.</p>}
-        {change !== null && report.period.previous && <p className={styles.comparison}>{change === 0 ? "Unchanged" : `${money(Math.abs(change))} ${change > 0 ? "more" : "less"}`} than the previous period.</p>}
+        {change !== null && report.period.previous && <p className={styles.comparison}>{change === 0 ? "Unchanged from" : `${money(Math.abs(change))} ${change > 0 ? "more" : "less"} than`} the previous period.</p>}
       </div>
     </div>
     <div className={styles.financeDetails}>
