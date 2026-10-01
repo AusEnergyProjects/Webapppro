@@ -50,7 +50,8 @@ export async function readExternalCalendarProvider(connection: Connection, windo
     for (let page = 0; page < MAX_PAGES; page += 1) {
       if (visited.has(url)) throw new Error("CALENDAR_INVALID_PAGINATION");
       visited.add(url);
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(provider === "microsoft_calendar" ? { Prefer: 'outlook.timezone="UTC"' } : {}) }, signal, redirect: "error", cache: "no-store" });
+      // Workerd supports manual redirects; reject 3xx below without forwarding credentials.
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(provider === "microsoft_calendar" ? { Prefer: 'outlook.timezone="UTC"' } : {}) }, signal, redirect: "manual", cache: "no-store" });
       // Only status codes enter diagnostics; provider error bodies can contain private data.
       if (!response.ok) throw new Error(response.status === 401 ? "CALENDAR_RECONNECT_REQUIRED" : response.status === 403 ? "CALENDAR_ACCESS_REQUIRED" : `CALENDAR_PROVIDER_HTTP_${response.status}`);
       const payload: unknown = await response.json();

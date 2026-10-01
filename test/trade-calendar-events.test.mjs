@@ -106,11 +106,53 @@ test('provider list requests expand recurring occurrences without fetching or re
   assert.equal(g.searchParams.get('singleEvents'), 'true'); assert.equal(g.searchParams.get('showDeleted'), 'false');
   assert.equal(m.pathname, '/v1.0/me/calendarView'); assert.match(m.searchParams.get('startDateTime'), /Z$/);
   const urls = [];
-  await withFetch(async (url, init) => { urls.push(url); assert.equal(init.method, undefined); assert.equal(init.redirect, 'error'); return Response.json(urls.length === 1 ? { items: [google()], nextPageToken: 'second-page' } : { items: [google({ summary: 'Updated occurrence' }), google({ id: 'next-occurrence' })] }); }, async () => {
+  await withFetch(async (url, init) => { urls.push(url); assert.equal(init.method, undefined); assert.equal(init.redirect, 'manual'); return Response.json(urls.length === 1 ? { items: [google()], nextPageToken: 'second-page' } : { items: [google({ summary: 'Updated occurrence' }), google({ id: 'next-occurrence' })] }); }, async () => {
     const result = await loaded.readExternalCalendarProvider({ provider: 'google_calendar' }, window, 'owner-member', mirrors());
     assert.equal(result.complete, true); assert.equal(result.events.length, 2); assert.equal(result.events[0].title, 'Updated occurrence');
     assert.match(urls[1], /pageToken=second-page/);
   });
+});
+
+test('calendar fetch options construct valid Requests in the actual Workers runtime', async () => {
+  const { Miniflare } = await import('miniflare');
+  const captured = []; const loaded = server();
+  await withFetch(async (url, init) => {
+    assert.ok(init.signal instanceof AbortSignal);
+    const { signal, ...options } = init;
+    assert.equal(signal.aborted, false);
+    captured.push({ url, options });
+    return Response.json(url.includes('googleapis.com') ? {} : { value: [] });
+  }, async () => {
+    for (const provider of ['google_calendar', 'microsoft_calendar']) assert.equal((await loaded.readExternalCalendarProvider({ provider }, window, 'owner-member', mirrors())).complete, true);
+  });
+  const runtime = new Miniflare({ modules: true, compatibilityDate: '2026-05-15', compatibilityFlags: ['nodejs_compat', 'global_fetch_strictly_public'], port: 0,
+    script: `export default { async fetch(request) {
+      const { url, options } = await request.json();
+      try {
+        const providerRequest = new Request(url, { ...options, signal: AbortSignal.timeout(12000) });
+        return Response.json({ ok: true, redirect: providerRequest.redirect });
+      } catch (error) { return Response.json({ ok: false, name: error.name }); }
+    } }`,
+  });
+  const invoke = async payload => (await runtime.dispatchFetch('https://local.test/', { method: 'POST', body: JSON.stringify(payload) })).json();
+  try {
+    assert.deepEqual(await invoke({ ...captured[0], options: { ...captured[0].options, redirect: 'error' } }), { ok: false, name: 'TypeError' });
+    for (const request of captured) assert.deepEqual(await invoke(request), { ok: true, redirect: 'manual' });
+  } finally { await runtime.dispose(); }
+});
+
+test('calendar redirects fail without issuing a second request or forwarding credentials', async () => {
+  const loaded = server();
+  for (const provider of ['google_calendar', 'microsoft_calendar']) for (const status of [301, 302, 303, 307, 308]) {
+    let requests = 0;
+    await withFetch(async (url, init) => {
+      requests += 1; assert.equal(init.redirect, 'manual'); assert.doesNotMatch(url, /redirect-target/);
+      return new Response(null, { status, headers: { Location: 'https://redirect-target.example.test/collect' } });
+    }, async () => {
+      const result = await loaded.readExternalCalendarProvider({ provider }, window, 'owner-member', mirrors());
+      assert.equal(result.complete, false); assert.deepEqual(result.events, []); assert.match(result.error, new RegExp(`HTTP ${status}`)); assert.equal(requests, 1);
+    });
+  }
 });
 
 test('provider refresh replaces cancelled or moved-out events instead of retaining stale imports', async () => {
