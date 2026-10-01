@@ -95,7 +95,7 @@ function harness(initial = payload(), options = {}) {
   const panelModule = compile('TradeSwmsPanel.tsx', {
     react: runtime.hooks, 'react/jsx-runtime': jsx,
     './TradeBusinessProvider': { useTradeBusinessFetch: () => fetch },
-    './TradeWorkPackSignaturePad': { TradeWorkPackSignaturePad: SignaturePad },
+    'next/dynamic': { default: () => SignaturePad },
     './TradeWorkTimeTracking': { WorkTimeStatus: () => null, useFormTimeTracking: value => {
       timings.push(value); return { bind: {}, markCompleted: () => completions.push(value.formId) };
     } },
