@@ -1,4 +1,5 @@
 import { useBusinessApi } from '@/lib/use-business-api';
+import { useFormTimeTracking, WorkTimeStatus } from '@/components/work-time-tracking';
 import * as Crypto from 'expo-crypto';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
@@ -140,6 +141,9 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
   const stepIndex = Math.max(0, pages.findIndex((item) => item.key === cache?.stepKey));
   const step = pages[stepIndex];
   const editable = record?.status === 'draft';
+  const timing = useFormTimeTracking({ formKind: 'activity_record', formId: record?.id || '', workOrderId,
+    pageKey: step?.key || 'review', pageTitle: step?.kind === 'fields' ? step.section : step?.kind === 'signature' ? step.declaration.title : 'Review and complete',
+    enabled: editable && !overview && !cache?.finishRequested });
   const signatureDeclarations = step?.kind === 'signature' && record
     ? step.legacyStepKeys.flatMap((key) => {
       const declaration = record.form.declarations.find((item) => item.key === key);
@@ -390,6 +394,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     if (!conflicts.length) { setError(''); queuePageSync([], true); }
   }
   function answer(key: string, value: string | number | boolean) {
+    timing.activity();
     if (!cacheRef.current) return;
     void remember({ ...cacheRef.current, answers: { ...cacheRef.current.answers, [key]: value } }).catch(() => setError('Could not save the draft on this phone. Keep this form open and reconnect.'));
   }
@@ -723,6 +728,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     if (!latest) return;
     try {
       await remember({ ...latest, finishRequested: true, finishError: '' });
+      timing.markCompleted();
       onReturnToJob();
       void processActivityFormCompletionQueue(cacheKey)
       .then(() => onChanged())
@@ -829,6 +835,7 @@ export function ActivityFieldFormWizard({ workOrderId, intentId, variantId = '',
     </View>;
   }
   return <View style={styles.container}>
+    <WorkTimeStatus />
     <View style={styles.header}><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => { if (overview) void perform('leaving', leave); else setOverview(true); }}>{overview ? 'Job' : 'Back'}</FieldButton><View style={styles.flex}><Text numberOfLines={2} style={styles.small}>{record.form.title}</Text><Text style={styles.small}>{record.recordNumber} · {syncing ? 'Saving in background' : online ? 'Connected' : 'Draft on this phone'}</Text></View><FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => setOverview(!overview)}>{overview ? 'Continue' : 'Sections'}</FieldButton></View>
     <KeyboardAwareScrollView
       ref={scroll}

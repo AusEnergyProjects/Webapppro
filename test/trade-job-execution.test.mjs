@@ -48,8 +48,9 @@ test("actuals, variance and completion are authoritative and one-entry friendly"
   assert.match(executionRoute, /ON CONFLICT\(job_plan_requirement_id\) DO UPDATE/);
   assert.match(executionRoute, /varianceStatus/);
   assert.match(executionRoute, /action === "complete"/);
-  assert.match(executionRoute, /Invoice and handover preparation are ready/);
-  for (const copy of ["Used as planned", "Done as planned", "Actual differs", "Complete job and prepare invoice", "Finish cleanly without office re-entry"]) assert.match(panel, new RegExp(copy));
+  assert.match(executionRoute, /reconcileTradeFormJobProgress/);
+  assert.doesNotMatch(panel, /Complete job and prepare invoice/);
+  for (const copy of ["Used as planned", "Done as planned", "Actual differs"]) assert.match(panel, new RegExp(copy));
 });
 
 test("completion includes scope, forms, materials and requested proof", () => {

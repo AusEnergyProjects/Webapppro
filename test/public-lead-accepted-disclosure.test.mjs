@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import * as aeaTradeRouting from "../src/lib/aea-trade-routing.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -124,6 +125,7 @@ function applyMigration(database, source) {
 function workflowFixture() {
   evidenceObjects.clear();
   const database = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(database);
   database.exec(`
     CREATE TABLE trade_opportunity_matches (
       id text PRIMARY KEY, opportunity_id text NOT NULL, firebase_uid text NOT NULL,

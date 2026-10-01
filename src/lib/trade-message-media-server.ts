@@ -1,5 +1,5 @@
 import type { TeamAccess } from "./trade-team-server";
-import { messageActorGuard, messageParticipantGuard } from "./trade-message-media-access";
+import { messageActorGuard, messageParticipantGuard, messageMemberVisibilityGuard } from "./trade-message-media-access";
 import { inspectMessageMedia, messageAttachmentIds, type MessageAttachment } from "./trade-message-media";
 
 type Actor = Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "fieldSessionId">;
@@ -14,9 +14,10 @@ const projection = (row: MediaRow): MessageAttachment => ({ id: row.id, kind: ro
 
 function avatarGuard(actor: AvatarActor, memberId: string, write: boolean) {
   const guard = messageActorGuard(actor);
-  return { sql: `${guard.sql} AND EXISTS (SELECT 1 FROM trade_team_members avatar_member WHERE avatar_member.id = ? AND avatar_member.owner_uid = ? AND avatar_member.status = 'active')
+  const visibility = messageMemberVisibilityGuard(actor, "avatar_member.id", "conversation");
+  return { sql: `${guard.sql} AND EXISTS (SELECT 1 FROM trade_team_members avatar_member WHERE avatar_member.id = ? AND avatar_member.owner_uid = ? AND avatar_member.status = 'active' ${write ? "" : `AND ${visibility.sql}`})
     ${write && memberId !== actor.memberId ? `AND EXISTS (SELECT 1 FROM trade_team_members avatar_editor WHERE avatar_editor.id = ? AND avatar_editor.owner_uid = ? AND (avatar_editor.member_uid = avatar_editor.owner_uid OR avatar_editor.can_manage_team = 1))` : ""}`,
-  values: [...guard.values, memberId, actor.ownerUid, ...(write && memberId !== actor.memberId ? [actor.memberId, actor.ownerUid] : [])] };
+  values: [...guard.values, memberId, actor.ownerUid, ...(write ? [] : visibility.values), ...(write && memberId !== actor.memberId ? [actor.memberId, actor.ownerUid] : [])] };
 }
 
 export function messageAttachmentStatements(db: D1Database, actor: Actor, threadId: string, messageId: string, value: unknown) {
@@ -109,8 +110,9 @@ export async function deleteMessageMedia(db: D1Database, bucket: MessageMediaBuc
 
 export async function teamAvatarRevisions(db: D1Database, actor: Actor) {
   const guard = messageActorGuard(actor);
+  const visibility = messageMemberVisibilityGuard(actor, "member.id", "conversation");
   const rows = await db.prepare(`SELECT media.member_id, media.id FROM trade_message_media media JOIN trade_team_members member
     ON member.id = media.member_id AND member.owner_uid = media.owner_uid AND member.status = 'active'
-    WHERE media.owner_uid = ? AND media.purpose = 'avatar' AND media.state = 'active' AND ${guard.sql}`).bind(actor.ownerUid, ...guard.values).all<{ member_id: string; id: string }>();
+    WHERE media.owner_uid = ? AND media.purpose = 'avatar' AND media.state = 'active' AND ${guard.sql} AND ${visibility.sql}`).bind(actor.ownerUid, ...guard.values, ...visibility.values).all<{ member_id: string; id: string }>();
   return Object.fromEntries(rows.results.map(row => [row.member_id, row.id]));
 }

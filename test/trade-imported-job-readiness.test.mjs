@@ -9,6 +9,8 @@ test("imported history cannot create plans, stock usage, readiness or completion
   const queries = [];
   const forbidden = () => { throw new Error("Imported work reached an operational write"); };
   const dependencies = {
+    "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: async () => ({changed:false,stage:"imported",blockers:[]}) },
+    "@/lib/trade-team-server": {},
     "../../../../db": { getD1: () => ({ prepare(sql) {
       queries.push(sql);
       assert.match(sql, /SELECT w.id, w.assignee_member_id, w.stage/);

@@ -1,6 +1,8 @@
 "use client";
 
 import TradeTeamPresence from "./TradeTeamPresence";
+import { TradeTeamTimeWorkspace } from "./TradeTeamTimeWorkspace";
+import { TradeCrewWorkspace } from "./TradeCrewWorkspace";
 import { TradePersonalNameSettings } from "./TradePersonalNameSettings";
 
 import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvider";
@@ -36,11 +38,11 @@ type Task = { id: string; title: string; dueAt: string; status: string };
 type Job = { id: string; workNumber: string; title: string; serviceCategory: string; siteArea: string; stage: string; priority: string; scheduledStart: string; scheduledEnd: string; assigneeMemberId: string; assigneeLabel: string; protectedJob: boolean; serviceAddress: string; tasks: Task[] };
 type AssigneeRoster = { page: number; pageSize: number; total: number; totalPages: number; search: string; capability: string };
 type WorkRoster = { included: boolean; page: number; pageSize: number; total: number; totalPages: number };
-type Result = { ownerUid?: string; businessName?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; permissions: TradeTeamPermissions }; members?: Member[]; assignees?: Assignee[]; assigneeRoster?: AssigneeRoster; work?: WorkRoster; jobs?: Job[]; error?: string };
+type Result = { ownerUid?: string; businessName?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; crewId?: string; crewLead?: boolean; permissions: TradeTeamPermissions }; members?: Member[]; assignees?: Assignee[]; assigneeRoster?: AssigneeRoster; work?: WorkRoster; jobs?: Job[]; error?: string };
 type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
 const stages = [["backlog", "Planning"], ["ready", "Ready"], ["scheduled", "Scheduled"], ["in_progress", "On site"], ["blocked", "Waiting"], ["completed", "Complete"], ["cancelled", "Cancelled"]];
-type PortalView = "work" | "business" | "map" | "team" | "training" | "messages";
+type PortalView = "work" | "business" | "map" | "team" | "training" | "messages" | "time" | "crew";
 type CrmShortcut = "today" | "jobs" | "customers" | "schedule" | "pricebook";
 
 function teamCrmShortcuts(permissions: TradeTeamPermissions) {
@@ -51,13 +53,15 @@ function teamCrmShortcuts(permissions: TradeTeamPermissions) {
   return shortcuts;
 }
 
-function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm }: {
-  permissions: TradeTeamPermissions; view: PortalView; crmView: string;
+function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm, crewId }: {
+  permissions: TradeTeamPermissions; view: PortalView; crmView: string; crewId?: string;
   onView: (view: PortalView) => void; onCrm: (view: CrmShortcut) => void;
 }) {
   return <nav className="tlink-team-navigation" aria-label="Staff workspace">
     <button type="button" aria-current={view === "business" && crmView === "today" ? "page" : undefined} onClick={() => onCrm("today")}><TLinkNavigationIcon name="home" /><span>Home dashboard</span></button>
     <button type="button" aria-current={view === "work" ? "page" : undefined} onClick={() => onView("work")}><TLinkNavigationIcon name="work" /><span>My work</span></button>
+    <button type="button" aria-current={view === "time" ? "page" : undefined} onClick={() => onView("time")}><TLinkNavigationIcon name="schedule" /><span>My time</span></button>
+    {crewId && <button type="button" aria-current={view === "crew" ? "page" : undefined} onClick={() => onView("crew")}><TLinkNavigationIcon name="team" /><span>My crew</span></button>}
     <button type="button" aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
     {teamCrmShortcuts(permissions).map(item => <button type="button" key={item.id} aria-current={view === "business" && crmView === item.id ? "page" : undefined} onClick={() => onCrm(item.id)}><TLinkNavigationIcon name={item.icon} /><span>{item.label}</span></button>)}
     {permissions.canViewQuotes && permissions.canManageQuotes && <button type="button" aria-current={view === "map" ? "page" : undefined} onClick={() => onView("map")}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span></button>}
@@ -227,7 +231,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   useEffect(() => {
     const applyTrainingLink = () => {
       const workspace = new URLSearchParams(window.location.search).get("workspace");
-      if (workspace === "training" || workspace === "messages") setPortalView(workspace);
+      if (workspace === "training" || workspace === "messages" || workspace === "time") setPortalView(workspace);
     };
     applyTrainingLink();
     window.addEventListener("popstate", applyTrainingLink);
@@ -457,12 +461,14 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
           <TradeTeamPresence key={user.uid} getAuthHeaders={async () => ({ Authorization: "Bearer " + await user.getIdToken() })} />
         </div>
       </header>
-      <TeamWorkspaceNavigation permissions={data.access.permissions} view={portalView} crmView={crmView} onView={setPortalView} onCrm={openCrm} />
+      <TeamWorkspaceNavigation permissions={data.access.permissions} crewId={data.access.crewId} view={portalView} crmView={crmView} onView={setPortalView} onCrm={openCrm} />
       <div className="tlink-team-content">
       {portalView === "work" && <TradePersonalNameSettings key={`${user.uid}:${data.access.memberId}`} user={user} name={data.access.displayName} onSaved={displayName => setData(current => current.access ? { ...current, access: { ...current.access, displayName } } : current)} />}
       {portalView === "work" && <div className="tlink-team-welcome"><div><h1>Hi, {data.access.displayName.split(" ")[0] || data.access.displayName}</h1><p>{permissions?.jobScope === "own" ? "Only work assigned to you is visible." : "Your team’s work, ready to go."}</p></div><span>{todayJobs.length} {todayJobs.length === 1 ? "job" : "jobs"} today</span></div>}
       {portalView === "work" && <><section className="team-queue-summary"><article><span>Assigned work</span><strong>{jobs.filter((job) => !["completed", "cancelled"].includes(job.stage)).length}</strong></article><article><span>Today</span><strong>{todayJobs.length}</strong></article><article><span>Waiting</span><strong>{jobs.filter((job) => job.stage === "blocked").length}</strong></article><article><span>Open tasks</span><strong>{jobs.flatMap((job) => job.tasks).filter((task) => task.status !== "done").length}</strong></article></section>
       <div className="team-queue-layout"><aside className="team-job-queue"><header><strong>Work queue</strong><span>{jobs.length}{data.work?.total ? ` of ${data.work.total}` : ""} visible</span></header>{jobs.length ? jobs.map((job) => <button type="button" key={job.id} className={selectedJobId === job.id ? "active" : ""} onClick={() => { setSelectedJobId(job.id); setAssigneeSearch(""); if (permissions?.canAssignJobs) void loadAssignees(job.serviceCategory, ""); }}><span>{job.workNumber}<b>{job.priority}</b></span><strong>{job.title}</strong><small>{job.scheduledStart || "Not scheduled"} | {job.assigneeLabel || "Unassigned"}</small></button>) : <div className="crm-empty"><strong>No work assigned</strong><span>Your dispatcher can assign the next job.</span></div>}{data.work && data.work.page < data.work.totalPages && <button type="button" disabled={workLoading} onClick={() => void loadMoreWork()}>{workLoading ? "Loading more work..." : "Load more work"}</button>}</aside><section className="team-job-focus">{selectedJob ? <article><header><div><span>{selectedJob.workNumber}</span><h2>{selectedJob.title}</h2><p>{selectedJob.protectedJob ? `${selectedJob.siteArea || "Service region"}. Australian Energy Assessments protected job, no customer identity or street address.` : selectedJob.serviceAddress || "Direct customer address has not been added."}</p>{permissions?.canViewQuotes && <button className="tlink-team-quoteButton" type="button" onClick={() => { setCrmTarget({ workspace: "work", kind: "job", id: selectedJob.id, jobTab: "quote", query: "", nonce: Date.now() }); setCrmView("jobs"); setPortalView("business"); }}>Open quote</button>}</div><label><span>Job stage</span><select value={selectedJob.stage} disabled={!permissions?.canManageJobs || busy === `job:${selectedJob.id}`} onChange={(event) => void update({ action: "update_job", workOrderId: selectedJob.id, stage: event.target.value }, `job:${selectedJob.id}`, "Job stage updated.")}>{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></header>{permissions?.canAssignJobs && <section className="team-portal-assignment" aria-label="Assign this job"><label><span>Assigned technician</span><select value={selectedJob.assigneeMemberId} disabled={busy === `assign:${selectedJob.id}` || assigneesLoading} onChange={(event) => void update({ action: "assign_job", workOrderId: selectedJob.id, memberId: event.target.value }, `assign:${selectedJob.id}`, "Assignment updated.")}><option value="">Unassigned</option>{selectedJob.assigneeMemberId && !(data.assignees || []).some((member) => member.id === selectedJob.assigneeMemberId) && <option value={selectedJob.assigneeMemberId}>{selectedJob.assigneeLabel || "Current assignee"}</option>}{(data.assignees || []).map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select></label><form onSubmit={(event) => { event.preventDefault(); void loadAssignees(selectedJob.serviceCategory, assigneeSearch); }}><label><span>Find an active teammate</span><input type="search" value={assigneeSearch} onChange={(event) => setAssigneeSearch(event.target.value)} placeholder="Search by name" /></label><button type="submit" disabled={assigneesLoading}>{assigneesLoading ? "Searching..." : "Search"}</button></form>{data.assigneeRoster && data.assigneeRoster.page < data.assigneeRoster.totalPages && <button type="button" disabled={assigneesLoading} onClick={() => void loadAssignees(selectedJob.serviceCategory, data.assigneeRoster?.search || "", data.assigneeRoster!.page + 1, true)}>{assigneesLoading ? "Loading..." : "Load more team members"}</button>}<small>{permissions.jobScope === "own" ? "You can hand your assigned job to an active teammate. You cannot open or reassign someone else's work." : "Choose an active teammate who provides this service."}</small></section>}<section className="team-mobile-checklist"><h3>Job checklist</h3>{selectedJob.tasks.length ? selectedJob.tasks.map((task) => <label key={task.id}><input type="checkbox" checked={task.status === "done"} disabled={!permissions?.canManageJobs || busy === `task:${task.id}`} onChange={(event) => void update({ action: "update_task", taskId: task.id, status: event.target.checked ? "done" : "pending" }, `task:${task.id}`, event.target.checked ? "Task completed." : "Task reopened.")} /><span>{task.title}<small>{task.dueAt ? `Due ${task.dueAt}` : "No due date"}</small></span></label>) : <div className="crm-empty"><strong>No checklist yet</strong><span>The office can add task steps from the CRM.</span></div>}</section>{permissions?.canViewFieldEvidence && <section className="team-field-tools"><h3>Field record</h3><TradeFieldWorkPanel user={user} workOrderId={selectedJob.id} isProtected={selectedJob.protectedJob} readOnly={!permissions.canManageFieldEvidence} /></section>}{permissions?.canViewFieldEvidence && <section className="team-field-tools"><h3>Field forms</h3><TradeJobFormsPanel user={user} workOrderId={selectedJob.id} readOnly={!permissions.canManageFieldEvidence} /></section>}</article> : <div className="crm-empty"><strong>Select a job</strong><span>Its work details will open here.</span></div>}</section></div></>}
+      {portalView === "time" && <TradeTeamTimeWorkspace user={user} />}
+      {portalView === "crew" && data.access.crewId && <TradeCrewWorkspace user={user} />}
       {portalView === "messages" && <TradeMessagesWorkspace user={user} initialThreadId={messageTarget.id} initialThreadRevision={messageTarget.revision} onOpenQuote={workOrderId => { setCrmTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() }); setPortalView("business"); }} />}
       {(portalView === "business" || (portalView === "map" && permissions?.canViewQuotes && permissions.canManageQuotes)) && businessToolsAvailable && <InstallerCrmWorkspace key={portalView} user={user} teamAccess={Boolean(permissions?.canManageTeam)} staffPermissions={permissions} navigationTarget={portalView === "map" ? null : crmTarget} mapWorkspace={portalView === "map"} onRegisterMapSave={registerMapSave} onViewChange={setCrmView} />}
       {portalView === "training" && <TradeTrainingWorkspace key={user.uid} user={user} />}

@@ -46,6 +46,7 @@ import {
 } from "./AustralianAddressLookup";
 import { TradeWorkPackSignaturePad } from "./TradeWorkPackSignaturePad";
 import styles from "./TradeActivityWorkPackPanel.module.css";
+import { useFormTimeTracking, WorkTimeStatus } from "./TradeWorkTimeTracking";
 
 const ENDPOINT = "/api/trade-team/work-packs";
 const WEB_DEVICE_STORAGE_KEY = "aea-creditex-work-pack-web-device-v1";
@@ -511,6 +512,9 @@ function WorkPack({
     response,
   }), [pack.definition.schema, response]);
   const currentSection = sections[page];
+  const timing = useFormTimeTracking({ formKind: "work_pack", formId: pack.instance.id, workOrderId: pack.instance.workOrderId,
+    pageKey: currentSection?.sectionKey || "review", pageTitle: currentSection?.title || "Review and complete",
+    enabled: open && !readOnly && !["completed", "void"].includes(pack.instance.status) });
   const reviewPage = page >= sections.length;
   const dependenciesReady = pack.definition.schema.dependencies.every((dependency) =>
     dependencyReady({ ...pack, response }, dependency.dependencyKey));
@@ -1207,6 +1211,7 @@ function WorkPack({
     setBusy("finalize");
     try {
       const next = await action("work_pack_finalize", {});
+      timing.markCompleted();
       setMessage("Completed. The signed activity PDF is retained with this job.");
       if (next.finalRecord) await openFinalRecord(next);
     } catch (finalizeError) {
@@ -1266,12 +1271,13 @@ function WorkPack({
     }
   }
 
-  return <article className={styles.pack} data-status={pack.instance.status}>
+  return <article className={styles.pack} data-status={pack.instance.status} {...timing.bind}>
     <button type="button" className={styles.packToggle} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
       <span><b>{pack.definition.title}</b><small>{pack.instance.activityDate} | Version {pack.definition.version}</small></span>
       <strong>{statusLabel(pack.instance.status)}</strong>
     </button>
     {open && <div className={styles.packBody}>
+      <WorkTimeStatus />
       <IdentityBoundary pack={pack} />
       {conflict && <div className={styles.conflict} role="alert"><strong>This form was updated elsewhere</strong><span>{conflict}</span>
         {answerConflicts.map((item) => <div key={`${item.sectionKey}:${item.repeatInstanceKey || ""}:${item.promptKey}`}>

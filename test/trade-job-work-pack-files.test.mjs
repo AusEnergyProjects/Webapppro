@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
@@ -67,6 +68,8 @@ function fixture() {
     INSERT INTO compliance_activity_work_pack_instances VALUES
       ('instance-1', 'creditex', 'pack-1', 'case-1', 'job-1', 1);
   `);
+  installEmptyTradeCrews(database);
+  database.exec("CREATE TABLE trade_team_members(id TEXT,owner_uid TEXT,status TEXT)");
   return database;
 }
 
@@ -116,6 +119,8 @@ function loadRoute({ database, bucket, scope }) {
   const moduleRecord = { exports: {} };
   const calls = { scope: 0, byteResponse: [] };
   const mocks = {
+    "@/lib/trade-team-server": {},
+    "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: async () => ({changed:false,stage:"in_progress",blockers:[]}) },
     "@/lib/trade-job-collaboration": collaboration,
     "../../../../../db": { getD1: () => d1(database) },
     "@/lib/admin-server": {

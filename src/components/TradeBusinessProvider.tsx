@@ -6,6 +6,7 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { createTradeBusinessFetch, readTradeBusinessSelection, resolveTradeBusinessSelection, saveTradeBusinessSelection, type TradeBusinessChoice } from "@/lib/trade-business-client";
 import styles from "./TradeBusinessProvider.module.css";
+import { TradeWorkTimeProvider } from "./TradeWorkTimeTracking";
 
 type BusinessContext = { business: TradeBusinessChoice; request: typeof fetch; updatePersonalName?: (name: string) => void };
 const Context = createContext<BusinessContext | null>(null);
@@ -21,7 +22,7 @@ export function TradeBusinessProvider({ business, children, onAccessLost, onPers
   const reportAccessLost = useCallback(() => { if (active.current) onAccessLost?.(); }, [onAccessLost]);
   const request = useCallback<typeof fetch>((input, init) => createTradeBusinessFetch(business.ownerUid, window.location.origin, fetch, reportAccessLost)(input, init), [business.ownerUid, reportAccessLost]);
   const value = useMemo(() => ({ business, request, updatePersonalName: onPersonalNameChange }), [business, request, onPersonalNameChange]);
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  return <Context.Provider value={value}><TradeWorkTimeProvider ownerUid={business.ownerUid} request={request}>{children}</TradeWorkTimeProvider></Context.Provider>;
 }
 
 export function TradeBusinessGate({ destination, children }: { destination: "owner" | "member" | "messages"; children: ReactNode }) {

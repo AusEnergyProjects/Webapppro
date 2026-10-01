@@ -8,6 +8,9 @@ test("job collaboration follows live or completed visits within the same busines
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`CREATE TABLE trade_work_orders(id TEXT,firebase_uid TEXT,assignee_member_id TEXT,record_status TEXT);
     CREATE TABLE trade_crm_appointments(work_order_id TEXT,firebase_uid TEXT,assignee_member_id TEXT,status TEXT);
+    CREATE TABLE trade_crews(id TEXT,owner_uid TEXT,lead_member_id TEXT);
+    CREATE TABLE trade_crew_members(owner_uid TEXT,crew_id TEXT,member_id TEXT);
+    CREATE TABLE trade_team_members(id TEXT,owner_uid TEXT,status TEXT);
     INSERT INTO trade_work_orders VALUES ('job','owner','lead','active');
     INSERT INTO trade_crm_appointments VALUES ('job','owner','plumber','scheduled'),('job','owner','electrician','in_progress'),
       ('job','owner','finished','completed'),('job','owner','cancelled','cancelled'),('job','owner','absent','no_show'),
@@ -36,6 +39,8 @@ test('governed evidence uploads admit collaborators without granting lead signat
     db.exec(`CREATE TABLE trade_work_orders(id TEXT,firebase_uid TEXT,assignee_member_id TEXT,record_status TEXT);
       CREATE TABLE trade_crm_appointments(work_order_id TEXT,firebase_uid TEXT,assignee_member_id TEXT,status TEXT);
       CREATE TABLE trade_team_members(id TEXT,owner_uid TEXT,member_uid TEXT,status TEXT,job_scope TEXT);
+      CREATE TABLE trade_crews(id TEXT,owner_uid TEXT,lead_member_id TEXT);
+      CREATE TABLE trade_crew_members(owner_uid TEXT,crew_id TEXT,member_id TEXT);
       CREATE TABLE compliance_activity_work_pack_instances(id TEXT,organisation_id TEXT,work_order_id TEXT,work_pack_version_id TEXT,instance_key TEXT,status TEXT,compliance_case_id TEXT,revision INTEGER);
       CREATE TABLE compliance_activity_work_pack_versions(id TEXT,organisation_id TEXT,schema_snapshot TEXT);
       CREATE TABLE compliance_activity_work_pack_browser_upload_receipts(case_instance_id TEXT,organisation_id TEXT,work_order_id TEXT,owner_uid TEXT,member_id TEXT,actor_uid TEXT,instance_key TEXT,prompt_key TEXT,purpose TEXT,artifact_kind TEXT,content_type TEXT,metadata_snapshot TEXT);

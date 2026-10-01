@@ -567,9 +567,10 @@ test('review keeps governed delivery identities read-only and signing uses large
   assert.doesNotMatch(wizard, /signatureObjectKey|objectKey/);
 });
 
-test('job completion is retained locally and does not wait for Creditex processing', () => {
+test('forms drive job completion while existing queued completion receipts remain recoverable', () => {
   assert.match(jobScreen, /function jobFinishLocalBlockers\(job: FieldJob\)/);
-  assert.match(jobScreen, /await saveActionInBackground\(\{ type: 'advance_field_job'/);
+  assert.doesNotMatch(jobScreen, /function advanceFieldJob|onPress=\{\(\) => void advanceFieldJob/);
+  assert.match(jobScreen, /Work activity is recorded as you complete job forms/);
   assert.doesNotMatch(
     sourceFunction(jobScreen, 'jobFinishLocalBlockers'),
     /activityWorkPacks|complianceIntents|governed evidence|Creditex/,

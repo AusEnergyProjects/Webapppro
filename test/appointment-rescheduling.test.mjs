@@ -1,3 +1,4 @@
+import * as crews from "../src/lib/trade-crews.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -78,7 +79,7 @@ function assertEligibilityPrecheckAndAtomicGuard(section, label) {
 function assertBatchEligibilityPrecheckAndAtomicGuard(section) {
   const preparationLoop = section.indexOf("for (const change of changes)");
   const precheck = section.indexOf("await assertTradeJobReadyForScheduling(");
-  const statements = section.indexOf("const statements: D1PreparedStatement[] = []");
+  const statements = section.indexOf("const statements: D1PreparedStatement[] = crewScheduleGuardStatements(");
   const guard = section.indexOf("tradeJobScheduleEligibilityGuardStatement(db");
   const guardLoop = section.lastIndexOf("for (const item of prepared)", guard);
   const batch = section.indexOf("await db.batch(statements)");
@@ -149,6 +150,7 @@ function conflictDispatchRoute(conflictCode) {
     },
     "@/lib/trade-team-sync-server": { jobSyncChangeStatements: () => [], nextJobRevision: (value) => Number(value) + 1 },
     "@/lib/trade-schedule": scheduleHelpers,
+    "@/lib/trade-crews": crews,
     "@/lib/appointment-rescheduling": { parsePreferredWindows },
     "@/lib/direct-appointment-invite-server": { sendDirectAppointmentCalendarInvite: async () => ({ status: "accepted" }) },
     "@/lib/appointment-notification-server": { queueAppointmentNotifications: async () => {} },

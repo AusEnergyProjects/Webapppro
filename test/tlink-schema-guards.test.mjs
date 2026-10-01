@@ -42,7 +42,7 @@ function schemaDatabase() {
       can_view_price_book integer, can_manage_price_book integer, can_apply_discounts integer,
       can_reschedule_jobs integer, can_manage_team integer, can_edit_team_permissions integer,
       can_view_field_evidence integer, can_manage_field_evidence integer,
-      can_run_reports integer, can_search_customers integer
+      can_run_reports integer, can_search_customers integer, job_scope text DEFAULT 'own', schedule_scope text DEFAULT 'own'
     );
     CREATE TABLE trade_crm_job_details (
       work_order_id text, firebase_uid text, customer_source text,
@@ -124,6 +124,7 @@ function schemaDatabase() {
   for (const migration of ["0210_trade_solar_stock_snapshot.sql", "0212_trade_team_sms.sql", "0213_trade_stock_receipts.sql", "0214_trade_messages.sql", "0215_trade_message_media.sql", "0216_trade_team_calls.sql"]) {
     database.exec(fs.readFileSync(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
   }
+  database.exec(fs.readFileSync(new URL("../drizzle/0231_trade_crews.sql", import.meta.url), "utf8"));
   return database;
 }
 
@@ -304,7 +305,7 @@ test("runtime installer creates and verifies every TLink integrity guard", async
   const installed = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name").all();
   assert.deepEqual(installed.map((row) => row.name), ALL_TLINK_GUARDS.map((item) => item.name).sort());
   database.close();
-  assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 21);
+  assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 27);
 });
 
 test("TLink guard verification survives another request's stalled and then cancelled I/O", async () => {

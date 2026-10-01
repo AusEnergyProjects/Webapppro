@@ -1,6 +1,7 @@
 import { addReportDays, resolveReportPeriod } from "./trade-business-reports.ts";
 import { loadBusinessReport, type ReportAccess } from "./trade-business-reports-server.ts";
 import { jobMemberSql } from "./trade-job-collaboration.ts";
+import { crewScheduleMemberIds } from "./trade-crews.ts";
 import type { HomeDashboard, HomeJobReference } from "./trade-home-dashboard.ts";
 
 type HomeAccess = ReportAccess & { canRunReports: boolean };
@@ -21,7 +22,7 @@ const visits = `, visits AS MATERIALIZED (
   FROM trade_crm_appointments a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid
   WHERE j.stage NOT IN ('imported','cancelled')
     AND a.status IN ('scheduled','en_route','arrived','in_progress','completed')
-    AND date(a.starts_at) IS NOT NULL AND (?=1 OR a.assignee_member_id=?)
+    AND date(a.starts_at) IS NOT NULL AND (?=1 OR a.assignee_member_id IN (SELECT value FROM json_each(?)))
 )`;
 
 function jobReference(row: Row): HomeJobReference {
@@ -41,7 +42,8 @@ export async function loadHomeDashboard(db: Pick<D1Database, "prepare" | "batch"
     weekStart: addReportDays(monday, index * 7), weekEnd: addReportDays(monday, index * 7 + 6),
   }));
   const args = [uid, access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId];
-  const visitArgs = [...args, access.isOwner || access.scheduleScope === "team" ? 1 : 0, access.memberId];
+  const scheduleMemberIds = crewScheduleMemberIds(access);
+  const visitArgs = [...args, scheduleMemberIds === null ? 1 : 0, JSON.stringify(scheduleMemberIds || [])];
   const results = await db.batch<Row>([
     db.prepare(`${base} SELECT
       COUNT(CASE WHEN stage NOT IN ${activeStages} THEN 1 END) open_jobs,

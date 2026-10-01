@@ -1,3 +1,4 @@
+import { crewMutationGuard } from "@/lib/trade-crews";
 import { jobMemberSql } from "@/lib/trade-job-collaboration";
 import { tradeTeamPresenceStatusSql } from "@/lib/trade-team-presence";
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
@@ -377,6 +378,7 @@ function errorResponse(error: unknown) {
   if (conflict) return adminJson({ ok: false, code: conflict.code, error: conflict.message }, conflict.status);
   if (error instanceof CreditexComplianceError) return adminJson({ ok: false, code: error.code, error: error.message, trainingModules: error.trainingModules }, error.status);
   const code = error instanceof Error ? error.message : "";
+  if (code.includes("CREW_SCOPE_REQUIRED")) return adminJson({ ok: false, error: "Crew members have assigned-work access. Remove the person from their crew before granting whole-business or financial access." }, 400);
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active team access was found for this account." }, 404);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Team access requires an administrator grant on the installer account." }, 403);
@@ -500,6 +502,10 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
     .bind(new Date().toISOString(), ...bindings, pageSize, offset).all<Record<string, unknown>>();
   const assigneeConditions = ["owner_uid = ?", "status = 'active'"];
   const assigneeBindings: unknown[] = [access.ownerUid];
+  if (access.crewId) {
+    assigneeConditions.push("id IN (SELECT value FROM json_each(?))");
+    assigneeBindings.push(JSON.stringify(access.crewMemberIds || [access.memberId]));
+  }
   if (assigneeSearch) {
     assigneeConditions.push("lower(display_name) LIKE ?");
     assigneeBindings.push(`%${assigneeSearch.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`);
@@ -544,8 +550,8 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
     businessServiceStates,
     access: { businessName: access.businessName, displayName: access.displayName,
       memberId: access.memberId,
-      isOwner: access.isOwner, canManageTeam: canManageTeam(access),
-      permissions: { canCreateJobs: access.canCreateJobs, canManageJobs: access.canManageJobs,
+      isOwner: access.isOwner, canManageTeam: canManageTeam(access), crewId: access.crewId, crewLead: access.crewLead,
+      permissions: { crewLead: access.crewLead, canCreateJobs: access.canCreateJobs, canManageJobs: access.canManageJobs,
         canAssignJobs: access.canAssignJobs,
         jobScope: access.jobScope, canViewCustomers: access.canViewCustomers,
         canManageCustomers: access.canManageCustomers,
@@ -1043,6 +1049,7 @@ export async function PATCH(request: Request) {
         label = String(member.display_name);
       }
       const revision = nextJobRevision(job.revision);
+      const crewGuard = crewMutationGuard(access, [String(job.assignee_member_id || ""), memberId]);
       const jobStage = String(job.stage);
       const rentalInspection = await db.prepare(`SELECT id FROM trade_rental_inspections
         WHERE work_order_id = ? AND firebase_uid = ? LIMIT 1`)
@@ -1064,9 +1071,9 @@ export async function PATCH(request: Request) {
           SET assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
             AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?
-            AND assignee_member_id = ?`)
+            AND assignee_member_id = ? AND (${crewGuard.sql})`)
           .bind(memberId, label, revision, now, workOrderId, access.ownerUid,
-            jobStage, Number(job.revision), String(job.assignee_member_id || "")),
+            jobStage, Number(job.revision), String(job.assignee_member_id || ""), ...crewGuard.bindings),
         ...rentalInspectionAssignmentStatements(db, {
           actorType: access.isOwner ? "owner" : "assessor",
           actorUid: access.actorUid,
@@ -1100,6 +1107,7 @@ export async function PATCH(request: Request) {
       const workOrderId = cleanAdminText(body.workOrderId, 180);
       const job = await mutableAssignedJobState(db, access, workOrderId);
       const stage = cleanAdminText(body.stage, 30);
+      if (access.crewId && stage === "cancelled") throw new Error("DISPATCH_REQUIRED");
       if (!WORK_STAGES.has(stage)) return adminJson({ ok: false, error: "Choose a valid job stage." }, 400);
       if (stage === "completed" && await db.prepare(`SELECT 1 FROM trade_crm_appointments
         WHERE work_order_id = ? AND firebase_uid = ? AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)

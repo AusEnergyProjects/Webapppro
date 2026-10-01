@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import { jobMemberSql } from "../src/lib/trade-job-collaboration.ts";
 import { creditexWriteGuard } from "../src/lib/creditex-onboarding-server.ts";
 import assert from 'node:assert/strict';
@@ -36,6 +37,8 @@ function fixture(t) {
     INSERT INTO trade_work_orders (id, firebase_uid, service_category) VALUES
       ('job', 'owner', 'rental-inspection'), ('job-two', 'owner', 'rental-inspection'),
       ('other-job', 'other-owner', 'rental-inspection'), ('electrical', 'owner', 'electrical');`);
+  installEmptyTradeCrews(sql);
+  sql.exec("CREATE TABLE trade_team_members(id TEXT,owner_uid TEXT,status TEXT)");
   const objects = new Map();
   let putCount = 0;
   let beforeBatch;
@@ -59,6 +62,7 @@ function fixture(t) {
     },
   };
   const dependencies = { jobMemberSql, creditexWriteGuard,
+    reconcileTradeFormJobProgress: async () => ({ changed: false, stage: "in_progress", blockers: [] }),
     getD1: () => db,
     adminJson: (value, status = 200) => Response.json(value, { status }),
     cleanAdminText: (value, limit) => String(value || '').trim().slice(0, limit),

@@ -15,9 +15,6 @@ const jobSource = ts.createSourceFile('job.tsx', readFileSync(new URL('../src/ap
 const blockerCode = ts.transpileModule(jobSource.statements.find((entry) => ts.isFunctionDeclaration(entry) && entry.name?.text === 'jobFinishLocalBlockers').getText(jobSource),
   { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const finishBlockers = new Function(blockerCode + '; return jobFinishLocalBlockers;')();
-const eligibilityCode = ts.transpileModule(jobSource.statements.find((entry) => ts.isFunctionDeclaration(entry) && entry.name?.text === 'canCompleteFieldJob').getText(jobSource),
-  { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-const canComplete = new Function('completableAppointmentStatuses', eligibilityCode + '; return canCompleteFieldJob;')(new Set(['scheduled', 'en_route', 'arrived', 'in_progress']));
 
 function fixture() {
   const job = { id: 'job-1', fieldLane: 'trade_team', revision: 77, stage: 'scheduled', appointmentStatus: 'scheduled', tasks: [], forms: [], openIssues: 0,
@@ -48,8 +45,8 @@ test('job details and schedule read the newer authenticated issued rental result
     assert.equal(updated.rentalInspection.progress.moduleTotal, 1);
     assert.equal(updated.rentalInspection.progress.evidenceFiles, 1);
     assert.equal(updated.rentalInspection.issuedReportId, 'report-1');
-    assert.deepEqual(finishBlockers(updated), [], 'The issued report no longer disables Complete job');
-    assert.equal(updated.stage, 'scheduled', 'The assessor must still explicitly complete the job');
+    assert.deepEqual(finishBlockers(updated), [], 'The issued report clears the rental completion blocker');
+    assert.equal(updated.stage, 'scheduled', 'Only the server confirms automatic job completion');
     assert.equal(updated.revision, 77, 'Job CAS revision remains the authoritative work-order revision');
   }
   assert.equal(job.rentalInspection.progress.completeModules, 0, 'The stale sync payload is not mutated');
@@ -75,15 +72,16 @@ test('pending or absent rental results retain actual blockers and never manufact
   assert.deepEqual(finishBlockers(await readers(job, result).getJob(job.id)), ['required forms']);
 });
 
-test('issued rental jobs can finish after a cancelled or missing appointment without reopening terminal jobs', () => {
+test('issued rental progress never invents job or appointment completion', () => {
   const { job, result } = fixture();
   for (const appointmentStatus of ['cancelled', 'completed', 'no_show', '']) {
     const draft = { ...job, appointmentStatus };
-    assert.equal(canComplete(draft), false);
     const issued = rental.rentalJobWithResult(draft, result);
-    assert.equal(canComplete(issued), true);
     assert.deepEqual(finishBlockers(issued), []);
-    assert.equal(canComplete({ ...issued, stage: 'cancelled' }), false);
-    assert.equal(canComplete({ ...issued, stage: 'completed' }), false);
+    assert.equal(issued.stage, draft.stage);
+    assert.equal(issued.appointmentStatus, appointmentStatus);
+    for (const stage of ['cancelled', 'completed']) {
+      assert.equal(rental.rentalJobWithResult({ ...draft, stage }, result).stage, stage);
+    }
   }
 });

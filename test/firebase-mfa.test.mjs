@@ -96,6 +96,7 @@ test("team access applies the policy to the employer owner rather than the staff
     "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => {} },
     "./tlink-schema-guards": { ensureTlinkSchemaGuards: async () => {} },
     "./trade-team-permission-policy.mjs": {},
+    "./trade-crews-server": { applyTradeCrewAccess: async access => access },
     "./trade-field-session-server": { isFieldSessionRequest: (request) => request.headers.has("X-Field"), requireFieldSessionAccess: async () => ({ ownerUid: "myob-owner" }) },
     "./trade-mfa-server": { requireTradeMyobSecondFactor: async (actor, ownerUid) => { guarded.push({ actor, ownerUid }); mfa.requireSecondFactor(actor); } },
   });

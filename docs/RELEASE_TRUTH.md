@@ -4,11 +4,23 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 1 October 2026
+Last reconciled locally: 2 October 2026
 
-## Current implementation: Home dashboard and connected calendars
+## Current implementation: form timing and scoped crews
 
-The installer and team Home dashboard replaces My day. The main installer navigation is Home dashboard, Jobs, Schedule, Customers, Connect and Finance; secondary tools remain available in More tools. Old summary panels, fetch state and styles are removed. The dashboard shows actual scoped weekly job counts, four-week workload, upcoming visits and direct next actions. Invoice/report permissions are checked on the server before returning financial data; job costs require the existing price-book permission as well. Staff invoices remain inside their authorised jobs.
+Migrations 0231 and 0232 add owner-managed crews and tenant/member-scoped work activity. Owners group their own staff and subcontractor workers under a lead. Crew membership limits job, schedule, customer, finance, directory and new Connect recipient discovery; existing explicitly joined conversations retain their participant authority. Leads see their crew's assigned work. Assignment, revocation and cache-removal paths use the same live crew boundary. The established runtime schema guard installer owns the crew integrity triggers because Sites migration splitting cannot carry trigger bodies.
+
+Web and native editors record page openings, active spans and device-observed completion for business forms, activity records, governed work packs and rental inspections. Work-pack revisions group under their stable instance key. Weekly Time/My time reports show elapsed form/page work separately from active app use. Elapsed windows include phone-away work and stay open until form completion; only active app time pauses in the background or after idle. Overlapping forms count once per person in job totals. Offline finish time is separate from authoritative server sync receipt. These windows are operational estimates, not attendance or approved payroll hours, and old active durations are not reconstructed.
+
+Form/evidence saves advance work automatically through existing training, form, photo, issue, task, work-plan and compliance gates. Finishing one of several forms cannot complete the job. Only an unambiguous actor-assigned visit advances automatically, and other open visits keep the shared job open. An unscheduled job can close only for its actual assignee or the owner of an unassigned job, with a completed persisted form family, no open visits and every completion gate satisfied; the existing issued-rental exception also remains. No travel or physical arrival is invented. Normal manual travel/arrival/start/finish controls are removed; explicit recorded time corrections and authorised office management remain available.
+
+This is the source implementation record prepared before publication. Exact validation, Git/Sites and native update identities belong in `C:/Webproject/outputs/tlink-time-crews-20261002/`. Native physical-device operation remains separate from export checks. Navigation was already published in Sites 726 from `30ac81ebaadd5255f2b3891fb78634e5d9b89184`: all destinations are visible in grouped navigation, Finance stays grouped and Business settings stays at the bottom.
+
+Native updates target the verified existing Android 1.3.3 runtime and iOS 1.3.4 runtime. EAS lists finished builds `b73113ba-3db2-4df3-80f3-c7d3d19e7fa3` and `7dcaf393-abf7-4fe3-9ba9-66acb11e3fec` respectively. Since Android 1.3.3, native dependency/config changes comprise the app version bump and iOS-only diagnostic bridge. Android therefore has an explicit 1.3.3 runtime override; any future Android native/dependency change must update that override and produce a compatible build. The iOS runtime continues to use appVersion. No new native dependency is introduced by timing.
+
+## Previous implementation: Home dashboard and connected calendars
+
+The installer and team Home dashboard replaces My day. Grouped navigation keeps daily work, business tools and specialist tools visible. Old summary panels, fetch state and styles are removed. The dashboard shows actual scoped weekly job counts, four-week workload, upcoming visits and direct next actions. Invoice/report permissions are checked on the server before returning financial data; job costs require the existing price-book permission as well. Staff invoices remain inside their authorised jobs.
 
 Revenue is issued TLink invoicing less credits, excluding GST. Outstanding balances include GST. Recorded invoice GST is not a tax-liability or BAS calculation. Costs and gross margin use the existing completed-job cohort, which is explicitly separate from the invoice-period revenue chart. Incomplete cost or invoice records suppress margin.
 

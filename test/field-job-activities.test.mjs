@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -33,6 +34,7 @@ const sync = load('src/lib/trade-team-sync-server.ts', {});
 
 function fixture(accessOverrides = {}) {
   const database = new DatabaseSync(':memory:');
+  installEmptyTradeCrews(database);
   database.exec(`
     CREATE TABLE trade_work_orders(id text primary key, firebase_uid text, partner_type text, source_type text,
       source_reference text, work_number text, assignee_member_id text, assignee_label text, stage text, service_category text,
@@ -90,7 +92,7 @@ function fixture(accessOverrides = {}) {
   };
   const access = { ownerUid: 'owner', actorUid: 'owner', memberId: 'worker', isOwner: true, jobScope: 'own', canManageJobs: true, ...accessOverrides };
   const teams = load('src/lib/trade-team-server.ts', { '../../db': { getD1: () => db }, './trade-team-permission-policy.mjs': {},
-    './firebase-server': {}, './trade-access-server': {}, './trade-business-context-server': {}, './creditex-schema-guards': {}, './tlink-schema-guards': {}, './trade-field-session-server': {} });
+    './trade-crews-server': { applyTradeCrewAccess: async access => access }, './firebase-server': {}, './trade-access-server': {}, './trade-business-context-server': {}, './creditex-schema-guards': {}, './tlink-schema-guards': {}, './trade-field-session-server': {} });
   const route = load('src/app/api/field/job-activities/route.ts', {
     '../../../../../db': { getD1: () => db },
     '@/lib/admin-server': { mfaErrorResponse, cleanAdminText: (value, max) => String(value || '').trim().slice(0, max),

@@ -1,9 +1,19 @@
 # Next task handover
 
-Status: Home dashboard and private connected-calendar implementation and validation.
-Prepared: 1 October 2026
+Status: Form timing, automatic work progress and scoped crews implementation and release validation.
+Prepared: 2 October 2026
 
-## Active contract: Home dashboard and connected schedule
+## Active contract: forms record work and crews stay scoped
+
+Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Navigation baseline: Sites 726, source `30ac81ebaadd5255f2b3891fb78634e5d9b89184`.
+
+Outcome: every editable form page records its opening and active intervals, forms retain device-observed finish and authoritative sync timestamps, and weekly views distinguish elapsed work from app use. Before/after work windows continue while the phone is away. Each form stays separate; overlapping forms count once per person in job totals. Multiple required forms and evidence must all be complete before automatic job completion. The normal field flow has no travel/arrival/start/finish button sequence.
+
+Crews: the owner groups existing business staff under a lead, including a subcontractor company label. A lead sees only that crew and assigned jobs. Membership changes revoke schedule/job/cache/directory authority. Existing explicit conversation participation is preserved. No crew role grants finance, global reporting, customer directory or team administration access.
+
+Validation gate: timing/page/idle/offline/idempotency tests, real SQLite scope and completion race tests, all existing regressions, typecheck, lint, production migration replay and Android/iOS exports. Publish the exact GitHub source to Sites and the compatible authorised Expo channels. Record publication identities and affected live checks in `C:/Webproject/outputs/tlink-time-crews-20261002/`. A successful export/update is not proof of physical-device installation or multi-device operation. No real customer messages or payments are development tests.
+
+## Previous contract: Home dashboard and connected schedule
 
 Prepared: 1 October 2026. Baseline Sites 720, application source `5496340`, documentation source `58c7f4a`. Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`.
 

@@ -1,4 +1,5 @@
 import { useBusinessApi } from '@/lib/use-business-api';
+import { useFormTimeTracking, useJobTimeTracking, WorkTimeStatus } from '@/components/work-time-tracking';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Application from 'expo-application';
 import * as Crypto from 'expo-crypto';
@@ -33,7 +34,6 @@ import {
 import {
   addUpload,
   discardUpload,
-  getJobCompletionQueueState,
   getSetting,
   listLocallyFinishedActivityIntentIds,
   listPendingWorkPackActions,
@@ -41,7 +41,6 @@ import {
   listWorkPackAnswerConflicts,
   resolveWorkPackAnswerConflict,
   setSetting,
-  type JobCompletionQueueState,
 } from '@/lib/database';
 import { activityIntentComplete } from '@/lib/activity-field-completion';
 import { APP_VERSION } from '@/lib/config';
@@ -91,8 +90,6 @@ import {
 } from '@/lib/work-packs';
 import { useApp } from '@/providers/app-provider';
 
-const completableAppointmentStatuses = new Set(['scheduled', 'en_route', 'arrived', 'in_progress']);
-
 const PENDING_PHOTO_SETTING = 'pending_evidence_photo_v1';
 const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
 const ALLOWED_EVIDENCE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
@@ -111,8 +108,8 @@ type PendingWorkPackPhotoCapture = PendingPhotoCapture & {
 
 function readable(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
-function lifecycleLabel(job: FieldJob, activityRecords: readonly ActivityFieldSummary[] = [], completionQueued = false) {
-  const serverStatus = completionQueued && !job.appointmentRevision && !job.collaborativeJob ? 'completed' : job.lifecycleStatus || job.stage;
+function lifecycleLabel(job: FieldJob, activityRecords: readonly ActivityFieldSummary[] = []) {
+  const serverStatus = job.lifecycleStatus || job.stage;
   const effectiveStatus = ['unscheduled', 'scheduled', 'backlog', 'ready'].includes(serverStatus)
     && activityRecords.some((record) => record.status !== 'not_started' || record.lifecycleStatus === 'partial')
     ? 'partial'
@@ -121,11 +118,6 @@ function lifecycleLabel(job: FieldJob, activityRecords: readonly ActivityFieldSu
   return effectiveStatus === 'audited' && job.auditOutcome
     ? `${status} | ${readable(job.auditOutcome)}`
     : status;
-}
-
-function canCompleteFieldJob(job: FieldJob) {
-  return !['completed', 'cancelled'].includes(job.stage)
-    && (completableAppointmentStatuses.has(job.appointmentStatus) || job.rentalInspection?.status === 'issued');
 }
 
 function jobFinishLocalBlockers(job: FieldJob) {
@@ -288,6 +280,7 @@ function workPackCaption(context: ActivityWorkPackPromptContext) {
 export default function JobScreen() {
   const apiRequest = useBusinessApi();
   const { id, openCommercial } = useLocalSearchParams<{ id: string; openCommercial?: string }>();
+  useJobTimeTracking(String(id || ''));
   const {
     findJob,
     saveAction,
@@ -310,9 +303,6 @@ export default function JobScreen() {
   const [activityRecords, setActivityRecords] = useState<ActivityFieldSummary[]>([]);
   const [locallyFinishedActivityIntentIds, setLocallyFinishedActivityIntentIds] = useState<string[]>([]);
   const [activityLoadError, setActivityLoadError] = useState('');
-  const [completionQueue, setCompletionQueue] = useState<JobCompletionQueueState>({
-    finish: null,
-  });
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
   const pickingDocument = useRef(false);
@@ -320,11 +310,10 @@ export default function JobScreen() {
   const load = useCallback(async (refreshActivityForms = true) => {
     const workOrderId = String(id);
     try {
-    const [nextJob, problems, pendingActions, queuedCompletion, finishedActivityIntents, nextAnswerConflicts] = await Promise.all([
+    const [nextJob, problems, pendingActions, finishedActivityIntents, nextAnswerConflicts] = await Promise.all([
       findJob(workOrderId),
       listWorkPackProblems(workOrderId),
       listPendingWorkPackActions(workOrderId),
-      getJobCompletionQueueState(workOrderId),
       listLocallyFinishedActivityIntentIds(workOrderId),
       listWorkPackAnswerConflicts(workOrderId),
     ]);
@@ -334,7 +323,6 @@ export default function JobScreen() {
     setJobLoadError('');
     setWorkPackProblems(problems);
     setPendingWorkPackActions(pendingActions);
-    setCompletionQueue(queuedCompletion);
     setLocallyFinishedActivityIntentIds(finishedActivityIntents);
     if (!refreshActivityForms) return;
     if (nextJob?.complianceIntents?.length && nextJob.fieldLane !== 'creditex_manual') {
@@ -499,25 +487,6 @@ export default function JobScreen() {
     return () => { unsubscribe(); if (refresh) clearTimeout(refresh); };
   }, [id, load]);
 
-  async function advanceFieldJob() {
-    if (!job || !canCompleteFieldJob(job)) return;
-    const action = { transition: 'finish' as const };
-    const localBlockers = jobFinishLocalBlockers(job);
-    if (localBlockers.length) return Alert.alert('Finish the required work', `Complete ${localBlockers.join(', ')} first.`);
-    setBusy(`field:${action.transition}`);
-    try {
-      await saveActionInBackground({ type: 'advance_field_job', workOrderId: job.id, baseRevision: job.revision, transition: action.transition,
-        ...(job.appointmentId && job.appointmentRevision ? { appointmentId: job.appointmentId, baseAppointmentRevision: job.appointmentRevision } : {}) });
-      setCompletionQueue((current) => ({
-        ...current,
-        finish: { status: 'queued', errorCode: '', errorMessage: '' },
-      }));
-    } catch {
-      Alert.alert('Could not save completion', 'TLink could not retain the job completion on this device. Tap Complete job again.');
-    }
-    finally { setBusy(''); }
-  }
-
   async function toggleTask(taskId: string) {
     if (!job) return;
     const task = job.tasks.find((item) => item.id === taskId);
@@ -554,12 +523,12 @@ export default function JobScreen() {
   }
 
   async function saveForm(form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) {
-    if (!job) return;
+    if (!job) throw new Error('This job is no longer available.');
     const missing = form.template.fields.filter((field) => field.required && (field.type === 'checkbox' ? answers[field.key] !== true : !String(answers[field.key] || '').trim())).map((field) => field.label);
     if (complete && missing.length) throw new Error(`Finish the required fields: ${missing.join(', ')}`);
     setBusy(`form:${form.id}`);
     try {
-      await saveAction({ type: 'save_job_form', workOrderId: job.id, formId: form.id, baseRevision: form.revision, answers, complete });
+      await (complete ? saveActionInBackground : saveAction)({ type: 'save_job_form', workOrderId: job.id, formId: form.id, baseRevision: form.revision, answers, complete });
       await load(false);
     } finally { setBusy(''); }
   }
@@ -1274,14 +1243,14 @@ export default function JobScreen() {
     if (!job) throw new Error('This job is no longer available.');
     setBusy(`work-pack-finalize:${pack.instance.id}`);
     try {
-      await saveAction({
+      await saveActionInBackground({
         type: 'work_pack_finalize',
         workOrderId: job.id,
         baseRevision: job.revision,
         caseInstanceId: pack.instance.id,
         expectedResponseSha256: pack.instance.responseSha256,
       });
-      await load();
+      await load(false);
     } finally {
       setBusy('');
     }
@@ -1320,23 +1289,18 @@ export default function JobScreen() {
   const fieldForms = job.forms || [];
   const complianceIntents = job.complianceIntents || [];
   const complianceCases = complianceCasesForJob(job);
-  const canCompleteJob = canCompleteFieldJob(job);
-  const finishQueued = completionQueue.finish?.status === 'queued' || completionQueue.finish?.status === 'retry';
-  const finishProblem = completionQueue.finish && !finishQueued
-    ? completionQueue.finish.errorMessage || 'TLink could not complete this job. Check the remaining work and try again.'
-    : '';
   const finishBlockers = jobFinishLocalBlockers(job);
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   const creditexManual = job.fieldLane === 'creditex_manual';
   const syntheticManual = job.recordMode === 'synthetic_test' && creditexManual;
   if (!creditexManual && complianceIntents.some((intent) => intent.id === activeFormId)) return <Screen scroll={false} style={{ padding: 0 }}><ActivityFieldFormWizard key={activeFormId} workOrderId={job.id} intentId={activeFormId!} variantId={complianceIntents.find((intent) => intent.id === activeFormId)?.variantId || ''} online={sync.online} onReturnToJob={() => { setActiveFormId(null); void load(); }} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
   const selectedBusinessForm = fieldForms.find((form) => form.id === activeFormId);
-  if (selectedBusinessForm) return <Screen><JobFieldForm key={selectedBusinessForm.id} form={selectedBusinessForm} busy={busy === 'form:' + selectedBusinessForm.id} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></Screen>;
+  if (selectedBusinessForm) return <Screen><JobFieldForm key={selectedBusinessForm.id} form={selectedBusinessForm} workOrderId={job.id} busy={busy === 'form:' + selectedBusinessForm.id} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></Screen>;
   if (job.rentalInspection && activeFormId === 'rental') return <Screen scroll={false} style={{ padding: 0 }}><RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onReturnToJob={() => { setActiveFormId(null); void load(false); }} onChanged={async () => { await load(false); await syncNow(); await load(false); }} /></Screen>;
   return (
     <Screen scrollKey={activeFormId || 'overview'}>
       <View style={styles.hero}>
-        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{lifecycleLabel(job, activityRecords, finishQueued)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
+        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{lifecycleLabel(job, activityRecords)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
         <Text style={styles.title}>{job.title || 'Field job'}</Text>
         <Text style={styles.body}>{job.protectedJob ? job.siteArea || 'Protected service area' : [job.customerName, job.serviceAddress || job.siteArea || 'Service site not added'].filter(Boolean).join(' | ')}</Text>
         {job.appointmentStartsAt ? <Text style={styles.meta}>{new Date(job.appointmentStartsAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</Text> : null}
@@ -1470,15 +1434,10 @@ export default function JobScreen() {
       </View> : null}
 
       {!activeFormId && !creditexManual ? <View style={styles.card}>
-        <Text style={styles.cardTitle}>{job.collaborativeJob ? 'Finish my visit' : 'Complete job'}</Text>
-        {job.openIssues ? <Text style={styles.warningText}>{job.openIssues} open issue(s) need attention before completion.</Text> : null}
-        {finishProblem ? <Text style={styles.warningText}>{finishProblem}</Text> : null}
-        <FieldButton disabled={!canCompleteJob || Boolean(busy) || finishQueued || finishBlockers.length > 0} loading={busy === 'field:finish'} onPress={() => void advanceFieldJob()}>{job.stage === 'completed' ? 'Job complete' : finishQueued ? 'Completion saved' : job.collaborativeJob ? job.appointmentStatus === 'completed' ? 'Visit complete' : 'Finish my visit' : 'Complete job'}</FieldButton>
-        <Text style={styles.meta}>{finishQueued
-          ? job.collaborativeJob ? 'Your visit completion is saved on this phone. The job stays open until the team finishes and server checks pass.' : 'Completion is saved on this phone. TLink will confirm the job status after syncing.'
-          : finishBlockers.length
-            ? `Complete ${finishBlockers.join(', ')} first.`
-            : 'Tap once to save completion on this phone. TLink will finish uploads and server checks in the background.'}</Text>
+        <Text style={styles.cardTitle}>Work progress</Text>
+        <Text style={styles.body}>Work activity is recorded as you complete job forms.</Text>
+        {finishBlockers.length ? <Text style={styles.meta}>{`Complete ${finishBlockers.join(', ')} to finish the job.`}</Text> : <Text style={styles.meta}>{job.stage === 'completed' ? 'All required work is complete.' : 'TLink confirms completion after the required forms and server checks finish syncing.'}</Text>}
+        <WorkTimeStatus />
       </View> : null}
 
       <View style={styles.syncLine}><MaterialCommunityIcons name={sync.online ? sync.conflicts ? 'cloud-alert-outline' : 'cloud-check-outline' : 'cloud-off-outline'} size={20} color={colours.green} /><Text style={styles.body}>{syncLabel}</Text></View>
@@ -1619,11 +1578,14 @@ function ComplianceCaseEvidence({
   </View>;
 }
 
-function JobFieldForm({ form, busy, onSave, onReturnToJob }: { form: FieldForm; busy: boolean; onReturnToJob: () => void; onSave: (form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) => Promise<void> }) {
+function JobFieldForm({ form, workOrderId, busy, onSave, onReturnToJob }: { form: FieldForm; workOrderId: string; busy: boolean; onReturnToJob: () => void; onSave: (form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) => Promise<void> }) {
   const [answers, setAnswers] = useState<Record<string, string | boolean>>(form.answers || {});
   const [questionIndex, setQuestionIndex] = useState(0);
   const [overview, setOverview] = useState(false);
   const leaving = useRef(false);
+  const timing = useFormTimeTracking({ formKind: 'job_form', formId: form.id, workOrderId,
+    pageKey: form.template.fields[questionIndex]?.key || 'form', pageTitle: form.template.fields[questionIndex]?.label || form.name,
+    enabled: !overview && form.status !== 'complete' });
   const dirty = form.status !== 'complete' && JSON.stringify(answers) !== JSON.stringify(form.answers || {});
   async function leave() {
     if (busy || leaving.current) return;
@@ -1636,9 +1598,10 @@ function JobFieldForm({ form, busy, onSave, onReturnToJob }: { form: FieldForm; 
     if (!overview) { setOverview(true); return; }
     void leave();
   }
-  function change(key: string, value: string | boolean) { setAnswers((current) => ({ ...current, [key]: value })); }
+  function change(key: string, value: string | boolean) { timing.activity(); setAnswers((current) => ({ ...current, [key]: value })); }
   usePreventRemove(true, () => backToSectionsOrJob());
   return <View style={styles.formBlock}>
+    <WorkTimeStatus />
     <FieldButton variant="secondary" disabled={overview && busy} onPress={backToSectionsOrJob}>{overview ? 'Save and return to job' : 'Sections'}</FieldButton>
     <View style={styles.formRow}>
       <MaterialCommunityIcons name={form.status === 'complete' ? 'check-decagram-outline' : 'clipboard-text-outline'} size={25} color={form.status === 'complete' ? colours.green : colours.muted} />
@@ -1654,7 +1617,9 @@ function JobFieldForm({ form, busy, onSave, onReturnToJob }: { form: FieldForm; 
       const field = form.template.fields[questionIndex];
       if (form.status !== 'complete') {
         if (field?.required && (answers[field.key] === undefined || answers[field.key] === '' || (field.type === 'checkbox' && answers[field.key] !== true))) return Alert.alert('Answer required', 'Complete this question before continuing.');
-        await onSave(form, answers, questionIndex === form.template.fields.length - 1);
+        const complete = questionIndex === form.template.fields.length - 1;
+        await onSave(form, answers, complete);
+        if (complete) timing.markCompleted();
       }
       setQuestionIndex((value) => Math.min(form.template.fields.length - 1, value + 1));
     })().catch((error) => Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again.'))}>{questionIndex === form.template.fields.length - 1 ? form.status === 'complete' ? 'Complete' : 'Complete form' : 'Next'}</FieldButton></View></View>}

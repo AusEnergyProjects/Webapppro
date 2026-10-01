@@ -38,6 +38,7 @@ function fixture(t, options = {}) {
       accepted_at TEXT NOT NULL DEFAULT '', invited_at TEXT NOT NULL DEFAULT '', last_active_at TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT '');`);
   database.exec(fs.readFileSync(new URL("../drizzle/0230_trade_manager_name.sql", import.meta.url), "utf8"));
+  database.exec(fs.readFileSync(new URL("../drizzle/0231_trade_crews.sql", import.meta.url), "utf8"));
   const identity = { uid: "person-1", email: "person@example.invalid", emailVerified: true,
     authTime: 1, signInProvider: "password", ...options.identity };
   const calls = { mfa: [], schema: [] };

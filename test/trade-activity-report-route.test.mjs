@@ -33,6 +33,7 @@ function loadRoute({ originAccepted, readPdf = async () => reportBytes() }) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const mocks = {
+    "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: async () => ({changed:false,stage:"in_progress",blockers:[]}) },
     "../../../../db": { getD1: () => ({}) },
     "@/lib/admin-server": { mfaErrorResponse,
       adminJson: (value, status = 200) => Response.json(value, { status }),

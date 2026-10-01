@@ -1,3 +1,4 @@
+import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, requireAdminIdentity, sameOrigin } from "@/lib/admin-server";
@@ -446,7 +447,8 @@ export async function POST(request: Request) {
       if (!(file instanceof File)) throw new Error("INVALID_ACTIVITY_FILE");
       const preview = data.get("preview");
       const record = await uploadActivityEvidence(access, String(data.get("recordId") || ""), Number(data.get("expectedRevision")), String(data.get("fieldKey") || ""), file, JSON.parse(String(data.get("captureMetadata") || "{}")), String(data.get("clientUploadId") || ""), preview instanceof File ? preview : undefined);
-      return adminJson({ ok: true, record: activityPresentation(record, record.signerDefaults.technician ? undefined : await activitySigningProfileSetup(access, record)) });
+      const jobProgress = await reconcileTradeFormJobProgress(access, record.workOrderId, { afterSave: true });
+      return adminJson({ ok: true, jobProgress, record: activityPresentation(record, record.signerDefaults.technician ? undefined : await activitySigningProfileSetup(access, record)) });
     }
     const parsed = await readBoundedJsonRequest(request, 1024 * 1024);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("INVALID_ACTIVITY_REQUEST");
@@ -490,6 +492,7 @@ export async function POST(request: Request) {
       : action === "submit" ? await submitActivityRecord(access, id, body.expectedRevision)
       : null;
     if (!record) throw new Error("INVALID_ACTIVITY_ACTION");
-    return adminJson({ ok: true, record: activityPresentation(record, record.signerDefaults.technician ? undefined : await activitySigningProfileSetup(access, record)) });
+    const jobProgress = ["save", "sign", "submit"].includes(action) ? await reconcileTradeFormJobProgress(access, record.workOrderId, { afterSave: true }) : undefined;
+    return adminJson({ ok: true, jobProgress, record: activityPresentation(record, record.signerDefaults.technician ? undefined : await activitySigningProfileSetup(access, record)) });
   } catch (error) { return failure(error); }
 }

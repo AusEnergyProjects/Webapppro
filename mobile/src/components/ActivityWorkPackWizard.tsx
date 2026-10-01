@@ -1,4 +1,5 @@
 import { useBusinessApi } from '@/lib/use-business-api';
+import { useFormTimeTracking, WorkTimeStatus } from '@/components/work-time-tracking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -298,6 +299,9 @@ export function ActivityWorkPackWizard({
   const sections = useMemo(() => fieldWorkPackSections({ ...pack, response }), [pack, response]);
   const reviewPage = pageIndex >= sections.length;
   const section = reviewPage ? undefined : sections[pageIndex];
+  const timing = useFormTimeTracking({ formKind: 'work_pack', formId: pack.instance.id, workOrderId: pack.instance.workOrderId,
+    pageKey: section?.sectionKey || 'review', pageTitle: section?.title || 'Review and complete',
+    enabled: open && !overview && !conflict && !['completed', 'void'].includes(pack.instance.status) });
   const completion = useMemo(() => fieldActivityWorkPackCompletion({
     workPack: pack.definition.schema,
     response,
@@ -356,6 +360,7 @@ export function ActivityWorkPackWizard({
     promptKey: string,
     answer: unknown,
   ) {
+    timing.activity();
     const key = `${changedSection.sectionKey}:${repeatInstanceKey}`;
     const patch: FieldWorkPackSectionPatch = {
       sectionKey: changedSection.sectionKey,
@@ -511,6 +516,7 @@ export function ActivityWorkPackWizard({
 
   usePreventRemove(true, () => backToSectionsOrJob());
   return <View style={styles.shell}>
+    <WorkTimeStatus />
     <FieldButton variant="secondary" disabled={overview && Boolean(busy)} onPress={backToSectionsOrJob}>{overview ? 'Job' : 'Sections'}</FieldButton>
     <Pressable
       accessibilityRole="button"
@@ -736,7 +742,7 @@ export function ActivityWorkPackWizard({
             || busy === `work-pack-prepare-signing:${pack.instance.id}`}
           style={styles.flex}
           onPress={() => void run(pack.instance.status === 'ready_to_sign'
-            ? onFinalize
+            ? async () => { await onFinalize(); timing.markCompleted(); }
             : onPrepareSigning)}
         >{pack.instance.status === 'ready_to_sign'
           ? 'Finish work pack'

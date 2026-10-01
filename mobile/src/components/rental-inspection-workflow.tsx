@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useFormTimeTracking, WorkTimeStatus } from '@/components/work-time-tracking';
 import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
@@ -335,6 +336,10 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     && (f.phase !== 'final' || observationsReady)) || [];
   const accessSuggestion = active ? rentalAccessLimitations(data.items || [], active.id) : '';
   const field = metadata[metadataIndex];
+  const timing = useFormTimeTracking({ formKind: 'rental_inspection', formId: data.inspection?.id || '', workOrderId,
+    pageKey: [active?.key || 'inspection', page, page === 'metadata' ? field?.key : page === 'review' ? '' : `${section?.key || ''}:${check?.key || ''}:${page === 'details' ? detailField?.key || '' : ''}`].filter(Boolean).join(':'),
+    pageTitle: page === 'metadata' ? field?.label || 'Assessment details' : page === 'review' ? 'Review and complete' : detailField && page === 'details' ? detailField.label : check?.prompt || section?.title || 'Assessment',
+    enabled: loaded && editable && !(finishRequest?.finish?.issueReport && finishRequest.status !== 'conflict') && Boolean(active) && !['categories', 'earlier'].includes(page) });
   const queuedMetadata = pendingSaves.find((entry) => entry.draftKey === `metadata:${active?.id}:${field?.key}`);
   const report = data.reports?.find((r) => r.status === 'issued');
   const allComplete = data.modules?.every((m) => m.status === 'complete') === true;
@@ -347,6 +352,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const canEmailReport = Boolean(data.deliveryRecipient?.email) && (report ? data.permissions?.canRevokeLink === true : issueReport && data.permissions?.canIssue === true);
   const evidence = item ? data.evidence?.filter((e) => e.itemId === item.id && e.status === 'active') || [] : [];
   function change(values: Partial<Draft>) {
+    timing.activity();
     if (!draft) return;
     const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...(cacheRef.current.drafts[key] || draft), response: draft.response, ...values } } };
     cacheRef.current = next; setCache(next);
@@ -395,6 +401,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     else { setMetadataIndex(0); setPage(editable && metadata.length ? 'metadata' : 'review'); }
   }
   function changeAnswer(fieldKey: string, value: unknown) {
+    timing.activity();
     if (!active) return;
     const nextCache = { ...cacheRef.current, answers: { ...cacheRef.current.answers, [active.id]: { ...cacheRef.current.answers[active.id], [fieldKey]: value } } };
     cacheRef.current = nextCache; setCache(nextCache);
@@ -672,6 +679,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       { text: email ? 'Confirm and email' : 'Confirm and finish', onPress: () => void perform('complete', async () => {
         await persist();
         const record = await enqueueRentalFinish({ workOrderId, module: active, reviewed: data, email, issueReport, confirmCredential: Boolean(credentialConfirmation), recipientEmail: data.deliveryRecipient?.email || '' });
+        if (issueReport) timing.markCompleted();
         setSaves((current) => [...current.filter((entry) => entry.id !== record.id), record]);
         setPage('review');
         void onChanged().catch(() => { /* The durable finish request remains in Sync. */ });
@@ -700,6 +708,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   // remove that entire route, skipping both its sections and the job overview.
   usePreventRemove(true, () => backToSectionsOrJob());
   return <View style={styles.shell}>
+    <WorkTimeStatus />
     <View style={styles.header}><Pressable accessibilityRole="button" accessibilityLabel={page === 'categories' ? 'Back to job' : 'Back to assessment sections'} disabled={page === 'categories' && Boolean(busy)} onPress={backToSectionsOrJob} style={styles.job}><MaterialCommunityIcons name="arrow-left" size={22} color={colours.green} /><Text style={styles.link}>{page === 'categories' ? 'Job' : 'Sections'}</Text></Pressable><Text style={styles.reference}>{data.inspection?.inspectionNumber || summary.inspectionNumber}</Text><Text style={styles.status}>{busy ? 'Saving on phone...' : saveStatus || (hasDraft ? 'Draft on phone' : 'Saved')}</Text></View>
     <KeyboardAwareScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content}
       keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">

@@ -31,7 +31,7 @@ function harness(initialChoices, { destination = "member", saved = "", disableNo
     saveTradeBusinessSelection: (uid, ownerUid) => businessClient.saveTradeBusinessSelection(uid, ownerUid, store),
   };
   const fetch = async (url, init) => { requests.push({ url, init }); return Response.json({ businesses, requiresSelection: businesses.length > 1 }); };
-  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": { onIdTokenChanged(_auth, callback) { authObserver = callback; callback(user); return () => {}; } }, "@/lib/firebase-client": { firebaseAuth: {} }, "@/lib/trade-device-client": { disableTradeDeviceNotifications: disableNotifications }, "@/lib/trade-business-client": context, "./TradeBusinessProvider.module.css": { default: {} } };
+  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": { onIdTokenChanged(_auth, callback) { authObserver = callback; callback(user); return () => {}; } }, "@/lib/firebase-client": { firebaseAuth: {} }, "@/lib/trade-device-client": { disableTradeDeviceNotifications: disableNotifications }, "@/lib/trade-business-client": context, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children } };
   const exports = {};
   const window = { location: { origin: "https://tlink.test", replace: url => redirects.push(url) }, history: { replaceState() {} } };
   Function("require", "exports", "fetch", "window", compiled)(id => { assert.ok(dependencies[id], id); return dependencies[id]; }, exports, fetch, window);
@@ -220,7 +220,7 @@ test("an unmounted business provider cannot replace the active chooser from a de
   let respond;
   const request = new Promise(resolve => { respond = resolve; });
   const react = { createContext: () => ({ Provider: () => null }), useRef: value => ({ current: value }), useCallback: callback => callback, useMemo: create => create(), useEffect: effect => cleanups.push(effect()) };
-  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": {}, "@/lib/firebase-client": {}, "@/lib/trade-device-client": {}, "@/lib/trade-business-client": businessClient, "./TradeBusinessProvider.module.css": { default: {} } };
+  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": {}, "@/lib/firebase-client": {}, "@/lib/trade-device-client": {}, "@/lib/trade-business-client": businessClient, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children } };
   const exports = {};
   Function("require", "exports", "fetch", "window", compiled)(id => dependencies[id], exports, () => request, { location: { origin: "https://tlink.test" } });
   const tree = exports.TradeBusinessProvider({ business: choice("old-business"), onAccessLost: () => lost.push(true), children: null });

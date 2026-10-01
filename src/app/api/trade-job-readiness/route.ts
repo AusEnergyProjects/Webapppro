@@ -1,3 +1,5 @@
+import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
+import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
@@ -155,14 +157,12 @@ export async function POST(request: Request) {
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'job_actual_recorded', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `Actual work recorded for ${String(requirement.description)}.`, now),
       ]);
     } else if (action === "complete") {
-      const current = await payload(identity.uid, workOrderId); if (!current.completion?.ready) throw new Error("NOT_COMPLETE");
-      await db.batch([
-        db.prepare(`UPDATE trade_crm_job_plans SET status = 'completed', completed_at = ?, updated_at = ? WHERE work_order_id = ? AND firebase_uid = ? AND status IN ('ready','in_progress')`).bind(now, now, workOrderId, identity.uid),
-        db.prepare(`UPDATE trade_crm_job_plan_phases SET status = 'completed', completed_at = ?, updated_at = ? WHERE firebase_uid = ? AND job_plan_id IN (SELECT id FROM trade_crm_job_plans WHERE work_order_id = ? AND firebase_uid = ?)`).bind(now, now, identity.uid, workOrderId, identity.uid),
-        db.prepare(`UPDATE trade_work_orders SET stage = 'completed', updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(now, workOrderId, identity.uid),
-        db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'job_completed', 'Required scope, forms, materials and proof cleared. Invoice and handover preparation are ready.', ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, now),
-      ]);
+      const access = await requireInstallerTeamAccess(request);
+      const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId);
+      if (jobProgress.stage !== "completed") return adminJson({ ok: false, jobProgress, error: "Complete all required forms, evidence and assigned visits before the job can close." }, 409);
     } else return adminJson({ ok: false, error: "Unknown job readiness action." }, 400);
-    return adminJson({ ok: true, ...(await payload(identity.uid, workOrderId)) });
+    const jobProgress = ["actual", "requirement"].includes(action)
+      ? await reconcileTradeFormJobProgress(await requireInstallerTeamAccess(request), workOrderId, { afterSave: true }) : undefined;
+    return adminJson({ ok: true, jobProgress, ...(await payload(identity.uid, workOrderId)) });
   } catch (error) { return errorResponse(error); }
 }

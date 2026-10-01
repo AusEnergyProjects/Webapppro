@@ -15,6 +15,7 @@ import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalAssessorFields, rentalF
 import { rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
 import { RENTAL_SHOWER_CHOICES, rentalAssessorSections, rentalShowerChoicePatch, rentalShowerChoiceValue, rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorOutcomePatch, rentalWindowIsFixed, rentalAssessorMetadataField } from "@/lib/rental-assessor-workflow.mjs";
 import styles from "./TradeRentalInspectionPanel.module.css";
+import { useFormTimeTracking, WorkTimeStatus } from "./TradeWorkTimeTracking";
 
 type MetadataField = {
   key: string;
@@ -768,6 +769,9 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   const workflow = useMemo(() => activeModule ? assessmentGroups(activeModule) : { groups: [] }, [activeModule]);
   const activeSection = workflow.groups.find((section) => section.key === activeSectionKey);
   const canEdit = !readOnly && data.permissions?.canEdit === true;
+  const timing = useFormTimeTracking({ formKind: "rental_inspection", formId: data.inspection?.id || "", workOrderId,
+    pageKey: `${activeModule?.key || "inspection"}:${activeSection?.key || "metadata"}`, pageTitle: activeSection?.title || `${activeModule?.title || "Inspection"} details`,
+    enabled: !loading && canEdit && activeModule?.status !== "complete", activateOnOpen: Boolean(activeSection) });
   const moduleCompletion = activeModule ? data.completion?.[activeModule.id] : undefined;
   const allModulesComplete = (data.modules || []).length > 0 && (data.modules || []).every((module) => module.status === "complete");
   const latestReport = data.reports?.find((report) => report.status === "issued");
@@ -886,6 +890,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
 
   async function issueReport() {
     await mutate({ action: "issue_report" }, "issue-report", "Report issued. The secure link is ready to share for 60 days.");
+    timing.markCompleted();
   }
 
   async function copyReportLink() {
@@ -1022,7 +1027,8 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   if (loading) return <section className={styles.loading}><strong>Opening the rental assessment...</strong><span>Loading the frozen form and saved evidence.</span></section>;
   if (!data.inspection || !activeModule) return <section className={styles.loading}><strong>Rental assessment unavailable</strong><span>{status || "No assessment is attached to this job."}</span></section>;
 
-  return <section className={styles.workspace} aria-label="Rental inspection workflow">
+  return <section className={styles.workspace} aria-label="Rental inspection workflow" {...timing.bind}>
+    <WorkTimeStatus />
     <header className={styles.hero}>
       <div>
         <span>Victorian rental assessment</span>

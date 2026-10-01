@@ -1,3 +1,4 @@
+import { applyTradeCrewAccess } from "./trade-crews-server";
 import { getD1 } from "../../db";
 import { tradeAccountProjection } from "./trade-access-server";
 import type { TeamAccess } from "./trade-team-server";
@@ -307,7 +308,7 @@ export async function redeemFieldSetupPin(input: {
     db.prepare(`DELETE FROM trade_field_access_attempts WHERE key_hash = ?`).bind(attemptKey),
   ]);
   if (!results[0]?.meta.changes || !results[1]?.meta.changes) throw new Error("FIELD_CREDENTIALS_INVALID");
-  const access = accessFromRow(matched, sessionId);
+  const access = await applyTradeCrewAccess(accessFromRow(matched, sessionId));
   return {
     token: sessionToken,
     expiresAt,
@@ -349,7 +350,7 @@ export async function requireFieldSessionAccess(request: Request): Promise<TeamA
     getD1().prepare(`UPDATE trade_team_members SET last_active_at = ?
       WHERE id = ? AND owner_uid = ? AND status = 'active'`).bind(now, row.team_member_id, row.owner_uid),
   ]);
-  return accessFromRow(row, String(row.session_id));
+  return applyTradeCrewAccess(accessFromRow(row, String(row.session_id)));
 }
 
 export async function revokeCurrentFieldSession(request: Request) {

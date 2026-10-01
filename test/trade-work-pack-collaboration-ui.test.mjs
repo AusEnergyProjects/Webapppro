@@ -38,6 +38,7 @@ function harness(responder, latest = revision(2, { model: 'Saved' })) {
   const fetch = async (_url, init) => { const payload = JSON.parse(init.body); requests.push(payload); return responder(payload, requests.length); };
   const imports = (name) => name === 'react' ? hooks : name === 'react/jsx-runtime' ? jsx
     : name === './TradeBusinessProvider' ? { useTradeBusinessFetch: () => fetch }
+    : name === './TradeWorkTimeTracking' ? { useFormTimeTracking: () => ({ bind: {}, markCompleted() {} }), WorkTimeStatus: () => null }
     : name === '@/lib/creditex-activity-work-pack' ? { creditexActivityWorkPackVisibilityMatches: () => true,
       creditexActivityWorkPackCompletion: () => ({ blockers: [{ key: 'model' }], ready: false }) }
     : name.endsWith('.module.css') ? { default: {} } : {};

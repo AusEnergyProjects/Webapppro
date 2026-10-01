@@ -1,3 +1,4 @@
+import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { getD1 } from "../../../../../db";
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
@@ -3190,11 +3191,21 @@ export async function POST(request: Request) {
       actions,
       results,
     );
+    const progressJobIds = new Set<string>();
+    for (let index = 0; index < actions.length; index++) {
+      const action = actions[index], result = results[index];
+      if (!["applied", "duplicate"].includes(String(result?.status))) continue;
+      if (!["save_job_form", "set_task_status", ...WORK_PACK_ACTIONS].includes(String(action.type))) continue;
+      const workOrderId = cleanAdminText(action.workOrderId || ("entityId" in result ? result.entityId : ""), 180);
+      if (workOrderId) progressJobIds.add(workOrderId);
+    }
+    const jobProgress = [];
+    for (const workOrderId of progressJobIds) jobProgress.push({ workOrderId, ...await reconcileTradeFormJobProgress(access, workOrderId) });
     return adminJson({ ok: true, contractVersion: CONTRACT_VERSION, serverTime: new Date().toISOString(),
       accepted: results.filter((item) => item.status === "applied" || item.status === "duplicate").length,
       conflicts: results.filter((item) => item.status === "conflict").length,
       retrying: results.filter((item) => item.status === "retry").length,
       devicePolicy: mobileAppPolicy(device.platform), results,
-      workPackReconciliation });
+      workPackReconciliation, jobProgress });
   } catch (error) { return syncError(error); }
 }

@@ -1,3 +1,5 @@
+import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
+import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { getD1 } from "../../../../../db";
 import { adminJson } from "@/lib/admin-server";
 import {
@@ -38,6 +40,7 @@ import {
   assignedWorkPackError,
   assignedWorkPackOrigin,
   assignedWorkPackRequestScope,
+  assignedWorkPackScope,
 } from "./_shared";
 
 export const runtime = "edge";
@@ -289,7 +292,8 @@ export async function POST(request: Request) {
   const rejected = assignedWorkPackOrigin(request);
   if (rejected) return rejected;
   try {
-    const scope = await assignedWorkPackRequestScope(request);
+    const access = await requireInstallerTeamAccess(request);
+    const scope = assignedWorkPackScope(access);
     const body = record(await readBoundedJsonRequest(
       request,
       MAXIMUM_WORK_PACK_REQUEST_BYTES,
@@ -322,6 +326,13 @@ export async function POST(request: Request) {
       expectedResponseSha256: String(body.expectedResponseSha256 || ""),
       idempotency: idempotency(body.idempotency),
     };
+    const progress = async () => {
+      const pack = await database.prepare(`SELECT pack.work_order_id FROM compliance_activity_work_pack_instances pack
+        JOIN compliance_cases c ON c.id = pack.compliance_case_id AND c.organisation_id = pack.organisation_id
+        WHERE pack.id = ? AND c.installer_uid = ? AND c.work_order_id = pack.work_order_id`)
+        .bind(common.caseInstanceId, access.ownerUid).first<{ work_order_id: string }>();
+      return pack ? reconcileTradeFormJobProgress(access, pack.work_order_id, { afterSave: true }) : undefined;
+    };
     if (action === "work_pack_commit") {
       const dependencyResolutions = Object.fromEntries(Object.entries(
         record(body.dependencyResolutions),
@@ -341,14 +352,14 @@ export async function POST(request: Request) {
           body.artifactLinks,
         ),
       });
-      return adminJson({ ok: true, result });
+      return adminJson({ ok: true, result, jobProgress: await progress() });
     }
     if (action === "work_pack_prepare_signing") {
       const result = await prepareAssignedCreditexActivityWorkPackSigning(
         database,
         common,
       );
-      return adminJson({ ok: true, result });
+      return adminJson({ ok: true, result, jobProgress: await progress() });
     }
     if (action === "work_pack_capture_signatures") {
       const result = await captureAssignedCreditexActivityWorkPackSignatures(
@@ -358,7 +369,7 @@ export async function POST(request: Request) {
           packets: list<CreditexWorkPackSignaturePacketInput>(body.packets),
         },
       );
-      return adminJson({ ok: true, result });
+      return adminJson({ ok: true, result, jobProgress: await progress() });
     }
     if (action === "work_pack_update_customer_context") {
       const result = await updateAssignedCreditexActivityWorkPackCustomerContext(
@@ -372,14 +383,14 @@ export async function POST(request: Request) {
           contactPatch: record(body.contactPatch),
         },
       );
-      return adminJson({ ok: true, result });
+      return adminJson({ ok: true, result, jobProgress: await progress() });
     }
     if (action === "work_pack_refresh_execution_context") {
       const result = await refreshAssignedCreditexActivityWorkPackExecutionContext(
         database,
         common,
       );
-      return adminJson({ ok: true, result });
+      return adminJson({ ok: true, result, jobProgress: await progress() });
     }
     if (action === "work_pack_select_scenario") {
       const result = await selectAssignedCreditexActivityWorkPackScenario(
@@ -390,7 +401,7 @@ export async function POST(request: Request) {
           scenarioCode: String(body.scenarioCode || ""),
         },
       );
-      return adminJson({ ok: true, result });
+      return adminJson({ ok: true, result, jobProgress: await progress() });
     }
     if (action === "work_pack_select_official_products") {
       const result = await selectAssignedCreditexActivityWorkPackOfficialProducts(
@@ -403,7 +414,7 @@ export async function POST(request: Request) {
           ),
         },
       );
-      return adminJson({ ok: true, result });
+      return adminJson({ ok: true, result, jobProgress: await progress() });
     }
     if (action === "work_pack_run_calculator") {
       const result = await runAssignedCreditexActivityWorkPackCalculator(
@@ -413,14 +424,14 @@ export async function POST(request: Request) {
           dependencyKey: String(body.dependencyKey || ""),
         },
       );
-      return adminJson({ ok: true, result });
+      return adminJson({ ok: true, result, jobProgress: await progress() });
     }
     if (action === "work_pack_finalize") {
       const result = await finaliseAssignedCreditexActivityWorkPack(
         database,
         common,
       );
-      return adminJson({ ok: true, result });
+      return adminJson({ ok: true, result, jobProgress: await progress() });
     }
     return adminJson({
       ok: false,

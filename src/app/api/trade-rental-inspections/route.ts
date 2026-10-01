@@ -1,3 +1,4 @@
+import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import {
@@ -1136,8 +1137,9 @@ export async function POST(request: Request) {
     }
     if (action === "issue_report") {
       const issuedReport = await issueRentalAssessmentReport({ access, workOrderId, origin: new URL(request.url).origin });
+      const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
       context = await contextFor(access, workOrderId);
-      return adminJson({ ok: true, issuedReport, ...(await assessmentPayload(context, new URL(request.url).origin)) });
+      return adminJson({ ok: true, jobProgress, issuedReport, ...(await assessmentPayload(context, new URL(request.url).origin)) });
     }
     assertEditable(context);
     let result: InspectionContext | Response;
@@ -1150,8 +1152,9 @@ export async function POST(request: Request) {
     else if (action === "reopen_module") result = await reopenModule(context, body);
     else return adminJson({ ok: false, error: "Choose a valid rental assessment action." }, 400);
     if (result instanceof Response) return result;
-    context = result;
-    return adminJson({ ok: true, ...(await assessmentPayload(context, new URL(request.url).origin)) });
+    const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
+    context = await contextFor(access, workOrderId);
+    return adminJson({ ok: true, jobProgress, ...(await assessmentPayload(context, new URL(request.url).origin)) });
   } catch (error) {
     return inspectionError(error);
   }

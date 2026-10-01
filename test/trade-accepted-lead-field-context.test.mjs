@@ -1,3 +1,4 @@
+import { loadFormJobProgress } from "./helpers/trade-form-job-progress-fixture.mjs";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
@@ -19,6 +20,7 @@ function compile(source, fileName, mocks) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "@/lib/trade-form-job-progress") return loadFormJobProgress(Object.entries(mocks).find(([name]) => name.endsWith("/db"))[1].getD1(), dependency => dependency === "@/lib/photo-request-review-server" && !mocks[dependency] ? { photoRequestProofOverview: async () => ({proofReady:false}) } : require(dependency));
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (/trade-job-collaboration(?:\.ts)?$/.test(specifier)) return jobCollaboration;
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;

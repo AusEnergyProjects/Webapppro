@@ -5,6 +5,7 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeBusinessFormEditor } from "./TradeBusinessFormEditor";
+import { useFormTimeTracking, WorkTimeStatus } from "./TradeWorkTimeTracking";
 
 type Field = { key: string; label: string; type: string; required: boolean; maxLength?: number; options?: string[] };
 type Template = { key: string; version: number; name: string; jurisdiction: string; description: string; guidance: string; fieldCount: number };
@@ -49,10 +50,10 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false }: { us
   }
 
   async function save(formId: string, baseRevision: number, answers: Record<string, string | boolean>, complete: boolean) {
-    if (readOnly) return;
+    if (readOnly) return false;
     setBusy(`save:${formId}`); setStatus(complete ? "Checking and completing the field form..." : "Saving the field form...");
-    try { await request("PATCH", { formId, baseRevision, answers, complete }); setStatus(complete ? "Field form completed." : "Field form saved."); }
-    catch (error) { setStatus(error instanceof Error ? error.message : "The field form could not be saved."); }
+    try { await request("PATCH", { formId, baseRevision, answers, complete }); setStatus(complete ? "Field form completed." : "Field form saved."); return true; }
+    catch (error) { setStatus(error instanceof Error ? error.message : "The field form could not be saved."); return false; }
     finally { setBusy(""); }
   }
 
@@ -67,20 +68,24 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false }: { us
     })}</div></section>}
     {!readOnly && result.serviceCategory ? <TradeBusinessFormEditor user={user} serviceCategory={result.serviceCategory} onSaved={() => request()} /> : null}
     <section className="crm-active-forms"><header><strong>Job forms</strong><span>{(result.forms || []).filter((form) => form.status === "complete").length}/{(result.forms || []).length} complete</span></header>
-      {(result.forms || []).length ? (result.forms || []).map((form) => <JobForm key={form.id} form={form} disabled={readOnly || busy === `save:${form.id}`} readOnly={readOnly} onSave={save} />) : <div className="crm-empty"><strong>No forms added yet</strong><span>{readOnly ? "There are no field forms to review." : "Choose one supporting form above. The shortest useful form is usually the best place to start."}</span></div>}
+      {(result.forms || []).length ? (result.forms || []).map((form) => <JobForm key={form.id} form={form} workOrderId={workOrderId} disabled={readOnly || busy === `save:${form.id}`} readOnly={readOnly} onSave={save} />) : <div className="crm-empty"><strong>No forms added yet</strong><span>{readOnly ? "There are no field forms to review." : "Choose one supporting form above. The shortest useful form is usually the best place to start."}</span></div>}
     </section>
     {status && <p className="crm-inline-status" role="status">{status}</p>}
   </div>;
 }
 
-function JobForm({ form, disabled, readOnly, onSave }: { form: FormRecord; disabled: boolean; readOnly: boolean; onSave: (id: string, revision: number, answers: Record<string, string | boolean>, complete: boolean) => Promise<void> }) {
+function JobForm({ form, workOrderId, disabled, readOnly, onSave }: { form: FormRecord; workOrderId: string; disabled: boolean; readOnly: boolean; onSave: (id: string, revision: number, answers: Record<string, string | boolean>, complete: boolean) => Promise<boolean> }) {
   const [answers, setAnswers] = useState<Record<string, string | boolean>>(form.answers || {});
+  const [open, setOpen] = useState(form.status !== "complete");
+  const timing = useFormTimeTracking({ formKind: "job_form", formId: form.id, workOrderId, pageKey: "form", pageTitle: form.templateName,
+    enabled: open && !readOnly && form.status !== "complete", activateOnOpen: false });
   function change(key: string, value: string | boolean) { setAnswers((current) => ({ ...current, [key]: value })); }
+  async function completeForm() { if (await onSave(form.id, form.revision, answers, true)) timing.markCompleted(); }
   function submit(event: FormEvent<HTMLFormElement>, complete: boolean) { event.preventDefault(); if (!readOnly) void onSave(form.id, form.revision, answers, complete); }
-  return <details className={`crm-job-form status-${form.status}`} open={form.status !== "complete"}>
+  return <details className={`crm-job-form status-${form.status}`} open={open} onToggle={event => setOpen(event.currentTarget.open)} {...timing.bind}>
     <summary><span><strong>{form.templateName}</strong><small>{form.jurisdiction} | Version {form.templateVersion}</small></span><b>{form.status === "complete" ? "Complete" : readOnly ? "View only" : form.ready ? "Ready to complete" : `${form.missing.length} required`}</b></summary>
     <div><p>{form.template.guidance}</p><form onSubmit={(event) => submit(event, false)}>{form.template.fields.map((field) => <label className={field.type === "textarea" ? "wide" : ""} key={field.key}>{field.type === "checkbox" ? <><input type="checkbox" required={field.required} checked={answers[field.key] === true} disabled={disabled || form.status === "complete"} onChange={(event) => change(field.key, event.target.checked)} /><span>{field.label}{field.required ? " *" : ""}</span></> : <><span>{field.label}{field.required ? " *" : ""}</span>{field.type === "textarea" ? <textarea rows={3} required={field.required} maxLength={field.maxLength || 1200} value={String(answers[field.key] || "")} disabled={disabled || form.status === "complete"} onChange={(event) => change(field.key, event.target.value)} /> : field.type === "select" ? <select required={field.required} value={String(answers[field.key] || "")} disabled={disabled || form.status === "complete"} onChange={(event) => change(field.key, event.target.value)}><option value="">Choose one</option>{(field.options || []).map((option) => <option key={option}>{option}</option>)}</select> : <input type={field.type === "date" ? "date" : "text"} required={field.required} maxLength={field.maxLength || 240} value={String(answers[field.key] || "")} disabled={disabled || form.status === "complete"} onChange={(event) => change(field.key, event.target.value)} />}</>}</label>)}
-      {!readOnly && form.status !== "complete" && <div className="crm-job-form-actions"><button disabled={disabled}>Save draft</button><button className="complete" type="button" disabled={disabled} onClick={(event) => { const parent = event.currentTarget.closest("form"); if (parent?.reportValidity()) void onSave(form.id, form.revision, answers, true); }}>Check and complete</button></div>}
-    </form></div>
+      {!readOnly && form.status !== "complete" && <div className="crm-job-form-actions"><button disabled={disabled}>Save draft</button><button className="complete" type="button" disabled={disabled} onClick={(event) => { const parent = event.currentTarget.closest("form"); if (parent?.reportValidity()) void completeForm(); }}>Check and complete</button></div>}
+    </form>{open && <WorkTimeStatus />}</div>
   </details>;
 }

@@ -1,3 +1,5 @@
+import * as crewHelpers from "../src/lib/trade-crews.ts";
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { appointmentEndsAt } from "../src/lib/trade-schedule.ts";
@@ -87,13 +89,14 @@ function loadTypescriptModule(path, mocks) {
     fileName: path,
   }).outputText;
   const moduleRecord = { exports: {} };
-  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : (specifier.includes("trade-job-collaboration") ? jobCollaboration : certificateTestDependency(specifier)) || {};
+  const require = (specifier) => specifier === "@/lib/trade-form-job-progress" ? { reconcileTradeFormJobProgress: async () => ({ changed: false, stage: "in_progress", blockers: [] }) } : specifier === "@/lib/trade-crews" ? crewHelpers : Object.hasOwn(mocks, specifier) ? mocks[specifier] : (specifier.includes("trade-job-collaboration") ? jobCollaboration : certificateTestDependency(specifier)) || {};
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
 
 function fixture() {
   const database = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(database);
   database.exec(`
     CREATE TABLE trade_accounts (
       firebase_uid text PRIMARY KEY NOT NULL,

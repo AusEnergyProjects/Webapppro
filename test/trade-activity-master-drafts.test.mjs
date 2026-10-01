@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -15,6 +16,7 @@ const compiled = ts.transpileModule(routeSource, { compilerOptions: { target: ts
 
 function fixture(t) {
   const database = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(database);
   t.after(() => database.close());
   for (const name of ["0170_trade_activity_forms.sql", "0190_trade_activity_master_drafts.sql"]) {
     database.exec(fs.readFileSync(new URL(`../drizzle/${name}`, import.meta.url), "utf8"));
@@ -58,7 +60,7 @@ function fixture(t) {
     "@/lib/bounded-json-request": bounded,
   };
   const moduleRecord = { exports: {} };
-  new Function("require", "module", "exports", compiled)((name) => {
+  new Function("require", "module", "exports", compiled)((name) => { if (name === "@/lib/trade-form-job-progress") return { reconcileTradeFormJobProgress: async () => ({changed:false,stage:"in_progress",blockers:[]}) };
     if (name in dependencies) return dependencies[name];
     const result = certificateTestDependency(name); assert.ok(result, name); return result;
   }, moduleRecord, moduleRecord.exports);

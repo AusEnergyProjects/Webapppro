@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -11,6 +12,7 @@ const params = extra => new URLSearchParams({ period: "monthly", ...extra });
 const schema = fs.readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");
 function fixture() {
   const db = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(db);
   const tables = ["trade_work_orders", "trade_crm_job_details", "trade_crm_service_sites", "trade_crm_quick_invoices", "trade_crm_accepted_invoices", "trade_crm_quick_invoice_credits", "trade_crm_quotes", "trade_crm_quote_versions", "trade_crm_quote_acceptances", "trade_work_order_events", "trade_crm_accounting_documents", "trade_crm_appointments", "trade_team_members", "trade_work_order_tasks", "trade_crm_job_notes", "trade_crm_job_plans", "trade_crm_job_plan_requirements", "trade_crm_job_actuals", "trade_crm_commercial_handovers"];
   for (const table of tables) {
     const start = schema.indexOf(`sqliteTable("${table}", {`); assert.ok(start >= 0);

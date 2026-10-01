@@ -131,6 +131,7 @@ function loadRoute(fixture, permissions = {}, reportApi = {}) {
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const moduleRecord = { exports: {} };
   const dependencies = {
+    "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: async () => ({changed:false,stage:"in_progress",blockers:[]}) },
     "../../../../db": { getD1: () => fixture.d1 },
     "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }), cleanAdminText: (value, max) => String(value ?? "").trim().slice(0, max), sameOrigin: () => true },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access, assignedJob: async (_, id) => {

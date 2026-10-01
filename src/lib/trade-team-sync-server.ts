@@ -15,10 +15,13 @@ export function jobSyncChangeStatements(db: D1Database, change: SyncJobChange, g
     UNION SELECT assignee_member_id FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
       AND status IN ('scheduled','en_route','arrived','in_progress','completed')
     UNION SELECT audience_member_id FROM trade_team_sync_changes WHERE entity_type = 'job' AND entity_id = ? AND owner_uid = ?
-    UNION SELECT ? UNION SELECT ?
+    UNION SELECT crew.lead_member_id FROM trade_crews crew
+      WHERE crew.owner_uid=? AND EXISTS (SELECT 1 FROM trade_work_orders crew_job
+        WHERE crew_job.id=? AND crew_job.firebase_uid=crew.owner_uid AND ${jobMemberSql("crew_job", "crew.lead_member_id")})
+    UNION SELECT value FROM json_each(?)
   ) WHERE member_id <> ''`;
   const audienceValues = [change.workOrderId, change.ownerUid, change.workOrderId, change.ownerUid,
-    change.workOrderId, change.ownerUid, change.audienceMemberId || "", change.previousAudienceMemberId || ""];
+    change.workOrderId, change.ownerUid, change.ownerUid, change.workOrderId, JSON.stringify([change.audienceMemberId || "", change.previousAudienceMemberId || ""])];
   const operationSql = operation === "delete" ? "'delete'" : `CASE WHEN EXISTS (
     SELECT 1 FROM trade_work_orders current_job WHERE current_job.id = ? AND current_job.firebase_uid = ?
       AND current_job.record_status = 'active' AND ${jobMemberSql("current_job", "audience.member_id")}

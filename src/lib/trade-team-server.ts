@@ -8,6 +8,7 @@ import {
 } from "./trade-access-server";
 import { requestedTradeBusiness, selectTradeBusiness, TradeBusinessContextError } from "./trade-business-context-server";
 import { canAssignWithinScope } from "./trade-team-permission-policy.mjs";
+import { applyTradeCrewAccess } from "./trade-crews-server";
 import { isFieldSessionRequest, requireFieldSessionAccess } from "./trade-field-session-server";
 
 export type TeamScope = "own" | "team";
@@ -45,6 +46,9 @@ export type TeamAccess = {
   canRunReports: boolean;
   canSearchCustomers: boolean;
   fieldSessionId?: string;
+  crewId?: string;
+  crewLead?: boolean;
+  crewMemberIds?: string[];
 };
 
 export async function ensureOwnerTeamMember(ownerUid: string, email: string, displayName: string) {
@@ -148,7 +152,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
   await requireTradeMyobSecondFactor(identity, ownerUid);
   await db.prepare("UPDATE trade_team_members SET last_active_at = ? WHERE id = ? AND member_uid = ?")
     .bind(new Date().toISOString(), member.id, identity.uid).run();
-  return { identity, ownerUid, actorUid: identity.uid, actorEmail: identity.email, memberId: String(member.id),
+  return applyTradeCrewAccess({ identity, ownerUid, actorUid: identity.uid, actorEmail: identity.email, memberId: String(member.id),
     displayName: String(member.display_name || identity.email), isOwner: false,
     businessName: String(member.business_name || "Installer business"),
     canCreateJobs: Boolean(member.can_create_jobs), canManageJobs: Boolean(member.can_manage_jobs),
@@ -167,7 +171,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
     canViewFieldEvidence: Boolean(member.can_view_field_evidence),
     canManageFieldEvidence: Boolean(member.can_manage_field_evidence),
     canRunReports: Boolean(member.can_run_reports),
-    canSearchCustomers: Boolean(member.can_search_customers) };
+    canSearchCustomers: Boolean(member.can_search_customers) });
 }
 
 export function canDispatch(access: TeamAccess) {

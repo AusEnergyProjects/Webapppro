@@ -84,6 +84,7 @@ function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides
   const dependencies = {
     ...componentStubs(workspace, "JobDetail"), ...hooks,
     useTradeBusinessFetch: () => async () => { throw new Error("Unexpected request"); },
+    useJobTimeTracking: () => {},
     nextAppointmentSlot: () => "2026-10-01T09:00", lifecycleLabel: value => value,
     scheduleProposalKey: (...parts) => parts.join(":"), registerStyles: {},
     serviceLabels: {}, pipelineLabels: {}, workStageLabels: {}, appointmentLabels: {},

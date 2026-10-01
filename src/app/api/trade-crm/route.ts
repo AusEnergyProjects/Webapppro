@@ -1,3 +1,5 @@
+import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
+import { canAccessCrewMember, crewScheduleMemberIds, crewMutationGuard } from "@/lib/trade-crews";
 import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
 import { assertTradeJobCanCancel,tradeJobCancellationGuard,cancelledJobAppointmentsStatement,reconcileCancelledJobCalendars } from "@/lib/trade-job-cancellation-server";
 import { getD1 } from "../../../../db";
@@ -1225,6 +1227,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string, forMa
 
 async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
   const db = getD1();
+  const scheduleIds = crewScheduleMemberIds(identity.access);
   if (resource === "customer") {
     const row = await db.prepare(`SELECT c.*,
       (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
@@ -1285,11 +1288,11 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     db.prepare("SELECT * FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? ORDER BY status = 'done', due_at = '', due_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare(`SELECT * FROM trade_crm_appointments
       WHERE work_order_id = ? AND firebase_uid = ?
-        AND (? = 'team' OR assignee_member_id = ?)
+        AND (? = 'team' OR assignee_member_id IN (SELECT value FROM json_each(?)))
       ORDER BY starts_at, created_at`)
       .bind(id, identity.uid,
-        identity.access.isOwner || identity.access.scheduleScope === "team" ? "team" : "own",
-        identity.memberId).all<Record<string, unknown>>(),
+        scheduleIds === null ? "team" : "own",
+        JSON.stringify(scheduleIds || [])).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at DESC LIMIT 200").bind(id, identity.uid).all<Record<string, unknown>>(),
     customerId
       ? db.prepare("SELECT * FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
@@ -1343,8 +1346,8 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     recipientEmail: String(customer?.email || ""),
     activities: scheduledDocumentActivities,
   });
-  return { customer: customer ? indexedCustomer(customer) : null,
-    sites: sites.results.map((site: Record<string, unknown>) => indexedServiceSite(site, siteContacts.results)), job: { ...job,
+  return { customer: customer ? indexedCustomer(identity.access.crewId ? { ...customer, private_notes: "", tags: "[]" } : customer) : null,
+    sites: sites.results.filter(site => !identity.access.crewId || site.id === row.service_site_id).map((site: Record<string, unknown>) => indexedServiceSite(site, siteContacts.results)), job: { ...job,
     sourceReference: importedSource?.source_job_id || "",
     importedDataforce: visibleDataforceSource(importedSource?.raw_json, { protectedCustomer, canViewInvoices: identity.access.canViewInvoices }),
     tasks: tasks.results.map((item: Record<string, unknown>) => ({ id: item.id, title: item.title, dueAt: item.due_at, status: item.status, completedAt: item.completed_at })),
@@ -1544,19 +1547,20 @@ async function crmSchedule(identity: CrmIdentity, url: URL) {
   try { cursor = decodeKeysetCursor(cursorInput, "schedule:starts-asc", SCHEDULE_SORT.terms.length); } catch { throw new Error("INVALID_CURSOR"); }
   if (page > 1 && !cursor) throw new Error("INVALID_CURSOR");
   const cursorWhere = cursor ? keysetAfter(SCHEDULE_SORT.terms, cursor) : null;
-  const ownOnly = !identity.access.isOwner && identity.access.scheduleScope === "own";
+  const scheduleIds = crewScheduleMemberIds(identity.access);
+  const ownOnly = scheduleIds !== null;
   const [countRow, rows] = await Promise.all([
     includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-      WHERE a.firebase_uid = ? AND (? = 0 OR a.assignee_member_id = ?) AND w.record_status = 'active'
+      WHERE a.firebase_uid = ? AND (? = 0 OR a.assignee_member_id IN (SELECT value FROM json_each(?))) AND w.record_status = 'active'
         AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?`)
-      .bind(identity.uid, ownOnly ? 1 : 0, identity.memberId, today).first<Record<string, unknown>>() : Promise.resolve(null),
+      .bind(identity.uid, ownOnly ? 1 : 0, JSON.stringify(scheduleIds || []), today).first<Record<string, unknown>>() : Promise.resolve(null),
     db.prepare(`SELECT a.*, w.id work_order_id, w.work_number, w.title job_title, w.source_type, d.customer_source
       FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
-      WHERE a.firebase_uid = ? AND (? = 0 OR a.assignee_member_id = ?) AND w.record_status = 'active'
+      WHERE a.firebase_uid = ? AND (? = 0 OR a.assignee_member_id IN (SELECT value FROM json_each(?))) AND w.record_status = 'active'
         AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?
       ${cursorWhere ? `AND (${cursorWhere.sql})` : ""}
-      ORDER BY ${SCHEDULE_SORT.orderBy} LIMIT ?`).bind(identity.uid, ownOnly ? 1 : 0, identity.memberId,
+      ORDER BY ${SCHEDULE_SORT.orderBy} LIMIT ?`).bind(identity.uid, ownOnly ? 1 : 0, JSON.stringify(scheduleIds || []),
         today, ...(cursorWhere?.bindings || []), pageSize + 1).all<Record<string, unknown>>(),
   ]);
   const total = countRow ? Number(countRow.total || 0) : undefined;
@@ -1625,6 +1629,7 @@ async function assertMemberCapability(
   memberId: string,
   serviceCategory: string,
 ) {
+  if (!canAccessCrewMember(identity.access, memberId)) throw new Error("JOB_ASSIGN_REQUIRED");
   const member = await db.prepare(`SELECT display_name, member_uid, capabilities FROM trade_team_members
     WHERE id = ? AND owner_uid = ? AND status = 'active'`)
     .bind(memberId, identity.uid).first<Record<string, unknown>>();
@@ -1643,6 +1648,8 @@ function tradeCrmScheduleMemberGuardStatement(
     memberId,
     serviceCategory,
     changedAt,
+    access,
+    currentMemberId,
     rentalGates = [],
     credentialDate = changedAt.slice(0, 10),
   }: {
@@ -1650,13 +1657,16 @@ function tradeCrmScheduleMemberGuardStatement(
     memberId: string;
     serviceCategory: string;
     changedAt: string;
+    access: TeamAccess;
+    currentMemberId?: string;
     rentalGates?: string[];
     credentialDate?: string;
   },
 ) {
+  const crewGuard = crewMutationGuard(access, currentMemberId ? [currentMemberId, memberId] : [memberId]);
   return db.prepare(`INSERT INTO trade_crm_write_guards
     (id, firebase_uid, operation_id, step_number, verified, created_at)
-    VALUES (?, ?, ?, 1, CASE WHEN EXISTS (
+    VALUES (?, ?, ?, 1, CASE WHEN (${crewGuard.sql}) AND EXISTS (
       SELECT 1 FROM trade_team_members selected_member
       WHERE selected_member.id = ? AND selected_member.owner_uid = ? AND selected_member.status = 'active'
         AND (selected_member.member_uid = ? OR ? = '' OR EXISTS (
@@ -1668,6 +1678,7 @@ function tradeCrmScheduleMemberGuardStatement(
       crypto.randomUUID(),
       ownerUid,
       `schedule-member:${crypto.randomUUID()}`,
+      ...crewGuard.bindings,
       memberId,
       ownerUid,
       ownerUid,
@@ -1704,7 +1715,7 @@ export async function GET(request: Request) {
     }
     const accessPayload = { permissions: {
       canCreateJobs: identity.access.canCreateJobs, canManageJobs: identity.access.canManageJobs,
-      canAssignJobs: identity.access.canAssignJobs, jobScope: identity.access.jobScope,
+      canAssignJobs: identity.access.canAssignJobs, jobScope: identity.access.jobScope, crewLead: identity.access.crewLead,
       canViewCustomers: identity.access.canViewCustomers, canManageCustomers: identity.access.canManageCustomers,
       canSearchCustomers: identity.access.canSearchCustomers,
       canViewQuotes: identity.access.canViewQuotes, canManageQuotes: identity.access.canManageQuotes,
@@ -1719,7 +1730,7 @@ export async function GET(request: Request) {
       catch (error) { if (error instanceof ReportInputError) return adminJson({ ok: false, error: error.message }, 400); throw error; }
     }
     if (mode === "summary") {
-      if (!identity.access.canRunReports) throw new Error("REPORTS_REQUIRED");
+      if (!identity.access.canRunReports || identity.access.crewId) throw new Error("REPORTS_REQUIRED");
       return adminJson({ ok: true, access: accessPayload, ...(await crmSummary(identity)) });
     }
     if (mode === "schedule") {
@@ -1728,7 +1739,7 @@ export async function GET(request: Request) {
         resultCount: result.items.length, cursorUsed: Boolean(url.searchParams.get("cursor")) });
     }
     if (mode === "reports") {
-      if (!identity.access.canRunReports) throw new Error("REPORTS_REQUIRED");
+      if (!identity.access.canRunReports || identity.access.crewId) throw new Error("REPORTS_REQUIRED");
       try { return adminJson({ ok: true, report: await crmReports(identity, url) }); }
       catch (error) { if (error instanceof ReportInputError) return adminJson({ ok: false, error: error.message }, 400); throw error; }
     }
@@ -2496,6 +2507,7 @@ export async function POST(request: Request) {
             .bind(appointmentId, workOrderId, identity.uid, appointmentType, appointmentTitle, scheduledStart, scheduledEnd,
               assigneeMemberId, assignee, cleanAdminText(body.appointmentNotes, 1000), now, now),
           ...requiredServiceCategories.map((requiredCategory) => tradeCrmScheduleMemberGuardStatement(db, {
+            access: identity.access,
             ownerUid: identity.uid,
             memberId: assigneeMemberId,
             serviceCategory: requiredCategory,
@@ -2827,7 +2839,7 @@ export async function POST(request: Request) {
         return adminJson({ ok: false, error: "Choose the team member who will attend." }, 400);
       }
       const assigneeMemberId = requestedAssigneeMemberId;
-      if (!identity.access.isOwner && identity.access.scheduleScope === "own"
+      if (!identity.access.isOwner && identity.access.scheduleScope === "own" && !identity.access.crewLead
         && assigneeMemberId !== identity.memberId) throw new Error("JOB_RESCHEDULE_REQUIRED");
       await assertCertificateJobEligibility(db, { ownerUid: identity.uid, actorMemberId: identity.memberId,
         assignedMemberId: assigneeMemberId, workOrderId });
@@ -2921,6 +2933,7 @@ export async function POST(request: Request) {
           workOrderId,
         }),
         tradeCrmScheduleMemberGuardStatement(db, {
+          access: identity.access, currentMemberId: currentAssigneeMemberId,
           ownerUid: identity.uid,
           memberId: assigneeMemberId,
           serviceCategory: String(job.service_category || ""),
@@ -3071,7 +3084,8 @@ export async function PATCH(request: Request) {
       ], { childKind: "task", childId: taskId, childRevision: taskRevision, jobRevision,
         jobStage: String(task.job_stage), ownerUid: identity.uid, updatedAt: now,
         workOrderId: String(task.work_order_id) });
-      return adminJson({ ok: true });
+      const jobProgress = status === "done" ? await reconcileTradeFormJobProgress(identity.access, String(task.work_order_id), { afterSave: true }) : undefined;
+      return adminJson({ ok: true, jobProgress });
     }
 
     if (action === "bulk_set_job_priority") {
@@ -3298,7 +3312,9 @@ export async function PATCH(request: Request) {
         }
       }
       const jobRevision = nextJobRevision(current.job_revision);
+      const appointmentCrewGuard = crewMutationGuard(identity.access, [String(current.assignee_member_id || "")]);
       await db.batch([
+        creditexWriteGuard(db, identity.uid, appointmentCrewGuard.sql, appointmentCrewGuard.bindings),
         creditexWriteGuard(db, identity.uid, `EXISTS (
           SELECT 1 FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id=a.work_order_id AND w.firebase_uid=a.firebase_uid
           WHERE a.id=? AND a.firebase_uid=? AND a.work_order_id=? AND a.revision=? AND a.status=?
@@ -3333,7 +3349,8 @@ export async function PATCH(request: Request) {
       const result = await db.prepare(`UPDATE trade_crm_job_notes SET issue_status = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND note_type = 'issue'`).bind(issueStatus, now, noteId, identity.uid).run();
       if (!result.meta.changes) throw new Error("NOTE_NOT_FOUND");
-      return adminJson({ ok: true });
+      const jobProgress = issueStatus === "resolved" ? await reconcileTradeFormJobProgress(identity.access, String(note.work_order_id), { afterSave: true }) : undefined;
+      return adminJson({ ok: true, jobProgress });
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
@@ -3402,6 +3419,7 @@ export async function PATCH(request: Request) {
       && current?.customer_source === "public_lead_released";
     const pipelineStage = body.pipelineStage === undefined ? String(current?.pipeline_stage || (platformPrivate ? "qualifying" : "enquiry")) : cleanAdminText(body.pipelineStage, 30);
     const workStage = body.stage === undefined ? "" : cleanAdminText(body.stage, 30);
+    if (identity.access.crewId && (workStage === "cancelled" || pipelineStage === "lost")) throw new Error("JOB_MANAGEMENT_REQUIRED");
     const importedJob = job.stage === "imported" || current?.pipeline_stage === "imported";
     const activatingImport = importedJob && body.activateImported === true && workStage === "backlog" && pipelineStage === "enquiry";
     if (importedJob && !activatingImport && ((workStage && workStage !== "imported") || pipelineStage !== "imported")) {

@@ -137,13 +137,13 @@ test("optional summary notes have one editable owner in the Notes tab", () => {
   assert.match(workspace, /saveNotes/);
 });
 
-test("field workflow enforces ordered, audited and idempotent transitions", () => {
+test("retained field action receipts remain audited and idempotent", () => {
   for (const action of ["start_travel", "arrive", "start_work", "finish"]) assert.match(fieldRoute, new RegExp(`${action}: \\{ from:`));
   assert.match(fieldRoute, /trade_offline_actions/);
   assert.match(fieldRoute, /clientActionId/);
   assert.match(fieldRoute, /duplicate: true/);
   assert.match(fieldRoute, /appointment\.status !== expectedAppointmentStatus/);
-  assert.match(fieldRoute, /const fieldCompleted = appointmentStatus === "completed" && job\?\.stage === "completed"/);
+  assert.match(fieldRoute, /const fieldCompleted = job\?\.stage === "completed"/);
   assert.match(fieldRoute, /last_transition_by_uid/);
   assert.match(fieldRoute, /field_state_changed/);
   assert.match(syncRoute, /actionType === "advance_field_job"/);
@@ -177,18 +177,21 @@ test("contact actions stay behind the direct-customer permission boundary", () =
   assert.match(mobile, /!job\.protectedJob/);
 });
 
-test("web and native surfaces show one primary action, Today checklist and truthful sync", () => {
+test("web and native surfaces derive progress from forms and retain checklist and truthful sync", () => {
   for (const label of ["Scope and instructions", "Assigned tasks", "Required forms", "Required photo proof", "Open issues or blockers"]) {
     assert.match(`${fieldRoute}\n${fieldPanel}\n${mobile}`, new RegExp(label));
   }
-  assert.match(fieldPanel, /primaryAction/);
+  assert.doesNotMatch(fieldPanel, /async function advance\(|onClick=\{\(\) => void advance\(\)/);
+  assert.match(fieldRoute, /primaryAction: null/);
   assert.match(fieldPanel, /Saved/);
   assert.match(fieldPanel, /Syncing/);
   assert.match(fieldPanel, /Offline/);
   assert.match(fieldPanel, /Action required/);
-  assert.match(fieldPanel, /does not queue field actions offline/);
-  assert.match(mobile, /saveActionInBackground/);
-  assert.match(mobile, /Tap once to save completion on this phone/);
+  assert.match(fieldRoute, /Form activity starts work/);
+  assert.match(mobile, /async function saveForm/);
+  assert.match(mobile, /useFormTimeTracking/);
+  assert.doesNotMatch(mobile, /Tap once to save completion on this phone/);
+  assert.match(mobile, /Work activity is recorded as you complete job forms/);
   assert.doesNotMatch(mobile, /Reconnect before finishing/);
 });
 

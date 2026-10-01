@@ -1,3 +1,4 @@
+import { canAccessCrewMember, crewMutationGuard } from "../src/lib/trade-crews.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -166,11 +167,11 @@ test("a rental visit may explicitly add hot water and only offers workers with b
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.deepEqual(result.assignees.map((item) => item.id).sort(), ["both", "self"]);
-    const assertCapability = sourceFunction(crm, "assertMemberCapability", { parsedCapabilities: JSON.parse });
-    await assert.rejects(assertCapability(d1, { uid: "business" }, "rental", "hot-water"), /MEMBER_CAPABILITY_REQUIRED/);
-    assert.ok(await assertCapability(d1, { uid: "business" }, "both", "hot-water"));
-    assert.equal(await assertCapability(d1, { uid: "business" }, "inactive", "hot-water"), null);
-    assert.equal(await assertCapability(d1, { uid: "business" }, "foreign", "hot-water"), null);
+    const assertCapability = sourceFunction(crm, "assertMemberCapability", { parsedCapabilities: JSON.parse, canAccessCrewMember });
+    await assert.rejects(assertCapability(d1, { uid: "business", access: { isOwner: true } }, "rental", "hot-water"), /MEMBER_CAPABILITY_REQUIRED/);
+    assert.ok(await assertCapability(d1, { uid: "business", access: { isOwner: true } }, "both", "hot-water"));
+    assert.equal(await assertCapability(d1, { uid: "business", access: { isOwner: true } }, "inactive", "hot-water"), null);
+    assert.equal(await assertCapability(d1, { uid: "business", access: { isOwner: true } }, "foreign", "hot-water"), null);
   } finally { db.close(); }
 });
 
@@ -220,8 +221,8 @@ test("specialised rental checks require credentials valid for the appointment ev
     assert.deepEqual((await (await get(selected)).json()).assignees.map((item) => item.id), ["both"]);
     const extra = await (await get({ ...selected, rentalModules: '["electrical_safety_check","gas_safety_check"]' })).json();
     assert.deepEqual(extra.assignees, []);
-    const guard = sourceFunction(crm, "tradeCrmScheduleMemberGuardStatement", rentalCredentials);
-    const guardInput = { ownerUid: "business", memberId: "both", serviceCategory: "rental-inspection", changedAt: "2026-09-07T00:00:00Z",
+    const guard = sourceFunction(crm, "tradeCrmScheduleMemberGuardStatement", { ...rentalCredentials, crewMutationGuard });
+    const guardInput = { access: { isOwner: true }, ownerUid: "business", memberId: "both", serviceCategory: "rental-inspection", changedAt: "2026-09-07T00:00:00Z",
       credentialDate: "2030-01-01", rentalGates: ["licensed_electrician"] };
     await guard(d1, guardInput).run();
     db.prepare("UPDATE trade_team_member_files SET expires_at = '2029-12-31' WHERE id = 'electrical-file'").run();

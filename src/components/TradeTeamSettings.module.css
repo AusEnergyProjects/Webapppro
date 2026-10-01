@@ -1122,3 +1122,10 @@
 :global(html[data-tlink-colour-mode="night"] .trade-portal-shell) .previewMessage {
   color: #60766f;
 }
+.crewList{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:1rem;padding:1rem}
+.crewCard{border:1px solid var(--crm-border,#d7e0dc);border-radius:14px;padding:1rem;background:var(--crm-panel,#fff)}
+.crewCard header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}
+.crewCard p{margin:.3rem 0;color:inherit}
+.crewCard ul{margin:.8rem 0 0;padding-left:1.2rem}
+.crewEditor{display:grid;gap:1rem;padding:1rem}
+.crewEditor label{display:grid;gap:.4rem}

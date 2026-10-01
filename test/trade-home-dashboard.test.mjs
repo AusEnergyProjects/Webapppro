@@ -26,8 +26,9 @@ function fixture() {
     assert.ok(start >= 0, table);
     const block = schema.slice(start, schema.indexOf("}, (table)", start));
     const columns = [...block.matchAll(/(?:text|integer|real)\("([a-z_]+)"/g)].map(match => match[1]);
-    database.exec(`CREATE TABLE ${table} (${columns.map(name => `${name} ${/cents|revision|minutes/.test(name) ? "INTEGER DEFAULT 0" : "TEXT DEFAULT ''"}`).join(",")})`);
+    database.exec(`CREATE TABLE ${table} (${columns.map(name => `${name} ${/^can_|cents|revision|minutes/.test(name) ? "INTEGER DEFAULT 0" : "TEXT DEFAULT ''"}`).join(",")})`);
   }
+  database.exec(readFileSync(new URL('../drizzle/0231_trade_crews.sql', import.meta.url), 'utf8'));
   const insert = (table, values) => database.prepare(`INSERT INTO ${table} (${Object.keys(values).join(",")}) VALUES (${Object.keys(values).map(() => "?").join(",")})`).run(...Object.values(values));
   insert("trade_accounts", { firebase_uid: "owner", address_state: "VIC" });
   const job = (id, values = {}, detail = {}) => {
@@ -95,6 +96,30 @@ test("jobScope and scheduleScope restrict independent dimensions of Home", async
   assert.equal(teamJobsOwnSchedule.metrics.openJobs, 2); assert.equal(teamJobsOwnSchedule.metrics.todayVisits, 1);
   const owner = await f.home({ isOwner: true });
   assert.equal(owner.metrics.openJobs, 2); assert.equal(owner.metrics.todayVisits, 3);
+});
+
+test('crew Home aggregates crew jobs and visits without exposing other crews or their visits on shared jobs', async t => {
+  const f = fixture(); t.after(() => f.database.close());
+  for (const member of ['me','teammate','other']) f.insert('trade_team_members', {
+    id: member, owner_uid: 'owner', member_uid: `${member}-user`, status: 'active',
+  });
+  f.insert('trade_crews', { id: 'crew', owner_uid: 'owner', name: 'Crew', lead_member_id: 'me', created_at: 'now', updated_at: 'now' });
+  for (const member of ['me','teammate']) f.insert('trade_crew_members', { owner_uid: 'owner', crew_id: 'crew', member_id: member, created_at: 'now' });
+  f.job('mine'); f.visit('mine', 'mine');
+  f.job('crew-job', { assignee_member_id: 'teammate' }); f.visit('crew-visit', 'crew-job', undefined, { assignee_member_id: 'teammate' });
+  f.visit('outside-shared', 'crew-job', undefined, { assignee_member_id: 'other' });
+  f.job('outside-job', { assignee_member_id: 'other' }); f.visit('outside-visit', 'outside-job', undefined, { assignee_member_id: 'other' });
+  f.job('unassigned', { assignee_member_id: '' });
+  const access = { crewId: 'crew', crewLead: true, crewMemberIds: ['me','teammate'] };
+  const lead = await f.home(access);
+  assert.equal(lead.metrics.openJobs, 2); assert.equal(lead.metrics.todayVisits, 2);
+  assert.deepEqual(lead.upcomingAppointments.map(item => item.id).sort(), ['crew-visit','mine']);
+  const worker = await f.home({ ...access, memberId: 'teammate', crewLead: false, crewMemberIds: ['teammate'] });
+  assert.equal(worker.metrics.openJobs, 1); assert.equal(worker.metrics.todayVisits, 1);
+  assert.deepEqual(worker.upcomingAppointments.map(item => item.id), ['crew-visit']);
+  f.database.prepare("DELETE FROM trade_crew_members WHERE member_id='teammate'").run();
+  const removed = await f.home({ ...access, crewMemberIds: ['me'] });
+  assert.equal(removed.metrics.openJobs, 1); assert.equal(removed.metrics.todayVisits, 1);
 });
 
 test("weekly outlook starts this Monday, counts distinct jobs separately from visits, and keeps completed visits", async t => {

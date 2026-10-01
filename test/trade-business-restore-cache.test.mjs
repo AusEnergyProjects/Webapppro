@@ -6,6 +6,7 @@ import ts from "typescript";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "../src/lib/bounded-json-request.ts";
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from "../src/lib/firebase-mfa.ts";
 import { isJobMember } from "../src/lib/trade-job-collaboration.ts";
+import { installEmptyTradeCrews } from './helpers/trade-crews-fixture.mjs';
 
 function functions(file, names, dependencies = {}) {
   const source = ts.createSourceFile(file, readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
@@ -23,6 +24,8 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
 
 function fixture(t, overrides = {}) {
   const database = new DatabaseSync(":memory:"); t.after(() => database.close());
+  installEmptyTradeCrews(database);
+  database.exec('CREATE TABLE trade_team_members(id TEXT,owner_uid TEXT,status TEXT)');
   database.exec(`CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, partner_type TEXT DEFAULT 'installer',
     source_type TEXT DEFAULT 'internal', source_reference TEXT DEFAULT '', assignee_member_id TEXT DEFAULT 'member-a',
     assignee_label TEXT DEFAULT 'Installer', stage TEXT DEFAULT 'scheduled', service_category TEXT DEFAULT 'solar', revision INTEGER DEFAULT 1,

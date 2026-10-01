@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency, installCreditexTrainingFixture } from "./helpers/creditex-training-fixture.mjs";
@@ -109,6 +110,7 @@ function loadRoute(mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (specifier === "@/lib/trade-form-job-progress") return { reconcileTradeFormJobProgress: async () => ({ changed: false, stage: "in_progress", blockers: [] }) };
     if (specifier === "@/lib/trade-job-collaboration") return jobCollaboration;
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
@@ -129,6 +131,7 @@ function loadRoute(mocks) {
 
 function syncDatabase(stage = "in_progress", revision = 5) {
   const database = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(database);
   database.exec(fs.readFileSync(new URL("../drizzle/0170_trade_activity_forms.sql", import.meta.url), "utf8"));
   installFieldCorrectionFixture(database);
   database.exec(`
@@ -546,7 +549,7 @@ function syncDatabase(stage = "in_progress", revision = 5) {
   return database;
 }
 
-function routeHarness(database, { assigned = true, workPacks = [], memberId = "member-1" } = {}) {
+function routeHarness(database, { assigned = true, workPacks = [], memberId = "member-1", formProgress } = {}) {
   const d1 = testD1(database);
   const workPackCalls = [];
   const workPackMutationCalls = [];
@@ -562,6 +565,7 @@ function routeHarness(database, { assigned = true, workPacks = [], memberId = "m
     canManageFieldEvidence: true,
   };
   const route = loadRoute({
+    ...(formProgress ? { "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: formProgress } } : {}),
     "../../../../../db": { getD1: () => d1 },
     "@/lib/admin-server": { mfaErrorResponse,
       adminJson: (body, status = 200) => Response.json(body, { status }),
@@ -966,6 +970,30 @@ async function postActions(route, actions) {
   ));
   return { response, payload: await response.json() };
 }
+
+test("offline form progress runs once after all successful action receipts apply and never for a conflict", async () => {
+  const database = syncDatabase("in_progress", 5);
+  const calls = [];
+  const { route } = routeHarness(database, { formProgress: async (access, workOrderId) => {
+    calls.push(workOrderId);
+    assert.equal(access.memberId, "member-1");
+    assert.deepEqual(database.prepare("SELECT status FROM trade_offline_actions ORDER BY client_action_id").all().map(row => row.status), ["applied", "applied"]);
+    assert.equal(database.prepare("SELECT status FROM trade_job_forms WHERE id='form-1'").get().status, "complete");
+    assert.equal(database.prepare("SELECT status FROM trade_work_order_tasks WHERE id='task-1'").get().status, "done");
+    return { changed: false, stage: "in_progress", blockers: [] };
+  } });
+  try {
+    const response = await postActions(route, [
+      { clientActionId: "progress-form-save", type: "save_job_form", workOrderId: "job-1", formId: "form-1", baseRevision: 1, answers: {}, complete: true },
+      { clientActionId: "progress-task-done", type: "set_task_status", workOrderId: "job-1", taskId: "task-1", baseRevision: 2, status: "done" },
+    ]);
+    assert.equal(response.payload.accepted, 2);
+    assert.deepEqual(calls, ["job-1"]);
+    const stale = await postActions(route, [{ clientActionId: "progress-task-stale", type: "set_task_status", workOrderId: "job-1", taskId: "task-1", baseRevision: 1, status: "pending" }]);
+    assert.equal(stale.payload.conflicts, 1);
+    assert.deepEqual(calls, ["job-1"]);
+  } finally { database.close(); }
+});
 
 test("bootstrap fails closed before companion rows can exceed its response cap", async () => {
   const database = syncDatabase("in_progress", 5);

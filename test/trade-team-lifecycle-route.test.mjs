@@ -1,3 +1,4 @@
+import * as crews from "../src/lib/trade-crews.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import * as teamPresence from "../src/lib/trade-team-presence.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
@@ -61,6 +62,7 @@ function loadRoute(database, aborted, currentAccess = managerAccess, { sent = []
     databaseBinding.batch = async statements => { beforeBatch(statements); return batch(statements); };
   }
   const mocks = {
+    "@/lib/trade-crews": crews,
     "@/lib/trade-team-presence": teamPresence,
     "@/lib/trade-job-collaboration": jobCollaboration, "./trade-job-collaboration": jobCollaboration,
     "../../../../db": { getD1: () => databaseBinding },
@@ -151,6 +153,7 @@ function fixture() {
     CREATE TABLE trade_accounts (firebase_uid text PRIMARY KEY, capabilities text NOT NULL);
     CREATE TABLE trade_work_orders (id text PRIMARY KEY, firebase_uid text NOT NULL, assignee_member_id text NOT NULL);
   `);
+  database.exec(fs.readFileSync(new URL("../drizzle/0231_trade_crews.sql", import.meta.url), "utf8"));
   const columns = permissionColumns.join(", ");
   database.exec(fs.readFileSync(new URL("../drizzle/0219_trade_team_presence.sql", import.meta.url), "utf8"));
   const zeros = permissionColumns.map(() => "0").join(", ");

@@ -1,3 +1,4 @@
+import { fieldCompletionGuard, photoFinishState, UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL, UNFINISHED_JOB_WORK_PACKS_SQL, type PhotoFinishGuard, reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
@@ -6,7 +7,7 @@ import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/a
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { ACTIVE_VISIT_STATUSES, jobMemberSql } from "@/lib/trade-job-collaboration";
 import { fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
-import { submittedActivityFieldCaseSql, UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL } from "@/lib/trade-activity-forms-completion";
+import { UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL } from "@/lib/trade-activity-forms-completion";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
@@ -29,152 +30,6 @@ const SIGNER_ROLES = new Set(["technician", "customer"]);
 function protectedJob(job: Record<string, unknown>) {
   return job.source_type === "opportunity" || job.customer_source === "platform_private";
 }
-const UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL = `SELECT 1
-  FROM compliance_cases compliance_case
-  JOIN compliance_evidence_requirements requirement
-    ON requirement.policy_version_id = compliance_case.evidence_policy_version_id
-    AND requirement.organisation_id = compliance_case.organisation_id
-  WHERE compliance_case.work_order_id = ?
-    AND compliance_case.installer_uid = ?
-    AND compliance_case.status NOT IN ('rejected', 'closed')
-    AND NOT EXISTS (${submittedActivityFieldCaseSql("compliance_case")})
-    AND requirement.minimum_count > 0
-    AND (
-      SELECT COUNT(DISTINCT evidence.original_sha256)
-      FROM compliance_case_evidence evidence
-      WHERE evidence.organisation_id = compliance_case.organisation_id
-        AND evidence.case_id = compliance_case.id
-        AND evidence.requirement_id = requirement.id
-        AND evidence.status IN ('received', 'under_review', 'accepted')
-        AND NOT EXISTS (
-          SELECT 1
-          FROM compliance_case_evidence replacement
-          WHERE replacement.organisation_id = evidence.organisation_id
-            AND replacement.case_id = evidence.case_id
-            AND replacement.supersedes_evidence_id = evidence.id
-        )
-    ) < requirement.minimum_count`;
-
-const PHOTO_MEDIA_SNAPSHOT_SQL = `COALESCE((
-  SELECT json_group_array(json(photo_media.item))
-  FROM (
-    SELECT json_object(
-      'id', media.id,
-      'photoRequirementId', media.photo_requirement_id,
-      'createdAt', media.created_at
-    ) item
-    FROM trade_crm_job_media media
-    WHERE media.firebase_uid = finish_request.firebase_uid
-      AND media.work_order_id = finish_request.work_order_id
-      AND media.photo_request_id = finish_request.id
-      AND media.source = 'customer_request'
-    ORDER BY media.created_at, media.id
-  ) photo_media
-), '[]')`;
-
-const PHOTO_REVIEW_SNAPSHOT_SQL = `COALESCE((
-  SELECT json_group_array(json(photo_review.item))
-  FROM (
-    SELECT json_object(
-      'id', review.id,
-      'photoRequirementId', review.photo_requirement_id,
-      'status', review.status,
-      'reasonCode', review.reason_code,
-      'guidance', review.guidance,
-      'reviewRevision', review.review_revision,
-      'reviewedUploadCount', review.reviewed_upload_count,
-      'createdAt', review.created_at
-    ) item
-    FROM trade_crm_photo_requirement_reviews review
-    WHERE review.firebase_uid = finish_request.firebase_uid
-      AND review.work_order_id = finish_request.work_order_id
-      AND review.photo_request_id = finish_request.id
-      AND review.request_revision = finish_request.revision
-    ORDER BY review.review_revision, review.id
-  ) photo_review
-), '[]')`;
-
-const PHOTO_COMPLETION_SNAPSHOT_SQL = `COALESCE((
-  SELECT json_object(
-    'id', completion.id,
-    'completionRevision', completion.completion_revision,
-    'checklistVersion', completion.checklist_version,
-    'evidenceKey', completion.evidence_key,
-    'requiredCount', completion.required_count,
-    'suppliedCount', completion.supplied_count,
-    'completedAt', completion.completed_at
-  )
-  FROM trade_crm_photo_request_completions completion
-  WHERE completion.firebase_uid = finish_request.firebase_uid
-    AND completion.work_order_id = finish_request.work_order_id
-    AND completion.photo_request_id = finish_request.id
-    AND completion.request_revision = finish_request.revision
-  ORDER BY completion.completion_revision DESC
-  LIMIT 1
-), '')`;
-
-type PhotoFinishGuard = {
-  kind: "none";
-} | {
-  kind: "active";
-  requestId: string;
-  revision: number;
-  status: string;
-  requirements: string;
-  mediaSnapshot: string;
-  reviewSnapshot: string;
-  completionSnapshot: string;
-};
-
-async function photoFinishState(
-  db: D1Database,
-  ownerUid: string,
-  workOrderId: string,
-): Promise<{ ready: boolean; guard: PhotoFinishGuard }> {
-  const request = await db.prepare(`SELECT
-      finish_request.id,
-      finish_request.revision,
-      finish_request.requirements,
-      finish_request.status,
-      ${PHOTO_MEDIA_SNAPSHOT_SQL} media_snapshot,
-      ${PHOTO_REVIEW_SNAPSHOT_SQL} review_snapshot,
-      ${PHOTO_COMPLETION_SNAPSHOT_SQL} completion_snapshot
-    FROM trade_crm_photo_requests finish_request
-    WHERE finish_request.work_order_id = ?
-      AND finish_request.firebase_uid = ?
-    LIMIT 1`)
-    .bind(workOrderId, ownerUid)
-    .first<Record<string, unknown>>();
-  if (!request || String(request.status) === "revoked") {
-    return { ready: true, guard: { kind: "none" } };
-  }
-  const guard: PhotoFinishGuard = {
-    kind: "active",
-    requestId: String(request.id),
-    revision: Number(request.revision),
-    status: String(request.status),
-    requirements: String(request.requirements || "[]"),
-    mediaSnapshot: String(request.media_snapshot || "[]"),
-    reviewSnapshot: String(request.review_snapshot || "[]"),
-    completionSnapshot: String(request.completion_snapshot || ""),
-  };
-  try {
-    const requirements = normalisePhotoRequirements(
-      JSON.parse(guard.requirements),
-    );
-    const proof = await photoRequestProofOverview({
-      ownerUid,
-      workOrderId,
-      requestId: guard.requestId,
-      requestRevision: guard.revision,
-      requirements,
-    });
-    return { ready: Boolean(proof.proofReady), guard };
-  } catch {
-    return { ready: false, guard };
-  }
-}
-
 const FIELD_TRANSITIONS = {
   start_travel: { from: "scheduled", to: "en_route", timestamp: "travel_started_at", label: "Start travel" },
   arrive: { from: "en_route", to: "arrived", timestamp: "arrived_at", label: "Arrive" },
@@ -350,12 +205,12 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
     LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'
     LEFT JOIN trade_crm_appointments a ON a.id = ? AND a.work_order_id = w.id AND a.firebase_uid = w.firebase_uid
     WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active'`).bind(selectedVisit?.id || "", workOrderId, firebaseUid).first<Record<string, unknown>>();
-  const [taskCount, formCount, issueCount, planCount, unsyncedCount, complianceCount, rentalReportCount, activityCount] = await Promise.all([
+  const [taskCount, formCount, issueCount, planCount, unsyncedCount, complianceCount, rentalReportCount, activityCount, workPackCount] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM trade_crm_job_plan_requirements r JOIN trade_crm_job_plans p ON p.id = r.job_plan_id AND p.firebase_uid = r.firebase_uid
-      WHERE p.work_order_id = ? AND p.firebase_uid = ? AND r.status NOT IN ('installed', 'complete', 'completed', 'done', 'not_required')`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
+      WHERE p.work_order_id = ? AND p.firebase_uid = ? AND r.status NOT IN ('installed', 'complete', 'completed', 'done', 'not_required', 'not_needed')`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_offline_actions WHERE owner_uid = ? AND entity_id = ? AND status IN ('processing', 'conflict')").bind(firebaseUid, workOrderId).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM (${UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL})`)
       .bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
@@ -363,6 +218,7 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
       WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'issued'`)
       .bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM (${UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL})`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM (${UNFINISHED_JOB_WORK_PACKS_SQL})`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
   ]);
   const customerContext = job?.source_type !== "opportunity"
     && (job?.customer_source === "trade_owned" || job?.customer_source === "public_lead_released");
@@ -370,6 +226,7 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
   const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0), compliance: Number(complianceCount?.count || 0), rentalReports: Number(rentalReportCount?.count || 0) };
   const blockers = [
     ...(counts.tasks ? [{ key: "tasks", label: `${counts.tasks} assigned task${counts.tasks === 1 ? " is" : "s are"} not complete`, target: "tasks" }] : []),
+    ...(Number(workPackCount?.count || 0) ? [{ key: "work-packs", label: "Complete and sign every required activity work pack", target: "forms" }] : []),
     ...(counts.forms ? [{ key: "forms", label: `${counts.forms} required form${counts.forms === 1 ? " is" : "s are"} not complete`, target: "forms" }] : []),
     ...(request && request.status !== "revoked" && !proofReview?.proofReady ? [{ key: "proof", label: "Required photo proof is not ready", target: "evidence" }] : []),
     ...(counts.issues ? [{ key: "issues", label: `${counts.issues} open issue${counts.issues === 1 ? " needs" : "s need"} attention`, target: "notes" }] : []),
@@ -380,10 +237,7 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
     ...(Number(activityCount?.count || 0) ? [{ key: "activities", label: "Complete the activity forms and provide the signed field records to Creditex", target: "forms" }] : []),
   ];
   const appointmentStatus = String(job?.appointment_status || "");
-  const fieldCompleted = appointmentStatus === "completed" && job?.stage === "completed";
-  const action = selectedVisit && controlsVisit(access, selectedVisit, String(job?.assignee_member_id || ""))
-    && !["imported", "completed", "cancelled"].includes(String(job?.stage))
-    ? Object.entries(FIELD_TRANSITIONS).find(([, transition]) => transition.from === appointmentStatus) : undefined;
+  const fieldCompleted = job?.stage === "completed";
   const fieldJob = job ? { id: job.id, workNumber: job.work_number,
     title: customerContext ? job.title : "Assigned field job", status: appointmentStatus || job.stage,
     customerName: customerContext ? String(job.customer_name || "Customer") : job.source_type === "opportunity" ? "Australian Energy Assessments protected customer" : "Internal job",
@@ -392,8 +246,8 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
     appointmentId: String(job.appointment_id || ""), appointmentRevision: Number(selectedVisit?.revision || 0), collaborativeJob, remainingActiveVisits,
     visits: visits.map(visit => ({ id: visit.id, memberId: visit.assignee_member_id, memberName: visit.assignee_label, status: visit.status,
       startsAt: visit.starts_at, endsAt: visit.ends_at, instructions: visit.notes, canAdvance: controlsVisit(access, visit, String(job.assignee_member_id || "")) })),
-    primaryAction: action ? { action: action[0], label: action[0] === "finish" && collaborativeJob ? "Finish my visit" : action[1].label } : null,
-    actionUnavailableReason: job.stage === "imported" ? "Start this imported job in TLink before recording field work." : !job.appointment_id ? "Schedule this job before starting travel." : fieldCompleted ? "Field work is complete." : appointmentStatus === "completed" ? "This visit is complete. Other visits and required job items may still be outstanding." : "Only the assigned worker or a job manager can advance this visit.",
+    primaryAction: null,
+    actionUnavailableReason: job.stage === "imported" ? "Start this imported job in TLink before recording field work." : fieldCompleted ? "All required work is complete." : appointmentStatus === "completed" ? "This visit is complete. Other visits or required job items remain outstanding." : "Form activity starts work. Completing all required forms and evidence advances the job automatically.",
     phone: customerContext ? String(job.customer_phone || "") : "", address, directionsUrl: address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : "",
     timestamps: { travelStartedAt: job.travel_started_at || "", arrivedAt: job.arrived_at || "", workStartedAt: job.work_started_at || "", completedAt: job.completed_at || "" },
     checklist: [
@@ -472,113 +326,10 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
   }
   const now = new Date().toISOString(); const revision = nextJobRevision(job.revision); const receiptId = crypto.randomUUID();
   const timestampColumn = transition.timestamp;
-  const finishGuard = `(
-    ? <> 'finish'
-    OR (
-      NOT EXISTS (
-        SELECT 1 FROM trade_work_order_tasks blocker
-        WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
-          AND blocker.status <> 'done'
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM trade_job_forms blocker
-        WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
-          AND blocker.status <> 'complete'
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM trade_crm_job_notes blocker
-        WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
-          AND blocker.note_type = 'issue' AND blocker.issue_status = 'open'
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM trade_crm_job_plan_requirements blocker
-        JOIN trade_crm_job_plans blocker_plan
-          ON blocker_plan.id = blocker.job_plan_id
-          AND blocker_plan.firebase_uid = blocker.firebase_uid
-        WHERE blocker_plan.work_order_id = ? AND blocker_plan.firebase_uid = ?
-          AND blocker.status NOT IN (
-            'installed', 'complete', 'completed', 'done', 'not_required'
-          )
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM trade_offline_actions blocker
-        WHERE blocker.owner_uid = ? AND blocker.entity_id = ?
-          AND blocker.status IN ('processing', 'conflict')
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM trade_rental_inspections blocker
-        WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
-          AND blocker.status <> 'issued'
-      )
-      AND NOT EXISTS (${UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL})
-      AND NOT EXISTS (${UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL})
-      AND (
-        (
-          ? = 'none'
-          AND NOT EXISTS (
-            SELECT 1
-            FROM trade_crm_photo_requests finish_request
-            WHERE finish_request.work_order_id = ?
-              AND finish_request.firebase_uid = ?
-              AND finish_request.status <> 'revoked'
-          )
-        )
-        OR (
-          ? = 'active'
-          AND EXISTS (
-            SELECT 1
-            FROM trade_crm_photo_requests finish_request
-            WHERE finish_request.work_order_id = ?
-              AND finish_request.firebase_uid = ?
-              AND finish_request.id = ?
-              AND finish_request.revision = ?
-              AND finish_request.status = ?
-              AND finish_request.status <> 'revoked'
-              AND finish_request.requirements = ?
-              AND ${PHOTO_MEDIA_SNAPSHOT_SQL} = ?
-              AND ${PHOTO_REVIEW_SNAPSHOT_SQL} = ?
-              AND ${PHOTO_COMPLETION_SNAPSHOT_SQL} = ?
-          )
-        )
-      )
-    )
-  )`;
-  const photoGuard = photoFinish.guard;
   const trainingGuards = await certificateJobEligibilityGuards(db, { ownerUid: access.ownerUid,
     actorMemberId: access.memberId, assignedMemberId: appointment.assignee_member_id || String(job.assignee_member_id || ""), workOrderId });
-  const finishGuardValues = [
-    completesJob ? "finish" : action === "finish" ? "finish_visit" : action,
-    workOrderId,
-    access.ownerUid,
-    workOrderId,
-    access.ownerUid,
-    workOrderId,
-    access.ownerUid,
-    workOrderId,
-    access.ownerUid,
-    access.ownerUid,
-    workOrderId,
-    workOrderId,
-    access.ownerUid,
-    workOrderId,
-    access.ownerUid,
-    workOrderId,
-    access.ownerUid,
-    photoGuard.kind,
-    workOrderId,
-    access.ownerUid,
-    photoGuard.kind,
-    workOrderId,
-    access.ownerUid,
-    photoGuard.kind === "active" ? photoGuard.requestId : "",
-    photoGuard.kind === "active" ? photoGuard.revision : 0,
-    photoGuard.kind === "active" ? photoGuard.status : "",
-    photoGuard.kind === "active" ? photoGuard.requirements : "",
-    photoGuard.kind === "active" ? photoGuard.mediaSnapshot : "",
-    photoGuard.kind === "active" ? photoGuard.reviewSnapshot : "",
-    photoGuard.kind === "active" ? photoGuard.completionSnapshot : "",
-  ];
+  const completionGuard = fieldCompletionGuard(access.ownerUid, workOrderId, photoFinish,
+    completesJob ? "finish" : action === "finish" ? "finish_visit" : action);
   const results = await db.batch([
     creditexWriteGuard(db, access.ownerUid, `EXISTS (SELECT 1 FROM trade_work_orders current_job
       JOIN trade_crm_appointments selected_visit ON selected_visit.work_order_id = current_job.id AND selected_visit.firebase_uid = current_job.firebase_uid
@@ -596,10 +347,10 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
        base_revision, result_revision, status, lease_until, error_code, created_at, updated_at)
       SELECT ?, ?, ?, ?, 'web-field', ?, ?, ?, 'job', ?, ?, ?, 'applied', '', '', ?, ?
        WHERE EXISTS (SELECT 1 FROM trade_crm_appointments WHERE id = ? AND firebase_uid = ? AND status = ?)
-         AND ${finishGuard}`)
+         AND ${completionGuard.sql}`)
       .bind(receiptId, access.ownerUid, access.actorUid, access.memberId || "", clientActionId, actionIdentity, actionType,
         workOrderId, Number(job.revision), revision, now, now, appointment.id, access.ownerUid, expectedAppointmentStatus,
-        ...finishGuardValues),
+        ...completionGuard.values),
     creditexWriteGuard(db, access.ownerUid, "EXISTS (SELECT 1 FROM trade_offline_actions WHERE id = ? AND status = 'applied')", [receiptId]),
     db.prepare(`UPDATE trade_crm_appointments SET status = ?, ${timestampColumn} = ?, last_transition_by_uid = ?, revision = revision + 1, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND status = ? AND EXISTS (SELECT 1 FROM trade_offline_actions WHERE id = ?)`)
@@ -755,8 +506,9 @@ async function upload(request: Request, access: TeamAccess) {
     }
     await store.delete(objectKey); throw error;
   }
-  if (clientUploadId) return adminJson({ ok: true, uploadedMediaId: id, revision }, 201);
-  return adminJson({ ok: true, revision, ...(await payload(access, workOrderId)) }, 201);
+  const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
+  if (clientUploadId) return adminJson({ ok: true, uploadedMediaId: id, revision: jobProgress.revision ?? revision }, 201);
+  return adminJson({ ok: true, jobProgress, revision: jobProgress.revision ?? revision, ...(await payload(access, workOrderId)) }, 201);
 }
 
 export async function POST(request: Request) {
@@ -825,7 +577,8 @@ export async function POST(request: Request) {
       ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
         audienceMemberId: job.assignee_member_id }),
     ]);
-    return adminJson({ ok: true, protectedJob: protectedJob(job), revision,
+    const jobProgress = action === "add_signoff" ? await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true }) : undefined;
+    return adminJson({ ok: true, jobProgress, protectedJob: protectedJob(job), revision: jobProgress?.revision ?? revision,
       ...(await payload(access, workOrderId)) }, 201);
   } catch (error) { return fieldError(error); }
 }

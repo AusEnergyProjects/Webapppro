@@ -1,5 +1,6 @@
 import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
+import { installEmptyTradeCrews } from './helpers/trade-crews-fixture.mjs';
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,6 +37,7 @@ const clean = (value, limit) => typeof value === 'string' ? value.trim().slice(0
 const deniedSideEffect = () => { throw new Error('Quick quote invoked a scheduling or compliance side effect'); };
 function fixture(overrides = {}) {
   const database = new DatabaseSync(':memory:');
+  installEmptyTradeCrews(database);
   const tables = {
     trade_accounts: 'firebase_uid address_state',
     trade_crm_customers: 'id firebase_uid customer_number customer_type first_name last_name business_name business_number email phone address_line_1 address_line_2 suburb address_state postcode tags private_notes record_status created_at updated_at',

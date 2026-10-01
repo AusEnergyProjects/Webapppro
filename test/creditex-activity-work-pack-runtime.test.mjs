@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -231,6 +232,7 @@ function insertLifecycleEvent(sqlite, id, action, sourceSnapshot, occurredAt) {
 
 function runtimeDatabase() {
   const sqlite = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(sqlite);
   sqlite.exec("PRAGMA foreign_keys = ON");
   applyMigrations(sqlite);
   return { sqlite, database: new TestD1Database(sqlite) };

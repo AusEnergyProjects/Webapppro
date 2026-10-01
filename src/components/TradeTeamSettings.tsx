@@ -18,6 +18,8 @@ import dynamic from "next/dynamic";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import styles from "./TradeTeamSettings.module.css";
+import { TradeCrewWorkspace } from "./TradeCrewWorkspace";
+import { TradeTeamTimeWorkspace } from "./TradeTeamTimeWorkspace";
 import TradeTeamStatusDot from "./TradeTeamStatusDot";
 import type { TradeTeamPresenceStatus } from "@/lib/trade-team-presence";
 
@@ -30,6 +32,7 @@ type ScheduleColour = "emerald" | "teal" | "blue" | "violet" | "amber" | "rose";
 type AccessPreset = "manager" | "office" | "field";
 
 export type TradeTeamPermissions = {
+  crewLead?: boolean;
   jobScope: Scope;
   canCreateJobs: boolean;
   canManageJobs: boolean;
@@ -55,7 +58,7 @@ export type TradeTeamPermissions = {
   canRunReports: boolean;
 };
 
-type BooleanPermissionKey = Exclude<keyof TradeTeamPermissions, "jobScope" | "scheduleScope">;
+type BooleanPermissionKey = Exclude<keyof TradeTeamPermissions, "jobScope" | "scheduleScope" | "crewLead">;
 
 export type TradeTeamMember = {
   id: string;
@@ -272,6 +275,7 @@ function trapDialogKey(event: KeyboardEvent<HTMLElement>, close: () => void) {
 
 export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }: { user: User; navigationTarget?: TLinkCommandTarget | null; onOpenOwnTraining?: () => void }) {
   const fetch = useTradeBusinessFetch();
+  const [teamView, setTeamView] = useState<"people" | "crews" | "time">("people");
   const [members, setMembers] = useState<TradeTeamMember[]>([]);
   const [teamAccess, setTeamAccess] = useState<TeamResult["access"]>(undefined);
   const [loading, setLoading] = useState(true);
@@ -823,9 +827,11 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
       : uploadRentalGate === "licensed_plumber" || uploadRentalGate === "refrigerant_handler" ? "licence" : "";
   const invitationPanel = inviteUrl && <section className={styles.invitePanel} aria-label="Team invitation"><div><strong>{inviteDelivery?.status === "sent" ? "Invitation emailed" : "Invitation ready"}</strong><p>{inviteDelivery?.message || "Email delivery has not been confirmed."} This new link lasts 7 days and replaces the previous invitation.</p></div><input aria-label="Private login link" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} /><button type="button" className={styles.secondary} onClick={() => void copyInvite()}>Copy invitation link</button></section>;
 
+  if (teamView !== "people") return <div className={styles.workspace}><nav className={styles.actions} aria-label="Team views"><button type="button" className={styles.secondary} onClick={() => setTeamView("people")}>Your team</button>{isOwner && <button type="button" className={teamView === "crews" ? styles.primary : styles.secondary} onClick={() => setTeamView("crews")}>Crews</button>}<button type="button" className={teamView === "time" ? styles.primary : styles.secondary} onClick={() => setTeamView("time")}>Time</button></nav>{teamView === "crews" && isOwner ? <TradeCrewWorkspace user={user} /> : <TradeTeamTimeWorkspace user={user} />}</div>;
+
   return <div className={styles.workspace}>
     <div className={styles.heading}><div><h4>{archivedView ? "Archived team" : "Your team"}</h4><p>{archivedView ? "Former team members with access revoked. Their details, documents and history remain saved." : "Keep each person's contact details, access, availability and documents in one place."}</p></div>{!archivedView && <button type="button" className={styles.primary} disabled={Boolean(busy)} onClick={openNew}>Add team member</button>}</div>
-    <nav className={styles.actions} aria-label="Team views"><button type="button" className={archivedView ? styles.secondary : styles.primary} aria-pressed={!archivedView} disabled={Boolean(busy)} onClick={() => changeRosterView(false)}>Your team</button><button type="button" className={archivedView ? styles.primary : styles.secondary} aria-pressed={archivedView} disabled={Boolean(busy)} onClick={() => changeRosterView(true)}>Archived team</button></nav>
+    <nav className={styles.actions} aria-label="Team views"><button type="button" className={archivedView ? styles.secondary : styles.primary} aria-pressed={!archivedView} disabled={Boolean(busy)} onClick={() => changeRosterView(false)}>Your team</button><button type="button" className={archivedView ? styles.primary : styles.secondary} aria-pressed={archivedView} disabled={Boolean(busy)} onClick={() => changeRosterView(true)}>Archived team</button>{isOwner && <button type="button" className={styles.secondary} onClick={() => setTeamView("crews")}>Crews</button>}<button type="button" className={styles.secondary} onClick={() => setTeamView("time")}>Time</button></nav>
     {!archivedView && <section className={styles.setupGuide} aria-label="Set up TLink for a team member">
       <div><span>1</span><strong>Add the person</strong><small>Enter their email and choose their access.</small></div>
       <div><span>2</span><strong>Invitation sent</strong><small>They set their password from the email.</small></div>
@@ -928,7 +934,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
         {trainingTodos}
         {showAccessEditor ? <>
           <label>Quick access preset<select value={formPreset} onChange={(event) => applyPreset(event.target.value as AccessPreset)}><option value="custom" disabled>Custom access</option>{accessPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><small className={styles.hint}>{editing === "new" ? accessPresets.find((item) => item.id === formPreset)?.description : "This person's saved switches are shown below."} Applying a preset only fills the switches below. You can then change any permission for this person.</small></label>
-          <fieldset className={styles.permissionGroup}><legend>Work visibility</legend><div className={styles.grid}><label>Jobs<select value={formPermissions.jobScope} onChange={(event) => setPermission("jobScope", event.target.value as Scope)}><option value="own">Assigned jobs only</option><option value="team" disabled={!isOwner && actorPermissions.jobScope !== "team"}>All team jobs</option></select><small className={styles.hint}>Own scope means this person cannot view, edit, assign or reassign another person&apos;s work.</small></label><label>Schedule<select value={formPermissions.scheduleScope} onChange={(event) => setPermission("scheduleScope", event.target.value as Scope)}><option value="own">Own schedule only</option><option value="team" disabled={!isOwner && actorPermissions.scheduleScope !== "team"}>Whole team schedule</option></select><small className={styles.hint}>Own scope means this person cannot view, schedule or reschedule another person&apos;s work.</small></label></div></fieldset>
+          <fieldset className={styles.permissionGroup}><legend>Work visibility</legend><div className={styles.grid}><label>Jobs<select value={formPermissions.jobScope} onChange={(event) => setPermission("jobScope", event.target.value as Scope)}><option value="own">Assigned jobs only</option><option value="team" disabled={!isOwner && actorPermissions.jobScope !== "team"}>All team jobs</option></select><small className={styles.hint}>Assigned work includes this person&apos;s jobs and, for designated crew leads, their crew&apos;s jobs.</small></label><label>Schedule<select value={formPermissions.scheduleScope} onChange={(event) => setPermission("scheduleScope", event.target.value as Scope)}><option value="own">Own schedule only</option><option value="team" disabled={!isOwner && actorPermissions.scheduleScope !== "team"}>Whole team schedule</option></select><small className={styles.hint}>Designated crew leads can see their own crew&apos;s schedule. Assignment and rescheduling still require the relevant permissions.</small></label></div></fieldset>
           {permissionGroups.map((group) => <fieldset className={styles.permissionGroup} key={group.label}><legend>{group.label}</legend>{group.items.map((item) => <label className={styles.check} key={item.key}><input type="checkbox" disabled={!isOwner && !actorPermissions[item.key]} checked={Boolean(formPermissions[item.key])} onChange={(event) => setPermission(item.key, event.target.checked)} /><span>{item.label}<small>{!isOwner && !actorPermissions[item.key] ? "You cannot grant access you do not have." : item.detail}</small></span></label>)}</fieldset>)}
         </> : <p className={styles.status}>{editingOwnAccess ? "You cannot edit your own access permissions." : "You can update this person's contact details and status. Only the owner or a delegated access manager can change permissions."}</p>}</>}
         <div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy === "member"}>{busy === "member" ? "Saving..." : editing === "new" ? "Add team member" : editingOwner ? "Save my details" : "Save changes"}</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={closeMemberDialog}>{editing === "new" ? "Cancel" : "Done"}</button></div>

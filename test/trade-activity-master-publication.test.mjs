@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
 import { FIELD_CORRECTION_GUARD_NAMES, lifecycleGuardFixture } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
@@ -63,6 +64,7 @@ test("the master editor supports safe routing, ordering and Creditex declaration
 
 function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   const database = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(database);
   database.exec(`CREATE TABLE trade_work_orders (id TEXT, firebase_uid TEXT, record_status TEXT, assignee_member_id TEXT, scheduled_start TEXT, revision INTEGER, stage TEXT);
     CREATE TABLE trade_crm_appointments (id TEXT,work_order_id TEXT,firebase_uid TEXT,assignee_member_id TEXT,status TEXT);
     CREATE TABLE trade_team_sync_changes (owner_uid TEXT, audience_member_id TEXT, entity_type TEXT, entity_id TEXT, operation TEXT, revision INTEGER, changed_at TEXT);
@@ -91,7 +93,7 @@ function fixture({ libraryOverrides = {}, serverOverrides = {} } = {}) {
   const load = (text, imports) => {
     const compiled = ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
     const moduleRecord = { exports: {} };
-    new Function("require", "module", "exports", compiled)((name) => { if (name in imports) return imports[name]; const dependency = certificateTestDependency(name); assert.ok(dependency, name); return dependency; }, moduleRecord, moduleRecord.exports);
+    new Function("require", "module", "exports", compiled)((name) => { if (name === "@/lib/trade-form-job-progress") return { reconcileTradeFormJobProgress: async () => ({changed:false,stage:"in_progress",blockers:[]}) }; if (name in imports) return imports[name]; const dependency = certificateTestDependency(name); assert.ok(dependency, name); return dependency; }, moduleRecord, moduleRecord.exports);
     return moduleRecord.exports;
   };
   const access = { ownerUid: "owner", actorUid: "owner", isOwner: true, memberId: "worker", jobScope: "team", displayName: "Owner", businessName: "Trade business" };

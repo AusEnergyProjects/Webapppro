@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
 import { FIELD_CORRECTION_GUARD_NAMES, lifecycleGuardFixture } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
@@ -23,7 +24,7 @@ const serverSource = read("../src/lib/trade-activity-forms-server.ts");
 function loadModule(source, dependencies) {
   const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const moduleRecord = { exports: {} };
-  new Function("require", "module", "exports", code)((name) => {
+  new Function("require", "module", "exports", code)((name) => { if (name === "@/lib/trade-form-job-progress") return { reconcileTradeFormJobProgress: async () => ({changed:false,stage:"in_progress",blockers:[]}) };
     if (certificateTestDependency(name)) return certificateTestDependency(name);
     assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency ${name}`);
     return dependencies[name];
@@ -48,6 +49,7 @@ const strokes = [{ points: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.8 }, { x: 0.9, y:
 
 function fixture(fieldForm = form(), options = {}) {
   const database = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(database);
   database.exec(`PRAGMA foreign_keys = ON;
     CREATE TABLE trade_work_orders (id TEXT PRIMARY KEY, firebase_uid TEXT, partner_type TEXT, record_status TEXT, source_type TEXT, source_reference TEXT,
       assignee_member_id TEXT, assignee_label TEXT, stage TEXT, service_category TEXT, scheduled_start TEXT, revision INTEGER);

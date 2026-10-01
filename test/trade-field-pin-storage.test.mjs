@@ -42,6 +42,7 @@ function loadServer(database) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const mocks = {
+    "./trade-crews-server": { applyTradeCrewAccess: async access => access },
     "../../db": { getD1: () => d1(database) },
     "./trade-access-server": { tradeAccountProjection: async () => null },
     "./trade-field-access-policy.mjs": {

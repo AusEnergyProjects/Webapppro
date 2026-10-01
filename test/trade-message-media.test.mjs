@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -24,6 +25,7 @@ const foreign = { ...owner, ownerUid: "owner-b", actorUid: "owner-b", memberId: 
 const png = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aW3sAAAAASUVORK5CYII=", "base64"));
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(sqlite);
   sqlite.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,member_uid TEXT,status TEXT,can_manage_team INTEGER);
     INSERT INTO trade_team_members VALUES('owner','owner-a','owner-a','active',1),('jane','owner-a','jane-uid','active',0),('john','owner-a','john-uid','active',0),('foreign','owner-b','owner-b','active',1);
@@ -40,6 +42,20 @@ function fixture() {
   return { sqlite, db, bucket, stored, close: () => sqlite.close() };
 }
 const upload = (f, actor = owner, threadId = "thread-a") => server.uploadMessageMedia(f.db, f.bucket, actor, { purpose: "message", threadId, memberId: "", bytes: png, contentType: "image/png" });
+
+test("crew avatar reads exclude undisclosed staff and preserve people in joined conversations", async () => {
+  const f=fixture(); try {
+    const johnAvatar=await server.uploadMessageMedia(f.db,f.bucket,owner,{purpose:'avatar',memberId:'john',threadId:'',bytes:png,contentType:'image/png'});
+    const ownerAvatar=await server.uploadMessageMedia(f.db,f.bucket,owner,{purpose:'avatar',memberId:'owner',threadId:'',bytes:png,contentType:'image/png'});
+    f.sqlite.exec("INSERT INTO trade_crews(id,owner_uid,lead_member_id) VALUES('crew','owner-a','jane'); INSERT INTO trade_crew_members(owner_uid,crew_id,member_id) VALUES('owner-a','crew','jane')");
+    assert.equal(await server.readMessageMedia(f.db,jane,{avatarMemberId:'john'}),null);
+    assert.deepEqual(await server.teamAvatarRevisions(f.db,jane),{owner:ownerAvatar.id});
+    f.sqlite.exec("INSERT INTO trade_crew_members(owner_uid,crew_id,member_id) VALUES('owner-a','crew','john')");
+    assert.equal((await server.readMessageMedia(f.db,jane,{avatarMemberId:'john'})).id,johnAvatar.id);
+    f.sqlite.exec("DELETE FROM trade_crew_members WHERE member_id='john'; INSERT INTO trade_message_participants VALUES('thread-b','owner-a','jane',0)");
+    assert.equal((await server.readMessageMedia(f.db,jane,{avatarMemberId:'john'})).id,johnAvatar.id);
+  } finally { f.close(); }
+});
 async function attach(f, actor, ids, messageId = "message-1", threadId = "thread-a") {
   const prepared = server.messageAttachmentStatements(f.db, actor, threadId, messageId, ids);
   return f.db.batch([f.db.prepare(`INSERT OR IGNORE INTO trade_internal_messages(id,owner_uid,thread_id,sequence,actor_member_id,actor_name,body,request_id,created_at)

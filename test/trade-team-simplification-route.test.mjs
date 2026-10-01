@@ -1,3 +1,4 @@
+import * as crewHelpers from "../src/lib/trade-crews.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 import assert from "node:assert/strict";
@@ -17,6 +18,7 @@ function transpileRoute(path, mocks) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "@/lib/trade-crews") return crewHelpers;
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
@@ -89,19 +91,19 @@ test("ordinary staff availability is self-only while delegated managers can edit
     async all() {
       if (this.sql.includes("FROM trade_team_members")) {
         const ownOnly = Number(this.values[1]) === 1;
-        return { results: members.filter((item) => !ownOnly || item.id === this.values[2]) };
+        return { results: members.filter((item) => !ownOnly || (this.sql.includes("json_each") ? JSON.parse(this.values[2]).includes(item.id) : item.id === this.values[2])) };
       }
       if (this.sql.includes("FROM trade_team_working_hours")) {
         const ownOnly = Number(this.values[1]) === 1;
-        return { results: hours.filter((item) => item.owner_uid === this.values[0] && (!ownOnly || item.team_member_id === this.values[2])) };
+        return { results: hours.filter((item) => item.owner_uid === this.values[0] && (!ownOnly || JSON.parse(this.values[2]).includes(item.team_member_id))) };
       }
       if (this.sql.includes("FROM trade_team_unavailability")) {
         const ownOnly = Number(this.values[1]) === 1;
-        return { results: unavailable.filter((item) => item.owner_uid === this.values[0] && (!ownOnly || item.team_member_id === this.values[2])) };
+        return { results: unavailable.filter((item) => item.owner_uid === this.values[0] && (!ownOnly || JSON.parse(this.values[2]).includes(item.team_member_id))) };
       }
       if (this.sql.includes("FROM trade_crm_appointments a JOIN")) {
         const ownOnly = Number(this.values[3]) === 1;
-        return { results: appointments.filter((item) => !ownOnly || item.assignee_member_id === this.values[4]) };
+        return { results: appointments.filter((item) => !ownOnly || JSON.parse(this.values[4]).includes(item.assignee_member_id)) };
       }
       return { results: [] };
     }

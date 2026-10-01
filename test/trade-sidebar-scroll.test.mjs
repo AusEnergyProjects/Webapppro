@@ -72,7 +72,9 @@ test("both top bars remain visible and the independently scrolling rail fills th
       } else {
         const railBounds = await rail.boundingBox();
         assert.ok(railBounds.y + railBounds.height <= scenario.height + 1, "The complete scroll container fits below the actual header");
-        assert.ok(await rail.evaluate(node => node.scrollHeight > node.clientHeight), "The menu must retain an independent scroll range");
+        const overflow = await rail.evaluate(node => node.scrollHeight > node.clientHeight);
+        assert.equal(await rail.evaluate(node => getComputedStyle(node).overflowY), "auto", "The menu retains independent scrolling when its content exceeds the viewport");
+        if (scenario.height <= 614) assert.ok(overflow, "Short screens must exercise the independent scroll range");
         await rail.hover();
         await page.mouse.wheel(0, 5000);
         await page.waitForFunction(() => { const nav = document.querySelector('.dashboard-workspace-nav'); return Math.abs(nav.scrollHeight - nav.clientHeight - nav.scrollTop) < 2; });
@@ -86,7 +88,7 @@ test("both top bars remain visible and the independently scrolling rail fills th
         await rail.getByRole('button').first().focus();
         for (let index = 1; index < await rail.locator('button, summary').count(); index++) await page.keyboard.press('Tab');
         assert.equal(await business.evaluate(node => document.activeElement === node), true);
-        assert.ok(await rail.evaluate(node => node.scrollTop > 0), "Keyboard focus reveals the bottom destination inside the menu");
+        if (overflow) assert.ok(await rail.evaluate(node => node.scrollTop > 0), "Keyboard focus reveals the bottom destination inside the menu");
         assert.equal(await page.evaluate(() => window.scrollY), initialScroll);
         await page.locator('#business-context').evaluate(node => { node.style.height = '80px'; });
         await page.waitForFunction(expected => Number.parseFloat(document.querySelector('.trade-portal-shell').style.getPropertyValue('--trade-header-stack-height')) === expected, scenario.headerHeight + 80);

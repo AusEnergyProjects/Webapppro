@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 30 September 2026
+Last reconciled: 2 October 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -17,6 +17,8 @@ The dated audit is the immutable evidence baseline. [Release truth](./docs/RELEA
 Sequence is dependency based, not a calendar promise. A source change is not a release. A roadmap item is complete only when its required tests, release identity and runtime evidence are recorded.
 
 ## Current product direction: a simpler business home
+
+Current delivery gate: publish form-driven work progress, per-page elapsed timing, weekly active app reporting and scoped subcontractor crews. Verify multiple forms on one job, phone-away gaps, offline completion receipt delay, crew reassignment and participant discovery. Elapsed work and active app use remain distinct. No mandatory travel/arrival/start/finish sequence is required in the normal field flow. Publication and physical-device evidence remain separate.
 
 Prioritise a permission-aware Home dashboard, clear next actions, useful financial/workload charts and connected-calendar visibility. Keep customers informed through existing email updates and secure account-free document links. Do not build a customer portal or require customer accounts.
 

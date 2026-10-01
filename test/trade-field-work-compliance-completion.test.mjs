@@ -1,3 +1,5 @@
+import { loadFormJobProgress } from "./helpers/trade-form-job-progress-fixture.mjs";
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { installFieldCorrectionFixture } from "./helpers/activity-field-corrections-fixture.mjs";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
@@ -136,6 +138,7 @@ function loadRoute(db, accessPatch = {}) {
     },
   };
   const require = (specifier) => {
+    if (specifier === "@/lib/trade-form-job-progress") return loadFormJobProgress(db, require);
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
@@ -481,8 +484,17 @@ CREATE TABLE compliance_activity_work_pack_final_records (
       work_pack_version_id text NOT NULL
     );`);
   installCreditexTrainingFixture(database);
+  installEmptyTradeCrews(database);
   const db = testD1(database);
-  return { database, db, route: loadRoute(db, accessPatch) };
+  return { database, db, route: loadRoute(db, accessPatch), progress: loadFormJobProgress(db, specifier => {
+    if (specifier === "@/lib/trade-job-collaboration") return jobCollaboration;
+    if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
+    if (specifier === "@/lib/trade-team-sync-server") return { nextJobRevision: value => Number(value) + 1, jobSyncChangeStatements: () => [] };
+    if (specifier === "@/lib/photo-request-review-server") return { photoRequestProofOverview: async () => ({proofReady: db.photoReady !== false}) };
+    if (specifier === "@/lib/trade-photo-requests") return { normalisePhotoRequirements: value => value };
+    const dependency = certificateTestDependency(specifier); if (dependency) return dependency;
+    throw new Error(`Unexpected progress dependency: ${specifier}`);
+  }) };
 }
 
 function finishRequest(clientActionId) {
@@ -497,6 +509,282 @@ function finishRequest(clientActionId) {
     }),
   });
 }
+
+const progressAccess = { ownerUid: "owner-1", actorUid: "actor-1", memberId: "member-1", isOwner: false,
+  canManageFieldEvidence: true, jobScope: "own" };
+function progressFixture() {
+  const value = fixture();
+  value.database.exec(`ALTER TABLE trade_team_members ADD COLUMN can_manage_field_evidence INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE trade_work_orders ADD COLUMN partner_type TEXT NOT NULL DEFAULT 'installer';
+    UPDATE trade_work_orders SET assignee_member_id='member-1', stage='scheduled';
+    UPDATE trade_crm_appointments SET status='scheduled', work_started_at='';
+    INSERT INTO trade_team_members(id,owner_uid,member_uid,status) VALUES ('member-1','owner-1','actor-1','active'),('member-2','owner-1','actor-2','active');
+    DELETE FROM compliance_evidence_requirements;
+    INSERT INTO trade_job_forms VALUES ('form-1','job-1','owner-1','draft'),('form-2','job-1','owner-1','draft');`);
+  return value;
+}
+
+test("saved form editing starts work without claiming travel or arrival, and timing alone cannot complete", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    const first = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db, startOnly: true, now: "2026-10-02T02:00:00.000Z" });
+    assert.equal(first.stage, "in_progress"); assert.equal(first.changed, true);
+    const visit = database.prepare("SELECT * FROM trade_crm_appointments").get();
+    assert.equal(visit.status, "in_progress"); assert.equal(visit.travel_started_at, ""); assert.equal(visit.arrived_at, "");
+    assert.equal(visit.work_started_at, "2026-10-02T02:00:00.000Z");
+    database.exec("UPDATE trade_job_forms SET status='complete'");
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db, startOnly: true })).stage, "in_progress");
+    assert.equal(database.prepare("SELECT completed_at FROM trade_crm_appointments").get().completed_at, "");
+  } finally { database.close(); }
+});
+
+test("every form on a job must complete before authoritative reconciliation closes the job once", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("UPDATE trade_job_forms SET status='complete' WHERE id='form-1'");
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "in_progress");
+    database.exec("UPDATE trade_job_forms SET status='complete' WHERE id='form-2'");
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "completed");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments").get().status, "completed");
+    assert.equal(database.prepare("SELECT pipeline_stage FROM trade_crm_job_details").get().pipeline_stage, "complete");
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).changed, false);
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events WHERE event_type='job_completed'").get().total, 1);
+  } finally { database.close(); }
+});
+
+for (const [name, create] of [
+  ["task", "INSERT INTO trade_work_order_tasks VALUES ('task-1','job-1','owner-1','pending')"],
+  ["open issue", "INSERT INTO trade_crm_job_notes VALUES ('issue-1','job-1','owner-1','issue','open')"],
+  ["unissued rental", "INSERT INTO trade_rental_inspections VALUES ('rental-1','job-1','owner-1','draft')"],
+  ["work-plan item", "INSERT INTO trade_crm_job_plans VALUES ('plan-1','job-1','owner-1','in_progress','',''); INSERT INTO trade_crm_job_plan_requirements VALUES ('item-1','plan-1','owner-1','required')"],
+  ["governed evidence", "INSERT INTO compliance_evidence_requirements VALUES ('missing','org-1','policy-1',1)"],
+]) test(`automatic completion retains the ${name} blocker`, async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("UPDATE trade_job_forms SET status='complete';" + create);
+    const result = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+    assert.equal(result.stage, "in_progress"); assert.ok(result.blockers.length);
+    assert.equal(database.prepare("SELECT completed_at FROM trade_crm_appointments").get().completed_at, "");
+  } finally { database.close(); }
+});
+
+test("pending customer photo proof prevents automatic completion", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec(`UPDATE trade_job_forms SET status='complete'; INSERT INTO trade_crm_photo_requests VALUES ('photos','job-1','owner-1',1,'[]','active')`);
+    db.photoReady = false;
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "in_progress");
+    db.photoReady = true;
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "completed");
+  } finally { database.close(); }
+});
+
+test("processing or conflicted offline receipts prevent automatic completion", async () => {
+  for (const status of ["processing", "conflict"]) {
+    const { database, db, progress } = progressFixture();
+    try {
+      database.exec("UPDATE trade_job_forms SET status='complete'");
+      database.prepare(`INSERT INTO trade_offline_actions VALUES
+        ('pending','owner-1','actor-1','member-1','device','pending-action','hash','save_job_form','job','job-1',1,2,?,'','','','')`).run(status);
+      assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "in_progress");
+      database.exec("UPDATE trade_offline_actions SET status='applied'");
+      assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "completed");
+    } finally { database.close(); }
+  }
+});
+
+test("planned activity requirements and missing certificate training never silently advance work", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec(`UPDATE trade_job_forms SET status='complete';
+      INSERT INTO trade_work_order_compliance_intents
+        (id,work_order_id,intent_key,installer_uid,compliance_organisation_id,program_template_id,activity_template_id,
+         program_code,registry_activity_code,planned_start,status,intent_snapshot,compliance_case_id,created_at)
+        VALUES ('intent','job-1','intent','owner-1','org-1','sres','sres-ashp','SRES','','','planned','{}','','')`);
+    const result = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+    assert.equal(result.changed, false); assert.ok(result.blockers.length);
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "scheduled");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments").get().status, "scheduled");
+  } finally { database.close(); }
+});
+
+test("assignment and actor revocation during the atomic batch prevent automatic progress", async () => {
+  for (const mutation of ["UPDATE trade_crm_appointments SET assignee_member_id='member-2',revision=revision+1", "UPDATE trade_team_members SET status='inactive' WHERE id='member-1'", "UPDATE trade_team_members SET can_manage_field_evidence=0 WHERE id='member-1'"] ) {
+    const { database, db, progress } = progressFixture();
+    try {
+      database.exec("UPDATE trade_job_forms SET status='complete'");
+      db.setBeforeBatch(() => database.exec(mutation));
+      const result = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+      assert.equal(result.changed, false); assert.equal(result.blockers[0].key, "changed");
+      assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "scheduled");
+      assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events").get().total, 0);
+    } finally { database.close(); }
+  }
+});
+
+test("a concurrent new required form rolls back the completion projection", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("UPDATE trade_job_forms SET status='complete'");
+    db.setBeforeBatch(() => database.exec("INSERT INTO trade_job_forms VALUES ('form-3','job-1','owner-1','draft')"));
+    const result = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+    assert.equal(result.changed, false);
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "scheduled");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments").get().status, "scheduled");
+  } finally { database.close(); }
+});
+
+test("shared jobs finish only the actor's unique visit and wait for other workers", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec(`UPDATE trade_job_forms SET status='complete'; INSERT INTO trade_crm_appointments
+      SELECT 'member-2','Other worker',notes,'appointment-2',work_order_id,firebase_uid,status,starts_at,ends_at,
+        travel_started_at,arrived_at,work_started_at,completed_at,last_transition_by_uid,revision,updated_at FROM trade_crm_appointments`);
+    const first = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+    assert.equal(first.stage, "in_progress");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-1'").get().status, "completed");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-2'").get().status, "scheduled");
+    assert.equal((await progress.reconcileTradeFormJobProgress({ ...progressAccess, memberId: "member-2", actorUid: "actor-2" }, "job-1", { db })).stage, "completed");
+  } finally { database.close(); }
+});
+
+test("an actor retry after another worker completes the last form closes only the actor's pending visit", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec(`INSERT INTO trade_crm_appointments
+      SELECT 'member-2','Other worker',notes,'appointment-2',work_order_id,firebase_uid,status,starts_at,ends_at,
+        travel_started_at,arrived_at,work_started_at,completed_at,last_transition_by_uid,revision,updated_at FROM trade_crm_appointments;
+      UPDATE trade_job_forms SET status='complete' WHERE id='form-1'`);
+    const first = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+    assert.equal(first.stage, "in_progress"); assert.ok(first.blockers.length);
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-1'").get().status, "in_progress");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-2'").get().status, "scheduled");
+
+    database.exec("UPDATE trade_job_forms SET status='complete' WHERE id='form-2'");
+    const second = await progress.reconcileTradeFormJobProgress({ ...progressAccess, memberId: "member-2", actorUid: "actor-2" }, "job-1", { db });
+    assert.equal(second.stage, "in_progress");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment-1'").get().status, "in_progress");
+    const otherVisit = database.prepare("SELECT * FROM trade_crm_appointments WHERE id='appointment-2'").get();
+    assert.equal(otherVisit.status, "completed"); assert.equal(otherVisit.last_transition_by_uid, "actor-2");
+
+    // A persisted completion marker lets this actor's later authenticated heartbeat retry.
+    const retried = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+    assert.equal(retried.stage, "completed");
+    assert.equal(database.prepare("SELECT last_transition_by_uid FROM trade_crm_appointments WHERE id='appointment-1'").get().last_transition_by_uid, "actor-1");
+    assert.deepEqual(database.prepare("SELECT * FROM trade_crm_appointments WHERE id='appointment-2'").get(), otherVisit);
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events WHERE event_type='job_completed'").get().total, 1);
+  } finally { database.close(); }
+});
+
+test("ambiguous actor visits and managers' other-worker visits are never inferred", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec(`UPDATE trade_job_forms SET status='complete'; INSERT INTO trade_crm_appointments
+      SELECT assignee_member_id,assignee_label,notes,'appointment-2',work_order_id,firebase_uid,status,starts_at,ends_at,
+        travel_started_at,arrived_at,work_started_at,completed_at,last_transition_by_uid,revision,updated_at FROM trade_crm_appointments`);
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).blockers[0].key, "visit");
+    database.exec("UPDATE trade_crm_appointments SET assignee_member_id='member-2'");
+    await progress.reconcileTradeFormJobProgress({ ...progressAccess, isOwner: true, jobScope: "team" }, "job-1", { db });
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_crm_appointments WHERE status='scheduled'").get().total, 2);
+  } finally { database.close(); }
+});
+
+test("unscheduled assigned jobs complete only after every form, without requiring a fabricated appointment", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("DELETE FROM trade_crm_appointments; UPDATE trade_job_forms SET status='complete' WHERE id='form-1'");
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "in_progress");
+    database.exec("UPDATE trade_job_forms SET status='complete' WHERE id='form-2'");
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "completed");
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_crm_appointments").get().total, 0);
+  } finally { database.close(); }
+});
+
+test("unscheduled automatic closure excludes another worker's assignment and empty jobs", async () => {
+  for (const mutation of ["UPDATE trade_work_orders SET assignee_member_id='member-2'", "DELETE FROM trade_job_forms"]) {
+    const { database, db, progress } = progressFixture();
+    try {
+      database.exec("DELETE FROM trade_crm_appointments; UPDATE trade_job_forms SET status='complete';" + mutation);
+      const result = await progress.reconcileTradeFormJobProgress({ ...progressAccess, isOwner: true }, "job-1", { db });
+      assert.notEqual(result.stage, "completed");
+      assert.notEqual(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "completed");
+    } finally { database.close(); }
+  }
+});
+
+test("an owner can close an unassigned unscheduled job with completed forms", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("DELETE FROM trade_crm_appointments; UPDATE trade_work_orders SET assignee_member_id=''; UPDATE trade_job_forms SET status='complete'");
+    assert.equal((await progress.reconcileTradeFormJobProgress({ ...progressAccess, isOwner: true }, "job-1", { db })).stage, "completed");
+  } finally { database.close(); }
+});
+
+test("waived work-plan requirements use the persisted not_needed state", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec(`UPDATE trade_job_forms SET status='complete';
+      INSERT INTO trade_crm_job_plans VALUES ('plan','job-1','owner-1','in_progress','','');
+      INSERT INTO trade_crm_job_plan_requirements VALUES ('waived','plan','owner-1','not_needed')`);
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "completed");
+  } finally { database.close(); }
+});
+
+test("a direct case's current work pack blocks closure until its signed final record exists", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec(`UPDATE trade_job_forms SET status='complete';
+      INSERT INTO compliance_activity_work_pack_instances VALUES ('pack','org-1','case-1','job-1','','pack-key','version',1,'in_progress')`);
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "in_progress");
+    database.exec("UPDATE compliance_activity_work_pack_instances SET status='completed'");
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "in_progress");
+    database.exec("INSERT INTO compliance_activity_work_pack_final_records VALUES ('final','org-1','pack-key','pack','version')");
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "completed");
+  } finally { database.close(); }
+});
+
+test("a submitted modern activity form remains a valid alternative to the same case's older work pack", () => {
+  const { database, progress } = progressFixture();
+  try {
+    database.exec(`UPDATE trade_job_forms SET status='complete';
+      INSERT INTO trade_work_order_compliance_intents
+        (id,work_order_id,intent_key,installer_uid,compliance_organisation_id,program_template_id,activity_template_id,
+         program_code,registry_activity_code,planned_start,status,intent_snapshot,compliance_case_id,created_at)
+        VALUES ('intent','job-1','intent','owner-1','org-1','sres','sres-ashp','SRES','','','case_linked','{}','case-1','');
+      UPDATE compliance_cases SET compliance_intent_id='intent' WHERE id='case-1';
+      INSERT INTO compliance_activity_work_pack_instances VALUES ('pack','org-1','case-1','job-1','intent','pack-key','version',1,'in_progress')`);
+    const payload = { id: "modern", intentId: "intent", workOrderId: "job-1", ownerUid: "owner-1", organisationId: "org-1",
+      revision: 1, status: "submitted_for_creditex_review", form: { activityTemplateId: "sres-ashp" } };
+    database.prepare(`INSERT INTO trade_activity_field_records
+      (id,intent_id,work_order_id,owner_uid,organisation_id,activity_template_id,revision,status,payload,pdf_object_key,pdf_sha256,actor_uid,created_at,updated_at,submitted_at)
+      VALUES ('modern','intent','job-1','owner-1','org-1','sres-ashp',1,'submitted_for_creditex_review',?,'signed.pdf',?,'actor-1','now','now','now')`)
+      .run(JSON.stringify(payload), "a".repeat(64));
+    const guard = progress.fieldCompletionGuard("owner-1", "job-1", { guard: { kind: "none" } });
+    assert.equal(database.prepare(`SELECT 1 ready WHERE ${guard.sql}`).get(...guard.values).ready, 1);
+  } finally { database.close(); }
+});
+
+test("the existing issued-rental exception can close a job while retaining ended appointments", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec(`UPDATE trade_job_forms SET status='complete'; UPDATE trade_crm_appointments SET status='cancelled';
+      INSERT INTO trade_rental_inspections VALUES ('issued','job-1','owner-1','issued')`);
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "completed");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments").get().status, "cancelled");
+  } finally { database.close(); }
+});
+
+test("a failed post-save projection is explicitly pending while strict durable retries still fail", async (t) => {
+  const { database, progress } = progressFixture();
+  try {
+    t.mock.method(console, "error", () => {});
+    const offline = { prepare() { throw new Error("Database temporarily unavailable"); } };
+    const result = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db: offline, afterSave: true });
+    assert.equal(result.pending, true); assert.equal(result.changed, false); assert.equal(result.stage, "");
+    assert.equal(result.blockers[0].key, "job_progress_pending");
+    await assert.rejects(progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db: offline }), /temporarily unavailable/);
+  } finally { database.close(); }
+});
 
 function jobState(database) {
   return {

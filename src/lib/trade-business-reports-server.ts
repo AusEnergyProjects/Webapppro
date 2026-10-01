@@ -3,7 +3,8 @@ import { addReportDays, ReportInputError, reportTrendWindows, resolveReportPerio
 import { australiaLocalDateTime } from "./trade-schedule.ts";
 import { jobMemberSql } from "./trade-job-collaboration.ts";
 
-export type ReportAccess = { isOwner: boolean; memberId: string; jobScope: string; scheduleScope: string; canViewInvoices: boolean; canViewQuotes: boolean; canViewPriceBook?: boolean };
+export type ReportAccess = { isOwner: boolean; memberId: string; jobScope: string; scheduleScope: string; canViewInvoices: boolean; canViewQuotes: boolean; canViewPriceBook?: boolean;
+  crewId?: string; crewLead?: boolean; crewMemberIds?: string[] };
 type Row = Record<string, unknown>;
 const number = (value: unknown) => Number(value || 0);
 const ISSUED = "('issued','part_credited','credited')";

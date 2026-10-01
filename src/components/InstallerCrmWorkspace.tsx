@@ -1,6 +1,7 @@
 "use client";
 
 import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useJobTimeTracking } from "./TradeWorkTimeTracking";
 
 import { TradeInvoicePaymentDialog } from "./TradeInvoicePaymentDialog";
 import { JobRegisterScroll } from "./JobRegisterScroll";
@@ -1120,7 +1121,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     const archived = job.recordStatus === "archived";
     const selfMemberId = teamMembers.find((member) => member.isSelf)?.id || "";
     const canOpenScheduleAction = !staffPermissions || staffPermissions.canAssignJobs
-      || staffPermissions.scheduleScope === "team" || job.assigneeMemberId === selfMemberId
+      || staffPermissions.scheduleScope === "team" || staffPermissions.crewLead === true || job.assigneeMemberId === selfMemberId
       || job.appointments.some((appointment) => appointment.assigneeMemberId === selfMemberId);
     return <div className={registerStyles.actions} onPointerDown={(event) => event.stopPropagation()}>
       <button type="button" data-job-action-trigger={job.id} className={registerStyles.actionTrigger} aria-label={`Actions for ${job.workNumber}`} aria-haspopup="menu" aria-expanded={open} onClick={(event) => {
@@ -1717,6 +1718,7 @@ function CrmAddressFields({ user, initialValue }: { user: User; initialValue?: C
 }
 
 function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamMembers, permissions, initialTab = "summary", onEditPayment, onCrm, onWorkOrder, onOpenJob, onOpenPriceBook, onOpenCustomer, onOpenIntegrations, onReload }: { job: Job; customer?: Customer; sites: ServiceSite[]; user: User; busy: string; refreshing?: boolean; teamMembers: TeamMember[]; permissions?: TradeTeamPermissions; initialTab?: JobTab; onEditPayment: () => void; onCrm: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onWorkOrder: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onOpenJob: (workOrderId: string) => void; onOpenPriceBook: () => void; onOpenCustomer: (customerId: string) => void; onOpenIntegrations: () => void; onReload: () => Promise<void> }) {
+  useJobTimeTracking(job.id);
   const fetch = useTradeBusinessFetch();
   const activeJobAppointmentKey = job.appointments
     .filter((item) => ["scheduled", "en_route", "arrived", "in_progress"].includes(item.status))
@@ -1811,7 +1813,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   }
   async function addNote(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!canManageJobs) return; const form = event.currentTarget; const data = new FormData(form); if (await onCrm("POST", { action: "create_note", workOrderId: job.id, noteType: data.get("noteType"), body: data.get("body") }, `note:${job.id}`, "Job note added.")) form.reset(); }
   const selfMember = teamMembers.find((member) => member.isSelf);
-  const canViewTeamSchedule = !permissions || permissions.scheduleScope === "team";
+  const canViewTeamSchedule = !permissions || permissions.scheduleScope === "team" || permissions.crewLead === true;
   const jobReadyForScheduling = !isImported && job.scheduleReady;
   const visibleJobAppointments = canViewTeamSchedule
     ? job.appointments
@@ -1962,7 +1964,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
           } else setTab(next);
         }} onChanged={refreshJobFiles} /></details>
         {!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary" open={photoRequestOpen} onToggle={(event) => setPhotoRequestOpen(event.currentTarget.open)}><summary>Request customer photos</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}
-        {!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan"><summary>Work plan and actuals</summary><TradeJobReadinessPanel key={job.id} user={user} workOrderId={job.id} completionAction={false} onChanged={onReload} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} /></details>}
+        {!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan"><summary>Work plan and actuals</summary><TradeJobReadinessPanel key={job.id} user={user} workOrderId={job.id} onChanged={onReload} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} /></details>}
       </>}
     </section>}
     {activeTab === "review" && canManageJobs && canViewFieldEvidence && canManageFieldEvidence && <section className="crm-job-section" aria-label="Business job review"><TradeJobReviewPanel user={user} workOrderId={job.id} onChanged={onReload} /><TradeJobFilesPanel user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} /></section>}

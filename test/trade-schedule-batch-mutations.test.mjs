@@ -1,4 +1,5 @@
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
+import * as crews from "../src/lib/trade-crews.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -75,7 +76,7 @@ function loadTypescriptModule(path, mocks = {}) {
     fileName: path,
   }).outputText;
   const moduleRecord = { exports: {} };
-  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : (specifier.includes("trade-job-collaboration") ? jobCollaboration : certificateTestDependency(specifier)) || {};
+  const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier] : (specifier.includes("trade-crews") ? crews : specifier.includes("trade-job-collaboration") ? jobCollaboration : certificateTestDependency(specifier)) || {};
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
@@ -212,6 +213,11 @@ function fixture() {
         'member-a', 'Worker A', 'scheduled', 'Call on arrival', 1, '2026-01-01', '2026-01-01');
   `);
   installCreditexTrainingFixture(database);
+  const crewMigration = read('../drizzle/0231_trade_crews.sql');
+  const memberColumns = new Set(database.prepare('PRAGMA table_info(trade_team_members)').all().map(row => row.name));
+  for (const name of ['job_scope','schedule_scope']) if (!memberColumns.has(name)) database.exec(`ALTER TABLE trade_team_members ADD COLUMN ${name} TEXT DEFAULT 'own'`);
+  for (const name of new Set(crewMigration.match(/\bcan_[a-z_]+/g))) if (!memberColumns.has(name)) database.exec(`ALTER TABLE trade_team_members ADD COLUMN ${name} INTEGER DEFAULT 0`);
+  database.exec(crewMigration);
   return { database, d1: testD1(database) };
 }
 
@@ -302,6 +308,92 @@ const swappedChanges = [
   { appointmentId: "appointment-a", expectedRevision: 1, memberId: "member-a", startsAt: "2099-01-05T11:00", durationMinutes: 60 },
   { appointmentId: "appointment-b", expectedRevision: 1, memberId: "member-a", startsAt: "2099-01-05T10:00", durationMinutes: 60 },
 ];
+
+function crewFixture() {
+  const value = fixture();
+  value.database.exec(`
+    INSERT INTO trade_team_members(id,owner_uid,member_uid,email,display_name,capabilities,schedule_colour,status)
+      VALUES ('member-c','owner-1','actor-c','c@example.test','Worker C','["hot-water"]','#333333','active');
+    INSERT INTO trade_crews VALUES ('crew-a','owner-1','Crew A','Company A','member-a',1,'now','now');
+    INSERT INTO trade_crew_members VALUES ('owner-1','crew-a','member-a','now'),('owner-1','crew-a','member-b','now');
+    UPDATE trade_crm_appointments SET assignee_member_id='member-b',assignee_label='Worker B' WHERE id='appointment-b';
+    UPDATE trade_work_orders SET assignee_member_id='member-b',assignee_label='Worker B' WHERE id='job-b';
+  `);
+  return { ...value, access: { ...ownerAccess(), isOwner: false, actorUid: 'actor-a',
+    canManageTeam: false, canViewCustomers: false, canViewQuotes: false, jobScope: 'own', scheduleScope: 'own',
+    crewId: 'crew-a', crewLead: true, crewMemberIds: ['member-a','member-b'] } };
+}
+
+test('crew schedule reads include active crew work and capacity without other workers, unassigned jobs or protected details', async t => {
+  const f = crewFixture(); t.after(() => f.database.close());
+  f.database.exec(`
+    INSERT INTO trade_crm_appointments SELECT 'outside-crew',work_order_id,firebase_uid,appointment_type,title,starts_at,ends_at,
+      'member-c','Worker C',status,notes,revision,created_at,updated_at FROM trade_crm_appointments WHERE id='appointment-a';
+    INSERT INTO trade_crm_appointments SELECT 'foreign-owner',work_order_id,'foreign',appointment_type,title,starts_at,ends_at,
+      assignee_member_id,assignee_label,status,notes,revision,created_at,updated_at FROM trade_crm_appointments WHERE id='appointment-a';
+    INSERT INTO trade_team_unavailability VALUES
+      ('crew-leave','owner-1','member-b','2099-01-06T09:00','2099-01-06T10:00','Medical appointment','actor-b','now','now'),
+      ('outside-leave','owner-1','member-c','2099-01-06T09:00','2099-01-06T10:00','Private reason','actor-c','now','now');
+  `);
+  const request = () => new Request('https://example.test/api/trade-schedule?weekStart=2099-01-05');
+  const response = await scheduleRoute(f.d1, [], [], f.access).GET(request());
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result.appointments.map(item => item.id).sort(), ['appointment-a','appointment-b']);
+  assert.deepEqual(result.members.map(item => item.id).sort(), ['member-a','member-b']);
+  assert.deepEqual(result.availabilityMembers.map(item => item.id), ['member-a']);
+  assert.deepEqual(result.unavailability.map(item => [item.id,item.reason]), [['crew-leave','Unavailable']]);
+  assert.deepEqual(result.unassignedJobs, []);
+  const crewVisit = result.appointments.find(item => item.id === 'appointment-b');
+  assert.equal(crewVisit.addressLine1, '2 Beta Street'); assert.equal(crewVisit.notes, 'Call on arrival');
+  assert.equal(crewVisit.customerEmail, ''); assert.equal(crewVisit.quotedValueCents, 0);
+  f.database.exec("UPDATE trade_crm_job_details SET customer_source='platform_private' WHERE work_order_id='job-b'");
+  const protectedVisit = (await (await scheduleRoute(f.d1, [], [], f.access).GET(request())).json()).appointments.find(item => item.id === 'appointment-b');
+  assert.equal(protectedVisit.addressLine1, ''); assert.equal(protectedVisit.notes, '');
+  const worker = (await (await scheduleRoute(f.d1, [], [], { ...f.access, crewLead: false, crewMemberIds: ['member-a'] }).GET(request())).json());
+  assert.deepEqual(worker.appointments.map(item => item.id), ['appointment-a']);
+  const owner = await (await scheduleRoute(f.d1).GET(request())).json();
+  assert.equal(owner.appointments.length, 3);
+});
+
+test('crew dispatch permits own crew targets and rejects cross-crew sources, targets and ordinary crew workers', async t => {
+  for (const mode of ['allowed','target','source','worker','unassigned']) {
+    const f = crewFixture(); t.after(() => f.database.close());
+    if (mode === 'source') f.database.exec("UPDATE trade_crm_appointments SET assignee_member_id='member-c' WHERE id='appointment-a'");
+    if (mode === 'unassigned') f.database.exec("UPDATE trade_work_orders SET assignee_member_id='' WHERE id='job-a'");
+    const access = mode === 'worker' ? { ...f.access, crewLead: false, crewMemberIds: ['member-a'] } : f.access;
+    const notifications = []; const synced = [];
+    const request = mode === 'unassigned' ? scheduleMutationRequest({ action: 'schedule_job', workOrderId: 'job-a',
+      expectedRevision: f.database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-a'").get().revision,
+      memberId: 'member-b', startsAt: '2099-01-06T10:00', durationMinutes: 60 }) : batchRequest([
+      { ...swappedChanges[0], memberId: mode === 'target' ? 'member-c' : 'member-b' },
+    ]);
+    const response = await scheduleRoute(f.d1, notifications, synced, access).PATCH(request);
+    assert.equal(response.status, mode === 'allowed' ? 200 : 403, `${mode}: ${JSON.stringify(await response.clone().json())}`);
+    assert.equal(f.database.prepare("SELECT revision FROM trade_crm_appointments WHERE id='appointment-a'").get().revision, mode === 'allowed' ? 2 : 1);
+    if (mode !== 'allowed') { assert.equal(notifications.length, 0); assert.equal(synced.length, 0); }
+  }
+});
+
+test('crew dispatch rolls back when actor authority or source and target membership changes before commit', async t => {
+  for (const mutation of [
+    "DELETE FROM trade_crew_members WHERE member_id='member-a'",
+    "DELETE FROM trade_crew_members WHERE member_id='member-b'",
+    "UPDATE trade_team_members SET status='suspended' WHERE id='member-a'",
+    "UPDATE trade_team_members SET status='suspended' WHERE id='member-b'",
+    "UPDATE trade_crews SET lead_member_id='member-b' WHERE id='crew-a'",
+    "DELETE FROM trade_crews WHERE id='crew-a'",
+  ]) {
+    const f = crewFixture(); t.after(() => f.database.close());
+    f.d1.setBeforeBatch(() => f.database.exec(mutation));
+    const notifications = []; const synced = [];
+    const response = await scheduleRoute(f.d1, notifications, synced, f.access).PATCH(batchRequest([{ ...swappedChanges[0], memberId: 'member-b' }]));
+    assert.equal(response.status, 409, `${mutation}: ${JSON.stringify(await response.clone().json())}`);
+    assert.equal(f.database.prepare("SELECT revision FROM trade_crm_appointments WHERE id='appointment-a'").get().revision, 1);
+    assert.equal(f.database.prepare('SELECT count(*) count FROM trade_crm_appointment_revisions').get().count, 0);
+    assert.equal(notifications.length, 0); assert.equal(synced.length, 0);
+  }
+});
 
 function attachCertificateIntent(database, activityTemplateId = 'veu-1') {
   database.prepare(`INSERT INTO trade_work_order_compliance_intents
@@ -662,7 +754,7 @@ test('mobile rescheduling preserves every selected weekday and uses its containi
       const route=loadTypescriptModule('../src/app/api/field/appointment-actions/route.ts', {
         '../../../../../db':{getD1:()=>d1},
         '@/lib/admin-server':{ mfaErrorResponse,sameOrigin:()=>true,cleanAdminText:(value,max)=>String(value||'').trim().slice(0,max),adminJson:(body,status=200)=>Response.json(body,{status})},
-        '@/lib/trade-team-server':{requireInstallerTeamAccess:async()=>access,assignedJob:teams.assignedJob},
+        '@/lib/trade-team-server':{requireInstallerTeamAccess:async()=>access,assignedJob:teams.assignedJob,canAssignJob:canAssignWithinScope},
         '@/lib/trade-team-permission-policy.mjs':{canRescheduleWithinScope},
         '@/lib/trade-schedule':loadTypescriptModule('../src/lib/trade-schedule.ts'),
         '@/lib/trade-rental-credentials':loadTypescriptModule('../src/lib/trade-rental-credentials.ts'),

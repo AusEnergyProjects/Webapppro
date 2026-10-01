@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from './helpers/trade-crews-fixture.mjs';
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -12,7 +13,7 @@ const NOW='2026-09-25T06:00:00.000Z',SHA='a'.repeat(64);
 const trade={kind:'trade',uid:'manager',access:{ownerUid:'owner',actorUid:'manager',isOwner:true,jobScope:'team',canManageJobs:true,canManageFieldEvidence:true,canViewFieldEvidence:true}};
 const admin={kind:'compliance',uid:'creditex',organisationId:'org',role:'admin'};
 function fixture(t){
- const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());sqlite.exec(`PRAGMA foreign_keys=ON;
+ const sqlite=new DatabaseSync(':memory:');installEmptyTradeCrews(sqlite);t.after(()=>sqlite.close());sqlite.exec(`PRAGMA foreign_keys=ON;
  CREATE TABLE trade_work_orders(id TEXT PRIMARY KEY,firebase_uid TEXT,partner_type TEXT,work_number TEXT,title TEXT,stage TEXT,record_status TEXT,revision INTEGER,assignee_member_id TEXT,updated_at TEXT);
  CREATE TABLE trade_accounts(firebase_uid TEXT,business_name TEXT);
  CREATE TABLE trade_team_members(id TEXT,owner_uid TEXT,email TEXT,display_name TEXT,status TEXT);

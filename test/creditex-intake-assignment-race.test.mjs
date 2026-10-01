@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
 import { jobMemberSql } from '../src/lib/trade-job-collaboration.ts';
+import { installEmptyTradeCrews } from './helpers/trade-crews-fixture.mjs';
 
 const route = fs.readFileSync(new URL('../src/app/api/trade-compliance/route.ts', import.meta.url), 'utf8');
 const guard = route.match(/statements\.push\(creditexWriteGuard\(database, access\.identity\.uid,\s*`([^`]+)`/);
@@ -20,6 +21,8 @@ test(`${name} rolls back if assignment or job revision changes after the trainin
     const database = new DatabaseSync(':memory:');
     try {
       installCreditexTrainingFixture(database, { qualified: false });
+      installEmptyTradeCrews(database);
+      database.exec('CREATE TABLE IF NOT EXISTS trade_team_members(id TEXT,owner_uid TEXT,status TEXT)');
       database.exec(`CREATE TABLE trade_work_orders(id TEXT,firebase_uid TEXT,assignee_member_id TEXT,revision INTEGER,record_status TEXT,stage TEXT);
         CREATE TABLE trade_crm_appointments(id TEXT,work_order_id TEXT,firebase_uid TEXT,assignee_member_id TEXT,status TEXT);
         CREATE TABLE created_cases(id TEXT);

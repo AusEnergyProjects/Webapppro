@@ -165,7 +165,7 @@ test('editing one property answer retains only dirty fields, without hidden prof
   const compiled = ts.transpileModule(`export ${implementation.trim()}`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
-  const environment = { active: { id: 'module' }, answers: { assessorName: 'From Team', address: 'Saved address' },
+  const environment = { timing: { activity() {} }, active: { id: 'module' }, answers: { assessorName: 'From Team', address: 'Saved address' },
     cacheRef: { current: { drafts: {}, answers: { module: { areasNotAccessed: 'Garage' } } } }, setCache() {} };
   new Function('environment', `with (environment) { const exports = {}; ${compiled}; exports.changeAnswer('inspectionDate', '2026-09-09'); }`)(environment);
   assert.deepEqual(environment.cacheRef.current.answers.module, { areasNotAccessed: 'Garage', inspectionDate: '2026-09-09' });
@@ -372,6 +372,7 @@ test('old metadata snapshots hide automatic date and profile details and save on
 test('finish confirms once, queues delivery without waiting for evidence and stays on the result screen', async () => {
   const env = { active: { id: 'module', status: 'draft', revision: 3, answers: {} }, pendingSaves: [{ id: 'fifty-photos' }], saves: [], activeHasDraft: false,
     canEmailReport: false, issueReport: true, credentialConfirmation: undefined,
+    timing: { markCompleted() { assert.ok(env.queued, 'Completion follows durable queue success'); env.timingCompleted = true; } },
     data: { items: [], completion: { module: { complete: false, blockers: [{ key: 'metadata:assessorDeclaration', label: 'Confirm assessment' }] } } },
     cache: { answers: { module: { coverageConfirmed: true, assessorDeclaration: true, credentialConfirmed: false } } }, completionBlockers: [], rentalCompletionTarget, calls: [], finishRequest: undefined, earlierDrafts: [], sections: [], workOrderId: 'job',
     setError(message) { env.message = message; }, perform: async (_name, action) => action(), persist: async () => {},
@@ -382,7 +383,7 @@ test('finish confirms once, queues delivery without waiting for evidence and sta
   const finish = mountedHandler('finishAssessment', 'previous', env);
   await finish(); assert.match(env.message, /complete and accurate/); assert.equal(env.queued, undefined);
   await env.confirm(); await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(env.queued.module.id, 'module'); assert.equal(env.left, undefined); assert.equal(env.page, 'review'); assert.deepEqual(env.calls, []);
+  assert.equal(env.timingCompleted, true); assert.equal(env.queued.module.id, 'module'); assert.equal(env.left, undefined); assert.equal(env.page, 'review'); assert.deepEqual(env.calls, []);
 });
 
 test('an older future-shower blocker opens the single visible shower check', () => {
@@ -490,6 +491,7 @@ test('each optional module confirms its own credential and finishes without prom
   for (const key of ['electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check']) {
     const env = { active: { id: key, key, title: key, answers: {} }, pendingSaves: [], saves: [], activeHasDraft: false, canEmailReport: false, issueReport: false,
       credentialConfirmation: { label: 'I confirm my qualification details are current and accurate' },
+      timing: { markCompleted() { assert.fail('An intermediate module does not complete the whole form'); } },
       data: {}, cache: { answers: {} }, completionBlockers: [], finishRequest: undefined, earlierDrafts: [], workOrderId: 'job',
       setError() {}, perform: async (_name, action) => action(), persist: async () => {}, onChanged: async () => {},
       enqueueRentalFinish: async (input) => { env.queued = input; return { id: 'finish' }; }, setSaves() {}, setPage(page) { env.page = page; },

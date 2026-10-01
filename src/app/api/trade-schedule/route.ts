@@ -15,6 +15,7 @@ import {
   previousTradeScheduleMutationGuardStatement,
 } from "@/lib/trade-compliance-intent-replan-server";
 import { canRescheduleWithinScope } from "@/lib/trade-team-permission-policy.mjs";
+import { canAccessCrewMember, crewMutationGuard, crewScheduleMemberIds } from "@/lib/trade-crews";
 import {
   assertTradeJobReadyForScheduling,
   assertTradeScheduleAvailable,
@@ -90,7 +91,8 @@ function parsedCapabilities(value: unknown) {
 }
 
 function assertScheduleTarget(access: TeamAccess, memberId: string) {
-  if (!access.isOwner && access.scheduleScope === "own" && memberId !== access.memberId) {
+  const memberIds = crewScheduleMemberIds(access);
+  if (memberIds && !memberIds.includes(memberId)) {
     throw new Error("RESCHEDULE_REQUIRED");
   }
 }
@@ -102,6 +104,15 @@ function assertCurrentScheduleAssignment(access: TeamAccess, memberId: string) {
 function assertAssignmentChange(access: TeamAccess, fromMemberId: string, toMemberId: string) {
   if (fromMemberId === toMemberId) return;
   if (!canAssignJob(access, fromMemberId, toMemberId)) throw new Error("ASSIGN_REQUIRED");
+}
+
+function crewScheduleGuardStatements(db: D1Database, access: TeamAccess, memberIds: string[], changedAt: string) {
+  if (access.isOwner || !access.crewId) return [];
+  const guard = crewMutationGuard(access, memberIds);
+  return [db.prepare(`INSERT INTO trade_crm_write_guards
+    (id, firebase_uid, operation_id, step_number, verified, created_at)
+    VALUES (?, ?, ?, 1, CASE WHEN ${guard.sql} THEN 1 ELSE 0 END, ?)`)
+    .bind(crypto.randomUUID(), access.ownerUid, `crew-schedule:${crypto.randomUUID()}`, ...guard.bindings, changedAt)];
 }
 
 function assertMemberCapability(member: Record<string, unknown>, serviceCategory: string, ownerUid: string) {
@@ -135,20 +146,24 @@ function scheduleMemberGuardStatement(
 
 async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeeks = 1) {
   const db = getD1(); const ownerUid = access.ownerUid;
-  const ownOnly = !access.isOwner && access.scheduleScope === "own";
+  const scheduleMemberIds = crewScheduleMemberIds(access);
+  const ownOnly = scheduleMemberIds !== null;
+  const scheduleMembersJson = JSON.stringify(scheduleMemberIds || []);
   const availabilityOwnOnly = !access.isOwner && !access.canManageTeam;
+  const capacityMemberIds = access.crewId ? scheduleMemberIds : availabilityOwnOnly ? [access.memberId] : null;
+  const capacityMembersJson = JSON.stringify(capacityMemberIds || []);
   const rangeEnd = addCalendarDays(rangeStart, normaliseScheduleRangeWeeks(rangeWeeks) * 7);
   const [members, availabilityMembers, hours, unavailable, appointmentRows, unassignedJobs, rescheduleRows] = await Promise.all([
     db.prepare(`SELECT id, member_uid, display_name, status, schedule_colour FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
-      AND (? = 0 OR id = ?) ORDER BY display_name, email`).bind(ownerUid, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
+      AND (? = 0 OR id IN (SELECT value FROM json_each(?))) ORDER BY display_name, email`).bind(ownerUid, ownOnly ? 1 : 0, scheduleMembersJson).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, member_uid, display_name, status, schedule_colour FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
       AND (? = 0 OR id = ?) ORDER BY display_name, email`).bind(ownerUid, availabilityOwnOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, team_member_id, weekday, start_minute, end_minute, is_available FROM trade_team_working_hours
-      WHERE owner_uid = ? AND (? = 0 OR team_member_id = ?) ORDER BY team_member_id, weekday`)
-      .bind(ownerUid, availabilityOwnOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
+      WHERE owner_uid = ? AND (? = 0 OR team_member_id IN (SELECT value FROM json_each(?))) ORDER BY team_member_id, weekday`)
+      .bind(ownerUid, capacityMemberIds ? 1 : 0, capacityMembersJson).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, team_member_id, starts_at, ends_at, reason FROM trade_team_unavailability
-      WHERE owner_uid = ? AND (? = 0 OR team_member_id = ?) AND starts_at < ? AND ends_at >= ? ORDER BY starts_at`)
-      .bind(ownerUid, availabilityOwnOnly ? 1 : 0, access.memberId, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
+      WHERE owner_uid = ? AND (? = 0 OR team_member_id IN (SELECT value FROM json_each(?))) AND starts_at < ? AND ends_at >= ? ORDER BY starts_at`)
+      .bind(ownerUid, capacityMemberIds ? 1 : 0, capacityMembersJson, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
     db.prepare(`SELECT a.id, a.work_order_id, a.appointment_type, a.title, a.starts_at, a.ends_at, a.assignee_member_id,
         a.assignee_label, a.status, a.notes, a.revision, w.work_number, w.service_category, w.site_area, w.source_type,
         d.customer_source, d.quote_status, d.quoted_value_cents, c.first_name customer_first_name, c.last_name customer_last_name,
@@ -160,9 +175,9 @@ async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeek
       LEFT JOIN trade_crm_service_sites s ON s.id = d.service_site_id AND s.firebase_uid = w.firebase_uid
       WHERE a.firebase_uid = ? AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
         AND w.stage <> 'cancelled' AND COALESCE(d.pipeline_stage, '') <> 'lost' AND a.starts_at < ?
-        AND COALESCE(NULLIF(a.ends_at, ''), a.starts_at) >= ? AND (? = 0 OR a.assignee_member_id = ?)
+        AND COALESCE(NULLIF(a.ends_at, ''), a.starts_at) >= ? AND (? = 0 OR a.assignee_member_id IN (SELECT value FROM json_each(?)))
       ORDER BY a.starts_at, a.created_at`)
-      .bind(ownerUid, `${rangeEnd}T00:00`, `${rangeStart}T00:00`, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
+      .bind(ownerUid, `${rangeEnd}T00:00`, `${rangeStart}T00:00`, ownOnly ? 1 : 0, scheduleMembersJson).all<Record<string, unknown>>(),
     (!access.canAssignJobs || ownOnly) ? Promise.resolve({ results: [] as Record<string, unknown>[] }) : db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.priority, w.stage, w.revision, w.source_type,
         w.assignee_member_id, w.assignee_label,
         d.customer_source, c.first_name customer_first_name, c.last_name customer_last_name,
@@ -189,8 +204,8 @@ async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeek
       JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       WHERE r.firebase_uid = ? AND r.status IN ('pending', 'alternative_proposed')
-        AND (? = 0 OR a.assignee_member_id = ?)
-      ORDER BY r.requested_at LIMIT 100`).bind(ownerUid, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
+        AND (? = 0 OR a.assignee_member_id IN (SELECT value FROM json_each(?)))
+      ORDER BY r.requested_at LIMIT 100`).bind(ownerUid, ownOnly ? 1 : 0, scheduleMembersJson).all<Record<string, unknown>>(),
   ]);
   const workingHours = hours.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, weekday: Number(row.weekday), startMinute: Number(row.start_minute), endMinute: Number(row.end_minute), isAvailable: Boolean(row.is_available) }));
   const conflictIds = scheduleConflictIds(appointmentRows.results.filter((row) => row.status !== "completed").map((row) => ({
@@ -209,7 +224,8 @@ async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeek
         ? String(row.customer_business_name || "").trim() || [row.customer_first_name, row.customer_last_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ") || "Customer"
         : "No customer linked";
     const suburbLabel = protectedJob ? String(row.site_area || "Protected service region") : String(row.suburb || row.site_area || "Suburb not recorded");
-    const assignedViewer = !access.isOwner && String(row.assignee_member_id || "") === access.memberId;
+    const assignedViewer = !access.isOwner && (String(row.assignee_member_id || "") === access.memberId
+      || Boolean(access.crewId && canAccessCrewMember(access, String(row.assignee_member_id || ""))));
     const canSeeOperationalDetails = !protectedJob && (access.isOwner || access.jobScope === "team" || assignedViewer);
     const canSeeCustomerContact = !protectedJob && (access.isOwner || access.canViewCustomers);
     return { id: row.id, workOrderId: row.work_order_id, workNumber: row.work_number,
@@ -233,13 +249,14 @@ async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeek
   return { weekStart: rangeStart, weekEnd: rangeEnd, rangeStart, rangeEnd, rangeWeeks,
     access: { memberId: access.memberId, isOwner: access.isOwner,
       permissions: { canAssignJobs: access.canAssignJobs, canRescheduleJobs: access.canRescheduleJobs,
-        canManageTeam: access.canManageTeam, jobScope: access.jobScope, scheduleScope: access.scheduleScope } },
+        canManageTeam: access.canManageTeam, jobScope: access.jobScope, scheduleScope: access.scheduleScope, crewLead: access.crewLead } },
     members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, status: row.status,
       scheduleColour: row.schedule_colour, isOwner: row.member_uid === ownerUid })),
     availabilityMembers: availabilityMembers.results.map((row) => ({ id: row.id, displayName: row.display_name, status: row.status,
       scheduleColour: row.schedule_colour, isOwner: row.member_uid === ownerUid })),
     workingHours,
-    unavailability: unavailable.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, startsAt: row.starts_at, endsAt: row.ends_at, reason: row.reason })),
+    unavailability: unavailable.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, startsAt: row.starts_at, endsAt: row.ends_at,
+      reason: availabilityOwnOnly && row.team_member_id !== access.memberId ? "Unavailable" : row.reason })),
     appointments, rescheduleRequests: rescheduleRows.results.map((row) => { const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private"; return ({ id: row.id, appointmentId: row.appointment_id,
       workOrderId: row.work_order_id, workNumber: row.work_number,
       title: protectedJob ? "Appointment change request" : row.title, status: row.status,
@@ -283,7 +300,7 @@ export async function PATCH(request: Request) {
     const body = await request.json() as Record<string, unknown>; const action = cleanAdminText(body.action, 40); const db = getD1(); const now = new Date().toISOString();
     const availabilityAction = ["save_working_hours", "add_unavailability", "remove_unavailability"].includes(action);
     if (!availabilityAction && !access.isOwner && !access.canRescheduleJobs) throw new Error("RESCHEDULE_REQUIRED");
-    const ownOnly = !access.isOwner && access.scheduleScope === "own";
+    const scheduleMemberIds = crewScheduleMemberIds(access);
     const rangeStart = normaliseWeekStart(body.rangeStart || body.weekStart); const rangeWeeks = normaliseScheduleRangeWeeks(body.rangeWeeks, 1);
     const account = await db.prepare("SELECT address_state FROM trade_accounts WHERE firebase_uid = ?").bind(access.ownerUid).first<Record<string, unknown>>();
     const localNow = australiaLocalDateTime(String(account?.address_state || "NSW"));
@@ -332,15 +349,16 @@ export async function PATCH(request: Request) {
       const requestRevision = Number(current.revision) + 1; const decisionNote = cleanAdminText(body.decisionNote, 500);
       if (decision === "rejected") {
         await db.batch([
+          ...crewScheduleGuardStatements(db, access, [String(current.current_assignee_member_id || "")], now),
           db.prepare(`UPDATE trade_crm_appointment_reschedule_requests SET status = 'rejected', active_key = ?,
             decision_note = ?, revision = ?, decided_by_uid = ?, decided_at = ?, updated_at = ?
             WHERE id = ? AND firebase_uid = ? AND revision = ?
               AND (? = 0 OR EXISTS (SELECT 1 FROM trade_crm_appointments current_appointment
                 WHERE current_appointment.id = trade_crm_appointment_reschedule_requests.appointment_id
                   AND current_appointment.firebase_uid = trade_crm_appointment_reschedule_requests.firebase_uid
-                  AND current_appointment.assignee_member_id = ?))`).bind(
+                  AND current_appointment.assignee_member_id IN (SELECT value FROM json_each(?))))`).bind(
               `closed:${requestId}`, decisionNote, requestRevision, access.actorUid, now, now, requestId, access.ownerUid, current.revision,
-              ownOnly ? 1 : 0, access.memberId),
+              scheduleMemberIds ? 1 : 0, JSON.stringify(scheduleMemberIds || [])),
           db.prepare(`INSERT INTO trade_crm_appointment_reschedule_events
             (id, request_id, appointment_id, work_order_id, firebase_uid, actor_type, actor_uid, event_type,
              request_revision, from_starts_at, from_ends_at, summary, created_at)
@@ -363,6 +381,7 @@ export async function PATCH(request: Request) {
         await assertTradeScheduleAvailable({ ownerUid: access.ownerUid, memberId, startsAt, endsAt });
         if (decision === "alternative_proposed") {
           await db.batch([
+            ...crewScheduleGuardStatements(db, access, [String(current.current_assignee_member_id || ""), memberId], now),
             db.prepare(`UPDATE trade_crm_appointment_reschedule_requests SET status = 'alternative_proposed',
               proposed_starts_at = ?, proposed_ends_at = ?, proposed_assignee_member_id = ?, proposed_assignee_label = ?,
               decision_note = ?, revision = ?, decided_by_uid = ?, decided_at = ?, updated_at = ?
@@ -399,6 +418,7 @@ export async function PATCH(request: Request) {
             workOrderId: String(current.work_order_id),
           }) : [];
           await db.batch([
+            ...crewScheduleGuardStatements(db, access, [String(current.current_assignee_member_id || ""), memberId], now),
             ...complianceIntentStatements,
             db.prepare(`INSERT OR IGNORE INTO trade_crm_appointment_revisions
               (id, appointment_id, work_order_id, firebase_uid, revision, starts_at, ends_at, assignee_member_id,
@@ -573,7 +593,8 @@ export async function PATCH(request: Request) {
         });
       }
       const batchReference = crypto.randomUUID();
-      const statements: D1PreparedStatement[] = [];
+      const statements: D1PreparedStatement[] = crewScheduleGuardStatements(db, access,
+        prepared.flatMap(item => [String(item.current.assignee_member_id || ""), item.memberId]), now);
       const jobChanges = new Map<string, typeof prepared>();
       for (const item of prepared) {
         const id = String(item.current.work_order_id);
@@ -754,6 +775,7 @@ export async function PATCH(request: Request) {
         workOrderId: String(current.work_order_id),
       }) : [];
       await db.batch([
+        ...crewScheduleGuardStatements(db, access, [String(current.assignee_member_id || ""), memberId], now),
         ...complianceIntentStatements,
         db.prepare(`INSERT OR IGNORE INTO trade_crm_appointment_revisions
           (id, appointment_id, work_order_id, firebase_uid, revision, starts_at, ends_at, assignee_member_id,
@@ -865,6 +887,7 @@ export async function PATCH(request: Request) {
         workOrderId,
       }) : [];
       await db.batch([
+        ...crewScheduleGuardStatements(db, access, [String(job.assignee_member_id || ""), memberId], now),
         ...complianceIntentStatements,
         db.prepare(`INSERT INTO trade_crm_appointments (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id,
           assignee_label, status, notes, revision, created_at, updated_at) VALUES (?, ?, ?, 'work', ?, ?, ?, ?, ?, 'scheduled', '', 1, ?, ?)`)

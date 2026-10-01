@@ -1,3 +1,5 @@
+import * as crewHelpers from "../src/lib/trade-crews.ts";
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import * as teamPresence from "../src/lib/trade-team-presence.ts";
 import * as importLabels from "../src/lib/trade-import-labels.ts";
@@ -81,6 +83,8 @@ function loadTypescriptModule(path, mocks) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "@/lib/trade-form-job-progress") return { reconcileTradeFormJobProgress: async () => ({ changed: false, stage: "in_progress", blockers: [] }) };
+    if (specifier === "@/lib/trade-crews") return crewHelpers;
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (/trade-job-collaboration(?:\.ts)?$/.test(specifier)) return jobCollaboration;
     if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
@@ -101,6 +105,7 @@ const syncHelpers = loadTypescriptModule(
 
 function fixture(stage = "in_progress", revision = 5) {
   const database = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(database);
   database.exec(`
     CREATE TABLE trade_crm_appointments (
       id text PRIMARY KEY NOT NULL, work_order_id text NOT NULL, firebase_uid text NOT NULL,

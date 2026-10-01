@@ -64,7 +64,7 @@ function deletionGuard(db: D1Database, access: TeamAccess, job: Job, now: string
 }
 
 export async function deleteTradeJob(db: D1Database, access: TeamAccess, job: Job) {
-  if ((!access.isOwner && !access.canManageJobs) || job.source_type === 'opportunity' || !['trade_owned', 'public_lead_released'].includes(job.customer_source)) {
+  if ((!access.isOwner && (access.crewId || !access.canManageJobs)) || job.source_type === 'opportunity' || !['trade_owned', 'public_lead_released'].includes(job.customer_source)) {
     throw new JobDeletionError('JOB_DELETE_NOT_ALLOWED', 'Only authorised Team members can delete your business-owned jobs.');
   }
   if (job.stage === 'completed') throw new JobDeletionError('JOB_DELETE_PROTECTED', 'Completed jobs must be retained.');

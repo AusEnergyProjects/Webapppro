@@ -1,3 +1,4 @@
+import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
@@ -170,7 +171,7 @@ export async function PATCH(request: Request) {
     const { access, job } = await accessAndJob(request, workOrderId);
     if (!access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
     const formId = cleanAdminText(body.formId, 180);
-    const row = await getD1().prepare(`SELECT form.id, form.template_key, form.template_snapshot,
+    const row = await getD1().prepare(`SELECT form.id, form.template_key, form.template_snapshot, form.answers, form.completed_by_uid,
         form.status, form.revision, work_order.stage job_stage, work_order.revision job_revision
       FROM trade_job_forms form
       JOIN trade_work_orders work_order
@@ -181,14 +182,24 @@ export async function PATCH(request: Request) {
       .first<Record<string, unknown>>();
     if (!row) return adminJson({ ok: false, error: "Field form not found." }, 404);
     if (Number(row.job_revision) !== Number(job.revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
+    const template = parseJson(row.template_snapshot, null) as Record<string, unknown> | null;
+    if (!template || !Array.isArray(template.fields)) return adminJson({ ok: false, error: "The saved form template is invalid." }, 409);
+    const replayRevision = Number(body.baseRevision);
+    if (row.status === "complete" && body.complete === true && row.completed_by_uid === access.actorUid
+      && Number.isInteger(replayRevision) && replayRevision + 1 === Number(row.revision)
+      && !["imported", "cancelled"].includes(String(row.job_stage))
+      && JSON.stringify(normalizeTradeFormAnswers(template, body.answers))
+        === JSON.stringify(normalizeTradeFormAnswers(template, parseJson(row.answers, {})))) {
+      // Retry an acknowledged identity without changing the immutable form or its original timestamps.
+      const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
+      return adminJson({ ok: true, duplicate: true, jobProgress, ...(await formPayload(access.ownerUid, workOrderId)) });
+    }
     if (["imported", "completed", "cancelled"].includes(String(row.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
     if (row.status === "complete") return adminJson({ ok: false, error: "This completed form is locked. Start a newer template version if the record must be replaced." }, 409);
     const baseRevision = Number(body.baseRevision || row.revision);
     if (!Number.isInteger(baseRevision) || baseRevision !== Number(row.revision)) {
       return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This form changed elsewhere. Refresh it before saving." }, 409);
     }
-    const template = parseJson(row.template_snapshot, null) as Record<string, unknown> | null;
-    if (!template || !Array.isArray(template.fields)) return adminJson({ ok: false, error: "The saved form template is invalid." }, 409);
     const answers = normalizeTradeFormAnswers(template, body.answers);
     if (containsPrivateData(answers)) return adminJson({ ok: false, error: "Keep customer contact details and phone numbers out of technical field forms." }, 400);
     const completion = tradeFormCompletion(template, answers);
@@ -268,7 +279,8 @@ export async function PATCH(request: Request) {
       updatedAt: now,
       workOrderId,
     });
-    return adminJson({ ok: true, ...(await formPayload(access.ownerUid, workOrderId)) });
+    const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
+    return adminJson({ ok: true, jobProgress, ...(await formPayload(access.ownerUid, workOrderId)) });
   } catch (error) {
     if (error instanceof SyntaxError) return adminJson({ ok: false, error: "Invalid field form request." }, 400);
     return formError(error);

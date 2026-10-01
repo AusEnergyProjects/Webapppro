@@ -1,4 +1,5 @@
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
+import * as crews from "../src/lib/trade-crews.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,7 +23,7 @@ const load = (path, dependencies = {}) => {
   const source = ts.transpileModule(fs.readFileSync(new URL(path, root), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  new Function('require', 'module', 'exports', source)((name) => dependencies[name] || (/trade-job-collaboration(?:\.ts)?$/.test(name) ? jobCollaboration : {}), moduleRecord, moduleRecord.exports);
+  new Function('require', 'module', 'exports', source)((name) => dependencies[name] || (/trade-crews(?:\.ts)?$/.test(name) ? crews : /trade-job-collaboration(?:\.ts)?$/.test(name) ? jobCollaboration : {}), moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 };
 const timestamp = '2026-09-10T01:00:00.000Z';

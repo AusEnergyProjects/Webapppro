@@ -27,6 +27,7 @@
     },
     "android": {
       "package": "au.com.australianenergyassessments.field",
+      "runtimeVersion": "1.3.3",
       "googleServicesFile": "./google-services.json",
       "versionCode": 3,
       "adaptiveIcon": {

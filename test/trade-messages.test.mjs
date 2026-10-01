@@ -1,3 +1,4 @@
+import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import * as presence from '../src/lib/trade-team-presence.ts';
 import * as personalNames from '../src/lib/trade-team-personal-name.ts';
 import assert from "node:assert/strict";
@@ -27,6 +28,7 @@ const john = { ...owner, actorUid: "john-uid", memberId: "john", displayName: "J
 const foreign = { ...owner, ownerUid: "business-b", actorUid: "other-uid", memberId: "other" };
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
+  installEmptyTradeCrews(sqlite);
   sqlite.function('strftime', (format, value) => {
     assert.equal(format, '%Y-%m-%dT%H:%M:%fZ'); assert.equal(value, 'now');
     return new Date().toISOString();
@@ -56,14 +58,49 @@ function fixture() {
   sqlite.exec(read("../drizzle/0222_trade_message_receipts.sql").replaceAll("--> statement-breakpoint", ""));
   const statement = (sql, values = []) => ({ bind: (...params) => statement(sql, params), first: async () => sqlite.prepare(sql).get(...values) || null,
     all: async () => ({ results: sqlite.prepare(sql).all(...values) }), runSync: () => ({ meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } }), run() { return Promise.resolve(this.runSync()); } });
-  const db = { prepare: statement, batch: async statements => { sqlite.exec("BEGIN"); try { const out = []; for (const s of statements) out.push(s.runSync()); sqlite.exec("COMMIT"); return out; } catch (error) { sqlite.exec("ROLLBACK"); throw error; } } };
+  let beforeBatch;
+  const db = { prepare: statement, batch: async statements => { if (beforeBatch) { const hook=beforeBatch; beforeBatch=null; hook(); } sqlite.exec("BEGIN"); try { const out = []; for (const s of statements) out.push(s.runSync()); sqlite.exec("COMMIT"); return out; } catch (error) { sqlite.exec("ROLLBACK"); throw error; } } };
   const server = load("../src/lib/trade-messages-server.ts", { "../../db": { getD1: () => db }, "./trade-messages": pure, "./trade-team-presence": presence,
     "./trade-message-media-access": mediaAccess, "./trade-message-media": mediaPure, "./trade-message-media-server": mediaServer,
     "./trade-message-receipts-server": receiptServer, "./trade-team-personal-name": personalNames });
-  return { sqlite, db, server, close: () => sqlite.close() };
+  return { sqlite, db, server, setBeforeBatch: hook => { beforeBatch=hook; }, close: () => sqlite.close() };
 }
 const request = number => `message-request-${String(number).padStart(8, "0")}`;
 const create = (f, actor, memberIds, subject = "", requestId = request(1)) => f.server.createTeamConversation(actor, { memberIds, subject, requestId }, f.db);
+
+test("crew discovery is live and limited to crew plus an already-connected owner, while joined conversations remain available", async () => {
+  const f=fixture(); try {
+    f.sqlite.exec("INSERT INTO trade_team_members VALUES('outside','business-a','outside-uid','active','Outside','own',0,0,'0412 999 999')");
+    const ownerThread=await create(f,owner,['jane']);
+    const existing=await create(f,jane,['outside'],'',request(2));
+    f.sqlite.exec("INSERT INTO trade_crews(id,owner_uid,lead_member_id) VALUES('crew','business-a','jane'); INSERT INTO trade_crew_members(owner_uid,crew_id,member_id) VALUES('business-a','crew','jane'),('business-a','crew','john')");
+    // The actor object predates crew assignment. The query must use the database.
+    const workspace=await f.server.messagesWorkspace(jane,'',1,f.db);
+    assert.deepEqual(workspace.members.map(member=>member.id).sort(),['jane','john','owner']);
+    assert.ok(workspace.threads.some(thread=>thread.id===existing.id));
+    assert.ok(workspace.threads.some(thread=>thread.id===ownerThread.id));
+    assert.deepEqual((await f.server.searchMessageContacts(jane,'Outside',f.db)).members,[]);
+    assert.deepEqual((await f.server.searchMessageContacts(jane,'0412999999',f.db)).members,[]);
+    assert.equal((await create(f,jane,['outside'],'',request(3))).id,existing.id);
+    await f.server.sendTeamMessage(jane,existing.id,'Existing conversation retained',request(4),f.db);
+    await assert.rejects(create(f,jane,['outside','john'],'New group',request(5)),/MESSAGE_MEMBERS_INVALID/);
+    assert.equal((await f.server.messagesWorkspace(owner,'',1,f.db)).members.length,4);
+    f.sqlite.exec("DELETE FROM trade_message_participants WHERE thread_id='"+ownerThread.id+"' AND member_id='jane'");
+    assert.deepEqual((await f.server.searchMessageContacts(jane,'Owner',f.db)).members,[]);
+  } finally { f.close(); }
+});
+
+test("new crew conversation recipients are rechecked inside the write transaction", async () => {
+  const f=fixture(); try {
+    f.sqlite.exec("INSERT INTO trade_crews(id,owner_uid,lead_member_id) VALUES('crew','business-a','jane'); INSERT INTO trade_crew_members(owner_uid,crew_id,member_id) VALUES('business-a','crew','jane'),('business-a','crew','john')");
+    await assert.rejects(create(f,jane,['owner']),/MESSAGE_MEMBERS_INVALID/);
+    f.setBeforeBatch(()=>f.sqlite.exec("DELETE FROM trade_crew_members WHERE member_id='john'"));
+    await assert.rejects(create(f,jane,['john'],'',request(2)),/MESSAGE_MEMBERS_INVALID/);
+    assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_message_threads').get().n,0);
+    f.sqlite.exec("INSERT INTO trade_crew_members(owner_uid,crew_id,member_id) VALUES('business-a','crew','john')");
+    assert.ok((await create(f,jane,['john'],'',request(3))).id);
+  } finally { f.close(); }
+});
 
 test('saved owner personal names appear to staff immediately in threads, member search and unread labels without owner login or rewriting history', async () => {
   const f=fixture();try {

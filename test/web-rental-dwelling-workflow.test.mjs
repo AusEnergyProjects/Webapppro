@@ -20,6 +20,7 @@ const dependencies = {
   "@/lib/rental-quotation.mjs": quotation,
   "@/lib/trade-rental-assessment.mjs": assessment,
   "@/lib/rental-assessor-workflow.mjs": workflowHelpers,
+  "./TradeWorkTimeTracking": { useFormTimeTracking: () => ({ bind: {}, markCompleted() {} }), WorkTimeStatus: () => null },
   "./TradeRentalInspectionPanel.module.css": { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) },
 };
 new Function("require", "module", "exports", compiled)((id) => {

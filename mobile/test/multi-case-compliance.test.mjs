@@ -218,5 +218,5 @@ test('governed evidence cannot be queued with a partial or unbound identifier se
 test('field completion does not wait for Creditex evidence processing', () => {
   const finishBlockers = sourceFunction(jobScreen, 'jobFinishLocalBlockers');
   assert.doesNotMatch(finishBlockers, /submittedCount|acceptedCount|governedEvidence|complianceCase/);
-  assert.match(jobScreen, /TLink will finish uploads and server checks in the background/);
+  assert.match(jobScreen, /TLink confirms completion after the required forms and server checks finish syncing/);
 });

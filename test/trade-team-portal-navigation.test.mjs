@@ -24,8 +24,8 @@ const label = value => Array.isArray(value) ? value.map(label).join('')
   : value && typeof value === 'object' ? label(value.props?.children) : typeof value === 'string' ? value : '';
 const base = { jobScope: 'own', scheduleScope: 'own', canViewCustomers: false, canSearchCustomers: false,
   canViewPriceBook: false, canManageTeam: false, canViewQuotes: false, canManageQuotes: false };
-function render(permissions = {}, view = 'work', crmView = 'jobs') {
-  const destinations = [], tree = context.renderNavigation({ permissions: { ...base, ...permissions }, view, crmView,
+function render(permissions = {}, view = 'work', crmView = 'jobs', crewId) {
+  const destinations = [], tree = context.renderNavigation({ permissions: { ...base, ...permissions }, view, crmView, crewId,
     onView: id => destinations.push(['portal', id]), onCrm: id => destinations.push(['crm', id]) });
   const buttons = flatten(tree).filter(node => node.type === 'button');
   return { tree, buttons, destinations, button: name => buttons.find(node => label(node) === name) };
@@ -33,7 +33,7 @@ function render(permissions = {}, view = 'work', crmView = 'jobs') {
 
 test('field staff see Home, work, Connect, jobs and their schedule without restricted tools', () => {
   const ui = render();
-  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'My work', 'Connect ', 'Jobs', 'Schedule', 'To do & training']);
+  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'My work', 'My time', 'Connect ', 'Jobs', 'Schedule', 'To do & training']);
   assert.equal(ui.tree.props['aria-label'], 'Staff workspace');
   assert.equal(ui.button('My work').props['aria-current'], 'page');
   assert.equal(flatten(ui.tree).filter(node => node.type === 'UnreadBadge').length, 1);
@@ -94,4 +94,11 @@ test('direct tools retain the original staff permission object and save map desi
   assert.match(portal, /onRegisterMapSave=\{registerMapSave\}/);
   assert.match(portal, /mapNavigation\.run\(\(\) => setPortalViewState\(view\)\)/);
   assert.match(portal, /permissions\?\.canViewQuotes && <button className="tlink-team-quoteButton"/);
+});
+
+test('crew and time views never imply financial or team administration access', () => {
+  const ui = render({}, 'crew', 'jobs', 'crew-1');
+  ui.button('My crew').props.onClick(); ui.button('My time').props.onClick();
+  assert.deepEqual(ui.destinations, [['portal','crew'],['portal','time']]);
+  assert.equal(ui.button('Team'), undefined);assert.equal(ui.button('Products'), undefined);assert.equal(ui.button('Customers'), undefined);
 });

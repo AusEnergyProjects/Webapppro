@@ -4,7 +4,7 @@ import type { TeamAccess } from "./trade-team-server";
 export function tradeFieldPermissions(access: TeamAccess) {
   return {
     canCreateJobs: access.isOwner || access.canCreateJobs,
-    canAssignJobs: access.isOwner || (access.canAssignJobs && access.jobScope === "team" && access.canRescheduleJobs && access.scheduleScope === "team"),
+    canAssignJobs: access.isOwner || (access.canAssignJobs && access.canRescheduleJobs && ((access.jobScope === "team" && access.scheduleScope === "team") || access.crewLead === true)),
     canViewQuotes: access.isOwner || access.canViewQuotes,
     canManageQuotes: access.isOwner || (access.canViewQuotes && access.canManageQuotes),
     canSendQuotes: access.isOwner || (access.canViewQuotes && access.canManageQuotes && access.canSendQuotes),

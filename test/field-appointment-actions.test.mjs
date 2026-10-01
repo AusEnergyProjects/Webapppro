@@ -9,6 +9,7 @@ import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
 import { lifecycleGuardFixture } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 import * as collaboration from "../src/lib/trade-job-collaboration.ts";
 import * as jobLifecycle from "../src/lib/trade-job-lifecycle.ts";
+import * as crews from "../src/lib/trade-crews.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -78,7 +79,7 @@ function loadTypescriptModule(path, mocks = {}) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => Object.hasOwn(mocks, specifier) ? mocks[specifier]
-    : specifier.includes('trade-job-collaboration') ? collaboration : specifier.includes('trade-job-lifecycle') ? jobLifecycle : {};
+    : specifier.includes('trade-crews') ? crews : specifier.includes('trade-job-collaboration') ? collaboration : specifier.includes('trade-job-lifecycle') ? jobLifecycle : {};
   new Function("require", "module", "exports", output)(require, moduleRecord, moduleRecord.exports);
   return moduleRecord.exports;
 }
@@ -102,12 +103,17 @@ function fixture(overrides = {}, effects = {}) {
     CREATE TABLE trade_work_order_events(id text, work_order_id text, firebase_uid text, event_type text, summary text, created_at text);
     CREATE TABLE trade_crm_write_guards(id text, firebase_uid text, operation_id text, step_number integer,
       verified integer CONSTRAINT trade_crm_write_guard_verified_check CHECK(verified = 1), created_at text);
+    CREATE TABLE trade_team_members(id text, owner_uid text, display_name text, status text, member_uid text, capabilities text);
     INSERT INTO trade_work_orders VALUES('job','owner','installer','internal','','worker','Worker','scheduled','general',4,'active','2026-10-10','2026-10-10','before');
     INSERT INTO trade_crm_job_details VALUES('job','owner','customer','trade_owned');
     INSERT INTO trade_crm_appointments VALUES('appointment','job','owner',2,'scheduled','2026-10-10T09:00','2026-10-10T10:00','worker','before','before');
     INSERT INTO trade_crm_customers VALUES('customer','owner','Jane','Smith','','0400000000','jane@example.test','before','active');
     INSERT INTO trade_crm_customer_contacts VALUES('customer','owner','Jane','Smith','0400000000','jane@example.test','before',1,'active');
   `);
+  const crewMigration = read('../drizzle/0231_trade_crews.sql');
+  for (const name of ['job_scope','schedule_scope']) database.exec(`ALTER TABLE trade_team_members ADD COLUMN ${name} TEXT DEFAULT 'own'`);
+  for (const name of new Set(crewMigration.match(/\bcan_[a-z_]+/g))) database.exec(`ALTER TABLE trade_team_members ADD COLUMN ${name} INTEGER DEFAULT 0`);
+  database.exec(crewMigration);
   const db = testD1(database);
   database.exec(`ALTER TABLE trade_crm_job_details ADD COLUMN pipeline_stage TEXT DEFAULT '';
     CREATE TABLE trade_activity_field_records(id TEXT,work_order_id TEXT,owner_uid TEXT,status TEXT,submitted_at TEXT);
@@ -154,10 +160,10 @@ test('an unscheduled job exposes Schedule and Delete and creates its first appoi
     database.exec("UPDATE trade_work_orders SET stage='scheduled',revision=5,scheduled_start='2026-10-11',scheduled_end='2026-10-11'");
   } });
   f.database.exec(`DELETE FROM trade_crm_appointments; UPDATE trade_work_orders SET stage='new',scheduled_start='',scheduled_end='';
-    CREATE TABLE trade_team_members(id text, owner_uid text, display_name text, status text, member_uid text, capabilities text);
+    CREATE TABLE IF NOT EXISTS trade_team_members(id text, owner_uid text, display_name text, status text, member_uid text, capabilities text);
     CREATE TABLE trade_team_member_credentials(owner_uid text,team_member_id text,file_id text,rental_gate text,status text,credential_number text,jurisdiction text,credential_type text,expires_at text);
     CREATE TABLE trade_team_member_files(id text,owner_uid text,team_member_id text,status text,expires_at text);
-    INSERT INTO trade_team_members VALUES('worker','owner','Worker','active','worker-user','["general"]');`);
+    INSERT INTO trade_team_members(id,owner_uid,display_name,status,member_uid,capabilities) VALUES('worker','owner','Worker','active','worker-user','["general"]');`);
   const context = await (await f.get()).json();
   assert.equal(context.appointment, null); assert.equal(context.permissions.schedule, true);
   assert.equal(context.permissions.reschedule, false); assert.equal(context.permissions.deleteJob, true);
@@ -185,7 +191,7 @@ test('released public leads expose scheduling and deletion while private opportu
   for (const released of [true, false]) {
     const f = fixture({ isOwner: true });
     f.database.exec(`DELETE FROM trade_crm_appointments; UPDATE trade_work_orders SET stage='new';
-      CREATE TABLE trade_team_members(id text, owner_uid text, display_name text, status text, member_uid text, capabilities text);
+      CREATE TABLE IF NOT EXISTS trade_team_members(id text, owner_uid text, display_name text, status text, member_uid text, capabilities text);
       CREATE TABLE trade_team_member_credentials(owner_uid text,team_member_id text,file_id text,rental_gate text,status text,credential_number text,jurisdiction text,credential_type text,expires_at text);
       CREATE TABLE trade_team_member_files(id text,owner_uid text,team_member_id text,status text,expires_at text);`);
     f.database.prepare('UPDATE trade_work_orders SET source_type=?').run(released ? 'public_lead' : 'opportunity');
@@ -219,6 +225,63 @@ test('no show removes the slot, preserves the job and evidence identity, and upd
 function addPlumberVisit(database) {
   database.exec("INSERT INTO trade_crm_appointments VALUES('plumbing','job','owner',1,'scheduled','2026-10-10T11:00','2026-10-10T12:00','plumber','later','later')");
 }
+
+function crewFixture() {
+  const f = fixture({ crewId: 'crew', crewLead: true, crewMemberIds: ['worker','plumber'], canAssignJobs: true });
+  f.database.exec(`
+    INSERT INTO trade_team_members(id,owner_uid,display_name,status,member_uid,capabilities) VALUES ('worker','owner','Worker','active','worker-user','["general"]'),
+      ('plumber','owner','Plumber','active','plumber-user','["general"]');
+    INSERT INTO trade_crews VALUES ('crew','owner','Crew','Company','worker',1,'now','now');
+    INSERT INTO trade_crew_members VALUES ('owner','crew','worker','now'),('owner','crew','plumber','now');
+    CREATE TABLE trade_team_member_credentials(owner_uid text,team_member_id text,file_id text,rental_gate text,status text,credential_number text,jurisdiction text,credential_type text,expires_at text);
+    CREATE TABLE trade_team_member_files(id text,owner_uid text,team_member_id text,status text,expires_at text);
+  `);
+  addPlumberVisit(f.database);
+  return f;
+}
+
+test('crew action contexts and dispatch choices stay inside the crew and cannot delete whole jobs', async t => {
+  const f = crewFixture(); t.after(() => f.database.close());
+  f.database.exec("INSERT INTO trade_crm_appointments VALUES('outside','job','owner',1,'scheduled','2026-10-10T13:00','2026-10-10T14:00','other','later','later')");
+  const response = await f.get('plumbing'); assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result.appointments.map(visit => visit.id), ['appointment','plumbing']);
+  assert.deepEqual(result.assignees.map(member => member.id).sort(), ['plumber','worker']);
+  assert.equal(result.permissions.reschedule, true); assert.equal(result.permissions.cancel, false); assert.equal(result.permissions.deleteJob, false);
+  assert.equal((await f.get('outside')).status, 404);
+  assert.equal((await f.patch('cancel')).status, 403);
+  assert.equal((await f.patch('delete', { confirmDelete: true })).status, 403);
+  assert.equal((await f.patch('reschedule', { memberId: 'other', startsAt: '2026-10-11T09:00', durationMinutes: 60 })).status, 403);
+  assert.equal(f.scheduleChanges.length, 0); assert.equal(f.calendars.length, 0); assert.equal(f.messages.length, 0);
+});
+
+test('crew leads can mark crew visits no-show while ordinary crew workers cannot dispatch', async t => {
+  const lead = crewFixture(); t.after(() => lead.database.close());
+  const response = await lead.patch('no_show', { appointmentId: 'plumbing', expectedAppointmentRevision: 1 });
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  assert.equal(lead.database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment'").get().status, 'scheduled');
+  const worker = crewFixture(); t.after(() => worker.database.close());
+  Object.assign(worker.access, { crewLead: false, crewMemberIds: ['worker'] });
+  assert.equal((await worker.patch('no_show')).status, 403);
+  assert.equal((await worker.get('plumbing')).status, 404);
+});
+
+test('crew cancellation rechecks new cross-crew visits and lead membership before committing', async t => {
+  for (const mutation of [
+    "INSERT INTO trade_crm_appointments VALUES('outside','job','owner',1,'scheduled','2026-10-10T13:00','2026-10-10T14:00','other','later','later')",
+    "DELETE FROM trade_crew_members WHERE member_id='worker'",
+    "DELETE FROM trade_crew_members WHERE member_id='plumber'",
+    "UPDATE trade_crews SET lead_member_id='plumber' WHERE id='crew'",
+  ]) {
+    const f = crewFixture(); t.after(() => f.database.close());
+    f.db.setBeforeBatch(() => f.database.exec(mutation));
+    const response = await f.patch('cancel');
+    assert.equal(response.status, 409, JSON.stringify(await response.clone().json()));
+    assert.equal(f.database.prepare('SELECT stage FROM trade_work_orders').get().stage, 'scheduled');
+    assert.equal(f.database.prepare("SELECT status FROM trade_crm_appointments WHERE id='appointment'").get().status, 'scheduled');
+    assert.equal(f.messages.length, 0); assert.equal(f.calendars.length, 0);
+  }
+});
 
 test('action context defaults to the current worker and keeps other visits inside schedule scope', async () => {
   const own = fixture({ memberId: 'plumber', canRescheduleJobs: false });
@@ -338,13 +401,13 @@ test('reschedule rechecks rental credentials for the new date before calling sch
  UPDATE trade_work_orders SET service_category='rental-inspection';
  CREATE TABLE IF NOT EXISTS trade_rental_inspections(id text,firebase_uid text,work_order_id text);
  CREATE TABLE IF NOT EXISTS trade_rental_inspection_modules(inspection_id text,firebase_uid text,module_key text,status text);
- CREATE TABLE trade_team_members(id text,owner_uid text,status text,member_uid text,capabilities text);
+ CREATE TABLE IF NOT EXISTS trade_team_members(id text,owner_uid text,status text,member_uid text,capabilities text);
  CREATE TABLE trade_team_member_credentials(owner_uid text,team_member_id text,file_id text,rental_gate text,status text,
    credential_number text,jurisdiction text,credential_type text,expires_at text);
  CREATE TABLE trade_team_member_files(id text,owner_uid text,team_member_id text,status text,expires_at text);
  INSERT INTO trade_rental_inspections VALUES('inspection','owner','job');
  INSERT INTO trade_rental_inspection_modules VALUES('inspection','owner','electrical_safety_check','draft');
- INSERT INTO trade_team_members VALUES('worker','owner','active','worker-user','["rental-inspection"]');
+ INSERT INTO trade_team_members(id,owner_uid,status,member_uid,capabilities) VALUES('worker','owner','active','worker-user','["rental-inspection"]');
  INSERT INTO trade_team_member_files VALUES('file','owner','worker','active','2026-10-12');
  INSERT INTO trade_team_member_credentials VALUES('owner','worker','file','licensed_electrician','active','123','VIC','licence','2026-10-12');`);
  const response=await f.patch('reschedule',{startsAt:'2026-10-13T09:00',durationMinutes:60,memberId:'worker'});

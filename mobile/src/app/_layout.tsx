@@ -10,6 +10,7 @@ import { NotificationNavigation } from '@/components/notification-navigation';
 import { colours } from '@/lib/theme';
 import { AppProvider, useApp } from '@/providers/app-provider';
 import { NativeTeamCallProvider } from '@/providers/native-team-call-provider';
+import { NativeWorkTimeProvider } from '@/components/work-time-tracking';
 
 function AppNavigation() {
   const { access } = useApp();
@@ -40,9 +41,11 @@ function AppNavigation() {
 export default function RootLayout() {
   return (
     <AppProvider>
+      <NativeWorkTimeProvider>
       <NativeTeamCallProvider>
         <AppNavigation />
       </NativeTeamCallProvider>
+      </NativeWorkTimeProvider>
     </AppProvider>
   );
 }

@@ -1,3 +1,4 @@
+import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
@@ -376,8 +377,9 @@ export async function POST(request: Request) {
     } else {
       return adminJson({ ok: false, error: "Unsupported photo request action." }, 400);
     }
+    const jobProgress = action === "review_requirement" ? await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true }) : undefined;
     const refreshedJob = await managedDirectJob(access, workOrderId);
-    return adminJson({ ok: true, ...(await requestPayload(access, refreshedJob, shareUrl)) }, current ? 200 : 201);
+    return adminJson({ ok: true, jobProgress, ...(await requestPayload(access, refreshedJob, shareUrl)) }, current ? 200 : 201);
   } catch (error) { return responseForError(error); }
 }
 

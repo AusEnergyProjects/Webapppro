@@ -209,6 +209,7 @@ test("web markup uses compact controls and removes already captured equipment fi
     "@/lib/rental-assessor-workflow.mjs": workflowModule,
     "@/lib/trade-rental-assessment.mjs": assessmentModule,
     "./TradeRentalInspectionPanel.module.css": { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) },
+    "./TradeWorkTimeTracking": { useFormTimeTracking: () => ({ bind: {}, markCompleted() {} }), WorkTimeStatus: () => null },
   };
   new Function("require", "module", "exports", compiled)((id) => {
     if (!(id in dependencies)) throw new Error(`Unexpected web test dependency: ${id}`);
