@@ -40,8 +40,12 @@ test("accepted scope becomes an explicitly gated ready job", () => {
 test("roster-only people can be assigned while login access remains separate", () => {
   const route = read("src/app/api/trade-team/route.ts");
   const settings = read("src/components/TradeTeamSettings.tsx");
-  assert.match(route, /ROSTER_STATUS_FILTERS = new Set\(\["active", "invited", "suspended"\]\)/);
+  assert.match(route, /ROSTER_STATUS_FILTERS = new Set\(\["active", "invited", "suspended", "archived"\]\)/);
+  assert.match(route, /rosterStatus === "archived" \? "status = 'archived'" : "status <> 'archived'"/);
   assert.match(route, /rosterStatus === "invited"[\s\S]*?status = 'active'[\s\S]*?pending_invite\.consumed_at = ''/);
+  const assigneeQuery = route.slice(route.indexOf("const assigneeConditions ="), route.indexOf("const workCount ="));
+  assert.match(assigneeQuery, /const assigneeConditions = \["owner_uid = \?", "status = 'active'"\]/);
+  assert.doesNotMatch(assigneeQuery, /(?:member_uid|email)\s*(?:<>|!=)\s*''/);
   assert.match(route, /action === "add_member"/);
   assert.match(settings, /Roster only/); assert.match(settings, /Send new invitation/);
   assert.match(settings, /Leave it blank for a roster-only person/);
