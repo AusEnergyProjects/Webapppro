@@ -1,4 +1,4 @@
-import { Gunzip } from "fflate";
+import { gunzipSync } from "node:zlib";
 import { gnafAddressKey, gnafShardForKey, type GnafEntry, type GnafManifest, type GnafShard } from "./gnaf-address.ts";
 
 export const GNAF_MAX_COMPRESSED_BYTES = 2 * 1024 * 1024;
@@ -43,17 +43,13 @@ function isEntry(value: unknown): value is GnafEntry {
 }
 function decodeGnafShard(bytes: Uint8Array, version: string, path: string) {
   if (bytes.length < 18 || bytes.length > GNAF_MAX_COMPRESSED_BYTES) throw new GnafDirectoryUnavailableError();
-  // The trailer is untrusted. Measure actual streaming output, with small compressed chunks
-  // so a forged gzip cannot force a large allocation before the limit is checked.
+  // The trailer is untrusted. Native inflation enforces the hard output cap;
+  // exact length is checked separately because Workerd's buffer growth can
+  // reject valid gzip when maxOutputLength is set to an arbitrary exact size.
   const size = new DataView(bytes.buffer, bytes.byteOffset + bytes.length - 4, 4).getUint32(0, true);
   if (size < 1 || size > GNAF_MAX_DECODED_BYTES) throw new GnafDirectoryUnavailableError();
-  const decoded = new Uint8Array(size); let written = 0;
-  const unzip = new Gunzip(chunk => {
-    if (written + chunk.length > size) throw new GnafDirectoryUnavailableError();
-    decoded.set(chunk, written); written += chunk.length;
-  });
-  for (let offset = 0; offset < bytes.length; offset += 512) unzip.push(bytes.subarray(offset, offset + 512), offset + 512 >= bytes.length);
-  if (written !== size) throw new GnafDirectoryUnavailableError();
+  const decoded = gunzipSync(bytes, { maxOutputLength: GNAF_MAX_DECODED_BYTES });
+  if (decoded.length !== size) throw new GnafDirectoryUnavailableError();
   const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(decoded));
   if (!object(value) || value.schema !== 1 || value.version !== version || !object(value.entries)
     || typeof value.postcode !== "string" || typeof value.bucket !== "string"

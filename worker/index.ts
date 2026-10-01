@@ -51,6 +51,7 @@ import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 import { cleanupUnreferencedTradeIssuedDocuments } from "../src/lib/trade-issued-document-cleanup";
 import { cleanupExpiredTradeMapLocations } from "../src/lib/trade-map-location-cache";
 import { drainTradeMapPreparation, queueTradeMapPreparation } from "../src/lib/trade-map-preparation";
+import { queueTradeMapMaintenance } from "../src/lib/trade-map-maintenance";
 import { getGnafDirectory } from "../src/lib/gnaf-directory-server";
 import { drainTradeCrmJobMediaCleanup } from "../src/lib/trade-crm-job-media-cleanup";
 import {
@@ -461,6 +462,17 @@ function queueBackgroundDispatches(
       if (result.failed) console.error("Automatic map preparation is waiting for a directory retry.");
     }),
     onError: () => console.error("Automatic map preparation will resume from the durable queue."),
+  });
+  response = queueTradeMapMaintenance(request, response, {
+    waitUntil: (promise) => ctx.waitUntil(promise),
+    drain: async () => {
+      const db = getD1();
+      await ensureTlinkSchemaGuards(db);
+      const result = await drainTradeMapPreparation({ db, getDirectory: getGnafDirectory, maxBatches: 1 });
+      console.info("Automatic map maintenance completed.", result);
+      return result;
+    },
+    onError: () => console.error("Automatic map maintenance remains queued for retry."),
   });
   return queueTradeQuoteDeliveryDispatch(queuePublicPlanDeliveryDispatch(queueCreditexProductRegistryDispatch(queueCustomerProjectActivityDispatch(
     queueOpportunityNotificationDispatch(

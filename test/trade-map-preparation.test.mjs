@@ -70,14 +70,14 @@ function fixture() {
 test("imports enqueue durably and a later cron finishes bounded batches without a browser", async () => {
   const f = fixture();
   try {
-    for (let i = 0; i < 61; i++) f.add(String(i));
-    assert.equal(f.state().requested_revision, 61);
-    assert.deepEqual(await f.drain({ ownerUid: "owner" }), { processed: 25, completed: 0, failed: 0 });
-    assert.equal(f.cache().filter(row => row.status === "located").length, 25);
-    assert.deepEqual(await f.drain({ maxBatches: 20 }), { processed: 36, completed: 1, failed: 0 });
-    assert.equal(f.state().completed_revision, 61);
+    for (let i = 0; i < 261; i++) f.add(String(i));
+    assert.equal(f.state().requested_revision, 261);
+    assert.deepEqual(await f.drain({ ownerUid: "owner" }), { processed: 100, completed: 0, failed: 0 });
+    assert.equal(f.cache().filter(row => row.status === "located").length, 100);
+    assert.deepEqual(await f.drain({ maxBatches: 20 }), { processed: 161, completed: 1, failed: 0 });
+    assert.equal(f.state().completed_revision, 261);
     assert.deepEqual(await f.drain({ maxBatches: 20 }), { processed: 0, completed: 0, failed: 0 });
-    assert.ok(f.calls.every(addresses => addresses.length <= 25));
+    assert.deepEqual(f.calls.map(addresses => addresses.length), [100, 100, 61]);
     assert.ok(f.cache().every(row => row.provider === "gnaf" && row.expires_at === ""));
   } finally { f.close(); }
 });

@@ -92,3 +92,25 @@ test("the customer map has no manual preparation controls or provider implementa
   assert.match(source, /Address data licence/);
   assert.match(source, /response\.status === 401 \|\| response\.status === 403[\s\S]*?setDataset\(null\); setSelection\(null\)/);
 });
+
+test("customer maps preserve cooperative scrolling on desktop and touch devices", () => {
+  let options;
+  function findMap(node) {
+    if (ts.isNewExpression(node) && node.expression.getText(tree) === "api.Map") options = node.arguments[0];
+    ts.forEachChild(node, findMap);
+  }
+  findMap(tree);
+  assert.ok(options, "Exercise the options passed to the actual map constructor");
+  for (const finePointer of [true, false]) {
+    const configured = vm.runInNewContext(`(${options.getText(tree)})`, {
+      config: { apiKey: "test-key" }, canvas: {}, style: () => "test-style",
+      window: { matchMedia: () => ({ matches: finePointer }) },
+    });
+    assert.equal(configured.cooperativeGestures, true, "Page scrolling must not zoom either pointer mode");
+    assert.equal(configured.fullscreenControl, true);
+    assert.equal(configured.scaleControl, true);
+    assert.equal(configured.dragRotate, false);
+  }
+  const roofMap = readFileSync(new URL("../src/components/TradeRoofDesignMap.tsx", import.meta.url), "utf8");
+  assert.match(roofMap, /gestureHandling: "cooperative"/, "Both map providers must require modified scrolling");
+});

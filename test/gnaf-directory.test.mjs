@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { gzipSync } from "node:zlib";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
+import { Miniflare } from "miniflare";
 import { gnafAddressKey, gnafShardForKey, GNAF_ATTRIBUTION } from "../src/lib/gnaf-address.ts";
 import { createGnafDirectory, parseGnafManifest, parseGnafShard, gnafSha256, GNAF_PREFIX } from "../src/lib/gnaf-directory.ts";
 import { uploadGnafPart, verifyGnafBatch, activateGnafDirectory, gnafProvisionAuthorized, readGnafUpload } from "../src/lib/gnaf-provision.ts";
@@ -121,6 +124,96 @@ test("missing or corrupt partition fails the request instead of caching false no
   const json = encode(f.shard), bomb = Uint8Array.from(gzipSync(Buffer.concat([json,Buffer.alloc(1024*1024,32)])));
   new DataView(bomb.buffer).setUint32(bomb.length-4,json.length,true);
   assert.throws(()=>parseGnafShard(bomb,"aug2026",f.path),"a forged gzip trailer must not hide its actual expanded size");
+});
+
+test("native Workers inflation enforces output limits and rejects damaged gzip with matching object hashes", async () => {
+  const compile = path => ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const f = await fixture();
+  const largeFixtures = await Promise.all(Array.from({ length: 9 }, (_, index) => fixture(`12 Smith Street Melbourne VIC ${3100 + index}`)));
+  const largeObjects = new Map();
+  let random = 42;
+  for (const [index, item] of largeFixtures.entries()) {
+    const size = [339295, 362376, 65536][index] || 2 * 1024 * 1024;
+    const value = { ...item.shard, padding: "" };
+    const padding = Buffer.alloc(size - encode(value).length);
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    for (let position = 0; position < padding.length; position++) {
+      random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
+      padding[position] = alphabet.charCodeAt(random % alphabet.length);
+    }
+    value.padding = padding.toString();
+    const decoded = encode(value), bytes = gzipSync(decoded);
+    assert.equal(decoded.length, size);
+    item.manifest.shards[item.path] = { sha256: await gnafSha256(bytes), bytes: bytes.length, decodedBytes: size, entries: 1 };
+    largeObjects.set(`${GNAF_PREFIX}aug2026/${item.path}`, bytes);
+  }
+  const largeManifest = { ...f.manifest, recordCount: largeFixtures.length, shards: Object.assign({}, ...largeFixtures.map(item => item.manifest.shards)) };
+  const runtime = new Miniflare({
+    compatibilityDate: "2026-05-15", compatibilityFlags: ["nodejs_compat"], port: 0,
+    serviceBindings: { LOCAL: request => {
+      const bytes = largeObjects.get(decodeURIComponent(new URL(request.url).pathname.slice(1)));
+      assert.ok(bytes, "Only local synthetic directory partitions may be read");
+      return new Response(bytes);
+    } },
+    modules: [
+      { type: "ESModule", path: "entry.js", contents: `
+        import { createGnafDirectory, parseGnafShard, gnafSha256 } from './directory.js';
+        const fixture = ${JSON.stringify({ key: f.key, path: f.path, manifest: f.manifest })};
+        const large = ${JSON.stringify({ keys: largeFixtures.map(item => item.key), manifest: largeManifest })};
+        export default { async fetch(request, env) {
+          if (new URL(request.url).pathname === '/multiple') {
+            let reads = 0;
+            const bucket = { get: async key => {
+              reads++;
+              const response = await env.LOCAL.fetch('https://local-bucket.test/' + encodeURIComponent(key));
+              const bytes = await response.arrayBuffer();
+              return { size: bytes.byteLength, arrayBuffer: async () => bytes };
+            } };
+            const results = await createGnafDirectory(bucket, large.manifest).resolve(large.keys);
+            return Response.json({ located: results.filter(result => result.status === 'located').length, reads });
+          }
+          const bytes = new Uint8Array(await request.arrayBuffer());
+          const manifest = structuredClone(fixture.manifest);
+          manifest.shards[fixture.path].sha256 = await gnafSha256(bytes);
+          manifest.shards[fixture.path].bytes = bytes.length;
+          const bucket = { get: async () => ({ size: bytes.length, arrayBuffer: async () => bytes.buffer }) };
+          let provisioning = false, runtime = false;
+          try { parseGnafShard(bytes, 'aug2026', fixture.path); provisioning = true; } catch {}
+          try { runtime = (await createGnafDirectory(bucket, manifest).resolve([fixture.key]))[0].status === 'located'; } catch {}
+          return Response.json({ provisioning, runtime });
+        } }
+      ` },
+      { type: "ESModule", path: "directory.js", contents: compile("../src/lib/gnaf-directory.ts") },
+      { type: "ESModule", path: "gnaf-address.ts", contents: compile("../src/lib/gnaf-address.ts") },
+    ],
+    outboundService: () => { throw new Error("Directory tests must never call an external service"); },
+  });
+  const invoke = async bytes => (await runtime.dispatchFetch("https://local.test/", { method: "POST", body: bytes })).json();
+  try {
+    assert.deepEqual(await invoke(f.bytes), { provisioning: true, runtime: true });
+    // Workerd's native output-buffer growth rejected these valid lengths when
+    // maxOutputLength equalled the trailer, even for a single small partition.
+    for (let iteration = 0; iteration < 2; iteration++) {
+      const response = await runtime.dispatchFetch("https://local.test/multiple");
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { located: largeFixtures.length, reads: largeFixtures.length });
+    }
+    const crc = Uint8Array.from(f.bytes); crc[crc.length - 8] ^= 1;
+    const smallTrailer = Uint8Array.from(f.bytes);
+    new DataView(smallTrailer.buffer).setUint32(smallTrailer.length - 4, 1, true);
+    const largeTrailer = Uint8Array.from(f.bytes);
+    new DataView(largeTrailer.buffer).setUint32(largeTrailer.length - 4, 9 * 1024 * 1024, true);
+    const bomb = Uint8Array.from(gzipSync(Buffer.alloc(9 * 1024 * 1024, 32)));
+    new DataView(bomb.buffer).setUint32(bomb.length - 4, encode(f.shard).length, true);
+    const concatenated = Buffer.concat([f.bytes, f.bytes]);
+    for (const [name, bytes] of [
+      ["CRC mismatch", crc], ["truncated gzip", f.bytes.subarray(0, f.bytes.length - 4)],
+      ["small forged trailer", smallTrailer], ["oversized trailer", largeTrailer],
+      ["expanded output exceeds forged length", bomb], ["concatenated members exceed length", concatenated],
+    ]) assert.deepEqual(await invoke(bytes), { provisioning: false, runtime: false }, name);
+  } finally { await runtime.dispose(); }
 });
 test("ambiguous addresses remain unlocated, while unknown postcode is a genuine no-match",async()=>{
   const f=await fixture(); f.shard.entries[f.key]=null;const decoded=encode(f.shard),bytes=gzipSync(decoded);

@@ -5,7 +5,8 @@ import { locateTradeMapRecords, type TradeMapAuthorizedDataset } from "./trade-m
 import type { GnafDirectory } from "./gnaf-directory.ts";
 
 export const TRADE_MAP_PREPARATION_HEADER = "X-TLink-Map-Preparation";
-export const TRADE_MAP_PREPARATION_BATCH_SIZE = 25;
+// Leave headroom for remote storage latency within the post-response work window.
+export const TRADE_MAP_PREPARATION_BATCH_SIZE = 100;
 const LEASE_MS = 120_000;
 
 /** Business-wide address-only projection. Record visibility remains enforced by the map GET. */

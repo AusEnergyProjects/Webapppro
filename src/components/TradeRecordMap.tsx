@@ -155,7 +155,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
         terrainControl: false, geolocateControl: false, projectionControl: false,
         // SDK 4.x overrides attributionControl; this disables the underlying HTML control.
         forceNoAttributionControl: true,
-        cooperativeGestures: !window.matchMedia("(pointer: fine)").matches,
+        cooperativeGestures: true,
         dragRotate: false, touchPitch: false, pitchWithRotate: false, maxPitch: 0, renderWorldCopies: false,
       });
       createdMap.addControl(new api.NavigationControl({ showCompass: false }), "bottom-right");
