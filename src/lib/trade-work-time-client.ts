@@ -170,7 +170,7 @@ export function parseStoredWorkTime(raw: string | null): ClientWorkTimeSession |
     const item = value as Record<string, unknown>;
     if (typeof item.id !== "string" || !["app", "form"].includes(String(item.kind))
       || !["web", "native"].includes(String(item.source))
-      || !["", "job_form", "activity_record", "work_pack", "rental_inspection"].includes(String(item.formKind))
+      || !["", "job_form", "activity_record", "work_pack", "rental_inspection", "swms"].includes(String(item.formKind))
       || typeof item.formId !== "string" || typeof item.workOrderId !== "string"
       || typeof item.pageKey !== "string" || typeof item.pageTitle !== "string"
       || typeof item.startedAt !== "string" || typeof item.endedAt !== "string"

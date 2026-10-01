@@ -1,4 +1,4 @@
-export const WORK_TIME_FORM_KINDS = ["job_form", "activity_record", "work_pack", "rental_inspection"] as const;
+export const WORK_TIME_FORM_KINDS = ["job_form", "activity_record", "work_pack", "rental_inspection", "swms"] as const;
 export type WorkTimeFormKind = typeof WORK_TIME_FORM_KINDS[number];
 export type WorkTimeSessionInput = {
   id: string; kind: "app" | "form"; source: "web" | "native";

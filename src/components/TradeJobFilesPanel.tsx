@@ -6,6 +6,7 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import type { User } from "firebase/auth";
 import type { SavedMessageJobFile } from "@/lib/trade-message-job-files";
+import type { SwmsPayload } from "@/lib/trade-swms";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   CreditexAssignedActivityWorkPackProjection,
@@ -239,6 +240,7 @@ export function TradeJobFilesPanel({
       includeQuotes ? jsonRequest<QuoteResult>(fetch, user, `/api/trade-quotes?workOrderId=${queryId}`) : Promise.resolve<QuoteResult>({ quote: null }),
       includeInvoices ? jsonRequest<InvoiceResult>(fetch, user, `/api/trade-quick-invoices?workOrderId=${queryId}`) : Promise.resolve<InvoiceResult>({ invoice: null }),
       jsonRequest<{ files: SavedMessageJobFile[] }>(fetch, user, `/api/trade-message-job-files?workOrderId=${queryId}`),
+      jsonRequest<SwmsPayload>(fetch, user, `/api/trade-swms?workOrderId=${queryId}`),
     ]);
     const next: JobFile[] = [];
     const failures: string[] = [];
@@ -250,6 +252,13 @@ export function TradeJobFilesPanel({
     };
 
     const field = value<FieldWorkResult>(0);
+    const swms = value<SwmsPayload>(8)?.record;
+    if (swms?.status === "complete" && swms.pdfUrl) next.push({
+      id: `swms:${swms.id}`, group: "SWMS", title: "Safe work method statement",
+      fileName: `${safePart(swms.context.workNumber)}-SWMS.pdf`, contentType: "application/pdf", sizeBytes: 0,
+      recordedAt: swms.completedAt, detail: `Signed by ${swms.signature?.signerName || swms.context.scheduledWorker.name}`,
+      path: swms.pdfUrl,
+    });
     for (const item of field?.media || []) {
       next.push({
         id: `job-media:${item.id}`,

@@ -25,6 +25,8 @@ export async function workTimeFormMeta(db: D1Database, ownerUid: string, input: 
   let row: { form_key: string; title: string; completed_at: string } | null = null;
   if (input.formKind === "job_form") row = await db.prepare(`SELECT id form_key,template_name title,completed_at FROM trade_job_forms
     WHERE id=? AND firebase_uid=? AND work_order_id=?`).bind(input.formId, ownerUid, input.workOrderId).first();
+  else if (input.formKind === "swms") row = await db.prepare(`SELECT id form_key,template_name title,completed_at FROM trade_job_swms
+    WHERE id=? AND firebase_uid=? AND work_order_id=?`).bind(input.formId, ownerUid, input.workOrderId).first();
   else if (input.formKind === "activity_record") row = await db.prepare(`SELECT id form_key,
     COALESCE(json_extract(payload,'$.form.title'),'Activity form') title,submitted_at completed_at
     FROM trade_activity_field_records WHERE id=? AND owner_uid=? AND work_order_id=?`).bind(input.formId, ownerUid, input.workOrderId).first();
@@ -72,12 +74,15 @@ export async function saveWorkTimeSessions(access: TeamAccess, sessions: WorkTim
       .bind(session.id, ...identity, session.endedAt, ...actor.values, ...job.values).first()) throw new WorkTimeAccessError();
     accepted.push(session.id);
   }
-  const currentForms = new Set(sessions.filter(session => session.kind === "form").map(session => session.workOrderId));
+  // Optional safety documents record preparation time without attesting that job work started or finished.
+  const progressSessions = sessions.filter(session => session.kind === "form" && session.formKind !== "swms");
+  const currentForms = new Set(progressSessions.map(session => session.workOrderId));
   // A co-worker may complete the final form later. Revisit this person's saved
   // finish markers on subsequent authenticated activity without adding a button
   // or borrowing another person's authority. Rotate large backlogs fairly.
   const recoverySql = `FROM trade_work_time_sessions s JOIN trade_work_orders w ON w.id=s.work_order_id AND w.firebase_uid=s.owner_uid
-    WHERE s.owner_uid=? AND s.member_id=? AND s.observed_completed_at<>'' AND w.record_status='active'
+    WHERE s.owner_uid=? AND s.member_id=? AND s.kind='form' AND s.form_kind<>'swms'
+      AND s.observed_completed_at<>'' AND w.record_status='active'
       AND w.partner_type='installer' AND w.stage NOT IN ('imported','completed','cancelled')
       AND (w.assignee_member_id=? OR (?=1 AND w.assignee_member_id='') OR EXISTS (
         SELECT 1 FROM trade_crm_appointments a WHERE a.work_order_id=w.id AND a.firebase_uid=w.firebase_uid
@@ -87,7 +92,7 @@ export async function saveWorkTimeSessions(access: TeamAccess, sessions: WorkTim
   const page = count ? Math.floor(Date.parse(now) / 30_000) % Math.ceil(count / 20) : 0;
   const recovery = count ? (await db.prepare(`SELECT DISTINCT s.work_order_id ${recoverySql} ORDER BY s.work_order_id LIMIT 20 OFFSET ?`)
     .bind(...recoveryValues, page * 20).all<{ work_order_id: string }>()).results : [];
-  const completedJobs = new Set([...sessions.filter(session => session.completedAt).map(session => session.workOrderId), ...recovery.map(row => row.work_order_id)]);
+  const completedJobs = new Set([...progressSessions.filter(session => session.completedAt).map(session => session.workOrderId), ...recovery.map(row => row.work_order_id)]);
   for (const workOrderId of new Set([...currentForms, ...completedJobs])) {
     // A durable completion marker also retries a previously interrupted status
     // projection. All actual form/evidence authority is rechecked by the helper.
@@ -154,12 +159,13 @@ export async function loadWorkTimeReport(access: TeamAccess, params: URLSearchPa
     JOIN trade_work_orders w ON w.id=s.work_order_id AND w.firebase_uid=s.owner_uid AND w.record_status='active'
     LEFT JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
     LEFT JOIN trade_job_forms jf ON s.form_kind='job_form' AND jf.id=s.form_id AND jf.firebase_uid=s.owner_uid AND jf.work_order_id=s.work_order_id
+    LEFT JOIN trade_job_swms swms ON s.form_kind='swms' AND swms.id=s.form_id AND swms.firebase_uid=s.owner_uid AND swms.work_order_id=s.work_order_id
     LEFT JOIN trade_activity_field_records af ON s.form_kind='activity_record' AND af.id=s.form_id AND af.owner_uid=s.owner_uid AND af.work_order_id=s.work_order_id
     LEFT JOIN trade_rental_inspections ri ON s.form_kind='rental_inspection' AND ri.id=s.form_id AND ri.firebase_uid=s.owner_uid AND ri.work_order_id=s.work_order_id
     LEFT JOIN compliance_activity_work_pack_instances wi ON s.form_kind='work_pack' AND wi.id=s.form_id AND wi.work_order_id=s.work_order_id
     WHERE s.owner_uid=? AND s.kind='form' AND EXISTS (SELECT 1 FROM trade_work_time_sessions origin
       WHERE origin.owner_uid=s.owner_uid AND origin.form_key=s.form_key AND origin.started_at<?) AND (?='' OR s.work_order_id=?)
-      AND COALESCE(NULLIF(jf.completed_at,''),NULLIF(af.submitted_at,''),NULLIF(ri.submitted_at,''),NULLIF(ri.issued_at,''),
+      AND COALESCE(NULLIF(jf.completed_at,''),NULLIF(swms.completed_at,''),NULLIF(af.submitted_at,''),NULLIF(ri.submitted_at,''),NULLIF(ri.issued_at,''),
         (SELECT MAX(wf.finalised_at) FROM compliance_activity_work_pack_final_records wf WHERE wf.organisation_id=wi.organisation_id AND wf.instance_key=wi.instance_key),?)>=?
       AND s.member_id IN (SELECT value FROM json_each(?)) AND (?=1 OR ${jobMemberSql("w")}) AND ${actor.sql}
     ORDER BY s.started_at,s.id LIMIT 30001`)

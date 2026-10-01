@@ -19,6 +19,6 @@ export const tradeWorkTimeSessions = sqliteTable("trade_work_time_sessions", {
   check("trade_work_time_kind_check", sql`${table.kind} IN ('app','form') AND ${table.source} IN ('web','native')`),
   check("trade_work_time_completion_check", sql`${table.observedCompletedAt}='' OR (${table.kind}='form' AND ${table.observedCompletedAt}=${table.endedAt})`),
   check("trade_work_time_page_check", sql`(${table.kind}='app' AND ${table.pageKey}='' AND ${table.pageTitle}='') OR (${table.kind}='form' AND length(${table.pageKey}) BETWEEN 1 AND 180 AND length(${table.pageTitle}) BETWEEN 1 AND 160)`),
-  check("trade_work_time_form_check", sql`(${table.kind}='app' AND ${table.formKind}='' AND ${table.formId}='' AND ${table.formKey}='') OR (${table.kind}='form' AND ${table.formKind} IN ('job_form','activity_record','work_pack','rental_inspection') AND ${table.formId}<>'' AND ${table.formKey}<>'' AND ${table.workOrderId}<>'')`),
+  check("trade_work_time_form_check", sql`(${table.kind}='app' AND ${table.formKind}='' AND ${table.formId}='' AND ${table.formKey}='') OR (${table.kind}='form' AND ${table.formKind} IN ('job_form','activity_record','work_pack','rental_inspection','swms') AND ${table.formId}<>'' AND ${table.formKey}<>'' AND ${table.workOrderId}<>'')`),
   check("trade_work_time_range_check", sql`julianday(${table.startedAt}) IS NOT NULL AND julianday(${table.endedAt}) IS NOT NULL AND ${table.endedAt}>=${table.startedAt} AND julianday(${table.endedAt})-julianday(${table.startedAt})<=1`),
 ]);

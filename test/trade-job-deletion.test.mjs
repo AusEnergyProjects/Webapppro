@@ -454,6 +454,31 @@ test('a protected record added after preflight is rejected by the atomic deletio
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM trade_crm_job_media_cleanup').get().n, 0);
 });
 
+function addSwms(f, id, owner = 'owner', workOrderId = 'job', complete = false) {
+  f.insert('trade_job_swms', { id, firebase_uid: owner, work_order_id: workOrderId, template_key: 'tlink-swms-v1',
+    template_name: 'Safe work method statement', template_version: 1, template_snapshot: '{}', context_json: '{}', answers_json: '{}',
+    last_actor_uid: owner, last_actor_member_id: owner, created_by_uid: owner, created_at: timestamp, updated_at: timestamp,
+    ...(complete ? { status: 'complete', signature_json: '{}', completed_at: timestamp, snapshot_sha256: 'a'.repeat(64) } : {}) });
+}
+
+test('job deletion removes only its own optional SWMS draft', async t => {
+  const f = fixture(t);
+  addSwms(f, 'own'); addSwms(f, 'other', 'other-owner', 'other');
+  await f.delete();
+  assert.deepEqual(f.sql.prepare('SELECT id FROM trade_job_swms').all().map(row => row.id), ['other']);
+});
+
+test('signed SWMS is retained, including a signature saved after deletion preflight', async t => {
+  for (const race of [false, true]) await t.test(race ? 'concurrent signing' : 'already signed', async t => {
+    const f = fixture(t);
+    if (race) f.race(() => addSwms(f, 'signed', 'owner', 'job', true));
+    else addSwms(f, 'signed', 'owner', 'job', true);
+    await assert.rejects(f.delete(), race ? /trade_crm_write_guard_verified_check/ : /signed SWMS/);
+    assert.equal(f.sql.prepare("SELECT COUNT(*) count FROM trade_job_swms WHERE id='signed'").get().count, 1);
+    assert.equal(f.sql.prepare("SELECT COUNT(*) count FROM trade_work_orders WHERE id='job'").get().count, 1);
+  });
+});
+
 test('calendar failure keeps the job reachable and mappings available for a retry', async (t) => {
   const f = fixture(t);
   f.insert('trade_crm_appointments', { id: 'appointment', work_order_id: 'job', firebase_uid: 'owner', title: 'Visit', starts_at: timestamp, status: 'no_show', created_at: timestamp, updated_at: timestamp });

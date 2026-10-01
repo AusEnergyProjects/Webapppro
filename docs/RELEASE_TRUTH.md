@@ -6,7 +6,15 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 2 October 2026
 
-## Current implementation: quote-aware work queues and Lost archive
+## Current implementation: default optional SWMS
+
+Every business has the same built-in SWMS in Job > Files. Adding it creates a job-specific draft with authoritative business/ABN, job/site and assigned-worker details. An authorised editor can prepare the draft; the assigned worker reviews and draws their own signature. The signed snapshot records the actual actor and timestamp, is immutable, and supplies its PDF in Files. Existing business, field-record and crew/job access applies to edits and downloads. Protected customer addresses are not inferred or disclosed.
+
+SWMS remains separate from required job forms. Its page and elapsed time is reported, but opening, saving, signing or replaying its time markers cannot start or complete a job. Migration 0233 adds the job document and extends the existing timing kind while preserving stored sessions. Signed records prevent hard deletion; disposable drafts follow authorised job deletion. Native preparation and the signed in-app record require a connection; PDF preview and download are available in website Files. No business template setup, PDF upload library, customer account or extra subscription is introduced.
+
+This source record precedes publication. Exact validation, Git/Sites and native update receipts belong in `C:/Webproject/outputs/tlink-swms-20261002/`. The default is a site-reviewable template, not an assertion of legal compliance. Prior quote/Lost work is released in Sites 730 from `eeea8f97b7d3f373918582fe7327fa702aed1366`.
+
+## Previous implementation: quote-aware work queues and Lost archive
 
 Home and its Jobs drill-down share the same scheduling definition: accepted current quotes, or explicitly approved direct work that needs no quote, without a current/future visit. Draft, unanswered and declined quotes do not create scheduling pressure. Intentional quote/site visits remain bookable through Schedule.
 

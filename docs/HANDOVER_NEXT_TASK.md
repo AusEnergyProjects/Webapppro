@@ -1,9 +1,17 @@
 # Next task handover
 
-Status: Quote-aware work queues and Lost archive implementation and release validation.
+Status: Default optional SWMS implementation and release validation.
 Prepared: 2 October 2026
 
-## Active contract: separate customer decisions from committed work
+## Active contract: one default SWMS for every business
+
+Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Baseline source `eeea8f97b7d3f373918582fe7327fa702aed1366`, Sites 730.
+
+Outcome: an optional job-specific SWMS is available in Files with business and scheduled-worker prefills, short site-specific fields and a real assigned-worker signature. Draft save and immutable signed PDF use the existing field access boundary. Its time is reported without becoming a mandatory form or causing job progress. Native uses the same online contract. Migration 0233 preserves existing timing records while adding this form kind.
+
+Validation and release receipts belong in `C:/Webproject/outputs/tlink-swms-20261002/`. Verify revision/permission/reassignment races, actual signer, immutable PDF, optional timing, deletion retention, web handlers, native exports and exact Git/Sites/Expo provenance. Do not sign on a real worker's behalf or send customer messages to test this feature. The next proposed Quotes workspace improvements remain in ROADMAP.md.
+
+## Previous contract: separate customer decisions from committed work
 
 Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Baseline source `ca7ce51e78cf58ae1bba6945416a8459ba92f61e`, Sites 729.
 

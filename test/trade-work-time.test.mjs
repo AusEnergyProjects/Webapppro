@@ -29,6 +29,14 @@ test('session boundary accepts page keys, forbids forged actors and invalid comp
   assert.throws(()=>timing.parseWorkTimeBatch({sessions:Array.from({length:31},()=>session())},now.getTime()),timing.WorkTimeInputError);
 });
 
+test('SWMS sessions use the same page, completion and actor validation as other forms',()=>{
+  const entry=session({formKind:'swms',formId:'swms-a',pageKey:'controls',pageTitle:'Risk controls',completedAt:at(1)});
+  assert.deepEqual(timing.parseWorkTimeBatch({sessions:[entry]},now.getTime()),[entry]);
+  for(const changes of [{pageKey:''},{completedAt:at(2)},{memberId:'scheduled-worker'},{kind:'app'}]) {
+    assert.throws(()=>timing.parseWorkTimeBatch({sessions:[{...entry,...changes}]},now.getTime()),timing.WorkTimeInputError);
+  }
+});
+
 test('phone-away gaps remain in elapsed page windows; returns to the same page are coalesced',()=>{
   const windows=timing.formPageWindows([
     {pageKey:'before',startedAt:at(0),endedAt:at(1)},
@@ -66,6 +74,10 @@ function fixture(){
   installEmptyTradeCrews(sqlite);
   sqlite.exec(`INSERT INTO trade_crews VALUES('crew','business-a','Crew','','lead',1,'',''); INSERT INTO trade_crew_members VALUES('business-a','crew','lead',''),('business-a','crew','worker','');`);
   sqlite.exec(read('../drizzle/0232_trade_work_time.sql'));
+  sqlite.exec(read('../drizzle/0233_trade_job_swms.sql'));
+  sqlite.exec(`INSERT INTO trade_job_swms
+    (id,firebase_uid,work_order_id,template_key,template_name,template_version,template_snapshot,context_json,answers_json,last_actor_uid,last_actor_member_id,created_by_uid,created_at,updated_at)
+    VALUES('swms-a','business-a','job-a','tlink-swms-v1','Safe work method statement',1,'{}','{"scheduledWorker":{"memberId":"lead","name":"Lead"}}','{}','worker-user','worker','worker-user','','');`);
   let beforeRun;
   const statement=(sql,values=[])=>({bind:(...next)=>statement(sql,next),first:async()=>sqlite.prepare(sql).get(...values)||null,all:async()=>({results:sqlite.prepare(sql).all(...values)}),run:async()=>{if(beforeRun){const action=beforeRun;beforeRun=null;action();}return{meta:{changes:Number(sqlite.prepare(sql).run(...values).changes)}};}});
   const db={prepare:statement},progress=[];
@@ -83,6 +95,47 @@ test('server derives identity, updates spans monotonically and keeps page identi
     const saved=f.sqlite.prepare('SELECT * FROM trade_work_time_sessions').get();assert.equal(saved.owner_uid,'business-a');assert.equal(saved.member_id,'worker');assert.equal(saved.ended_at,at(2));assert.equal(saved.page_key,'before');assert.equal(saved.form_key,'job_form:job-a:form-a');
     await assert.rejects(f.server.saveWorkTimeSessions(worker,[{...entry,pageKey:'after'}],f.db),f.server.WorkTimeConflictError);
     assert.equal(f.progress.length,3);assert.equal(f.progress[0][2].startOnly,true);
+  }finally{f.close();}
+});
+
+for(const ordinaryCompletion of ['',at(8)]) test(`SWMS timing cannot start or finish work alongside ${ordinaryCompletion?'completed':'unfinished'} ordinary forms, including later recovery`,async()=>{
+  const f=fixture();try{
+    f.sqlite.prepare('UPDATE trade_job_forms SET completed_at=? WHERE work_order_id=?').run(ordinaryCompletion,'job-a');
+    const opened=session({formKind:'swms',formId:'swms-a',pageKey:'work-description',pageTitle:'Work description'});
+    await f.server.saveWorkTimeSessions(worker,[opened],f.db,at(12));
+    assert.equal(f.progress.length,0,'opening an optional SWMS never calls job progress');
+    f.sqlite.prepare("UPDATE trade_job_swms SET status='complete',signature_json='{}',snapshot_sha256=?,completed_at=? WHERE id='swms-a'").run('a'.repeat(64),at(10));
+    const completed=session({formKind:'swms',formId:'swms-a',pageKey:'signature',pageTitle:'Signature',startedAt:at(6),endedAt:at(6),completedAt:at(6)});
+    await f.server.saveWorkTimeSessions(worker,[completed],f.db,at(12));
+    assert.equal(f.progress.length,0,'a SWMS completion marker never calls job progress');
+    await f.server.saveWorkTimeSessions(worker,[session({kind:'app',formKind:'',formId:'',workOrderId:'',pageKey:'',pageTitle:''})],f.db,at(12));
+    assert.equal(f.progress.length,0,'persisted SWMS completion cannot be recovered as job completion');
+    assert.equal(f.sqlite.prepare("SELECT stage FROM trade_work_orders WHERE id='job-a'").get().stage,'scheduled');
+    await f.server.saveWorkTimeSessions(worker,[session()],f.db,at(12));
+    assert.equal(f.progress.length,1,'ordinary form activity still reconciles');
+    assert.equal(f.progress[0][2].startOnly,true,'the saved SWMS marker cannot upgrade ordinary activity into a finish signal');
+  }finally{f.close();}
+});
+
+test('SWMS pages and observed completion appear in time reports under the actual actor, not the scheduled worker',async()=>{
+  const f=fixture();try{
+    await f.server.saveWorkTimeSessions(worker,[
+      session({formKind:'swms',formId:'swms-a',pageKey:'description',pageTitle:'Work description'}),
+      session({formKind:'swms',formId:'swms-a',pageKey:'controls',pageTitle:'Risk controls',startedAt:at(3),endedAt:at(4)}),
+      session({formKind:'swms',formId:'swms-a',pageKey:'controls',pageTitle:'Risk controls',startedAt:at(6),endedAt:at(6),completedAt:at(6)}),
+    ],f.db,at(12));
+    f.sqlite.prepare("UPDATE trade_job_swms SET status='complete',signature_json='{}',snapshot_sha256=?,completed_at=? WHERE id='swms-a'").run('a'.repeat(64),at(10));
+    const report=await f.server.loadWorkTimeReport(owner,new URLSearchParams(),f.db,now);
+    const form=report.forms.find(row=>row.formKind==='swms'),person=report.members.find(row=>row.memberId==='worker');
+    assert.equal(form.formId,'swms-a');assert.equal(form.title,'Safe work method statement');
+    assert.equal(form.completedAt,at(10));assert.equal(form.workFinishedAt,at(6));
+    assert.equal(form.elapsedSeconds,6*3600);assert.equal(form.activeSeconds,2*3600);
+    assert.deepEqual(form.pages.map(page=>[page.key,page.elapsedSeconds,page.activeSeconds]),[['description',3*3600,3600],['controls',3*3600,3600]]);
+    assert.deepEqual(form.members,['Worker']);assert.equal(person.formSeconds,2*3600);assert.equal(person.workSeconds,6*3600);
+    assert.equal(report.members.find(row=>row.memberId==='lead').formSeconds,0);
+    assert.equal(f.progress.length,0);
+    const later=await f.server.loadWorkTimeReport(owner,new URLSearchParams(),f.db,new Date('2026-10-08T12:00:00.000Z'));
+    assert.equal(later.forms.length,0,'a completed SWMS must not appear to remain open in later weeks');
   }finally{f.close();}
 });
 
@@ -159,11 +212,11 @@ test('lead report is restricted to current crew and assigned jobs; changing crew
   }finally{f.close();}
 });
 
-test('all four form families resolve only within the business and job',async()=>{
+test('all form families and optional SWMS resolve only within the business and job',async()=>{
   const f=fixture();try{
     f.sqlite.exec(`INSERT INTO trade_activity_field_records VALUES('activity','business-a','job-a','{"form":{"title":"Activity"}}',''); INSERT INTO trade_rental_inspections VALUES('rental','business-a','job-a','RI-1','','');
       INSERT INTO compliance_cases VALUES('case','org','job-a','business-a'); INSERT INTO compliance_activity_work_pack_instances VALUES('pack','logical-pack','org','case','job-a');`);
-    for(const [formKind,formId]of [['job_form','form-a'],['activity_record','activity'],['rental_inspection','rental'],['work_pack','pack']]){
+    for(const [formKind,formId]of [['job_form','form-a'],['activity_record','activity'],['rental_inspection','rental'],['work_pack','pack'],['swms','swms-a']]){
       assert.ok(await f.server.workTimeFormMeta(f.db,'business-a',{formKind,formId,workOrderId:'job-a'}));
       assert.equal(await f.server.workTimeFormMeta(f.db,'business-b',{formKind,formId,workOrderId:'job-a'}),null);
       assert.equal(await f.server.workTimeFormMeta(f.db,'business-a',{formKind,formId,workOrderId:'job-b'}),null);

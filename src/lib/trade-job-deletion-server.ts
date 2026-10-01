@@ -25,6 +25,7 @@ export function scheduleJobFileCleanup(db: D1Database) {
 // These records have independent retention/immutability contracts. Deletion must
 // never leave their canonical job missing or quietly become an archive operation.
 const protectedRecords = [
+  ["trade_job_swms", "firebase_uid", "AND status='complete'", "This job has a signed SWMS that must be retained."],
   ["trade_activity_field_records", "owner_uid", "AND (status <> 'draft' OR submitted_at <> '' OR pdf_object_key <> '' OR pdf_sha256 <> '')", "This job has a completed or submitted activity assessment that must be retained."],
   ["trade_activity_customer_document_deliveries", "firebase_uid", "", "This job has customer document delivery history that must be retained."],
   ["trade_handover_packs", "firebase_uid", "", "This job has installed-asset or handover records that must be retained."],
@@ -180,7 +181,7 @@ export async function deleteTradeJob(db: D1Database, access: TeamAccess, job: Jo
   for (const table of ['trade_crm_appointment_reschedule_events', 'trade_crm_appointment_reschedule_requests',
     'trade_crm_appointment_revisions', 'trade_crm_photo_request_events', 'trade_crm_photo_request_deliveries',
     'trade_crm_photo_request_completions', 'trade_crm_photo_requirement_reviews', 'trade_crm_photo_requests',
-    'trade_crm_job_media_events', 'trade_rental_inspections', 'trade_crm_job_media', 'trade_job_forms', 'trade_work_order_tasks',
+    'trade_crm_job_media_events', 'trade_rental_inspections', 'trade_crm_job_media', 'trade_job_forms', 'trade_job_swms', 'trade_work_order_tasks',
     'trade_crm_job_notes', 'trade_crm_signoffs', 'trade_crm_time_entries', 'trade_crm_appointments',
     'trade_service_follow_ups',
     'trade_crm_job_details', 'trade_work_order_events']) {

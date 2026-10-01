@@ -49,6 +49,7 @@ import {
 } from "@/lib/energy-service-catalogue.mjs";
 
 const TradeHandoverCentre = dynamic(() => import("./TradeHandoverCentre").then((module) => module.TradeHandoverCentre));
+const TradeSwmsPanel = dynamic(() => import("./TradeSwmsPanel").then((module) => module.TradeSwmsPanel));
 const TradeIntegrationCentre = dynamic(() => import("./TradeIntegrationCentre").then((module) => module.TradeIntegrationCentre));
 const TradeCommercialHandoffPanel = dynamic(() => import("./TradeCommercialHandoffPanel").then((module) => module.TradeCommercialHandoffPanel));
 const TradeActivityFieldRecords = dynamic(() => import("./TradeActivityFieldRecords").then((module) => module.TradeActivityFieldRecords));
@@ -1997,6 +1998,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
         <TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} onChanged={refreshJobFiles} />
       </details>
       {activeTab === "files" && <>
+        <TradeSwmsPanel key={job.id} user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} onChanged={refreshJobFiles} />
         {!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary" open={photoRequestOpen} onToggle={(event) => setPhotoRequestOpen(event.currentTarget.open)}><summary>Request customer photos</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}
         {!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan"><summary>Work plan and actuals</summary><TradeJobReadinessPanel key={job.id} user={user} workOrderId={job.id} onChanged={onReload} onOpenTeam={() => { if (canOpenJobSchedule) setTab("schedule"); }} /></details>}
         <TradeJobFilesPanel key={`${job.revision}:${filesRevision}`} user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} />

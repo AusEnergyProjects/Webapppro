@@ -22,6 +22,7 @@ import { FieldDatePicker } from '@/components/field-date-picker';
 import { FieldButton } from '@/components/field-button';
 import { FieldCommercialWorkspace } from '@/components/field-commercial-workspace';
 import { FieldFormLibrary } from '@/components/field-form-library';
+import { FieldSwmsFiles, FieldSwmsForm, type SwmsPayload } from '@/components/field-swms-form';
 import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflow';
 import { subscribeRentalSaves } from '@/lib/rental-save-queue';
 import { Screen } from '@/components/screen';
@@ -300,6 +301,7 @@ export default function JobScreen() {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState('');
   const [activeFormId, setActiveFormId] = useState<string | null>(() => openCommercial === 'quote' || openCommercial === 'invoice' ? openCommercial : null);
+  const [swmsDraft, setSwmsDraft] = useState<SwmsPayload | null>(null);
   const [activityRecords, setActivityRecords] = useState<ActivityFieldSummary[]>([]);
   const [locallyFinishedActivityIntentIds, setLocallyFinishedActivityIntentIds] = useState<string[]>([]);
   const [activityLoadError, setActivityLoadError] = useState('');
@@ -1400,6 +1402,8 @@ export default function JobScreen() {
 
       {!creditexManual && activeFormId === 'form-library' ? <FieldFormLibrary workOrderId={job.id} serviceCategory={job.serviceCategory} online={sync.online} onBack={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
+      {!creditexManual && activeFormId === 'swms' && swmsDraft?.record?.workOrderId === job.id ? <FieldSwmsForm key={swmsDraft.record.id} initial={{ ...swmsDraft, record: swmsDraft.record }} online={sync.online} onBack={() => { setSwmsDraft(null); setActiveFormId('files'); }} onChanged={async () => { await syncNow(); await load(); }} /> : null}
+
       {activeFormId === 'files' ? <View style={styles.card}>
         <FieldButton variant="secondary" onPress={() => setActiveFormId(null)}>Job</FieldButton>
         <Text style={styles.label}>FIELD EVIDENCE</Text><Text style={styles.cardTitle}>Photos and documents</Text>
@@ -1422,6 +1426,7 @@ export default function JobScreen() {
         <View style={styles.row}><FieldButton variant="secondary" loading={busy === 'photo:general'} style={styles.flex} onPress={() => void capturePhoto()}>Take photo</FieldButton><FieldButton variant="secondary" loading={busy === 'document:general'} style={styles.flex} onPress={() => void chooseDocument()}>Add document</FieldButton></View></> : null}
         {complianceCases.length ? <Text style={styles.meta}>General job files remain separate and are not submitted against a governed requirement.</Text> : null}
         <Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} already synced</Text>
+        {!creditexManual ? <FieldSwmsFiles key={job.id} workOrderId={job.id} online={sync.online} onOpen={data => { setSwmsDraft(data); setActiveFormId('swms'); }} /> : null}
       </View> : null}
 
       {!creditexManual && activeFormId === 'time' ? <View style={styles.card}>

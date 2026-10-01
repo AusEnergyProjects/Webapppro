@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, sqliteView, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 export * from "./trade-work-time-schema";
 export * from "./trade-crews-schema";
+export * from "./trade-swms-schema";
 
 export const tradeMapLocationCache = sqliteTable("trade_map_location_cache", {
   ownerUid: text("owner_uid").notNull(), addressKey: text("address_key").notNull(), address: text("address").notNull(),

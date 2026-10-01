@@ -214,6 +214,21 @@ test('offline completion survives storage and later sync without replacing the o
   assert.equal(store.size, 0);
 });
 
+test('optional SWMS page and completion timing survives the shared web and native offline queue', async () => {
+  const entry = { ...interval(0), formKind: 'swms', formId: 'swms-1', pageKey: 'controls', pageTitle: 'Risk controls', completedAt: new Date(start).toISOString() };
+  const store = new Map();
+  const offline = queueFixture({ store, canSend: () => false });
+  offline.queue.enqueue(entry);
+  await new Promise(resolve => setImmediate(resolve));
+  const restored = parseStoredWorkTime(JSON.stringify(store.get(entry.id)));
+  assert.deepEqual(restored, entry);
+  const sent = [];
+  const online = queueFixture({ store: new Map([[entry.id, restored]]), send: async batch => sent.push(...batch) });
+  await online.queue.flush();
+  assert.deepEqual(sent, [entry]);
+  assert.equal(online.store.size, 0);
+});
+
 function trackingHook(path, native = false) {
   const source = ts.createSourceFile(path, readFileSync(new URL(path, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const hook = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'useFormTimeTracking');
