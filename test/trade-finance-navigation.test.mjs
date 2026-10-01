@@ -94,30 +94,55 @@ test("Solar and measurements navigation waits for the current design to save", a
 });
 
 test("explicit solar navigation opens the existing design tools without mounting customer maps", () => {
-  const expression = find(dashboard, node => ts.isJsxExpression(node)
-    && node.expression?.getText(dashboard).startsWith('workspace === "design" && (hasBusinessOperations'));
+  const execute = (source, name, context) => {
+    const declaration = find(source, node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    return Function("exports", ...Object.keys(context), `${compile(declaration.getText(source).replace(/^export /, ""))}\nreturn ${name};`)({}, ...Object.values(context));
+  };
   const context = { require: () => jsx, exports: {}, workspace: "design", hasBusinessOperations: true,
-    user: { uid: "owner" }, registerMapSave() {}, TradeDesignWorkspace() {},
-    setWorkspace() {}, setCommandTarget() {}, setMapNavigationNonce() {} };
-  const view = evaluate(expression.expression, dashboard, context);
-  assert.equal(view.type, context.TradeDesignWorkspace);
+    user: { uid: "owner" }, registerMapSave() {}, TradeBusinessHub() {}, hasTeamAccess: true,
+    commandTarget: { id: "stale-job" }, mapNavigationNonce: 1, openFinance() {},
+    setWorkspace() {}, setCommandTarget() {}, setMapNavigationNonce() {}, setActiveWorkView() {} };
+  const view = evaluate(mapHubElement, dashboard, context);
+  assert.equal(view.type, context.TradeBusinessHub);
+  assert.equal(view.props.mapWorkspace, false);
+  assert.equal(view.props.navigationTarget, null);
+  assert.equal(typeof view.props.designWorkspace.onOpenMap, "function");
   assert.equal(view.props.onRegisterMapSave, context.registerMapSave);
-  assert.equal(evaluate(expression.expression, dashboard, { ...context, workspace: "map" }), false);
-  const blocked = evaluate(expression.expression, dashboard, { ...context, hasBusinessOperations: false });
+  const hub = ts.createSourceFile("TradeBusinessHub.tsx", read("TradeBusinessHub"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const hubContext = { require: () => jsx, InstallerCrmWorkspace() {} };
+  const hubRender = execute(hub, "TradeBusinessHub", hubContext);
+  const blocked = hubRender({ ...view.props, fullAccess: false });
   assert.match(text(blocked), /Verification required/);
-  assert.equal(nodes(blocked, node => node.type === context.TradeDesignWorkspace).length, 0);
+  assert.equal(nodes(blocked, node => node.type === hubContext.InstallerCrmWorkspace).length, 0);
+  const crmProps = hubRender(view.props).props;
+  const quotePermissions = execute(crm, "mapQuotePermissions", {});
+  const crmContext = { require: () => jsx, TradeRecordMap() {}, InstallerCrmWorkspaceView() {}, mapQuotePermissions: quotePermissions };
+  const renderCrm = execute(crm, "InstallerCrmWorkspace", crmContext);
+  const design = renderCrm(crmProps);
+  assert.equal(design.type, crmContext.TradeRecordMap);
+  assert.equal(design.props.designOnly, true);
+  assert.equal(design.props.onOpenMap, view.props.designWorkspace.onOpenMap);
+  assert.equal(design.props.onRegisterMapSave, context.registerMapSave);
+  assert.deepEqual(design.props.quoteAccess, { canCreate: true, canCreateCustomer: true, canSend: true });
+  assert.equal(renderCrm({ ...crmProps, designWorkspace: undefined }).type, crmContext.InstallerCrmWorkspaceView);
+  assert.equal(renderCrm({ ...crmProps, staffPermissions: {} }).props.quoteAccess, undefined);
+  assert.deepEqual(renderCrm({ ...crmProps, staffPermissions: { canViewQuotes: true, canManageQuotes: true, canCreateJobs: true, jobScope: "assigned", canManageCustomers: false, canSendQuotes: false } }).props.quoteAccess,
+    { canCreate: false, canCreateCustomer: false, canSend: false });
 });
 
 test("the dedicated design view remounts for each business and retains quote and save handoffs", () => {
-  const roof = ts.createSourceFile("TradeRoofDesignMap.tsx", read("TradeRoofDesignMap"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const roof = ts.createSourceFile("TradeRecordMap.tsx", read("TradeRecordMap"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const execute = (name, context) => {
     const declaration = find(roof, node => ts.isFunctionDeclaration(node) && node.name?.text === name);
     return Function("exports", ...Object.keys(context), `${compile(declaration.getText(roof).replace(/^export /, ""))}\nreturn ${name};`)({}, ...Object.values(context));
   };
-  const context = { require: () => jsx, TradeDesignWorkspaceView() {}, useTradeBusiness: () => ({ ownerUid: "business-a" }) };
-  const props = { user: { uid: "actor" }, onRegisterMapSave() {}, onOpenMap() {} };
-  assert.equal(execute("TradeDesignWorkspace", context)(props).key, "actor:business-a");
-  assert.equal(execute("TradeDesignWorkspace", { ...context, useTradeBusiness: () => ({ ownerUid: "business-b" }) })(props).key, "actor:business-b");
+  const context = { require: () => jsx, TradeDesignWorkspaceView() {}, TradeRecordMapView() {}, useTradeBusiness: () => ({ ownerUid: "business-a" }) };
+  const props = { user: { uid: "actor" }, designOnly: true, quoteAccess: { canCreate: true, canCreateCustomer: true, canSend: true }, onRegisterMapSave() {}, onOpenMap() {} };
+  const entry = execute("TradeRecordMap", context)(props);
+  assert.equal(entry.type, context.TradeDesignWorkspaceView);
+  assert.equal(entry.key, "actor:business-a");
+  assert.equal(execute("TradeRecordMap", { ...context, useTradeBusiness: () => ({ ownerUid: "business-b" }) })(props).key, "actor:business-b");
+  assert.equal(execute("TradeRecordMap", context)({ ...props, designOnly: false }).type, context.TradeRecordMapView);
   const measurement = { kind: "area", quantity: 120 }, setters = [() => {}, () => {}];
   let hook = 0;
   const viewContext = { require: () => jsx, TradeRoofDesignMap() {}, TradeMapQuoteDialog() {}, useState: () => [hook === 0 ? measurement : null, setters[hook++]] };
@@ -127,7 +152,12 @@ test("the dedicated design view remounts for each business and retains quote and
   assert.equal(tools.props.onQuote, setters[0]);
   const dialog = nodes(view, node => node.type === viewContext.TradeMapQuoteDialog)[0];
   assert.equal(dialog.props.measurement, measurement);
+  assert.equal(dialog.props.access, props.quoteAccess);
   assert.equal(dialog.props.onDesignLinked, setters[1]);
+  hook = 0;
+  const restricted = execute("TradeDesignWorkspaceView", viewContext)({ ...props, quoteAccess: undefined });
+  assert.equal(nodes(restricted, node => node.type === viewContext.TradeRoofDesignMap)[0].props.onQuote, undefined);
+  assert.equal(nodes(restricted, node => node.type === viewContext.TradeMapQuoteDialog).length, 0);
   const ownerGate = find(dashboard, node => ts.isJsxOpeningElement(node) && node.tagName.getText(dashboard) === "TradeBusinessGate");
   assert.match(ownerGate.getText(dashboard), /destination="owner"/);
 });

@@ -2,35 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
-import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
-import dynamic from "next/dynamic";
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { GoogleMapsClientError, loadGoogleMaps, onGoogleMapsAuthFailure } from "@/lib/google-maps-client";
 import { TradeMapTools } from "./TradeMapTools";
 import type { SolarMapContext } from "./TradeMapSolarTools";
 import type { SolarDesign } from "@/lib/trade-solar-design";
 import type { MapQuoteMeasurement } from "@/lib/trade-map-quote";
 import styles from "./TradeRecordMap.module.css";
-
-const TradeMapQuoteDialog = dynamic(() => import("./TradeMapQuoteDialog").then(module => module.TradeMapQuoteDialog));
-
-type WorkspaceProps = { user: User; onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void; onOpenMap: () => void };
-
-/** The explicit tool entry opens without loading the customer-location map. */
-export function TradeDesignWorkspace(props: WorkspaceProps) {
-  const businessOwnerUid = useTradeBusiness()?.ownerUid || props.user.uid;
-  return <TradeDesignWorkspaceView key={`${props.user.uid}:${businessOwnerUid}`} {...props} />;
-}
-
-function TradeDesignWorkspaceView({ user, onRegisterMapSave, onOpenMap }: WorkspaceProps) {
-  const [measurement, setMeasurement] = useState<MapQuoteMeasurement | null>(null);
-  const [linkedDesign, setLinkedDesign] = useState<SolarDesign | null>(null);
-  // Mounted by the verified owner dashboard only, with the same quote rights
-  // as its existing CRM map. Team views retain their own permission checks.
-  return <section className="dashboard-panel">
-    <TradeRoofDesignMap user={user} linkedDesign={linkedDesign} onRegisterMapSave={onRegisterMapSave} onQuote={setMeasurement} onClose={onOpenMap} closeLabel="Jobs & customer map" />
-    {measurement && <TradeMapQuoteDialog user={user} measurement={measurement} access={{ canCreate: true, canCreateCustomer: true, canSend: true }} onDesignLinked={setLinkedDesign} onClose={() => setMeasurement(null)} />}
-  </section>;
-}
 
 type Props = {
   user: User;

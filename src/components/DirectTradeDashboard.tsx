@@ -62,7 +62,6 @@ const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace"
 const TradeEmailTemplatesWorkspace = dynamic(() => import("./TradeEmailTemplatesWorkspace").then((module) => module.TradeEmailTemplatesWorkspace));
 const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then((module) => module.TradeMessagesWorkspace), { loading: () => <p role="status">Loading messages...</p> });
 const TradeNetworkWorkspace = dynamic(() => import("./TradeNetworkWorkspace").then((module) => module.TradeNetworkWorkspace), { loading: () => <p role="status">Loading trade network...</p> });
-const TradeDesignWorkspace = dynamic(() => import("./TradeRoofDesignMap").then((module) => module.TradeDesignWorkspace), { ssr: false, loading: () => <p role="status">Loading solar and measurement tools...</p> });
 const InstallerPlatformQuote = dynamic(() => import("./InstallerPlatformQuote").then((module) => module.InstallerPlatformQuote));
 const InstallerArrivalWindows = dynamic(() => import("./InstallerArrivalWindows").then((module) => module.InstallerArrivalWindows));
 const TradePurchasingWorkspace = dynamic(() => import("./TradePurchasingWorkspace").then((module) => module.TradePurchasingWorkspace));
@@ -2528,17 +2527,16 @@ function DirectTradeDashboardContent() {
               {workspace === "email-templates" && <TradeEmailTemplatesWorkspace user={user} />}
               {workspace === "messages" && <TradeMessagesWorkspace user={user} initialThreadId={messageTarget.id} initialThreadRevision={messageTarget.revision} onOpenAutomations={() => setWorkspace("email-templates")} onOpenQuote={workOrderId => { void setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() })); }} onOpenIntegrations={() => setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() }))} />}
 
-              {workspace === "design" && (hasBusinessOperations ? <TradeDesignWorkspace user={user} onRegisterMapSave={registerMapSave} onOpenMap={() => setWorkspace("map", () => { setCommandTarget(null); setMapNavigationNonce(current => current + 1); })} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to open solar designs and measurement tools.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
-
-              {(workspace === "work" || workspace === "map") && <TradeBusinessHub
+              {(workspace === "work" || workspace === "map" || workspace === "design") && <TradeBusinessHub
                 key={`${user.uid}:${workspace}:${workspace === "map" ? mapNavigationNonce : 0}`}
                 user={user}
                 partnerType="installer"
                 fullAccess={hasBusinessOperations}
                 teamAccess={hasTeamAccess}
                 mapWorkspace={workspace === "map"}
+                designWorkspace={workspace === "design" ? { onOpenMap: () => setWorkspace("map", () => { setCommandTarget(null); setMapNavigationNonce(current => current + 1); }) } : undefined}
                 onRegisterMapSave={registerMapSave}
-                navigationTarget={workspace === "map" ? null : commandTarget}
+                navigationTarget={workspace === "work" ? commandTarget : null}
                 onOpenSchedule={(weekStart) => {
                   setWorkspace("work", () => {
                     setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: weekStart || "", nonce: Date.now() });

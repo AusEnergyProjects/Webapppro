@@ -18,7 +18,20 @@ import type { SolarDesign } from "@/lib/trade-solar-design";
 const TradeMapQuoteDialog = dynamic(() => import("./TradeMapQuoteDialog").then(module => module.TradeMapQuoteDialog));
 const TradeRoofDesignMap = dynamic(() => import("./TradeRoofDesignMap").then(module => module.TradeRoofDesignMap), { ssr: false });
 
-type Props = { user: User; query: TradeMapQuery; onOpenRecord: (record: TradeMapRecord) => void; quoteAccess?: MapQuoteAccess; onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void };
+type SharedProps = { user: User; quoteAccess?: MapQuoteAccess; onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void };
+type DesignProps = SharedProps & { designOnly: true; onOpenMap: () => void };
+type RecordMapProps = SharedProps & { designOnly?: false; query: TradeMapQuery; onOpenRecord: (record: TradeMapRecord) => void };
+type Props = DesignProps | RecordMapProps;
+
+function TradeDesignWorkspaceView({ user, quoteAccess, onRegisterMapSave, onOpenMap }: DesignProps) {
+  const [measurement, setMeasurement] = useState<MapQuoteMeasurement | null>(null);
+  const [linkedDesign, setLinkedDesign] = useState<SolarDesign | null>(null);
+  return <section className="dashboard-panel">
+    <TradeRoofDesignMap user={user} linkedDesign={linkedDesign} onRegisterMapSave={onRegisterMapSave} onQuote={quoteAccess ? setMeasurement : undefined} onClose={onOpenMap} closeLabel="Jobs & customer map" />
+    {measurement && quoteAccess && <TradeMapQuoteDialog user={user} measurement={measurement} access={quoteAccess} onDesignLinked={setLinkedDesign} onClose={() => setMeasurement(null)} />}
+  </section>;
+}
+
 type Runtime = { ownerUid: string; api: typeof import("@maptiler/sdk"); map: TLinkMap };
 type MapState = "loading" | "ready" | "unconfigured" | "access" | "auth" | "limit" | "unavailable";
 type MarkerEntry = { marker: Marker; element: HTMLButtonElement; badge: HTMLSpanElement; click: () => void };
@@ -54,11 +67,12 @@ function locationLabel(record: TradeMapDatasetItem) {
 
 export function TradeRecordMap(props: Props) {
   const businessOwnerUid = useTradeBusiness()?.ownerUid || props.user.uid;
+  if (props.designOnly) return <TradeDesignWorkspaceView key={`${props.user.uid}:${businessOwnerUid}`} {...props} />;
   // Remount all map, search and design state when the authenticated business changes.
   return <TradeRecordMapView key={`${props.user.uid}:${businessOwnerUid}`} {...props} businessOwnerUid={businessOwnerUid} />;
 }
 
-function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegisterMapSave, businessOwnerUid }: Props & { businessOwnerUid: string }) {
+function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegisterMapSave, businessOwnerUid }: RecordMapProps & { businessOwnerUid: string }) {
   const fetch = useTradeBusinessFetch();
   const baseUrl = tradeMapQueryUrl(query);
   const scope = `${user.uid}:${businessOwnerUid}:${baseUrl}`;

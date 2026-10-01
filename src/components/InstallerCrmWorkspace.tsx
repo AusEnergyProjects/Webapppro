@@ -396,7 +396,19 @@ function unreachableCustomerRegisterColumn(key: never): never {
   throw new Error(`Unsupported customer register column: ${String(key)}`);
 }
 
-export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navigationTarget, mapWorkspace = false, onRegisterMapSave, onOpenSchedule, onViewChange, onOpenInvoices, onOpenFinance, onCloseJobNavigation }: { user: User; teamAccess: boolean; staffPermissions?: TradeTeamPermissions; navigationTarget?: TLinkCommandTarget | null; mapWorkspace?: boolean; onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void; onOpenSchedule?: (weekStart?: string) => void; onViewChange?: (view: View) => void; onOpenInvoices?: () => void; onOpenFinance?: (view: "pricebook" | "reports", priceBookView?: "items" | "packets") => void; onCloseJobNavigation?: () => void }) {
+type InstallerCrmWorkspaceProps = { user: User; teamAccess: boolean; staffPermissions?: TradeTeamPermissions; navigationTarget?: TLinkCommandTarget | null; mapWorkspace?: boolean; designWorkspace?: { onOpenMap: () => void }; onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void; onOpenSchedule?: (weekStart?: string) => void; onViewChange?: (view: View) => void; onOpenInvoices?: () => void; onOpenFinance?: (view: "pricebook" | "reports", priceBookView?: "items" | "packets") => void; onCloseJobNavigation?: () => void };
+
+function mapQuotePermissions(staffPermissions?: TradeTeamPermissions) {
+  return !staffPermissions || (staffPermissions.canViewQuotes && staffPermissions.canManageQuotes)
+    ? { canCreate: !staffPermissions || (staffPermissions.canCreateJobs && staffPermissions.jobScope === "team"), canCreateCustomer: !staffPermissions || staffPermissions.canManageCustomers, canSend: !staffPermissions || staffPermissions.canSendQuotes } : undefined;
+}
+
+export function InstallerCrmWorkspace(props: InstallerCrmWorkspaceProps) {
+  if (props.designWorkspace) return <TradeRecordMap user={props.user} designOnly onOpenMap={props.designWorkspace.onOpenMap} quoteAccess={mapQuotePermissions(props.staffPermissions)} onRegisterMapSave={props.onRegisterMapSave} />;
+  return <InstallerCrmWorkspaceView {...props} />;
+}
+
+function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigationTarget, mapWorkspace = false, onRegisterMapSave, onOpenSchedule, onViewChange, onOpenInvoices, onOpenFinance, onCloseJobNavigation }: InstallerCrmWorkspaceProps) {
   const fetch = useTradeBusinessFetch();
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -541,8 +553,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     setView("pricebook");
   }
   const canCreateCustomer = !staffPermissions || staffPermissions.canManageCustomers;
-  const mapQuoteAccess = !staffPermissions || (staffPermissions.canViewQuotes && staffPermissions.canManageQuotes)
-    ? { canCreate: !staffPermissions || (staffPermissions.canCreateJobs && staffPermissions.jobScope === "team"), canCreateCustomer, canSend: !staffPermissions || staffPermissions.canSendQuotes } : undefined;
+  const mapQuoteAccess = mapQuotePermissions(staffPermissions);
   const canCreateJob = !staffPermissions || staffPermissions.canCreateJobs;
   const canSearchCustomerFields = true;
   const canSearchCustomerDirectory = !staffPermissions || (staffPermissions.canViewCustomers && staffPermissions.canSearchCustomers);
