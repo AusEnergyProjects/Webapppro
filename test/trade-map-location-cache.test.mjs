@@ -83,17 +83,45 @@ test("concurrent devices atomically claim disjoint bounded batches and cannot re
   } finally { f.close(); }
 });
 
-test("an interrupted batch resumes after its lease; expired tokens cannot overwrite its replacement", async () => {
+test("a slow completed batch saves after its deadline when its lease has not been reclaimed", async () => {
+  const f = fixture();
+  try {
+    f.add("a");
+    const first = await f.claim(), now = later(TRADE_MAP_LOCATION_LEASE_MS + 30_000);
+    assert.deepEqual(await f.save(first.claims, located, { now }), saveCounts(1));
+    assert.equal(f.cache()[0].checked_at, now);
+    assert.equal(f.cache()[0].expires_at, "");
+    assert.deepEqual(await f.claim({ now }), { claims: [], retryAfterMs: 0 });
+    assert.equal((await f.locate({ now })).complete, true);
+    assert.equal(f.lookupCalls.length, 0, "completed matches are not looked up again");
+    assert.deepEqual(await f.save(first.claims, located, { now }), saveCounts(0, 1), "completed tokens cannot be replayed");
+  } finally { f.close(); }
+});
+
+test("an interrupted batch resumes after its lease; its reclaimed token cannot overwrite the replacement", async () => {
   const f = fixture();
   try {
     f.add("a");
     const first = await f.claim(), now = later(TRADE_MAP_LOCATION_LEASE_MS);
-    assert.deepEqual(await f.save(first.claims, located, { now }), saveCounts(0, 1));
     const next = await f.claim({ now });
     assert.equal(next.claims.length, 1);
     assert.notEqual(next.claims[0].leaseToken, first.claims[0].leaseToken);
     assert.deepEqual(await f.save(first.claims, located, { now }), saveCounts(0, 1));
     assert.deepEqual(await f.save(next.claims, located, { now }), saveCounts(1));
+  } finally { f.close(); }
+});
+
+test("an expired but unreclaimed lease still requires the current business and authorized address", async () => {
+  const f = fixture();
+  try {
+    f.add("a"); f.add("b", "2 Example Street Melbourne VIC 3000", "other");
+    const first = await f.claim(), now = later(TRADE_MAP_LOCATION_LEASE_MS + 30_000);
+    assert.deepEqual(await f.save(first.claims, located, { now }, "other"), saveCounts(0, 1));
+    f.sqlite.prepare("UPDATE records SET member_id='different-staff' WHERE id='a'").run();
+    assert.deepEqual(await f.save(first.claims, located, { now }, "owner", f.dataset("owner", "staff")), saveCounts(0, 1));
+    f.sqlite.prepare("UPDATE records SET address='Changed address VIC 3000' WHERE id='a'").run();
+    assert.deepEqual(await f.save(first.claims, located, { now }), saveCounts(0, 1));
+    assert.equal(f.cache()[0].status, "pending");
   } finally { f.close(); }
 });
 

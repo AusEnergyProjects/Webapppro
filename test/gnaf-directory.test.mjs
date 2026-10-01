@@ -6,9 +6,9 @@ import { createGnafDirectory, parseGnafManifest, parseGnafShard, gnafSha256, GNA
 import { uploadGnafPart, verifyGnafBatch, activateGnafDirectory, gnafProvisionAuthorized, readGnafUpload } from "../src/lib/gnaf-provision.ts";
 
 const encode = value => new TextEncoder().encode(JSON.stringify(value));
-async function fixture(address = "12 Smith St, Melbourne VIC 3000, Australia") {
+async function fixture(address = "12 Smith St, Melbourne VIC 3000, Australia", sourceId = "GAVIC123") {
   const key = gnafAddressKey(address), path = gnafShardForKey(key);
-  const shard = { schema: 1, version: "aug2026", postcode: "3000", bucket: path.split('/')[1][0], entries: { [key]: [-37.81, 144.96, "GAVIC123", "PC"] } };
+  const shard = { schema: 1, version: "aug2026", postcode: path.split('/')[0], bucket: path.split('/')[1][0], entries: { [key]: [-37.81, 144.96, sourceId, "PC"] } };
   const decoded = encode(shard), bytes = gzipSync(decoded);
   const manifest = { schema: 1, version: "aug2026", sourceUrl: "https://data.gov.au/data/gnaf.zip", sourceSha256: "1".repeat(64), attribution: GNAF_ATTRIBUTION, datum: "GDA2020", createdAt: "2026-10-01T00:00:00Z", recordCount: 1,
     shards: { [path]: { sha256: await gnafSha256(bytes), bytes: bytes.length, decodedBytes: decoded.length, entries: 1 } } };
@@ -34,6 +34,46 @@ test("directory resolves repeated addresses once per shard without external call
   assert.equal(result.length,200); assert.equal(f.reads(),1); assert.equal(result[0].sourceId,"GAVIC123"); assert.equal(result[0].approximate,true);
   assert.equal((await directory.resolve(["missing"] ))[0].reason,"invalid_address");
   await assert.rejects(directory.resolve(Array(201).fill(f.key)));
+});
+test("directory overlaps at most four compressed reads and preserves result order across groups", async () => {
+  const fixtures = await Promise.all(Array.from({ length: 9 }, (_, index) => fixture(`12 Smith Street Melbourne VIC ${3000 + index}`, `GAVIC${index}`)));
+  const manifest = { ...fixtures[0].manifest, recordCount: fixtures.length, shards: Object.assign({}, ...fixtures.map(f => f.manifest.shards)) };
+  const partitions = new Map(fixtures.map(f => [`${GNAF_PREFIX}aug2026/${f.path}`, f]));
+  let active = 0, maximumActive = 0, reads = 0;
+  const bucket = { async get(path) {
+    const f = partitions.get(path);
+    assert.ok(f); reads++; active++; maximumActive = Math.max(maximumActive, active);
+    await new Promise(resolve => setImmediate(resolve));
+    return { size: f.bytes.length, async arrayBuffer() {
+      await new Promise(resolve => setImmediate(resolve)); active--;
+      return Uint8Array.from(f.bytes).buffer;
+    } };
+  } };
+  const addresses = fixtures.map(f => f.key).reverse();
+  const result = await createGnafDirectory(bucket, manifest).resolve([...addresses, addresses[0], "invalid"]);
+  assert.equal(maximumActive, 4); assert.equal(active, 0); assert.equal(reads, 9);
+  assert.deepEqual(result.slice(0, 10).map(item => item.status), Array(10).fill("located"));
+  assert.deepEqual(result.slice(0, 10).map(item => item.sourceId), ["GAVIC8", "GAVIC7", "GAVIC6", "GAVIC5", "GAVIC4", "GAVIC3", "GAVIC2", "GAVIC1", "GAVIC0", "GAVIC8"]);
+  assert.equal(result.at(-1).reason, "invalid_address");
+});
+test("a failed prefetched group finishes its outstanding reads and never returns partial matches", async () => {
+  const fixtures = await Promise.all(Array.from({ length: 5 }, (_, index) => fixture(`12 Smith Street Melbourne VIC ${3000 + index}`)));
+  const manifest = { ...fixtures[0].manifest, recordCount: fixtures.length, shards: Object.assign({}, ...fixtures.map(f => f.manifest.shards)) };
+  const partitions = new Map(fixtures.map(f => [`${GNAF_PREFIX}aug2026/${f.path}`, f]));
+  for (const failure of ["missing", "corrupt", "truncated"]) {
+    let active = 0, reads = 0;
+    const bucket = { async get(path) {
+      const f = partitions.get(path); reads++; active++;
+      await new Promise(resolve => setImmediate(resolve));
+      if (f === fixtures[0] && failure === "missing") { active--; return null; }
+      return { size: f.bytes.length, async arrayBuffer() {
+        await new Promise(resolve => setImmediate(resolve)); active--;
+        return (f !== fixtures[0] ? Uint8Array.from(f.bytes) : failure === "corrupt" ? new Uint8Array(f.bytes.length) : Uint8Array.from(f.bytes).slice(1)).buffer;
+      } };
+    } };
+    await assert.rejects(createGnafDirectory(bucket, manifest).resolve(fixtures.map(f => f.key)));
+    assert.equal(active, 0, failure); assert.equal(reads, 4, "later groups are not read after a failed group");
+  }
 });
 test("lookup accepts explicit unit slashes after aliases without changing stored canonical keys", async () => {
   const f=await fixture("Unit 3M 15 Smith Street Melbourne VIC 3000");

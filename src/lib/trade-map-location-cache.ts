@@ -87,7 +87,7 @@ export async function claimTradeMapLocations(db: D1Database, ownerUid: string, d
   return { claims: [], retryAfterMs: (await pendingLocations(db, ownerUid, dataset, now)).retryAfterMs };
 }
 
-/** Accept only trusted server directory matches; this function is never exposed as an HTTP save action. */
+/** Accept trusted matches while the exact lease is still owned, even after its reclaim deadline. */
 export async function saveTradeMapLocations(db: D1Database, ownerUid: string, dataset: TradeMapAuthorizedDataset,
   values: readonly PermanentLocationSave[], options: { sourceVersion: string; now?: string }) {
   if (!Array.isArray(values) || values.length < 1 || values.length > MAX_BATCH || typeof options.sourceVersion !== "string"
@@ -114,10 +114,10 @@ export async function saveTradeMapLocations(db: D1Database, ownerUid: string, da
         json_extract(r.value,'$.approximate'),json_extract(r.value,'$.reason'),json_extract(r.value,'$.sourceId')
       FROM results r WHERE r.address_key=trade_map_location_cache.address_key
     ), source_version=?,checked_at=?,expires_at='',retry_after='',lease_token='',lease_expires_at=''
-    WHERE owner_uid=? AND provider='gnaf' AND address_key IN(SELECT address_key FROM results) AND lease_expires_at>?
+    WHERE owner_uid=? AND provider='gnaf' AND address_key IN(SELECT address_key FROM results)
       AND EXISTS(SELECT 1 FROM results r WHERE r.address_key=trade_map_location_cache.address_key AND r.lease_token=trade_map_location_cache.lease_token)
       AND EXISTS(SELECT 1 FROM dataset d WHERE d.address_key=trade_map_location_cache.address_key AND d.address=trade_map_location_cache.address)
-    RETURNING status`).bind(...dataset.bindings, JSON.stringify(rows), options.sourceVersion, now, ownerUid, now).all<{ status: string }>();
+    RETURNING status`).bind(...dataset.bindings, JSON.stringify(rows), options.sourceVersion, now, ownerUid).all<{ status: string }>();
   const located = updated.results.filter(row => row.status === "located").length;
   return { saved: updated.results.length, ignored: values.length - updated.results.length, located, unlocated: updated.results.length - located };
 }

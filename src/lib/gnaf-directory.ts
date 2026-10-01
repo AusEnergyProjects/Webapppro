@@ -79,21 +79,35 @@ export function createGnafDirectory(bucket: GnafBucketReader, manifest: GnafMani
     const groups = new Map<string, { key: string; index: number }[]>();
     addresses.forEach((address, index) => { const key = lookupAddressKey(address); if (!key) return;
       const shard = gnafShardForKey(key); const list = groups.get(shard) || []; list.push({ key, index }); groups.set(shard, list); });
-    // Serial partitions keep maximum live decoded memory bounded, even for 200 different postcodes.
-    for (const [path, items] of groups) {
-      const expected = manifest.shards[path];
-      if (!expected) { for (const item of items) results[item.index] = { status: "unlocated", reason: "zero_results" }; continue; }
-      const source = await bucket.get(`${GNAF_PREFIX}${manifest.version}/${path}`);
-      if (!source || source.size !== expected.bytes || source.size > GNAF_MAX_COMPRESSED_BYTES) throw new GnafDirectoryUnavailableError();
-      const bytes = new Uint8Array(await source.arrayBuffer());
-      if (await gnafSha256(bytes) !== expected.sha256) throw new GnafDirectoryUnavailableError();
-      const { shard, decodedBytes } = parseGnafShard(bytes, manifest.version, path);
-      if (decodedBytes !== expected.decodedBytes || Object.keys(shard.entries).length !== expected.entries) throw new GnafDirectoryUnavailableError();
-      for (const { key, index } of items) {
-        const entry = Object.hasOwn(shard.entries, key) ? shard.entries[key] : undefined;
-        results[index] = entry === null ? { status: "unlocated", reason: "ambiguous" }
-          : entry ? { status: "located", position: { lat: entry[0], lng: entry[1] }, approximate: true, sourceId: entry[2] }
-            : { status: "unlocated", reason: "zero_results" };
+    const partitions = [...groups];
+    // Overlap storage latency, retaining at most four compressed bodies (8 MiB).
+    // Decode and extract one partition at a time; never retain a batch of decoded maps.
+    for (let offset = 0; offset < partitions.length; offset += 4) {
+      const fetched = await Promise.allSettled(partitions.slice(offset, offset + 4).map(async ([path, items]) => {
+        const expected = manifest.shards[path];
+        if (!expected) return { path, items, expected, bytes: null };
+        const source = await bucket.get(`${GNAF_PREFIX}${manifest.version}/${path}`);
+        if (!source || source.size !== expected.bytes || source.size > GNAF_MAX_COMPRESSED_BYTES) throw new GnafDirectoryUnavailableError();
+        const bytes = new Uint8Array(await source.arrayBuffer());
+        if (bytes.length !== expected.bytes) throw new GnafDirectoryUnavailableError();
+        return { path, items, expected, bytes };
+      }));
+      // Wait for this bounded group before failing, so a retry cannot overlap abandoned reads.
+      const failed = fetched.find(result => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      for (const result of fetched) {
+        if (result.status !== "fulfilled") throw new GnafDirectoryUnavailableError();
+        const { path, items, expected, bytes } = result.value;
+        if (!expected || !bytes) { for (const item of items) results[item.index] = { status: "unlocated", reason: "zero_results" }; continue; }
+        if (await gnafSha256(bytes) !== expected.sha256) throw new GnafDirectoryUnavailableError();
+        const { shard, decodedBytes } = parseGnafShard(bytes, manifest.version, path);
+        if (decodedBytes !== expected.decodedBytes || Object.keys(shard.entries).length !== expected.entries) throw new GnafDirectoryUnavailableError();
+        for (const { key, index } of items) {
+          const entry = Object.hasOwn(shard.entries, key) ? shard.entries[key] : undefined;
+          results[index] = entry === null ? { status: "unlocated", reason: "ambiguous" }
+            : entry ? { status: "located", position: { lat: entry[0], lng: entry[1] }, approximate: true, sourceId: entry[2] }
+              : { status: "unlocated", reason: "zero_results" };
+        }
       }
     }
     return results;
