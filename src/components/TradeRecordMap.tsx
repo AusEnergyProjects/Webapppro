@@ -7,8 +7,8 @@ import type { Map as TLinkMap, Marker } from "@maptiler/sdk";
 import "@maptiler/sdk/dist/maptiler-sdk.css";
 import { tradeMapDirectionsUrl, tradeMapRecordCategory, TRADE_MAP_PIN_CATEGORY_ORDER, TRADE_MAP_PIN_LABELS, type TradeMapRecord } from "@/lib/trade-record-map";
 import type { TradeMapBounds, TradeMapDatasetItem, TradeMapDatasetResponse, TradeMapQuery } from "@/lib/trade-map-contract";
-import { isTradeMapDatasetResponse, tradeMapQueryUrl, tradeMapViewportUrl, waitForTradeMapRetry, type TradeMapLocationStatus } from "@/lib/trade-map-client";
-import { createTLinkMapAttribution, isTLinkAddressResult, isTLinkMapConfiguration, isTLinkMapLocationProgress, tlinkMapBounds, tlinkMapFailure, type TLinkMapConfiguration } from "@/lib/tlink-map-client";
+import { isTradeMapDatasetResponse, tradeMapQueryUrl, tradeMapViewportUrl, type TradeMapLocationStatus } from "@/lib/trade-map-client";
+import { createTLinkMapAttribution, isTLinkAddressResult, isTLinkMapConfiguration, tlinkMapBounds, tlinkMapFailure, type TLinkMapConfiguration } from "@/lib/tlink-map-client";
 import { GNAF_LICENCE_URL } from "@/lib/gnaf-address";
 import styles from "./TradeRecordMap.module.css";
 import dynamic from "next/dynamic";
@@ -36,7 +36,6 @@ type Runtime = { ownerUid: string; api: typeof import("@maptiler/sdk"); map: TLi
 type MapState = "loading" | "ready" | "unconfigured" | "access" | "auth" | "limit" | "unavailable";
 type MarkerEntry = { marker: Marker; element: HTMLButtonElement; badge: HTMLSpanElement; click: () => void };
 type View = { scope: string; bounds: TradeMapBounds | null; page: number; addressKey: string; locationStatus: TradeMapLocationStatus };
-type Progress = { scope: string; running: boolean; waiting: boolean; completed: number; error: string };
 
 function recordKey(record: TradeMapRecord) { return `${record.kind}:${record.id}`; }
 function initialView(scope: string): View { return { scope, bounds: null, page: 1, addressKey: "", locationStatus: "all" }; }
@@ -50,11 +49,11 @@ function fitBounds(runtime: Runtime, bounds: TradeMapBounds) {
 }
 const mapMessages: Record<Exclude<MapState, "ready">, { title: string; detail: string }> = {
   loading: { title: "Loading map", detail: "Your saved locations will appear when the map is ready." },
-  unconfigured: { title: "Customer maps are being connected", detail: "An administrator needs to finish the map connection. Your saved records are available below." },
-  access: { title: "Map access is unavailable", detail: "Refresh your session and try again. Your workspace access may need to be reviewed." },
-  auth: { title: "The map connection needs attention", detail: "An administrator needs to check map access for this site. Your customer and job records are still available." },
-  limit: { title: "Map display is paused", detail: "The map provider's usage limit has been reached. Saved addresses and customer records remain available below." },
-  unavailable: { title: "Map display is unavailable", detail: "Check your connection and try again. Your customer and job records are still available." },
+  unconfigured: { title: "Map temporarily unavailable", detail: "Your customer and job records are still available below." },
+  access: { title: "Map access is unavailable", detail: "Refresh your session and try again." },
+  auth: { title: "Map temporarily unavailable", detail: "Your customer and job records are still available below." },
+  limit: { title: "Map temporarily unavailable", detail: "Your customer and job records are still available below." },
+  unavailable: { title: "Map temporarily unavailable", detail: "Check your connection and try again. Your records are still available below." },
 };
 const locationLabels: Record<TradeMapLocationStatus, string> = {
   all: "In this area + without a pin", located: "On map in this area", pending: "Waiting for a location", unlocated: "Address needs attention", approximate: "Approximate pins in this area",
@@ -103,14 +102,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
   const addressMarkerRef = useRef<Marker | null>(null);
   const [searchState, setSearchState] = useState({ scope, busy: false, message: "" });
   const [mapState, setMapState] = useState<MapState>("loading");
-  const [progress, setProgress] = useState<Progress>({ scope, running: false, waiting: false, completed: 0, error: "" });
-  const currentProgress = progress.scope === scope ? progress : null;
   const [setupAttempt, setSetupAttempt] = useState(0);
-  const [locateAttempt, setLocateAttempt] = useState(0);
-  const [lookupState, setLookupState] = useState({ scope, enabled: false });
-  const lookupEnabled = lookupState.scope === scope && lookupState.enabled;
-  // An explicit start applies only to this set of filters and this business.
-  if (lookupState.scope !== scope) setLookupState({ scope, enabled: false });
   const requestUrl = tradeMapViewportUrl(baseUrl, view);
   const requestKey = `${scope}:${requestUrl}:${query.revision ?? 0}:${refresh}`;
   const loading = completedRequest !== requestKey;
@@ -120,7 +112,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
     const controller = new AbortController();
     void (async () => {
       const response = await fetch(requestUrl, { headers: { Authorization: `Bearer ${await user.getIdToken()}` }, cache: "no-store", signal: controller.signal });
-      if ((response.status === 401 || response.status === 403) && !controller.signal.aborted) { setDataset(null); setSelection(null); setLookupState({ scope, enabled: false }); }
+      if ((response.status === 401 || response.status === 403) && !controller.signal.aborted) { setDataset(null); setSelection(null); }
       if (!response.ok) throw new Error(response.status === 403 ? "You do not have access to these map records." : "Map records could not be loaded. Try again.");
       const result: unknown = await response.json();
       if (!isTradeMapDatasetResponse(result) || result.resource !== query.resource) throw new Error("Map records could not be read. Try again.");
@@ -222,40 +214,18 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
   }, [runtime, businessOwnerUid, data, scope]);
 
   useEffect(() => {
-    if (!config?.gnaf.ready || !lookupEnabled) return;
-    const controller = new AbortController();
-    const signal = controller.signal;
-    let completed = 0;
-    let lastRefresh = 0;
-    async function post() {
-      const response = await fetch(baseUrl, { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ action: "locate_map_records", limit: 200 }), signal });
-      if ((response.status === 401 || response.status === 403) && !signal.aborted) { setDataset(null); setSelection(null); setLookupState({ scope, enabled: false }); }
-      if (!response.ok) throw new Error(response.status === 503 ? "The Australian address directory is being prepared. Your saved records are available. Try again later." : "Address processing could not be completed. Retry to continue from your saved locations.");
-      const result: unknown = await response.json();
-      return result;
-    }
-    function reload(force = false) {
-      if (!signal.aborted && (force || Date.now() - lastRefresh >= 3_000)) { lastRefresh = Date.now(); setRefresh(value => value + 1); }
-    }
-    void (async () => {
-      setProgress({ scope, running: true, waiting: false, completed, error: "" });
-      while (!signal.aborted) {
-        const batch = await post();
-        if (signal.aborted) return;
-        if (!isTLinkMapLocationProgress(batch)) throw new Error("Address processing returned an unexpected result. Retry to continue.");
-        completed += batch.processed;
-        reload(batch.complete);
-        setProgress({ scope, running: !batch.complete && !batch.retryAfterMs, waiting: !batch.complete && batch.retryAfterMs > 0, completed, error: "" });
-        if (batch.complete) { setLookupState({ scope, enabled: false }); return; }
-        // One bounded server batch at a time. The server saves progress even if
-        // this view closes; no customer addresses are sent to a map provider.
-        await waitForTradeMapRetry(batch.retryAfterMs || 150, signal);
-      }
-    })().catch(error => {
-      if (!signal.aborted) { reload(true); setProgress({ scope, running: false, waiting: false, completed, error: error instanceof Error ? error.message : "Address processing paused. Retry to continue." }); setLookupState({ scope, enabled: false }); }
-    });
-    return () => controller.abort();
-  }, [config?.gnaf.ready, baseUrl, scope, fetch, user, locateAttempt, query.revision, lookupEnabled]);
+    if (!config?.gnaf.ready || !data?.pending || loading || designOpen || dataError?.request === requestKey) return;
+    // Matching belongs to the server. This view only refreshes saved results,
+    // with one request at a time and no polling while the map is hidden.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      clearTimeout(timer);
+      if (document.visibilityState === "visible") timer = setTimeout(() => setRefresh(value => value + 1), 8_000);
+    };
+    document.addEventListener("visibilitychange", schedule);
+    schedule();
+    return () => { clearTimeout(timer); document.removeEventListener("visibilitychange", schedule); };
+  }, [config?.gnaf.ready, data?.pending, loading, designOpen, dataError?.request, requestKey]);
 
   const pins = useMemo(() => data?.markers ?? [], [data]);
   const legendCategories = useMemo(() => {
@@ -321,7 +291,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
     addressMarkerRef.current?.remove();
     try {
       const response = await fetch("/api/trade-map/locate", { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ address: query }), signal: controller.signal });
-      if (!response.ok) throw new Error(response.status === 503 ? "The Australian address directory is being prepared. Try again later." : "Address search is unavailable. Try again.");
+      if (!response.ok) throw new Error("Address search is temporarily unavailable. Try again shortly.");
       const value: unknown = await response.json();
       if (controller.signal.aborted) return;
       if (!isTLinkAddressResult(value)) throw new Error("Address search returned an unexpected result. Try again.");
@@ -353,15 +323,9 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       context={selected ? { title: selected.address || selected.title, customerId: selected.kind === "customer" ? selected.id : "", workOrderId: selected.kind === "job" ? selected.id : "" } : undefined}
       onQuote={quoteAccess ? setQuoteMeasurement : undefined} onClose={() => setDesignScope(null)} />}
     {quoteAccess && quoteMeasurement && <TradeMapQuoteDialog key={businessOwnerUid} user={user} measurement={quoteMeasurement} access={quoteAccess} onDesignLinked={setLinkedDesign} onClose={() => setQuoteMeasurement(null)} />}
-    <div className={styles.status} role="status" aria-live="polite"><span><i className={styles.dot} aria-hidden="true" />{number(data?.mapped ?? 0)} mapped</span><span>{number(data?.approximate ?? 0)} approximate</span><span>{number(data?.pending ?? 0)} waiting</span><span>{number(data?.unmapped ?? 0)} need an address check</span>{loading && <span>Updating view...</span>}</div>
-    {data && data.pending > 0 && config && <div className={styles.processing}>
-      <div><strong>{!config.gnaf.ready ? "Australian address directory is being prepared" : lookupEnabled ? currentProgress?.waiting ? "Waiting for the next available batch" : "Saving permanent address locations" : "Locations ready to prepare"}</strong>
-        <p>{!config.gnaf.ready ? "Your customer records are saved. Location matching will be available when the directory is ready." : lookupEnabled ? `${number(currentProgress?.completed ?? 0)} addresses checked this visit. Keep this map open to continue.` : `${number(data.pending)} ${query.resource} are waiting for a location. Start or resume when you are ready.`} Address matching uses the TLink Australian directory, with no per-address Google lookup charge. Saved matches are shared across your business and team.</p></div>
-      <button type="button" className={styles.button} disabled={!config.gnaf.ready} onClick={() => { if (lookupEnabled) { setLookupState({ scope, enabled: false }); setRefresh(value => value + 1); } else { setLocateAttempt(value => value + 1); setLookupState({ scope, enabled: true }); } }}>{lookupEnabled ? "Pause lookups" : "Start locating addresses"}</button>
-    </div>}
+    <div className={styles.status} role="status" aria-live="polite"><span><i className={styles.dot} aria-hidden="true" />{number(data?.mapped ?? 0)} mapped</span>{Boolean(data?.approximate) && <span>{number(data?.approximate ?? 0)} approximate</span>}{Boolean(data?.unmapped) && <span>{number(data?.unmapped ?? 0)} need an address check</span>}{dataError?.request !== requestKey && <>{data?.pending ? <span>{config && !config.gnaf.ready ? "Some locations are temporarily unavailable." : data.mapped ? "Updating locations…" : `Loading ${query.resource === "jobs" ? "job" : "customer"} locations…`}</span> : loading && <span>Updating view…</span>}</>}</div>
     {legendCategories.length > 0 && <ul className={styles.legend} aria-label="Map pin colours">{legendCategories.map(category => <li key={category}><i className={styles.swatch} data-category={category} aria-hidden="true" /><span>{TRADE_MAP_PIN_LABELS[category]}</span></li>)}</ul>}
     {dataError?.request === requestKey && <div className={styles.notice} role="alert"><p>{dataError.message}</p><button type="button" className={styles.button} onClick={() => setRefresh(value => value + 1)}>Reload map records</button></div>}
-    {currentProgress?.error && <div className={styles.notice} role="alert"><p>{currentProgress.error}</p><button type="button" className={styles.button} disabled={!config?.gnaf.ready} onClick={() => { setLocateAttempt(value => value + 1); setLookupState({ scope, enabled: true }); }}>Retry address lookup</button></div>}
     <div className={styles.layout} hidden={designOpen}><div className={styles.mapArea}><div ref={canvasRef} className={styles.canvas} aria-label={`Map of all matching ${query.resource}`} />
       {overlay && <div className={styles.overlay} role="status"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 43S9 29 9 18a15 15 0 0 1 30 0c0 11-15 25-15 25Z" /><circle cx="24" cy="18" r="5" /></svg><strong>{overlay.title}</strong><p>{overlay.detail}</p>{["unavailable", "access", "unconfigured", "auth"].includes(mapState) && <button type="button" className={styles.button} onClick={() => setSetupAttempt(value => value + 1)}>Try again</button>}</div>}
     </div><aside className={styles.sidebar} aria-label="Map records" aria-busy={loading}>
@@ -373,6 +337,6 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       {!loading && listCurrent && !records.length && <p className={styles.emptyList}>{data?.total ? "No records in this view. Change the view or zoom out." : "No records match these filters."}</p>}
       {data && <div className={styles.pagination}><button type="button" className={styles.button} disabled={loading || !listCurrent || view.page <= 1} onClick={() => setViewState({ ...view, page: view.page - 1 })}>Previous</button><span>Page {number(view.page)}</span><button type="button" className={styles.button} disabled={loading || !listCurrent || !data.hasMore} onClick={() => setViewState({ ...view, page: view.page + 1 })}>Next</button></div>}
     </aside></div>
-    <p className={styles.footer}>Matched address locations are saved permanently for your business and reused by every team member and device. New or changed addresses are matched when you start processing. Customer records and address searches stay in TLink. The map provider only supplies the background map.{config?.gnaf.attribution && <> <span>{config.gnaf.attribution}</span> <a href={GNAF_LICENCE_URL} target="_blank" rel="noopener noreferrer">Address data licence</a>.</>}</p>
+    {config?.gnaf.attribution && <p className={styles.footer}><span>{config.gnaf.attribution}</span> <a href={GNAF_LICENCE_URL} target="_blank" rel="noopener noreferrer">Address data licence</a>.</p>}
   </section>;
 }

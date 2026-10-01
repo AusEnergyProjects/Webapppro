@@ -8,23 +8,14 @@ export type TLinkMapConfiguration = {
   apiKey: string;
   gnaf: { ready: boolean; version: string; attribution: string };
 };
-export type TLinkMapLocationProgress = { ok: true; processed: number; located: number; unlocated: number; retryAfterMs: number; complete: boolean };
 
 function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
-function count(value: unknown): value is number { return typeof value === "number" && Number.isSafeInteger(value) && value >= 0; }
 
 export function isTLinkMapConfiguration(value: unknown): value is TLinkMapConfiguration {
   return object(value) && value.ok === true && value.provider === "maptiler" && typeof value.configured === "boolean"
     && typeof value.apiKey === "string" && (!value.configured || value.apiKey.trim().length > 0)
     && object(value.gnaf) && typeof value.gnaf.ready === "boolean" && typeof value.gnaf.version === "string" && typeof value.gnaf.attribution === "string"
     && (!value.gnaf.ready || Boolean(value.gnaf.version.trim() && value.gnaf.attribution.trim()));
-}
-
-export function isTLinkMapLocationProgress(value: unknown): value is TLinkMapLocationProgress {
-  return object(value) && value.ok === true && count(value.processed) && value.processed <= 200
-    && count(value.located) && count(value.unlocated) && value.located + value.unlocated <= value.processed
-    && count(value.retryAfterMs) && value.retryAfterMs <= 120_000 && typeof value.complete === "boolean"
-    && (value.processed > 0 || value.complete || value.retryAfterMs > 0);
 }
 
 export function isTLinkAddressResult(value: unknown): value is { ok: true; result: TradeMapGeocodeResult } {

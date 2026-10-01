@@ -116,6 +116,8 @@ import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards"
 import { loadTradeMapDataset, tradeMapAddressSql, TradeMapInputError, type TradeMapDataset } from "@/lib/trade-map-dataset-server";
 import { locateTradeMapRecords, TradeMapLocationInputError } from "@/lib/trade-map-location-cache";
 import { getGnafDirectory, GnafDirectoryUnavailableError } from "@/lib/gnaf-directory-server";
+import { enqueueTradeMapPreparation, withTradeMapPreparation, TRADE_MAP_PREPARATION_BATCH_SIZE } from "@/lib/trade-map-preparation";
+import { ensureTlinkSchemaGuards } from "@/lib/tlink-schema-guards";
 import { rentalAssignmentRequiredGates, rentalAssignmentCredentialSql } from "@/lib/trade-rental-credentials";
 import {
   isRentalInspectionAssignmentConflict,
@@ -376,6 +378,7 @@ async function resolvedAddressWrite(
 
 async function crmIdentity(request: Request): Promise<CrmIdentity> {
   const access = await requireInstallerTeamAccess(request);
+  await ensureTlinkSchemaGuards(getD1());
   const account = await getD1().prepare("SELECT address_state FROM trade_accounts WHERE firebase_uid = ?")
     .bind(access.ownerUid).first<Record<string, unknown>>();
   return {
@@ -1736,8 +1739,10 @@ export async function GET(request: Request) {
       const db = getD1(); const timer = routeTimer();
       const dataset = await crmIndex(identity, url, resource, true);
       const result = await timer.database(loadTradeMapDataset(db, identity.uid, dataset, url));
-      return performanceJson({ ok: true, access: accessPayload, ...result }, { db, routeKey: `trade.crm.map.${resource}`,
+      if (result.pending > 0) await enqueueTradeMapPreparation(db, identity.uid);
+      const response = await performanceJson({ ok: true, access: accessPayload, ...result }, { db, routeKey: `trade.crm.map.${resource}`,
         startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs, resultCount: result.items.length });
+      return result.pending > 0 ? withTradeMapPreparation(response, identity.uid) : response;
     }
     if (mode === "detail" && ["job", "customer"].includes(resource)) {
       const id = cleanAdminText(url.searchParams.get("id"), 180);
@@ -1769,7 +1774,12 @@ export async function POST(request: Request) {
         || !identity.access.canSearchCustomers)) throw new Error("CUSTOMER_SEARCH_REQUIRED");
       const dataset = await crmIndex(identity, url, resource, true);
       if (body.limit !== undefined && typeof body.limit !== "number") throw new TradeMapLocationInputError();
-      return adminJson({ ok: true, ...(await locateTradeMapRecords(db, identity.uid, dataset, { limit: body.limit, directory: await getGnafDirectory() })) });
+      if (typeof body.limit === "number" && (!Number.isInteger(body.limit) || body.limit < 1 || body.limit > 200)) throw new TradeMapLocationInputError();
+      await enqueueTradeMapPreparation(db, identity.uid);
+      const result = await locateTradeMapRecords(db, identity.uid, dataset, {
+        limit: Math.min(body.limit ?? TRADE_MAP_PREPARATION_BATCH_SIZE, TRADE_MAP_PREPARATION_BATCH_SIZE), directory: await getGnafDirectory(),
+      });
+      return withTradeMapPreparation(adminJson({ ok: true, ...result }), identity.uid);
     }
     const quickQuote = requestedAction === "create_quick_quote_job";
     const action = quickQuote ? "create_job" : requestedAction;

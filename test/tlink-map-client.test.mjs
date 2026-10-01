@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { createTLinkMapAttribution, isTLinkAddressResult, isTLinkMapConfiguration, isTLinkMapLocationProgress, tlinkMapBounds, tlinkMapFailure } from "../src/lib/tlink-map-client.ts";
+import { createTLinkMapAttribution, isTLinkAddressResult, isTLinkMapConfiguration, tlinkMapBounds, tlinkMapFailure } from "../src/lib/tlink-map-client.ts";
 
 const configuration = () => ({ ok: true, provider: "maptiler", configured: true, apiKey: "public-browser-key", gnaf: { ready: true, version: "aug2026", attribution: "G-NAF attribution" } });
-const progress = () => ({ ok: true, processed: 200, located: 195, unlocated: 5, retryAfterMs: 0, complete: false });
 
 test("overview configuration distinguishes a prepared directory from unavailable setup", () => {
   assert.equal(isTLinkMapConfiguration(configuration()), true);
@@ -13,19 +12,6 @@ test("overview configuration distinguishes a prepared directory from unavailable
   assert.equal(isTLinkMapConfiguration({ ...configuration(), provider: "google" }), false);
   assert.equal(isTLinkMapConfiguration({ ...configuration(), gnaf: { ready: true, version: "", attribution: "" } }), false);
   assert.equal(isTLinkMapConfiguration(null), false);
-});
-
-test("permanent location batches reject impossible counts and zero-progress retry loops", () => {
-  assert.equal(isTLinkMapLocationProgress(progress()), true);
-  assert.equal(isTLinkMapLocationProgress({ ...progress(), processed: 0, located: 0, unlocated: 0, complete: true }), true);
-  assert.equal(isTLinkMapLocationProgress({ ...progress(), processed: 0, located: 0, unlocated: 0, retryAfterMs: 120_000 }), true);
-  assert.equal(isTLinkMapLocationProgress({ ...progress(), processed: 0, located: 0, unlocated: 0 }), false);
-  assert.equal(isTLinkMapLocationProgress({ ...progress(), processed: 201 }), false);
-  assert.equal(isTLinkMapLocationProgress({ ...progress(), located: 200 }), false);
-  assert.equal(isTLinkMapLocationProgress({ ...progress(), processed: -1 }), false);
-  assert.equal(isTLinkMapLocationProgress({ ...progress(), processed: 1.5 }), false);
-  assert.equal(isTLinkMapLocationProgress({ ...progress(), retryAfterMs: 120_001 }), false);
-  assert.equal(isTLinkMapLocationProgress({ ...progress(), complete: "true" }), false);
 });
 
 test("address results support Australian external territories while rejecting unsafe coordinates", () => {
@@ -67,8 +53,7 @@ test("customer overview has no Google loading or browser geocoding path", () => 
   const design = readFileSync(new URL("../src/components/TradeRoofDesignMap.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(overview, /google-maps-client|geocodeTradeMapAddress|resolveTradeMapClaims|claim_map_locations|save_map_locations/);
   assert.match(overview, /designOpen && <TradeRoofDesignMap/);
-  assert.match(overview, /action: "locate_map_records", limit: 200/);
-  assert.match(overview, /if \(!config\?\.gnaf\.ready \|\| !lookupEnabled\) return;/);
+  assert.doesNotMatch(overview, /locate_map_records|lookupEnabled|Start locating addresses|Pause lookups|Retry address lookup|Keep this map open/);
   assert.match(overview, /key=\{`\$\{props\.user\.uid\}:\$\{businessOwnerUid\}`\}/);
   assert.match(design, /\/api\/trade-map\/config\?provider=design/);
   assert.match(design, /await loadGoogleMaps\(config\.apiKey\)/);

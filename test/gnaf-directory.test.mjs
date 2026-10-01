@@ -129,6 +129,41 @@ test("ambiguous addresses remain unlocated, while unknown postcode is a genuine 
   const results=await createGnafDirectory(f.bucket,f.manifest).resolve([f.key,"12 Smith Street Melbourne VIC 3999"]);
   assert.equal(results[0].reason,"ambiguous");assert.equal(results[1].reason,"zero_results");
 });
+test("runtime rejects invalid requested values even when partition bytes match the manifest", async () => {
+  for (const entry of [[91,144,"GAVIC1","PC"],[-37,144,"<invalid>","PC"],{},false]) {
+    const f=await fixture(); f.shard.entries[f.key]=entry;
+    const decoded=encode(f.shard),bytes=gzipSync(decoded);
+    f.manifest.shards[f.path]={sha256:await gnafSha256(bytes),bytes:bytes.length,decodedBytes:decoded.length,entries:1};
+    f.objects.set(`${GNAF_PREFIX}aug2026/${f.path}`,{bytes,metadata:{}});
+    await assert.rejects(createGnafDirectory(f.bucket,f.manifest).resolve([f.key]));
+  }
+});
+test("runtime validates partition identity and decoded metadata after checking its hash", async () => {
+  for (const change of ["version","path","schema","count","size"]) {
+    const f=await fixture();
+    if(change==="version") f.shard.version="another";
+    if(change==="path") f.shard.postcode="3999";
+    if(change==="schema") f.shard.schema=2;
+    const decoded=encode(f.shard),bytes=gzipSync(decoded);
+    f.manifest.shards[f.path]={sha256:await gnafSha256(bytes),bytes:bytes.length,decodedBytes:decoded.length+(change==="size"?1:0),entries:change==="count"?2:1};
+    f.objects.set(`${GNAF_PREFIX}aug2026/${f.path}`,{bytes,metadata:{}});
+    await assert.rejects(createGnafDirectory(f.bucket,f.manifest).resolve([f.key]),change);
+  }
+});
+test("provisioning still rejects malformed unrelated entries before immutable upload", async () => {
+  const f=await fixture();
+  const malformedEntries=[
+    ["unrelated",[-37,144,"GAVIC1","PC"]],
+    [gnafAddressKey("1 Test Road Sydney NSW 2000"),[-33,151,"GANSW1","PC"]],
+    [f.key,[91,144,"GAVIC1","PC"]],
+  ];
+  for (const [key,entry] of malformedEntries) {
+    const bytes=gzipSync(encode({...f.shard,entries:{...f.shard.entries,[key]:entry}}));
+    assert.throws(()=>parseGnafShard(bytes,"aug2026",f.path));
+    await assert.rejects(uploadGnafPart(f.bucket,"aug2026",f.path,bytes),/Invalid directory partition data/);
+  }
+  assert.equal(f.objects.size,0);
+});
 test("activation requires every immutable partition and matching verification receipts",async()=>{
   const f=await fixture();await uploadGnafPart(f.bucket,"aug2026","manifest.json",encode(f.manifest));
   await assert.rejects(activateGnafDirectory(f.bucket,"aug2026"),/Verify every/);

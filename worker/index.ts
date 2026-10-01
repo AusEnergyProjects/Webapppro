@@ -50,6 +50,8 @@ import { ensureTlinkSchemaGuards } from "../src/lib/tlink-schema-guards";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 import { cleanupUnreferencedTradeIssuedDocuments } from "../src/lib/trade-issued-document-cleanup";
 import { cleanupExpiredTradeMapLocations } from "../src/lib/trade-map-location-cache";
+import { drainTradeMapPreparation, queueTradeMapPreparation } from "../src/lib/trade-map-preparation";
+import { getGnafDirectory } from "../src/lib/gnaf-directory-server";
 import { drainTradeCrmJobMediaCleanup } from "../src/lib/trade-crm-job-media-cleanup";
 import {
   drainTradeTeamMemberFileCleanup,
@@ -453,6 +455,13 @@ function queueBackgroundDispatches(
     ]),
     onError: () => console.error("Automatic invoice dispatch failed; the durable queues will retry."),
   });
+  response = queueTradeMapPreparation(response, {
+    waitUntil: (promise) => ctx.waitUntil(promise),
+    drain: (ownerUid) => drainTradeMapPreparation({ db: getD1(), getDirectory: getGnafDirectory, ownerUid }).then((result) => {
+      if (result.failed) console.error("Automatic map preparation is waiting for a directory retry.");
+    }),
+    onError: () => console.error("Automatic map preparation will resume from the durable queue."),
+  });
   return queueTradeQuoteDeliveryDispatch(queuePublicPlanDeliveryDispatch(queueCreditexProductRegistryDispatch(queueCustomerProjectActivityDispatch(
     queueOpportunityNotificationDispatch(
       queueCustomerOpportunityDispatch(response, ctx),
@@ -546,6 +555,9 @@ const worker = {
       }).EVIDENCE;
       const registryEnvironment = workerEnv as Readonly<Record<string, unknown>>;
       tasks.push(
+        ensureTlinkSchemaGuards(getD1()).then(() => drainTradeMapPreparation({ db: getD1(), getDirectory: getGnafDirectory, maxBatches: 20 })).then((result) => {
+          if (result.failed) console.error("Automatic map preparation is waiting for a directory retry.");
+        }).catch(() => console.error("Automatic map preparation queue could not be processed.")),
         processBusinessFollowUps(getD1()).catch(() => {
           console.error("Business follow-up reminders could not be processed.");
         }),

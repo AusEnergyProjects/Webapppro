@@ -4,6 +4,7 @@ import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access
 import { commitTradeCrmCsvImport, exportTradeCrmCsvSource, getTradeCrmCsvImport, previewTradeCrmCsvImport, TradeCrmCsvImportError, TradeCrmCsvValidationError } from "@/lib/trade-crm-csv-import-server";
 import { isTradeImportRecordKind } from "@/lib/trade-import-review-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
+import { ensureTlinkSchemaGuards } from "@/lib/tlink-schema-guards";
 
 export const runtime = "edge";
 function failure(error: unknown) {
@@ -38,7 +39,10 @@ export async function POST(request: Request) {
     const body = await readBoundedJsonRequest(request, 22 * 1024 * 1024);
     if (!body || typeof body !== "object" || Array.isArray(body) || !("action" in body)) return adminJson({ ok: false, error: "Choose preview or commit." }, 400);
     if (body.action === "preview" && "files" in body && "options" in body) return adminJson({ ok: true, ...await previewTradeCrmCsvImport(getD1(), access.identity.uid, body.files, body.options) }, 201);
-    if (body.action === "commit" && "batchId" in body && typeof body.batchId === "string") return adminJson({ ok: true, ...await commitTradeCrmCsvImport(getD1(), access.identity.uid, body.batchId.slice(0, 180)) });
+    if (body.action === "commit" && "batchId" in body && typeof body.batchId === "string") {
+      await ensureTlinkSchemaGuards(getD1());
+      return adminJson({ ok: true, ...await commitTradeCrmCsvImport(getD1(), access.identity.uid, body.batchId.slice(0, 180)) });
+    }
     return adminJson({ ok: false, error: "Choose preview or commit." }, 400);
   } catch (error) { return failure(error); }
 }

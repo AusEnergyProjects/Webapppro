@@ -30,6 +30,9 @@ function testD1(database) {
 function schemaDatabase() {
   const database = new DatabaseSync(":memory:");
   database.exec(`
+    CREATE TABLE trade_map_preparation(owner_uid text PRIMARY KEY,requested_revision integer DEFAULT 1,completed_revision integer DEFAULT 0,updated_at text);
+    CREATE TABLE trade_crm_customers(id text, firebase_uid text, address_line_1 text,address_line_2 text,suburb text,address_state text,postcode text,record_status text);
+    CREATE TABLE trade_crm_service_sites(id text, firebase_uid text, address_line_1 text,address_line_2 text,suburb text,address_state text,postcode text,record_status text);
     CREATE TABLE trade_team_members (
       id text, owner_uid text, member_uid text, status text,
       can_create_jobs integer, can_manage_jobs integer, can_assign_jobs integer,
@@ -44,7 +47,7 @@ function schemaDatabase() {
     CREATE TABLE trade_crm_job_details (
       work_order_id text, firebase_uid text, customer_source text,
       accepted_disclosure_snapshot text, accepted_disclosure_sha256 text,
-      accepted_disclosure_at text, created_at text
+      accepted_disclosure_at text, created_at text, service_site_id text
     );
     CREATE TABLE trade_crm_job_media (
       id text, work_order_id text, firebase_uid text, category text, content_type text,
@@ -251,7 +254,7 @@ function insertAcceptedLeadJobDetails(database, snapshot, acceptedDisclosureAt =
 }
 
 test("Sites-safe TLink migrations contain no trigger bodies", () => {
-  for (const name of ["0131_trade_team_permissions_and_member_files.sql", "0132_public_lead_accepted_disclosure.sql", "0133_public_lead_job_files.sql", "0172_trade_team_sres_credentials.sql", "0173_trade_activity_customer_document_delivery.sql"]) {
+  for (const name of ["0131_trade_team_permissions_and_member_files.sql", "0132_public_lead_accepted_disclosure.sql", "0133_public_lead_job_files.sql", "0172_trade_team_sres_credentials.sql", "0173_trade_activity_customer_document_delivery.sql", "0229_trade_map_preparation.sql"]) {
     const source = fs.readFileSync(new URL(`../drizzle/${name}`, import.meta.url), "utf8");
     assert.doesNotMatch(source, /CREATE\s+TRIGGER/i, name);
     for (const statement of source.split(";").map((item) => item.trim()).filter(Boolean)) {
@@ -301,7 +304,7 @@ test("runtime installer creates and verifies every TLink integrity guard", async
   const installed = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name").all();
   assert.deepEqual(installed.map((row) => row.name), ALL_TLINK_GUARDS.map((item) => item.name).sort());
   database.close();
-  assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 13);
+  assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 21);
 });
 
 test("TLink guard verification survives another request's stalled and then cancelled I/O", async () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isTradeMapDatasetResponse, tradeMapQueryUrl, tradeMapViewportUrl, waitForTradeMapRetry } from "../src/lib/trade-map-client.ts";
+import { isTradeMapDatasetResponse, tradeMapQueryUrl, tradeMapViewportUrl } from "../src/lib/trade-map-client.ts";
 
 const located = { status: "located", position: { lat: -37.81, lng: 144.96 }, approximate: false };
 const claim = index => ({ addressKey: `address-${index}`, address: `${index + 1} Smith Street, Melbourne VIC 3000, Australia`, leaseToken: `lease-${index}` });
@@ -32,5 +32,3 @@ test("50,000-record summaries are accepted without permitting 50,000 DOM records
   assert.equal(isTradeMapDatasetResponse({ ...dataset(), items: [item] }), true);
   assert.equal(isTradeMapDatasetResponse({ ...dataset(), items: [{ ...item, locationStatus: "invented" }] }), false);
 });
-
-test("cancelled retry waits finish promptly", async () => { const stop = new AbortController(); const waiting = waitForTradeMapRetry(60000, stop.signal); stop.abort(); await waiting; });

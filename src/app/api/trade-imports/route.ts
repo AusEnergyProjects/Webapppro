@@ -5,6 +5,7 @@ import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { reserveTlinkJobNumbers } from "@/lib/trade-job-number-server";
 import { IMPORT_DEFINITIONS, IMPORT_MAX_ROWS, validateImportCsv } from "@/lib/trade-data-imports.mjs";
+import { ensureTlinkSchemaGuards } from "@/lib/tlink-schema-guards";
 
 export const runtime = "edge";
 
@@ -23,6 +24,7 @@ const ROLLBACK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 async function importIdentity(request: Request): Promise<ImportIdentity> {
   const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer", "supplier"] });
   const partnerType = access.partnerType;
+  if (partnerType === "installer") await ensureTlinkSchemaGuards(getD1());
   const entitlements = await accountEntitlements(access.identity.uid, partnerType);
   return {
     uid: access.identity.uid,

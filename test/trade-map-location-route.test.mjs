@@ -31,6 +31,9 @@ function fixture(options = {}) {
     crmIndex: async (...args) => { calls.projection.push(args); return dataset; },
     getGnafDirectory: async () => { calls.directory++; if (options.directoryError) throw options.directoryError; return directory; },
     locateTradeMapRecords: async (...args) => { calls.locations.push(args); return { processed: 1, located: 1, unlocated: 0, complete: true, retryAfterMs: 0 }; },
+    enqueueTradeMapPreparation: async () => {},
+    withTradeMapPreparation: response => response,
+    TRADE_MAP_PREPARATION_BATCH_SIZE: 25,
     TradeMapInputError, TradeMapLocationInputError, GnafDirectoryUnavailableError,
     mfaErrorResponse: () => null, creditexMutationConflict: () => null,
     isTradeJobScheduleEligibilityConflict: () => false, isTradeComplianceIntentScheduleConflict: () => false,
@@ -64,7 +67,7 @@ test("location action uses verified business scope, current filters and the serv
   const [actor, url, resource, mapMode] = f.calls.projection[0];
   assert.equal(actor, f.identity); assert.equal(url.searchParams.get("operationalStatus"), "imported");
   assert.equal(url.searchParams.get("search"), "Jones"); assert.equal(resource, "jobs"); assert.equal(mapMode, true);
-  assert.deepEqual(f.calls.locations, [[f.db, "verified-business-owner", f.dataset, { limit: 200, directory: f.directory }]]);
+  assert.deepEqual(f.calls.locations, [[f.db, "verified-business-owner", f.dataset, { limit: 25, directory: f.directory }]]);
 });
 
 test("map location action requires both customer view and customer search permission", async () => {

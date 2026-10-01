@@ -52,12 +52,3 @@ export function isTradeMapDatasetResponse(value: unknown): value is TradeMapData
       && typeof marker.approximate === "boolean" && (marker.record === undefined || record(marker.record))
       && (marker.addressKey === undefined || typeof marker.addressKey === "string"));
 }
-
-export function waitForTradeMapRetry(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise(resolve => {
-    const finish = () => { clearTimeout(timer); signal.removeEventListener("abort", finish); resolve(); };
-    const timer = setTimeout(finish, ms);
-    if (signal.aborted) { finish(); return; }
-    signal.addEventListener("abort", finish, { once: true });
-  });
-}

@@ -41,7 +41,7 @@ function isEntry(value: unknown): value is GnafEntry {
     && typeof value[1] === "number" && Number.isFinite(value[1]) && value[1] >= 96 && value[1] <= 169
     && typeof value[2] === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(value[2]) && typeof value[3] === "string" && value[3].length <= 80);
 }
-export function parseGnafShard(bytes: Uint8Array, version: string, path: string): { shard: GnafShard; decodedBytes: number } {
+function decodeGnafShard(bytes: Uint8Array, version: string, path: string) {
   if (bytes.length < 18 || bytes.length > GNAF_MAX_COMPRESSED_BYTES) throw new GnafDirectoryUnavailableError();
   // The trailer is untrusted. Measure actual streaming output, with small compressed chunks
   // so a forged gzip cannot force a large allocation before the limit is checked.
@@ -58,10 +58,16 @@ export function parseGnafShard(bytes: Uint8Array, version: string, path: string)
   if (!object(value) || value.schema !== 1 || value.version !== version || !object(value.entries)
     || typeof value.postcode !== "string" || typeof value.bucket !== "string"
     || `${value.postcode}/${value.bucket}.json.gz` !== path) throw new GnafDirectoryUnavailableError();
-  for (const [key, entry] of Object.entries(value.entries)) {
+  return { shard: { schema: 1 as const, version, postcode: value.postcode, bucket: value.bucket, entries: value.entries }, decodedBytes: size };
+}
+
+/** Provisioning validates every entry before a partition can be activated. */
+export function parseGnafShard(bytes: Uint8Array, version: string, path: string): { shard: GnafShard; decodedBytes: number } {
+  const decoded = decodeGnafShard(bytes, version, path);
+  for (const [key, entry] of Object.entries(decoded.shard.entries)) {
     if (key.length > 1000 || gnafAddressKey(key) !== key || gnafShardForKey(key) !== path || !isEntry(entry)) throw new GnafDirectoryUnavailableError();
   }
-  return { shard: value as GnafShard, decodedBytes: size };
+  return { shard: decoded.shard as GnafShard, decodedBytes: decoded.decodedBytes };
 }
 
 function lookupAddressKey(address: string): string | null {
@@ -100,10 +106,14 @@ export function createGnafDirectory(bucket: GnafBucketReader, manifest: GnafMani
         const { path, items, expected, bytes } = result.value;
         if (!expected || !bytes) { for (const item of items) results[item.index] = { status: "unlocated", reason: "zero_results" }; continue; }
         if (await gnafSha256(bytes) !== expected.sha256) throw new GnafDirectoryUnavailableError();
-        const { shard, decodedBytes } = parseGnafShard(bytes, manifest.version, path);
+        // Activation already validated every entry. The hash above verifies those exact
+        // immutable bytes; re-normalising thousands of unrelated addresses per lookup
+        // exceeded the Worker CPU limit. Decode once and validate only requested values.
+        const { shard, decodedBytes } = decodeGnafShard(bytes, manifest.version, path);
         if (decodedBytes !== expected.decodedBytes || Object.keys(shard.entries).length !== expected.entries) throw new GnafDirectoryUnavailableError();
         for (const { key, index } of items) {
           const entry = Object.hasOwn(shard.entries, key) ? shard.entries[key] : undefined;
+          if (entry !== undefined && !isEntry(entry)) throw new GnafDirectoryUnavailableError();
           results[index] = entry === null ? { status: "unlocated", reason: "ambiguous" }
             : entry ? { status: "located", position: { lat: entry[0], lng: entry[1] }, approximate: true, sourceId: entry[2] }
               : { status: "unlocated", reason: "zero_results" };

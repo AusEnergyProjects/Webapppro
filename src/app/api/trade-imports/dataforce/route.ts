@@ -5,6 +5,7 @@ import { commitTradeDataforceImport, DATAFORCE_IMPORT_MAX_BYTES, exportTradeData
   getTradeDataforceImport, previewTradeDataforceImport, TradeDataforceImportError } from "@/lib/trade-dataforce-import-server";
 import { isTradeImportRecordKind } from "@/lib/trade-import-review-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
+import { ensureTlinkSchemaGuards } from "@/lib/tlink-schema-guards";
 
 export const runtime = "edge";
 
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
         "fileName" in body ? body.fileName : "job-import.csv", "serviceCategoryMappings" in body ? body.serviceCategoryMappings : {}) }, 201);
     }
     if (body.action === "commit" && "batchId" in body && typeof body.batchId === "string") {
+      await ensureTlinkSchemaGuards(getD1());
       return adminJson({ ok: true, ...await commitTradeDataforceImport(getD1(), access.identity.uid, body.batchId.slice(0, 180)) });
     }
     return adminJson({ ok: false, error: "Choose preview or commit." }, 400);

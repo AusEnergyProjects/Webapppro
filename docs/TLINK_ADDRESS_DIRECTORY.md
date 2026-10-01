@@ -10,7 +10,9 @@ MapTiler SDK 4.1.0 pins a MapLibre version affected by [GHSA-jrc7-96c5-q579](htt
 
 G-NAF matches have no timed expiry. Changing a record's address produces a new cache key. Legacy Google coordinates remain identified as Google, are excluded from the new overview, and retain their existing expiry cleanup. They must never be relabelled as G-NAF.
 
-Map responses contain at most 96 clusters and 50 sidebar records. Counts cover the complete authorised, filtered business dataset. Location processing uses batches of at most 200 and requires an explicit Start action. Closing or pausing the view stops new batches; completed matches remain saved, and an interrupted lease becomes available after two minutes.
+Map responses contain at most 96 clusters and 50 sidebar records. Counts cover the complete authorised, filtered business dataset. Address imports, creation, changes and restored records enqueue the business atomically in `trade_map_preparation`. Opening a map also repairs any missing queue entry and starts a background batch automatically. There are no customer-operated lookup controls.
+
+Processing uses 25-address batches with business and address leases. The existing minutely worker schedule continues the durable queue after the browser closes, taking at most 20 batches within a 20-second dispatch budget. An interrupted business lease can resume after two minutes. Completed locations are reused, including across customer and job records. Revision checks retain edits arriving during a batch. Directory failures remain pending with a bounded retry delay; infrastructure failures are never recorded as missing addresses. Every claim and saved projection checks the current authoritative business approval. Protected opportunity addresses are excluded.
 
 ## Build the national directory
 
@@ -23,6 +25,8 @@ node --experimental-strip-types scripts/build-gnaf-directory.mjs --source=<absol
 The builder joins current address records to their default geocodes and associated streets/localities. It preserves units, levels and number ranges; it does not multiply unrelated locality aliases onto every address. Completed states are checkpointed. For an interrupted build, rerun with the same inputs and `--resume=true`; mismatched source or normaliser identity is rejected. Preserve incomplete stages for inspection.
 
 Postcode/hash partitions contain gzip JSON and SHA-256 metadata. The runtime limits compressed partitions to 2 MiB and actual decompressed content to 8 MiB. Source coordinates are GDA2020; the GDA2020/WGS84 web-map null transformation is adequate for approximate address pins, not survey or roof-measurement precision. G-NAF attribution and the Open G-NAF licence link appear in the map.
+
+Provisioning validates every partition entry. Runtime reads verify the immutable SHA-256, decompression bounds, partition schema and count, then validate requested values, avoiding repeated full-partition validation.
 
 ## Provision and activate
 

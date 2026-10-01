@@ -148,9 +148,6 @@ button.pinButton { cursor: pointer; }
 .pin[data-cluster="true"] { border-radius: 16px; padding: 0 8px 0 2px; }
 .pin[data-cluster="true"]::before { flex-basis: 21px; height: 21px; width: 21px; }
 @media (prefers-reduced-motion: reduce) { .pin { transition: none; } }
-.processing { align-items: center; background: var(--trade-accent-soft, #e8f5f0); border-bottom: 1px solid var(--trade-line, #dbe5e2); display: flex; gap: 16px; justify-content: space-between; margin: 0; padding: 13px 22px; }
-.processing strong { font-size: .78rem; }
-.processing p { color: var(--trade-muted, #5b716a); font-size: .73rem; line-height: 1.5; margin: 4px 0 0; }
 .listControls { display: grid; gap: 7px; padding: 15px 16px 0; }
 .listControls label { color: var(--trade-muted, #5b716a); font-size: .72rem; font-weight: 700; }
 .listControls select { background: var(--trade-surface, #fff); border: 1px solid var(--trade-line, #dbe5e2); border-radius: 8px; color: var(--trade-ink, #16372f); font: inherit; font-size: .73rem; min-height: 42px; min-width: 0; padding: 8px; width: 100%; }
@@ -175,7 +172,6 @@ button.pinButton { cursor: pointer; }
   .canvas { height: 340px; }
   .sidebar { border-left: 0; border-top: 1px solid var(--trade-line, #dbe5e2); max-height: 460px; }
   .notice { align-items: flex-start; flex-direction: column; padding: 12px 16px; }
-  .processing { align-items: flex-start; flex-direction: column; padding: 12px 16px; }
   .footer { padding: 12px 16px; }
   .toolbar { align-items: stretch; flex-direction: column; padding: 0 16px 16px; }
   .addressSearch { flex-basis: auto; }
