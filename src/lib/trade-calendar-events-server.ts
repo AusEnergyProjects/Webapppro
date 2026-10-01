@@ -21,7 +21,8 @@ export function calendarReadUrl(provider: CalendarProvider, window: CalendarWind
 }
 function providerError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
-  if (code === "CALENDAR_RECONNECT_REQUIRED") return "Reconnect this calendar to read its events.";
+  if (code === "CALENDAR_RECONNECT_REQUIRED" || code === "INTEGRATION_CREDENTIALS_INVALID") return "Reconnect this calendar to read its events.";
+  if (code === "INTEGRATION_ENCRYPTION_UNAVAILABLE") return "Secure calendar setup is unavailable. Contact TLink support before reconnecting.";
   if (code === "CALENDAR_ACCESS_REQUIRED") return "Calendar access was not granted. Reconnect and approve calendar access.";
   if (["CALENDAR_PROVIDER_TIMEOUT", "AbortError", "TimeoutError"].includes(code) || error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)) return "This calendar took too long to respond. Refresh to try again.";
   if (code === "CALENDAR_INVALID_RESPONSE") return "This calendar returned an unreadable response. Refresh or contact TLink support.";
@@ -31,10 +32,19 @@ function providerError(error: unknown) {
   if (httpStatus) return `This calendar could not be read (HTTP ${httpStatus}). Refresh to try again.`;
   return "This calendar could not be read. Refresh to try again.";
 }
+function diagnosticCode(error: unknown) {
+  if (!(error instanceof Error)) return "UNKNOWN_ERROR";
+  const allowedCodes = ["INTEGRATION_CREDENTIALS_INVALID", "INTEGRATION_ENCRYPTION_UNAVAILABLE", "CALENDAR_RECONNECT_REQUIRED", "CALENDAR_ACCESS_REQUIRED", "CALENDAR_PROVIDER_TIMEOUT", "CALENDAR_INVALID_RESPONSE", "CALENDAR_INVALID_PAGINATION"];
+  if (allowedCodes.includes(error.message) || /^CALENDAR_PROVIDER_HTTP_[45]\d{2}$/.test(error.message)) return error.message;
+  const allowedNames = ["Error", "TypeError", "SyntaxError", "RangeError", "AbortError", "TimeoutError", "OperationError", "DataError", "NotSupportedError", "InvalidStateError"];
+  return allowedNames.includes(error.name) ? error.name : "UNKNOWN_ERROR";
+}
 export async function readExternalCalendarProvider(connection: Connection, window: CalendarWindow, memberId: string, mirrors: { externalIds: Set<string>; appointmentIds: Set<string> }) {
   const provider = connection.provider; const events = new Map<string, NonNullable<ReturnType<typeof normalizeExternalCalendarEvent>>>();
+  let stage: "credentials" | "events" = "credentials";
   try {
     const token = await calendarAccessToken(provider, connection);
+    stage = "events";
     const initialUrl = calendarReadUrl(provider, window); let url = initialUrl.toString();
     const visited = new Set<string>(); const signal = AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
     for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -62,7 +72,10 @@ export async function readExternalCalendarProvider(connection: Connection, windo
       }
     }
     return { events: [...events.values()], provider, complete: false, error: "This calendar has more events than can be shown at once. Only part of this week is shown." };
-  } catch (error) { return { events: [], provider, complete: false, error: providerError(error) }; }
+  } catch (error) {
+    console.warn("Calendar read failed", { provider, stage, code: diagnosticCode(error) });
+    return { events: [], provider, complete: false, error: providerError(error) };
+  }
 }
 export async function loadOwnerCalendarEvents(ownerUid: string, memberId: string, rangeStart: string, rangeEnd: string): Promise<ExternalCalendarResult> {
   // Validate before database/provider work; state-specific UTC boundaries are resolved below.

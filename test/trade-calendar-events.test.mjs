@@ -6,13 +6,13 @@ import * as events from '../src/lib/trade-calendar-events.ts';
 import { scheduleAppointmentLanes, scheduleDisplayWindow } from '../src/lib/trade-schedule.ts';
 
 const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
-function load(path, mocks) {
+function load(path, mocks, diagnosticConsole = console) {
   const source = ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const loaded = { exports: {} };
-  new Function('require', 'module', 'exports', source)(specifier => {
+  new Function('require', 'module', 'exports', 'console', source)(specifier => {
     if (!Object.hasOwn(mocks, specifier)) throw new Error(`Unexpected dependency ${specifier}`);
     return mocks[specifier];
-  }, loaded, loaded.exports);
+  }, loaded, loaded.exports, diagnosticConsole);
   return loaded.exports;
 }
 const window = events.externalCalendarWindow('2026-10-01', '2026-10-08', 'NSW');
@@ -98,7 +98,7 @@ test('unsafe links and provider text are bounded without rendering HTML', () => 
   assert.equal(result.sourceUrl, ''); assert.equal(result.joinUrl, ''); assert.equal(result.title.length, 240); assert.doesNotMatch(result.title, /\u0000/);
 });
 
-function server(db = {}) { return load('../src/lib/trade-calendar-events-server.ts', { '../../db': { getD1: () => db }, './trade-calendar-sync-server': { calendarAccessToken: async () => 'provider-test-token' }, './trade-calendar-events': events }); }
+function server(db = {}, { calendarAccessToken = async () => 'provider-test-token', warn = () => {} } = {}) { return load('../src/lib/trade-calendar-events-server.ts', { '../../db': { getD1: () => db }, './trade-calendar-sync-server': { calendarAccessToken }, './trade-calendar-events': events }, { warn }); }
 async function withFetch(mock, work) { const previous = globalThis.fetch; globalThis.fetch = mock; try { return await work(); } finally { globalThis.fetch = previous; } }
 
 test('provider list requests expand recurring occurrences without fetching or rewriting job data', async () => {
@@ -168,6 +168,39 @@ test('provider authentication, missing consent, timeout and server failures rema
   await withFetch(async () => { throw new DOMException('timeout', 'TimeoutError'); }, async () => {
     assert.match((await loaded.readExternalCalendarProvider({ provider: 'google_calendar' }, window, 'owner-member', mirrors())).error, /too long/);
   });
+});
+
+test('credential failures give actionable guidance and safe stage diagnostics without fetching events', async () => {
+  for (const [code, guidance] of [['INTEGRATION_CREDENTIALS_INVALID', /Reconnect/], ['INTEGRATION_ENCRYPTION_UNAVAILABLE', /Secure calendar setup is unavailable.*Contact TLink support/]]) {
+    const warnings = []; let credentialReads = 0; let eventReads = 0;
+    const loaded = server({}, { calendarAccessToken: async () => { credentialReads += 1; throw new Error(code); }, warn: (...args) => warnings.push(args) });
+    await withFetch(async () => { eventReads += 1; throw new Error('Unexpected event read'); }, async () => {
+      const result = await loaded.readExternalCalendarProvider({ provider: 'google_calendar', encrypted_credentials: 'secret-credentials', firebase_uid: 'private-owner' }, window, 'private-member', mirrors());
+      assert.equal(result.complete, false); assert.deepEqual(result.events, []); assert.match(result.error, guidance);
+      assert.equal(credentialReads, 1); assert.equal(eventReads, 0);
+      assert.deepEqual(warnings, [['Calendar read failed', { provider: 'google_calendar', stage: 'credentials', code }]]);
+      assert.doesNotMatch(JSON.stringify({ result, warnings }), /secret-credentials|private-owner|private-member/);
+    });
+  }
+});
+
+test('event diagnostics allow only fixed codes or known error names and never expose raw errors', async () => {
+  const warnings = []; const loaded = server({}, { warn: (...args) => warnings.push(args) });
+  const sensitive = 'private@example.com https://provider.test/private?token=secret-token';
+  for (const error of [new TypeError(sensitive), Object.assign(new Error(sensitive), { name: sensitive })]) {
+    await withFetch(async () => { throw error; }, async () => {
+      const result = await loaded.readExternalCalendarProvider({ provider: 'microsoft_calendar' }, window, 'private-member', mirrors());
+      assert.equal(result.complete, false); assert.doesNotMatch(JSON.stringify({ result, warnings }), /private@example|secret-token|private-member/);
+    });
+  }
+  await withFetch(async () => Response.json({ error: { message: sensitive } }, { status: 503 }), async () => {
+    await loaded.readExternalCalendarProvider({ provider: 'microsoft_calendar' }, window, 'private-member', mirrors());
+  });
+  assert.deepEqual(warnings, [
+    ['Calendar read failed', { provider: 'microsoft_calendar', stage: 'events', code: 'TypeError' }],
+    ['Calendar read failed', { provider: 'microsoft_calendar', stage: 'events', code: 'UNKNOWN_ERROR' }],
+    ['Calendar read failed', { provider: 'microsoft_calendar', stage: 'events', code: 'CALENDAR_PROVIDER_HTTP_503' }],
+  ]);
 });
 
 test('owner-selected business is the only authority for inbound events; team schedule permission does not grant access', async () => {
