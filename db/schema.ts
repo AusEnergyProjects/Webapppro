@@ -3,20 +3,22 @@ import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, sqlit
 
 export const tradeMapLocationCache = sqliteTable("trade_map_location_cache", {
   ownerUid: text("owner_uid").notNull(), addressKey: text("address_key").notNull(), address: text("address").notNull(),
+  provider: text("provider").notNull().default("gnaf"), sourceVersion: text("source_version").notNull().default(""), sourceId: text("source_id").notNull().default(""),
   status: text("status").notNull().default("pending"), lat: real("lat"), lng: real("lng"),
   approximate: integer("approximate").notNull().default(0), reason: text("reason").notNull().default(""),
   checkedAt: text("checked_at").notNull().default(""), expiresAt: text("expires_at").notNull().default(""),
   leaseToken: text("lease_token").notNull().default(""), leaseExpiresAt: text("lease_expires_at").notNull().default(""),
   retryAfter: text("retry_after").notNull().default(""),
 }, t => [primaryKey({ columns: [t.ownerUid, t.addressKey] }),
-  index("trade_map_location_cache_expiry_idx").on(t.expiresAt).where(sql`${t.expiresAt}<>''`),
+  index("trade_map_location_cache_expiry_idx").on(t.expiresAt).where(sql`${t.provider}='google' AND ${t.expiresAt}<>''`),
   index("trade_map_location_cache_lease_idx").on(t.ownerUid, t.leaseToken).where(sql`${t.leaseToken}<>''`),
-  index("trade_map_location_cache_backoff_idx").on(t.ownerUid, t.retryAfter).where(sql`${t.status}='error'`),
+  check("trade_map_location_cache_provider", sql`${t.provider} IN ('google','gnaf')`),
   check("trade_map_location_cache_status", sql`${t.status} IN ('pending','located','unlocated','error')`),
   check("trade_map_location_cache_approximate", sql`${t.approximate} IN (0,1)`),
   check("trade_map_location_cache_key", sql`length(${t.addressKey}) BETWEEN 1 AND 1000`),
   check("trade_map_location_cache_address", sql`length(${t.address}) BETWEEN 1 AND 1000`),
-  check("trade_map_location_cache_position", sql`(${t.status}='located' AND ${t.lat} BETWEEN -55 AND -9 AND ${t.lng} BETWEEN 96 AND 169 AND ${t.lat} IS NOT NULL AND ${t.lng} IS NOT NULL AND ${t.expiresAt}<>'') OR (${t.status}<>'located' AND ${t.lat} IS NULL AND ${t.lng} IS NULL)`),
+  check("trade_map_location_cache_source", sql`(${t.provider}='google' AND ${t.sourceVersion}='' AND ${t.sourceId}='') OR (${t.provider}='gnaf' AND ${t.expiresAt}='' AND (${t.status} NOT IN ('located','unlocated') OR length(${t.sourceVersion}) BETWEEN 1 AND 180))`),
+  check("trade_map_location_cache_position", sql`(${t.status}='located' AND ${t.lat} BETWEEN -55 AND -9 AND ${t.lng} BETWEEN 96 AND 169 AND ${t.lat} IS NOT NULL AND ${t.lng} IS NOT NULL AND ((${t.provider}='google' AND ${t.expiresAt}<>'') OR (${t.provider}='gnaf' AND length(${t.sourceId}) BETWEEN 1 AND 180))) OR (${t.status}<>'located' AND ${t.lat} IS NULL AND ${t.lng} IS NULL)`),
 ]);
 
 export const tradeEmailConnections = sqliteTable("trade_email_connections", {

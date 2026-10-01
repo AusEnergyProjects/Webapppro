@@ -1,3 +1,4 @@
+import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { appointmentEndsAt } from "../src/lib/trade-schedule.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
@@ -447,6 +448,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
     "@/lib/trade-dataforce-source": tradeDataforceSource,
     "@/lib/trade-map-dataset-server": tradeMapDataset,
     "@/lib/trade-map-location-cache": tradeMapLocationCache,
+    "@/lib/gnaf-directory-server": { GnafDirectoryUnavailableError },
     "@/lib/trade-crm-register-sort-sql": registerSortHelpers,
     "@/lib/trade-calendar-sync-server": {
       syncCreatedAppointmentToConnectedCalendars: syncAppointment,

@@ -1,4 +1,4 @@
-import type { TradeMapGeocodeResult, TradeMapPinCategory, TradeMapPosition, TradeMapRecord } from "./trade-record-map.ts";
+import type { TradeMapPinCategory, TradeMapPosition, TradeMapRecord } from "./trade-record-map.ts";
 
 export type TradeMapResource = "customers" | "jobs";
 export type TradeMapQuery = { resource: TradeMapResource; filters: Record<string, string>; revision?: number };
@@ -38,14 +38,6 @@ export type TradeMapDatasetResponse = {
   page: number;
   pageSize: 50;
   hasMore: boolean;
-};
-
-export type TradeMapLocationClaim = { addressKey: string; address: string; leaseToken: string };
-export type TradeMapLocationClaimsResponse = { claims: TradeMapLocationClaim[]; retryAfterMs: number };
-export type TradeMapLocationSave = {
-  addressKey: string;
-  leaseToken: string;
-  result: TradeMapGeocodeResult;
 };
 
 /** A register page or cursor must never limit map coverage. */

@@ -1,3 +1,4 @@
+import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import test from 'node:test';
@@ -90,6 +91,7 @@ function fixture(overrides = {}) {
     '@/lib/trade-dataforce-source': tradeDataforceSource,
     '@/lib/trade-map-dataset-server': tradeMapDataset,
     '@/lib/trade-map-location-cache': tradeMapLocationCache,
+    '@/lib/gnaf-directory-server': { GnafDirectoryUnavailableError },
     '@/lib/creditex-dataforce-job-csv': { projectInstallerWorkOrderToDataforceRecord: input => input },
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access,
       canCreateJobs: current => current.isOwner || current.canCreateJobs,

@@ -1,7 +1,8 @@
 import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
-import { tradeMapConfiguration } from "@/lib/trade-map-configuration";
+import { tlinkMapConfiguration, tradeMapConfiguration } from "@/lib/trade-map-configuration";
+import { gnafDirectoryStatus } from "@/lib/gnaf-directory-server";
 
 export const runtime = "edge";
 
@@ -9,7 +10,8 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     await requireInstallerTeamAccess(request);
-    return adminJson({ ok: true, ...tradeMapConfiguration(process.env) });
+    if (new URL(request.url).searchParams.get("provider") === "design") return adminJson({ ok: true, ...tradeMapConfiguration(process.env) });
+    return adminJson({ ok: true, ...tlinkMapConfiguration(process.env), gnaf: await gnafDirectoryStatus() });
   } catch (error) {
     const mfa = mfaErrorResponse(error);
     if (mfa) return mfa;

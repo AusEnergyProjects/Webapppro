@@ -63,7 +63,7 @@ function marker(row: Row): TradeMapDatasetMarker {
 }
 
 /** Bounded queries. SQLite aggregates the full matching set; raw records never leave storage in bulk. */
-export async function loadTradeMapDataset(db: D1Database, ownerUid: string, dataset: TradeMapDataset, url: URL, now = new Date().toISOString()): Promise<TradeMapDatasetResponse> {
+export async function loadTradeMapDataset(db: D1Database, ownerUid: string, dataset: TradeMapDataset, url: URL): Promise<TradeMapDatasetResponse> {
   const requestedViewport = viewport(url);
   const pageText = url.searchParams.get("mapPage") || "1";
   const page = Number(pageText);
@@ -79,9 +79,9 @@ export async function loadTradeMapDataset(db: D1Database, ownerUid: string, data
         WHEN cache.status = 'located' AND cache.lat IS NOT NULL AND cache.lng IS NOT NULL THEN 'located'
         WHEN cache.status = 'unlocated' THEN 'unlocated' ELSE 'pending' END location_status
     FROM map_records r LEFT JOIN trade_map_location_cache cache
-      ON cache.owner_uid = ? AND cache.address_key = r.address_key AND cache.expires_at > ?
+      ON cache.owner_uid = ? AND cache.address_key = r.address_key AND cache.provider = 'gnaf'
   )`;
-  const args = [...dataset.bindings, ownerUid, now];
+  const args = [...dataset.bindings, ownerUid];
   const summary = await db.prepare(`${cte} SELECT COUNT(*) total,
     COUNT(CASE WHEN location_status = 'located' THEN 1 END) mapped,
     COUNT(CASE WHEN location_status = 'located' AND approximate = 1 THEN 1 END) approximate,

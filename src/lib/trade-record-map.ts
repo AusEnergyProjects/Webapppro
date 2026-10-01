@@ -32,7 +32,7 @@ export function tradeMapRecordCategory(record: TradeMapRecord): TradeMapPinCateg
 export type TradeMapPosition = { lat: number; lng: number };
 export type TradeMapGeocodeResult =
   | { status: "located"; position: TradeMapPosition; approximate: boolean }
-  | { status: "unlocated"; reason: "missing_address" | "invalid_address" | "zero_results" | "outside_australia" }
+  | { status: "unlocated"; reason: "missing_address" | "invalid_address" | "zero_results" | "outside_australia" | "ambiguous" }
   | { status: "error"; reason: "denied" | "quota" | "unavailable" };
 
 type GeocodeCandidate = {

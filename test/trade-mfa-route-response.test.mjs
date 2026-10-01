@@ -1,3 +1,4 @@
+import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -48,6 +49,7 @@ function deniedRoute(routeName, error) {
     TradeTeamInvitationError: OtherDomainError,
     TradeMapInputError,
     TradeMapLocationInputError,
+    GnafDirectoryUnavailableError,
   };
   const names = ['GET', 'POST', 'PATCH', 'errorResponse'];
   if (routeName === 'trade-crm') names.push('crmIdentity');

@@ -108,44 +108,45 @@ test("GET and location mutation paths enforce customer view and search permissio
   const mapRoute = route.slice(route.indexOf('if (mode === "map"'), route.indexOf('if (mode === "detail"'));
   assert.match(mapRoute, /!identity\.access\.canViewCustomers[\s\S]*!identity\.access\.canSearchCustomers/);
   assert.match(mapRoute, /crmIndex\(identity, url, resource, true\)/);
-  const mutation = route.slice(route.indexOf('if (requestedAction === "claim_map_locations"'), route.indexOf('const quickQuote ='));
+  const mutation = route.slice(route.indexOf('if (requestedAction === "locate_map_records"'), route.indexOf('const quickQuote ='));
   assert.match(mutation, /!identity\.access\.canViewCustomers[\s\S]*!identity\.access\.canSearchCustomers/);
   assert.match(mutation, /crmIndex\(identity, url, resource, true\)/);
-  assert.match(mutation, /saveTradeMapLocations\(db, identity.uid, dataset, body.results\)/);
+  assert.match(mutation, /locateTradeMapRecords\(db, identity.uid, dataset, \{ limit: body.limit, directory: await getGnafDirectory\(\) \}\)/);
+  assert.doesNotMatch(mutation, /body\.results|saveTradeMapLocations/);
   assert.match(route, /error instanceof TradeMapInputError \|\| error instanceof TradeMapLocationInputError/);
 });
 
-test("50,000 customers are represented by bounded clusters and sidebar pages, independently of list pagination", async t => {
+test("100,000 customers are represented by bounded clusters and sidebar pages, independently of list pagination", async t => {
   const sqlite = schema();
   try {
-    sqlite.exec(`WITH RECURSIVE numbers(n) AS (VALUES(1) UNION ALL SELECT n + 1 FROM numbers WHERE n < 50000)
+    sqlite.exec(`WITH RECURSIVE numbers(n) AS (VALUES(1) UNION ALL SELECT n + 1 FROM numbers WHERE n < 100000)
       INSERT INTO trade_crm_customers(id,firebase_uid,customer_number,first_name,address_line_1,suburb,address_state,postcode,email,private_notes,created_at,updated_at)
       SELECT 'customer-' || n,'owner','C' || n,'Customer ' || n, CASE WHEN n <= 10 THEN '1 Shared Street' ELSE n || ' Sample Street' END,
         'Melbourne','VIC','3000','NEVER-RETURN-EMAIL','NEVER-RETURN-NOTES','${now}','${now}' FROM numbers`);
     const dataset = await mapQuery("customers", "page=2000&pageSize=25&cursor=invalid");
     sqlite.prepare(`WITH source AS (${dataset.sql}) INSERT INTO trade_map_location_cache
-      (owner_uid,address_key,address,status,lat,lng,approximate,checked_at,expires_at)
-      SELECT 'owner',address_key,MIN(address),'located',-38 + (CAST(SUBSTR(MIN(id),10) AS INTEGER) % 200) / 100.0,
-        144 + (CAST(SUBSTR(MIN(id),10) AS INTEGER) % 250) / 100.0,0,?,'2026-10-29T00:00:00.000Z'
+      (owner_uid,address_key,address,provider,source_version,source_id,status,lat,lng,approximate,checked_at)
+      SELECT 'owner',address_key,MIN(address),'gnaf','gnaf-aug2026','GAVIC'||MIN(id),'located',-38 + (CAST(SUBSTR(MIN(id),10) AS INTEGER) % 200) / 100.0,
+        144 + (CAST(SUBSTR(MIN(id),10) AS INTEGER) % 250) / 100.0,0,?
       FROM source GROUP BY address_key`).run(...dataset.bindings, now);
     const url = new URL("https://example.test/api/trade-crm?resource=customers&mapPage=1");
     const customerStarted = performance.now();
     const first = await loadTradeMapDataset(d1(sqlite), "owner", dataset, url, now);
-    t.diagnostic(`50k customer query: ${Math.round(performance.now() - customerStarted)}ms, ${JSON.stringify(first).length} bytes, ${first.markers.length} markers`);
-    assert.equal(first.total, 50000); assert.equal(first.mapped, 50000);
-    assert.equal(first.inViewport, 50000); assert.equal(first.listTotal, 50000);
+    t.diagnostic(`100k customer query: ${Math.round(performance.now() - customerStarted)}ms, ${JSON.stringify(first).length} bytes, ${first.markers.length} markers`);
+    assert.equal(first.total, 100000); assert.equal(first.mapped, 100000);
+    assert.equal(first.inViewport, 100000); assert.equal(first.listTotal, 100000);
     assert.equal(first.pending, 0); assert.equal(first.unmapped, 0);
-    assert.equal(first.markers.reduce((sum, value) => sum + value.count, 0), 50000);
+    assert.equal(first.markers.reduce((sum, value) => sum + value.count, 0), 100000);
     assert.ok(first.markers.length <= 96); assert.equal(first.items.length, 50); assert.equal(first.hasMore, true);
     const encoded = JSON.stringify(first);
-    assert.ok(encoded.length < 100000, `${encoded.length} bytes must remain bounded regardless of 50,000 source rows`);
+    assert.ok(encoded.length < 100000, `${encoded.length} bytes must remain bounded regardless of 100,000 source rows`);
     assert.ok(!encoded.includes("NEVER-RETURN"), "unrequested customer fields must never be sent with map data");
     url.searchParams.set("mapPage", "2");
     const second = await loadTradeMapDataset(d1(sqlite), "owner", dataset, url, now);
     assert.ok(second.items.every(row => !first.items.some(prior => prior.id === row.id)));
     for (const [key, value] of Object.entries({ north: "-37", south: "-37.5", east: "145", west: "144", mapPage: "1", mapLocationStatus: "located" })) url.searchParams.set(key, value);
     const area = await loadTradeMapDataset(d1(sqlite), "owner", dataset, url, now);
-    assert.equal(area.total, 50000); assert.equal(area.mapped, 50000); assert.ok(area.inViewport > 0 && area.inViewport < 50000);
+    assert.equal(area.total, 100000); assert.equal(area.mapped, 100000); assert.ok(area.inViewport > 0 && area.inViewport < 100000);
     assert.equal(area.listTotal, area.inViewport);
     assert.ok(area.items.every(row => row.position.lat >= -37.5 && row.position.lat <= -37 && row.position.lng >= 144 && row.position.lng <= 145));
     url.searchParams.set("mapAddressKey", "1 shared street, melbourne, vic, 3000, australia");
@@ -163,29 +164,30 @@ test("50,000 customers are represented by bounded clusters and sidebar pages, in
       SELECT 'detail-' || id,'job-' || id,firebase_uid,id,'site-' || id,'trade_owned',
         CASE WHEN CAST(SUBSTR(id,10) AS INTEGER) % 2 = 0 THEN 'imported' ELSE 'enquiry' END,created_at,updated_at FROM trade_crm_customers;`);
     const jobDataset = await mapQuery("jobs", "filter=all&operationalStatus=imported");
-    t.diagnostic(`50k jobs seed: ${Math.round(performance.now() - seedStarted)}ms`);
+    t.diagnostic(`100k jobs seed: ${Math.round(performance.now() - seedStarted)}ms`);
     const jobsStarted = performance.now();
     const jobs = await loadTradeMapDataset(d1(sqlite), "owner", jobDataset, new URL("https://example.test/api/trade-crm?resource=jobs"), now);
-    assert.equal(jobs.total, 25000); assert.equal(jobs.mapped, 25000); assert.equal(jobs.inViewport, 25000);
+    assert.equal(jobs.total, 50000); assert.equal(jobs.mapped, 50000); assert.equal(jobs.inViewport, 50000);
     assert.equal(jobs.items.length, 50); assert.ok(jobs.items.every(row => row.jobStatus === "imported"));
     assert.ok(jobs.markers.every(value => value.category === "imported"));
     assert.ok(jobs.markers.length <= 96);
-    t.diagnostic(`50k job source / 25k Imported query: ${Math.round(performance.now() - jobsStarted)}ms, ${JSON.stringify(jobs).length} bytes, ${jobs.markers.length} markers`);
+    t.diagnostic(`100k job source / 50k Imported query: ${Math.round(performance.now() - jobsStarted)}ms, ${JSON.stringify(jobs).length} bytes, ${jobs.markers.length} markers`);
   } finally { sqlite.close(); }
 });
 
-test("missing, failed, expired, changed and cross-owner cached addresses cannot become valid pins", async () => {
+test("missing, failed, legacy Google, changed and cross-owner cached addresses cannot become valid pins", async () => {
   const sqlite = schema();
   try {
-    for (const name of ["located", "approximate", "missing", "expired", "failed", "error", "changed", "cross-owner"]) {
+    for (const name of ["located", "approximate", "missing", "legacy-google", "failed", "error", "changed", "cross-owner"]) {
       insert(sqlite, "trade_crm_customers", { id: name, firebase_uid: "owner", customer_number: name, first_name: name,
         address_line_1: name === "missing" ? "" : `1 ${name} Street`, suburb: "Melbourne", address_state: "VIC", postcode: "3000", created_at: now, updated_at: now });
       if (name === "missing") continue;
       const address = `1 ${name} Street, Melbourne, VIC, 3000, Australia`;
       const located = name !== "failed" && name !== "error";
       insert(sqlite, "trade_map_location_cache", { owner_uid: name === "cross-owner" ? "other" : "owner", address_key: address.toLowerCase(), address,
+        provider: name === "legacy-google" ? "google" : "gnaf", source_version: name === "legacy-google" ? "" : "gnaf-aug2026", source_id: name === "legacy-google" || !located ? "" : "GAVIC" + name,
         status: located ? "located" : name === "error" ? "error" : "unlocated", lat: located ? -37.8 : null, lng: located ? 144.9 : null,
-        approximate: name === "approximate" ? 1 : 0, expires_at: name === "error" ? "" : name === "expired" ? "2026-09-30T00:00:00.000Z" : "2026-10-29T00:00:00.000Z" });
+        approximate: name === "approximate" ? 1 : 0, expires_at: name === "legacy-google" ? "2026-10-29T00:00:00.000Z" : "" });
     }
     sqlite.prepare("UPDATE trade_crm_customers SET address_line_1='2 Changed Street' WHERE id='changed'").run();
     const dataset = await mapQuery("customers");
@@ -221,8 +223,8 @@ test("co-located jobs preserve counts, canonical and mixed lifecycle categories,
       insert(sqlite, "trade_crm_service_sites", { id, firebase_uid: "owner", customer_id: "customer", address_line_1: street,
         suburb: "Melbourne", address_state: "VIC", postcode: "3000", created_at: now, updated_at: now });
       const address = `${street}, Melbourne, VIC, 3000, Australia`;
-      insert(sqlite, "trade_map_location_cache", { owner_uid: "owner", address_key: address.toLowerCase(), address, status: "located",
-        lat: -37.8, lng: 144.9, approximate, checked_at: now, expires_at: "2026-10-29T00:00:00.000Z" });
+      insert(sqlite, "trade_map_location_cache", { owner_uid: "owner", address_key: address.toLowerCase(), address, provider: "gnaf", source_version: "gnaf-aug2026", source_id: "GAVIC" + id, status: "located",
+        lat: -37.8, lng: 144.9, approximate, checked_at: now, expires_at: "" });
     }
     for (const id of ["job-a", "job-b"]) {
       insert(sqlite, "trade_work_orders", { id, firebase_uid: "owner", partner_type: "installer", work_number: id,
@@ -278,10 +280,10 @@ test("real Cloudflare D1 accepts the complete lifecycle-filtered map and claim/s
     assert.equal(initial.total, 1); assert.equal(initial.pending, 1); assert.equal(initial.items[0].jobStatus, "imported");
     const claimed = await claimTradeMapLocations(db, "owner", dataset, { now });
     assert.equal(claimed.claims.length, 1);
-    const saved = await saveTradeMapLocations(db, "owner", dataset, claimed.claims.map(claim => ({ ...claim, result: { status: "located", position: { lat: -37.8, lng: 144.9 }, approximate: false } })), { now });
+    const saved = await saveTradeMapLocations(db, "owner", dataset, claimed.claims.map(claim => ({ ...claim, result: { status: "located", position: { lat: -37.8, lng: 144.9 }, approximate: true, sourceId: "GAVIC123" } })), { now, sourceVersion: "gnaf-aug2026" });
     assert.equal(saved.saved, 1);
     const located = await loadTradeMapDataset(db, "owner", dataset, url, now);
     assert.equal(located.mapped, 1); assert.equal(located.markers.length, 1); assert.equal(located.markers[0].record.id, "job");
-    assert.equal((await claimTradeMapLocations(db, "owner", dataset, { now })).claims.length, 0, "reopening must not cause another paid lookup");
+    assert.equal((await claimTradeMapLocations(db, "owner", dataset, { now })).claims.length, 0, "reopening must not cause another address lookup");
   } finally { sqlite.close(); await mf.dispose(); }
 });

@@ -114,7 +114,8 @@ import {
 } from "@/lib/trade-rental-assessment.mjs";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 import { loadTradeMapDataset, tradeMapAddressSql, TradeMapInputError, type TradeMapDataset } from "@/lib/trade-map-dataset-server";
-import { claimTradeMapLocations, saveTradeMapLocations, TradeMapLocationInputError } from "@/lib/trade-map-location-cache";
+import { locateTradeMapRecords, TradeMapLocationInputError } from "@/lib/trade-map-location-cache";
+import { getGnafDirectory, GnafDirectoryUnavailableError } from "@/lib/gnaf-directory-server";
 import { rentalAssignmentRequiredGates, rentalAssignmentCredentialSql } from "@/lib/trade-rental-credentials";
 import {
   isRentalInspectionAssignmentConflict,
@@ -389,6 +390,7 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof GnafDirectoryUnavailableError) return adminJson({ ok: false, error: error.message }, 503);
   if (error instanceof TradeMapInputError || error instanceof TradeMapLocationInputError) {
     return adminJson({ ok: false, error: error.message }, 400);
   }
@@ -1757,17 +1759,17 @@ export async function POST(request: Request) {
     const db = getD1();
     const requestedAction = cleanAdminText(body.action, 40);
     if (requestedAction === "claim_map_locations" || requestedAction === "save_map_locations") {
+      return adminJson({ ok: false, error: "Refresh the map to use saved Australian address locations." }, 410);
+    }
+    if (requestedAction === "locate_map_records") {
       const url = new URL(request.url);
       const resource = cleanAdminText(url.searchParams.get("resource") || body.resource, 20);
       if (resource !== "jobs" && resource !== "customers") throw new TradeMapInputError("Choose jobs or customers for the map.");
       if (resource === "customers" && (!identity.access.canViewCustomers
         || !identity.access.canSearchCustomers)) throw new Error("CUSTOMER_SEARCH_REQUIRED");
       const dataset = await crmIndex(identity, url, resource, true);
-      if (requestedAction === "claim_map_locations") {
-        if (body.limit !== undefined && typeof body.limit !== "number") throw new TradeMapLocationInputError();
-        return adminJson({ ok: true, ...(await claimTradeMapLocations(db, identity.uid, dataset, { limit: body.limit })) });
-      }
-      return adminJson({ ok: true, ...(await saveTradeMapLocations(db, identity.uid, dataset, body.results)) });
+      if (body.limit !== undefined && typeof body.limit !== "number") throw new TradeMapLocationInputError();
+      return adminJson({ ok: true, ...(await locateTradeMapRecords(db, identity.uid, dataset, { limit: body.limit, directory: await getGnafDirectory() })) });
     }
     const quickQuote = requestedAction === "create_quick_quote_job";
     const action = quickQuote ? "create_job" : requestedAction;

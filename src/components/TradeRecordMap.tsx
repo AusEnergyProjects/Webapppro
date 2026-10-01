@@ -1,53 +1,47 @@
 "use client";
 
 import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
-/// <reference types="google.maps" />
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
-import { geocodeTradeMapAddress, GoogleMapsClientError, loadGoogleMaps, onGoogleMapsAuthFailure } from "@/lib/google-maps-client";
+import type { Map as TLinkMap, Marker } from "@maptiler/sdk";
+import "@maptiler/sdk/dist/maptiler-sdk.css";
 import { tradeMapDirectionsUrl, tradeMapRecordCategory, TRADE_MAP_PIN_CATEGORY_ORDER, TRADE_MAP_PIN_LABELS, type TradeMapRecord } from "@/lib/trade-record-map";
 import type { TradeMapBounds, TradeMapDatasetItem, TradeMapDatasetResponse, TradeMapQuery } from "@/lib/trade-map-contract";
-import { isTradeMapClaimsResponse, isTradeMapDatasetResponse, resolveTradeMapClaims, tradeMapQueryUrl, tradeMapViewportUrl, waitForTradeMapRetry, type TradeMapLocationStatus } from "@/lib/trade-map-client";
+import { isTradeMapDatasetResponse, tradeMapQueryUrl, tradeMapViewportUrl, waitForTradeMapRetry, type TradeMapLocationStatus } from "@/lib/trade-map-client";
+import { createTLinkMapAttribution, isTLinkAddressResult, isTLinkMapConfiguration, isTLinkMapLocationProgress, tlinkMapBounds, tlinkMapFailure, type TLinkMapConfiguration } from "@/lib/tlink-map-client";
+import { GNAF_LICENCE_URL } from "@/lib/gnaf-address";
 import styles from "./TradeRecordMap.module.css";
-import { TradeMapTools } from "./TradeMapTools";
 import dynamic from "next/dynamic";
 import type { MapQuoteMeasurement } from "@/lib/trade-map-quote";
 import type { MapQuoteAccess } from "./TradeMapQuoteDialog";
 import type { SolarDesign } from "@/lib/trade-solar-design";
 const TradeMapQuoteDialog = dynamic(() => import("./TradeMapQuoteDialog").then(module => module.TradeMapQuoteDialog));
+const TradeRoofDesignMap = dynamic(() => import("./TradeRoofDesignMap").then(module => module.TradeRoofDesignMap), { ssr: false });
 
 type Props = { user: User; query: TradeMapQuery; onOpenRecord: (record: TradeMapRecord) => void; quoteAccess?: MapQuoteAccess; onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void };
-type Runtime = { ownerUid: string; api: typeof google.maps; map: google.maps.Map; geocoder: google.maps.Geocoder };
-type MapState = "loading" | "ready" | "unconfigured" | "access" | "auth" | "unavailable";
-type MarkerEntry = { marker: google.maps.marker.AdvancedMarkerElement; badge: HTMLDivElement; click: () => void };
+type Runtime = { ownerUid: string; api: typeof import("@maptiler/sdk"); map: TLinkMap };
+type MapState = "loading" | "ready" | "unconfigured" | "access" | "auth" | "limit" | "unavailable";
+type MarkerEntry = { marker: Marker; element: HTMLButtonElement; badge: HTMLSpanElement; click: () => void };
 type View = { scope: string; bounds: TradeMapBounds | null; page: number; addressKey: string; locationStatus: TradeMapLocationStatus };
 type Progress = { scope: string; running: boolean; waiting: boolean; completed: number; error: string };
 
 function recordKey(record: TradeMapRecord) { return `${record.kind}:${record.id}`; }
 function initialView(scope: string): View { return { scope, bounds: null, page: 1, addressKey: "", locationStatus: "all" }; }
 function number(value: number) { return value.toLocaleString("en-AU"); }
-function removeMarker(entry: MarkerEntry) { entry.marker.removeEventListener("gmp-click", entry.click); entry.marker.map = null; }
+function removeMarker(entry: MarkerEntry) { entry.element.removeEventListener("click", entry.click); entry.marker.remove(); }
 function fitBounds(runtime: Runtime, bounds: TradeMapBounds) {
   if (bounds.north - bounds.south < 0.00001 && bounds.east - bounds.west < 0.00001) {
-    runtime.map.setCenter({ lat: bounds.north, lng: bounds.east }); runtime.map.setZoom(17); return;
+    runtime.map.easeTo({ center: [bounds.east, bounds.north], zoom: 17 }); return;
   }
-  runtime.map.fitBounds(bounds, 55);
-  runtime.api.event.addListenerOnce(runtime.map, "idle", () => { if ((runtime.map.getZoom() ?? 0) > 18) runtime.map.setZoom(18); });
-}
-function isConfiguredMap(value: unknown): value is { ok: true; configured: boolean; apiKey?: string; mapId?: string } {
-  return typeof value === "object" && value !== null && "ok" in value && value.ok === true && "configured" in value && typeof value.configured === "boolean";
+  runtime.map.fitBounds(tlinkMapBounds(bounds), { padding: 55, maxZoom: 18 });
 }
 const mapMessages: Record<Exclude<MapState, "ready">, { title: string; detail: string }> = {
   loading: { title: "Loading map", detail: "Your saved locations will appear when the map is ready." },
-  unconfigured: { title: "Google Maps is not connected yet", detail: "An administrator needs to finish Google Maps setup. You can still open your records below." },
+  unconfigured: { title: "Customer maps are being connected", detail: "An administrator needs to finish the map connection. Your saved records are available below." },
   access: { title: "Map access is unavailable", detail: "Refresh your session and try again. Your workspace access may need to be reviewed." },
-  auth: { title: "Google Maps could not authorise this site", detail: "An administrator needs to check the Google Maps connection. Refresh this page after it is corrected." },
-  unavailable: { title: "Google Maps is unavailable", detail: "Check your connection and try again. Your customer and job records are still available." },
-};
-const geocodeMessages = {
-  denied: "Google could not authorise address lookup. An administrator needs to check the Maps connection.",
-  quota: "Google's address lookup limit has been reached. Your saved locations are available. Remaining addresses will resume later.",
-  unavailable: "Address lookup is temporarily unavailable. Your saved locations are available. Retry to continue.",
+  auth: { title: "The map connection needs attention", detail: "An administrator needs to check map access for this site. Your customer and job records are still available." },
+  limit: { title: "Map display is paused", detail: "The map provider's usage limit has been reached. Saved addresses and customer records remain available below." },
+  unavailable: { title: "Map display is unavailable", detail: "Check your connection and try again. Your customer and job records are still available." },
 };
 const locationLabels: Record<TradeMapLocationStatus, string> = {
   all: "In this area + without a pin", located: "On map in this area", pending: "Waiting for a location", unlocated: "Address needs attention", approximate: "Approximate pins in this area",
@@ -58,9 +52,14 @@ function locationLabel(record: TradeMapDatasetItem) {
   return record.locationStatus === "unlocated" ? "Address needs attention" : "Waiting for location";
 }
 
-export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegisterMapSave }: Props) {
+export function TradeRecordMap(props: Props) {
+  const businessOwnerUid = useTradeBusiness()?.ownerUid || props.user.uid;
+  // Remount all map, search and design state when the authenticated business changes.
+  return <TradeRecordMapView key={`${props.user.uid}:${businessOwnerUid}`} {...props} businessOwnerUid={businessOwnerUid} />;
+}
+
+function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegisterMapSave, businessOwnerUid }: Props & { businessOwnerUid: string }) {
   const fetch = useTradeBusinessFetch();
-  const businessOwnerUid = useTradeBusiness()?.ownerUid || user.uid;
   const baseUrl = tradeMapQueryUrl(query);
   const scope = `${user.uid}:${businessOwnerUid}:${baseUrl}`;
   const [viewState, setViewState] = useState<View>(() => initialView(scope));
@@ -78,12 +77,17 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
   const canvasRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef(new Map<string, MarkerEntry>());
-  const activeScopeRef = useRef<string | null>(scope);
   const interactedRef = useRef(false);
   const firstFitRef = useRef({ scope: "", final: false });
-  const [measuring, setMeasuring] = useState(false);
-  const exploreMap = useCallback(() => { interactedRef.current = true; }, []);
   const [runtime, setRuntime] = useState<Runtime | null>(null);
+  const [configuration, setConfiguration] = useState<{ ownerUid: string; value: TLinkMapConfiguration } | null>(null);
+  const config = configuration?.ownerUid === businessOwnerUid ? configuration.value : null;
+  const [designScope, setDesignScope] = useState<string | null>(null);
+  const designOpen = designScope === scope;
+  const [address, setAddress] = useState("");
+  const addressSearchRef = useRef<AbortController | null>(null);
+  const addressMarkerRef = useRef<Marker | null>(null);
+  const [searchState, setSearchState] = useState({ scope, busy: false, message: "" });
   const [mapState, setMapState] = useState<MapState>("loading");
   const [progress, setProgress] = useState<Progress>({ scope, running: false, waiting: false, completed: 0, error: "" });
   const currentProgress = progress.scope === scope ? progress : null;
@@ -97,7 +101,7 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
   const requestKey = `${scope}:${requestUrl}:${query.revision ?? 0}:${refresh}`;
   const loading = completedRequest !== requestKey;
 
-  useEffect(() => { interactedRef.current = false; activeScopeRef.current = scope; return () => { activeScopeRef.current = null; }; }, [scope]);
+  useEffect(() => { interactedRef.current = false; addressMarkerRef.current?.remove(); return () => { addressSearchRef.current?.abort(); }; }, [scope]);
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
@@ -120,45 +124,56 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
     canvas?.addEventListener("pointerdown", interact);
     canvas?.addEventListener("wheel", interact, { passive: true });
     canvas?.addEventListener("keydown", interact);
-    let createdMap: google.maps.Map | null = null;
-    let api: typeof google.maps | null = null;
-    const unsubscribeAuth = onGoogleMapsAuthFailure(() => {
-      if (controller.signal.aborted) return;
-      controller.abort(); setMapState("auth"); setRuntime(null);
-    });
+    let createdMap: TLinkMap | null = null;
+    let loadingTimer: ReturnType<typeof setTimeout> | undefined;
+    let themeObserver: MutationObserver | null = null;
+    let resizeObserver: ResizeObserver | null = null;
     void (async () => {
-      setMapState("loading"); setRuntime(null);
+      setMapState("loading"); setRuntime(null); setConfiguration(null);
+      setSearchState(previous => ({ ...previous, busy: false }));
       firstFitRef.current = { scope: "", final: false };
       const response = await fetch("/api/trade-map/config", { headers: { Authorization: `Bearer ${await user.getIdToken()}` }, cache: "no-store", signal: controller.signal });
       if (response.status === 401 || response.status === 403) { if (!controller.signal.aborted) setMapState("access"); return; }
       if (!response.ok) throw new Error("Map configuration unavailable");
       const config: unknown = await response.json();
       if (controller.signal.aborted) return;
-      if (!isConfiguredMap(config)) throw new Error("Invalid map configuration");
+      if (!isTLinkMapConfiguration(config)) throw new Error("Invalid map configuration");
+      setConfiguration({ ownerUid: businessOwnerUid, value: config });
       if (!config.configured) { setMapState("unconfigured"); return; }
-      if (!config.apiKey?.trim() || !config.mapId?.trim() || config.mapId === "DEMO_MAP_ID") throw new Error("Incomplete map configuration");
-      api = await loadGoogleMaps(config.apiKey);
+      const api = await import("@maptiler/sdk");
       if (controller.signal.aborted || !canvas) return;
-      createdMap = new api.Map(canvas, {
-        mapId: config.mapId, center: { lat: -25.5, lng: 134 }, zoom: 4, mapTypeControl: false,
-        scaleControl: true, zoomControl: true, cameraControl: false, tilt: 0, heading: 0,
-        tiltInteractionEnabled: false, headingInteractionEnabled: false, rotateControl: false,
-        streetViewControl: false, clickableIcons: false, fullscreenControl: true,
-        gestureHandling: window.matchMedia("(pointer: fine)").matches ? "greedy" : "cooperative",
-        colorScheme: document.documentElement.dataset.tlinkColourMode === "night" ? "DARK" : "LIGHT",
+      const style = () => document.documentElement.dataset.tlinkColourMode === "night" ? api.MapStyle.STREETS.DARK : api.MapStyle.STREETS.DEFAULT;
+      createdMap = new api.Map({
+        apiKey: config.apiKey, container: canvas, center: [134, -25.5], zoom: 4, style: style(),
+        scaleControl: true, navigationControl: false, fullscreenControl: true,
+        terrainControl: false, geolocateControl: false, projectionControl: false,
+        // SDK 4.x overrides attributionControl; this disables the underlying HTML control.
+        forceNoAttributionControl: true,
+        cooperativeGestures: !window.matchMedia("(pointer: fine)").matches,
+        dragRotate: false, touchPitch: false, pitchWithRotate: false, maxPitch: 0, renderWorldCopies: false,
       });
-      createdMap.addListener("dragstart", () => { interactedRef.current = true; });
-      setRuntime({ ownerUid: businessOwnerUid, api, map: createdMap, geocoder: new api.Geocoder() });
-      setMapState("ready");
-    })().catch(error => { if (!controller.signal.aborted) setMapState(error instanceof GoogleMapsClientError && error.reason === "auth" ? "auth" : "unavailable"); });
+      createdMap.addControl(new api.NavigationControl({ showCompass: false }), "bottom-right");
+      createdMap.addControl(createTLinkMapAttribution(document, styles.mapAttribution), "bottom-left");
+      loadingTimer = setTimeout(() => { if (!controller.signal.aborted) setMapState("unavailable"); }, 20_000);
+      createdMap.on("dragstart", () => { interactedRef.current = true; });
+      createdMap.on("load", () => { clearTimeout(loadingTimer); if (!controller.signal.aborted) setMapState("ready"); });
+      createdMap.on("error", event => { clearTimeout(loadingTimer); if (!controller.signal.aborted) setMapState(tlinkMapFailure(event.error)); });
+      setRuntime({ ownerUid: businessOwnerUid, api, map: createdMap });
+      themeObserver = new MutationObserver(() => { createdMap?.setStyle(style()); });
+      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-tlink-colour-mode"] });
+      resizeObserver = new ResizeObserver(() => { if (canvas.clientWidth && canvas.clientHeight) createdMap?.resize(); });
+      resizeObserver.observe(canvas);
+    })().catch(error => { if (!controller.signal.aborted) setMapState(tlinkMapFailure(error)); });
     return () => {
-      controller.abort(); unsubscribeAuth();
+      controller.abort(); clearTimeout(loadingTimer); themeObserver?.disconnect(); resizeObserver?.disconnect();
       canvas?.removeEventListener("pointerdown", interact);
       canvas?.removeEventListener("wheel", interact);
       canvas?.removeEventListener("keydown", interact);
       for (const entry of markers.values()) removeMarker(entry);
       markers.clear();
-      if (createdMap && api) api.event.clearInstanceListeners(createdMap);
+      addressSearchRef.current?.abort();
+      addressMarkerRef.current?.remove();
+      createdMap?.remove();
       canvas?.replaceChildren();
     };
   }, [businessOwnerUid, fetch, user, setupAttempt]);
@@ -169,8 +184,8 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
     const update = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        const bounds = runtime.map.getBounds()?.toJSON();
-        if (!bounds) return;
+        const currentBounds = runtime.map.getBounds();
+        const bounds = { north: currentBounds.getNorth(), south: currentBounds.getSouth(), east: Math.min(180, currentBounds.getEast()), west: Math.max(-180, currentBounds.getWest()) };
         setViewState(previous => {
           const current = previous.scope === scope ? previous : initialView(scope);
           const next = { ...current, bounds };
@@ -179,9 +194,9 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
         });
       }, 250);
     };
-    const listener = runtime.map.addListener("idle", update);
+    runtime.map.on("moveend", update);
     update();
-    return () => { clearTimeout(timer); listener.remove(); };
+    return () => { clearTimeout(timer); runtime.map.off("moveend", update); };
   }, [runtime, businessOwnerUid, scope, baseUrl]);
 
   useEffect(() => {
@@ -193,14 +208,15 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
   }, [runtime, businessOwnerUid, data, scope]);
 
   useEffect(() => {
-    if (!runtime || runtime.ownerUid !== businessOwnerUid || !lookupEnabled) return;
+    if (!config?.gnaf.ready || !lookupEnabled) return;
     const controller = new AbortController();
     const signal = controller.signal;
     let completed = 0;
     let lastRefresh = 0;
-    async function post(body: unknown, saveCompleted = false) {
-      const response = await fetch(baseUrl, { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: saveCompleted ? undefined : signal });
-      if (!response.ok) throw new Error("Location progress could not be saved. Retry to continue from your saved locations.");
+    async function post() {
+      const response = await fetch(baseUrl, { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ action: "locate_map_records", limit: 200 }), signal });
+      if ((response.status === 401 || response.status === 403) && !signal.aborted) { setDataset(null); setSelection(null); setLookupState({ scope, enabled: false }); }
+      if (!response.ok) throw new Error(response.status === 503 ? "The Australian address directory is being prepared. Your saved records are available. Try again later." : "Address processing could not be completed. Retry to continue from your saved locations.");
       const result: unknown = await response.json();
       return result;
     }
@@ -210,36 +226,22 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
     void (async () => {
       setProgress({ scope, running: true, waiting: false, completed, error: "" });
       while (!signal.aborted) {
-        const claims = await post({ action: "claim_map_locations", limit: 10 });
+        const batch = await post();
         if (signal.aborted) return;
-        if (!isTradeMapClaimsResponse(claims)) throw new Error("Address processing could not be started. Retry to continue.");
-        if (!claims.claims.length) {
-          reload(true);
-          if (!claims.retryAfterMs) { setProgress({ scope, running: false, waiting: false, completed, error: "" }); setLookupState({ scope, enabled: false }); return; }
-          setProgress({ scope, running: false, waiting: true, completed, error: "" });
-          await waitForTradeMapRetry(Math.min(Math.max(claims.retryAfterMs, 3_000), 60_000), signal);
-          continue;
-        }
-        setProgress({ scope, running: true, waiting: false, completed, error: "" });
-        const batch = await resolveTradeMapClaims(claims.claims, address => geocodeTradeMapAddress(runtime.geocoder, address), signal);
-        if (batch.results.length) {
-          // Save completed work even if the user paused or navigated away during
-          // this batch. Cancellation prevents any new Google lookups.
-          const saved = await post({ action: "save_map_locations", results: batch.results }, true);
-          if (typeof saved !== "object" || saved === null || !("saved" in saved) || typeof saved.saved !== "number") throw new Error("Location progress could not be confirmed. Retry to continue.");
-          if (signal.aborted) { if (activeScopeRef.current === scope) setRefresh(value => value + 1); return; }
-          completed += saved.saved;
-          reload(Boolean(batch.error));
-        }
-        if (signal.aborted) return;
-        if (batch.error) { setProgress({ scope, running: false, waiting: false, completed, error: geocodeMessages[batch.error] }); setLookupState({ scope, enabled: false }); return; }
-        setProgress({ scope, running: true, waiting: false, completed, error: "" });
+        if (!isTLinkMapLocationProgress(batch)) throw new Error("Address processing returned an unexpected result. Retry to continue.");
+        completed += batch.processed;
+        reload(batch.complete);
+        setProgress({ scope, running: !batch.complete && !batch.retryAfterMs, waiting: !batch.complete && batch.retryAfterMs > 0, completed, error: "" });
+        if (batch.complete) { setLookupState({ scope, enabled: false }); return; }
+        // One bounded server batch at a time. The server saves progress even if
+        // this view closes; no customer addresses are sent to a map provider.
+        await waitForTradeMapRetry(batch.retryAfterMs || 150, signal);
       }
     })().catch(error => {
       if (!signal.aborted) { reload(true); setProgress({ scope, running: false, waiting: false, completed, error: error instanceof Error ? error.message : "Address processing paused. Retry to continue." }); setLookupState({ scope, enabled: false }); }
     });
     return () => controller.abort();
-  }, [runtime, businessOwnerUid, baseUrl, scope, fetch, user, locateAttempt, query.revision, lookupEnabled]);
+  }, [config?.gnaf.ready, baseUrl, scope, fetch, user, locateAttempt, query.revision, lookupEnabled]);
 
   const pins = useMemo(() => data?.markers ?? [], [data]);
   const legendCategories = useMemo(() => {
@@ -270,27 +272,53 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
         selectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       };
       if (!entry) {
-        const badge = document.createElement("div"); badge.className = styles.pin;
-        const marker = new runtime.api.marker.AdvancedMarkerElement({ map: runtime.map, position: pin.position, gmpClickable: true });
-        marker.append(badge); entry = { marker, badge, click }; markers.set(pin.id, entry);
-      } else { entry.marker.removeEventListener("gmp-click", entry.click); entry.click = click; }
-      entry.marker.addEventListener("gmp-click", click);
-      entry.marker.map = measuring ? null : runtime.map;
-      entry.marker.position = pin.position;
-      entry.marker.title = `${number(pin.count)} ${pin.count === 1 ? "record" : "records"}. ${TRADE_MAP_PIN_LABELS[pin.category]}. ${pin.count === 1 ? "Select to view details." : pin.addressKey ? "Select to browse this address." : "Select to zoom in."}`;
+        const element = document.createElement("button"); element.type = "button"; element.className = styles.pinButton;
+        const badge = document.createElement("span"); badge.className = styles.pin;
+        element.append(badge);
+        const marker = new runtime.api.Marker({ element, anchor: "bottom" }).setLngLat([pin.position.lng, pin.position.lat]).addTo(runtime.map);
+        entry = { marker, element, badge, click }; markers.set(pin.id, entry);
+      } else { entry.element.removeEventListener("click", entry.click); entry.click = click; }
+      entry.element.addEventListener("click", click);
+      entry.marker.setLngLat([pin.position.lng, pin.position.lat]);
+      const title = `${number(pin.count)} ${pin.count === 1 ? "record" : "records"}. ${TRADE_MAP_PIN_LABELS[pin.category]}. ${pin.count === 1 ? "Select to view details." : pin.addressKey ? "Select to browse this address." : "Select to zoom in."}`;
+      entry.element.title = title; entry.element.setAttribute("aria-label", title);
       entry.badge.textContent = pin.count > 1 ? number(pin.count) : query.resource === "jobs" ? "J" : "C";
       entry.badge.dataset.category = pin.category;
       entry.badge.dataset.cluster = String(pin.count > 1);
       const isSelected = Boolean((selected && pin.record && recordKey(selected) === recordKey(pin.record)) || (view.addressKey && view.addressKey === pin.addressKey));
       entry.badge.dataset.selected = String(isSelected);
-      entry.marker.zIndex = isSelected ? 1000 : undefined;
+      entry.element.style.zIndex = isSelected ? "1000" : "";
     }
-  }, [businessOwnerUid, runtime, pins, selected, view.addressKey, scope, query.resource, measuring]);
+  }, [businessOwnerUid, runtime, pins, selected, view.addressKey, scope, query.resource]);
 
   function selectRecord(record: TradeMapDatasetItem) {
     interactedRef.current = true; setSelection({ scope, record }); setClusterNotice(null);
-    if (runtime && record.position) { runtime.map.panTo(record.position); if ((runtime.map.getZoom() ?? 0) < 15) runtime.map.setZoom(15); }
+    if (runtime && record.position) runtime.map.easeTo({ center: [record.position.lng, record.position.lat], zoom: Math.max(runtime.map.getZoom(), 15) });
     selectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  async function findAddress(event: FormEvent) {
+    event.preventDefault();
+    if (!runtime || runtime.ownerUid !== businessOwnerUid || !config?.gnaf.ready) return;
+    const query = address.trim();
+    if (query.length < 4) { setSearchState({ scope, busy: false, message: "Enter the street number, street, suburb, state and postcode." }); return; }
+    addressSearchRef.current?.abort();
+    const controller = new AbortController(); addressSearchRef.current = controller;
+    setSearchState({ scope, busy: true, message: "" });
+    addressMarkerRef.current?.remove();
+    try {
+      const response = await fetch("/api/trade-map/locate", { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ address: query }), signal: controller.signal });
+      if (!response.ok) throw new Error(response.status === 503 ? "The Australian address directory is being prepared. Try again later." : "Address search is unavailable. Try again.");
+      const value: unknown = await response.json();
+      if (controller.signal.aborted) return;
+      if (!isTLinkAddressResult(value)) throw new Error("Address search returned an unexpected result. Try again.");
+      if (value.result.status === "located") {
+        interactedRef.current = true;
+        const position = value.result.position;
+        addressMarkerRef.current = new runtime.api.Marker({ color: "#087567" }).setLngLat([position.lng, position.lat]).addTo(runtime.map);
+        runtime.map.easeTo({ center: [position.lng, position.lat], zoom: 17 });
+        setSearchState({ scope, busy: false, message: value.result.approximate ? "Approximate address found. Confirm its location before travelling." : "Address found in the Australian address directory." });
+      } else setSearchState({ scope, busy: false, message: value.result.status === "unlocated" ? value.result.reason === "ambiguous" ? "This address has more than one location. Add the unit number and check the full address." : "No exact address match. Enter the street number, street, suburb, state and postcode." : "The address directory is temporarily unavailable. Try again." });
+    } catch (error) { if (!controller.signal.aborted) setSearchState({ scope, busy: false, message: error instanceof Error ? error.message : "Address search is unavailable." }); }
   }
   function setLocationStatus(status: TradeMapLocationStatus) { setSelection(null); setClusterNotice(null); setViewState({ ...view, page: 1, addressKey: "", locationStatus: status }); }
   const overlay = mapState !== "ready" ? mapMessages[mapState] : null;
@@ -302,23 +330,24 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
   return <section className={styles.root} aria-label={query.resource === "jobs" ? "Job map" : "Customer map"}>
     <header className={styles.header}>
       <div><h3>{query.resource === "jobs" ? "Job locations" : "Customer locations"}</h3><p>{data ? `${number(data.total)} matching ${query.resource}. All saved locations are included. Zoom in to expand numbered groups.` : `Loading matching ${query.resource}...`}</p></div>
-      <button type="button" className={styles.button} disabled={!runtime || !data?.bounds || measuring || mapState !== "ready"} onClick={() => { if (runtime && data?.bounds) { interactedRef.current = true; fitBounds(runtime, data.bounds); setViewState({ ...view, addressKey: "", page: 1 }); } }}>Fit all pins</button>
+      <button type="button" className={styles.button} disabled={!runtime || !data?.bounds || designOpen || mapState !== "ready"} onClick={() => { if (runtime && data?.bounds) { interactedRef.current = true; fitBounds(runtime, data.bounds); setViewState({ ...view, addressKey: "", page: 1 }); } }}>Fit all pins</button>
     </header>
-    {runtime && runtime.ownerUid === businessOwnerUid && mapState === "ready" && <TradeMapTools key={businessOwnerUid} user={user} onRegisterMapSave={onRegisterMapSave} linkedDesign={linkedDesign}
+    {!designOpen && <div className={styles.toolbar}><form onSubmit={event => void findAddress(event)} className={styles.addressSearch}><label htmlFor={`map-address-${query.resource}`}>Go to an address</label><div><input id={`map-address-${query.resource}`} value={address} maxLength={1000} autoComplete="off" placeholder="Street number, street, suburb, state and postcode" onChange={event => setAddress(event.target.value)} /><button type="submit" className={styles.button} disabled={!config?.gnaf.ready || mapState !== "ready" || searchState.scope === scope && searchState.busy}>{searchState.scope === scope && searchState.busy ? "Finding..." : "Find address"}</button></div>{searchState.scope === scope && searchState.message && <p role="status">{searchState.message}</p>}</form><button type="button" className={styles.button} onClick={() => setDesignScope(scope)}><svg className={styles.toolIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3Z" /><path d="m8 12 4-3 4 3v5H8Z" /></svg>Roof design & measurements</button></div>}
+    {designOpen && <TradeRoofDesignMap key={scope} user={user} onRegisterMapSave={onRegisterMapSave} linkedDesign={linkedDesign} position={selected?.position}
       context={selected ? { title: selected.address || selected.title, customerId: selected.kind === "customer" ? selected.id : "", workOrderId: selected.kind === "job" ? selected.id : "" } : undefined}
-      api={runtime.api} map={runtime.map} onExplore={exploreMap} onMeasuring={setMeasuring} onQuote={quoteAccess ? setQuoteMeasurement : undefined} />}
+      onQuote={quoteAccess ? setQuoteMeasurement : undefined} onClose={() => setDesignScope(null)} />}
     {quoteAccess && quoteMeasurement && <TradeMapQuoteDialog key={businessOwnerUid} user={user} measurement={quoteMeasurement} access={quoteAccess} onDesignLinked={setLinkedDesign} onClose={() => setQuoteMeasurement(null)} />}
     <div className={styles.status} role="status" aria-live="polite"><span><i className={styles.dot} aria-hidden="true" />{number(data?.mapped ?? 0)} mapped</span><span>{number(data?.approximate ?? 0)} approximate</span><span>{number(data?.pending ?? 0)} waiting</span><span>{number(data?.unmapped ?? 0)} need an address check</span>{loading && <span>Updating view...</span>}</div>
-    {data && data.pending > 0 && mapState === "ready" && <div className={styles.processing}>
-      <div><strong>{lookupEnabled ? currentProgress?.waiting ? "Waiting for the next available lookup" : "Saving address locations" : "Locations ready to prepare"}</strong>
-        <p>{lookupEnabled ? `${number(currentProgress?.completed ?? 0)} addresses checked this visit. Keep this map open to continue.` : `${number(data.pending)} ${query.resource} are waiting for a location. Start or resume when you are ready.`} Google Maps lookup charges may apply. Saved progress is shared with your team.</p></div>
-      <button type="button" className={styles.button} onClick={() => { if (lookupEnabled) { setLookupState({ scope, enabled: false }); setRefresh(value => value + 1); } else { setLocateAttempt(value => value + 1); setLookupState({ scope, enabled: true }); } }}>{lookupEnabled ? "Pause lookups" : "Start locating addresses"}</button>
+    {data && data.pending > 0 && config && <div className={styles.processing}>
+      <div><strong>{!config.gnaf.ready ? "Australian address directory is being prepared" : lookupEnabled ? currentProgress?.waiting ? "Waiting for the next available batch" : "Saving permanent address locations" : "Locations ready to prepare"}</strong>
+        <p>{!config.gnaf.ready ? "Your customer records are saved. Location matching will be available when the directory is ready." : lookupEnabled ? `${number(currentProgress?.completed ?? 0)} addresses checked this visit. Keep this map open to continue.` : `${number(data.pending)} ${query.resource} are waiting for a location. Start or resume when you are ready.`} Address matching uses the TLink Australian directory, with no per-address Google lookup charge. Saved matches are shared across your business and team.</p></div>
+      <button type="button" className={styles.button} disabled={!config.gnaf.ready} onClick={() => { if (lookupEnabled) { setLookupState({ scope, enabled: false }); setRefresh(value => value + 1); } else { setLocateAttempt(value => value + 1); setLookupState({ scope, enabled: true }); } }}>{lookupEnabled ? "Pause lookups" : "Start locating addresses"}</button>
     </div>}
     {legendCategories.length > 0 && <ul className={styles.legend} aria-label="Map pin colours">{legendCategories.map(category => <li key={category}><i className={styles.swatch} data-category={category} aria-hidden="true" /><span>{TRADE_MAP_PIN_LABELS[category]}</span></li>)}</ul>}
     {dataError?.request === requestKey && <div className={styles.notice} role="alert"><p>{dataError.message}</p><button type="button" className={styles.button} onClick={() => setRefresh(value => value + 1)}>Reload map records</button></div>}
-    {currentProgress?.error && mapState === "ready" && <div className={styles.notice} role="alert"><p>{currentProgress.error}</p><button type="button" className={styles.button} onClick={() => { setLocateAttempt(value => value + 1); setLookupState({ scope, enabled: true }); }}>Retry address lookup</button></div>}
-    <div className={styles.layout}><div className={styles.mapArea}><div ref={canvasRef} className={styles.canvas} aria-label={`Google map of all matching ${query.resource}`} />
-      {overlay && <div className={styles.overlay} role="status"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 43S9 29 9 18a15 15 0 0 1 30 0c0 11-15 25-15 25Z" /><circle cx="24" cy="18" r="5" /></svg><strong>{overlay.title}</strong><p>{overlay.detail}</p>{["unavailable", "access", "unconfigured"].includes(mapState) && <button type="button" className={styles.button} onClick={() => setSetupAttempt(value => value + 1)}>Try again</button>}</div>}
+    {currentProgress?.error && <div className={styles.notice} role="alert"><p>{currentProgress.error}</p><button type="button" className={styles.button} disabled={!config?.gnaf.ready} onClick={() => { setLocateAttempt(value => value + 1); setLookupState({ scope, enabled: true }); }}>Retry address lookup</button></div>}
+    <div className={styles.layout} hidden={designOpen}><div className={styles.mapArea}><div ref={canvasRef} className={styles.canvas} aria-label={`Map of all matching ${query.resource}`} />
+      {overlay && <div className={styles.overlay} role="status"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 43S9 29 9 18a15 15 0 0 1 30 0c0 11-15 25-15 25Z" /><circle cx="24" cy="18" r="5" /></svg><strong>{overlay.title}</strong><p>{overlay.detail}</p>{["unavailable", "access", "unconfigured", "auth"].includes(mapState) && <button type="button" className={styles.button} onClick={() => setSetupAttempt(value => value + 1)}>Try again</button>}</div>}
     </div><aside className={styles.sidebar} aria-label="Map records" aria-busy={loading}>
       <div ref={selectionRef} className={styles.selection} aria-live="polite">{selected ? <><div className={styles.selectionHeading}><strong>Selected record</strong><button type="button" className={styles.clearButton} onClick={() => setSelection(null)} aria-label="Clear map selection">×</button></div><article className={styles.selectedRecord}><span className={styles.reference}>{selected.reference || selected.kind}</span><h4>{selected.title}</h4>{selected.detail && <p>{selected.detail}</p>}<p>{selected.address || "Address unavailable"}</p>{selected.approximate && <p className={styles.approximate}>Approximate location. Confirm the address before travelling.</p>}<div className={styles.actions}><button type="button" className={styles.primaryButton} onClick={() => onOpenRecord(selected)}>Open {selected.kind}</button>{directions && <a href={directions} target="_blank" rel="noopener noreferrer">Directions ↗</a>}</div></article></> : <p className={styles.hint}>{clusterNotice?.scope === scope ? clusterNotice.message : "Select a numbered group to zoom in. Select an individual pin or a record for details and directions."}</p>}</div>
       <div className={styles.listControls}><label htmlFor={`map-record-view-${query.resource}`}>Show</label><select id={`map-record-view-${query.resource}`} value={view.locationStatus} onChange={event => { const value = event.target.value; if (value === "all" || value === "located" || value === "pending" || value === "unlocated" || value === "approximate") setLocationStatus(value); }}>{Object.entries(locationLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></div>
@@ -328,6 +357,6 @@ export function TradeRecordMap({ user, query, onOpenRecord, quoteAccess, onRegis
       {!loading && listCurrent && !records.length && <p className={styles.emptyList}>{data?.total ? "No records in this view. Change the view or zoom out." : "No records match these filters."}</p>}
       {data && <div className={styles.pagination}><button type="button" className={styles.button} disabled={loading || !listCurrent || view.page <= 1} onClick={() => setViewState({ ...view, page: view.page - 1 })}>Previous</button><span>Page {number(view.page)}</span><button type="button" className={styles.button} disabled={loading || !listCurrent || !data.hasMore} onClick={() => setViewState({ ...view, page: view.page + 1 })}>Next</button></div>}
     </aside></div>
-    <p className={styles.footer}>Saved locations are reused across your business. Changed addresses and expired Google locations wait for the next lookup you start. Only street addresses are sent to Google. Customer names, contacts and job details stay in TLink.</p>
+    <p className={styles.footer}>Matched address locations are saved permanently for your business and reused by every team member and device. New or changed addresses are matched when you start processing. Customer records and address searches stay in TLink. The map provider only supplies the background map.{config?.gnaf.attribution && <> <span>{config.gnaf.attribution}</span> <a href={GNAF_LICENCE_URL} target="_blank" rel="noopener noreferrer">Address data licence</a>.</>}</p>
   </section>;
 }

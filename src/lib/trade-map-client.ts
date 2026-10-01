@@ -1,5 +1,5 @@
-import type { TradeMapBounds, TradeMapDatasetResponse, TradeMapLocationClaim, TradeMapLocationClaimsResponse, TradeMapLocationSave, TradeMapQuery } from "./trade-map-contract.ts";
-import { prepareTradeMapAddress, TRADE_MAP_PIN_LABELS, type TradeMapGeocodeResult } from "./trade-record-map.ts";
+import type { TradeMapBounds, TradeMapDatasetResponse, TradeMapQuery } from "./trade-map-contract.ts";
+import { TRADE_MAP_PIN_LABELS } from "./trade-record-map.ts";
 
 export type TradeMapLocationStatus = "all" | "located" | "pending" | "unlocated" | "approximate";
 
@@ -51,50 +51,6 @@ export function isTradeMapDatasetResponse(value: unknown): value is TradeMapData
       && position(marker.position) && bounds(marker.bounds) && typeof marker.category === "string" && Object.hasOwn(TRADE_MAP_PIN_LABELS, marker.category)
       && typeof marker.approximate === "boolean" && (marker.record === undefined || record(marker.record))
       && (marker.addressKey === undefined || typeof marker.addressKey === "string"));
-}
-
-export function isTradeMapClaimsResponse(value: unknown): value is TradeMapLocationClaimsResponse {
-  return object(value) && count(value.retryAfterMs) && Array.isArray(value.claims) && value.claims.length <= 20
-    && value.claims.every(claim => object(claim) && typeof claim.address === "string" && claim.address.length <= 1000
-      && typeof claim.addressKey === "string" && claim.addressKey.length <= 1000
-      && typeof claim.leaseToken === "string" && claim.leaseToken.length > 0 && claim.leaseToken.length <= 200);
-}
-
-function resolveAddress(address: string, resolve: (address: string) => Promise<TradeMapGeocodeResult>, signal: AbortSignal, timeoutMs: number): Promise<TradeMapGeocodeResult | null> {
-  return new Promise(done => {
-    let finished = false;
-    const finish = (result: TradeMapGeocodeResult | null) => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      signal.removeEventListener("abort", abort);
-      done(result);
-    };
-    const abort = () => finish(null);
-    const timer = setTimeout(() => finish({ status: "error", reason: "unavailable" }), timeoutMs);
-    if (signal.aborted) { finish(null); return; }
-    signal.addEventListener("abort", abort, { once: true });
-    void Promise.resolve().then(() => signal.aborted ? null : resolve(address)).then(finish, () => finish({ status: "error", reason: "unavailable" }));
-  });
-}
-
-/** Two address-only lookups at a time, with no new work after an error or cancellation. */
-export async function resolveTradeMapClaims(claims: readonly TradeMapLocationClaim[], resolve: (address: string) => Promise<TradeMapGeocodeResult>, signal: AbortSignal, timeoutMs = 15_000): Promise<{ results: TradeMapLocationSave[]; error: "denied" | "quota" | "unavailable" | null }> {
-  const results: TradeMapLocationSave[] = [];
-  let next = 0;
-  let error: "denied" | "quota" | "unavailable" | null = null;
-  async function worker() {
-    while (!signal.aborted && !error && next < claims.length) {
-      const claim = claims[next++];
-      const address = prepareTradeMapAddress(claim.address);
-      const result = address ? await resolveAddress(address, resolve, signal, timeoutMs) : { status: "unlocated", reason: "invalid_address" } satisfies TradeMapGeocodeResult;
-      if (signal.aborted || !result) return;
-      results.push({ addressKey: claim.addressKey, leaseToken: claim.leaseToken, result });
-      if (result.status === "error") error = result.reason;
-    }
-  }
-  await Promise.all([worker(), worker()]);
-  return { results, error };
 }
 
 export function waitForTradeMapRetry(ms: number, signal: AbortSignal): Promise<void> {

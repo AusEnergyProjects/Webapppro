@@ -2,7 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
-import { tradeMapConfiguration } from "../src/lib/trade-map-configuration.ts";
+import { tradeMapConfiguration, tlinkMapConfiguration } from "../src/lib/trade-map-configuration.ts";
+
+test("overview configuration exposes only the dedicated MapTiler browser key", () => {
+  assert.deepEqual(tlinkMapConfiguration({ TLINK_MAPTILER_BROWSER_KEY: " browser-map ", TLINK_GOOGLE_MAPS_BROWSER_KEY: "design", TLINK_GNAF_IMPORT_TOKEN: "maintenance" }), { provider: "maptiler", configured: true, apiKey: "browser-map" });
+  assert.deepEqual(tlinkMapConfiguration({ TLINK_GOOGLE_MAPS_BROWSER_KEY: "design" }), { provider: "maptiler", configured: false, apiKey: "" });
+});
 
 test("map configuration exposes only the dedicated browser key and owned map ID", () => {
   assert.deepEqual(tradeMapConfiguration({
@@ -23,6 +28,7 @@ test("missing configuration never falls back to private address lookup credentia
 test("map configuration route requires trade access and returns uncached responses", async () => {
   const root = fileURLToPath(new URL("../", import.meta.url));
   const stubs = {
+    "@/lib/gnaf-directory-server": `export async function gnafDirectoryStatus() { return {ready:true,version:'aug2026',attribution:'G-NAF'}; }`,
     "@/lib/trade-team-server": `let denied = false; let calls = 0;
       export function denyAccess(value) { denied = value; }
       export function accessCalls() { return calls; }

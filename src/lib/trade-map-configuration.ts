@@ -7,3 +7,8 @@ export function tradeMapConfiguration(environment: Readonly<Record<string, unkno
   const configured = Boolean(apiKey && mapId && mapId !== "DEMO_MAP_ID");
   return { configured, apiKey: configured ? apiKey : "", mapId: configured ? mapId : "" };
 }
+
+export function tlinkMapConfiguration(environment: Readonly<Record<string, unknown>>) {
+  const apiKey = typeof environment.TLINK_MAPTILER_BROWSER_KEY === "string" ? environment.TLINK_MAPTILER_BROWSER_KEY.trim() : "";
+  return { provider: "maptiler" as const, configured: Boolean(apiKey), apiKey };
+}
