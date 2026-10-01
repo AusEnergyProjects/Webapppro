@@ -13,18 +13,16 @@ import { colours, radius, spacing } from '@/lib/theme';
 import { checkForAppUpdate, restartIntoUpdate } from '@/lib/updates';
 import { useApp } from '@/providers/app-provider';
 
-export default function SettingsScreen() {
-  const { user, signOut, businesses, openBusinessChooser, updatePersonalName } = useApp();
+function PersonalNameCard({ businessKey, updatePersonalName }: {
+  businessKey: string; updatePersonalName: (name: string) => Promise<string>;
+}) {
   const [name, setName] = useState('');
   const [nameReady, setNameReady] = useState(false);
   const [savingName, setSavingName] = useState(false);
   const [nameMessage, setNameMessage] = useState('');
-  const businessKey = user?.localOwnerKey;
   useEffect(() => {
-    if (!businessKey) return;
     let current = true;
     const controller = new AbortController();
-    setNameReady(false); setNameMessage('');
     void apiRequest<{ name: string }>('/api/trade-personal-profile', { signal: controller.signal }, undefined, { expectedBusinessKey: businessKey })
       .then(profile => { if (current) { setName(profile.name); setNameReady(true); } })
       .catch(error => { if (current) setNameMessage(error instanceof Error ? error.message : 'Your name could not be loaded. Reopen Account to try again.'); });
@@ -36,6 +34,19 @@ export default function SettingsScreen() {
     catch (error) { setNameMessage(error instanceof Error ? error.message : 'Your name could not be saved.'); }
     finally { setSavingName(false); }
   }
+  return <View style={styles.card}>
+    <Text style={styles.label}>MY NAME</Text>
+    <Text style={styles.body}>The name your teammates see in messages and incoming calls.</Text>
+    <TextInput accessibilityLabel="My name" value={name} onChangeText={setName} maxLength={120}
+      autoComplete="name" autoCapitalize="words" editable={nameReady && !savingName}
+      placeholder={nameReady ? 'Your name' : 'Loading your name...'} placeholderTextColor={colours.muted} style={styles.nameInput} />
+    {nameMessage ? <Text accessibilityLiveRegion="polite" style={styles.body}>{nameMessage}</Text> : null}
+    <FieldButton disabled={!nameReady} loading={savingName} onPress={() => void saveName()}>Save my name</FieldButton>
+  </View>;
+}
+
+export default function SettingsScreen() {
+  const { user, signOut, businesses, openBusinessChooser, updatePersonalName } = useApp();
   const [deviceId, setDeviceId] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateMessage, setUpdateMessage] = useState('');
@@ -68,15 +79,7 @@ export default function SettingsScreen() {
         <Text style={styles.title}>{user?.businessName || 'Your team'}</Text>
         {user?.authMode === 'firebase' && businesses.length > 1 ? <FieldButton variant="quiet" onPress={() => void openBusinessChooser()}>Switch business</FieldButton> : null}
       </View>
-      <View style={styles.card}>
-        <Text style={styles.label}>MY NAME</Text>
-        <Text style={styles.body}>The name your teammates see in messages and incoming calls.</Text>
-        <TextInput accessibilityLabel="My name" value={name} onChangeText={setName} maxLength={120}
-          autoComplete="name" autoCapitalize="words" editable={nameReady && !savingName}
-          placeholder={nameReady ? 'Your name' : 'Loading your name...'} placeholderTextColor={colours.muted} style={styles.nameInput} />
-        {nameMessage ? <Text accessibilityLiveRegion="polite" style={styles.body}>{nameMessage}</Text> : null}
-        <FieldButton disabled={!nameReady} loading={savingName} onPress={() => void saveName()}>Save my name</FieldButton>
-      </View>
+      {user && <PersonalNameCard key={user.localOwnerKey} businessKey={user.localOwnerKey} updatePersonalName={updatePersonalName} />}
       <DeviceNotificationSettings />
       <View style={styles.card}>
         <Text style={styles.label}>APP UPDATES</Text>

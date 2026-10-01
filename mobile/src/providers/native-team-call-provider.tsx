@@ -3,7 +3,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import softRingtone from '../../assets/sounds/tlink-call-soft.wav';
 import * as Notifications from 'expo-notifications';
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, DeviceEventEmitter, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -88,7 +88,6 @@ function NativeTeamCallSession({ children, enabled, principal = null }: { childr
   const joinedPending = useRef<{ callId: string; sessionId: string } | null>(null);
   const answerAuthorization = useRef<AnswerAuthorization | null>(null);
   const principalRef = useRef(principal);
-  principalRef.current = principal;
   const session = useRef<Session | null>(null);
   const media = useRef<MediaStream | null>(null);
   const mediaRequest = useRef<AbortController | null>(null);
@@ -186,10 +185,11 @@ function NativeTeamCallSession({ children, enabled, principal = null }: { childr
     setShowSettings(false); setSwitchingCamera(false); setCanSwitchCamera(false); setMinimized(false);
   }, [release]);
 
-  const previousPrincipal = useRef(principal);
-  useEffect(() => {
-    const previous = previousPrincipal.current;
-    previousPrincipal.current = principal;
+  useLayoutEffect(() => {
+    // Native answers must see only committed identities. Publish the principal
+    // and invalidate an old call together before native events can resume.
+    const previous = principalRef.current;
+    principalRef.current = principal;
     const capability = answerAuthorization.current;
     const changed = previous && (!principal || previous.ownerId !== principal.ownerId || previous.memberId !== principal.memberId);
     const wrongRestoration = principal && capability?.ownerUid && (principal.ownerId !== capability.ownerUid || principal.memberId !== capability.memberId);
@@ -593,7 +593,7 @@ function NativeTeamCallSession({ children, enabled, principal = null }: { childr
     // Keep the same in-flight guard when negotiation changes the cadence.
     const interval = setInterval(() => void tickRef.current(), pollInterval);
     return () => clearInterval(interval);
-  }, [enabled, pollInterval]);
+  }, [activeId, enabled, pollInterval]);
 
   const switchCamera = async () => {
     const current = session.current;

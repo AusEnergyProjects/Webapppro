@@ -11,7 +11,7 @@ const invitation = { id: 'call-123456', threadId: 'thread-123456', threadName: '
 const flush = async () => { for (let i = 0; i < 32; i++) await Promise.resolve(); };
 
 function harness({ native = false, platform = 'ios', initialAppState = 'active', enabled = true, principal = null } = {}) {
-  const slots = [], effects = [], pendingEffects = [], intervals = new Set(), intervalDelays = new Map(), listeners = new Set(), pushListeners = new Set(), presenceListeners = new Set();
+  const slots = [], effects = [], pendingEffects = [], pendingLayoutEffects = [], intervals = new Set(), intervalDelays = new Map(), listeners = new Set(), pushListeners = new Set(), presenceListeners = new Set();
   let cursor = 0, tree;
   const identityListeners = new Set();
   const state = { enabled, principal, capabilities: [], api: [], media: [], audioStarts: [], stops: 0, released: [], settings: 0, peerCloses: 0, peers: [], rings:0, ringStops:0, ringbacks:0, ringbackStops:0, notificationMuted:false, audioModes:[], requestLifetimes: [], keyboardDismissals: 0,
@@ -27,6 +27,7 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active',
     useRef(initial) { const i = cursor++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; },
     useCallback(fn, deps) { const i = cursor++; if (!slots[i] || !same(slots[i].deps, deps)) slots[i] = { fn, deps }; return slots[i].fn; },
     useEffect(fn, deps) { const i = cursor++; if (!effects[i] || !same(effects[i].deps, deps)) { const old = effects[i]; effects[i] = { deps, cleanup: null }; pendingEffects.push(() => { old?.cleanup?.(); effects[i].cleanup = fn(); }); } },
+    useLayoutEffect(fn, deps) { const i = cursor++; if (!effects[i] || !same(effects[i].deps, deps)) { const old = effects[i]; effects[i] = { deps, cleanup: null }; pendingLayoutEffects.push(() => { old?.cleanup?.(); effects[i].cleanup = fn(); }); } },
   };
   const stream = { getTracks: () => [audio, video], getAudioTracks: () => [audio], getVideoTracks: () => [video] };
   const audio = { enabled: true, kind: 'audio' }, video = { enabled: true, kind: 'video', applyConstraints: async () => undefined };
@@ -77,7 +78,9 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active',
   new Function('require', 'exports', 'setInterval', 'clearInterval', `${compiled}\nexports.TestSession = NativeTeamCallSession; exports.TestTile = CallTile; exports.TestPresentation = CallPresentation; exports.styles = styles;`)(id => {
     assert.ok(id in dependencies, `unexpected dependency ${id}`); return dependencies[id];
   }, exports, (fn,delay) => { intervals.add(fn); intervalDelays.set(fn,delay); return fn; }, fn => { intervals.delete(fn); intervalDelays.delete(fn); });
-  function render() { cursor = 0; tree = exports.TestSession({ enabled: state.enabled, principal: state.principal, children: 'app' }); while (pendingEffects.length) pendingEffects.shift()(); return tree; }
+  function commitLayout() { while (pendingLayoutEffects.length) pendingLayoutEffects.shift()(); }
+  function commitPassive() { while (pendingEffects.length) pendingEffects.shift()(); }
+  function render({ commit = true } = {}) { cursor = 0; tree = exports.TestSession({ enabled: state.enabled, principal: state.principal, children: 'app' }); if (commit) { commitLayout(); commitPassive(); } return tree; }
   function visit(node) { if (!node || typeof node !== 'object') return []; return [node, ...[node.props?.children].flat(2).flatMap(child => visit(child))]; }
   function nodes() { return visit(tree); }
   const hasLabel = (node, label) => (node.type === 'FieldButton' && node.props.children === label) || (node.type?.name === 'CallControl' && node.props.label === label);
@@ -89,7 +92,7 @@ function harness({ native = false, platform = 'ios', initialAppState = 'active',
   function appState(value) { for (const listener of [...listeners]) listener(value); }
   function cleanup() { for (const effect of effects) effect?.cleanup?.(); }
   render();
-  return { state, render, nodes, button, hasButton, context, appState, cleanup, intervals,intervalDelays,ringtone, system, exports, presentation, underlying,
+  return { state, render, commitLayout, commitPassive, nodes, button, hasButton, context, appState, cleanup, intervals,intervalDelays,ringtone, system, exports, presentation, underlying,
     systemEvent: async event => { for (const listener of [...system.listeners]) await listener(event); },
     receivePush:()=>{for(const listener of pushListeners)listener({request:{content:{data:{type:'team_call',threadId:invitation.threadId,callId:invitation.id}}}});},
     presence:status=>{for(const listener of presenceListeners)listener({status});},
@@ -718,6 +721,28 @@ test('an invitation capability cannot join for a different restored principal an
   callCapabilityResponses(h); await h.systemEvent(pushAnswer()); h.render();
   assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 0);
   assert.deepEqual(h.state.media, []); assert.ok(h.system.ended.includes(invitation.id)); h.cleanup();
+});
+
+test('an uncommitted identity render cannot reject the current answer, and committing it revokes before passive effects', async () => {
+  const h = harness({ native: true, principal: restoredPrincipal, initialAppState: 'background' });
+  const normal = h.state.respond; let finishLookup;
+  h.state.respond = (url, body) => url.includes('view=incoming')
+    ? new Promise(resolve => { finishLookup = resolve; })
+    : normal(url, body);
+  const pending = h.systemEvent(pushAnswer()); await flush();
+  h.state.principal = { ...restoredPrincipal, memberId: 'replacement-member' };
+  h.render({ commit: false });
+  finishLookup({ ok: true, calls: [invitation], ownerUid: restoredPrincipal.ownerId, memberId: restoredPrincipal.memberId });
+  await pending;
+  assert.equal(h.state.api.filter(item => item.body?.action === 'join').length, 1, 'native callbacks still use the committed recipient');
+  assert.deepEqual(h.state.media, ['audio']);
+  assert.deepEqual(h.system.ended, [], 'a speculative render cannot alter the active native session');
+  h.commitLayout();
+  assert.equal(h.state.requestLifetimes[0].aborted, true);
+  assert.equal(h.state.released.length, 1, 'a committed identity change releases media before passive subscriptions update');
+  assert.ok(h.system.ended.includes(invitation.id));
+  h.commitPassive(); h.render();
+  assert.equal(h.context().busy, false); h.cleanup();
 });
 
 test('a replaced foreground invitation lookup cannot end the newer capability Answer', async () => {
