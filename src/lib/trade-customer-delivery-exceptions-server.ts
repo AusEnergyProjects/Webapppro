@@ -34,6 +34,8 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
   const workOrderId = options.workOrderId || "";
   const page = Math.max(1, Math.min(10000, Number.isSafeInteger(options.page) ? Number(options.page) : 1));
   const pageSize = 10;
+  // workerd limits each compound SELECT to five terms. Materialized source groups
+  // preserve one database snapshot and global ordering/counts without flattening seven terms.
   const result = await db.prepare(`WITH jobs AS MATERIALIZED (
     SELECT w.id,w.firebase_uid,w.work_number,w.title,w.stage,d.pipeline_stage,d.crm_customer_id,
       (SELECT lower(trim(customer.email)) FROM trade_crm_customers customer
@@ -42,7 +44,7 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
     WHERE w.firebase_uid=? AND w.partner_type='installer' AND w.record_status='active'
       AND w.source_type<>'opportunity' AND d.customer_source IN ('trade_owned','public_lead_released')
       AND (?='' OR w.id=?)
-  ), exceptions AS (
+  ), commercial_exceptions AS MATERIALIZED (
     SELECT 'quote:'||delivery.id id,w.id work_order_id,'Quote email' label,delivery.status,delivery.updated_at,'quote' tab
     FROM jobs w JOIN trade_crm_quotes quote ON quote.work_order_id=w.id AND quote.firebase_uid=w.firebase_uid AND quote.crm_customer_id=w.crm_customer_id
     JOIN trade_crm_quote_versions version ON version.quote_id=quote.id AND version.firebase_uid=quote.firebase_uid
@@ -67,7 +69,7 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
       AND NOT EXISTS(SELECT 1 FROM trade_crm_quick_invoices newer WHERE newer.work_order_id=w.id AND newer.firebase_uid=w.firebase_uid AND newer.status<>'void')
       AND NOT EXISTS(SELECT 1 FROM trade_crm_accounting_documents newer WHERE newer.work_order_id=w.id AND newer.firebase_uid=w.firebase_uid
         AND newer.document_type='invoice' AND newer.status NOT IN ('void','cancelled') AND newer.commercial_handoff_id<>invoice.commercial_handoff_id)
-    UNION ALL
+  ), operational_exceptions(id,work_order_id,label,status,updated_at,tab) AS MATERIALIZED (
     SELECT 'booking:'||event.id,w.id,'Booking email',substr(event.event_type,length('customer_calendar_invite_')+1),event.created_at,'summary'
     FROM jobs w JOIN trade_crm_appointments appointment ON appointment.work_order_id=w.id AND appointment.firebase_uid=w.firebase_uid
     JOIN trade_work_order_events event ON event.id=(SELECT latest.id FROM trade_work_order_events latest
@@ -111,6 +113,8 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
       AND (COALESCE(json_extract(message.context_json,'$.invoiceId'),'')='' OR EXISTS(
         SELECT 1 FROM trade_crm_quick_invoices i WHERE i.id=json_extract(message.context_json,'$.invoiceId') AND i.work_order_id=w.id AND i.firebase_uid=w.firebase_uid AND i.crm_customer_id=w.crm_customer_id AND i.status IN ('issued','part_credited')
         UNION ALL SELECT 1 FROM trade_crm_accepted_invoices i WHERE i.id=json_extract(message.context_json,'$.invoiceId') AND i.work_order_id=w.id AND i.firebase_uid=w.firebase_uid AND i.crm_customer_id=w.crm_customer_id AND i.status='issued'))
+  ), exceptions AS (
+    SELECT * FROM commercial_exceptions UNION ALL SELECT * FROM operational_exceptions
   ) SELECT exceptions.*,jobs.work_number,jobs.title,COUNT(*) OVER() total FROM exceptions JOIN jobs ON jobs.id=exceptions.work_order_id
     ORDER BY exceptions.updated_at DESC,exceptions.id DESC LIMIT ? OFFSET ?`)
     .bind(access.ownerUid, workOrderId, workOrderId, pageSize, (page - 1) * pageSize).all<Row>();

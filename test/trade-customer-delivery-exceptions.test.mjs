@@ -6,6 +6,29 @@ import { customerDeliveryFailureDiagnostic, loadCustomerDeliveryExceptions } fro
 const now = "2026-10-02T03:00:00.000Z";
 const later = "2026-10-02T04:00:00.000Z";
 const owner = { ownerUid: "owner", isOwner: true };
+
+// Node SQLite permits 500 compound terms, but workerd setupSecurity() sets
+// SQLITE_LIMIT_COMPOUND_SELECT to 5. Enforce that boundary before executing the real query.
+function assertD1CompoundLimit(sql) {
+  const compounds = [1];
+  const tokens = sql.match(/--[^\r\n]*|\/\*[\s\S]*?\*\/|'(?:''|[^'])*'|"(?:""|[^"])*"|`[^`]*`|\[[^\]]*\]|[()]|\b(?:UNION|INTERSECT|EXCEPT)\b/gi) || [];
+  for (const token of tokens) {
+    if (token === "(") compounds.push(1);
+    else if (token === ")") compounds.pop();
+    else if (/^(?:UNION|INTERSECT|EXCEPT)$/i.test(token)) {
+      compounds[compounds.length - 1]++;
+      assert.ok(compounds.at(-1) <= 5, "workerd permits at most five terms in each compound SELECT");
+    }
+  }
+}
+
+test("D1 compound-limit guard rejects six terms while accepting materialized groups", () => {
+  const five = Array.from({ length: 5 }, (_, index) => `SELECT ${index}`).join(" UNION ALL ");
+  assert.doesNotThrow(() => assertD1CompoundLimit(five));
+  assert.throws(() => assertD1CompoundLimit(`${five} UNION ALL SELECT 6`), /at most five terms/);
+  assert.doesNotThrow(() => assertD1CompoundLimit(`WITH one AS MATERIALIZED (${five}), two AS MATERIALIZED (${five}) SELECT * FROM one UNION ALL SELECT * FROM two`));
+  assert.doesNotThrow(() => assertD1CompoundLimit("SELECT 'UNION UNION UNION UNION UNION UNION' /* UNION */"));
+});
 test("delivery diagnostics classify nested D1 failures without exposing SQL or customer data", () => {
   const secret = "customer@example.test token=private-secret SELECT * FROM invoices";
   assert.deepEqual(customerDeliveryFailureDiagnostic(new Error(secret, { cause: new Error("D1_ERROR: no such column: w.customer_email: SQLITE_ERROR") })), { code: "missing_column" });
@@ -29,7 +52,10 @@ function fixture(t) {
     }
     sqlite.prepare(`INSERT INTO ${table} (${Object.keys(row).join(",")}) VALUES (${Object.keys(row).map(() => "?").join(",")})`).run(...Object.values(row));
   }
-  const prepare = (sql, values = []) => ({ bind: (...args) => prepare(sql, args), all: async () => ({ results: sqlite.prepare(sql).all(...values) }) });
+  const prepare = (sql, values = []) => ({ bind: (...args) => prepare(sql, args), all: async () => {
+    assertD1CompoundLimit(sql);
+    return { results: sqlite.prepare(sql).all(...values) };
+  } });
   const db = { prepare };
   const job = (id, values = {}, detail = {}) => {
     insert("trade_work_orders", { id, firebase_uid: "owner", partner_type: "installer", title: `Work ${id}`, work_number: `JOB-${id}`, source_type: "internal", stage: "backlog", created_at: now, updated_at: now, ...values });
@@ -139,13 +165,22 @@ test("follow-up actions require the current active recipient and invoice custome
 
 test("owner-only projection scopes every row, redacts protected jobs and preserves bounded paging", async t => {
   const f = fixture(t);
-  for (let i = 0; i < 13; i++) { const id = `job-${i}`; f.job(id); f.quote(id); f.delivery(id, id); }
+  for (let i = 0; i < 13; i++) {
+    const id = `job-${i}`; f.job(id);
+    if (i % 2 === 0) { f.quote(id); f.delivery(id, id); }
+    else {
+      f.insert("trade_crm_appointments", { id, work_order_id: id, firebase_uid: "owner", status: "scheduled", revision: 1 });
+      f.receipt(id, "failed");
+    }
+  }
   for (const [id, work, details] of [["private", { source_type: "opportunity" }, {}], ["internal-private", {}, { customer_source: "platform_private" }], ["bin", { record_status: "archived" }, {}], ["foreign", { firebase_uid: "foreign" }, {}]]) {
     f.job(id, work, details); f.quote(id); f.delivery(id, id);
   }
   await assert.rejects(f.load({}, { ...owner, isOwner: false }), /EMAIL_OWNER_REQUIRED/);
   const first = await f.load(); assert.equal(first.total, 13); assert.equal(first.items.length, 10); assert.equal(first.hasNext, true);
   const second = await f.load({ page: 2 }); assert.equal(second.total, 13); assert.equal(second.items.length, 3); assert.equal(second.hasNext, false);
+  assert.deepEqual(first.items.map(item => item.label), [...Array(7).fill("Quote email"), ...Array(3).fill("Booking email")], "global ordering crosses commercial and operational groups before paging");
+  assert.ok(second.items.every(item => item.label === "Booking email"));
   assert.equal(new Set([...first.items, ...second.items].map(item => item.id)).size, 13);
   assert.equal((await f.load({ workOrderId: "job-1" })).total, 1);
   assert.equal((await f.load({ workOrderId: "foreign" })).total, 0);
