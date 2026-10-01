@@ -5,7 +5,7 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import type { PhotoRequirement } from "@/lib/trade-photo-requests";
 import { jobStock, stockActualStatements } from "@/lib/trade-stock-server";
-import { buildJobPlanStatements } from "@/lib/trade-job-plan-server";
+import { buildJobPlanStatements, CURRENT_ACCEPTED_HANDOFF_SQL } from "@/lib/trade-job-plan-server";
 import { requireInstallerOperations } from "@/lib/trade-integrations-server";
 
 export const runtime = "edge";
@@ -55,9 +55,16 @@ async function proofCheck(uid: string, workOrderId: string) {
 
 function requirementDone(row: Row) { return COMPLETE.has(String(row.status)); }
 
-async function payload(uid: string, workOrderId: string) {
+async function currentAcceptedHandoff(db: D1Database, uid: string, workOrderId: string) {
+  return db.prepare(`SELECT h.* FROM trade_crm_commercial_handovers h
+    WHERE h.firebase_uid=? AND h.work_order_id=? AND h.status='accepted' AND ${CURRENT_ACCEPTED_HANDOFF_SQL}
+    ORDER BY h.accepted_at DESC,h.id DESC LIMIT 1`).bind(uid, workOrderId).first<Row>();
+}
+
+async function payload(uid: string, workOrderId: string, preparation = false) {
   const db = getD1(); const job = await ownedJob(uid, workOrderId);
-  const handoff = await db.prepare(`SELECT * FROM trade_crm_commercial_handovers WHERE firebase_uid = ? AND work_order_id = ? ORDER BY accepted_at DESC LIMIT 1`).bind(uid, workOrderId).first<Row>();
+  const handoff = preparation ? await currentAcceptedHandoff(db, uid, workOrderId)
+    : await db.prepare(`SELECT * FROM trade_crm_commercial_handovers WHERE firebase_uid = ? AND work_order_id = ? ORDER BY accepted_at DESC LIMIT 1`).bind(uid, workOrderId).first<Row>();
   if (!handoff) return { handoff: false, plan: null, phases: [], requirements: [], readiness: null, execution: null, completion: null };
   const plan = await db.prepare(`SELECT * FROM trade_crm_job_plans WHERE firebase_uid = ? AND commercial_handoff_id = ?`).bind(uid, handoff.id).first<Row>();
   if (!plan) return { handoff: true, plan: null, phases: [], requirements: [], readiness: null, execution: null, completion: null };
@@ -108,7 +115,7 @@ async function payload(uid: string, workOrderId: string) {
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
-  try { const identity = await requireInstallerOperations(request); const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180); return adminJson({ ok: true, ...(await payload(identity.uid, workOrderId)) }); }
+  try { const identity = await requireInstallerOperations(request); const params = new URL(request.url).searchParams; const workOrderId = cleanAdminText(params.get("workOrderId"), 180); return adminJson({ ok: true, ...(await payload(identity.uid, workOrderId, params.get("preparation") === "1")) }); }
   catch (error) { return errorResponse(error); }
 }
 
@@ -120,11 +127,12 @@ export async function POST(request: Request) {
     if (job.stage === "imported") return adminJson({ ok: false, code: "IMPORTED_JOB_INACTIVE", error: "Start this imported job in TLink before preparing or recording work." }, 409);
     const db = getD1(); const now = new Date().toISOString();
     if (action === "prepare") {
-      const handoff = await db.prepare(`SELECT * FROM trade_crm_commercial_handovers WHERE firebase_uid = ? AND work_order_id = ? ORDER BY accepted_at DESC LIMIT 1`).bind(identity.uid, workOrderId).first<Row>();
-      if (!handoff) return adminJson({ ok: false, error: "Accept a quote before preparing the job." }, 409);
+      const handoff = await currentAcceptedHandoff(db, identity.uid, workOrderId);
+      if (!handoff) return adminJson({ ok: false, error: "Review the current customer and accepted quote before preparing this job." }, 409);
       const statements = await buildJobPlanStatements(db, { ownerUid: identity.uid, workOrderId,
-        handoffId: String(handoff.id), quoteVersionId: String(handoff.quote_version_id), now });
+        handoffId: String(handoff.id), quoteVersionId: String(handoff.quote_version_id), now, requireCurrentAcceptance: true });
       if (statements.length) await db.batch(statements);
+      if ((await currentAcceptedHandoff(db, identity.uid, workOrderId))?.id !== handoff.id) return adminJson({ ok: false, error: "The customer or quote changed. Review the current accepted scope before preparing the job." }, 409);
     } else if (action === "requirement") {
       const requirementId = cleanAdminText(body.requirementId, 180); const status = ["required", "confirmed", "not_needed"].includes(String(body.status)) ? String(body.status) : "required";
       await db.prepare(`UPDATE trade_crm_job_plan_requirements SET status = ? WHERE id = ? AND firebase_uid = ? AND job_plan_id IN (SELECT id FROM trade_crm_job_plans WHERE work_order_id = ? AND firebase_uid = ?)`).bind(status, requirementId, identity.uid, workOrderId, identity.uid).run();
@@ -163,6 +171,6 @@ export async function POST(request: Request) {
     } else return adminJson({ ok: false, error: "Unknown job readiness action." }, 400);
     const jobProgress = ["actual", "requirement"].includes(action)
       ? await reconcileTradeFormJobProgress(await requireInstallerTeamAccess(request), workOrderId, { afterSave: true }) : undefined;
-    return adminJson({ ok: true, jobProgress, ...(await payload(identity.uid, workOrderId)) });
+    return adminJson({ ok: true, jobProgress, ...(await payload(identity.uid, workOrderId, action === "prepare")) });
   } catch (error) { return errorResponse(error); }
 }

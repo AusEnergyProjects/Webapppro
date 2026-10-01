@@ -30,7 +30,7 @@ const inverter = { id: "selected-inverter", kind: "inverter", name: "5 kW invert
 
 function fixture(equipment = { common: [panel, inverter], choices: [] }) {
   const db = new DatabaseSync(":memory:"), schema = read("db/schema.ts");
-  for (const table of ["trade_team_members", "trade_price_book_items", "trade_work_orders", "trade_crm_job_details", "trade_crm_job_plans", "trade_crm_job_plan_phases", "trade_crm_job_plan_requirements", "trade_crm_job_actuals", "trade_work_order_events", "trade_crm_commercial_handovers", "trade_crm_quote_versions", "trade_crm_quote_choices", "trade_crm_quote_items", "trade_crm_quote_execution_snapshots", "trade_crm_quote_acceptances"]) {
+  for (const table of ["trade_team_members", "trade_price_book_items", "trade_work_orders", "trade_crm_job_details", "trade_crm_job_plans", "trade_crm_job_plan_phases", "trade_crm_job_plan_requirements", "trade_crm_job_actuals", "trade_work_order_events", "trade_crm_commercial_handovers", "trade_crm_quotes", "trade_crm_quote_versions", "trade_crm_quote_choices", "trade_crm_quote_items", "trade_crm_quote_execution_snapshots", "trade_crm_quote_acceptances"]) {
     const start = schema.indexOf(`sqliteTable("${table}", {`), block = schema.slice(start, schema.indexOf("}, (table)", start));
     const columns = [...block.matchAll(/(?:text|integer|real)\("([a-z_]+)"/g)].map(match => match[1]);
     assert.ok(columns.length, table);
@@ -70,6 +70,42 @@ function fixture(equipment = { common: [panel, inverter], choices: [] }) {
   const accept = async (choices = []) => d1.batch([handoff, ...await plan.buildJobPlanStatements(d1, { ...input, selectedChoiceIds: choices })]);
   return { db, d1, stock, enable, freeze, input, handoff, accept };
 }
+
+test("manual preparation accepts only the exact current customer, version and acceptance at write time", async () => {
+  const scenarios = [
+    ["current acceptance", "", 1],
+    ["customer reassigned", "UPDATE trade_crm_job_details SET crm_customer_id='new-customer'", 0],
+    ["quote superseded", "UPDATE trade_crm_quotes SET current_version_number=2", 0],
+    ["acceptance withdrawn", "UPDATE trade_crm_quote_acceptances SET decision='declined'", 0],
+    ["foreign acceptance", "UPDATE trade_crm_quote_acceptances SET firebase_uid='other-owner'", 0],
+    ["wrong acceptance", "UPDATE trade_crm_commercial_handovers SET acceptance_id='different-acceptance'", 0],
+  ];
+  for (const [label, change, expected] of scenarios) {
+    const f = fixture();
+    try {
+      await f.enable("panel", 20000); await f.enable("inverter", 2000); await f.freeze();
+      await f.d1.batch([f.handoff]);
+      f.db.exec(`UPDATE trade_crm_job_details SET crm_customer_id='customer';
+        INSERT INTO trade_crm_quotes(id,firebase_uid,work_order_id,crm_customer_id,current_version_number,status)
+          VALUES('quote','owner','job','customer',1,'accepted');
+        UPDATE trade_crm_quote_versions SET quote_id='quote',version_number=1,status='accepted';
+        INSERT INTO trade_crm_quote_acceptances(id,firebase_uid,quote_id,quote_version_id,work_order_id,crm_customer_id,decision)
+          VALUES('acceptance','owner','quote','v1','job','customer','accepted');
+        UPDATE trade_crm_commercial_handovers SET quote_id='quote',crm_customer_id='customer',acceptance_id='acceptance'`);
+      const statements = await plan.buildJobPlanStatements(f.d1, { ...f.input, requireCurrentAcceptance: true });
+      assert.ok(statements.length, label);
+      // The identity changes after preparation but before the atomic write.
+      if (change) f.db.exec(change);
+      await f.d1.batch(statements);
+      assert.equal(f.db.prepare("SELECT COUNT(*) n FROM trade_crm_job_plans").get().n, expected, label);
+      assert.equal((await f.stock.stockItem("owner", "panel")).reservedMilli, expected * 12000, label);
+      if (!expected) {
+        assert.equal(f.db.prepare("SELECT COUNT(*) n FROM trade_crm_job_plan_requirements").get().n, 0, label);
+        assert.equal(f.db.prepare("SELECT COUNT(*) n FROM trade_work_order_events WHERE event_type='job_plan_prepared'").get().n, 0, label);
+      }
+    } finally { f.db.close(); }
+  }
+});
 
 test("whole-system quote freezes 12 panels and one inverter, commits only on acceptance and releases on cancellation", async () => {
   const f = fixture(); await f.enable("panel", 10000); await f.enable("inverter", 2000);

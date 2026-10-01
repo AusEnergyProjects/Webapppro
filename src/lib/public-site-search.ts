@@ -253,25 +253,13 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
     path: "/direct-trade",
     title: "TLink for households and trades",
     description: "Learn how households can find trades and how trades can use the free workspace.",
-    keywords: ["tlink", "trade", "tradesperson", "installer", "find a trade", "trade software"],
-  },
-  {
-    path: "/direct-trade/partners",
-    title: "TLink for industry partners",
-    description: "Information for suppliers and industry partners joining TLink.",
-    keywords: ["supplier", "partner", "manufacturer", "wholesaler", "tlink partner"],
+    keywords: ["tlink", "trade", "tradesperson", "installer", "find a trade", "trade software", "supplier", "partner", "manufacturer", "wholesaler", "tlink access", "trade verification", "join tlink", "trade account", "trade login", "tlink login"],
   },
   {
     path: "/direct-trade/integrations",
     title: "TLink integrations",
     description: "See how TLink connects with common trade and business workflows.",
     keywords: ["tlink integrations", "accounting integration", "calendar integration", "trade software connection"],
-  },
-  {
-    path: "/direct-trade/access",
-    title: "TLink access and verification",
-    description: "Understand business verification and access to the TLink workspace.",
-    keywords: ["tlink access", "trade verification", "join tlink", "trade account", "trade login", "tlink login"],
   },
   {
     path: "/direct-trade/standards",

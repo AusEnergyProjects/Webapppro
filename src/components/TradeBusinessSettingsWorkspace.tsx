@@ -844,7 +844,7 @@ export function TradeBusinessSettingsWorkspace({
             </form>
             {profile.partnerType === "installer" && <TradeEmailSettings user={user} />}
             <div className="dashboard-account-links">
-              <a href="/direct-trade/partners">
+              <a href="/direct-trade/dashboard?setup=business">
                 <strong>Edit business identity</strong>
                 <span>
                   Update contact details, address and registered service states.

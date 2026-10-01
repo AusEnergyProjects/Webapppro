@@ -6,7 +6,19 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 2 October 2026
 
-## Current implementation: default optional SWMS
+## Current implementation: streamlined daily work and dashboard setup
+
+Business sign-in, registration and profile setup now live inside the dashboard. The former Trade account and Free access pages redirect there; standards remain contextual. Approved businesses get one operational header and visible grouped navigation. Incomplete, unverified, closed and MFA-required accounts retain their existing access gates. The same verified business profile is used throughout.
+
+Staff Home, Jobs and Files replace duplicate My work/field-record destinations. Forms, optional SWMS, photos, documents and existing handover history are together in Files; manual time remains an optional correction. Existing assets, recurring service schedules and correction records remain reachable through Assets. No customer account journey is introduced.
+
+Quotes has scoped Preparing, Awaiting customer, Accepted and Lost/history views based on the current version, customer, decision and delivery. Preparation uses the existing job and immutable accepted scope. Old-customer acceptance cannot prepare a reassigned job, including a change before the database write. No waiting quote creates automatic chasing. Owner delivery exceptions expose recorded failures, blocks and uncertain outcomes through existing job actions; booking receipts identify the exact appointment revision and attempt. Historical outcomes are not guessed and uncertainty never triggers blind resend.
+
+Home counts the complete authorised daily job/visit cohort. Financial drill-downs use existing issued invoices, payment balances and recorded job costs, with incomplete cost coverage visible. Form time and app use never become payroll, labour cost, profit or tax liability. Business/member context changes immediately hide previous report, quote and exception results. Staff email capability remains separately authorised and uses the established assigned-job/visit boundary.
+
+This source record precedes publication. Baseline is Sites 731, source `3cf7138192b099389b3e96a122ad2386d71ace61`. Exact validation, GitHub/Sites and compatible Android/iOS preview/production update receipts belong in `C:/Webproject/outputs/tlink-workflow-cleanup-20261002/`. There is no new migration or native dependency. Native exports and update publication do not prove installation or physical-device operation. No real customer sends, signatures or payments are development tests.
+
+## Previous implementation: default optional SWMS
 
 Every business has the same built-in SWMS in Job > Files. Adding it creates a job-specific draft with authoritative business/ABN, job/site and assigned-worker details. An authorised editor can prepare the draft; the assigned worker reviews and draws their own signature. The signed snapshot records the actual actor and timestamp, is immutable, and supplies its PDF in Files. Existing business, field-record and crew/job access applies to edits and downloads. Protected customer addresses are not inferred or disclosed.
 

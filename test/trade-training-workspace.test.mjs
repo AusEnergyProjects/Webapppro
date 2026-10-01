@@ -400,7 +400,8 @@ test("training is reachable for owners and staff and learner bundles never impor
   assert.match(read("TradeTeamPortal.tsx"), /portalView === "training" && <TradeTrainingWorkspace/);
   assert.match(read("TradeTeamPortal.tsx"), /onOpenOwnTraining=\{\(\) => setPortalView\("training"\)\}/);
   assert.match(read("DirectTradeDashboard.tsx"), /onOpenOwnTraining=\{\(\) => setWorkspace\("training"\)\}/);
-  assert.match(read("DirectTradePartnerForm.tsx"), /<TradeCreditexOnboarding user=\{user\} initialExpanded/);
+  assert.doesNotMatch(read("DirectTradePartnerForm.tsx"), /<TradeCreditexOnboarding/);
+  assert.match(read("TradeBusinessSettingsWorkspace.tsx"), /<TradeCreditexOnboarding user=\{user\}/);
   assert.doesNotMatch(source, /correctOptionId|TRAINING_MODULES|creditex-training-curriculum|localStorage/);
   assert.match(source, /result\?\.feedback/);
   assert.match(read("CreditexOnboardingReviewWorkspace.tsx"), /expectedVersion: curriculum\.version, expectedHash: curriculum\.contentHash/);

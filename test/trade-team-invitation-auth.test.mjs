@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import ts from "typescript";
 import { runInNewContext } from "node:vm";
 import { teamAuthErrorCode, teamAuthErrorMessage } from "../src/components/trade-team-auth-errors.ts";
 import { TLinkPasswordResetError, tlinkPasswordResetErrorMessage } from "../src/lib/tlink-password-reset-client.ts";
@@ -193,7 +194,11 @@ function requestPasswordReset(email, provider = async () => {}) {
   const calls = [];
   const messages = [];
   const actionSettings = { url: "https://ausenergyassessments.com/direct-trade/team?invite=test-invitation" };
-  const handler = portal.slice(portal.indexOf("  async function reset()"), portal.indexOf("  async function update("));
+  const source = ts.createSourceFile("TradeTeamPortal.tsx", portal, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const component = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "TradeTeamPortalContent");
+  const declaration = component.body.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "reset");
+  assert.ok(declaration, "the production reset handler must exist");
+  const handler = declaration.getText(source);
   const completion = runInNewContext(`(async () => { ${handler}\nawait reset(); })()`, {
     email, firebaseAuth: "test-auth", emailActionSettings: () => actionSettings,
     setStatus: value => messages.push(value), setBusy: value => calls.push(["busy", value]),

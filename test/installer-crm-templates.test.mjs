@@ -11,7 +11,7 @@ const route = read("../src/app/api/trade-crm/route.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
 const platform = read("../src/app/platform/page.tsx");
-const access = read("../src/app/direct-trade/access/page.tsx");
+const access = read("../src/components/DirectTradePartnerForm.tsx") + read("../src/components/DirectTradeDashboard.tsx");
 
 test("job templates are durable, owner scoped and uniquely named", () => {
   assert.match(schema, /sqliteTable\("trade_crm_job_templates"/);
@@ -52,7 +52,7 @@ test("public access copy makes free and verification boundaries explicit", () =>
   assert.match(platform, /Always free/);
   assert.match(platform, /Core trade operations cost A\$0 after verification/);
   assert.match(platform, /Wholesalers never receive household opportunities/);
-  assert.match(access, /Run the core trade workflow for A\$0/);
+  assert.match(access, /Core trade operations cost A\$0/);
   assert.match(access, /A valid ABN and the required business evidence must be supplied/);
 });
 

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import { resolveReportPeriod } from "../src/lib/trade-business-reports.ts";
+import * as reporting from "../src/lib/trade-business-reports.ts";
 import * as schedule from "../src/lib/trade-schedule.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradeHomeDashboard.tsx", import.meta.url), "utf8");
@@ -26,9 +27,9 @@ function fixture() {
     financial: {
       generatedAt: "2026-10-01T02:00:00Z", period: resolveReportPeriod(new URLSearchParams(), "NSW", new Date("2026-10-01T02:00:00Z")), service: "", state: "", permissions: { invoices: true, quotes: true }, options: { services: ["electrical"], states: ["NSW"] }, current: measures, previous: { ...measures, invoicedCents: 5000 },
       trend: [], services: [{ key: "electrical", newJobs: 4, completedJobs: 2, invoicedCents: 10000 }], regions: [], work: { openJobs: 9 }, team: [],
-      receivables: { outstandingCents: 33000, paidCents: 20000, buckets: [{ key: "Not overdue", count: 1, cents: 22000 }, { key: "1 to 30 days", count: 1, cents: 11000 }, { key: "No due date", count: 0, cents: 0 }], undatedInvoiceCount: 0, undatedInvoiceCents: 0 },
+      receivables: { outstandingCents: 33000, paidCents: 20000, buckets: [{ key: "Not overdue", count: 1, cents: 22000 }, { key: "1 to 30 days", count: 1, cents: 11000 }, { key: "No due date", count: 0, cents: 0 }], undatedInvoiceCount: 0, undatedInvoiceCents: 0, items: [] },
       recordedGst: { invoiceGstCents: 1000, creditGstCents: 0, netGstCents: 1000 },
-      profitability: { jobs: 2, completeJobs: 2, revenueCents: 10000, labourCents: 2500, materialCents: 2500, otherCents: 0, labourMinutes: 60, completeRevenueCents: 10000, marginCents: 5000, marginPercent: 50, page: 1, pageSize: 25, items: [] },
+      profitability: { jobs: 2, completeJobs: 2, revenueCents: 10000, labourCents: 2500, materialCents: 2500, otherCents: 0, labourMinutes: 60, completeRevenueCents: 10000, marginCents: 5000, marginPercent: 50, page: 1, pageSize: 25, items: [], attentionItems: [], coverage: {invoiceNeeded:0,planNeeded:0,scopeReview:0,costsNeeded:0,missingCosts:0} },
     },
   };
 }
@@ -43,7 +44,7 @@ function harness(responder, options = {}) {
     useState(initial) { const index = cursor++; if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial; return [state[index], next => state[index] = typeof next === "function" ? next(state[index]) : next]; },
     useEffect(callback, deps) { const index = cursor++; const old = effects[index]; if (!old || deps.some((value, i) => value !== old.deps[i])) { old?.cleanup?.(); effects[index] = { deps }; pending.push(() => effects[index].cleanup = callback()); } },
   };
-  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./TradeBusinessProvider" ? { useTradeBusinessFetch: () => request, useTradeBusiness: () => currentBusiness } : id === "@/lib/trade-schedule" ? schedule : id === "@/lib/energy-service-catalogue.mjs" ? { ENERGY_SERVICE_LABELS: { electrical: "Electrical" } } : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : {};
+  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./TradeBusinessProvider" ? { useTradeBusinessFetch: () => request, useTradeBusiness: () => currentBusiness } : id === "@/lib/trade-business-reports" ? reporting : id === "@/lib/trade-schedule" ? schedule : id === "@/lib/energy-service-catalogue.mjs" ? { ENERGY_SERVICE_LABELS: { electrical: "Electrical" } } : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : {};
   Function("require", "exports", compiled)(require, exports);
   const render = () => { cursor = 0; const tree = expand(exports.TradeHomeDashboard(props)); for (const effect of pending.splice(0)) effect(); return tree; };
   return { render, props, requests, calls, setBusiness(value) { currentBusiness = value; }, async mount() { render(); await flush(); return render(); }, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
@@ -77,6 +78,20 @@ test("attention actions retain the task or issue destination and do not imply sc
   const targets = nodes(actions, node => node.type === "button");
   targets[0].props.onClick(); targets[1].props.onClick();
   assert.deepEqual(h.calls, [["job", "job-1", "tasks"], ["job", "job-1", "notes"]]); h.cleanup();
+});
+
+test("Home shows today workload and routes financial follow-ups to their specific permitted job", async () => {
+  const data=fixture(), calls=[];
+  data.financial.receivables.items=[{jobId:'late-job',number:'TLJ-LATE',title:'Late job',balanceCents:12500,dueAt:'2026-09-01',overdueDays:30}];
+  data.financial.profitability.completeJobs=1;
+  data.financial.profitability.attentionItems=[{id:'cost-job',number:'TLJ-COST',status:'costs_needed',missingCosts:2},{id:'invoice-job',number:'TLJ-INVOICE',status:'invoice_needed',missingCosts:0}];
+  const h=harness(async()=>response(data),{onOpenJobInvoice:id=>calls.push(['invoice',id]),onOpenJobCosts:id=>calls.push(['cost',id])});
+  const tree=await h.mount(); assert.match(text(tree),/Today:\s+2 jobs\s+·\s+2 visits/); assert.match(text(tree),/30 days overdue/); assert.match(text(tree),/2 cost items missing/);
+  for(const id of ['TLJ-LATE','TLJ-COST','TLJ-INVOICE']) nodes(tree,node=>node.type==='button'&&text(node).includes(id))[0].props.onClick();
+  assert.deepEqual(calls,[['invoice','late-job'],['cost','cost-job'],['invoice','invoice-job']]);
+  assert.doesNotMatch(text(tree),/Completed-job gross margin/); h.cleanup();
+  const apprentice=harness(async()=>response(data),{staffPermissions:{canRunReports:false,canViewInvoices:false}}); const hidden=await apprentice.mount();
+  assert.doesNotMatch(text(hidden),/TLJ-LATE|TLJ-COST|Payment follow-up|Completed job costs/); apprentice.cleanup();
 });
 
 test("no active jobs offers permitted creators a new job without treating existing history as first-time setup", async () => {

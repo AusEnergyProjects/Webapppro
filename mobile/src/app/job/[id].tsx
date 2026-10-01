@@ -1319,7 +1319,7 @@ export default function JobScreen() {
       {!activeFormId ? <View style={styles.card}>
         <Text style={styles.cardTitle}>Job actions</Text>
         {!job.protectedJob && (job.customerPhone || job.serviceAddress) ? <View style={styles.row}>{job.customerPhone ? <><Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`tel:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Call</Text></Pressable><Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`sms:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Text</Text></Pressable></> : null}{job.serviceAddress ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.serviceAddress)}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Directions</Text></Pressable> : null}</View> : null}
-        <View style={styles.row}><FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('files')}>Job files</FieldButton>{!creditexManual ? <FieldButton variant="secondary" style={styles.flex} onPress={() => setActiveFormId('time')}>Record time</FieldButton> : null}</View>
+        <FieldButton variant="secondary" onPress={() => setActiveFormId('files')}>Files</FieldButton>
         {!syntheticManual && !complianceCases.length ? <FieldButton variant="secondary" disabled={Boolean(busy)} loading={busy === 'photo:general'} onPress={() => void capturePhoto()}>Take photo</FieldButton> : null}
         {job.description ? <Text style={styles.body}>{job.description}</Text> : null}
       </View> : null}
@@ -1427,11 +1427,13 @@ export default function JobScreen() {
         {complianceCases.length ? <Text style={styles.meta}>General job files remain separate and are not submitted against a governed requirement.</Text> : null}
         <Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} already synced</Text>
         {!creditexManual ? <FieldSwmsFiles key={job.id} workOrderId={job.id} online={sync.online} onOpen={data => { setSwmsDraft(data); setActiveFormId('swms'); }} /> : null}
+        {!creditexManual ? <><Text style={styles.meta}>Form activity is timestamped automatically. Add manual time only for work that is not captured by forms.</Text><FieldButton variant="secondary" onPress={() => setActiveFormId('time')}>Add manual time</FieldButton></> : null}
       </View> : null}
 
       {!creditexManual && activeFormId === 'time' ? <View style={styles.card}>
-        <FieldButton variant="secondary" onPress={() => setActiveFormId(null)}>Job</FieldButton>
-        <Text style={styles.label}>TIME ENTRY</Text><Text style={styles.cardTitle}>Record today&apos;s work</Text>
+        <FieldButton variant="secondary" onPress={() => setActiveFormId('files')}>Back to Files</FieldButton>
+        <Text style={styles.label}>OPTIONAL TIME ENTRY</Text><Text style={styles.cardTitle}>Add manual time</Text>
+        <Text style={styles.body}>For work outside your forms. This entry stays separate from automatic form timing.</Text>
         <View style={styles.row}>{[15, 30, 60, 120].map((minutes) => <FieldButton key={minutes} variant="secondary" style={styles.flex} disabled={Boolean(busy)} onPress={() => setDuration(String(minutes))}>{minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}</FieldButton>)}</View>
         <Text style={styles.inputLabel}>Minutes worked</Text><TextInput style={styles.input} value={duration} onChangeText={setDuration} keyboardType="number-pad" placeholder="For example, 90" />
         <Text style={styles.inputLabel}>Work note, optional</Text><TextInput style={[styles.input, styles.notes]} multiline value={notes} onChangeText={setNotes} placeholder={job.protectedJob ? 'Describe the work only. Do not add customer contact details.' : 'Briefly describe completed work'} maxLength={500} />

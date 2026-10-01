@@ -23,7 +23,7 @@ const supplierUi = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const installerUi = read("../src/components/InstallerProductMarketplace.tsx");
 const standards = read("../src/app/direct-trade/standards/page.tsx");
 const stripeWebhook = read("../src/app/api/stripe/webhook/route.ts");
-const access = read("../src/app/direct-trade/access/page.tsx");
+const access = read("../src/components/DirectTradePartnerForm.tsx") + read("../src/components/DirectTradeDashboard.tsx");
 
 test("opportunity allocation reaches every qualified trade and preserves deterministic ranking", () => {
   assert.doesNotMatch(opportunityServer, /MAX_VISIBLE_INSTALLERS/);
@@ -289,7 +289,7 @@ test("supplier catalogues are owner scoped and support pricing, order rules, CSV
 });
 
 test("trade software access is free and Sites payment processing is disabled", () => {
-  assert.match(access, /Run the core trade workflow for A\$0/);
+  assert.match(access, /Core trade operations cost A\$0/);
   assert.match(access, /valid ABN/);
   assert.match(stripeWebhook, /SITES_FINANCIAL_TRANSACTIONS_DISABLED/);
   assert.match(stripeWebhook, /ignored: true/);

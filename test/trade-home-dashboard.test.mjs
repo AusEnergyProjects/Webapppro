@@ -160,17 +160,17 @@ test("weekly outlook starts this Monday, counts distinct jobs separately from vi
 
 test("full Home aggregates are not capped by previews and ignore invalid or undated task and visit dates", async t => {
   const f = fixture(); t.after(() => f.database.close());
-  for (let index = 0; index < 37; index++) {
+  for (let index = 0; index < 75; index++) {
     const id = String(index); f.job(id); f.visit(`v-${id}`, id); f.task(`t-${id}`, id); f.issue(`n-${id}`, id);
   }
   f.task("no-date", "0", { due_at: "" }); f.task("bad-date", "0", { due_at: "bad" });
   f.task("today", "0", { due_at: "2026-10-01" }); f.task("done", "0", { status: "done" });
   f.visit("bad-date", "0", "bad"); f.visit("no-date", "0", "");
   const result = await f.home();
-  assert.equal(result.metrics.openJobs, 37); assert.equal(result.metrics.overdueTasks, 37);
-  assert.equal(result.metrics.openIssues, 37); assert.equal(result.workload[0].jobs, 37); assert.equal(result.workload[0].visits, 37);
+  assert.equal(result.metrics.openJobs, 75); assert.equal(result.metrics.overdueTasks, 75);
+  assert.equal(result.metrics.openIssues, 75); assert.equal(result.workload[0].jobs, 75); assert.equal(result.workload[0].visits, 75);
   assert.equal(result.upcomingAppointments.length, 6); assert.equal(result.overdueTasks.length, 5); assert.equal(result.openIssues.length, 5);
-  assert.equal(result.metrics.awaitingSchedule, 0);
+  assert.equal(result.metrics.awaitingSchedule, 0); assert.equal(result.metrics.todayJobs, 75); assert.equal(result.metrics.todayVisits, 75);
 });
 
 test("scheduling attention requires accepted or explicitly approved work, not a quote awaiting response", async t => {

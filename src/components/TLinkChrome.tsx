@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
 import { TLinkChromeStyles } from "./TLinkChromeStyles";
 
-type TLinkSection = "dashboard" | "partners" | "access" | "standards" | "verification" | "team";
+type TLinkSection = "dashboard" | "standards" | "verification" | "team";
 
 export function TLinkMark({
   className = "tlink-brand-mark",
@@ -73,8 +73,6 @@ export function TLinkHeader({ active }: { active: TLinkSection }) {
     </Link>
     <nav aria-label="TLink navigation">
       <Link className={active === "dashboard" ? "active" : ""} href="/direct-trade/dashboard">Dashboard</Link>
-      <Link className={active === "partners" ? "active" : ""} href="/direct-trade/partners">Trade account</Link>
-      <Link className={active === "access" ? "active" : ""} href="/direct-trade/access">Free access</Link>
       <Link className={active === "standards" ? "active" : ""} href="/direct-trade/standards">Standards</Link>
     </nav>
     <AeaProductLink placement="site-header" />

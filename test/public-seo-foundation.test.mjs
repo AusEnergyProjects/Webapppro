@@ -45,8 +45,6 @@ const platformMetadataRoutes = [
   "privacy",
   "rental-assessment/request",
   "direct-trade",
-  "direct-trade/partners",
-  "direct-trade/access",
   "direct-trade/standards",
 ];
 const guideMetadataRoutes = [

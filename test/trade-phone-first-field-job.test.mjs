@@ -150,7 +150,7 @@ test("retained field action receipts remain audited and idempotent", () => {
   assert.match(mobileTypes, /'advance_field_job'/);
 });
 
-test("finish uses genuine blockers and exposes invoice and handover paths", () => {
+test("finish uses genuine blockers and exposes the scoped invoice path", () => {
   for (const source of [fieldRoute, syncRoute]) {
     assert.match(source, /trade_work_order_tasks/);
     assert.match(source, /trade_job_forms/);
@@ -163,7 +163,7 @@ test("finish uses genuine blockers and exposes invoice and handover paths", () =
   assert.match(syncRoute, /finishBlockerGuard/);
   assert.match(fieldRoute, /Unsynchronised field changes need attention/);
   assert.match(fieldPanel, /Prepare invoice/);
-  assert.match(fieldPanel, /Open handover/);
+  assert.doesNotMatch(fieldPanel, /Open handover|canOpenHandover/);
 });
 
 test("contact actions stay behind the direct-customer permission boundary", () => {

@@ -1,5 +1,4 @@
 import { crewMutationGuard } from "@/lib/trade-crews";
-import { jobMemberSql } from "@/lib/trade-job-collaboration";
 import { tradeTeamPresenceStatusSql } from "@/lib/trade-team-presence";
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
@@ -423,9 +422,6 @@ type RosterOptions = {
   status?: string;
   capability?: string;
   memberId?: string;
-  includeWork?: boolean;
-  workPage?: number;
-  workPageSize?: number;
   assigneePage?: number;
   assigneePageSize?: number;
   assigneeSearch?: string;
@@ -441,9 +437,6 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const rosterStatus = ROSTER_STATUS_FILTERS.has(String(options.status)) ? String(options.status) : "all";
   const rosterCapability = cleanAdminText(options.capability, 80);
   const rosterMemberId = cleanAdminText(options.memberId, 180);
-  const includeWork = options.includeWork === true;
-  const workPage = Math.max(1, Math.floor(Number(options.workPage) || 1));
-  const workPageSize = Math.min(100, Math.max(1, Math.floor(Number(options.workPageSize) || 50)));
   const assigneePage = Math.max(1, Math.floor(Number(options.assigneePage) || 1));
   const assigneePageSize = Math.min(50, Math.max(1, Math.floor(Number(options.assigneePageSize) || 25)));
   const assigneeSearch = cleanAdminText(options.assigneeSearch, 120).toLowerCase();
@@ -523,29 +516,6 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       ORDER BY display_name COLLATE NOCASE, id
       LIMIT ? OFFSET ?`).bind(...assigneeBindings, assigneePageSize, (assigneePage - 1) * assigneePageSize)
       .all<Record<string, unknown>>();
-  const workCount = !includeWork ? 0 : Number((await db.prepare(`SELECT COUNT(*) count FROM trade_work_orders w
-    WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      AND (? <> 'own' OR ${jobMemberSql("w")} )`)
-    .bind(access.ownerUid, access.jobScope, access.memberId).first<Record<string, unknown>>())?.count || 0);
-  const jobRows = !includeWork ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage,
-      w.priority, w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label,
-      w.source_type, d.customer_source, c.address_line_1, c.address_line_2, c.suburb,
-      c.address_state, c.postcode, w.revision, w.updated_at
-    FROM trade_work_orders w
-    LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
-    LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
-    WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      AND (? <> 'own' OR ${jobMemberSql("w")} )
-    ORDER BY w.scheduled_start = '', w.scheduled_start, w.priority = 'urgent' DESC, w.updated_at DESC, w.id
-    LIMIT ? OFFSET ?`)
-    .bind(access.ownerUid, access.jobScope, access.memberId, workPageSize, (workPage - 1) * workPageSize).all<Record<string, unknown>>();
-  const jobIds = jobRows.results.map((row) => String(row.id));
-  const taskRows = !jobIds.length ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT t.id, t.work_order_id, t.title, t.due_at, t.status, t.completed_at, t.revision
-    FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id
-    WHERE t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-      AND t.work_order_id IN (${jobIds.map(() => "?").join(",")})
-    ORDER BY t.status = 'done', t.due_at = '', t.due_at, t.created_at`)
-    .bind(access.ownerUid, access.ownerUid, ...jobIds).all<Record<string, unknown>>();
   return {
     businessServiceStates,
     access: { businessName: access.businessName, displayName: access.displayName,
@@ -603,21 +573,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       capability: assigneeCapability },
     roster: { page, pageSize, total: rosterTotal, totalPages: Math.max(1, Math.ceil(rosterTotal / pageSize)),
       search: rosterSearch, status: rosterStatus, capability: rosterCapability },
-    work: { included: includeWork, page: workPage, pageSize: workPageSize, total: workCount,
-      totalPages: Math.max(1, Math.ceil(workCount / workPageSize)) },
-    jobs: jobRows.results.map((row) => {
-      const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
-      const address = protectedJob ? "" : [row.address_line_1, row.address_line_2, row.suburb, row.address_state, row.postcode]
-        .map((item) => String(item || "").trim()).filter(Boolean).join(", ");
-      return { id: row.id, workNumber: row.work_number,
-        title: protectedJob ? `${String(row.service_category || "Service")} job` : row.title, serviceCategory: row.service_category,
-        siteArea: row.site_area, stage: row.stage, priority: row.priority, scheduledStart: row.scheduled_start,
-        scheduledEnd: row.scheduled_end, assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label,
-        protectedJob, serviceAddress: address, revision: Number(row.revision || 1), updatedAt: row.updated_at,
-        tasks: taskRows.results.filter((task) => task.work_order_id === row.id).map((task) => ({ id: task.id,
-          title: task.title, dueAt: task.due_at, status: task.status, completedAt: task.completed_at,
-          revision: Number(task.revision || 1) })) };
-    }),
+
   };
 }
 
@@ -675,9 +631,6 @@ export async function GET(request: Request) {
       search: search.get("search") || "", status: search.get("status") || "all",
       capability: search.get("capability") || "",
       memberId: search.get("memberId") || "",
-      includeWork: search.get("includeWork") === "1",
-      workPage: Number(search.get("workPage") || 1),
-      workPageSize: Number(search.get("workPageSize") || 50),
       assigneePage: Number(search.get("assigneePage") || 1),
       assigneePageSize: Number(search.get("assigneePageSize") || 25),
       assigneeSearch: search.get("assigneeSearch") || "",

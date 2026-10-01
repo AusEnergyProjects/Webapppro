@@ -6,8 +6,25 @@ import { mapQuoteSystemPanels } from "./trade-map-quote.ts";
 type Row = Record<string, unknown>;
 type JobPlanInput = {
   ownerUid: string; workOrderId: string; handoffId: string; quoteVersionId: string; now: string;
-  selectedChoiceIds?: string[]; onlyIfTracked?: boolean;
+  selectedChoiceIds?: string[]; onlyIfTracked?: boolean; requireCurrentAcceptance?: boolean;
 };
+
+// Manual preparation must still belong to this job's current customer and quote
+// when the INSERT runs, including after a concurrent customer/quote change.
+export const CURRENT_ACCEPTED_HANDOFF_SQL = `EXISTS (
+  SELECT 1 FROM trade_crm_job_details current_job
+  JOIN trade_crm_quotes current_quote ON current_quote.work_order_id=current_job.work_order_id
+    AND current_quote.firebase_uid=current_job.firebase_uid AND current_quote.crm_customer_id=current_job.crm_customer_id
+  JOIN trade_crm_quote_versions current_version ON current_version.quote_id=current_quote.id
+    AND current_version.firebase_uid=current_quote.firebase_uid AND current_version.version_number=current_quote.current_version_number
+  JOIN trade_crm_quote_acceptances current_acceptance ON current_acceptance.quote_id=current_quote.id
+    AND current_acceptance.quote_version_id=current_version.id AND current_acceptance.firebase_uid=current_quote.firebase_uid
+    AND current_acceptance.work_order_id=current_job.work_order_id AND current_acceptance.crm_customer_id=current_job.crm_customer_id
+  WHERE current_job.work_order_id=h.work_order_id AND current_job.firebase_uid=h.firebase_uid
+    AND current_job.crm_customer_id=h.crm_customer_id AND current_quote.id=h.quote_id
+    AND current_version.id=h.quote_version_id AND current_acceptance.id=h.acceptance_id
+    AND current_quote.status='accepted' AND current_version.status='accepted' AND current_acceptance.decision='accepted'
+)`;
 
 function parseJson<T>(value: unknown, fallback: T): T {
   try { return JSON.parse(String(value || "")) as T; } catch { return fallback; }
@@ -75,6 +92,7 @@ export async function buildJobPlanStatements(db: D1Database, input: JobPlanInput
     h.subtotal_cents,h.tax_cents,h.total_cents,?,h.subtotal_cents-?,?,?,'optional','','',?,?
     FROM trade_crm_commercial_handovers h WHERE h.id=? AND h.firebase_uid=? AND h.work_order_id=?
     AND h.quote_version_id=? AND h.status='accepted'
+    AND ${input.requireCurrentAcceptance ? CURRENT_ACCEPTED_HANDOFF_SQL : "1=1"}
     AND NOT EXISTS(SELECT 1 FROM trade_crm_job_plans WHERE commercial_handoff_id=h.id AND firebase_uid=h.firebase_uid)`)
     .bind(planId, sourceKind, budgetCost, budgetCost, expectedDuration, suggestedCrew, now, now, handoffId, ownerUid, workOrderId, quoteVersionId)];
   let position = 0; let phasePosition = 0;

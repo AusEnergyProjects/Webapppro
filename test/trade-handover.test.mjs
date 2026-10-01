@@ -15,7 +15,7 @@ const tradeRoute = read("../src/app/api/trade-handover/route.ts");
 const documentRoute = read("../src/app/api/trade-handover/documents/route.ts");
 const adminRoute = read("../src/app/api/admin/handovers/route.ts");
 const workOrderRoute = read("../src/app/api/trade-work-orders/route.ts");
-const tradeUi = read("../src/components/TradeHandoverCentre.tsx");
+const tradeUi = read("../src/components/TradeHandoverHistory.tsx");
 const adminUi = read("../src/components/AdminHandoverReview.tsx");
 const handoverSchema = schema.slice(
   schema.indexOf("export const tradeHandoverPacks"),
@@ -110,7 +110,7 @@ test("installed assets, compliance, pack reviews and protected document metadata
 
 test("handover storage excludes household contact and address fields", () => {
   assert.doesNotMatch(handoverSchema, /customer_name|household_name|customer_email|customer_phone|street_address|address_line/i);
-  assert.match(tradeUi, /No customer name, email, phone or street address is stored here/);
+  assert.doesNotMatch(tradeUi, /customerName|customerEmail|customerPhone|streetAddress/);
   assert.match(adminUi, /Customer names, contact details, notes and street addresses are excluded/);
 });
 
@@ -122,7 +122,8 @@ test("trade handover actions are authenticated, same-origin, installer-only, own
   assert.match(tradeRoute, /WHERE work_order_id = \? AND firebase_uid = \?/);
   assert.match(tradeRoute, /accountEntitlements\(access\.identity\.uid, "installer"\)/);
   assert.doesNotMatch(tradeRoute, /billing_status/);
-  assert.match(tradeUi, /Verification required/);
+  assert.match(tradeUi, /await user\.getIdToken\(\)/);
+  assert.match(tradeUi, /Authorization: `Bearer \$\{token\}`/);
   assert.doesNotMatch(tradeUi, /Premium Business Hub feature/);
 });
 
@@ -153,4 +154,10 @@ test("approved asset histories remain available instead of disappearing through 
 
 test("new handover user-facing copy avoids prohibited dash characters", () => {
   assert.doesNotMatch(`${tradeUi}\n${adminUi}`, /[\u2013\u2014]/);
+});
+
+test("normal TLink handover access is read-only history with no customer portal creation", () => {
+  assert.equal(fs.existsSync(new URL("../src/components/TradeHandoverCentre.tsx", import.meta.url)), false);
+  assert.match(tradeUi, /Earlier completion records/);
+  assert.doesNotMatch(tradeUi, /method:\s*["'](?:POST|PUT|PATCH|DELETE)|<form|<input|initialize_pack|customer portal|free home account/i);
 });

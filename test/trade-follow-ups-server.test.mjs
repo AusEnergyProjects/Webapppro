@@ -33,6 +33,9 @@ function fixture(t) {
     CREATE TABLE trade_crm_quote_deliveries (firebase_uid TEXT,crm_customer_id TEXT,channel TEXT DEFAULT 'email',status TEXT);
     CREATE TABLE trade_crm_photo_request_deliveries (firebase_uid TEXT,crm_customer_id TEXT,channel TEXT DEFAULT 'email',status TEXT);
     CREATE TABLE trade_crm_appointments (id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,status TEXT DEFAULT 'scheduled',starts_at TEXT,ends_at TEXT DEFAULT '',assignee_member_id TEXT DEFAULT 'member');
+    CREATE TABLE trade_crews (id TEXT,owner_uid TEXT,lead_member_id TEXT);
+    CREATE TABLE trade_crew_members (owner_uid TEXT,crew_id TEXT,member_id TEXT);
+    CREATE TABLE trade_team_members (id TEXT,owner_uid TEXT,status TEXT);
     CREATE TABLE trade_dataforce_sources (firebase_uid TEXT,work_order_id TEXT);
     CREATE TABLE trade_csv_import_sources (firebase_uid TEXT,work_order_id TEXT,entity_type TEXT);
     CREATE TABLE trade_crm_quick_invoices (id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,crm_customer_id TEXT,invoice_number TEXT,due_at TEXT,total_cents INTEGER,status TEXT DEFAULT 'issued',sent_at TEXT DEFAULT '2026-09-26T03:00:00.000Z',provider_message_id TEXT DEFAULT 'provider-id',delivery_status TEXT DEFAULT 'provider_accepted',document_snapshot_json TEXT DEFAULT '{}',created_at TEXT DEFAULT '2026-09-25T03:00:00.000Z');
@@ -152,6 +155,54 @@ test("job context excludes other businesses, protected jobs and unassigned own s
   await assert.rejects(previewFollowUp(f.db, f.services, ownerAccess("owner", { isOwner: false, jobScope: "own" }), "job", "general-follow-up"), /EMAIL_RECIPIENT_UNAVAILABLE/);
 });
 
+test("visit collaborators can prepare follow-ups but assignment revocation cancels a queued message before transport", async t => {
+  const f = fixture(t);
+  const access = ownerAccess("owner", { isOwner: false, actorUid: "staff", jobScope: "own", scheduleScope: "own" });
+  f.sqlite.exec("UPDATE trade_work_orders SET assignee_member_id='job-lead'");
+  f.appointment("assigned-visit");
+  const draft = await previewFollowUp(f.db, f.services, access, "job", "general-follow-up");
+  assert.deepEqual(draft.missing, []); assert.equal(draft.recipient, "alex@example.test");
+  const id = await queueManualFollowUp(f.db, f.services, access, { workOrderId: "job", templateId: "general-follow-up", requestId: "collaborator-request-123456", subject: draft.subject, body: draft.body, contextHash: draft.contextHash });
+  f.sqlite.exec("UPDATE trade_crm_appointments SET status='cancelled'");
+  await assert.rejects(previewFollowUp(f.db, f.services, access, "job", "general-follow-up"), /EMAIL_RECIPIENT_UNAVAILABLE/);
+  assert.equal(await deliverFollowUp(f.db, f.services, id, access), "cancelled");
+  assert.equal(f.sends.length, 0); assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM trade_email_submissions").get().n, 0);
+});
+
+test("visit collaboration cannot cross the business boundary or bypass invoice permissions", async t => {
+  const f = fixture(t);
+  const access = ownerAccess("owner", { isOwner: false, actorUid: "staff", jobScope: "own", scheduleScope: "own", canManageInvoices: false });
+  f.sqlite.exec("UPDATE trade_work_orders SET assignee_member_id='job-lead'");
+  f.appointment("foreign-visit", "job", { firebase_uid: "foreign" });
+  await assert.rejects(previewFollowUp(f.db, f.services, access, "job", "general-follow-up"), /EMAIL_RECIPIENT_UNAVAILABLE/);
+  f.sqlite.exec("UPDATE trade_crm_appointments SET firebase_uid='owner'");
+  f.quick();
+  await assert.rejects(previewFollowUp(f.db, f.services, access, "job", "overdue-invoice"), /EMAIL_ACCESS_REQUIRED/);
+  f.sqlite.exec("UPDATE trade_crm_appointments SET status='no_show'");
+  await assert.rejects(previewFollowUp(f.db, f.services, access, "job", "general-follow-up"), /EMAIL_RECIPIENT_UNAVAILABLE/);
+  assert.equal(f.sends.length, 0);
+});
+
+test("crew job access in follow-up context is withdrawn when active crew membership changes", async t => {
+  const f = fixture(t);
+  const access = ownerAccess("owner", { isOwner: false, actorUid: "crew-lead", memberId: "lead", jobScope: "own", scheduleScope: "own", crewId: "crew", crewLead: true, crewMemberIds: ["lead", "worker"] });
+  f.sqlite.exec("UPDATE trade_work_orders SET assignee_member_id='job-lead'");
+  f.appointment("crew-visit", "job", { assignee_member_id: "worker" });
+  f.insert("trade_crews", { id: "crew", owner_uid: "owner", lead_member_id: "lead" });
+  for (const member of ["lead", "worker"]) {
+    f.insert("trade_team_members", { id: member, owner_uid: "owner", status: "active" });
+    f.insert("trade_crew_members", { owner_uid: "owner", crew_id: "crew", member_id: member });
+  }
+  // The fixture recipient is intentionally broad. This verifies the independent
+  // SQL job boundary even if a future caller supplies email-authorized crew access.
+  const draft = await previewFollowUp(f.db, f.services, access, "job", "general-follow-up");
+  assert.equal(draft.recipient, "alex@example.test");
+  const id = await queueManualFollowUp(f.db, f.services, access, { workOrderId: "job", templateId: "general-follow-up", requestId: "crew-request-123456", subject: draft.subject, body: draft.body, contextHash: draft.contextHash });
+  f.sqlite.exec("DELETE FROM trade_crew_members WHERE member_id='worker'");
+  await assert.rejects(previewFollowUp(f.db, f.services, access, "job", "general-follow-up"), /EMAIL_RECIPIENT_UNAVAILABLE/);
+  assert.equal(await deliverFollowUp(f.db, f.services, id, access), "cancelled"); assert.equal(f.sends.length, 0);
+});
+
 test("manual send replays one request without duplicate transport and rejects edited replay", async t => {
   const f = fixture(t), { id, input } = await f.manual();
   assert.equal(await deliverFollowUp(f.db, f.services, id, ownerAccess()), "accepted");
@@ -214,6 +265,19 @@ test("appointment preview respects own schedule scope and resolves local time", 
   assert.equal(own.context.appointmentId, "own-visit");
   assert.match(own.body, /9:00/);
   assert.match(own.body, /29 September 2026/);
+});
+
+test("shared-job collaborators can preview only their own visit even when another worker's visit is earlier", async t => {
+  const f = fixture(t);
+  const access = ownerAccess("owner", { isOwner: false, actorUid: "staff", jobScope: "own", scheduleScope: "own" });
+  f.sqlite.exec("UPDATE trade_work_orders SET assignee_member_id='job-lead'");
+  f.appointment("other-visit", "job", { assignee_member_id: "other-member", starts_at: "2026-09-29T08:00" });
+  f.appointment("own-visit", "job", { starts_at: "2026-09-29T10:00" });
+  const draft = await previewFollowUp(f.db, f.services, access, "job", "appointment-reminder", { now: NOW });
+  assert.equal(draft.context.appointmentId, "own-visit"); assert.match(draft.body, /10:00/);
+  const blocked = await previewFollowUp(f.db, f.services, access, "job", "appointment-reminder", { now: NOW, appointmentId: "other-visit" });
+  assert.equal(blocked.context.appointmentId, ""); assert.ok(blocked.missing.includes("An upcoming appointment"));
+  assert.equal(f.sends.length, 0); assert.equal(f.rows().length, 0);
 });
 
 test("automation remains dormant until owner enables it and one appointment sends once", async t => {

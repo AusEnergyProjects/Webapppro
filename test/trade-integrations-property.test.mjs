@@ -216,7 +216,7 @@ test("field records are owner or assigned-team scoped and protected customer sig
   assert.match(fieldRoute, /return job\.source_type === "opportunity" \|\| job\.customer_source === "platform_private"/);
   assert.match(fieldRoute, /PROTECTED_CUSTOMER/);
   assert.match(fieldUi, /Customer sign-off stays with Australian Energy Assessments/);
-  assert.match(fieldUi, /Technician time/);
+  assert.match(fieldUi, /Add manual time \(optional\)/);
   assert.match(fieldUi, /Photos and files/);
   assert.match(fieldUi, /Digital sign-off/);
 });

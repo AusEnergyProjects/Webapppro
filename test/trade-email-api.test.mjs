@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import * as bounded from "../src/lib/bounded-json-request.ts";
+import * as collaboration from "../src/lib/trade-job-collaboration.ts";
 import { ReminderProviderDeliveryError } from "../src/lib/service-reminder-delivery.ts";
 import { FirebaseMfaRequiredError } from "../src/lib/firebase-mfa.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
@@ -29,6 +30,7 @@ const api = load("../src/lib/trade-email-api.ts", {
 const targetHelper = load("../src/lib/trade-email-recipient-server.ts", {
   "../../db": {}, "./aea-trade-owner-server": {}, "./trade-certificate-leads": {},
   "./public-trade-lead-access.mjs": {}, "./trade-opportunity-read-projection.mjs": {},
+  "./trade-job-collaboration.ts": collaboration,
 });
 const origin = "https://portal.example.test";
 const requestId = "request-1234567890";

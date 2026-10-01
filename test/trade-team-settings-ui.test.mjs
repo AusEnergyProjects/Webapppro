@@ -174,23 +174,13 @@ test("member profiles use a dense contact roster, schedule colour and validated 
   assert.match(settings, /result\.code !== "REVISION_CONFLICT"/);
 });
 
-test("staff portal renders only permission-backed operations", () => {
-  assert.match(portal, /permissions\?\.jobScope === "own"/);
-  assert.match(portal, /includeWork=1&workPage=1&workPageSize=50/);
-  assert.match(portal, /data\.assignees/);
-  assert.match(portal, /assigneePage: String\(page\)/);
-  assert.match(portal, /assigneeCapability: capability/);
-  assert.match(portal, /assigneeSearch/);
-  assert.match(portal, /Load more team members/);
-  assert.match(portal, /Load more work/);
-  assert.match(portal, /data\.work\.page < data\.work\.totalPages/);
-  assert.match(portal, /permissions\?\.canAssignJobs/);
+test("staff portal delegates job operations to the canonical permission-scoped CRM", () => {
+  assert.match(portal, /staffPermissions=\{permissions\}/);
+  assert.doesNotMatch(portal, /includeWork=1|data\.assignees|Load more work|todayJobs|TradeFieldWorkPanel|TradeJobFormsPanel/);
   assert.match(portal, /permissions\?\.canManageTeam && <section/);
   assert.match(portal, /<TradeTeamSettings user=\{user\}/);
   assert.doesNotMatch(portal, /TradeInvoiceWorkspace/);
   assert.doesNotMatch(portal, /\{data\.access\.role\} portal/);
-  assert.match(portal, /!permissions\?\.canManageJobs/);
-  assert.match(portal, /readOnly=\{!permissions\.canManageFieldEvidence\}/);
   assert.match(field, /if \(readOnly\) return/);
   assert.match(forms, /readOnly \? "Review completed field forms"/);
 });
@@ -238,9 +228,8 @@ test("staff schedule loads through its authorised API without opening owner cale
 });
 
 test("delegated field work never offers the unsupported handover route", () => {
-  assert.match(field, /canOpenHandover = true/);
-  assert.match(field, /\{canOpenHandover && data\.fieldJob\.completion\.handoverReady && <button[^>]+onClick=\{\(\) => onNavigate\("handover"\)\}>Open handover<\/button>\}/);
-  assert.match(crm, /canOpenHandover=\{!permissions && !isLost\}/);
+  assert.doesNotMatch(field, /canOpenHandover|Open handover/);
+  assert.doesNotMatch(crm, /canOpenHandover=/);
   assert.match(crm, /const moreTabs:[^=]+ = \[\["tasks"/);
   assert.match(crm, /disabled=\{isImported \|\| !canManageJobs \|\| busy === `task-toggle:/);
   assert.match(crm, /\{canManageJobs && <form className="crm-inline-form note"/);

@@ -7,7 +7,10 @@ export type ReportPeriod = ReportWindow & { preset: ReportPreset; today: string;
 export type ReportMeasures = { newJobs: number; completedJobs: number; quoteIssues: number | null; wonQuotes: number | null; declinedQuotes: number | null; wonCents: number | null; invoicedCents: number | null; creditCents: number | null; invoiceCount: number | null; bookedMinutes: number; visits: number; completedVisits: number; missingDurations: number };
 export type ReportBreakdown = { key: string; newJobs: number; completedJobs: number; invoicedCents: number | null };
 export type JobProfitability = { id: string; number: string; title: string; completedAt: string; revenueCents: number; labourCents: number; materialCents: number; otherCents: number; labourMinutes: number; missingCosts: number; status: string; marginCents: number | null; marginPercent: number | null };
-export type ProfitabilityReport = { jobs: number; completeJobs: number; revenueCents: number; labourCents: number; materialCents: number; otherCents: number; labourMinutes: number; completeRevenueCents: number; marginCents: number | null; marginPercent: number | null; page: number; pageSize: number; items: JobProfitability[] };
+export const JOB_COST_STATUS_LABELS: Record<string, string> = { complete: "Complete", invoice_needed: "Invoice needed", plan_needed: "Work plan needed", scope_review: "Review revised costs", costs_needed: "Record actual costs" };
+export type ReportReceivable = { jobId: string; number: string; title: string; balanceCents: number; dueAt: string; overdueDays: number | null };
+export type ProfitabilityReport = { jobs: number; completeJobs: number; revenueCents: number; labourCents: number; materialCents: number; otherCents: number; labourMinutes: number; completeRevenueCents: number; marginCents: number | null; marginPercent: number | null; page: number; pageSize: number; items: JobProfitability[];
+  coverage: { invoiceNeeded: number; planNeeded: number; scopeReview: number; costsNeeded: number; missingCosts: number }; attentionItems: JobProfitability[] };
 export type BusinessReport = {
   generatedAt: string; period: ReportPeriod; service: string; state: string;
   permissions: { invoices: boolean; quotes: boolean };
@@ -19,7 +22,7 @@ export type BusinessReport = {
   trend: Array<{ start: string; end: string; newJobs: number; completedJobs: number; invoicedCents: number | null }>;
   services: ReportBreakdown[]; regions: ReportBreakdown[];
   work: { openJobs: number; waitingJobs: number; unassignedJobs: number; awaitingSchedule: number; overdueTasks: number; openIssues: number; completedUninvoiced: number | null; stages: Array<{ key: string; count: number }> };
-  receivables: null | { outstandingCents: number; paidCents: number; buckets: Array<{ key: string; count: number; cents: number }>; undatedInvoiceCount: number; undatedInvoiceCents: number };
+  receivables: null | { outstandingCents: number; paidCents: number; buckets: Array<{ key: string; count: number; cents: number }>; undatedInvoiceCount: number; undatedInvoiceCents: number; items: ReportReceivable[] };
   team: Array<{ key: string; label: string; visits: number; completedVisits: number; bookedMinutes: number; upcomingVisits: number; upcomingMinutes: number; missingDurations: number }>;
 };
 export class ReportInputError extends Error {}
@@ -133,6 +136,7 @@ export function reportCsvRows(report: BusinessReport) {
     const p = report.profitability;
     const basis = "Current recorded position for jobs completed in the selected period; AUD excluding GST";
     put("Job profitability", "Completed jobs", p.jobs); put("Job profitability", "Jobs with complete cost and invoice records", p.completeJobs);
+    for (const [label, value] of [["Jobs needing an invoice", p.coverage.invoiceNeeded], ["Jobs needing a work plan", p.coverage.planNeeded], ["Jobs needing scope review", p.coverage.scopeReview], ["Jobs needing actual costs", p.coverage.costsNeeded], ["Missing cost items", p.coverage.missingCosts]] as const) put("Cost coverage", label, value, "", "Jobs completed in the selected period");
     for (const [label, value] of [["Net invoiced value", p.revenueCents], ["Recorded labour costs", p.labourCents], ["Recorded material costs", p.materialCents], ["Recorded other direct costs", p.otherCents], ["Net invoiced value for complete jobs", p.completeRevenueCents]] as const) put("Job profitability", label, (value / 100).toFixed(2), "", basis);
     put("Job profitability", "Recorded labour hours", (p.labourMinutes / 60).toFixed(2));
     if (p.marginCents !== null) put("Job profitability", "Gross job margin for complete jobs only", (p.marginCents / 100).toFixed(2), "", basis);

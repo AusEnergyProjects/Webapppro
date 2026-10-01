@@ -1,0 +1,15 @@
+.views { display: flex; gap: 8px; flex-wrap: wrap; }
+.views button { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px 16px; border: 1px solid var(--trade-line, #cadbd5); border-radius: 10px; background: var(--trade-surface, #fff); color: var(--trade-ink, #18312b); font: inherit; font-size: .87rem; font-weight: 650; cursor: pointer; }
+.views button[aria-pressed="true"] { background: var(--trade-accent-soft, #eaf8f2); color: var(--trade-accent-readable, #064e3b); border-color: var(--trade-accent, #087f5b); }
+.views span { min-width: 1.2em; font-size: .75rem; opacity: .8; }
+.views button:focus-visible, .list button:focus-visible { outline: 3px solid var(--trade-accent, #087f5b); outline-offset: 3px; }
+.description { margin: 10px 0 18px; color: var(--trade-muted, #637971); font-size: .85rem; line-height: 1.5; }
+.list { display: grid; gap: 10px; }
+.list article { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.2fr) minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 18px; border: 1px solid var(--trade-line, #cadbd5); border-radius: 12px; background: var(--trade-surface, #fff); }
+.list article > div { display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.list span, .list small { color: var(--trade-muted, #637971); font-size: .75rem; line-height: 1.45; }
+.list strong { font-size: .9rem; }
+.list .status { color: var(--trade-accent-readable, #064e3b); }
+.list button { min-height: 44px; padding: 10px 14px; border: 1px solid var(--trade-line, #cadbd5); border-radius: 9px; background: var(--trade-accent-soft, #eaf8f2); color: var(--trade-accent-readable, #064e3b); font: inherit; font-size: .82rem; font-weight: 700; cursor: pointer; }
+@media (max-width: 900px) { .list article { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; } .list button { justify-self: end; } }
+@media (max-width: 480px) { .views { display: grid; grid-template-columns: 1fr 1fr; } .views button { justify-content: space-between; padding: 10px; font-size: .78rem; } .list article { grid-template-columns: minmax(0, 1fr); padding: 15px; } .list button { justify-self: stretch; } }

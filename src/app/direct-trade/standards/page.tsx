@@ -221,11 +221,8 @@ export default function DirectTradeStandardsPage() {
           <a className="btn" href="/plan">
             Build my home energy plan
           </a>
-          <a className="btn ghost" href="/direct-trade/partners">
+          <a className="btn ghost" href="/direct-trade/dashboard?setup=1">
             Trade and supplier participation
-          </a>
-          <a className="btn ghost" href="/direct-trade/access">
-            Free trade access
           </a>
         </div>
       </section>

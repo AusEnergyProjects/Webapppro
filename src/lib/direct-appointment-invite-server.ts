@@ -29,11 +29,9 @@ export async function sendDirectAppointmentCalendarInvite(input: {
   origin: string;
   change?: "rescheduled" | "cancelled";
 }): Promise<DirectAppointmentInviteResult> {
-  const configuration = await tradeCustomerEmailReadiness(input.ownerUid);
-  if (!configuration.configured) {
-    return { requested: true, status: "unavailable", message: "Email delivery is not configured." };
-  }
-  const row = await getD1().prepare(`SELECT a.id appointment_id, a.revision, a.starts_at, a.ends_at,
+  const attemptStartedAt = new Date().toISOString();
+  const db = getD1();
+  const row = await db.prepare(`SELECT a.id appointment_id, a.work_order_id, a.revision, a.starts_at, a.ends_at,
       w.work_number, detail.crm_customer_id,
       COALESCE((SELECT prior.starts_at FROM trade_crm_appointment_revisions prior
         WHERE prior.appointment_id = a.id AND prior.firebase_uid = a.firebase_uid
@@ -52,9 +50,29 @@ export async function sendDirectAppointmentCalendarInvite(input: {
       AND w.source_type <> 'opportunity' AND detail.customer_source IN ('trade_owned', 'public_lead_released')
       AND w.record_status = 'active' LIMIT 1`).bind(input.appointmentId, input.ownerUid).first<Record<string, unknown>>();
   if (!row) return { requested: true, status: "unavailable", message: "The saved appointment could not be loaded for email." };
+  const workOrderId = String(row.work_order_id);
+  const appointmentRevision = Number(row.revision || 1);
+  async function receipt(result: DirectAppointmentInviteResult): Promise<DirectAppointmentInviteResult> {
+    // The event identity binds the receipt to this exact appointment revision and
+    // attempt without putting implementation details into the visible job history.
+    try {
+      await db.prepare(`INSERT INTO trade_work_order_events (id,work_order_id,firebase_uid,event_type,summary,created_at)
+        VALUES (?,?,?,?,?,?)`).bind(
+        `calendar-invite:${input.appointmentId}:${appointmentRevision}:${attemptStartedAt}:${crypto.randomUUID()}`,
+        workOrderId, input.ownerUid, `customer_calendar_invite_${result.status}`,
+        result.message, new Date().toISOString()).run();
+    } catch {
+      // A successful or uncertain provider submission must never turn into a
+      // retryable failure merely because its display receipt could not be stored.
+      return { ...result, message: `${result.message} Its job receipt could not be saved. Check the outgoing mailbox before sending another copy.` };
+    }
+    return result;
+  }
+  const configuration = await tradeCustomerEmailReadiness(input.ownerUid);
+  if (!configuration.configured) return receipt({ requested: true, status: "unavailable", message: "Email delivery is not configured." });
   const recipient = String(row.customer_email || "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
-    return { requested: true, status: "unavailable", message: "The selected customer does not have a valid email address." };
+    return receipt({ requested: true, status: "unavailable", message: "The selected customer does not have a valid email address." });
   }
   const draft = directAppointmentInviteDraft({
     workNumber: String(row.work_number || ""),
@@ -69,7 +87,7 @@ export async function sendDirectAppointmentCalendarInvite(input: {
     originalStartsAt: String(row.original_starts_at || row.starts_at),
     change: input.change,
   });
-  if (!draft) return { requested: true, status: "unavailable", message: "The saved appointment time could not be added to a calendar." };
+  if (!draft) return receipt({ requested: true, status: "unavailable", message: "The saved appointment time could not be added to a calendar." });
   try {
     await sendTradeCustomerEmail(input.ownerUid, input.actorUid || "system", {
       channel: "email",
@@ -86,11 +104,11 @@ export async function sendDirectAppointmentCalendarInvite(input: {
       )],
       callbackUrl: new URL("/api/service-reminder-provider-events/twilio", input.origin).toString(),
     });
-    return { requested: true, status: "accepted", message: "The calendar invite was accepted for delivery." };
+    return receipt({ requested: true, status: "accepted", message: "The calendar invite was accepted for delivery." });
   } catch (error) {
     if (reminderProviderFailureOutcome(error) === "indeterminate") {
-      return { requested: true, status: "reconciliation_required", message: "The job was saved. Check the outgoing mailbox before sending this calendar invite again." };
+      return receipt({ requested: true, status: "reconciliation_required", message: "The job was saved. Check the outgoing mailbox before sending this calendar invite again." });
     }
-    return { requested: true, status: "failed", message: "The job was saved, but the calendar invite could not be sent." };
+    return receipt({ requested: true, status: "failed", message: "The job was saved, but the calendar invite could not be sent." });
   }
 }

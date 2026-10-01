@@ -7,6 +7,7 @@ import type { User } from "firebase/auth";
 import type { JobStockRequirement, JobStockSummary } from "@/lib/trade-stock";
 import { TradeStockJobPanel } from "./TradeStockJobPanel";
 import stockStyles from "./TradeStockJobPanel.module.css";
+import preparationStyles from "./TradeJobPreparation.module.css";
 
 type Requirement = { id: string; phaseId: string; type: string; description: string; status: string; quantityMilli: number; expectedDurationMinutes: number; requiredCapability: string; totalCostCents: number; actualQuantityMilli: number; actualDurationMinutes: number; actualCostCents: number; actualNote: string; actualRecorded: boolean };
 type Data = {
@@ -24,18 +25,19 @@ type StockUseDraft = { mode: "single" | "split"; locationId: string; quantities:
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 const label = (value: string) => value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
 
-export function TradeJobReadinessPanel({ user, workOrderId, onOpenTeam, onChanged }: { user: User; workOrderId: string; onOpenTeam: () => void; onChanged: () => Promise<void> }) {
+export function TradeJobReadinessPanel({ user, workOrderId, onOpenTeam, onChanged, preparation }: { user: User; workOrderId: string; onOpenTeam: () => void; onChanged: () => Promise<void>; preparation?: { hasBooking: boolean; onOpenFiles: () => void; onOpenPlan: () => void; onOpenQuote: () => void } }) {
   const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<Data | null>(null); const [busy, setBusy] = useState(""); const [status, setStatus] = useState("");
   const [drafts, setDrafts] = useState<Record<string, ActualDraft>>({});
   const [stockUseDrafts, setStockUseDrafts] = useState<Record<string, StockUseDraft>>({});
   const actionRequest = useRef<AbortController | null>(null);
+  const preparing = Boolean(preparation);
   const load = useCallback(async (signal: AbortSignal) => {
     const token = await user.getIdToken(); if (signal.aborted) return;
-    const response = await fetch(`/api/trade-job-readiness?workOrderId=${encodeURIComponent(workOrderId)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
+    const response = await fetch(`/api/trade-job-readiness?workOrderId=${encodeURIComponent(workOrderId)}${preparing ? "&preparation=1" : ""}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
     const result = await response.json().catch(() => ({})); if (signal.aborted) return;
     if (!response.ok) throw new Error(result.error || "Job readiness could not be loaded."); setData(result as Data);
-  }, [fetch, user, workOrderId]);
+  }, [fetch, user, workOrderId, preparing]);
   useEffect(() => {
     const request = new AbortController();
     const frame = requestAnimationFrame(() => void load(request.signal).catch((error) => { if (!request.signal.aborted) setStatus(error instanceof Error ? error.message : "Job readiness could not be loaded."); }));
@@ -112,7 +114,19 @@ export function TradeJobReadinessPanel({ user, workOrderId, onOpenTeam, onChange
     </div>;
   }
   if (!data) return <section className="crm-job-readiness empty"><span>Ready-to-run job</span><p>{status || "Checking the accepted scope..."}</p></section>;
-  if (!data.handoff) return <section className="crm-job-readiness empty"><span>Next step</span><h4>Accept the quote first</h4><p>The accepted scope becomes the job plan automatically, with no retyping.</p></section>;
+  if (!data.handoff) return <section className="crm-job-readiness empty"><span>Next step</span><h4>{preparation ? "Accepted scope needs review" : "Accept the quote first"}</h4><p>{preparation ? "The current customer and accepted quote could not be matched. Review the quote before preparing this work." : "Prepare the work plan from the accepted quote, with no retyping."}</p>{preparation && <button type="button" onClick={preparation.onOpenQuote}>Review quote</button>}</section>;
+  if (preparation) return <section className={preparationStyles.panel} aria-label="Accepted job preparation">
+    <header><div><span>Accepted work</span><h4>Prepare this job</h4><p>Keep the accepted scope, worker, visit and forms together.</p></div><button type="button" onClick={preparation.onOpenQuote}>Accepted quote</button></header>
+    {data.plan ? <>
+      <details className={preparationStyles.scope}><summary>Accepted scope · {data.plan.commercialReference}</summary>{data.phases.map((phase) => <div key={phase.id}><strong>{phase.title}</strong>{phase.customerDescription && <p>{phase.customerDescription}</p>}<ul>{data.requirements.filter(item => item.phaseId === phase.id && item.type !== "form").map(item => <li key={item.id}>{item.description}</li>)}</ul></div>)}</details>
+      <div className={preparationStyles.steps}>
+        <article><span>Worker and booking</span><strong>{preparation.hasBooking ? "Assigned visits" : data.readiness?.assignedTo || "Choose the worker"}</strong><p>{preparation.hasBooking ? "A visit is booked. Check everyone attending and their work instructions." : "Choose a time and assign each person attending. Choose the right worker for this work."}</p><button type="button" onClick={onOpenTeam}>{preparation.hasBooking ? "View booking" : "Assign and book"}</button></article>
+        <article><span>Forms and files</span><strong>Job paperwork</strong><p>Choose the forms for this work in Files. An optional SWMS is available there too.</p>{data.requirements.some(item => item.type === "form" && item.status !== "not_needed") && <ul>{data.requirements.filter(item => item.type === "form" && item.status !== "not_needed").map(item => <li key={item.id}>{item.description}</li>)}</ul>}<button type="button" onClick={preparation.onOpenFiles}>Open forms and files</button></article>
+        <article><span>Materials and costs</span><strong>{data.requirements.filter(item => item.type === "material" && item.status === "required").length ? "Materials to check" : "Review the work plan"}</strong><p>Check materials and record actual costs when known. Form timing stays separate from labour costs.</p><button type="button" onClick={preparation.onOpenPlan}>Open work plan</button></article>
+      </div>
+    </> : <div className={preparationStyles.start}><p>Bring the accepted quote into this job&apos;s work plan, including any saved packet requirements. No new job is created.</p><button type="button" disabled={Boolean(busy)} onClick={() => void act("prepare")}>{busy ? "Preparing..." : "Prepare from accepted quote"}</button></div>}
+    {status && <p role="status">{status}</p>}
+  </section>;
   if (!data.plan) return <section className="crm-job-readiness empty"><span>Accepted scope</span><h4>Prepare the job in one click</h4><p>TLink will carry the issued packet tasks, forms, crew, time and known costs into a practical job checklist.</p><button type="button" disabled={Boolean(busy)} onClick={() => void act("prepare")}>{busy ? "Preparing..." : "Prepare ready-to-run job"}</button>{status && <p role="status">{status}</p>}</section>;
   const checks = [["scope", "Scope", "Accepted work is grouped into clear phases."], ["forms", "Forms", "Required paperwork is attached and confirmed."], ["people", "Technician", data.readiness?.assignedTo ? `Assigned to ${data.readiness.assignedTo}.` : "Assign yourself or an active technician."], ["materials", "Materials", "Confirm required products before dispatch."], ["deposit", "Deposit", "Manage any required payment through your approved process outside TLink."]] as const;
   const working = ["ready", "in_progress", "completed"].includes(data.plan.status);

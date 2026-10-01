@@ -232,6 +232,49 @@ test("ageing correctly separates due today, overdue ranges and missing due dates
   const report=await f.report(); assert.equal(report.receivables.buckets.find(row=>row.key==="Not overdue").cents,11000); assert.equal(report.receivables.buckets.find(row=>row.key==="31 to 60 days").cents,11000); assert.equal(report.receivables.buckets.find(row=>row.key==="No due date").cents,11000);
 });
 
+test("payment follow-up uses current net balances, oldest overdue first and authorised job references", async t => {
+  const f=fixture(); t.after(() => f.db.close());
+  for (const [id,due,paid] of [["oldest","2026-08-01",3000],["recent","2026-09-18",0],["today","2026-09-20",0],["undated","",0],["paid","2026-07-01",11000]]) {
+    f.job(id,{ work_number:`TLJ-${id}`,title:`Work ${id}`,assignee_member_id:"me" },{ paid_value_cents:paid }); f.invoice(id,{due_at:due,sent_at:"2026-08-01T00:00Z"});
+  }
+  f.insert("trade_crm_quick_invoice_credits",{id:"credit",invoice_id:"i-oldest",work_order_id:"oldest",firebase_uid:"owner",status:"issued",total_cents:2200,tax_cents:200});
+  f.job("private",{source_type:"opportunity",title:"Private contact name",assignee_member_id:"other"}); f.invoice("private",{due_at:"2026-01-01"});
+  const owned=await f.report({}, {isOwner:false,jobScope:"own",memberId:"me"});
+  assert.deepEqual(owned.receivables.items.map(item=>item.jobId),["oldest","recent","today","undated"]);
+  assert.equal(owned.receivables.items[0].balanceCents,5800); assert.equal(owned.receivables.items[0].overdueDays,50);
+  assert.equal(owned.receivables.items[2].overdueDays,0); assert.equal(owned.receivables.items[3].overdueDays,null);
+  const owner=await f.report(); assert.equal(owner.receivables.items[0].title,"Protected job");
+  assert.equal((await f.report({}, {canViewInvoices:false})).receivables,null);
+  assert.equal(owned.current.invoicedCents,0); // Old invoices still need collection; they are not current-period sales.
+});
+
+test("completed cost coverage stays separate from invoicing and never substitutes app time for actual labour", async t => {
+  const f=fixture(); t.after(() => f.db.close()); costJob(f,"complete"); costJob(f,"missing",false); costJob(f,"invoice-needed");
+  f.db.exec("UPDATE trade_crm_quick_invoices SET status='draft' WHERE work_order_id='invoice-needed'; UPDATE trade_crm_quick_invoices SET sent_at='2026-08-01T00:00Z' WHERE work_order_id='complete'");
+  f.db.exec("CREATE TABLE trade_work_time_sessions(work_order_id TEXT,active_seconds INTEGER,elapsed_seconds INTEGER); INSERT INTO trade_work_time_sessions VALUES ('missing',360000,900000)");
+  const report=await f.report(); const p=report.profitability;
+  assert.equal(report.current.invoicedCents,10000); assert.equal(p.revenueCents,20000);
+  assert.deepEqual(p.coverage,{invoiceNeeded:1,planNeeded:0,scopeReview:0,costsNeeded:1,missingCosts:2});
+  assert.equal(p.completeJobs,1); assert.equal(p.labourMinutes,240); assert.equal(p.labourCents,4000);
+  assert.equal(p.items.find(item=>item.id==='missing').marginCents,null);
+  assert.deepEqual(p.attentionItems.map(item=>item.id).sort(),['invoice-needed','missing']);
+  assert.ok(p.items.slice(0,2).every(item=>item.status!=='complete'));
+  const hidden=await f.report({}, {isOwner:false,canViewPriceBook:false}); assert.equal(hidden.profitability,null);
+});
+
+test("crew lead workload includes own crew visits but excludes another crew on the same job", async t => {
+  const f=fixture(); t.after(() => f.db.close());
+  for (const member of ['me','teammate','other']) f.insert('trade_team_members',{id:member,owner_uid:'owner',status:'active'});
+  f.insert('trade_crews',{id:'crew',owner_uid:'owner',lead_member_id:'me'});
+  for (const member of ['me','teammate']) f.insert('trade_crew_members',{owner_uid:'owner',crew_id:'crew',member_id:member});
+  f.job('crew-work',{assignee_member_id:'teammate'}); f.job('other-work',{assignee_member_id:'other'});
+  for (const [id,job,member] of [['crew-visit','crew-work','teammate'],['shared-outsider','crew-work','other'],['outside','other-work','other']]) {
+    f.insert('trade_crm_appointments',{id,work_order_id:job,firebase_uid:'owner',assignee_member_id:member,starts_at:'2026-09-21T09:00',ends_at:'2026-09-21T11:00',status:'scheduled'});
+  }
+  const report=await f.report({}, {isOwner:false,memberId:'me',jobScope:'own',scheduleScope:'team',crewId:'crew',crewLead:true,crewMemberIds:['me','teammate']});
+  assert.equal(report.current.newJobs,1); assert.deepEqual(report.team.map(item=>[item.key,item.upcomingMinutes]),[['teammate',120]]);
+});
+
 test("large business reports aggregate all records rather than a display page cap", async () => {
   const f=fixture(); f.db.exec("BEGIN"); for(let i=0;i<1200;i++) { f.job(`job-${i}`); f.invoice(`job-${i}`); } f.db.exec("COMMIT");
   const report=await f.report(); assert.equal(report.current.newJobs,1200); assert.equal(report.current.invoiceCount,1200); assert.equal(report.current.invoicedCents,12000000); assert.equal(report.receivables.outstandingCents,13200000);

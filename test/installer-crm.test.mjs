@@ -103,7 +103,8 @@ test("verified installers receive the complete progressive CRM", () => {
   }
   assert.match(crm, /NewJobForm/);
   assert.match(crm, /CustomerForm/);
-  assert.match(crm, /TradeHandoverCentre/);
+  assert.match(crm, /TradeHandoverHistory/);
+  assert.doesNotMatch(crm, /free home account|\["handover", "Handover"\]/);
   assert.match(home, /outstandingCents/);
   assert.match(crm, /min=\{minimumStart\}/);
   assert.match(route, /assertFutureAppointment/);
@@ -580,7 +581,7 @@ test("heavy workspaces load dynamically and profile readiness does not wait for 
   }
 
   const profileLoadStart = dashboard.indexOf("async function loadDashboard()");
-  const profileLoadEnd = dashboard.indexOf("}, [fetch, user]);", profileLoadStart);
+  const profileLoadEnd = dashboard.indexOf("}, [fetch, profileRefresh, user]);", profileLoadStart);
   assert.ok(profileLoadStart >= 0 && profileLoadEnd > profileLoadStart);
   const profileLoad = dashboard.slice(profileLoadStart, profileLoadEnd);
   assert.match(profileLoad, /fetch\("\/api\/trade-profile"/);

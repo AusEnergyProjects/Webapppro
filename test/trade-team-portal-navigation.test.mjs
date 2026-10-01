@@ -7,35 +7,36 @@ import ts from 'typescript';
 const portal = readFileSync(new URL('../src/components/TradeTeamPortal.tsx', import.meta.url), 'utf8');
 const source = ts.createSourceFile('TradeTeamPortal.tsx', portal, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const functions = source.statements.filter(node => ts.isFunctionDeclaration(node)
-  && ['teamCrmShortcuts', 'TeamWorkspaceNavigation'].includes(node.name?.text));
-assert.equal(functions.length, 2);
+  && ['teamWorkspaceLocation', 'teamCrmShortcuts', 'TeamWorkspaceNavigation'].includes(node.name?.text));
+assert.equal(functions.length, 3);
 const executable = ts.transpileModule(functions.map(node => node.getText(source)).join('\n'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText;
 const jsx = (type, props, ...children) => ({ type, props: { ...props, children } });
 const context = {
-  React: { createElement: jsx },
+  React: { createElement: jsx }, URLSearchParams,
   TLinkNavigationIcon: 'Icon', TradeMessageUnreadBadge: 'UnreadBadge',
 };
-runInNewContext(`${executable}\nglobalThis.renderNavigation = TeamWorkspaceNavigation;`, context);
+runInNewContext(`${executable}\nglobalThis.renderNavigation = TeamWorkspaceNavigation;globalThis.workspaceLocation = teamWorkspaceLocation;`, context);
 const flatten = value => Array.isArray(value) ? value.flatMap(flatten)
   : value && typeof value === 'object' ? [value, ...flatten(value.props?.children)] : [];
 const label = value => Array.isArray(value) ? value.map(label).join('')
   : value && typeof value === 'object' ? label(value.props?.children) : typeof value === 'string' ? value : '';
 const base = { jobScope: 'own', scheduleScope: 'own', canViewCustomers: false, canSearchCustomers: false,
   canViewPriceBook: false, canManageTeam: false, canViewQuotes: false, canManageQuotes: false };
-function render(permissions = {}, view = 'work', crmView = 'jobs', crewId) {
+function render(permissions = {}, view = 'business', crmView = 'jobs', crewId) {
   const destinations = [], tree = context.renderNavigation({ permissions: { ...base, ...permissions }, view, crmView, crewId,
     onView: id => destinations.push(['portal', id]), onCrm: id => destinations.push(['crm', id]) });
   const buttons = flatten(tree).filter(node => node.type === 'button');
   return { tree, buttons, destinations, button: name => buttons.find(node => label(node) === name) };
 }
 
-test('field staff see Home, work, Connect, jobs and their schedule without restricted tools', () => {
+test('field staff use one Home and Jobs workflow with Connect and their schedule', () => {
   const ui = render();
-  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'My work', 'My time', 'Connect ', 'Jobs', 'Schedule', 'To do & training']);
+  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'To do & training']);
   assert.equal(ui.tree.props['aria-label'], 'Staff workspace');
-  assert.equal(ui.button('My work').props['aria-current'], 'page');
+  assert.equal(ui.button('Jobs').props['aria-current'], 'page');
+  assert.equal(ui.button('My work'), undefined);
   assert.equal(flatten(ui.tree).filter(node => node.type === 'UnreadBadge').length, 1);
   ui.button('Schedule').props.onClick();
   assert.deepEqual(ui.destinations, [['crm', 'schedule']]);
@@ -44,7 +45,7 @@ test('field staff see Home, work, Connect, jobs and their schedule without restr
 test('Home selects the scoped dashboard and Connect keeps its communication destination', () => {
   const ui = render({}, 'business', 'today');
   assert.equal(ui.button('Home dashboard').props['aria-current'], 'page');
-  assert.equal(ui.button('My work').props['aria-current'], undefined);
+  assert.equal(ui.button('Jobs').props['aria-current'], undefined);
   ui.button('Home dashboard').props.onClick();
   ui.button('Connect ').props.onClick();
   assert.deepEqual(ui.destinations, [['crm', 'today'], ['portal', 'messages']]);
@@ -93,7 +94,8 @@ test('direct tools retain the original staff permission object and save map desi
   assert.match(portal, /mapWorkspace=\{portalView === "map"\}/);
   assert.match(portal, /onRegisterMapSave=\{registerMapSave\}/);
   assert.match(portal, /mapNavigation\.run\(\(\) => setPortalViewState\(view\)\)/);
-  assert.match(portal, /permissions\?\.canViewQuotes && <button className="tlink-team-quoteButton"/);
+  assert.doesNotMatch(portal, /TradeFieldWorkPanel|TradeJobFormsPanel|todayJobs|selectedJobId|includeWork=1/);
+  assert.match(portal, /fetch\("\/api\/trade-team",/);
 });
 
 test('crew and time views never imply financial or team administration access', () => {
@@ -101,4 +103,36 @@ test('crew and time views never imply financial or team administration access', 
   ui.button('My crew').props.onClick(); ui.button('My time').props.onClick();
   assert.deepEqual(ui.destinations, [['portal','crew'],['portal','time']]);
   assert.equal(ui.button('Team'), undefined);assert.equal(ui.button('Products'), undefined);assert.equal(ui.button('Customers'), undefined);
+});
+
+
+test('legacy work and saved job links open the canonical workspace and preserve the requested record', () => {
+  for (const workspace of ['work', 'jobs']) {
+    const result = context.workspaceLocation('?workspace=' + workspace);
+    assert.equal(result.view, 'business'); assert.equal(result.target.kind, 'crm-view'); assert.equal(result.target.id, 'jobs');
+  }
+  const job = context.workspaceLocation('?workspace=work&jobId=job-123&jobTab=files');
+  assert.equal(job.target.kind, 'job'); assert.equal(job.target.id, 'job-123'); assert.equal(job.target.jobTab, 'field');
+  for (const tab of ['quote', 'invoice', 'field', 'summary', 'schedule']) assert.equal(context.workspaceLocation('?workspace=work&jobId=job-123&jobTab=' + tab).target.jobTab, tab);
+  assert.equal(context.workspaceLocation('?workspace=work&jobId=%3Cscript%3E').target.kind, 'crm-view');
+  assert.equal(context.workspaceLocation('').target.id, 'today');
+});
+
+test('training, communication and time deep links keep their existing destinations', () => {
+  for (const view of ['training', 'messages', 'time']) {
+    const result = context.workspaceLocation('?workspace=' + view);
+    assert.equal(result.view, view); assert.equal(result.target, null);
+  }
+  assert.match(portal, /window\.addEventListener\("popstate", applyWorkspaceLink\)/);
+  assert.match(portal, /<TradePersonalNameSettings/);
+});
+
+
+test('reports remain discoverable when inner CRM navigation is removed', () => {
+  assert.equal(render().button('Reports'), undefined);
+  const ui = render({ canRunReports: true }, 'business', 'reports');
+  assert.equal(ui.button('Reports').props['aria-current'], 'page');
+  ui.button('Reports').props.onClick();
+  assert.deepEqual(ui.destinations, [['crm', 'reports']]);
+  assert.match(portal, /hideNavigation=\{portalView !== "map"\}/);
 });

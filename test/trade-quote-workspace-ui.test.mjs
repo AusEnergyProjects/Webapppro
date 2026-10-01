@@ -3,21 +3,23 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import * as quoteIndex from "../src/lib/trade-crm-quote-index.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradeQuoteWorkspace.tsx", import.meta.url), "utf8");
-const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
+const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
 const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(item => nodes(item, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
 const button = (tree, name) => nodes(tree, node => node.type === "button" && text(node) === name)[0];
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const job = (id, quoteStatus = "draft", cents = 12345) => ({ id, workNumber: `JOB-${id}`, title: `Job ${id}`, customerDisplayName: "Customer name", quoteStatus, jobRegister: { quoteTotalExGstCents: cents } });
-const response = (items = [job("one")], pagination = {}) => ({ ok: true, json: async () => ({ ok: true, items, pagination: { page: 1, pageSize: 25, total: items.length, pageCount: 1, hasNext: false, nextCursor: "", ...pagination } }) });
+const job = (id, status = "draft", cents = 12345) => ({ id, workNumber: `JOB-${id}`, title: `Job ${id}`, customerName: "Customer name", status, versionNumber: status === "not_started" ? null : 1, quoteNumber: "", totalCents: cents, hasChoices: false, latestIssued: null, delivery: null });
+const response = (items = [job("one")], pagination = {}) => ({ ok: true, json: async () => ({ ok: true, items, access: { permissions: { canManageQuotes: true, jobScope: "team" } }, counts: { preparing: items.length, awaiting: 0, accepted: 0, history: 0 }, pagination: { page: 1, pageSize: 25, total: items.length, pageCount: 1, hasNext: false, nextCursor: "", ...pagination } }) });
 
 function harness(responder) {
   let cursor = 0;
   const state = [], effects = [], pending = [], requests = [], opened = [];
   const exports = {};
   let created = 0;
+  let business = { ownerUid: "owner-1" };
   const user = { uid: "owner-1", getIdToken: async () => "token" };
   const hooks = {
     useState(initial) {
@@ -32,30 +34,30 @@ function harness(responder) {
       }
     },
   };
-  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : {};
+  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/trade-crm-quote-index" ? quoteIndex : id === "./TradeBusinessProvider" ? { useTradeBusinessFetch: () => fetch, useTradeBusiness: () => business } : { default: {} };
   const fetch = async (url, init) => { requests.push({ url, init }); return responder(url, init); };
   Function("require", "exports", "fetch", compiled)(require, exports, fetch);
   const render = () => {
     cursor = 0;
-    const tree = exports.TradeQuoteWorkspace({ user, onOpenJob: id => opened.push(id), onNewQuote: () => created++ });
+    const tree = exports.TradeQuoteWorkspace({ user, onOpenJob: (id, tab) => opened.push({ id, tab }), onNewQuote: () => created++ });
     for (const effect of pending.splice(0)) effect();
     return tree;
   };
-  return { render, requests, opened, get created() { return created; }, async mount() { render(); await flush(); return render(); }, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
+  return { render, requests, opened, setBusiness(ownerUid) { business = { ownerUid }; }, get created() { return created; }, async mount() { render(); await flush(); return render(); }, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
 }
 
-test("quotes use the authorised server index and preserve unquoted records and exact quote amounts", async t => {
+test("quotes use the dedicated server index and preserve explicit preparation records and exact quote amounts", async t => {
   const h = harness(async () => response([job("draft"), job("none", "not_started", null), job("free", "accepted", 0)]));
   t.after(() => h.cleanup());
   const tree = await h.mount(), params = new URL(h.requests[0].url, "https://tlink.test").searchParams;
-  assert.equal(params.get("mode"), "index"); assert.equal(params.get("resource"), "jobs"); assert.equal(params.get("filter"), "all");
-  assert.equal(params.get("sort"), "updated-desc"); assert.equal(params.get("pageSize"), "25");
+  assert.equal(params.get("mode"), "index"); assert.equal(params.get("resource"), "quotes"); assert.equal(params.get("view"), "preparing");
+  assert.equal(params.has("filter"), false); assert.equal(params.get("pageSize"), "25");
   assert.equal(h.requests[0].init.headers.Authorization, "Bearer token"); assert.equal(h.requests[0].init.cache, "no-store");
   assert.equal(nodes(tree, node => node.props?.role === "listitem").length, 3);
-  assert.match(text(tree), /Not quoted/); assert.match(text(tree), /\$123\.45/); assert.match(text(tree), /\$0\.00/);
-  assert.match(text(tree), /Quote total ex GST/);
-  button(tree, "Open quote").props.onClick(); button(tree, "Open job").props.onClick(); button(tree, "New quote").props.onClick();
-  assert.deepEqual(h.opened, ["draft", "none"]); assert.equal(h.created, 1);
+  assert.match(text(tree), /Not priced/); assert.match(text(tree), /\$123\.45/); assert.match(text(tree), /\$0\.00/);
+  assert.match(text(tree), /Quote total incl GST/);
+  button(tree, "Open quote").props.onClick(); button(tree, "Prepare quote").props.onClick(); button(tree, "New quote").props.onClick();
+  assert.deepEqual(h.opened, [{ id: "draft", tab: "quote" }, { id: "none", tab: "quote" }]); assert.equal(h.created, 1);
 });
 
 test("pagination uses server cursors and search resets to the first page", async t => {
@@ -112,4 +114,33 @@ test("a missing continuation cursor is an error instead of silently hiding later
   const tree = await h.mount();
   assert.match(text(tree), /quote list could not be loaded/); assert.ok(button(tree, "Try again"));
   assert.equal(button(tree, "Next"), undefined);
+});
+
+test("view changes reset pagination and accepted quotes open existing job preparation", async t => {
+  const h = harness(async url => {
+    const view = new URL(url, "https://tlink.test").searchParams.get("view");
+    return response([job(view, view === "accepted" ? "accepted" : "draft")], { total: 26, pageCount: 2, hasNext: true, nextCursor: "first-page" });
+  });
+  t.after(() => h.cleanup());
+  let tree = await h.mount(); button(tree, "Next").props.onClick(); h.render(); await flush(); tree = h.render();
+  nodes(tree, node => node.type === "button" && text(node).startsWith("Accepted"))[0].props.onClick(); h.render(); await flush(); tree = h.render();
+  const params = new URL(h.requests.at(-1).url, "https://tlink.test").searchParams;
+  assert.equal(params.get("view"), "accepted"); assert.equal(params.get("page"), "1"); assert.equal(params.has("cursor"), false);
+  button(tree, "Prepare job").props.onClick(); assert.deepEqual(h.opened, [{ id: "accepted", tab: "summary" }]);
+});
+
+test("issued delivery is distinct from customer decision while preparing a replacement", async t => {
+  const item = { ...job("draft"), versionNumber: 2, latestIssued: { versionNumber: 1, status: "issued", issuedAt: "2026-10-02T03:00:00.000Z", decidedAt: "" }, delivery: { status: "provider_accepted", label: "Email accepted for delivery" } };
+  const h = harness(async () => response([item])); t.after(() => h.cleanup());
+  const tree = await h.mount();
+  assert.match(text(tree), /Version 2/); assert.match(text(tree), /Version\s+1\s+:.*Awaiting customer/);
+  assert.match(text(tree), /Email accepted for delivery/); assert.doesNotMatch(text(tree), /Overdue|Schedule this job/);
+});
+
+test("switching business hides prior customer and quote data before the replacement fetch settles", async t => {
+  let release;
+  const h = harness(async () => h.requests.length === 1 ? response([job("previous-business")]) : new Promise(resolve => release = resolve)); t.after(() => h.cleanup());
+  let tree = await h.mount(); assert.match(text(tree), /JOB-previous-business/);
+  h.setBusiness("other-business"); tree = h.render(); assert.doesNotMatch(text(tree), /JOB-previous-business|Customer name|\$123/); assert.match(text(tree), /Loading quotes/);
+  await flush(); release(response([job("new-business")])); await flush(); tree = h.render(); assert.match(text(tree), /JOB-new-business/);
 });

@@ -58,6 +58,7 @@ import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
 import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlerts";
 
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
+const DirectTradePartnerForm = dynamic(() => import("./DirectTradePartnerForm").then((module) => module.DirectTradePartnerForm), { loading: () => <p role="status">Opening business setup...</p> });
 const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace").then((module) => module.TradePriceBookWorkspace));
 const TradeEmailTemplatesWorkspace = dynamic(() => import("./TradeEmailTemplatesWorkspace").then((module) => module.TradeEmailTemplatesWorkspace));
 const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then((module) => module.TradeMessagesWorkspace), { loading: () => <p role="status">Loading messages...</p> });
@@ -809,9 +810,22 @@ function DirectTradeDashboardContent() {
   const [messageTarget, setMessageTarget] = useState({ id: "", revision: 0 });
   const [authReady, setAuthReady] = useState(false);
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
+  const [profileRefresh, setProfileRefresh] = useState(0);
+  const [profileSetupOpen, setProfileSetupOpen] = useState(false);
+  const [initialAuthMode, setInitialAuthMode] = useState<"create" | "signin">("signin");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [mfaRequired, setMfaRequired] = useState(false);
+  function closeBusinessSetup() {
+    setProfileSetupOpen(false);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("setup");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+  function businessProfileSaved() {
+    closeBusinessSetup();
+    setProfileRefresh(value => value + 1);
+  }
   async function leaveAccount() {
     try {
       await disableTradeDeviceNotifications(async ():Promise<Record<string,string>> => user ? {Authorization: `Bearer ${await user.getIdToken()}`} : {}, fetch);
@@ -1249,6 +1263,9 @@ function DirectTradeDashboardContent() {
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
+      const setup = new URLSearchParams(window.location.search).get("setup");
+      setProfileSetupOpen(setup === "business");
+      setInitialAuthMode(setup ? "create" : "signin");
       const returned = readIntegrationReturn(window.location.search);
       if (!returned) return;
       if (isCalendarIntegration(returned.provider)) {
@@ -1345,7 +1362,7 @@ function DirectTradeDashboardContent() {
     return () => {
       cancelled = true;
     };
-  }, [fetch, user]);
+  }, [fetch, profileRefresh, user]);
 
   useEffect(() => {
     if (profile?.partnerType === "supplier" && (workspace === "calculator" || workspace === "map" || workspace === "design")) {
@@ -1435,11 +1452,12 @@ function DirectTradeDashboardContent() {
     profile.addressState &&
     /^\d{4}$/.test(profile.postcode),
   );
-  const workspaceVisible = Boolean(authReady && !loading && user && !error && profile?.accountStatus !== "closed" && profileComplete && profile?.entitlements.verified);
+  const workspaceVisible = Boolean(authReady && !loading && user && !error && !profileSetupOpen && profile?.accountStatus !== "closed" && profileComplete && profile?.entitlements.verified);
   const dashboardFooter = <SiteFooter>
     Free TLink access does not replace trade licensing, government
     accreditation, scheme approval, insurance, product compliance or
     customer obligations.
+    {" "}<a href="/direct-trade/standards">Marketplace and customer standards</a>.
   </SiteFooter>;
   const offeredCount = opportunities.filter((item) =>
     ["offered", "viewed"].includes(item.matchStatus),
@@ -2116,7 +2134,7 @@ function DirectTradeDashboardContent() {
 
   return (
     <TradeMessageAlerts user={user} enabled={Boolean(profile?.entitlements.verified && profile.partnerType === "installer")} onOpen={threadId => { void setWorkspace("messages", () => setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 }))); }}><TradeTeamCallProvider user={user} enabled={Boolean(profile?.entitlements.verified && profile.partnerType === "installer")}><main className="wrap direct-trade-dashboard-page">
-      <TLinkHeader active="dashboard" />
+      {!workspaceVisible && <TLinkHeader active="dashboard" />}
       {user && mfaRequired && <p className="crm-status" role="status">Your account needs authenticator verification. <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</p>}
       {authReady && user && installerPlanPreview && (
         <CustomerPlanReportPreviewDialog
@@ -2313,25 +2331,14 @@ function DirectTradeDashboardContent() {
           <p>Preparing your TLink dashboard...</p>
         </section>
       ) : !user ? (
-        <section className="dashboard-state-card">
-          <span>Account required</span>
-          <h1>Sign in to open your dashboard</h1>
-          <p>
-            Use the same Google account or business email used to create the
-            trade profile.
-          </p>
-          <a className="btn" href="/direct-trade/partners">
-            Sign in or create an account
-          </a>
-        </section>
+        <DirectTradePartnerForm key={initialAuthMode} initialMode={initialAuthMode} onSaved={businessProfileSaved} onSignOut={leaveAccount} />
       ) : error ? (
         <section className="dashboard-state-card">
           <span>Dashboard unavailable</span>
           <h1>We could not load this account</h1>
           <p>{error}</p>
-          <a className="btn" href="/direct-trade/partners">
-            Return to account setup
-          </a>
+          <button className="btn" type="button" onClick={() => setProfileRefresh(value => value + 1)}>Try again</button>
+          <button type="button" onClick={() => void leaveAccount()}>Sign out</button>
         </section>
       ) : profile?.accountStatus === "closed" ? (
         <section className="dashboard-state-card">
@@ -2351,18 +2358,8 @@ function DirectTradeDashboardContent() {
             Sign out
           </button>
         </section>
-      ) : !profile || !profileComplete ? (
-        <section className="dashboard-state-card">
-          <span>Profile required</span>
-          <h1>Finish the business profile first</h1>
-          <p>
-            Add the required business address, service coverage and capabilities
-            before using the dashboard.
-          </p>
-          <a className="btn" href="/direct-trade/partners">
-            Complete business profile
-          </a>
-        </section>
+      ) : !profile || !profileComplete || profileSetupOpen ? (
+        <DirectTradePartnerForm key={user.uid} onSaved={businessProfileSaved} onCancel={profileComplete ? closeBusinessSetup : undefined} onSignOut={leaveAccount} />
       ) : !profile.entitlements.verified ? (
         <section className="dashboard-state-card">
           <span>Application review required</span>
@@ -2376,7 +2373,9 @@ function DirectTradeDashboardContent() {
             <a className="btn" href="/direct-trade/dashboard/verification">
               Open application status
             </a>
-            <a href="/direct-trade/partners">Update business profile</a>
+            <button type="button" onClick={() => setProfileSetupOpen(true)}>Update business profile</button>
+            <button type="button" onClick={() => setProfileRefresh(value => value + 1)}>Refresh application status</button>
+            <button type="button" onClick={() => void leaveAccount()}>Sign out</button>
           </div>
           <TradeAccessPanel profile={profile} />
         </section>
@@ -2394,9 +2393,8 @@ function DirectTradeDashboardContent() {
             }}
           >
             <div className="trade-portal-brand">
-              <TLinkBrand context={isSupplier ? "Wholesaler control centre" : "Installer control centre"} />
+              <TLinkBrand context={isSupplier ? "Wholesale workspace" : "Business workspace"} />
             </div>
-            <AeaProductLink placement="trade-portal" />
             <TLinkCommandCentre
               user={user}
               partnerType={isSupplier ? "supplier" : "installer"}
@@ -2435,21 +2433,24 @@ function DirectTradeDashboardContent() {
                 </svg>
               </span>
             </button>
-            <div className="dashboard-account-actions">
+            <details className="dashboard-account-menu" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+              <summary><span>Business</span><span aria-hidden="true">⌄</span></summary>
+              <div className="dashboard-account-actions">
+              <AeaProductLink placement="trade-portal" />
               {!isSupplier && <TradeTeamPresence key={user.uid} getAuthHeaders={async () => ({ Authorization: `Bearer ${await user.getIdToken()}` })} />}
               {!isSupplier && <a className="tlink-get-app" href="/direct-trade/field-app"><Image src="/tlink-icon-192.png" alt="" width={25} height={25} /><span>Get the app</span></a>}
-              <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
               <div className="dashboard-account-summary">
                 <small>Business account</small>
                 <strong title={user.email || ""}>{profile.businessName}</strong>
               </div>
-              <button type="button" onClick={() => setWorkspace("account")}>
-                Business
+              <button type="button" onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); setWorkspace("account"); }}>
+                Business settings
               </button>
               <button type="button" onClick={() => void leaveAccount()}>
                 Sign out
               </button>
             </div>
+            </details>
           </header>
 
           {isSupplier && workspace !== "map" && workspace !== "design" && workspace !== "network" && workspace !== "email-templates" && workspace !== "messages" && <div className="trade-portal-intro">

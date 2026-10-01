@@ -276,7 +276,7 @@ test("desktop categories and the mobile page browser use lightweight native disc
 
 test("direct trade proposition presents the free verified operating model honestly", () => {
   assert.match(guide, /href="\/direct-trade\/standards"/);
-  assert.match(guide, /href="\/direct-trade\/partners"/);
+  assert.match(guide, /href="\/direct-trade\/dashboard\?setup=1"/);
   assert.match(matchingDialog, /We do not sell leads or let businesses pay for placement/);
   assert.doesNotMatch(guide, /Live service, expanding tool|direct-trade-status/);
 });
@@ -419,7 +419,8 @@ test("public discovery metadata is complete and private operations stay excluded
   assert.match(robots, /\/operations\//);
   assert.match(robots, /\/api\//);
   assert.match(robots, /sitemap\.xml/);
-  assert.match(sitemap, /\/direct-trade\/access/);
+  assert.match(sitemap, /\/direct-trade\/standards/);
+  assert.doesNotMatch(sitemap, /\/direct-trade\/(?:access|partners|dashboard)/);
   assert.match(sitemap, /\/wattzun/);
   assert.doesNotMatch(sitemap, /url: `\$\{SITE_URL\}\/surge`/);
   assert.doesNotMatch(sitemap, /\/operations/);

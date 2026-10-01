@@ -73,7 +73,7 @@ export function GettingStarted() {
       <div className={styles.resourceLinks}><Link href="/guides">Browse all guides, rebates and examples</Link><Link href="/rebates">Rebates & assistance</Link><Link href="/direct-trade/standards">Read the marketplace standards</Link></div>
     </section>
     <section className={styles.finalCta} aria-labelledby="home-next-title"><div><span className={styles.eyebrow}>Your next step starts here</span><h2 id="home-next-title">Let&apos;s get your home moving forward.</h2><p>One request. The right service. Your choice.</p></div><a className={styles.primaryLink} href="#home-enquiry">Tell us what you need <span aria-hidden="true">↗</span></a></section>
-    <aside className={styles.partners}><p><strong>Good at what you do?</strong> Approved trades and reputable suppliers can connect through TLink.</p><Link href="/direct-trade/partners">Trade and supplier participation</Link></aside>
+    <aside className={styles.partners}><p><strong>Good at what you do?</strong> Approved trades and reputable suppliers can connect through TLink.</p><Link href="/direct-trade/dashboard?setup=1">Trade and supplier participation</Link></aside>
     <SiteFooter>Prices, rebates and rules can change. Confirm the full quote, credentials and conditions before you commit. Need help? <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a>.</SiteFooter>
   </main>;
 }

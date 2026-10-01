@@ -21,7 +21,7 @@ export default function RentalAssessmentRequestPage() {
       <div className="assessment-asat"><strong>This form does not book a job</strong><span>We first confirm authority, scope, price, property access and appointment details. A TLink job is created and assigned only after that review.</span></div>
     </header>
     <PublicRentalAssessmentRequestForm />
-    <section className="assessment-upload-boundary"><div><span>Already working with us?</span><h2>Your assessor can also complete the workflow from TLink</h2><p>Assigned assessors see their schedule, open the job, save each section and issue the final report from the app or web portal.</p></div><Link href="/direct-trade/access">Open TLink access</Link></section>
+    <section className="assessment-upload-boundary"><div><span>Already working with us?</span><h2>Your assessor can also complete the workflow from TLink</h2><p>Assigned assessors see their schedule, open the job, save each section and issue the final report from the app or web portal.</p></div><Link href="/direct-trade/dashboard">Open TLink access</Link></section>
     <SiteFooter>Do not place tenant identity details, access codes, payment information or documents in this public request. We will collect only what is needed after authority and scope are confirmed.</SiteFooter>
   </main>;
 }

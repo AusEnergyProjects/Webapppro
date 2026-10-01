@@ -2,6 +2,7 @@ import type { TeamAccess } from "./trade-team-server";
 import { DEFAULT_FOLLOW_UP_SETTINGS, DEFAULT_FOLLOW_UP_TEMPLATES, followUpTemplate, followUpSettings,
   renderFollowUp, followUpJobSubject, followUpLocalTime, followUpAppointmentEpoch, followUpTimingHours, type FollowUpTemplate } from "./trade-follow-ups.ts";
 import { australianAppointmentTimeZone } from "./customer-appointment-calendar.ts";
+import { jobMemberSql } from "./trade-job-collaboration.ts";
 
 type Row = Record<string, unknown>;
 export type FollowUpServices = {
@@ -78,7 +79,7 @@ export async function followUpContext(db: D1Database, services: FollowUpServices
     LEFT JOIN trade_crm_service_sites s ON s.id=d.service_site_id AND s.firebase_uid=w.firebase_uid AND s.record_status='active'
     WHERE w.id=? AND w.firebase_uid=? AND w.partner_type='installer' AND w.record_status='active'
     AND w.source_type<>'opportunity' AND d.customer_source IN ('trade_owned','public_lead_released')
-    AND (?=1 OR w.assignee_member_id=?)`)
+    AND (?=1 OR ${jobMemberSql("w")})`)
     .bind(workOrderId, access.ownerUid, access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId).first<Row>();
   if (!row || row.stage === "cancelled" || row.pipeline_stage === "lost") invalid("EMAIL_RECIPIENT_UNAVAILABLE");
   if (row.source_type === "public_lead") {

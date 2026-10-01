@@ -1,0 +1,5 @@
+.setup { margin: 24px auto; max-width: 1240px; }
+.setup h1 { font-size: clamp(1.6rem, 3vw, 2.2rem); line-height: 1.2; margin: 5px 0 10px; }
+.standards { color: var(--color-aea-muted); font-size: .75rem; line-height: 1.6; margin: 18px 0; }
+.standards a { color: var(--color-aea-green-dark); font-weight: 700; }
+@media (max-width: 600px) { .setup { margin-top: 16px; } }

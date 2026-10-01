@@ -56,9 +56,7 @@ const routes = [
   "/team",
   "/trusted-suppliers",
   "/direct-trade",
-  "/direct-trade/partners",
   "/direct-trade/integrations",
-  "/direct-trade/access",
   "/direct-trade/standards",
 ] as const;
 

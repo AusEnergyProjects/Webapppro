@@ -3,6 +3,7 @@ import { addReportDays, ReportInputError, reportTrendWindows, resolveReportPerio
 import { australiaLocalDateTime } from "./trade-schedule.ts";
 import { tradeJobNeedsSchedulingSql } from "./trade-job-scheduling-attention.ts";
 import { jobMemberSql } from "./trade-job-collaboration.ts";
+import { crewScheduleMemberIds } from "./trade-crews.ts";
 
 export type ReportAccess = { isOwner: boolean; memberId: string; jobScope: string; scheduleScope: string; canViewInvoices: boolean; canViewQuotes: boolean; canViewPriceBook?: boolean;
   crewId?: string; crewLead?: boolean; crewMemberIds?: string[] };
@@ -105,11 +106,13 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
   const service = params.get("service") || ""; const region = params.get("state") || "";
   if (!/^[a-zA-Z0-9_-]{0,80}$/.test(service) || !["", "unknown", "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"].includes(region)) throw new ReportInputError("Choose a valid service and region.");
   const args = [uid, access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId, service, service, region, region];
-  const teamSchedule = access.isOwner || access.scheduleScope === "team" ? 1 : 0;
+  const scheduleMembers = crewScheduleMemberIds(access);
+  const teamSchedule = scheduleMembers === null ? 1 : 0;
+  const scheduleMembersJson = JSON.stringify(scheduleMembers || []);
   if (period.preset === "all") {
     const history = await db.prepare(`${base}${events} SELECT
       (SELECT datetime(MIN(julianday(at))) FROM events WHERE julianday(at)<=julianday(?) AND (kind NOT IN ('invoicedCents','invoiceCount','creditCents','invoiceGstCents','creditGstCents') OR ?=1) AND (kind NOT IN ('quoteIssues','wonQuotes','declinedQuotes','wonCents') OR ?=1)) first_utc,
-      (SELECT MIN(substr(a.starts_at,1,10)) FROM trade_crm_appointments a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid WHERE j.stage<>'cancelled' AND j.pipeline_stage<>'lost' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND date(a.starts_at) IS NOT NULL AND substr(a.starts_at,1,10)<=? AND (?=1 OR a.assignee_member_id=?)) first_visit`).bind(...args, now.toISOString(), access.canViewInvoices ? 1 : 0, access.canViewQuotes ? 1 : 0, period.today, teamSchedule, access.memberId).first<Row>();
+      (SELECT MIN(substr(a.starts_at,1,10)) FROM trade_crm_appointments a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid WHERE j.stage<>'cancelled' AND j.pipeline_stage<>'lost' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND date(a.starts_at) IS NOT NULL AND substr(a.starts_at,1,10)<=? AND (?=1 OR a.assignee_member_id IN (SELECT value FROM json_each(?)))) first_visit`).bind(...args, now.toISOString(), access.canViewInvoices ? 1 : 0, access.canViewQuotes ? 1 : 0, period.today, teamSchedule, scheduleMembersJson).first<Row>();
     const firstUtc = history?.first_utc ? australiaLocalDateTime(state, new Date(`${String(history.first_utc).replace(" ", "T")}Z`)).slice(0, 10) : period.today;
     const firstDay = [firstUtc, String(history?.first_visit || period.today)].sort()[0];
     period = resolveReportPeriod(params, state, now, firstDay);
@@ -131,12 +134,12 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
       SELECT bucket, COUNT(CASE WHEN balance>0 THEN 1 END) count, SUM(balance) cents, SUM(MAX(0,paid)) paid, SUM(undated) undated_count, SUM(CASE WHEN undated=1 THEN total ELSE 0 END) undated_cents FROM aged GROUP BY bucket`).bind(...args, period.today, period.today, period.today, period.today),
     db.prepare(`${base}, windows AS (SELECT json_extract(value,'$.id') id, json_extract(value,'$.start') start, json_extract(value,'$.end') end FROM json_each(?)), visits AS (
       SELECT a.*, MAX(0,ROUND((julianday(a.ends_at)-julianday(a.starts_at))*1440)) minutes FROM trade_crm_appointments a JOIN jobs j ON j.id=a.work_order_id AND j.firebase_uid=a.firebase_uid
-      WHERE j.stage<>'cancelled' AND j.pipeline_stage<>'lost' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND (?=1 OR a.assignee_member_id=?)
+      WHERE j.stage<>'cancelled' AND j.pipeline_stage<>'lost' AND a.status IN ('scheduled','en_route','arrived','in_progress','completed') AND (?=1 OR a.assignee_member_id IN (SELECT value FROM json_each(?)))
     ) SELECT r.id period, a.assignee_member_id member, MAX(COALESCE(NULLIF(m.display_name,''),NULLIF(a.assignee_label,''),'Unassigned')) label,
       COUNT(*) visits, SUM(CASE WHEN a.status='completed' THEN 1 ELSE 0 END) completed,
       SUM(COALESCE(a.minutes,0)) minutes, SUM(CASE WHEN a.minutes IS NULL OR a.minutes<=0 THEN 1 ELSE 0 END) missing
       FROM windows r JOIN visits a ON substr(a.starts_at,1,10)>=r.start AND substr(a.starts_at,1,10)<r.end AND (r.id<>'upcoming' OR a.status<>'completed')
-      LEFT JOIN trade_team_members m ON m.id=a.assignee_member_id AND m.owner_uid=a.firebase_uid GROUP BY r.id,a.assignee_member_id`).bind(...args, scheduleRanges, access.isOwner || access.scheduleScope === "team" ? 1 : 0, access.memberId),
+      LEFT JOIN trade_team_members m ON m.id=a.assignee_member_id AND m.owner_uid=a.firebase_uid GROUP BY r.id,a.assignee_member_id`).bind(...args, scheduleRanges, teamSchedule, scheduleMembersJson),
     db.prepare(`${base}${native} SELECT
       SUM(CASE WHEN stage NOT IN ('completed','cancelled') AND pipeline_stage<>'lost' THEN 1 ELSE 0 END) open_jobs,
       SUM(CASE WHEN stage='blocked' AND pipeline_stage<>'lost' THEN 1 ELSE 0 END) waiting,
@@ -150,11 +153,21 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
     db.prepare(`${base} SELECT DISTINCT service_category service,region FROM all_jobs ORDER BY service,region`).bind(...args),
     ...(canViewCosts ? [
       db.prepare(`${base}${profitability} SELECT COUNT(*) jobs,COUNT(CASE WHEN status='complete' THEN 1 END) complete_jobs,
+        COUNT(CASE WHEN status='invoice_needed' THEN 1 END) invoice_needed,COUNT(CASE WHEN status='plan_needed' THEN 1 END) plan_needed,
+        COUNT(CASE WHEN status='scope_review' THEN 1 END) scope_review,COUNT(CASE WHEN status='costs_needed' THEN 1 END) costs_needed,SUM(missing_costs) missing_costs,
         SUM(revenue) revenue,SUM(labour) labour,SUM(material) material,SUM(other) other,SUM(minutes) minutes,
         SUM(CASE WHEN status='complete' THEN revenue ELSE 0 END) complete_revenue,
         SUM(CASE WHEN status='complete' THEN revenue-labour-material-other ELSE 0 END) margin FROM profits`).bind(...profitArgs),
-      db.prepare(`${base}${profitability} SELECT * FROM profits ORDER BY completed_at DESC,id DESC LIMIT 50 OFFSET ?`).bind(...profitArgs, (profitPage - 1) * 50),
+      db.prepare(`${base}${profitability} SELECT * FROM profits ORDER BY status='complete',completed_at DESC,id DESC LIMIT 50 OFFSET ?`).bind(...profitArgs, (profitPage - 1) * 50),
     ] : []),
+    ...(access.canViewInvoices ? [db.prepare(`${base}${finance} SELECT o.id job_id,j.work_number,
+      CASE WHEN j.source_type='opportunity' OR j.customer_source='platform_private' THEN 'Protected job' ELSE j.title END title,
+      SUM(o.balance) balance,MIN(CASE WHEN date(o.due_at) IS NOT NULL THEN date(o.due_at) END) due_at,
+      MAX(CASE WHEN date(o.due_at) IS NOT NULL THEN MAX(0,CAST(julianday(?)-julianday(date(o.due_at)) AS INTEGER)) END) overdue_days
+      FROM outstanding o JOIN jobs j ON j.id=o.id WHERE o.balance>0 GROUP BY o.id
+      ORDER BY overdue_days>0 DESC,overdue_days DESC,balance DESC,o.id LIMIT 6`).bind(...args, period.today)] : []),
+    ...(canViewCosts ? [db.prepare(`${base}${profitability} SELECT * FROM profits WHERE status<>'complete'
+      ORDER BY completed_at,id LIMIT 6`).bind(...profitArgs)] : []),
   ]);
   const values = (id: string): ReportMeasures => {
     const totals = Object.fromEntries(results[0].results.filter(row => row.id === id).map(row => [String(row.kind), number(row.value)]));
@@ -186,17 +199,27 @@ export async function loadBusinessReport(db: Pick<D1Database, "prepare" | "batch
   const work = results[4].results[0] || {}; const balances = results[2].results;
   const sumBalance = (key: string) => balances.reduce((total, row) => total + number(row[key]), 0);
   const recordedTax = (kind: string) => number(results[0].results.find(row => row.id === "current" && row.kind === kind)?.value);
+  const profitItem = (item: Row): NonNullable<BusinessReport["profitability"]>["items"][number] => {
+    const marginCents = item.status === "complete" ? number(item.revenue)-number(item.labour)-number(item.material)-number(item.other) : null;
+    return { id: String(item.id), number: String(item.work_number), title: String(item.title), completedAt: String(item.completed_at),
+      revenueCents: number(item.revenue), labourCents: number(item.labour), materialCents: number(item.material), otherCents: number(item.other),
+      labourMinutes: number(item.minutes), missingCosts: number(item.missing_costs), status: String(item.status), marginCents,
+      marginPercent: marginCents !== null && number(item.revenue)>0 ? marginCents/number(item.revenue)*100 : null };
+  };
   return { generatedAt: now.toISOString(), period, service, state: region, permissions: { invoices: access.canViewInvoices, quotes: access.canViewQuotes },
     recordedGst: access.canViewInvoices ? { invoiceGstCents: recordedTax("invoiceGstCents"), creditGstCents: recordedTax("creditGstCents"), netGstCents: recordedTax("invoiceGstCents") - recordedTax("creditGstCents") } : null,
     options: { services: [...new Set(results[6].results.map(row => String(row.service)))], states: [...new Set(results[6].results.map(row => String(row.region)))].sort() },
     profitability: canViewCosts ? (() => {
       const row = results[7].results[0] || {}; const completeJobs = number(row.complete_jobs); const margin = completeJobs ? number(row.margin) : null;
       return { jobs: number(row.jobs), completeJobs, revenueCents: number(row.revenue), labourCents: number(row.labour), materialCents: number(row.material), otherCents: number(row.other), labourMinutes: number(row.minutes), completeRevenueCents: number(row.complete_revenue), marginCents: margin, marginPercent: margin !== null && number(row.complete_revenue)>0 ? margin/number(row.complete_revenue)*100 : null, page: profitPage, pageSize: 50,
-        items: results[8].results.map(item => { const marginCents = item.status === "complete" ? number(item.revenue)-number(item.labour)-number(item.material)-number(item.other) : null;
-          return { id: String(item.id), number: String(item.work_number), title: String(item.title), completedAt: String(item.completed_at), revenueCents: number(item.revenue), labourCents: number(item.labour), materialCents: number(item.material), otherCents: number(item.other), labourMinutes: number(item.minutes), missingCosts: number(item.missing_costs), status: String(item.status), marginCents, marginPercent: marginCents !== null && number(item.revenue)>0 ? marginCents/number(item.revenue)*100 : null }; }) };
+        coverage: { invoiceNeeded: number(row.invoice_needed), planNeeded: number(row.plan_needed), scopeReview: number(row.scope_review), costsNeeded: number(row.costs_needed), missingCosts: number(row.missing_costs) },
+        attentionItems: results[10].results.map(profitItem), items: results[8].results.map(profitItem) };
     })() : null,
     current: values("current"), previous: period.previous ? values("previous") : null, trend: timeline.map((window, index) => ({ start: window.start, end: window.end, newJobs: values(`trend${index}`).newJobs, completedJobs: values(`trend${index}`).completedJobs, invoicedCents: values(`trend${index}`).invoicedCents })),
     services: breakdown("service"), regions: breakdown("region"), team: [...members.values()].sort((a, b) => b.bookedMinutes - a.bookedMinutes || a.label.localeCompare(b.label)),
     work: { openJobs: number(work.open_jobs), waitingJobs: number(work.waiting), unassignedJobs: number(work.unassigned), awaitingSchedule: number(work.awaiting), overdueTasks: number(work.overdue_tasks), openIssues: number(work.issues), completedUninvoiced: access.canViewInvoices ? number(work.uninvoiced) : null, stages: results[5].results.map(row => ({ key: String(row.stage), count: number(row.count) })) },
-    receivables: access.canViewInvoices ? { outstandingCents: sumBalance("cents"), paidCents: sumBalance("paid"), undatedInvoiceCount: sumBalance("undated_count"), undatedInvoiceCents: sumBalance("undated_cents"), buckets: ["Not overdue","1 to 30 days","31 to 60 days","61 to 90 days","Over 90 days","No due date"].map(key => { const row = balances.find(row => row.bucket === key); return { key, count: number(row?.count), cents: number(row?.cents) }; }) } : null };
+    receivables: access.canViewInvoices ? { outstandingCents: sumBalance("cents"), paidCents: sumBalance("paid"), undatedInvoiceCount: sumBalance("undated_count"), undatedInvoiceCents: sumBalance("undated_cents"),
+      items: results[canViewCosts ? 9 : 7].results.map(row => ({ jobId: String(row.job_id), number: String(row.work_number || ""), title: String(row.title || ""),
+        balanceCents: number(row.balance), dueAt: String(row.due_at || ""), overdueDays: row.overdue_days === null ? null : number(row.overdue_days) })),
+      buckets: ["Not overdue","1 to 30 days","31 to 60 days","61 to 90 days","Over 90 days","No due date"].map(key => { const row = balances.find(row => row.bucket === key); return { key, count: number(row?.count), cents: number(row?.cents) }; }) } : null };
 }

@@ -17,7 +17,7 @@ export function TradeFinanceWorkspace({ user, view, priceBookView, onViewChange,
   view: FinanceView;
   priceBookView: "items" | "packets";
   onViewChange: (view: FinanceView) => void;
-  onOpenJob: (id: string, tab: "quote" | "invoice" | "field") => void;
+  onOpenJob: (id: string, tab: "quote" | "invoice" | "field" | "summary") => void;
   onNewQuote: () => void;
   onOpenJobs: () => void;
   onOpenSchedule: () => void;
@@ -27,9 +27,9 @@ export function TradeFinanceWorkspace({ user, view, priceBookView, onViewChange,
     <nav className={styles.navigation} aria-label="Finance sections">
       {sections.map(([key, label]) => <button key={key} type="button" aria-current={view === key ? "page" : undefined} onClick={() => onViewChange(key)}>{label}</button>)}
     </nav>
-    {view === "quotes" && <TradeQuoteWorkspace user={user} onOpenJob={(id) => onOpenJob(id, "quote")} onNewQuote={onNewQuote} />}
+    {view === "quotes" && <TradeQuoteWorkspace user={user} onOpenJob={(id, tab = "quote") => onOpenJob(id, tab)} onNewQuote={onNewQuote} />}
     {view === "invoices" && <TradeInvoiceWorkspace user={user} onOpenJob={(id) => onOpenJob(id, "invoice")} />}
     {view === "pricebook" && <div className={styles.priceBook}><TradePriceBookWorkspace key={priceBookView} user={user} initialView={priceBookView} /></div>}
-    {view === "reports" && <TradeBusinessReports user={user} onOpenJobs={onOpenJobs} onOpenSchedule={onOpenSchedule} onOpenInvoices={() => onViewChange("invoices")} onOpenJobCosts={(id) => onOpenJob(id, "field")} />}
+    {view === "reports" && <TradeBusinessReports user={user} onOpenJobs={onOpenJobs} onOpenSchedule={onOpenSchedule} onOpenInvoices={() => onViewChange("invoices")} onOpenJobCosts={(id) => onOpenJob(id, "field")} onOpenJobInvoice={(id) => onOpenJob(id, "invoice")} />}
   </section>;
 }

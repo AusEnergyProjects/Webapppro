@@ -8,13 +8,13 @@ import { australianAppointmentTimeZone, textAttachment } from "../src/lib/custom
 import { directAppointmentInviteDraft } from "../src/lib/direct-appointment-invite.ts";
 import { ReminderProviderDeliveryError, reminderProviderFailureOutcome } from "../src/lib/service-reminder-delivery.ts";
 
-function inviteFixture({ configured = true, indeterminate = false } = {}) {
+function inviteFixture({ configured = true, indeterminate = false, receiptFailure = false } = {}) {
   const source = fs.readFileSync(new URL("../src/lib/direct-appointment-invite-server.ts", import.meta.url), "utf8");
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const sent = [];
-  const db = { prepare: () => ({ bind: (appointmentId, ownerUid) => ({ first: async () => {
+  const sent = [], receipts = [];
+  const db = { prepare: sql => sql.startsWith("INSERT INTO trade_work_order_events") ? { bind: (...values) => ({ run: async () => { if (receiptFailure) throw new Error("receipt write unavailable"); receipts.push(values); return { meta: { changes: 1 } }; } }) } : ({ bind: (appointmentId, ownerUid) => ({ first: async () => {
     assert.equal(appointmentId, "appointment"); assert.equal(ownerUid, "business");
-    return { work_number: "JOB-123", revision: 1, first_name: "Jane", customer_email: "jane@example.test",
+    return { work_order_id: "job", work_number: "JOB-123", revision: 1, first_name: "Jane", customer_email: "jane@example.test",
       trade_business_name: "Johns Electrical", starts_at: "2026-10-10T09:00", ends_at: "2026-10-10T10:00", address_state: "VIC" };
   } }) }) };
   const mocks = {
@@ -38,7 +38,7 @@ function inviteFixture({ configured = true, indeterminate = false } = {}) {
     assert.ok(Object.hasOwn(mocks, key), `Unexpected dependency ${key}`); return mocks[key];
   }, moduleRecord, moduleRecord.exports);
   const input = { appointmentId: "appointment", ownerUid: "business", actorUid: "team-user", origin: "https://example.test" };
-  return { sent, send: () => moduleRecord.exports.sendDirectAppointmentCalendarInvite(input) };
+  return { sent, receipts, send: () => moduleRecord.exports.sendDirectAppointmentCalendarInvite(input) };
 }
 
 test("direct calendar invite uses the team business sender and selected sender as calendar organizer", async () => {
@@ -48,11 +48,25 @@ test("direct calendar invite uses the team business sender and selected sender a
   const calendar = Buffer.from(f.sent[0].message.attachments[0].content, "base64").toString();
   assert.match(calendar, /ORGANIZER;CN=Johns Electrical:mailto:team@jelec\.example/);
   assert.doesNotMatch(calendar, /info@ausenergyassessments|service@reminders/);
+  assert.equal(f.receipts.length, 1); assert.match(f.receipts[0][0], /^calendar-invite:appointment:1:/);
+  assert.deepEqual(f.receipts[0].slice(1, 4), ["job", "business", "customer_calendar_invite_accepted"]);
+  assert.equal(f.receipts[0][4], result.message);
 });
 
 test("disconnected calendar sender blocks sending and an unknown send outcome requires reconciliation", async () => {
   const disconnected = inviteFixture({ configured: false }); assert.equal((await disconnected.send()).status, "unavailable"); assert.equal(disconnected.sent.length, 0);
+  assert.equal(disconnected.receipts[0][3], "customer_calendar_invite_unavailable");
   const unknown = inviteFixture({ indeterminate: true }); assert.equal((await unknown.send()).status, "reconciliation_required");
+  assert.equal(unknown.receipts[0][3], "customer_calendar_invite_reconciliation_required");
+});
+
+test("receipt persistence failure preserves actual provider outcome without submitting a second copy", async () => {
+  for (const indeterminate of [false, true]) {
+    const f = inviteFixture({ indeterminate, receiptFailure: true }); const result = await f.send();
+    assert.equal(result.status, indeterminate ? "reconciliation_required" : "accepted");
+    assert.match(result.message, /receipt could not be saved.*Check the outgoing mailbox/);
+    assert.equal(f.sent.length, 1); assert.equal(f.receipts.length, 0);
+  }
 });
 
 function appointmentFixture({ platformConfigured = false, indeterminate = false, failSend = false } = {}) {

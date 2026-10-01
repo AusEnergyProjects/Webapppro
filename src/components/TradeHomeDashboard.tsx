@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { User } from "firebase/auth";
 import type { BusinessReport, ReportPreset } from "@/lib/trade-business-reports";
+import { JOB_COST_STATUS_LABELS } from "@/lib/trade-business-reports";
 import type { HomeDashboard } from "@/lib/trade-home-dashboard";
 import { normaliseLocalDateTime } from "@/lib/trade-schedule";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
@@ -20,6 +21,8 @@ export type TradeHomeDashboardProps = {
   onOpenJobs: (filter?: string) => void;
   onNewJob?: () => void;
   onOpenInvoices?: () => void;
+  onOpenJobInvoice?: (id: string) => void;
+  onOpenJobCosts?: (id: string) => void;
   onOpenReports?: () => void;
   refreshKey?: number;
 };
@@ -49,7 +52,7 @@ function Icon({ kind }: { kind: "calendar" | "briefcase" | "wallet" | "chart" | 
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[kind]}</svg>;
 }
 
-export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSchedule, onOpenJobs, onNewJob, onOpenInvoices, onOpenReports, refreshKey = 0 }: TradeHomeDashboardProps) {
+export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSchedule, onOpenJobs, onNewJob, onOpenInvoices, onOpenJobInvoice, onOpenJobCosts, onOpenReports, refreshKey = 0 }: TradeHomeDashboardProps) {
   const request = useTradeBusinessFetch();
   const business = useTradeBusiness();
   const [period, setPeriod] = useState<HomePeriod>("monthly");
@@ -88,6 +91,8 @@ export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSc
   }, [request, user, period, requestKey]);
 
   const overdue = financial?.receivables?.buckets.filter(bucket => bucket.key !== "Not overdue" && bucket.key !== "No due date").reduce((sum, bucket) => sum + bucket.cents, 0) ?? null;
+  const payments = financial?.receivables?.items || [];
+  const costAttention = financial?.profitability?.attentionItems || [];
 
   return <section className={styles.home} aria-label="Home dashboard" data-tlink-home>
     <header className={styles.heading}>
@@ -118,7 +123,7 @@ export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSc
 
       <div className={styles.lowerGrid}>
         <section className={styles.card} aria-label="Upcoming schedule">
-          <div className={styles.cardHeading}><div><span className={styles.eyebrow}>Coming up</span><h3>Your schedule</h3></div><button className={styles.textButton} type="button" onClick={() => onOpenSchedule()}>Open schedule</button></div>
+          <div className={styles.cardHeading}><div><span className={styles.eyebrow}>Coming up</span><h3>Your schedule</h3><p className={styles.range}>Today: {plural(dashboard.metrics.todayJobs, "job")} · {plural(dashboard.metrics.todayVisits, "visit")}</p></div><button className={styles.textButton} type="button" onClick={() => onOpenSchedule()}>Open schedule</button></div>
           {dashboard.upcomingAppointments.length ? <ol className={styles.scheduleList}>{dashboard.upcomingAppointments.slice(0, 5).map(appointment => {
             // Schedule timestamps are business-local wall time, not UTC instants.
             // UTC here preserves their date and clock components in every browser zone.
@@ -140,12 +145,27 @@ export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSc
             {dashboard.metrics.awaitingSchedule > 0 && <ActionRow count={dashboard.metrics.awaitingSchedule} title="Needs scheduling" detail="View accepted or approved work to book" onClick={() => onOpenJobs("awaiting_schedule")} />}
             {dashboard.metrics.waitingJobs > 0 && <ActionRow count={dashboard.metrics.waitingJobs} title="Waiting jobs" detail="Check what is holding work up" onClick={() => onOpenJobs("blocked")} />}
           </div>
+          {payments.length > 0 && <>
+            <h4 className={styles.attentionHeading}>Payment follow-up</h4>
+            <ul className={styles.financeActions}>{payments.slice(0, 3).map(item => <li key={item.jobId}><button type="button" onClick={() => (onOpenJobInvoice || onOpenJob)(item.jobId)}>
+              <span><strong>{item.number || item.title || "Job invoice"}</strong><small>{item.overdueDays === null ? "Add a due date" : item.overdueDays > 0 ? `${item.overdueDays} days overdue` : `Due ${dayLabel(item.dueAt)}`}</small></span>
+              <b>{money(item.balanceCents)}</b>
+            </button></li>)}</ul>
+            <p className={styles.footnote}>Current outstanding balances including GST. Oldest overdue first.</p>
+          </>}
+          {financial?.profitability && financial.profitability.jobs > 0 && <>
+            <h4 className={styles.attentionHeading}>Completed job costs</h4>
+            <p className={styles.footnote}>{financial.profitability.completeJobs} of {financial.profitability.jobs} completed jobs have full cost and invoice records for this period.</p>
+            {costAttention.length > 0 && <ul className={styles.financeActions}>{costAttention.slice(0, 3).map(item => <li key={item.id}><button type="button" onClick={() => (item.status === "invoice_needed" ? onOpenJobInvoice || onOpenJob : onOpenJobCosts || onOpenJob)(item.id)}>
+              <span><strong>{item.number || item.title || "Job"}</strong><small>{JOB_COST_STATUS_LABELS[item.status]}{item.missingCosts > 0 ? ` · ${item.missingCosts} cost items missing` : ""}</small></span><span aria-hidden="true">→</span>
+            </button></li>)}</ul>}
+          </>}
           {dashboard.metrics.overdueTasks > 0 && <p className={styles.attentionHeading}>{plural(dashboard.metrics.overdueTasks, "overdue task")}</p>}
           {(dashboard.overdueTasks.length > 0 || dashboard.openIssues.length > 0) && <ul className={styles.attentionList}>
             {dashboard.overdueTasks.slice(0, 3).map(task => <li key={`task-${task.id}`}><button type="button" onClick={() => onOpenJob(task.job.id, "tasks")}><span className={styles.attentionDot} /><span><strong>{task.title}</strong><small>{task.job.workNumber} · Overdue task</small></span></button></li>)}
             {dashboard.openIssues.slice(0, 2).map(issue => <li key={`issue-${issue.id}`}><button type="button" onClick={() => onOpenJob(issue.job.id, "notes")}><span className={styles.attentionDot} /><span><strong>{issue.body}</strong><small>{issue.job.workNumber} · Open issue</small></span></button></li>)}
           </ul>}
-          {!dashboard.metrics.awaitingSchedule && !dashboard.metrics.waitingJobs && !dashboard.metrics.overdueTasks && !dashboard.metrics.openIssues && <div className={styles.empty}>
+          {!dashboard.metrics.awaitingSchedule && !dashboard.metrics.waitingJobs && !dashboard.metrics.overdueTasks && !dashboard.metrics.openIssues && !payments.length && !costAttention.length && <div className={styles.empty}>
             {dashboard.metrics.openJobs === 0 ? <><Icon kind="briefcase" /><strong>No active jobs</strong>
               <p>{canCreate ? "Create a job to start planning your next piece of work." : staffPermissions?.crewLead ? "Your crew's next assigned jobs will appear here." : staffPermissions?.jobScope === "own" ? "Your dispatcher can assign your next job." : "No active jobs are available in this view."}</p>
               {canCreate ? <button type="button" onClick={onNewJob}>Create job</button> : <button type="button" onClick={() => onOpenSchedule()}>View schedule</button>}

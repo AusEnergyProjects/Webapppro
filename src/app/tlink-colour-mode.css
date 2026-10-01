@@ -1935,7 +1935,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-close {
   color: var(--trade-accent-readable);
 }
 
-/* Business hub and handover remain operational portal surfaces in night mode. */
+/* Business operations and asset service tools in night mode. */
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-hub-create,
   .business-hub-toolbar > div,
@@ -1944,15 +1944,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-work-tasks li,
   .business-hub-empty,
   .business-hub-activity li,
-  .trade-handover-centre,
-  .handover-workspace,
-  .handover-statusbar > div,
-  .handover-asset-list > article,
-  .handover-asset-list dl div,
   .handover-add-record,
-  .handover-compliance article,
-  .handover-document-list article,
-  .handover-document-form,
   .trade-lifecycle-metrics > div,
   .lifecycle-plan,
   .lifecycle-event-list article,
@@ -1973,9 +1965,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-work-tasks button,
   .business-work-assignee button,
   .business-work-card > footer button,
-  .trade-handover-centre > summary b,
-  .handover-asset-list button,
-  .handover-document-list button,
   .lifecycle-plan button,
   .trade-lifecycle-assets > article > header > strong,
   .trade-lifecycle-automation button,
@@ -1990,14 +1979,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-work-card > header > div:first-child > span,
   .business-hub-activity summary,
-  .handover-locked > span,
-  .handover-start span,
-  .handover-assets header span,
-  .handover-compliance header span,
-  .handover-documents header span,
-  .handover-readiness span,
-  .handover-asset-list article > div > span,
-  .handover-document-list article > div > span,
   .handover-add-record > summary,
   .trade-lifecycle-workspace > header span,
   .trade-lifecycle-assets > article > header span,
@@ -2011,8 +1992,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-hub-access.is-member,
-  .handover-customer-link.linked,
-  .handover-readiness.ready,
   .trade-lifecycle-automation
 ) {
   background: #143329;
@@ -2023,11 +2002,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-hub-access.is-free,
   .business-hub-metrics article.attention,
-  .handover-locked,
-  .handover-start,
-  .handover-customer-link.internal,
-  .handover-review-note,
-  .handover-readiness.blocked,
   .trade-safety-notices,
   .crm-job-form > div > p
 ) {
@@ -2042,9 +2016,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-safety-notices >
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .handover-review-note strong,
-  .handover-review-note p,
-  .handover-readiness.blocked ul,
   .trade-safety-notices > h5,
   .trade-safety-notices article span,
   .trade-safety-notices article a
@@ -2057,11 +2028,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-work-tasks,
   .business-work-card > footer,
   .business-hub-activity,
-  .trade-handover-centre[open] > summary,
-  .handover-assets,
-  .handover-compliance,
-  .handover-documents,
-  .handover-readiness,
   .trade-lifecycle-workspace,
   .lifecycle-plan details,
   .trade-lifecycle-assets > article,

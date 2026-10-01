@@ -63,3 +63,7 @@
 @media (max-width:1100px) { .twoColumns { grid-template-columns: 1fr; } .receivables { grid-template-columns: 1fr; } }
 @media (max-width:650px) { .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } .metric, .card { padding: 15px; } .metric > strong { font-size: 1.7rem; } .filters label, .custom label { min-width: 0; flex: 1 1 140px; } .reports input { width: 100%; min-width: 0; } .presets button { flex: 1 1 auto; } .ageing { grid-template-columns: repeat(2,minmax(0,1fr)); } .heading .actions { width: 100%; } .chart { gap: 2px; } .chartColumn > span { font-size: .75rem; writing-mode: vertical-rl; height: 40px; } .stageList > div { grid-template-columns: 110px 1fr 25px; } }
 @media (max-width:360px) { .metrics { grid-template-columns: 1fr; } }
+.coverage { display: grid; grid-template-columns: auto minmax(90px, 1fr); align-items: center; gap: 8px 16px; padding: 14px; margin: 16px 0; background: var(--trade-surface-soft, #f0f6f5); border-radius: 8px; font-size: .875rem; }
+.coverage meter { width: 100%; accent-color: var(--trade-accent, #087b7c); }
+.coverage span { grid-column: 1 / -1; color: var(--color-aea-muted, #526b6f); }
+.reports caption { text-align: left; color: var(--color-aea-muted, #526b6f); padding: 16px 9px 8px; font-size: .8rem; }

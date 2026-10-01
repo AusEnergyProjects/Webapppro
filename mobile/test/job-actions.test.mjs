@@ -66,3 +66,37 @@ test('an incomplete required form rejects the save instead of advancing its call
   await assert.rejects(save({ template: { fields: [{ key: 'name', label: 'Name', required: true, type: 'text' }] } }, { name: ' ' }, true), /Finish the required fields: Name/);
   assert.equal(wrote, false);
 });
+
+
+function renderJobCard(title, overrides = {}) {
+  const ast = ts.createSourceFile('job.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let card;
+  function find(node) {
+    if (ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.card}>'
+      && node.children.some(child => ts.isJsxElement(child) && child.getText(ast).includes('>' + title + '</Text>'))) card = node;
+    ts.forEachChild(node, find);
+  }
+  find(ast); assert.ok(card, title);
+  const destinations = [];
+  const jsx = (type, props, ...children) => ({ type, props: { ...props, children } });
+  const dependencies = { React: { createElement: jsx, Fragment: 'Fragment' }, View: 'View', Text: 'Text', TextInput: 'TextInput', FieldButton: 'FieldButton', Pressable: 'Pressable',
+    FieldSwmsFiles: 'FieldSwmsFiles', styles: {}, job: { id: 'job', media: [] }, busy: '', syntheticManual: false, complianceCases: [], creditexManual: false,
+    sync: { online: true }, duration: '', notes: '', setDuration() {}, setNotes() {}, setActiveFormId: value => destinations.push(value), ...overrides };
+  const code = ts.transpileModule('const tree = (' + card.getText(ast) + ');', { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
+  const tree = Function(...Object.keys(dependencies), code + ';return tree;')(...Object.values(dependencies));
+  const flatten = value => Array.isArray(value) ? value.flatMap(flatten) : value && typeof value === 'object' ? [value, ...flatten(value.props?.children)] : [];
+  const label = value => Array.isArray(value) ? value.map(label).join('') : value && typeof value === 'object' ? label(value.props?.children) : typeof value === 'string' ? value : '';
+  return { destinations, button: name => flatten(tree).find(node => node.type === 'FieldButton' && label(node) === name) };
+}
+
+test('job actions prioritise Files while optional manual time lives inside Files', () => {
+  const overview = renderJobCard('Job actions');
+  assert.equal(overview.button('Record time'), undefined);
+  assert.equal(overview.button('Add manual time'), undefined);
+  overview.button('Files').props.onPress(); assert.deepEqual(overview.destinations, ['files']);
+  const files = renderJobCard('Photos and documents');
+  files.button('Add manual time').props.onPress(); assert.deepEqual(files.destinations, ['time']);
+  assert.equal(renderJobCard('Photos and documents', { creditexManual: true }).button('Add manual time'), undefined);
+  const time = renderJobCard('Add manual time');
+  time.button('Back to Files').props.onPress(); assert.deepEqual(time.destinations, ['files']);
+});

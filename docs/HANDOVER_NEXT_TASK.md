@@ -1,9 +1,23 @@
 # Next task handover
 
-Status: Default optional SWMS implementation and release validation.
+Status: Six approved workflow improvements and removal of superseded screens.
 Prepared: 2 October 2026
 
-## Active contract: one default SWMS for every business
+## Active contract: one connected business workflow
+
+Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Baseline source `3cf7138192b099389b3e96a122ad2386d71ace61`, Sites 731.
+
+Outcome: consolidate staff and native job files, use complete permission-scoped daily summaries, give Quotes preparation/customer-decision/accepted/history views, connect accepted work to assignment and scheduling on the same job, make customer email delivery exceptions actionable, and connect financial totals to authoritative invoices and cost records. Remove directly superseded navigation, forms, styles and state. Keep optional SWMS and automatic form timing, with manual time only an exception.
+
+Ownership: staff agent owns TradeTeamPortal and its tests; quote agent owns TradeQuoteWorkspace and the quote index; financial agent owns Home and Reports; coordinating agent owns job preparation, customer delivery, native and shared layout, integration and release. No overlapping writers. All six domains are explicitly approved together by the user. Voice Wattzun, new accounting products, dependencies, customer accounts and provider setup are outside this scope.
+
+Acceptance: customers use email and account-free document links; unanswered/lost quotes do not require scheduling or chasing; accepted work reuses the job and frozen quote; crew leads retain own-crew/assigned-job access and apprentices receive no financial payload; form elapsed time is never payroll or billable labour. Responsive day/night layouts keep tools discoverable without duplicate navigation. Financial coverage, uncertain delivery and missing information stay explicit rather than implying success. Preserve existing records and compatibility of current deep links.
+
+Additional user-approved cleanup: registration and business setup live inside the dashboard. Retire the separate Trade account and Free access filler pages with redirects, update their entry links, keep standards available in context and preserve sign-in, MFA, ABN, verification and entitlement gates. The staff/UI agent owns this onboarding integration and its tests; it does not grant unverified accounts operational access.
+
+Validation: focused behavior and permission tests, root/native typecheck and scoped lint, required full checks with existing failures reported separately, publication build and exact GitHub/Sites/compatible Expo provenance. No real customer sends, payments or signatures as tests. Stop for new credentials, provider consent or conflicting source. Evidence belongs in `C:/Webproject/outputs/tlink-workflow-cleanup-20261002/`.
+
+## Previous contract: one default SWMS for every business
 
 Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Baseline source `eeea8f97b7d3f373918582fe7327fa702aed1366`, Sites 730.
 

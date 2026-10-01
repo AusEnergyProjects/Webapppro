@@ -569,7 +569,9 @@ test("every user-facing assignment and schedule mutation routes through the shar
   assert.match(scheduleRoute, /RENTAL_ACTIVE_APPOINTMENT/);
   assert.equal(countMatches(scheduleRoute, /\.\.\.rentalInspectionAssignmentStatements\(/g), 4);
 
-  assert.match(teamPortal, /action: "assign_job"/);
+  assert.match(teamPortal, /<InstallerCrmWorkspace/);
+  assert.match(teamPortal, /staffPermissions=\{permissions\}/);
+  assert.doesNotMatch(teamPortal, /action: "assign_job"/);
   assertActionUsesAssignmentHelper(teamRoute, "assign_job");
   assert.match(teamRoute, /RENTAL_ACTIVE_APPOINTMENT/);
   assert.equal(countMatches(teamRoute, /\.\.\.rentalInspectionAssignmentStatements\(/g), 1);

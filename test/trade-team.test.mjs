@@ -72,7 +72,7 @@ test("owners and delegated managers are bounded by authoritative permission flag
   assert.match(access, /return access\.isOwner/);
   assert.match(access, /access\.canManageTeam/);
   assert.match(access, /access\.jobScope === "own" && row\.assignee_member_id !== access\.memberId/);
-  assert.match(route, /\? <> 'own' OR \$\{jobMemberSql\("w"\)\}/);
+  assert.match(access, /isJobMember\(getD1\(\), access\.ownerUid, workOrderId, access\.memberId\)/);
   assert.match(route, /if \(!canManageTeam\(access\)\) throw new Error\("OWNER_REQUIRED"\)/);
   assert.match(route, /if \(!access\.canManageJobs\) throw new Error\("DISPATCH_REQUIRED"\)/);
   assert.match(route, /canAssignJob\(access,/);
@@ -81,27 +81,24 @@ test("owners and delegated managers are bounded by authoritative permission flag
   assert.match(access, /ownerAccount\.approvedAbnAccess/);
 });
 
-test("team job payloads preserve protected-customer boundaries", () => {
-  assert.match(route, /row\.source_type === "opportunity" \|\| row\.customer_source === "platform_private"/);
-  assert.match(route, /const address = protectedJob \? ""/);
-  assert.doesNotMatch(route, /c\.email|c\.phone|c\.first_name|c\.last_name/);
-  assert.match(portal, /Australian Energy Assessments protected job, no customer identity or street address/);
-  assert.match(portal, /Direct customer address has not been added/);
-  assert.match(portal, /Only work assigned to you is visible/);
+test("team access no longer duplicates customer and job payloads", () => {
+  assert.doesNotMatch(route, /includeWork|workPageSize|FROM trade_crm_customers|serviceAddress|tasks: taskRows/);
+  assert.match(portal, /staffPermissions=\{permissions\}/);
+  assert.match(workspace, /TradeJobFilesPanel/);
+  assert.doesNotMatch(portal, /team-job-focus|serviceAddress/);
 });
 
 test("the owner CRM and mobile staff portal expose permission-aware team workflows", () => {
   assert.doesNotMatch(workspace, /TradeTeamCentre/);
   assert.match(dashboard, /<TradeTeamSettings user=\{user\}/);
   assert.match(workspace, /permissions/);
-  assert.match(route, /includeWork/);
-  assert.match(route, /workPageSize/);
+  assert.doesNotMatch(route, /includeWork|workPageSize/);
   assert.match(route, /const assigneeConditions = \["owner_uid = \?", "status = 'active'"\]/);
   assert.match(route, /assigneePageSize = Math\.min\(50/);
   assert.match(portal, /Continue with Google/);
   assert.match(portal, /canManageTeam/);
-  assert.match(portal, /Work queue/);
-  assert.match(portal, /TradeFieldWorkPanel/);
+  assert.match(portal, /<InstallerCrmWorkspace/);
+  assert.doesNotMatch(portal, /TradeFieldWorkPanel|TradeJobFormsPanel|Work queue/);
 });
 
 test("team operations copy avoids prohibited dash characters", () => {

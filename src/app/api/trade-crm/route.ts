@@ -66,6 +66,7 @@ import { projectInstallerWorkOrderToDataforceRecord } from "@/lib/creditex-dataf
 import { visibleDataforceSource } from "@/lib/trade-dataforce-source";
 import { integrationEnvironment } from "@/lib/trade-integrations-server";
 import { TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL } from "@/lib/trade-crm-job-index-sql";
+import { loadTradeQuoteIndex } from "@/lib/trade-crm-quote-index-server";
 import {
   JOB_REGISTER_CUSTOMER_CONTEXT_SQL,
   JOB_REGISTER_OPERATIONAL_STATUSES,
@@ -461,6 +462,7 @@ function errorResponse(error: unknown) {
   if (code === "CUSTOMER_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer changes." }, 403);
   if (code === "CUSTOMER_SEARCH_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer directory search." }, 403);
   if (code === "QUOTE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow quote totals." }, 403);
+  if (code === "INVALID_QUOTE_VIEW") return adminJson({ ok: false, error: "Choose a valid quote view." }, 400);
   if (code === "INVOICE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow invoice filters or values." }, 403);
   if (code === "REPORTS_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow business reports." }, 403);
   if (code === "MEMBER_CAPABILITY_REQUIRED") return adminJson({ ok: false, error: "The selected team member is not enabled for this service category." }, 409);
@@ -1754,6 +1756,12 @@ export async function GET(request: Request) {
       try { return adminJson({ ok: true, report: await crmReports(identity, url) }); }
       catch (error) { if (error instanceof ReportInputError) return adminJson({ ok: false, error: error.message }, 400); throw error; }
     }
+    if (mode === "index" && resource === "quotes") {
+      const db = getD1(); const timer = routeTimer();
+      const result = await timer.database(loadTradeQuoteIndex(db, identity.access, url.searchParams));
+      return performanceJson({ ok: true, access: accessPayload, ...result }, { db, routeKey: "trade.crm.quotes", startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs,
+        resultCount: result.items.length, cursorUsed: Boolean(url.searchParams.get("cursor")) });
+    }
     if (mode === "index" && ["jobs", "customers"].includes(resource)) {
       if (resource === "customers" && (!identity.access.canViewCustomers
         || !identity.access.canSearchCustomers)) throw new Error("CUSTOMER_SEARCH_REQUIRED");
@@ -2733,23 +2741,6 @@ export async function POST(request: Request) {
           actorUid: identity.access.actorUid,
           origin: new URL(request.url).origin,
         });
-        try {
-          await db.prepare(`INSERT INTO trade_work_order_events
-            (id, work_order_id, firebase_uid, event_type, summary, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)`)
-            .bind(
-              crypto.randomUUID(),
-              workOrderId,
-              identity.uid,
-              calendarInvite.status === "accepted" ? "customer_calendar_invite_accepted" : "customer_calendar_invite_failed",
-              calendarInvite.message,
-              new Date().toISOString(),
-            ).run();
-        } catch {
-          calendarInvite = calendarInvite.status === "accepted"
-            ? calendarInvite
-            : { ...calendarInvite, message: "The job was saved, but the calendar invite needs to be sent again." };
-        }
       }
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
         appointmentId, complianceIntentPlanned: complianceIntents.length > 0,

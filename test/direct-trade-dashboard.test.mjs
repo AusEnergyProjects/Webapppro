@@ -152,16 +152,17 @@ test("verification evidence is private, bounded and owner protected", () => {
 });
 
 test("trade access page presents the free verified operating model", () => {
-  assert.match(access, /Run the core trade workflow for A\$0/);
-  assert.match(access, /no card details, seat fee, job fee, quote fee/);
-  assert.match(access, /A valid ABN and the required business evidence must be supplied/);
+  assert.match(access, /redirect\("\/direct-trade\/dashboard"\)/);
+  assert.match(dashboard, /Core trade operations cost A\$0/);
+  assert.match(partners, /No payment details required/);
+  assert.match(partners, /A valid ABN and the required business evidence must be supplied/);
   assert.match(dashboard, /Unlimited users, leads, jobs and quotes remain A\$0/);
 });
 
 test("free access and verification routes are connected across the account journey", () => {
   assert.match(dashboard, /href="\/direct-trade\/dashboard\/verification"/);
-  assert.match(partners, /See what is included for free/);
-  assert.match(standards, /Free trade access/);
+  assert.match(partners, /href="\/direct-trade\/standards"/);
+  assert.match(standards, /href="\/direct-trade\/dashboard\?setup=1"/);
 });
 
 test("installer leads can be narrowed without exposing household details", () => {
@@ -181,8 +182,8 @@ test("installer and wholesaler dashboards share the clean operations shell", () 
     /data-trade-theme=\{profile\.brandThemeKey \|\| DEFAULT_TRADE_BRAND_THEME\}/,
   );
   assert.match(dashboard, /TLinkBrand/);
-  assert.match(dashboard, /Wholesaler control centre/);
-  assert.match(dashboard, /Installer control centre/);
+  assert.match(dashboard, /Wholesale workspace/);
+  assert.match(dashboard, /Business workspace/);
   assert.doesNotMatch(dashboard, /dashboard-rail-note|TradeServiceFollowUpWorkspace|workspace === "follow-ups"/);
   assert.match(styles, /Admin-inspired trade CRM shell/);
   assert.match(styles, /grid-template-columns: 244px minmax\(0, 1fr\)/);

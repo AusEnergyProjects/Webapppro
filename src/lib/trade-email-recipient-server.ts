@@ -4,6 +4,7 @@ import { tradeOpportunityOwnerScopeSql, isAeaTradeOwner } from './aea-trade-owne
 import { certificateLeadEligibilitySql } from './trade-certificate-leads';
 import { publicTradeContactForMatchedLead } from './public-trade-lead-access.mjs';
 import { customerProjectContactForMatchedLead, platformQuoteForMatchedLead } from './trade-opportunity-read-projection.mjs';
+import { jobMemberSql } from './trade-job-collaboration.ts';
 
 type Target = { customerId?: string; workOrderId?: string; enquiryId?: string };
 type Row = Record<string, unknown>;
@@ -84,7 +85,7 @@ export async function resolveTradeEmailRecipient(access: TeamAccess, target: Tar
       JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
       WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
         AND w.source_type <> 'opportunity' AND d.customer_source <> 'platform_private'
-        AND (? = 1 OR w.assignee_member_id = ?)`)
+        AND (? = 1 OR ${jobMemberSql('w')})`)
       .bind(target.workOrderId, access.ownerUid, access.isOwner || access.jobScope === 'team' ? 1 : 0, access.memberId).first<{ email: string }>();
     if (!row) throw new Error('EMAIL_RECIPIENT_UNAVAILABLE');
     return email(row.email);
@@ -92,7 +93,7 @@ export async function resolveTradeEmailRecipient(access: TeamAccess, target: Tar
   const row = await db.prepare(`SELECT c.email FROM trade_crm_customers c WHERE c.id = ? AND c.firebase_uid = ? AND c.record_status = 'active'
     AND (? = 1 OR EXISTS (SELECT 1 FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id AND w.firebase_uid = d.firebase_uid
       WHERE d.crm_customer_id = c.id AND w.firebase_uid = c.firebase_uid AND w.partner_type = 'installer'
-        AND w.record_status = 'active' AND w.assignee_member_id = ? AND w.source_type <> 'opportunity' AND d.customer_source <> 'platform_private'))`)
+        AND w.record_status = 'active' AND ${jobMemberSql('w')} AND w.source_type <> 'opportunity' AND d.customer_source <> 'platform_private'))`)
     .bind(target.customerId || '', access.ownerUid, access.isOwner || access.canSearchCustomers ? 1 : 0, access.memberId).first<{ email: string }>();
   if (!row) throw new Error('EMAIL_RECIPIENT_UNAVAILABLE');
   return email(row.email);

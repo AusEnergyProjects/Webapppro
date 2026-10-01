@@ -14,11 +14,12 @@ const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const dashboardPage = read("../src/app/direct-trade/dashboard/page.tsx");
 
 test("the homepage connects installers and suppliers to a participation route", () => {
-  assert.match(homepage, /href="\/direct-trade\/partners">Trade and supplier participation/);
+  assert.match(homepage, /href="\/direct-trade\/dashboard\?setup=1">Trade and supplier participation/);
   assert.match(homepage, /reputable suppliers/i);
   assert.match(form, /Create your free TLink account/);
   assert.match(form, /No payment details required/i);
-  assert.match(page, /DirectTradePartnerForm/);
+  assert.match(page, /redirect\("\/direct-trade\/dashboard\?setup=1"\)/);
+  assert.match(dashboard, /<DirectTradePartnerForm/);
 });
 
 test("trade accounts use Firebase identity and protected same-origin profile storage", () => {

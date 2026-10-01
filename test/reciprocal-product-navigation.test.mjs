@@ -26,7 +26,7 @@ test("TLink headers keep an obvious reciprocal AEA home link", () => {
   );
   assert.match(
     directTradeDashboard,
-    /className="trade-portal-brand"[\s\S]*?<AeaProductLink placement="trade-portal" \/>[\s\S]*?<TLinkCommandCentre/,
+    /className="trade-portal-brand"[\s\S]*?<TLinkCommandCentre[\s\S]*?className="dashboard-account-actions"[\s\S]*?<AeaProductLink placement="trade-portal" \/>/,
   );
   assert.doesNotMatch(tlinkChrome, />AEA home</);
 });

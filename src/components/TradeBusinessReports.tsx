@@ -1,10 +1,10 @@
 "use client";
 
-import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { useEffect, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
-import { reportChange, reportCsvRows, type BusinessReport, type ReportBreakdown, type ReportPreset } from "@/lib/trade-business-reports";
+import { JOB_COST_STATUS_LABELS, reportChange, reportCsvRows, type BusinessReport, type ReportBreakdown, type ReportPreset } from "@/lib/trade-business-reports";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import { downloadWorkspaceCsv } from "./WorkspaceTableTools";
 import { TradeFinanceProjection } from "./TradeFinanceProjection";
@@ -21,19 +21,21 @@ const stages: Record<string, string> = { backlog: "Planning", ready: "Ready to s
 const presets: Array<[ReportPreset, string]> = [["weekly", "Weekly"], ["monthly", "Monthly"], ["quarterly", "Quarterly"], ["fytd", "Financial year to date"], ["all", "All time"], ["custom", "Custom dates"]];
 type ReportResponse = { ok?: boolean; report?: BusinessReport; error?: string };
 
-export function TradeBusinessReports({ user, onOpenJobs, onOpenSchedule, onOpenInvoices, onOpenJobCosts }: {
-  user: User; onOpenJobs: () => void; onOpenSchedule?: () => void; onOpenInvoices?: () => void; onOpenJobCosts?: (id: string) => void;
+export function TradeBusinessReports({ user, onOpenJobs, onOpenSchedule, onOpenInvoices, onOpenJobCosts, onOpenJobInvoice }: {
+  user: User; onOpenJobs: () => void; onOpenSchedule?: () => void; onOpenInvoices?: () => void; onOpenJobCosts?: (id: string) => void; onOpenJobInvoice?: (id: string) => void;
 }) {
   const fetch = useTradeBusinessFetch();
+  const business = useTradeBusiness();
   const [preset, setPreset] = useState<ReportPreset>("monthly"); const [anchor, setAnchor] = useState("");
   const [service, setService] = useState(""); const [state, setState] = useState("");
   const [custom, setCustom] = useState(false); const [from, setFrom] = useState(""); const [to, setTo] = useState("");
   const [range, setRange] = useState({ from: "", to: "" }); const [refresh, setRefresh] = useState(0);
-  const [report, setReport] = useState<BusinessReport | null>(null); const [settledKey, setSettledKey] = useState(""); const [requestError, setError] = useState("");
+  const [storedReport, setReport] = useState<BusinessReport | null>(null); const [settledKey, setSettledKey] = useState(""); const [requestError, setError] = useState("");
   const [profitPage, setProfitPage] = useState(1);
   const [chart, setChart] = useState<"jobs" | "invoices">("jobs");
-  const requestKey = [user.uid, preset, anchor, service, state, range.from, range.to, profitPage, refresh].join("|");
+  const requestKey = [user.uid, business?.ownerUid || "", business?.memberId || "", preset, anchor, service, state, range.from, range.to, profitPage, refresh].join("|");
   const loading = settledKey !== requestKey; const error = loading ? "" : requestError;
+  const report = loading || error ? null : storedReport;
   useEffect(() => {
     let active = true; const controller = new AbortController();
     const timer = setTimeout(() => { controller.abort(); if (active) { setSettledKey(requestKey); setError("Reports took too long to load. Try refreshing this report."); } }, 25000);
@@ -102,14 +104,25 @@ export function TradeBusinessReports({ user, onOpenJobs, onOpenSchedule, onOpenI
         </section>
         <section className={styles.card} aria-label="Current work health"><header><div><h4>What needs attention</h4><p>Current work, as at {date(report.period.today)}</p></div><button type="button" onClick={onOpenJobs}>View jobs</button></header><dl className={styles.list}>{[["Open jobs", report.work.openJobs], ["Waiting on something", report.work.waitingJobs], ["Need a team member", report.work.unassignedJobs], ["Need a future visit", report.work.awaitingSchedule], ["Overdue tasks", report.work.overdueTasks], ["Open issues", report.work.openIssues], ["Completed, not invoiced", report.work.completedUninvoiced]].filter(([, value]) => value !== null).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>
       </div>
-      {report.receivables && <section className={styles.card} aria-label="Money to collect"><header><div><h4>Money to collect</h4><p>Current balances across the selected services and regions, including GST</p></div>{onOpenInvoices && <button type="button" onClick={onOpenInvoices}>Open invoices</button>}</header><div className={styles.receivables}><div><span>Outstanding today</span><strong>{money(report.receivables.outstandingCents)}</strong><small>Recorded paid balance: {exactMoney(report.receivables.paidCents)}</small></div><div className={styles.ageing}>{report.receivables.buckets.map(bucket => <div key={bucket.key}><span>{bucket.key}</span><strong>{money(bucket.cents)}</strong><small>{bucket.count} invoice{bucket.count === 1 ? "" : "s"}</small></div>)}</div></div><p className={styles.hint}>This is today&apos;s position, not a historical cash balance. Recorded payments come from linked accounting or manually entered job balances; keep those records up to date.</p></section>}
+      {report.receivables && <section className={styles.card} aria-label="Money to collect">
+        <header><div><h4>Money to collect</h4><p>Current balances across the selected services and regions, including GST</p></div>{onOpenInvoices && <button type="button" onClick={onOpenInvoices}>Open invoices</button>}</header>
+        <div className={styles.receivables}><div><span>Outstanding today</span><strong>{money(report.receivables.outstandingCents)}</strong><small>Recorded paid balance: {exactMoney(report.receivables.paidCents)}</small></div><div className={styles.ageing}>{report.receivables.buckets.map(bucket => <div key={bucket.key}><span>{bucket.key}</span><strong>{money(bucket.cents)}</strong><small>{bucket.count} invoice{bucket.count === 1 ? "" : "s"}</small></div>)}</div></div>
+        {report.receivables.items.length > 0 && <div className={styles.tableScroll}><table><caption>Payment follow-up: oldest overdue first, up to six jobs</caption><thead><tr><th>Job</th><th>Due</th><th>Outstanding</th><th>Next step</th></tr></thead><tbody>{report.receivables.items.map(item => <tr key={item.jobId}>
+          <th>{item.number || "Job"}<small>{item.title}</small></th><td>{item.dueAt ? date(item.dueAt) : "No due date"}{item.overdueDays !== null && item.overdueDays > 0 && <small>{item.overdueDays} days overdue</small>}</td><td>{exactMoney(item.balanceCents)}</td><td>{onOpenJobInvoice ? <button type="button" onClick={() => onOpenJobInvoice(item.jobId)}>Open invoice</button> : "Review invoice"}</td>
+        </tr>)}</tbody></table></div>}
+        <p className={styles.hint}>Current recorded balances, including manual and linked accounting payments. These are not dated cash receipts.</p>
+      </section>}
       {report.profitability && <section className={styles.card} aria-label="Completed job profitability"><header><div><h4>Completed job profitability</h4><p>Current recorded position for jobs completed in this period. All figures exclude GST.</p></div></header>
         <div className={styles.metrics}>
           <Metric label="Net invoiced value" value={money(report.profitability.revenueCents)} detail={`${report.profitability.jobs} completed jobs, less issued credits`} comparison={null} />
           <Metric label="Recorded direct costs" value={money(report.profitability.labourCents + report.profitability.materialCents + report.profitability.otherCents)} detail={`Labour ${money(report.profitability.labourCents)} · Materials ${money(report.profitability.materialCents)} · Other ${money(report.profitability.otherCents)}`} comparison={null} />
-          <Metric label="Gross job margin" value={report.profitability.marginCents === null ? "Costs needed" : money(report.profitability.marginCents)} detail={`${report.profitability.completeJobs} of ${report.profitability.jobs} jobs with complete records${report.profitability.marginPercent === null ? "" : ` · ${report.profitability.marginPercent.toFixed(1)}% margin`}`} comparison={null} />
+          <Metric label="Margin on complete records" value={report.profitability.marginCents === null ? "Costs needed" : money(report.profitability.marginCents)} detail={`${report.profitability.completeJobs} of ${report.profitability.jobs} jobs with complete records${report.profitability.marginPercent === null ? "" : ` · ${report.profitability.marginPercent.toFixed(1)}% margin`}`} comparison={null} />
         </div><p className={styles.hint}>Margin includes only jobs with an issued TLink invoice and recorded costs for every planned cost item. Missing costs are not treated as zero. This is gross job margin before business overheads, payroll on-costs and income tax. Recorded labour: {hours(report.profitability.labourMinutes)}.</p>
-        {report.profitability.items.length > 0 ? <div className={styles.tableScroll}><table><thead><tr><th>Job</th><th>Net invoiced</th><th>Recorded costs</th><th>Gross margin</th><th>Cost records</th></tr></thead><tbody>{report.profitability.items.map(job => <tr key={job.id}><th><strong>{job.number || "Job"}</strong><small>{job.title}</small></th><td>{exactMoney(job.revenueCents)}</td><td>{exactMoney(job.labourCents + job.materialCents + job.otherCents)}<small>{hours(job.labourMinutes)} labour</small></td><td>{job.marginCents === null ? "Incomplete" : exactMoney(job.marginCents)}{job.marginPercent !== null && <small>{job.marginPercent.toFixed(1)}%</small>}</td><td>{({complete:"Complete",invoice_needed:"Invoice needed",plan_needed:"Work plan needed",scope_review:"Revised scope needs cost review",costs_needed:"Actual costs needed"} as Record<string,string>)[job.status]}{job.missingCosts > 0 && <small>{job.missingCosts} costs to record</small>}{onOpenJobCosts && <button type="button" onClick={() => onOpenJobCosts(job.id)}>Open job costs</button>}</td></tr>)}</tbody></table></div> : <p className={styles.hint}>No completed jobs on this page.</p>}
+        {report.profitability.jobs > 0 && <div className={styles.coverage} aria-label="Completed job cost coverage">
+          <strong>{report.profitability.completeJobs} / {report.profitability.jobs} complete records</strong><meter min="0" max={report.profitability.jobs} value={report.profitability.completeJobs} aria-label="Jobs with complete cost and invoice records" />
+          <span>{report.profitability.coverage.missingCosts} cost items missing · {report.profitability.coverage.invoiceNeeded} need an invoice · {report.profitability.coverage.planNeeded} need a work plan · {report.profitability.coverage.scopeReview} need a scope review</span>
+        </div>}
+        {report.profitability.items.length > 0 ? <div className={styles.tableScroll}><table><caption>Jobs needing records first</caption><thead><tr><th>Job</th><th>Net invoiced</th><th>Recorded costs</th><th>Gross margin</th><th>Cost records</th></tr></thead><tbody>{report.profitability.items.map(job => <tr key={job.id}><th><strong>{job.number || "Job"}</strong><small>{job.title}</small></th><td>{exactMoney(job.revenueCents)}</td><td>{exactMoney(job.labourCents + job.materialCents + job.otherCents)}<small>{hours(job.labourMinutes)} labour</small></td><td>{job.marginCents === null ? "Incomplete" : exactMoney(job.marginCents)}{job.marginPercent !== null && <small>{job.marginPercent.toFixed(1)}%</small>}</td><td>{JOB_COST_STATUS_LABELS[job.status]}{job.missingCosts > 0 && <small>{job.missingCosts} costs to record</small>}{job.status === "invoice_needed" && onOpenJobInvoice ? <button type="button" onClick={() => onOpenJobInvoice(job.id)}>Open invoice</button> : onOpenJobCosts && <button type="button" onClick={() => onOpenJobCosts(job.id)}>Open job costs</button>}</td></tr>)}</tbody></table></div> : <p className={styles.hint}>No completed jobs on this page.</p>}
         {report.profitability.jobs > report.profitability.pageSize && <nav className={styles.actions} aria-label="Job profitability pages"><button type="button" disabled={profitPage <= 1} onClick={() => setProfitPage(value => value - 1)}>Previous jobs</button><span>Page {profitPage} of {Math.ceil(report.profitability.jobs / report.profitability.pageSize)} · all {report.profitability.jobs} jobs included in totals</span><button type="button" disabled={profitPage * report.profitability.pageSize >= report.profitability.jobs} onClick={() => setProfitPage(value => value + 1)}>Next jobs</button></nav>}
       </section>}
       <div className={styles.twoColumns}><Breakdown title="Performance by service" items={report.services} label={key => services[key] || key} invoices={report.permissions.invoices} /><Breakdown title="Performance by region" items={report.regions} label={key => key === "unknown" ? "Region not recorded" : key} invoices={report.permissions.invoices} /></div>

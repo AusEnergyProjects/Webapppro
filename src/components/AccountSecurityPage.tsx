@@ -12,7 +12,7 @@ export function AccountSecurityPage() {
   const [ready, setReady] = useState(false);
   useEffect(() => onAuthStateChanged(firebaseAuth, (next) => { setUser(next); setReady(true); }), []);
   return <main className="wrap direct-trade-request-page">
-    <TLinkHeader active="partners" />
+    <TLinkHeader active="dashboard" />
     {!ready ? <p role="status">Opening account security...</p> : user ? <>
       <FirebaseAccountSecurity key={user.uid} user={user} />
       <nav className={styles.workspaceNav} aria-label="Return to your workspace">
@@ -20,6 +20,6 @@ export function AccountSecurityPage() {
         <a href="/direct-trade/team">Team workspace</a>
         <button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button>
       </nav>
-    </> : <section className="dashboard-state-card"><h1>Sign in to manage account security</h1><p>Use your existing TLink account, then open Account security from your profile.</p><a className="btn" href="/direct-trade/partners">Open account sign-in</a></section>}
+    </> : <section className="dashboard-state-card"><h1>Sign in to manage account security</h1><p>Use your existing TLink account, then open Account security from your profile.</p><a className="btn" href="/direct-trade/dashboard">Open account sign-in</a></section>}
   </main>;
 }

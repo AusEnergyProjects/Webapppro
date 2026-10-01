@@ -141,10 +141,10 @@ test("embedded mode keeps readiness and the pack editor outside collapsed option
 
 test("commercial and read-only restrictions hold in embedded readiness", async () => {
   const data = fieldData({ completion: { ready: true, invoiceReady: true, handoverReady: true } });
-  const h = panelHarness("TradeFieldWorkPanel", { user, workOrderId: "job", embedded: true, canOpenInvoice: false, canOpenHandover: false, onNavigate() {} }, async () => Response.json(data));
+  const h = panelHarness("TradeFieldWorkPanel", { user, workOrderId: "job", embedded: true, canOpenInvoice: false, onNavigate() {} }, async () => Response.json(data));
   let tree = await h.ready();
   assert.equal(button(tree, "Prepare invoice"), undefined); assert.equal(button(tree, "Open handover"), undefined);
-  tree = await h.refresh({ canOpenHandover: true }); assert.ok(button(tree, "Open handover")); assert.equal(button(tree, "Prepare invoice"), undefined);
+  tree = await h.refresh({ canOpenInvoice: true }); assert.ok(button(tree, "Prepare invoice")); assert.equal(button(tree, "Open handover"), undefined);
   tree = await h.refresh({ readOnly: true, canOpenInvoice: true });
   assert.equal(button(tree, "Prepare invoice"), undefined); assert.equal(button(tree, "Open handover"), undefined);
   assert.equal(nodes(tree, node => node.type === "form").length, 0); assert.equal(child(tree, "TradeActivityWorkPackPanel").props.readOnly, true);

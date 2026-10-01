@@ -4,7 +4,6 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
-import { TradeHandoverCentre } from "./TradeHandoverCentre";
 import { recoverableTradeWorkspace } from "./RecoverableTradeWorkspace";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
@@ -456,12 +455,6 @@ function BusinessHubFoundation({
                     <button type="submit" disabled={busy === order.id}>Save assignment</button>
                   </form>
                 )}
-
-                {partnerType === "installer" && <TradeHandoverCentre
-                  user={user}
-                  workOrderId={order.id}
-                  fullAccess={access.fullAccess}
-                />}
 
                 <footer>
                   <span>{order.lastEvent?.summary || "Work record created."}</span>

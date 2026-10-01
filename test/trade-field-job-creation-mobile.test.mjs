@@ -147,7 +147,8 @@ test("optional TLink invite is requested only after the job and appointment comm
   assert.match(inviteServer, /messageType: "tlink_direct_appointment_invite"/);
   assert.match(inviteServer, /text\/calendar; charset=utf-8/);
   assert.match(inviteServer, /sendTradeCustomerEmail\(input\.ownerUid/);
-  assert.match(crmRoute, /customer_calendar_invite_accepted/);
+  assert.match(inviteServer, /customer_calendar_invite_\$\{result.status\}/);
+  assert.match(inviteServer, /calendar-invite:\$\{input.appointmentId\}:\$\{appointmentRevision\}/);
 });
 
 test("appointment email delivery rejects provider redirects with a bounded timeout", async t => {

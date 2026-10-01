@@ -7,12 +7,12 @@ import { fileURLToPath } from "node:url";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const accessPage = fs.readFileSync(path.resolve(directory, "../src/app/direct-trade/access/page.tsx"), "utf8");
 
-test("TLink publishes its Australia-wide digital rollout boundary", () => {
-  assert.match(accessPage, /"@type": "Service"/);
-  assert.match(accessPage, /"@type": "SoftwareApplication"/);
-  assert.match(accessPage, /areaServed: \{ "@type": "Country", name: "Australia" \}/);
-  assert.match(accessPage, /availability: "https:\/\/schema\.org\/LimitedAvailability"/);
-  assert.match(accessPage, /designed for digital access by approved businesses/);
-  assert.match(accessPage, /During rollout, access remains subject to/);
-  assert.match(accessPage, /each business[\s\S]*controls the real service areas where it accepts work/);
+test("retired access page redirects to the canonical dashboard without duplicate public metadata", () => {
+  assert.match(accessPage, /redirect\("\/direct-trade\/dashboard"\)/);
+  assert.doesNotMatch(accessPage, /JsonLd|SoftwareApplication|buildPlatformMetadata/);
+  const sitemap = fs.readFileSync(path.resolve(directory, "../src/app/sitemap.ts"), "utf8");
+  assert.doesNotMatch(sitemap, /"\/direct-trade\/(?:access|partners)"/);
+  const setup = fs.readFileSync(path.resolve(directory, "../src/components/DirectTradePartnerForm.tsx"), "utf8");
+  assert.match(setup, /A valid ABN and the required business evidence must be supplied, reviewed and approved/);
+  assert.match(setup, /States and territories served/);
 });

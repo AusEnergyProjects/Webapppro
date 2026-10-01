@@ -122,6 +122,63 @@ test("draft quotes offer preparation instead of field-work prompts", () => {
   assert.equal(nodes(tree, node => node.props?.["aria-label"] === "Job next steps").length, 0);
 });
 
+test("accepted work opens the existing booking, forms and actual costs without a new job", () => {
+  const h = workspaceHarness({ initialTab: "summary", job: { quoteStatus: "accepted", pipelineStage: "approved" } });
+  let tree = h.render();
+  const prep = component(tree, "TradeJobReadinessPanel");
+  assert.equal(prep.props.workOrderId, "job-1");
+  assert.equal(prep.props.preparation.hasBooking, false);
+  assert.equal(nodes(tree, node => node.props?.["aria-label"] === "Job next steps").length, 0);
+  prep.props.preparation.onOpenPlan(); tree = h.render();
+  assert.equal(tabButton(tree, "Files").props.className, "active");
+  assert.equal(byId(tree, "field-work-plan").props.open, true);
+  prep.props.onOpenTeam(); tree = h.render();
+  assert.equal(tabButton(tree, "Schedule (0)").props.className, "active");
+  prep.props.preparation.onOpenFiles(); tree = h.render();
+  assert.equal(byId(tree, "job-files-forms").props.open, true);
+});
+
+test("accepted planning does not fetch owner cost data for staff or protected jobs", () => {
+  for (const options of [{ permissions: { canViewFieldEvidence: true, canViewQuotes: true } }, { job: { customerSource: "platform_private" } }]) {
+    const tree = workspaceHarness({ ...options, initialTab: "summary", job: { quoteStatus: "accepted", ...options.job } }).render();
+    assert.equal(component(tree, "TradeJobReadinessPanel"), undefined);
+  }
+});
+
+test("completed work opens email and invoice without another preparation or booking prompt", () => {
+  const h = workspaceHarness({ initialTab: "summary", job: { stage: "completed", quoteStatus: "accepted", pipelineStage: "complete" } });
+  const tree = h.render();
+  assert.equal(component(tree, "TradeJobReadinessPanel"), undefined);
+  assert.match(text(tree), /Work complete/);
+  assert.equal(nodes(tree, node => node.props?.["aria-label"] === "Job next steps").length, 0);
+  nodes(tree, node => node.type === "button" && text(node) === "Email the customer")[0].props.onClick();
+  assert.equal(tabButton(h.render(), "Messages").props.className, "active");
+});
+
+test("email-capable staff can reach customer updates without SMS or financial access", () => {
+  const h = workspaceHarness({ initialTab: "messages", permissions: { canViewCustomers: true, canManageJobs: true, canSendSms: false, canViewQuotes: false, canViewInvoices: false } });
+  const tree = h.render();
+  assert.equal(tabButton(tree, "Messages").props.className, "active");
+  assert.match(text(tree), /Keep the customer informed/);
+  assert.equal(component(tree, "TradeCustomerSmsPanel"), undefined);
+  assert.equal(component(tree, "TradeCustomerDeliveryExceptions"), undefined);
+});
+
+test("owners see email exceptions; staff with no communication permission have no Messages tab", () => {
+  const owner = workspaceHarness({ initialTab: "messages" }).render();
+  assert.equal(component(owner, "TradeCustomerDeliveryExceptions").props.workOrderId, "job-1");
+  const staff = workspaceHarness({ initialTab: "messages", permissions: { canViewCustomers: true, canSendSms: false } }).render();
+  assert.equal(tabButton(staff, "Messages"), undefined);
+  assert.equal(component(staff, "TradeCustomerDeliveryExceptions"), undefined);
+});
+
+test("the old handover link opens Files and preserves existing records without a portal action", () => {
+  const tree = workspaceHarness({ initialTab: "handover", job: { handoverStatus: "published" } }).render();
+  assert.equal(tabButton(tree, "Files").props.className, "active");
+  assert.equal(component(tree, "TradeHandoverHistory").props.workOrderId, "job-1");
+  assert.equal(component(tree, "TradeHandoverCentre"), undefined);
+});
+
 test("lost records keep read-only files and history without operational prompts or commercial mutations", () => {
   const h = workspaceHarness({ initialTab: "summary", job: { stage: "cancelled", pipelineStage: "lost", salesOutcome: { canMarkLost: false, canReopen: true }, tasks: [{ id: "task", status: "pending" }] } });
   let tree = h.render();
@@ -208,7 +265,7 @@ test("Files preserves staff visibility, commercial restrictions and imported rea
       assert.equal(files.props.includeHandover, false);
       assert.equal(files.props.includeQuotes, false);
       assert.equal(files.props.includeInvoices, false);
-      assert.equal(component(tree, "TradeFieldWorkPanel").props.canOpenHandover, false);
+      assert.equal(component(tree, "TradeHandoverHistory"), undefined);
     }
   }
   const owner = workspaceHarness().render();
@@ -307,7 +364,7 @@ test("restricted staff cannot follow a field shortcut into hidden commercial tab
   const h = workspaceHarness({ initialTab: "files", permissions: { canViewFieldEvidence: true, canManageFieldEvidence: true, canViewQuotes: false, canViewInvoices: false } });
   const panel = component(h.render(), "TradeFieldWorkPanel");
   assert.equal(panel.props.canOpenInvoice, false);
-  assert.equal(panel.props.canOpenHandover, false);
+  assert.equal(component(h.render(), "TradeHandoverHistory"), undefined);
   panel.props.onNavigate("invoice");
   assert.equal(tabButton(h.render(), "Files").props.className, "active");
 });

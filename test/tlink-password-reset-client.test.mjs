@@ -82,7 +82,7 @@ test("malformed recipients never reach the email API", async t => {
 });
 
 test("all TLink web entry points use the branded request with their own safe return destination", () => {
-  for (const [name, destination] of [["TradeTeamPortal", "emailActionSettings().url"], ["DirectTradePartnerForm", '"/direct-trade/partners"'], ["AdminOperationsPortal", '"/operations/control-centre"'], ["CreditexCompliancePortal", '"/creditex/compliance"']]) {
+  for (const [name, destination] of [["TradeTeamPortal", "emailActionSettings().url"], ["DirectTradePartnerForm", '"/direct-trade/dashboard"'], ["AdminOperationsPortal", '"/operations/control-centre"'], ["CreditexCompliancePortal", '"/creditex/compliance"']]) {
     const source = readFileSync(new URL(`../src/components/${name}.tsx`, import.meta.url), "utf8");
     assert.match(source, /requestTLinkPasswordReset/);
     assert.match(source, /tlinkPasswordResetErrorMessage\(error\)/);

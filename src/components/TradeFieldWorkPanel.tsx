@@ -32,7 +32,7 @@ type RetakeDialog = { review: PhotoRequirementReview; reasonCode: PhotoRetakeRea
 const day = () => new Date().toISOString().slice(0, 10);
 const timeLabel = (minutes: number) => minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? `${minutes % 60}m` : ""}`.trim() : `${minutes}m`;
 
-export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly = false, embedded = false, showProgress = true, canOpenInvoice = true, canOpenHandover = true, refreshKey = 0, onNavigate, onChanged }: { user: User; workOrderId: string; isProtected: boolean; readOnly?: boolean; embedded?: boolean; showProgress?: boolean; canOpenInvoice?: boolean; canOpenHandover?: boolean; refreshKey?: number; onNavigate?: (target: "forms" | "tasks" | "notes" | "invoice" | "handover" | "rental-assessment" | "activity-forms") => void; onChanged?: () => Promise<void> }) {
+export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly = false, embedded = false, showProgress = true, canOpenInvoice = true, refreshKey = 0, onNavigate, onChanged }: { user: User; workOrderId: string; isProtected: boolean; readOnly?: boolean; embedded?: boolean; showProgress?: boolean; canOpenInvoice?: boolean; refreshKey?: number; onNavigate?: (target: "forms" | "tasks" | "notes" | "invoice" | "rental-assessment" | "activity-forms") => void; onChanged?: () => Promise<void> }) {
   const fetch = useTradeBusinessFetch();
   const [data, setData] = useState<Result>({ protectedJob: isProtected, timeEntries: [], media: [], signoffs: [] });
   const [loading, setLoading] = useState(true);
@@ -119,11 +119,11 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
       setNavigationHint("This section is not available in your current view. Ask your job coordinator to review the outstanding item.");
       return;
     }
-    if ((target === "invoice" && !canOpenInvoice) || (target === "handover" && !canOpenHandover)) {
+    if (target === "invoice" && !canOpenInvoice) {
       setNavigationHint("Your access does not include this job section. Ask your job coordinator to review the next step.");
       return;
     }
-    if (target === "forms" || target === "tasks" || target === "notes" || target === "invoice" || target === "handover"
+    if (target === "forms" || target === "tasks" || target === "notes" || target === "invoice"
       || target === "rental-assessment" || target === "activity-forms") {
       if (onNavigate) { onNavigate(target); return; }
       setNavigationHint("Open this job in Jobs to review its forms, assessments and outstanding work.");
@@ -259,7 +259,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
 
   function navigationHelp(target: string) {
     if (target === "sync") return "Open TLink on the device with pending field changes, reconnect and resolve any sync conflicts there. This page cannot sync another device's saved work.";
-    if (!["forms", "tasks", "notes", "invoice", "handover", "rental-assessment", "activity-forms", "work-packs", "evidence", "work-plan"].includes(target)) {
+    if (!["forms", "tasks", "notes", "invoice", "rental-assessment", "activity-forms", "work-packs", "evidence", "work-plan"].includes(target)) {
       return "Ask your job coordinator to review this outstanding item. Job completion remains blocked until its requirements are resolved.";
     }
     return "";
@@ -279,9 +279,8 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
         : <button type="button" key={blocker.key} onClick={() => openChecklist(blocker.target, blocker.key)}>{blocker.label}</button>;
     })}</div>}
     {navigationHint && <p className="crm-inline-status" role="status">{navigationHint}</p>}
-    {!readOnly && onNavigate && ((canOpenInvoice && data.fieldJob.completion.invoiceReady) || (canOpenHandover && data.fieldJob.completion.handoverReady)) && <div className="crm-field-next-paths">
+    {!readOnly && onNavigate && canOpenInvoice && data.fieldJob.completion.invoiceReady && <div className="crm-field-next-paths">
       {canOpenInvoice && data.fieldJob.completion.invoiceReady && <button type="button" onClick={() => onNavigate("invoice")}>Prepare invoice</button>}
-      {canOpenHandover && data.fieldJob.completion.handoverReady && <button type="button" onClick={() => onNavigate("handover")}>Open handover</button>}
     </div>}
   </section>;
   const RecordsContainer = embedded ? "details" : "div";
@@ -304,12 +303,12 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
     {!embedded && data.fieldJob && <header className="crm-field-job-header"><div className="crm-field-job-heading"><span>{data.fieldJob.workNumber} | {data.fieldJob.collaborativeJob ? "Visit: " : ""}{data.fieldJob.status.replaceAll("_", " ")}</span><h3>{data.fieldJob.title}</h3><p>{data.fieldJob.customerName} | {data.fieldJob.serviceSite}</p>{data.fieldJob.scheduledStart && <small>{new Date(data.fieldJob.scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small>}</div><div className="crm-field-job-primary"><strong>View only</strong><span className="crm-sync-state">Read only</span></div></header>}
     <div className={`crm-field-privacy ${isProtected ? "protected" : "owned"}`}><strong>Field evidence access</strong><span>You can review this job&apos;s field record. Adding or changing field evidence is not included in your access.</span></div>
     <section id="job-files-work-packs"><TradeActivityWorkPackPanel key={workOrderId} user={user} workOrderId={workOrderId} readOnly onPresenceChange={setHasGovernedPacks} onOpenSupportingForms={onNavigate ? () => onNavigate("forms") : undefined} /></section>
-    <section className="crm-field-summary"><article><span>Time recorded</span><strong>{timeLabel(totalMinutes)}</strong></article><article><span>Job files</span><strong>{(data.media || []).length}</strong></article><article><span>Sign-offs</span><strong>{(data.signoffs || []).length}</strong></article></section>
+    <section className="crm-field-summary"><article><span>Manual time</span><strong>{timeLabel(totalMinutes)}</strong></article><article><span>Job files</span><strong>{(data.media || []).length}</strong></article><article><span>Sign-offs</span><strong>{(data.signoffs || []).length}</strong></article></section>
     {data.proofReview && <section id="field-photo-review" className={`crm-photo-proof-readiness ${data.proofReview.proofReady ? "ready" : "pending"}`}><header><div><span>Customer photo proof</span><h4>{data.proofReview.proofReady ? "Ready for field use" : "Review in progress"}</h4></div><strong>{data.proofReview.counts.accepted} accepted | {data.proofReview.counts.retakeRequested} retake | {data.proofReview.counts.pending} pending</strong></header><ul>{data.proofReview.reviews.map((review) => <li key={review.requirementId}><span>{review.label}</span><strong>{review.status.replaceAll("_", " ")}</strong></li>)}</ul></section>}
     <RecordsContainer id="field-evidence" className={embedded ? "crm-field-secondary" : undefined}>
-      {embedded && <summary>Time, uploads and supporting sign-offs</summary>}
+      {embedded && <summary>Uploads, supporting sign-offs and manual time</summary>}
       <div className="crm-field-grid">
-      <section className="crm-field-card"><header><div><span>Technician time</span><h4>Recorded work</h4></div></header>{(data.timeEntries || []).length > 0 ? <ol className="crm-field-records">{(data.timeEntries || []).slice(0, 20).map((entry) => <li key={entry.id}><div><strong>{timeLabel(entry.durationMinutes)} | {entry.staffLabel || "Team"}</strong><span>{new Date(`${entry.workDate}T00:00:00`).toLocaleDateString("en-AU", { dateStyle: "medium" })}</span>{entry.notes && <p>{entry.notes}</p>}</div></li>)}</ol> : <div className="crm-empty"><strong>No time recorded</strong></div>}</section>
+      <section className="crm-field-card"><header><div><span>Additional time</span><h4>Manually recorded work</h4></div></header>{(data.timeEntries || []).length > 0 ? <ol className="crm-field-records">{(data.timeEntries || []).slice(0, 20).map((entry) => <li key={entry.id}><div><strong>{timeLabel(entry.durationMinutes)} | {entry.staffLabel || "Team"}</strong><span>{new Date(`${entry.workDate}T00:00:00`).toLocaleDateString("en-AU", { dateStyle: "medium" })}</span>{entry.notes && <p>{entry.notes}</p>}</div></li>)}</ol> : <div className="crm-empty"><strong>No manual time recorded</strong></div>}</section>
       <section className="crm-field-card"><header><div><span>Photos and files</span><h4>Recorded site evidence</h4></div></header>{(data.media || []).length > 0 ? <ol className="crm-field-records">{(data.media || []).map((item) => <li key={item.id}><div><strong>{item.caption || item.fileName}</strong><span>{item.category.replaceAll("_", " ")} | {Math.max(1, Math.round(item.sizeBytes / 1024))} KB</span></div><button type="button" disabled={busy === `preview:${item.id}`} onClick={() => void openPreview(item)}>{busy === `preview:${item.id}` ? "Opening..." : "Preview"}</button></li>)}</ol> : <div className="crm-empty"><strong>No job files recorded</strong></div>}</section>
       {hasGovernedPacks === false && <section className="crm-field-card wide"><header><div><span>Supporting acknowledgement</span><h4>Recorded operational acknowledgements</h4></div></header>{(data.signoffs || []).length > 0 ? <ol className="crm-field-records signoffs">{(data.signoffs || []).map((item) => <li key={item.id}><div><strong>{item.signerName}</strong><span>{item.signerRole} | {new Date(item.signedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</span><p>{item.confirmationText}</p></div></li>)}</ol> : <div className="crm-empty"><strong>No acknowledgements recorded</strong></div>}</section>}
       </div>
@@ -327,7 +326,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
       <span>{isProtected ? "Record work, time and site evidence without names, contact details or a precise address. Customer sign-off stays with Australian Energy Assessments." : "This job belongs to your business, so the customer may complete a recorded sign-off."}</span>
     </div>
     <section id="job-files-work-packs"><TradeActivityWorkPackPanel key={workOrderId} user={user} workOrderId={workOrderId} readOnly={readOnly} onPresenceChange={setHasGovernedPacks} onOpenSupportingForms={onNavigate ? () => onNavigate("forms") : undefined} /></section>
-    <section className="crm-field-summary"><article><span>Time recorded</span><strong>{timeLabel(totalMinutes)}</strong></article><article><span>Job files</span><strong>{(data.media || []).length}</strong></article><article><span>Sign-offs</span><strong>{(data.signoffs || []).length}</strong></article></section>
+    <section className="crm-field-summary"><article><span>Manual time</span><strong>{timeLabel(totalMinutes)}</strong></article><article><span>Job files</span><strong>{(data.media || []).length}</strong></article><article><span>Sign-offs</span><strong>{(data.signoffs || []).length}</strong></article></section>
     {data.proofReview && <section id="field-photo-review" className={`crm-photo-proof-readiness ${data.proofReview.proofReady ? "ready" : "pending"}`}><header><div><span>Customer photo proof</span><h4>{data.proofReview.proofReady ? "Ready for field use" : data.proofReview.completion?.evidenceCurrent ? "Installer review in progress" : "Waiting for customer completion"}</h4></div><strong>{data.proofReview.counts.accepted} accepted | {data.proofReview.counts.retakeRequested} retake | {data.proofReview.counts.pending} pending</strong></header><ul>{data.proofReview.reviews.map((review) => {
       const actionable = Boolean(data.canReviewPhotoRequest && data.proofReview?.completion?.evidenceCurrent
         && data.proofReview.uploadCounts[review.requirementId]
@@ -335,9 +334,9 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
       return <li key={review.requirementId}><span>{review.label}</span><strong>{review.status.replaceAll("_", " ")}</strong><div className="crm-photo-proof-actions">{review.status === "retake_requested" && <small>{review.retakeAnswered ? "Replacement added" : "Replacement outstanding"}</small>}{actionable && <><button type="button" className="approve" disabled={Boolean(busy)} onClick={() => void approveRequirement(review)}>Approve</button><button type="button" className="retake" disabled={Boolean(busy)} onClick={() => void openRetake(review)}>Retake</button></>}</div></li>;
     })}</ul></section>}
     <RecordsContainer id="field-evidence" className={embedded ? "crm-field-secondary" : undefined}>
-      {embedded && <summary>Time, uploads and supporting sign-offs</summary>}
+      {embedded && <summary>Uploads, supporting sign-offs and manual time</summary>}
       <div className="crm-field-grid">
-      <section className="crm-field-card"><header><div><span>Technician time</span><h4>Log work completed</h4></div></header>
+      <details className="crm-field-card crm-manual-time"><summary>Add manual time (optional)</summary><p>Form activity is timestamped automatically. Use this only for work outside your forms. Entries stay separate from automatic form timing.</p>
         <form className="crm-field-form" onSubmit={(event) => void jsonAction(event, "add_time", "Technician time added.")}>
           <label><span>Work date</span><input type="date" name="workDate" required defaultValue={day()} /></label>
           <label><span>Minutes worked</span><input type="number" name="durationMinutes" min="1" max="1440" required placeholder="90" /></label>
@@ -346,7 +345,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, readOnly =
           <button disabled={busy === "add_time"}>{busy === "add_time" ? "Saving..." : "Add time"}</button>
         </form>
         {(data.timeEntries || []).length > 0 && <ol className="crm-field-records">{(data.timeEntries || []).slice(0, 8).map((entry) => <li key={entry.id}><div><strong>{timeLabel(entry.durationMinutes)} | {entry.staffLabel || "Team"}</strong><span>{new Date(`${entry.workDate}T00:00:00`).toLocaleDateString("en-AU", { dateStyle: "medium" })}</span>{entry.notes && <p>{entry.notes}</p>}</div></li>)}</ol>}
-      </section>
+      </details>
       <section className="crm-field-card"><header><div><span>Photos and files</span><h4>Keep site evidence together</h4></div></header>
         <form className="crm-field-form" onSubmit={(event) => void upload(event)}>
           <label><span>Type</span><select name="category"><option value="before">Before work</option><option value="progress">Work in progress</option><option value="after">Completed work</option><option value="document">Document</option></select></label>

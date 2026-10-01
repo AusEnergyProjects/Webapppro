@@ -10,6 +10,7 @@ import { PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE } from 
 import { CUSTOMER_CONTACT_RELEASE_FIELDS, CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION } from "../src/lib/customer-projects.mjs";
 import { PUBLIC_SITE } from "../src/lib/public-site.ts";
 import * as abn from "../src/lib/trade-abn.ts";
+import * as collaboration from "../src/lib/trade-job-collaboration.ts";
 
 const cache = new Map();
 function load(path, dependencies) {
@@ -34,6 +35,10 @@ function fixture() {
     trade_crm_customers: "id firebase_uid email record_status",
     trade_crm_job_details: "work_order_id firebase_uid crm_customer_id customer_source",
     trade_work_orders: "id firebase_uid partner_type record_status source_type assignee_member_id",
+    trade_crm_appointments: "id work_order_id firebase_uid assignee_member_id status",
+    trade_crews: "id owner_uid lead_member_id",
+    trade_crew_members: "owner_uid crew_id member_id",
+    trade_team_members: "id owner_uid status",
     trade_opportunity_matches: "id firebase_uid opportunity_id status matched_categories",
     trade_opportunities: "id source_reference postcode state service_categories status expires_at created_at",
     customer_projects: "id opportunity_id firebase_uid postcode address_state",
@@ -55,6 +60,7 @@ function fixture() {
   const recipient = load("../src/lib/trade-email-recipient-server.ts", {
     "../../db": { getD1: () => db }, "./aea-trade-owner-server": aea, "./trade-certificate-leads": certificate,
     "./public-trade-lead-access.mjs": publicContact, "./trade-opportunity-read-projection.mjs": projectContact,
+    "./trade-job-collaboration.ts": collaboration,
   });
   const publicRelease = (changes = {}) => insert("public_trade_lead_contact_releases", {
     id: "release", opportunity_id: "opportunity", source_reference: "public:source", status: "active",
@@ -125,6 +131,82 @@ test("Assigned staff cannot send to unassigned customers, protected opportunity 
     }
     await assert.rejects(resolve({ customerId: "customer" }, { ...owner, canViewCustomers: false }), /EMAIL_ACCESS_REQUIRED/);
     await assert.rejects(resolve({ customerId: "customer" }, { ...assignedMember, canManageCustomers: false, canManageJobs: false, canSendQuotes: false, canManageInvoices: false }), /EMAIL_ACCESS_REQUIRED/);
+  } finally { f.close(); }
+});
+
+test("email-authorized visit collaborators can resolve their job and customer without becoming the job lead", async () => {
+  const f = fixture();
+  try {
+    f.customer(); f.job({ assignee_member_id: "job-lead" });
+    f.insert("trade_crm_appointments", { id: "visit", work_order_id: "job", firebase_uid: "owner", assignee_member_id: "member", status: "scheduled" });
+    const targets = [{ workOrderId: "job" }, { customerId: "customer" }];
+    for (const status of collaboration.COLLABORATING_VISIT_STATUSES) {
+      f.sqlite.prepare("UPDATE trade_crm_appointments SET status=?").run(status);
+      for (const target of targets) assert.equal(await f.recipient.resolveTradeEmailRecipient(assignedMember, target, f.db), "customer@example.test", status);
+    }
+    for (const target of targets) {
+      await assert.rejects(f.recipient.resolveTradeEmailRecipient({ ...assignedMember, canViewCustomers: false }, target, f.db), /EMAIL_ACCESS_REQUIRED/);
+      await assert.rejects(f.recipient.resolveTradeEmailRecipient({ ...assignedMember, canManageCustomers: false, canManageJobs: false, canSendQuotes: false, canManageInvoices: false }, target, f.db), /EMAIL_ACCESS_REQUIRED/);
+    }
+    assert.equal(f.sqlite.prepare("SELECT assignee_member_id FROM trade_work_orders").get().assignee_member_id, "job-lead");
+  } finally { f.close(); }
+});
+
+test("cancelled, no-show, reassigned and foreign-owner visits cannot expose a job recipient or its customer", async () => {
+  const f = fixture();
+  try {
+    f.customer(); f.job({ assignee_member_id: "job-lead" });
+    f.insert("trade_crm_appointments", { id: "visit", work_order_id: "job", firebase_uid: "owner", assignee_member_id: "member", status: "scheduled" });
+    const mutations = [
+      "UPDATE trade_crm_appointments SET status='cancelled'",
+      "UPDATE trade_crm_appointments SET status='no_show'",
+      "UPDATE trade_crm_appointments SET status='scheduled',assignee_member_id='someone-else'",
+      "UPDATE trade_crm_appointments SET assignee_member_id='member',firebase_uid='other-business'",
+      "UPDATE trade_crm_appointments SET firebase_uid='owner',work_order_id='other-job'",
+    ];
+    for (const mutation of mutations) {
+      f.sqlite.exec(mutation);
+      for (const target of [{ workOrderId: "job" }, { customerId: "customer" }]) {
+        await assert.rejects(f.recipient.resolveTradeEmailRecipient(assignedMember, target, f.db), /EMAIL_RECIPIENT_UNAVAILABLE/, mutation);
+      }
+    }
+  } finally { f.close(); }
+});
+
+test("email recipient crew collaboration rechecks active membership and tenant scope while preserving crew email restrictions", async () => {
+  const f = fixture();
+  try {
+    f.customer(); f.job({ assignee_member_id: "job-lead" });
+    for (const id of ["lead", "worker"]) {
+      f.insert("trade_team_members", { id, owner_uid: "owner", status: "active" });
+      f.insert("trade_crew_members", { owner_uid: "owner", crew_id: "crew", member_id: id });
+    }
+    f.insert("trade_crews", { id: "crew", owner_uid: "owner", lead_member_id: "lead" });
+    f.insert("trade_crm_appointments", { id: "visit", work_order_id: "job", firebase_uid: "owner", assignee_member_id: "worker", status: "scheduled" });
+    const scopedLead = { ...assignedMember, memberId: "lead", crewId: "crew", crewLead: true, crewMemberIds: ["lead", "worker"] };
+    // Collaboration is not itself email authorization. Actual subcontractor access
+    // disables customer access before this SQL query is reached.
+    const restrictedLead = { ...scopedLead, canViewCustomers: false, canManageCustomers: false, canSendQuotes: false, canManageInvoices: false };
+    for (const target of [{ workOrderId: "job" }, { customerId: "customer" }]) {
+      await assert.rejects(f.recipient.resolveTradeEmailRecipient(restrictedLead, target, f.db), /EMAIL_ACCESS_REQUIRED/);
+      assert.equal(await f.recipient.resolveTradeEmailRecipient(scopedLead, target, f.db), "customer@example.test");
+    }
+    const revokedStates = [
+      ["DELETE FROM trade_crew_members WHERE member_id='lead'", "INSERT INTO trade_crew_members VALUES ('owner','crew','lead')"],
+      ["DELETE FROM trade_crew_members WHERE member_id='worker'", "INSERT INTO trade_crew_members VALUES ('owner','crew','worker')"],
+      ["UPDATE trade_team_members SET status='inactive' WHERE id='worker'", "UPDATE trade_team_members SET status='active'"],
+      ["UPDATE trade_team_members SET status='inactive' WHERE id='lead'", "UPDATE trade_team_members SET status='active'"],
+      ["UPDATE trade_crews SET owner_uid='other-business'", "UPDATE trade_crews SET owner_uid='owner'"],
+      ["UPDATE trade_crm_appointments SET firebase_uid='other-business'", "UPDATE trade_crm_appointments SET firebase_uid='owner'"],
+      ["UPDATE trade_crews SET lead_member_id='worker'", "UPDATE trade_crews SET lead_member_id='lead'"],
+    ];
+    for (const [revoke, restore] of revokedStates) {
+      f.sqlite.exec(revoke);
+      for (const target of [{ workOrderId: "job" }, { customerId: "customer" }]) {
+        await assert.rejects(f.recipient.resolveTradeEmailRecipient(scopedLead, target, f.db), /EMAIL_RECIPIENT_UNAVAILABLE/, revoke);
+      }
+      f.sqlite.exec(restore);
+    }
   } finally { f.close(); }
 });
 
