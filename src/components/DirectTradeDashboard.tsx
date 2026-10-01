@@ -2433,24 +2433,21 @@ function DirectTradeDashboardContent() {
                 </svg>
               </span>
             </button>
-            <details className="dashboard-account-menu" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
-              <summary><span>Business</span><span aria-hidden="true">⌄</span></summary>
-              <div className="dashboard-account-actions">
+            <div className="dashboard-account-actions">
               <AeaProductLink placement="trade-portal" />
-              {!isSupplier && <TradeTeamPresence key={user.uid} getAuthHeaders={async () => ({ Authorization: `Bearer ${await user.getIdToken()}` })} />}
-              {!isSupplier && <a className="tlink-get-app" href="/direct-trade/field-app"><Image src="/tlink-icon-192.png" alt="" width={25} height={25} /><span>Get the app</span></a>}
               <div className="dashboard-account-summary">
                 <small>Business account</small>
                 <strong title={user.email || ""}>{profile.businessName}</strong>
               </div>
-              <button type="button" onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); setWorkspace("account"); }}>
+              {!isSupplier && <TradeTeamPresence key={user.uid} getAuthHeaders={async () => ({ Authorization: `Bearer ${await user.getIdToken()}` })} />}
+              {!isSupplier && <a className="tlink-get-app" href="/direct-trade/field-app"><Image src="/tlink-icon-192.png" alt="" width={25} height={25} /><span>Get the app</span></a>}
+              <button type="button" onClick={() => setWorkspace("account")}>
                 Business settings
               </button>
               <button type="button" onClick={() => void leaveAccount()}>
                 Sign out
               </button>
             </div>
-            </details>
           </header>
 
           {isSupplier && workspace !== "map" && workspace !== "design" && workspace !== "network" && workspace !== "email-templates" && workspace !== "messages" && <div className="trade-portal-intro">

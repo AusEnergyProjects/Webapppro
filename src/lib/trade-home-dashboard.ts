@@ -1,4 +1,16 @@
-import type { BusinessReport } from "./trade-business-reports.ts";
+import type { BusinessReport, ReportPreset } from "./trade-business-reports.ts";
+
+export const HOME_REVENUE_PERIODS = [
+  { value: "weekly", label: "This week", preset: "weekly", previous: false },
+  { value: "last_week", label: "Last week", preset: "weekly", previous: true },
+  { value: "monthly", label: "This month", preset: "monthly", previous: false },
+  { value: "last_month", label: "Last month", preset: "monthly", previous: true },
+  { value: "quarterly", label: "This quarter", preset: "quarterly", previous: false },
+  { value: "last_quarter", label: "Last quarter", preset: "quarterly", previous: true },
+  { value: "fytd", label: "This financial year", preset: "fytd", previous: false },
+  { value: "last_financial_year", label: "Last financial year", preset: "fytd", previous: true },
+] as const satisfies ReadonlyArray<{ value: string; label: string; preset: ReportPreset; previous: boolean }>;
+export type HomeRevenuePeriod = typeof HOME_REVENUE_PERIODS[number]["value"];
 
 export type HomeJobReference = { id: string; workNumber: string; title: string; protected: boolean };
 export type HomeAppointment = {

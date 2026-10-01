@@ -326,6 +326,48 @@ test("local dates roll through DST and invalid report periods fail before queryi
   assert.equal(f.queries.length, before);
 });
 
+test("last revenue periods include whole calendars, leap days, year rollovers and business-local boundaries", async t => {
+  const f = fixture(); t.after(() => f.database.close());
+  const cases = [
+    { period: "last_week", now: "2026-01-01T01:00:00Z", start: "2025-12-22", end: "2025-12-28", previousStart: "2025-12-15", previousEnd: "2025-12-21" },
+    { period: "last_month", now: "2024-02-29T13:30:00Z", start: "2024-02-01", end: "2024-02-29", previousStart: "2024-01-01", previousEnd: "2024-01-31", startUtc: "2024-01-31T13:00:00.000Z", endUtc: "2024-02-29T13:00:00.000Z" },
+    { period: "last_month", now: "2026-01-01T01:00:00Z", start: "2025-12-01", end: "2025-12-31", previousStart: "2025-11-01", previousEnd: "2025-11-30" },
+    { period: "last_quarter", now: "2026-01-01T01:00:00Z", start: "2025-10-01", end: "2025-12-31", previousStart: "2025-07-01", previousEnd: "2025-09-30" },
+    { period: "last_financial_year", now: "2026-06-30T13:30:00Z", start: "2024-07-01", end: "2025-06-30", previousStart: "2023-07-01", previousEnd: "2024-06-30" },
+    { period: "last_financial_year", now: "2026-06-30T14:30:00Z", start: "2025-07-01", end: "2026-06-30", previousStart: "2024-07-01", previousEnd: "2025-06-30" },
+    { period: "last_week", now: "2026-10-04T13:30:00Z", start: "2026-09-28", end: "2026-10-04", previousStart: "2026-09-21", previousEnd: "2026-09-27", startUtc: "2026-09-27T14:00:00.000Z", endUtc: "2026-10-04T13:00:00.000Z" },
+  ];
+  for (const item of cases) await t.test(`${item.period} at ${item.now}`, async () => {
+    const result = await loadHomeDashboard(f.db, "owner", { ...defaultAccess, canRunReports: true, canViewInvoices: true }, new URLSearchParams({ period: item.period }), "NSW", new Date(item.now));
+    const period = result.financial.period;
+    assert.deepEqual([period.start, period.end, period.previous.start, period.previous.end], [item.start, item.end, item.previousStart, item.previousEnd]);
+    if (item.startUtc) assert.deepEqual([period.startUtc, period.endUtc], [item.startUtc, item.endUtc]);
+    assert.equal(period.timeZone, "Australia/Sydney");
+    assert.equal(result.today, period.today);
+  });
+});
+
+test("last-month revenue uses issued dates and leaves current workload and current outstanding balances intact", async t => {
+  const f = fixture(); t.after(() => f.database.close());
+  for (const [id, sentAt, total] of [
+    ["previous", "2026-08-31T13:59:59Z", 22000], ["first", "2026-08-31T14:00:00Z", 11000],
+    ["last", "2026-09-30T13:59:59Z", 33000], ["current", "2026-09-30T14:00:00Z", 44000],
+  ]) { f.job(id); f.invoice(id, id, { sent_at: sentAt, total_cents: total, tax_cents: total / 11 }); }
+  f.visit("today", "current");
+  const params = new URLSearchParams({ period: "last_month" });
+  const result = await loadHomeDashboard(f.db, "owner", { ...defaultAccess, canRunReports: true, canViewInvoices: true }, params, "NSW", now);
+  assert.equal(result.financial.current.invoicedCents, 40000);
+  assert.equal(result.financial.previous.invoicedCents, 20000);
+  assert.equal(result.financial.recordedGst.netGstCents, 4000);
+  assert.equal(result.financial.receivables.outstandingCents, 110000);
+  assert.equal(result.metrics.todayVisits, 1); assert.equal(result.today, "2026-10-01");
+  assert.equal(result.workload[0].weekStart, "2026-09-28");
+  assert.equal(params.get("period"), "last_month", "Request parameters remain immutable");
+  for (const permissions of [{}, { canRunReports: true }, { canViewInvoices: true }]) {
+    assert.equal((await f.home(permissions, { period: "last_month" })).financial, null);
+  }
+});
+
 // Run the actual GET and crmIdentity functions against SQLite. Authentication,
 // schema setup and JSON transport are isolated; all dashboard SQL is executed.
 const routeSource = ts.createSourceFile("route.ts", readFileSync(new URL("../src/app/api/trade-crm/route.ts", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
@@ -360,6 +402,22 @@ test("Home API uses authenticated business, validates origin/auth/dates and leav
   assert.equal((await foreignOrigin.get("mode=home")).status, 403); assert.equal(foreignOrigin.authCalls(), 0);
   assert.equal((await api(f, {}, { authError: "AUTH_REQUIRED" }).get("mode=home")).status, 401);
   assert.equal((await api(f, {}, { authError: "ABN_REVIEW_REQUIRED" }).get("mode=home")).status, 403);
+});
+
+test("Home API accepts every previous-period selector and keeps financial authority on the server", async t => {
+  const f = fixture(); t.after(() => f.database.close());
+  const permitted = api(f, { canRunReports: true, canViewInvoices: true });
+  const staff = api(f);
+  for (const [period, start, end] of [
+    ["last_week", "2026-09-21", "2026-09-27"], ["last_month", "2026-09-01", "2026-09-30"],
+    ["last_quarter", "2026-07-01", "2026-09-30"], ["last_financial_year", "2025-07-01", "2026-06-30"],
+  ]) {
+    const response = await permitted.get(`mode=home&period=${period}`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual([body.dashboard.financial.period.start, body.dashboard.financial.period.end], [start, end]);
+    assert.equal((await (await staff.get(`mode=home&period=${period}`)).json()).dashboard.financial, null);
+  }
 });
 
 test("Home query batches execute within Cloudflare D1 limits with SQLite-equivalent scoped results", async () => {

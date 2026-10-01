@@ -3,7 +3,7 @@ import { loadBusinessReport, type ReportAccess } from "./trade-business-reports-
 import { jobMemberSql } from "./trade-job-collaboration.ts";
 import { crewScheduleMemberIds } from "./trade-crews.ts";
 import { tradeJobNeedsSchedulingSql } from "./trade-job-scheduling-attention.ts";
-import type { HomeDashboard, HomeJobReference } from "./trade-home-dashboard.ts";
+import { HOME_REVENUE_PERIODS, type HomeDashboard, type HomeJobReference } from "./trade-home-dashboard.ts";
 
 type HomeAccess = ReportAccess & { canRunReports: boolean };
 type Row = Record<string, unknown>;
@@ -37,8 +37,17 @@ function jobReference(row: Row): HomeJobReference {
 /** Approved users get only their existing job and schedule scopes, independently of report access. */
 export async function loadHomeDashboard(db: Pick<D1Database, "prepare" | "batch">, uid: string, access: HomeAccess,
   params: URLSearchParams, state = "NSW", now = new Date()): Promise<HomeDashboard> {
+  const selectedPeriod = HOME_REVENUE_PERIODS.find(option => option.value === params.get("period"));
+  const reportParams = new URLSearchParams(params);
+  if (selectedPeriod?.previous) {
+    reportParams.set("period", selectedPeriod.preset);
+    reportParams.delete("anchor");
+    // Anchor in the previous calendar period so reports return all of it, not a to-date comparison.
+    const current = resolveReportPeriod(reportParams, state, now);
+    reportParams.set("anchor", addReportDays(current.start, -1));
+  }
   // Validate the selected reporting window even when financial data is unavailable.
-  const period = resolveReportPeriod(params, state, now);
+  const period = resolveReportPeriod(reportParams, state, now);
   const today = period.today;
   const monday = addReportDays(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7));
   const weeks = Array.from({ length: 4 }, (_, index) => ({
@@ -110,6 +119,6 @@ export async function loadHomeDashboard(db: Pick<D1Database, "prepare" | "batch"
       return { id: String(row.id), body: job.protected ? "Protected job issue" : String(row.body || ""), createdAt: String(row.created_at), job };
     }),
     financial: access.isOwner || (access.canRunReports && access.canViewInvoices)
-      ? await loadBusinessReport(db, uid, access, params, state, now) : null,
+      ? await loadBusinessReport(db, uid, access, reportParams, state, now) : null,
   };
 }

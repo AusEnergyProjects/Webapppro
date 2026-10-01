@@ -5,6 +5,7 @@ import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import { resolveReportPeriod } from "../src/lib/trade-business-reports.ts";
 import * as reporting from "../src/lib/trade-business-reports.ts";
+import * as homeReporting from "../src/lib/trade-home-dashboard.ts";
 import * as schedule from "../src/lib/trade-schedule.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradeHomeDashboard.tsx", import.meta.url), "utf8");
@@ -44,7 +45,7 @@ function harness(responder, options = {}) {
     useState(initial) { const index = cursor++; if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial; return [state[index], next => state[index] = typeof next === "function" ? next(state[index]) : next]; },
     useEffect(callback, deps) { const index = cursor++; const old = effects[index]; if (!old || deps.some((value, i) => value !== old.deps[i])) { old?.cleanup?.(); effects[index] = { deps }; pending.push(() => effects[index].cleanup = callback()); } },
   };
-  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./TradeBusinessProvider" ? { useTradeBusinessFetch: () => request, useTradeBusiness: () => currentBusiness } : id === "@/lib/trade-business-reports" ? reporting : id === "@/lib/trade-schedule" ? schedule : id === "@/lib/energy-service-catalogue.mjs" ? { ENERGY_SERVICE_LABELS: { electrical: "Electrical" } } : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : {};
+  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./TradeBusinessProvider" ? { useTradeBusinessFetch: () => request, useTradeBusiness: () => currentBusiness } : id === "@/lib/trade-business-reports" ? reporting : id === "@/lib/trade-home-dashboard" ? homeReporting : id === "@/lib/trade-schedule" ? schedule : id === "@/lib/energy-service-catalogue.mjs" ? { ENERGY_SERVICE_LABELS: { electrical: "Electrical" } } : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : {};
   Function("require", "exports", compiled)(require, exports);
   const render = () => { cursor = 0; const tree = expand(exports.TradeHomeDashboard(props)); for (const effect of pending.splice(0)) effect(); return tree; };
   return { render, props, requests, calls, setBusiness(value) { currentBusiness = value; }, async mount() { render(); await flush(); return render(); }, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
@@ -68,6 +69,30 @@ test("period selection clears stale numbers and routes all Home actions", async 
   nodes(tree, node => node.type === "select")[0].props.onChange({ target: { value: "quarterly" } });
   tree = h.render(); assert.match(text(tree), /Loading your dashboard/); assert.doesNotMatch(text(tree), /\$100/);
   await flush(); tree = h.render(); assert.match(h.requests.at(-1).url, /period=quarterly/); assert.equal(nodes(tree, node => node.type === "select")[0].props.value, "quarterly"); h.cleanup();
+});
+
+test("Revenue offers the current and last complete periods and labels selected and comparison years", async () => {
+  const h = harness(async url => {
+    const data = fixture();
+    if (url.includes("period=last_financial_year")) data.financial.period = resolveReportPeriod(new URLSearchParams({ period: "fytd", anchor: "2026-06-30" }), "NSW", new Date(data.generatedAt));
+    return response(data);
+  });
+  let tree = await h.mount();
+  assert.deepEqual(nodes(tree, node => node.type === "option").map(node => [node.props.value, text(node)]), [
+    ["weekly", "This week"], ["last_week", "Last week"], ["monthly", "This month"], ["last_month", "Last month"],
+    ["quarterly", "This quarter"], ["last_quarter", "Last quarter"], ["fytd", "This financial year"], ["last_financial_year", "Last financial year"],
+  ]);
+  for (const value of ["last_week", "last_month", "last_quarter", "last_financial_year"]) {
+    nodes(tree, node => node.type === "select")[0].props.onChange({ target: { value } });
+    tree = h.render(); assert.match(text(tree), /Loading your dashboard/); assert.doesNotMatch(text(tree), /\$100/);
+    await flush(); tree = h.render();
+    assert.equal(h.requests.at(-1).url, `/api/trade-crm?mode=home&period=${value}`);
+    assert.equal(nodes(tree, node => node.type === "select")[0].props.value, value);
+  }
+  assert.match(text(tree), /Last financial year · ex GST/);
+  assert.match(text(tree), /1 Jul(?:y)? 2025\s+to\s+30 Jun(?:e)? 2026/);
+  assert.match(text(tree), /previous period \(\s*1 Jul(?:y)? 2024\s+to\s+30 Jun(?:e)? 2025\s*\)/);
+  h.cleanup();
 });
 
 test("attention actions retain the task or issue destination and do not imply scheduling eligibility", async () => {

@@ -34,7 +34,7 @@ test("TLink headers keep an obvious reciprocal AEA home link", () => {
 test("TLink headers switch to bounded layouts before their controls can overflow", () => {
   assert.match(
     styles,
-    /@media \(max-width: 960px\) \{[\s\S]*?\.trade-portal-shell \{ grid-template-rows: auto auto; \}[\s\S]*?tlink-command-launcher[\s\S]*?flex: 1 0 100%/,
+    /grid-template-rows: max-content auto;[\s\S]*?@media \(max-width: 960px\) \{[\s\S]*?tlink-command-launcher[\s\S]*?flex: 1 0 100%/,
   );
   assert.match(
     styles,

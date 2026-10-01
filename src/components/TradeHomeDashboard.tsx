@@ -2,16 +2,15 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { User } from "firebase/auth";
-import type { BusinessReport, ReportPreset } from "@/lib/trade-business-reports";
+import type { BusinessReport } from "@/lib/trade-business-reports";
 import { JOB_COST_STATUS_LABELS } from "@/lib/trade-business-reports";
-import type { HomeDashboard } from "@/lib/trade-home-dashboard";
+import { HOME_REVENUE_PERIODS as periods, type HomeDashboard, type HomeRevenuePeriod } from "@/lib/trade-home-dashboard";
 import { normaliseLocalDateTime } from "@/lib/trade-schedule";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import styles from "./TradeHomeDashboard.module.css";
 
-type HomePeriod = Extract<ReportPreset, "weekly" | "monthly" | "quarterly" | "fytd">;
 type HomeResponse = { ok?: boolean; dashboard?: HomeDashboard; error?: string };
 export type TradeHomeDashboardProps = {
   user: User;
@@ -27,13 +26,9 @@ export type TradeHomeDashboardProps = {
   refreshKey?: number;
 };
 
-const periods: Array<{ value: HomePeriod; label: string }> = [
-  { value: "weekly", label: "This week" }, { value: "monthly", label: "This month" },
-  { value: "quarterly", label: "This quarter" }, { value: "fytd", label: "Financial year" },
-];
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(cents / 100);
 const exactMoney = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
-const dayLabel = (day: string) => new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
+const dayLabel = (day: string, showYear = false) => new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: showYear ? "numeric" : undefined, timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
 const hours = (minutes: number) => `${(minutes / 60).toLocaleString("en-AU", { maximumFractionDigits: 1 })} h`;
 const plural = (count: number, noun: string) => `${count.toLocaleString("en-AU")} ${noun}${count === 1 ? "" : "s"}`;
 const serviceNames: Record<string, string> = { ...ENERGY_SERVICE_LABELS, "rental-inspection": "Rental inspection", "mounting-hardware": "Mounting and hardware", controls: "Energy controls", unknown: "Uncategorised", other: "Other work" };
@@ -55,7 +50,7 @@ function Icon({ kind }: { kind: "calendar" | "briefcase" | "wallet" | "chart" | 
 export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSchedule, onOpenJobs, onNewJob, onOpenInvoices, onOpenJobInvoice, onOpenJobCosts, onOpenReports, refreshKey = 0 }: TradeHomeDashboardProps) {
   const request = useTradeBusinessFetch();
   const business = useTradeBusiness();
-  const [period, setPeriod] = useState<HomePeriod>("monthly");
+  const [period, setPeriod] = useState<HomeRevenuePeriod>("monthly");
   const [refresh, setRefresh] = useState(0);
   const [result, setResult] = useState<{ key: string; dashboard: HomeDashboard | null; error: string } | null>(null);
   const canSeeFinance = !staffPermissions || (staffPermissions.canRunReports && staffPermissions.canViewInvoices);
@@ -184,7 +179,7 @@ function SummaryCard({ label, value, detail, icon, onClick, attention = false }:
   return onClick ? <button type="button" className={styles.summaryCard} onClick={onClick}>{content}</button> : <div className={styles.summaryCard}>{content}</div>;
 }
 
-function RevenueCard({ report, period, onPeriodChange, onOpenReports }: { report: BusinessReport; period: HomePeriod; onPeriodChange: (period: HomePeriod) => void; onOpenReports?: () => void }) {
+function RevenueCard({ report, period, onPeriodChange, onOpenReports }: { report: BusinessReport; period: HomeRevenuePeriod; onPeriodChange: (period: HomeRevenuePeriod) => void; onOpenReports?: () => void }) {
   const groups = report.services.filter(group => group.invoicedCents !== null && group.invoicedCents !== 0).sort((a, b) => (b.invoicedCents ?? 0) - (a.invoicedCents ?? 0));
   const hasNegative = groups.some(group => (group.invoicedCents ?? 0) < 0);
   const total = groups.reduce((sum, group) => sum + (group.invoicedCents ?? 0), 0);
@@ -197,7 +192,7 @@ function RevenueCard({ report, period, onPeriodChange, onOpenReports }: { report
   const completeCostRecords = Boolean(costs && costs.jobs > 0 && costs.completeJobs === costs.jobs);
   return <section className={styles.card} aria-label="Revenue overview">
     <div className={styles.cardHeading}><div><span className={styles.eyebrow}>Business performance</span><h3>Revenue</h3></div><label className={styles.periodPicker}><span className={styles.srOnly}>Revenue period</span><select value={period} onChange={event => { const selected = periods.find(item => item.value === event.target.value); if (selected) onPeriodChange(selected.value); }}>{periods.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></div>
-    <p className={styles.range}>{dayLabel(report.period.start)} to {dayLabel(report.period.end)} · Net invoicing by service</p>
+    <p className={styles.range}>{dayLabel(report.period.start, true)} to {dayLabel(report.period.end, true)} · Net invoicing by service</p>
     <div className={styles.revenueVisual}>
       <div className={styles.doughnut}>
         <svg viewBox="0 0 220 220" role="img" aria-label={net === null ? "Net invoicing unavailable" : `Net invoicing ${exactMoney(net)} excluding GST. ${hasNegative ? "Signed service amounts are listed alongside; proportions are not shown because some service totals are negative." : "Service amounts are listed alongside."}`}>
@@ -213,7 +208,7 @@ function RevenueCard({ report, period, onPeriodChange, onOpenReports }: { report
       <div className={styles.revenueLegend}>
         {chartGroups.length ? <ul>{chartGroups.map((group, index) => <li key={group.key}><span className={styles.legendDot} style={{ background: hasNegative ? "var(--trade-muted, #637a7b)" : chartColours[index] }} /><span>{group.key === "remaining-services" ? "Other services" : serviceNames[group.key] || group.key}</span><strong title={exactMoney(group.invoicedCents ?? 0)}>{money(group.invoicedCents ?? 0)}</strong></li>)}</ul> : <p>No issued invoices or credits in this period.</p>}
         {hasNegative && <p className={styles.chartNote}>Credits exceed invoicing in one or more services. Signed totals are shown without a proportional split.</p>}
-        {change !== null && report.period.previous && <p className={styles.comparison}>{change === 0 ? "Unchanged from" : `${money(Math.abs(change))} ${change > 0 ? "more" : "less"} than`} the previous period.</p>}
+        {change !== null && report.period.previous && <p className={styles.comparison}>{change === 0 ? "Unchanged from" : `${money(Math.abs(change))} ${change > 0 ? "more" : "less"} than`} the previous period ({dayLabel(report.period.previous.start, true)} to {dayLabel(report.period.previous.end, true)}).</p>}
       </div>
     </div>
     <div className={styles.financeDetails}>
