@@ -397,7 +397,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [creating, setCreatingState] = useState<"" | "job" | "customer">("");
   const [newJobSeed, setNewJobSeed] = useState<TradeNewJobInitial | null>(null);
   const [focusedJobId, setFocusedJobId] = useState("");
-  const [focusedJobTab, setFocusedJobTab] = useState<JobTab>("summary");
+  const [focusedJobTab, setFocusedJobTab] = useState<JobDetailTab>("summary");
   const [jobReturnTarget, setJobReturnTarget] = useState<JobReturnTarget>({ kind: "jobs" });
   const [selectedCustomerId, setSelectedCustomerIdState] = useState("");
   const [jobFilter, setJobFilter] = useState("all");
@@ -1007,7 +1007,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     return () => window.cancelAnimationFrame(frame);
   }, [allowedViews, canCreateCustomer, canCreateJob, navigationTarget, teamAccess, setCreating, setJobLayout, setSelectedCustomerId, setView]);
 
-  function openFocusedJob(id: string, tab: JobTab = "summary", returnTarget: JobReturnTarget = { kind: "jobs" }) {
+  function openFocusedJob(id: string, tab: JobDetailTab = "summary", returnTarget: JobReturnTarget = { kind: "jobs" }) {
     if (indexedJobs.some(job => job.id === id && job.recordStatus === "archived")) { setStatus("This job is in the bin. Choose Actions, then Restore job to open it."); return; }
     void mapNavigation.run(() => {
       setCreatingState("");
@@ -1717,7 +1717,7 @@ function CrmAddressFields({ user, initialValue }: { user: User; initialValue?: C
   </>;
 }
 
-function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamMembers, permissions, initialTab = "summary", onEditPayment, onCrm, onWorkOrder, onOpenJob, onOpenPriceBook, onOpenCustomer, onOpenIntegrations, onReload }: { job: Job; customer?: Customer; sites: ServiceSite[]; user: User; busy: string; refreshing?: boolean; teamMembers: TeamMember[]; permissions?: TradeTeamPermissions; initialTab?: JobTab; onEditPayment: () => void; onCrm: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onWorkOrder: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onOpenJob: (workOrderId: string) => void; onOpenPriceBook: () => void; onOpenCustomer: (customerId: string) => void; onOpenIntegrations: () => void; onReload: () => Promise<void> }) {
+function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamMembers, permissions, initialTab = "summary", onEditPayment, onCrm, onWorkOrder, onOpenJob, onOpenPriceBook, onOpenCustomer, onOpenIntegrations, onReload }: { job: Job; customer?: Customer; sites: ServiceSite[]; user: User; busy: string; refreshing?: boolean; teamMembers: TeamMember[]; permissions?: TradeTeamPermissions; initialTab?: JobDetailTab; onEditPayment: () => void; onCrm: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onWorkOrder: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onOpenJob: (workOrderId: string) => void; onOpenPriceBook: () => void; onOpenCustomer: (customerId: string) => void; onOpenIntegrations: () => void; onReload: () => Promise<void> }) {
   useJobTimeTracking(job.id);
   const fetch = useTradeBusinessFetch();
   const activeJobAppointmentKey = job.appointments
@@ -1727,7 +1727,8 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     .join("|");
   const hasActiveJobAppointment = Boolean(activeJobAppointmentKey);
   const [tab, setTab] = useState<JobDetailTab>(initialTab);
-  const [formsOpen, setFormsOpen] = useState(initialTab === "field");
+  const [formsOpen, setFormsOpen] = useState(true);
+  const [activityRecordsRequested, setActivityRecordsRequested] = useState(false);
   const [photoRequestOpen, setPhotoRequestOpen] = useState(false);
   const [filesRevision, setFilesRevision] = useState(0);
   const refreshJobFiles = async () => { setFilesRevision((value) => value + 1); await onReload(); };
@@ -1902,6 +1903,15 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     <nav className="crm-job-tabs" aria-label="Job card sections">{mainTabs.map(([value, label]) => <button key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}<AccessibleMenu className="crm-job-more" active={moreActive} label={moreActive ? activeTab[0].toUpperCase() + activeTab.slice(1) : "More"}>{(close) => moreTabs.map(([value, label]) => <button role="menuitem" key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => { setTab(value); close(); }}>{label}</button>)}</AccessibleMenu></nav>
     {activeTab === "messages" && !isProtected && (!permissions || permissions.canSendSms) && <TradeCustomerSmsPanel key={`${job.id}:${customer?.id || ""}`} user={user} workOrderId={job.id} customerId={customer?.id || ""} onOpenIntegrations={permissions ? undefined : onOpenIntegrations} />}
     {activeTab === "summary" && <section className="crm-job-section crm-summary-workspace">
+        {!isImported && <section className="crm-job-next-actions" aria-label="Job next steps">
+          <div><h4>Next steps</h4><p>{job.nextAction || (canViewFieldEvidence ? "Open the job requirements, complete the forms and see what still needs attention." : "Check your assigned tasks, notes and visit details.")}</p></div>
+          <div className="crm-job-next-actions-buttons">
+            {canViewFieldEvidence && <button type="button" onClick={() => { setTab("files"); setFormsOpen(true); }}>{canManageFieldEvidence ? "Forms and job progress" : "View job files"}</button>}
+            {canOpenJobSchedule && <button type="button" onClick={() => setTab("schedule")}>View schedule</button>}
+            {job.tasks.some(task => task.status === "pending") && <button type="button" onClick={() => setTab("tasks")}>Tasks ({job.tasks.filter(task => task.status === "pending").length})</button>}
+            {openIssues > 0 && <button type="button" onClick={() => setTab("notes")}>Open issues ({openIssues})</button>}
+          </div>
+        </section>}
         {isImported && <section className={registerStyles.detailSection} aria-label="Imported job history"><h4>Imported</h4><p>This record preserves your previous work. It is not completed, ready for review or ready for submission in TLink. Start work only if you want to manage new work on this job; the original dates and statuses remain in its history.</p>{canManageJobs && <button type="button" className="btn" disabled={busy === `activate-import:${job.id}`} onClick={() => void onCrm("PATCH", { action: "update_job", workOrderId: job.id, expectedRevision: job.revision, activateImported: true, stage: "backlog", pipelineStage: "enquiry" }, `activate-import:${job.id}`, "Job activated. Schedule a new visit when ready.")}>Start work in TLink</button>}</section>}
         {job.importedDataforce && <details className={registerStyles.detailSection}>
           <summary>Original imported record {job.sourceReference}</summary>
@@ -1912,7 +1922,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
           <h4 id={`job-information-${job.id}`}>Job information</h4>
           <dl className={registerStyles.detailGrid}>
             <div><dt>Job ID</dt><dd>{job.workNumber}</dd></div>
-            <div><dt>Job / compliance</dt><dd className={registerStyles.detailAction}><span>{displayedLifecycle}</span>{canOpenJobSchedule && <button type="button" onClick={() => setTab("schedule")}>Schedule</button>}{canViewFieldEvidence && <button type="button" onClick={() => { setTab("files"); setFormsOpen(true); }}>Open forms</button>}{canManageJobs && canManageFieldEvidence && <button type="button" onClick={() => setTab("review")}>Review</button>}</dd></div>
+            <div><dt>Job / compliance</dt><dd className={registerStyles.detailAction}><span>{displayedLifecycle}</span>{canManageJobs && canManageFieldEvidence && <button type="button" onClick={() => setTab("review")}>Review</button>}</dd></div>
             {(canViewQuotes || canViewInvoices) && <div><dt>Customer billing</dt><dd className={registerStyles.detailAction}><span>{jobCustomerBillingStatus(job) || "Restricted"}</span>{canViewQuotes && <button type="button" onClick={() => setTab("quote")}>Edit quote</button>}{canViewInvoices && <button type="button" onClick={() => setTab("invoice")}>Edit invoice</button>}</dd></div>}
             {canViewInvoices && <div><dt>Invoice payment</dt><dd className={registerStyles.detailAction}><JobInvoiceStatus job={job} />{canManageInvoices && <button type="button" onClick={onEditPayment}>Edit payment</button>}</dd></div>}
             <div><dt>Work type</dt><dd>{serviceLabels[job.serviceCategory] || job.serviceCategory || "Not added"}</dd></div>
@@ -1948,23 +1958,28 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
       {complianceCases.length > 0 && <section className="crm-job-compliance"><header><div><span>Compliance intake</span><h4>{complianceCases.length} linked case{complianceCases.length === 1 ? "" : "s"}</h4></div><strong>Compliance review required</strong></header><div>{complianceCases.map((item) => <article key={item.id}><div><span>{item.caseNumber} | activity date {item.activityDate}</span><strong>{item.programCode} | {item.registryActivityCode || item.activityKey} | {item.title} | v{item.version}</strong><p>{[item.productCategory, item.scenarioCode ? `scenario ${item.scenarioCode}` : "", item.scenario].filter(Boolean).join(" | ")}</p></div><dl><div><dt>Case</dt><dd>{item.status.replaceAll("_", " ")}</dd></div><div><dt>Evidence</dt><dd>{item.evidenceStatus.replaceAll("_", " ")}</dd></div></dl>{item.officialSourceUrl && <a href={item.officialSourceUrl} target="_blank" rel="noreferrer">Open official {item.officialSourceVersion || item.officialSourceTitle || "activity"} source</a>}</article>)}</div><p>TLink has preserved the selected rule version for intake. This is not an eligibility decision, certificate calculation, evidence acceptance or rebate promise.</p></section>}
     </section>}
     {canViewFieldEvidence && <section className="crm-job-section" hidden={activeTab !== "files"} aria-label="Job files and forms">
-      {activeTab === "files" && <TradeJobFilesPanel key={`${job.revision}:${filesRevision}`} user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} />}
-      <details className="crm-field-secondary" id="job-files-forms" open={formsOpen} onToggle={(event) => setFormsOpen(event.currentTarget.open)}>
+      {activeTab === "files" && <TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} embedded canOpenInvoice={canViewInvoices} canOpenHandover={!permissions} refreshKey={job.revision + filesRevision} onNavigate={(next) => {
+        if (next === "forms" || next === "rental-assessment" || next === "activity-forms") {
+          setFormsOpen(true);
+          if (next === "activity-forms") setActivityRecordsRequested(true);
+          const target = next === "rental-assessment" ? "job-files-rental" : next === "activity-forms" ? "job-files-activity-records" : "job-files-forms";
+          window.requestAnimationFrame(() => {
+            const section = document.getElementById(target);
+            section?.scrollIntoView({ behavior: "smooth", block: "start" });
+            section?.focus({ preventScroll: true });
+          });
+        } else if (allowedTabs.includes(next)) setTab(next);
+      }} onChanged={refreshJobFiles} />}
+      <details className="crm-field-secondary" id="job-files-forms" tabIndex={-1} open={formsOpen} onToggle={(event) => setFormsOpen(event.currentTarget.open)}>
         <summary>Forms and assessments</summary>
-        <TradeRentalActivityPicker key={job.id} user={user} workOrderId={job.id} refreshKey={job.revision} active={activeTab === "files"} readOnly={!canManageFieldEvidence} initiallyAttached={job.serviceCategory === "rental-inspection"} onChanged={refreshJobFiles} onAttachmentChanged={setRentalAttached} />
-        {formsOpen && complianceIntents.length > 0 && <TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} />}
-        <TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} />
+        <div id="job-files-rental" tabIndex={-1}><TradeRentalActivityPicker key={job.id} user={user} workOrderId={job.id} refreshKey={job.revision} active={activeTab === "files"} readOnly={!canManageFieldEvidence} initiallyAttached={job.serviceCategory === "rental-inspection"} onChanged={refreshJobFiles} onAttachmentChanged={setRentalAttached} /></div>
+        {(complianceIntents.length > 0 || activityRecordsRequested) && <div id="job-files-activity-records" tabIndex={-1}><TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} /></div>}
+        <TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} onChanged={refreshJobFiles} />
       </details>
       {activeTab === "files" && <>
-        <details className="crm-field-secondary"><summary>Time, sign-offs and uploads</summary><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => {
-          if (next === "forms") {
-            setTab("files");
-            setFormsOpen(true);
-            window.requestAnimationFrame(() => document.getElementById("job-files-forms")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-          } else setTab(next);
-        }} onChanged={refreshJobFiles} /></details>
         {!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary" open={photoRequestOpen} onToggle={(event) => setPhotoRequestOpen(event.currentTarget.open)}><summary>Request customer photos</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}
-        {!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan"><summary>Work plan and actuals</summary><TradeJobReadinessPanel key={job.id} user={user} workOrderId={job.id} onChanged={onReload} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} /></details>}
+        {!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan"><summary>Work plan and actuals</summary><TradeJobReadinessPanel key={job.id} user={user} workOrderId={job.id} onChanged={onReload} onOpenTeam={() => { if (canOpenJobSchedule) setTab("schedule"); }} /></details>}
+        <TradeJobFilesPanel key={`${job.revision}:${filesRevision}`} user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} />
       </>}
     </section>}
     {activeTab === "review" && canManageJobs && canViewFieldEvidence && canManageFieldEvidence && <section className="crm-job-section" aria-label="Business job review"><TradeJobReviewPanel user={user} workOrderId={job.id} onChanged={onReload} /><TradeJobFilesPanel user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} /></section>}

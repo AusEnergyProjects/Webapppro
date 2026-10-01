@@ -74,7 +74,7 @@ const tabButton = (tree, label) => nodes(jobTabs(tree), node => node.type === "b
 
 function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides = {} } = {}) {
   const hooks = hookState();
-  const frames = [], scrolled = [], reloads = [];
+  const frames = [], scrolled = [], focused = [], reloads = [];
   const job = {
     id: "job-1", workNumber: "TLJ-1", revision: 4, title: "Test job", serviceCategory: "rental-inspection",
     customerSource: "trade_owned", sourceType: "internal", stage: "backlog", pipelineStage: "enquiry",
@@ -89,8 +89,9 @@ function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides
     scheduleProposalKey: (...parts) => parts.join(":"), registerStyles: {},
     serviceLabels: {}, pipelineLabels: {}, workStageLabels: {}, appointmentLabels: {},
     jobCustomerBillingStatus: () => "", phoneHref: value => `tel:${value}`,
+    dateLabel: value => value || "Not recorded", money: value => String(value || 0),
     window: { requestAnimationFrame(callback) { frames.push(callback); return frames.length; } },
-    document: { getElementById: id => ({ scrollIntoView: options => scrolled.push({ id, options }) }) },
+    document: { getElementById: id => ({ scrollIntoView: options => scrolled.push({ id, options }), focus: () => focused.push(id) }) },
   };
   const renderJob = loadFunction(workspace, "JobDetail", dependencies);
   const props = {
@@ -100,7 +101,7 @@ function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides
   return {
     render() { hooks.reset(); return renderJob(props); },
     runFrames() { frames.splice(0).forEach(callback => callback()); },
-    scrolled, reloads,
+    scrolled, focused, reloads,
   };
 }
 
@@ -178,7 +179,7 @@ test("field checklist supporting-forms navigation opens and reveals the Files fo
   const h = workspaceHarness();
   byId(h.render(), "job-files-forms").props.onToggle({ currentTarget: { open: false } });
   const field = component(h.render(), "TradeFieldWorkPanel");
-  const openChecklist = loadFunction(fieldPanel, "openChecklist", { onNavigate: field.props.onNavigate });
+  const openChecklist = loadFunction(fieldPanel, "openChecklist", { onNavigate: field.props.onNavigate, setNavigationHint() {} });
   openChecklist("forms");
   const tree = h.render();
   assert.equal(tabButton(tree, "Files").props.className, "active");
@@ -196,12 +197,78 @@ test("a work-plan blocker opens its disclosure before scrolling to the retained 
   }
   const details = new Details();
   const openChecklist = loadFunction(fieldPanel, "openChecklist", {
+    setNavigationHint() {},
     HTMLDetailsElement: Details,
     document: { getElementById(id) { assert.equal(id, "field-work-plan"); return details; } },
   });
   openChecklist("work-plan");
   assert.equal(details.open, true);
   assert.deepEqual(events, [{ open: true, options: { behavior: "smooth", block: "start" } }]);
+});
+
+test("Files puts live requirements and open forms before the archive", () => {
+  const tree = workspaceHarness({ initialTab: "files" }).render();
+  const ordered = nodes(tree, node => ["TradeFieldWorkPanel", "TradeJobFormsPanel", "TradeJobFilesPanel"].includes(node.type));
+  assert.deepEqual(ordered.map(node => node.type), ["TradeFieldWorkPanel", "TradeJobFormsPanel", "TradeJobFilesPanel"]);
+  assert.equal(ordered[0].props.embedded, true);
+  assert.equal(byId(tree, "job-files-forms").props.open, true);
+  assert.ok(!nodes(tree, node => node.type === "summary").map(text).includes("Time, sign-offs and uploads"), "Requirements are no longer hidden behind an unrelated records disclosure");
+});
+
+for (const [target, anchor] of [["rental-assessment", "job-files-rental"], ["activity-forms", "job-files-activity-records"]]) {
+  test(`${target} navigation reveals and focuses its actual section`, () => {
+    const h = workspaceHarness({ initialTab: "files" });
+    byId(h.render(), "job-files-forms").props.onToggle({ currentTarget: { open: false } });
+    component(h.render(), "TradeFieldWorkPanel").props.onNavigate(target);
+    const tree = h.render();
+    assert.equal(byId(tree, "job-files-forms").props.open, true);
+    assert.ok(byId(tree, anchor));
+    h.runFrames();
+    assert.deepEqual(h.scrolled.map(item => item.id), [anchor]);
+    assert.deepEqual(h.focused, [anchor]);
+  });
+}
+
+test("a supporting-form save refreshes requirements and the archive without replacing the editor", async () => {
+  const h = workspaceHarness({ initialTab: "files" });
+  const before = h.render();
+  const form = component(before, "TradeJobFormsPanel");
+  await form.props.onChanged();
+  const after = h.render();
+  assert.deepEqual(h.reloads, ["job-1"]);
+  assert.equal(component(after, "TradeJobFormsPanel").key, form.key);
+  assert.equal(component(after, "TradeJobFormsPanel").type, form.type);
+  assert.notEqual(component(after, "TradeFieldWorkPanel").props.refreshKey, component(before, "TradeFieldWorkPanel").props.refreshKey);
+  assert.notEqual(component(after, "TradeJobFilesPanel").key, component(before, "TradeJobFilesPanel").key);
+});
+
+test("readiness assignment opens this job's schedule rather than the global Team screen", () => {
+  const h = workspaceHarness({ initialTab: "files" });
+  component(h.render(), "TradeJobReadinessPanel").props.onOpenTeam();
+  const schedule = component(h.render(), "TradeScheduleWorkspace");
+  assert.ok(schedule);
+  assert.equal(schedule.props.variant, "job");
+});
+
+test("job next steps open forms directly without duplicate overview form buttons", () => {
+  const h = workspaceHarness({ initialTab: "summary" });
+  const before = h.render();
+  const nextSteps = nodes(before, node => node.props?.["aria-label"] === "Job next steps")[0];
+  const button = nodes(nextSteps, node => node.type === "button" && text(node) === "Forms and job progress")[0];
+  assert.ok(button);
+  button.props.onClick();
+  assert.equal(tabButton(h.render(), "Files").props.className, "active");
+  assert.equal(byId(h.render(), "job-files-forms").props.open, true);
+  assert.equal(nodes(before, node => node.type === "button" && text(node) === "Open forms").length, 0);
+});
+
+test("restricted staff cannot follow a field shortcut into hidden commercial tabs", () => {
+  const h = workspaceHarness({ initialTab: "files", permissions: { canViewFieldEvidence: true, canManageFieldEvidence: true, canViewQuotes: false, canViewInvoices: false } });
+  const panel = component(h.render(), "TradeFieldWorkPanel");
+  assert.equal(panel.props.canOpenInvoice, false);
+  assert.equal(panel.props.canOpenHandover, false);
+  panel.props.onNavigate("invoice");
+  assert.equal(tabButton(h.render(), "Files").props.className, "active");
 });
 
 function mutationHarness(kind, { readOnly = false, failed = false, changed = async () => {} } = {}) {

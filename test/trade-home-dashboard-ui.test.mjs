@@ -37,7 +37,7 @@ function harness(responder, options = {}) {
   let cursor = 0; let currentBusiness = { ownerUid: "business-a", memberId: "" };
   const state = []; const effects = []; const pending = []; const requests = []; const calls = []; const exports = {};
   const user = { uid: "viewer", getIdToken: async () => "token" };
-  const props = { user, onOpenJob: id => calls.push(["job", id]), onOpenSchedule: week => calls.push(["schedule", week]), onOpenJobs: filter => calls.push(["jobs", filter]), onNewJob: () => calls.push(["new"]), onOpenInvoices: () => calls.push(["invoices"]), onOpenReports: () => calls.push(["reports"]), ...options };
+  const props = { user, onOpenJob: (...target) => calls.push(["job", ...target]), onOpenSchedule: week => calls.push(["schedule", week]), onOpenJobs: filter => calls.push(["jobs", filter]), onNewJob: () => calls.push(["new"]), onOpenInvoices: () => calls.push(["invoices"]), onOpenReports: () => calls.push(["reports"]), ...options };
   const request = async (url, init) => { requests.push({ url, init }); return responder(url, init, requests.length); };
   const hooks = {
     useState(initial) { const index = cursor++; if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial; return [state[index], next => state[index] = typeof next === "function" ? next(state[index]) : next]; },
@@ -67,6 +67,48 @@ test("period selection clears stale numbers and routes all Home actions", async 
   nodes(tree, node => node.type === "select")[0].props.onChange({ target: { value: "quarterly" } });
   tree = h.render(); assert.match(text(tree), /Loading your dashboard/); assert.doesNotMatch(text(tree), /\$100/);
   await flush(); tree = h.render(); assert.match(h.requests.at(-1).url, /period=quarterly/); assert.equal(nodes(tree, node => node.type === "select")[0].props.value, "quarterly"); h.cleanup();
+});
+
+test("attention actions retain the task or issue destination and do not imply scheduling eligibility", async () => {
+  const h = harness(async () => response(fixture())); const tree = await h.mount();
+  assert.match(text(tree), /Needs scheduling/); assert.match(text(tree), /Plan the next visit in Schedule/);
+  assert.doesNotMatch(text(tree), /Ready to schedule/);
+  const actions = nodes(tree, node => node.type === "ul" && node.props.className === "attentionList")[0];
+  const targets = nodes(actions, node => node.type === "button");
+  targets[0].props.onClick(); targets[1].props.onClick();
+  assert.deepEqual(h.calls, [["job", "job-1", "tasks"], ["job", "job-1", "notes"]]); h.cleanup();
+});
+
+test("no active jobs offers permitted creators a new job without treating existing history as first-time setup", async () => {
+  const data = fixture(); data.metrics = Object.fromEntries(Object.keys(data.metrics).map(key => [key, 0]));
+  data.upcomingAppointments = []; data.overdueTasks = []; data.openIssues = [];
+  for (const options of [{}, { staffPermissions: { canCreateJobs: true, canRescheduleJobs: false, jobScope: "own" } }]) {
+    const h = harness(async () => response(data), options); const tree = await h.mount();
+    assert.match(text(tree), /No active jobs/); assert.doesNotMatch(text(tree), /You are up to date|first job|Get started/);
+    button(tree, "Create job").props.onClick(); assert.deepEqual(h.calls, [["new"]]);
+    assert.ok(button(tree, options.staffPermissions ? "View schedule" : "Plan your week")); h.cleanup();
+  }
+});
+
+test("empty field and crew views explain assignment and expose only existing schedule actions", async () => {
+  const data = fixture(); data.financial = null; data.metrics = Object.fromEntries(Object.keys(data.metrics).map(key => [key, 0]));
+  data.upcomingAppointments = []; data.overdueTasks = []; data.openIssues = [];
+  for (const crewLead of [false, true]) {
+    const h = harness(async () => response(data), { staffPermissions: { canCreateJobs: false, canRescheduleJobs: false, jobScope: "own", crewLead } });
+    const tree = await h.mount();
+    assert.match(text(tree), crewLead ? /Your crew's next assigned jobs/ : /Your dispatcher can assign your next job/);
+    assert.doesNotMatch(text(tree), /You are up to date|Plan your week|Create job|New job|\$/);
+    const actions = nodes(tree, node => node.type === "section" && node.props["aria-label"] === "Next actions")[0];
+    button(actions, "View schedule").props.onClick(); assert.deepEqual(h.calls, [["schedule", undefined]]); h.cleanup();
+  }
+});
+
+test("active jobs with no outstanding actions retain the up-to-date state", async () => {
+  const data = fixture(); Object.assign(data.metrics, { awaitingSchedule: 0, waitingJobs: 0, overdueTasks: 0, openIssues: 0 });
+  data.overdueTasks = []; data.openIssues = [];
+  const h = harness(async () => response(data)); const tree = await h.mount();
+  assert.match(text(tree), /You are up to date/); assert.doesNotMatch(text(tree), /No active jobs/);
+  button(tree, "View jobs").props.onClick(); assert.deepEqual(h.calls, [["jobs", "all"]]); h.cleanup();
 });
 
 test("server-null and staff-denied finance never render money or financial controls", async () => {

@@ -2432,6 +2432,13 @@
 .crm-field-next-paths { display: flex; gap: 8px; margin-top: 10px; }
 .crm-field-secondary { border: 1px solid #d5e5df; border-radius: 11px; margin-top: 12px; padding: 11px; }
 .crm-field-secondary > summary { color: #17684f; cursor: pointer; font-size: .65rem; font-weight: 850; }
+.crm-job-next-actions { background: var(--trade-surface-soft, #f4faf7); border: 1px solid var(--trade-line, #cfe2da); border-radius: 13px; display: grid; gap: 12px; min-width: 0; padding: 16px; }
+.crm-job-next-actions h4 { color: var(--trade-ink, #123d35); margin: 0 0 5px; }
+.crm-job-next-actions p { color: var(--trade-muted, #60766f); font-size: .8rem; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+.crm-job-next-actions-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.crm-job-next-actions-buttons button { background: var(--trade-surface, #fff); border: 1px solid var(--trade-line, #cfe2da); border-radius: 9px; color: var(--trade-ink, #123d35); cursor: pointer; font-size: .8rem; font-weight: 750; min-height: 44px; padding: 10px 14px; }
+.crm-job-next-actions-buttons button:focus-visible, .crm-field-secondary:focus-visible, #job-files-rental:focus-visible, #job-files-activity-records:focus-visible { outline: 3px solid var(--trade-accent, #1baf8c); outline-offset: 3px; }
+.crm-job-next-actions-buttons button:hover { border-color: var(--trade-accent, #1baf8c); }
 .crm-notes-summary { border-bottom: 1px solid #dce8e4; margin-bottom: 16px; padding-bottom: 16px; }
 
 @media (max-width: 600px) {

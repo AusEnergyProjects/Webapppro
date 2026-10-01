@@ -15,7 +15,7 @@ type HomeResponse = { ok?: boolean; dashboard?: HomeDashboard; error?: string };
 export type TradeHomeDashboardProps = {
   user: User;
   staffPermissions?: TradeTeamPermissions;
-  onOpenJob: (id: string) => void;
+  onOpenJob: (id: string, tab?: "tasks" | "notes") => void;
   onOpenSchedule: (weekStart?: string) => void;
   onOpenJobs: (filter?: string) => void;
   onNewJob?: () => void;
@@ -57,6 +57,7 @@ export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSc
   const [result, setResult] = useState<{ key: string; dashboard: HomeDashboard | null; error: string } | null>(null);
   const canSeeFinance = !staffPermissions || (staffPermissions.canRunReports && staffPermissions.canViewInvoices);
   const canCreate = Boolean(onNewJob) && (!staffPermissions || staffPermissions.canCreateJobs);
+  const canPlanSchedule = !staffPermissions || staffPermissions.canRescheduleJobs;
   const canSeeReports = Boolean(onOpenReports) && (!staffPermissions || staffPermissions.canRunReports);
   const requestKey = [user.uid, business?.ownerUid || "", business?.memberId || "", JSON.stringify(staffPermissions || null), period, refresh, refreshKey].join("|");
   const loading = result?.key !== requestKey;
@@ -129,22 +130,27 @@ export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSc
               <span className={styles.scheduleCopy}><strong>{appointment.job.title || appointment.title}</strong><span><time dateTime={appointment.startsAt}>{new Intl.DateTimeFormat("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(wallTime)} · {startTime}</time>{appointment.assigneeLabel ? ` · ${appointment.assigneeLabel}` : ""}</span><small>{appointment.job.workNumber}</small></span>
               
             </button></li>;
-          })}</ol> : <div className={styles.empty}><Icon kind="calendar" /><strong>No upcoming visits</strong><p>Your next scheduled jobs will appear here.</p><button type="button" onClick={() => onOpenSchedule()}>Plan your week</button></div>}
+          })}</ol> : <div className={styles.empty}><Icon kind="calendar" /><strong>No upcoming visits</strong><p>Your next scheduled jobs will appear here.</p><button type="button" onClick={() => onOpenSchedule()}>{canPlanSchedule ? "Plan your week" : "View schedule"}</button></div>}
           <p className={styles.footnote}>Times shown in {dashboard.timeZone.replace("Australia/", "").replaceAll("_", " ")} time.</p>
         </section>
 
         <section className={styles.card} aria-label="Next actions">
           <div className={styles.cardHeading}><div><span className={styles.eyebrow}>Keep work moving</span><h3>Needs attention</h3></div></div>
           <div className={styles.actionList}>
-            {dashboard.metrics.awaitingSchedule > 0 && <ActionRow count={dashboard.metrics.awaitingSchedule} title="Ready to schedule" detail="Choose a time for these jobs" onClick={() => onOpenJobs("awaiting_schedule")} />}
+            {dashboard.metrics.awaitingSchedule > 0 && <ActionRow count={dashboard.metrics.awaitingSchedule} title="Needs scheduling" detail="Plan the next visit in Schedule" onClick={() => onOpenJobs("awaiting_schedule")} />}
             {dashboard.metrics.waitingJobs > 0 && <ActionRow count={dashboard.metrics.waitingJobs} title="Waiting jobs" detail="Check what is holding work up" onClick={() => onOpenJobs("blocked")} />}
           </div>
           {dashboard.metrics.overdueTasks > 0 && <p className={styles.attentionHeading}>{plural(dashboard.metrics.overdueTasks, "overdue task")}</p>}
           {(dashboard.overdueTasks.length > 0 || dashboard.openIssues.length > 0) && <ul className={styles.attentionList}>
-            {dashboard.overdueTasks.slice(0, 3).map(task => <li key={`task-${task.id}`}><button type="button" onClick={() => onOpenJob(task.job.id)}><span className={styles.attentionDot} /><span><strong>{task.title}</strong><small>{task.job.workNumber} · Overdue task</small></span></button></li>)}
-            {dashboard.openIssues.slice(0, 2).map(issue => <li key={`issue-${issue.id}`}><button type="button" onClick={() => onOpenJob(issue.job.id)}><span className={styles.attentionDot} /><span><strong>{issue.body}</strong><small>{issue.job.workNumber} · Open issue</small></span></button></li>)}
+            {dashboard.overdueTasks.slice(0, 3).map(task => <li key={`task-${task.id}`}><button type="button" onClick={() => onOpenJob(task.job.id, "tasks")}><span className={styles.attentionDot} /><span><strong>{task.title}</strong><small>{task.job.workNumber} · Overdue task</small></span></button></li>)}
+            {dashboard.openIssues.slice(0, 2).map(issue => <li key={`issue-${issue.id}`}><button type="button" onClick={() => onOpenJob(issue.job.id, "notes")}><span className={styles.attentionDot} /><span><strong>{issue.body}</strong><small>{issue.job.workNumber} · Open issue</small></span></button></li>)}
           </ul>}
-          {!dashboard.metrics.awaitingSchedule && !dashboard.metrics.waitingJobs && !dashboard.metrics.overdueTasks && !dashboard.metrics.openIssues && <div className={styles.empty}><Icon kind="check" /><strong>You are up to date</strong><p>No waiting jobs, overdue tasks or open issues to follow up.</p><button type="button" onClick={() => onOpenJobs("all")}>View jobs</button></div>}
+          {!dashboard.metrics.awaitingSchedule && !dashboard.metrics.waitingJobs && !dashboard.metrics.overdueTasks && !dashboard.metrics.openIssues && <div className={styles.empty}>
+            {dashboard.metrics.openJobs === 0 ? <><Icon kind="briefcase" /><strong>No active jobs</strong>
+              <p>{canCreate ? "Create a job to start planning your next piece of work." : staffPermissions?.crewLead ? "Your crew's next assigned jobs will appear here." : staffPermissions?.jobScope === "own" ? "Your dispatcher can assign your next job." : "No active jobs are available in this view."}</p>
+              {canCreate ? <button type="button" onClick={onNewJob}>Create job</button> : <button type="button" onClick={() => onOpenSchedule()}>View schedule</button>}
+            </> : <><Icon kind="check" /><strong>You are up to date</strong><p>No waiting jobs, overdue tasks or open issues to follow up.</p><button type="button" onClick={() => onOpenJobs("all")}>View jobs</button></>}
+          </div>}
           {(dashboard.metrics.overdueTasks > 3 || dashboard.metrics.openIssues > 2) && <p className={styles.footnote}>Showing {Math.min(3, dashboard.overdueTasks.length)} of {plural(dashboard.metrics.overdueTasks, "overdue task")} and {Math.min(2, dashboard.openIssues.length)} of {plural(dashboard.metrics.openIssues, "open issue")}.</p>}
         </section>
       </div>
