@@ -70,6 +70,7 @@ const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspac
 const TradeFinanceWorkspace = dynamic(() => import("./TradeFinanceWorkspace").then((module) => module.TradeFinanceWorkspace));
 const TradeRebateCalculatorWorkspace = dynamic(() => import("./TradeRebateCalculatorWorkspace").then((module) => module.TradeRebateCalculatorWorkspace));
 const TradeTeamSettings = dynamic(() => import("./TradeTeamSettings").then((module) => module.TradeTeamSettings));
+const TradeFormsWorkspace = dynamic(() => import('./TradeFormsWorkspace').then(module => module.TradeFormsWorkspace), { loading: () => <p role="status">Opening forms...</p> });
 const TradeTasksAndTraining = dynamic(() => import("./TradeTasksAndTraining").then(module => module.TradeTasksAndTraining), { loading: () => <p role="status">Loading tasks and training...</p> });
 
 type DashboardProfile = TradeBusinessSettingsProfile & {
@@ -238,7 +239,7 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "map" | "design" | "network" | "messages" | "email-templates" | "team" | "tasks" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "map" | "design" | "network" | "messages" | "email-templates" | "team" | "forms" | "tasks" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "map",
@@ -247,6 +248,7 @@ const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "email-templates",
   "messages",
   "team",
+  "forms",
   "tasks",
   "training",
   "finance",
@@ -2519,6 +2521,7 @@ function DirectTradeDashboardContent() {
                     });
                   }}><TLinkNavigationIcon name="leads" /><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span></button>
                   <button type="button" title="People, access and files" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><TLinkNavigationIcon name="team" /><span>Team</span></button>
+                  <button type="button" title="Business forms and Creditex compliance forms" aria-current={workspace === 'forms' ? 'page' : undefined} className={workspace === 'forms' ? 'active' : ''} onClick={() => setWorkspace('forms')}><TLinkNavigationIcon name="forms" /><span>Forms</span></button>
                   <button type="button" title="Tasks and your training" aria-current={workspace === "tasks" || workspace === "training" ? "page" : undefined} className={workspace === "tasks" || workspace === "training" ? "active" : ""} onClick={() => setWorkspace("tasks")}><TLinkNavigationIcon name="training" /><span>Tasks &amp; training</span></button>
                   <button type="button" title="SMS and email reminders" aria-current={workspace === "email-templates" ? "page" : undefined} className={workspace === "email-templates" ? "active" : ""} onClick={() => setWorkspace("email-templates")}><TLinkNavigationIcon name="email" /><span>Follow-ups</span></button>
                   <button type="button" title="Your items, prices and PDFs" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products", () => setCommandTarget(null))}><TLinkNavigationIcon name="products" /><span>Products</span></button>
@@ -2573,6 +2576,7 @@ function DirectTradeDashboardContent() {
                   : current)}
               />}
 
+              {workspace === 'forms' && <TradeFormsWorkspace user={user} onRegisterLeave={registerMapSave} />}
               {(workspace === "tasks" || workspace === "training") && <TradeTasksAndTraining key={user.uid} user={user} tab={workspace} onTab={tab => setWorkspace(tab)} />}
 
               {workspace === "team" && (hasBusinessOperations && hasTeamAccess ? (

@@ -65,7 +65,7 @@ export async function listBusinessTasks(access: TeamAccess, options: { view?: st
 }
 function audit(db: D1Database, access: TeamAccess, id: string, event: string, now: string) {
   return db.prepare(`INSERT INTO trade_team_member_events (id,owner_uid,team_member_id,actor_uid,entity_type,entity_id,event_type,metadata,created_at)
-    SELECT ?,?,?,?,'business_task',?,?,?,? WHERE changes()=1`).bind(crypto.randomUUID(), access.ownerUid, access.memberId, access.actorUid, id, event, '{}', now);
+    SELECT ?,?,?,?,'member',?,?,?,? WHERE changes()=1`).bind(crypto.randomUUID(), access.ownerUid, access.memberId, access.actorUid, access.memberId, event, JSON.stringify({ taskId: id }), now);
 }
 export async function saveBusinessTask(access: TeamAccess, input: Record<string, unknown>, db: D1Database = getD1()) {
   const id = taskText(input.id, 128, true);

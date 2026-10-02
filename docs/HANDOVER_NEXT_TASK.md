@@ -1,9 +1,15 @@
 # Next task handover
 
-Status: Team onboarding, everyday tasks and private pay/onboarding records.
+Status: Visible business Forms workspace and explicit authoring permission.
 Prepared: 2 October 2026
 
-## Active contract: simple team setup and everyday tasks
+## Active contract: business forms and governed compliance previews
+
+Workspace C:/Webproject/aea-energy-tlink-home-dashboard, branch codex/tlink-home-dashboard. Forms must remain a visible sidebar item with Creditex compliance forms and Forms tabs. Owners and explicitly authorised members can design only their business templates. Creditex definitions are read-only; no drafts or other business records are exposed. Pages, conditions, saved job versions and form-time tracking must agree across web/native. Add optional forms through job Files. Migration0236 grants no automatic authoring to nonowners. Correct the Sites738 audit constraint regression for private records and tasks; preserve actual event-table constraints in tests.
+
+Evidence and exact release receipt: C:/Webproject/outputs/tlink-forms-20261002/. Validate tenant/permission races, read-only master access, native compatibility, full release checks and the affected desktop/mobile flows. No customer sends or real employment/payment changes as QA.
+
+## Previous contract: simple team setup and everyday tasks
 
 Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Baseline source `817400aba224de689dd2c58a65c8138f87f327f5`, Sites 737.
 

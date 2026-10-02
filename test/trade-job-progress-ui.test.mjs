@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import * as businessFormDesign from '../src/lib/trade-business-form-design.ts';
+import * as tradeFormLibrary from '../src/lib/trade-form-library.mjs';
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 
@@ -58,7 +60,8 @@ function panelHarness(name, initialProps, request) {
     "@/lib/photo-request-review": { PHOTO_RETAKE_REASONS: {} },
     "./TradeActivityWorkPackPanel": { TradeActivityWorkPackPanel: "TradeActivityWorkPackPanel" },
     "./TradeSwmsPanel": { TradeSwmsPanel: "TradeSwmsPanel" },
-    "./TradeBusinessFormEditor": { TradeBusinessFormEditor: "TradeBusinessFormEditor" },
+    '@/lib/trade-business-form-design': businessFormDesign,
+    '@/lib/trade-form-library.mjs': tradeFormLibrary,
     "./TradeWorkTimeTracking": { WorkTimeStatus: "WorkTimeStatus", useFormTimeTracking: () => ({ bind: {}, markCompleted() {} }) },
   };
   const source = fs.readFileSync(new URL(`../src/components/${name}.tsx`, import.meta.url), "utf8");
@@ -205,14 +208,14 @@ test("draft save and add-form success notify the parent, while failed writes and
   }
 });
 
-test("supporting-form catalogue follows attached forms, opens for empty jobs and retains its editor when collapsed", async () => {
+test("supporting-form catalogue follows attached forms and opens for empty jobs without duplicating the workspace designer", async () => {
   const h = formsHarness({ empty: true }); let tree = await h.ready();
   const catalogue = nodes(tree, node => node.type === "details")[0];
-  assert.equal(catalogue.props.open, true); const builder = child(catalogue, "TradeBusinessFormEditor"); assert.ok(builder);
+  assert.equal(catalogue.props.open, true); assert.equal(child(catalogue, "TradeBusinessFormEditor"), undefined);
   const sections = nodes(tree, node => node.props?.className === "crm-active-forms" || node.type === "details");
   assert.equal(sections[0].props.className, "crm-active-forms");
   catalogue.props.onToggle({ currentTarget: { open: false } }); tree = h.render();
   const collapsed = nodes(tree, node => node.type === "details")[0]; assert.equal(collapsed.props.open, false);
-  assert.equal(child(collapsed, "TradeBusinessFormEditor").type, builder.type);
+  assert.equal(child(collapsed, "TradeBusinessFormEditor"), undefined);
   assert.ok(button(collapsed, "Add to job"));
 });

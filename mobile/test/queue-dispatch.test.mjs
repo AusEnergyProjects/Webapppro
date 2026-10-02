@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { normalizeTradeFormAnswers, tradeFormCompletion } from '../../src/lib/trade-form-library.mjs';
 
 const source = fs.readFileSync(new URL('../src/lib/database.ts', import.meta.url), 'utf8');
 const ast = ts.createSourceFile('database.ts', source, ts.ScriptTarget.Latest, true);
@@ -25,6 +26,7 @@ function fixture() {
   };
   const merge = (left, right) => ({ ...left, ...right, clientActionId: left.clientActionId });
   const dependencies = {
+    normalizeTradeFormAnswers, tradeFormCompletion,
     getDatabase: async () => db, workOrderFieldLane: async () => 'trade_team', workPackActionPhaseError: () => '',
     mergeQueuedWorkPackCommit: merge, mergeQueuedWorkPackSignatureCapture: merge, mergeQueuedWorkPackCustomerContext: merge,
     saveJob: async (_db, job) => { sql.prepare('INSERT OR REPLACE INTO jobs VALUES (?, ?, ?)').run(job.id, job.fieldLane, JSON.stringify(job)); },
@@ -86,6 +88,40 @@ test('authoritative refresh keeps newer queued form answers and server revisions
   await f.api.applyChanges([{ operation: 'delete', entityId: 'job' }], false, 'now', 'trade_team');
   assert.equal(f.rows().length, 0);
   assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM jobs').get().count, 0);
+});
+
+const branchingTemplate = () => ({ key: 'business-check', version: 3, fields: [
+  { key: 'hazard', label: 'Hazard present', type: 'select', required: true, options: ['Yes', 'No'], section: 'Site', phase: 'before' },
+  { key: 'control', label: 'Hazard control', type: 'text', required: true, condition: { fieldKey: 'hazard', equals: 'Yes' } },
+  { key: 'checked', label: 'Check date', type: 'date', required: true, section: 'Handover', phase: 'after' },
+] });
+
+test('offline completion prunes hidden answers and retains the assigned template snapshot and server revision', async (t) => {
+  const f = fixture(); t.after(() => f.sql.close());
+  const template = branchingTemplate();
+  const job = { id: 'job', fieldLane: 'trade_team', forms: [{ id: 'form', revision: 8, template, answers: {} }] };
+  f.sql.prepare('INSERT INTO jobs VALUES (?, ?, ?)').run('job', 'trade_team', JSON.stringify(job));
+  await f.api.queueAction({ ...formAction('conditional', ''), complete: true,
+    answers: { hazard: 'No', control: 'outdated hidden answer', checked: '2026-10-02', injected: 'not a field' } });
+  const saved = JSON.parse(f.sql.prepare('SELECT payload FROM jobs').get().payload).forms[0];
+  assert.deepEqual(saved.answers, { hazard: 'No', checked: '2026-10-02' });
+  assert.equal(saved.status, 'complete'); assert.equal(saved.ready, true); assert.deepEqual(saved.missing, []);
+  assert.equal(saved.revision, 8); assert.deepEqual(saved.template, template); assert.ok(saved.completedAt);
+});
+
+test('offline completion stays a draft when a branch reveals missing required data or a visible date is invalid', (t) => {
+  const f = fixture(); t.after(() => f.sql.close());
+  for (const [answers, missing] of [
+    [{ hazard: 'Yes', checked: '2026-10-02' }, ['Hazard control']],
+    [{ hazard: 'No', checked: '2026-02-30' }, ['Check date']],
+    [{ hazard: 'Maybe', checked: '2026-10-02' }, ['Hazard present']],
+  ]) {
+    const job = { forms: [{ id: 'form', revision: 5, template: branchingTemplate(), answers: {} }] };
+    f.api.applyQueuedForm(job, { ...formAction('conditional', ''), complete: true, answers }, 'saved-at');
+    assert.deepEqual(job.forms[0].missing, missing); assert.equal(job.forms[0].ready, false);
+    assert.equal(job.forms[0].status, 'draft'); assert.equal(job.forms[0].completedAt, '');
+    assert.equal(job.forms[0].revision, 5);
+  }
 });
 
 test('conflict retries clear the dispatch freeze only when minting a new ID', async (t) => {

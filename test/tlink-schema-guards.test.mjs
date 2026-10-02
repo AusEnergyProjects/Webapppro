@@ -125,6 +125,7 @@ function schemaDatabase() {
     database.exec(fs.readFileSync(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
   }
   database.exec(fs.readFileSync(new URL("../drizzle/0231_trade_crews.sql", import.meta.url), "utf8"));
+  database.exec(fs.readFileSync(new URL("../drizzle/0236_trade_form_authoring_permission.sql", import.meta.url), "utf8"));
   return database;
 }
 

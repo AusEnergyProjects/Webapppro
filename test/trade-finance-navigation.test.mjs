@@ -246,7 +246,8 @@ test("installer Map navigation is explicit, independently active and clears the 
     ["Home dashboard", "Jobs", "Schedule", "Customers"]);
   assert.equal(nodes(navigation, node => node.type === "details").length, 0, "Workspaces remain discoverable without expanding a menu");
   assert.equal(nodes(navigation, node => node.type === "button" && text(node).includes("Customer & job map")).length, 1);
-  assert.equal(nodes(navigation, node => node.type === "button").length, 16, "Every existing destination remains available once");
+  assert.equal(nodes(navigation, node => node.type === "button" && text(node).trim() === "Forms").length, 1);
+  assert.equal(nodes(navigation, node => node.type === "button").length, 17, "Every existing destination and Forms remain available once");
 });
 
 test("Map button retains its current record when saving fails and waits for a successful retry", async () => {

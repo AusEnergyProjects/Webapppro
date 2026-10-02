@@ -80,7 +80,7 @@ function fixture() {
     "can_view_quotes", "can_manage_quotes", "can_send_quotes", "can_view_invoices", "can_manage_invoices",
     "can_view_price_book", "can_manage_price_book", "can_apply_discounts", "can_reschedule_jobs",
     "can_manage_team", "can_edit_team_permissions", "can_view_field_evidence", "can_manage_field_evidence",
-    "can_run_reports", "can_search_customers",
+    "can_manage_forms", "can_run_reports", "can_search_customers",
   ];
   database.exec(`CREATE TABLE trade_team_members (
     id text PRIMARY KEY, owner_uid text NOT NULL, member_uid text NOT NULL, email text NOT NULL,
@@ -114,7 +114,7 @@ test("owner access bootstrap does not change the member revision when authoritat
 test("owner access bootstrap updates the revision only when authoritative owner details need repair", async () => {
   const { database, permissionColumns } = fixture();
   const revision = "2026-08-25T00:00:00.000Z";
-  const permissions = permissionColumns.map((column) => column === "can_manage_team" ? "0" : "1").join(", ");
+  const permissions = permissionColumns.map((column) => ["can_manage_team", "can_manage_forms"].includes(column) ? "0" : "1").join(", ");
   database.prepare(`INSERT INTO trade_team_members (
       id, owner_uid, member_uid, email, display_name, role, ${permissionColumns.join(", ")},
       job_scope, schedule_scope, status, invited_at, accepted_at, last_active_at, created_at, updated_at
@@ -126,9 +126,19 @@ test("owner access bootstrap updates the revision only when authoritative owner 
   const server = loadServer(database);
   await server.ensureOwnerTeamMember("owner-1", "owner@test.invalid", "Owner Business");
 
-  const owner = database.prepare(`SELECT display_name, can_manage_team, updated_at
+  const owner = database.prepare(`SELECT display_name, can_manage_team, can_manage_forms, updated_at
     FROM trade_team_members WHERE id = 'owner-member'`).get();
   assert.equal(owner.display_name, "Owner Business");
   assert.equal(owner.can_manage_team, 1);
+  assert.equal(owner.can_manage_forms, 1);
   assert.notEqual(owner.updated_at, revision);
+});
+
+test("new owner membership receives explicit form authoring without relying on a preset", async () => {
+  const { database } = fixture();
+  try {
+    const memberId = await loadServer(database).ensureOwnerTeamMember("owner-1", "owner@test.invalid", "Owner Business");
+    const row = database.prepare("SELECT member_uid,can_manage_forms,status FROM trade_team_members WHERE id=?").get(memberId);
+    assert.deepEqual({ ...row }, { member_uid: "owner-1", can_manage_forms: 1, status: "active" });
+  } finally { database.close(); }
 });

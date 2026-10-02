@@ -37,7 +37,7 @@ export async function readMemberEngagement(access: TeamAccess, memberId: string,
   if (!row) throw new MemberEngagementError(404, "This team member is not available in your business.");
   const result = await details(access, memberId, row.encrypted_payload ? row : null);
   await db.prepare(`INSERT INTO trade_team_member_events(id,owner_uid,team_member_id,actor_uid,entity_type,entity_id,event_type,metadata,created_at)
-    VALUES(?,?,?,?,'engagement',?,'engagement.viewed','{}',?)`)
+    VALUES(?,?,?,?,'member',?,'engagement.viewed','{}',?)`)
     .bind(crypto.randomUUID(), access.ownerUid, memberId, access.actorUid, memberId, new Date().toISOString()).run();
   return { memberId, business: member.business, readOnly: member.status === "archived", ...result };
 }
@@ -62,7 +62,7 @@ export async function saveMemberEngagement(access: TeamAccess, input: Record<str
       .bind(access.ownerUid, memberId, encrypted, mutationId, access.actorUid, now, now, expectedRevision,
         access.ownerUid, memberId, access.ownerUid, memberId, access.ownerUid, access.memberId, access.actorUid, expectedRevision),
     db.prepare(`INSERT INTO trade_team_member_events(id,owner_uid,team_member_id,actor_uid,entity_type,entity_id,event_type,metadata,created_at)
-      SELECT ?,?,?,?,'engagement',?,'engagement.saved',?,? WHERE EXISTS (SELECT 1 FROM trade_member_engagement WHERE owner_uid=? AND member_id=? AND last_mutation_id=?)`)
+      SELECT ?,?,?,?,'member',?,'engagement.saved',?,? WHERE EXISTS (SELECT 1 FROM trade_member_engagement WHERE owner_uid=? AND member_id=? AND last_mutation_id=?)`)
       .bind(crypto.randomUUID(), access.ownerUid, memberId, access.actorUid, memberId, JSON.stringify({ revision: expectedRevision + 1 }), now, access.ownerUid, memberId, mutationId),
   ]);
   if (Number(result[0]?.meta.changes || 0) !== 1) throw new MemberEngagementError(409, "This record or team access changed. Refresh the private record and try again.");

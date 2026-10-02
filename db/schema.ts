@@ -582,6 +582,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   canEditTeamPermissions: integer("can_edit_team_permissions", { mode: "boolean" }).notNull().default(false),
   canViewFieldEvidence: integer("can_view_field_evidence", { mode: "boolean" }).notNull().default(false),
   canManageFieldEvidence: integer("can_manage_field_evidence", { mode: "boolean" }).notNull().default(false),
+  canManageForms: integer("can_manage_forms", { mode: "boolean" }).notNull().default(false),
   canRunReports: integer("can_run_reports", { mode: "boolean" }).notNull().default(false),
   canSearchCustomers: integer("can_search_customers", { mode: "boolean" }).notNull().default(false),
   status: text("status").notNull().default("invited"),
@@ -601,6 +602,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   check("trade_team_members_service_states_check", sql`${table.serviceStates} IS NULL OR (json_valid(${table.serviceStates}) AND json_type(${table.serviceStates}) = 'array' AND json_array_length(${table.serviceStates}) BETWEEN 1 AND 8)`),
   check("trade_team_members_schedule_colour_check", sql`${table.scheduleColour} IN ('emerald', 'teal', 'blue', 'violet', 'amber', 'rose')`),
   check("trade_team_members_permission_editor_check", sql`${table.canEditTeamPermissions} = 0 OR ${table.canManageTeam} = 1`),
+  check("trade_team_members_manage_forms_check", sql`${table.canManageForms} IN (0, 1)`),
 ]);
 
 export const tradeTeamMemberFiles = sqliteTable("trade_team_member_files", {

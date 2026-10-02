@@ -6,7 +6,15 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 2 October 2026
 
-## Current implementation: team onboarding and everyday tasks
+## Current implementation: visible business Forms workspace
+
+Forms is a direct left-sidebar destination for owners and staff. Creditex compliance forms expose only current official definitions for read-only exploration, phone preview and mind maps. Business Forms provides a tenant-scoped designer, reusable pages, conditional questions, mind map and preview; published versions remain immutable in existing job snapshots. Create and edit forms is an independent, explicit team permission. Existing nonowners default off; owners retain access. Business templates and records never cross owner scope.
+
+Optional forms can be attached and completed from job Files. Shared conditional-answer validation removes stale hidden answers and excludes hidden required questions. Web page timing and native question timing preserve existing job-time semantics. Migration 0236 adds can_manage_forms without expanding other privileges. No Creditex master-write permissions or training completion gates are changed.
+
+Sites 738/source 6aeed48f4ffe7626c217bb8f6ebb84c16e7a2df1 delivered team onboarding, tasks and private agreement starters. Live QA then caught an audit entity CHECK mismatch affecting private-record opens and task writes. This slice fixes those audit entries using the existing member entity and adds actual 0131 database constraints to regression fixtures. Release evidence is in C:/Webproject/outputs/tlink-forms-20261002/. This source statement precedes the matching release receipt.
+
+## Previous implementation: team onboarding and everyday tasks
 
 Team shows invitation/joining, optional crew setup, individual training and the next scheduling action together. Unknown or incomplete training never implies job eligibility; business approval, person training and job compliance remain separate gates. Owners can keep optional agreed pay, payment and super details in each member's private onboarding record. Employment type (employee or contractor) is separate from pay basis (hourly, annual salary or per job). These records are encrypted using the existing integration encryption key. Private contracts and onboarding files use the existing protected member-file storage and are excluded from manager file lists, counts and shared renewal alerts. This is recordkeeping, not payroll calculation, contract execution or payment processing.
 

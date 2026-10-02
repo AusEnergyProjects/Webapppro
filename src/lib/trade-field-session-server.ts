@@ -136,6 +136,7 @@ function accessFromRow(row: MemberAccessRow, sessionId: string): TeamAccess {
     canEditTeamPermissions: Boolean(row.can_edit_team_permissions),
     canViewFieldEvidence: Boolean(row.can_view_field_evidence),
     canManageFieldEvidence: Boolean(row.can_manage_field_evidence),
+    canManageForms: Boolean(row.can_manage_forms),
     canRunReports: Boolean(row.can_run_reports),
     canSearchCustomers: Boolean(row.can_search_customers),
     fieldSessionId: sessionId,
@@ -148,7 +149,7 @@ const MEMBER_ACCESS_COLUMNS = `m.id team_member_id, m.owner_uid, m.email, m.disp
   m.can_send_quotes, m.can_send_sms, m.can_view_invoices, m.can_manage_invoices, m.can_view_price_book,
   m.can_manage_price_book, m.can_apply_discounts, m.schedule_scope, m.can_reschedule_jobs,
   m.can_manage_team, m.can_edit_team_permissions, m.can_view_field_evidence,
-  m.can_manage_field_evidence, m.can_run_reports, m.can_search_customers, a.business_name`;
+  m.can_manage_field_evidence, m.can_manage_forms, m.can_run_reports, m.can_search_customers, a.business_name`;
 
 async function approvedInstallerAccount(ownerUid: string) {
   const account = await tradeAccountProjection(ownerUid);

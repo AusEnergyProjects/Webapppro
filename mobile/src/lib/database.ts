@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
+import { normalizeTradeFormAnswers, tradeFormCompletion } from '../../../src/lib/trade-form-library.mjs';
 
 import { ADDRESS_MAX_AGE_MS } from '@/lib/config';
 import { deleteEncryptedBundle, encryptFileForQueue, purgeEncryptedFiles, purgeEncryptionKey } from '@/lib/encrypted-files';
@@ -388,12 +389,12 @@ function applyQueuedForm(job: FieldJob, action: OfflineAction, savedAt: string) 
   if (action.type !== 'save_job_form' || !action.formId || !action.answers) return;
   const form = job.forms.find((item) => item.id === action.formId);
   if (!form) return;
-  form.answers = action.answers;
-  form.status = action.complete ? 'complete' : 'draft';
-  form.missing = form.template.fields.filter((field) => field.required && (field.type === 'checkbox'
-    ? action.answers?.[field.key] !== true : !String(action.answers?.[field.key] || '').trim())).map((field) => field.label);
-  form.ready = !form.missing.length;
-  form.completedAt = action.complete ? savedAt : '';
+  form.answers = normalizeTradeFormAnswers(form.template, action.answers);
+  const completion = tradeFormCompletion(form.template, form.answers);
+  form.missing = completion.missing;
+  form.ready = completion.ready;
+  form.status = action.complete && completion.ready ? 'complete' : 'draft';
+  form.completedAt = form.status === 'complete' ? savedAt : '';
   form.updatedAt = savedAt;
 }
 

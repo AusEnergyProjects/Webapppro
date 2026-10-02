@@ -58,7 +58,7 @@ test("form answer normalisation is bounded and completion requires checked confi
   assert.equal(answers.technician.length, 100);
   assert.equal(answers.site_safe, false);
   assert.equal(tradeFormCompletion(template, answers).ready, false);
-  const complete = Object.fromEntries(template.fields.map((field) => [field.key, field.type === "checkbox" ? true : "recorded"]));
+  const complete = Object.fromEntries(template.fields.map((field) => [field.key, field.type === "checkbox" ? true : field.type === "date" ? "2026-10-02" : field.type === "select" ? field.options[0] : "recorded"]));
   assert.equal(tradeFormCompletion(template, complete).ready, true);
   assert.equal(normalizeTradeFormAnswers(template, { work_date: "16/07/2026" }).work_date, "");
   assert.equal(normalizeTradeFormAnswers(template, { work_date: "2026-02-30" }).work_date, "");

@@ -4,6 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as flow from '../src/lib/trade-activity-form-flow.ts';
 import { activityFieldWorkerForm } from '../src/lib/trade-activity-field-policy.ts';
+import { visibleTradeFormFields } from '../src/lib/trade-form-library.mjs';
 
 const source = readFileSync(new URL('../src/components/CreditexFormPhonePreview.tsx', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: {
@@ -33,6 +34,7 @@ function preview(props) {
     if (name === 'react/jsx-runtime') return { jsx: element, jsxs: element, Fragment: 'fragment' };
     if (name.endsWith('trade-activity-form-flow')) return flow;
     if (name.endsWith('trade-activity-field-policy')) return { activityFieldWorkerForm };
+    if (name.endsWith('trade-form-library.mjs')) return { visibleTradeFormFields };
     if (name.endsWith('.module.css')) return { default: new Proxy({}, { get: (_, key) => key }) };
     if (name.endsWith('TradeWorkPackSignaturePad')) return { TradeWorkPackSignaturePad: 'signature-pad' };
     throw new Error(`Unexpected preview dependency: ${name}`);
@@ -94,6 +96,41 @@ test('conditional routing follows test answers while next always works with empt
   view.jump('installed');
   view.click('No');
   assert.doesNotMatch(view.text(), /serial/);
+});
+
+test('business preview discards hidden answers without trimming text entry and requires fresh answers when the branch reopens', () => {
+  const view = preview({ businessForm: true, form: form([field('installed', 'boolean'), field('serial', 'text', { condition: { fieldKey: 'installed', equals: true } })]) });
+  view.click('Yes');
+  view.answer('serial', ' ');
+  assert.equal(view.nodes().find(node => node.props.id === 'phone-test-serial').props.value, ' ');
+  view.answer('serial', 'UNIT ');
+  assert.equal(view.nodes().find(node => node.props.id === 'phone-test-serial').props.value, 'UNIT ');
+  view.answer('serial', 'UNIT 001');
+  view.click('No'); assert.doesNotMatch(view.text(), /serial/);
+  view.click('Yes');
+  assert.equal(view.nodes().find(node => node.props.id === 'phone-test-serial').props.value, '');
+  view.click('Check these answers'); assert.match(view.text(), /Complete this required question/);
+});
+
+test('business preview applies strict equality and inequality even to case-distinct select options', () => {
+  const view = preview({ businessForm: true, form: form([
+    field('choice', 'select', { options: ['A', 'a'] }),
+    field('upper', 'text', { condition: { fieldKey: 'choice', equals: 'A' } }),
+    field('lower', 'text', { condition: { fieldKey: 'choice', notEquals: 'A' } }),
+  ]) });
+  const has = key => view.nodes().some(node => node.props.id === `phone-test-${key}`);
+  view.answer('choice', 'A'); assert.equal(has('upper'), true); assert.equal(has('lower'), false);
+  view.answer('upper', 'Old answer');
+  view.answer('choice', 'a'); assert.equal(has('upper'), false); assert.equal(has('lower'), true);
+  view.answer('choice', 'A'); assert.equal(view.nodes().find(node => node.props.id === 'phone-test-upper').props.value, '');
+});
+
+test('governed preview retains its existing case-insensitive conditions and hidden draft answers', () => {
+  const view = preview({ form: form([field('choice', 'select', { options: ['A', 'a', 'B'] }), field('serial', 'text', { condition: { fieldKey: 'choice', equals: 'A' } })]) });
+  view.answer('choice', 'A'); view.answer('serial', 'Retain governed draft');
+  view.answer('choice', 'B'); assert.doesNotMatch(view.text(), /serial/);
+  view.answer('choice', 'a');
+  assert.equal(view.nodes().find(node => node.props.id === 'phone-test-serial').props.value, 'Retain governed draft');
 });
 
 test('removing a repeat preserves same-index evidence in another repeat group', () => {

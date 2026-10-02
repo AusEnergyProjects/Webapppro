@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ActivityAnswer, ActivityAnswers, ActivityField, ActivityForm } from "@/lib/trade-activity-form-types";
 import { activityFieldWorkerForm } from "@/lib/trade-activity-field-policy";
+import { visibleTradeFormFields } from "@/lib/trade-form-library.mjs";
 import {
   activityBaseFieldKey, activityOptionLabel, activityRepeatCount, activityRepeatItemLabel, activityRepeatKey,
   activityWizardPageForStepKey, activityWizardPages, boundActivityDeclaration,
@@ -26,22 +27,26 @@ function validAnswer(field: ActivityField, value: ActivityAnswer | undefined) {
   return field.type === "text";
 }
 
-function previewAnswers(form: ActivityForm, answers: ActivityAnswers): ActivityAnswers {
+function previewAnswers(form: ActivityForm, answers: ActivityAnswers, businessForm = false): ActivityAnswers {
   const fields = new Map(form.fields.map((field) => [field.key, field]));
-  return Object.fromEntries(Object.entries(answers).filter(([key, value]) => {
+  const valid = Object.fromEntries(Object.entries(answers).filter(([key, value]) => {
     if (key.startsWith("$repeat.")) return form.fields.some((field) => field.repeatGroup === key.slice(8)) && typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 20;
     const field = fields.get(activityBaseFieldKey(key));
-    return field && validAnswer(field, value);
+    return field && (businessForm && field.type === "text" && typeof value === "string" && value.length <= 10_000 || validAnswer(field, value));
   }));
+  if (!businessForm) return valid;
+  const visible = new Set(visibleTradeFormFields(form, valid).map((field: ActivityField) => field.key));
+  return Object.fromEntries(Object.entries(valid).filter(([key]) => visible.has(key)));
 }
 
-export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, selectedDeclarationKey, onSelectField, onSelectDeclaration, canEdit = true }: {
+export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, selectedDeclarationKey, onSelectField, onSelectDeclaration, canEdit = true, businessForm = false }: {
   form: ActivityForm;
   selectedFieldKey?: string;
   selectedDeclarationKey?: string;
   onSelectField?: (key: string) => void;
   onSelectDeclaration?: (key: string) => void;
   canEdit?: boolean;
+  businessForm?: boolean;
 }) {
   const form = useMemo(() => activityFieldWorkerForm(sourceForm), [sourceForm]);
   const selectedKey = selectedDeclarationKey || selectedFieldKey || "";
@@ -56,8 +61,11 @@ export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, s
   const [showValidation, setShowValidation] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
   const id = useId();
-  const answers = previewAnswers(form, draft);
-  const pages = streamlinedActivityPages(activityWizardPages(form, answers));
+  const answers = previewAnswers(form, draft, businessForm);
+  const businessFields: ActivityField[] = businessForm ? visibleTradeFormFields(form, answers) : [];
+  // Business routing has already been resolved with the same strict rules as job forms.
+  const pageForm = businessForm ? { ...form, fields: businessFields.map(field => ({ ...field, condition: undefined })) } : form;
+  const pages = streamlinedActivityPages(activityWizardPages(pageForm, answers));
   const page = activityWizardPageForStepKey(pages, pageKey) || pages[0];
   const pageIndex = pages.findIndex((item) => item.key === page.key);
   const selectedField = selectedDeclarationKey ? undefined : form.fields.find((field) => field.key === selectedFieldKey)
@@ -101,7 +109,10 @@ export function CreditexFormPhonePreview({ form: sourceForm, selectedFieldKey, s
     : !inspect && page.kind === "fields" ? page.fields : [];
 
   function answer(field: ActivityField, value: ActivityAnswer) {
-    setDraft((current) => ({ ...previewAnswers(form, current), [field.key]: value }));
+    setDraft((current) => {
+      const next = { ...previewAnswers(form, current, businessForm), [field.key]: value };
+      return businessForm ? previewAnswers(form, next, true) : next;
+    });
     // Test signatures follow the form answers rather than pretending to be legal records.
     setSignatures({});
   }

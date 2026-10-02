@@ -12,7 +12,8 @@ function fixture(t) {
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,member_uid TEXT,display_name TEXT,status TEXT DEFAULT 'active',can_manage_team INTEGER DEFAULT 0,UNIQUE(owner_uid,id));
     CREATE TABLE trade_crews(id TEXT PRIMARY KEY,owner_uid TEXT,lead_member_id TEXT);
     CREATE TABLE trade_crew_members(owner_uid TEXT,crew_id TEXT,member_id TEXT,UNIQUE(owner_uid,member_id));
-    CREATE TABLE trade_team_member_events(id TEXT PRIMARY KEY,owner_uid TEXT,team_member_id TEXT,actor_uid TEXT,entity_type TEXT,entity_id TEXT,event_type TEXT,metadata TEXT,created_at TEXT);`);
+    `);
+  sqlite.exec(fs.readFileSync(new URL('../drizzle/0131_trade_team_permissions_and_member_files.sql', import.meta.url), 'utf8').split('--> statement-breakpoint').find(sql => sql.includes('CREATE TABLE `trade_team_member_events`')));
   sqlite.exec(read('drizzle/0234_trade_business_tasks.sql'));
   class Statement {
     constructor(sql, bindings = []) { this.sql=sql; this.bindings=bindings; }

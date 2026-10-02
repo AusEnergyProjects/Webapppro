@@ -53,7 +53,7 @@ const REQUIRED_COLUMNS = {
     "can_view_price_book", "can_manage_price_book", "can_apply_discounts",
     "can_reschedule_jobs", "can_manage_team", "can_edit_team_permissions",
     "can_view_field_evidence", "can_manage_field_evidence", "can_run_reports",
-    "can_search_customers", "can_send_sms",
+    "can_search_customers", "can_send_sms", "can_manage_forms",
   ],
   trade_crm_job_details: [
     "work_order_id", "firebase_uid", "customer_source", "accepted_disclosure_snapshot",

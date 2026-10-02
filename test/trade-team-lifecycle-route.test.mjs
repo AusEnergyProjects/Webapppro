@@ -48,7 +48,7 @@ const managerAccess = {
   canViewCustomers: false, canManageCustomers: false, canViewQuotes: false, canManageQuotes: false,
   canSendQuotes: false, canViewInvoices: false, canManageInvoices: false, canViewPriceBook: false,
   canManagePriceBook: false, canApplyDiscounts: false, scheduleScope: "team", canRescheduleJobs: false,
-  canViewFieldEvidence: false, canManageFieldEvidence: false, canRunReports: false, canSearchCustomers: false,
+  canViewFieldEvidence: false, canManageFieldEvidence: false, canManageForms: false, canRunReports: false, canSearchCustomers: false,
 };
 
 function loadRoute(database, aborted, currentAccess = managerAccess, { sent = [], deliveryStatus = "sent", beforeBatch } = {}) {
@@ -120,7 +120,7 @@ function fixture() {
     "can_manage_customers", "can_view_quotes", "can_manage_quotes", "can_send_quotes", "can_send_sms", "can_view_invoices",
     "can_manage_invoices", "can_view_price_book", "can_manage_price_book", "can_apply_discounts",
     "can_reschedule_jobs", "can_manage_team", "can_edit_team_permissions", "can_view_field_evidence",
-    "can_manage_field_evidence", "can_run_reports", "can_search_customers"];
+    "can_manage_field_evidence", "can_manage_forms", "can_run_reports", "can_search_customers"];
   database.exec(`
     CREATE TABLE trade_team_members (
       id text PRIMARY KEY, owner_uid text NOT NULL, member_uid text NOT NULL, email text NOT NULL,
@@ -633,6 +633,43 @@ test("archiving revokes access, preserves identity and history, and only appears
     assert.equal(past.assignees.some(member => member.id === "target-1"), false);
     const filtered = await (await owner.GET(new Request("https://test/api/trade-team?status=archived&search=not-present"))).json();
     assert.equal(filtered.roster.total, 0);
+  } finally { database.close(); }
+});
+
+test("form authoring is explicitly granted, independently revoked and audited through Team", async () => {
+  const database = fixture();
+  try {
+    const owner = loadRoute(database, [], { ...managerAccess, isOwner: true, actorUid: "owner-1", memberId: "owner-member", canManageForms: true });
+    const change = (route, memberId, permissions) => patch(route, { action: "update_member", memberId,
+      expectedUpdatedAt: database.prepare("SELECT updated_at FROM trade_team_members WHERE id=?").get(memberId).updated_at, permissions });
+    assert.equal(database.prepare("SELECT can_manage_forms FROM trade_team_members WHERE id='target-1'").get().can_manage_forms, 0);
+    const enabled = await change(owner, "target-1", { canManageForms: true });
+    const payload = await enabled.json(); assert.equal(enabled.status, 200, payload.error);
+    assert.equal(payload.members.find(member => member.id === "target-1").permissions.canManageForms, true);
+    const saved = database.prepare("SELECT can_manage_forms,can_manage_jobs,can_view_field_evidence,can_manage_field_evidence FROM trade_team_members WHERE id='target-1'").get();
+    assert.deepEqual({ ...saved }, { can_manage_forms: 1, can_manage_jobs: 0, can_view_field_evidence: 0, can_manage_field_evidence: 0 });
+    assert.equal((await change(owner, "target-1", { canManageForms: false })).status, 200);
+    assert.equal(database.prepare("SELECT can_manage_forms FROM trade_team_members WHERE id='target-1'").get().can_manage_forms, 0);
+    assert.ok(database.prepare("SELECT metadata FROM trade_team_member_events WHERE team_member_id='target-1'").all().some(row => JSON.parse(row.metadata).permissionsAfter?.canManageForms === true));
+    const manager = loadRoute(database, [], { ...managerAccess, canEditTeamPermissions: true, canManageForms: false });
+    database.exec("UPDATE trade_team_members SET can_edit_team_permissions=1 WHERE id='manager-1'");
+    assert.equal((await change(manager, "target-1", { canManageForms: true })).status, 403);
+    assert.equal((await change(manager, "manager-1", { canManageForms: true })).status, 403);
+    assert.equal((await change(owner, "target-1", { canManageForms: "true" })).status, 400);
+  } finally { database.close(); }
+});
+
+test("authoring delegation checks the live grant before a teammate mutation", async () => {
+  const database = fixture();
+  try {
+    database.exec("UPDATE trade_team_members SET can_edit_team_permissions=1,can_manage_forms=1 WHERE id='manager-1'");
+    const manager = loadRoute(database, [], { ...managerAccess, canEditTeamPermissions: true, canManageForms: true }, {
+      beforeBatch: () => database.exec("UPDATE trade_team_members SET can_manage_forms=0 WHERE id='manager-1'"),
+    });
+    const response = await patch(manager, { action: "update_member", memberId: "target-1", expectedUpdatedAt: "2026-08-12T00:00:00.000Z", permissions: { canManageForms: true } });
+    assert.equal(response.status, 409);
+    assert.equal(database.prepare("SELECT can_manage_forms FROM trade_team_members WHERE id='target-1'").get().can_manage_forms, 0);
+    assert.equal(database.prepare("SELECT count(*) count FROM trade_team_member_events").get().count, 0);
   } finally { database.close(); }
 });
 

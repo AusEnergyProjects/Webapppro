@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import { normalizeTradeFormAnswers, tradeFormCompletion } from '../../src/lib/trade-form-library.mjs';
 
 const source = fs.readFileSync(new URL('../src/app/job/[id].tsx', import.meta.url), 'utf8');
 function action(name, dependencies) {
@@ -62,7 +63,7 @@ test('time saving preserves input on failure and releases busy state', async () 
 
 test('an incomplete required form rejects the save instead of advancing its caller', async () => {
   let wrote = false;
-  const save = action('saveForm', { job: { id: 'job' }, saveAction: async () => { wrote = true; } });
+  const save = action('saveForm', { job: { id: 'job' }, normalizeTradeFormAnswers, tradeFormCompletion, saveAction: async () => { wrote = true; } });
   await assert.rejects(save({ template: { fields: [{ key: 'name', label: 'Name', required: true, type: 'text' }] } }, { name: ' ' }, true), /Finish the required fields: Name/);
   assert.equal(wrote, false);
 });

@@ -89,6 +89,16 @@ test("large rosters are searched, filtered and paginated by the server", () => {
   assert.doesNotMatch(settings, /50 (?:member|seat)/i);
 });
 
+test("all team presets leave business form authoring off until explicitly granted", () => {
+  const definitions = settings.slice(settings.indexOf("const fullPermissions"), settings.indexOf("const accessPresets"));
+  const script = ts.transpileModule(definitions, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const result = runInNewContext(`${script}; [fullPermissions,officePermissions,fieldPermissions].map(value => value.canManageForms);`);
+  assert.deepEqual(Array.from(result), [false, false, false]);
+  assert.match(settings, /key: "canManageForms", label: "Create and edit business forms"/);
+  assert.match(settings, /Creditex compliance forms stay protected/);
+  assert.doesNotMatch(settings, /Business forms also require Edit job details/);
+});
+
 test("member lifecycle preserves historical records and has no hard-delete control", () => {
   assert.match(settings, /Deactivate access/);
   assert.match(settings, /Reactivate access/);
@@ -183,7 +193,7 @@ test("staff portal delegates job operations to the canonical permission-scoped C
   assert.doesNotMatch(portal, /TradeInvoiceWorkspace/);
   assert.doesNotMatch(portal, /\{data\.access\.role\} portal/);
   assert.match(field, /if \(readOnly\) return/);
-  assert.match(forms, /readOnly \? "Review completed field forms"/);
+  assert.match(forms, /readOnly \? "Saved job forms"/);
 });
 
 test("quote and invoice viewers keep context while every mutation follows exact access", () => {

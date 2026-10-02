@@ -14,7 +14,7 @@ export function followUpServices(db:D1Database):FollowUpServices {
         isOwner:true,jobScope:"team",scheduleScope:"team",canCreateJobs:false,canManageJobs:true,canAssignJobs:false,canViewCustomers:true,canManageCustomers:false,
         canViewQuotes:true,canManageQuotes:false,canSendQuotes:true,canViewInvoices:true,canManageInvoices:true,canViewPriceBook:false,canManagePriceBook:false,
         canApplyDiscounts:false,canRescheduleJobs:false,canManageTeam:false,canEditTeamPermissions:false,canViewFieldEvidence:false,canManageFieldEvidence:false,
-        canRunReports:false,canSearchCustomers:false};
+        canManageForms:false,canRunReports:false,canSearchCustomers:false};
     },
     recipient:(access,workOrderId)=>resolveTradeEmailRecipient(access,{workOrderId},db),
     send:(ownerUid,actorUid,message,beforeSend)=>sendTradeCustomerEmail(ownerUid,actorUid,{...message,channel:"email",callbackUrl:"",messageType:"trade_follow_up"},{db,requireConnection:true,beforeSend}),

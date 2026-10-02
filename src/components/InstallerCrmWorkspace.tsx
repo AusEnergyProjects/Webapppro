@@ -2010,7 +2010,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
         <summary>Forms and assessments</summary>
         <div id="job-files-rental" tabIndex={-1}><TradeRentalActivityPicker key={job.id} user={user} workOrderId={job.id} refreshKey={job.revision} active={activeTab === "files"} readOnly={!canManageFieldEvidence} initiallyAttached={job.serviceCategory === "rental-inspection"} onChanged={refreshJobFiles} onAttachmentChanged={setRentalAttached} /></div>
         {(complianceIntents.length > 0 || activityRecordsRequested) && <div id="job-files-activity-records" tabIndex={-1}><TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} /></div>}
-        <TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} onChanged={refreshJobFiles} />
+        <TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence || ['completed', 'cancelled'].includes(job.stage)} onChanged={refreshJobFiles} />
       </details>
       {activeTab === "files" && <>
         {!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary" open={photoRequestOpen} onToggle={(event) => setPhotoRequestOpen(event.currentTarget.open)}><summary>Request customer photos</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}

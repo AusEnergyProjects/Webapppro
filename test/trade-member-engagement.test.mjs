@@ -26,7 +26,8 @@ function fixture() {
     CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT NOT NULL,member_uid TEXT NOT NULL,status TEXT NOT NULL,UNIQUE(owner_uid,id));
     INSERT INTO trade_team_members VALUES('owner-a','business-a','business-a','active'),('staff-a','business-a','person-a','active'),('owner-b','business-b','business-b','active'),('staff-b','business-b','person-b','active');
     CREATE TABLE trade_team_member_files(id TEXT PRIMARY KEY);
-    CREATE TABLE trade_team_member_events(id TEXT PRIMARY KEY,owner_uid TEXT,team_member_id TEXT,actor_uid TEXT,entity_type TEXT,entity_id TEXT,event_type TEXT,metadata TEXT,created_at TEXT);`);
+    `);
+  database.exec(fs.readFileSync(new URL('../drizzle/0131_trade_team_permissions_and_member_files.sql', import.meta.url), 'utf8').split('--> statement-breakpoint').find(sql => sql.includes('CREATE TABLE `trade_team_member_events`')));
   database.exec(fs.readFileSync(new URL("../drizzle/0235_trade_member_engagement.sql", import.meta.url), "utf8"));
   function statement(sql, bindings = []) {
     return { bind(...values) { return statement(sql, values); }, async first() { return database.prepare(sql).get(...bindings) || null; }, async all() { return { results: database.prepare(sql).all(...bindings) }; }, async run() { return { meta: { changes: Number(database.prepare(sql).run(...bindings).changes) } }; } };

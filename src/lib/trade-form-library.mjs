@@ -144,15 +144,38 @@ export function tradeFormTemplate(key, version, serviceCategory) {
 
 export function normalizeTradeFormAnswers(template, value) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  return Object.fromEntries(template.fields.map((field) => {
+  const clean = Object.fromEntries(template.fields.map((field) => {
     if (field.type === "checkbox") return [field.key, source[field.key] === true];
     const limit = Number(field.maxLength || 240);
     const clean = String(source[field.key] || "").trim().slice(0, limit);
-    return [field.key, field.type === "date" && !validIsoDate(clean) ? "" : clean];
+    return [field.key, (field.type === "date" && !validIsoDate(clean)) || (field.type === 'select' && !field.options?.includes(clean)) ? "" : clean];
   }));
+  const visible = new Set(visibleTradeFormFields(template, clean).map(field => field.key));
+  return Object.fromEntries(Object.entries(clean).filter(([key]) => visible.has(key)));
+}
+
+export function orderedTradeFormFields(template) {
+  return ['before', 'after'].flatMap(phase => {
+    const fields = template.fields.filter(field => (field.phase || 'before') === phase);
+    return [...new Set(fields.map(field => field.section || 'Questions'))]
+      .flatMap(section => fields.filter(field => (field.section || 'Questions') === section));
+  });
+}
+
+export function visibleTradeFormFields(template, answers) {
+  const visible = new Set();
+  return orderedTradeFormFields(template).filter(field => {
+    const rule = field.condition;
+    const answer = rule ? answers[rule.fieldKey] : undefined;
+    const show = !rule || (visible.has(rule.fieldKey) && answer !== undefined && answer !== ''
+      && (Object.hasOwn(rule, 'equals') ? answer === rule.equals : answer !== rule.notEquals));
+    if (show) visible.add(field.key);
+    return show;
+  });
 }
 
 export function tradeFormCompletion(template, answers) {
-  const missing = template.fields.filter((field) => field.required && (field.type === "checkbox" ? answers[field.key] !== true : !String(answers[field.key] || "").trim()));
+  const clean = normalizeTradeFormAnswers(template, answers);
+  const missing = visibleTradeFormFields(template, clean).filter((field) => field.required && (field.type === "checkbox" ? clean[field.key] !== true : !String(clean[field.key] || "").trim()));
   return { ready: missing.length === 0, missing: missing.map((field) => field.label) };
 }

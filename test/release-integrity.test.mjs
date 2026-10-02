@@ -97,7 +97,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   );
   assert.match(handover, /Current production: Sites version 499/);
   assert.match(releaseTruth, /Last reconciled locally: 2 October 2026/);
-  assert.match(releaseTruth, /## Current implementation: team onboarding and everyday tasks/);
+  assert.match(releaseTruth, /## Current implementation: visible business Forms workspace/);
   assert.match(releaseTruth, /Migrations 0234 and 0235/);
   assert.match(releaseTruth, /## Previous implementation: streamlined daily work and dashboard setup/);
   assert.match(releaseTruth, /## Previous implementation: default optional SWMS/);
@@ -1093,7 +1093,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Team onboarding, everyday tasks and private pay\/onboarding records/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Visible business Forms workspace and explicit authoring permission/);
   assert.match(currentHandover, /Direct regulator transmission remains dependent on approved interfaces and delegated access/);
   assert.match(currentHandover, /external provider registration and live OAuth acceptance remain in progress/);
   assert.match(currentHandover, /Milestone ID: `PUBLIC-MEASUREMENT-PROVENANCE-86`/);

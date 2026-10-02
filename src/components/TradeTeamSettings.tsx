@@ -57,6 +57,7 @@ export type TradeTeamPermissions = {
   canEditTeamPermissions: boolean;
   canViewFieldEvidence: boolean;
   canManageFieldEvidence: boolean;
+  canManageForms: boolean;
   canRunReports: boolean;
 };
 
@@ -161,7 +162,7 @@ const fullPermissions: TradeTeamPermissions = {
   canViewInvoices: true, canManageInvoices: true,
   canViewPriceBook: true, canManagePriceBook: true,
   scheduleScope: "team", canRescheduleJobs: true, canManageTeam: true, canEditTeamPermissions: true,
-  canViewFieldEvidence: true, canManageFieldEvidence: true,
+  canViewFieldEvidence: true, canManageFieldEvidence: true, canManageForms: false,
   canRunReports: true,
 };
 
@@ -181,12 +182,12 @@ const fieldPermissions: TradeTeamPermissions = {
   canViewInvoices: false, canManageInvoices: false,
   canViewPriceBook: true, canManagePriceBook: false,
   scheduleScope: "own", canRescheduleJobs: false, canManageTeam: false, canEditTeamPermissions: false,
-  canViewFieldEvidence: true, canManageFieldEvidence: true,
+  canViewFieldEvidence: true, canManageFieldEvidence: true, canManageForms: false,
   canRunReports: false,
 };
 
 const accessPresets: Array<{ id: AccessPreset; name: string; description: string; permissions: TradeTeamPermissions }> = [
-  { id: "manager", name: "Manager access", description: "Starts with full business access, including reports and customer search.", permissions: fullPermissions },
+  { id: "manager", name: "Manager access", description: "Starts with jobs, customers, finance, team access and reports. Form authoring is granted separately.", permissions: fullPermissions },
   { id: "office", name: "Office access", description: "Starts with jobs, customers, quoting, accounts, reports and the team schedule.", permissions: officePermissions },
   { id: "field", name: "Field access", description: "Starts with assigned jobs, simple self-assigned job intake, own schedule and field evidence.", permissions: fieldPermissions },
 ];
@@ -222,7 +223,8 @@ const permissionGroups: Array<{ label: string; items: Array<{ key: BooleanPermis
     { key: "canManageTeam", label: "Manage team members", detail: "Add people and update member contact details or status." },
     { key: "canEditTeamPermissions", label: "Edit access permissions", detail: "Sensitive: change what another team member can see or do. This never allows changing their own access." },
     { key: "canViewFieldEvidence", label: "View field documents", detail: "Open job evidence and field documents." },
-    { key: "canManageFieldEvidence", label: "Manage field forms and evidence", detail: "Business forms also require Edit job details and All team jobs. Creditex masters stay protected." },
+    { key: "canManageFieldEvidence", label: "Complete job forms and evidence", detail: "Record answers, photos and signatures for permitted jobs." },
+    { key: "canManageForms", label: "Create and edit business forms", detail: "Explicit access to publish reusable forms for this business. Creditex compliance forms stay protected." },
     { key: "canRunReports", label: "Run whole-business reports", detail: "Sensitive: open reporting across the whole business." },
   ] },
 ];

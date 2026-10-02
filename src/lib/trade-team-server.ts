@@ -43,6 +43,7 @@ export type TeamAccess = {
   canEditTeamPermissions: boolean;
   canViewFieldEvidence: boolean;
   canManageFieldEvidence: boolean;
+  canManageForms: boolean;
   canRunReports: boolean;
   canSearchCustomers: boolean;
   fieldSessionId?: string;
@@ -66,7 +67,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
       can_view_price_book = 1, can_manage_price_book = 1, can_apply_discounts = 1,
       schedule_scope = 'team', can_reschedule_jobs = 1, can_manage_team = 1,
       can_edit_team_permissions = 1,
-      can_view_field_evidence = 1, can_manage_field_evidence = 1,
+      can_view_field_evidence = 1, can_manage_field_evidence = 1, can_manage_forms = 1,
       can_run_reports = 1, can_search_customers = 1, status = 'active',
       accepted_at = CASE WHEN accepted_at = '' THEN ? ELSE accepted_at END, updated_at = ?
       WHERE id = ? AND owner_uid = ?
@@ -78,7 +79,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
           OR can_view_price_book <> 1 OR can_manage_price_book <> 1 OR can_apply_discounts <> 1
           OR schedule_scope <> 'team' OR can_reschedule_jobs <> 1 OR can_manage_team <> 1
           OR can_edit_team_permissions <> 1
-          OR can_view_field_evidence <> 1 OR can_manage_field_evidence <> 1
+          OR can_view_field_evidence <> 1 OR can_manage_field_evidence <> 1 OR can_manage_forms <> 1
           OR can_run_reports <> 1 OR can_search_customers <> 1 OR status <> 'active'
           OR accepted_at = '')`).bind(ownerUid, email, displayName, now, now, existing.id, ownerUid,
         ownerUid, email, displayName).run();
@@ -91,11 +92,11 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
      can_send_quotes, can_view_invoices, can_manage_invoices, can_view_price_book,
       can_manage_price_book, can_apply_discounts, schedule_scope, can_reschedule_jobs, can_manage_team,
      can_edit_team_permissions,
-     can_view_field_evidence, can_manage_field_evidence, can_run_reports,
+     can_view_field_evidence, can_manage_field_evidence, can_manage_forms, can_run_reports,
      can_search_customers, status, invited_at,
      accepted_at, last_active_at, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, 'manager', 1, 1, 1, 'team', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-      'team', 1, 1, 1, 1, 1, 1, 1, 'active', '', ?, ?, ?, ?)`)
+      'team', 1, 1, 1, 1, 1, 1, 1, 1, 'active', '', ?, ?, ?, ?)`)
     .bind(id, ownerUid, ownerUid, email, displayName, now, now, now, now).run();
   return id;
 }
@@ -126,7 +127,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
       canViewPriceBook: true, canManagePriceBook: true, canApplyDiscounts: true,
       scheduleScope: "team", canRescheduleJobs: true, canManageTeam: true,
       canEditTeamPermissions: true,
-      canViewFieldEvidence: true, canManageFieldEvidence: true,
+      canViewFieldEvidence: true, canManageFieldEvidence: true, canManageForms: true,
       canRunReports: true, canSearchCustomers: true };
   }
   if (!identity.emailVerified) throw new Error("EMAIL_VERIFICATION_REQUIRED");
@@ -138,7 +139,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
       m.can_apply_discounts,
       m.schedule_scope, m.can_reschedule_jobs, m.can_manage_team,
       m.can_edit_team_permissions,
-      m.can_view_field_evidence, m.can_manage_field_evidence,
+      m.can_view_field_evidence, m.can_manage_field_evidence, m.can_manage_forms,
       m.can_run_reports, m.can_search_customers, a.business_name
     FROM trade_team_members m JOIN trade_accounts a ON a.firebase_uid = m.owner_uid
     WHERE m.member_uid = ? AND m.owner_uid = ? AND m.id = ? AND m.status = 'active'`)
@@ -170,6 +171,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
     canEditTeamPermissions: Boolean(member.can_edit_team_permissions),
     canViewFieldEvidence: Boolean(member.can_view_field_evidence),
     canManageFieldEvidence: Boolean(member.can_manage_field_evidence),
+    canManageForms: Boolean(member.can_manage_forms),
     canRunReports: Boolean(member.can_run_reports),
     canSearchCustomers: Boolean(member.can_search_customers) });
 }

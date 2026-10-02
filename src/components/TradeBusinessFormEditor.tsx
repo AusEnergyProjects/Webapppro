@@ -1,63 +1,59 @@
 "use client";
-
-import { useTradeBusinessFetch } from "./TradeBusinessProvider";
-
-import { useCallback, useEffect, useState } from "react";
-import type { User } from "firebase/auth";
-
-type Field = { key: string; label: string; type: string; required: boolean; options?: string[] };
-type Template = { id: string; version: number; updatedAt: string; name: string; description: string; guidance: string; categories: string[]; jurisdiction: string; fields: Field[] };
-type Library = { canManage: boolean; templates: Template[] };
-const newField = (): Field => ({ key: `question_${crypto.randomUUID().replaceAll("-", "_")}`, label: "", type: "select", required: false, options: ["Yes", "No"] });
-
-export function TradeBusinessFormEditor({ user, serviceCategory, onSaved }: { user: User; serviceCategory: string; onSaved: () => Promise<void> }) {
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { User } from 'firebase/auth';
+import { useTradeBusinessFetch } from './TradeBusinessProvider';
+import { TlinkFormMindMap } from './TlinkFormMindMap';
+import { CreditexFormPhonePreview } from './CreditexFormPhonePreview';
+import { businessFormDesign, businessFormPreview, applyBusinessFormDesign, type BusinessFormTemplate, type BusinessFormField } from '@/lib/trade-business-form-design';
+import type { ActivityForm, ActivityCondition } from '@/lib/trade-activity-form-types';
+import { editorFormPages, moveEditorQuestion, dropEditorQuestion, renameEditorPage, editorQuestionDeleteReason, deleteEditorPage } from '@/lib/creditex-form-pages';
+import styles from './TradeFormsWorkspace.module.css';
+type Library = { canManage: boolean; templates: BusinessFormTemplate[] };
+const newField = (section = 'Questions', phase: 'before' | 'after' = 'before'): BusinessFormField => ({ key: `question_${crypto.randomUUID().replaceAll('-', '_')}`, label: 'New question', type: 'select', required: false, options: ['Yes', 'No'], section, phase });
+export type RegisterFormLeave = (check: (() => Promise<unknown>) | null) => void;
+export function TradeBusinessFormEditor({ user, onRegisterLeave }: { user: User; onRegisterLeave?: RegisterFormLeave }) {
   const fetch = useTradeBusinessFetch();
   const [library, setLibrary] = useState<Library>({ canManage: false, templates: [] });
-  const [draft, setDraft] = useState<Template | null>(null);
-  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
-  const request = useCallback(async (body?: object): Promise<Library> => {
-    const response = await fetch("/api/trade-form-templates", { method: body ? "POST" : "GET", cache: "no-store", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Could not open your form library.");
-    return result;
+  const [draft, setDraft] = useState<BusinessFormTemplate | null>(null);
+  const [savedDraft, setSavedDraft] = useState('');
+  const [history, setHistory] = useState<BusinessFormTemplate[]>([]);
+  const [selected, setSelected] = useState(''); const [mode, setMode] = useState<'design' | 'map' | 'preview'>('design');
+  const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(''), [query, setQuery] = useState('');
+  const dirty = Boolean(draft && JSON.stringify(draft) !== savedDraft);
+  const request = useCallback(async (body?: object, signal?: AbortSignal): Promise<Library> => {
+    const response = await fetch('/api/trade-form-templates', { method: body ? 'POST' : 'GET', signal, cache: 'no-store', headers: { Authorization: `Bearer ${await user.getIdToken()}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Could not open your forms.'); return result;
   }, [fetch, user]);
-  useEffect(() => {
-    let active = true;
-    void request().then((result) => { if (active) setLibrary(result); }).catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Could not open the form library."); });
-    return () => { active = false; };
-  }, [request]);
-  useEffect(() => {
-    if (!draft && !busy) return;
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [draft, busy]);
-  async function save() {
-    if (!draft || busy) return;
-    setBusy(true); setError("");
-    try {
-      setLibrary(await request({ ...draft, id: draft.id || undefined, expectedVersion: draft.version, expectedUpdatedAt: draft.updatedAt, description: draft.description || draft.name }));
-      setDraft(null); await onSaved();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "The form was not saved."); }
-    finally { setBusy(false); }
-  }
-  if (!library.canManage) return error ? <p role="status">{error}</p> : null;
-  function updateField(index: number, patch: Partial<Field>) {
-    setDraft((current) => current ? { ...current, fields: current.fields.map((field, i) => i === index ? { ...field, ...patch } : field) } : current);
-  }
-  return <section className="admin-form-template-builder">
-    <header><div><strong>Your business forms</strong><p>Reusable additional questions for your team. Mandatory activity forms stay controlled by Creditex and Australian Energy Assessments.</p></div></header>
-    {error ? <p role="alert">{error}</p> : null}
-    {!draft ? <div className="admin-choice-row"><button type="button" onClick={() => setDraft({ id: "", version: 1, updatedAt: "", name: "", description: "", guidance: "", categories: [serviceCategory], jurisdiction: "AU", fields: [newField()] })}>Create business form</button>{library.templates.map((template) => <button key={template.id} type="button" onClick={() => setDraft(structuredClone(template))}>Edit {template.name}</button>)}</div> : <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
-      <fieldset disabled={busy}><legend>Business form questions</legend><div className="admin-form-grid"><label>Form name<input required maxLength={140} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label>Instructions<textarea required maxLength={1200} value={draft.guidance} onChange={(event) => setDraft({ ...draft, guidance: event.target.value })} /></label></div>
-      <section className="admin-template-fields">{draft.fields.map((field, index) => <article key={field.key}>
-        <label>Question {index + 1}<input required maxLength={180} value={field.label} onChange={(event) => updateField(index, { label: event.target.value })} /></label>
-        <label>Answer<select value={field.type} onChange={(event) => updateField(index, { type: event.target.value, options: event.target.value === "select" ? field.options || ["Yes", "No"] : undefined })}><option value="select">Select an answer</option><option value="checkbox">Confirm a check</option><option value="text">Short text</option><option value="textarea">Notes</option><option value="date">Date</option></select></label>
-        {field.type === "select" ? <label>Answers, one per line<textarea required value={(field.options || []).join("\n")} onChange={(event) => updateField(index, { options: event.target.value.split("\n") })} /></label> : null}
-        <label><input type="checkbox" checked={field.required} onChange={(event) => updateField(index, { required: event.target.checked })} />Required</label>
-        <button type="button" disabled={busy || draft.fields.length === 1} onClick={() => setDraft({ ...draft, fields: draft.fields.filter((_, i) => i !== index) })}>Remove</button>
-      </article>)}</section>
-      <footer><button type="button" disabled={busy || draft.fields.length >= 30} onClick={() => setDraft({ ...draft, fields: [...draft.fields, newField()] })}>Add question</button><button type="submit" disabled={busy}>Save and make available</button><button type="button" disabled={busy} onClick={() => { if (window.confirm("Discard this form's unsaved changes?")) setDraft(null); }}>Cancel</button></footer></fieldset>
-    </form>}
+  useEffect(() => { const controller = new AbortController(); void request(undefined, controller.signal).then(value => { if (!controller.signal.aborted) setLibrary(value); }).catch(caught => { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Forms could not load.'); }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [request]);
+  const canLeave = useCallback(async () => { if (busy) throw new Error('Wait for the form to save.'); if (dirty && !window.confirm('Discard unsaved form changes?')) throw new Error('Keep editing'); }, [busy, dirty]);
+  useEffect(() => { onRegisterLeave?.(canLeave); return () => onRegisterLeave?.(null); }, [canLeave, onRegisterLeave]);
+  useEffect(() => { if (!dirty && !busy) return; const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty, busy]);
+  const design = useMemo(() => draft ? businessFormDesign(draft) : null, [draft]);
+  function change(next: BusinessFormTemplate) { if (!draft || busy || !library.canManage) return; setHistory(items => [...items.slice(-19), draft]); setDraft(next); setError(''); }
+  function changeDesign(next: ActivityForm) { if (draft) change(applyBusinessFormDesign(draft, next)); }
+  function attempt(action: () => void) { try { action(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'This change could not be made.'); } }
+  function updateField(key: string, patch: Partial<BusinessFormField>) { if (draft) change({ ...draft, fields: draft.fields.map(field => field.key === key ? { ...field, ...patch } : field) }); }
+  function edit(template: BusinessFormTemplate) { setDraft(structuredClone(template)); setSavedDraft(JSON.stringify(template)); setHistory([]); setSelected(template.fields[0]?.key || ''); setMode('design'); setError(''); }
+  function addPage() { if (!draft || draft.fields.length >= 30) return; let number = 1; while (draft.fields.some(field => field.section === `Page ${number}`)) number++; const field = newField(`Page ${number}`); change({ ...draft, fields: [...draft.fields, field] }); setSelected(field.key); }
+  function addQuestion(pageKey?: string) { if (!draft || draft.fields.length >= 30) return; const page = design && editorFormPages(design).find(item => item.key === pageKey); if (page && page.fields.length >= 8) { setError('This page has 8 questions. Add another page.'); return; } const field = newField(page?.section || draft.fields.at(-1)?.section, page?.phase || draft.fields.at(-1)?.phase); const fields = [...draft.fields]; const index = page ? Math.max(...fields.map((item, i) => page.fieldKeys.includes(item.key) ? i : -1)) + 1 : fields.length; fields.splice(index, 0, field); change({ ...draft, fields }); setSelected(field.key); }
+  function condition(key: string, next?: ActivityCondition) { if (!draft) return false; const index = draft.fields.findIndex(field => field.key === key); const source = draft.fields.slice(0, index).find(field => field.key === next?.fieldKey); if (next && (!source || !['select', 'checkbox'].includes(source.type) || next.all || next.any || next.lessThanOrEqual !== undefined)) { setError('Choose a previous Yes/No or select question for this connection.'); return false; } updateField(key, { condition: next }); return true; }
+  async function save() { if (!draft || busy || !library.canManage) return; setBusy(true); setError(''); try { const value = await request({ ...draft, id: draft.id || undefined, expectedVersion: draft.version, expectedUpdatedAt: draft.updatedAt, description: draft.description || draft.name, guidance: draft.guidance || "Complete each applicable question." }); setLibrary(value); setDraft(null); setSavedDraft(''); setHistory([]); } catch (caught) { setError(caught instanceof Error ? caught.message : 'The form was not saved.'); } finally { setBusy(false); } }
+  const field = draft?.fields.find(item => item.key === selected);
+  const inspector = field && draft ? <div className={styles.inspector}><label>Question<input maxLength={180} value={field.label} onChange={event => updateField(field.key, { label: event.target.value })} /></label><label>Answer type<select value={field.type} onChange={event => { const type = event.target.value; if (type === 'checkbox' || type === 'text' || type === 'textarea' || type === 'date' || type === 'select') updateField(field.key, { type, options: type === 'select' ? field.options || ['Yes', 'No'] : undefined }); }}><option value="select">Select an answer</option><option value="checkbox">Confirmation checkbox</option><option value="text">Short answer</option><option value="textarea">Long answer</option><option value="date">Date</option></select></label>{field.type === 'select' && <label>Answers, one per line<textarea value={(field.options || []).join('\n')} onChange={event => updateField(field.key, { options: event.target.value.split('\n') })} /></label>}<label><input type="checkbox" checked={field.required} onChange={event => updateField(field.key, { required: event.target.checked })} />Required</label><label>Page name<input maxLength={160} value={field.section || 'Questions'} onChange={event => updateField(field.key, { section: event.target.value })} /></label><label>Stage<select value={field.phase || 'before'} onChange={event => updateField(field.key, { phase: event.target.value === 'after' ? 'after' : 'before' })}><option value="before">Before work / start</option><option value="after">After work / finish</option></select></label><p>Use TLink mind map to connect this question to an earlier select or checkbox answer.</p></div> : null;
+  if (loading) return <p role="status">Loading forms...</p>;
+  return <section className={styles.library}>
+    {error && <p role="alert" className={styles.error}>{error}</p>}
+    {!draft ? <><div className={styles.toolbar}><label>Find a form<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your business forms" /></label>{library.canManage && <button className="btn" type="button" onClick={() => { const field = newField(); edit({ id: '', version: 1, updatedAt: '', name: '', description: '', guidance: '', categories: allCategories, jurisdiction: 'AU', fields: [field] }); setSavedDraft(''); }}>Create form</button>}</div><p>{library.canManage ? 'Create reusable forms for your jobs and team. Only this business can see them.' : 'Your business forms. Ask your business owner for Create and edit forms access to change them.'}</p><div className={styles.cards}>{library.templates.filter(item => `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase())).map(template => <article key={template.id}><span>Version {template.version} · {template.fields.length} questions</span><h3>{template.name}</h3><p>{template.description}</p><button type="button" onClick={() => edit(template)}>{library.canManage ? 'Open designer' : 'Preview form'}</button></article>)}</div>{!library.templates.length && <div className={styles.empty}><h3>Your forms, in one place</h3><p>Create a checklist, work process or team training form. Add it to a job from Files when needed.</p></div>}</> : <>
+      <div className={styles.toolbar}><button type="button" disabled={busy} onClick={() => void canLeave().then(() => setDraft(null)).catch(() => {})}>Back to forms</button><strong>{draft.name || 'New form'}</strong>{library.canManage && <button className="btn" disabled={busy} type="button" onClick={() => void save()}>{busy ? 'Saving...' : 'Save form'}</button>}</div>
+      <p>Existing job records keep their saved version. New jobs use the latest saved form.</p>
+      {library.canManage && <fieldset disabled={busy} className={styles.settings}><label>Form name<input required maxLength={140} value={draft.name} onChange={event => change({ ...draft, name: event.target.value })} /></label><label>Instructions<textarea maxLength={1200} value={draft.guidance} onChange={event => change({ ...draft, guidance: event.target.value })} /></label><label>Available on<select value={draft.categories.length === 1 ? draft.categories[0] : '*'} onChange={event => change({ ...draft, categories: event.target.value === '*' ? allCategories : [event.target.value] })}><option value="*">All job types</option>{allCategories.map(id => <option key={id} value={id}>{categoryLabels[id] || id}</option>)}</select></label></fieldset>}
+      <div className={styles.tabs} role="tablist" aria-label="Form views">{(['design', 'map', 'preview'] as const).map(value => <button type="button" role="tab" aria-selected={mode === value} key={value} onClick={() => setMode(value)}>{value === 'design' ? 'Form design' : value === 'map' ? 'TLink mind map' : 'Try the form'}</button>)}{library.canManage && <button type="button" disabled={busy || !history.length} onClick={() => { const previous = history.at(-1); if (previous) { setDraft(previous); setHistory(items => items.slice(0, -1)); } }}>Undo</button>}</div>
+      {mode === 'design' && design && <div className={styles.design}><div>{editorFormPages(design).map(page => <article key={page.key}><h3>{page.section}</h3><small>{page.phase === 'after' ? 'After work' : 'Start / before work'}</small>{page.fields.map(item => <button type="button" key={item.key} aria-pressed={selected === item.key} onClick={() => setSelected(item.key)}>{item.label}{item.required ? ' *' : ''}</button>)}{library.canManage && <button type="button" disabled={busy || draft.fields.length >= 30} onClick={() => addQuestion(page.key)}>Add question</button>}</article>)}{library.canManage && <button type="button" disabled={busy || draft.fields.length >= 30} onClick={addPage}>Add page</button>}</div><fieldset disabled={busy || !library.canManage}>{inspector}</fieldset></div>}
+      {mode === 'map' && design && <TlinkFormMindMap form={design} editable={library.canManage && !busy} selectedKey={selected} onSelect={setSelected} onEdit={setSelected} onCondition={condition} onAddPage={addPage} onAddQuestion={addQuestion} onMoveQuestion={(key, page) => attempt(() => changeDesign(moveEditorQuestion(design, key, page).form))} onDropQuestion={(key, target, position) => { try { changeDesign(dropEditorQuestion(design, key, target, position).form); return true; } catch (caught) { setError(caught instanceof Error ? caught.message : 'Cannot move question.'); return false; } }} onRenamePage={key => { const title = window.prompt('Page name', editorFormPages(design).find(page => page.key === key)?.section); if (title) attempt(() => changeDesign(renameEditorPage(design, key, title).form)); }} onDelete={(kind, key) => attempt(() => changeDesign(kind === 'page' ? deleteEditorPage(design, key).form : (() => { const reason = editorQuestionDeleteReason(design, key); if (reason) throw new Error(reason); return { ...design, fields: design.fields.filter(item => item.key !== key) }; })()))} editor={<fieldset disabled={busy || !library.canManage}>{inspector}</fieldset>} onCloseEditor={() => setSelected('')} />}
+      {mode === 'preview' && design && <CreditexFormPhonePreview key={draft.id + draft.version} form={businessFormPreview(draft)} canEdit={false} businessForm />}
+    </>}
   </section>;
 }
+import { ENERGY_SERVICE_IDS, ENERGY_SERVICE_LABELS } from '@/lib/energy-service-catalogue.mjs';
+const allCategories: string[] = [...ENERGY_SERVICE_IDS, 'rental-inspection', 'electrical', 'plumbing', 'mounting-hardware', 'controls'];
+const categoryLabels: Record<string, string> = ENERGY_SERVICE_LABELS;

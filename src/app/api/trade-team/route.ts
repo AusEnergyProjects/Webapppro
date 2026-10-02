@@ -101,6 +101,7 @@ type MemberPermissions = {
   canEditTeamPermissions: boolean;
   canViewFieldEvidence: boolean;
   canManageFieldEvidence: boolean;
+  canManageForms: boolean;
   canRunReports: boolean;
   canSearchCustomers: boolean;
 };
@@ -110,7 +111,7 @@ const BOOLEAN_PERMISSION_KEYS = [
   "canViewQuotes", "canManageQuotes", "canSendQuotes", "canSendSms", "canViewInvoices",
   "canManageInvoices", "canViewPriceBook", "canManagePriceBook", "canApplyDiscounts",
   "canRescheduleJobs",
-  "canManageTeam", "canEditTeamPermissions", "canViewFieldEvidence", "canManageFieldEvidence", "canRunReports",
+  "canManageTeam", "canEditTeamPermissions", "canViewFieldEvidence", "canManageFieldEvidence", "canManageForms", "canRunReports",
   "canSearchCustomers",
 ] as const;
 const PERMISSION_KEYS = new Set<string>([...BOOLEAN_PERMISSION_KEYS, "jobScope", "scheduleScope"]);
@@ -149,7 +150,7 @@ const SAFE_MEMBER_PERMISSIONS: MemberPermissions = {
   canViewPriceBook: false, canManagePriceBook: false, canApplyDiscounts: false,
   scheduleScope: "own", canRescheduleJobs: false,
   canManageTeam: false, canEditTeamPermissions: false,
-  canViewFieldEvidence: false, canManageFieldEvidence: false,
+  canViewFieldEvidence: false, canManageFieldEvidence: false, canManageForms: false,
   canRunReports: false, canSearchCustomers: false,
 };
 
@@ -189,6 +190,7 @@ function memberPermissions(body: Record<string, unknown>, current?: Record<strin
     canEditTeamPermissions,
     canViewFieldEvidence: value("canViewFieldEvidence", "can_view_field_evidence") || canManageFieldEvidence,
     canManageFieldEvidence,
+    canManageForms: value("canManageForms", "can_manage_forms"),
     canRunReports: value("canRunReports", "can_run_reports"),
     canSearchCustomers: value("canSearchCustomers", "can_search_customers"),
   };
@@ -203,7 +205,7 @@ function permissionBindings(value: MemberPermissions) {
     value.canViewPriceBook ? 1 : 0, value.canManagePriceBook ? 1 : 0, value.canApplyDiscounts ? 1 : 0,
     value.scheduleScope, value.canRescheduleJobs ? 1 : 0,
     value.canManageTeam ? 1 : 0, value.canEditTeamPermissions ? 1 : 0,
-    value.canViewFieldEvidence ? 1 : 0, value.canManageFieldEvidence ? 1 : 0,
+    value.canViewFieldEvidence ? 1 : 0, value.canManageFieldEvidence ? 1 : 0, value.canManageForms ? 1 : 0,
     value.canRunReports ? 1 : 0, value.canSearchCustomers ? 1 : 0,
   ];
 }
@@ -235,6 +237,7 @@ function assertPermissionGrant(access: TeamAccess, permissions: MemberPermission
     canEditTeamPermissions: access.canEditTeamPermissions,
     canViewFieldEvidence: access.canViewFieldEvidence,
     canManageFieldEvidence: access.canManageFieldEvidence,
+    canManageForms: access.canManageForms,
     canRunReports: access.canRunReports,
     canSearchCustomers: access.canSearchCustomers,
   };
@@ -258,7 +261,7 @@ const PERMISSION_COLUMNS: Record<(typeof BOOLEAN_PERMISSION_KEYS)[number], strin
   canApplyDiscounts: "can_apply_discounts", canRescheduleJobs: "can_reschedule_jobs",
   canManageTeam: "can_manage_team",
   canEditTeamPermissions: "can_edit_team_permissions", canViewFieldEvidence: "can_view_field_evidence",
-  canManageFieldEvidence: "can_manage_field_evidence", canRunReports: "can_run_reports",
+  canManageFieldEvidence: "can_manage_field_evidence", canManageForms: "can_manage_forms", canRunReports: "can_run_reports",
   canSearchCustomers: "can_search_customers",
 };
 
@@ -482,7 +485,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_view_invoices, can_manage_invoices,
       can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
       can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
-      can_view_field_evidence, can_manage_field_evidence, can_run_reports, can_search_customers,
+      can_view_field_evidence, can_manage_field_evidence, can_manage_forms, can_run_reports, can_search_customers,
       invited_at, accepted_at, last_active_at, updated_at,
       CASE WHEN status = 'active' THEN ${tradeTeamPresenceStatusSql("trade_team_members.id", "trade_team_members.owner_uid")} ELSE NULL END presence,
       (SELECT COUNT(*) FROM trade_team_member_files file
@@ -534,6 +537,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
         canManageTeam: access.canManageTeam, canEditTeamPermissions: access.canEditTeamPermissions,
         canViewFieldEvidence: access.canViewFieldEvidence,
         canManageFieldEvidence: access.canManageFieldEvidence,
+        canManageForms: access.canManageForms,
         canRunReports: access.canRunReports,
         canSearchCustomers: access.canSearchCustomers } },
     members: memberRows.results.map((row) => ({ id: row.id, email: row.email, displayName: row.display_name,
@@ -561,6 +565,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
         canManageTeam: Boolean(row.can_manage_team), canEditTeamPermissions: Boolean(row.can_edit_team_permissions),
         canViewFieldEvidence: Boolean(row.can_view_field_evidence),
         canManageFieldEvidence: Boolean(row.can_manage_field_evidence),
+        canManageForms: Boolean(row.can_manage_forms),
         canRunReports: Boolean(row.can_run_reports),
         canSearchCustomers: Boolean(row.can_search_customers),
       } })),
@@ -700,14 +705,14 @@ export async function POST(request: Request) {
            can_view_invoices, can_manage_invoices, can_view_price_book, can_manage_price_book, can_apply_discounts,
            schedule_scope, can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
            can_view_field_evidence,
-           can_manage_field_evidence, can_run_reports, can_search_customers, status, invited_at,
+           can_manage_field_evidence, can_manage_forms, can_run_reports, can_search_customers, status, invited_at,
            accepted_at, last_active_at, created_at, updated_at, service_states)
            SELECT ?, ?, '',
              ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?,
-             ?, 'active', '', '', '', ?, ?, ? WHERE ${createGuard.sql}`)
+             ?, ?, 'active', '', '', '', ?, ?, ? WHERE ${createGuard.sql}`)
           .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour, JSON.stringify(capabilities), "field",
             ...permissionBindings(permissions), now, now, serviceStates, ...createGuard.bindings),
         conditionalMemberAuditStatement(db, access, memberId, "member.created", {
@@ -725,7 +730,7 @@ export async function POST(request: Request) {
           can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms,
           can_view_invoices, can_manage_invoices, can_view_price_book, can_manage_price_book, can_apply_discounts,
           schedule_scope, can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
-          can_view_field_evidence, can_manage_field_evidence,
+          can_view_field_evidence, can_manage_field_evidence, can_manage_forms,
           can_run_reports, can_search_customers
         FROM trade_team_members
         WHERE id = ? AND owner_uid = ?`).bind(memberId, access.ownerUid).first<Record<string, unknown>>();
@@ -764,7 +769,7 @@ export async function POST(request: Request) {
             can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_view_invoices, can_manage_invoices,
             can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
             can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
-            can_view_field_evidence, can_manage_field_evidence, can_run_reports, can_search_customers
+            can_view_field_evidence, can_manage_field_evidence, can_manage_forms, can_run_reports, can_search_customers
           FROM trade_team_members WHERE id = ? AND owner_uid = ?`)
           .bind(memberId, access.ownerUid).first<Record<string, unknown>>();
         if (!current) throw new Error("MEMBER_NOT_FOUND");
@@ -795,7 +800,7 @@ export async function POST(request: Request) {
             can_manage_customers = ?, can_view_quotes = ?, can_manage_quotes = ?, can_send_quotes = ?, can_send_sms = ?,
             can_view_invoices = ?, can_manage_invoices = ?, can_view_price_book = ?, can_manage_price_book = ?, can_apply_discounts = ?,
             schedule_scope = ?, can_reschedule_jobs = ?, can_manage_team = ?, can_edit_team_permissions = ?, can_view_field_evidence = ?,
-            can_manage_field_evidence = ?, can_run_reports = ?, can_search_customers = ?, invited_at = ?, updated_at = ?
+            can_manage_field_evidence = ?, can_manage_forms = ?, can_run_reports = ?, can_search_customers = ?, invited_at = ?, updated_at = ?
             WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`).bind(email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour,
               JSON.stringify(capabilities), serviceStates, ...permissionBindings(permissions),
               now, now, memberId, access.ownerUid, current.updated_at, ...actorGuard.bindings),
@@ -819,14 +824,14 @@ export async function POST(request: Request) {
            can_view_invoices, can_manage_invoices, can_view_price_book, can_manage_price_book, can_apply_discounts,
            schedule_scope, can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
            can_view_field_evidence,
-           can_manage_field_evidence, can_run_reports, can_search_customers, status, invited_at,
+           can_manage_field_evidence, can_manage_forms, can_run_reports, can_search_customers, status, invited_at,
            accepted_at, last_active_at, created_at, updated_at, service_states)
           SELECT ?, ?, '',
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, 'active', ?, '', '', ?, ?, ? WHERE ${createGuard.sql}`)
+            ?, ?, 'active', ?, '', '', ?, ?, ? WHERE ${createGuard.sql}`)
           .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour,
             JSON.stringify(capabilities), "field",
             ...permissionBindings(permissions), now, now, now, serviceStates, ...createGuard.bindings),
@@ -870,7 +875,7 @@ export async function PATCH(request: Request) {
           can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_view_invoices, can_manage_invoices,
           can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
           can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
-          can_view_field_evidence, can_manage_field_evidence, can_run_reports, can_search_customers
+          can_view_field_evidence, can_manage_field_evidence, can_manage_forms, can_run_reports, can_search_customers
         FROM trade_team_members WHERE id = ? AND owner_uid = ?`)
         .bind(memberId, access.ownerUid).first<Record<string, unknown>>();
       if (!current) throw new Error("MEMBER_NOT_FOUND");
@@ -952,7 +957,7 @@ export async function PATCH(request: Request) {
           can_view_invoices = ?, can_manage_invoices = ?, can_view_price_book = ?, can_manage_price_book = ?,
           can_apply_discounts = ?, schedule_scope = ?, can_reschedule_jobs = ?,
           can_manage_team = ?, can_edit_team_permissions = ?, can_view_field_evidence = ?,
-          can_manage_field_evidence = ?, can_run_reports = ?, can_search_customers = ?, updated_at = ?
+          can_manage_field_evidence = ?, can_manage_forms = ?, can_run_reports = ?, can_search_customers = ?, updated_at = ?
           WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`).bind(email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour,
             JSON.stringify(capabilities), serviceStates, status,
             ...permissionBindings(permissions), now, memberId, access.ownerUid, current.updated_at, ...actorGuard.bindings),

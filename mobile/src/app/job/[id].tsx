@@ -1,4 +1,5 @@
 import { useBusinessApi } from '@/lib/use-business-api';
+import { normalizeTradeFormAnswers, tradeFormCompletion, visibleTradeFormFields } from '../../../../src/lib/trade-form-library.mjs';
 import { useFormTimeTracking, useJobTimeTracking, WorkTimeStatus } from '@/components/work-time-tracking';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Application from 'expo-application';
@@ -526,11 +527,12 @@ export default function JobScreen() {
 
   async function saveForm(form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) {
     if (!job) throw new Error('This job is no longer available.');
-    const missing = form.template.fields.filter((field) => field.required && (field.type === 'checkbox' ? answers[field.key] !== true : !String(answers[field.key] || '').trim())).map((field) => field.label);
+    const clean = normalizeTradeFormAnswers(form.template, answers);
+    const { missing } = tradeFormCompletion(form.template, clean);
     if (complete && missing.length) throw new Error(`Finish the required fields: ${missing.join(', ')}`);
     setBusy(`form:${form.id}`);
     try {
-      await (complete ? saveActionInBackground : saveAction)({ type: 'save_job_form', workOrderId: job.id, formId: form.id, baseRevision: form.revision, answers, complete });
+      await (complete ? saveActionInBackground : saveAction)({ type: 'save_job_form', workOrderId: job.id, formId: form.id, baseRevision: form.revision, answers: clean, complete });
       await load(false);
     } finally { setBusy(''); }
   }
@@ -1589,9 +1591,11 @@ function JobFieldForm({ form, workOrderId, busy, onSave, onReturnToJob }: { form
   const [answers, setAnswers] = useState<Record<string, string | boolean>>(form.answers || {});
   const [questionIndex, setQuestionIndex] = useState(0);
   const [overview, setOverview] = useState(false);
+  const fields: FieldForm['template']['fields'] = visibleTradeFormFields(form.template, answers);
+  const activeQuestionIndex = Math.min(questionIndex, Math.max(0, fields.length - 1));
   const leaving = useRef(false);
   const timing = useFormTimeTracking({ formKind: 'job_form', formId: form.id, workOrderId,
-    pageKey: form.template.fields[questionIndex]?.key || 'form', pageTitle: form.template.fields[questionIndex]?.label || form.name,
+    pageKey: fields[activeQuestionIndex]?.key || 'form', pageTitle: fields[activeQuestionIndex]?.label || form.name,
     enabled: !overview && form.status !== 'complete' });
   const dirty = form.status !== 'complete' && JSON.stringify(answers) !== JSON.stringify(form.answers || {});
   async function leave() {
@@ -1605,7 +1609,14 @@ function JobFieldForm({ form, workOrderId, busy, onSave, onReturnToJob }: { form
     if (!overview) { setOverview(true); return; }
     void leave();
   }
-  function change(key: string, value: string | boolean) { timing.activity(); setAnswers((current) => ({ ...current, [key]: value })); }
+  function change(key: string, value: string | boolean) {
+    timing.activity();
+    setAnswers((current) => {
+      const next = { ...current, [key]: value };
+      const visible = new Set(visibleTradeFormFields(form.template, next).map((field: FieldForm['template']['fields'][number]) => field.key));
+      return Object.fromEntries(Object.entries(next).filter(([fieldKey]) => visible.has(fieldKey)));
+    });
+  }
   usePreventRemove(true, () => backToSectionsOrJob());
   return <View style={styles.formBlock}>
     <WorkTimeStatus />
@@ -1614,22 +1625,23 @@ function JobFieldForm({ form, workOrderId, busy, onSave, onReturnToJob }: { form
       <MaterialCommunityIcons name={form.status === 'complete' ? 'check-decagram-outline' : 'clipboard-text-outline'} size={25} color={form.status === 'complete' ? colours.green : colours.muted} />
       <View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.jurisdiction} | Version {form.templateVersion} | {form.status === 'complete' ? 'Complete and locked' : form.ready ? 'Ready to complete' : `${form.missing.length} required`}</Text></View>
     </View>
-    {overview ? <View style={styles.formBody}><Text style={styles.taskTitle}>Sections</Text>{form.template.fields.map((field, index) => <FieldButton key={field.key} variant="secondary" onPress={() => { setQuestionIndex(index); setOverview(false); }}>{field.label}</FieldButton>)}</View> : <View style={styles.formBody}><Text style={styles.meta}>Question {questionIndex + 1} of {form.template.fields.length}</Text>{questionIndex === 0 && form.template.guidance ? <Text style={styles.body}>{form.template.guidance}</Text> : null}{form.template.fields.slice(questionIndex, questionIndex + 1).map((field) => <View key={field.key} style={styles.formField}>
+    {overview ? <View style={styles.formBody}><Text style={styles.taskTitle}>Sections</Text>{fields.map((field, index) => <FieldButton key={field.key} variant="secondary" onPress={() => { setQuestionIndex(index); setOverview(false); }}>{field.label}</FieldButton>)}</View> : <View style={styles.formBody}><Text style={styles.meta}>Question {activeQuestionIndex + 1} of {fields.length}</Text>{activeQuestionIndex === 0 && form.template.guidance ? <Text style={styles.body}>{form.template.guidance}</Text> : null}{fields.slice(activeQuestionIndex, activeQuestionIndex + 1).map((field) => <View key={field.key} style={styles.formField}>
       <Text style={styles.inputLabel}>{field.label}{field.required ? ' *' : ''}</Text>
       {field.type === 'checkbox' ? <Pressable disabled={busy || form.status === 'complete'} accessibilityRole="checkbox" accessibilityState={{ checked: answers[field.key] === true }} onPress={() => change(field.key, answers[field.key] !== true)} style={[styles.checkbox, answers[field.key] === true && styles.checkboxSelected]}><MaterialCommunityIcons name={answers[field.key] === true ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={colours.green} /><Text style={styles.body}>{answers[field.key] === true ? 'Confirmed' : 'Tap to confirm'}</Text></Pressable>
         : field.type === 'select' ? <View style={styles.optionList}>{(field.options || []).map((option) => <Pressable key={option} disabled={busy || form.status === 'complete'} onPress={() => change(field.key, option)} style={[styles.option, answers[field.key] === option && styles.optionSelected]}><Text style={styles.optionText}>{option}</Text></Pressable>)}</View>
         : field.type === 'signature' ? <View style={styles.signatureBlocked}><MaterialCommunityIcons name="alert-circle-outline" size={20} color={colours.amber} /><Text style={styles.body}>Signature capture is not available in this tested TLink build. This required item remains blocked and cannot be marked complete.</Text></View>
         : field.type === 'date' ? <FieldDatePicker label={field.label} value={String(answers[field.key] || '')} disabled={busy || form.status === 'complete'} onChange={(value) => change(field.key, value)} /> : <TextInput editable={!busy && form.status !== 'complete'} style={[styles.input, field.type === 'textarea' && styles.notes]} multiline={field.type === 'textarea'} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} value={String(answers[field.key] || '')} onChangeText={(value) => change(field.key, value)} maxLength={field.maxLength || 240} placeholder={field.type === 'number' ? 'Enter a number' : 'Enter technical job information'} />}
-    </View>)}<View style={styles.formActions}><FieldButton variant="secondary" style={styles.flex} disabled={busy || questionIndex === 0} onPress={() => setQuestionIndex((value) => value - 1)}>Previous</FieldButton><FieldButton loading={busy} style={styles.flex} disabled={busy || (form.status === 'complete' && questionIndex === form.template.fields.length - 1)} onPress={() => void (async () => {
-      const field = form.template.fields[questionIndex];
+    </View>)}<View style={styles.formActions}><FieldButton variant="secondary" style={styles.flex} disabled={busy || activeQuestionIndex === 0} onPress={() => setQuestionIndex(activeQuestionIndex - 1)}>Previous</FieldButton><FieldButton loading={busy} style={styles.flex} disabled={busy || !fields.length || (form.status === 'complete' && activeQuestionIndex === fields.length - 1)} onPress={() => void (async () => {
+      const field = fields[activeQuestionIndex];
       if (form.status !== 'complete') {
-        if (field?.required && (answers[field.key] === undefined || answers[field.key] === '' || (field.type === 'checkbox' && answers[field.key] !== true))) return Alert.alert('Answer required', 'Complete this question before continuing.');
-        const complete = questionIndex === form.template.fields.length - 1;
+        const clean = normalizeTradeFormAnswers(form.template, answers);
+        if (field?.required && (clean[field.key] === undefined || clean[field.key] === '' || (field.type === 'checkbox' && clean[field.key] !== true))) return Alert.alert('Answer required', 'Complete this question before continuing.');
+        const complete = activeQuestionIndex === fields.length - 1;
         await onSave(form, answers, complete);
         if (complete) timing.markCompleted();
       }
-      setQuestionIndex((value) => Math.min(form.template.fields.length - 1, value + 1));
-    })().catch((error) => Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again.'))}>{questionIndex === form.template.fields.length - 1 ? form.status === 'complete' ? 'Complete' : 'Complete form' : 'Next'}</FieldButton></View></View>}
+      setQuestionIndex(Math.min(fields.length - 1, activeQuestionIndex + 1));
+    })().catch((error) => Alert.alert('Form not saved', error instanceof Error ? error.message : 'Try again.'))}>{activeQuestionIndex === fields.length - 1 ? form.status === 'complete' ? 'Complete' : 'Complete form' : 'Next'}</FieldButton></View></View>}
   </View>;
 }
 

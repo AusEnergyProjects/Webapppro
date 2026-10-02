@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import { normalizeTradeFormAnswers, tradeFormCompletion, visibleTradeFormFields } from '../../src/lib/trade-form-library.mjs';
 
 const rental = readFileSync(new URL('../src/components/rental-inspection-workflow.tsx', import.meta.url), 'utf8');
 const job = readFileSync(new URL('../src/app/job/[id].tsx', import.meta.url), 'utf8');
 const activity = readFileSync(new URL('../src/components/ActivityFieldFormWizard.tsx', import.meta.url), 'utf8');
 const workPack = readFileSync(new URL('../src/components/ActivityWorkPackWizard.tsx', import.meta.url), 'utf8');
+const library = readFileSync(new URL('../src/components/field-form-library.tsx', import.meta.url), 'utf8');
 
 function methods(source, componentName, names, environment) {
   const file = ts.createSourceFile('form.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -21,6 +23,59 @@ function methods(source, componentName, names, environment) {
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+const branchingForm = () => ({ id: 'form', revision: 4, template: { fields: [
+  { key: 'hazard', label: 'Hazard present', type: 'select', required: true, options: ['Yes', 'No'] },
+  { key: 'control', label: 'Hazard control', type: 'text', required: true, condition: { fieldKey: 'hazard', equals: 'Yes' } },
+  { key: 'notes', label: 'Notes', type: 'text', required: false },
+] } });
+
+test('native branch changes discard hidden answers while text entry preserves spaces between words', () => {
+  let answers = { hazard: 'Yes', control: 'Isolate supply', notes: 'Site' };
+  let activity = 0;
+  const environment = { form: branchingForm(), visibleTradeFormFields,
+    timing: { activity() { activity++; } }, setAnswers(update) { answers = update(answers); } };
+  const subject = methods(job, 'JobFieldForm', ['change'], environment);
+  subject.change('notes', 'Site '); assert.equal(answers.notes, 'Site ');
+  subject.change('notes', 'Site checked'); assert.equal(answers.notes, 'Site checked');
+  subject.change('hazard', 'No'); assert.deepEqual(answers, { hazard: 'No', notes: 'Site checked' });
+  subject.change('hazard', 'Yes'); assert.equal(answers.control, undefined);
+  assert.deepEqual(tradeFormCompletion(environment.form.template, answers).missing, ['Hazard control']);
+  assert.equal(activity, 4);
+});
+
+test('native saves queue only visible normalized answers and reject incomplete revealed branches', async () => {
+  const calls = [];
+  const environment = { job: { id: 'job' }, normalizeTradeFormAnswers, tradeFormCompletion,
+    setBusy() {}, load: async () => {}, saveAction: async (action) => calls.push(action),
+    saveActionInBackground: async (action) => calls.push(action) };
+  const subject = methods(job, 'JobScreen', ['saveForm'], environment);
+  const form = branchingForm();
+  await subject.saveForm(form, { hazard: 'No', control: 'hidden', notes: ' Saved notes ', injected: 'no' }, true);
+  assert.deepEqual(calls[0].answers, { hazard: 'No', notes: 'Saved notes' });
+  assert.equal(calls[0].complete, true); assert.equal(calls[0].baseRevision, 4);
+  await assert.rejects(subject.saveForm(form, { hazard: 'Yes', notes: '' }, true), /Hazard control/);
+  assert.equal(calls.length, 1);
+  await subject.saveForm(form, { hazard: 'Yes', control: '', notes: '' }, false);
+  assert.equal(calls[1].complete, false); assert.equal(calls[1].answers.control, '');
+});
+
+test('editing native form labels preserves workflow metadata in the versioned save request', async () => {
+  const fields = branchingForm().template.fields.map((field) => ({ ...field, section: 'Site checks', phase: 'before' }));
+  const environment = { online: true, busy: false, loading: false, library: { canManage: true }, serviceCategory: 'other', workOrderId: 'job',
+    setEditing(value) { environment.editing = value; }, setName(value) { environment.name = value; },
+    setGuidance(value) { environment.guidance = value; }, setQuestions(value) { environment.questions = typeof value === 'function' ? value(environment.questions) : value; },
+    setDirty() {}, setError() {}, setBusy() {}, setLibrary() {}, setJobForms() {} };
+  let payload;
+  environment.apiRequest = async (_path, options) => { if (options?.method === 'POST') payload = JSON.parse(options.body); return { canManage: true, templates: [], forms: [] }; };
+  const subject = methods(library, 'FieldFormLibrary', ['edit', 'change', 'save'], environment);
+  subject.edit({ id: 'template', version: 3, updatedAt: 'last-saved', name: 'Inspection', guidance: 'Follow checks', fields });
+  subject.change(1, { label: 'Document the controls' });
+  await subject.save();
+  assert.deepEqual(payload.fields[1], { ...fields[1], label: 'Document the controls' });
+  assert.deepEqual(payload.fields[0], fields[0]); assert.equal(payload.expectedVersion, 3);
+  assert.equal(payload.expectedUpdatedAt, 'last-saved');
+});
 
 test('rental system back and fixed header use the same sections-first handler for saved and dirty forms', () => {
   assert.match(rental, /usePreventRemove\(true, \(\) => backToSectionsOrJob\(\)\)/);

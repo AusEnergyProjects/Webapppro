@@ -1,14 +1,8 @@
 import { getD1 } from "../../db";
 import { tradeFormTemplatesFor } from "@/lib/trade-form-library.mjs";
+import type { BusinessFormField } from './trade-business-form-design';
 
-export type TradeFormField = {
-  key: string;
-  label: string;
-  type: "checkbox" | "text" | "textarea" | "date" | "select";
-  required: boolean;
-  maxLength?: number;
-  options?: string[];
-};
+export type TradeFormField = BusinessFormField;
 
 export type TradeFormTemplate = {
   key: string;
@@ -31,7 +25,7 @@ function parseList<T>(value: unknown): T[] {
 
 export async function publishedTradeFormTemplatesFor(serviceCategory: string, database?: D1Database, ownerUid = ""): Promise<TradeFormTemplate[]> {
   const builtIns = tradeFormTemplatesFor(serviceCategory) as TradeFormTemplate[];
-  const rows = await (database || getD1()).prepare(`SELECT template_key, version, name, jurisdiction, categories, description, guidance, fields, status
+  const rows = await (database || getD1()).prepare(`SELECT template_key, version, name, jurisdiction, categories, description, guidance, fields, status, scope_owner_uid
     FROM trade_form_templates candidate
     WHERE (scope_owner_uid = '' OR scope_owner_uid = ?) AND status <> 'draft'
       AND version = (SELECT MAX(newer.version) FROM trade_form_templates newer
@@ -42,7 +36,7 @@ export async function publishedTradeFormTemplatesFor(serviceCategory: string, da
     key: String(row.template_key), version: Number(row.version), name: String(row.name),
     jurisdiction: String(row.jurisdiction), categories: parseList<string>(row.categories),
     description: String(row.description), guidance: String(row.guidance),
-    fields: parseList<TradeFormField>(row.fields), governed: true,
+    fields: parseList<TradeFormField>(row.fields), governed: !row.scope_owner_uid,
   })).filter((template) => template.categories.includes(serviceCategory || "other"));
   const governedKeys = new Set(rows.results.map((row) => String(row.template_key)));
   return [...builtIns.filter((template) => !governedKeys.has(template.key)), ...governed]

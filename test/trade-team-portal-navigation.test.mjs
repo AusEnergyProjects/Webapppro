@@ -33,7 +33,7 @@ function render(permissions = {}, view = 'business', crmView = 'jobs', crewId) {
 
 test('field staff use one Home and Jobs workflow with Connect and their schedule', () => {
   const ui = render();
-  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'Tasks & training']);
+  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'Forms', 'Tasks & training']);
   assert.equal(ui.tree.props['aria-label'], 'Staff workspace');
   assert.equal(ui.button('Jobs').props['aria-current'], 'page');
   assert.equal(ui.button('My work'), undefined);
