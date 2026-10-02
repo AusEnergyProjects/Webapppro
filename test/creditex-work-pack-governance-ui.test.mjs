@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import ts from "typescript";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const builder = read("../src/components/CreditexActivityWorkPackGovernance.tsx");
@@ -13,7 +14,7 @@ const fieldMasters = read("../src/components/CreditexFieldFormMasters.tsx");
 
 test("Creditex and AEA admin share one governed activity form builder", () => {
   assert.match(creditex, /\{ id: "forms", label: "Forms" \}/);
-  assert.match(creditex, /toolsTabs\.map\([\s\S]*id=\{`creditex-tab-\$\{item\.id\}`\}[\s\S]*aria-controls=\{`creditex-panel-\$\{item\.id\}`\}/);
+  assert.match(creditex, /toolsTabs\.filter\(item => canAccessTab\(item\.id\)\)\.map\([\s\S]*id=\{`creditex-tab-\$\{item\.id\}`\}[\s\S]*aria-controls=\{`creditex-panel-\$\{item\.id === 'settings' && navigationTab !== tab \? tab : item\.id\}`\}/);
   assert.match(creditex, /id="creditex-panel-forms"[\s\S]*aria-labelledby="creditex-tab-forms"/);
   assert.match(creditex, /endpoint="\/api\/creditex\/work-packs"/);
   assert.match(creditex, /sourceEndpoint="\/api\/creditex\/official-sources"/);
@@ -31,6 +32,21 @@ test("Creditex and AEA admin share one governed activity form builder", () => {
   assert.match(fieldMasters, /named Creditex administrator, case manager or reviewer account/);
   assert.match(fieldMasters, /Shared-mailbox and auditor accounts are read-only/);
   assert.match(fieldMasters, /Admin → Activity forms/);
+});
+
+test("form-only and job-preview access never loads or renders advanced source governance", async () => {
+  const ast = ts.createSourceFile("builder.tsx", builder, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const component = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "CreditexActivityWorkPackGovernance");
+  const load = component.body.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations]).find(node => node.name.getText(ast) === "load");
+  const output = ts.transpileModule(`export const load = ${load.initializer.arguments[0].getText(ast)}`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const permitted of [false, true]) {
+    const exports = {}, requests = [];
+    Function("exports", "canManageGovernance", "api", "endpoint", "sourceEndpoint", "parseSnapshot", "parseCustodySources", "setSnapshot", "setCustodySources", "setSelectedActivityId", "setSelectedVersionId", output)(exports, permitted, async url => { requests.push(url); return { activities: [], versions: [] }; }, "/work-packs", "/sources", value => value, () => [], () => {}, () => {}, () => {}, () => {});
+    await exports.load(); assert.deepEqual(requests, permitted ? ["/work-packs", "/sources?pageSize=100"] : []);
+  }
+  assert.match(builder, /<CreditexFieldFormMasters[^>]*canAuthor=\{fieldMasterCanAuthor/);
+  assert.match(builder, /canManageGovernance && <details className=\{styles\.advancedGovernance\}/);
+  assert.match(creditex, /canManageGovernance=\{permitted\('governance'\)\}/);
 });
 
 test("Forms can capture and inspect one governed source artifact without making it selectable early", () => {

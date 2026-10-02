@@ -109,7 +109,7 @@ test("the operations portal prioritises alerts and provides a filterable account
   assert.equal((portal.match(/notificationCount=\{notificationCounts\.unread \|\| 0\}/g) || []).length, 1);
   assert.match(portal, /unread=\{notificationCounts\.unread\}/);
   assert.match(read("../src/components/PortalWorkspaceHeader.tsx"), /Open inbox, \$\{notificationCount\} unread alerts/);
-  assert.match(portal, /onTasks=\{openNotificationInbox\}/);
+  assert.match(portal, /onNotifications=\{openNotificationInbox\}/);
   assert.match(read("../src/components/PortalWorkspaceHeader.tsx"), /notificationCount > 0 && <strong>\{notificationCount\}/);
   assert.match(portal, /<span>Action notifications<\/span>\s*<strong>\{notificationCounts\.action_required/);
   assert.match(inbox, /30_000/);

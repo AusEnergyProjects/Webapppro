@@ -1,3 +1,5 @@
+import { hasCreditexPermission, type CreditexPermission } from "./creditex-permissions.ts";
+
 const SHARED_EMAIL_LOCAL_PARTS = new Set([
   "admin",
   "administrator",
@@ -22,6 +24,7 @@ type CreditexFieldMasterIdentity = {
   role: string;
   organisationCode: string;
   namedOwnerConfirmed?: boolean;
+  permissions?: readonly CreditexPermission[];
 };
 
 export function isNamedCreditexIdentity(
@@ -40,6 +43,7 @@ export function canEditCreditexFieldMasters(
   identity: CreditexFieldMasterIdentity,
 ) {
   return identity.organisationCode.trim().toUpperCase() === "CREDITEX-AU"
+    && hasCreditexPermission(identity, "forms")
     && ["admin", "case_manager", "reviewer"].includes(identity.role)
     && (isNamedCreditexIdentity(identity)
       || (identity.namedOwnerConfirmed === true && identity.role === "admin"

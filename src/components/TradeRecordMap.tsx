@@ -20,7 +20,7 @@ const TradeRoofDesignMap = dynamic(() => import("./TradeRoofDesignMap").then(mod
 
 type SharedProps = { user: User; quoteAccess?: MapQuoteAccess; onRegisterMapSave?: (save: (() => Promise<unknown>) | null) => void };
 type DesignProps = SharedProps & { designOnly: true; onOpenMap: () => void };
-type RecordMapProps = SharedProps & { designOnly?: false; query: TradeMapQuery; onOpenRecord: (record: TradeMapRecord) => void };
+type RecordMapProps = SharedProps & { designOnly?: false; query: TradeMapQuery; onOpenRecord: (record: TradeMapRecord) => void; workspace?: 'trade' | 'creditex' };
 type Props = DesignProps | RecordMapProps;
 
 function TradeDesignWorkspaceView({ user, quoteAccess, onRegisterMapSave, onOpenMap }: DesignProps) {
@@ -71,9 +71,11 @@ export function TradeRecordMap(props: Props) {
   return <TradeRecordMapView key={`${props.user.uid}:${businessOwnerUid}`} {...props} businessOwnerUid={businessOwnerUid} />;
 }
 
-function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegisterMapSave, businessOwnerUid }: RecordMapProps & { businessOwnerUid: string }) {
+function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegisterMapSave, businessOwnerUid, workspace = 'trade' }: RecordMapProps & { businessOwnerUid: string }) {
   const fetch = useTradeBusinessFetch();
-  const baseUrl = tradeMapQueryUrl(query);
+  const baseUrl = tradeMapQueryUrl(query).replace('/api/trade-crm', workspace === 'creditex' ? '/api/creditex/map' : '/api/trade-crm');
+  const configUrl = workspace === 'creditex' ? `/api/creditex/map?mode=config&resource=${query.resource}` : '/api/trade-map/config';
+  const locateUrl = workspace === 'creditex' ? `/api/creditex/map?resource=${query.resource}` : '/api/trade-map/locate';
   const scope = `${user.uid}:${businessOwnerUid}:${baseUrl}`;
   const [viewState, setViewState] = useState<View>(() => initialView(scope));
   const view = viewState.scope === scope ? viewState : initialView(scope);
@@ -138,7 +140,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       setMapState("loading"); setRuntime(null); setConfiguration(null);
       setSearchState(previous => ({ ...previous, busy: false }));
       firstFitRef.current = { scope: "", final: false };
-      const response = await fetch("/api/trade-map/config", { headers: { Authorization: `Bearer ${await user.getIdToken()}` }, cache: "no-store", signal: controller.signal });
+      const response = await fetch(configUrl, { headers: { Authorization: `Bearer ${await user.getIdToken()}` }, cache: "no-store", signal: controller.signal });
       if (response.status === 401 || response.status === 403) { if (!controller.signal.aborted) setMapState("access"); return; }
       if (!response.ok) throw new Error("Map configuration unavailable");
       const config: unknown = await response.json();
@@ -148,7 +150,8 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       if (!config.configured) { setMapState("unconfigured"); return; }
       const api = await import("@maptiler/sdk");
       if (controller.signal.aborted || !canvas) return;
-      const style = () => document.documentElement.dataset.tlinkColourMode === "night" ? api.MapStyle.STREETS.DARK : api.MapStyle.STREETS.DEFAULT;
+      const themeRoot = workspace === 'creditex' ? canvas.closest<HTMLElement>('[data-portal-mode]') || document.documentElement : document.documentElement;
+      const style = () => (workspace === 'creditex' ? themeRoot.dataset.portalMode : themeRoot.dataset.tlinkColourMode) === "night" ? api.MapStyle.STREETS.DARK : api.MapStyle.STREETS.DEFAULT;
       createdMap = new api.Map({
         apiKey: config.apiKey, container: canvas, center: [134, -25.5], zoom: 4, style: style(),
         scaleControl: true, navigationControl: false, fullscreenControl: true,
@@ -166,7 +169,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       createdMap.on("error", event => { clearTimeout(loadingTimer); if (!controller.signal.aborted) setMapState(tlinkMapFailure(event.error)); });
       setRuntime({ ownerUid: businessOwnerUid, api, map: createdMap });
       themeObserver = new MutationObserver(() => { createdMap?.setStyle(style()); });
-      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-tlink-colour-mode"] });
+      themeObserver.observe(themeRoot, { attributes: true, attributeFilter: [workspace === 'creditex' ? 'data-portal-mode' : "data-tlink-colour-mode"] });
       resizeObserver = new ResizeObserver(() => { if (canvas.clientWidth && canvas.clientHeight) createdMap?.resize(); });
       resizeObserver.observe(canvas);
     })().catch(error => { if (!controller.signal.aborted) setMapState(tlinkMapFailure(error)); });
@@ -182,7 +185,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       createdMap?.remove();
       canvas?.replaceChildren();
     };
-  }, [businessOwnerUid, fetch, user, setupAttempt]);
+  }, [businessOwnerUid, fetch, user, setupAttempt, configUrl, workspace]);
 
   useEffect(() => {
     if (!runtime || runtime.ownerUid !== businessOwnerUid) return;
@@ -290,7 +293,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
     setSearchState({ scope, busy: true, message: "" });
     addressMarkerRef.current?.remove();
     try {
-      const response = await fetch("/api/trade-map/locate", { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ address: query }), signal: controller.signal });
+      const response = await fetch(locateUrl, { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ address: query }), signal: controller.signal });
       if (!response.ok) throw new Error("Address search is temporarily unavailable. Try again shortly.");
       const value: unknown = await response.json();
       if (controller.signal.aborted) return;
@@ -318,7 +321,7 @@ function TradeRecordMapView({ user, query, onOpenRecord, quoteAccess, onRegister
       <div><h3>{query.resource === "jobs" ? "Job locations" : "Customer locations"}</h3><p>{data ? `${number(data.total)} matching ${query.resource}. All saved locations are included. Zoom in to expand numbered groups.` : `Loading matching ${query.resource}...`}</p></div>
       <button type="button" className={styles.button} disabled={!runtime || !data?.bounds || designOpen || mapState !== "ready"} onClick={() => { if (runtime && data?.bounds) { interactedRef.current = true; fitBounds(runtime, data.bounds); setViewState({ ...view, addressKey: "", page: 1 }); } }}>Fit all pins</button>
     </header>
-    {!designOpen && <div className={styles.toolbar}><form onSubmit={event => void findAddress(event)} className={styles.addressSearch}><label htmlFor={`map-address-${query.resource}`}>Go to an address</label><div><input id={`map-address-${query.resource}`} value={address} maxLength={1000} autoComplete="off" placeholder="Street number, street, suburb, state and postcode" onChange={event => setAddress(event.target.value)} /><button type="submit" className={styles.button} disabled={!config?.gnaf.ready || mapState !== "ready" || searchState.scope === scope && searchState.busy}>{searchState.scope === scope && searchState.busy ? "Finding..." : "Find address"}</button></div>{searchState.scope === scope && searchState.message && <p role="status">{searchState.message}</p>}</form><button type="button" className={styles.button} onClick={() => setDesignScope(scope)}><svg className={styles.toolIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3Z" /><path d="m8 12 4-3 4 3v5H8Z" /></svg>Solar &amp; insulation tools</button></div>}
+    {!designOpen && <div className={styles.toolbar}><form onSubmit={event => void findAddress(event)} className={styles.addressSearch}><label htmlFor={`map-address-${query.resource}`}>Go to an address</label><div><input id={`map-address-${query.resource}`} value={address} maxLength={1000} autoComplete="off" placeholder="Street number, street, suburb, state and postcode" onChange={event => setAddress(event.target.value)} /><button type="submit" className={styles.button} disabled={!config?.gnaf.ready || mapState !== "ready" || searchState.scope === scope && searchState.busy}>{searchState.scope === scope && searchState.busy ? "Finding..." : "Find address"}</button></div>{searchState.scope === scope && searchState.message && <p role="status">{searchState.message}</p>}</form>{workspace === "trade" && <button type="button" className={styles.button} onClick={() => setDesignScope(scope)}><svg className={styles.toolIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3Z" /><path d="m8 12 4-3 4 3v5H8Z" /></svg>Solar &amp; insulation tools</button>}</div>}
     {designOpen && <TradeRoofDesignMap key={scope} user={user} onRegisterMapSave={onRegisterMapSave} linkedDesign={linkedDesign} position={selected?.position}
       context={selected ? { title: selected.address || selected.title, customerId: selected.kind === "customer" ? selected.id : "", workOrderId: selected.kind === "job" ? selected.id : "" } : undefined}
       onQuote={quoteAccess ? setQuoteMeasurement : undefined} onClose={() => setDesignScope(null)} />}

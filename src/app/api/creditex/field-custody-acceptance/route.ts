@@ -93,7 +93,7 @@ export async function GET(request: Request) {
   }
   try {
     const database = getD1();
-    const member = await requireComplianceAccess(request, {
+    const member = await requireComplianceAccess(request, { requiredPermission: "audit",
       allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
     }, database);
     const evidenceId = new URL(request.url).searchParams.get("evidenceId");
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
       );
     }
     const database = getD1();
-    const member = await requireComplianceAccess(request, {
+    const member = await requireComplianceAccess(request, { requiredPermission: "audit",
       allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
     }, database);
     const body = requiredBody(await request.json().catch(() => null));

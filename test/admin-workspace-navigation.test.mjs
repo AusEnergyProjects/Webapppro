@@ -146,8 +146,8 @@ test("unsaved training edits block desktop, alert and browser-history navigation
   h.nav(tree).onSelect("compliance-questions"); tree = h.settle();
   nodes(tree, node => typeof node.props?.onDirtyChange === "function")[0].props.onDirtyChange(true);
   assert.equal(h.nav(tree).onSelect("form-governance"), false);
-  const header = nodes(tree, node => typeof node.props?.onTasks === "function")[0];
-  header.props.onTasks(); tree = h.settle();
+  const header = nodes(tree, node => typeof node.props?.onNotifications === "function")[0];
+  header.props.onNotifications(); tree = h.settle();
   assert.equal(h.nav(tree).selected, "compliance-questions");
   const originalHistory = [...h.history];
   h.back(); tree = h.settle(); assert.equal(h.nav(tree).selected, "compliance-questions");

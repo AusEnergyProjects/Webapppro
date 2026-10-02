@@ -43,3 +43,5 @@
 @media(max-width:850px) { .brand { width: auto; } .bar { padding: 10px 14px; } .actions { flex-wrap: wrap; justify-content: flex-start; width: 100%; margin: 0; gap: 8px; } .aea,.account,.signedIn { display: none; } .search { min-width: 170px; } .search kbd { display: none; } .businessBar { padding: 7px 14px; font-size: .75rem; } .businessBar > span:last-child { display: none; } }
 @media(max-width:480px) { .brand :global(.tlink-brand) small { max-width: 118px; font-size: .7rem; } .search { order: 3; flex: 1 1 100%; } .actions { gap: 6px; } .header button,.app { font-size: .7rem; padding: 7px 9px; min-height: 38px; } .app span { display: none; } }
 .settings { text-transform: capitalize; } @media(max-width:480px) { .settingsPrefix { display:none; } }
+.profile { display:inline-flex; align-items:center; gap:7px; }
+.profile :global(img) { object-fit:cover; }

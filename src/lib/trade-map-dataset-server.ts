@@ -4,7 +4,7 @@ import { TRADE_JOB_LIFECYCLE_STATUSES } from "./trade-job-lifecycle.ts";
 import type { TradeMapAuthorizedDataset } from "./trade-map-location-cache.ts";
 
 /** Authorised, filtered records. Only server-built SQL may cross this boundary. */
-export type TradeMapDataset = TradeMapAuthorizedDataset;
+export type TradeMapDataset = TradeMapAuthorizedDataset & { cacheOwnerColumn?: 'owner_uid' };
 
 const PAGE_SIZE = 50;
 const GRID_COLUMNS = 12;
@@ -79,9 +79,9 @@ export async function loadTradeMapDataset(db: D1Database, ownerUid: string, data
         WHEN cache.status = 'located' AND cache.lat IS NOT NULL AND cache.lng IS NOT NULL THEN 'located'
         WHEN cache.status = 'unlocated' THEN 'unlocated' ELSE 'pending' END location_status
     FROM map_records r LEFT JOIN trade_map_location_cache cache
-      ON cache.owner_uid = ? AND cache.address_key = r.address_key AND cache.provider = 'gnaf'
+      ON cache.owner_uid = ${dataset.cacheOwnerColumn === 'owner_uid' ? 'r.owner_uid' : '?'} AND cache.address_key = r.address_key AND cache.provider = 'gnaf'
   )`;
-  const args = [...dataset.bindings, ownerUid];
+  const args = dataset.cacheOwnerColumn === 'owner_uid' ? [...dataset.bindings] : [...dataset.bindings, ownerUid];
   const summary = await db.prepare(`${cte} SELECT COUNT(*) total,
     COUNT(CASE WHEN location_status = 'located' THEN 1 END) mapped,
     COUNT(CASE WHEN location_status = 'located' AND approximate = 1 THEN 1 END) approximate,

@@ -8,14 +8,17 @@ import { sendServiceReminderProviderMessage, reminderProviderFailureOutcome } fr
 import { prepareCreditexCorrectionWorkPackStatements } from "./creditex-activity-work-pack-server";
 import { prepareFieldCorrectionStatements } from "./trade-activity-forms-server";
 import { cancelledJobAppointmentsStatement,reconcileCancelledJobCalendars } from "./trade-job-cancellation-server";
+import { creditexPermissionSql } from "./creditex-permissions";
+import { CREDITEX_PARTNER_ORGANISATION_CODE } from "./trade-compliance-intent";
 
 export type JobLifecycleActor =
   | { kind: "trade"; uid: string; access: TeamAccess }
-  | { kind: "compliance" | "admin"; uid: string; organisationId: string; role: string };
+  | { kind: "compliance"; uid: string; organisationId: string; memberId: string; role: string }
+  | { kind: "admin"; uid: string; organisationId: string; role: string };
 type Input = Readonly<Record<string, unknown>>;
 type ContextRow = { intent_id: string; intent_status: string; organisation_id: string; work_order_id: string; owner_uid: string;
   business_name: string; work_number:string; title:string; stage: string; record_status: string; revision: number; assignee_member_id: string;
-  completion_snapshot: string; submission_snapshot: string; ever_completed: number };
+  completion_snapshot: string; submission_snapshot: string; ever_completed: number; can_mutate: number; can_correct: number };
 type LifecycleEvent = { id: string; action: string; source_snapshot: string; reference: string; amount_minor: number;
   recipient_uid: string; occurred_at: string; actor_uid: string; note: string; created_at: string; request_sha256: string };
 
@@ -30,18 +33,45 @@ const clean = (value: unknown, label: string, max = 240) => {
   return value.trim();
 };
 
-async function context(db: D1Database, actor: JobLifecycleActor, intentId: string) {
+// A lifecycle action can affect every activity on a job. The current member must
+// retain access to every linked case when the write commits, not just the tab they opened.
+function complianceScope(actor: JobLifecycleActor, permission: "jobs" | "audit", wholeJob?: { work: string; owner: string }) {
+  if (actor.kind !== "compliance") return { sql: "1=1", bindings: [] };
+  const assigned = `(COALESCE(intent.compliance_case_id,'')='' OR EXISTS (
+    SELECT 1 FROM compliance_cases linked_case WHERE linked_case.id=intent.compliance_case_id
+      AND linked_case.organisation_id=intent.compliance_organisation_id AND linked_case.compliance_intent_id=intent.id
+      AND linked_case.work_order_id=intent.work_order_id AND linked_case.installer_uid=intent.installer_uid
+      AND (member.role='admin' OR EXISTS (SELECT 1 FROM compliance_case_assignments assignment
+        WHERE assignment.organisation_id=linked_case.organisation_id AND assignment.case_id=linked_case.id
+          AND assignment.compliance_user_id=member.id AND assignment.status='assigned'))))`;
+  return {
+    sql: `EXISTS (SELECT 1 FROM compliance_users member JOIN compliance_organisations organisation ON organisation.id=member.organisation_id
+      WHERE member.id=? AND member.firebase_uid=? AND member.organisation_id=? AND member.role=? AND member.status='active'
+        AND organisation.status='active' AND organisation.organisation_code=? AND ${creditexPermissionSql("jobs")}
+        ${permission === "audit" ? `AND ${creditexPermissionSql("audit")}` : ""}
+        AND ${wholeJob ? `NOT EXISTS (SELECT 1 FROM trade_work_order_compliance_intents intent
+          WHERE intent.work_order_id=${wholeJob.work} AND intent.installer_uid=${wholeJob.owner}
+            AND intent.compliance_organisation_id=member.organisation_id AND intent.status IN ('planned','case_linked') AND NOT ${assigned})` : assigned})`,
+    bindings: [actor.memberId, actor.uid, actor.organisationId, actor.role, CREDITEX_PARTNER_ORGANISATION_CODE],
+  };
+}
+
+async function context(db: D1Database, actor: JobLifecycleActor, intentId: string, permission: "jobs" | "audit" = "jobs") {
   await ensureCreditexJobLifecycleSchemaGuards(db);
+  const readScope = complianceScope(actor, permission), mutationScope = complianceScope(actor, "audit");
+  const correctionScope = complianceScope(actor, "audit", { work: "work.id", owner: "work.firebase_uid" });
   const row = await db.prepare(`SELECT intent.id intent_id, intent.status intent_status,
       intent.compliance_organisation_id organisation_id, work.id work_order_id, work.firebase_uid owner_uid,
       COALESCE(account.business_name,'Trade business') business_name, work.work_number,work.title,work.stage,work.record_status,
       work.revision,work.assignee_member_id, ${creditexIntentCompletionSnapshotSql()} completion_snapshot,
-      ${creditexIntentSubmissionSnapshotSql()} submission_snapshot, ${creditexJobEverCompletedSql()} ever_completed
+      ${creditexIntentSubmissionSnapshotSql()} submission_snapshot, ${creditexJobEverCompletedSql()} ever_completed,
+      ${mutationScope.sql} can_mutate, ${correctionScope.sql} can_correct
     FROM trade_work_order_compliance_intents intent JOIN trade_work_orders work
       ON work.id=intent.work_order_id AND work.firebase_uid=intent.installer_uid AND work.partner_type='installer'
     LEFT JOIN trade_accounts account ON account.firebase_uid=work.firebase_uid
-    WHERE intent.id=? AND ${actor.kind === "trade" ? "work.firebase_uid=?" : "intent.compliance_organisation_id=?"}`)
-    .bind(intentId, actor.kind === "trade" ? actor.access.ownerUid : actor.organisationId).first<ContextRow>();
+    WHERE intent.id=? AND ${actor.kind === "trade" ? "work.firebase_uid=?" : "intent.compliance_organisation_id=?"} AND ${readScope.sql}`)
+    .bind(...mutationScope.bindings, ...correctionScope.bindings, intentId,
+      actor.kind === "trade" ? actor.access.ownerUid : actor.organisationId, ...readScope.bindings).first<ContextRow>();
   if (!row) return fail("JOB_LIFECYCLE_NOT_FOUND", "This activity is not available in your workspace.", 404);
   if (actor.kind === "trade" && !actor.access.isOwner && actor.access.jobScope !== "team"
     && row.assignee_member_id !== actor.access.memberId
@@ -109,7 +139,7 @@ export async function loadJobLifecycle(db: D1Database, actor: JobLifecycleActor,
   const latestReview = events.results.find(e=>["reviewed","correction_required"].includes(e.action));
   const reviewed = latestReview?.action==="reviewed"&&latestReview.source_snapshot===row.completion_snapshot;
   const paid = events.results.some(e=>e.action==="payout_recorded"&&e.source_snapshot===row.submission_snapshot&&e.recipient_uid===row.owner_uid);
-  const correctionRows=access.correction&&["planned","case_linked"].includes(row.intent_status)?await jobReviewRows(db,actor,row.work_order_id):[];
+  const correctionRows=access.correction&&row.can_correct&&["planned","case_linked"].includes(row.intent_status)?await jobReviewRows(db,actor,row.work_order_id):[];
   const notifications=await db.prepare(`SELECT id,status,recipient_email,last_error FROM creditex_job_correction_deliveries d
     WHERE d.work_order_id=? AND d.owner_uid=? AND EXISTS(SELECT 1 FROM creditex_job_lifecycle_events e WHERE e.id=d.event_id AND e.organisation_id=?)
     ORDER BY d.created_at DESC,d.id DESC LIMIT 3`).bind(row.work_order_id,row.owner_uid,row.organisation_id)
@@ -118,10 +148,10 @@ export async function loadJobLifecycle(db: D1Database, actor: JobLifecycleActor,
     recipient:row.business_name, recordStatus:row.record_status, stage:row.stage,
     completionSha256:hash(row.completion_snapshot), correctionSourceSha256:hash(reviewIdentity(correctionRows)), reviewed, paid,
     capabilities:{ canReview:access.review&&active&&completed(row.completion_snapshot)&&!reviewed,
-      canRecordPayout:access.payout&&active&&!paid&&await submitted(db,row),
-      canCancel:access.cancel&&active&&!row.ever_completed,
+      canRecordPayout:access.payout&&Boolean(row.can_mutate)&&active&&!paid&&await submitted(db,row),
+      canCancel:access.cancel&&Boolean(row.can_correct)&&active&&!row.ever_completed,
       canRequestCorrection:access.correction&&active&&correctionRows.length>0&&correctionRows.every(r=>completed(r.completion_snapshot))&&!await everLodged(db,correctionRows),
-      canDelete:access.bin&&row.record_status==="active", canRestore:access.bin&&row.record_status==="archived" },
+      canDelete:access.bin&&Boolean(row.can_correct)&&row.record_status==="active", canRestore:access.bin&&Boolean(row.can_correct)&&row.record_status==="archived" },
     notifications:notifications.results.map(d=>({id:d.id,status:d.status,recipient:d.recipient_email,error:d.last_error})),
     history:events.results.map(e=>({id:e.id,action:e.action,reference:e.reference,amountMinor:e.amount_minor,
       occurredAt:e.occurred_at,note:e.note,actorUid:e.actor_uid})),
@@ -131,12 +161,12 @@ export async function loadJobLifecycle(db: D1Database, actor: JobLifecycleActor,
 /** Records a completed business action only. This never transfers funds or lodges certificates. */
 export async function mutateJobLifecycle(db:D1Database,actor:JobLifecycleActor,input:Input,options:{now?:()=>string}={}) {
   if(input.action==="correction_required") {
-    const row=await context(db,actor,clean(input.intentId,"an activity"));
+    const row=await context(db,actor,clean(input.intentId,"an activity"),"audit");
     await reviewTradeJob(db,actor,{...input,workOrderId:row.work_order_id,expectedSourceSha256:input.expectedCorrectionSourceSha256},options);
     return loadJobLifecycle(db,actor,row.intent_id);
   }
   if(input.action==="retry_notification") {
-    const row=await context(db,actor,clean(input.intentId,"an activity"));
+    const row=await context(db,actor,clean(input.intentId,"an activity"),"audit");
     await dispatchJobCorrectionEmail(db,actor,clean(input.deliveryId,"a notification"),{...options,expectedWorkOrderId:row.work_order_id});
     return loadJobLifecycle(db,actor,row.intent_id);
   }
@@ -147,7 +177,7 @@ export async function mutateJobLifecycle(db:D1Database,actor:JobLifecycleActor,i
   const previous=await db.prepare(`SELECT request_sha256 FROM creditex_job_lifecycle_events WHERE actor_kind=? AND actor_uid=? AND request_id=?`)
     .bind(actor.kind,actor.uid,requestId).first<{request_sha256:string}>();
   if(previous){ if(previous.request_sha256!==requestHash) return fail("JOB_LIFECYCLE_REQUEST_CHANGED","This request already records a different action."); return loadJobLifecycle(db,actor,intentId); }
-  const row=await context(db,actor,intentId),p=permissions(actor);
+  const row=await context(db,actor,intentId,"audit"),p=permissions(actor);
   const allowed=action==="reviewed"?p.review:action==="payout_recorded"?p.payout:action==="cancelled"?p.cancel:["deleted","restored"].includes(action)&&p.bin;
   if(!allowed) return fail("JOB_LIFECYCLE_PERMISSION","Your role cannot perform this job action.",403);
   if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision!==row.revision) return fail("JOB_LIFECYCLE_CHANGED","The job changed. Refresh before continuing.");
@@ -184,11 +214,12 @@ export async function mutateJobLifecycle(db:D1Database,actor:JobLifecycleActor,i
   const id=crypto.randomUUID(),nextRevision=row.revision+1;
   const status=action==="deleted"?"archived":action==="restored"?"active":row.record_status;
   const stage=action==="cancelled"?"cancelled":row.stage;
+  const mutationScope=complianceScope(actor,"audit",{work:"trade_work_orders.id",owner:"trade_work_orders.firebase_uid"});
   const statements=[db.prepare(`UPDATE trade_work_orders SET record_status=?,stage=?,revision=revision+1,updated_at=?,
     scheduled_start=CASE WHEN ?='cancelled' THEN '' ELSE scheduled_start END,
     scheduled_end=CASE WHEN ?='cancelled' THEN '' ELSE scheduled_end END
-    WHERE id=? AND firebase_uid=? AND revision=? AND record_status=? AND stage=? AND (${predicate})`)
-    .bind(status,stage,now,action,action,row.work_order_id,row.owner_uid,row.revision,row.record_status,row.stage,...extra),
+    WHERE id=? AND firebase_uid=? AND revision=? AND record_status=? AND stage=? AND (${predicate}) AND ${mutationScope.sql}`)
+    .bind(status,stage,now,action,action,row.work_order_id,row.owner_uid,row.revision,row.record_status,row.stage,...extra,...mutationScope.bindings),
     db.prepare(`INSERT INTO trade_work_order_events(id,work_order_id,firebase_uid,event_type,summary,created_at)
       VALUES(?,?,?,'lifecycle_action',CASE WHEN changes()=1 THEN ? ELSE NULL END,?)`)
       .bind(crypto.randomUUID(),row.work_order_id,row.owner_uid,`${action}: ${note}`,now),
@@ -211,14 +242,14 @@ export async function mutateJobLifecycle(db:D1Database,actor:JobLifecycleActor,i
 type Delivery = {id:string;event_id:string;recipient_email:string;subject:string;body:string;status:string;provider_reference:string;
   last_error:string;attempts:number;first_attempt_at:string;last_attempt_at:string};
 
-async function jobReviewRows(db:D1Database,actor:JobLifecycleActor,workOrderId:string) {
+async function jobReviewRows(db:D1Database,actor:JobLifecycleActor,workOrderId:string,permission:"jobs"|"audit"="jobs") {
   if(!permissions(actor).correction) return fail("JOB_REVIEW_PERMISSION","Authorised review access is required.",403);
   const intents=await db.prepare(`SELECT intent.id FROM trade_work_order_compliance_intents intent
     JOIN trade_work_orders work ON work.id=intent.work_order_id AND work.firebase_uid=intent.installer_uid
     WHERE work.id=? AND ${actor.kind==="trade"?"work.firebase_uid=?":"intent.compliance_organisation_id=?"} AND intent.status IN ('planned','case_linked') ORDER BY intent.id`)
     .bind(workOrderId,actor.kind==="trade"?actor.access.ownerUid:actor.organisationId).all<{id:string}>();
   if(!intents.results.length) return fail("JOB_REVIEW_NOT_FOUND","No active certificate activities are available for this job.",404);
-  return Promise.all(intents.results.map(i=>context(db,actor,i.id)));
+  return Promise.all(intents.results.map(i=>context(db,actor,i.id,permission)));
 }
 
 function reviewIdentity(rows:ContextRow[]) {return JSON.stringify(rows.map(r=>({intentId:r.intent_id,source:r.completion_snapshot})));}
@@ -270,16 +301,17 @@ export async function dispatchJobCorrectionEmail(db:D1Database,actor:JobLifecycl
   if(!delivery) return fail("JOB_NOTIFICATION_NOT_FOUND","This notification is not available.",404);
   if(options.expectedWorkOrderId&&options.expectedWorkOrderId!==delivery.work_order_id)
     return fail("JOB_NOTIFICATION_NOT_FOUND","This notification does not belong to the selected job.",404);
-  await jobReviewRows(db,actor,delivery.work_order_id);
+  await jobReviewRows(db,actor,delivery.work_order_id,"audit");
   const now=options.now?.()||new Date().toISOString();
   if(delivery.status==="accepted") return;
   if(delivery.first_attempt_at && ["sending","uncertain"].includes(delivery.status)
     && Date.parse(now)-Date.parse(delivery.first_attempt_at)>23*60*60*1000)
     return fail("JOB_NOTIFICATION_RECONCILIATION","The provider result needs checking before this notification can be retried.");
+  const mutationScope=complianceScope(actor,"audit",{work:"creditex_job_correction_deliveries.work_order_id",owner:"creditex_job_correction_deliveries.owner_uid"});
   const claimed=await db.prepare(`UPDATE creditex_job_correction_deliveries SET status='sending',attempts=attempts+1,
     first_attempt_at=CASE WHEN first_attempt_at='' THEN ? ELSE first_attempt_at END,last_attempt_at=?,updated_at=?
-    WHERE id=? AND owner_uid=? AND (status IN ('pending','failed','uncertain') OR (status='sending' AND last_attempt_at<?))`)
-    .bind(now,now,now,delivery.id,delivery.owner_uid,new Date(Date.parse(now)-90000).toISOString()).run();
+    WHERE id=? AND owner_uid=? AND (status IN ('pending','failed','uncertain') OR (status='sending' AND last_attempt_at<?)) AND ${mutationScope.sql}`)
+    .bind(now,now,now,delivery.id,delivery.owner_uid,new Date(Date.parse(now)-90000).toISOString(),...mutationScope.bindings).run();
   if(!claimed.meta.changes) return;
   try {
     const sent=await (options.send||sendServiceReminderProviderMessage)({channel:"email",recipient:delivery.recipient_email,
@@ -303,7 +335,7 @@ export async function reviewTradeJob(db:D1Database,actor:JobLifecycleActor,input
   const requestId=clean(input.requestId,"a request identifier",100);
   if(!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId)) return fail("JOB_REVIEW_INPUT","Use a valid request identifier.",400);
   const note=action==="correction_required"?clean(input.note,"the correction notes",2000):String(input.note||"").trim().slice(0,2000)||"Business review passed.";
-  const rows=await jobReviewRows(db,actor,workOrderId), row=rows[0],now=options.now?.()||new Date().toISOString();
+  const rows=await jobReviewRows(db,actor,workOrderId,"audit"), row=rows[0],now=options.now?.()||new Date().toISOString();
   const requestHash=hash(JSON.stringify([workOrderId,action,input.expectedRevision,input.expectedSourceSha256,note]));
   const previous=await db.prepare(`SELECT id,request_sha256 FROM creditex_job_lifecycle_events WHERE actor_kind=? AND actor_uid=? AND request_id=?`)
     .bind(actor.kind,actor.uid,hash(`${requestId}:${row.intent_id}`)).first<{id:string;request_sha256:string}>();
@@ -318,14 +350,15 @@ export async function reviewTradeJob(db:D1Database,actor:JobLifecycleActor,input
   if(action==="correction_required"&&(!technician||!/^\S+@\S+\.\S+$/.test(technician.email)))
     return fail("JOB_CORRECTION_TECHNICIAN_REQUIRED","Assign an active technician with an email address so the correction can be returned to them.");
   const guards=rows.map(()=>`EXISTS (SELECT 1 FROM trade_work_order_compliance_intents intent WHERE intent.id=? AND intent.status IN ('planned','case_linked') AND ${creditexIntentCompletionSnapshotSql()}=?)`).join(" AND ");
+  const mutationScope=complianceScope(actor,"audit",{work:"trade_work_orders.id",owner:"trade_work_orders.firebase_uid"});
   const statements=[db.prepare(`UPDATE trade_work_orders SET stage=?,revision=revision+1,updated_at=?
     WHERE id=? AND firebase_uid=? AND revision=? AND record_status='active' AND stage NOT IN ('cancelled','imported')
       AND (SELECT COUNT(*) FROM trade_work_order_compliance_intents i WHERE i.work_order_id=trade_work_orders.id
         AND i.installer_uid=trade_work_orders.firebase_uid AND i.status IN ('planned','case_linked')
         ${actor.kind==="trade"?"":"AND i.compliance_organisation_id=?"})=? AND ${guards}
-      AND NOT ${jobLodgementGuardSql("trade_work_orders.id","trade_work_orders.firebase_uid")}`)
+      AND NOT ${jobLodgementGuardSql("trade_work_orders.id","trade_work_orders.firebase_uid")} AND ${mutationScope.sql}`)
       .bind(action==="correction_required"?"in_progress":row.stage,now,workOrderId,row.owner_uid,row.revision,...(actor.kind==="trade"?[]:[actor.organisationId]),rows.length,
-        ...rows.flatMap(r=>[r.intent_id,r.completion_snapshot])),
+        ...rows.flatMap(r=>[r.intent_id,r.completion_snapshot]),...mutationScope.bindings),
     db.prepare(`INSERT INTO trade_work_order_events(id,work_order_id,firebase_uid,event_type,summary,created_at)
       VALUES(?,?,?,'business_review',CASE WHEN changes()=1 THEN ? ELSE NULL END,?)`)
       .bind(crypto.randomUUID(),workOrderId,row.owner_uid,`${action}: ${note}`,now)];

@@ -35,7 +35,7 @@ export type CreditexJobAuditWorkspace = {
   sourceSha256: string; records: CreditexJobAuditRecord[]; files: CreditexJobAuditFile[];
   checklist: CreditexJobAuditSaved | null; history: CreditexJobAuditSaved[];
   auditCompleted: boolean; submissionReady: boolean;
-  capabilities: { canSave: boolean; canComplete: boolean; canRequestCorrection: boolean; reason: string };
+  capabilities: { canSave: boolean; canComplete: boolean; canRequestCorrection: boolean; canCall: boolean; reason: string };
 };
 export type CreditexJobAuditSaveInput = {
   intentId: string; expectedAuditRevision: number; expectedSourceSha256: string; requestId: string;

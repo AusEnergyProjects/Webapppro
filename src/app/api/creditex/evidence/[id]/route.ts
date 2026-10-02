@@ -196,7 +196,7 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const database = getD1();
-    const member = await requireComplianceAccess(request, {
+    const member = await requireComplianceAccess(request, { requiredPermission: "jobs",
       allowedRoles: ["admin", "reviewer", "auditor"],
     }, database);
     const record = await database.prepare(`SELECT

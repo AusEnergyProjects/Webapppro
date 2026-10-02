@@ -4100,6 +4100,7 @@ export const complianceUsers = sqliteTable("compliance_users", {
   email: text("email").notNull(),
   displayName: text("display_name").notNull().default(""),
   role: text("role").notNull(),
+  permissionsJson: text("permissions_json"),
   status: text("status").notNull().default("active"),
   governanceIdentityVerified: integer("governance_identity_verified").notNull().default(0),
   governanceIdentityVerifiedByUid: text("governance_identity_verified_by_uid").notNull().default(""),
@@ -4116,6 +4117,7 @@ export const complianceUsers = sqliteTable("compliance_users", {
   index("compliance_users_org_role_status_idx").on(table.organisationId, table.role, table.status),
   index("compliance_users_org_governance_identity_idx").on(table.organisationId, table.governanceIdentityVerified, table.role, table.status),
   check("compliance_users_role_check", sql`${table.role} IN ('admin', 'case_manager', 'reviewer', 'auditor')`),
+  check("compliance_users_permissions_check", sql`${table.permissionsJson} IS NULL OR (json_valid(${table.permissionsJson}) AND json_type(${table.permissionsJson}) = 'array')`),
   check("compliance_users_status_check", sql`${table.status} IN ('active', 'suspended', 'revoked')`),
   check("compliance_users_governance_identity_check", sql`(${table.governanceIdentityVerified} = 0 AND ${table.governanceIdentityVerifiedByUid} = '' AND ${table.governanceIdentityVerifiedAt} = '' AND ${table.governanceIdentityVerificationBasis} = '') OR (${table.governanceIdentityVerified} = 1 AND trim(${table.governanceIdentityVerifiedByUid}) <> '' AND ${table.governanceIdentityVerifiedByUid} <> ${table.firebaseUid} AND trim(${table.governanceIdentityVerifiedAt}) <> '' AND trim(${table.governanceIdentityVerificationBasis}) <> '')`),
 ]);
@@ -4311,6 +4313,7 @@ export const complianceInvitations = sqliteTable("compliance_invitations", {
   email: text("email").notNull(),
   displayName: text("display_name").notNull().default(""),
   role: text("role").notNull(),
+  permissionsJson: text("permissions_json"),
   status: text("status").notNull().default("pending"),
   invitedByUid: text("invited_by_uid").notNull(),
   expiresAt: text("expires_at").notNull(),
@@ -4324,6 +4327,7 @@ export const complianceInvitations = sqliteTable("compliance_invitations", {
     .where(sql`${table.status} IN ('pending', 'claimed')`),
   index("compliance_invitations_email_status_idx").on(sql`${table.email} COLLATE NOCASE`, table.status, table.expiresAt),
   check("compliance_invitations_role_check", sql`${table.role} IN ('admin', 'case_manager', 'reviewer', 'auditor')`),
+  check("compliance_invitations_permissions_check", sql`${table.permissionsJson} IS NULL OR (json_valid(${table.permissionsJson}) AND json_type(${table.permissionsJson}) = 'array')`),
   check("compliance_invitations_status_check", sql`${table.status} IN ('pending', 'claimed', 'revoked', 'expired')`),
   check("compliance_invitations_email_check", sql`length(${table.email}) BETWEEN 3 AND 320 AND ${table.email} = lower(trim(${table.email}))`),
   check("compliance_invitations_claimed_state_check", sql`(${table.status} = 'claimed' AND ${table.claimedByUid} <> '' AND ${table.claimedAt} <> '') OR (${table.status} <> 'claimed' AND ${table.claimedByUid} = '' AND ${table.claimedAt} = '')`),
@@ -7439,3 +7443,22 @@ export const tradePushDeliveries = sqliteTable("trade_push_deliveries", {
 },t=>[primaryKey({columns:[t.eventKind,t.eventId,t.endpointHash]}),index("trade_push_deliveries_owner_created_idx").on(t.ownerUid,t.createdAt),
   check("trade_push_deliveries_kind",sql`${t.eventKind} IN ('team-message','team-call')`),check("trade_push_deliveries_hash",sql`length(${t.endpointHash})=64`),
   check("trade_push_deliveries_status",sql`${t.status} IN ('attempted','accepted','failed','expired')`)]);
+
+export const portalWorkspaceProfiles = sqliteTable("portal_workspace_profiles", {
+  workspace: text("workspace").notNull(), tenantId: text("tenant_id").notNull(), memberId: text("member_id").notNull(),
+  displayName: text("display_name").notNull().default(""), themeKey: text("theme_key").notNull().default("emerald_navy"),
+  colourMode: text("colour_mode").notNull().default("day"), updatedAt: text("updated_at").notNull(),
+  avatarRevision: text("avatar_revision").notNull().default(""), avatarObjectKey: text("avatar_object_key").notNull().default(""),
+  avatarContentType: text("avatar_content_type").notNull().default(""),
+}, table => [primaryKey({ columns: [table.workspace, table.tenantId, table.memberId] }),
+  check("portal_workspace_profiles_workspace_check", sql`${table.workspace} IN ('admin', 'creditex')`),
+  check("portal_workspace_profiles_colour_mode_check", sql`${table.colourMode} IN ('day', 'night')`),
+  check("portal_workspace_profiles_avatar_content_type_check", sql`${table.avatarContentType} IN ('', 'image/jpeg', 'image/png')`)]);
+
+export const creditexNotificationReceipts = sqliteTable("creditex_notification_receipts", {
+  organisationId: text("organisation_id").notNull(), memberId: text("member_id").notNull(), eventKey: text("event_key").notNull(),
+  readAt: text("read_at").notNull().default(""), dismissedAt: text("dismissed_at").notNull().default(""),
+}, table => [primaryKey({ columns: [table.organisationId, table.memberId, table.eventKey] }),
+  index("creditex_notification_receipts_member").on(table.memberId, table.organisationId),
+  check("creditex_notification_receipts_event_key_check", sql`length(${table.eventKey}) BETWEEN 1 AND 1200`),
+  check("creditex_notification_receipts_state_check", sql`${table.readAt} <> '' OR ${table.dismissedAt} <> ''`)]);

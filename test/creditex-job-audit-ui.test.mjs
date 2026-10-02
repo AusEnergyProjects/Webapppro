@@ -11,7 +11,7 @@ const text = node => node == null || typeof node === 'boolean' ? '' : typeof nod
 const nodes = (node, fn) => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, fn)) : [...(fn(node) ? [node] : []), ...nodes(node.props?.children, fn)];
 const button = (tree, name) => nodes(tree, n => n.type === 'button' && text(n) === name)[0];
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const workspace = () => ({ target: { intentId:'intent-1', jobNumber:'TLJ-TEST', customerName:'Test customer', customerPhone:'+61400000000', siteAddress:'Test site', activityDate:'2026-10-02', activityTitle:'Assessment', assignee:'Technician', addressReviewRequired:true }, sourceSha256:'a'.repeat(64), records:[{kind:'field',id:'form-1',title:'Site assessment',status:'submitted',revision:3,updatedAt:'2026-10-02',answers:[{key:'result',label:'Recorded result',section:'Inspection',value:'Done'}]}], files:[1,2].map(id => ({id:String(id),kind:'field_evidence',parentId:'form-1',label:`Photo ${id}`,previewPath:`/api/creditex/job-audit/file?id=${id}`,contentType:'image/png'})), checklist:null,history:[],auditCompleted:false,submissionReady:false,capabilities:{canSave:true,canComplete:true,canRequestCorrection:true,reason:''} });
+const workspace = () => ({ target: { intentId:'intent-1', jobNumber:'TLJ-TEST', customerName:'Test customer', customerPhone:'+61400000000', siteAddress:'Test site', activityDate:'2026-10-02', activityTitle:'Assessment', assignee:'Technician', addressReviewRequired:true }, sourceSha256:'a'.repeat(64), records:[{kind:'field',id:'form-1',title:'Site assessment',status:'submitted',revision:3,updatedAt:'2026-10-02',answers:[{key:'result',label:'Recorded result',section:'Inspection',value:'Done'}]}], files:[1,2].map(id => ({id:String(id),kind:'field_evidence',parentId:'form-1',label:`Photo ${id}`,previewPath:`/api/creditex/job-audit/file?id=${id}`,contentType:'image/png'})), checklist:null,history:[],auditCompleted:false,submissionReady:false,capabilities:{canSave:true,canComplete:true,canRequestCorrection:true,canCall:true,reason:''} });
 function harness(options={}) {
   const slots=[], effects=[], queued=[], callbacks=[], requests=[], revocations=[], dirtyReports=[];
   let cursor=0, closed=0, changes=0, currentProps={user:{uid:'reviewer',getIdToken:async()=> 'fixture'},intentId:'intent-1',actorMode:options.actorMode || 'creditex',onClose:()=>closed++,onChanged:()=>changes++,onDirtyChange:value=>dirtyReports.push(value)};
@@ -67,6 +67,13 @@ test('access failures expose a retry without rendering unavailable answers or fi
 
 test('admin requests use admin authority and never mount the Creditex-only call panel',async()=>{
   const h=harness({actorMode:'admin'});const tree=await h.settle();assert.match(h.requests[0].path,/actorMode=admin/);assert.equal(button(tree,'Call customer'),undefined);assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexAuditCallPanel').length,0);h.cleanup();
+});
+
+test('audit calling controls follow the server customer permission', async () => {
+  const denied = workspace(); denied.capabilities.canCall = false;
+  const h = harness({ fetch: async path => path.includes('/file?') ? new Response('photo', { headers: { 'Content-Type': 'image/png' } }) : Response.json({ ok: true, workspace: denied }) });
+  const tree = await h.settle(); assert.equal(button(tree, 'Call customer'), undefined);
+  assert.equal(nodes(tree, node => node.type?.displayName === 'CreditexAuditCallPanel').length, 0); h.cleanup();
 });
 
 test('HTML or SVG attachments are never executed by the inline preview',async()=>{

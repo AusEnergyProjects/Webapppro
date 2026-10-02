@@ -57,7 +57,7 @@ function errorResponse(error: unknown) {
 
 async function requireMember(request: Request, database: D1Database) {
   const identity = await requireFirebaseIdentity(request);
-  return requireComplianceIdentity(identity, {
+  return requireComplianceIdentity(identity, { requiredPermission: "calculator",
     allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
   }, database);
 }

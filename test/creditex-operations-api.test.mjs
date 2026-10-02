@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
+import * as permissions from "../src/lib/creditex-permissions.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const server = read("../src/lib/creditex-operations-server.ts");
@@ -30,6 +31,7 @@ function loadServer() {
   }).outputText;
   const record = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "./creditex-permissions.ts") return permissions;
     throw new Error(`Unexpected runtime dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(

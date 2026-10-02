@@ -296,7 +296,7 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /CREDITEX_PARTNER_ORGANISATION_CODE = "CREDITEX-AU"/,
   );
   for (const contract of [
-    /requireComplianceAccess\(request, \{\}, database\)/,
+    /requireComplianceAccess\(request, \{ requiredPermission: "jobs" \}, database\)/,
     /access\.organisationCode !== CREDITEX_PARTNER_ORGANISATION_CODE/,
     /"CREDITEX_PARTNER_REQUIRED",\s*403/,
     /WHERE intent\.compliance_organisation_id = \?/,
@@ -405,7 +405,7 @@ test("planned intake exposes private job context only to the exact Creditex orga
   assert.doesNotMatch(plannedIntakeQueue, /AuditRecordView|All saved fields and references|<td>\{item\.customerPhone/);
 
   for (const contract of [
-    /requireComplianceAccess\(request, \{\}, database\)/,
+    /requireComplianceAccess\(request, \{ requiredPermission: "jobs" \}, database\)/,
     /access\.organisationCode !== CREDITEX_PARTNER_ORGANISATION_CODE/,
     /WHERE id = \? AND compliance_organisation_id = \?/,
     /AND partner_type = 'installer'[\s\S]*AND source_type = 'internal'/,
@@ -804,18 +804,15 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
     "../src/components/CreditexCompliancePortal.module.css",
   );
   assert.match(portal, /role="tablist"/);
-  assert.match(portal, /aria-controls=\{`creditex-panel-\$\{item\.id\}`\}/);
-  for (const id of ["cases", "sources", "governance"]) assert.match(portal, new RegExp(`id: "${id}"`));
+  assert.match(portal, /aria-controls=\{`creditex-panel-\$\{item\.id === 'settings' && navigationTab !== tab \? tab : item\.id\}`\}/);
+  for (const id of ["cases", "settings"]) assert.match(portal, new RegExp(`id: "${id}"`));
   assert.match(portal, /Official sources/);
   assert.match(
     portal,
     /onSettings=\{\(\) => selectTab\("settings"\)\}/,
   );
-  assert.ok(
-    portal.indexOf('{ id: "sources", label: "Official sources" }')
-      < portal.indexOf('...(session?.role === "admin" ?'),
-    "Every authorised compliance role must reach the source custody tab.",
-  );
+  assert.match(portal, /permitted\('governance'\)[\s\S]*selectTab\('sources'\)/);
+  assert.match(portal, /toolsTabs\.filter\(item => canAccessTab\(item\.id\)\)\.map/);
   assert.match(portal, /role="tabpanel"/);
   assert.match(portal, /handleWorkspaceTabKeyDown/);
   assert.ok(

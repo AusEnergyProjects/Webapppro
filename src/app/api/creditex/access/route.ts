@@ -100,6 +100,7 @@ async function requireAdministrator(request: Request, database: D1Database) {
   const identity = await requireFirebaseIdentity(request);
   return requireComplianceIdentity(identity, {
     allowedRoles: ["admin"],
+    requiredPermission: "team_access",
   }, database);
 }
 

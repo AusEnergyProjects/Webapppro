@@ -118,7 +118,7 @@
 .selectedRecord .approximate { color: var(--trade-ink, #16372f); font-size: .73rem; font-weight: 650; }
 .reference { color: var(--trade-accent-readable, #087567); font-size: .66rem; font-weight: 800; letter-spacing: .035em; overflow-wrap: anywhere; text-transform: uppercase; }
 .actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px; }
-.primaryButton { background: var(--trade-accent, #087567); border-color: transparent; color: #fff; }
+.primaryButton { background: var(--trade-accent, #087567); border-color: transparent; color: var(--trade-button-ink, #fff); }
 .primaryButton:hover { filter: brightness(.92); }
 .actions a { align-items: center; color: var(--trade-accent-readable, #087567); display: inline-flex; font-size: .75rem; font-weight: 750; min-height: 44px; text-decoration: underline; text-underline-offset: 3px; }
 .listHeading { align-items: center; display: flex; font-size: .73rem; justify-content: space-between; padding: 16px 16px 10px; }

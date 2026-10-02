@@ -199,8 +199,8 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
           </section>
         </div>
         <section className={`${styles.card} ${styles.checklist}`} aria-label="Verification call and audit">
-          <header><div><span className={styles.eyebrow}>Verification</span><h3>Quick audit</h3></div>{actorMode === "creditex" && workspace.target.customerPhone && <button type="button" aria-expanded={showCall} onClick={() => setShowCall(value => !value)}>Call customer</button>}</header>
-          {actorMode === "creditex" && showCall && <div tabIndex={-1} ref={callRef} aria-label="Customer audit call controls"><CreditexAuditCallPanel user={user} jobIntentId={intentId} selectedCallId={callId} onCallSelected={saving || !workspace.capabilities.canSave ? undefined : selectAuditCall} /></div>}
+          <header><div><span className={styles.eyebrow}>Verification</span><h3>Quick audit</h3></div>{actorMode === "creditex" && workspace.capabilities.canCall && workspace.target.customerPhone && <button type="button" aria-expanded={showCall} onClick={() => setShowCall(value => !value)}>Call customer</button>}</header>
+          {actorMode === "creditex" && workspace.capabilities.canCall && showCall && <div tabIndex={-1} ref={callRef} aria-label="Customer audit call controls"><CreditexAuditCallPanel user={user} jobIntentId={intentId} selectedCallId={callId} onCallSelected={saving || !workspace.capabilities.canSave ? undefined : selectAuditCall} /></div>}
           {callId && <p className={styles.muted}>A completed call is linked to this audit. <button type="button" disabled={saving} onClick={() => { setCallId(""); setDirty(true); }}>Remove link</button></p>}
           <fieldset disabled={saving || !workspace.capabilities.canSave} className={styles.questions}>
             <legend>Confirm the work and record the result</legend>

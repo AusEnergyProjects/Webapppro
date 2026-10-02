@@ -5,6 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as contracts from "../src/lib/portal-team-workspace.ts";
 import * as boundedJson from "../src/lib/bounded-json-request.ts";
+import * as permissions from "../src/lib/creditex-permissions.ts";
+import * as notifications from "../src/lib/creditex-notifications.ts";
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const uuid = () => crypto.randomUUID();
@@ -21,12 +23,15 @@ function fixture(t) {
     CREATE TABLE compliance_users(id TEXT PRIMARY KEY,organisation_id TEXT,firebase_uid TEXT,display_name TEXT,role TEXT,status TEXT);
     INSERT INTO compliance_organisations VALUES('creditex','active'),('another','active');`);
   sqlite.exec(read("drizzle/0239_portal_team_workspace.sql"));
+  sqlite.exec(read("drizzle/0238_portal_workspace_profiles.sql"));
+  sqlite.exec(read("drizzle/0240_portal_profile_avatars.sql"));
   for (const [id, role] of [["owner", "owner"], ["a", "support"], ["b", "reviewer"], ["outside", "reviewer"], ["admin", "admin"]]) {
     sqlite.prepare("INSERT INTO admin_users VALUES(?,?,?,?, 'active')").run(id, `${id}-uid`, id, role);
   }
   for (const [id, role, organisation] of [["a", "auditor", "creditex"], ["b", "case_manager", "creditex"], ["outside", "reviewer", "creditex"], ["admin", "admin", "creditex"], ["foreign", "admin", "another"]]) {
     sqlite.prepare("INSERT INTO compliance_users VALUES(?,?,?,?,?,'active')").run(id, organisation, `${id}-uid`, id, role);
   }
+  sqlite.exec("ALTER TABLE compliance_users ADD COLUMN permissions_json TEXT");
   let beforeWrite;
   function beforeMutation(sql) {
     if (beforeWrite && /(?:INSERT INTO portal_team_|UPDATE portal_team_)/.test(sql)) { const next = beforeWrite; beforeWrite = null; next(); }
@@ -50,6 +55,7 @@ function fixture(t) {
   const api = load("src/lib/portal-team-workspace-server.ts", name => {
     if (name === "../../db") return { getD1: () => db };
     if (name === "./portal-team-workspace") return contracts;
+    if (name === "./creditex-permissions") return permissions;
     if (name === "./admin-server") return { requireAdminIdentity: adminAuth };
     if (name === "./compliance-access-server") return { requireComplianceAccess: creditexAuth };
     throw new Error(name);
@@ -184,7 +190,7 @@ test("task and people lists are bounded and every task page is reachable", async
   const f = fixture(t); for (let index = 0; index < 27; index++) await f.create("creditex", "a", "a", { title: `Task ${index}` });
   const first = await f.api.portalTasks(f.actor(), {}, f.db); const next = await f.api.portalTasks(f.actor(), { page: "2" }, f.db);
   assert.equal(first.total, 27); assert.equal(first.tasks.length, 25); assert.equal(first.totalPages, 2); assert.equal(next.tasks.length, 2);
-  for (let index = 0; index < 35; index++) f.sqlite.prepare("INSERT INTO compliance_users VALUES(?,'creditex',?,?, 'reviewer','active')").run(`extra${index}`, `uid${index}`, `Worker ${index}`);
+  for (let index = 0; index < 35; index++) f.sqlite.prepare("INSERT INTO compliance_users VALUES(?,'creditex',?,?, 'reviewer','active',NULL)").run(`extra${index}`, `uid${index}`, `Worker ${index}`);
   const people = await f.api.portalPeople(f.actor(), "", f.db); assert.equal(people.people.length, 30); assert.equal(people.hasMore, true);
   assert.equal((await f.api.portalPeople(f.actor(), "Worker 34", f.db)).people[0].id, "extra34");
 });
@@ -203,9 +209,47 @@ test("request identity resolves only through its selected portal without client 
   const f = fixture(t); const request = new Request("https://example.com/api/portal-team-workspace?workspace=creditex&organisationId=another");
   const compliance = await f.api.requirePortalTeamAccess(request, "creditex");
   assert.equal(compliance.scopeId, "creditex"); assert.equal(compliance.memberId, "a");
-  assert.deepEqual(f.authCalls, [["creditex", { claimPendingInvitation: false }]]);
+  assert.deepEqual(f.authCalls, [["creditex", { claimPendingInvitation: false, requiredAnyPermission: ["messages", "tasks"] }]]);
   const admin = await f.api.requirePortalTeamAccess(request, "admin"); assert.equal(admin.scopeId, "platform");
   assert.equal(f.authCalls.at(-1), "admin");
+});
+
+test("current Creditex message and task permissions isolate tools and prevent mid-request writes", async t => {
+  const f = fixture(t); const task = await f.create(); await f.message();
+  f.sqlite.exec("UPDATE compliance_users SET permissions_json='[\"tasks\"]' WHERE id='a'");
+  await assert.rejects(f.api.portalMessages(f.actor(), "b", "", f.db), /access changed/);
+  await assert.rejects(f.message(), /access changed/);
+  assert.equal((await f.api.portalPeople(f.actor(), "", f.db)).memberId, "a");
+  await assert.rejects(f.api.portalPeople(f.actor(), "", f.db, "", "messages"), /access changed/);
+  assert.equal((await f.api.portalPeople(f.actor(), "", f.db, "", "tasks")).memberId, "a");
+  assert.equal((await f.api.portalTasks(f.actor(), { view: "assigned" }, f.db)).total, 1);
+  f.sqlite.exec("UPDATE compliance_users SET permissions_json='[\"messages\"]' WHERE id='a'");
+  assert.equal((await f.api.portalMessages(f.actor(), "b", "", f.db)).messages.length, 1);
+  await assert.rejects(f.api.portalTasks(f.actor(), {}, f.db), /access changed/);
+  await assert.rejects(f.api.savePortalTask(f.actor(), { action: "task_status", id: task.id, revision: 1, status: "done" }, f.db), /access changed/);
+  f.beforeWrite(() => f.sqlite.exec("UPDATE compliance_users SET permissions_json='[]' WHERE id='a'"));
+  await assert.rejects(f.message(), /access changed/);
+  assert.equal(f.sqlite.prepare("SELECT count(*) total FROM portal_team_messages").get().total, 1);
+});
+
+test("notification targets resolve a specific authorised teammate and task beyond normal paging", async t => {
+  const f = fixture(t), task = await f.create();
+  for (let index = 0; index < 35; index++) f.sqlite.prepare("INSERT INTO compliance_users VALUES(?,'creditex',?,?, 'reviewer','active',NULL)").run(`extra${index}`, `uid${index}`, `Worker ${index}`);
+  assert.equal((await f.api.portalPeople(f.actor(), "", f.db, "extra34")).people[0].id, "extra34");
+  assert.equal((await f.api.portalPeople(f.actor(), "", f.db, "foreign")).people.length, 0);
+  assert.equal((await f.api.portalTasks(f.actor(), { taskId: task.id }, f.db)).tasks[0].id, task.id);
+  assert.equal((await f.api.portalTasks(f.actor("creditex", "outside"), { taskId: task.id }, f.db)).tasks.length, 0);
+});
+
+test("team directory and conversation photo revisions use the profile in the matching tenant only", async t => {
+  const f = fixture(t); await f.message();
+  const insert = f.sqlite.prepare("INSERT INTO portal_workspace_profiles(workspace,tenant_id,member_id,display_name,updated_at,avatar_revision) VALUES(?,?,?,?,?,?)");
+  insert.run("creditex", "creditex", "a", "Preferred A", "now", "creditex-photo");
+  insert.run("admin", "operations", "a", "Admin A", "now", "admin-photo");
+  assert.equal((await f.api.portalPeople(f.actor(), "Preferred", f.db)).people[0].avatarRevision, "creditex-photo");
+  assert.equal((await f.api.portalPeople(f.actor("admin"), "", f.db, "a")).people[0].name, "Admin A");
+  assert.equal((await f.api.portalMessages(f.actor(), "b", "", f.db)).messages[0].senderAvatarRevision, "creditex-photo");
+  assert.equal((await f.api.portalMessages(f.actor(), "b", "", f.db)).messages[0].senderName, "a", "immutable message attribution stays intact");
 });
 test("route rejects cross-origin and oversized requests, then dispatches only scoped actions", async t => {
   const f = fixture(t); let calls = 0;
@@ -213,6 +257,9 @@ test("route rejects cross-origin and oversized requests, then dispatches only sc
   const route = load("src/app/api/portal-team-workspace/route.ts", name => {
     if (name === "@/lib/portal-team-workspace") return contracts;
     if (name === "@/lib/bounded-json-request") return boundedJson;
+    if (name === "../../../../db") return { getD1: () => f.db };
+    if (name === "@/lib/creditex-notification-server") return { markCreditexConversationRead: async () => {} };
+    if (name === "@/lib/creditex-notifications") return notifications;
     if (name === "@/lib/compliance-access-server") return { ComplianceAccessError };
     if (name === "@/lib/admin-server") return { adminJson: (body, status = 200) => Response.json(body, { status }), mfaErrorResponse: () => null,
       sameOrigin: request => !request.headers.get("origin") || request.headers.get("origin") === new URL(request.url).origin,

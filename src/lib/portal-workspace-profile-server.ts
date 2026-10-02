@@ -3,7 +3,7 @@ import { DEFAULT_PORTAL_PROFILE, portalProfileInput } from "./portal-workspace-p
 import { requireAdminIdentity } from "./admin-server";
 import { requireComplianceAccess } from "./compliance-access-server";
 
-type ProfileActor = { workspace: PortalWorkspace; tenantId: string; memberId: string; uid: string; displayName: string };
+export type ProfileActor = { workspace: PortalWorkspace; tenantId: string; memberId: string; uid: string; displayName: string };
 export async function requirePortalProfileActor(request: Request, database: D1Database): Promise<ProfileActor> {
   const workspace = new URL(request.url).searchParams.get("workspace");
   if (workspace === "admin") {
@@ -17,19 +17,19 @@ export async function requirePortalProfileActor(request: Request, database: D1Da
   throw new Error("PORTAL_WORKSPACE_INVALID");
 }
 
-function activeGuard(actor: ProfileActor) {
+export function portalProfileActiveGuard(actor: ProfileActor) {
   return actor.workspace === "admin" ? {
-    sql: "EXISTS (SELECT 1 FROM admin_users WHERE id = ? AND firebase_uid = ? AND status = 'active')",
+    sql: "EXISTS (SELECT 1 FROM admin_users WHERE id = ? AND firebase_uid = ? AND status = 'active' AND role IN ('owner','admin','reviewer','support'))",
     values: [actor.memberId, actor.uid],
   } : {
     sql: `EXISTS (SELECT 1 FROM compliance_users member JOIN compliance_organisations organisation ON organisation.id = member.organisation_id
-      WHERE member.id = ? AND member.firebase_uid = ? AND member.organisation_id = ? AND member.status = 'active' AND organisation.status = 'active')`,
+      WHERE member.id = ? AND member.firebase_uid = ? AND member.organisation_id = ? AND member.status = 'active' AND member.role IN ('admin','case_manager','reviewer','auditor') AND organisation.status = 'active')`,
     values: [actor.memberId, actor.uid, actor.tenantId],
   };
 }
 
 export async function loadPortalProfile(database: D1Database, actor: ProfileActor): Promise<PortalWorkspaceProfile> {
-  const guard = activeGuard(actor);
+  const guard = portalProfileActiveGuard(actor);
   const row = await database.prepare(`SELECT profile.display_name, profile.theme_key, profile.colour_mode
     FROM (SELECT 1) current_actor LEFT JOIN portal_workspace_profiles profile ON profile.workspace = ? AND profile.tenant_id = ? AND profile.member_id = ?
     WHERE ${guard.sql}`).bind(actor.workspace, actor.tenantId, actor.memberId, ...guard.values)
@@ -40,7 +40,7 @@ export async function loadPortalProfile(database: D1Database, actor: ProfileActo
 }
 
 export async function savePortalProfile(database: D1Database, actor: ProfileActor, profile: PortalWorkspaceProfile) {
-  const guard = activeGuard(actor);
+  const guard = portalProfileActiveGuard(actor);
   // The personal display label never changes the authoritative membership or named-owner identity.
   const result = await database.prepare(`INSERT INTO portal_workspace_profiles (workspace, tenant_id, member_id, display_name, theme_key, colour_mode, updated_at)
     SELECT ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}

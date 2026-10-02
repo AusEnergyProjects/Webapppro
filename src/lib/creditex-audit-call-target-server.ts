@@ -1,6 +1,7 @@
 import { ComplianceAccessError, isComplianceRole, type ComplianceIdentity } from "./compliance-access-server";
 import { CREDITEX_PARTNER_ORGANISATION_CODE } from "./trade-compliance-intent";
 import { normalizeAuditCallPhone } from "./creditex-audit-calls";
+import { creditexPermissionSql } from "./creditex-permissions";
 
 export type AuditCallActor = Pick<ComplianceIdentity, "organisationId" | "membershipId" | "uid" | "role">;
 export type AuditCallTargetInput = { caseId?: string; jobIntentId?: string };
@@ -40,7 +41,7 @@ async function currentActor(database: D1Database, actor: Pick<AuditCallActor, "o
     FROM compliance_users member
     JOIN compliance_organisations organisation ON organisation.id = member.organisation_id
     WHERE member.id = ? AND member.firebase_uid = ? AND member.organisation_id = ?
-      AND member.status = 'active' AND organisation.status = 'active'`)
+      AND member.status = 'active' AND organisation.status = 'active' AND ${creditexPermissionSql("customers")}`)
     .bind(actor.membershipId, actor.uid, actor.organisationId)
     .first<{ role: string; organisation_code: string }>();
   if (!row || !isComplianceRole(row.role) || row.organisation_code !== CREDITEX_PARTNER_ORGANISATION_CODE) throw unavailable();

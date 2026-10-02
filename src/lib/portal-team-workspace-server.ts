@@ -1,6 +1,7 @@
 import { getD1 } from "../../db";
 import { requireAdminIdentity } from "./admin-server";
 import { requireComplianceAccess } from "./compliance-access-server";
+import { creditexPermissionSql } from "./creditex-permissions";
 import {
   PortalTeamError, portalDueDate, portalIdentifier, portalRequestId, portalText,
   type PortalWorkspace, type PortalPeople, type PortalMessageList, type PortalTask, type PortalTaskList,
@@ -8,7 +9,7 @@ import {
 
 export type PortalTeamAccess = { workspace: PortalWorkspace; scopeId: string; memberId: string; uid: string };
 type MemberRow = { id: string; uid: string; name: string; role: string; scope_id: string };
-type MessageRow = { id: string; body: string; sender_id: string; sender_name: string; recipient_id: string; created_at: string };
+type MessageRow = { id: string; body: string; sender_id: string; sender_name: string; avatar_revision?: string; recipient_id: string; created_at: string };
 type TaskRow = {
   id: string; title: string; detail: string; assignee_id: string; assignee_name: string; creator_id: string;
   creator_name: string; status: "open" | "done"; due_on: string; created_at: string; updated_at: string;
@@ -23,33 +24,37 @@ export async function requirePortalTeamAccess(request: Request, workspace: Porta
     const actor = await requireAdminIdentity(request);
     return { workspace, scopeId: "platform", memberId: actor.adminId, uid: actor.uid };
   }
-  const actor = await requireComplianceAccess(request, { claimPendingInvitation: false });
+  const actor = await requireComplianceAccess(request, { claimPendingInvitation: false, requiredAnyPermission: ["messages", "tasks"] });
   return { workspace, scopeId: actor.organisationId, memberId: actor.membershipId, uid: actor.uid };
 }
 
 // This CTE deliberately uses the portal's own memberships, never trade-business identity.
 // Every query repeats active membership and organisation checks, including the mutation itself.
-function members(access: PortalTeamAccess) {
+function members(access: PortalTeamAccess, permission: "messages" | "tasks" | "either" = "tasks") {
+  const grants = permission === "either" ? `(${creditexPermissionSql("messages", "m")} OR ${creditexPermissionSql("tasks", "m")})` : creditexPermissionSql(permission, "m");
   return access.workspace === "admin"
     ? `WITH members AS (SELECT id,firebase_uid uid,display_name name,role,'platform' scope_id FROM admin_users
         WHERE status='active' AND role IN ('owner','admin','reviewer','support') AND firebase_uid<>'' AND firebase_uid NOT LIKE 'pending:%')`
     : `WITH members AS (SELECT m.id,m.firebase_uid uid,m.display_name name,m.role,m.organisation_id scope_id
         FROM compliance_users m JOIN compliance_organisations o ON o.id=m.organisation_id AND o.status='active'
-        WHERE m.status='active' AND m.role IN ('admin','case_manager','reviewer','auditor') AND m.firebase_uid<>'' AND m.firebase_uid NOT LIKE 'pending:%')`;
+        WHERE m.status='active' AND m.role IN ('admin','case_manager','reviewer','auditor') AND m.firebase_uid<>'' AND m.firebase_uid NOT LIKE 'pending:%' AND ${grants})`;
 }
 function actorJoin() { return "JOIN members actor ON actor.id=? AND actor.uid=? AND actor.scope_id=?"; }
 function actorBindings(access: PortalTeamAccess) { return [access.memberId, access.uid, access.scopeId]; }
-async function currentActor(access: PortalTeamAccess, db: D1Database) {
-  const actor = await db.prepare(`${members(access)} SELECT * FROM members WHERE id=? AND uid=? AND scope_id=?`)
+async function currentActor(access: PortalTeamAccess, db: D1Database, permission: "messages" | "tasks" | "either" = "tasks") {
+  const actor = await db.prepare(`${members(access, permission)} SELECT * FROM members WHERE id=? AND uid=? AND scope_id=?`)
     .bind(...actorBindings(access)).first<MemberRow>();
   if (!actor) throw new PortalTeamError(403, "Your workspace access changed. Refresh before continuing.");
   return actor;
 }
-export async function portalPeople(access: PortalTeamAccess, search: string, db: D1Database = getD1()): Promise<PortalPeople> {
-  const actor = await currentActor(access, db); const query = portalText(search, 100);
-  const rows = await db.prepare(`${members(access)} SELECT person.id,person.name,person.role FROM members person ${actorJoin()}
-    WHERE person.scope_id=actor.scope_id AND (?='' OR instr(lower(person.name),lower(?))>0)
-    ORDER BY person.id=actor.id DESC,person.name,person.id LIMIT 31`).bind(...actorBindings(access), query, query).all<{ id: string; name: string; role: string }>();
+export async function portalPeople(access: PortalTeamAccess, search: string, db: D1Database = getD1(), memberId = "", purpose = "either"): Promise<PortalPeople> {
+  if (purpose !== "messages" && purpose !== "tasks" && purpose !== "either") throw new PortalTeamError(400, "Choose a valid team directory.");
+  const actor = await currentActor(access, db, purpose); const query = portalText(search, 100);
+  const member = memberId ? portalIdentifier(memberId) : "";
+  const rows = await db.prepare(`${members(access, purpose)} SELECT person.id,COALESCE(NULLIF(profile.display_name,''),person.name) name,person.role,COALESCE(profile.avatar_revision,'') avatarRevision FROM members person ${actorJoin()}
+    LEFT JOIN portal_workspace_profiles profile ON profile.workspace=? AND profile.tenant_id=${access.workspace === "admin" ? "'operations'" : "person.scope_id"} AND profile.member_id=person.id
+    WHERE person.scope_id=actor.scope_id AND (?='' OR person.id=?) AND (?='' OR instr(lower(COALESCE(NULLIF(profile.display_name,''),person.name)),lower(?))>0)
+    ORDER BY person.id=actor.id DESC,person.name,person.id LIMIT 31`).bind(...actorBindings(access), access.workspace, member, member, query, query).all<{ id: string; name: string; role: string; avatarRevision: string }>();
   return { people: rows.results.slice(0, 30), hasMore: rows.results.length > 30, memberId: actor.id, canViewTeam: ["owner", "admin"].includes(actor.role) };
 }
 
@@ -62,12 +67,13 @@ function messageCursor(value: string) {
   return { createdAt, id: portalRequestId(id) };
 }
 export async function portalMessages(access: PortalTeamAccess, peerId: string, before = "", db: D1Database = getD1()): Promise<PortalMessageList> {
-  await currentActor(access, db); const peer = portalIdentifier(peerId); const cursor = messageCursor(before);
-  const participant = await db.prepare(`${members(access)} SELECT person.id FROM members person ${actorJoin()}
+  await currentActor(access, db, "messages"); const peer = portalIdentifier(peerId); const cursor = messageCursor(before);
+  const participant = await db.prepare(`${members(access, "messages")} SELECT person.id FROM members person ${actorJoin()}
     WHERE person.id=? AND person.scope_id=actor.scope_id`).bind(...actorBindings(access), peer).first();
   if (!participant || peer === access.memberId) throw new PortalTeamError(404, "This conversation is no longer available.");
-  const rows = await db.prepare(`${members(access)} SELECT m.* FROM portal_team_messages m ${actorJoin()}
+  const rows = await db.prepare(`${members(access, "messages")} SELECT m.*,profile.avatar_revision FROM portal_team_messages m ${actorJoin()}
     JOIN members peer ON peer.id=? AND peer.scope_id=actor.scope_id
+    LEFT JOIN portal_workspace_profiles profile ON profile.workspace=m.workspace AND profile.tenant_id=${access.workspace === "admin" ? "'operations'" : "m.scope_id"} AND profile.member_id=m.sender_id
     WHERE m.workspace=? AND m.scope_id=actor.scope_id AND
       ((m.sender_id=actor.id AND m.recipient_id=peer.id) OR (m.sender_id=peer.id AND m.recipient_id=actor.id))
       AND (?='' OR m.created_at<? OR (m.created_at=? AND m.id<?))
@@ -75,18 +81,18 @@ export async function portalMessages(access: PortalTeamAccess, peerId: string, b
     .bind(...actorBindings(access), peer, access.workspace, cursor.createdAt, cursor.createdAt, cursor.createdAt, cursor.id).all<MessageRow>();
   const selected = rows.results.slice(0, 50); const oldest = selected.at(-1);
   return { memberId: access.memberId, hasMore: rows.results.length > 50, before: oldest ? `${oldest.created_at}|${oldest.id}` : "",
-    messages: selected.reverse().map(row => ({ id: row.id, body: row.body, senderId: row.sender_id, senderName: row.sender_name, recipientId: row.recipient_id, createdAt: row.created_at })) };
+    messages: selected.reverse().map(row => ({ id: row.id, body: row.body, senderId: row.sender_id, senderName: row.sender_name, senderAvatarRevision: row.avatar_revision || "", recipientId: row.recipient_id, createdAt: row.created_at })) };
 }
 export async function sendPortalMessage(access: PortalTeamAccess, input: Record<string, unknown>, db: D1Database = getD1()) {
-  await currentActor(access, db);
+  await currentActor(access, db, "messages");
   const id = portalRequestId(input.id); const recipient = portalIdentifier(input.recipientId); const body = portalText(input.body, 4000, true);
   if (recipient === access.memberId) throw new PortalTeamError(400, "Choose a teammate to message.");
   const now = new Date().toISOString();
-  await db.prepare(`${members(access)} INSERT INTO portal_team_messages(id,workspace,scope_id,sender_id,recipient_id,sender_uid,sender_name,body,created_at)
+  await db.prepare(`${members(access, "messages")} INSERT INTO portal_team_messages(id,workspace,scope_id,sender_id,recipient_id,sender_uid,sender_name,body,created_at)
     SELECT ?,?,actor.scope_id,actor.id,person.id,actor.uid,actor.name,?,? FROM members person ${actorJoin()}
     WHERE person.id=? AND person.scope_id=actor.scope_id ON CONFLICT(id) DO NOTHING`)
     .bind(id, access.workspace, body, now, ...actorBindings(access), recipient).run();
-  const row = await db.prepare(`${members(access)} SELECT m.* FROM portal_team_messages m ${actorJoin()}
+  const row = await db.prepare(`${members(access, "messages")} SELECT m.* FROM portal_team_messages m ${actorJoin()}
     JOIN members peer ON peer.id=m.recipient_id AND peer.scope_id=actor.scope_id
     WHERE m.id=? AND m.workspace=? AND m.scope_id=actor.scope_id AND m.sender_id=actor.id AND m.sender_uid=actor.uid`)
     .bind(...actorBindings(access), id, access.workspace).first<MessageRow>();
@@ -111,15 +117,16 @@ async function currentTask(access: PortalTeamAccess, id: string, db: D1Database)
   if (!task) throw new PortalTeamError(404, "This task is no longer available to you.");
   return task;
 }
-export async function portalTasks(access: PortalTeamAccess, options: { view?: string; status?: string; page?: string }, db: D1Database = getD1()): Promise<PortalTaskList> {
+export async function portalTasks(access: PortalTeamAccess, options: { view?: string; status?: string; page?: string; taskId?: string }, db: D1Database = getD1()): Promise<PortalTaskList> {
   const actor = await currentActor(access, db); const canViewTeam = ["owner", "admin"].includes(actor.role);
   const view = options.view || "mine"; const status = options.status || "open"; const requestedPage = Number(options.page || "1");
   if (!["mine", "assigned", "team"].includes(view) || !["open", "done", "all"].includes(status)
     || !Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage > 100000) throw new PortalTeamError(400, "Choose a valid task view.");
   if (view === "team" && !canViewTeam) throw new PortalTeamError(403, "Only workspace administrators can view all team tasks.");
+  const focusedTask = options.taskId ? portalIdentifier(options.taskId) : "";
   const filter = `t.workspace=? AND t.scope_id=actor.scope_id AND ${visible} AND
-    (?='all' OR t.status=?) AND ((?='mine' AND t.assignee_id=actor.id) OR (?='assigned' AND t.creator_id=actor.id) OR (?='team' AND ${manager}))`;
-  const bindings = [...actorBindings(access), access.workspace, status, status, view, view, view];
+    (?='all' OR t.status=?) AND (?='' OR t.id=?) AND (?<>'' OR (?='mine' AND t.assignee_id=actor.id) OR (?='assigned' AND t.creator_id=actor.id) OR (?='team' AND ${manager}))`;
+  const bindings = [...actorBindings(access), access.workspace, status, status, focusedTask, focusedTask, focusedTask, view, view, view];
   const count = await db.prepare(`${members(access)} SELECT count(*) total ${taskFrom()} WHERE ${filter}`).bind(...bindings).first<{ total: number }>();
   const total = Number(count?.total || 0); const totalPages = Math.max(1, Math.ceil(total / 25)); const page = Math.min(requestedPage, totalPages);
   const rows = await db.prepare(`${members(access)} SELECT ${taskSelection} ${taskFrom()} WHERE ${filter}

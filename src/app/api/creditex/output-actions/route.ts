@@ -20,7 +20,7 @@ async function handle(request: Request) {
   }
   try {
     const database = getD1();
-    const member = await requireComplianceAccess(request, {
+    const member = await requireComplianceAccess(request, { requiredPermission: "governance",
       allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
     }, database);
     return handleCreditexOutputActionRequest(request, database, {

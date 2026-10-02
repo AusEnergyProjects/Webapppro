@@ -2,6 +2,7 @@
 
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { CREDITEX_PERMISSION_GROUPS, creditexRolePermissions, resolveCreditexPermissions, type CreditexPermission } from "@/lib/creditex-permissions";
 import styles from "./CreditexOperationsWorkspace.module.css";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
@@ -12,6 +13,7 @@ type WorkspaceSession = {
   role: ComplianceRole;
   canConfirmNamedOwner?: boolean;
   namedOwnerConfirmed?: boolean;
+  permissions?: CreditexPermission[];
   organisation: {
     code: string;
     legalName: string;
@@ -26,6 +28,7 @@ type AccessMember = {
   role: string;
   status: string;
   lastLoginAt: string;
+  permissions: CreditexPermission[];
 };
 
 type AccessInvitation = {
@@ -36,6 +39,7 @@ type AccessInvitation = {
   status: string;
   expiresAt: string;
   createdAt: string;
+  permissions: CreditexPermission[];
 };
 
 type AccessSnapshot = {
@@ -119,6 +123,7 @@ function parseAccess(value: unknown): AccessSnapshot {
       role: text(item, ["role"]),
       status: text(item, ["status"]),
       lastLoginAt: text(item, ["lastLoginAt", "last_login_at"]),
+      permissions: resolveCreditexPermissions(text(item, ["role"]), item.permissions),
     })),
     invitations: records(first(source, ["invitations"])).map((item) => ({
       id: text(item, ["id"]),
@@ -128,6 +133,7 @@ function parseAccess(value: unknown): AccessSnapshot {
       status: text(item, ["status"]),
       expiresAt: text(item, ["expiresAt", "expires_at"]),
       createdAt: text(item, ["createdAt", "created_at"]),
+      permissions: resolveCreditexPermissions(text(item, ["role"]), item.permissions),
     })),
   };
 }
@@ -181,6 +187,29 @@ function StatusPill({ value }: { value: string }) {
   );
 }
 
+function PermissionFields({ role, permissions, disabled, onChange }: {
+  role: string; permissions: CreditexPermission[]; disabled: boolean; onChange: (permissions: CreditexPermission[]) => void;
+}) {
+  const allowed = creditexRolePermissions(role);
+  return <div className={styles.permissionFields}>
+    <p>{role === "admin" ? "Administrators have full workspace access, including team management. Choose another role to customise permissions."
+      : "Choose the tools this person needs. Their role, assigned jobs and independent approval requirements still apply."}</p>
+    {CREDITEX_PERMISSION_GROUPS.map(group => <fieldset key={group.label} disabled={disabled || role === "admin"}>
+      <legend>{group.label}</legend>
+      <div className={styles.permissionGrid}>{group.permissions.map(permission => <label className={styles.permissionOption} key={permission.key}>
+        <input type="checkbox" checked={permissions.includes(permission.key)} disabled={!allowed.includes(permission.key)}
+          onChange={event => {
+            const next = new Set(permissions);
+            if (event.target.checked) { next.add(permission.key); if (permission.key === "audit") next.add("jobs"); }
+            else { next.delete(permission.key); if (permission.key === "jobs") next.delete("audit"); }
+            onChange(allowed.filter(key => next.has(key)));
+          }} />
+        <span><strong>{permission.label}</strong><small>{allowed.includes(permission.key) ? permission.description : "Not available for this role."}</small></span>
+      </label>)}</div>
+    </fieldset>)}
+  </div>;
+}
+
 export function CreditexTeamAccess({ session, onSessionChanged }: { session: WorkspaceSession; onSessionChanged?: () => Promise<void> }) {
   const [access, setAccess] = useState<AccessSnapshot>(EMPTY_ACCESS);
   const [loading, setLoading] = useState(true);
@@ -218,12 +247,13 @@ function AccessView({
     displayName: "",
     email: "",
     role: "reviewer",
+    permissions: creditexRolePermissions("reviewer"),
   });
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
   const [memberDrafts, setMemberDrafts] = useState<
-    Record<string, { role: string; status: string }>
+    Record<string, { role: string; status: string; permissions: CreditexPermission[] }>
   >({});
 
   async function accessAction(
@@ -262,7 +292,7 @@ function AccessView({
       `Invitation ready for ${form.displayName}. Give them the Creditex sign-in link and ask them to use ${form.email}. No invitation email was sent.`,
     );
     if (created) {
-      setForm({ displayName: "", email: "", role: "reviewer" });
+      setForm({ displayName: "", email: "", role: "reviewer", permissions: creditexRolePermissions("reviewer") });
     }
   }
 
@@ -275,6 +305,7 @@ function AccessView({
     const draft = memberDrafts[member.id] || {
       role: member.role,
       status: member.status,
+      permissions: member.permissions,
     };
     if (
       !window.confirm(
@@ -285,6 +316,7 @@ function AccessView({
       memberId: member.id,
       role: draft.role,
       status: draft.status,
+      permissions: draft.permissions,
     }, "The named member access record was updated.");
     if (updated) {
       setMemberDrafts((current) => {
@@ -312,7 +344,7 @@ function AccessView({
         <div>
           <h3 id="operations-access-title">Team access</h3>
           <p>
-            Invite your team to edit and preview activity forms using their own accounts.
+            Invite people, choose their tools and control what each team member can do.
           </p>
         </div>
         {session.role === "admin" && (
@@ -334,9 +366,9 @@ function AccessView({
       </div>}
       {session.namedOwnerConfirmed && <div className={styles.accessPolicy}><strong>James Morris · Creditex Administrator</strong><p>Your existing {session.email} login has named manager access, including form editing and team access management.</p></div>}
       <div className={styles.accessPolicy}>
-        <strong>Ready to edit in three steps</strong>
-        <ol><li>Invite a named colleague as Reviewer, Case manager or Administrator below.</li><li>Give them <a href="/creditex/compliance" target="_blank" rel="noreferrer">the Creditex sign-in link</a>. They can use Continue with Google or an existing TLink login with the exact invited email, then complete the account security steps shown.</li><li>They can open Activity forms, choose Edit, test their changes in the phone and save the master.</li></ol>
-        <p>Reviewer is the default for form editors. Auditors can preview forms but cannot publish changes. Official source approvals remain separate.</p>
+        <strong>Individual accounts, clear access</strong>
+        <p>Choose a role, then adjust the permissions below. Give the person <a href="/creditex/compliance" target="_blank" rel="noreferrer">the Creditex sign-in link</a> and ask them to use their invited email. No invitation email is sent automatically.</p>
+        <p>Access stays limited to their authorised jobs and organisation. Permissions never bypass independent compliance approvals.</p>
       </div>
       <details className={styles.accessPolicy}>
         <summary>Initial administrator setup</summary>
@@ -406,13 +438,14 @@ function AccessView({
             />
           </label>
           <label>
-            Role
+            Role preset
             <select
               value={form.role}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
                   role: event.target.value,
+                  permissions: creditexRolePermissions(event.target.value),
                 }))}
             >
               <option value="case_manager">Case manager</option>
@@ -421,10 +454,11 @@ function AccessView({
               <option value="admin">Administrator</option>
             </select>
           </label>
+          <div className={styles.formWide}><PermissionFields role={form.role} permissions={form.permissions} disabled={Boolean(busy)} onChange={permissions => setForm(current => ({ ...current, permissions }))} /></div>
           <button
             className={styles.primaryAction}
             type="submit"
-            disabled={busy === "create_invitation"}
+            disabled={Boolean(busy) || loading}
           >
             {busy === "create_invitation"
               ? "Creating invitation..."
@@ -441,9 +475,11 @@ function AccessView({
                 const draft = memberDrafts[member.id] || {
                   role: member.role,
                   status: member.status,
+                  permissions: member.permissions,
                 };
                 const changed = draft.role !== member.role
-                  || draft.status !== member.status;
+                  || draft.status !== member.status
+                  || JSON.stringify(draft.permissions) !== JSON.stringify(member.permissions);
                 const bootstrapMailbox =
                   member.email.toLowerCase()
                   === "info@ausenergyassessments.com";
@@ -460,7 +496,7 @@ function AccessView({
                     </small>
                     <div className={styles.memberAccessControls}>
                       <label>
-                        Role
+                        Role preset
                         <select
                           value={draft.role}
                           onChange={(event) =>
@@ -469,6 +505,7 @@ function AccessView({
                               [member.id]: {
                                 ...draft,
                                 role: event.target.value,
+                                permissions: creditexRolePermissions(event.target.value),
                               },
                             }))}
                         >
@@ -495,10 +532,14 @@ function AccessView({
                           <option value="suspended">Suspended</option>
                         </select>
                       </label>
+                      <details className={styles.memberPermissions}>
+                        <summary>Permissions ({draft.permissions.length} of {creditexRolePermissions(draft.role).length})</summary>
+                        <PermissionFields role={draft.role} permissions={draft.permissions} disabled={Boolean(busy)} onChange={permissions => setMemberDrafts(current => ({ ...current, [member.id]: { ...draft, permissions } }))} />
+                      </details>
                       <button
                         className={styles.inlineAction}
                         type="button"
-                        disabled={!changed || busy === "update_member_access"}
+                        disabled={!changed || Boolean(busy) || loading}
                         onClick={() => void updateMemberAccess(member)}
                       >
                         Apply access change
@@ -526,6 +567,7 @@ function AccessView({
                   </span>
                   <p>{invitation.email} | {readable(invitation.role)}</p>
                   <small>Expires {dateTime(invitation.expiresAt)}</small>
+                  <details className={styles.memberPermissions}><summary>Permissions ({invitation.permissions.length})</summary><PermissionFields role={invitation.role} permissions={invitation.permissions} disabled onChange={() => {}} /></details>
                   {invitation.status === "pending" && (
                     <button
                       className={styles.inlineAction}

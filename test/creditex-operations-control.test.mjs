@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as permissions from "../src/lib/creditex-permissions.ts";
 import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 import * as namedOwner from "../src/lib/creditex-named-owner-server.ts";
@@ -143,6 +144,7 @@ function loadTypescriptModule(path, mocks = {}) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "./creditex-permissions" || specifier === "./creditex-permissions.ts") return permissions;
     if (specifier === "./firebase-mfa") return firebaseMfa;
     if (specifier === "./creditex-named-owner-server") return namedOwner;
     if (specifier === "./myob-security-audit") return myobSecurityAudit;
@@ -305,6 +307,7 @@ function databaseWithComplianceOperations({ installGuards = true } = {}) {
   applyStatements(database, dataforceMigration);
   applyStatements(database, acceptedHandoffMigration);
   applyStatements(database, operationsMigration);
+  applyStatements(database, read("../drizzle/0241_creditex_member_permissions.sql"));
   applyStatements(database, custodyMigration);
   applyStatements(database, tradeComplianceMigration);
   database.exec(multiActivitySchemaColumnsMigration);
@@ -1394,7 +1397,8 @@ test("ordinary Creditex administrators cannot confer governance identity", async
 test("team invitations reuse identical pending requests without duplicate audit or membership", async () => {
   const database = databaseWithComplianceOperations();
   const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
-  const actor = { uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
+  seedComplianceUser(database, { id: "bootstrap-admin", firebaseUid: "bootstrap-admin", role: "admin" });
+  const actor = { membershipId: "bootstrap-admin", uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
   const request = { action: "create_invitation", displayName: "Jamie Smith", email: "Jamie.Smith@example.com", role: "reviewer" };
   const first = await operations.executeCreditexAccessAction(testD1(database), actor, request);
   const repeated = await operations.executeCreditexAccessAction(testD1(database), actor, request);
@@ -1403,18 +1407,72 @@ test("team invitations reuse identical pending requests without duplicate audit 
   assert.equal(repeated.reused, true);
   assert.equal(repeated.delivery, "not_sent");
   assert.equal(repeated.signInUrl, "/creditex/compliance");
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_users").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_users").get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_audit_events WHERE event_type = 'membership.invitation_created'").get().count, 1);
   await assert.rejects(operations.executeCreditexAccessAction(testD1(database), actor, { ...request, role: "admin" }),
     (error) => error.code === "CREDITEX_INVITATION_EXISTS");
   assert.equal(database.prepare("SELECT role FROM compliance_invitations WHERE id = ?").get(first.id).role, "reviewer");
 });
 
+test("custom permissions are persisted on the named invitation and claimed membership", async t => {
+  const database = databaseWithComplianceOperations(); t.after(() => database.close());
+  seedComplianceUser(database, { id: "admin", firebaseUid: "admin", role: "admin" });
+  const d1 = testD1(database), actor = { membershipId: "admin", uid: "admin", role: "admin", organisationId: "org_creditex_au" };
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "reviewer", permissions: ["jobs", "calculator"] };
+  const invitation = await operations.executeCreditexAccessAction(d1, actor, request);
+  assert.deepEqual(JSON.parse(database.prepare("SELECT permissions_json FROM compliance_invitations WHERE id=?").get(invitation.id).permissions_json), request.permissions);
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, permissions: ["jobs"] }), e => e.code === "CREDITEX_INVITATION_EXISTS");
+  const access = loadTypescriptModule("../src/lib/compliance-access-server.ts", { "../../db": {}, "./firebase-server": {}, "./creditex-schema-guards": {} });
+  const firebase = { uid: "jamie", email: request.email, emailVerified: true };
+  await access.claimPendingComplianceInvitation(firebase, d1);
+  const row = database.prepare("SELECT * FROM compliance_users WHERE firebase_uid='jamie'").get();
+  assert.deepEqual(JSON.parse(row.permissions_json), request.permissions);
+  assert.equal(row.governance_identity_verified, 0);
+  const overview = await operations.loadCreditexAccess(d1, actor.organisationId);
+  assert.deepEqual(overview.members.find(member => member.id === row.id).permissions, request.permissions);
+  await operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: row.id, role: "reviewer", status: "active", permissions: ["tasks"] });
+  assert.deepEqual(JSON.parse(database.prepare("SELECT permissions_json FROM compliance_users WHERE id=?").get(row.id).permissions_json), ["tasks"]);
+  // An older client changing only the status must preserve custom permissions.
+  await operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: row.id, role: "reviewer", status: "suspended" });
+  assert.deepEqual(JSON.parse(database.prepare("SELECT permissions_json FROM compliance_users WHERE id=?").get(row.id).permissions_json), ["tasks"]);
+});
+
+test("permission changes reject escalation and preserve the final administrator", async t => {
+  const database = databaseWithComplianceOperations(); t.after(() => database.close());
+  seedComplianceUser(database, { id: "admin", firebaseUid: "admin", role: "admin" });
+  const d1 = testD1(database), actor = { membershipId: "admin", uid: "admin", role: "admin", organisationId: "org_creditex_au" };
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "auditor" };
+  for (const requested of [["forms"], ["team_access"], ["audit"], ["jobs", "jobs"], ["invalid"]]) {
+    await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, permissions: requested }), e => e.code === "CREDITEX_PERMISSIONS_INVALID");
+  }
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, role: "admin", permissions: ["jobs"] }), e => e.code === "CREDITEX_ADMIN_PERMISSIONS_REQUIRED");
+  await assert.rejects(operations.executeCreditexAccessAction(d1, { ...actor, permissions: [] }, request), e => e.code === "CREDITEX_ROLE_REQUIRED");
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: "admin", role: "reviewer", status: "active" }), e => e.code === "CREDITEX_FINAL_ADMIN_REQUIRED");
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_invitations WHERE email=?").get(request.email).n, 0);
+});
+
+test("an access change rechecks the administrator inside the write transaction", async t => {
+  const database = databaseWithComplianceOperations(); t.after(() => database.close());
+  seedComplianceUser(database, { id: "admin", firebaseUid: "admin", role: "admin" });
+  seedComplianceUser(database, { id: "backup", firebaseUid: "backup", role: "admin" });
+  const d1 = testD1(database), actor = { membershipId: "admin", uid: "admin", role: "admin", organisationId: "org_creditex_au" };
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "reviewer", permissions: ["jobs"] };
+  const originalBatch = d1.batch;
+  d1.batch = async statements => { database.prepare("UPDATE compliance_users SET status='suspended' WHERE id='admin'").run(); return originalBatch(statements); };
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, request), /verified/);
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_invitations WHERE email=?").get(request.email).n, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_audit_events WHERE event_type='membership.invitation_created'").get().n, 0);
+});
+
 test("expired team invitation can be renewed without deleting its history", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-24T00:00:00.000Z") });
   const database = databaseWithComplianceOperations();
   const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
-  const actor = { uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
+  seedComplianceUser(database, { id: "bootstrap-admin", firebaseUid: "bootstrap-admin", role: "admin" });
+  const actor = { membershipId: "bootstrap-admin", uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
   const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "reviewer" };
   const first = await operations.executeCreditexAccessAction(testD1(database), actor, request);
   t.mock.timers.setTime(new Date("2026-10-02T00:00:00.000Z").getTime());
@@ -1429,7 +1487,8 @@ test("expired team invitation can be renewed without deleting its history", asyn
 test("a concurrent invitation retry returns the winning record with one audit", async () => {
   const database = databaseWithComplianceOperations();
   const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
-  const actor = { uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
+  seedComplianceUser(database, { id: "bootstrap-admin", firebaseUid: "bootstrap-admin", role: "admin" });
+  const actor = { membershipId: "bootstrap-admin", uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
   const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "reviewer" };
   const d1 = testD1(database);
   let winner;
@@ -1450,7 +1509,8 @@ test("a concurrent invitation retry returns the winning record with one audit", 
 test("team invitations retain named-user roles and organisation boundaries", async () => {
   const database = databaseWithComplianceOperations();
   const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
-  const actor = { uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
+  seedComplianceUser(database, { id: "bootstrap-admin", firebaseUid: "bootstrap-admin", role: "admin" });
+  const actor = { membershipId: "bootstrap-admin", uid: "bootstrap-admin", role: "admin", organisationId: "org_creditex_au" };
   const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "reviewer" };
   await assert.rejects(operations.executeCreditexAccessAction(testD1(database), { ...actor, role: "reviewer" }, request),
     (error) => error.code === "CREDITEX_ROLE_REQUIRED");

@@ -5,6 +5,7 @@ import type { User } from "firebase/auth";
 import { DEFAULT_PORTAL_PROFILE, portalProfileInput, type PortalWorkspace, type PortalWorkspaceProfile } from "@/lib/portal-workspace-profile";
 import { TRADE_BRAND_THEME_KEYS, TRADE_BRAND_THEME_OPTIONS } from "@/lib/trade-business-branding";
 import styles from "./PortalWorkspacePreferences.module.css";
+import { PortalProfileAvatar } from "./PortalProfileAvatar";
 
 type Options = { workspace: PortalWorkspace; user: User | null; currentDisplayName: string; onProfileChanged?: (profile: PortalWorkspaceProfile) => void };
 export type PortalWorkspacePreferencesController = ReturnType<typeof usePortalWorkspacePreferences>;
@@ -72,7 +73,7 @@ export function usePortalWorkspacePreferences({ workspace, user, currentDisplayN
     "--portal-success-bg": night ? "#123c31" : "#edf9f1", "--portal-success-ink": night ? "#a0e8bd" : "#1b6441", "--portal-success-line": night ? "#39775a" : "#b7dec6",
     "--portal-error-bg": night ? "#452629" : "#fff1f0", "--portal-error-ink": night ? "#ffb9b2" : "#983b35", "--portal-error-line": night ? "#925054" : "#e7b5b0",
     "--portal-warning-bg": night ? "#3d331e" : "#fff8e5", "--portal-warning-ink": night ? "#f0d397" : "#795818", "--portal-warning-line": night ? "#857043" : "#e2d09d" };
-  return { profile, loading, savingProfile, error, saveProfile, rootProps: { "data-portal-theme": profile.themeKey, "data-portal-mode": profile.colourMode, style } };
+  return { workspace, user, profile, loading, savingProfile, error, saveProfile, rootProps: { "data-portal-theme": profile.themeKey, "data-portal-mode": profile.colourMode, style } };
 }
 
 export function PortalWorkspacePreferences({ controller }: { controller: PortalWorkspacePreferencesController }) {
@@ -89,9 +90,10 @@ export function PortalWorkspacePreferences({ controller }: { controller: PortalW
     setSaving(false);
   }
   return <section className={styles.panel} aria-labelledby="portal-profile-heading">
-    <header><span>Make it yours</span><h1 id="portal-profile-heading">Profile & appearance</h1><p>Choose your display name, workspace colours and day or night appearance.</p></header>
+    <header><span>Make it yours</span><h1 id="portal-profile-heading">My profile</h1><p>Choose your team photo, display name, workspace colours and appearance.</p></header>
     {error && <p role="alert" className={styles.error}>{error}</p>}
     <form onSubmit={(event) => void submit(event)}>
+      {controller.user && <PortalProfileAvatar workspace={controller.workspace} user={controller.user} name={draft.displayName} editable />}
       <label className={styles.name}>Your display name<input value={draft.displayName} maxLength={120} required autoComplete="name" onChange={(event) => setDraft((value) => ({ ...value, displayName: event.target.value }))} /><small>Your account identity and permissions stay managed by your workspace administrator.</small></label>
       <fieldset><legend>Workspace colours</legend><div className={styles.palettes}>{TRADE_BRAND_THEME_KEYS.map((key) => <label key={key} className={draft.themeKey === key ? styles.selected : ""}><input type="radio" name="portal-theme" value={key} checked={draft.themeKey === key} onChange={() => setDraft((value) => ({ ...value, themeKey: key }))} /><span aria-hidden="true" style={{ background: TRADE_BRAND_THEME_OPTIONS[key].gradient }} /><strong>{TRADE_BRAND_THEME_OPTIONS[key].label}</strong></label>)}</div></fieldset>
       <fieldset><legend>Appearance</legend><div className={styles.modes}>{(["day", "night"] as const).map((mode) => <label key={mode}><input type="radio" name="portal-mode" checked={draft.colourMode === mode} onChange={() => setDraft((value) => ({ ...value, colourMode: mode }))} />{mode === "day" ? "Day" : "Night"}</label>)}</div></fieldset>

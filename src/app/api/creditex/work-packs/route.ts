@@ -21,6 +21,7 @@ async function handle(request: Request) {
   try {
     const database = getD1();
     const member = await requireComplianceAccess(request, {
+      ...(request.method === "GET" ? { requiredAnyPermission: ["jobs", "forms", "governance"] as const } : { requiredPermission: "forms" as const }),
       allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
     }, database);
     return handleCreditexWorkPackGovernanceRequest(request, database, {

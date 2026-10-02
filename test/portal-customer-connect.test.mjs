@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { customerEmailHref, customerPhoneHref } from "../src/lib/portal-customer-connect.ts";
+import * as permissions from '../src/lib/creditex-permissions.ts';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 function load(path, require) {
@@ -17,7 +18,7 @@ function fixture(t) {
   const sqlite = new DatabaseSync(":memory:"); t.after(() => sqlite.close());
   sqlite.exec(`CREATE TABLE admin_users(id TEXT PRIMARY KEY,firebase_uid TEXT,role TEXT,status TEXT);
     CREATE TABLE compliance_organisations(id TEXT PRIMARY KEY,organisation_code TEXT,status TEXT);
-    CREATE TABLE compliance_users(id TEXT PRIMARY KEY,organisation_id TEXT,firebase_uid TEXT,role TEXT,status TEXT);
+    CREATE TABLE compliance_users(id TEXT PRIMARY KEY,organisation_id TEXT,firebase_uid TEXT,role TEXT,status TEXT,permissions_json TEXT);
     CREATE TABLE compliance_case_assignments(organisation_id TEXT,case_id TEXT,compliance_user_id TEXT,status TEXT);
     CREATE TABLE compliance_cases(id TEXT PRIMARY KEY,organisation_id TEXT,installer_uid TEXT,work_order_id TEXT,compliance_intent_id TEXT);
     CREATE TABLE trade_work_order_compliance_intents(id TEXT PRIMARY KEY,compliance_organisation_id TEXT,installer_uid TEXT,work_order_id TEXT,compliance_case_id TEXT,status TEXT,intent_snapshot TEXT,registry_activity_code TEXT);
@@ -27,12 +28,13 @@ function fixture(t) {
     CREATE TABLE trade_crm_service_sites(id TEXT PRIMARY KEY,firebase_uid TEXT,customer_id TEXT,record_status TEXT,address_line_1 TEXT,suburb TEXT,address_state TEXT,postcode TEXT);
     CREATE TABLE trade_accounts(firebase_uid TEXT,business_name TEXT);
     INSERT INTO compliance_organisations VALUES('creditex','creditex','active'),('foreign','different','active');
-    INSERT INTO compliance_users VALUES('member','creditex','user','auditor','active'),('manager','creditex','manager-uid','admin','active'),('foreign-member','foreign','foreign-user','admin','active');
+    INSERT INTO compliance_users VALUES('member','creditex','user','auditor','active',NULL),('manager','creditex','manager-uid','admin','active',NULL),('foreign-member','foreign','foreign-user','admin','active',NULL);
     INSERT INTO admin_users VALUES('admin','platform-user','owner','active'),('support','support-user','support','active');`);
   const db = { prepare(sql) { return { bind(...values) { return { first: async () => sqlite.prepare(sql).get(...values) || null, all: async () => ({ results: sqlite.prepare(sql).all(...values) }) }; } }; } };
   const api = load("src/lib/portal-customer-connect-server.ts", name => {
     if (name.includes("trade-compliance-intent")) return { CREDITEX_PARTNER_ORGANISATION_CODE: "creditex" };
     if (name.includes("creditex-job-audit-server")) return { CreditexJobAuditError: AccessError };
+    if (name.includes('creditex-permissions')) return permissions;
     throw Error(name);
   });
   const actor = { kind: "compliance", memberId: "member", uid: "user", organisationId: "creditex", role: "admin", name: "User" };
@@ -79,7 +81,7 @@ test("platform admin contact access does not manufacture headset authority", asy
   const f = fixture(t); f.add("job", { caseId: "c1" });
   const actor = { ...f.actor, kind: "admin", memberId: "admin", uid: "platform-user" };
   assert.equal((await f.list("", actor)).customers[0].headsetAllowed, false);
-  f.sqlite.exec("INSERT INTO compliance_users VALUES('real-membership','creditex','platform-user','auditor','active')");
+  f.sqlite.exec("INSERT INTO compliance_users VALUES('real-membership','creditex','platform-user','auditor','active',NULL)");
   assert.equal((await f.list("", actor)).customers[0].headsetAllowed, false);
   f.sqlite.exec("INSERT INTO compliance_case_assignments VALUES('creditex','c1','real-membership','assigned')");
   assert.equal((await f.list("", actor)).customers[0].headsetAllowed, true);

@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   try {
-    const db = getD1(), actor = await requireJobAuditActor(request, db);
+    const db = getD1(), actor = await requireJobAuditActor(request, db, 'audit');
     return jobAuditJson({ ok: true, workspace: await saveCreditexJobAudit(db, actor, await readBoundedJsonRequest(request, 32 * 1024)) });
   } catch (error) { return jobAuditError(error); }
 }

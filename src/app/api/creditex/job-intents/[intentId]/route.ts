@@ -217,7 +217,7 @@ export async function GET(request: Request, context: RouteContext) {
   }
   try {
     const database = getD1();
-    const access = await requireComplianceAccess(request, {}, database);
+    const access = await requireComplianceAccess(request, { requiredPermission: "jobs" }, database);
     if (access.organisationCode !== CREDITEX_PARTNER_ORGANISATION_CODE) {
       throw new ComplianceAccessError(
         "CREDITEX_PARTNER_REQUIRED",

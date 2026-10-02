@@ -8,6 +8,7 @@ import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, requireSecondFactor } f
 import { hasMyobIntegrationData, writeMyobSecurityEvent } from "./myob-security-audit";
 import { CREDITEX_PARTNER_ORGANISATION_CODE } from "./trade-compliance-intent";
 import { creditexNamedOwnerCapabilities } from "./creditex-named-owner-server";
+import { creditexPermissionLabel, hasCreditexPermission, resolveCreditexPermissions, type CreditexPermission } from "./creditex-permissions";
 
 export const COMPLIANCE_ROLES = [
   "admin",
@@ -22,6 +23,8 @@ export type ComplianceAccessOptions = {
   allowedRoles?: readonly ComplianceRole[];
   organisationId?: string;
   claimPendingInvitation?: boolean;
+  requiredPermission?: CreditexPermission;
+  requiredAnyPermission?: readonly CreditexPermission[];
 };
 
 export type ComplianceMembershipRecord = {
@@ -38,6 +41,7 @@ export type ComplianceMembershipRecord = {
   membershipStatus: string;
   governanceIdentityVerified: boolean;
   lastLoginAt: string;
+  permissions?: CreditexPermission[];
 };
 
 export type ComplianceIdentity = FirebaseIdentity & {
@@ -51,6 +55,7 @@ export type ComplianceIdentity = FirebaseIdentity & {
   governanceIdentityVerified: boolean;
   canConfirmNamedOwner?: boolean;
   namedOwnerConfirmed?: boolean;
+  permissions?: CreditexPermission[];
 };
 
 export class ComplianceAccessError extends Error {
@@ -61,6 +66,12 @@ export class ComplianceAccessError extends Error {
     super(message);
     this.code = code;
     this.status = status;
+  }
+}
+
+export function assertCompliancePermission(identity: ComplianceIdentity, permission: CreditexPermission) {
+  if (!hasCreditexPermission(identity, permission)) {
+    throw new ComplianceAccessError("COMPLIANCE_PERMISSION_REQUIRED", 403, `Your team access does not include ${creditexPermissionLabel(permission).toLowerCase()}. Ask your administrator to update your permissions.`);
   }
 }
 
@@ -135,6 +146,7 @@ export function assertActiveComplianceMembership(
     displayName: membership.displayName,
     role: membership.role,
     governanceIdentityVerified: membership.governanceIdentityVerified,
+    permissions: resolveCreditexPermissions(membership.role, membership.permissions),
   };
 }
 
@@ -153,6 +165,7 @@ function membershipProjection(row: Record<string, unknown>): ComplianceMembershi
     membershipStatus: String(row.membership_status),
     governanceIdentityVerified: Number(row.governance_identity_verified) === 1,
     lastLoginAt: String(row.last_login_at || ""),
+    permissions: resolveCreditexPermissions(String(row.role), row.permissions_json),
   };
 }
 
@@ -164,6 +177,7 @@ type PendingComplianceInvitation = {
   role: string;
   invited_by_uid: string;
   expires_at: string;
+  permissions_json: string | null;
 };
 
 export async function claimPendingComplianceInvitation(
@@ -184,6 +198,7 @@ export async function claimPendingComplianceInvitation(
       invitation.role,
       invitation.invited_by_uid,
       invitation.expires_at
+      , invitation.permissions_json
     FROM compliance_invitations invitation
     JOIN compliance_organisations organisation
       ON organisation.id = invitation.organisation_id
@@ -221,9 +236,9 @@ export async function claimPendingComplianceInvitation(
         governance_identity_verified, governance_identity_verified_by_uid,
         governance_identity_verified_at,
         governance_identity_verification_basis,
-        created_by_uid, last_login_at, created_at, updated_at
+        created_by_uid, last_login_at, created_at, updated_at, permissions_json
       )
-      SELECT ?, ?, ?, ?, ?, ?, 'active', 0, '', '', '', ?, ?, ?, ?
+      SELECT ?, ?, ?, ?, ?, ?, 'active', 0, '', '', '', ?, ?, ?, ?, ?
       WHERE EXISTS (
         SELECT 1 FROM compliance_invitations
         WHERE id = ? AND status = 'pending' AND expires_at > ?
@@ -243,6 +258,7 @@ export async function claimPendingComplianceInvitation(
       now,
       now,
       now,
+      invitation.permissions_json ?? null,
       invitation.id,
       now,
       invitation.organisation_id,
@@ -327,6 +343,7 @@ export async function requireComplianceIdentity(
       member.status membership_status,
       member.governance_identity_verified,
       member.last_login_at,
+      member.permissions_json,
       organisation.organisation_code,
       organisation.legal_name organisation_legal_name,
       organisation.trading_name organisation_trading_name,
@@ -363,6 +380,10 @@ export async function requireComplianceIdentity(
     membership,
     options.allowedRoles,
   );
+  if (options.requiredPermission) assertCompliancePermission(access, options.requiredPermission);
+  if (options.requiredAnyPermission && !options.requiredAnyPermission.some(permission => hasCreditexPermission(access, permission))) {
+    throw new ComplianceAccessError("COMPLIANCE_PERMISSION_REQUIRED", 403, "Your team access does not include this workspace tool. Ask your administrator to update your permissions.");
+  }
   // Creditex's job register includes balances copied from the accounting provider.
   // Validate membership first; unrelated partner organisations do not read that register.
   if (access.organisationCode === CREDITEX_PARTNER_ORGANISATION_CODE && await hasMyobIntegrationData(db)) {

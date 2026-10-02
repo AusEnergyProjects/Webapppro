@@ -124,7 +124,10 @@ async function masterActor(request: Request, mode: string, readOnly = false) {
     return { uid: actor.uid, organisationId: await resolveActiveCreditexOfficialSourceOrganisation(getD1()) };
   }
   if (mode !== "creditex") throw new Error("ACTIVITY_AUTHOR_REQUIRED");
-  const actor = await requireComplianceAccess(request, { allowedRoles: readOnly ? ["admin", "case_manager", "reviewer", "auditor"] : ["admin", "case_manager", "reviewer"] }, getD1());
+  const actor = await requireComplianceAccess(request, {
+    allowedRoles: readOnly ? ["admin", "case_manager", "reviewer", "auditor"] : ["admin", "case_manager", "reviewer"],
+    ...(readOnly ? { requiredAnyPermission: ["jobs", "forms"] as const } : { requiredPermission: "forms" as const }),
+  }, getD1());
   if (actor.organisationCode.trim().toUpperCase() !== "CREDITEX-AU"
     || (!readOnly && !canEditCreditexFieldMasters(actor))) throw new Error("ACTIVITY_AUTHOR_REQUIRED");
   return { uid: actor.uid, organisationId: actor.organisationId };

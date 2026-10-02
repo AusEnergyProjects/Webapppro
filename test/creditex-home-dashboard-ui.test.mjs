@@ -119,7 +119,7 @@ test("Home removes previous-member counts immediately and ignores aborted respon
 
 test("Home cards navigate to working destinations while team management follows permission", async () => {
   const h = harness(); let tree = h.render();
-  for (const [label, destination] of [["Open jobs", "cases"], ["Awaiting audit", "cases"], ["Corrections required", "operations"], ["Audits completed", "cases"], ["Ready for submission", "submissions"], ["✓ Audit a job", "cases"], ["☷ My tasks & team", "tasks"], ["↗ Activity submissions", "submissions"], ["Customers & team", "connect"], ["Forms & activity requirements", "forms"], ["Manage team access", "team"], ["Profile & workspace colours", "settings"]]) {
+  for (const [label, destination] of [["Open jobs", "cases"], ["Awaiting audit", "cases"], ["Corrections required", "operations"], ["Audits completed", "cases"], ["Ready for submission", "submissions"], ["✓ Audit a job", "cases"], ["▦ Calculator", "calculator"], ["⌖ Customer & job map", "map"], ["☷ My tasks & team", "tasks"], ["↗ Activity submissions", "submissions"], ["Customers & team", "connect"], ["Forms & activity requirements", "forms"], ["Manage team access", "team"], ["My profile & appearance", "profile"]]) {
     const action = button(tree, label);
     assert.ok(action, label);
     action.props.onClick();
@@ -129,6 +129,19 @@ test("Home cards navigate to working destinations while team management follows 
   tree = h.render();
   assert.equal(button(tree, "Manage team access"), undefined);
   assert.ok(button(tree, "Customers & team"));
-  assert.ok(button(tree, "Profile & workspace colours"));
+  assert.ok(button(tree, "My profile & appearance"));
+  h.cleanup();
+});
+
+test("Home hides unavailable tools and does not request job counts without jobs permission", async () => {
+  const h = harness(); h.props.canManageTeam = false; h.props.canAccess = destination => ['tasks', 'profile'].includes(destination);
+  let tree = h.render(); await flush();
+  assert.equal(h.requests.length, 0); assert.equal(button(tree, 'Open jobs'), undefined);
+  for (const label of [...labels, '✓ Audit a job', '▦ Calculator', '⌖ Customer & job map', 'Customers', 'Forms & activity requirements', 'Manage team access']) assert.equal(button(tree, label), undefined, label);
+  assert.ok(button(tree, '☷ My tasks & team')); assert.ok(button(tree, 'My profile & appearance'));
+  assert.equal(nodes(tree, node => node.props?.role === 'meter').length, 0);
+  h.props.canAccess = () => true; tree = h.render(); await flush(); assert.equal(h.requests.length, 1);
+  h.requests[0].respond({ ok: true, dashboard: dashboard() }); tree = await h.settle(); assert.equal(count(tree, 'Awaiting audit'), '170');
+  h.props.canAccess = () => false; tree = h.render(); assert.equal(button(tree, 'Awaiting audit'), undefined); assert.equal(nodes(tree, node => node.props?.role === 'meter').length, 0);
   h.cleanup();
 });

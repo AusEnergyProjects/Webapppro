@@ -5,12 +5,13 @@ import Image from "next/image";
 import { AeaProductLink, TLinkBrand } from "./TLinkChrome";
 import type { PortalWorkspacePreferencesController } from "./PortalWorkspacePreferences";
 import styles from "./PortalWorkspaceHeader.module.css";
+import { PortalProfileAvatar } from './PortalProfileAvatar';
 
-export function PortalWorkspaceHeader({ context, organisation, displayName, preferences, onSearch, onTasks, notificationCount, onSettings, onSignOut }: {
+export function PortalWorkspaceHeader({ context, organisation, displayName, preferences, onSearch, onNotifications, notificationCount, onSettings, onProfile, onSignOut }: {
   context: string; organisation: string; displayName: string;
   preferences: PortalWorkspacePreferencesController;
-  onSearch: (query: string) => boolean; onTasks: () => void; notificationCount?: number;
-  onSettings: () => void; onSignOut: () => void;
+  onSearch: (query: string) => boolean; onNotifications: () => void; notificationCount?: number;
+  onSettings: () => void; onProfile?: () => void; onSignOut: () => void;
 }) {
   const [query, setQuery] = useState("");
   const input = useRef<HTMLInputElement>(null);
@@ -42,7 +43,7 @@ export function PortalWorkspaceHeader({ context, organisation, displayName, pref
         <button type="submit" aria-label="Search workspace">Search</button><kbd>Ctrl K</kbd>
       </form>
       <div className={styles.actions}>
-        <button type="button" className={styles.bell} aria-label={notificationCount === undefined ? "Open my tasks" : `Open inbox, ${notificationCount} unread alerts`} title={notificationCount === undefined ? "My tasks" : "Notifications"} onClick={onTasks}>
+        <button type="button" className={styles.bell} aria-label={notificationCount === undefined ? "Open notifications" : `Open inbox, ${notificationCount} unread alerts`} title="Notifications" onClick={onNotifications}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0v7l-2 3h16l-2-3zM10 21h4M12 1v1"/></svg>{notificationCount !== undefined && notificationCount > 0 && <strong>{notificationCount}</strong>}
         </button>
         <button type="button" className={styles.mode} aria-label="Night mode" aria-pressed={night} title={night ? "Switch to day mode" : "Switch to night mode"} disabled={preferences.loading || preferences.savingProfile} onClick={() => void preferences.saveProfile({ ...preferences.profile, colourMode: night ? "day" : "night" })}>
@@ -53,6 +54,7 @@ export function PortalWorkspaceHeader({ context, organisation, displayName, pref
         <div className={styles.account}><small>{context}</small><strong>{organisation}</strong></div>
         <span className={styles.signedIn}><i aria-hidden="true"/>Signed in</span>
         <a className={styles.app} href="/direct-trade/field-app" aria-label="Get the TLink app"><Image src="/tlink-icon-192.png" width={24} height={24} alt=""/><span>Get the app</span></a>
+        {onProfile && <button type="button" className={styles.profile} onClick={onProfile}>{preferences.user && <PortalProfileAvatar workspace={preferences.workspace} user={preferences.user} name={displayName}/>}<span>My profile</span></button>}
         <button type="button" className={styles.settings} aria-label="Workspace settings" onClick={onSettings}><span className={styles.settingsPrefix}>Workspace </span>settings</button>
         <button type="button" onClick={onSignOut}>Sign out</button>
       </div>

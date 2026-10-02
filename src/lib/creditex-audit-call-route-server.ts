@@ -11,7 +11,7 @@ export function auditCallError(error: unknown) {
   return auditCallJson({ok:false,code:"AUDIT_CALL_UNAVAILABLE",error:"The private audit call operation could not be completed."},503);
 }
 export async function auditCallMember(request:Request,database:D1Database) {
-  const member=await requireComplianceAccess(request,{allowedRoles:["admin","case_manager","reviewer","auditor"]},database);
+  const member=await requireComplianceAccess(request,{allowedRoles:["admin","case_manager","reviewer","auditor"],requiredPermission:"customers"},database);
   if(member.organisationCode!==CREDITEX_PARTNER_ORGANISATION_CODE) throw new ComplianceAccessError("CREDITEX_ACCESS_REQUIRED",403,"Creditex access is required.");
   return member;
 }

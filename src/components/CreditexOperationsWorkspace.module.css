@@ -26,6 +26,18 @@
 }
 .localForm > button { align-self: end; min-height: 44px; }
 .formWide { grid-column: 1 / -1; }
+.permissionFields { display: grid; gap: 16px; min-width: 0; }
+.permissionFields > p { margin: 0; color: var(--portal-muted); font-size: .8125rem; line-height: 1.6; }
+.permissionFields fieldset { min-width: 0; border: 1px solid var(--portal-line); border-radius: 10px; padding: 12px; }
+.permissionFields legend { padding: 0 6px; font-size: .875rem; font-weight: 750; color: var(--portal-ink); }
+.permissionGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.permissionGrid .permissionOption { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: 8px; background: var(--portal-soft); }
+.permissionOption input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; flex: 0 0 18px; margin-top: 3px; accent-color: var(--portal-green); }
+.permissionOption span { min-width: 0; }
+.permissionOption strong { display: block; color: var(--portal-ink); font-size: .8125rem; }
+.permissionOption small { display: block; margin-top: 4px; color: var(--portal-muted); font-size: .75rem; line-height: 1.5; font-weight: 400; }
+.memberPermissions { grid-column: 1 / -1; margin-top: 6px; }
+.memberPermissions > summary { padding: 10px 0; cursor: pointer; color: var(--portal-ink); font-size: .8125rem; font-weight: 650; }
 .splitColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .splitColumns > div { min-width: 0; }
 .subheading { margin: 0 0 12px; }
@@ -45,3 +57,4 @@
 .success { background: var(--portal-success-bg); border-color: var(--portal-success-line); color: var(--portal-success-ink); }
 @media (max-width: 820px) { .sectionHeader { align-items: stretch; flex-direction: column; } .splitColumns { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .localForm, .memberAccessControls { grid-template-columns: 1fr; } .localForm, .accessPolicy, .compactList article { padding: 16px; } .formWide { grid-column: auto; } .compactList article > span { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 700px) { .permissionGrid { grid-template-columns: 1fr; } }

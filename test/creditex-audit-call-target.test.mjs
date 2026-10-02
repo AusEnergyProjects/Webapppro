@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
+import * as permissions from "../src/lib/creditex-permissions.ts";
 import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 import * as namedOwner from "../src/lib/creditex-named-owner-server.ts";
 import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
@@ -14,6 +15,7 @@ function load(file, dependencies) {
   }).outputText;
   const record = { exports: {} };
   new Function("require", "module", "exports", output)((name) => {
+    if (name === "./creditex-permissions") return permissions;
     if (!(name in dependencies)) throw new Error(`Unexpected dependency ${name}`);
     return dependencies[name];
   }, record, record.exports);
@@ -53,6 +55,7 @@ function fixture() {
     INSERT INTO trade_crm_customers VALUES ('customer','installer','0412 345 678','active'),('other-customer','other-owner','0412 345 678','active');
     INSERT INTO trade_crm_service_sites VALUES ('site','installer','customer','active');
   `);
+  sql.exec("ALTER TABLE compliance_users ADD COLUMN permissions_json TEXT DEFAULT NULL;");
   const statement = (text, values = []) => ({
     bind: (...bindings) => statement(text, bindings),
     first: async () => sql.prepare(text).get(...values) || null,
@@ -89,6 +92,13 @@ test("live membership and role prevail over stale admin claims", async (t) => {
   assert.equal((await server.loadAuditCallTarget(f.db, actor, { caseId: "case" })).canCall, true);
   f.sql.exec("UPDATE compliance_users SET status='revoked' WHERE id='member'");
   await assert.rejects(server.loadAuditCallTarget(f.db, actor, { caseId: "case" }), forbidden);
+});
+test("customer calling permission is read from the current membership", async t => {
+  const f = fixture(); t.after(f.close);
+  f.sql.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='member'").run('["jobs","audit"]');
+  await assert.rejects(server.loadAuditCallTarget(f.db, actor, { caseId: "case" }), forbidden);
+  f.sql.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='member'").run('["customers"]');
+  assert.equal((await server.loadAuditCallTarget(f.db, actor, { caseId: "case" })).canCall, true);
 });
 test("linked-job entry cannot bypass a formal case assignment or a mismatched graph", async (t) => {
   const f = fixture(); t.after(f.close);

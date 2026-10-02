@@ -1,6 +1,6 @@
 export type PortalWorkspace = "admin" | "creditex";
-export type PortalPerson = { id: string; name: string; role: string };
-export type PortalMessage = { id: string; body: string; senderId: string; senderName: string; recipientId: string; createdAt: string };
+export type PortalPerson = { id: string; name: string; role: string; avatarRevision: string };
+export type PortalMessage = { id: string; body: string; senderId: string; senderName: string; senderAvatarRevision: string; recipientId: string; createdAt: string };
 export type PortalTask = {
   id: string; title: string; detail: string; assigneeId: string; assigneeName: string;
   creatorId: string; creatorName: string; status: "open" | "done"; dueOn: string;

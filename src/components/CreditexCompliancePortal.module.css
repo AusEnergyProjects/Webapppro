@@ -1095,6 +1095,10 @@
 .supportingTools { margin-top: 20px; border: 1px solid var(--portal-line); border-radius: 10px; background: var(--portal-soft); }
 .supportingTools > summary { padding: 15px 18px; color: var(--portal-ink); font-size: 14px; font-weight: 650; cursor: pointer; }
 .supportingTools > :not(summary) { padding: 0 18px 18px; }
+.settingsPanel h1 { color:var(--portal-ink); font-size:1.5rem; margin:0 0 8px; }
+.settingsPanel > p { color:var(--portal-muted); margin-bottom:20px; }
+.settingsActions { display:flex; flex-wrap:wrap; gap:12px; }
+.content > [role="region"][aria-label="Notifications"] { padding:24px; }
 .supportingTools > summary:focus-visible, .mobileNavigation select:focus-visible { outline: 2px solid var(--portal-green); outline-offset: 2px; }
 .governanceProgramTabs { left: calc(50% + 116px); width: min(calc(100vw - 280px), 1480px); background: var(--portal-soft); }
 @media (max-width: 1050px) { .hero { grid-template-columns: 1fr; } .guardrail { max-width: none; } }
@@ -1111,3 +1115,13 @@
   .governanceProgramTabs { left: 50%; width: calc(100vw - 24px); }
 }
 @media (max-width: 560px) { .content > [id="creditex-panel-governance"] { padding-bottom: 220px; } }
+
+.calculatorPanel {
+  --pilot-canvas: var(--portal-background); --pilot-surface: var(--portal-surface);
+  --pilot-surface-raised: var(--portal-raised); --pilot-surface-soft: var(--portal-soft);
+  --pilot-line: var(--portal-line); --pilot-line-strong: var(--portal-line-strong);
+  --pilot-ink: var(--portal-ink); --pilot-text: var(--portal-text); --pilot-muted: var(--portal-muted);
+  --pilot-teal: var(--portal-green-dark); --pilot-green: var(--portal-green); --pilot-gold: var(--portal-warning-ink);
+  color: var(--portal-text); min-width: 0;
+}
+.calculatorPanel > h1 { color: var(--portal-ink); font-size: 1.6rem; margin: 0 0 20px; }

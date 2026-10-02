@@ -27,6 +27,7 @@ function palette(colourMode) {
   const loaded = load(read("components/PortalWorkspacePreferences.tsx"), {
     react, "react/jsx-runtime": {}, "@/lib/portal-workspace-profile": profile,
     "@/lib/trade-business-branding": branding, "./PortalWorkspacePreferences.module.css": {},
+    "./PortalProfileAvatar": { PortalProfileAvatar: () => null },
   });
   return loaded.usePortalWorkspacePreferences({ workspace: "creditex", user: { uid: "tester" }, currentDisplayName: "Test" }).rootProps;
 }

@@ -81,7 +81,7 @@ function errorResponse(error: unknown) {
 }
 
 async function access(request: Request, database: D1Database) {
-  return requireComplianceAccess(request, {
+  return requireComplianceAccess(request, { requiredPermission: "audit",
     allowedRoles: ["admin", "reviewer", "auditor"],
   }, database);
 }

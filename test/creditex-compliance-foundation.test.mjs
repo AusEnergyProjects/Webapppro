@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as permissions from "../src/lib/creditex-permissions.ts";
 import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 import * as namedOwner from "../src/lib/creditex-named-owner-server.ts";
@@ -109,6 +110,7 @@ function loadTypescriptModule(path, mocks = {}) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "./creditex-permissions") return permissions;
     if (specifier === "./firebase-mfa") return firebaseMfa;
     if (specifier === "./creditex-named-owner-server") return namedOwner;
     if (specifier === "./myob-security-audit") return myobSecurityAudit;
@@ -149,6 +151,7 @@ function applyFoundation(database) {
   for (const definition of CREDITEX_FOUNDATION_SCHEMA_GUARD_DEFINITIONS) {
     database.exec(definition.sql);
   }
+  database.exec("ALTER TABLE compliance_users ADD COLUMN permissions_json TEXT DEFAULT NULL;");
 }
 
 function applyEvidencePolicyFixtureSchema(database) {

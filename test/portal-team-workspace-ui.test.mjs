@@ -12,7 +12,7 @@ const button = (tree, label) => nodes(tree, node => node.type === "button" && te
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const message = { id: "message", senderId: "a", senderName: "A", recipientId: "b", body: "Existing message", createdAt: "2026-10-02T00:00:00.000Z" };
 const history = () => ({ memberId: "a", messages: [message], before: "older-cursor", hasMore: false });
-function harness(api) {
+function harness(api, workspace = "admin", visibilityState = "visible") {
   let cursor = 0; const slots = [], effects = [], queued = [];
   const hooks = {
     useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }]; },
@@ -23,16 +23,18 @@ function harness(api) {
     useCallback: callback => callback,
   };
   const loaded = {};
-  Function("require", "exports", "document", "setInterval", "clearInterval", `${compiled}\nexports.Conversation=Conversation;`)(name => {
+  const notifications = [];
+  Function("require", "exports", "document", "setInterval", "clearInterval", "window", `${compiled}\nexports.Conversation=Conversation;`)(name => {
     if (name === "react") return hooks;
     if (name === "react/jsx-runtime") return jsx;
     if (name === "@/lib/firebase-mfa") return { MFA_SETUP_URL: "/security" };
+    if (name === "./PortalProfileAvatar") return { PortalProfileAvatar: () => null };
     if (name.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => key }) };
     throw Error(name);
-  }, loaded, { visibilityState: "visible" }, () => 1, () => {});
-  const render = () => { cursor = 0; const tree = loaded.Conversation({ api, peer: { id: "b", name: "B" } }); for (const effect of queued.splice(0)) effect(); return tree; };
+  }, loaded, { visibilityState }, () => 1, () => {}, { dispatchEvent: event => notifications.push(event.type) });
+  const render = () => { cursor = 0; const tree = loaded.Conversation({ api, peer: { id: "b", name: "B" }, workspace, user: { uid: "a" } }); for (const effect of queued.splice(0)) effect(); return tree; };
   const settle = async () => { render(); await flush(); return render(); };
-  return { render, settle, wrapper: loaded.PortalTeamWorkspace, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
+  return { render, settle, notifications, wrapper: loaded.PortalTeamWorkspace, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
 }
 test("sending locks the draft and suppresses duplicate clicks, then clears it on success", async () => {
   let release; const sent = [];
@@ -78,4 +80,22 @@ test("changing portal, account or tool discards the previous workspace component
   const h = harness(async () => history()); const base = { workspace: "admin", user: { uid: "one" }, view: "connect" };
   const keys = [base, { ...base, workspace: "creditex" }, { ...base, user: { uid: "two" } }, { ...base, view: "tasks" }].map(props => h.wrapper(props).key);
   assert.equal(new Set(keys).size, 4);
+});
+
+test("visible incoming Creditex messages mark only rendered IDs as read and refresh the bell", async () => {
+  const reads = [];
+  const h = harness(async (_query, body) => {
+    if (body) { reads.push(body); return { ok: true }; }
+    return { ...history(), messages: [message, { ...message, id: "incoming", senderId: "b", recipientId: "a" }] };
+  }, "creditex");
+  await h.settle(); await flush(); h.render();
+  assert.deepEqual(reads, [{ action: "read_messages", messageIds: ["incoming"] }]);
+  assert.deepEqual(h.notifications, ["creditex-notifications-changed"]);
+  h.render(); await flush(); assert.equal(reads.length, 1); h.cleanup();
+});
+
+test("hidden Creditex conversations do not mark notifications as read", async () => {
+  const requests = [];
+  const h = harness(async (_query, body) => { requests.push(body); return history(); }, "creditex", "hidden");
+  await h.settle(); assert.deepEqual(requests, []); h.cleanup();
 });

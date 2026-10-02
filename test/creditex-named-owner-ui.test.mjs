@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import { CREDITEX_PERMISSION_GROUPS, creditexRolePermissions } from "../src/lib/creditex-permissions.ts";
 
 const source = fs.readFileSync(new URL("../src/components/CreditexOperationsWorkspace.tsx", import.meta.url), "utf8");
 const ast = ts.createSourceFile("CreditexOperationsWorkspace.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -35,9 +36,9 @@ function harness({ flags = {}, respond = async () => ({ ok: true, result: { name
     const result = await respond(); events.push("server success"); return result;
   };
   const exports = {};
-  Function("require", "exports", "useState", "authenticatedJson", "styles", "readable", "dateTime", "EmptyState", "StatusPill", "window", compiled)(
+  Function("require", "exports", "useState", "authenticatedJson", "styles", "readable", "dateTime", "EmptyState", "StatusPill", "window", "creditexRolePermissions", "PermissionFields", compiled)(
     name => { assert.equal(name, "react/jsx-runtime"); return jsx; }, exports, useState, authenticatedJson, {}, value => value,
-    value => value, "empty-state", "status-pill", { confirm: () => true },
+    value => value, "empty-state", "status-pill", { confirm: () => true }, creditexRolePermissions, "permission-fields",
   );
   const render = () => {
     cursor = 0;
@@ -85,4 +86,31 @@ test("a rejected confirmation shows the server error without a success notice or
   assert.doesNotMatch(text(tree), /James Morris is now the named|James Morris · Creditex Administrator/);
   assert.equal(h.session.namedOwnerConfirmed, false);
   assert.equal(button(tree, confirmationLabel).props.disabled, false);
+});
+
+test("invitation role presets and custom permissions are submitted together", async () => {
+  const h = harness(); let tree = h.render();
+  assert.deepEqual(nodes(tree, node => node.type === "permission-fields")[0].props.permissions, creditexRolePermissions("reviewer"));
+  nodes(tree, node => node.type === "select")[0].props.onChange({ target: { value: "auditor" } });
+  tree = h.render(); assert.deepEqual(nodes(tree, node => node.type === "permission-fields")[0].props.permissions, creditexRolePermissions("auditor"));
+  nodes(tree, node => node.type === "permission-fields")[0].props.onChange(["jobs", "messages"]);
+  tree = h.render(); await nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(h.calls[0].body.action, "create_invitation");
+  assert.equal(h.calls[0].body.role, "auditor"); assert.deepEqual(h.calls[0].body.permissions, ["jobs", "messages"]);
+});
+
+test("permission checkboxes explain authority, keep audit and jobs coherent, and lock administrator access", () => {
+  const permissionDeclaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "PermissionFields");
+  const permissionCode = ts.transpileModule(`export ${permissionDeclaration.getText(ast)}`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const exports = {};
+  Function("require", "exports", "creditexRolePermissions", "CREDITEX_PERMISSION_GROUPS", "styles", permissionCode)(name => { assert.equal(name, "react/jsx-runtime"); return jsx; }, exports, creditexRolePermissions, CREDITEX_PERMISSION_GROUPS, {});
+  let result;
+  const render = (role, permissions) => exports.PermissionFields({ role, permissions, disabled: false, onChange: next => { result = next; } });
+  const checkbox = (tree, label) => nodes(tree, node => node.type === "label" && text(node).includes(label))[0].props.children[0];
+  checkbox(render("reviewer", []), "Audit jobs").props.onChange({ target: { checked: true } }); assert.deepEqual(result, ["jobs", "audit"]);
+  checkbox(render("reviewer", result), "Jobs and corrections").props.onChange({ target: { checked: false } }); assert.deepEqual(result, []);
+  assert.equal(checkbox(render("auditor", creditexRolePermissions("auditor")), "Edit activity forms").props.disabled, true);
+  assert.ok(nodes(render("admin", creditexRolePermissions("admin")), node => node.type === "fieldset").every(node => node.props.disabled));
 });

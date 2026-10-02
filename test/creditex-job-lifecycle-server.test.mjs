@@ -8,15 +8,20 @@ import {createHash} from 'node:crypto';
 import ts from 'typescript';
 import * as lifecycleSql from '../src/lib/creditex-job-lifecycle-sql.ts';
 import * as delivery from '../src/lib/service-reminder-delivery.ts';
+import * as creditexPermissions from '../src/lib/creditex-permissions.ts';
 import { JOB_LIFECYCLE_GUARD_NAMES, lifecycleGuardFixture } from './helpers/creditex-lifecycle-guards-fixture.mjs';
 const NOW='2026-09-25T06:00:00.000Z',SHA='a'.repeat(64);
 const trade={kind:'trade',uid:'manager',access:{ownerUid:'owner',actorUid:'manager',isOwner:true,jobScope:'team',canManageJobs:true,canManageFieldEvidence:true,canViewFieldEvidence:true}};
-const admin={kind:'compliance',uid:'creditex',organisationId:'org',role:'admin'};
+const admin={kind:'compliance',uid:'creditex',organisationId:'org',memberId:'creditex-admin',role:'admin'};
+const reviewer={kind:'compliance',uid:'reviewer-uid',organisationId:'org',memberId:'reviewer',role:'reviewer'};
 function fixture(t){
  const sqlite=new DatabaseSync(':memory:');installEmptyTradeCrews(sqlite);t.after(()=>sqlite.close());sqlite.exec(`PRAGMA foreign_keys=ON;
  CREATE TABLE trade_work_orders(id TEXT PRIMARY KEY,firebase_uid TEXT,partner_type TEXT,work_number TEXT,title TEXT,stage TEXT,record_status TEXT,revision INTEGER,assignee_member_id TEXT,updated_at TEXT);
  CREATE TABLE trade_accounts(firebase_uid TEXT,business_name TEXT);
  CREATE TABLE trade_team_members(id TEXT,owner_uid TEXT,email TEXT,display_name TEXT,status TEXT);
+ CREATE TABLE compliance_organisations(id TEXT PRIMARY KEY,organisation_code TEXT,status TEXT);
+ CREATE TABLE compliance_users(id TEXT PRIMARY KEY,firebase_uid TEXT,organisation_id TEXT,role TEXT,status TEXT,permissions_json TEXT);
+ CREATE TABLE compliance_case_assignments(organisation_id TEXT,case_id TEXT,compliance_user_id TEXT,status TEXT);
  CREATE TABLE trade_work_order_compliance_intents(id TEXT PRIMARY KEY,status TEXT,compliance_organisation_id TEXT,work_order_id TEXT,installer_uid TEXT,revision INTEGER,intent_snapshot_sha256 TEXT,program_code TEXT,activity_template_id TEXT,compliance_case_id TEXT,intent_snapshot TEXT);
  CREATE TABLE trade_activity_field_records(id TEXT PRIMARY KEY,intent_id TEXT,work_order_id TEXT,owner_uid TEXT,organisation_id TEXT,revision INTEGER,status TEXT,pdf_sha256 TEXT,pdf_object_key TEXT,submitted_at TEXT,supersedes_record_id TEXT);
  CREATE TABLE trade_activity_field_record_versions(record_id TEXT,payload TEXT);
@@ -37,13 +42,16 @@ function fixture(t){
  INSERT INTO trade_work_orders VALUES('job','owner','installer','TLJ-123','Installation','completed','active',1,'tech','${NOW}');
  INSERT INTO trade_accounts VALUES('owner','Trade Pty Ltd');
  INSERT INTO trade_team_members VALUES('tech','owner','tech@example.test','Technician','active');
+ INSERT INTO compliance_organisations VALUES('org','CREDITEX-AU','active');
+ INSERT INTO compliance_users VALUES('creditex-admin','creditex','org','admin','active',NULL),('reviewer','reviewer-uid','org','reviewer','active',NULL);
  ALTER TABLE trade_work_orders ADD COLUMN scheduled_start TEXT DEFAULT '';
  ALTER TABLE trade_work_orders ADD COLUMN scheduled_end TEXT DEFAULT '';
  `);sqlite.exec(readFileSync(new URL('../drizzle/0193_creditex_job_lifecycle.sql',import.meta.url),'utf8'));
- class Statement{constructor(sql,values=[]){this.sql=sql;this.values=values;}bind(...v){return new Statement(this.sql,v);}async first(){return sqlite.prepare(this.sql).get(...this.values)||null;}async all(){return {results:sqlite.prepare(this.sql).all(...this.values)};}runSync(){return {meta:{changes:Number(sqlite.prepare(this.sql).run(...this.values).changes)}};}async run(){return this.runSync();}}
- let beforeBatch;
+ let beforeBatch,beforeClaim;
+ class Statement{constructor(sql,values=[]){this.sql=sql;this.values=values;}bind(...v){return new Statement(this.sql,v);}async first(){return sqlite.prepare(this.sql).get(...this.values)||null;}async all(){return {results:sqlite.prepare(this.sql).all(...this.values)};}runSync(){return {meta:{changes:Number(sqlite.prepare(this.sql).run(...this.values).changes)}};}async run(){if(beforeClaim&&this.sql.includes("UPDATE creditex_job_correction_deliveries SET status='sending'")){const fn=beforeClaim;beforeClaim=null;fn();}return this.runSync();}}
  const db={prepare:sql=>new Statement(sql),async batch(statements){if(beforeBatch){const fn=beforeBatch;beforeBatch=null;fn();}sqlite.exec('BEGIN');try{const r=statements.map(s=>s.runSync());sqlite.exec('COMMIT');return r;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
  const dependencies={
+ './creditex-permissions':creditexPermissions,'./trade-compliance-intent':{CREDITEX_PARTNER_ORGANISATION_CODE:'CREDITEX-AU'},
     "@/lib/trade-job-collaboration": jobCollaboration, "./trade-job-collaboration": jobCollaboration,'./creditex-job-lifecycle-schema-guards':lifecycleGuardFixture(sqlite,JOB_LIFECYCLE_GUARD_NAMES),'node:crypto':{createHash},'./trade-team-sync-server':{jobSyncChangeStatements:()=>[]},'./creditex-job-lifecycle-sql':lifecycleSql,'./service-reminder-delivery':delivery,
  './trade-job-cancellation-server':{cancelledJobAppointmentsStatement:(db,owner,job,now)=>db.prepare(`UPDATE trade_crm_appointments SET status='cancelled',revision=revision+1,updated_at=? WHERE work_order_id=? AND firebase_uid=? AND status='scheduled'`).bind(now,job,owner),reconcileCancelledJobCalendars:async()=>({attempted:0,synced:0,failed:0})},
  './creditex-activity-work-pack-server':{prepareCreditexCorrectionWorkPackStatements:async()=>[]},
@@ -54,7 +62,7 @@ function fixture(t){
  async function input(action='reviewed'){const state=await service.loadTradeJobReview(db,trade,'job');return {workOrderId:'job',action,note:action==='reviewed'?'':'Fix the unit label',requestId:crypto.randomUUID(),expectedRevision:state.revision,expectedSourceSha256:state.sourceSha256};}
  async function lifecycle(action,more={}){const state=await service.loadJobLifecycle(db,admin,'intent');return {intentId:'intent',action,note:'Checked the records',requestId:crypto.randomUUID(),expectedRevision:state.revision,...more};}
  function packet(){sqlite.prepare('INSERT INTO compliance_output_action_packets VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('packet','org','case-intent',SHA,'VEU','activity',1,'pack',1,'VEEC','2026-09-24T00:00:00.000Z');sqlite.prepare('INSERT INTO compliance_output_action_events VALUES(?,?,?,?,?)').run('event','org','packet','submitted',1);}
- return {sqlite,db,service,options,sent,intent,input,lifecycle,packet,intercept:fn=>beforeBatch=fn};
+ return {sqlite,db,service,options,sent,intent,input,lifecycle,packet,intercept:fn=>beforeBatch=fn,interceptClaim:fn=>beforeClaim=fn};
 }
 test('whole-job business pass binds all current sources and owner scope',async t=>{const f=fixture(t);f.intent();f.intent('second');const result=await f.service.reviewTradeJob(f.db,trade,await f.input(),f.options);assert.equal(result.reviewed,true);assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_lifecycle_events').get().n,2);await assert.rejects(f.service.loadJobLifecycle(f.db,{...admin,organisationId:'elsewhere'},'intent'),e=>e.status===404);await assert.rejects(f.service.reviewTradeJob(f.db,{...trade,access:{...trade.access,fieldSessionId:'field'}},await f.input(),f.options),e=>e.status===403);});
 test('changed source atomically rejects pass without partial history',async t=>{const f=fixture(t);f.intent();const input=await f.input();f.intercept(()=>f.sqlite.exec(`UPDATE trade_activity_field_records SET revision=2`));await assert.rejects(f.service.reviewTradeJob(f.db,trade,input,f.options),e=>e.code==='JOB_REVIEW_SOURCE_CHANGED');assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_lifecycle_events').get().n,0);assert.equal(f.sqlite.prepare('SELECT revision FROM trade_work_orders').get().revision,1);});
@@ -97,4 +105,68 @@ test('correction source race rolls back an inserted audit receipt; successful re
  const refreshed=await f.input('correction_required');await f.service.reviewTradeJob(f.db,trade,refreshed,{...f.options,auditStatements});
  await f.service.reviewTradeJob(f.db,trade,refreshed,{...f.options,auditStatements});
  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM test_audit_receipt').get().n,1);assert.equal(f.sent.length,1);
+});
+
+test('Creditex lifecycle restricts linked cases to current assignments and all affected activities',async t=>{
+ const f=fixture(t);f.intent();
+ await assert.rejects(f.service.loadJobLifecycle(f.db,reviewer,'intent'),e=>e.status===404);
+ f.sqlite.exec("INSERT INTO compliance_case_assignments VALUES('org','case-intent','reviewer','assigned')");
+ assert.equal((await f.service.loadJobLifecycle(f.db,reviewer,'intent')).capabilities.canRequestCorrection,true);
+ f.intent('second');
+ const state=await f.service.loadJobLifecycle(f.db,reviewer,'intent');
+ assert.equal(state.capabilities.canRequestCorrection,false);
+ await assert.rejects(f.service.reviewTradeJob(f.db,reviewer,await f.input('correction_required'),f.options),e=>e.status===404);
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_lifecycle_events').get().n,0);
+ assert.equal(f.sent.length,0);
+ // Platform operations retains its separate authority, without a compliance membership.
+ assert.equal((await f.service.loadJobLifecycle(f.db,{kind:'admin',uid:'platform',organisationId:'org',role:'admin'},'intent')).intentId,'intent');
+});
+
+test('jobs permission allows lifecycle reads while audit permission controls every mutation capability',async t=>{
+ const f=fixture(t);f.intent();
+ f.sqlite.exec(`UPDATE compliance_users SET permissions_json='["jobs"]' WHERE id='creditex-admin'`);
+ const state=await f.service.loadJobLifecycle(f.db,admin,'intent');
+ assert.equal(state.capabilities.canRequestCorrection,false);
+ assert.equal(state.capabilities.canDelete,false);
+ await assert.rejects(f.service.mutateJobLifecycle(f.db,admin,{intentId:'intent',action:'deleted',note:'Remove job',requestId:crypto.randomUUID(),expectedRevision:1},f.options),e=>e.status===404);
+ f.sqlite.exec(`UPDATE compliance_users SET permissions_json='[]' WHERE id='creditex-admin'`);
+ await assert.rejects(f.service.loadJobLifecycle(f.db,admin,'intent'),e=>e.status===404);
+});
+
+for(const [label,sql] of [
+ ['membership suspended',"UPDATE compliance_users SET status='suspended' WHERE id='reviewer'"],
+ ['membership identity changed',"UPDATE compliance_users SET firebase_uid='replacement' WHERE id='reviewer'"],
+ ['role changed',"UPDATE compliance_users SET role='auditor' WHERE id='reviewer'"],
+ ['audit permission removed',`UPDATE compliance_users SET permissions_json='["jobs"]' WHERE id='reviewer'`],
+ ['jobs permission removed',`UPDATE compliance_users SET permissions_json='["audit"]' WHERE id='reviewer'`],
+ ['organisation suspended',"UPDATE compliance_organisations SET status='suspended' WHERE id='org'"],
+ ['assignment revoked',"UPDATE compliance_case_assignments SET status='removed' WHERE compliance_user_id='reviewer'"],
+ ['linked case ownership changed',"UPDATE compliance_cases SET installer_uid='another-business' WHERE id='case-intent'"],
+]) test(`Creditex correction atomically rejects ${label} before commit`,async t=>{
+ const f=fixture(t);f.intent();f.sqlite.exec("INSERT INTO compliance_case_assignments VALUES('org','case-intent','reviewer','assigned')");
+ const input=await f.input('correction_required');
+ f.intercept(()=>f.sqlite.exec(sql));
+ await assert.rejects(f.service.reviewTradeJob(f.db,reviewer,input,f.options),e=>e.code==='JOB_REVIEW_SOURCE_CHANGED');
+ assert.equal(f.sqlite.prepare('SELECT revision FROM trade_work_orders').get().revision,1);
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_lifecycle_events').get().n,0);
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM trade_activity_field_records').get().n,1);
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_correction_deliveries').get().n,0);
+ assert.equal(f.sent.length,0);
+});
+
+test('Creditex bin mutation rechecks membership at commit and leaves no partial events',async t=>{
+ const f=fixture(t);f.intent();const input=await f.lifecycle('deleted');
+ f.intercept(()=>f.sqlite.exec(`UPDATE compliance_users SET permissions_json='["jobs"]' WHERE id='creditex-admin'`));
+ await assert.rejects(f.service.mutateJobLifecycle(f.db,admin,input,f.options),e=>e.code==='JOB_LIFECYCLE_CHANGED');
+ assert.equal(f.sqlite.prepare('SELECT record_status FROM trade_work_orders').get().record_status,'active');
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_lifecycle_events').get().n,0);
+});
+
+test('Creditex correction email cannot claim a send after its assignment is revoked',async t=>{
+ const f=fixture(t);f.intent();f.sqlite.exec("INSERT INTO compliance_case_assignments VALUES('org','case-intent','reviewer','assigned')");
+ const result=await f.service.reviewTradeJob(f.db,trade,await f.input('correction_required'),{...f.options,send:async()=>{throw new Error('No email');}});
+ f.interceptClaim(()=>f.sqlite.exec("UPDATE compliance_case_assignments SET status='removed' WHERE compliance_user_id='reviewer'"));
+ await f.service.dispatchJobCorrectionEmail(f.db,reviewer,result.notifications[0].id,f.options);
+ assert.equal(f.sent.length,0);
+ assert.equal(f.sqlite.prepare('SELECT status FROM creditex_job_correction_deliveries').get().status,'failed');
 });

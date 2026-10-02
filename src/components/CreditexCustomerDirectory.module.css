@@ -1,0 +1,26 @@
+.workspace { display:grid; gap:20px; color:var(--portal-text); min-width:0; }
+.workspace header,.actions { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.workspace h1 { font-size:1.6rem; color:var(--portal-ink); margin:4px 0 8px; }
+.workspace h2 { font-size:1.15rem; color:var(--portal-ink); }
+.workspace header span { color:var(--portal-green-dark); font-size:.75rem; font-weight:800; }
+.workspace p { margin:5px 0; line-height:1.5; }
+.workspace button,.workspace a { min-height:44px; padding:10px 16px; background:var(--portal-raised); color:var(--portal-ink); border:1px solid var(--portal-line); border-radius:9px; cursor:pointer; font:inherit; font-size:.85rem; font-weight:700; text-decoration:none; }
+.workspace button:disabled { opacity:.5; cursor:default; }
+.workspace :is(button,a,input,select):focus-visible { outline:2px solid var(--portal-green); outline-offset:3px; }
+.search { display:flex; gap:12px; align-items:end; }
+.search label { display:grid; gap:7px; flex:1; font-size:.85rem; }
+.search input { min-width:0; width:100%; background:var(--portal-input); color:var(--portal-ink); border:1px solid var(--portal-line); padding:12px; border-radius:9px; font:inherit; }
+.table { overflow:auto; background:var(--portal-surface); border:1px solid var(--portal-line); border-radius:12px; }
+.table table { border-collapse:collapse; width:100%; text-align:left; }
+.table th,.table td { padding:14px; border-bottom:1px solid var(--portal-line); font-size:.85rem; }
+.table th { background:var(--portal-raised); color:var(--portal-muted); }
+.table small,.jobs small { display:block; color:var(--portal-muted); margin-top:4px; }
+.workspace .link { border:0; background:none; color:var(--portal-green-dark); padding:4px 0; text-align:left; }
+.actions { justify-content:flex-start; }
+.empty { border:1px solid var(--portal-line); border-radius:12px; padding:30px; background:var(--portal-surface); }
+.muted { color:var(--portal-muted); }
+.jobs { display:grid; gap:12px; }
+.jobs article { display:flex; gap:16px; flex-wrap:wrap; justify-content:space-between; padding:20px; border:1px solid var(--portal-line); background:var(--portal-surface); border-radius:12px; }
+.jobs strong { color:var(--portal-ink); }
+.map { --trade-surface:var(--portal-surface); --trade-surface-soft:var(--portal-soft); --trade-ink:var(--portal-ink); --trade-muted:var(--portal-muted); --trade-line:var(--portal-line); --trade-accent-readable:var(--portal-green-dark); --trade-accent:var(--portal-green); --trade-button-ink:var(--portal-button-ink); --trade-accent-soft:var(--portal-selected-bg); min-width:0; }
+@media(max-width:600px) { .search { flex-wrap:wrap; }.search label { flex-basis:100%; }.workspace header { align-items:flex-start; } }

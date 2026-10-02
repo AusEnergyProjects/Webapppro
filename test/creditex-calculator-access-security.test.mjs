@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { errors } from "jose";
 import ts from "typescript";
+import * as permissions from "../src/lib/creditex-permissions.ts";
 import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 import * as namedOwner from "../src/lib/creditex-named-owner-server.ts";
@@ -26,6 +27,7 @@ function loadTypescriptModule(path, mocks = {}) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
+    if (specifier === "./creditex-permissions") return permissions;
     if (specifier === "./firebase-mfa") return firebaseMfa;
     if (specifier === "./creditex-named-owner-server") return namedOwner;
     if (specifier === "./myob-security-audit") return myobSecurityAudit;
@@ -195,8 +197,21 @@ test("calculator access requests a non-claiming compliance lookup", async () => 
     {},
   );
   assert.equal(complianceOptions.claimPendingInvitation, false);
+  assert.equal(complianceOptions.requiredPermission, "calculator");
   assert.equal(result.accessType, "installer");
   assert.equal(result.identity, installerAccess);
+});
+
+test("denied Creditex calculator permission cannot fall through to installer authority", async () => {
+  class MockComplianceAccessError extends Error { code = "COMPLIANCE_PERMISSION_REQUIRED"; status = 403; }
+  let tradeReads = 0;
+  const calculator = loadTypescriptModule("../src/lib/creditex-calculator-access-server.ts", {
+    "./compliance-access-server": { ComplianceAccessError: MockComplianceAccessError, requireComplianceIdentity: async () => { throw new MockComplianceAccessError("Calculator permission required."); } },
+    "./firebase-server": { requireFirebaseIdentity: async () => firebaseIdentity },
+    "./trade-access-server": { TradeAccessError: Error, assertTradeOwnerContext: () => {}, requireVerifiedTradeIdentity: async () => { tradeReads++; return {}; } },
+  });
+  await assert.rejects(calculator.requireCreditexCalculatorAccess(new Request("https://example.test/api/creditex/program-estimates"), {}), e => e.code === "COMPLIANCE_PERMISSION_REQUIRED" && e.status === 403);
+  assert.equal(tradeReads, 0);
 });
 
 test("calculator access permits only an explicitly enabled anonymous quote", async () => {

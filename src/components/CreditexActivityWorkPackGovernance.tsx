@@ -1057,6 +1057,7 @@ export function CreditexActivityWorkPackGovernance({
   sourceEndpoint,
   sourceBatchEndpoint,
   canCaptureSource,
+  canManageGovernance = true,
   fieldMasterCanAuthor,
   onManageFormAccess,
   onFieldFormDirtyChange,
@@ -1068,6 +1069,7 @@ export function CreditexActivityWorkPackGovernance({
   sourceEndpoint: string;
   sourceBatchEndpoint: string;
   canCaptureSource: boolean;
+  canManageGovernance?: boolean;
   fieldMasterCanAuthor?: boolean;
   onManageFormAccess?: () => void;
   onFieldFormDirtyChange?: (dirty: boolean) => void;
@@ -1109,6 +1111,7 @@ export function CreditexActivityWorkPackGovernance({
   const sourcedDraftRequestIds = useRef(new Map<string, string>());
 
   const load = useCallback(async () => {
+    if (!canManageGovernance) return;
     const [result, sourceResult] = await Promise.all([
       api(endpoint),
       api(`${sourceEndpoint}?pageSize=100`),
@@ -1118,7 +1121,7 @@ export function CreditexActivityWorkPackGovernance({
     setCustodySources(parseCustodySources(sourceResult));
     setSelectedActivityId((current) => current || next.activities[0]?.id || "");
     setSelectedVersionId((current) => current || next.versions[0]?.id || "");
-  }, [api, endpoint, sourceEndpoint]);
+  }, [api, endpoint, sourceEndpoint, canManageGovernance]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1442,7 +1445,7 @@ export function CreditexActivityWorkPackGovernance({
     <section className={styles.workspace} aria-label={`${contextLabel} compliance form governance`}>
       <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} onManageAccess={onManageFormAccess} onDirtyChange={onFieldFormDirtyChange} />
 
-      <details className={styles.advancedGovernance}>
+      {canManageGovernance && <details className={styles.advancedGovernance}>
         <summary><strong>Source review &amp; publication rules</strong><span>{pendingCalculatorReviews.length ? `${pendingCalculatorReviews.length} calculations awaiting review · ` : ""}Official documents, governed versions and calculation approvals</span></summary>
         <div className={styles.advancedContent}>
       <header className={styles.heading}>
@@ -1970,9 +1973,9 @@ export function CreditexActivityWorkPackGovernance({
         </main>
       </div>
         </div>
-      </details>
+      </details>}
 
-      {governanceAction && (
+      {canManageGovernance && governanceAction && (
         <div className={styles.dialogBackdrop} role="presentation" onMouseDown={(event) => {
           if (event.currentTarget === event.target && !busy) setGovernanceAction(null);
         }}>
@@ -1991,7 +1994,7 @@ export function CreditexActivityWorkPackGovernance({
         </div>
       )}
 
-      {previewOpen && (draft || selectedVersion) && (
+      {canManageGovernance && previewOpen && (draft || selectedVersion) && (
         <WorkPackPreview schema={draft?.schema || selectedVersion!.schema} onClose={() => setPreviewOpen(false)} />
       )}
     </section>

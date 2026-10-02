@@ -2,6 +2,7 @@ import type {
   ComplianceIdentity,
   ComplianceRole,
 } from "./compliance-access-server";
+import { creditexPermissionSql, creditexRolePermissions, hasCreditexPermission, isCreditexPermission, resolveCreditexPermissions, type CreditexPermission } from "./creditex-permissions.ts";
 
 type Input = Record<string, unknown>;
 type Row = Record<string, unknown>;
@@ -741,6 +742,12 @@ function assertActionRole(
       "Your compliance role does not permit that operation.",
     );
   }
+  const permission: CreditexPermission = ["create_task", "complete_task"].includes(action) ? "tasks"
+    : ["create_finding", "resolve_finding", "review_evidence", "record_decision"].includes(action) ? "audit"
+      : ["assign_case", "release_case_assignment", "add_participant", "add_participant_ability", "add_equipment"].includes(action) ? "jobs" : "submissions";
+  if (!hasCreditexPermission(identity, permission)) {
+    throw new CreditexOperationsError("CREDITEX_PERMISSION_REQUIRED", 403, "Your team permissions do not include this operation.");
+  }
 }
 
 async function first(
@@ -831,6 +838,13 @@ async function writeWithAudit(
       ),
   ]);
   await database.batch([
+    ...(audit.eventType.startsWith("membership.") ? [database.prepare(`INSERT INTO compliance_write_guards (
+        id, organisation_id, operation_id, step_number, verified, created_at
+      ) VALUES (?, ?, ?, ${writes.length + 1}, CASE WHEN EXISTS (SELECT 1 FROM compliance_users member
+        JOIN compliance_organisations organisation ON organisation.id=member.organisation_id
+        WHERE member.id=? AND member.firebase_uid=? AND member.organisation_id=? AND member.status='active'
+          AND organisation.status='active' AND ${creditexPermissionSql("team_access")}) THEN 1 ELSE 0 END, ?)`)
+      .bind(crypto.randomUUID(), identity.organisationId, operationId, identity.membershipId, identity.uid, identity.organisationId, createdAt)] : []),
     ...guardedWrites,
     auditStatement(
       database,
@@ -4621,19 +4635,37 @@ function namedInvitation(
   return { email, displayName };
 }
 
+function requestedMemberPermissions(role: string, input: unknown): CreditexPermission[] {
+  const available = creditexRolePermissions(role);
+  if (input === undefined) return available;
+  if (!Array.isArray(input) || !input.every(isCreditexPermission) || new Set(input).size !== input.length) {
+    throw new CreditexOperationsError("CREDITEX_PERMISSIONS_INVALID", 400, "Choose valid team permissions without duplicates.");
+  }
+  if (input.some(permission => !available.includes(permission))) {
+    throw new CreditexOperationsError("CREDITEX_PERMISSIONS_INVALID", 400, "These permissions are not available for the selected role.");
+  }
+  if (role === "admin" && available.some(permission => !input.includes(permission))) {
+    throw new CreditexOperationsError("CREDITEX_ADMIN_PERMISSIONS_REQUIRED", 400, "Administrators retain full workspace access. Choose another role to customise access.");
+  }
+  if (input.includes("audit") && !input.includes("jobs")) {
+    throw new CreditexOperationsError("CREDITEX_PERMISSIONS_INVALID", 400, "Audit access also requires jobs and corrections access.");
+  }
+  return available.filter(permission => input.includes(permission));
+}
+
 export async function loadCreditexAccess(
   database: D1Database,
   organisationId: string,
 ) {
   const [memberRows, invitationRows] = await Promise.all([
     rows(database, `SELECT id, email, display_name, role, status,
-        governance_identity_verified,
+        governance_identity_verified, permissions_json,
         last_login_at, created_at, updated_at
       FROM compliance_users
       WHERE organisation_id = ?
       ORDER BY status, display_name, email, id
       LIMIT 250`, [organisationId]),
-    rows(database, `SELECT id, email, display_name, role, status,
+    rows(database, `SELECT id, email, display_name, role, status, permissions_json,
         expires_at, claimed_at, created_at, updated_at
       FROM compliance_invitations
       WHERE organisation_id = ?
@@ -4645,8 +4677,11 @@ export async function loadCreditexAccess(
       ...member,
       governanceIdentityVerified:
         Number(member.governanceIdentityVerified) === 1,
+      permissions: resolveCreditexPermissions(String(member.role), member.permissionsJson),
     })),
-    invitations: projectRows(invitationRows),
+    invitations: projectRows(invitationRows).map(invitation => ({ ...invitation,
+      permissions: resolveCreditexPermissions(String(invitation.role), invitation.permissionsJson),
+    })),
   };
 }
 
@@ -4655,7 +4690,7 @@ export async function executeCreditexAccessAction(
   identity: ComplianceIdentity,
   body: Input,
 ) {
-  if (identity.role !== "admin") {
+  if (identity.role !== "admin" || !hasCreditexPermission(identity, "team_access")) {
     throw new CreditexOperationsError(
       "CREDITEX_ROLE_REQUIRED",
       403,
@@ -4672,6 +4707,7 @@ export async function executeCreditexAccessAction(
     const role = choice(body.role, "Role", [
       "admin", "case_manager", "reviewer", "auditor",
     ] as const);
+    const permissions = requestedMemberPermissions(role, body.permissions);
     const existingMember = await first(database,
       `SELECT id FROM compliance_users
         WHERE organisation_id = ? AND email = ? COLLATE NOCASE`,
@@ -4683,7 +4719,7 @@ export async function executeCreditexAccessAction(
       );
     }
     const findInvitation = () => first(database,
-      `SELECT id, display_name, role, status, expires_at FROM compliance_invitations
+      `SELECT id, display_name, role, status, expires_at, permissions_json FROM compliance_invitations
         WHERE organisation_id = ? AND email = ? COLLATE NOCASE
           AND status IN ('pending', 'claimed')`,
       [identity.organisationId, email]);
@@ -4691,7 +4727,8 @@ export async function executeCreditexAccessAction(
       && invitation.status === "pending"
       && valueText(invitation.expires_at) > now
       && invitation.display_name === displayName
-      && invitation.role === role;
+      && invitation.role === role
+      && JSON.stringify(resolveCreditexPermissions(role, invitation.permissions_json)) === JSON.stringify(permissions);
     const existingInvitation = await findInvitation();
     if (existingInvitation && matchesPending(existingInvitation)) {
       return { id: valueText(existingInvitation.id), delivery: "not_sent" as const,
@@ -4730,8 +4767,8 @@ export async function executeCreditexAccessAction(
       database.prepare(`INSERT INTO compliance_invitations (
           id, organisation_id, email, display_name, role, status,
           invited_by_uid, expires_at, claimed_by_uid, claimed_at,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, '', '', ?, ?)`)
+          created_at, updated_at, permissions_json
+        ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, '', '', ?, ?, ?)`)
         .bind(
           id,
           identity.organisationId,
@@ -4742,6 +4779,7 @@ export async function executeCreditexAccessAction(
           expiresAt,
           now,
           now,
+          JSON.stringify(permissions),
         ),
     );
     try {
@@ -4750,7 +4788,7 @@ export async function executeCreditexAccessAction(
         targetType: "compliance_invitation",
         targetId: id,
         summary: "A named compliance portal invitation was created.",
-        metadata: { role, ...(existingInvitation ? { expiredInvitationId: existingInvitation.id } : {}) },
+        metadata: { role, permissions, ...(existingInvitation ? { expiredInvitationId: existingInvitation.id } : {}) },
       }, now);
     } catch (error) {
       // A simultaneous retry may already have created this exact pending invitation.
@@ -4797,12 +4835,14 @@ export async function executeCreditexAccessAction(
     ] as const);
     const member = await requireRecord(
       database,
-      `SELECT id, role, status, email
+      `SELECT id, role, status, email, permissions_json
         FROM compliance_users
         WHERE id = ? AND organisation_id = ?`,
       [memberId, identity.organisationId],
       "The compliance member was not found in this organisation.",
     );
+    const permissions = requestedMemberPermissions(role, body.permissions === undefined && role === member.role
+      ? resolveCreditexPermissions(role, member.permissions_json) : body.permissions);
     const removesActiveAdmin = valueText(member.role) === "admin"
       && valueText(member.status) === "active"
       && (role !== "admin" || status !== "active");
@@ -4825,14 +4865,20 @@ export async function executeCreditexAccessAction(
     }
     await writeWithAudit(database, identity, [
       database.prepare(`UPDATE compliance_users
-        SET role = ?, status = ?, updated_at = ?
-        WHERE id = ? AND organisation_id = ?`)
+        SET role = ?, status = ?, updated_at = ?, permissions_json = ?
+        WHERE id = ? AND organisation_id = ?
+          AND (role <> 'admin' OR status <> 'active' OR (? = 'admin' AND ? = 'active')
+            OR EXISTS (SELECT 1 FROM compliance_users other_admin WHERE other_admin.organisation_id = compliance_users.organisation_id
+              AND other_admin.id <> compliance_users.id AND other_admin.role = 'admin' AND other_admin.status = 'active'))`)
         .bind(
           role,
           status,
           now,
+          JSON.stringify(permissions),
           memberId,
           identity.organisationId,
+          role,
+          status,
         ),
     ], {
       eventType: "membership.access_updated",
@@ -4842,11 +4888,12 @@ export async function executeCreditexAccessAction(
       metadata: {
         role,
         status,
+        permissions,
         bootstrapMailbox: valueText(member.email)
           === "info@ausenergyassessments.com",
       },
     }, now);
-    return { id: memberId, role, status };
+    return { id: memberId, role, status, permissions };
   }
   throw new CreditexOperationsError(
     "CREDITEX_ACCESS_ACTION_INVALID",

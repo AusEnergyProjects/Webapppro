@@ -8,13 +8,13 @@ import { PortalTeamWorkspace } from "./PortalTeamWorkspace";
 import { CreditexAuditCallPanel } from "./CreditexAuditCallPanel";
 import styles from "./PortalConnectWorkspace.module.css";
 
-type Props = { workspace: PortalWorkspace; user: User; onActiveChange?: (active: boolean) => void };
+type Props = { workspace: PortalWorkspace; user: User; onActiveChange?: (active: boolean) => void; initialPeerId?: string; initialIntentId?: string; canViewCustomers?: boolean; canMessageTeam?: boolean };
 export function PortalConnectWorkspace(props: Props) {
   return <ConnectWorkspace key={`${props.workspace}-${props.user.uid}`} {...props} />;
 }
 
-function ConnectWorkspace({ workspace, user, onActiveChange }: Props) {
-  const [view, setView] = useState<"customers" | "team">("customers");
+function ConnectWorkspace({ workspace, user, onActiveChange, initialPeerId, initialIntentId, canViewCustomers = true, canMessageTeam = true }: Props) {
+  const [view, setView] = useState<"customers" | "team">(initialPeerId || !canViewCustomers ? 'team' : 'customers');
   const [callActive, setCallActive] = useState(false);
   useEffect(() => { onActiveChange?.(callActive); }, [onActiveChange, callActive]);
   useEffect(() => () => onActiveChange?.(false), [onActiveChange]);
@@ -27,43 +27,45 @@ function ConnectWorkspace({ workspace, user, onActiveChange }: Props) {
   return <section className={styles.workspace}>
     <header className={styles.heading}><span>Conversations</span><h2>Connect</h2><p>Contact a customer or catch up with your team.</p></header>
     <nav className={styles.tabs} aria-label="Connect audience">
-      <button type="button" aria-pressed={view === "customers"} onClick={() => setView("customers")}>Customers</button>
-      <button type="button" disabled={callActive} aria-pressed={view === "team"} onClick={() => setView("team")}>Team</button>
+      {canViewCustomers && <button type="button" aria-pressed={view === "customers"} onClick={() => setView("customers")}>Customers</button>}
+      {canMessageTeam && <button type="button" disabled={callActive} aria-pressed={view === "team"} onClick={() => setView("team")}>Team</button>}
     </nav>
     {callActive && <p role="status" className={styles.muted}>Finish the active call before changing customer or conversation.</p>}
-    {view === "customers" ? <Customers workspace={workspace} user={user} callActive={callActive} onCallActiveChange={setCallActive} /> : <PortalTeamWorkspace workspace={workspace} user={user} view="connect" />}
+    {view === "customers" && canViewCustomers ? <Customers workspace={workspace} user={user} initialIntentId={initialIntentId} callActive={callActive} onCallActiveChange={setCallActive} /> : canMessageTeam && <PortalTeamWorkspace workspace={workspace} user={user} view="connect" initialPeerId={initialPeerId} />}
   </section>;
 }
 
 type CallState = { callActive: boolean; onCallActiveChange: (active: boolean) => void };
-function Customers({ workspace, user, callActive, onCallActiveChange }: Props & CallState) {
+function Customers({ workspace, user, callActive, onCallActiveChange, initialIntentId }: Props & CallState) {
   const [source, setSource] = useState<"certificate" | "enquiry" | "account">(workspace === "admin" ? "enquiry" : "certificate");
   return <>{workspace === "admin" && <label className={styles.source}>Customer list<select disabled={callActive} value={source} onChange={event => {
     const value = event.target.value; if (value === "certificate" || value === "enquiry" || value === "account") setSource(value);
   }}><option value="enquiry">Enquiries</option><option value="account">Customer accounts</option><option value="certificate">Certificate jobs</option></select></label>}
-    <CustomerDirectory key={source} workspace={workspace} user={user} source={source} callActive={callActive} onCallActiveChange={onCallActiveChange} /></>;
+    <CustomerDirectory key={source} workspace={workspace} user={user} source={source} initialIntentId={initialIntentId} callActive={callActive} onCallActiveChange={onCallActiveChange} /></>;
 }
 
 type AdminLeadResponse = { ok: boolean; error?: string; leads: { id: string; name: string; email: string; phone: string; suburb: string; state: string; postcode: string; status: string }[] };
 type AdminAccountResponse = { ok: boolean; error?: string; accounts: { accountKey: string; name: string; email: string; addressState: string; postcode: string }[]; pagination: { hasNext: boolean; nextCursor: string } };
-function CustomerDirectory({ workspace, user, source, callActive, onCallActiveChange }: Props & CallState & { source: "certificate" | "enquiry" | "account" }) {
+function CustomerDirectory({ workspace, user, source, callActive, onCallActiveChange, initialIntentId = '' }: Props & CallState & { source: "certificate" | "enquiry" | "account" }) {
+  const [linkedIntent, setLinkedIntent] = useState(initialIntentId);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [version, setVersion] = useState(0);
   const [cursors, setCursors] = useState<string[]>([""]);
-  const requestKey = JSON.stringify([workspace, user.uid, source, query, page, version, cursors[page - 1]]);
+  const requestKey = JSON.stringify([workspace, user.uid, source, query, page, version, cursors[page - 1], linkedIntent]);
   const [responseState, setResponseState] = useState<{ key: string; data: PortalConnectCustomers | null; error: string } | null>(null);
   const [selection, setSelection] = useState<{ key: string; customer: PortalConnectCustomer } | null>(null);
   const loading = responseState?.key !== requestKey;
   const result = !loading ? responseState.data : null;
   const error = !loading ? responseState.error : "";
-  const selected = !loading && !error && selection?.key === requestKey ? selection.customer : null;
+  const selected = !loading && !error ? selection?.key === requestKey ? selection.customer : result?.customers.find(customer => customer.id === linkedIntent) || null : null;
 
   useEffect(() => {
     const abort = new AbortController();
     void (async () => {
       const params = new URLSearchParams({ actorMode: workspace === "admin" ? "admin" : "compliance", search: query, page: String(page) });
+      if (linkedIntent && source === 'certificate') params.set('intentId', linkedIntent);
       let endpoint = "/api/portal-customer-connect";
       if (source === "enquiry") endpoint = "/api/admin/energy-assistant-leads";
       if (source === "account") { endpoint = "/api/admin/directory"; params.set("type", "customer"); params.set("status", "active"); params.set("pageSize", "25"); params.set("cursor", cursors[page - 1] || ""); }
@@ -85,10 +87,11 @@ function CustomerDirectory({ workspace, user, source, callActive, onCallActiveCh
       if (!abort.signal.aborted) setResponseState({ key: requestKey, data: next, error: "" });
     })().catch(reason => { if (!abort.signal.aborted) setResponseState({ key: requestKey, data: null, error: reason instanceof Error ? reason.message : "Customers could not be loaded." }); });
     return () => abort.abort();
-  }, [workspace, user, source, query, page, cursors, requestKey]);
+  }, [workspace, user, source, query, page, cursors, requestKey, linkedIntent]);
 
   return <div className={styles.customers}>
     <div className={styles.directory}>
+      {linkedIntent && <button type="button" disabled={callActive} onClick={() => { setLinkedIntent(''); setSelection(null); }}>All customers</button>}
       <form className={styles.search} onSubmit={event => { event.preventDefault(); if (callActive) return; setQuery(search.trim()); setPage(1); setCursors([""]); setVersion(current => current + 1); }}>
         <label>Find a customer<input type="search" disabled={callActive} value={search} placeholder="Name, job, email or address" maxLength={120} onChange={event => setSearch(event.target.value)} /></label>
         <button type="submit" disabled={callActive}>Search</button>

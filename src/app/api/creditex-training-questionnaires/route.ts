@@ -14,7 +14,7 @@ async function requireQuestionnaireEditor(request: Request) {
   catch (error) {
     // A valid Creditex reviewer need not also hold an internal operations account.
     if (!(error instanceof Error) || !['ADMIN_REQUIRED', 'ROLE_REQUIRED'].includes(error.message)) throw error;
-    return requireCreditexTrainingReviewer(request);
+    return requireCreditexTrainingReviewer(request, 'forms');
   }
 }
 function apiError(error: unknown) {

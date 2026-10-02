@@ -235,7 +235,7 @@ export async function POST(request: Request) {
       );
     }
     const database = getD1();
-    const access = await requireComplianceAccess(request, {
+    const access = await requireComplianceAccess(request, { requiredPermission: "governance",
       allowedRoles: ["admin"],
     }, database);
     if (access.governanceIdentityVerified !== true) {

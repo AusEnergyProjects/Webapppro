@@ -56,7 +56,7 @@ function hooksHarness() {
 
 function headerHarness() {
   const h = hooksHarness(), listeners = new Map(), properties = new Map(), observers = [], searches = [], saved = [];
-  const calls = { tasks: 0, settings: 0, signOut: 0, focus: 0, select: 0 };
+  const calls = { notifications: 0, settings: 0, profile: 0, signOut: 0, focus: 0, select: 0 };
   const input = { focus() { calls.focus++; }, select() { calls.select++; } };
   const shell = { style: { setProperty: (key, value) => properties.set(key, value), removeProperty: key => properties.delete(key) } };
   const header = { offsetHeight: 96, closest(selector) { assert.equal(selector, "[data-portal-theme]"); return shell; } };
@@ -68,12 +68,13 @@ function headerHarness() {
   const props = {
     context: "Compliance workspace", organisation: "Creditex", displayName: "Named reviewer",
     preferences: { profile: { displayName: "Named reviewer", themeKey: "indigo_orchid", colourMode: "day" }, loading: false, savingProfile: false, error: "", saveProfile: async value => { saved.push(value); return true; } },
-    onSearch: query => { searches.push(query); return true; }, onTasks: () => { calls.tasks++; },
+    onSearch: query => { searches.push(query); return true; }, onNotifications: () => { calls.notifications++; }, onProfile: () => { calls.profile++; },
     onSettings: () => { calls.settings++; }, onSignOut: () => { calls.signOut++; },
   };
   const loaded = load("components/PortalWorkspaceHeader.tsx", {
     react: h.hooks, "react/jsx-runtime": jsx, "next/image": { default: () => null },
     "./TLinkChrome": { AeaProductLink: () => null, TLinkBrand: () => null }, "./PortalWorkspaceHeader.module.css": css,
+    "./PortalProfileAvatar": { PortalProfileAvatar: () => null },
   }, { window: { addEventListener: (type, callback) => listeners.set(type, callback), removeEventListener: (type, callback) => { if (listeners.get(type) === callback) listeners.delete(type); } }, ResizeObserver });
   const render = () => {
     h.begin();
@@ -142,11 +143,11 @@ test("mode toggle preserves the personal name and palette and is disabled while 
   h.cleanup();
 });
 
-test("header tasks, counted inbox, account controls and visible profile errors use their callbacks", () => {
+test("header opens real notifications, counted inbox and separate profile and workspace settings callbacks", () => {
   const h = headerHarness(); let tree = h.render();
   assert.match(text(tree).replace(/\s+/g, " "), /Working with Creditex.*Welcome Named reviewer/);
-  labelled(tree, "Open my tasks").props.onClick();
-  assert.equal(h.calls.tasks, 1);
+  labelled(tree, "Open notifications").props.onClick();
+  assert.equal(h.calls.notifications, 1);
   h.props.notificationCount = 0; tree = h.render();
   assert.equal(nodes(labelled(tree, "Open inbox, 0 unread alerts"), node => node.type === "strong").length, 0);
   h.props.notificationCount = 7; tree = h.render();
@@ -155,7 +156,8 @@ test("header tasks, counted inbox, account controls and visible profile errors u
   inbox.props.onClick();
   labelled(tree, "Workspace settings").props.onClick();
   button(tree, "Sign out").props.onClick();
-  assert.equal(h.calls.tasks, 2); assert.equal(h.calls.settings, 1); assert.equal(h.calls.signOut, 1);
+  assert.equal(h.calls.notifications, 2); assert.equal(h.calls.settings, 1); assert.equal(h.calls.signOut, 1);
+  nodes(tree, node => node.type === "button" && text(node).trim() === "My profile")[0].props.onClick(); assert.equal(h.calls.profile, 1);
   const app = nodes(tree, node => node.type === "a" && node.props.href === "/direct-trade/field-app")[0];
   assert.match(text(app), /Get the app/);
   h.props.preferences.error = "Appearance could not be saved.";
@@ -176,6 +178,7 @@ function preferencesHarness() {
   const loaded = load("components/PortalWorkspacePreferences.tsx", {
     react: h.hooks, "react/jsx-runtime": jsx, "@/lib/trade-business-branding": branding,
     "@/lib/portal-workspace-profile": pure, "./PortalWorkspacePreferences.module.css": css,
+    "./PortalProfileAvatar": { PortalProfileAvatar: () => null },
   }, {
     window: { setTimeout: callback => { timers.set(++timerId, callback); return timerId; }, clearTimeout: id => timers.delete(id) },
     fetch: (path, init) => new Promise(resolve => requests.push({ path, init, respond(data, status = 200) { resolve({ ok: status < 400, status, json: async () => data }); } })),

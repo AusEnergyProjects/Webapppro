@@ -52,11 +52,15 @@ export async function requireCreditexCalculatorAccess(
       const complianceIdentity = await requireComplianceIdentity(identity, {
         allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
         claimPendingInvitation: false,
+        requiredPermission: "calculator",
       }, database);
       return { accessType: "compliance", identity: complianceIdentity };
     }
   } catch (error) {
     if (!(error instanceof ComplianceAccessError)) throw error;
+    if (error.code === "COMPLIANCE_PERMISSION_REQUIRED") {
+      throw new CreditexCalculatorAccessError(error.code, error.status, error.message);
+    }
   }
 
   try {

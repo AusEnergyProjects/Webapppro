@@ -107,7 +107,7 @@ export async function GET(request: Request) {
   }
   try {
     const database = getD1();
-    const member = await requireComplianceAccess(request, {
+    const member = await requireComplianceAccess(request, { requiredPermission: "jobs",
       allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
     }, database);
     const url = new URL(request.url);

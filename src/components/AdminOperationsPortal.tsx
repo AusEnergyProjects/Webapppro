@@ -736,7 +736,7 @@ export function AdminOperationsPortal() {
       }}>Skip to workspace</a>
       <PortalWorkspaceHeader context="Administration" organisation="Australian Energy Assessments" displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences} notificationCount={notificationCounts.unread || 0}
         onSearch={query => { if (tab === "jobs" && auditDirty.current && !window.confirm("Leave this audit without saving your changes?")) return false; if (!selectTab("jobs")) return false; auditDirty.current = false; setJobSearch(current => ({ query, nonce: current.nonce + 1 })); return true; }}
-        onTasks={openNotificationInbox} onSettings={() => selectTab("settings")} onSignOut={() => { if (!callActive.current || window.confirm("End the active customer call and sign out?")) void signOut(firebaseAuth); }} />
+        onNotifications={openNotificationInbox} onProfile={() => selectTab("settings")} onSettings={() => selectTab("settings")} onSignOut={() => { if (!callActive.current || window.confirm("End the active customer call and sign out?")) void signOut(firebaseAuth); }} />
       <div className="admin-layout">
         <AdminWorkspaceNavigation selected={tab} role={session.role} unread={notificationCounts.unread} onSelect={selectTab} />
         <section className="admin-content" id="admin-workspace-content" aria-label="Selected operations workspace" tabIndex={-1}>

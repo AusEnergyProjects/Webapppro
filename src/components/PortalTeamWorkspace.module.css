@@ -13,6 +13,11 @@
 .connect { display:grid; grid-template-columns:minmax(210px,280px) minmax(0,1fr); border:1px solid var(--portal-line); border-radius:14px; overflow:hidden; background:var(--portal-surface); }
 .people { padding:16px; background:var(--portal-soft); display:flex; flex-direction:column; gap:10px; border-right:1px solid var(--portal-line); }
 .people button { display:grid; text-align:left; gap:4px; }
+.people button.person { align-items:center; display:flex; gap:10px; }
+.person > span:last-child { display:grid; gap:4px; min-width:0; overflow-wrap:anywhere; }
+.conversationPerson { align-items:center; display:flex; gap:10px; min-width:0; }
+.conversationPerson h3 { overflow-wrap:anywhere; }
+.focusedTask { align-items:center; background:var(--portal-soft); border:1px solid var(--portal-line); border-radius:10px; display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; padding:12px; }
 .people small { font-weight:400; text-transform:capitalize; }
 .people p { font-size:.85rem; }
 .conversation { display:grid; grid-template-rows:auto auto 1fr auto; min-width:0; }

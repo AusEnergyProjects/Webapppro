@@ -20,7 +20,7 @@ export function tradeMapViewportUrl(base: string, options: { bounds: TradeMapBou
   params.set("mapPage", String(options.page));
   if (options.addressKey) params.set("mapAddressKey", options.addressKey);
   if (options.locationStatus !== "all") params.set("mapLocationStatus", options.locationStatus);
-  return `/api/trade-crm?${params}`;
+  return `${base.split('?')[0]}?${params}`;
 }
 
 function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null; }
