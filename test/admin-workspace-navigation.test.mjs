@@ -16,6 +16,14 @@ const text = node => node == null || typeof node === "boolean" ? "" : typeof nod
 const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
 const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node).replace(/\s+/g, " ").trim() === label)[0];
 
+test("the document-scrolling admin workspace keeps its header above the desktop and mobile rail", () => {
+  const css = read("AdminOperationsPortal.css");
+  assert.match(css, /\.admin-workspace > header\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;/);
+  assert.match(css, /\.admin-workspace \.admin-sidebar\s*\{[^}]*top:\s*var\(--portal-header-height, 96px\)/);
+  assert.match(css, /scroll-margin-top:\s*var\(--portal-header-height, 96px\)/);
+  assert.match(css, /scroll-margin-top:\s*calc\(var\(--portal-header-height, 96px\) \+ 66px\)/);
+});
+
 test("desktop and mobile navigation preserve every role boundary", () => {
   for (const role of ["owner", "admin", "reviewer", "support"]) {
     const selected = [];

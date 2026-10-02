@@ -223,7 +223,7 @@ export async function POST(request: Request) {
   }
   try {
     const database = getD1();
-    const access = await requireComplianceAccess(request, { requiredPermission: "governance",
+    const access = await requireComplianceAccess(request, { requiredPermission: request.method === "GET" ? "governance" : "governance_manage",
       allowedRoles: ["admin"],
     }, database);
     const body = requestRecord(await readBoundedJsonRequest(

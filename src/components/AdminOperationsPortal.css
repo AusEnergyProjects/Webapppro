@@ -424,6 +424,8 @@
 
 /* The administration shell follows TLink's persistent left workspace rail. */
 .admin-shell.admin-workspace { --color-aea-muted: #586d76; --color-aea-text: #30454e; --color-aea-ink: #163540; --admin-rail: #102b36; --admin-accent: #087f78; background: var(--portal-background, #f3f7f8); display: flex; flex-direction: column; min-height: 100dvh; padding: 0; }
+/* The admin workspace scrolls with the page, so its header must stay with the rail. */
+.admin-workspace > header { position: sticky; top: 0; }
 .admin-workspace .admin-layout { display: grid; grid-template-columns: 248px minmax(0, 1fr); flex: 1; min-height: calc(100dvh - var(--portal-header-height, 96px)); }
 .admin-workspace .admin-sidebar { align-self: start; background: var(--admin-rail); border: 0; display: flex; flex-direction: column; gap: 24px; height: calc(100dvh - var(--portal-header-height, 96px)); min-width: 0; overflow-y: auto; overscroll-behavior-y: contain; padding: 22px 14px 18px; position: sticky; scrollbar-color: #496670 var(--admin-rail); scrollbar-width: thin; top: var(--portal-header-height, 96px); }
 .admin-rail-heading { display: grid; gap: 3px; padding: 0 12px; }
@@ -442,7 +444,7 @@
 .admin-creditex-link { align-items: center; border-top: 1px solid #34505a; color: #a2e9d6; display: flex; flex-shrink: 0; font-size: .8rem; gap: 8px; justify-content: space-between; margin-top: auto; min-height: 46px; padding: 16px 12px 0; text-decoration: none; }
 .admin-creditex-link:hover { color: #fff; text-decoration: underline; }
 .admin-mobile-section { display: none; }
-.admin-workspace .admin-content { background: var(--portal-surface, #fff); color: var(--color-aea-text); margin: 0 auto; max-width: 1680px; min-width: 0; padding: 30px clamp(20px, 2.8vw, 42px) 48px; scroll-margin-top: 90px; width: 100%; }
+.admin-workspace .admin-content { background: var(--portal-surface, #fff); color: var(--color-aea-text); margin: 0 auto; max-width: 1680px; min-width: 0; padding: 30px clamp(20px, 2.8vw, 42px) 48px; scroll-margin-top: var(--portal-header-height, 96px); width: 100%; }
 .admin-skip-link { background: var(--portal-surface, #fff); border: 2px solid var(--admin-accent); border-radius: 8px; color: #163540; font-size: .875rem; left: 16px; padding: 12px 18px; position: fixed; top: -100px; z-index: 100; }
 .admin-skip-link:focus { top: 10px; }
 .admin-supporting-form-templates { box-shadow: none; margin-top: 20px; padding: 0; }
@@ -489,7 +491,7 @@
   .admin-nav-groups, .admin-rail-heading, .admin-creditex-link { display: none; }
   .admin-mobile-section { align-items: center; color: #c5d8df; display: flex; font-size: .8rem; gap: 12px; }
   .admin-mobile-section select { background: #1e404c; border: 1px solid #52707b; border-radius: 8px; color: #fff; flex: 1; font: inherit; font-size: .875rem; min-height: 44px; min-width: 0; padding: 9px 12px; }
-  .admin-workspace .admin-content { padding: 24px 16px 36px; scroll-margin-top: 144px; }
+  .admin-workspace .admin-content { padding: 24px 16px 36px; scroll-margin-top: calc(var(--portal-header-height, 96px) + 66px); }
   .admin-register-heading { align-items: start; }
   .admin-register-heading p { line-height: 1.5; }
   .admin-register-filters { gap: 10px; padding: 14px; }

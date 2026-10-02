@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as collaboration from "../src/lib/trade-job-collaboration.ts";
 import * as syncChanges from "../src/lib/trade-team-sync-server.ts";
+import * as permissions from "../src/lib/creditex-permissions.ts";
 
 import * as activityWorkPack from "../src/lib/creditex-activity-work-pack.ts";
 import * as interchangePreflight from "../src/lib/creditex-interchange-preflight.ts";
@@ -35,6 +36,7 @@ function loadTypescriptModule(path, mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (specifier === "./creditex-permissions.ts") return permissions;
     if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
@@ -176,7 +178,8 @@ function sourcedDraftDatabase({
       role text NOT NULL,
       status text NOT NULL,
       governance_identity_verified integer NOT NULL,
-      governance_identity_verified_by_uid text NOT NULL
+      governance_identity_verified_by_uid text NOT NULL,
+      permissions_json text DEFAULT NULL
     );
     CREATE TABLE compliance_programs (
       id text PRIMARY KEY,

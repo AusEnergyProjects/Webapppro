@@ -6,7 +6,7 @@ export const runtime="edge";
 export const dynamic="force-dynamic";
 async function handle(request:Request) {
   if(!sameOrigin(request)) return adminJson({ok:false,error:"Request origin was not accepted."},403);
-  try {const db=getD1(),member=await requireComplianceAccess(request,{allowedRoles:["admin","case_manager","reviewer","auditor"],requiredPermission:request.method === "GET" ? "jobs" : "audit"},db);
+  try {const db=getD1(),member=await requireComplianceAccess(request,{allowedRoles:["admin","case_manager","reviewer","auditor"],requiredPermission:"jobs"},db);
     return await handleLifecycleRequest(request,db,{kind:"compliance",uid:member.uid,organisationId:member.organisationId,memberId:member.membershipId,role:member.role});
   }catch(error){return lifecycleError(error);}
 }

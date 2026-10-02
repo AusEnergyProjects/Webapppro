@@ -113,7 +113,7 @@ function ConditionEditor({ form, targetKey, phase, condition, locked, label, onC
   </div>;
 }
 
-export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onManageAccess, onDirtyChange }: { api: Api; actorMode: "admin" | "creditex"; canAuthor?: boolean; onManageAccess?: () => void; onDirtyChange?: (dirty: boolean) => void }) {
+export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, canPublish = canAuthor, onManageAccess, onDirtyChange }: { api: Api; actorMode: "admin" | "creditex"; canAuthor?: boolean; canPublish?: boolean; onManageAccess?: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const [editorView, setEditorView] = useState<"form" | "map">("form");
   const [mapOpened, setMapOpened] = useState(false);
   const [mapEditorOpen, setMapEditorOpen] = useState(false);
@@ -135,6 +135,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
   const [selected, setSelected] = useState("");
   const [formHistory, setFormHistory] = useState(createEditorFormHistory(null));
   const { form, dirty } = formHistory;
+  const canEditCurrent = canAuthor && (Boolean(draftCopy) || canPublish);
   const [expectedVersion, setExpectedVersion] = useState(0); const [question, setQuestion] = useState(0);
   const [busy, setBusy] = useState(true); const [message, setMessage] = useState("");
   const [records, setRecords] = useState<ActivityRecord[]>([]);
@@ -142,11 +143,11 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
   const endpoint = "/api/trade-activity-forms";
   function setForm(value: ActivityForm | null) { setFormHistory(createEditorFormHistory(value)); }
   function changeForm(value: ActivityForm | ((current: ActivityForm) => ActivityForm), group = "") {
-    if (!canAuthor || busy) return;
+    if (!canEditCurrent || busy) return;
     setFormHistory((current) => current.form ? changeEditorFormHistory(current, typeof value === "function" ? value(current.form) : value, group) : current);
   }
   function travelHistory(direction: "undo" | "redo") {
-    if (!canAuthor || busy) return;
+    if (!canEditCurrent || busy) return;
     const next = direction === "undo" ? undoEditorFormHistory(formHistory) : redoEditorFormHistory(formHistory);
     if (next === formHistory || !next.form) return;
     const key = form?.fields[question]?.key;
@@ -203,7 +204,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     setSearch(""); setProgram("");
   }
   async function save() {
-    if (!form || !canAuthor || busy) return; setBusy(true); setMessage("");
+    if (!form || !canAuthor || !canPublish || busy) return; setBusy(true); setMessage("");
     try { const result = await api(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save_master", actorMode,
       activityTemplateId: form.activityTemplateId, variantId: form.variantId, expectedVersion, form }) });
       if (!result.form || typeof result.form !== "object") throw new Error("The master form was not saved.");
@@ -281,7 +282,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     finally { setBusy(false); }
   }
   async function finishDraft(action: "publish_master_draft" | "discard_master_draft") {
-    if (!draftCopy || !canAuthor || busy || (action === "publish_master_draft" && dirty)) return;
+    if (!draftCopy || !canAuthor || busy || (action === "publish_master_draft" && (!canPublish || dirty))) return;
     setBusy(true); setMessage("");
     try {
       const result = await api(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, actorMode, draftId: draftCopy.id, expectedRevision: draftCopy.revision }) });
@@ -305,7 +306,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     changeForm((current) => current ? { ...current, fields: current.fields.map((field, index) => index === question ? { ...field, ...patch } : field) } : current, group ? `question:${form?.fields[question]?.key}:${group}` : "");
   }
   function moveField(offset: -1 | 1) {
-    if (!form) return;
+    if (!form || !canEditCurrent || busy) return;
     const current = form.fields[question]; const destination = fieldMoveDestination(form.fields, question, offset);
     if (!current || destination < 0 || current.sourceRequirementId
       || current.presentation === "derived" || current.requiredValue !== undefined) return;
@@ -313,7 +314,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     changeForm({ ...form, fields }); setQuestion(destination);
   }
   function deleteField() {
-    if (!form || !canAuthor || busy) return;
+    if (!form || !canEditCurrent || busy) return;
     const current = form.fields[question];
     if (!current) return;
     const reason = editorQuestionDeleteReason(form, current.key);
@@ -325,20 +326,20 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
 
   }
   function moveDeclaration(index: number, offset: -1 | 1) {
-    if (!form) return;
+    if (!form || !canEditCurrent || busy) return;
     const destination = index + offset;
     if (destination < 0 || destination >= form.declarations.length) return;
     const declarations = [...form.declarations]; const [current] = declarations.splice(index, 1); declarations.splice(destination, 0, current);
     changeForm({ ...form, declarations });
   }
   function addDeclaration() {
-    if (!form) return;
+    if (!form || !canEditCurrent || busy) return;
     const declaration: ActivityDeclaration = { key: `custom.${crypto.randomUUID()}`, title: "New Creditex declaration",
       text: "Enter the declaration wording.", role: "customer", phase: "after", required: false, sourceUrl: "", sourceTextSha256: "" };
     changeForm({ ...form, declarations: [...form.declarations, declaration] }); selectSignature(declaration.key);
   }
   function updateCondition(key: string, condition: ActivityCondition | undefined, group = "") {
-    if (!form || !canAuthor || busy) return false;
+    if (!form || !canEditCurrent || busy) return false;
     try { changeForm(changeEditorCondition(form, key, condition), group); setMessage(""); return true; }
     catch (error) { setMessage(error instanceof Error ? error.message : "This answer rule could not be changed."); return false; }
   }
@@ -349,7 +350,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
   function selectQuestion(index: number) { setQuestion(index); setSigningItem(""); setRemoval(null); setRenamingPage(""); }
   function selectSignature(key: string) { setSigningItem(key); setRemoval(null); setRenamingPage(""); }
   function editPage(change: () => EditorFormChange) {
-    if (!canAuthor || busy) return false;
+    if (!canEditCurrent || busy) return false;
     try {
       const next = change();
       changeForm(next.form); selectQuestion(Math.max(0, next.form.fields.findIndex((item) => item.key === next.selectedFieldKey)));
@@ -358,7 +359,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     } catch (error) { setMessage(error instanceof Error ? error.message : "This page could not be changed."); return false; }
   }
   function confirmRemoval() {
-    if (!form || !removal || !canAuthor || busy) return;
+    if (!form || !removal || !canEditCurrent || busy) return;
     if (removal.kind === "page") { editPage(() => deleteEditorPage(form, removal.key)); return; }
     if (removal.kind === "signature") {
       const declaration = form.declarations.find((item) => item.key === removal.key);
@@ -374,7 +375,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     setRemoval(null); setMessage("");
   }
   function convertToSignature() {
-    if (!form) return;
+    if (!form || !canEditCurrent || busy) return;
     const current = form.fields[question];
     if (!current?.key.startsWith("custom.") || form.fields.length <= 1 || current.sourceRequirementId || current.presentation || current.requiredValue !== undefined || fieldIsReferenced(form, current.key)) return;
     const declaration: ActivityDeclaration = { key: current.key, title: current.label === "New question" ? "New signature" : current.label,
@@ -384,7 +385,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     setQuestion(Math.max(0, question - 1)); selectSignature(declaration.key);
   }
   function deleteDeclaration(index: number) {
-    if (!form || !canAuthor || busy) return;
+    if (!form || !canEditCurrent || busy) return;
     const current = form.declarations[index];
     if (!current?.key.startsWith("custom.") || current.sourceUrl || current.sourceTextSha256) return;
     setRemoval({ kind: "signature", key: current.key }); setRenamingPage("");
@@ -423,14 +424,14 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
     return (!program || activity?.programCode === program) && `${activity?.programCode || ""} ${activity?.activityCode || ""} ${item.title}`.toLowerCase().includes(search.trim().toLowerCase());
   });
   const saveCurrent = draftCopy ? saveDraft : save;
-  const historyControls = canAuthor && <div className={styles.masterRowActions} role="group" aria-label="Unsaved form history">
+  const historyControls = canEditCurrent && <div className={styles.masterRowActions} role="group" aria-label="Unsaved form history">
     <button type="button" disabled={busy || !formHistory.past.length} title="Undo an unsaved form change (Ctrl/Cmd+Z outside text fields)" aria-keyshortcuts="Control+Z Meta+Z" onClick={() => travelHistory("undo")}>Undo</button>
     <button type="button" disabled={busy || !formHistory.future.length} title="Redo a form change (Ctrl/Cmd+Shift+Z or Ctrl+Y outside text fields)" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y" onClick={() => travelHistory("redo")}>Redo</button>
   </div>;
   const renameControls = form && selectedPage && renamingPage === selectedPage.key && <div className={styles.masterPageAction}><label>Page name<input value={pageName} maxLength={160} onChange={(event) => setPageName(event.target.value)} /></label><div className={styles.masterRowActions}><button type="button" disabled={busy || !pageName.trim()} onClick={() => editPage(() => renameEditorPage(form, selectedPage.key, pageName))}>Apply page name</button><button type="button" onClick={() => setRenamingPage("")}>Cancel rename</button></div></div>;
   const removalControls = removal && removalLabel && <div className={styles.masterPageAction} role="alert"><strong>Delete {removal.kind} &quot;{removalLabel}&quot;?</strong><p>{removalPage ? `This removes the page and its ${removalPage.fields.length} question${removalPage.fields.length === 1 ? "" : "s"}.` : "This removes the selected item from this form."} Changes take effect when you {draftCopy ? "save and publish this draft" : "save and publish"}. Existing signed records keep their original form.</p>{removalPage && <ul>{removalPage.fields.map((item) => <li key={item.key}>{item.label}</li>)}</ul>}<div className={styles.masterRowActions}><button type="button" className={styles.masterDelete} disabled={busy} onClick={confirmRemoval}>{`Confirm delete ${removal.kind}`}</button><button type="button" onClick={() => setRemoval(null)}>{`Keep ${removal.kind}`}</button></div></div>;
-  const itemActions = form && field && canAuthor && <div className={styles.masterRowActions}><button type="button" disabled={busy} onClick={addDeclaration}>Add signature</button>{signingItem ? <><button type="button" onClick={() => selectQuestion(question)}>Back to questions</button><button type="button" className={styles.masterDelete} disabled={busy || !selectedDeclaration?.key.startsWith("custom.") || Boolean(selectedDeclaration.sourceUrl || selectedDeclaration.sourceTextSha256)} onClick={() => deleteDeclaration(form.declarations.findIndex((item) => item.key === signingItem))}>Delete signature</button></> : <button type="button" className={styles.masterDelete} disabled={busy || Boolean(questionDeleteReason)} onClick={deleteField}>Delete question</button>}</div>;
-  const itemEditor = form && field ? (<fieldset disabled={busy || !canAuthor}>
+  const itemActions = form && field && canEditCurrent && <div className={styles.masterRowActions}><button type="button" disabled={busy} onClick={addDeclaration}>Add signature</button>{signingItem ? <><button type="button" onClick={() => selectQuestion(question)}>Back to questions</button><button type="button" className={styles.masterDelete} disabled={busy || !selectedDeclaration?.key.startsWith("custom.") || Boolean(selectedDeclaration.sourceUrl || selectedDeclaration.sourceTextSha256)} onClick={() => deleteDeclaration(form.declarations.findIndex((item) => item.key === signingItem))}>Delete signature</button></> : <button type="button" className={styles.masterDelete} disabled={busy || Boolean(questionDeleteReason)} onClick={deleteField}>Delete question</button>}</div>;
+  const itemEditor = form && field ? (<fieldset disabled={busy || !canEditCurrent}>
       <legend>{draftCopy ? "Draft form" : `Master version ${form.version}`}{dirty ? " | Unsaved changes" : ""}</legend>
       <small>{draftCopy ? "This copy does not change live jobs. After publication, new records and unsigned drafts use it; signed and submitted records keep their original version." : "New records and unsigned drafts use it when opened; signed and submitted records stay locked to what was agreed."}</small>
       <label>Form title<input value={form.title} maxLength={300} onChange={(event) => { changeForm({ ...form, title: event.target.value }, "form:title"); }} /></label>
@@ -481,16 +482,16 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
         </article>;
       })}</details>
       <details><summary>Regulator sources and review notes</summary>{form.sources.map((source) => <p key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></p>)}{form.reviewNotes.map((note, index) => <p key={index}>{note}</p>)}</details>
-      <button type="button" disabled={!dirty} onClick={() => void saveCurrent()}>{busy ? "Saving..." : draftCopy ? "Save draft" : "Save and publish master"}</button>
+      {canEditCurrent && <button type="button" disabled={!dirty} onClick={() => void saveCurrent()}>{busy ? "Saving..." : draftCopy ? "Save draft" : "Save and publish master"}</button>}
     </fieldset>) : null;
   return <section className={`${styles.builderSection} ${styles.masterLibrary}`} aria-label="Activity form editor">
     {form && <button className={styles.masterBack} type="button" disabled={busy} onClick={backToCatalogue}>Back to all forms</button>}
-    <header><div><h2>{form ? form.title : "Activity forms"}</h2><p>{canAuthor ? form ? draftCopy ? "Edit and save your draft while the published form stays available. Replace it when your team is ready." : "Changes appear in the phone as you type. Make a draft copy if you want to save work before publishing." : "Create a new form for an activity, edit a published form, or duplicate one into a saved draft." : "Choose a form to test its questions in the phone preview."}</p></div>
+    <header><div><h2>{form ? form.title : "Activity forms"}</h2><p>{canAuthor ? canPublish ? form ? draftCopy ? "Edit and save your draft while the published form stays available. Replace it when your team is ready." : "Changes appear in the phone as you type. Make a draft copy if you want to save work before publishing." : "Create a new form for an activity, edit a published form, or duplicate one into a saved draft." : draftCopy ? "Edit and save this draft. A team member with publishing permission can publish it when ready." : "Preview published forms, create a new draft, or duplicate a form to edit your own draft copy." : "Choose a form to test its questions in the phone preview."}</p></div>
       {!form && canAuthor && <button type="button" className={styles.masterPrimaryAction} disabled={busy || !catalogue.length || creatingForm} onClick={startNewForm}>New form</button>}
       {!form && <button type="button" disabled={busy} onClick={() => void loadCatalogue()}>{busy ? "Loading forms..." : "Refresh forms"}</button>}
       {canAuthor && <button type="button" disabled={busy} onClick={() => void reviewQueue()}>Submitted field records</button>}
       {onManageAccess && <button type="button" onClick={onManageAccess}>Set up form editors</button>}</header>
-    {actorMode === "creditex" && !canAuthor ? <div className={styles.masterAccess} role="note"><strong>You can preview and test every form.</strong><p>Sign in with your named Creditex administrator, case manager or reviewer account to edit forms. Shared-mailbox and auditor accounts are read-only. {onManageAccess ? "Use Set up form editors to invite a named member of your team." : "Ask your Creditex administrator to invite you through Team access."} Australian Energy Assessments owners can use <a href="/operations/control-centre#form-governance">Admin → Activity forms</a>.</p></div> : null}
+    {actorMode === "creditex" && !canAuthor ? <div className={styles.masterAccess} role="note"><strong>You can preview and test every form.</strong><p>Editing requires a named account with Create and edit form drafts permission. Publishing needs Publish activity forms permission too. {onManageAccess ? "Use Set up form editors to manage your team's access." : "Ask your Creditex administrator to update your team access."} Australian Energy Assessments owners can use <a href="/operations/control-centre#form-governance">Admin → Activity forms</a>.</p></div> : null}
     {message ? <p role="status">{message}</p> : null}
     {reviewLink ? <p><a href={reviewLink} target="_blank" rel="noreferrer">Open the signed field report and original evidence</a> (link expires in one hour)</p> : null}
     {!form && creatingForm && canAuthor && <section className={styles.masterCreate} aria-label="Create a new activity form">
@@ -504,7 +505,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
           <label>Form name<input value={newFormName} maxLength={300} placeholder="For example, Creditex installation checks" onChange={(event) => setNewFormName(event.target.value)} /></label>
         </div>
       </fieldset>
-      <p>The published form stays available until you choose Replace published form. Each activity and premises type uses one published form for new records.</p>
+      <p>The published form stays available until {canPublish ? "you choose Replace published form" : "a team member with publishing permission publishes the draft"}. Each activity and premises type uses one published form for new records.</p>
       <div className={styles.masterRowActions}><button type="button" className={styles.masterPrimaryAction} disabled={busy || !newFormSource || !newFormName.trim()} onClick={() => void createNewForm()}>{busy ? "Preparing form..." : "Create draft"}</button>{message && newFormActivity && <button type="button" disabled={busy} onClick={() => void chooseNewFormActivity(newFormActivity, newFormSource?.form.variantId)}>Reload activity</button>}<button type="button" disabled={busy} onClick={() => { setCreatingForm(false); setNewFormSource(null); setNewFormName(""); setMessage(""); }}>Cancel new form</button></div>
     </section>}
     {!form && catalogue.length > 0 && <>
@@ -522,7 +523,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
             <header><h3 id={`master-program-${actorMode}-${code}`}>{code}</h3><span>{items.length} built-in program {items.length === 1 ? "form" : "forms"}</span></header>
             <ul>{items.map((item) => <li key={item.activityTemplateId} className={styles.masterRow}>
               <span className={styles.masterCode}>{item.activityCode}</span><strong>{item.title}</strong>
-              <div className={styles.masterRowActions}><button type="button" disabled={busy} aria-label={`${canAuthor ? "Edit" : "Preview"} ${item.programCode} ${item.activityCode}: ${item.title}`} onClick={() => void load(item.activityTemplateId)}>{canAuthor ? "Edit" : "Preview"}</button>{canAuthor && <button type="button" disabled={busy} aria-label={`Duplicate ${item.programCode} ${item.activityCode}: ${item.title}`} onClick={() => void duplicate(item.activityTemplateId)}>Duplicate</button>}</div>
+              <div className={styles.masterRowActions}><button type="button" disabled={busy} aria-label={`${canAuthor && canPublish ? "Edit" : "Preview"} ${item.programCode} ${item.activityCode}: ${item.title}`} onClick={() => void load(item.activityTemplateId)}>{canAuthor && canPublish ? "Edit" : "Preview"}</button>{canAuthor && <button type="button" disabled={busy} aria-label={`Duplicate ${item.programCode} ${item.activityCode}: ${item.title}`} onClick={() => void duplicate(item.activityTemplateId)}>Duplicate</button>}</div>
             </li>)}</ul>
           </section> : null;
         })}
@@ -539,13 +540,13 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
       event.preventDefault();
       travelHistory(key === "y" || event.shiftKey ? "redo" : "undo");
     }}>
-    <div className={styles.masterSaveBar}><span role="status">{draftCopy ? `Draft copy ${draftCopy.revision}${dirty ? " | Unsaved changes" : " | Saved"}` : canAuthor ? dirty ? "Unsaved changes" : "Published form" : "Read-only preview"} · {draftCopy ? draftCopy.baseMasterVersion ? `Published version ${draftCopy.baseMasterVersion}` : "Based on built-in form" : `Published version ${form.version}`}</span>{canAuthor && <div className={styles.masterRowActions}><button type="button" disabled={!dirty || busy} onClick={() => void saveCurrent()}>{busy ? "Saving..." : draftCopy ? "Save draft" : "Save and publish master"}</button>{draftCopy ? <><button type="button" disabled={busy || dirty || !draftCopy.baseIsCurrent} onClick={() => setDraftConfirmation("publish")}>Replace published form</button><button type="button" disabled={busy} onClick={() => setDraftConfirmation("discard")}>Discard draft</button></> : <button type="button" disabled={busy || dirty} onClick={() => void duplicate(form.activityTemplateId)}>Duplicate to draft</button>}</div>}</div>
-    {draftCopy && <p className={styles.masterLibraryNote}>{dirty ? "Save your draft before replacing the published form." : "You can leave and return to this saved draft at any time."} {!draftCopy.baseIsCurrent && "The published form has changed since this copy was created. This copy cannot replace it; create a new copy of the current form."}</p>}
-    {draftConfirmation && draftCopy && <div className={styles.masterAccess} role="alert"><strong>{draftConfirmation === "publish" ? draftCopy.baseMasterVersion ? `Replace published version ${draftCopy.baseMasterVersion} with this saved draft?` : "Replace the built-in form with this saved draft?" : "Discard this draft copy?"}</strong><p>{draftConfirmation === "publish" ? "New records will use the replacement. Signed and submitted records keep their original version." : "The published form stays unchanged. Any unsaved edits in this copy will be discarded."}</p><div className={styles.masterRowActions}><button type="button" disabled={busy || (draftConfirmation === "publish" && (dirty || !draftCopy.baseIsCurrent))} onClick={() => void finishDraft(draftConfirmation === "publish" ? "publish_master_draft" : "discard_master_draft")}>{draftConfirmation === "publish" ? "Confirm replacement" : "Confirm discard"}</button><button type="button" disabled={busy} onClick={() => setDraftConfirmation(null)}>Keep editing</button></div></div>}
+    <div className={styles.masterSaveBar}><span role="status">{draftCopy ? `Draft copy ${draftCopy.revision}${dirty ? " | Unsaved changes" : " | Saved"}` : canEditCurrent ? dirty ? "Unsaved changes" : "Published form" : "Read-only preview"} · {draftCopy ? draftCopy.baseMasterVersion ? `Published version ${draftCopy.baseMasterVersion}` : "Based on built-in form" : `Published version ${form.version}`}</span>{canAuthor && <div className={styles.masterRowActions}>{canEditCurrent && <button type="button" disabled={!dirty || busy} onClick={() => void saveCurrent()}>{busy ? "Saving..." : draftCopy ? "Save draft" : "Save and publish master"}</button>}{draftCopy ? <>{canPublish && <button type="button" disabled={busy || dirty || !draftCopy.baseIsCurrent} onClick={() => setDraftConfirmation("publish")}>Replace published form</button>}<button type="button" disabled={busy} onClick={() => setDraftConfirmation("discard")}>Discard draft</button></> : <button type="button" disabled={busy || dirty} onClick={() => void duplicate(form.activityTemplateId)}>Duplicate to draft</button>}</div>}</div>
+    {draftCopy && <p className={styles.masterLibraryNote}>{dirty ? canPublish ? "Save your draft before replacing the published form." : "Save your changes so your team can review this draft." : "You can leave and return to this saved draft at any time."} {!draftCopy.baseIsCurrent && "The published form has changed since this copy was created. This copy cannot replace it; create a new copy of the current form."}</p>}
+    {draftConfirmation && draftCopy && canAuthor && (draftConfirmation !== "publish" || canPublish) && <div className={styles.masterAccess} role="alert"><strong>{draftConfirmation === "publish" ? draftCopy.baseMasterVersion ? `Replace published version ${draftCopy.baseMasterVersion} with this saved draft?` : "Replace the built-in form with this saved draft?" : "Discard this draft copy?"}</strong><p>{draftConfirmation === "publish" ? "New records will use the replacement. Signed and submitted records keep their original version." : "The published form stays unchanged. Any unsaved edits in this copy will be discarded."}</p><div className={styles.masterRowActions}><button type="button" disabled={busy || (draftConfirmation === "publish" && (dirty || !draftCopy.baseIsCurrent))} onClick={() => void finishDraft(draftConfirmation === "publish" ? "publish_master_draft" : "discard_master_draft")}>{draftConfirmation === "publish" ? "Confirm replacement" : "Confirm discard"}</button><button type="button" disabled={busy} onClick={() => setDraftConfirmation(null)}>Keep editing</button></div></div>}
     <div className={styles.masterViewPicker} role="group" aria-label="Form design view"><button type="button" aria-pressed={editorView === "form"} onClick={() => setEditorView("form")}>Form editor</button><button type="button" aria-pressed={editorView === "map"} onClick={() => { setMapOpened(true); setEditorView("map"); }}><TlinkMindMapMark /> TLink Mind Map</button></div>
     {editorView === "form" && historyControls}
     <div hidden={editorView !== "map"}>
-      {mapOpened && <TlinkFormMindMap key={`${form.activityTemplateId}:${form.variantId}:${draftCopy?.id || "published"}`} form={form} editable={canAuthor && !busy} selectedKey={signingItem ? '@declaration:' + signingItem : field.key}
+      {mapOpened && <TlinkFormMindMap key={`${form.activityTemplateId}:${form.variantId}:${draftCopy?.id || "published"}`} form={form} editable={canEditCurrent && !busy} selectedKey={signingItem ? '@declaration:' + signingItem : field.key}
         onSelect={selectMapItem} onEdit={(key) => { selectMapItem(key); setMapEditorOpen(true); }} onCondition={updateCondition} historyControls={historyControls}
         onAddPage={() => editPage(() => addEditorPage(form, selectedPage?.key))}
         onAddQuestion={(key) => editPage(() => addEditorPageQuestion(form, key))}
@@ -553,35 +554,35 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, onM
         onDropQuestion={(key, target, position) => editPage(() => dropEditorQuestion(form, key, target, position))}
         editor={editorView === "map" && mapEditorOpen ? <>{message && <p role="status">{message}</p>}{renamingPage ? renameControls : removal ? removalControls : <>{itemActions}{itemEditor}</>}</> : null}
         onCloseEditor={() => { setMapEditorOpen(false); setRemoval(null); setRenamingPage(""); }}
-        onRenamePage={(key) => { if (!canAuthor || busy) return; const page = pages.find((item) => item.key === key); if (!page || editorPageRenameReason(form, key)) return; selectMapItem(key); setMapEditorOpen(true); setRenamingPage(key); setPageName(page.section); }}
-        onDelete={(kind, key) => { if (!canAuthor || busy) return; selectMapItem(kind === "signature" ? `@declaration:${key}` : key); setMapEditorOpen(true); setRemoval({ kind, key }); }} />}
+        onRenamePage={(key) => { if (!canEditCurrent || busy) return; const page = pages.find((item) => item.key === key); if (!page || editorPageRenameReason(form, key)) return; selectMapItem(key); setMapEditorOpen(true); setRenamingPage(key); setPageName(page.section); }}
+        onDelete={(kind, key) => { if (!canEditCurrent || busy) return; selectMapItem(kind === "signature" ? `@declaration:${key}` : key); setMapEditorOpen(true); setRemoval({ kind, key }); }} />}
     </div>
     {editorView === "form" && <>
     <section className={styles.masterPages} aria-label="Pages and sections">
-      <header><div><h3>Pages and sections</h3><p>Group questions on a page, then check the phone preview.</p></div>{canAuthor && <button type="button" disabled={busy} onClick={() => editPage(() => addEditorPage(form, selectedPage?.key))}>Add page</button>}</header>
-      <label>Page to {canAuthor ? "edit" : "preview"}<select value={selectedPage?.key || ""} onChange={(event) => { const page = pages.find((item) => item.key === event.target.value); if (page) selectQuestion(form.fields.findIndex((item) => item.key === page.fieldKeys[0])); }}>
+      <header><div><h3>Pages and sections</h3><p>Group questions on a page, then check the phone preview.</p></div>{canEditCurrent && <button type="button" disabled={busy} onClick={() => editPage(() => addEditorPage(form, selectedPage?.key))}>Add page</button>}</header>
+      <label>Page to {canEditCurrent ? "edit" : "preview"}<select value={selectedPage?.key || ""} onChange={(event) => { const page = pages.find((item) => item.key === event.target.value); if (page) selectQuestion(form.fields.findIndex((item) => item.key === page.fieldKeys[0])); }}>
         {!selectedPage && <option value="">Choose a question page</option>}{pages.map((page, index) => <option key={page.key} value={page.key}>{index + 1}. {page.section} · {page.phase === "before" ? "Before" : "After"} work · {page.fields.length} question{page.fields.length === 1 ? "" : "s"}{page.repeatGroup ? " · Repeated item" : ""}</option>)}
       </select></label>
       {selectedPage && <>
         <div className={styles.masterPageQuestions}>{selectedPage.fields.map((item, index) => <button key={item.key} type="button" aria-current={item.key === field.key ? "true" : undefined} onClick={() => selectQuestion(form.fields.findIndex((candidate) => candidate.key === item.key))}><span>{index + 1}</span><strong>{item.label}</strong><small>{item.required ? "Required" : "Optional"}</small></button>)}</div>
-        {canAuthor && <div className={styles.masterRowActions}>
+        {canEditCurrent && <div className={styles.masterRowActions}>
           <button type="button" disabled={busy || selectedPage.fields.length >= ACTIVITY_WIZARD_PAGE_FIELD_LIMIT} onClick={() => editPage(() => addEditorPageQuestion(form, selectedPage.key))}>Add question</button>
           <button type="button" disabled={busy || Boolean(pageRenameReason)} title={pageRenameReason || undefined} onClick={() => { setRenamingPage(selectedPage.key); setPageName(selectedPage.section); setRemoval(null); }}>Rename page</button>
           <button type="button" className={styles.masterDelete} disabled={busy || Boolean(pageDeleteReason)} onClick={() => { setRemoval({ kind: "page", key: selectedPage.key }); setRenamingPage(""); }}>Delete page</button>
         </div>}
-        {canAuthor && (pageRenameReason || pageDeleteReason) && <small>{pageRenameReason} {pageDeleteReason}</small>}
+        {canEditCurrent && (pageRenameReason || pageDeleteReason) && <small>{pageRenameReason} {pageDeleteReason}</small>}
         {renameControls}
       </>}
       <small>Up to 8 questions per screen. Answers can hide questions; repeated items have their own pages. A new page starts with one question. Signatures follow the question pages.</small>
     </section>
-    <label>Item to {canAuthor ? "edit" : "preview"}<select value={signingItem ? `signature:${signingItem}` : String(question)} onChange={(event) => { if (event.target.value.startsWith("signature:")) selectSignature(event.target.value.slice(10)); else selectQuestion(Number(event.target.value)); }}><optgroup label="Questions">{form.fields.map((item, index) => <option key={item.key} value={index}>{index + 1}. {item.section}: {item.label}</option>)}</optgroup><optgroup label="Signatures">{form.declarations.map((item) => <option key={item.key} value={`signature:${item.key}`}>Signature: {item.title}</option>)}</optgroup></select></label>
+    <label>Item to {canEditCurrent ? "edit" : "preview"}<select value={signingItem ? `signature:${signingItem}` : String(question)} onChange={(event) => { if (event.target.value.startsWith("signature:")) selectSignature(event.target.value.slice(10)); else selectQuestion(Number(event.target.value)); }}><optgroup label="Questions">{form.fields.map((item, index) => <option key={item.key} value={index}>{index + 1}. {item.section}: {item.label}</option>)}</optgroup><optgroup label="Signatures">{form.declarations.map((item) => <option key={item.key} value={`signature:${item.key}`}>Signature: {item.title}</option>)}</optgroup></select></label>
     {itemActions}
-    {canAuthor && !signingItem && questionDeleteReason && <p className={styles.masterLibraryNote}>{questionDeleteReason}</p>}
+    {canEditCurrent && !signingItem && questionDeleteReason && <p className={styles.masterLibraryNote}>{questionDeleteReason}</p>}
     {removalControls}
     {form.variantOptions.length > 1 ? <label>Premises<select disabled={busy || Boolean(draftCopy)} value={form.variantId} onChange={(event) => void load(selected, event.target.value)}>{form.variantOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label> : null}
     {itemEditor}</>}
     </div>
-    <CreditexFormPhonePreview key={`${form.activityTemplateId}:${form.variantId}:${draftCopy?.id || "published"}`} form={form} canEdit={canAuthor} selectedFieldKey={signingItem ? undefined : field.key} selectedDeclarationKey={signingItem || undefined} onSelectDeclaration={selectSignature} onSelectField={(key) => { const index = form.fields.findIndex((item) => item.key === key); if (index >= 0) selectQuestion(index); }} />
+    <CreditexFormPhonePreview key={`${form.activityTemplateId}:${form.variantId}:${draftCopy?.id || "published"}`} form={form} canEdit={canEditCurrent} selectedFieldKey={signingItem ? undefined : field.key} selectedDeclarationKey={signingItem || undefined} onSelectDeclaration={selectSignature} onSelectField={(key) => { const index = form.fields.findIndex((item) => item.key === key); if (index >= 0) selectQuestion(index); }} />
     </div> : null}
     {records.length ? <table><thead><tr><th>Field record</th><th>Activity</th><th>Submitted</th><th>Job</th><th>Report</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}><td>{record.recordNumber}</td><td>{record.form.title}</td><td>{record.submittedAt}</td><td>{record.workOrderId}</td><td><button type="button" disabled={busy} onClick={() => void viewReport(record.id)}>View report</button></td></tr>)}</tbody></table> : null}
   </section>;

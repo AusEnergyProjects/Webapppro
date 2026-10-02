@@ -186,7 +186,7 @@ test("connection API requires same origin and Creditex admin before inspecting s
   const route = load("../src/app/api/creditex/voice-connection/route.ts", {
     "../../../../../db": { getD1: () => ({}) },
     "@/lib/admin-server": { adminJson: (body, status = 200) => Response.json(body, { status }), sameOrigin: request => !request.headers.get("origin") || request.headers.get("origin") === new URL(request.url).origin },
-    "@/lib/compliance-access-server": { ComplianceAccessError: AccessError, requireComplianceAccess: async (_request, options) => { accessChecks++; assert.deepEqual(options.allowedRoles, ["admin"]); if(otherOrganisation)return {organisationCode:"OTHER",organisationId:"other"};throw new AccessError(); } },
+    "@/lib/compliance-access-server": { ComplianceAccessError: AccessError, requireComplianceAccess: async (_request, options) => { accessChecks++; assert.deepEqual(options.allowedRoles, ["admin"]); assert.equal(options.requiredPermission, "voice_setup"); if(otherOrganisation)return {organisationCode:"OTHER",organisationId:"other"};throw new AccessError(); } },
     "@/lib/trade-compliance-intent": { CREDITEX_PARTNER_ORGANISATION_CODE:"CREDITEX" },
     "@/lib/creditex-voice-connection-server": { ...server, inspectVoiceAccount: () => { checks++; } },
   });

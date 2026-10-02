@@ -98,6 +98,8 @@ test("customer calling permission is read from the current membership", async t 
   f.sql.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='member'").run('["jobs","audit"]');
   await assert.rejects(server.loadAuditCallTarget(f.db, actor, { caseId: "case" }), forbidden);
   f.sql.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='member'").run('["customers"]');
+  await assert.rejects(server.loadAuditCallTarget(f.db, actor, { caseId: "case" }), forbidden);
+  f.sql.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='member'").run('["customers","customer_calls"]');
   assert.equal((await server.loadAuditCallTarget(f.db, actor, { caseId: "case" })).canCall, true);
 });
 test("linked-job entry cannot bypass a formal case assignment or a mismatched graph", async (t) => {

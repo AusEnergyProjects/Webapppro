@@ -57,7 +57,7 @@ function quantity(value:unknown,required=false) {
 }
 
 export async function registryCapabilities(db:D1Database,actor:RegistryActor) {
-  const identity=await loadCreditexWorkPackGovernanceIdentity(db,actor);
+  const identity=await loadCreditexWorkPackGovernanceIdentity(db,actor,"submissions");
   if(!identity.access.canRead) fail("REGISTRY_ACCESS_DENIED","Registry access is unavailable.",403);
   return {
     canManageAccounts:identity.access.canAuthor && (actor.actorKind==="admin"?["owner","admin"].includes(identity.role):identity.role==="admin"),

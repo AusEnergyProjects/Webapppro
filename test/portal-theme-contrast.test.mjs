@@ -76,12 +76,12 @@ for (const mode of ["day", "night"]) {
 test("Team access inherits the portal palette without an independent dark canvas", () => {
   const css = read("components/CreditexOperationsWorkspace.module.css");
   assert.match(value(css, ".workspace", "background"), /^(transparent|var\(--portal-)/);
-  for (const selector of [".localForm", ".compactList article", ".accessPolicy", ".empty"]) {
+  for (const selector of [".dialog", ".memberCard", ".accessPolicy", ".empty", ".portalAccessPanel", ".fieldAccessPanel", ".permissionFields fieldset", ".memberTable th"]) {
     assert.match(value(css, selector, "background"), /^var\(--portal-/, selector);
   }
   assert.ok(parseFloat(value(css, ".localForm label", "font-size")) >= .8);
   assert.ok(parseFloat(value(css, ".localForm input", "min-height")) >= 44);
-  for (const selector of [".localForm input", ".localForm select", ".memberAccessControls select"]) {
+  for (const selector of [".localForm input", ".localForm select"]) {
     assert.match(value(css, selector, "background"), /^var\(--portal-input/);
     assert.match(value(css, selector, "color"), /^var\(--portal-ink/);
   }

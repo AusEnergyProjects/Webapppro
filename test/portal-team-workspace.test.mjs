@@ -91,13 +91,13 @@ for (const workspace of ["admin", "creditex"]) {
     assert.equal((await f.api.portalTasks(f.actor(workspace, "b"), {}, f.db)).total, 1);
     assert.equal((await f.api.portalTasks(f.actor(workspace, "outside"), {}, f.db)).total, 0);
     assert.equal((await f.api.portalTasks(f.actor(workspace, "admin"), { view: "team" }, f.db)).total, 1);
-    await assert.rejects(() => f.api.portalTasks(f.actor(workspace, "b"), { view: "team" }, f.db), /administrators/);
+    await assert.rejects(() => f.api.portalTasks(f.actor(workspace, "b"), { view: "team" }, f.db), /does not include viewing all team tasks/);
     await assert.rejects(() => f.api.savePortalTask(f.actor(workspace, "outside"), { action: "task_status", id: task.id, revision: 1, status: "done" }, f.db), /no longer available/);
   });
   test(`${workspace}: recipient can complete a task but only creator/admin can edit or reassign it`, async t => {
     const f = fixture(t); const task = await f.create(workspace);
     const edit = { action: "edit_task", id: task.id, revision: 1, title: "Changed", assigneeId: "outside" };
-    await assert.rejects(() => f.api.savePortalTask(f.actor(workspace, "b"), edit, f.db), /creator or a workspace administrator/);
+    await assert.rejects(() => f.api.savePortalTask(f.actor(workspace, "b"), edit, f.db), /does not allow editing/);
     await f.api.savePortalTask(f.actor(workspace, "b"), { action: "task_status", id: task.id, revision: 1, status: "done" }, f.db);
     const done = (await f.api.portalTasks(f.actor(workspace, "b"), { status: "done" }, f.db)).tasks[0];
     assert.ok(done.completedAt); assert.equal(done.revision, 2);
@@ -223,13 +223,81 @@ test("current Creditex message and task permissions isolate tools and prevent mi
   await assert.rejects(f.api.portalPeople(f.actor(), "", f.db, "", "messages"), /access changed/);
   assert.equal((await f.api.portalPeople(f.actor(), "", f.db, "", "tasks")).memberId, "a");
   assert.equal((await f.api.portalTasks(f.actor(), { view: "assigned" }, f.db)).total, 1);
-  f.sqlite.exec("UPDATE compliance_users SET permissions_json='[\"messages\"]' WHERE id='a'");
+  f.sqlite.exec("UPDATE compliance_users SET permissions_json='[\"messages\",\"messages_send\"]' WHERE id='a'");
   assert.equal((await f.api.portalMessages(f.actor(), "b", "", f.db)).messages.length, 1);
   await assert.rejects(f.api.portalTasks(f.actor(), {}, f.db), /access changed/);
   await assert.rejects(f.api.savePortalTask(f.actor(), { action: "task_status", id: task.id, revision: 1, status: "done" }, f.db), /access changed/);
   f.beforeWrite(() => f.sqlite.exec("UPDATE compliance_users SET permissions_json='[]' WHERE id='a'"));
   await assert.rejects(f.message(), /access changed/);
   assert.equal(f.sqlite.prepare("SELECT count(*) total FROM portal_team_messages").get().total, 1);
+});
+
+test("Creditex read access does not grant message sending or task mutations", async t => {
+  const f = fixture(t), task = await f.create(); await f.message();
+  f.sqlite.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='a'").run(JSON.stringify(["messages", "tasks"]));
+  const conversation = await f.api.portalMessages(f.actor(), "b", "", f.db);
+  assert.equal(conversation.canSend, false); assert.equal(conversation.messages.length, 1);
+  const tasks = await f.api.portalTasks(f.actor(), { view: "assigned" }, f.db);
+  assert.equal(tasks.total, 1); assert.equal(tasks.canCreate, false); assert.equal(tasks.canAssign, false); assert.equal(tasks.canComplete, false);
+  assert.equal(tasks.tasks[0].canEdit, false); assert.equal(tasks.tasks[0].canComplete, false);
+  await assert.rejects(f.message(), /not sending/);
+  await assert.rejects(f.create("creditex", "a", "a"), /creating tasks/);
+  await assert.rejects(f.api.savePortalTask(f.actor(), { action: "edit_task", id: task.id, revision: 1, title: "Changed", assigneeId: "b" }, f.db), /editing this task/);
+  await assert.rejects(f.api.savePortalTask(f.actor(), { action: "task_status", id: task.id, revision: 1, status: "done" }, f.db), /completing or reopening/);
+  assert.equal(f.sqlite.prepare("SELECT count(*) n FROM portal_team_events").get().n, 1);
+});
+
+test("Creditex task creation, reassignment, editing and completion are independent capabilities", async t => {
+  const f = fixture(t);
+  const grants = keys => f.sqlite.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='a'").run(JSON.stringify(["tasks", ...keys]));
+  grants(["tasks_create"]);
+  const own = await f.create("creditex", "a", "a");
+  await assert.rejects(f.create("creditex", "a", "b"), /for yourself/);
+  grants(["tasks_assign"]);
+  assert.equal((await f.api.portalTasks(f.actor(), { view: "assigned" }, f.db)).canCreate, false);
+  await assert.rejects(f.create(), /creating tasks/);
+  grants(["tasks_create", "tasks_assign"]);
+  const assigned = await f.create();
+  const list = await f.api.portalTasks(f.actor(), { view: "assigned" }, f.db);
+  assert.equal(list.canCreate, true); assert.equal(list.canAssign, true); assert.equal(list.canComplete, false);
+  grants(["tasks_edit"]);
+  await f.api.savePortalTask(f.actor(), { action: "edit_task", id: assigned.id, revision: 1, title: "Details changed", assigneeId: "b" }, f.db);
+  await assert.rejects(f.api.savePortalTask(f.actor(), { action: "edit_task", id: assigned.id, revision: 2, title: "Move it", assigneeId: "outside" }, f.db), /reassigning tasks/);
+  grants(["tasks_complete"]);
+  await f.api.savePortalTask(f.actor(), { action: "task_status", id: own.id, revision: 1, status: "done" }, f.db);
+  assert.equal(f.sqlite.prepare("SELECT status FROM portal_team_tasks WHERE id=?").get(own.id).status, "done");
+  assert.equal(f.sqlite.prepare("SELECT assignee_id FROM portal_team_tasks WHERE id=?").get(assigned.id).assignee_id, "b");
+});
+
+test("Creditex all-team task access follows explicit grants rather than the admin role", async t => {
+  const f = fixture(t), task = await f.create();
+  f.sqlite.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='admin'").run(JSON.stringify(["tasks"]));
+  await assert.rejects(f.api.portalTasks(f.actor("creditex", "admin"), { view: "team" }, f.db), /does not include viewing all team tasks/);
+  assert.equal((await f.api.portalTasks(f.actor("creditex", "admin"), { taskId: task.id }, f.db)).total, 0);
+  f.sqlite.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='outside'").run(JSON.stringify(["tasks", "tasks_team", "tasks_edit"]));
+  const list = await f.api.portalTasks(f.actor("creditex", "outside"), { view: "team" }, f.db);
+  assert.equal(list.total, 1); assert.equal(list.tasks[0].canEdit, true); assert.equal(list.tasks[0].canComplete, false);
+  await f.api.savePortalTask(f.actor("creditex", "outside"), { action: "edit_task", id: task.id, revision: 1, title: "Team review", assigneeId: "b" }, f.db);
+});
+
+test("revoking only a Creditex action permission at write time blocks that action and its audit", async t => {
+  const f = fixture(t), task = await f.create();
+  const grants = keys => f.sqlite.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='a'").run(JSON.stringify(keys));
+  grants(["tasks", "tasks_complete"]);
+  f.beforeWrite(() => grants(["tasks"]));
+  await assert.rejects(f.api.savePortalTask(f.actor(), { action: "task_status", id: task.id, revision: 1, status: "done" }, f.db), /access changed/);
+  grants(["tasks", "tasks_edit", "tasks_assign"]);
+  f.beforeWrite(() => grants(["tasks", "tasks_edit"]));
+  await assert.rejects(f.api.savePortalTask(f.actor(), { action: "edit_task", id: task.id, revision: 1, title: "Reassigned", assigneeId: "outside" }, f.db), /access changed/);
+  grants(["tasks", "tasks_create"]);
+  f.beforeWrite(() => grants(["tasks"]));
+  await assert.rejects(f.create("creditex", "a", "a"), /no longer available/);
+  grants(["messages", "messages_send"]);
+  f.beforeWrite(() => grants(["messages"]));
+  await assert.rejects(f.message(), /access changed/);
+  assert.equal(f.sqlite.prepare("SELECT count(*) n FROM portal_team_events").get().n, 1);
+  assert.equal(f.sqlite.prepare("SELECT count(*) n FROM portal_team_messages").get().n, 0);
+  assert.equal(f.sqlite.prepare("SELECT revision FROM portal_team_tasks WHERE id=?").get(task.id).revision, 1);
 });
 
 test("notification targets resolve a specific authorised teammate and task beyond normal paging", async t => {

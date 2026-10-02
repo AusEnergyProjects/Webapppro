@@ -32,7 +32,7 @@ export function googleSignIn(idToken: string) {
   return signInWithCredential(firebaseAuth, GoogleAuthProvider.credential(idToken));
 }
 
-export async function resetPassword(email: string) {
+export async function resetPassword(email: string, workspace: 'trade' | 'creditex' = 'trade') {
   const recipient = email.trim().toLowerCase();
   if (recipient.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
     throw new Error('Enter a valid email address before resetting your password.');
@@ -45,7 +45,7 @@ export async function resetPassword(email: string) {
       response = await fetch(`${API_BASE_URL}/api/auth/password-reset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: recipient, continuePath: '/direct-trade/team' }),
+        body: JSON.stringify({ email: recipient, continuePath: workspace === 'creditex' ? '/creditex/compliance' : '/direct-trade/team' }),
         signal: controller.signal,
       });
     } catch {

@@ -43,7 +43,7 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const database = getD1();
-    const owner = await requireComplianceAccess(request, { allowedRoles: ["admin"], organisationId: new URL(request.url).searchParams.get("organisationId") || undefined, claimPendingInvitation: false }, database);
+    const owner = await requireComplianceAccess(request, { allowedRoles: ["admin"], requiredPermission: "voice_setup", organisationId: new URL(request.url).searchParams.get("organisationId") || undefined, claimPendingInvitation: false }, database);
     if (owner.organisationCode !== CREDITEX_PARTNER_ORGANISATION_CODE) throw new ComplianceAccessError("CREDITEX_ACCESS_REQUIRED", 403, "Creditex administrator access is required.");
     return adminJson({ ok: true, ...await voiceWorkspace(database, owner.organisationId) });
   } catch (error) { return failure(error); }
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   try {
     const database = getD1();
     const input = await body(request);
-    const owner = await requireComplianceAccess(request, { allowedRoles: ["admin"], organisationId: typeof input.organisationId === "string" ? input.organisationId : undefined, claimPendingInvitation: false }, database);
+    const owner = await requireComplianceAccess(request, { allowedRoles: ["admin"], requiredPermission: "voice_setup", organisationId: typeof input.organisationId === "string" ? input.organisationId : undefined, claimPendingInvitation: false }, database);
     if (owner.organisationCode !== CREDITEX_PARTNER_ORGANISATION_CODE) throw new ComplianceAccessError("CREDITEX_ACCESS_REQUIRED", 403, "Creditex administrator access is required.");
     if (input.action === "inspect") return adminJson({ ok: true, ...await inspectVoiceAccount(voiceCredentials(input.apiKey, input.publicKey)) });
     if (input.action === "connect") await connectVoiceAccount(database, owner, input);

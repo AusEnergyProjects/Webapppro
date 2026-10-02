@@ -1059,6 +1059,7 @@ export function CreditexActivityWorkPackGovernance({
   canCaptureSource,
   canManageGovernance = true,
   fieldMasterCanAuthor,
+  fieldMasterCanPublish,
   onManageFormAccess,
   onFieldFormDirtyChange,
   onDownloadSource,
@@ -1071,6 +1072,7 @@ export function CreditexActivityWorkPackGovernance({
   canCaptureSource: boolean;
   canManageGovernance?: boolean;
   fieldMasterCanAuthor?: boolean;
+  fieldMasterCanPublish?: boolean;
   onManageFormAccess?: () => void;
   onFieldFormDirtyChange?: (dirty: boolean) => void;
   onDownloadSource: (
@@ -1443,7 +1445,7 @@ export function CreditexActivityWorkPackGovernance({
 
   return (
     <section className={styles.workspace} aria-label={`${contextLabel} compliance form governance`}>
-      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} onManageAccess={onManageFormAccess} onDirtyChange={onFieldFormDirtyChange} />
+      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} canPublish={fieldMasterCanPublish} onManageAccess={onManageFormAccess} onDirtyChange={onFieldFormDirtyChange} />
 
       {canManageGovernance && <details className={styles.advancedGovernance}>
         <summary><strong>Source review &amp; publication rules</strong><span>{pendingCalculatorReviews.length ? `${pendingCalculatorReviews.length} calculations awaiting review · ` : ""}Official documents, governed versions and calculation approvals</span></summary>

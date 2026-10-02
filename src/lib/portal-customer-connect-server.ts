@@ -52,7 +52,7 @@ export async function loadPortalConnectCustomers(db: D1Database, actor: Creditex
       account.business_name installer,
       EXISTS(SELECT 1 FROM compliance_users caller WHERE caller.firebase_uid=? AND caller.organisation_id=intent.compliance_organisation_id
         AND caller.status='active' AND caller.role IN ('admin','case_manager','reviewer','auditor')
-        AND ${creditexPermissionSql('customers', 'caller')}
+        AND ${creditexPermissionSql('customer_calls', 'caller')}
         AND (COALESCE(intent.compliance_case_id,'')='' OR caller.role='admin' OR EXISTS(
           SELECT 1 FROM compliance_case_assignments ca WHERE ca.organisation_id=intent.compliance_organisation_id
             AND ca.case_id=linked_case.id AND ca.compliance_user_id=caller.id AND ca.status='assigned'))) headset_allowed

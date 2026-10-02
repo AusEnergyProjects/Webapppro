@@ -96,7 +96,7 @@ export async function GET(request: Request) {
   }
   try {
     const database = getD1();
-    const member = await requireComplianceAccess(request, { requiredPermission: "submissions",
+    const member = await requireComplianceAccess(request, { requiredPermission: request.method === "GET" ? "submissions" : "submissions_manage",
       allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
     }, database);
     const runs = await listCreditexParallelReconciliationRuns(
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
       );
     }
     const database = getD1();
-    const member = await requireComplianceAccess(request, { requiredPermission: "submissions",
+    const member = await requireComplianceAccess(request, { requiredPermission: request.method === "GET" ? "submissions" : "submissions_manage",
       allowedRoles: ["admin", "case_manager", "reviewer"],
     }, database);
     const body = requiredBody(await request.json().catch(() => null));

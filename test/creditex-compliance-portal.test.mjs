@@ -909,7 +909,7 @@ test("Creditex program rails remain reachable and critical audit text is legible
     read("../src/components/CreditexCompliancePortal.module.css"),
     contract,
   );
-  for(const selector of [".workspace",".localForm",".accessPolicy",".memberAccessControls",".compactList"])assert.ok(operationsStyles.includes(selector));
+  for(const selector of [".workspace",".localForm",".accessPolicy",".memberAccessControls",".memberTable",".dialog"])assert.ok(operationsStyles.includes(selector));
   assert.match(operationsStyles,/background: var\(--portal-surface\)/);
   assert.match(operationsStyles,/min-height: 44px/);
   assert.doesNotMatch(operationsStyles,/\.programTabs|\.caseTable|\.privateDetailGrid|#092331/);
@@ -926,5 +926,6 @@ test("named member access can be changed without enabling shared team credential
   assert.match(operations, /Keep at least[\s\S]*two named administrators for continuity/);
   assert.match(operations, /confirmed named owner can[\s\S]*keep using this account as their individual manager login/);
   assert.match(operations, /"revoke_invitation"/);
-  assert.match(operations, /Shared or role-based mailboxes are rejected/);
+  assert.match(operations, /Invite each team member with their own verified email/);
+  assert.match(operations, /It is not a shared Creditex login/);
 });

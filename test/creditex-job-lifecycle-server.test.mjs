@@ -122,7 +122,7 @@ test('Creditex lifecycle restricts linked cases to current assignments and all a
  assert.equal((await f.service.loadJobLifecycle(f.db,{kind:'admin',uid:'platform',organisationId:'org',role:'admin'},'intent')).intentId,'intent');
 });
 
-test('jobs permission allows lifecycle reads while audit permission controls every mutation capability',async t=>{
+test('jobs permission allows lifecycle reads while action permissions control mutation capabilities',async t=>{
  const f=fixture(t);f.intent();
  f.sqlite.exec(`UPDATE compliance_users SET permissions_json='["jobs"]' WHERE id='creditex-admin'`);
  const state=await f.service.loadJobLifecycle(f.db,admin,'intent');
@@ -131,6 +131,25 @@ test('jobs permission allows lifecycle reads while audit permission controls eve
  await assert.rejects(f.service.mutateJobLifecycle(f.db,admin,{intentId:'intent',action:'deleted',note:'Remove job',requestId:crypto.randomUUID(),expectedRevision:1},f.options),e=>e.status===404);
  f.sqlite.exec(`UPDATE compliance_users SET permissions_json='[]' WHERE id='creditex-admin'`);
  await assert.rejects(f.service.loadJobLifecycle(f.db,admin,'intent'),e=>e.status===404);
+});
+
+test('audit, correction and lifecycle grants remain independent for an administrator',async t=>{
+ const f=fixture(t);f.intent();
+ f.sqlite.exec(`UPDATE compliance_users SET permissions_json='["jobs","audit"]' WHERE id='creditex-admin'`);
+ let state=await f.service.loadJobLifecycle(f.db,admin,'intent');
+ assert.equal(state.capabilities.canRequestCorrection,false);
+ assert.equal(state.capabilities.canDelete,false);
+ await assert.rejects(f.service.mutateJobLifecycle(f.db,admin,await f.lifecycle('deleted'),f.options),e=>e.status===404);
+ f.sqlite.exec(`UPDATE compliance_users SET permissions_json='["jobs","audit","corrections"]' WHERE id='creditex-admin'`);
+ state=await f.service.loadJobLifecycle(f.db,admin,'intent');
+ assert.equal(state.capabilities.canRequestCorrection,true);
+ assert.equal(state.capabilities.canDelete,false);
+ f.sqlite.exec(`UPDATE compliance_users SET permissions_json='["jobs","job_lifecycle"]' WHERE id='creditex-admin'`);
+ state=await f.service.loadJobLifecycle(f.db,admin,'intent');
+ assert.equal(state.capabilities.canDelete,true);
+ assert.equal(state.capabilities.canRequestCorrection,false);
+ await f.service.mutateJobLifecycle(f.db,admin,await f.lifecycle('deleted'),f.options);
+ assert.equal(f.sqlite.prepare('SELECT record_status FROM trade_work_orders').get().record_status,'archived');
 });
 
 for(const [label,sql] of [

@@ -11,6 +11,8 @@ import { colours } from '@/lib/theme';
 import { AppProvider, useApp } from '@/providers/app-provider';
 import { NativeTeamCallProvider } from '@/providers/native-team-call-provider';
 import { NativeWorkTimeProvider } from '@/components/work-time-tracking';
+import { NativeWorkspaceProvider, useNativeWorkspace } from '@/providers/native-workspace-provider';
+import { CreditexNativeApp } from '@/components/creditex-native-app';
 
 function AppNavigation() {
   const { access } = useApp();
@@ -38,7 +40,9 @@ function AppNavigation() {
   );
 }
 
-export default function RootLayout() {
+function WorkspaceApp() {
+  const { workspace } = useNativeWorkspace();
+  if (workspace === 'creditex') return <CreditexNativeApp />;
   return (
     <AppProvider>
       <NativeWorkTimeProvider>
@@ -48,4 +52,8 @@ export default function RootLayout() {
       </NativeWorkTimeProvider>
     </AppProvider>
   );
+}
+
+export default function RootLayout() {
+  return <NativeWorkspaceProvider><WorkspaceApp /></NativeWorkspaceProvider>;
 }

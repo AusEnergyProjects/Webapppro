@@ -180,8 +180,8 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 242);
-  assert.match(completeMigrationChain.at(-1), /^0242_creditex_notification_receipts\.sql$/);
+  assert.equal(completeMigrationChain.length, 244);
+  assert.match(completeMigrationChain.at(-1), /^0244_creditex_granular_permissions\.sql$/);
   assert.ok(completeMigrationChain.includes("0241_creditex_member_permissions.sql"));
   assert.ok(completeMigrationChain.includes("0240_portal_profile_avatars.sql"));
   assert.match(completeMigrationChain[0], /^0000_/);

@@ -308,6 +308,7 @@ function databaseWithComplianceOperations({ installGuards = true } = {}) {
   applyStatements(database, acceptedHandoffMigration);
   applyStatements(database, operationsMigration);
   applyStatements(database, read("../drizzle/0241_creditex_member_permissions.sql"));
+  applyStatements(database, read("../drizzle/0243_creditex_member_contacts.sql"));
   applyStatements(database, custodyMigration);
   applyStatements(database, tradeComplianceMigration);
   database.exec(multiActivitySchemaColumnsMigration);
@@ -1438,6 +1439,76 @@ test("custom permissions are persisted on the named invitation and claimed membe
   assert.deepEqual(JSON.parse(database.prepare("SELECT permissions_json FROM compliance_users WHERE id=?").get(row.id).permissions_json), ["tasks"]);
 });
 
+test("team contact details survive invitation claim and can be updated without changing sign-in identity", async t => {
+  const database = databaseWithComplianceOperations(); t.after(() => database.close());
+  seedComplianceUser(database, { id: "contacts-admin", firebaseUid: "contacts-admin", role: "admin" });
+  const d1 = testD1(database);
+  const actor = { membershipId: "contacts-admin", uid: "contacts-admin", role: "admin", organisationId: "org_creditex_au" };
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", phone: "+61 412 345 678", jobTitle: "Audit coordinator", role: "reviewer" };
+  const invitation = await operations.executeCreditexAccessAction(d1, actor, request);
+  const loadedInvitation = (await operations.loadCreditexAccess(d1, actor.organisationId)).invitations.find(item => item.id === invitation.id);
+  assert.equal(loadedInvitation.phone, request.phone);
+  assert.equal(loadedInvitation.jobTitle, request.jobTitle);
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, phone: "0412345999" }), error => error.code === "CREDITEX_INVITATION_EXISTS");
+  const access = loadTypescriptModule("../src/lib/compliance-access-server.ts", { "../../db": {}, "./firebase-server": {}, "./creditex-schema-guards": {} });
+  await access.claimPendingComplianceInvitation({ uid: "jamie-contacts", email: request.email, emailVerified: true }, d1);
+  const member = database.prepare("SELECT * FROM compliance_users WHERE firebase_uid='jamie-contacts'").get();
+  assert.equal(member.phone, request.phone);
+  assert.equal(member.job_title, request.jobTitle);
+  await operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: member.id, displayName: "Jamie Jones", phone: "(03) 9000 1234", jobTitle: "Senior auditor", role: member.role, status: "active" });
+  const updated = (await operations.loadCreditexAccess(d1, actor.organisationId)).members.find(item => item.id === member.id);
+  assert.equal(updated.displayName, "Jamie Jones");
+  assert.equal(updated.phone, "(03) 9000 1234");
+  assert.equal(updated.jobTitle, "Senior auditor");
+  assert.equal(updated.email, request.email);
+  await operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: member.id, role: member.role, status: "suspended" });
+  assert.equal(database.prepare("SELECT phone FROM compliance_users WHERE id=?").get(member.id).phone, updated.phone);
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: member.id, role: member.role, status: "active", email: "someone.else@example.com" }), error => error.code === "CREDITEX_MEMBER_IDENTITY_IMMUTABLE");
+  assert.equal(database.prepare("SELECT status FROM compliance_users WHERE id=?").get(member.id).status, "suspended");
+});
+
+test("team contact validation rejects invalid values before writing an invitation", async t => {
+  const database = databaseWithComplianceOperations(); t.after(() => database.close());
+  seedComplianceUser(database, { id: "contacts-admin", firebaseUid: "contacts-admin", role: "admin" });
+  const d1 = testD1(database), actor = { membershipId: "contacts-admin", uid: "contacts-admin", role: "admin", organisationId: "org_creditex_au" };
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const request = { action: "create_invitation", displayName: "Jamie Smith", email: "jamie.smith@example.com", role: "reviewer" };
+  for (const phone of ["123", "0412callme", "++61412345678", "0412+345678", "1234567890123456", { value: "0412345678" }]) {
+    await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, phone }), error => ["CREDITEX_PHONE_INVALID", "CREDITEX_CONTACT_INVALID"].includes(error.code));
+  }
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, jobTitle: "x".repeat(101) }), error => error.code === "CREDITEX_VALUE_TOO_LONG");
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, jobTitle: "Audit\u0000lead" }), error => error.code === "CREDITEX_CONTACT_INVALID");
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_invitations WHERE email=?").get(request.email).n, 0);
+});
+
+test("contact-only team access cannot change grants or identity and rechecks current permission and organisation", async t => {
+  const database = databaseWithComplianceOperations(); t.after(() => database.close());
+  seedComplianceUser(database, { id: "contacts-editor", firebaseUid: "contacts-editor", role: "reviewer" });
+  seedComplianceUser(database, { id: "contacts-person", firebaseUid: "contacts-person", role: "auditor" });
+  database.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='contacts-editor'").run(JSON.stringify(["team_details"]));
+  const d1 = testD1(database), actor = { membershipId: "contacts-editor", uid: "contacts-editor", role: "reviewer", permissions: ["team_details"], organisationId: "org_creditex_au" };
+  const operations = loadTypescriptModule("../src/lib/creditex-operations-server.ts");
+  const request = { action: "update_member_details", memberId: "contacts-person", displayName: "Taylor Jones", phone: "0412 345 678", jobTitle: "Auditor" };
+  await operations.executeCreditexAccessAction(d1, actor, request);
+  const member = database.prepare("SELECT * FROM compliance_users WHERE id='contacts-person'").get();
+  assert.equal(member.display_name, request.displayName);
+  assert.equal(member.phone, request.phone);
+  assert.equal(member.role, "auditor");
+  assert.equal(member.permissions_json, null);
+  for (const restrictedField of ["role", "status", "permissions", "email", "firebaseUid", "organisationId"]) {
+    await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, [restrictedField]: "admin" }), error => error.code === "CREDITEX_CONTACT_FIELDS_INVALID");
+  }
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: member.id, role: "admin", status: "active" }), error => error.code === "CREDITEX_ROLE_REQUIRED");
+  await assert.rejects(operations.executeCreditexAccessAction(d1, { ...actor, organisationId: "org-other" }, request), error => error.code === "CREDITEX_RECORD_NOT_FOUND");
+  await operations.executeCreditexAccessAction(d1, actor, { ...request, phone: "", jobTitle: "" });
+  assert.equal(database.prepare("SELECT phone FROM compliance_users WHERE id=?").get(member.id).phone, "");
+  database.prepare("UPDATE compliance_users SET permissions_json='[]' WHERE id=?").run(actor.membershipId);
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, displayName: "Should Not Save" }), /CHECK constraint failed: verified/);
+  assert.equal(database.prepare("SELECT display_name FROM compliance_users WHERE id=?").get(member.id).display_name, request.displayName);
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_audit_events WHERE event_type='membership.details_updated'").get().n, 2);
+});
+
 test("permission changes reject escalation and preserve the final administrator", async t => {
   const database = databaseWithComplianceOperations(); t.after(() => database.close());
   seedComplianceUser(database, { id: "admin", firebaseUid: "admin", role: "admin" });
@@ -1447,10 +1518,18 @@ test("permission changes reject escalation and preserve the final administrator"
   for (const requested of [["forms"], ["team_access"], ["audit"], ["jobs", "jobs"], ["invalid"]]) {
     await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, permissions: requested }), e => e.code === "CREDITEX_PERMISSIONS_INVALID");
   }
-  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { ...request, role: "admin", permissions: ["jobs"] }), e => e.code === "CREDITEX_ADMIN_PERMISSIONS_REQUIRED");
   await assert.rejects(operations.executeCreditexAccessAction(d1, { ...actor, permissions: [] }, request), e => e.code === "CREDITEX_ROLE_REQUIRED");
   await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: "admin", role: "reviewer", status: "active" }), e => e.code === "CREDITEX_FINAL_ADMIN_REQUIRED");
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: "admin", role: "admin", status: "active", permissions: ["jobs"] }), e => e.code === "CREDITEX_FINAL_ADMIN_REQUIRED");
   assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_invitations WHERE email=?").get(request.email).n, 0);
+  await operations.executeCreditexAccessAction(d1, actor, { ...request, role: "admin", permissions: ["jobs"] });
+  assert.deepEqual(JSON.parse(database.prepare("SELECT permissions_json FROM compliance_invitations WHERE email=?").get(request.email).permissions_json), ["jobs"]);
+  seedComplianceUser(database, { id: "backup", firebaseUid: "backup", role: "admin" });
+  database.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='backup'").run('["jobs"]');
+  await assert.rejects(operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: "admin", role: "admin", status: "active", permissions: ["jobs"] }), e => e.code === "CREDITEX_FINAL_ADMIN_REQUIRED");
+  database.prepare("UPDATE compliance_users SET permissions_json=? WHERE id='backup'").run('["team_access"]');
+  await operations.executeCreditexAccessAction(d1, actor, { action: "update_member_access", memberId: "admin", role: "admin", status: "active", permissions: ["jobs"] });
+  assert.deepEqual(JSON.parse(database.prepare("SELECT permissions_json FROM compliance_users WHERE id='admin'").get().permissions_json), ["jobs"]);
 });
 
 test("an access change rechecks the administrator inside the write transaction", async t => {
@@ -2017,6 +2096,7 @@ test("audited local operations execute against the schema and financial guards r
   });
   const identity = {
     uid: "admin-uid",
+    membershipId: "admin-member",
     role: "admin",
     organisationId: "org_creditex_au",
   };
@@ -2074,6 +2154,7 @@ test("audited local operations execute against the schema and financial guards r
   );
   const secondaryIdentity = {
     uid: "reviewer-2",
+    membershipId: "reviewer-member",
     role: "reviewer",
     organisationId: "org_creditex_au",
   };
@@ -2160,7 +2241,7 @@ test("audited local operations execute against the schema and financial guards r
   );
   assert.equal(
     database.prepare("SELECT COUNT(*) count FROM compliance_write_guards").get().count,
-    18,
+    30,
   );
   const decision = database.prepare(`SELECT primary_reviewer_uid,
       secondary_reviewer_uid, basis_snapshot FROM compliance_case_decisions
@@ -2241,6 +2322,7 @@ test("evidence outcomes require current access, reviewer assignment, and canonic
   });
   const identity = {
     uid: "assigned-reviewer",
+    membershipId: "assigned-reviewer-member",
     role: "reviewer",
     organisationId: "org_creditex_au",
   };
@@ -2395,6 +2477,7 @@ test("withdrawn pinned policies remain auditable but block downstream approval",
     .run("withdrawn-admin", TEST_NOW, TEST_NOW, governed.policyVersionId);
   const identity = {
     uid: "withdrawn-admin",
+    membershipId: "withdrawn-admin-member",
     role: "admin",
     organisationId: "org_creditex_au",
   };
@@ -2504,11 +2587,13 @@ test("ready-to-submit decision basis pins the exact verified calculator run", as
     .run(TEST_NOW, TEST_NOW, TEST_NOW);
   const primary = {
     uid: "calculator-admin",
+    membershipId: "calculator-admin-member",
     role: "admin",
     organisationId: "org_creditex_au",
   };
   const secondary = {
     uid: "calculator-secondary",
+    membershipId: "calculator-secondary-member",
     role: "reviewer",
     organisationId: "org_creditex_au",
   };

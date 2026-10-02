@@ -92,7 +92,7 @@ async function requireMember(
   write: boolean,
 ) {
   const identity = await requireFirebaseIdentity(request);
-  const member = await requireComplianceIdentity(identity, { requiredPermission: "submissions",
+  const member = await requireComplianceIdentity(identity, { requiredPermission: request.method === "GET" ? "submissions" : "submissions_manage",
     allowedRoles: write
       ? ["admin", "case_manager"]
       : ["admin", "case_manager", "reviewer", "auditor"],

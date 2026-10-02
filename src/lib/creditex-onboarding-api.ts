@@ -32,7 +32,8 @@ export function creditexApiError(error: unknown) {
   return creditexJson({ ok: false, code: 'CREDITEX_COMPLIANCE_UNAVAILABLE', error: 'Compliance records are temporarily unavailable. Certificate work remains blocked until they can be verified.', requestId }, 503);
 }
 export async function requireCreditexTrainingReviewer(request: Request, requiredPermission: 'forms' | 'governance' = 'governance') {
-  const access = await requireComplianceAccess(request, { allowedRoles: ['admin', 'reviewer'], claimPendingInvitation: false, requiredPermission });
+  const permission = requiredPermission === 'governance' && request.method !== 'GET' ? 'governance_manage' : requiredPermission;
+  const access = await requireComplianceAccess(request, { allowedRoles: ['admin', 'reviewer'], claimPendingInvitation: false, requiredPermission: permission });
   if (access.organisationCode !== 'CREDITEX-AU' || !access.governanceIdentityVerified) throw new CreditexComplianceError('CREDITEX_REVIEWER_REQUIRED', 'A verified authorised Creditex governance reviewer is required.');
   return access;
 }

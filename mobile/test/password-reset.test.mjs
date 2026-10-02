@@ -49,6 +49,11 @@ test('invalid email does not send a password reset request', async () => {
   assert.equal(h.requests.length, 0);
 });
 
+test('Creditex password reset returns the named account to its compliance workspace', async () => {
+  const h = authHarness(); await h.resetPassword('person@example.com', 'creditex');
+  assert.deepEqual(JSON.parse(h.requests[0].init.body), { email: 'person@example.com', continuePath: '/creditex/compliance' });
+});
+
 test('backend rejection uses safe status messages without displaying server details', async () => {
   for (const [status, message] of [
     [400, 'Enter a valid email address before resetting your password.'],

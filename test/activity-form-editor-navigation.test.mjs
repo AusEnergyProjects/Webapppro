@@ -57,7 +57,8 @@ test("read-only Creditex members can preview forms while edit and publication re
   let tree = await h.mount();
   assert.deepEqual(h.requests, ["/api/trade-activity-forms?view=masters&actorMode=creditex"]);
   assert.equal(button(tree, "Refresh forms").props.disabled, false);
-  assert.match(text(tree), /Shared-mailbox and auditor accounts are read-only/);
+  assert.match(text(tree), /Editing requires a named account with Create and edit form drafts permission/);
+  assert.match(text(tree), /Publishing needs Publish activity forms permission too/);
   const preview = nodes(tree, node => node.type === "button" && node.props["aria-label"] === "Preview VEU 6: Heating and cooling")[0];
   preview.props.onClick(); await flush(); tree = h.render();
   assert.equal(nodes(tree, node => node.type === "fieldset")[0].props.disabled, true);

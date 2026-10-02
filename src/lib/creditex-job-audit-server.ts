@@ -32,16 +32,16 @@ type JobFormSource = { id: string; title: string; revision: number; status: stri
   template: { fields: { key: string; label: string; section?: string }[] }; answers: Record<string, unknown> };
 type Source = { target: CreditexJobAuditWorkspace['target']; intentRevision: number; intentHash: string;
   fieldRecords: FieldSource[]; workPacks: PackSource[]; jobForms: JobFormSource[]; jobMedia: StoredFile[]; caseEvidence: StoredFile[] };
-type Context = { source_snapshot: string; source: Source; role: string; can_audit: number; can_call: number; active: number; submission_ready: number; correction_scope: number; evidence_access: number };
+type Context = { source_snapshot: string; source: Source; role: string; can_audit: number; can_call: number; can_correct: number; active: number; submission_ready: number; correction_scope: number; evidence_access: number };
 type AuditRow = { id: string; revision: number; outcome: CreditexJobAuditSaved['outcome']; checklist_version: string;
   answers_json: string; call_outcome: CreditexJobAuditSaved['callOutcome']; call_reason: string; call_id: string; note: string;
   source_sha256: string; actor_uid: string; actor_name: string; created_at: string; request_sha256: string; intent_id: string };
 
 function actorSql(actor: CreditexJobAuditActor) {
-  return actor.kind === 'admin' ? `SELECT administrator.role, administrator.id member_id, 1 can_audit, 0 can_call FROM admin_users administrator
+  return actor.kind === 'admin' ? `SELECT administrator.role, administrator.id member_id, 1 can_audit, 0 can_call, 1 can_correct FROM admin_users administrator
     JOIN compliance_organisations organisation ON organisation.id = ? AND organisation.status = 'active' AND organisation.organisation_code = ?
     WHERE administrator.id = ? AND administrator.firebase_uid = ? AND administrator.status = 'active' AND administrator.role IN ('owner','admin','reviewer')`
-    : `SELECT member.role, member.id member_id, ${creditexPermissionSql('audit')} can_audit, ${creditexPermissionSql('customers')} can_call FROM compliance_users member JOIN compliance_organisations organisation ON organisation.id = member.organisation_id
+    : `SELECT member.role, member.id member_id, ${creditexPermissionSql('audit')} can_audit, ${creditexPermissionSql('customer_calls')} can_call, ${creditexPermissionSql('corrections')} can_correct FROM compliance_users member JOIN compliance_organisations organisation ON organisation.id = member.organisation_id
     WHERE member.organisation_id = ? AND organisation.organisation_code = ? AND organisation.status = 'active'
       AND member.id = ? AND member.firebase_uid = ? AND member.status = 'active' AND member.role IN ('admin','case_manager','reviewer','auditor') AND ${creditexPermissionSql('jobs')}`;
 }
@@ -87,7 +87,7 @@ function sourceQuery(actor: CreditexJobAuditActor, scope: SourceScope = 'single'
   const evidence = jsonRows(`SELECT json_object('id',f.id,'parentId',linked_case.id,'label',f.file_name,'contentType',f.content_type,
     'sizeBytes',f.size_bytes,'sha256',f.original_sha256,'objectKey',f.object_key,'capturedAt',f.received_at,'status',f.status,'updatedAt',f.updated_at) item
     FROM compliance_case_evidence f WHERE f.case_id=linked_case.id AND f.organisation_id=linked_case.organisation_id ORDER BY f.id`);
-  return `WITH actor AS (${actorSql(actor)}) SELECT actor.role, actor.can_audit, actor.can_call,
+  return `WITH actor AS (${actorSql(actor)}) SELECT actor.role, actor.can_audit, actor.can_call, actor.can_correct,
     CASE WHEN work.record_status='active' AND work.stage NOT IN ('cancelled','imported') AND intent.status IN ('planned','case_linked') THEN 1 ELSE 0 END active,
     ${actor.kind === 'admin' ? '1' : `actor.role='admin' OR NOT EXISTS(SELECT 1 FROM trade_work_order_compliance_intents affected
       WHERE affected.work_order_id=work.id AND affected.installer_uid=work.firebase_uid AND affected.compliance_organisation_id=intent.compliance_organisation_id
@@ -222,7 +222,7 @@ async function loadWorkspace(db: D1Database, actor: CreditexJobAuditActor, inten
   return { target: current.source.target, sourceSha256, records: records(current.source), files: storedFiles(current.source).map(file => fileDto(file, actor, intentId, Boolean(current.evidence_access))),
     checklist: latest, history: history.results.map(saved), auditCompleted: latest?.outcome === 'audited' && latest.sourceSha256 === sourceSha256,
     submissionReady: Boolean(current.submission_ready), capabilities: { canSave: Boolean(current.active && current.can_audit), canComplete: Boolean(current.active && current.can_audit && complete), canCall: Boolean(current.can_call),
-      canRequestCorrection: Boolean(current.active && current.can_audit && current.correction_scope && lifecycle.capabilities.canRequestCorrection),
+      canRequestCorrection: Boolean(current.active && current.can_correct && current.correction_scope && lifecycle.capabilities.canRequestCorrection),
       reason: !current.can_audit ? 'Your team access allows viewing this job. Audit permission is required to change its audit.' : !current.active ? 'This job is inactive, imported or superseded.' : !complete ? 'The assigned field forms must be completed before completing the audit.' : '' } };
 }
 export async function loadCreditexJobAudit(db: D1Database, actor: CreditexJobAuditActor, intentId: string) {
@@ -286,7 +286,7 @@ export async function saveCreditexJobAudit(db: D1Database, actor: CreditexJobAud
   const auditStatements = [db.prepare(`INSERT INTO creditex_job_audit_versions
     (id,organisation_id,intent_id,work_order_id,owner_uid,revision,outcome,checklist_version,answers_json,call_outcome,call_reason,call_id,note,
      source_snapshot,source_sha256,actor_kind,actor_uid,actor_member_id,actor_name,request_id,request_sha256,created_at)
-    VALUES(?,?,?,?,?,(SELECT ?+1 FROM (${sourceQuery(actor)}) live WHERE live.active=1 AND live.can_audit=1 AND (?<>'correction_required' OR live.correction_scope=1) AND live.source_snapshot=?
+    VALUES(?,?,?,?,?,(SELECT ?+1 FROM (${sourceQuery(actor)}) live WHERE live.active=1 AND live.can_audit=1 AND (?<>'correction_required' OR (live.can_correct=1 AND live.correction_scope=1)) AND live.source_snapshot=?
       AND COALESCE((SELECT MAX(revision) FROM creditex_job_audit_versions WHERE organisation_id=? AND intent_id=?),0)=?),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(id, actor.organisationId, input.intentId, current.source.target.workOrderId, current.source.target.ownerUid, input.expectedAuditRevision,
       ...sourceBindings(actor, input.intentId), input.action, current.source_snapshot, actor.organisationId, input.intentId, input.expectedAuditRevision,

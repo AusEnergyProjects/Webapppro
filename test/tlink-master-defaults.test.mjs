@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as builtins from "../src/lib/trade-form-library.mjs";
 import { fieldTransitionExpectedStatus } from "../src/lib/trade-field-completion-policy.ts";
+import { creditexPermissionSql } from "../src/lib/creditex-permissions.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const compiled = ts.transpileModule(read("../src/lib/trade-form-templates-server.ts"), {
@@ -39,18 +40,31 @@ test("business libraries isolate owners and drafts cannot hide the current maste
 test("master publication rejects a stale draft behind a withdrawn head and a lost compare-and-save", () => {
   const server = read("../src/lib/creditex-activity-work-pack-server.ts");
   const body = server.slice(server.indexOf("export async function publishCreditexWorkPackVersion"));
-  const sql = /database\.prepare\(`(UPDATE\s+compliance_activity_work_pack_versions[\s\S]*?)`\)/.exec(body)?.[1];
-  assert.ok(sql, "Exercise the actual publication UPDATE");
+  const template = /database\.prepare\(`(UPDATE\s+compliance_activity_work_pack_versions[\s\S]*?)`\)/.exec(body)?.[1];
+  assert.ok(template, "Exercise the actual publication UPDATE");
+  const guardSource = server.slice(server.indexOf("function workPackPublicationGuard"), server.indexOf("function requireGovernancePermission"));
+  const guard = new Function("creditexPermissionSql", `${ts.transpileModule(guardSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText}\nreturn workPackPublicationGuard;`)(creditexPermissionSql);
+  const currentPublisher = guard({ actorKind: "compliance", organisationId: "org", actorUid: "editor" });
+  const sql = new Function("currentPublisher", `return \`${template}\`;`)(currentPublisher);
   const db = new DatabaseSync(":memory:");
   db.exec(`CREATE TABLE compliance_activity_work_pack_versions (id TEXT, organisation_id TEXT, activity_version_id TEXT,
     version INTEGER, publish_state TEXT, schema_sha256 TEXT, reviewed_by_uid TEXT, reviewed_at TEXT, review_note TEXT);
+    CREATE TABLE compliance_organisations(id TEXT,status TEXT);
+    CREATE TABLE compliance_users(organisation_id TEXT,firebase_uid TEXT,status TEXT,role TEXT,
+      governance_identity_verified INTEGER,display_name TEXT,governance_identity_verified_by_uid TEXT,permissions_json TEXT);
+    INSERT INTO compliance_organisations VALUES('org','active');
+    INSERT INTO compliance_users VALUES('org','editor','active','reviewer',1,'Named Editor','another-reviewer','["forms","forms_publish"]');
     INSERT INTO compliance_activity_work_pack_versions VALUES
       ('v1','org','activity',1,'published','hash','','',''),('v2','org','activity',2,'draft','hash','','',''),
       ('v3','org','activity',3,'withdrawn','hash','','',''),('v4','org','activity',4,'draft','hash','','',''),
       ('v5','org','activity',5,'draft','hash','','','');`);
-  const publish = (id, predecessor) => Number(db.prepare(sql).run("editor", "now", "Source checked", id, "org", "hash", predecessor, predecessor).changes);
+  const publish = (id, predecessor) => Number(db.prepare(sql).run("editor", "now", "Source checked", id, "org", "hash", predecessor, predecessor, ...currentPublisher.bindings).changes);
   assert.equal(publish("v2", "v1"), 0); assert.equal(publish("v2", "v3"), 0);
-  assert.equal(publish("v4", "v3"), 1); assert.equal(publish("v5", "v3"), 0); assert.equal(publish("v5", "v4"), 1);
+  assert.equal(publish("v4", "v3"), 1); assert.equal(publish("v5", "v3"), 0);
+  db.exec(`UPDATE compliance_users SET permissions_json='["forms"]'`);
+  assert.equal(publish("v5", "v4"), 0, "Revoked publication access blocks the final UPDATE even when the offered predecessor is current");
+  db.exec(`UPDATE compliance_users SET permissions_json='["forms","forms_publish"]'`);
+  assert.equal(publish("v5", "v4"), 1);
   db.close();
 });
 

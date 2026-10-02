@@ -173,7 +173,7 @@ async function outputActorCapabilities(
   actor: CreditexWorkPackGovernanceActor,
 ): Promise<CreditexOutputActionActorCapabilities> {
   await ensureCreditexWorkPackSchemaGuards(database);
-  const identity = await loadCreditexWorkPackGovernanceIdentity(database, actor);
+  const identity = await loadCreditexWorkPackGovernanceIdentity(database, actor, "governance");
   const canTransition = actor.actorKind === "admin"
     ? ["owner", "admin", "reviewer"].includes(identity.role)
     : ["admin", "case_manager", "reviewer"].includes(identity.role)

@@ -7,7 +7,7 @@ export const dynamic="force-dynamic";
 async function handle(request:Request) {
   if(!sameOrigin(request))return registryJson({ok:false,error:"Request origin was not accepted."},403);
   try {
-    const db=getD1(),member=await requireComplianceAccess(request,{allowedRoles:["admin","case_manager","reviewer","auditor"],requiredPermission:"submissions"},db);
+    const db=getD1(),member=await requireComplianceAccess(request,{allowedRoles:["admin","case_manager","reviewer","auditor"],requiredPermission: request.method === "GET" ? "submissions" : "submissions_manage"},db);
     return await handleRegistryRequest(request,db,{actorUid:member.uid,organisationId:member.organisationId,actorKind:"compliance"});
   } catch(error) {
     return registryError(error)||registryJson({ok:false,error:"Registry operations are unavailable. Refresh and try again."},500);

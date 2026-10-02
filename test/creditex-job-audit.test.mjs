@@ -125,6 +125,8 @@ test('custom audit permission is rechecked for read capabilities and inside the 
   assert.equal(view.capabilities.canSave, false); assert.equal(view.capabilities.canComplete, false); assert.equal(view.capabilities.canRequestCorrection, false);
   assert.equal(view.capabilities.canCall, false);
   f.sqlite.prepare('UPDATE compliance_users SET permissions_json=?').run('["jobs","customers"]');
+  assert.equal((await f.service.loadCreditexJobAudit(f.db, actor, 'intent')).capabilities.canCall, false);
+  f.sqlite.prepare('UPDATE compliance_users SET permissions_json=?').run('["jobs","customers","customer_calls"]');
   assert.equal((await f.service.loadCreditexJobAudit(f.db, actor, 'intent')).capabilities.canCall, true);
   f.sqlite.prepare('UPDATE compliance_users SET permissions_json=?').run('["jobs"]');
   await assert.rejects(f.service.saveCreditexJobAudit(f.db, actor, input), e => e.code === 'AUDIT_PERMISSION_REQUIRED');

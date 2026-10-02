@@ -96,11 +96,10 @@ function errorResponse(error: unknown) {
   }, 500);
 }
 
-async function requireAdministrator(request: Request, database: D1Database) {
+async function requireTeamMember(request: Request, database: D1Database) {
   const identity = await requireFirebaseIdentity(request);
   return requireComplianceIdentity(identity, {
-    allowedRoles: ["admin"],
-    requiredPermission: "team_access",
+    requiredAnyPermission: ["team_access", "team_details"],
   }, database);
 }
 
@@ -114,7 +113,7 @@ export async function GET(request: Request) {
   }
   try {
     const database = getD1();
-    const member = await requireAdministrator(request, database);
+    const member = await requireTeamMember(request, database);
     const access = await loadCreditexAccess(database, member.organisationId);
     return json({ ok: true, access });
   } catch (error) {
@@ -132,8 +131,11 @@ export async function POST(request: Request) {
   }
   try {
     const database = getD1();
-    const member = await requireAdministrator(request, database);
     const body = requiredBody(await readBoundedJsonRequest(request));
+    const identity = await requireFirebaseIdentity(request);
+    const member = await requireComplianceIdentity(identity, {
+      requiredPermission: body.action === "update_member_details" ? "team_details" : "team_access",
+    }, database);
     const result = body.action === "confirm_named_owner"
       ? await confirmCreditexNamedOwner(database, member)
       : await executeCreditexAccessAction(database, member, body);

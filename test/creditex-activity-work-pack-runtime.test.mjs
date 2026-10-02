@@ -212,6 +212,7 @@ function applyMigrations(sqlite) {
     .filter((name) => /^\d{4}_.+\.sql$/.test(name)
       && (name <= "0170_trade_activity_forms.sql"
         || name === "0188_creditex_output_dispatch_intents.sql"
+        || name === "0241_creditex_member_permissions.sql"
         || /^(0192|0193|0194)_/.test(name)))
     .filter((name) => name !== "0044_flimsy_omega_flight.sql")
     .sort();

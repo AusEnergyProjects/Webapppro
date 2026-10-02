@@ -197,7 +197,7 @@ test("calculator access requests a non-claiming compliance lookup", async () => 
     {},
   );
   assert.equal(complianceOptions.claimPendingInvitation, false);
-  assert.equal(complianceOptions.requiredPermission, "calculator");
+  assert.equal(complianceOptions.requiredPermission, undefined, "Calculator is a standard tool for an active verified workspace member");
   assert.equal(result.accessType, "installer");
   assert.equal(result.identity, installerAccess);
 });

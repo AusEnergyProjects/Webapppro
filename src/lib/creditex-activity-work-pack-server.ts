@@ -1,6 +1,7 @@
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "./trade-certificate-eligibility";
 import { jobMemberSql } from "./trade-job-collaboration";
 import { jobSyncChangeStatements } from "./trade-team-sync-server";
+import { creditexPermissionSql, hasCreditexPermission, resolveCreditexPermissions } from "./creditex-permissions.ts";
 import { creditexMutationConflict, creditexWriteGuard } from "./creditex-onboarding-server";
 import {
   CREDITEX_ACTIVITY_WORK_PACK_CUSTOMER_CONTEXT_CONTRACT,
@@ -9288,6 +9289,7 @@ function governedId(prefix: string, options?: GovernanceOptions) {
 async function governanceIdentity(
   database: D1Database,
   actor: CreditexWorkPackGovernanceActor,
+  purpose: "work_packs" | "submissions" | "governance" = "work_packs",
 ): Promise<GovernanceIdentity> {
   await ensureCreditexWorkPackSchemaGuards(database);
   const actorUid = text(
@@ -9305,7 +9307,7 @@ async function governanceIdentity(
   if (actor.actorKind === "compliance") {
     const row = await database.prepare(`SELECT member.role, member.display_name,
         member.governance_identity_verified,
-        member.governance_identity_verified_by_uid,
+        member.governance_identity_verified_by_uid, member.permissions_json,
         organisation.organisation_code
       FROM compliance_users member
       JOIN compliance_organisations organisation
@@ -9319,6 +9321,7 @@ async function governanceIdentity(
         display_name: string;
         governance_identity_verified: number;
         governance_identity_verified_by_uid: string;
+        permissions_json: string | null;
         organisation_code: string;
       }>();
     if (!row) {
@@ -9333,21 +9336,29 @@ async function governanceIdentity(
     const independentlyVerified = named
       && Boolean(row.governance_identity_verified_by_uid.trim())
       && row.governance_identity_verified_by_uid !== actorUid;
+    const permissions = resolveCreditexPermissions(row.role, row.permissions_json);
+    const canRead = purpose === "work_packs"
+      ? (["jobs", "forms", "governance"] as const).some(permission => permissions.includes(permission))
+      : hasCreditexPermission({ role: row.role, permissions }, purpose === "submissions" ? "submissions" : "governance");
+    const authorPermission = purpose === "work_packs" ? "forms" : purpose === "submissions" ? "submissions_manage" : "governance_manage";
     const canAuthor = named
-      && ["admin", "case_manager", "reviewer"].includes(row.role);
+      && ["admin", "case_manager", "reviewer"].includes(row.role)
+      && hasCreditexPermission({ role: row.role, permissions }, authorPermission);
     const canReview = independentlyVerified
-      && ["admin", "reviewer"].includes(row.role);
+      && ["admin", "reviewer"].includes(row.role)
+      && hasCreditexPermission({ role: row.role, permissions }, authorPermission);
+    const canPublish = canAuthor && (purpose !== "work_packs" || hasCreditexPermission({ role: row.role, permissions }, "forms_publish"));
     return Object.freeze({
       actorUid,
       actorKind: actor.actorKind,
       role: row.role,
       displayName: row.display_name,
       access: Object.freeze({
-        canRead: true,
+        canRead,
         canAuthor,
         canReview,
-        canPublish: canAuthor,
-        canWithdraw: canReview,
+        canPublish,
+        canWithdraw: canReview && canPublish,
       }),
     });
   }
@@ -9389,8 +9400,20 @@ async function governanceIdentity(
 export async function loadCreditexWorkPackGovernanceIdentity(
   database: D1Database,
   actor: CreditexWorkPackGovernanceActor,
+  purpose: "work_packs" | "submissions" | "governance" = "work_packs",
 ) {
-  return governanceIdentity(database, actor);
+  return governanceIdentity(database, actor, purpose);
+}
+
+function workPackPublicationGuard(actor: CreditexWorkPackGovernanceActor, independent = false) {
+  if (actor.actorKind !== "compliance") return { sql: "1=1", bindings: [] };
+  return { sql: `EXISTS (SELECT 1 FROM compliance_users member JOIN compliance_organisations organisation
+    ON organisation.id=member.organisation_id AND organisation.status='active'
+    WHERE member.organisation_id=? AND member.firebase_uid=? AND member.status='active'
+      AND member.role IN (${independent ? "'admin','reviewer'" : "'admin','case_manager','reviewer'"})
+      AND member.governance_identity_verified=1 AND length(trim(member.display_name))>0
+      ${independent ? "AND length(trim(member.governance_identity_verified_by_uid))>0 AND member.governance_identity_verified_by_uid<>member.firebase_uid" : ""}
+      AND ${creditexPermissionSql("forms_publish")})`, bindings: [actor.organisationId, actor.actorUid] };
 }
 
 function requireGovernancePermission(
@@ -11542,6 +11565,7 @@ export async function publishCreditexWorkPackVersion(
   );
   const comment = governanceComment(input.comment, "Publication review note");
   const now = governedNow(options);
+  const currentPublisher = workPackPublicationGuard(actor);
   const result = await database.prepare(`UPDATE
       compliance_activity_work_pack_versions
     SET publish_state = 'published', reviewed_by_uid = ?,
@@ -11554,6 +11578,7 @@ export async function publishCreditexWorkPackVersion(
           AND current.activity_version_id = compliance_activity_work_pack_versions.activity_version_id
           AND current.publish_state IN ('published', 'withdrawn')
         ORDER BY current.version DESC LIMIT 1), '') = ?)
+      AND ${currentPublisher.sql}
       AND version > COALESCE((SELECT MAX(current.version) FROM compliance_activity_work_pack_versions current
         WHERE current.organisation_id = compliance_activity_work_pack_versions.organisation_id
           AND current.activity_version_id = compliance_activity_work_pack_versions.activity_version_id
@@ -11567,6 +11592,7 @@ export async function publishCreditexWorkPackVersion(
       expected,
       input.expectedCurrentVersionId ?? null,
       input.expectedCurrentVersionId ?? null,
+      ...currentPublisher.bindings,
     ).run();
   if (Number(result.meta.changes || 0) !== 1) {
     return fail(
@@ -11594,6 +11620,7 @@ export async function saveCreditexMasterForm(
 ) {
   const identity = await governanceIdentity(database, actor);
   requireGovernancePermission(identity, "canAuthor");
+  requireGovernancePermission(identity, "canPublish");
   const base = await governanceVersionForPublish(database, actor.organisationId, input.baseVersionId);
   if (base.schema_sha256 !== input.expectedBaseSchemaSha256
     || !["draft", "published"].includes(base.publish_state)) {
@@ -11676,17 +11703,19 @@ export async function withdrawCreditexWorkPackVersion(
   }
   const comment = governanceComment(input.comment, "Version withdrawal note");
   const now = governedNow(options);
+  const currentPublisher = workPackPublicationGuard(actor, true);
   const result = await database.prepare(`UPDATE
       compliance_activity_work_pack_versions
     SET publish_state = 'withdrawn', withdrawn_by_uid = ?,
       withdrawn_at = ?, withdrawal_note = ?
-    WHERE id = ? AND organisation_id = ? AND publish_state = 'published'`)
+    WHERE id = ? AND organisation_id = ? AND publish_state = 'published' AND ${currentPublisher.sql}`)
     .bind(
       identity.actorUid,
       now,
       comment,
       row.id,
       actor.organisationId,
+      ...currentPublisher.bindings,
     ).run();
   if (Number(result.meta.changes || 0) !== 1) {
     return fail(

@@ -12,6 +12,7 @@ import { colours, radius, spacing } from '@/lib/theme';
 import { checkForAppUpdate, restartIntoUpdate } from '@/lib/updates';
 import { readableAuthError, useApp } from '@/providers/app-provider';
 import tlinkIcon from '../../assets/images/icon.png';
+import { useNativeWorkspace } from '@/providers/native-workspace-provider';
 
 function StartupSettings() {
   const [open, setOpen] = useState(false);
@@ -97,6 +98,7 @@ function StartupSettings() {
 }
 
 export default function SignInScreen() {
+  const workspace = useNativeWorkspace();
   const { user, loading, access, sync, syncNow, pinSignIn, signOut, businesses, choosingBusiness,
     businessError, chooseBusiness, cancelBusinessChooser, retryBusinesses } = useApp();
   const [displayName, setDisplayName] = useState('');
@@ -210,6 +212,7 @@ export default function SignInScreen() {
           </FieldButton>
         </View>
         <Text style={styles.privacy}>Your PIN works once on this phone. Only jobs assigned to your TLink access are downloaded.</Text>
+        <FieldButton variant="secondary" disabled={busy} onPress={() => void workspace.choose('creditex').catch(() => setMessage('The workspace could not be changed. Try again.'))}>Creditex team sign-in</FieldButton>
       </Screen>
     </View>
   );

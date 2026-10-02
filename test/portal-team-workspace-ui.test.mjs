@@ -11,8 +11,8 @@ const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Arra
 const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node) === label)[0];
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const message = { id: "message", senderId: "a", senderName: "A", recipientId: "b", body: "Existing message", createdAt: "2026-10-02T00:00:00.000Z" };
-const history = () => ({ memberId: "a", messages: [message], before: "older-cursor", hasMore: false });
-function harness(api, workspace = "admin", visibilityState = "visible") {
+const history = () => ({ memberId: "a", messages: [message], before: "older-cursor", hasMore: false, canSend: true });
+function harness(api, workspace = "admin", visibilityState = "visible", view = "conversation") {
   let cursor = 0; const slots = [], effects = [], queued = [];
   const hooks = {
     useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }]; },
@@ -24,7 +24,7 @@ function harness(api, workspace = "admin", visibilityState = "visible") {
   };
   const loaded = {};
   const notifications = [];
-  Function("require", "exports", "document", "setInterval", "clearInterval", "window", `${compiled}\nexports.Conversation=Conversation;`)(name => {
+  Function("require", "exports", "document", "setInterval", "clearInterval", "window", `${compiled}\nexports.Conversation=Conversation;exports.TasksWorkspace=TasksWorkspace;`)(name => {
     if (name === "react") return hooks;
     if (name === "react/jsx-runtime") return jsx;
     if (name === "@/lib/firebase-mfa") return { MFA_SETUP_URL: "/security" };
@@ -32,7 +32,7 @@ function harness(api, workspace = "admin", visibilityState = "visible") {
     if (name.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => key }) };
     throw Error(name);
   }, loaded, { visibilityState }, () => 1, () => {}, { dispatchEvent: event => notifications.push(event.type) });
-  const render = () => { cursor = 0; const tree = loaded.Conversation({ api, peer: { id: "b", name: "B" }, workspace, user: { uid: "a" } }); for (const effect of queued.splice(0)) effect(); return tree; };
+  const render = () => { cursor = 0; const tree = view === "tasks" ? loaded.TasksWorkspace({ api }) : loaded.Conversation({ api, peer: { id: "b", name: "B" }, workspace, user: { uid: "a" } }); for (const effect of queued.splice(0)) effect(); return tree; };
   const settle = async () => { render(); await flush(); return render(); };
   return { render, settle, notifications, wrapper: loaded.PortalTeamWorkspace, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
 }
@@ -61,7 +61,7 @@ test("a membership failure removes previously visible private messages", async (
   const h = harness(async () => { if (denied) throw new Error("Your workspace access changed."); return history(); });
   let tree = await h.settle(); assert.match(text(tree), /Existing message/);
   denied = true; button(tree, "Refresh").props.onClick(); tree = await h.settle();
-  assert.doesNotMatch(text(tree), /Existing message/); assert.equal(button(tree, "Send message").props.disabled, true); h.cleanup();
+  assert.doesNotMatch(text(tree), /Existing message/); assert.equal(button(tree, "Send message"), undefined); h.cleanup();
 });
 test("an abandoned conversation ignores late history responses", async () => {
   let release; const h = harness(() => new Promise(resolve => { release = resolve; }));
@@ -98,4 +98,23 @@ test("hidden Creditex conversations do not mark notifications as read", async ()
   const requests = [];
   const h = harness(async (_query, body) => { requests.push(body); return history(); }, "creditex", "hidden");
   await h.settle(); assert.deepEqual(requests, []); h.cleanup();
+});
+
+test("read-only message access retains history and removes the composer", async () => {
+  const h = harness(async () => ({ ...history(), canSend: false }), "creditex");
+  const tree = await h.settle();
+  assert.match(text(tree), /Existing message/); assert.match(text(tree), /read-only access/);
+  assert.equal(button(tree, "Send message"), undefined); assert.equal(nodes(tree, node => node.type === "textarea").length, 0);
+  h.cleanup();
+});
+
+test("task actions follow returned capabilities rather than a visible task or role", async () => {
+  const data = { tasks: [{ id: "task", title: "Check evidence", assigneeName: "A", creatorName: "B", createdAt: "2026-10-03", status: "open", canEdit: false, canComplete: false }], page: 1, totalPages: 1, total: 1, canViewTeam: false, canCreate: false, canAssign: false, canComplete: false };
+  const h = harness(async query => query.mode === "people" ? { people: [], memberId: "a", hasMore: false, ...data } : data, "creditex", "visible", "tasks");
+  let tree = await h.settle();
+  assert.match(text(tree), /Check evidence/); assert.equal(button(tree, "New task"), undefined); assert.equal(button(tree, "Mark done"), undefined); assert.equal(button(tree, "Edit"), undefined);
+  data.canCreate = true; data.tasks[0].canComplete = true;
+  button(tree, "Refresh").props.onClick(); tree = await h.settle();
+  assert.ok(button(tree, "New task")); assert.ok(button(tree, "Mark done")); assert.equal(button(tree, "Edit"), undefined);
+  h.cleanup();
 });

@@ -52,7 +52,6 @@ export async function requireCreditexCalculatorAccess(
       const complianceIdentity = await requireComplianceIdentity(identity, {
         allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
         claimPendingInvitation: false,
-        requiredPermission: "calculator",
       }, database);
       return { accessType: "compliance", identity: complianceIdentity };
     }

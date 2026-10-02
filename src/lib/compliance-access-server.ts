@@ -178,6 +178,8 @@ type PendingComplianceInvitation = {
   invited_by_uid: string;
   expires_at: string;
   permissions_json: string | null;
+  phone: string;
+  job_title: string;
 };
 
 export async function claimPendingComplianceInvitation(
@@ -198,7 +200,7 @@ export async function claimPendingComplianceInvitation(
       invitation.role,
       invitation.invited_by_uid,
       invitation.expires_at
-      , invitation.permissions_json
+      , invitation.permissions_json, invitation.phone, invitation.job_title
     FROM compliance_invitations invitation
     JOIN compliance_organisations organisation
       ON organisation.id = invitation.organisation_id
@@ -236,9 +238,9 @@ export async function claimPendingComplianceInvitation(
         governance_identity_verified, governance_identity_verified_by_uid,
         governance_identity_verified_at,
         governance_identity_verification_basis,
-        created_by_uid, last_login_at, created_at, updated_at, permissions_json
+        created_by_uid, last_login_at, created_at, updated_at, permissions_json, phone, job_title
       )
-      SELECT ?, ?, ?, ?, ?, ?, 'active', 0, '', '', '', ?, ?, ?, ?, ?
+      SELECT ?, ?, ?, ?, ?, ?, 'active', 0, '', '', '', ?, ?, ?, ?, ?, ?, ?
       WHERE EXISTS (
         SELECT 1 FROM compliance_invitations
         WHERE id = ? AND status = 'pending' AND expires_at > ?
@@ -259,6 +261,8 @@ export async function claimPendingComplianceInvitation(
       now,
       now,
       invitation.permissions_json ?? null,
+      invitation.phone,
+      invitation.job_title,
       invitation.id,
       now,
       invitation.organisation_id,

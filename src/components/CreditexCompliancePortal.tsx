@@ -328,6 +328,8 @@ export function CreditexCompliancePortal() {
     if (['home', 'profile', 'settings'].includes(next)) return true;
     if (next === 'connect') return permitted('customers') || permitted('messages');
     if (next === 'map') return permitted('customers') || permitted('jobs');
+    if (next === 'calculator') return true;
+    if (next === 'team') return permitted('team_details') || permitted('team_access');
     if (next === 'forms') return permitted('jobs') || permitted('forms');
     const permissions: Partial<Record<WorkspaceTab, CreditexPermission>> = { cases: 'jobs', operations: 'jobs', customers: 'customers', tasks: 'tasks', calculator: 'calculator', forms: 'forms', submissions: 'submissions', sources: 'governance', governance: 'governance', onboarding: 'governance', 'compliance-questions': 'forms', team: 'team_access' };
     return Boolean(permissions[next] && permitted(permissions[next]));
@@ -1228,14 +1230,14 @@ export function CreditexCompliancePortal() {
           </p>
         )}
 
-        {tab === "home" && <section id="creditex-panel-home" role="tabpanel" aria-labelledby="creditex-tab-home"><CreditexHomeDashboard user={user} canManageTeam={permitted('team_access')} onNavigate={selectTab} canAccess={canAccessTab} /></section>}
+        {tab === "home" && <section id="creditex-panel-home" role="tabpanel" aria-labelledby="creditex-tab-home"><CreditexHomeDashboard user={user} canManageTeam={permitted('team_access') || permitted('team_details')} onNavigate={selectTab} canAccess={canAccessTab} /></section>}
         {tab === "connect" && <section id="creditex-panel-connect" role="tabpanel" aria-labelledby="creditex-tab-connect"><PortalConnectWorkspace key={`${user.uid}:${connectTarget.nonce}`} workspace="creditex" user={user} initialIntentId={connectTarget.intentId} initialPeerId={connectTarget.peerId} canViewCustomers={permitted('customers')} canMessageTeam={permitted('messages')} onActiveChange={reportCallActive}/></section>}
         {tab === "tasks" && <section id="creditex-panel-tasks" role="tabpanel" aria-labelledby="creditex-tab-tasks"><PortalTeamWorkspace key={`${user.uid}:${taskTarget}`} workspace="creditex" user={user} view="tasks" initialTaskId={taskTarget}/></section>}
         {tab === 'profile' && <section id="creditex-panel-profile" role="tabpanel" aria-labelledby="creditex-tab-profile"><PortalWorkspacePreferences controller={preferences}/></section>}
         {tab === 'customers' && <section id="creditex-panel-customers" role="tabpanel" aria-labelledby="creditex-tab-customers"><CreditexCustomerDirectory user={user} initialCustomerId={customerTarget} onOpenJob={openJob} onContact={openContact} canOpenJobs={permitted('jobs')}/></section>}
         {tab === 'calculator' && <section className={styles.calculatorPanel} id="creditex-panel-calculator" role="tabpanel" aria-labelledby="creditex-tab-calculator"><h1>Calculator</h1><CreditexAllProgramCalculator api={api} role={session.role}/></section>}
         {tab === 'map' && <section id="creditex-panel-map" role="tabpanel" aria-labelledby="creditex-tab-map"><CreditexCustomerMap user={user} canViewCustomers={permitted('customers')} canViewJobs={permitted('jobs')} onOpenRecord={record => { if (record.kind === 'job') openJob(record.id); else if (selectTab('customers')) setCustomerTarget(record.id); }}/></section>}
-        {tab === "settings" && <section className={styles.settingsPanel} id="creditex-panel-settings" role="tabpanel" aria-labelledby="creditex-tab-settings"><h1>Workspace settings</h1><p>Manage your workspace and specialist compliance tools.</p><button className={styles.secondaryButton} type="button" onClick={() => selectTab('profile')}>My profile &amp; appearance</button>{permitted('governance') && <details className={styles.supportingTools}><summary>Rules &amp; source management</summary><div><p>Maintain the official documents and rules used by published compliance forms and calculations.</p><div className={styles.settingsActions}><button className={styles.secondaryButton} type="button" onClick={() => selectTab('sources')}>Official sources</button>{session.role === 'admin' && <button className={styles.secondaryButton} type="button" onClick={() => selectTab('governance')}>Government rules</button>}</div></div></details>}{session.role === "admin" && <details className={styles.voiceSettings}><summary>Audit phone setup</summary><CreditexVoiceSetupPanel user={user}/></details>}</section>}
+        {tab === "settings" && <section className={styles.settingsPanel} id="creditex-panel-settings" role="tabpanel" aria-labelledby="creditex-tab-settings"><h1>Workspace settings</h1><p>Manage your workspace and specialist compliance tools.</p><button className={styles.secondaryButton} type="button" onClick={() => selectTab('profile')}>My profile &amp; appearance</button>{permitted('governance') && <details className={styles.supportingTools}><summary>Rules &amp; source management</summary><div><p>Maintain the official documents and rules used by published compliance forms and calculations.</p><div className={styles.settingsActions}><button className={styles.secondaryButton} type="button" onClick={() => selectTab('sources')}>Official sources</button>{session.role === 'admin' && <button className={styles.secondaryButton} type="button" onClick={() => selectTab('governance')}>Government rules</button>}</div></div></details>}{permitted('voice_setup') && <details className={styles.voiceSettings}><summary>Audit phone setup</summary><CreditexVoiceSetupPanel user={user}/></details>}</section>}
 
         {tab === "cases" && (
           <div
@@ -1290,6 +1292,7 @@ export function CreditexCompliancePortal() {
               sourceBatchEndpoint="/api/creditex/official-sources/batch-import"
               canCaptureSource={["admin", "case_manager"].includes(session.role)}
               fieldMasterCanAuthor={session.canEditFieldMasters}
+              fieldMasterCanPublish={permitted('forms_publish')}
               onManageFormAccess={session.role === "admin" ? () => selectTab("team") : undefined}
               onFieldFormDirtyChange={reportFieldFormDirty}
               onDownloadSource={downloadOfficialSource}
@@ -1298,7 +1301,7 @@ export function CreditexCompliancePortal() {
           </section>
         )}
 
-        {tab === "team" && session.role === "admin" && (
+        {tab === "team" && (permitted('team_access') || permitted('team_details')) && (
           <section className={styles.panel} id="creditex-panel-team" role="tabpanel" aria-labelledby="creditex-tab-team">
             <CreditexTeamAccess session={session} onSessionChanged={loadWorkspace} />
           </section>

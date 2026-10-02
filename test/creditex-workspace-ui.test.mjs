@@ -362,12 +362,24 @@ test('notification navigation retains unsaved audits and active call protections
 
 test('member permissions control visible tools, Home shortcuts and direct navigation without hiding profile',()=>{
   const h=portal('admin',{session:{permissions:['tasks']}});let tree=h.render();
-  for(const label of ['Home dashboard','Tasks','My profile','Settings'])assert.ok(button(tree,label),label);
-  for(const label of ['Jobs','Customers','Connect','Cases','Calculator','Forms','Customer & job map','Team','Training','Trade onboarding'])assert.equal(button(tree,label),undefined,label);
-  const home=nodes(tree,n=>n.type?.displayName==='CreditexHomeDashboard')[0];assert.equal(home.props.canManageTeam,false);assert.equal(home.props.canAccess('cases'),false);assert.equal(home.props.canAccess('tasks'),true);
+  for(const label of ['Home dashboard','Tasks','Calculator','My profile','Settings'])assert.ok(button(tree,label),label);
+  for(const label of ['Jobs','Customers','Connect','Cases','Forms','Customer & job map','Team','Training','Trade onboarding'])assert.equal(button(tree,label),undefined,label);
+  const home=nodes(tree,n=>n.type?.displayName==='CreditexHomeDashboard')[0];assert.equal(home.props.canManageTeam,false);assert.equal(home.props.canAccess('cases'),false);assert.equal(home.props.canAccess('tasks'),true);assert.equal(home.props.canAccess('calculator'),true);
   const header=nodes(tree,n=>n.type?.displayName==='PortalWorkspaceHeader')[0];assert.equal(header.props.onSearch('Laura'),false);assert.equal(header.props.notificationControl.props.onOpen({kind:'job',intentId:'hidden'}),false);
   button(tree,'Settings').props.onClick();tree=h.render();assert.equal(button(tree,'Official sources'),undefined);assert.equal(button(tree,'Government rules'),undefined);h.cleanup();
   const previews=portal('auditor',{session:{permissions:['jobs']}});tree=previews.render();assert.ok(button(tree,'Forms'));assert.ok(button(tree,'Customer & job map'));assert.equal(button(tree,'Customers'),undefined);button(tree,'Customer & job map').props.onClick();tree=previews.render();const map=nodes(tree,n=>n.type?.displayName==='CreditexCustomerMap')[0];assert.equal(map.props.canViewJobs,true);assert.equal(map.props.canViewCustomers,false);previews.cleanup();
+});
+
+test('team detail and access grants independently expose the roster while preserving their distinct permissions',()=>{
+  for(const grant of ['team_details','team_access']) {
+    const h=portal('admin',{session:{permissions:[grant]}});let tree=h.render();
+    assert.ok(button(tree,'Team'),grant);
+    const home=nodes(tree,n=>n.type?.displayName==='CreditexHomeDashboard')[0];assert.equal(home.props.canManageTeam,true);assert.equal(home.props.canAccess('team'),true);
+    button(tree,'Team').props.onClick();tree=h.render();
+    const team=nodes(tree,n=>n.type?.displayName==='CreditexTeamAccess')[0];
+    assert.ok(team,`${grant} opens the team roster`);assert.deepEqual(team.props.session.permissions,[grant]);
+    h.cleanup();
+  }
 });
 
 test('source and rule maintenance stays inside Settings with correct navigation highlighting',()=>{

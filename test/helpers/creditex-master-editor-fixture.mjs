@@ -34,7 +34,7 @@ const masterForm = {
 const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node) === label)[0];
 const edit = tree => nodes(tree, node => node.type === "button" && node.props["aria-label"] === "Edit VEU 6: Heating and cooling")[0];
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function harness({ canAuthor = true, actorMode = "admin", respond = async () => ({ catalogue }), confirm = true, onManageAccess, onDirtyChange } = {}) {
+function harness({ canAuthor = true, canPublish, actorMode = "admin", respond = async () => ({ catalogue }), confirm = true, onManageAccess, onDirtyChange } = {}) {
   const state = [], effects = [], requests = [], calls = [], signals = []; let cursor = 0, mounted = true, lateStateWrites = 0;
   const hooks = {
     useState(initial) { const i = cursor++; if (!(i in state)) state[i] = initial; return [state[i], value => { if (!mounted) lateStateWrites++; state[i] = typeof value === "function" ? value(state[i]) : value; }]; },
@@ -45,8 +45,8 @@ function harness({ canAuthor = true, actorMode = "admin", respond = async () => 
   const exports = {};
   const window = { confirm: () => confirm, addEventListener() {}, removeEventListener() {} };
   Function("require", "exports", "window", compiled)(id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./CreditexFormPhonePreview" ? { CreditexFormPhonePreview: "phone-preview" } : id === "./TlinkFormMindMap" ? { TlinkFormMindMap: "form-mind-map", TlinkMindMapMark: "mind-map-mark" } : id.endsWith("/creditex-form-history") ? history : id.endsWith("/creditex-form-conditions") ? conditions : id.endsWith("/creditex-form-pages") ? pages : id.endsWith("/trade-activity-form-flow") ? flow : id.endsWith(".module.css") ? { default: {} } : (() => { throw Error(id); })(), exports, window);
-  const render = () => { cursor = 0; const tree = exports.CreditexFieldFormMasters({ api, actorMode, canAuthor, onManageAccess, onDirtyChange }); effects.splice(0).forEach(run => run()); return tree; };
-  return { requests, calls, signals, render, setConfirm(value) { confirm = value; }, get lateStateWrites() { return lateStateWrites; }, unmount() { mounted = false; for (const slot of state) slot?.cleanup?.(); }, async mount() { render(); await flush(); return render(); } };
+  const render = () => { cursor = 0; const tree = exports.CreditexFieldFormMasters({ api, actorMode, canAuthor, canPublish, onManageAccess, onDirtyChange }); effects.splice(0).forEach(run => run()); return tree; };
+  return { requests, calls, signals, render, setCanPublish(value) { canPublish = value; }, setConfirm(value) { confirm = value; }, get lateStateWrites() { return lateStateWrites; }, unmount() { mounted = false; for (const slot of state) slot?.cleanup?.(); }, async mount() { render(); await flush(); return render(); } };
 }
 
 

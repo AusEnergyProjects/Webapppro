@@ -4,11 +4,12 @@ export type PortalMessage = { id: string; body: string; senderId: string; sender
 export type PortalTask = {
   id: string; title: string; detail: string; assigneeId: string; assigneeName: string;
   creatorId: string; creatorName: string; status: "open" | "done"; dueOn: string;
-  createdAt: string; updatedAt: string; completedAt: string; revision: number; canEdit: boolean;
+  createdAt: string; updatedAt: string; completedAt: string; revision: number; canEdit: boolean; canComplete: boolean;
 };
-export type PortalTaskList = { tasks: PortalTask[]; page: number; totalPages: number; total: number; canViewTeam: boolean };
-export type PortalPeople = { people: PortalPerson[]; hasMore: boolean; memberId: string; canViewTeam: boolean };
-export type PortalMessageList = { messages: PortalMessage[]; before: string; hasMore: boolean; memberId: string };
+export type PortalTaskCapabilities = { canViewTeam: boolean; canCreate: boolean; canAssign: boolean; canComplete: boolean };
+export type PortalTaskList = PortalTaskCapabilities & { tasks: PortalTask[]; page: number; totalPages: number; total: number };
+export type PortalPeople = PortalTaskCapabilities & { people: PortalPerson[]; hasMore: boolean; memberId: string };
+export type PortalMessageList = { messages: PortalMessage[]; before: string; hasMore: boolean; memberId: string; canSend: boolean };
 
 export class PortalTeamError extends Error {
   readonly status: number;

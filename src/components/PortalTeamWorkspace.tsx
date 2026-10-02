@@ -32,7 +32,7 @@ function usePortalApi(workspace: PortalWorkspace, user: User): Api {
 }
 function usePeople(api: Api, purpose: "messages" | "tasks" = "tasks") {
   const [search, setSearch] = useState("");
-  const [data, setData] = useState<PortalPeople>({ people: [], hasMore: false, memberId: "", canViewTeam: false });
+  const [data, setData] = useState<PortalPeople>({ people: [], hasMore: false, memberId: "", canViewTeam: false, canCreate: false, canAssign: false, canComplete: false });
   const [error, setError] = useState<Failure | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -40,7 +40,7 @@ function usePeople(api: Api, purpose: "messages" | "tasks" = "tasks") {
       void api<PortalPeople>({ mode: "people", q: search, purpose }, undefined, controller.signal).then(value => {
         if (!controller.signal.aborted) { setData(value); setError(null); }
       }).catch(cause => {
-        if (!controller.signal.aborted) { setData({ people: [], hasMore: false, memberId: "", canViewTeam: false }); setError(failure(cause)); }
+        if (!controller.signal.aborted) { setData({ people: [], hasMore: false, memberId: "", canViewTeam: false, canCreate: false, canAssign: false, canComplete: false }); setError(failure(cause)); }
       });
     }, search ? 180 : 0);
     return () => { clearTimeout(timer); controller.abort(); };
@@ -87,6 +87,7 @@ function ConnectWorkspace({ api, workspace, user, initialPeerId }: { api: Api; w
 }
 function Conversation({ api, peer, workspace, user }: { api: Api; peer: PortalPerson; workspace: PortalWorkspace; user: User }) {
   const [messages, setMessages] = useState<PortalMessage[]>([]); const [memberId, setMemberId] = useState("");
+  const [canSend, setCanSend] = useState(false);
   const [before, setBefore] = useState(""); const [hasMore, setHasMore] = useState(false);
   const [historyCursor, setHistoryCursor] = useState("");
   const [error, setError] = useState<Failure | null>(null); const [body, setBody] = useState("");
@@ -99,9 +100,9 @@ function Conversation({ api, peer, workspace, user }: { api: Api; peer: PortalPe
       if (document.visibilityState === "hidden") return;
       void api<PortalMessageList>({ mode: "messages", peer: peer.id, before: historyCursor }, undefined, controller.signal).then(data => {
         if (controller.signal.aborted) return;
-        setMessages(data.messages); setMemberId(data.memberId); setBefore(data.before); setHasMore(data.hasMore); setError(null);
+        setMessages(data.messages); setMemberId(data.memberId); setCanSend(data.canSend); setBefore(data.before); setHasMore(data.hasMore); setError(null);
       }).catch(cause => {
-        if (!controller.signal.aborted) { setMessages([]); setMemberId(""); setBefore(""); setHasMore(false); setError(failure(cause)); }
+        if (!controller.signal.aborted) { setMessages([]); setMemberId(""); setCanSend(false); setBefore(""); setHasMore(false); setError(failure(cause)); }
       });
     };
     load(); const timer = setInterval(load, 15000);
@@ -118,7 +119,7 @@ function Conversation({ api, peer, workspace, user }: { api: Api; peer: PortalPe
     return () => controller.abort();
   }, [api, memberId, messages, workspace]);
   async function send(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (sendLock.current || !body.trim()) return;
+    event.preventDefault(); if (sendLock.current || !body.trim() || !canSend) return;
     sendLock.current = true; setBusy(true); setError(null);
     requestId.current ||= crypto.randomUUID();
     try {
@@ -135,7 +136,7 @@ function Conversation({ api, peer, workspace, user }: { api: Api; peer: PortalPe
       {!messages.length && !error && <p>No messages yet.</p>}
       {messages.map(message => <article key={message.id} className={message.senderId === memberId ? styles.mine : styles.message}><header><strong>{message.senderId === memberId ? "You" : message.senderName}</strong><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "short", timeStyle: "short" })}</time></header><p>{message.body}</p></article>)}
     </div>
-    <form className={styles.compose} onSubmit={send}><label><span>Message</span><textarea required maxLength={4000} value={body} disabled={busy} onChange={event => { setBody(event.target.value); requestId.current = ""; }} rows={3} placeholder={`Message ${peer.name || "your teammate"}`} /></label><button type="submit" disabled={busy || !memberId || !body.trim()}>{busy ? "Sending..." : "Send message"}</button></form>
+    {canSend ? <form className={styles.compose} onSubmit={send}><label><span>Message</span><textarea required maxLength={4000} value={body} disabled={busy} onChange={event => { setBody(event.target.value); requestId.current = ""; }} rows={3} placeholder={`Message ${peer.name || "your teammate"}`} /></label><button type="submit" disabled={busy || !memberId || !body.trim()}>{busy ? "Sending..." : "Send message"}</button></form> : memberId && <p>You have read-only access to team messages.</p>}
   </section>;
 }
 function TasksWorkspace({ api, initialTaskId }: { api: Api; initialTaskId?: string }) {
@@ -164,11 +165,11 @@ function TasksWorkspace({ api, initialTaskId }: { api: Api; initialTaskId?: stri
   }
   return <>
     {focusedTask && <div className={styles.focusedTask}><span>Task from your notification</span><button type="button" onClick={() => { setFocusedTask(""); setView("mine"); setStatus("all"); setPage(1); }}>Show all my tasks</button></div>}
-    <div className={styles.toolbar}><label><span>Tasks</span><select value={view} onChange={event => { setView(event.target.value); setFocusedTask(""); setPage(1); }}><option value="mine">My tasks</option><option value="assigned">Assigned by me</option>{directory.canViewTeam && <option value="team">All team tasks</option>}</select></label><label><span>Status</span><select value={status} onChange={event => { setStatus(event.target.value); setFocusedTask(""); setPage(1); }}><option value="open">Open</option><option value="done">Done</option><option value="all">All</option></select></label><button type="button" onClick={() => setRefresh(value => value + 1)}>Refresh</button><button type="button" disabled={!directory.memberId || Boolean(editing)} onClick={() => setEditing("new")}>New task</button></div>
+    <div className={styles.toolbar}><label><span>Tasks</span><select value={view} onChange={event => { setView(event.target.value); setFocusedTask(""); setPage(1); }}><option value="mine">My tasks</option><option value="assigned">Assigned by me</option>{data?.canViewTeam && <option value="team">All team tasks</option>}</select></label><label><span>Status</span><select value={status} onChange={event => { setStatus(event.target.value); setFocusedTask(""); setPage(1); }}><option value="open">Open</option><option value="done">Done</option><option value="all">All</option></select></label><button type="button" onClick={() => setRefresh(value => value + 1)}>Refresh</button>{data?.canCreate && <button type="button" disabled={!directory.memberId || Boolean(editing)} onClick={() => setEditing("new")}>New task</button>}</div>
     <ErrorNotice error={error || directory.error} onDismiss={() => { setError(null); directory.setError(null); }} />
     {editing && <TaskEditor key={typeof editing === "string" ? editing : editing.id} api={api} memberId={directory.memberId} task={editing === "new" ? null : editing} onCancel={() => setEditing(null)} onSaved={() => { setEditing(null); setRefresh(value => value + 1); }} />}
     <div className={styles.tasks}>
-      {data?.tasks.map(task => <article key={task.id} className={styles.task}><div><h3>{task.title}</h3><p>{task.assigneeName}{task.dueOn ? ` · Due ${new Date(`${task.dueOn}T00:00:00`).toLocaleDateString("en-AU")}` : ""}</p>{task.detail && <p className={styles.taskDetail}>{task.detail}</p>}<small>Assigned by {task.creatorName} · {new Date(task.createdAt).toLocaleDateString("en-AU")}</small></div><div className={styles.actions}><button type="button" disabled={Boolean(busy)} onClick={() => void changeStatus(task)}>{busy === task.id ? "Saving..." : task.status === "done" ? "Reopen" : "Mark done"}</button>{task.canEdit && <button type="button" disabled={Boolean(editing)} onClick={() => setEditing(task)}>Edit</button>}</div></article>)}
+      {data?.tasks.map(task => <article key={task.id} className={styles.task}><div><h3>{task.title}</h3><p>{task.assigneeName}{task.dueOn ? ` · Due ${new Date(`${task.dueOn}T00:00:00`).toLocaleDateString("en-AU")}` : ""}</p>{task.detail && <p className={styles.taskDetail}>{task.detail}</p>}<small>Assigned by {task.creatorName} · {new Date(task.createdAt).toLocaleDateString("en-AU")}</small></div><div className={styles.actions}>{task.canComplete && <button type="button" disabled={Boolean(busy)} onClick={() => void changeStatus(task)}>{busy === task.id ? "Saving..." : task.status === "done" ? "Reopen" : "Mark done"}</button>}{task.canEdit && <button type="button" disabled={Boolean(editing)} onClick={() => setEditing(task)}>Edit</button>}</div></article>)}
       {data && !data.tasks.length && <p className={styles.empty}>No {status === "all" ? "" : `${status} `}tasks in this view.</p>}
     </div>
     {data && data.totalPages > 1 && <nav className={styles.pagination} aria-label="Task pages"><button type="button" disabled={data.page <= 1} onClick={() => setPage(data.page - 1)}>Previous</button><span>Page {data.page} of {data.totalPages}</span><button type="button" disabled={data.page >= data.totalPages} onClick={() => setPage(data.page + 1)}>Next</button></nav>}
@@ -194,8 +195,8 @@ function TaskEditor({ api, memberId, task, onCancel, onSaved }: { api: Api; memb
   return <form className={styles.editor} onSubmit={save} aria-label={task ? "Edit task" : "New task"}>
     <h3>{task ? "Edit task" : "New task"}</h3><ErrorNotice error={error || directory.error} onDismiss={() => { setError(null); directory.setError(null); }} />
     <label><span>What needs doing?</span><input name="title" required maxLength={180} defaultValue={task?.title || ""} disabled={busy} /></label>
-    <div className={styles.editorRow}><label><span>Find teammate</span><input type="search" maxLength={100} value={directory.search} onChange={event => directory.setSearch(event.target.value)} placeholder="Search names" disabled={busy} /></label><label><span>Assigned to</span><select value={assigneeId} onChange={event => setAssigneeId(event.target.value)} required disabled={busy}>{people.map(person => <option key={person.id} value={person.id}>{person.id === memberId ? `${person.name || "Me"} (me)` : person.name}</option>)}</select></label><label><span>Due date (optional)</span><input type="date" name="dueOn" defaultValue={task?.dueOn || ""} disabled={busy} /></label></div>
-    {directory.hasMore && <small>Search by name to find more teammates.</small>}
+    <div className={styles.editorRow}>{directory.canAssign && <label><span>Find teammate</span><input type="search" maxLength={100} value={directory.search} onChange={event => directory.setSearch(event.target.value)} placeholder="Search names" disabled={busy} /></label>}<label><span>Assigned to</span><select value={assigneeId} onChange={event => setAssigneeId(event.target.value)} required disabled={busy || !directory.canAssign}>{people.map(person => <option key={person.id} value={person.id}>{person.id === memberId ? `${person.name || "Me"} (me)` : person.name}</option>)}</select></label><label><span>Due date (optional)</span><input type="date" name="dueOn" defaultValue={task?.dueOn || ""} disabled={busy} /></label></div>
+    {directory.canAssign && directory.hasMore && <small>Search by name to find more teammates.</small>}
     <label><span>Details (optional)</span><textarea name="detail" rows={3} maxLength={3000} defaultValue={task?.detail || ""} disabled={busy} /></label>
     <div className={styles.actions}><button type="submit" disabled={busy || !assigneeId}>{busy ? "Saving..." : "Save task"}</button><button type="button" disabled={busy} onClick={onCancel}>Cancel</button></div>
   </form>;

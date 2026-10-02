@@ -118,7 +118,7 @@ function mergeApprovedProductOptions(results: readonly { facets: { brands: { val
   }
   return [...merged.values()].sort((left, right) => left.label.localeCompare(right.label) || left.value.localeCompare(right.value));
 }
-async function masterActor(request: Request, mode: string, readOnly = false) {
+async function masterActor(request: Request, mode: string, readOnly = false, publish = false) {
   if (mode === "admin") {
     const actor = await requireAdminIdentity(request, ["owner", "admin"]);
     return { uid: actor.uid, organisationId: await resolveActiveCreditexOfficialSourceOrganisation(getD1()) };
@@ -126,7 +126,7 @@ async function masterActor(request: Request, mode: string, readOnly = false) {
   if (mode !== "creditex") throw new Error("ACTIVITY_AUTHOR_REQUIRED");
   const actor = await requireComplianceAccess(request, {
     allowedRoles: readOnly ? ["admin", "case_manager", "reviewer", "auditor"] : ["admin", "case_manager", "reviewer"],
-    ...(readOnly ? { requiredAnyPermission: ["jobs", "forms"] as const } : { requiredPermission: "forms" as const }),
+    ...(readOnly ? { requiredAnyPermission: ["jobs", "forms"] as const } : { requiredPermission: publish ? "forms_publish" as const : "forms" as const }),
   }, getD1());
   if (actor.organisationCode.trim().toUpperCase() !== "CREDITEX-AU"
     || (!readOnly && !canEditCreditexFieldMasters(actor))) throw new Error("ACTIVITY_AUTHOR_REQUIRED");
@@ -457,7 +457,7 @@ export async function POST(request: Request) {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("INVALID_ACTIVITY_REQUEST");
     const body = parsed as Row; const action = str(body.action);
     if (["create_master_draft", "save_master_draft", "publish_master_draft", "discard_master_draft"].includes(action)) {
-      const actor = await masterActor(request, str(body.actorMode));
+      const actor = await masterActor(request, str(body.actorMode), false, action === "publish_master_draft");
       return adminJson({ ok: true, ...await mutateMasterDraft(getD1(), actor, body) });
     }
     if (action === "view_review_report") {
@@ -471,7 +471,7 @@ export async function POST(request: Request) {
       return adminJson({ ok: true, reportUrl: `${new URL(request.url).origin}${new URL(request.url).pathname}?reportToken=${secret}` });
     }
     if (action === "save_master") {
-      const actor = await masterActor(request, str(body.actorMode)); const builtIn = defaultActivityFieldForm(str(body.activityTemplateId), str(body.variantId));
+      const actor = await masterActor(request, str(body.actorMode), false, true); const builtIn = defaultActivityFieldForm(str(body.activityTemplateId), str(body.variantId));
       const current = await getD1().prepare("SELECT MAX(version) version FROM trade_activity_field_masters WHERE organisation_id = ? AND activity_template_id = ? AND variant_id = ?")
         .bind(actor.organisationId, builtIn.activityTemplateId, builtIn.variantId).first<{ version: number | null }>();
       const expectedVersion = Number(current?.version || 0);

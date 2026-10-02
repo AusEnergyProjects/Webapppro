@@ -2,8 +2,49 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
-import { CREDITEX_PERMISSIONS, creditexRolePermissions, resolveCreditexPermissions, hasCreditexPermission, creditexPermissionSql } from "../src/lib/creditex-permissions.ts";
+import { CREDITEX_PERMISSIONS, creditexRolePermissions, creditexAllowedPermissions, setCreditexPermission, resolveCreditexPermissions, hasCreditexPermission, creditexPermissionSql } from "../src/lib/creditex-permissions.ts";
 import { canEditCreditexFieldMasters } from "../src/lib/creditex-field-master-access.ts";
+
+test("action dependencies are added by the editor and fail closed in stored grants", () => {
+  const selected = setCreditexPermission("admin", [], "corrections", true);
+  assert.deepEqual(new Set(selected), new Set(["jobs", "audit", "corrections"]));
+  assert.deepEqual(setCreditexPermission("admin", selected, "jobs", false), []);
+  assert.deepEqual(resolveCreditexPermissions("admin", ["messages_send", "tasks_complete"]), []);
+  assert.equal(creditexAllowedPermissions("reviewer").includes("team_details"), true);
+  assert.equal(creditexRolePermissions("reviewer").includes("team_details"), false);
+});
+
+test("granular migration preserves existing implied actions once without widening revoked tools", t => {
+  const db = new DatabaseSync(":memory:"); t.after(() => db.close());
+  for (const table of ["compliance_users", "compliance_invitations"]) {
+    db.exec(`CREATE TABLE ${table}(id TEXT,role TEXT,permissions_json TEXT)`);
+    const insert = db.prepare(`INSERT INTO ${table} VALUES(?,?,?)`);
+    insert.run("legacy-default", "admin", null);
+    insert.run("legacy-limited", "reviewer", '["jobs","audit","messages"]');
+    insert.run("empty", "admin", "[]");
+    insert.run("unknown", "admin", '["jobs","unknown"]');
+    insert.run("admin", "admin", '["jobs","audit","tasks","team_access"]');
+  }
+  db.exec(readFileSync(new URL("../drizzle/0244_creditex_granular_permissions.sql", import.meta.url), "utf8"));
+  for (const table of ["compliance_users", "compliance_invitations"]) {
+    const get = id => db.prepare(`SELECT permissions_json FROM ${table} WHERE id=?`).get(id).permissions_json;
+    assert.equal(get("legacy-default"), null);
+    assert.deepEqual(JSON.parse(get("empty")), []);
+    assert.deepEqual(JSON.parse(get("unknown")), ["jobs", "unknown"]);
+    const grants = resolveCreditexPermissions("reviewer", get("legacy-limited"));
+    assert.equal(grants.includes("corrections"), true);
+    assert.equal(grants.includes("messages_send"), true);
+    assert.equal(grants.includes("customer_calls"), false);
+    assert.equal(grants.includes("forms_publish"), false);
+    assert.equal(grants.includes("team_details"), false);
+    const admin = resolveCreditexPermissions("admin", get("admin"));
+    for (const key of ["job_lifecycle", "payouts", "tasks_create", "tasks_assign", "tasks_edit", "tasks_complete", "tasks_team", "team_details"]) assert.ok(admin.includes(key), key);
+    const revoked = admin.filter(key => key !== "tasks_complete");
+    db.prepare(`UPDATE ${table} SET permissions_json=? WHERE id='admin'`).run(JSON.stringify(revoked));
+    assert.equal(resolveCreditexPermissions("admin", get("admin")).includes("tasks_complete"), false);
+  }
+});
+
 
 test("legacy role defaults preserve authority while an empty custom set grants no tools", () => {
   for (const role of ["admin", "reviewer", "case_manager", "auditor"]) {

@@ -57,7 +57,8 @@ test("Creditex operations routes enforce same-origin, no-store and verified memb
     operationsRoute,
     /allowedRoles: \["admin", "case_manager", "reviewer", "auditor"\]/,
   );
-  assert.match(accessRoute, /allowedRoles: \["admin"\]/);
+  assert.match(accessRoute, /requiredAnyPermission: \["team_access", "team_details"\]/);
+  assert.match(accessRoute, /requiredPermission: body\.action === "update_member_details" \? "team_details" : "team_access"/);
 });
 
 test("operations filters are activity-agnostic, bounded, and cover the authoritative case dimensions", () => {
@@ -253,7 +254,7 @@ test("non-admin operations remain assignment-scoped while Creditex admins retain
     "stage_batch_item",
     "remove_batch_item",
   ]) {
-    const start = server.indexOf(`action === "${action}"`);
+    const start = server.indexOf(`if (action === "${action}")`, server.indexOf("export async function executeCreditexOperation"));
     const next = server.indexOf("if (action ===", start + 1);
     assert.match(
       server.slice(start, next < 0 ? server.length : next),
@@ -418,7 +419,7 @@ test("successful mutation paths append an immutable audit event and immutable le
     const start = server.indexOf(`action === "${action}"`);
     assert.notEqual(start, -1, `${action} handler should exist`);
     const nextStarts = operationsModule.CREDITEX_OPERATION_ACTIONS
-      .map((candidate) => server.indexOf(`action === "${candidate}"`, start + 1))
+      .map((candidate) => server.indexOf(`if (action === "${candidate}")`, start + 1))
       .filter((index) => index > start);
     const end = nextStarts.length ? Math.min(...nextStarts) : server.length;
     assert.match(
@@ -482,10 +483,11 @@ test("external execution is hard-disabled and local records do not imply registr
   assert.doesNotMatch(`${server}\n${operationsRoute}`, /\bfetch\s*\(/);
 });
 
-test("access management is admin-only and rejects shared mailbox invitations", async () => {
-  assert.match(server, /identity\.role !== "admin"/);
+test("access changes require team access and invitations reject shared mailbox identities", async () => {
+  assert.match(server, /action === "update_member_details" \? "team_details" : "team_access"/);
+  assert.match(server, /!hasCreditexPermission\(identity, requiredPermission\)/);
   assert.match(server, /SHARED_EMAIL_LOCAL_PARTS/);
-  assert.match(server, /nameParts\.length < 2/);
+  assert.match(server, /displayName\.split\(" "\)\.length < 2/);
   await assert.rejects(
     operationsModule.executeCreditexAccessAction(null, {
       uid: "admin-uid",

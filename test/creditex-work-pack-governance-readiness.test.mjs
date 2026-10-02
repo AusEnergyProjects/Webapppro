@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as collaboration from "../src/lib/trade-job-collaboration.ts";
 import * as syncChanges from "../src/lib/trade-team-sync-server.ts";
+import * as permissions from "../src/lib/creditex-permissions.ts";
 
 import * as activityWorkPack from "../src/lib/creditex-activity-work-pack.ts";
 import * as interchangePreflight from "../src/lib/creditex-interchange-preflight.ts";
@@ -35,6 +36,7 @@ function loadTypescriptModule(path, mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (specifier === "./creditex-permissions.ts") return permissions;
     if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
@@ -168,7 +170,8 @@ function governanceDatabase() {
       role text NOT NULL,
       status text NOT NULL,
       governance_identity_verified integer NOT NULL,
-      governance_identity_verified_by_uid text NOT NULL
+      governance_identity_verified_by_uid text NOT NULL,
+      permissions_json text DEFAULT NULL
     );
     CREATE TABLE compliance_programs (
       id text PRIMARY KEY,
@@ -866,6 +869,39 @@ function assertBlocked(result, expectedBlocker) {
   assert.equal(row.ready, false);
   if (expectedBlocker) assert.ok(row.blockers.includes(expectedBlocker), row.blockers);
 }
+
+test("Creditex work-pack drafting, publication and submission authority remain independent", async t => {
+  const database = governanceDatabase(); t.after(() => database.close());
+  const actor = { actorUid: "named-editor", actorKind: "compliance", organisationId: ORGANISATION_ID };
+  database.prepare(`INSERT INTO compliance_users(organisation_id,firebase_uid,display_name,role,status,
+    governance_identity_verified,governance_identity_verified_by_uid,permissions_json) VALUES(?,?,?,'reviewer','active',1,'independent-verifier',?)`)
+    .run(ORGANISATION_ID, actor.actorUid, "Named Editor", JSON.stringify(["forms"]));
+  const db = testD1(database);
+  let identity = await server.loadCreditexWorkPackGovernanceIdentity(db, actor);
+  assert.equal(identity.access.canAuthor, true); assert.equal(identity.access.canPublish, false); assert.equal(identity.access.canWithdraw, false);
+  await assert.rejects(server.publishCreditexWorkPackVersion(db, actor, {}), error => error.code === "WORK_PACK_GOVERNANCE_PERMISSION_DENIED");
+  await assert.rejects(server.saveCreditexMasterForm(db, actor, {}), error => error.code === "WORK_PACK_GOVERNANCE_PERMISSION_DENIED");
+  await assert.rejects(server.withdrawCreditexWorkPackVersion(db, actor, {}), error => error.code === "WORK_PACK_GOVERNANCE_PERMISSION_DENIED");
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM compliance_activity_work_pack_versions").get().n, 0);
+  const setGrants = grants => database.prepare("UPDATE compliance_users SET permissions_json=? WHERE firebase_uid=?").run(JSON.stringify(grants), actor.actorUid);
+  setGrants(["forms", "forms_publish"]);
+  identity = await server.loadCreditexWorkPackGovernanceIdentity(db, actor);
+  assert.equal(identity.access.canPublish, true); assert.equal(identity.access.canWithdraw, true);
+  setGrants(["submissions", "submissions_manage"]);
+  assert.equal((await server.loadCreditexWorkPackGovernanceIdentity(db, actor)).access.canAuthor, false);
+  assert.equal((await server.loadCreditexWorkPackGovernanceIdentity(db, actor, "submissions")).access.canAuthor, true);
+  setGrants(["submissions"]);
+  const readOnly = await server.loadCreditexWorkPackGovernanceIdentity(db, actor, "submissions");
+  assert.equal(readOnly.access.canRead, true); assert.equal(readOnly.access.canAuthor, false);
+  setGrants(["governance", "governance_manage"]);
+  assert.equal((await server.loadCreditexWorkPackGovernanceIdentity(db, actor, "governance")).access.canAuthor, true);
+  assert.equal((await server.loadCreditexWorkPackGovernanceIdentity(db, actor)).access.canPublish, false);
+  setGrants(["forms", "forms_publish"]);
+  database.exec("UPDATE compliance_users SET governance_identity_verified=0");
+  assert.equal((await server.loadCreditexWorkPackGovernanceIdentity(db, actor)).access.canPublish, false);
+  database.exec("UPDATE compliance_users SET governance_identity_verified=1,governance_identity_verified_by_uid='named-editor'");
+  assert.equal((await server.loadCreditexWorkPackGovernanceIdentity(db, actor)).access.canWithdraw, false);
+});
 
 test("governance readiness: clean inventory keeps every current or limited activity visible and blocked", async () => {
   const database = governanceDatabase();

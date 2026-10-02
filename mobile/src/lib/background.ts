@@ -5,10 +5,12 @@ import { firebaseAuth } from '@/lib/auth';
 import { getFieldPrincipal } from '@/lib/field-session';
 import { runSync } from '@/lib/sync';
 import { processRentalSaveQueue } from '@/lib/rental-save-queue';
+import { readNativeWorkspace } from '@/lib/native-workspace';
 
 export const FIELD_SYNC_TASK = 'aea-field-secure-sync-v1';
 
 TaskManager.defineTask(FIELD_SYNC_TASK, async () => {
+  if (await readNativeWorkspace() === 'creditex') return BackgroundTask.BackgroundTaskResult.Success;
   if (!firebaseAuth.currentUser && !await getFieldPrincipal()) {
     return BackgroundTask.BackgroundTaskResult.Success;
   }
