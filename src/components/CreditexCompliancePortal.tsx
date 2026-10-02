@@ -40,11 +40,13 @@ const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnair
 import { CreditexOutputActions } from "./CreditexOutputActions";
 import { CreditexRegistryWorkspace } from "./CreditexRegistryWorkspace";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
-import { CreditexOperationsWorkspace, CreditexTeamAccess } from "./CreditexOperationsWorkspace";
+import { CreditexTeamAccess } from "./CreditexOperationsWorkspace";
 import { CreditexPlannedIntakeQueue } from "./CreditexPlannedIntakeQueue";
 import CreditexVoiceSetupPanel from "./CreditexVoiceSetupPanel";
 import { PortalWorkspacePreferences, usePortalWorkspacePreferences } from "./PortalWorkspacePreferences";
 import { PortalTeamWorkspace } from "./PortalTeamWorkspace";
+import { PortalConnectWorkspace } from "./PortalConnectWorkspace";
+import { PortalWorkspaceHeader } from "./PortalWorkspaceHeader";
 import { CreditexHomeDashboard } from "./CreditexHomeDashboard";
 import styles from "./CreditexCompliancePortal.module.css";
 
@@ -83,33 +85,6 @@ type ComplianceSession = {
     legalName: string;
     tradingName: string;
   };
-};
-
-type CaseQueueItem = {
-  caseId?: string;
-  caseNumber: string;
-  jobNumber: string;
-  installerBusiness: string;
-  jurisdiction: string;
-  activityDate: string;
-  activity: {
-    programName: string;
-    activityKey: string;
-    registryActivityCode: string;
-    title: string;
-    version: number;
-    specificationPart: string;
-    productCategory: string;
-    scenarioCode: string;
-    scenario: string;
-    effectiveFrom: string;
-    effectiveTo: string;
-    officialSourceVersion: string;
-  };
-  evidenceStatus: string;
-  workflowStatus: string;
-  createdAt: string;
-  updatedAt: string;
 };
 
 type ProgramRecord = {
@@ -175,19 +150,6 @@ type ApiAttempt = {
   response: Response;
   result: ApiResult;
 };
-
-const CASE_STATUSES = [
-  "open",
-  "all",
-  "draft",
-  "ready_for_submission",
-  "submitted",
-  "in_review",
-  "changes_requested",
-  "accepted",
-  "rejected",
-  "closed",
-] as const;
 
 const SERVICE_CATEGORIES = [
   "assessment",
@@ -273,22 +235,6 @@ function workspaceMessage(error: unknown) {
     : "The protected Creditex workspace could not be loaded.";
 }
 
-function caseMatches(item: CaseQueueItem, query: string) {
-  const search = query.trim().toLowerCase();
-  if (!search) return true;
-  return [
-    item.caseNumber,
-    item.jobNumber,
-    item.installerBusiness,
-    item.jurisdiction,
-    item.activity.programName,
-    item.activity.activityKey,
-    item.activity.registryActivityCode,
-    item.activity.title,
-    item.activity.scenario,
-  ].some((value) => value.toLowerCase().includes(search));
-}
-
 function emptyProgramForm() {
   return {
     programCode: "",
@@ -351,8 +297,11 @@ export function CreditexCompliancePortal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tab, setTab] = useState<WorkspaceTab>("home");
+  const [jobSearch, setJobSearch] = useState({ query: "", nonce: 0 });
   const preferences = usePortalWorkspacePreferences({ workspace: "creditex", user: session ? user : null, currentDisplayName: session?.displayName || "" });
   const auditDirty = useRef(false);
+  const callActive = useRef(false);
+  const reportCallActive = useCallback((active: boolean) => { callActive.current = active; }, []);
   const reportAuditDirty = useCallback((dirty: boolean) => { auditDirty.current = dirty; }, []);
   const questionnaireDirty = useRef(false);
   const fieldFormDirty = useRef(false);
@@ -360,6 +309,7 @@ export function CreditexCompliancePortal() {
   const reportFieldFormDirty = useCallback((dirty: boolean) => { fieldFormDirty.current = dirty; }, []);
   function selectTab(next: typeof tab) {
     if (next === tab) return true;
+    if (callActive.current && !window.confirm("End the active customer call and leave Connect?")) return false;
     if (auditDirty.current && !window.confirm("Discard the unsaved audit answers?")) return false;
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
     if (fieldFormDirty.current && !window.confirm("Discard the unsaved changes to this activity form?")) return false;
@@ -375,15 +325,6 @@ export function CreditexCompliancePortal() {
     const timer = window.setTimeout(() => setNotice(""), 3000);
     return () => window.clearTimeout(timer);
   }, [notice, noticeKind]);
-  const [cases, setCases] = useState<CaseQueueItem[]>([]);
-  const [caseQuery, setCaseQuery] = useState("");
-  const [caseStatus, setCaseStatus] =
-    useState<(typeof CASE_STATUSES)[number]>("open");
-  const [casePagination, setCasePagination] = useState({
-    pageSize: 50,
-    hasNext: false,
-    nextCursor: "",
-  });
   const [programs, setPrograms] = useState<ProgramRecord[]>([]);
   const [activities, setActivities] = useState<ActivityRecord[]>([]);
   const [programForm, setProgramForm] = useState(emptyProgramForm);
@@ -575,40 +516,6 @@ export function CreditexCompliancePortal() {
     return accessReceipt;
   }, []);
 
-  const loadCases = useCallback(async ({
-    status = "open",
-    cursor = "",
-    append = false,
-  }: {
-    status?: (typeof CASE_STATUSES)[number];
-    cursor?: string;
-    append?: boolean;
-  } = {}) => {
-    const query = new URLSearchParams({ status, pageSize: "50" });
-    if (cursor) query.set("cursor", cursor);
-    const result = await api(`/api/creditex/cases?${query.toString()}`);
-    const nextCases = (result.cases || []) as CaseQueueItem[];
-    setCases((current) => {
-      if (!append) return nextCases;
-      const known = new Set(current.map((item) => item.caseNumber));
-      return [
-        ...current,
-        ...nextCases.filter((item) => !known.has(item.caseNumber)),
-      ];
-    });
-    setCasePagination(
-      (result.pagination || {
-        pageSize: 50,
-        hasNext: false,
-        nextCursor: "",
-      }) as {
-        pageSize: number;
-        hasNext: boolean;
-        nextCursor: string;
-      },
-    );
-  }, [api]);
-
   const loadGovernance = useCallback(async () => {
     const result = await api("/api/creditex/activities");
     setPrograms((result.programs || []) as ProgramRecord[]);
@@ -631,10 +538,6 @@ export function CreditexCompliancePortal() {
         if (firebaseAuth.currentUser?.uid !== activeUid) return;
         const nextSession = result.member as ComplianceSession;
         setSession(nextSession);
-        setCaseStatus("open");
-        setCaseQuery("");
-        await loadCases({ status: "open" });
-        if (firebaseAuth.currentUser?.uid !== activeUid) return;
         if (nextSession.role === "admin") await loadGovernance();
         else {
           setPrograms([]);
@@ -660,7 +563,7 @@ export function CreditexCompliancePortal() {
       }
     });
     return request;
-  }, [api, loadCases, loadGovernance]);
+  }, [api, loadGovernance]);
 
   useEffect(
     () =>
@@ -673,12 +576,8 @@ export function CreditexCompliancePortal() {
             workspaceLoadRef.current = null;
           }
           setSession(null);
-          setCases([]);
-          setCasePagination({ pageSize: 50, hasNext: false, nextCursor: "" });
           setPrograms([]);
           setActivities([]);
-          setCaseStatus("open");
-          setCaseQuery("");
           setGovernanceProgramId("");
           setGovernanceActivityId("");
           setProgramTemplateId("");
@@ -702,10 +601,6 @@ export function CreditexCompliancePortal() {
     [loadWorkspace],
   );
 
-  const visibleCases = useMemo(
-    () => cases.filter((item) => caseMatches(item, caseQuery)),
-    [caseQuery, cases],
-  );
   const selectedGovernanceProgram = useMemo(
     () =>
       programs.find((program) => program.id === governanceProgramId)
@@ -820,55 +715,6 @@ export function CreditexCompliancePortal() {
       officialSourceTitle: selectedActivityProgram.officialSourceTitle,
       officialSourceCheckedAt: GOVERNMENT_CATALOGUE_REVIEWED_ON,
     }));
-  }
-
-  async function changeCaseStatus(
-    nextStatus: (typeof CASE_STATUSES)[number],
-  ) {
-    setCaseStatus(nextStatus);
-    setCaseQuery("");
-    setBusy("cases");
-    try {
-      await loadCases({ status: nextStatus });
-    } catch (error) {
-      setCases([]);
-      setCasePagination({ pageSize: 50, hasNext: false, nextCursor: "" });
-      setNotice(workspaceMessage(error));
-      setNoticeKind("error");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function refreshCases() {
-    setBusy("cases");
-    try {
-      await loadCases({ status: caseStatus });
-      setNotice("Case queue refreshed from the first page.");
-      setNoticeKind("success");
-    } catch (error) {
-      setNotice(workspaceMessage(error));
-      setNoticeKind("error");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function loadNextCases() {
-    if (!casePagination.hasNext || !casePagination.nextCursor) return;
-    setBusy("case-page");
-    try {
-      await loadCases({
-        status: caseStatus,
-        cursor: casePagination.nextCursor,
-        append: true,
-      });
-    } catch (error) {
-      setNotice(workspaceMessage(error));
-      setNoticeKind("error");
-    } finally {
-      setBusy("");
-    }
   }
 
   async function signInEmail(event: FormEvent<HTMLFormElement>) {
@@ -1256,21 +1102,11 @@ export function CreditexCompliancePortal() {
       id="site-content"
       {...preferences.rootProps}
     >
+      <PortalWorkspaceHeader context="Compliance workspace" organisation={session.organisation.tradingName || session.organisation.legalName} displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences}
+        onSearch={query => { if (tab === "cases" && auditDirty.current && !window.confirm("Discard the unsaved audit answers?")) return false; if (!selectTab("cases")) return false; auditDirty.current = false; setJobSearch(current => ({ query, nonce: current.nonce + 1 })); return true; }}
+        onTasks={() => selectTab("tasks")} onSettings={() => selectTab("settings")} onSignOut={() => { if (!callActive.current || window.confirm("End the active customer call and sign out?")) void signOut(firebaseAuth); }} />
       <div className={styles.frame}>
         <aside className={styles.sidebar} aria-label="Creditex navigation">
-          <div className={styles.brand}>
-            <Image
-              src="/tlink-icon-192.png"
-              alt=""
-              aria-hidden="true"
-              width={42}
-              height={42}
-            />
-            <div>
-              <h1>Creditex</h1>
-              <span>TLink partner workspace</span>
-            </div>
-          </div>
           <label className={styles.mobileNavigation}>
             Workspace
             <select value={tab} onChange={(event) => {
@@ -1300,31 +1136,6 @@ export function CreditexCompliancePortal() {
           </div>
         </aside>
         <div className={styles.workspace}>
-        <header className={styles.topbar}>
-          <div className={styles.workspaceContext}>
-            <span>Creditex workspace</span>
-            <strong>{visibleTabs.find((item) => item.id === tab)?.label}</strong>
-          </div>
-          <div className={styles.identity}>
-            <button className={styles.secondaryButton} type="button" onClick={() => selectTab("settings")}>Profile &amp; colours</button>
-            <div>
-              <strong>
-                {preferences.profile.displayName || session.displayName || session.email}
-              </strong>
-              <span>
-                {session.organisation.tradingName ||
-                  session.organisation.legalName}
-              </span>
-            </div>
-            <button
-              className={styles.secondaryButton}
-              type="button"
-              onClick={() => void signOut(firebaseAuth)}
-            >
-              Sign out
-            </button>
-          </div>
-        </header>
         <div className={styles.content}>
         {!["home", "connect", "tasks", "settings", "cases", "operations", "submissions", "forms", "compliance-questions", "team"].includes(tab) && (
           <section className={styles.hero}>
@@ -1370,7 +1181,8 @@ export function CreditexCompliancePortal() {
         )}
 
         {tab === "home" && <section id="creditex-panel-home" role="tabpanel" aria-labelledby="creditex-tab-home"><CreditexHomeDashboard user={user} canManageTeam={session.role === "admin"} onNavigate={selectTab} /></section>}
-        {(tab === "connect" || tab === "tasks") && <section id={`creditex-panel-${tab}`} role="tabpanel" aria-labelledby={`creditex-tab-${tab}`}><PortalTeamWorkspace key={`${user.uid}:${tab}`} workspace="creditex" user={user} view={tab}/>{tab === "connect" && <p className={styles.callHint}>Customer audit calls are available inside each job. Open Jobs, choose Audit, then Call customer.</p>}</section>}
+        {tab === "connect" && <section id="creditex-panel-connect" role="tabpanel" aria-labelledby="creditex-tab-connect"><PortalConnectWorkspace key={user.uid} workspace="creditex" user={user} onActiveChange={reportCallActive}/></section>}
+        {tab === "tasks" && <section id="creditex-panel-tasks" role="tabpanel" aria-labelledby="creditex-tab-tasks"><PortalTeamWorkspace key={user.uid} workspace="creditex" user={user} view="tasks"/></section>}
         {tab === "settings" && <section id="creditex-panel-settings" role="tabpanel" aria-labelledby="creditex-tab-settings"><PortalWorkspacePreferences controller={preferences}/>{session.role === "admin" && <details className={styles.voiceSettings}><summary>Audit phone setup</summary><CreditexVoiceSetupPanel user={user}/></details>}</section>}
 
         {tab === "cases" && (
@@ -1379,29 +1191,13 @@ export function CreditexCompliancePortal() {
             role="tabpanel"
             aria-labelledby="creditex-tab-cases"
           >
-            <CreditexPlannedIntakeQueue api={api} onDirtyChange={reportAuditDirty} />
+            <CreditexPlannedIntakeQueue key={`${user.uid}:${jobSearch.nonce}`} initialSearch={jobSearch.query} api={api} onDirtyChange={reportAuditDirty} />
           </div>
         )}
 
         {tab === "operations" && (
           <div id="creditex-panel-operations" role="tabpanel" aria-labelledby="creditex-tab-operations">
-            <CreditexOperationsWorkspace
-              session={session}
-              seedCases={visibleCases}
-              seedPagination={casePagination}
-              seedStatus={caseStatus}
-              seedStatusOptions={CASE_STATUSES}
-              seedLoadNextLabel={`Load next ${casePagination.pageSize}`}
-              seedBusy={busy === "cases" || busy === "case-page"}
-              onSeedStatusChange={(status) =>
-                void changeCaseStatus(
-                  status as (typeof CASE_STATUSES)[number],
-                )}
-              onRefreshSeedCases={() => void refreshCases()}
-              onLoadNextSeedCases={() => void loadNextCases()}
-              onOpenActivityRules={() =>
-                selectTab(session.role === "admin" ? "governance" : "sources")}
-            />
+            <CreditexPlannedIntakeQueue key={`${user.uid}:corrections`} mode="corrections" api={api} onDirtyChange={reportAuditDirty} />
           </div>
         )}
 

@@ -228,8 +228,8 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(databaseWorkspace, /Live database console/);
   assert.match(portal, /requestTLinkPasswordReset\(accountEmail, "\/operations\/control-centre"\)/);
   assert.match(portal, /Forgot password\?/);
-  assert.match(portal, /href="#operations-inbox"/);
-  assert.match(portal, /aria-label=\{`Open operations inbox/);
+  assert.match(portal, /onTasks=\{openNotificationInbox\}/);
+  assert.match(read("../src/components/PortalWorkspaceHeader.tsx"), /Open inbox, \$\{notificationCount\} unread alerts/);
   assert.doesNotMatch(portal, /Ecosystem walkthrough|Open demo enquiries/);
   assert.match(portal, /AdminDemoCleanupPanel user=\{user\}/);
   assert.match(portal, /Owner recovery readiness/);

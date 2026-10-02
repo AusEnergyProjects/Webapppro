@@ -1,15 +1,15 @@
 .workbench {
-  --source-bg: #061c2a;
-  --source-panel: #0a2636;
-  --source-panel-raised: #0d3041;
-  --source-border: #185166;
-  --source-border-soft: #123f52;
-  --source-text: #eefbfb;
-  --source-muted: #9fc1c9;
-  --source-teal: #25d6bd;
-  --source-teal-dark: #0c7e73;
-  --source-amber: #f4c95d;
-  --source-red: #ff968f;
+  --source-bg: var(--portal-background, #061c2a);
+  --source-panel: var(--portal-surface, #0a2636);
+  --source-panel-raised: var(--portal-raised, #0d3041);
+  --source-border: var(--portal-line-strong, #185166);
+  --source-border-soft: var(--portal-line, #123f52);
+  --source-text: var(--portal-ink, #eefbfb);
+  --source-muted: var(--portal-muted, #9fc1c9);
+  --source-teal: var(--portal-green-dark, #25d6bd);
+  --source-teal-dark: var(--portal-green, #0c7e73);
+  --source-amber: var(--portal-warning-ink, #f4c95d);
+  --source-red: var(--portal-error-ink, #ff968f);
   min-width: 0;
   max-width: 100%;
   padding: clamp(14px, 2vw, 24px);
@@ -86,12 +86,12 @@
   gap: 3px;
   border: 1px solid #79662c;
   border-radius: 12px;
-  background: #2f2a17;
-  color: #ffedb0;
+  background: var(--portal-warning-bg, #2f2a17);
+  color: var(--portal-warning-ink, #ffedb0);
 }
 
 .boundary span {
-  color: #dccf9f;
+  color: var(--portal-warning-ink, #dccf9f);
   line-height: 1.45;
 }
 
@@ -105,18 +105,18 @@
 
 .notice {
   border: 1px solid #1f786f;
-  background: #0a393b;
-  color: #bff8eb;
+  background: var(--portal-success-bg, #0a393b);
+  color: var(--portal-success-ink, #bff8eb);
 }
 
 .error,
 .fieldError {
-  color: #ffd3d0;
+  color: var(--portal-error-ink, #ffd3d0);
 }
 
 .error {
   border: 1px solid #8b4649;
-  background: #3d1d27;
+  background: var(--portal-error-bg, #3d1d27);
 }
 
 .uploadPanel,
@@ -169,7 +169,7 @@
   border: 1px solid #2b6272;
   border-radius: 9px;
   outline: none;
-  background: #061b28;
+  background: var(--portal-soft, #061b28);
   color: var(--source-text);
   font: inherit;
 }
@@ -189,7 +189,7 @@
   padding: 7px 10px;
   border: 0;
   border-radius: 7px;
-  background: #145265;
+  background: var(--portal-selected-bg, #145265);
   color: var(--source-text);
   font: inherit;
   font-weight: 700;
@@ -218,14 +218,14 @@
   margin-top: 14px;
   border: 1px solid var(--source-border-soft);
   border-radius: 10px;
-  background: #082231;
+  background: var(--portal-soft, #082231);
 }
 
 .optional summary,
 .sourceDetails summary {
   padding: 11px 13px;
   cursor: pointer;
-  color: #b8e4e3;
+  color: var(--portal-ink, #b8e4e3);
   font-weight: 800;
 }
 
@@ -270,13 +270,14 @@
 
 .primaryButton {
   border: 1px solid #25d6bd;
-  background: #0f8f80;
+  background: var(--portal-green, #0f8f80);
+  color: var(--portal-button-ink, #fff);
 }
 
 .secondaryButton,
 .linkButton {
   border: 1px solid #2c6676;
-  background: #0b2c3d;
+  background: var(--portal-soft, #0b2c3d);
 }
 
 .primaryButton:hover:not(:disabled),
@@ -285,8 +286,9 @@
 .secondaryButton:focus-visible,
 .linkButton:hover,
 .linkButton:focus-visible {
-  border-color: #71f4df;
-  background: #126c67;
+  border-color: var(--portal-selected-line, #71f4df);
+  background: var(--portal-selected-bg, #126c67);
+  color: var(--portal-selected-ink, #fff);
 }
 
 .primaryButton:disabled,
@@ -312,7 +314,7 @@
   gap: 6px;
   border: 1px dashed #2c6273;
   border-radius: 12px;
-  background: #071f2d;
+  background: var(--portal-soft, #071f2d);
   color: var(--source-muted);
   text-align: center;
 }
@@ -377,7 +379,7 @@
   padding: 10px 11px;
   border: 1px solid var(--source-border-soft);
   border-radius: 9px;
-  background: #071f2d;
+  background: var(--portal-soft, #071f2d);
 }
 
 .metadata dt,
@@ -417,7 +419,7 @@
   padding: 13px;
   border: 1px solid var(--source-border-soft);
   border-radius: 11px;
-  background: #071f2d;
+  background: var(--portal-soft, #071f2d);
 }
 
 .libraryReviewNotice {
@@ -425,7 +427,7 @@
   padding: 13px;
   border: 1px solid var(--source-border-soft);
   border-radius: 11px;
-  background: #071f2d;
+  background: var(--portal-soft, #071f2d);
 }
 
 .libraryReviewNotice span,
@@ -466,21 +468,21 @@
   flex: 0 0 auto;
   padding: 4px 8px;
   border-radius: 999px;
-  background: #173b4a;
-  color: #c7e3e8;
+  background: var(--portal-selected-bg, #173b4a);
+  color: var(--portal-ink, #c7e3e8);
   font-size: 0.69rem;
   font-weight: 800;
 }
 
 .status[data-tone="approved"] {
-  background: #0b534a;
-  color: #9af1df;
+  background: var(--portal-success-bg, #0b534a);
+  color: var(--portal-success-ink, #9af1df);
 }
 
 .status[data-tone="rejected"],
 .status[data-tone="withdrawn"] {
-  background: #54272d;
-  color: #ffc0bc;
+  background: var(--portal-error-bg, #54272d);
+  color: var(--portal-error-ink, #ffc0bc);
 }
 
 .reviewHistory,

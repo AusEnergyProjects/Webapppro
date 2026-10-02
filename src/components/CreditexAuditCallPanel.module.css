@@ -10,7 +10,7 @@
 .callRow { background: var(--portal-raised, #fff); border: 1px solid var(--portal-line, #d5e2dd); border-radius: 10px; padding: 16px; }
 .callRow strong { color: var(--portal-ink, #102b25); font-size: 18px; }
 .panel button { border: 1px solid transparent; border-radius: 9px; cursor: pointer; flex: 0 0 auto; font: inherit; font-size: 13px; font-weight: 750; min-height: 42px; padding: 10px 14px; }
-.primary { background: var(--portal-green, #20cbb8); color: #032b26; }
+.primary { background: var(--portal-green, #20cbb8); color: var(--portal-button-ink, #fff); }
 .secondary { background: var(--portal-raised, #fff); border-color: var(--portal-line-strong, #bad6ca) !important; color: var(--portal-ink, #102b25); }
 .end { background: #a52b32; color: #fff; }
 .panel button:disabled { cursor: default; opacity: .55; }

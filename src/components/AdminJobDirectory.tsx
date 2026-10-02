@@ -26,8 +26,8 @@ function dateTime(value: string) {
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date.toLocaleString("en-AU",{dateStyle:"medium",timeStyle:"short"}) : value;
 }
-export function AdminJobDirectory({ api,user,onAuditDirtyChange }: { api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;user?:User;onAuditDirtyChange?:(dirty:boolean)=>void }) {
-  const [filters,setFilters] = useState(emptyFilters);
+export function AdminJobDirectory({ api,user,onAuditDirtyChange,initialSearch = "" }: { initialSearch?:string; api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;user?:User;onAuditDirtyChange?:(dirty:boolean)=>void }) {
+  const [filters,setFilters] = useState(() => ({ ...emptyFilters, q: initialSearch }));
   const [sort,setSort] = useState("updated-desc");
   const [page,setPage] = useState(1);
   const [revision,setRevision] = useState(0);

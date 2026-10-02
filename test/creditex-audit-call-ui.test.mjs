@@ -77,6 +77,21 @@ test("one Call customer action creates one bound intent and never supplies an ar
   button(h.render(), "End call").props.onClick(); await h.settle(); assert.ok(h.clients[0].disconnected); h.cleanup();
 });
 
+test("shared active call history never claims this panel owns a headset connection", async () => {
+  const active = [];
+  const h = harness({ workspace: { calls: [callRecord({ status: "in_progress", recordingStatus: "recording", startedByName: "Another auditor" })] }, props: { onActiveChange: value => active.push(value) } });
+  const tree = await h.mount();
+  assert.equal(button(tree, "Call customer").props.disabled, true);
+  assert.deepEqual(active, [false]); assert.equal(h.clients.length, 0); h.cleanup();
+});
+test("local headset work reports active until the owned call has ended", async () => {
+  const active = []; const h = harness({ props: { onActiveChange: value => active.push(value) } });
+  button(await h.mount(), "Call customer").props.onClick(); const tree = await h.settle();
+  assert.equal(active.at(-1), true);
+  button(tree, "End call").props.onClick(); await h.settle();
+  assert.equal(active.at(-1), false); h.cleanup();
+});
+
 test("completed call association requires an explicit choice and never selects active, declined or failed calls", async () => {
   const selected = [];
   const calls = contracts.CREDITEX_AUDIT_CALL_STATUS.map(status => callRecord({ id: `call-${status}`, status }));

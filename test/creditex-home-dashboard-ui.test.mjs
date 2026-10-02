@@ -119,7 +119,7 @@ test("Home removes previous-member counts immediately and ignores aborted respon
 
 test("Home cards navigate to working destinations while team management follows permission", async () => {
   const h = harness(); let tree = h.render();
-  for (const [label, destination] of [["Open jobs", "cases"], ["Awaiting audit", "cases"], ["Corrections required", "cases"], ["Audits completed", "cases"], ["Ready for submission", "submissions"], ["✓ Audit a job", "cases"], ["☷ My tasks & team", "tasks"], ["↗ Activity submissions", "submissions"], ["Connect with the team", "connect"], ["Forms & activity requirements", "forms"], ["Manage team access", "team"], ["Profile & workspace colours", "settings"]]) {
+  for (const [label, destination] of [["Open jobs", "cases"], ["Awaiting audit", "cases"], ["Corrections required", "operations"], ["Audits completed", "cases"], ["Ready for submission", "submissions"], ["✓ Audit a job", "cases"], ["☷ My tasks & team", "tasks"], ["↗ Activity submissions", "submissions"], ["Customers & team", "connect"], ["Forms & activity requirements", "forms"], ["Manage team access", "team"], ["Profile & workspace colours", "settings"]]) {
     const action = button(tree, label);
     assert.ok(action, label);
     action.props.onClick();
@@ -128,7 +128,7 @@ test("Home cards navigate to working destinations while team management follows 
   h.props.canManageTeam = false;
   tree = h.render();
   assert.equal(button(tree, "Manage team access"), undefined);
-  assert.ok(button(tree, "Connect with the team"));
+  assert.ok(button(tree, "Customers & team"));
   assert.ok(button(tree, "Profile & workspace colours"));
   h.cleanup();
 });

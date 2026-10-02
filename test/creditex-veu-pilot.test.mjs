@@ -2406,8 +2406,8 @@ test("Retained calculators, audit views and server priorities preserve their saf
     server,
     /PILOT_SEARCH_EXPRESSIONS\.map[\s\S]*REPLACE\(LOWER\(CAST\(COALESCE/,
   );
-  assert.match(workspaceStyles, /--pilot-canvas:\s*#020b18/);
-  assert.match(workspaceStyles, /--pilot-teal:\s*#20cbb8/);
+  assert.match(workspaceStyles, /--pilot-canvas:\s*var\(--portal-background, #020b18\)/);
+  assert.match(workspaceStyles, /--pilot-teal:\s*var\(--portal-green-dark, #20cbb8\)/);
   assert.match(manualEvidenceWorkspace, /Form builder/);
   assert.match(manualEvidenceWorkspace, /Manual jobs/);
   assert.match(manualEvidenceWorkspace, /Installer preview/);
@@ -2444,15 +2444,14 @@ test("Retained calculators, audit views and server priorities preserve their saf
     /\.jobRegister > header \.registerTools button,[\s\S]*height:\s*28px[\s\S]*max-height:\s*28px/,
   );
   const lightShell = sourceSection(portalStyles, ".shell {", "}");
-  const nightShell = sourceSection(portalStyles, ':global(html[data-tlink-colour-mode="night"]) .shell {', "}");
-  assert.match(lightShell, /--portal-soft:\s*#fff\s*;/);
-  assert.match(lightShell, /--portal-raised:\s*#f3f7f8\s*;/);
-  assert.match(lightShell, /background:\s*var\(--portal-raised\)/);
+  const nightShell = sourceSection(portalStyles, '.shell[data-portal-mode="night"] {', "}");
+  assert.match(lightShell, /background:\s*var\(--portal-background/);
   assert.match(lightShell, /color-scheme:\s*light/);
-  assert.match(nightShell, /--portal-soft:\s*#071b2a\s*;/);
-  assert.match(nightShell, /--portal-raised:\s*#0b2635\s*;/);
   assert.match(nightShell, /color-scheme:\s*dark/);
-  assert.match(sourceSection(portalStyles, ".topbar {", "}"), /background:\s*var\(--portal-soft\)/);
+  assert.doesNotMatch(portalStyles, /html\[data-tlink-colour-mode/);
+  const headerStyles = fs.readFileSync(new URL("../src/components/PortalWorkspaceHeader.module.css", import.meta.url), "utf8");
+  assert.match(sourceSection(headerStyles, ".bar {", "}"), /background:\s*var\(--portal-gradient\)/);
+  assert.match(sourceSection(headerStyles, ".businessBar {", "}"), /background:\s*var\(--portal-surface\)/);
   assert.match(
     workspaceStyles,
     /\.jobTable\s*\{[\s\S]*font-size:\s*0\.75rem/,
@@ -2562,5 +2561,5 @@ test("Retained calculators, audit views and server priorities preserve their saf
   }
 
   assert.doesNotMatch(portal, /CreditexVeuPilotWorkspace|creditex-tab-pilot|creditex-panel-pilot|VEU test pilot/);
-  assert.match(portal, /<CreditexPlannedIntakeQueue api=\{api\} onDirtyChange=\{reportAuditDirty\} \/>/);
+  assert.match(portal, /<CreditexPlannedIntakeQueue[^>]*api=\{api\} onDirtyChange=\{reportAuditDirty\} \/>/);
 });

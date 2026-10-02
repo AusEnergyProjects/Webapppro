@@ -128,6 +128,20 @@ const QUEUE_WHERE = `WHERE intent.compliance_organisation_id = ?
     OR site.postcode LIKE ? ESCAPE '\\'
   )`;
 
+// The corrections list opens the audit desk, so use that desk's current member
+// and case-assignment boundary for both the count and the paginated rows.
+const CORRECTIONS_ACCESS_SQL = `AND EXISTS (
+  SELECT 1 FROM compliance_users member
+  JOIN compliance_organisations organisation ON organisation.id = member.organisation_id
+  WHERE member.organisation_id = intent.compliance_organisation_id
+    AND organisation.organisation_code = ? AND organisation.status = 'active'
+    AND member.id = ? AND member.firebase_uid = ? AND member.status = 'active'
+    AND member.role IN ('admin','case_manager','reviewer','auditor')
+    AND (COALESCE(intent.compliance_case_id, '') = '' OR (linked_case.id IS NOT NULL
+      AND (member.role = 'admin' OR EXISTS (SELECT 1 FROM compliance_case_assignments assignment
+        WHERE assignment.organisation_id = linked_case.organisation_id AND assignment.case_id = linked_case.id
+          AND assignment.compliance_user_id = member.id AND assignment.status = 'assigned')))))`;
+
 export async function GET(request: Request) {
   if (!sameOrigin(request)) {
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
@@ -148,7 +162,8 @@ export async function GET(request: Request) {
     const status = queueStatus(url.searchParams.get("status"));
     const search = String(url.searchParams.get("search") || "").trim().slice(0, 120);
     const searchLike = creditexQueueLike(search);
-    const { filterSql, filterBindings, sortSql, sort, sortDirection, certificateType } = creditexJobIntentFilters(url.searchParams);
+    const { filterSql, filterBindings, sortSql, sort, sortDirection, certificateType, mode } = creditexJobIntentFilters(url.searchParams);
+    const accessSql = mode === "corrections" ? CORRECTIONS_ACCESS_SQL : "";
     const requestedPage = Math.max(
       1,
       Math.min(10_000, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1),
@@ -158,12 +173,13 @@ export async function GET(request: Request) {
       status,
       search,
       searchLike,
-    ), ...filterBindings];
+    ), ...filterBindings, ...(mode === "corrections" ? [CREDITEX_PARTNER_ORGANISATION_CODE, access.membershipId, access.uid] : [])];
     const count = await database.prepare(`SELECT count(*) total
       ${QUEUE_JOINS}
       ${QUEUE_WHERE}
       ${visibilitySql}
-      ${filterSql}`)
+      ${filterSql}
+      ${accessSql}`)
       .bind(...bindings)
       .first<Record<string, unknown>>();
     const total = Number(count?.total || 0);
@@ -240,6 +256,7 @@ export async function GET(request: Request) {
       ${QUEUE_WHERE}
       ${visibilitySql}
       ${filterSql}
+      ${accessSql}
       ORDER BY ${sortSql}
       LIMIT ? OFFSET ?`)
       .bind(
@@ -256,6 +273,7 @@ export async function GET(request: Request) {
       ok: true,
       status,
       view,
+      mode,
       certificateType,
       sort,
       sortDirection,

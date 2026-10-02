@@ -6,6 +6,7 @@
 .queue header > strong, .status { display: inline-block; border: 1px solid var(--portal-line-strong); border-radius: 7px; background: var(--portal-raised); color: var(--portal-green-dark); padding: 6px 9px; font-size: 11px; white-space: nowrap; }
 .queue header > strong { font-size: 13px; padding: 9px 13px; }
 .controls { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(155px, 190px) minmax(155px, 190px) auto auto auto; gap: 10px; align-items: end; background: var(--portal-raised); border: 1px solid var(--portal-line); border-radius: 12px; padding: 14px; }
+.controls[data-corrections="true"] { grid-template-columns: minmax(180px, 1fr) minmax(155px, 190px) auto auto; }
 .controls label { display: grid; gap: 6px; min-width: 0; }
 .controls label span { color: var(--portal-text); font-size: 12px; font-weight: 700; }
 .controls input, .controls select, .controls button { box-sizing: border-box; min-width: 0; width: 100%; min-height: 40px; border: 1px solid var(--portal-line-strong); border-radius: 7px; background: var(--portal-input); color: var(--portal-ink); font: inherit; font-size: 13px; padding: 9px 11px; color-scheme: inherit; }
@@ -45,10 +46,10 @@
 .empty span { color: var(--portal-muted); }
 .pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; color: var(--portal-muted); font-size: 13px; }
 .pageSize { margin-right: auto; }
-.pagination button button { min-height: 40px; border: 1px solid var(--portal-line-strong); border-radius: 8px; background: var(--portal-raised); color: var(--portal-ink); cursor: pointer; padding: 8px 13px; font: inherit; font-size: 13px; font-weight: 700; }
+.pagination button { min-height: 40px; border: 1px solid var(--portal-line-strong); border-radius: 8px; background: var(--portal-raised); color: var(--portal-ink); cursor: pointer; padding: 8px 13px; font: inherit; font-size: 13px; font-weight: 700; }
 .queue button:disabled { cursor: default; opacity: .5; }
 .queue button:focus-visible, .queue input:focus-visible, .queue select:focus-visible, .queue summary:focus-visible, .tableWrap:focus-visible { outline: 2px solid var(--portal-green); outline-offset: 3px; }
-@media (max-width: 700px) { .controls { grid-template-columns: 1fr 1fr; padding: 12px; } .controls label { grid-column: 1 / -1; } .controls button { width: 100%; } .queue > header { align-items: flex-start; flex-wrap: wrap; } .pagination,.resultBar { flex-wrap: wrap; } }
+@media (max-width: 700px) { .controls, .controls[data-corrections="true"] { grid-template-columns: 1fr 1fr; padding: 12px; } .controls label { grid-column: 1 / -1; } .controls button { width: 100%; } .queue > header { align-items: flex-start; flex-wrap: wrap; } .pagination,.resultBar { flex-wrap: wrap; } }
 .jobButton { display: inline-block; border: 0; min-height: 28px; text-align: left; background: none; color: var(--portal-green-dark); font: inherit; font-weight: 750; cursor: pointer; padding: 0; white-space: nowrap; }
 .jobButton:hover { text-decoration: underline; text-underline-offset: 3px; }
 .filterDrawer { position: fixed; inset: 0 0 0 auto; z-index: 9000; width: min(390px, 100vw); height: 100dvh; background: var(--portal-soft); border-left: 1px solid var(--portal-line-strong); box-shadow: -12px 0 40px #001e2526; animation: filtersEnter .16s ease-out; }

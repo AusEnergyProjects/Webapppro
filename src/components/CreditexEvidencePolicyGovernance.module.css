@@ -9,8 +9,8 @@
 .reviewSection,
 .historySection,
 .policySection {
-  background: #f3f8f6;
-  border: 1px solid #d5e2dd;
+  background: var(--portal-soft, #f3f8f6);
+  border: 1px solid var(--portal-line, #d5e2dd);
   border-radius: 14px;
   padding: 15px;
 }
@@ -67,7 +67,7 @@
 }
 
 .intro > div > p {
-  color: #d8f0e7;
+  color: var(--portal-muted, #d8f0e7);
   max-width: 760px;
 }
 
@@ -90,7 +90,7 @@
 }
 
 .intro dt {
-  color: #c8eadf;
+  color: var(--portal-muted, #c8eadf);
   font-size: .66rem;
   font-weight: 800;
 }
@@ -103,7 +103,7 @@
 
 .notice {
   background: #fff7df;
-  border: 1px solid #ead69d;
+  border: 1px solid var(--portal-line, #ead69d);
   border-radius: 10px;
   color: #6a4a0e;
   font-size: .72rem;
@@ -113,27 +113,27 @@
 }
 
 .notice[data-kind="success"] {
-  background: #e8f7f0;
-  border-color: #a9d9c6;
-  color: #145a45;
+  background: var(--portal-soft, #e8f7f0);
+  border-color: var(--portal-line, #a9d9c6);
+  color: var(--portal-ink, #145a45);
 }
 
 .notice[data-kind="error"] {
-  background: #fff0ec;
-  border-color: #efbdaf;
-  color: #8f2e17;
+  background: var(--portal-error-bg, #fff0ec);
+  border-color: var(--portal-line, #efbdaf);
+  color: var(--portal-error-ink, #8f2e17);
 }
 
 .loadState {
-  background: #f3f8f6;
-  border: 1px solid #b9cec6;
+  background: var(--portal-soft, #f3f8f6);
+  border: 1px solid var(--portal-line, #b9cec6);
   border-radius: 14px;
-  color: #29453d;
+  color: var(--portal-ink, #29453d);
   padding: 18px;
 }
 
 .loadState h4 {
-  color: #102b25;
+  color: var(--portal-ink, #102b25);
   font-size: .85rem;
   margin: 0;
 }
@@ -169,7 +169,7 @@
 .reviewSection h4,
 .historySection h4,
 .policySection h4 {
-  color: #102b25;
+  color: var(--portal-ink, #102b25);
   font-size: .85rem;
 }
 
@@ -179,7 +179,7 @@
 .policySection header p,
 .policyHeader p,
 .requirementList p {
-  color: #62766f;
+  color: var(--portal-muted, #62766f);
 }
 
 .formGrid {
@@ -191,7 +191,7 @@
 
 .formGrid label,
 .formGrid fieldset {
-  color: #102b25;
+  color: var(--portal-ink, #102b25);
   font-size: .68rem;
   font-weight: 800;
 }
@@ -204,10 +204,10 @@
 .formGrid input,
 .formGrid select,
 .formGrid textarea {
-  background: #fff;
-  border: 1px solid #afc7be;
+  background: var(--portal-surface, #fff);
+  border: 1px solid var(--portal-line, #afc7be);
   border-radius: 9px;
-  color: #29453d;
+  color: var(--portal-ink, #29453d);
   font: inherit;
   font-size: .72rem;
   min-height: 39px;
@@ -221,13 +221,13 @@
 }
 
 .formGrid small {
-  color: #62766f;
+  color: var(--portal-muted, #62766f);
   font-size: .66rem;
   font-weight: 500;
 }
 
 .formGrid fieldset {
-  border: 1px solid #c9d9d3;
+  border: 1px solid var(--portal-line, #c9d9d3);
   border-radius: 10px;
   margin: 0;
   padding: 9px;
@@ -300,22 +300,22 @@
 .policyActions .secondary,
 .requirementActions .secondary,
 .pagination .secondary {
-  background: #e4efeb;
-  color: #07533f;
+  background: var(--portal-soft, #e4efeb);
+  color: var(--portal-ink, #07533f);
 }
 
 .actions .danger,
 .policyActions .danger,
 .reviewActions .danger,
 .requirementActions .danger {
-  background: #fff0ec;
-  color: #922f19;
+  background: var(--portal-error-bg, #fff0ec);
+  color: var(--portal-error-ink, #922f19);
 }
 
 .reviewSection,
 .historySection,
 .policySection {
-  background: #fff;
+  background: var(--portal-surface, #fff);
 }
 
 .reviewList,
@@ -331,7 +331,7 @@
 .historyList > article,
 .policy,
 .requirementList > article {
-  border: 1px solid #d5e2dd;
+  border: 1px solid var(--portal-line, #d5e2dd);
   border-radius: 11px;
   padding: 11px;
 }
@@ -347,7 +347,7 @@
 .reviewList h5,
 .historyList h5,
 .policyHeader h5 {
-  color: #102b25;
+  color: var(--portal-ink, #102b25);
   font-size: .75rem;
   margin-top: 3px;
 }
@@ -355,7 +355,7 @@
 .reviewList code,
 .historyList code,
 .readiness code {
-  color: #315d50;
+  color: var(--portal-ink, #315d50);
   display: block;
   font-size: .66rem;
   margin-top: 6px;
@@ -385,22 +385,22 @@
 }
 
 .requestStatus strong[data-state="approved"] {
-  background: #e8f7f0;
-  color: #145a45;
+  background: var(--portal-soft, #e8f7f0);
+  color: var(--portal-ink, #145a45);
 }
 
 .requestStatus strong[data-state="rejected"] {
-  background: #fff0ec;
-  color: #922f19;
+  background: var(--portal-error-bg, #fff0ec);
+  color: var(--portal-error-ink, #922f19);
 }
 
 .requestStatus strong[data-state="superseded"] {
-  background: #edf1f0;
-  color: #4d625b;
+  background: var(--portal-soft, #edf1f0);
+  color: var(--portal-muted, #4d625b);
 }
 
 .historyList > article {
-  background: #f8fbfa;
+  background: var(--portal-soft, #f8fbfa);
   display: grid;
   gap: 6px;
 }
@@ -413,19 +413,19 @@
 }
 
 .historyList dl div {
-  background: #edf5f2;
+  background: var(--portal-soft, #edf5f2);
   border-radius: 8px;
   padding: 8px;
 }
 
 .historyList dt {
-  color: #62766f;
+  color: var(--portal-muted, #62766f);
   font-size: .66rem;
   font-weight: 800;
 }
 
 .historyList dd {
-  color: #29453d;
+  color: var(--portal-ink, #29453d);
   font-size: .68rem;
   line-height: 1.45;
   margin: 3px 0 0;
@@ -444,20 +444,20 @@
 }
 
 .policyHeader > div > span {
-  background: #edf5f2;
+  background: var(--portal-soft, #edf5f2);
   border-radius: 999px;
-  color: #315d50;
+  color: var(--portal-ink, #315d50);
   display: inline-block;
   padding: 4px 7px;
 }
 
 .policyHeader > div > span[data-state="withdrawn"] {
-  background: #fff0ec;
-  color: #922f19;
+  background: var(--portal-error-bg, #fff0ec);
+  color: var(--portal-error-ink, #922f19);
 }
 
 .policyHeader a {
-  color: #07533f;
+  color: var(--portal-ink, #07533f);
   display: inline-block;
   font-size: .68rem;
   font-weight: 800;
@@ -473,9 +473,9 @@
 }
 
 .readiness[data-ready="true"] {
-  background: #e8f7f0;
+  background: var(--portal-soft, #e8f7f0);
   border-left-color: #0b7258;
-  color: #145a45;
+  color: var(--portal-ink, #145a45);
 }
 
 .readiness strong {
@@ -490,11 +490,11 @@
 }
 
 .requirementList > article {
-  background: #f8fbfa;
+  background: var(--portal-soft, #f8fbfa);
 }
 
 .requirementList h6 {
-  color: #102b25;
+  color: var(--portal-ink, #102b25);
   font-size: .72rem;
   margin-top: 3px;
 }
@@ -507,9 +507,9 @@
 }
 
 .requirementBadges small {
-  background: #e7f1ed;
+  background: var(--portal-soft, #e7f1ed);
   border-radius: 999px;
-  color: #315d50;
+  color: var(--portal-ink, #315d50);
   font-size: .65rem;
   font-weight: 800;
   padding: 4px 6px;
@@ -517,7 +517,7 @@
 
 .pagination {
   align-items: center;
-  border-top: 1px solid #d5e2dd;
+  border-top: 1px solid var(--portal-line, #d5e2dd);
   display: flex;
   gap: 12px;
   justify-content: space-between;
@@ -526,7 +526,7 @@
 }
 
 .pagination p {
-  color: #62766f;
+  color: var(--portal-muted, #62766f);
   font-size: .68rem;
   line-height: 1.45;
   margin: 0;
@@ -547,10 +547,10 @@
 }
 
 .empty {
-  background: #f3f8f6;
-  border: 1px dashed #b9cec6;
+  background: var(--portal-soft, #f3f8f6);
+  border: 1px dashed var(--portal-line, #b9cec6);
   border-radius: 10px;
-  color: #62766f;
+  color: var(--portal-muted, #62766f);
   font-size: .7rem;
   line-height: 1.5;
   margin: 0;
@@ -605,22 +605,22 @@
 .reviewList code,
 .historyList code,
 .readiness code {
-  color: #b9fff0;
+  color: var(--portal-green-dark, #b9fff0);
 }
 
 .policyHeader a {
-  color: #7ee7d2;
+  color: var(--portal-green-dark, #7ee7d2);
 }
 
 .policyHeader > div > span {
   border-color: var(--portal-line, rgba(108, 207, 192, 0.2));
   background: var(--portal-raised, #0b2635);
-  color: #b9fff0;
+  color: var(--portal-green-dark, #b9fff0);
 }
 
 .historyList dl > div {
   border-color: var(--portal-line, rgba(108, 207, 192, 0.2));
-  background: #092331;
+  background: var(--portal-soft, #f3f8f6);
 }
 
 .intro h3,
@@ -648,16 +648,16 @@
 
 .notice,
 .readiness:not([data-ready="true"]) {
-  border-color: rgba(214, 180, 109, 0.42);
-  background: #352a16;
-  color: #f1d38e;
+  border-color: var(--portal-warning-line, #e2d09d);
+  background: var(--portal-warning-bg, #352a16);
+  color: var(--portal-warning-ink, #f1d38e);
 }
 
 .notice[data-kind="success"],
 .readiness[data-ready="true"] {
-  border-color: rgba(67, 211, 158, 0.4);
-  background: #0a362f;
-  color: #8cf0cb;
+  border-color: var(--portal-success-line, #b7dec6);
+  background: var(--portal-success-bg, #0a362f);
+  color: var(--portal-success-ink, #8cf0cb);
 }
 
 .notice[data-kind="error"],
@@ -665,9 +665,9 @@
 .policyActions .danger,
 .reviewActions .danger,
 .requirementActions .danger {
-  border-color: rgba(241, 120, 101, 0.42);
-  background: #3b1e20;
-  color: #ffb7ac;
+  border-color: var(--portal-error-line, #e7b5b0);
+  background: var(--portal-error-bg, #3b1e20);
+  color: var(--portal-error-ink, #ffb7ac);
 }
 
 @media (max-width: 980px) {

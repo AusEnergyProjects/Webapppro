@@ -3,10 +3,10 @@
   gap: 1rem;
   min-width: 0;
   padding: 1.1rem;
-  border: 1px solid #cfe2dc;
+  border: 1px solid var(--portal-line, #cfe2dc);
   border-radius: 1rem;
-  background: #fbfefd;
-  color: #143f3b;
+  background: var(--portal-surface, #fbfefd);
+  color: var(--portal-ink, #143f3b);
 }
 
 .heading,
@@ -32,7 +32,7 @@
 }
 
 .heading span {
-  color: #07856e;
+  color: var(--portal-muted, #07856e);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -46,7 +46,7 @@
 
 .heading p {
   max-width: 70rem;
-  color: #5e7773;
+  color: var(--portal-muted, #5e7773);
   line-height: 1.5;
 }
 
@@ -55,10 +55,10 @@
 .actions button {
   min-height: 2.7rem;
   padding: 0.65rem 0.9rem;
-  border: 1px solid #b8d5ce;
+  border: 1px solid var(--portal-line, #b8d5ce);
   border-radius: 0.7rem;
-  background: #fff;
-  color: #0d5e51;
+  background: var(--portal-surface, #fff);
+  color: var(--portal-ink, #0d5e51);
   font: inherit;
   font-weight: 750;
   cursor: pointer;
@@ -77,11 +77,11 @@
   padding: 0.85rem 1rem;
   border-left: 4px solid #0b9c7e;
   border-radius: 0.7rem;
-  background: #eaf7f2;
+  background: var(--portal-soft, #eaf7f2);
 }
 
 .boundary span {
-  color: #506e68;
+  color: var(--portal-muted, #506e68);
   line-height: 1.45;
 }
 
@@ -96,19 +96,19 @@
   display: grid;
   gap: 0.2rem;
   padding: 0.75rem;
-  border: 1px solid #d6e6e1;
+  border: 1px solid var(--portal-line, #d6e6e1);
   border-radius: 0.75rem;
-  background: #f3f8f6;
+  background: var(--portal-soft, #f3f8f6);
 }
 
 .summary div[data-alert="true"] {
   border-color: #d99a91;
-  background: #fff2f0;
-  color: #8b2c21;
+  background: var(--portal-error-bg, #fff2f0);
+  color: var(--portal-error-ink, #8b2c21);
 }
 
 .summary dt {
-  color: #617a75;
+  color: var(--portal-muted, #617a75);
   font-size: 0.72rem;
   font-weight: 750;
   text-transform: uppercase;
@@ -129,13 +129,13 @@
 }
 
 .notice {
-  background: #edf8f4;
-  color: #0b6555;
+  background: var(--portal-soft, #edf8f4);
+  color: var(--portal-ink, #0b6555);
 }
 
 .error {
-  background: #fff0ed;
-  color: #9b2d21;
+  background: var(--portal-error-bg, #fff0ed);
+  color: var(--portal-error-ink, #9b2d21);
 }
 
 .controls {
@@ -148,7 +148,7 @@
 .controls label {
   display: grid;
   gap: 0.35rem;
-  color: #526e69;
+  color: var(--portal-muted, #526e69);
   font-size: 0.78rem;
   font-weight: 750;
 }
@@ -158,10 +158,10 @@
   min-width: 0;
   min-height: 2.7rem;
   padding: 0.65rem 0.75rem;
-  border: 1px solid #bdd6cf;
+  border: 1px solid var(--portal-line, #bdd6cf);
   border-radius: 0.65rem;
-  background: #fff;
-  color: #153e3a;
+  background: var(--portal-surface, #fff);
+  color: var(--portal-ink, #153e3a);
   font: inherit;
 }
 
@@ -179,10 +179,10 @@
   gap: 0.8rem;
   align-items: start;
   padding: 0.8rem;
-  border: 1px solid #d4e4df;
+  border: 1px solid var(--portal-line, #d4e4df);
   border-left: 4px solid #7d928d;
   border-radius: 0.7rem;
-  background: #fff;
+  background: var(--portal-surface, #fff);
 }
 
 .list article[data-status="missing"] {
@@ -215,7 +215,7 @@
 
 .list article span,
 .list article small {
-  color: #677d79;
+  color: var(--portal-muted, #677d79);
 }
 
 .list article strong,
@@ -239,7 +239,7 @@
 }
 
 .itemStatus a {
-  color: #087563;
+  color: var(--portal-ink, #087563);
   font-size: 0.78rem;
   font-weight: 750;
 }
@@ -260,7 +260,7 @@
 
 .actions > div span,
 .actions > p {
-  color: #607974;
+  color: var(--portal-muted, #607974);
   font-size: 0.78rem;
 }
 
@@ -269,7 +269,7 @@
   align-items: center;
   gap: 0.5rem;
   max-width: 24rem;
-  color: #355e57;
+  color: var(--portal-ink, #355e57);
   font-size: 0.78rem;
   line-height: 1.35;
 }
@@ -289,14 +289,14 @@
 .outcomes,
 .manifest {
   padding: 0.75rem 0.9rem;
-  border: 1px solid #d4e4df;
+  border: 1px solid var(--portal-line, #d4e4df);
   border-radius: 0.7rem;
-  background: #f8fbfa;
+  background: var(--portal-soft, #f8fbfa);
 }
 
 .outcomes summary,
 .manifest summary {
-  color: #174c44;
+  color: var(--portal-ink, #174c44);
   font-weight: 800;
   cursor: pointer;
 }
@@ -315,13 +315,13 @@
   gap: 0.15rem;
   padding: 0.55rem;
   border-radius: 0.5rem;
-  background: #fff;
+  background: var(--portal-surface, #fff);
   list-style: none;
 }
 
 .outcomes li[data-failed="true"] {
-  background: #fff0ed;
-  color: #8f2d23;
+  background: var(--portal-error-bg, #fff0ed);
+  color: var(--portal-error-ink, #8f2d23);
 }
 
 .outcomes small,
@@ -330,7 +330,7 @@
 }
 
 .manifest dt {
-  color: #607974;
+  color: var(--portal-muted, #607974);
   font-size: 0.72rem;
   font-weight: 750;
 }

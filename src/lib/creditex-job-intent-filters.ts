@@ -1,5 +1,7 @@
 import { jobCreationDayStart } from "./job-register-dates.ts";
 import { CREDITEX_CERTIFICATE_TYPES, isCreditexCertificateType } from "./creditex-certificate-types.ts";
+import { creditexIntentOpenCorrectionSql } from "./creditex-job-lifecycle-sql.ts";
+import { CREDITEX_CASE_CORRECTION_SQL, SUBMISSION_PACKETS_SQL } from "./creditex-job-lifecycle-projection.ts";
 
 const CUSTOMER_NAME_SQL = "COALESCE(NULLIF(trim(customer.business_name), ''), trim(COALESCE(customer.first_name, '') || ' ' || COALESCE(customer.last_name, '')))";
 const SORT_COLUMNS = {
@@ -33,6 +35,18 @@ function dateFilter(params: URLSearchParams, key: string, label: string) {
 export function creditexJobIntentFilters(params: URLSearchParams) {
   const conditions: string[] = [];
   const bindings: string[] = [];
+  const mode = params.get("mode") || "jobs";
+  if (mode !== "jobs" && mode !== "corrections") throw new CreditexQueueFilterError("Choose a supported job-list view.");
+  if (mode === "corrections") {
+    // Match the audit workload's current correction state, including a rejected
+    // preparation packet. Historical correction requests clear on resubmission.
+    conditions.push("intent.status IN ('planned','case_linked')", "work.record_status = 'active'",
+      "work.stage NOT IN ('cancelled','imported')", "work.partner_type = 'installer'", "work.source_type = 'internal'",
+      "details.id IS NOT NULL", "customer.id IS NOT NULL", "site.id IS NOT NULL",
+      `(${creditexIntentOpenCorrectionSql("intent")} OR ${CREDITEX_CASE_CORRECTION_SQL}
+        OR EXISTS (SELECT 1 FROM json_each(${SUBMISSION_PACKETS_SQL}) packet
+          WHERE json_extract(packet.value, '$.status') = 'rejected' AND json_extract(packet.value, '$.lodged') <> 1))`);
+  }
   const value = (key: string) => (params.get(key) || "").trim().slice(0, 120);
   const certificateType = (params.get("certificateType") || "all").trim();
   if (certificateType === "certificates") {
@@ -79,5 +93,5 @@ export function creditexJobIntentFilters(params: URLSearchParams) {
   const order = sortDirection === "desc" ? "DESC" : "ASC";
   const dateColumn = sort === "plannedStart" ? "intent.planned_start" : sort === "createdAt" ? "work.created_at" : "";
   const sortSql = `${dateColumn ? `CASE WHEN COALESCE(${dateColumn}, '') = '' THEN 1 ELSE 0 END, ` : ""}${SORT_COLUMNS[sort]} ${order}, intent.id ASC`;
-  return { filterSql: conditions.length ? `AND ${conditions.join(" AND ")}` : "", filterBindings: bindings, sortSql, sort, sortDirection, certificateType };
+  return { filterSql: conditions.length ? `AND ${conditions.join(" AND ")}` : "", filterBindings: bindings, sortSql, sort, sortDirection, certificateType, mode };
 }

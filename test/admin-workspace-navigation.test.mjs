@@ -146,8 +146,8 @@ test("unsaved training edits block desktop, alert and browser-history navigation
   h.nav(tree).onSelect("compliance-questions"); tree = h.settle();
   nodes(tree, node => typeof node.props?.onDirtyChange === "function")[0].props.onDirtyChange(true);
   assert.equal(h.nav(tree).onSelect("form-governance"), false);
-  const alert = nodes(tree, node => node.type === "a" && node.props.href === "#operations-inbox")[0];
-  alert.props.onClick({ preventDefault() {} }); tree = h.settle();
+  const header = nodes(tree, node => typeof node.props?.onTasks === "function")[0];
+  header.props.onTasks(); tree = h.settle();
   assert.equal(h.nav(tree).selected, "compliance-questions");
   const originalHistory = [...h.history];
   h.back(); tree = h.settle(); assert.equal(h.nav(tree).selected, "compliance-questions");
@@ -232,4 +232,13 @@ test("submission controls have one dedicated workspace and shell provides an acc
   assert.ok(nodes(tree, node => node.type === "a" && node.props.href === "#admin-workspace-content")[0]);
   assert.equal(nodes(tree, node => node.props?.id === "admin-workspace-content")[0].props.tabIndex, -1);
   h.cleanup();
+});
+
+test('Admin Customer Connect call state protects tabs, header search and browser history',()=>{
+ const h=portalHarness();let tree=h.settle();h.nav(tree).onSelect('connect');tree=h.settle();
+ nodes(tree,n=>typeof n.props?.onActiveChange==='function')[0].props.onActiveChange(true);
+ assert.equal(h.nav(tree).onSelect('jobs'),false);const header=nodes(tree,n=>typeof n.props?.onSearch==='function')[0];assert.equal(header.props.onSearch('Laura'),false);
+ h.back();tree=h.settle();assert.equal(h.nav(tree).selected,'connect');
+ h.permitDiscard(true);assert.equal(header.props.onSearch('Laura'),true);tree=h.settle();assert.equal(h.nav(tree).selected,'jobs');
+ const directory=nodes(tree,n=>n.props?.initialSearch==='Laura')[0];assert.ok(directory);h.cleanup();
 });

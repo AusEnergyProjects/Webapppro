@@ -95,14 +95,3 @@ test("private case details do not expand into Team metadata", async () => {
   assert.deepEqual(await response.json(), { ok: true, workspace: { id: "case-a" } });
   assert.deepEqual(calls, []);
 });
-
-test("participant renewal UI distinguishes recorded expiry from verified cover", () => {
-  const ui = fs.readFileSync(new URL("../src/components/CreditexOperationsWorkspace.tsx", import.meta.url), "utf8");
-  const styles = fs.readFileSync(new URL("../src/components/CreditexOperationsWorkspace.module.css", import.meta.url), "utf8");
-  assert.match(ui, /Team documents/);
-  assert.match(ui, /Recorded expiry:/);
-  assert.match(ui, /Due within 30 days/);
-  assert.match(ui, /renewal\.status === "expired" \? "Expired"/);
-  assert.match(ui, /Insurance cover and qualifications still require review/);
-  assert.match(styles, /\.documentRenewals small\s*\{[^}]*font-size: \.75rem/s);
-});

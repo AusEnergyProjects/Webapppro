@@ -56,10 +56,11 @@ function disconnectHeadset(client: TelnyxRTC | null, call: Call | null) {
 
 type AuditCallTarget = { caseId: string; jobIntentId?: never } | { jobIntentId: string; caseId?: never };
 
-export function CreditexAuditCallPanel({ user, caseId, jobIntentId, selectedCallId, onCallSelected }: {
+export function CreditexAuditCallPanel({ user, caseId, jobIntentId, selectedCallId, onCallSelected, onActiveChange }: {
   user: User;
   selectedCallId?: string | null;
   onCallSelected?: (callId: string) => void;
+  onActiveChange?: (active: boolean) => void;
 } & AuditCallTarget) {
   const [data, setData] = useState<CreditexAuditCallsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,6 +106,11 @@ export function CreditexAuditCallPanel({ user, caseId, jobIntentId, selectedCall
   }, [load, cancelIntent]);
 
   const needsUpdates = phase !== "idle" || Boolean(data?.calls.some((call) => auditCallIsActive(call.status) || ["starting", "recording", "pending", "saving"].includes(call.recordingStatus)));
+  // Shared job history can contain another auditor's call. Navigation guards
+  // protect only the headset connection owned by this mounted panel.
+  const callInProgress = phase !== "idle";
+  useEffect(() => { onActiveChange?.(callInProgress); }, [onActiveChange, callInProgress]);
+  useEffect(() => () => onActiveChange?.(false), [onActiveChange]);
   useEffect(() => {
     if (!needsUpdates) return;
     const current = generation.current;

@@ -249,7 +249,7 @@ test('Home defaults and daily work plus compliance tools stay directly visible i
   for(const label of ['Home dashboard','Jobs','Connect','Tasks','Cases','Submissions','Training','Forms','Trade onboarding','Official sources','Government rules','Team','Settings'])assert.ok(button(tree,label));
   assert.doesNotMatch(text(tree),/Setup & rules|VEU test pilot/);
   assert.equal(nodes(tree,n=>n.props?.role==='tablist')[0].props['aria-orientation'],'vertical');
-  button(tree,'Cases').props.onClick();tree=h.render();assert.equal(button(tree,'Cases').props['aria-selected'],true);assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexOperationsWorkspace').length,1);
+  button(tree,'Cases').props.onClick();tree=h.render();assert.equal(button(tree,'Cases').props['aria-selected'],true);assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexOperationsWorkspace').length,0);assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexPlannedIntakeQueue')[0].props.mode,'corrections');
   button(tree,'Forms').props.onClick();tree=h.render();assert.ok(nodes(tree,n=>n.props?.id==='creditex-panel-forms')[0]);
   assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexRegistryWorkspace').length,0);
   button(tree,'Submissions').props.onClick();tree=h.render();assert.ok(nodes(tree,n=>n.props?.id==='creditex-panel-submissions')[0]);
@@ -260,8 +260,8 @@ test('Home defaults and daily work plus compliance tools stay directly visible i
 test('Connect, tasks and profile use the active Creditex identity, and unsaved audit blocks leaving Jobs',()=>{
   const h=portal('admin',{confirm:false});let tree=h.render();
   for(const [label,view] of [['Connect','connect'],['Tasks','tasks']]) {
-    button(tree,label).props.onClick();tree=h.render();const workspace=nodes(tree,n=>n.type?.displayName==='PortalTeamWorkspace')[0];
-    assert.equal(workspace.props.workspace,'creditex');assert.equal(workspace.props.user,user);assert.equal(workspace.props.view,view);
+    button(tree,label).props.onClick();tree=h.render();const workspace=nodes(tree,n=>n.type?.displayName===(view==='connect'?'PortalConnectWorkspace':'PortalTeamWorkspace'))[0];
+    assert.equal(workspace.props.workspace,'creditex');assert.equal(workspace.props.user,user);if(view==='tasks')assert.equal(workspace.props.view,view);
   }
   button(tree,'Settings').props.onClick();tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='PortalWorkspacePreferences').length,1);
   button(tree,'Jobs').props.onClick();tree=h.render();nodes(tree,n=>n.type?.displayName==='CreditexPlannedIntakeQueue')[0].props.onDirtyChange(true);
@@ -307,4 +307,31 @@ test('activity form drafts survive desktop, keyboard, mobile and team-access nav
   governance.props.onManageFormAccess();tree=h.render();assert.equal(button(tree,'Forms').props['aria-selected'],true);
   governance.props.onFieldFormDirtyChange(false);governance.props.onManageFormAccess();tree=h.render();assert.equal(button(tree,'Team').props['aria-selected'],true);
   assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexTeamAccess').length,1);h.cleanup();
+});
+
+
+test('corrections use the server-filtered job queue without general record/bin controls',async()=>{
+ const h=runtime('CreditexPlannedIntakeQueue',{mode:'corrections'},{api:async()=>({ok:true,items:[],total:0,page:1,totalPages:1})});const tree=await h.mount();
+ assert.equal(new URL(h.requests.at(-1),'https://test.invalid').searchParams.get('mode'),'corrections');
+ assert.equal(labelledField(tree,'Record status'),undefined);assert.equal(button(tree,'Bin'),undefined);assert.match(text(tree),/No corrections required/);h.cleanup();
+});
+test('header search seeds the same complete job register server search',async()=>{
+ const h=runtime('CreditexPlannedIntakeQueue',{initialSearch:'Laura Example'});const tree=await h.mount();
+ assert.equal(labelledField(tree,'Search jobs').props.value,'Laura Example');assert.equal(new URL(h.requests.at(-1),'https://test.invalid').searchParams.get('search'),'Laura Example');h.cleanup();
+});
+test('shared header routes search to Jobs and protects unsaved audits in Jobs and Cases',()=>{
+ const h=portal('admin',{confirm:false});let tree=h.render();const header=()=>nodes(h.render(),n=>n.type?.displayName==='PortalWorkspaceHeader')[0];
+ assert.equal(header().props.organisation,'Creditex');assert.equal(header().props.onSearch('Laura'),true);tree=h.render();
+ let queue=nodes(tree,n=>n.type?.displayName==='CreditexPlannedIntakeQueue')[0];assert.equal(queue.props.initialSearch,'Laura');assert.equal(button(tree,'Jobs').props['aria-selected'],true);
+ queue.props.onDirtyChange(true);assert.equal(header().props.onSearch('Other'),false);queue.props.onDirtyChange(false);
+ button(tree,'Cases').props.onClick();tree=h.render();queue=nodes(tree,n=>n.type?.displayName==='CreditexPlannedIntakeQueue')[0];queue.props.onDirtyChange(true);
+ assert.equal(header().props.onSearch('Other'),false);assert.equal(button(h.render(),'Cases').props['aria-selected'],true);h.cleanup();
+});
+
+test('active customer calls prevent portal navigation and header search until leaving is confirmed',()=>{
+ const h=portal('admin',{confirm:false});let tree=h.render();button(tree,'Connect').props.onClick();tree=h.render();
+ nodes(tree,n=>n.type?.displayName==='PortalConnectWorkspace')[0].props.onActiveChange(true);
+ button(tree,'Jobs').props.onClick();tree=h.render();assert.equal(button(tree,'Connect').props['aria-selected'],true);
+ const header=nodes(tree,n=>n.type?.displayName==='PortalWorkspaceHeader')[0];assert.equal(header.props.onSearch('Laura'),false);header.props.onSettings();tree=h.render();assert.equal(button(tree,'Connect').props['aria-selected'],true);
+ nodes(tree,n=>n.type?.displayName==='PortalConnectWorkspace')[0].props.onActiveChange(false);button(tree,'Jobs').props.onClick();assert.equal(button(h.render(),'Jobs').props['aria-selected'],true);h.cleanup();
 });

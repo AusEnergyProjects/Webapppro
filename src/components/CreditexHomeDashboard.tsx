@@ -33,7 +33,7 @@ export function CreditexHomeDashboard({ user, canManageTeam, onNavigate }: {
   }, [user, reload]);
   const metrics = [
     { key: "awaitingAudit" as const, label: "Awaiting audit", detail: "Completed field work ready to check", destination: "cases" as const },
-    { key: "correctionsRequired" as const, label: "Corrections required", detail: "Work returned for changes", destination: "cases" as const },
+    { key: "correctionsRequired" as const, label: "Corrections required", detail: "Work returned for changes", destination: "operations" as const },
     { key: "auditCompleted" as const, label: "Audits completed", detail: "Checks match the current evidence", destination: "cases" as const },
     { key: "readyForSubmission" as const, label: "Ready for submission", detail: "Required approval recorded", destination: "submissions" as const },
   ];
@@ -51,7 +51,7 @@ export function CreditexHomeDashboard({ user, canManageTeam, onNavigate }: {
         <p>Counts are per activity. An audited activity can also be ready for submission.</p>
       </section>
       <section className={styles.card}><header><div><span>KEEP WORK MOVING</span><h2>Team workspace</h2></div></header><p>Send a teammate a message, assign a task or update your workspace.</p><div className={styles.links}>
-        <button type="button" onClick={() => onNavigate("connect")}>Connect with the team <b aria-hidden="true">→</b></button>
+        <button type="button" onClick={() => onNavigate("connect")}>Customers & team <b aria-hidden="true">→</b></button>
         <button type="button" onClick={() => onNavigate("forms")}>Forms &amp; activity requirements <b aria-hidden="true">→</b></button>
         {canManageTeam && <button type="button" onClick={() => onNavigate("team")}>Manage team access <b aria-hidden="true">→</b></button>}
         <button type="button" onClick={() => onNavigate("settings")}>Profile &amp; workspace colours <b aria-hidden="true">→</b></button>

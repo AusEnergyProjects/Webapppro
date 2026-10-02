@@ -1,7 +1,7 @@
 .shell {
-  --portal-ink: var(--trade-ink, #17383e);
-  --portal-text: var(--trade-text, #314f59);
-  --portal-muted: var(--trade-muted, #5f717b);
+  --portal-ink: #17383e;
+  --portal-text: #314f59;
+  --portal-muted: #5f717b;
   --portal-line: #dce5e8;
   --portal-line-strong: #b9ced2;
   --portal-soft: #fff;
@@ -10,8 +10,17 @@
   --portal-green: #20cbb8;
   --portal-green-dark: #087f78;
   --portal-warn: #8c5b0a;
-  background: var(--portal-raised);
+  --color-aea-ink: var(--portal-ink);
+  --color-aea-text: var(--portal-text);
+  --color-aea-muted: var(--portal-muted);
+  --color-aea-card: var(--portal-surface, #fff);
+  --color-aea-line: var(--portal-line);
+  --color-aea-line-strong: var(--portal-line-strong);
+  --color-aea-green-dark: var(--portal-green-dark);
+  background: var(--portal-background, #f3f8f7);
   color: var(--portal-text);
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   height: 100dvh;
   min-height: 0;
@@ -22,28 +31,15 @@
 
 .shell[data-portal-mode="night"] { color-scheme: dark; --portal-warn: #f1c777; }
 .shell[data-portal-mode="day"] { color-scheme: light; }
-.callHint { margin: 18px 0 0; color: var(--portal-muted); font-size: 13px; }
 .voiceSettings { margin-top: 22px; border: 1px solid var(--portal-line); border-radius: 12px; padding: 18px; background: var(--portal-soft); }
 .voiceSettings > summary { font-weight: 750; cursor: pointer; margin-bottom: 12px; }
 
-:global(html[data-tlink-colour-mode="night"]) .shell {
-  --portal-ink: #f4fbff;
-  --portal-text: #d7e7eb;
-  --portal-muted: #a2b8c0;
-  --portal-line: #29434d;
-  --portal-line-strong: #3d6069;
-  --portal-soft: #071b2a;
-  --portal-raised: #0b2635;
-  --portal-input: #061724;
-  --portal-green-dark: #7ee7d2;
-  color-scheme: dark;
-}
-
 .frame {
   display: grid;
+  flex: 1;
   grid-template-columns: 232px minmax(0, 1fr);
   width: 100%;
-  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -54,9 +50,9 @@
   gap: 28px;
   padding: 26px 14px 18px;
   overflow: auto;
-  background: var(--portal-gradient, #102b36);
+  background: var(--portal-sidebar, #102b36);
   color: #e4eff1;
-  border-right: 1px solid #213f4a;
+  border-right: 1px solid rgba(255, 255, 255, .14);
 }
 
 .workspace {
@@ -86,23 +82,6 @@
 
 .content > [id="creditex-panel-governance"] { padding-bottom: 178px; }
 
-.topbar {
-  align-items: center;
-  background: var(--portal-soft);
-  border-bottom: 1px solid var(--portal-line);
-  min-height: 76px;
-  flex: 0 0 auto;
-  display: flex;
-  gap: 20px;
-  justify-content: space-between;
-  padding: 14px 28px;
-  box-sizing: border-box;
-}
-
-.workspaceContext { display: grid; gap: 4px; }
-.workspaceContext > span { font-size: 11px; color: var(--portal-muted); }
-.workspaceContext > strong { font-size: 18px; letter-spacing: -.025em; color: var(--portal-ink); }
-
 .brand {
   align-items: center;
   display: flex;
@@ -130,49 +109,7 @@
 
 .brand span {
   color: var(--portal-muted);
-  font-size: .68rem;
-  margin-top: 2px;
-}
-
-.identity {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-}
-
-.identity div {
-  text-align: right;
-}
-
-.identity strong,
-.identity span {
-  display: block;
-}
-
-.topbar .brand strong,
-.topbar .identity strong {
-  color: var(--portal-ink);
-}
-
-.topbar .brand span,
-.topbar .identity span {
-  color: var(--portal-muted);
-}
-
-.topbar .secondaryButton {
-  background: #0b2b3a;
-  border: 1px solid rgba(108, 207, 192, .28);
-  color: #d9f8f1;
-}
-
-.identity strong {
-  color: var(--portal-ink);
-  font-size: .72rem;
-}
-
-.identity span {
-  color: var(--portal-muted);
-  font-size: .6rem;
+  font-size: .8125rem;
   margin-top: 2px;
 }
 
@@ -190,7 +127,7 @@
 .secondaryButton,
 .dangerButton {
   border-radius: 10px;
-  font-size: .68rem;
+  font-size: .8125rem;
   font-weight: 800;
   min-height: 40px;
   padding: 9px 14px;
@@ -247,7 +184,7 @@
 .eyebrow {
   color: #bce9d9;
   display: block;
-  font-size: .62rem;
+  font-size: .8125rem;
   font-weight: 900;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -281,7 +218,7 @@
 
 .guardrail p {
   color: #9fb7bf;
-  font-size: .67rem;
+  font-size: .8125rem;
   line-height: 1.55;
   margin: 7px 0 0;
 }
@@ -291,7 +228,7 @@
   border: 1px solid #ead69d;
   border-radius: 12px;
   color: #6a4a0e;
-  font-size: .68rem;
+  font-size: .8125rem;
   line-height: 1.5;
   margin: 0 0 16px;
   padding: 11px 13px;
@@ -314,9 +251,9 @@
 .groupLabel { color: #94b0bb; font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; padding: 0 12px 7px; }
 .tab { align-items: center; display: flex; gap: 12px; width: 100%; min-height: 46px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: #c3d7df; text-align: left; padding: 11px 12px; font-size: 14px; font-weight: 650; line-height: 1.3; }
 .tab svg { width: 19px; height: 19px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.tab:hover { background: #1b3c48; color: #fff; }
-.tab[aria-selected="true"] { background: #164b4d; border-color: #276869; color: #fff; box-shadow: inset 3px 0 #2fd1b8; }
-.tab[aria-selected="true"] svg { color: #63e3cc; }
+.tab:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+.tab[aria-selected="true"] { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .24); color: #fff; box-shadow: inset 3px 0 rgba(255, 255, 255, .8); }
+.tab[aria-selected="true"] svg { color: #fff; }
 .tab:focus-visible { outline: 2px solid #7ee7d2; outline-offset: 2px; }
 .mobileNavigation { display: none; }
 .railFooter { display: grid; gap: 6px; padding: 18px 12px 0; border-top: 1px solid #2a4651; margin-top: auto; }
@@ -360,7 +297,7 @@
 .panelHeader p,
 .formCard > p {
   color: var(--portal-muted);
-  font-size: .66rem;
+  font-size: .8125rem;
   line-height: 1.55;
   margin: 4px 0 0;
 }
@@ -391,7 +328,7 @@
   border-radius: 10px;
   color: var(--portal-text);
   font: inherit;
-  font-size: .7rem;
+  font-size: .8125rem;
   min-height: 40px;
   padding: 8px 10px;
   width: 100%;
@@ -443,20 +380,20 @@
 
 .caseCard p {
   color: var(--portal-muted);
-  font-size: .62rem;
+  font-size: .8125rem;
   line-height: 1.45;
   margin: 2px 0 0;
 }
 
 .caseCard small {
   color: var(--portal-muted);
-  font-size: .55rem;
+  font-size: .8125rem;
   line-height: 1.4;
 }
 
 .caseCard strong {
   color: var(--portal-text);
-  font-size: .67rem;
+  font-size: .8125rem;
   line-height: 1.4;
   margin-top: 3px;
 }
@@ -491,7 +428,7 @@
   border: 1px dashed #b9cec6;
   border-radius: 13px;
   color: var(--portal-muted);
-  font-size: .7rem;
+  font-size: .8125rem;
   line-height: 1.55;
   padding: 22px;
   text-align: center;
@@ -509,7 +446,7 @@
 
 .pagination p {
   color: var(--portal-muted);
-  font-size: .64rem;
+  font-size: .8125rem;
   line-height: 1.45;
   margin: 0;
 }
@@ -534,7 +471,7 @@
 
 .governanceScope > div > span {
   color: #c8eadf;
-  font-size: .68rem;
+  font-size: .8125rem;
   font-weight: 900;
   letter-spacing: .08em;
 }
@@ -546,7 +483,7 @@
 
 .governanceScope p {
   color: #d8f0e7;
-  font-size: .72rem;
+  font-size: .8125rem;
   line-height: 1.5;
   margin: 5px 0 0;
   max-width: 760px;
@@ -554,7 +491,7 @@
 
 .governanceScope label {
   display: grid;
-  font-size: .7rem;
+  font-size: .8125rem;
   font-weight: 800;
   gap: 6px;
 }
@@ -583,7 +520,7 @@
 .catalogueHeader p,
 .catalogueCaveat {
   color: var(--portal-muted);
-  font-size: .68rem;
+  font-size: .8125rem;
   line-height: 1.55;
   margin: 5px 0 0;
 }
@@ -607,7 +544,7 @@
 
 .catalogueSummary span {
   color: var(--portal-muted);
-  font-size: .6rem;
+  font-size: .8125rem;
 }
 
 .catalogueGrid {
@@ -627,7 +564,7 @@
 
 .catalogueGrid h4 {
   color: var(--portal-green-dark);
-  font-size: .68rem;
+  font-size: .8125rem;
   letter-spacing: .06em;
   margin: 0 0 8px;
   text-transform: uppercase;
@@ -657,14 +594,14 @@
 
 .catalogueGrid article strong {
   color: var(--portal-ink);
-  font-size: .68rem;
+  font-size: .8125rem;
 }
 
 .catalogueGrid article span {
   background: #e8f5ef;
   border-radius: 999px;
   color: #24604f;
-  font-size: .51rem;
+  font-size: .8125rem;
   font-weight: 850;
   padding: 3px 6px;
 }
@@ -683,14 +620,14 @@
 
 .catalogueGrid h5 {
   color: var(--portal-text);
-  font-size: .65rem;
+  font-size: .8125rem;
   line-height: 1.35;
   margin: 5px 0 0;
 }
 
 .catalogueGrid article p {
   color: var(--portal-muted);
-  font-size: .58rem;
+  font-size: .8125rem;
   line-height: 1.45;
   margin: 4px 0 0;
 }
@@ -698,7 +635,7 @@
 .catalogueGrid article a {
   color: var(--portal-green-dark);
   display: inline-block;
-  font-size: .58rem;
+  font-size: .8125rem;
   font-weight: 800;
   margin-top: 5px;
   text-underline-offset: 2px;
@@ -727,7 +664,7 @@
 .formGrid label {
   color: var(--portal-ink);
   display: grid;
-  font-size: .68rem;
+  font-size: .8125rem;
   font-weight: 800;
   gap: 5px;
 }
@@ -743,12 +680,12 @@
 .templateNotice strong {
   color: var(--portal-green-dark);
   display: block;
-  font-size: .67rem;
+  font-size: .8125rem;
 }
 
 .templateNotice p {
   color: var(--portal-muted);
-  font-size: .62rem;
+  font-size: .8125rem;
   line-height: 1.45;
   margin: 4px 0 0;
 }
@@ -761,7 +698,7 @@
   background: #fff7df;
   border-left: 4px solid #d5972a;
   color: #6a4a0e;
-  font-size: .68rem;
+  font-size: .8125rem;
   line-height: 1.5;
   margin: 13px 0 0;
   padding: 10px 11px;
@@ -786,13 +723,13 @@
 
 .record h4 {
   color: var(--portal-ink);
-  font-size: .72rem;
+  font-size: .8125rem;
   margin: 0;
 }
 
 .record p {
   color: var(--portal-muted);
-  font-size: .66rem;
+  font-size: .8125rem;
   line-height: 1.45;
   margin: 4px 0 0;
 }
@@ -807,7 +744,7 @@
 .textButton {
   background: transparent;
   color: var(--portal-green-dark);
-  font-size: .68rem;
+  font-size: .8125rem;
   font-weight: 850;
   padding: 7px;
   text-decoration: underline;
@@ -836,7 +773,7 @@
 
 .governanceProgramTabs > span {
   color: var(--portal-muted);
-  font-size: .68rem;
+  font-size: .8125rem;
   font-weight: 900;
   padding: 0 4px;
   text-transform: uppercase;
@@ -867,7 +804,7 @@
 .governanceProgramTabs button[data-selected="true"] {
   background: var(--portal-green);
   border-color: var(--portal-green);
-  color: #052e2b;
+  color: var(--portal-button-ink, #fff);
 }
 
 .governanceProgramTabs button strong,
@@ -876,12 +813,12 @@
 }
 
 .governanceProgramTabs button strong {
-  font-size: .72rem;
+  font-size: .8125rem;
 }
 
 .governanceProgramTabs button small,
 .governanceProgramTabs > div > small {
-  font-size: .66rem;
+  font-size: .8125rem;
   margin-top: 2px;
 }
 
@@ -925,8 +862,8 @@
 .badge,
 .catalogueGrid article span,
 .governanceProgramTabs button {
-  background: #123b47;
-  color: #8fe9da;
+  background: var(--portal-selected-bg, #e3f2ed);
+  color: var(--portal-selected-ink, #145a45);
 }
 
 .empty {
@@ -943,21 +880,21 @@
 .status,
 .status[data-kind="success"],
 .status[data-kind="error"] {
-  border-color: rgba(214, 180, 109, .42);
-  background: #352a16;
-  color: #f1d38e;
+  border-color: var(--portal-warning-line, #e2c77e);
+  background: var(--portal-warning-bg, #fff7df);
+  color: var(--portal-warning-ink, #694c0d);
 }
 
 .status[data-kind="success"] {
-  border-color: rgba(67, 211, 158, .4);
-  background: #0a362f;
-  color: #8cf0cb;
+  border-color: var(--portal-success-line, #a9d9c6);
+  background: var(--portal-success-bg, #e8f7f0);
+  color: var(--portal-success-ink, #145a45);
 }
 
 .status[data-kind="error"] {
-  border-color: rgba(241, 120, 101, .42);
-  background: #3b1e20;
-  color: #ffb7ac;
+  border-color: var(--portal-error-line, #efbdaf);
+  background: var(--portal-error-bg, #fff0ec);
+  color: var(--portal-error-ink, #8f2e17);
 }
 
 .secondaryButton {
@@ -967,8 +904,8 @@
 }
 
 .dangerButton {
-  background: #3b1e20;
-  color: #ffb7ac;
+  background: var(--portal-error-bg, #fff0ec);
+  color: var(--portal-error-ink, #8f2e17);
 }
 
 .signInWrap {
@@ -1021,7 +958,7 @@
 
 .signInForm > p {
   color: var(--portal-muted);
-  font-size: .65rem;
+  font-size: .8125rem;
   line-height: 1.5;
   margin: 0 0 4px;
 }
@@ -1029,7 +966,7 @@
 .signInForm label {
   color: var(--portal-ink);
   display: grid;
-  font-size: .64rem;
+  font-size: .8125rem;
   font-weight: 800;
   gap: 6px;
 }
@@ -1038,7 +975,7 @@
   align-items: center;
   color: var(--portal-muted);
   display: flex;
-  font-size: .57rem;
+  font-size: .8125rem;
   gap: 10px;
 }
 
@@ -1054,7 +991,7 @@
   align-items: center;
   color: var(--portal-muted);
   display: flex;
-  font-size: .72rem;
+  font-size: .8125rem;
   justify-content: center;
   min-height: 220px;
 }
@@ -1075,18 +1012,9 @@
     padding: 0;
   }
 
-.topbar,
-  .panelHeader {
+.panelHeader {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .identity {
-    justify-content: space-between;
-  }
-
-  .identity div {
-    text-align: left;
   }
 
   .filters,
@@ -1153,18 +1081,9 @@
   }
 }
 /* Creditex uses the same navy rail and clear day workspace as TLink. */
-.sidebar .brand { padding: 0 8px; gap: 10px; }
-.sidebar .brand img { width: 36px; height: 36px; border-radius: 11px; }
-.sidebar .brand h1 { color: #fff; font-size: 23px; letter-spacing: -.04em; line-height: 1.2; margin: 0; }
-.sidebar .brand span { font-size: 10px; color: #9bb6c0; margin-top: 4px; }
 .signInIntro .brand strong { color: #fff; }
 .signInIntro .brand span { color: #b7d3da; }
-.identity strong { font-size: 13px; font-weight: 650; }
-.identity span { font-size: 11px; margin-top: 4px; }
-.topbar .identity strong { color: var(--portal-ink); }
-.topbar .identity span { color: var(--portal-muted); }
-.topbar .secondaryButton { min-height: 36px; padding: 8px 12px; background: var(--portal-soft); color: var(--portal-text); border: 1px solid var(--portal-line-strong); font-size: 12px; }
-.button { color: #052e2b; }
+.button { color: var(--portal-button-ink, #fff); }
 .hero { margin: 24px 24px 0; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: start; }
 .heroCopy { border: 0; border-radius: 0; box-shadow: none; background: transparent; color: var(--portal-ink); padding: 0; }
 .heroCopy h1 { font-size: 25px; margin: 0 0 8px; }
@@ -1181,18 +1100,10 @@
 @media (max-width: 1050px) { .hero { grid-template-columns: 1fr; } .guardrail { max-width: none; } }
 @media (max-width: 780px) {
   .frame { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-  .sidebar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(135px, .95fr); align-items: center; gap: 12px; padding: 12px 16px; overflow: visible; border: 0; }
-  .sidebar .brand { padding: 0; gap: 9px; }
-  .sidebar .brand h1 { font-size: 21px; }
-  .sidebar .brand span { font-size: 9px; }
+  .sidebar { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 12px; padding: 12px 16px; overflow: visible; border: 0; }
   .tabs, .railFooter { display: none; }
-  .mobileNavigation { display: grid; gap: 5px; color: #b8d1da; font-size: 10px; }
+  .mobileNavigation { display: flex; align-items: center; gap: 12px; color: #dbe8ef; font-size: 12px; }
   .mobileNavigation select { min-width: 0; width: 100%; min-height: 40px; border: 1px solid #47616c; border-radius: 7px; background: #193e4c; color: #fff; font: inherit; font-size: 13px; padding: 8px; color-scheme: dark; }
-  .topbar { flex-direction: row; align-items: center; min-height: 64px; padding: 12px 16px; }
-  .identity div { display: none; }
-  .workspaceContext { gap: 3px; }
-  .workspaceContext > span { font-size: 10px; }
-  .workspaceContext > strong { font-size: 16px; }
   .content > [role="tabpanel"] { padding: 18px 12px; }
   .hero { margin: 18px 12px 0; }
   .heroCopy h1 { font-size: 23px; }

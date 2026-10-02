@@ -65,9 +65,10 @@ function humanField(field: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function CreditexPlannedIntakeQueue({ api, onDirtyChange }: { api: Api; onDirtyChange?: (dirty: boolean) => void }) {
+export function CreditexPlannedIntakeQueue({ api, onDirtyChange, mode = "jobs", initialSearch = "" }: { api: Api; onDirtyChange?: (dirty: boolean) => void; mode?: "jobs" | "corrections"; initialSearch?: string }) {
+  const corrections = mode === "corrections";
   const [items, setItems] = useState<PlannedIntake[]>([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [status, setStatus] = useState<QueueStatus>("all");
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
@@ -95,8 +96,9 @@ export function CreditexPlannedIntakeQueue({ api, onDirtyChange }: { api: Api; o
   const tableRef = useRef<HTMLDivElement | null>(null);
   const tableScroll = useRef({ top: 0, left: 0 });
 
-  const query = new URLSearchParams({ status, search, certificateType, page: String(page), sort, sortDirection });
-  if (queueView === "bin") query.set("view", "bin");
+  const query = new URLSearchParams({ status: corrections ? "all" : status, search, certificateType, page: String(page), sort, sortDirection });
+  if (corrections) query.set("mode", "corrections");
+  if (!corrections && queueView === "bin") query.set("view", "bin");
   for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
   const queryKey = query.toString();
   const message = queueError?.query === queryKey ? queueError.text : "";
@@ -242,12 +244,12 @@ export function CreditexPlannedIntakeQueue({ api, onDirtyChange }: { api: Api; o
     <header>
       <div>
         <span>Creditex work register</span>
-        <h2 id="creditex-planned-intake-title">Jobs</h2>
-        <p>Find a job, review its records and call the customer from their audit workspace.</p>
+        <h2 id="creditex-planned-intake-title">{corrections ? "Corrections required" : "Jobs"}</h2>
+        <p>{corrections ? "Jobs awaiting changes. Open a job to review the correction and its evidence." : "Find a job, review its records and call the customer from their audit workspace."}</p>
       </div>
       <strong>{updating ? "Loading" : !hasLoaded ? "Unavailable" : stale ? "Last loaded results" : `${total} ${total === 1 ? "record" : "records"}`}</strong>
     </header>
-    <div className={styles.controls}>
+    <div className={styles.controls} data-corrections={corrections || undefined}>
       <label><span>Search jobs</span><input
         type="search"
         value={search}
@@ -264,7 +266,7 @@ export function CreditexPlannedIntakeQueue({ api, onDirtyChange }: { api: Api; o
         <option value="certificates">All certificates & credits</option>
         {CREDITEX_CERTIFICATE_TYPES.map((type) => <option key={type} value={type}>{type === "VEEC" ? "VEEC (VEU)" : type}</option>)}
       </select></label>
-      <label><span>Record status</span><select
+      {!corrections && <label><span>Record status</span><select
         value={status}
         onChange={(event) => {
           setStatus(event.target.value as QueueStatus);
@@ -275,18 +277,18 @@ export function CreditexPlannedIntakeQueue({ api, onDirtyChange }: { api: Api; o
         <option value="planned">Awaiting case setup</option>
         <option value="case_linked">Case linked</option>
         <option value="superseded">Superseded history</option>
-      </select></label>
+      </select></label>}
       <button ref={filterLauncherRef} type="button" className={styles.filterToggle} aria-expanded={showFilters} aria-controls="creditex-job-filters" onClick={toggleFilters}>Filters{activeFilters ? ` (${activeFilters})` : ""}</button>
       <button type="button" onClick={() => void load()} disabled={updating}>Refresh</button>
-      <button type="button" aria-pressed={queueView === "bin"} onClick={() => {
+      {!corrections && <button type="button" aria-pressed={queueView === "bin"} onClick={() => {
         closeAudit(); setQueueView(queueView === "bin" ? "active" : "bin"); setPage(1);
-      }}>{queueView === "bin" ? "Back to active jobs" : "Bin"}</button>
+      }}>{queueView === "bin" ? "Back to active jobs" : "Bin"}</button>}
     </div>
     <div className={styles.resultBar} aria-live="polite"><span>{updating ? "Updating jobs..." : message ? hasLoaded ? `${items.length} previously loaded ${items.length === 1 ? "record" : "records"} shown` : "Job count unavailable" : `${total} matching ${total === 1 ? "record" : "records"}${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}{!updating && !message && activeFilters ? ` · ${activeFilters} filters applied` : ""}</span>{(search || activeFilters || sort !== "plannedStart" || sortDirection !== "asc") && <button type="button" className={styles.detailButton} onClick={resetFilters}>Reset filters & sort</button>}</div>
-    <p className={styles.tableHint}>Each row is a job activity. Click a row and choose Audit to review its answers, files and verification call.</p>
+    <p className={styles.tableHint}>{corrections ? "Only open corrections appear here. Corrected and resubmitted work returns to Jobs for review." : "Each row is a job activity. Click a row and choose Audit to review its answers, files and verification call."}</p>
     {actionMessage && <p className={styles.tableHint} role="status">{actionMessage}</p>}
     {message && <div className={`${styles.message} ${styles.loadError}`} role="alert"><div><strong>{hasLoaded ? "Jobs could not be updated" : "Jobs could not be loaded"}</strong><p>{message}</p>{hasLoaded && <p>Showing the last loaded results. They may not match the current filters.</p>}</div><button type="button" onClick={() => void load()} disabled={updating}>Retry</button></div>}
-      <div ref={tableRef} className={styles.tableWrap} aria-busy={updating} data-stale={stale || undefined} tabIndex={0} role="region" aria-label="Assigned jobs"><table>
+      <div ref={tableRef} className={styles.tableWrap} aria-busy={updating} data-stale={stale || undefined} tabIndex={0} role="region" aria-label={corrections ? "Jobs requiring corrections" : "Assigned jobs"}><table>
         <thead><tr>{sortableHeading("Job ID", "jobNumber")}{sortableHeading("Created", "createdAt")}{sortableHeading("Customer", "customerName")}<th scope="col">Activity</th>{sortableHeading("Installer", "installerBusiness")}{sortableHeading("Planned", "plannedStart")}<th scope="col">Assigned to</th><th scope="col">Status</th></tr></thead>
         <tbody>{items.map((item) => {
           const reviewStage = ["unscheduled", "assigned", "partial", "complete", "reviewed"].includes(item.lifecycle?.status);
@@ -306,7 +308,7 @@ export function CreditexPlannedIntakeQueue({ api, onDirtyChange }: { api: Api; o
           <td>{dateTime(item.plannedStart)}</td>
           <td>{item.assigneeLabel || "Unassigned"}</td>
           <td><span className={styles.status}>{statusLabel}</span>{auditDetail && <small>{auditDetail}</small>}{item.lifecycle?.detail && <small>{item.lifecycle.detail}</small>}</td>
-        </tr>; })}{!items.length && <tr><td colSpan={8}><div className={styles.empty}><strong>{updating ? "Loading jobs..." : message ? "Results unavailable for these filters" : "No matching jobs"}</strong><span>{message ? "Retry or adjust the filters." : "Change the filters or reset your search."}</span></div></td></tr>}</tbody>
+        </tr>; })}{!items.length && <tr><td colSpan={8}><div className={styles.empty}><strong>{updating ? "Loading jobs..." : message ? "Results unavailable for these filters" : corrections && !search && !activeFilters ? "No corrections required" : "No matching jobs"}</strong><span>{message ? "Retry or adjust the filters." : corrections && !search && !activeFilters ? "Jobs appear here when a correction is requested." : "Change the filters or reset your search."}</span></div></td></tr>}</tbody>
       </table></div>
     {!updating && !message && <nav className={styles.pagination} aria-label="Certificate-work register pages">
       <span className={styles.pageSize}>{PAGE_SIZE} records per page</span>

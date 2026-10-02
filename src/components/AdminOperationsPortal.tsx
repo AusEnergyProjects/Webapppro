@@ -47,6 +47,8 @@ import { AdminEnergyAssistantLeads } from "@/components/AdminEnergyAssistantLead
 import { AdminSurgeAnswerReviews } from "@/components/AdminSurgeAnswerReviews";
 import { PortalWorkspacePreferences, usePortalWorkspacePreferences } from "./PortalWorkspacePreferences";
 import { PortalTeamWorkspace } from "./PortalTeamWorkspace";
+import { PortalConnectWorkspace } from "./PortalConnectWorkspace";
+import { PortalWorkspaceHeader } from "./PortalWorkspaceHeader";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -156,6 +158,8 @@ export function AdminOperationsPortal() {
   const questionnaireDirty = useRef(false);
   const fieldFormDirty = useRef(false);
   const auditDirty = useRef(false);
+  const callActive = useRef(false);
+  const reportCallActive = useCallback((active: boolean) => { callActive.current = active; }, []);
   const historyIndex = useRef<number | null>(null);
   const restoringHistory = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
@@ -163,6 +167,7 @@ export function AdminOperationsPortal() {
   const reportAuditDirty = useCallback((dirty: boolean) => { auditDirty.current = dirty; }, []);
   const selectTab = useCallback((next: AdminWorkspaceTab, updateHistory = true) => {
     if (next === tab) return true;
+    if (callActive.current && !window.confirm("End the active customer call and leave Connect?")) return false;
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
     if (fieldFormDirty.current && !window.confirm("Discard the unsaved changes to this activity form?")) return false;
     if (auditDirty.current && !window.confirm("Leave this audit without saving your changes?")) return false;
@@ -238,6 +243,7 @@ export function AdminOperationsPortal() {
   const [partnerTarget, setPartnerTarget] = useState<{ uid: string; nonce: number } | null>(null);
   const [partnerVerificationTarget, setPartnerVerificationTarget] = useState("");
   const [assistantLeadTarget, setAssistantLeadTarget] = useState<{ id: string; nonce: number } | null>(null);
+  const [jobSearch, setJobSearch] = useState({ query: "", nonce: 0 });
   const preferences = usePortalWorkspacePreferences({ workspace: "admin", user, currentDisplayName: session?.displayName || session?.email || "" });
 
   const api = useCallback(async (path: string, init: RequestInit = {}) => {
@@ -728,34 +734,9 @@ export function AdminOperationsPortal() {
         content?.focus({ preventScroll: true });
         content?.scrollIntoView({ block: "start" });
       }}>Skip to workspace</a>
-      <header className="admin-topbar">
-        <AdminTLinkBrand context="Administration" />
-        <div className="admin-topbar-account">
-          <a
-            href="#operations-inbox"
-            className="admin-notification-button"
-            aria-label={`Open operations inbox, ${notificationCounts.unread || 0} unread alerts`}
-            onClick={(event) => {
-              event.preventDefault();
-              openNotificationInbox();
-            }}
-          >
-            Alerts
-            {notificationCounts.unread > 0 && <strong>{notificationCounts.unread}</strong>}
-          </a>
-          <span className={`admin-role admin-role-${session.role}`}>
-            {session.role}
-          </span>
-          <div>
-            <strong>{preferences.profile.displayName || session.displayName || session.email}</strong>
-            <small>{session.email}</small>
-          </div>
-          <button type="button" onClick={() => selectTab("settings")} aria-label="Open profile and appearance">Settings</button>
-          <button type="button" onClick={() => void signOut(firebaseAuth)}>
-            Sign out
-          </button>
-        </div>
-      </header>
+      <PortalWorkspaceHeader context="Administration" organisation="Australian Energy Assessments" displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences} notificationCount={notificationCounts.unread || 0}
+        onSearch={query => { if (tab === "jobs" && auditDirty.current && !window.confirm("Leave this audit without saving your changes?")) return false; if (!selectTab("jobs")) return false; auditDirty.current = false; setJobSearch(current => ({ query, nonce: current.nonce + 1 })); return true; }}
+        onTasks={openNotificationInbox} onSettings={() => selectTab("settings")} onSignOut={() => { if (!callActive.current || window.confirm("End the active customer call and sign out?")) void signOut(firebaseAuth); }} />
       <div className="admin-layout">
         <AdminWorkspaceNavigation selected={tab} role={session.role} unread={notificationCounts.unread} onSelect={selectTab} />
         <section className="admin-content" id="admin-workspace-content" aria-label="Selected operations workspace" tabIndex={-1}>
@@ -775,7 +756,8 @@ export function AdminOperationsPortal() {
               onCounts={setNotificationCounts}
             />
           </div>
-          {(tab === "connect" || tab === "tasks") && user && <PortalTeamWorkspace key={`${user.uid}-${tab}`} workspace="admin" user={user} view={tab} />}
+          {tab === "connect" && user && <PortalConnectWorkspace key={user.uid} workspace="admin" user={user} onActiveChange={reportCallActive} />}
+          {tab === "tasks" && user && <PortalTeamWorkspace key={user.uid} workspace="admin" user={user} view="tasks" />}
           {tab === "settings" && user && <><PortalWorkspacePreferences controller={preferences} /><section className="admin-panel admin-profile-security"><FirebaseAccountSecurity user={user} /></section></>}
           {tab === "directory" && (
             <AdminAccountDirectory
@@ -792,7 +774,7 @@ export function AdminOperationsPortal() {
               }}
             />
           )}
-          {tab === "jobs" && <AdminJobDirectory api={api} user={user&&["owner","admin"].includes(session.role)?user:undefined} onAuditDirtyChange={reportAuditDirty} />}
+          {tab === "jobs" && <AdminJobDirectory key={jobSearch.nonce} initialSearch={jobSearch.query} api={api} user={user&&["owner","admin"].includes(session.role)?user:undefined} onAuditDirtyChange={reportAuditDirty} />}
           {tab === "customers" && (
             <AdminAccountDirectory
               api={api}
@@ -854,7 +836,7 @@ export function AdminOperationsPortal() {
                   See what needs attention and keep your team moving.
                 </p>
               </header>
-              <nav className="admin-home-shortcuts" aria-label="Quick actions"><button type="button" onClick={() => selectTab("jobs")}>Open jobs</button><button type="button" onClick={() => selectTab("tasks")}>My team tasks</button><button type="button" onClick={() => selectTab("connect")}>Message the team</button>{session.role === "owner" && <button type="button" onClick={() => selectTab("access")}>Manage team</button>}</nav>
+              <nav className="admin-home-shortcuts" aria-label="Quick actions"><button type="button" onClick={() => selectTab("jobs")}>Open jobs</button><button type="button" onClick={() => selectTab("tasks")}>My team tasks</button><button type="button" onClick={() => selectTab("connect")}>Open Connect</button>{session.role === "owner" && <button type="button" onClick={() => selectTab("access")}>Manage team</button>}</nav>
               <section className="admin-metric-grid">
                 <article>
                   <span>Action notifications</span>

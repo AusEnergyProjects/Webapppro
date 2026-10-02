@@ -958,6 +958,7 @@ test("Creditex planned-intake queue SQL executes against the complete migration 
     .replace("${QUEUE_WHERE}", routeTemplate("QUEUE_WHERE"))
     .replace("${visibilitySql}", "AND COALESCE(work.record_status, '') <> 'archived'")
     .replace("${filterSql}", filters.filterSql)
+    .replace("${accessSql}", "")
     .replace("${sortSql}", filters.sortSql);
   assert.doesNotMatch(query, /\$\{/);
   const bindings = [

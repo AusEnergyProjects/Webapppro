@@ -112,7 +112,7 @@ test("portal uses Firebase sign-in without public registration or bootstrap", ()
   assert.match(portal, /workspaceLoadRef = useRef<\{[\s\S]*uid: string;[\s\S]*promise: Promise<void>/);
   assert.match(portal, /workspaceLoadRef\.current\?\.uid === activeUid/);
   assert.match(portal, /firebaseAuth\.currentUser\?\.uid !== activeUid/);
-  assert.match(portal, /identityChanged[\s\S]*setSession\(null\)[\s\S]*setCases\(\[\]\)[\s\S]*setPrograms\(\[\]\)/);
+  assert.match(portal, /identityChanged[\s\S]*setSession\(null\)[\s\S]*setPrograms\(\[\]\)/);
   assert.doesNotMatch(
     portal.slice(
       portal.indexOf("async function signInEmail"),
@@ -531,9 +531,9 @@ test("case queue is read-only and returns only the approved privacy-minimised pr
     ),
     /accepted|rejected|closed/,
   );
-  assert.match(portal, /casePagination\.nextCursor/);
-  assert.match(portal, /Load next \$\{casePagination\.pageSize\}/);
-  assert.match(portal, /useState<\(typeof CASE_STATUSES\)\[number\]>\("open"\)/);
+  assert.match(portal, /<CreditexPlannedIntakeQueue[^>]*mode="corrections"/);
+  assert.doesNotMatch(portal, /loadNextCases|setCases|CreditexOperationsWorkspace\s*\{/);
+  assert.match(portal, /mode="corrections"/);
 });
 
 test("governance is admin-only with bounded draft, publish and withdraw actions", () => {
@@ -608,20 +608,7 @@ test("portal never exposes automated outcome, value or submission-success claims
   assert.doesNotMatch(operations, /[\u2013\u2014]/);
 });
 
-test("operations UI preserves unknown evidence policy fields and private evidence boundaries", () => {
-  assert.match(operations, /function optionalBooleanValue/);
-  assert.match(operations, /if \(value === undefined\) return null/);
-  assert.match(operations, /function requirementFlag/);
-  assert.match(operations, /Unknown \(not returned by the case API\)/);
-  assert.doesNotMatch(operations, /not flagged/i);
-  assert.doesNotMatch(operations, /fileName|file_name|originalSha256|original_sha256/);
-  assert.match(operations, /Open audited evidence/);
-  assert.match(operations, /Audited evidence viewer/);
-  assert.match(operations, /No private storage key or original file name reaches the UI/);
-  assert.match(operations, /reviewNote/);
-  assert.match(operations, /case evidence state was recalculated/);
-  assert.doesNotMatch(operations, /case-level evidence state was not changed/);
-});
+test("retired casework leaves only the dedicated Team workspace",()=>{assert.match(operations,/export function CreditexTeamAccess/);assert.doesNotMatch(operations,/export function CreditexOperationsWorkspace|function PrivateCaseDetails|function EvidenceViewerModal|runOperation|parseOperations/);assert.doesNotMatch(operations,/\/api\/creditex\/(?:operations|evidence)/);assert.match(operations,/authenticatedJson\("\/api\/creditex\/access"/);});
 
 test("evidence viewer is assignment-bound, audited before return and never discloses storage names", () => {
   assert.match(evidenceRoute, /if \(!sameOrigin\(request\)\)/);
@@ -661,119 +648,13 @@ test("evidence viewer is assignment-bound, audited before return and never discl
   assert.doesNotMatch(evidenceRoute, /filename=/i);
 });
 
-test("portal holds per-evidence view receipts and gates writable review controls", () => {
-  for (const contract of [
-    /Authorization: `Bearer \$\{await activeUser\.getIdToken\(\)\}`/,
-    /URL\.createObjectURL\(blob\)/,
-    /URL\.revokeObjectURL\(objectUrl\)/,
-    /X-Creditex-Evidence-Receipt/,
-    /setEvidenceAccessReceipts/,
-    /\{ \.\.\.evidenceReviewForm, evidenceAccessReceiptId \}/,
-    /!selectedEvidenceAccessReceipt/,
-    /Open this exact evidence item in the audited viewer before any review control is enabled/,
-    /role="dialog"/,
-    /aria-modal="true"/,
-    /sandbox=""/,
-    /reported by the stored evidence envelope/,
-    /Unknown means the viewer did not receive that fact/,
-  ]) assert.match(operations, contract);
-  assert.match(
-    operations,
-    /const canReviewCompliance = \["admin", "reviewer"\]\.includes/,
-  );
-  assert.doesNotMatch(
-    operations.slice(
-      operations.indexOf("const canReviewCompliance"),
-      operations.indexOf("const canRecordDecision"),
-    ),
-    /auditor/,
-  );
-});
+test("shared audit previews retain authentication, access restrictions and cleanup",()=>{for(const contract of [/Authorization: `Bearer \$\{token\}`/,/cache: "no-store"/,/file\.unavailableReason/,/URL\.createObjectURL\(blob\)/,/URL\.revokeObjectURL\(objectUrl\)/,/controller\.abort\(\)/,/workspace\.capabilities\.canSave/,/capabilities\.canComplete/,/workspace\.capabilities\.canRequestCorrection/])assert.match(jobAuditDesk,contract);assert.match(evidenceRoute,/"X-Creditex-Evidence-Receipt"/);assert.match(evidenceRoute,/'evidence\.viewed'/);});
 
-test("operations UI parses full case workflow and wires bounded local actions", () => {
-  for (const responseContract of [
-    "assignments",
-    "decisionRequests",
-    "calculationRuns",
-    "batchItems",
-    "actorName",
-  ]) assert.match(operations, new RegExp(`"${responseContract}"`));
-  for (const action of [
-    "assign_case",
-    "release_case_assignment",
-    "create_finding",
-    "resolve_finding",
-    "review_evidence",
-    "record_decision",
-    "add_participant",
-    "add_participant_ability",
-    "add_equipment",
-    "create_draft_batch",
-    "stage_batch_item",
-    "remove_batch_item",
-  ]) assert.match(operations, new RegExp(`runOperation\\(\\s*"${action}"`));
-  assert.match(operations, /reviewerNote: decisionForm\.basis\.trim\(\)/);
-  assert.doesNotMatch(operations, /basisSnapshot:\s*\{\s*reviewerBasis/);
-  for (const disabledExternalAction of [
-    "record_manual_response",
-    "submit_batch",
-    "submit_to_registry",
-    "execute_trade",
-    "settle_trade",
-  ]) {
-    assert.doesNotMatch(
-      operations,
-      new RegExp(`runOperation\\(\\s*"${disabledExternalAction}"`),
-    );
-  }
-  assert.match(operations, /pendingDecisionRequests/);
-  assert.match(operations, /Complete independent review/);
-  assert.match(operations, /decisionType: "evidence_complete"/);
-  assert.match(operations, /value="eligibility"/);
-  assert.match(operations, /value="ready_to_submit"/);
-  assert.match(operations, /decision\.caseRevision === selectedCase\.revision/);
-  assert.match(operations, /request\.caseRevision !== selectedCase\.revision/);
-  assert.match(operations, /server revalidates every requirement/i);
-  assert.doesNotMatch(operations, /Ready-to-submit approval remains unavailable/);
-});
 
-test("operations UI requires deliberate case selection and discloses bounded queues", () => {
-  assert.doesNotMatch(operations, /setSelectedCaseKey\(firstCase\.id\)/);
-  assert.match(operations, /if \(item\.id\) void loadOperations\(item\.id\)/);
-  assert.match(operations, /const queueCase = selectedCaseKey/);
-  assert.match(operations, /operationsRequestRef\.current\[requestKind\]/);
-  assert.match(operations, /requestId !== operationsRequestRef\.current\[requestKind\]/);
-  assert.match(operations, /if \(!item\.detailsLoaded\)/);
-  assert.match(operations, /first\(workspace, \["pagination"\]\)/);
-  assert.match(operations, /operations\.workspace\.total/);
-  assert.match(operations, /operations\.workspace\.hasNext/);
-  assert.match(operations, /limited to the selected case/);
-});
 
-test("operations UI is activity-agnostic with program tabs and legacy-parity filters", () => {
-  for (const contract of [
-    /className=\{styles\.programTabs\}/,
-    /aria-label="Compliance program workspaces"/,
-    /operations\.workspace\.programs\.map/,
-    /chooseProgram\(program\.programId\)/,
-    /className=\{styles\.activityTabRow\}/,
-    /chooseActivity\(activity\.activityVersionId\)/,
-    /activity\.activityVersionId/,
-    /Legacy-parity search/,
-    /Status filters/,
-    /Work &amp; personnel/,
-    /Client &amp; agent/,
-    /Customer &amp; address/,
-    /Job filters/,
-    /Appointment filters/,
-    /Tag filters/,
-    /Product filters/,
-    /Audit filters/,
-    /Other filters/,
-    /Creditex verifies and[\s\S]*activates a government-source program record/,
-  ]) assert.match(operations, contract);
-  assert.doesNotMatch(operations, /6\(23\)/);
-});
+test("job register opens audits deliberately and ignores obsolete list responses",()=>{for(const contract of [/setAuditItem\(item\)/,/label: "Audit"/,/requestId !== requestSequence\.current/,/requestController\.current\?\.abort\(\)/,/totalPages/,/PAGE_SIZE = 50/,/<CreditexJobAuditDesk key=\{auditItem\.id\}/])assert.match(plannedIntakeQueue,contract);assert.doesNotMatch(plannedIntakeQueue,/setAuditItem\(items\[0\]\)/);});
+
+test("correction register keeps concise activity-agnostic filters",()=>{for(const contract of [/mode\?: "jobs" \| "corrections"/,/Certificate type/,/Filter program/,/Filter activity/])assert.match(plannedIntakeQueue,contract);assert.doesNotMatch(plannedIntakeQueue,/Legacy-parity|Appointment filters|Tag filters|Product filters/);});
 
 test("government catalogue distinguishes national outcomes and remains discovery-only", () => {
   for (const contract of [
@@ -916,36 +797,7 @@ test("planned activity stays non-regulated until an exact governed chain promote
   );
 });
 
-test("authorised case detail renders private CRM data only after audited case access", () => {
-  assert.match(portal, /Queue lists minimise private data/);
-  assert.match(
-    portal,
-    /customer, installer, site,[\s\S]*appointments, evidence originals and[\s\S]*captured metadata/,
-  );
-  for (const contract of [
-    /privateDetails: OperationPrivateDetails \| null/,
-    /privateDetails: first\(actual/,
-    /<PrivateCaseDetails details=\{item\.privateDetails\} \/>/,
-    /Purpose-bound private access/,
-    /Customer, installer and job workspace/,
-    /Access audit recorded/,
-    /Private notes/,
-    /Exact address/,
-    /Commercial state/,
-    /Appointments/,
-  ]) assert.match(operations, contract);
-  assert.match(operations, /Government activity sources/);
-  assert.match(operations, /Review evidence, resolve tasks and track submissions from one case workspace/);
-  assert.doesNotMatch(operations, /submission and certificate workflow/);
-  assert.doesNotMatch(portal, /remain outside this queue/);
-  assert.doesNotMatch(
-    operations.slice(
-      operations.indexOf("function PrivateCaseDetails"),
-      operations.indexOf("function CaseReview"),
-    ),
-    /firebase_uid|object_key|original_filename/i,
-  );
-});
+test("authorised job details use the scoped audit contract without raw CRM dumps",()=>{assert.match(jobAuditDesk,/\/api\/creditex\/job-audit\?intentId=/);assert.match(jobAuditDesk,/workspace\.target\.customerName/);assert.match(jobAuditDesk,/workspace\.target\.siteAddress/);assert.match(plannedIntakeQueue,/<CreditexJobAuditDesk/);assert.doesNotMatch(operations,/PrivateCaseDetails|Purpose-bound private access|Commercial state/);assert.match(plannedJobAuditRoute,/PRIVATE_SERVER_FIELDS/);assert.match(plannedJobAuditRoute,/job\.audit_workspace_opened/);});
 
 test("portal tabs and disabled actions expose accessible semantics", () => {
   const portalStyles = read(
@@ -957,7 +809,7 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
   assert.match(portal, /Official sources/);
   assert.match(
     portal,
-    /selectTab\(session\.role === "admin" \? "governance" : "sources"\)/,
+    /onSettings=\{\(\) => selectTab\("settings"\)\}/,
   );
   assert.ok(
     portal.indexOf('{ id: "sources", label: "Official sources" }')
@@ -979,12 +831,12 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
     portalStyles,
     /\.frame\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*232px minmax\(0, 1fr\)/,
   );
-  assert.match(portalStyles, /--portal-ink:\s*#f4fbff/);
-  assert.match(portalStyles, /--portal-soft:\s*#071b2a/);
-  assert.match(operationsStyles, /shared protected Creditex palette/);
-  assert.match(evidenceGovernanceStyles, /shared protected Creditex palette/);
-  assert.match(operations, /aria-describedby=\{reasonId\}/);
-  assert.match(operations, /className=\{styles\.disabledReason\}/);
+  assert.match(portalStyles, /color:\s*var\(--portal-ink\)/);
+  assert.match(portalStyles, /background:\s*var\(--portal-background(?:,\s*#[a-f\d]+)?\)/);
+  assert.match(operationsStyles, /var\(--portal-/);
+  assert.match(evidenceGovernanceStyles, /var\(--portal-/);
+  assert.match(operations, /aria-labelledby="operations-access-title"/);
+  assert.match(operationsStyles, /:focus-visible/);
 });
 
 test("governance keeps program workspaces separate with scoped pagination and decision history", () => {
@@ -1060,16 +912,10 @@ test("Creditex program rails remain reachable and critical audit text is legible
     read("../src/components/CreditexCompliancePortal.module.css"),
     contract,
   );
-  for (const contract of [
-    /\.workspace\s*\{[^}]*padding-bottom:/s,
-    /\.programTabs\s*\{[^}]*position: fixed;/s,
-    /\.programTabs\s*\{[^}]*width: min\(/s,
-    /\.programTabs button span\s*\{[^}]*font-size: \.75rem/s,
-    /\.programTabs button small\s*\{[^}]*font-size: \.7rem/s,
-    /\.privateDetailGrid dt\s*\{[^}]*font-size: \.7rem/s,
-    /\.privateDetailGrid dd\s*\{[^}]*font-size: \.75rem/s,
-    /\.empty,\s*\.unavailable\s*\{[^}]*background: #092331;[^}]*color: #b7cbd1;/s,
-  ]) assert.match(operationsStyles, contract);
+  for(const selector of [".workspace",".localForm",".accessPolicy",".memberAccessControls",".compactList"])assert.ok(operationsStyles.includes(selector));
+  assert.match(operationsStyles,/background: var\(--portal-surface\)/);
+  assert.match(operationsStyles,/min-height: 44px/);
+  assert.doesNotMatch(operationsStyles,/\.programTabs|\.caseTable|\.privateDetailGrid|#092331/);
   for (const contract of [
     /\.privateRecordNote\s*\{[^}]*background: #352a16;[^}]*color: #f1d38e;/s,
     /\.mobileContext\s*\{[^}]*background: #092331;/s,
