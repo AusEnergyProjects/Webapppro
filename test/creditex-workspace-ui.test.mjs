@@ -40,8 +40,7 @@ function runtime(name, props={}, options={}) {
   const dynamicPanel=loader=>{const name=String(loader).match(/["']\.\/([^"']+)["']/)?.[1]||'DynamicPanel';if(!stubs.has(name))stubs.set(name,Object.assign(()=>null,{displayName:name}));return stubs.get(name);};
   const rowActions={};
   const mfa={};
-  const notificationController={unreadCount:3};
-  const require=id=>id==='./CreditexNotificationInbox'?{useCreditexNotifications:()=>notificationController,CreditexNotificationInbox:Object.assign(()=>null,{displayName:'CreditexNotificationInbox'})}:id==='@/lib/creditex-permissions'?permissions:id==='./PortalWorkspacePreferences'?{usePortalWorkspacePreferences:()=>({rootProps:{},profile:{displayName:'Test Reviewer'}}),PortalWorkspacePreferences:Object.assign(()=>null,{displayName:'PortalWorkspacePreferences'})}:id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./FirebaseMfa'?mfa:id==='firebase/app'?firebaseApp:id==='firebase/auth'?firebaseAuth:id==='@/lib/firebase-mfa'?firebaseMfa:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/creditex-certificate-types'?certificateTypes:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:dynamicPanel}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
+  const require=id=>id==='@/lib/creditex-permissions'?permissions:id==='./PortalWorkspacePreferences'?{usePortalWorkspacePreferences:()=>({rootProps:{},profile:{displayName:'Test Reviewer'}}),PortalWorkspacePreferences:Object.assign(()=>null,{displayName:'PortalWorkspacePreferences'})}:id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./FirebaseMfa'?mfa:id==='firebase/app'?firebaseApp:id==='firebase/auth'?firebaseAuth:id==='@/lib/firebase-mfa'?firebaseMfa:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/creditex-certificate-types'?certificateTypes:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:dynamicPanel}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
   Function('require','exports',compile('FirebaseMfa'))(require,mfa);
   Function('require','exports',compile('JobRowActions'))(require,rowActions);
   const api=async(path,init)=>{requests.push(path);requestOptions.push(init);if(options.api)return options.api(path,init);return path.includes('?')?{ok:true,items:jobs,total:150,totalPages:3,page:Number(new URL(path,'https://test.invalid').searchParams.get('page'))}:audit(jobs.find(item=>path.endsWith(item.id)));};
@@ -341,10 +340,9 @@ test('active customer calls prevent portal navigation and header search until le
  nodes(tree,n=>n.type?.displayName==='PortalConnectWorkspace')[0].props.onActiveChange(false);button(tree,'Jobs').props.onClick();assert.equal(button(h.render(),'Jobs').props['aria-selected'],true);h.cleanup();
 });
 
-test('the bell opens actual notifications and follows exact job, call, task and message destinations',()=>{
+test('header dropdown follows exact job, call, task and message destinations without a notifications page',()=>{
   const h=portal();const header=()=>nodes(h.render(),n=>n.type?.displayName==='PortalWorkspaceHeader')[0];
-  assert.equal(header().props.notificationCount,3);
-  function inbox(){header().props.onNotifications();const tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='PortalTeamWorkspace').length,0);assert.equal(button(tree,'Notifications'),undefined);const selector=nodes(tree,n=>n.type==='select'&&n.props.value==='notifications')[0];assert.ok(selector);assert.equal(nodes(selector,n=>n.type==='option'&&n.props.value==='notifications').length,1);return nodes(tree,n=>n.type?.displayName==='CreditexNotificationInbox')[0];}
+  function inbox(){const tree=h.render();assert.equal(button(tree,'Notifications'),undefined);assert.equal(nodes(tree,n=>n.type==='option'&&n.props.value==='notifications').length,0);assert.equal(header().props.onNotifications,undefined);const control=header().props.notificationControl;assert.equal(control.type.displayName,'CreditexNotifications');assert.equal(control.props.user,user);return control;}
   assert.equal(inbox().props.onOpen({kind:'job',intentId:'audit-123'}),true);
   let tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexJobAuditDesk')[0].props.intentId,'audit-123');
   assert.equal(inbox().props.onOpen({kind:'task',taskId:'task-123'}),true);tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='PortalTeamWorkspace')[0].props.initialTaskId,'task-123');
@@ -355,11 +353,11 @@ test('the bell opens actual notifications and follows exact job, call, task and 
 
 test('notification navigation retains unsaved audits and active call protections',()=>{
   const h=portal('admin',{confirm:false});const header=()=>nodes(h.render(),n=>n.type?.displayName==='PortalWorkspaceHeader')[0];
-  header().props.onNotifications();let tree=h.render();const inbox=nodes(tree,n=>n.type?.displayName==='CreditexNotificationInbox')[0];
+  let tree=h.render();const inbox=header().props.notificationControl;
   inbox.props.onOpen({kind:'job',intentId:'current'});tree=h.render();const audit=nodes(tree,n=>n.type?.displayName==='CreditexJobAuditDesk')[0];audit.props.onDirtyChange(true);
-  assert.equal(header().props.onNotifications(),false);assert.equal(inbox.props.onOpen({kind:'task',taskId:'blocked'}),false);tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
-  audit.props.onDirtyChange(false);header().props.onNotifications();tree=h.render();nodes(tree,n=>n.type?.displayName==='CreditexNotificationInbox')[0].props.onOpen({kind:'call',intentId:'call',caseId:''});
-  tree=h.render();nodes(tree,n=>n.type?.displayName==='PortalConnectWorkspace')[0].props.onActiveChange(true);assert.equal(header().props.onNotifications(),false);assert.equal(button(h.render(),'Connect').props['aria-selected'],true);h.cleanup();
+  assert.equal(header().props.notificationControl.props.onOpen({kind:'task',taskId:'blocked'}),false);tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
+  audit.props.onDirtyChange(false);header().props.notificationControl.props.onOpen({kind:'call',intentId:'call',caseId:''});
+  tree=h.render();nodes(tree,n=>n.type?.displayName==='PortalConnectWorkspace')[0].props.onActiveChange(true);assert.equal(header().props.notificationControl.props.onOpen({kind:'task',taskId:'blocked'}),false);assert.equal(button(h.render(),'Connect').props['aria-selected'],true);h.cleanup();
 });
 
 test('member permissions control visible tools, Home shortcuts and direct navigation without hiding profile',()=>{
@@ -367,7 +365,7 @@ test('member permissions control visible tools, Home shortcuts and direct naviga
   for(const label of ['Home dashboard','Tasks','My profile','Settings'])assert.ok(button(tree,label),label);
   for(const label of ['Jobs','Customers','Connect','Cases','Calculator','Forms','Customer & job map','Team','Training','Trade onboarding'])assert.equal(button(tree,label),undefined,label);
   const home=nodes(tree,n=>n.type?.displayName==='CreditexHomeDashboard')[0];assert.equal(home.props.canManageTeam,false);assert.equal(home.props.canAccess('cases'),false);assert.equal(home.props.canAccess('tasks'),true);
-  const header=nodes(tree,n=>n.type?.displayName==='PortalWorkspaceHeader')[0];assert.equal(header.props.onSearch('Laura'),false);header.props.onNotifications();tree=h.render();const inbox=nodes(tree,n=>n.type?.displayName==='CreditexNotificationInbox')[0];assert.equal(inbox.props.onOpen({kind:'job',intentId:'hidden'}),false);
+  const header=nodes(tree,n=>n.type?.displayName==='PortalWorkspaceHeader')[0];assert.equal(header.props.onSearch('Laura'),false);assert.equal(header.props.notificationControl.props.onOpen({kind:'job',intentId:'hidden'}),false);
   button(tree,'Settings').props.onClick();tree=h.render();assert.equal(button(tree,'Official sources'),undefined);assert.equal(button(tree,'Government rules'),undefined);h.cleanup();
   const previews=portal('auditor',{session:{permissions:['jobs']}});tree=previews.render();assert.ok(button(tree,'Forms'));assert.ok(button(tree,'Customer & job map'));assert.equal(button(tree,'Customers'),undefined);button(tree,'Customer & job map').props.onClick();tree=previews.render();const map=nodes(tree,n=>n.type?.displayName==='CreditexCustomerMap')[0];assert.equal(map.props.canViewJobs,true);assert.equal(map.props.canViewCustomers,false);previews.cleanup();
 });
@@ -386,11 +384,11 @@ test('customer and map selections open the specific accessible customer or audit
   button(tree,'Customer & job map').props.onClick();tree=h.render();map=nodes(tree,n=>n.type?.displayName==='CreditexCustomerMap')[0];map.props.onOpenRecord({kind:'job',id:'map-job'});tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexJobAuditDesk')[0].props.intentId,'map-job');h.cleanup();
 });
 
-test('notification page retains a keyboard entry into the left navigation',()=>{
+test('notification control leaves the current page and keyboard navigation selected',()=>{
   const h=portal('admin');let tree=h.render();
-  nodes(tree,n=>n.type?.displayName==='PortalWorkspaceHeader')[0].props.onNotifications();tree=h.render();
+  assert.ok(nodes(tree,n=>n.type?.displayName==='PortalWorkspaceHeader')[0].props.notificationControl);
   assert.equal(button(tree,'Home dashboard').props.tabIndex,0);
-  assert.equal(button(tree,'Home dashboard').props['aria-selected'],false);
+  assert.equal(button(tree,'Home dashboard').props['aria-selected'],true);
   button(tree,'Home dashboard').props.onKeyDown({key:'Home',preventDefault(){}});
   assert.equal(button(h.render(),'Home dashboard').props['aria-selected'],true);h.cleanup();
 });

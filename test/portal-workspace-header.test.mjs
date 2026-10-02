@@ -169,6 +169,13 @@ test("header opens real notifications, counted inbox and separate profile and wo
   h.cleanup();
 });
 
+test("header hosts the workspace notification dropdown without a second navigation bell", () => {
+  const h=headerHarness();
+  h.props.notificationControl=jsx.jsx('button',{'aria-label':'Work updates',children:'Bell'});
+  const tree=h.render();assert.ok(labelled(tree,'Work updates'));
+  assert.equal(labelled(tree,'Open notifications'),undefined);assert.equal(h.calls.notifications,0);h.cleanup();
+});
+
 function preferencesHarness() {
   const h = hooksHarness(), requests = [], timers = new Map(), updated = [];
   let timerId = 0;

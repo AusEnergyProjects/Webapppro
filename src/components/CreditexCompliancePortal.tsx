@@ -49,7 +49,7 @@ import { PortalConnectWorkspace } from "./PortalConnectWorkspace";
 import { PortalWorkspaceHeader } from "./PortalWorkspaceHeader";
 import { CreditexHomeDashboard } from "./CreditexHomeDashboard";
 import { CreditexCustomerDirectory } from './CreditexCustomerDirectory';
-import { CreditexNotificationInbox, useCreditexNotifications } from './CreditexNotificationInbox';
+import { CreditexNotifications } from './CreditexNotifications';
 import { hasCreditexPermission, type CreditexPermission } from '@/lib/creditex-permissions';
 import type { CreditexNotificationTarget } from '@/lib/creditex-notifications';
 const CreditexCustomerMap = dynamic(() => import('./CreditexCustomerMap').then(module => module.CreditexCustomerMap), { loading: () => <p role="status">Loading map...</p> });
@@ -58,7 +58,7 @@ const CreditexJobAuditDesk = dynamic(() => import('./CreditexJobAuditDesk').then
 import styles from "./CreditexCompliancePortal.module.css";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
-type WorkspaceTab = "home" | "connect" | "tasks" | "settings" | "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance" | "team" | 'customers' | 'map' | 'calculator' | 'profile' | 'notifications';
+type WorkspaceTab = "home" | "connect" | "tasks" | "settings" | "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance" | "team" | 'customers' | 'map' | 'calculator' | 'profile';
 
 function WorkspaceIcon({ tab }: { tab: WorkspaceTab }) {
   const paths: Record<WorkspaceTab, string> = {
@@ -67,7 +67,6 @@ function WorkspaceIcon({ tab }: { tab: WorkspaceTab }) {
     map: 'm3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15',
     calculator: 'M5 2h14v20H5zM8 5h8v4H8zM8 13h1M12 13h1M16 13h1M8 17h1M12 17h1M16 17h1',
     profile: 'M20 21v-2a7 7 0 0 0-14 0v2M13 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8',
-    notifications: 'M18 8a6 6 0 0 0-12 0v7l-2 3h16l-2-3zM10 21h4',
     connect: "M8 3H4c-3 8 9 20 17 17v-4l-5-2-2 3c-4-2-5-3-7-7l3-2z",
     tasks: "M8 4h12v17H4V4h4M8 2h8v5H8zM8 13l2 2 5-5",
     settings: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2",
@@ -315,7 +314,6 @@ export function CreditexCompliancePortal() {
   const [customerTarget, setCustomerTarget] = useState('');
   const [connectTarget, setConnectTarget] = useState({ peerId: '', intentId: '', nonce: 0 });
   const [taskTarget, setTaskTarget] = useState('');
-  const notifications = useCreditexNotifications(session ? user : null);
   const preferences = usePortalWorkspacePreferences({ workspace: "creditex", user: session ? user : null, currentDisplayName: session?.displayName || "" });
   const auditDirty = useRef(false);
   const callActive = useRef(false);
@@ -327,7 +325,7 @@ export function CreditexCompliancePortal() {
   const reportFieldFormDirty = useCallback((dirty: boolean) => { fieldFormDirty.current = dirty; }, []);
   function permitted(permission: CreditexPermission) { return Boolean(session && hasCreditexPermission(session, permission)); }
   function canAccessTab(next: WorkspaceTab) {
-    if (['home', 'profile', 'settings', 'notifications'].includes(next)) return true;
+    if (['home', 'profile', 'settings'].includes(next)) return true;
     if (next === 'connect') return permitted('customers') || permitted('messages');
     if (next === 'map') return permitted('customers') || permitted('jobs');
     if (next === 'forms') return permitted('jobs') || permitted('forms');
@@ -1153,7 +1151,7 @@ export function CreditexCompliancePortal() {
     >
       <PortalWorkspaceHeader context="Compliance workspace" organisation={session.organisation.tradingName || session.organisation.legalName} displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences}
         onSearch={query => { if (tab === "cases" && auditDirty.current && !window.confirm("Discard the unsaved audit answers?")) return false; if (!selectTab("cases")) return false; auditDirty.current = false; setJobTarget(null); setJobSearch(current => ({ query, nonce: current.nonce + 1 })); return true; }}
-        notificationCount={notifications.unreadCount} onNotifications={() => selectTab('notifications')} onProfile={() => selectTab('profile')} onSettings={() => selectTab("settings")} onSignOut={() => { if (!callActive.current || window.confirm("End the active customer call and sign out?")) void signOut(firebaseAuth); }} />
+        notificationControl={<CreditexNotifications key={user.uid} user={user} onOpen={openNotification}/>} onProfile={() => selectTab('profile')} onSettings={() => selectTab("settings")} onSignOut={() => { if (!callActive.current || window.confirm("End the active customer call and sign out?")) void signOut(firebaseAuth); }} />
       <div className={styles.frame}>
         <aside className={styles.sidebar} aria-label="Creditex navigation">
           <label className={styles.mobileNavigation}>
@@ -1162,7 +1160,6 @@ export function CreditexCompliancePortal() {
               const next = visibleTabs.find((item) => item.id === event.target.value);
               if (next) selectTab(next.id);
             }}>
-              {tab === 'notifications' && <option value="notifications">Notifications</option>}
               {visibleTabs.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
           </label>
@@ -1234,7 +1231,6 @@ export function CreditexCompliancePortal() {
         {tab === "home" && <section id="creditex-panel-home" role="tabpanel" aria-labelledby="creditex-tab-home"><CreditexHomeDashboard user={user} canManageTeam={permitted('team_access')} onNavigate={selectTab} canAccess={canAccessTab} /></section>}
         {tab === "connect" && <section id="creditex-panel-connect" role="tabpanel" aria-labelledby="creditex-tab-connect"><PortalConnectWorkspace key={`${user.uid}:${connectTarget.nonce}`} workspace="creditex" user={user} initialIntentId={connectTarget.intentId} initialPeerId={connectTarget.peerId} canViewCustomers={permitted('customers')} canMessageTeam={permitted('messages')} onActiveChange={reportCallActive}/></section>}
         {tab === "tasks" && <section id="creditex-panel-tasks" role="tabpanel" aria-labelledby="creditex-tab-tasks"><PortalTeamWorkspace key={`${user.uid}:${taskTarget}`} workspace="creditex" user={user} view="tasks" initialTaskId={taskTarget}/></section>}
-        {tab === 'notifications' && <section role="region" aria-label="Notifications"><CreditexNotificationInbox controller={notifications} onOpen={openNotification}/></section>}
         {tab === 'profile' && <section id="creditex-panel-profile" role="tabpanel" aria-labelledby="creditex-tab-profile"><PortalWorkspacePreferences controller={preferences}/></section>}
         {tab === 'customers' && <section id="creditex-panel-customers" role="tabpanel" aria-labelledby="creditex-tab-customers"><CreditexCustomerDirectory user={user} initialCustomerId={customerTarget} onOpenJob={openJob} onContact={openContact} canOpenJobs={permitted('jobs')}/></section>}
         {tab === 'calculator' && <section className={styles.calculatorPanel} id="creditex-panel-calculator" role="tabpanel" aria-labelledby="creditex-tab-calculator"><h1>Calculator</h1><CreditexAllProgramCalculator api={api} role={session.role}/></section>}

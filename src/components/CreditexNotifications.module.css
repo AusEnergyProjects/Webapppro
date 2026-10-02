@@ -1,0 +1,30 @@
+.control { position: relative; flex: 0 0 auto; z-index: 32; }
+.control .trigger { display: flex; align-items: center; justify-content: center; position: relative; width: 44px; height: 44px; padding: 8px; }
+.trigger svg { width: 22px; height: 22px; }
+.trigger strong { position: absolute; top: -5px; right: -5px; min-width: 18px; padding: 2px 4px; border-radius: 15px; background: #f6d776; color: #243d3f; font-size: .68rem; }
+.popover { position: absolute; top: calc(100% + 10px); right: 0; transform: translateX(var(--notification-offset, 0px)); z-index: 2; display: flex; flex-direction: column; width: min(420px, calc(100vw - 24px)); max-height: min(600px, var(--notification-space, 66vh)); overflow: hidden; border: 1px solid var(--portal-line); border-radius: 15px; background: var(--portal-surface); color: var(--portal-ink); box-shadow: 0 22px 64px #00161f52; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 13px 15px; border-bottom: 1px solid var(--portal-line); }
+.heading > div:first-child { display: grid; gap: 2px; }
+.heading span { color: var(--portal-muted); font-size: .65rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.heading strong { font-size: 1rem; }
+.actions { display: flex; gap: 8px; }
+.popover button { color: var(--portal-ink); background: var(--portal-surface); border: 1px solid var(--portal-line); font-size: .78rem; padding: 7px 9px; border-radius: 7px; cursor: pointer; }
+.popover button:hover { background: var(--portal-bg); }
+.popover button:focus-visible { outline: 3px solid var(--portal-green); outline-offset: -3px; }
+.popover button:disabled { opacity: .55; cursor: default; }
+.list { overflow-y: auto; min-height: 0; padding: 7px; }
+.list .item { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: start; gap: 9px; width: 100%; padding: 11px 10px; text-align: left; white-space: normal; border: 1px solid transparent; border-radius: 10px; }
+.list .unread { background: var(--portal-bg); }
+.item > span:last-child { display: grid; gap: 3px; overflow-wrap: anywhere; }
+.item strong { font-size: .86rem; }
+.item small { color: var(--portal-muted); font-size: .8rem; font-weight: 400; line-height: 1.4; }
+.item em { color: var(--portal-muted); font-size: .7rem; font-style: normal; font-weight: 400; }
+.dot { width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; }
+.unread .dot { background: var(--portal-green); }
+.empty { display: grid; gap: 6px; min-height: 140px; place-content: center; text-align: center; padding: 16px; }
+.empty span { color: var(--portal-muted); max-width: 280px; font-size: .82rem; line-height: 1.4; }
+.list > p { margin: 0; padding: 12px; font-size: .82rem; }
+.error { color: var(--portal-error-ink); }
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 12px; border-top: 1px solid var(--portal-line); font-size: .75rem; }
+.control .dismiss { position: fixed; inset: 0; z-index: 1; width: 100vw; height: 100dvh; min-height: 0; padding: 0; border: 0; border-radius: 0; background: #0011196b; cursor: default; }
+.control .dismiss:hover { background: #0011196b; }

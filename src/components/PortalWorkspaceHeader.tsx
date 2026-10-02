@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { AeaProductLink, TLinkBrand } from "./TLinkChrome";
 import type { PortalWorkspacePreferencesController } from "./PortalWorkspacePreferences";
 import styles from "./PortalWorkspaceHeader.module.css";
 import { PortalProfileAvatar } from './PortalProfileAvatar';
 
-export function PortalWorkspaceHeader({ context, organisation, displayName, preferences, onSearch, onNotifications, notificationCount, onSettings, onProfile, onSignOut }: {
+export function PortalWorkspaceHeader({ context, organisation, displayName, preferences, onSearch, onNotifications, notificationCount, notificationControl, onSettings, onProfile, onSignOut }: {
   context: string; organisation: string; displayName: string;
   preferences: PortalWorkspacePreferencesController;
-  onSearch: (query: string) => boolean; onNotifications: () => void; notificationCount?: number;
+  onSearch: (query: string) => boolean; onNotifications?: () => void; notificationCount?: number; notificationControl?: ReactNode;
   onSettings: () => void; onProfile?: () => void; onSignOut: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -43,9 +43,9 @@ export function PortalWorkspaceHeader({ context, organisation, displayName, pref
         <button type="submit" aria-label="Search workspace">Search</button><kbd>Ctrl K</kbd>
       </form>
       <div className={styles.actions}>
-        <button type="button" className={styles.bell} aria-label={notificationCount === undefined ? "Open notifications" : `Open inbox, ${notificationCount} unread alerts`} title="Notifications" onClick={onNotifications}>
+        {notificationControl ?? (onNotifications && <button type="button" className={styles.bell} aria-label={notificationCount === undefined ? "Open notifications" : `Open inbox, ${notificationCount} unread alerts`} title="Notifications" onClick={onNotifications}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0v7l-2 3h16l-2-3zM10 21h4M12 1v1"/></svg>{notificationCount !== undefined && notificationCount > 0 && <strong>{notificationCount}</strong>}
-        </button>
+        </button>)}
         <button type="button" className={styles.mode} aria-label="Night mode" aria-pressed={night} title={night ? "Switch to day mode" : "Switch to night mode"} disabled={preferences.loading || preferences.savingProfile} onClick={() => void preferences.saveProfile({ ...preferences.profile, colourMode: night ? "day" : "night" })}>
           <span data-selected={!night}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.3"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg></span>
           <span data-selected={night}><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.4 15.1A8.7 8.7 0 0 1 8.9 3.6 8.8 8.8 0 1 0 20.4 15.1Z"/></svg></span>

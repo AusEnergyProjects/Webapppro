@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
 
-const source = readFileSync(new URL('../src/components/CreditexNotificationInbox.tsx', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/components/CreditexNotifications.tsx', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function harness() {
@@ -18,7 +18,10 @@ function harness() {
     useEffect(fn, deps) { const i = cursor++; if (!changed(effects[i]?.deps, deps)) return; effects[i]?.cleanup?.(); effects[i] = { deps }; queued.push(() => { effects[i].cleanup = fn(); }); },
   };
   const document = { visibilityState: 'visible', addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) };
-  const window = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) };
+  const window = { innerWidth: 390, innerHeight: 740, addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) };
+  const focused = [], properties = new Map();
+  const trigger = { focus: () => focused.push('trigger'), getBoundingClientRect: () => ({right:58,bottom:170}) };
+  const dialog = { focus: () => focused.push('dialog'), offsetWidth:366, style:{setProperty:(key,value)=>properties.set(key,value)} };
   const fetch = (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve: data => resolve(Response.json({ ok: true, ...data })), reject }));
   const exported = {};
   new Function('require', 'exports', 'document', 'window', 'fetch', 'setInterval', 'clearInterval', compiled)(name => {
@@ -28,8 +31,9 @@ function harness() {
     throw new Error(name);
   }, exported, document, window, fetch, fn => { intervals.set(++nextInterval, fn); return nextInterval; }, id => intervals.delete(id));
   const user = { uid: 'one', getIdToken: async () => 'token-one' };
-  return { user, requests, intervals, listeners, document, exported,
+  return { user, requests, intervals, listeners, document, exported, focused, properties,
     render(value = user) { cursor = 0; const result = exported.useCreditexNotifications(value); for (const fn of queued.splice(0)) fn(); return result; },
+    renderPopover(onOpen = () => true) { cursor = 0; const tree = exported.CreditexNotifications({user,onOpen}); for (const node of nodes(tree,n=>n.props?.ref)) node.props.ref.current = node.type === 'button' ? trigger : dialog; for (const fn of queued.splice(0)) fn(); return tree; },
     cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
 }
 const list = count => ({ unreadCount: count, total: count, items: [], page: 1, totalPages: 1 });
@@ -62,16 +66,39 @@ test('duplicate notification writes are blocked and in-flight reads cannot resur
   c = h.render(); await flush(); assert.equal(c.unreadCount, 3); h.requests[3].resolve(list(2)); await flush(); c = h.render(); assert.equal(c.unreadCount, 2); h.cleanup();
 });
 
-test('opening inbox does not mark all read; guarded navigation and explicit dismissal use exact event IDs', () => {
-  const h = harness(); const updates = [], opened = [];
+test('bell toggles a compact non-modal dropdown with Escape, outside close and focus restoration', async () => {
+  const h=harness(); let tree=h.renderPopover(); await flush(); h.requests[0].resolve(list(3)); await flush(); tree=h.renderPopover();
+  const trigger=()=>nodes(tree,n=>n.props?.['aria-haspopup']==='dialog')[0];
+  assert.equal(trigger().props['aria-expanded'],false); assert.equal(nodes(tree,n=>n.props?.role==='dialog').length,0);
+  trigger().props.onClick();tree=h.renderPopover();
+  const dialog=nodes(tree,n=>n.props?.role==='dialog')[0]; assert.ok(dialog);assert.equal(dialog.props['aria-modal'],'false');
+  assert.equal(trigger().props['aria-expanded'],true);assert.equal(h.focused.at(-1),'dialog');
+  assert.equal(h.properties.get('--notification-offset'),'320px','popover stays inside a narrow screen');
+  assert.equal(h.requests.filter(r=>r.options.method==='POST').length,0);
+  h.listeners.get('keydown')({key:'Escape',preventDefault(){}});tree=h.renderPopover();assert.equal(trigger().props['aria-expanded'],false);assert.equal(h.focused.at(-1),'trigger');
+  trigger().props.onClick();tree=h.renderPopover();nodes(tree,n=>n.props?.className==='dismiss')[0].props.onClick();tree=h.renderPopover();assert.equal(trigger().props['aria-expanded'],false);
+  trigger().props.onClick();tree=h.renderPopover();trigger().props.onClick();tree=h.renderPopover();assert.equal(nodes(tree,n=>n.props?.role==='dialog').length,0);
+  h.cleanup();assert.equal(h.listeners.size,0);
+});
+
+test('opening updates preserves unread receipts; rejected navigation stays open and accepted navigation marks the exact event', async () => {
+  const h = harness(); const opened = []; let allow = false;
   const item = { id: 'message:1', type: 'message', title: 'New team message', detail: 'Peer: hello', createdAt: '2026-10-02T01:00:00.000Z', read: false, target: { kind: 'message', peerId: 'peer' } };
-  const controller = { data: { ...list(1), items: [item] }, filter: 'unread', error: '', busy: false, refresh() {}, setFilter() {}, setPage() {}, update: (...args) => { updates.push(args); } };
-  let tree = h.exported.CreditexNotificationInbox({ controller, onOpen: target => { opened.push(target); return false; } });
-  assert.equal(updates.length, 0);
-  const open = nodes(tree, node => node.type === 'button' && node.props.className === 'open')[0]; open.props.onClick();
-  assert.deepEqual(opened, [item.target]); assert.equal(updates.length, 0);
-  tree = h.exported.CreditexNotificationInbox({ controller, onOpen: () => true });
-  nodes(tree, node => node.type === 'button' && node.props.className === 'open')[0].props.onClick();
-  nodes(tree, node => node.type === 'button' && text(node) === 'Dismiss')[0].props.onClick();
-  assert.deepEqual(updates, [['read', ['message:1']], ['dismiss', ['message:1']]]);
+  const render=()=>h.renderPopover(target=>{opened.push(target);return allow;});
+  let tree=render();await flush();h.requests[0].resolve({...list(1),items:[item]});await flush();tree=render();
+  nodes(tree,n=>n.props?.['aria-haspopup']==='dialog')[0].props.onClick();tree=render();
+  nodes(tree,n=>n.props?.className==='item unread')[0].props.onClick();tree=render();await flush();
+  assert.deepEqual(opened,[item.target]);assert.equal(h.requests.filter(r=>r.options.method==='POST').length,0);assert.ok(nodes(tree,n=>n.props?.role==='dialog')[0]);
+  allow=true;nodes(tree,n=>n.props?.className==='item unread')[0].props.onClick();tree=render();await flush();
+  assert.equal(nodes(tree,n=>n.props?.role==='dialog').length,0);
+  const write=h.requests.find(r=>r.options.method==='POST');assert.deepEqual(JSON.parse(write.options.body),{action:'read',ids:['message:1']});write.resolve({});await flush();h.cleanup();
+});
+
+test('Clear marks only shown unread events and leaves read history available',async()=>{
+  const h=harness();let tree=h.renderPopover();await flush();
+  const item={id:'job:1',title:'Job completed',detail:'Ready for audit',createdAt:'2026-10-02T01:00:00Z',read:false,target:{kind:'job',intentId:'1'}};
+  h.requests[0].resolve({...list(2),items:[item,{...item,id:'job:2',read:true}]});await flush();tree=h.renderPopover();
+  assert.match(h.requests[0].url,/filter=all/);nodes(tree,n=>n.props?.['aria-haspopup']==='dialog')[0].props.onClick();tree=h.renderPopover();
+  nodes(tree,n=>n.type==='button'&&text(n)==='Clear')[0].props.onClick();await flush();
+  const write=h.requests.find(r=>r.options.method==='POST');assert.deepEqual(JSON.parse(write.options.body),{action:'read',ids:['job:1']});write.resolve({});await flush();h.cleanup();
 });

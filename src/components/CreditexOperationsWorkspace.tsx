@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CREDITEX_PERMISSION_GROUPS, creditexRolePermissions, resolveCreditexPermissions, type CreditexPermission } from "@/lib/creditex-permissions";
 import styles from "./CreditexOperationsWorkspace.module.css";
@@ -210,6 +210,16 @@ function PermissionFields({ role, permissions, disabled, onChange }: {
   </div>;
 }
 
+function trapTeamDialogKey(event: KeyboardEvent<HTMLElement>, close: () => void) {
+  if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'));
+  if (!focusable.length) { event.preventDefault(); event.currentTarget.focus(); return; }
+  const first = focusable[0]; const last = focusable[focusable.length - 1];
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === event.currentTarget)) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
+
 export function CreditexTeamAccess({ session, onSessionChanged }: { session: WorkspaceSession; onSessionChanged?: () => Promise<void> }) {
   const [access, setAccess] = useState<AccessSnapshot>(EMPTY_ACCESS);
   const [loading, setLoading] = useState(true);
@@ -247,14 +257,45 @@ function AccessView({
     displayName: "",
     email: "",
     role: "reviewer",
+    status: "active",
     permissions: creditexRolePermissions("reviewer"),
   });
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
-  const [memberDrafts, setMemberDrafts] = useState<
-    Record<string, { role: string; status: string; permissions: CreditexPermission[] }>
-  >({});
+  const [editing, setEditing] = useState<"new" | AccessMember | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), button:not([disabled])")?.focus();
+    });
+    return () => { window.cancelAnimationFrame(frame); document.body.style.overflow = previous; };
+  }, [editing]);
+
+  function openMemberDialog(member: "new" | AccessMember) {
+    if (busy || loading) return;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setActionError(""); setNotice("");
+    setForm(member === "new"
+      ? { displayName: "", email: "", role: "reviewer", status: "active", permissions: creditexRolePermissions("reviewer") }
+      : { displayName: member.displayName, email: member.email, role: member.role, status: member.status, permissions: [...member.permissions] });
+    setEditing(member);
+  }
+
+  function dismissMemberDialog() {
+    setEditing(null);
+    setActionError("");
+    window.requestAnimationFrame(() => restoreFocusRef.current?.focus());
+  }
+
+  function closeMemberDialog() {
+    if (!busy) dismissMemberDialog();
+  }
 
   async function accessAction(
     action: string,
@@ -284,47 +325,22 @@ function AccessView({
     }
   }
 
-  async function createInvitation(event: FormEvent<HTMLFormElement>) {
+  async function saveMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const created = await accessAction(
-      "create_invitation",
-      form,
-      `Invitation ready for ${form.displayName}. Give them the Creditex sign-in link and ask them to use ${form.email}. No invitation email was sent.`,
-    );
-    if (created) {
-      setForm({ displayName: "", email: "", role: "reviewer", permissions: creditexRolePermissions("reviewer") });
-    }
+    if (!editing || busy) return;
+    const saved = editing === "new"
+      ? await accessAction("create_invitation", {
+        displayName: form.displayName, email: form.email, role: form.role, permissions: form.permissions,
+      }, `Invitation ready for ${form.displayName}. Give them the Creditex sign-in link and ask them to use ${form.email}. No invitation email was sent.`)
+      : await accessAction("update_member_access", {
+        memberId: editing.id, role: form.role, status: form.status, permissions: form.permissions,
+      }, `Access updated for ${editing.displayName || editing.email}.`);
+    if (saved) dismissMemberDialog();
   }
 
   async function confirmNamedOwner() {
     const confirmed = await accessAction("confirm_named_owner", {}, "James Morris is now the named Creditex administrator for this login.");
     if (confirmed && onSessionChanged) await onSessionChanged();
-  }
-
-  async function updateMemberAccess(member: AccessMember) {
-    const draft = memberDrafts[member.id] || {
-      role: member.role,
-      status: member.status,
-      permissions: member.permissions,
-    };
-    if (
-      !window.confirm(
-        `Apply ${readable(draft.role)} and ${readable(draft.status)} access to ${member.displayName || member.email}?`,
-      )
-    ) return;
-    const updated = await accessAction("update_member_access", {
-      memberId: member.id,
-      role: draft.role,
-      status: draft.status,
-      permissions: draft.permissions,
-    }, "The named member access record was updated.");
-    if (updated) {
-      setMemberDrafts((current) => {
-        const next = { ...current };
-        delete next[member.id];
-        return next;
-      });
-    }
   }
 
   async function revokeInvitation(invitation: AccessInvitation) {
@@ -342,20 +358,21 @@ function AccessView({
     <section aria-labelledby="operations-access-title">
       <div className={styles.sectionHeader}>
         <div>
-          <h3 id="operations-access-title">Team access</h3>
+          <h3 id="operations-access-title">Your team</h3>
           <p>
             Invite people, choose their tools and control what each team member can do.
           </p>
         </div>
         {session.role === "admin" && (
-          <button
+          <div className={styles.actions}><button
             className={styles.refreshButton}
             type="button"
-            disabled={loading}
+            disabled={loading || Boolean(busy)}
             onClick={onRefresh}
           >
-            {loading ? "Refreshing..." : "Refresh access"}
+            {loading ? "Refreshing..." : "Refresh"}
           </button>
+          <button type="button" className={styles.primaryAction} disabled={loading || Boolean(busy)} onClick={() => openMemberDialog("new")}>Add team member</button></div>
         )}
       </div>
       {session.canConfirmNamedOwner && <div className={styles.accessPolicy}>
@@ -364,26 +381,6 @@ function AccessView({
         <p>Actions remain attributed to your verified login. Independent regulator and source approvals still require their separate reviewer.</p>
         <button type="button" disabled={Boolean(busy) || loading} onClick={() => void confirmNamedOwner()}>{busy === "confirm_named_owner" ? "Confirming James Morris..." : "Confirm James Morris as administrator"}</button>
       </div>}
-      {session.namedOwnerConfirmed && <div className={styles.accessPolicy}><strong>James Morris · Creditex Administrator</strong><p>Your existing {session.email} login has named manager access, including form editing and team access management.</p></div>}
-      <div className={styles.accessPolicy}>
-        <strong>Individual accounts, clear access</strong>
-        <p>Choose a role, then adjust the permissions below. Give the person <a href="/creditex/compliance" target="_blank" rel="noreferrer">the Creditex sign-in link</a> and ask them to use their invited email. No invitation email is sent automatically.</p>
-        <p>Access stays limited to their authorised jobs and organisation. Permissions never bypass independent compliance approvals.</p>
-      </div>
-      <details className={styles.accessPolicy}>
-        <summary>Initial administrator setup</summary>
-        <span>Initial owner invitation</span>
-        <strong>
-          {access.ownerEmail || "info@ausenergyassessments.com"}
-        </strong>
-        <p>
-          This address establishes the first administrator. It is not a shared
-          Creditex login. The administrator must invite each team member by
-          their own verified email and assign the role they need. Keep at least
-          two named administrators for continuity. A confirmed named owner can
-          keep using this account as their individual manager login.
-        </p>
-      </details>
       {session.role !== "admin" && (
         <EmptyState>
           Your {readable(session.role)} role can use operational work areas but
@@ -396,198 +393,78 @@ function AccessView({
       {session.role === "admin" && notice && (
         <p className={styles.success} role="status">{notice}</p>
       )}
-      {session.role === "admin" && actionError && (
+      {session.role === "admin" && actionError && !editing && (
         <p className={styles.error} role="alert">{actionError}</p>
       )}
-      {session.role === "admin" && (
-        <form className={styles.localForm} onSubmit={createInvitation}>
-          <div className={`${styles.formIntro} ${styles.formWide}`}>
-            <strong>Invite a named team member</strong>
-            <p>
-              Enter one person&apos;s full name and individual verified email.
-              Shared or role-based mailboxes are rejected by the access API.
-            </p>
-          </div>
-          <label>
-            Full name
-            <input
-              required
-              maxLength={180}
-              autoComplete="name"
-              value={form.displayName}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  displayName: event.target.value,
-                }))}
-            />
-          </label>
-          <label>
-            Individual email
-            <input
-              required
-              type="email"
-              maxLength={320}
-              autoComplete="email"
-              value={form.email}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  email: event.target.value,
-                }))}
-            />
-          </label>
-          <label>
-            Role preset
-            <select
-              value={form.role}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  role: event.target.value,
-                  permissions: creditexRolePermissions(event.target.value),
-                }))}
-            >
-              <option value="case_manager">Case manager</option>
-              <option value="reviewer">Reviewer</option>
-              <option value="auditor">Auditor</option>
-              <option value="admin">Administrator</option>
-            </select>
-          </label>
-          <div className={styles.formWide}><PermissionFields role={form.role} permissions={form.permissions} disabled={Boolean(busy)} onChange={permissions => setForm(current => ({ ...current, permissions }))} /></div>
-          <button
-            className={styles.primaryAction}
-            type="submit"
-            disabled={Boolean(busy) || loading}
-          >
-            {busy === "create_invitation"
-              ? "Creating invitation..."
-              : "Create named invitation"}
-          </button>
-        </form>
-      )}
-      {session.role === "admin" && (
+      {session.role === "admin" && <>
         <div className={styles.splitColumns}>
           <div>
-            <h4 className={styles.subheading}>Named members</h4>
+            <h4 className={styles.subheading}>Team members</h4>
             <div className={styles.compactList}>
-              {access.members.map((member) => {
-                const draft = memberDrafts[member.id] || {
-                  role: member.role,
-                  status: member.status,
-                  permissions: member.permissions,
-                };
-                const changed = draft.role !== member.role
-                  || draft.status !== member.status
-                  || JSON.stringify(draft.permissions) !== JSON.stringify(member.permissions);
-                const bootstrapMailbox =
-                  member.email.toLowerCase()
-                  === "info@ausenergyassessments.com";
-                return (
-                  <article key={member.id}>
-                    <span>
-                      <strong>{member.displayName || member.email}</strong>
-                      <StatusPill value={member.status} />
-                    </span>
-                    <p>{member.email} | {readable(member.role)}</p>
-                    <small>
-                      Last login {dateTime(member.lastLoginAt)}
-                      {bootstrapMailbox ? " | Initial owner account" : ""}
-                    </small>
-                    <div className={styles.memberAccessControls}>
-                      <label>
-                        Role preset
-                        <select
-                          value={draft.role}
-                          onChange={(event) =>
-                            setMemberDrafts((current) => ({
-                              ...current,
-                              [member.id]: {
-                                ...draft,
-                                role: event.target.value,
-                                permissions: creditexRolePermissions(event.target.value),
-                              },
-                            }))}
-                        >
-                          <option value="case_manager">Case manager</option>
-                          <option value="reviewer">Reviewer</option>
-                          <option value="auditor">Auditor</option>
-                          <option value="admin">Administrator</option>
-                        </select>
-                      </label>
-                      <label>
-                        Access state
-                        <select
-                          value={draft.status}
-                          onChange={(event) =>
-                            setMemberDrafts((current) => ({
-                              ...current,
-                              [member.id]: {
-                                ...draft,
-                                status: event.target.value,
-                              },
-                            }))}
-                        >
-                          <option value="active">Active</option>
-                          <option value="suspended">Suspended</option>
-                        </select>
-                      </label>
-                      <details className={styles.memberPermissions}>
-                        <summary>Permissions ({draft.permissions.length} of {creditexRolePermissions(draft.role).length})</summary>
-                        <PermissionFields role={draft.role} permissions={draft.permissions} disabled={Boolean(busy)} onChange={permissions => setMemberDrafts(current => ({ ...current, [member.id]: { ...draft, permissions } }))} />
-                      </details>
-                      <button
-                        className={styles.inlineAction}
-                        type="button"
-                        disabled={!changed || Boolean(busy) || loading}
-                        onClick={() => void updateMemberAccess(member)}
-                      >
-                        Apply access change
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-              {access.loaded && !access.members.length && (
-                <EmptyState>No active member records were returned.</EmptyState>
-              )}
-              {!access.loaded && !loading && !error && (
-                <EmptyState>Open this view to load access records.</EmptyState>
-              )}
+              {access.members.map(member => <article key={member.id}>
+                <span><strong>{member.displayName || member.email}</strong><StatusPill value={member.status} /></span>
+                <p>{member.email} | {readable(member.role)}</p>
+                <small>Last login {dateTime(member.lastLoginAt)}</small>
+                <small>{member.permissions.length} permissions enabled</small>
+                <button className={styles.inlineAction} type="button" disabled={Boolean(busy) || loading}
+                  aria-label={`Open details for ${member.displayName || member.email}`} onClick={() => openMemberDialog(member)}>Open details</button>
+              </article>)}
+              {loading && !access.loaded && <EmptyState>Loading your team...</EmptyState>}
+              {access.loaded && !access.members.length && <EmptyState>No team members yet.</EmptyState>}
             </div>
           </div>
           <div>
             <h4 className={styles.subheading}>Invitations</h4>
             <div className={styles.compactList}>
-              {access.invitations.map((invitation) => (
-                <article key={invitation.id}>
-                  <span>
-                    <strong>{invitation.displayName || invitation.email}</strong>
-                    <StatusPill value={invitation.status} />
-                  </span>
-                  <p>{invitation.email} | {readable(invitation.role)}</p>
-                  <small>Expires {dateTime(invitation.expiresAt)}</small>
-                  <details className={styles.memberPermissions}><summary>Permissions ({invitation.permissions.length})</summary><PermissionFields role={invitation.role} permissions={invitation.permissions} disabled onChange={() => {}} /></details>
-                  {invitation.status === "pending" && (
-                    <button
-                      className={styles.inlineAction}
-                      type="button"
-                      disabled={busy === "revoke_invitation"}
-                      onClick={() =>
-                        void revokeInvitation(invitation)}
-                    >
-                      Revoke invitation
-                    </button>
-                  )}
-                </article>
-              ))}
-              {access.loaded && !access.invitations.length && (
-                <EmptyState>No invitation records were returned.</EmptyState>
-              )}
+              {access.invitations.map(invitation => <article key={invitation.id}>
+                <span><strong>{invitation.displayName || invitation.email}</strong><StatusPill value={invitation.status} /></span>
+                <p>{invitation.email} | {readable(invitation.role)}</p>
+                <small>Expires {dateTime(invitation.expiresAt)}</small>
+                <details className={styles.memberPermissions}><summary>Permissions ({invitation.permissions.length})</summary><PermissionFields role={invitation.role} permissions={invitation.permissions} disabled onChange={() => {}} /></details>
+                {invitation.status === "pending" && <button className={styles.inlineAction} type="button" disabled={Boolean(busy)} onClick={() => void revokeInvitation(invitation)}>Revoke invitation</button>}
+              </article>)}
+              {access.loaded && !access.invitations.length && <EmptyState>No invitations yet. Add a team member to get started.</EmptyState>}
             </div>
           </div>
         </div>
-      )}
+        <details className={styles.accessPolicy}>
+          <summary>Account and invitation help</summary>
+          <p>Give each invited person <a href="/creditex/compliance" target="_blank" rel="noreferrer">the Creditex sign-in link</a> and ask them to use their invited email. No invitation email is sent automatically.</p>
+          {session.namedOwnerConfirmed && <><strong>James Morris · Creditex Administrator</strong><p>Your {session.email} login has named manager access.</p></>}
+          <p>The initial owner invitation is {access.ownerEmail || "info@ausenergyassessments.com"}. It is not a shared Creditex login. Invite each team member with their own verified email. Keep at least
+            two named administrators for continuity. A confirmed named owner can
+            keep using this account as their individual manager login.</p>
+        </details>
+      </>}
+      {session.role === "admin" && editing && <div className={styles.backdrop} onMouseDown={event => { if (event.target === event.currentTarget) closeMemberDialog(); }}>
+        <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="creditex-team-member-title" tabIndex={-1} onKeyDown={event => trapTeamDialogKey(event, closeMemberDialog)}>
+          <header className={styles.dialogHeader}>
+            <div><span>{editing === "new" ? "Add team member" : "Edit team member"}</span><h4 id="creditex-team-member-title">Person and access</h4></div>
+            <button type="button" className={styles.iconButton} aria-label="Close team member" disabled={Boolean(busy)} onClick={closeMemberDialog}>×</button>
+          </header>
+          <form className={styles.localForm} onSubmit={saveMember}>
+            {editing === "new" ? <>
+              <label>Full name<input required maxLength={180} autoComplete="name" disabled={Boolean(busy)} value={form.displayName} onChange={event => setForm(current => ({ ...current, displayName: event.target.value }))} /></label>
+              <label>Individual email<input required type="email" maxLength={320} autoComplete="email" disabled={Boolean(busy)} value={form.email} onChange={event => setForm(current => ({ ...current, email: event.target.value }))} /></label>
+              <p className={styles.formHint}>Use the person&apos;s own verified email. Shared or role-based mailboxes are rejected. After saving, give them the Creditex sign-in link. No invitation email is sent automatically.</p>
+            </> : <div className={styles.memberIdentity}><strong>{editing.displayName || editing.email}</strong><span>{editing.email}</span></div>}
+            <div className={styles.memberAccessControls}>
+              <label>Role preset<select value={form.role} disabled={Boolean(busy)} onChange={event => setForm(current => ({ ...current, role: event.target.value, permissions: creditexRolePermissions(event.target.value) }))}>
+                <option value="case_manager">Case manager</option><option value="reviewer">Reviewer</option><option value="auditor">Auditor</option><option value="admin">Administrator</option>
+              </select></label>
+              {editing !== "new" && <label>Access state<select value={form.status} disabled={Boolean(busy)} onChange={event => setForm(current => ({ ...current, status: event.target.value }))}>
+                <option value="active">Active</option><option value="suspended">Suspended</option>
+              </select></label>}
+            </div>
+            <div className={styles.formWide}><PermissionFields role={form.role} permissions={form.permissions} disabled={Boolean(busy)} onChange={permissions => setForm(current => ({ ...current, permissions }))} /></div>
+            {actionError && <p className={styles.error} role="alert">{actionError}</p>}
+            <div className={styles.dialogActions}>
+              <button className={styles.primaryAction} type="submit" disabled={Boolean(busy) || loading}>{busy ? "Saving..." : editing === "new" ? "Add team member" : "Save changes"}</button>
+              <button className={styles.refreshButton} type="button" disabled={Boolean(busy)} onClick={closeMemberDialog}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>}
     </section>
   );
 }
