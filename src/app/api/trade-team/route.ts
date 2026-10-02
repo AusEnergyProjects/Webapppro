@@ -487,7 +487,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       CASE WHEN status = 'active' THEN ${tradeTeamPresenceStatusSql("trade_team_members.id", "trade_team_members.owner_uid")} ELSE NULL END presence,
       (SELECT COUNT(*) FROM trade_team_member_files file
         WHERE file.owner_uid = trade_team_members.owner_uid AND file.team_member_id = trade_team_members.id
-          AND file.status = 'active') file_count,
+          AND file.status = 'active' AND file.owner_private = 0) file_count,
       EXISTS(SELECT 1 FROM trade_team_invites i WHERE i.team_member_id = trade_team_members.id AND i.consumed_at = '' AND i.expires_at > ?) invite_pending
     FROM trade_team_members WHERE ${where}
     ORDER BY status = 'active' DESC, display_name COLLATE NOCASE, email COLLATE NOCASE, id

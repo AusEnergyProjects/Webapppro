@@ -180,8 +180,8 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 233);
-  assert.match(completeMigrationChain.at(-1), /^0233_trade_job_swms\.sql$/);
+  assert.equal(completeMigrationChain.length, 235);
+  assert.match(completeMigrationChain.at(-1), /^0235_trade_member_engagement\.sql$/);
   assert.match(completeMigrationChain[0], /^0000_/);
   assert.ok(
     completeMigrationChain.includes("0190_trade_activity_master_drafts.sql"),

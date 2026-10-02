@@ -142,7 +142,7 @@ function fixture() {
     CREATE TABLE trade_field_sessions (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
       status text NOT NULL, revoked_at text NOT NULL, updated_at text NOT NULL);
     CREATE TABLE trade_team_member_files (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
-      status text NOT NULL, created_at text NOT NULL);
+      status text NOT NULL, created_at text NOT NULL, owner_private integer NOT NULL DEFAULT 0);
     CREATE TABLE trade_team_member_credentials (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
       credential_type text NOT NULL, name text NOT NULL, credential_number text NOT NULL, issuer text NOT NULL,
       jurisdiction text NOT NULL, expires_at text NOT NULL, status text NOT NULL, file_id text NOT NULL,
@@ -174,7 +174,7 @@ function fixture() {
     INSERT INTO trade_field_access_codes VALUES ('field-code-1', 'owner-1', 'target-1', 'active', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_field_sessions VALUES ('field-session-1', 'owner-1', 'target-1', 'active', '', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_team_invites VALUES ('invite-1', 'target-1', 'owner-1', 'hash', '2026-09-12T00:00:00.000Z', '', '2026-08-12T00:00:00.000Z');
-    INSERT INTO trade_team_member_files VALUES ('file-1', 'owner-1', 'target-1', 'active', '2026-08-12T00:00:00.000Z');
+    INSERT INTO trade_team_member_files VALUES ('file-1', 'owner-1', 'target-1', 'active', '2026-08-12T00:00:00.000Z', 0);
     INSERT INTO trade_team_member_credentials VALUES ('credential-1', 'owner-1', 'target-1', 'licence', 'Licence', 'L1', 'Issuer', 'VIC', '', 'active', 'file-1', '2026-08-12T00:00:00.000Z', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_work_orders VALUES ('job-1', 'owner-1', 'target-1');
   `);
@@ -187,6 +187,21 @@ async function patch(route, body) {
     method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
   }));
 }
+
+test("general roster document totals exclude owner-private onboarding files", async () => {
+  const database = fixture();
+  try {
+    database.exec("INSERT INTO trade_team_member_files(id,owner_uid,team_member_id,status,created_at,owner_private) VALUES ('private-contract', 'owner-1', 'target-1', 'active', '2026-08-12T00:00:00.000Z', 1)");
+    for (const access of [managerAccess, { ...managerAccess, actorUid: "owner-1", memberId: "owner-member", isOwner: true }]) {
+      const route = loadRoute(database, [], access);
+      const response = await route.GET(new Request("https://test/api/trade-team"));
+      const result = await response.json();
+      assert.equal(response.status, 200, result.error);
+      assert.equal(result.members.find(member => member.id === "target-1").fileCount, 1);
+      assert.doesNotMatch(JSON.stringify(result), /private-contract/);
+    }
+  } finally { database.close(); }
+});
 
 async function post(route, body) {
   return route.POST(new Request("https://test/api/trade-team", {

@@ -259,6 +259,7 @@ test("archived member documents remain readable and downloadable only within aut
     INSERT INTO trade_team_member_files VALUES ('file-1','owner-1','member-1','insurance','','Insurance','2027-01-31',
       'insurance.pdf','application/pdf',100,'hash','team/file-1','active',0,'','','owner-1','2026-08-13','2026-08-13','');
     INSERT INTO trade_team_member_credentials VALUES ('credential-1','file-1','owner-1','member-1','licence','Licence','L123','Issuer','VIC','','active','2026-08-13');
+    ALTER TABLE trade_team_member_files ADD COLUMN owner_private INTEGER NOT NULL DEFAULT 0 CHECK(owner_private IN (0,1));
   `);
   let access = { ownerUid: "owner-1", actorUid: "owner-1", isOwner: true, canManageTeam: false };
   let beforeBatch; let deletedObjects = 0; let uploadedObjects = 0;

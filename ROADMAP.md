@@ -24,6 +24,8 @@ Source baseline `ca7ce51` includes form-driven progress, per-page timing, crew s
 
 ### Current delivery and remaining proof
 
+The active scope is team onboarding and everyday tasks, plus the user's added private pay/onboarding records. Clear joining/training/crew/schedule next steps, self/team assignment and owner-only engagement records are implemented in source with migrations 0234/0235; publication and live proof are tracked separately in `C:/Webproject/outputs/tlink-team-tasks-20261002/`. Employment type stays separate from pay basis. Payroll calculation, automated payments, contract signing, broader AI work and provider integration changes are not part of this milestone.
+
 The quote-aware scheduling queue and quiet Lost archive were released in Sites 730. The default optional SWMS was released in Sites 731 from 3cf7138. This source milestone completes the following six workflow changes; release receipts and live checks are recorded separately in C:/Webproject/outputs/tlink-workflow-cleanup-20261002/.
 
 1. **One field workflow.** Staff Home, Jobs and Files replace duplicate field destinations; native job files are primary and manual time is optional. Existing handover history, service schedules and corrections remain accessible without a customer portal.

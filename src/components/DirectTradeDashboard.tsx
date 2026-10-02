@@ -70,7 +70,7 @@ const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspac
 const TradeFinanceWorkspace = dynamic(() => import("./TradeFinanceWorkspace").then((module) => module.TradeFinanceWorkspace));
 const TradeRebateCalculatorWorkspace = dynamic(() => import("./TradeRebateCalculatorWorkspace").then((module) => module.TradeRebateCalculatorWorkspace));
 const TradeTeamSettings = dynamic(() => import("./TradeTeamSettings").then((module) => module.TradeTeamSettings));
-const TradeTrainingWorkspace = dynamic(() => import("./TradeTrainingWorkspace").then((module) => module.TradeTrainingWorkspace), { loading: () => <p role="status">Loading training and onboarding...</p> });
+const TradeTasksAndTraining = dynamic(() => import("./TradeTasksAndTraining").then(module => module.TradeTasksAndTraining), { loading: () => <p role="status">Loading tasks and training...</p> });
 
 type DashboardProfile = TradeBusinessSettingsProfile & {
   entitlements: {
@@ -238,7 +238,7 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "map" | "design" | "network" | "messages" | "email-templates" | "team" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "map" | "design" | "network" | "messages" | "email-templates" | "team" | "tasks" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "map",
@@ -247,6 +247,7 @@ const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "email-templates",
   "messages",
   "team",
+  "tasks",
   "training",
   "finance",
   "products",
@@ -2518,7 +2519,7 @@ function DirectTradeDashboardContent() {
                     });
                   }}><TLinkNavigationIcon name="leads" /><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span></button>
                   <button type="button" title="People, access and files" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><TLinkNavigationIcon name="team" /><span>Team</span></button>
-                  <button type="button" title="Training and rebate registrations" aria-current={workspace === "training" ? "page" : undefined} className={workspace === "training" ? "active" : ""} onClick={() => setWorkspace("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span></button>
+                  <button type="button" title="Tasks and your training" aria-current={workspace === "tasks" || workspace === "training" ? "page" : undefined} className={workspace === "tasks" || workspace === "training" ? "active" : ""} onClick={() => setWorkspace("tasks")}><TLinkNavigationIcon name="training" /><span>Tasks &amp; training</span></button>
                   <button type="button" title="SMS and email reminders" aria-current={workspace === "email-templates" ? "page" : undefined} className={workspace === "email-templates" ? "active" : ""} onClick={() => setWorkspace("email-templates")}><TLinkNavigationIcon name="email" /><span>Follow-ups</span></button>
                   <button type="button" title="Your items, prices and PDFs" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products", () => setCommandTarget(null))}><TLinkNavigationIcon name="products" /><span>Products</span></button>
                 </div>
@@ -2572,7 +2573,7 @@ function DirectTradeDashboardContent() {
                   : current)}
               />}
 
-              {workspace === "training" && <TradeTrainingWorkspace key={user.uid} user={user} />}
+              {(workspace === "tasks" || workspace === "training") && <TradeTasksAndTraining key={user.uid} user={user} tab={workspace} onTab={tab => setWorkspace(tab)} />}
 
               {workspace === "team" && (hasBusinessOperations && hasTeamAccess ? (
                 <section className="dashboard-panel" aria-labelledby="team-workspace-title">
@@ -2581,7 +2582,7 @@ function DirectTradeDashboardContent() {
                     <h2 id="team-workspace-title">People, access and member records</h2>
                     <p>Add staff, set practical access, availability, schedule colours and private documents.</p>
                   </div>
-                  <TradeTeamSettings user={user} navigationTarget={commandTarget} onOpenOwnTraining={() => setWorkspace("training")} />
+                  <TradeTeamSettings user={user} navigationTarget={commandTarget} onOpenOwnTraining={() => setWorkspace("training")} onOpenSchedule={() => setWorkspace("work", () => { setActiveWorkView("schedule"); setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() }); })} />
                 </section>
               ) : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team management is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 

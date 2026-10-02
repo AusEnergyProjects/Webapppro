@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { teamOnboardingStep } from "../src/lib/trade-team-onboarding.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const settings = read("../src/components/TradeTeamSettings.tsx");
@@ -500,6 +501,9 @@ function renderTeam(overrides = {}) {
     React: { createElement: (type, props, ...children) => ({ type, props: props || {}, children: children.flat(Infinity).filter(child => child !== false && child != null) }) },
     styles: new Proxy({}, { get: (_, key) => key }),
     archivedView: false, busy: "", error: "", message: "", editing: null, invitationPanel: null,
+    onboardingLoading: false, onboardingError: "", joinedOnPage: 0, onboardingCurrentOnPage: 0, canOpenSchedule: false,
+    memberOnboarding: member => teamOnboardingStep(member), openOnboarding() {},
+    memberDetailTab: "profile", engagementOpened: false, engagementBusy: false, engagementDirty: false,
     roster: { total: 0, totalPages: 1 }, page: 1, loading: false, query: "", statusFilter: "all", capabilityFilter: "",
     ENERGY_SERVICE_CATALOGUE: [], visibleMembers: [], members: [], isOwner: true,
     memberLabel, isCurrentMember: member => member.id === "self", statusName: member => member.status,
@@ -519,6 +523,49 @@ function textContent(node) {
   if (node == null) return "";
   return typeof node === "object" ? node.children.map(textContent).join("") : String(node);
 }
+
+test("team onboarding offers optional crews and a permitted schedule handoff without sending invitations", () => {
+  const calls = [];
+  const tree = renderTeam({ canOpenSchedule: true, onOpenSchedule: () => calls.push("schedule"), setTeamView: view => calls.push(view) });
+  const onboarding = elements(tree).find(node => node.props["aria-label"] === "Team onboarding");
+  assert.match(textContent(onboarding), /Invite and join.*Crew, if needed.*Required training.*First assigned job/);
+  assert.match(textContent(onboarding), /Office-only staff skip installation training/);
+  assert.match(textContent(onboarding), /does not replace the eligibility checks for each job/);
+  elements(onboarding).find(node => node.type === "button" && textContent(node) === "Manage crews").props.onClick();
+  elements(onboarding).find(node => node.type === "button" && textContent(node) === "Open schedule").props.onClick();
+  assert.deepEqual(calls, ["crews", "schedule"]);
+  const restricted = renderTeam({ isOwner: false, canOpenSchedule: false });
+  assert.equal(elements(restricted).some(node => node.type === "button" && ["Manage crews", "Open schedule"].includes(textContent(node))), false);
+  assert.match(settings, /onOpenSchedule && \(isOwner \|\| actorPermissions\.canAssignJobs \|\| actorPermissions\.canRescheduleJobs\)/);
+});
+
+test("desktop and mobile next steps open the same person without automatically issuing a new invitation", () => {
+  const member = { ...archiveMember, status: "active", hasLogin: false, invitePending: true };
+  const opened = [];
+  const tree = renderTeam({ visibleMembers: [member], openOnboarding: person => opened.push(person.id) });
+  const actions = elements(tree).filter(node => node.type === "button" && textContent(node) === "View invitation");
+  assert.equal(actions.length, 2);
+  actions.forEach(action => action.props.onClick());
+  assert.deepEqual(opened, [member.id, member.id]);
+});
+
+test("training status errors do not report a ready roster", () => {
+  const tree = renderTeam({ onboardingError: "Connection unavailable", joinedOnPage: 3, onboardingCurrentOnPage: 2 });
+  const onboarding = elements(tree).find(node => node.props["aria-label"] === "Team onboarding");
+  assert.match(textContent(onboarding), /Connection unavailable.*Refresh setup/);
+  assert.doesNotMatch(textContent(onboarding), /2 with current training/);
+  assert.match(textContent(onboarding), /3 joined on this page/);
+});
+
+test("private pay and onboarding is an owner-only details tab and stays out of manager markup", () => {
+  const member = { ...archiveMember, status: "archived" };
+  const owner = renderTeam({ editing: member, archivedView: true, isOwner: true });
+  assert.ok(elements(owner).some(node => node.type === "button" && textContent(node) === "Pay & onboarding"));
+  const manager = renderTeam({ editing: member, archivedView: true, isOwner: false });
+  assert.equal(elements(manager).some(node => node.type === "button" && textContent(node) === "Pay & onboarding"), false);
+  assert.match(settings, /isOwner && editing !== "new" && engagementOpened/);
+  assert.match(settings, /TradeMemberEngagementPanel key=\{`\$\{user.uid\}:\$\{editing.id\}`\}/);
+});
 
 test("desktop and mobile show Delete for ordinary staff and never for the owner, current user or archived staff", () => {
   for (const member of [archiveMember, { ...archiveMember, status: "suspended" }, { ...archiveMember, isOwner: true }, { ...archiveMember, id: "self" }, { ...archiveMember, status: "archived" }]) {

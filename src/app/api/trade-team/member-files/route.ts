@@ -31,6 +31,7 @@ type MemberFileRow = {
   owner_uid: string;
   team_member_id: string;
   category: string;
+  owner_private: number;
   description: string;
   title: string;
   expires_at: string;
@@ -213,6 +214,8 @@ export async function GET(request: Request) {
     const access = await documentAccess(request);
     await sweepCleanup(access);
     const search = new URL(request.url).searchParams;
+    const privateOnboarding = search.get("scope") === "employment";
+    if (privateOnboarding && !access.isOwner) throw new Error("TEAM_DOCUMENT_ACCESS_REQUIRED");
     const memberId = cleanAdminText(search.get("memberId"), 180);
     await ownedMember(access, memberId);
     const fileId = cleanAdminText(search.get("fileId"), 180);
@@ -227,6 +230,7 @@ export async function GET(request: Request) {
           AND credential.owner_uid = file.owner_uid AND credential.team_member_id = file.team_member_id
           AND credential.status = 'active'
         WHERE file.owner_uid = ? AND file.team_member_id = ? AND file.status = 'active'
+          AND file.owner_private = ${privateOnboarding ? 1 : 0}
         ORDER BY file.created_at DESC, file.id DESC`)
         .bind(access.ownerUid, memberId).all<MemberFileRow>();
       await auditStatement(access, memberId, memberId, "vault.viewed", { fileCount: rows.results.length }).run();
@@ -235,7 +239,7 @@ export async function GET(request: Request) {
     const row = await getD1().prepare(`SELECT file.* FROM trade_team_member_files file
       WHERE file.id = ? AND file.owner_uid = ? AND file.team_member_id = ? AND file.status = 'active'`)
       .bind(fileId, access.ownerUid, memberId).first<MemberFileRow>();
-    if (!row) throw new Error("FILE_NOT_FOUND");
+    if (!row || (row.owner_private === 1 && !access.isOwner)) throw new Error("FILE_NOT_FOUND");
     const object = await memberFileBucket().get(row.object_key);
     if (!object) throw new Error("FILE_NOT_FOUND");
     const download = search.get("download") === "1";
@@ -277,6 +281,12 @@ export async function POST(request: Request) {
     await ownedMember(access, memberId, true);
     if (action === "retry_cleanup") {
       const fileId = cleanAdminText(form.get("fileId"), 180);
+      if (!access.isOwner) {
+        if (!fileId) throw new Error("TEAM_DOCUMENT_ACCESS_REQUIRED");
+        const file = await getD1().prepare("SELECT owner_private FROM trade_team_member_files WHERE id=? AND owner_uid=? AND team_member_id=?")
+          .bind(fileId, access.ownerUid, memberId).first<{ owner_private: number }>();
+        if (!file || file.owner_private === 1) throw new Error("FILE_NOT_FOUND");
+      }
       const result = await sweepCleanup(access, fileId);
       return adminJson({ ok: true, cleanup: result });
     }
@@ -305,20 +315,25 @@ export async function POST(request: Request) {
       return adminJson({ ok: false, error: "An SRES installer or designer credential must be saved as a national accreditation." }, 400);
     }
     const requestedCategory = cleanAdminText(form.get("category"), 30) || "other";
+    const privateOnboarding = form.get("scope") === "employment";
     if (!TEAM_MEMBER_FILE_CATEGORIES.has(requestedCategory)) return adminJson({ ok: false, error: "Choose a valid document category." }, 400);
+    if (privateOnboarding && !access.isOwner) throw new Error("TEAM_DOCUMENT_ACCESS_REQUIRED");
+    if (privateOnboarding && (rentalGate || requestedCategory !== "other")) return adminJson({ ok: false, error: "Private onboarding documents cannot be used as trade credentials or shared document categories." }, 400);
     const category = rentalGate === "suitably_qualified_smoke_alarm_worker" ? "training"
       : rentalGate ? "licence" : requestedCategory;
     const title = cleanAdminText(form.get("title"), 180);
     const expiresAt = cleanAdminText(form.get("expiresAt"), 10);
     if (!title) return adminJson({ ok: false, error: "Add a title for this document or photo." }, 400);
     if (!validDocumentExpiry(expiresAt)) return adminJson({ ok: false, error: "Choose a valid expiry date or leave it blank." }, 400);
+    if (privateOnboarding && expiresAt) return adminJson({ ok: false, error: "Keep expiry blank for private onboarding documents. They do not use shared team renewal alerts." }, 400);
     if (rentalGate && !expiresAt) return adminJson({ ok: false, error: "Add the credential expiry date so TLink can prevent expired sign-off." }, 400);
     if (category === "insurance" && !expiresAt) return adminJson({ ok: false, error: "Add the insurance expiry date so its renewal can be tracked." }, 400);
     const description = "";
     const file = form.get("file");
     if (!(file instanceof File)) return adminJson({ ok: false, error: "Choose a team member file." }, 400);
     const activeCount = await getD1().prepare(`SELECT COUNT(*) count FROM trade_team_member_files
-      WHERE owner_uid = ? AND team_member_id = ? AND status IN ('uploading', 'active')`)
+      WHERE owner_uid = ? AND team_member_id = ? AND status IN ('uploading', 'active')
+        AND owner_private = ${privateOnboarding ? 1 : 0}`)
       .bind(access.ownerUid, memberId).first<Record<string, unknown>>();
     if (Number(activeCount?.count || 0) >= TEAM_MEMBER_FILE_LIMIT) throw new Error("FILE_LIMIT_REACHED");
     const inspected = await inspectTeamMemberFile(file);
@@ -328,15 +343,15 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     await getD1().batch([
       getD1().prepare(`INSERT INTO trade_team_member_files
-        (id, owner_uid, team_member_id, category, description, title, expires_at, file_name, content_type,
+        (id, owner_uid, team_member_id, category, owner_private, description, title, expires_at, file_name, content_type,
          size_bytes, sha256, object_key, status, cleanup_attempts, next_cleanup_at,
          last_cleanup_error, uploaded_by_uid, created_at, updated_at, deleted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', 0, '', '', ?, ?, ?, '')`)
-        .bind(id, access.ownerUid, memberId, category, description, title, expiresAt, inspected.fileName,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', 0, '', '', ?, ?, ?, '')`)
+        .bind(id, access.ownerUid, memberId, category, privateOnboarding ? 1 : 0, description, title, expiresAt, inspected.fileName,
           inspected.contentType, inspected.sizeBytes, inspected.sha256, objectKey,
           access.actorUid, now, now),
       auditStatement(access, memberId, id, "file.upload_started", {
-        title, category, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
+        title: privateOnboarding ? undefined : title, category, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
       }),
     ]);
     try {
@@ -362,7 +377,7 @@ export async function POST(request: Request) {
             credentialNumber, credentialIssuer, credentialJurisdiction, expiresAt, id, now, now,
             id, access.ownerUid, memberId, now)] : []),
         conditionalFileAuditStatement(access, memberId, id, "file.uploaded", {
-          title, category, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
+          title: privateOnboarding ? undefined : title, category, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
           rentalGate: rentalGate || undefined,
         }, "active", now),
       ]);
@@ -417,7 +432,7 @@ export async function DELETE(request: Request) {
     const current = await getD1().prepare(`SELECT * FROM trade_team_member_files
       WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'active'`)
       .bind(fileId, access.ownerUid, memberId).first<MemberFileRow>();
-    if (!current) throw new Error("FILE_NOT_FOUND");
+    if (!current || (current.owner_private === 1 && !access.isOwner)) throw new Error("FILE_NOT_FOUND");
     const now = new Date().toISOString();
     const results = await getD1().batch([
       getD1().prepare(`UPDATE trade_team_member_files SET status = 'cleanup_pending',
@@ -435,7 +450,7 @@ export async function DELETE(request: Request) {
               AND file.status = 'cleanup_pending' AND file.updated_at = ?)`)
         .bind(now, access.ownerUid, memberId, fileId, fileId, now),
       conditionalFileAuditStatement(access, memberId, fileId, "file.delete_requested", {
-        title: current.title,
+        title: current.owner_private === 1 ? undefined : current.title,
       }, "cleanup_pending", now),
     ]);
     if (Number(results[0]?.meta.changes || 0) !== 1) throw new Error("FILE_NOT_FOUND");

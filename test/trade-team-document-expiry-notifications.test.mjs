@@ -94,6 +94,8 @@ function fixture() {
     id text PRIMARY KEY,
     owner_uid text NOT NULL,
     team_member_id text NOT NULL,
+    category text NOT NULL DEFAULT 'other',
+    owner_private integer NOT NULL DEFAULT 0,
     file_name text NOT NULL,
     title text NOT NULL DEFAULT '',
     expires_at text NOT NULL DEFAULT '',
@@ -147,6 +149,8 @@ test("only active documents for active staff inside the 30-day window enqueue on
   insertFile(database, { id: "no-expiry", ownerUid: "owner-a", memberId: "member-a", title: "Induction", expiresAt: "" });
   insertFile(database, { id: "later", ownerUid: "owner-a", memberId: "member-a", title: "Insurance", expiresAt: "2026-09-13" });
   insertFile(database, { id: "deleted", ownerUid: "owner-a", memberId: "member-a", title: "Old card", expiresAt: "2026-08-20", status: "deleted" });
+  insertFile(database, { id: "private", ownerUid: "owner-a", memberId: "member-a", title: "Private employment agreement", expiresAt: "2026-08-20" });
+  database.prepare("UPDATE trade_team_member_files SET owner_private=1 WHERE id='private'").run();
   database.prepare("UPDATE trade_team_members SET status = 'suspended' WHERE id = 'member-b'").run();
   insertFile(database, { id: "suspended", ownerUid: "owner-b", memberId: "member-b", title: "White card", expiresAt: "2026-08-20" });
 

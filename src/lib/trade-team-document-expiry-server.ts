@@ -129,7 +129,7 @@ export async function enqueueTradeTeamDocumentExpiryWarnings({
     FROM trade_team_member_files file
     JOIN trade_team_members member
       ON member.id = file.team_member_id AND member.owner_uid = file.owner_uid
-    WHERE file.status = 'active'
+    WHERE file.status = 'active' AND file.owner_private = 0
       AND file.expires_at <> ''
       AND date(file.expires_at) = file.expires_at
       AND date(file.expires_at) BETWEEN date(?) AND date(?, '+' || ? || ' days')
@@ -176,7 +176,7 @@ export async function listTradeTeamDocumentExpiryWarnings(
     JOIN trade_team_member_files file
       ON file.id = warning.file_id AND file.owner_uid = warning.owner_uid
         AND file.team_member_id = warning.team_member_id
-        AND file.status = 'active' AND file.expires_at = warning.expires_at
+        AND file.status = 'active' AND file.owner_private = 0 AND file.expires_at = warning.expires_at
     JOIN trade_team_members member
       ON member.id = warning.team_member_id AND member.owner_uid = warning.owner_uid
         AND member.status = 'active'
@@ -207,7 +207,7 @@ async function deliveryContext(db: D1Database, row: ExpiryDeliveryRow, today: st
     FROM trade_accounts account
     JOIN trade_team_member_files file
       ON file.id = ? AND file.owner_uid = account.firebase_uid
-        AND file.team_member_id = ? AND file.status = 'active'
+        AND file.team_member_id = ? AND file.status = 'active' AND file.owner_private = 0
         AND file.expires_at = ?
         AND date(file.expires_at) BETWEEN date(?) AND date(?, '+' || ? || ' days')
     JOIN trade_team_members member

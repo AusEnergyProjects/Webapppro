@@ -30,12 +30,31 @@
   gap: 20px;
 }
 
+.onboarding {
+  background: var(--trade-surface, #fff);
+  border: 1px solid var(--trade-line, #cfe2da);
+  border-radius: 16px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+.onboarding > header { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.onboarding strong { color: var(--trade-ink, #123d35); }
+.onboarding p { color: var(--trade-muted, #60766f); font-size: .84rem; line-height: 1.5; margin: 4px 0 0; }
+.onboarding > .error { color: var(--trade-danger, #9d2f2f); }
+.memberSetup { background: var(--trade-accent-soft, #e7f4ee); border-radius: 12px; display: grid; gap: 6px; padding: 14px; }
+.memberSetup strong { color: var(--trade-ink, #123d35); }
+.memberSetup p, .memberSetup small { color: var(--trade-muted, #60766f); font-size: .84rem; line-height: 1.5; margin: 0; }
+.nextStep { display: grid; gap: 4px; margin-top: 8px; max-width: 270px; }
+.nextStep strong { color: var(--trade-ink, #123d35); font-size: .82rem; }
+.nextStep button { background: transparent; border: 0; color: var(--trade-accent-readable, #08795f); cursor: pointer; font: inherit; font-size: .82rem; font-weight: 750; min-height: 44px; padding: 6px 0; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+.nextStep button:focus-visible, .setupGuide button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .setupGuide {
   background: linear-gradient(135deg, #07182a, #0a2d35);
   border-radius: 14px;
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .setupGuide > div {
@@ -57,6 +76,10 @@
 
 .setupGuide strong { color: #f4fbf9; font-size: .84rem; }
 .setupGuide small { color: #9db9bb; font-size: .8rem; line-height: 1.35; }
+.setupGuide button { background: transparent; border: 0; color: #7ff0c8; cursor: pointer; font: inherit; font-size: .82rem; font-weight: 800; grid-column: 2; min-height: 44px; padding: 6px 0; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+
+@media (max-width: 1100px) { .setupGuide { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .setupGuide { grid-template-columns: minmax(0, 1fr); } .onboarding { padding: 12px; } }
 
 .heading div,
 .memberHeader div,

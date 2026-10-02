@@ -25,7 +25,7 @@ import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { teamAuthErrorCode, teamAuthErrorMessage } from "./trade-team-auth-errors";
 import { saveTradeBusinessSelection } from "@/lib/trade-business-client";
 
-const TradeTrainingWorkspace = dynamic(() => import("./TradeTrainingWorkspace").then((module) => module.TradeTrainingWorkspace), { loading: () => <p role="status">Loading activity training...</p> });
+const TradeTasksAndTraining = dynamic(() => import("./TradeTasksAndTraining").then(module => module.TradeTasksAndTraining), { loading: () => <p role="status">Loading tasks and training...</p> });
 const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then(module => module.TradeMessagesWorkspace));
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
 import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlerts";
@@ -33,13 +33,13 @@ import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlert
 type Result = { ownerUid?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; crewId?: string; crewLead?: boolean; permissions: TradeTeamPermissions }; error?: string };
 type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
-type PortalView = "business" | "map" | "team" | "training" | "messages" | "time" | "crew";
+type PortalView = "business" | "map" | "team" | "tasks" | "training" | "messages" | "time" | "crew";
 type CrmShortcut = "today" | "jobs" | "customers" | "schedule" | "pricebook" | "reports";
 
 function teamWorkspaceLocation(search: string): { view: PortalView; target: TLinkCommandTarget | null } {
   const parameters = new URLSearchParams(search);
   const workspace = parameters.get("workspace");
-  if (workspace === "training" || workspace === "messages" || workspace === "time") return { view: workspace, target: null };
+  if (workspace === "tasks" || workspace === "training" || workspace === "messages" || workspace === "time") return { view: workspace, target: null };
   const jobId = parameters.get("jobId") || "";
   if (workspace === "work" && /^[A-Za-z0-9:_-]{1,180}$/.test(jobId)) {
     const requestedTab = parameters.get("jobTab");
@@ -70,7 +70,7 @@ function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm, cr
     {crewId && <button type="button" aria-current={view === "crew" ? "page" : undefined} onClick={() => onView("crew")}><TLinkNavigationIcon name="team" /><span>My crew</span></button>}
     <button type="button" aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
     {permissions.canViewQuotes && permissions.canManageQuotes && <button type="button" aria-current={view === "map" ? "page" : undefined} onClick={() => onView("map")}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span></button>}
-    <button type="button" aria-current={view === "training" ? "page" : undefined} onClick={() => onView("training")}><TLinkNavigationIcon name="training" /><span>To do &amp; training</span></button>
+    <button type="button" aria-current={view === "tasks" || view === "training" ? "page" : undefined} onClick={() => onView("tasks")}><TLinkNavigationIcon name="training" /><span>Tasks &amp; training</span></button>
     {permissions.canManageTeam && <button type="button" aria-current={view === "team" ? "page" : undefined} onClick={() => onView("team")}><TLinkNavigationIcon name="team" /><span>Team</span></button>}
   </nav>;
 }
@@ -395,8 +395,8 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       {portalView === "crew" && data.access.crewId && <TradeCrewWorkspace user={user} />}
       {portalView === "messages" && <TradeMessagesWorkspace user={user} initialThreadId={messageTarget.id} initialThreadRevision={messageTarget.revision} onOpenQuote={workOrderId => { setCrmTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() }); setPortalView("business"); }} />}
       {(portalView === "business" || (portalView === "map" && permissions?.canViewQuotes && permissions.canManageQuotes)) && <InstallerCrmWorkspace key={portalView} user={user} teamAccess={Boolean(permissions?.canManageTeam)} staffPermissions={permissions} hideNavigation={portalView !== "map"} navigationTarget={portalView === "map" ? null : crmTarget} mapWorkspace={portalView === "map"} onRegisterMapSave={registerMapSave} onViewChange={setCrmView} />}
-      {portalView === "training" && <TradeTrainingWorkspace key={user.uid} user={user} />}
-      {portalView === "team" && permissions?.canManageTeam && <section className="team-field-tools" aria-label="Team management"><TradeTeamSettings user={user} onOpenOwnTraining={() => setPortalView("training")} /></section>}
+      {(portalView === "tasks" || portalView === "training") && <TradeTasksAndTraining key={user.uid} user={user} tab={portalView} onTab={setPortalView} />}
+      {portalView === "team" && permissions?.canManageTeam && <section className="team-field-tools" aria-label="Team management"><TradeTeamSettings user={user} onOpenOwnTraining={() => setPortalView("training")} onOpenSchedule={() => openCrm("schedule")} /></section>}
       {status && <p className="crm-status" role="status">{status}</p>}
       </div><TradePersonalNameSettings key={`${user.uid}:${data.access.memberId}`} user={user} name={data.access.displayName} onSaved={displayName => setData(current => current.access ? { ...current, access: { ...current.access, displayName } } : current)} /><footer className="tlink-team-footer"><span>Signed in as {data.access.displayName}</span><button type="button" onClick={() => void leaveAccount()}>Sign out</button></footer>
     </>}{!teamReady && <SiteFooter>Team access is controlled by the installer business. Australian Energy Assessments protected customer identity and contact details remain unavailable.</SiteFooter>}</main></TradeTeamCallProvider></TradeMessageAlerts>;

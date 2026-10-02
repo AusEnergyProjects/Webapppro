@@ -3,6 +3,8 @@ import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, sqlit
 export * from "./trade-work-time-schema";
 export * from "./trade-crews-schema";
 export * from "./trade-swms-schema";
+export * from "./trade-business-tasks-schema";
+export * from "./trade-member-engagement-schema";
 
 export const tradeMapLocationCache = sqliteTable("trade_map_location_cache", {
   ownerUid: text("owner_uid").notNull(), addressKey: text("address_key").notNull(), address: text("address").notNull(),
@@ -606,6 +608,7 @@ export const tradeTeamMemberFiles = sqliteTable("trade_team_member_files", {
   ownerUid: text("owner_uid").notNull(),
   teamMemberId: text("team_member_id").notNull().references(() => tradeTeamMembers.id, { onDelete: "restrict" }),
   category: text("category").notNull(),
+  ownerPrivate: integer("owner_private").notNull().default(0),
   description: text("description").notNull().default(""),
   title: text("title").notNull().default(""),
   expiresAt: text("expires_at").notNull().default(""),
@@ -627,6 +630,7 @@ export const tradeTeamMemberFiles = sqliteTable("trade_team_member_files", {
   index("trade_team_member_files_cleanup_idx").on(table.status, table.nextCleanupAt),
   index("trade_team_member_files_expiry_idx").on(table.status, table.expiresAt, table.ownerUid, table.teamMemberId),
   check("trade_team_member_files_category_check", sql`${table.category} IN ('id', 'licence', 'compliance', 'training', 'insurance', 'other')`),
+  check("trade_team_member_files_owner_private_check", sql`${table.ownerPrivate} IN (0,1)`),
   check("trade_team_member_files_content_type_check", sql`${table.contentType} IN ('application/pdf', 'image/jpeg', 'image/png')`),
   check("trade_team_member_files_size_check", sql`${table.sizeBytes} > 0 AND ${table.sizeBytes} <= 12582912`),
   check("trade_team_member_files_sha256_check", sql`length(${table.sha256}) = 64 AND ${table.sha256} = lower(${table.sha256}) AND ${table.sha256} NOT GLOB '*[^0-9a-f]*'`),

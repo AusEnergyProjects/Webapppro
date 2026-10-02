@@ -1,0 +1,8 @@
+.templates { border:1px solid var(--trade-line,#cfe2da); border-radius:10px; padding:14px; background:var(--trade-surface,#fff); }
+.templates summary { cursor:pointer; font-weight:750; }
+.templates summary:focus-visible,.templates textarea:focus-visible { outline:3px solid var(--trade-accent-readable,#08795f); outline-offset:3px; }
+.templates p { margin:10px 0; }
+.actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.templates label { display:grid; gap:8px; font-weight:700; }
+.templates textarea { font:inherit; font-size:14px; line-height:1.5; font-weight:400; width:100%; min-width:0; padding:12px; border:1px solid var(--trade-line,#cfe2da); border-radius:8px; background:var(--trade-field,#fff); color:var(--trade-ink,#163c43); resize:vertical; }
+.templates a { color:var(--trade-accent-readable,#08795f); text-decoration:underline; }

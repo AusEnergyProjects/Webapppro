@@ -10,6 +10,7 @@ import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import styles from "./TradeHomeDashboard.module.css";
+import { TradeTasksWorkspace } from './TradeTasksWorkspace';
 
 type HomeResponse = { ok?: boolean; dashboard?: HomeDashboard; error?: string };
 export type TradeHomeDashboardProps = {
@@ -115,6 +116,8 @@ export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSc
         {financial && <RevenueCard report={financial} period={period} onPeriodChange={setPeriod} onOpenReports={canSeeReports ? onOpenReports : undefined} />}
         <WorkloadCard dashboard={dashboard} onOpenSchedule={onOpenSchedule} />
       </div>
+
+      <TradeTasksWorkspace user={user} compact />
 
       <div className={styles.lowerGrid}>
         <section className={styles.card} aria-label="Upcoming schedule">

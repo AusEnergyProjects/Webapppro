@@ -6,7 +6,17 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 2 October 2026
 
-## Current implementation: streamlined daily work and dashboard setup
+## Current implementation: team onboarding and everyday tasks
+
+Team shows invitation/joining, optional crew setup, individual training and the next scheduling action together. Unknown or incomplete training never implies job eligibility; business approval, person training and job compliance remain separate gates. Owners can keep optional agreed pay, payment and super details in each member's private onboarding record. Employment type (employee or contractor) is separate from pay basis (hourly, annual salary or per job). These records are encrypted using the existing integration encryption key. Private contracts and onboarding files use the existing protected member-file storage and are excluded from manager file lists, counts and shared renewal alerts. This is recordkeeping, not payroll calculation, contract execution or payment processing.
+
+Tasks can be added from Home or Tasks & training, assigned to the current person or an authorised teammate, optionally dated, progressed and reopened. My tasks, Assigned by me and permitted Team tasks share one implementation. Crew leads remain within their current crew, ordinary staff see tasks they assign or receive, and owners/team managers retain their existing scope. Current membership and revision checks protect writes; task completion has no effect on job or training completion.
+
+Optional employee and contractor agreement starters prefill saved names and agreed pay terms. The owner can edit the text, download an unsigned draft PDF or save it to private documents, and upload their own or signed documents through the same protected route. No bank/super identifiers are copied into the templates. Bracketed role-specific fields, draft labels and official Fair Work/business.gov.au guidance remain visible; generating a draft does not execute an agreement or certify compliance.
+
+Migrations 0234 and 0235 add business tasks and private member engagement records. Source baseline is `817400aba224de689dd2c58a65c8138f87f327f5`, Sites 737. This record precedes publication; validation, exact GitHub/Sites identity and affected live checks belong in `C:/Webproject/outputs/tlink-team-tasks-20261002/`. Native source is unchanged. No real payment, signature, invitation or customer send is a test of this slice.
+
+## Previous implementation: streamlined daily work and dashboard setup
 
 Business sign-in, registration and profile setup now live inside the dashboard. The former Trade account and Free access pages redirect there; standards remain contextual. Approved businesses get one operational header and visible grouped navigation. Incomplete, unverified, closed and MFA-required accounts retain their existing access gates. The same verified business profile is used throughout.
 

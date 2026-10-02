@@ -22,8 +22,10 @@ import { TradeCrewWorkspace } from "./TradeCrewWorkspace";
 import { TradeTeamTimeWorkspace } from "./TradeTeamTimeWorkspace";
 import TradeTeamStatusDot from "./TradeTeamStatusDot";
 import type { TradeTeamPresenceStatus } from "@/lib/trade-team-presence";
+import { teamOnboardingStep, type TeamOnboardingTarget, type TeamOnboardingTraining } from "@/lib/trade-team-onboarding";
 
 const TeamTrainingTodos = dynamic(() => import("./TeamTrainingTodos").then(module => module.TeamTrainingTodos), { loading: () => <p role="status">Loading training to-dos...</p> });
+const TradeMemberEngagementPanel = dynamic(() => import("./TradeMemberEngagementPanel").then(module => module.TradeMemberEngagementPanel), { loading: () => <p role="status">Loading private onboarding...</p> });
 
 type Scope = "own" | "team";
 type MemberStatus = "active" | "suspended" | "archived";
@@ -273,7 +275,7 @@ function trapDialogKey(event: KeyboardEvent<HTMLElement>, close: () => void) {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 
-export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }: { user: User; navigationTarget?: TLinkCommandTarget | null; onOpenOwnTraining?: () => void }) {
+export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining, onOpenSchedule }: { user: User; navigationTarget?: TLinkCommandTarget | null; onOpenOwnTraining?: () => void; onOpenSchedule?: () => void }) {
   const fetch = useTradeBusinessFetch();
   const [teamView, setTeamView] = useState<"people" | "crews" | "time">("people");
   const [members, setMembers] = useState<TradeTeamMember[]>([]);
@@ -289,6 +291,14 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   const [businessServiceStates, setBusinessServiceStates] = useState<string[]>([]);
   const [memberServiceStates, setMemberServiceStates] = useState<string[] | null>(null);
   const [trainingRevision, setTrainingRevision] = useState(0);
+  const [onboardingTraining, setOnboardingTraining] = useState<TeamOnboardingTraining[]>([]);
+  const [onboardingLoading, setOnboardingLoading] = useState(true);
+  const [onboardingError, setOnboardingError] = useState("");
+  const [onboardingTarget, setOnboardingTarget] = useState<TeamOnboardingTarget>("");
+  const [memberDetailTab, setMemberDetailTab] = useState<"profile" | "engagement">("profile");
+  const [engagementOpened, setEngagementOpened] = useState(false);
+  const [engagementDirty, setEngagementDirty] = useState(false);
+  const [engagementBusy, setEngagementBusy] = useState(false);
   const [menu, setMenu] = useState<{ member: TradeTeamMember; x: number; y: number } | null>(null);
   const [filesMember, setFilesMember] = useState<TradeTeamMember | null>(null);
   const [files, setFiles] = useState<MemberFile[]>([]);
@@ -325,6 +335,24 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   const visibleMembers = members;
 
   const tokenHeaders = useCallback(async () => ({ Authorization: `Bearer ${await user.getIdToken()}` }), [user]);
+  useEffect(() => {
+    if (!teamAccess?.canManageTeam || statusFilter === "archived") return;
+    const controller = new AbortController();
+    const frame = window.requestAnimationFrame(() => {
+      setOnboardingLoading(true); setOnboardingError(""); setOnboardingTraining([]);
+      void (async () => {
+        try {
+          const response = await fetch("/api/trade-training", { headers: await tokenHeaders(), cache: "no-store", signal: controller.signal });
+          const result = await response.json() as { ok?: boolean; error?: string; team?: TeamOnboardingTraining[] };
+          if (!response.ok || !result.ok || !Array.isArray(result.team)) throw new Error(result.error || "Training status could not be checked.");
+          if (!controller.signal.aborted) setOnboardingTraining(result.team);
+        } catch (cause) {
+          if (!controller.signal.aborted) setOnboardingError(cause instanceof Error ? cause.message : "Training status could not be checked.");
+        } finally { if (!controller.signal.aborted) setOnboardingLoading(false); }
+      })();
+    });
+    return () => { window.cancelAnimationFrame(frame); controller.abort(); };
+  }, [fetch, tokenHeaders, teamAccess?.canManageTeam, teamAccess?.memberId, statusFilter, trainingRevision]);
   const load = useCallback(async (signal?: AbortSignal) => {
     const params = new URLSearchParams({
       page: String(page),
@@ -435,8 +463,13 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
 
   useEffect(() => {
     if (!editing) return;
-    window.requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("input, button")?.focus());
-  }, [editing]);
+    const frame = window.requestAnimationFrame(() => {
+      const target = onboardingTarget ? dialogRef.current?.querySelector<HTMLElement>(`[data-onboarding-section="${onboardingTarget}"]`) : null;
+      if (target) { target.focus(); target.scrollIntoView({ block: "start" }); }
+      else dialogRef.current?.querySelector<HTMLElement>("input, button")?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [editing, onboardingTarget]);
 
   useEffect(() => {
     if (!filesMember) return;
@@ -475,6 +508,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     setInviteUrl(""); setInviteDelivery(undefined);
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
     setFormPreset("field"); setFormPermissions(fieldPermissions); setEditing("new");
+    setMemberDetailTab("profile"); setEngagementOpened(false); setEngagementDirty(false); setEngagementBusy(false);
     setFieldUsernameDraft(""); setFieldUsernameDirty(false); setFieldSetup(undefined);
     setMemberServices([]);
     setMemberServiceStates(null);
@@ -494,13 +528,15 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     setError(""); setMessage("");
   }
 
-  function openEdit(member: TradeTeamMember) {
+  function openEdit(member: TradeTeamMember, target: TeamOnboardingTarget = "") {
     if (busy) return;
     setError(""); setMessage("");
     setInviteUrl(""); setInviteDelivery(undefined);
     if (!menu) restoreFocusRef.current = document.activeElement as HTMLElement | null;
     setFormPreset("custom"); setFormPermissions(normalizePermissions(member.permissions));
     setEditing(member); setMenu(null);
+    setMemberDetailTab("profile"); setEngagementOpened(false); setEngagementDirty(false); setEngagementBusy(false);
+    setOnboardingTarget(target);
     setFieldUsernameDraft(member.fieldUsername || memberLabel(member)); setFieldUsernameDirty(!member.fieldUsername); setFieldSetup(undefined);
     setMemberServices(member.capabilities || []);
     setMemberServiceStates(member.assignedServiceStates ?? null);
@@ -528,8 +564,13 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     setFormPreset("custom");
   }
 
+  function canLeaveMemberDialog() {
+    if (busy || engagementBusy) return false;
+    return !engagementDirty || window.confirm("Discard unsaved private pay and onboarding details?");
+  }
+
   function closeMemberDialog() {
-    if (busy) return;
+    if (!canLeaveMemberDialog()) return;
     setEditing(null);
     window.requestAnimationFrame(() => restoreFocusRef.current?.focus());
   }
@@ -812,14 +853,19 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   const editingOwnAccess = editing !== null && editing !== "new" && isCurrentMember(editing);
   const editingOwner = editing !== null && editing !== "new" && editing.isOwner;
   const archivedView = statusFilter === "archived";
+  const memberOnboarding = (member: TradeTeamMember) => teamOnboardingStep(member, onboardingLoading || onboardingError ? undefined : onboardingTraining.find(item => item.memberId === member.id));
+  const canOpenSchedule = Boolean(onOpenSchedule && (isOwner || actorPermissions.canAssignJobs || actorPermissions.canRescheduleJobs));
+  const openOnboarding = (member: TradeTeamMember) => openEdit(member, memberOnboarding(member).target);
+  const joinedOnPage = visibleMembers.filter(member => member.status === "active" && (member.hasLogin || member.lastActiveAt)).length;
+  const onboardingCurrentOnPage = visibleMembers.filter(member => memberOnboarding(member).kind === "current").length;
   const unsavedServices = Boolean(editing && editing !== "new" && !editing.isOwner
     && (JSON.stringify([...memberServices].sort()) !== JSON.stringify([...(editing.capabilities || [])].sort())
       || JSON.stringify(memberServiceStates === null ? null : [...memberServiceStates].sort()) !== JSON.stringify(editing.assignedServiceStates == null ? null : [...editing.assignedServiceStates].sort())));
   const trainingTodos = editing === "new" ? <section className={styles.trainingPlaceholder} aria-label="Training to-dos"><h4>Training to-dos</h4><p>Save this person to create their training to-do list. Select services only for work they carry out on site. Office-only staff need no installation modules; each on-site worker completes their own.</p></section>
-    : editing && <TeamTrainingTodos key={`${user.uid}:${editing.id}:${trainingRevision}`} user={user} memberId={editing.id} displayName={memberLabel(editing)}
+    : editing && <div data-onboarding-section="training" tabIndex={-1}><TeamTrainingTodos key={`${user.uid}:${editing.id}:${trainingRevision}`} user={user} memberId={editing.id} displayName={memberLabel(editing)}
       hasOfficeLogin={editing.hasLogin} active={editing.status === "active"} unsavedServices={unsavedServices} saving={Boolean(busy)}
-      onSave={() => dialogRef.current?.querySelector<HTMLFormElement>("form")?.requestSubmit()} onOpenOwnTraining={onOpenOwnTraining}
-      ownTrainingHref={isOwner ? "/direct-trade/dashboard?workspace=training" : "/direct-trade/team?workspace=training"} />;
+      onSave={() => dialogRef.current?.querySelector<HTMLFormElement>("form")?.requestSubmit()} onOpenOwnTraining={() => { if (!canLeaveMemberDialog()) return; if (onOpenOwnTraining) onOpenOwnTraining(); else window.location.assign(isOwner ? "/direct-trade/dashboard?workspace=training" : "/direct-trade/team?workspace=training"); }}
+      ownTrainingHref={isOwner ? "/direct-trade/dashboard?workspace=training" : "/direct-trade/team?workspace=training"} /></div>;
   const showAccessEditor = Boolean(editing && canEditPermissions && !editingOwnAccess);
   const isSresCredential = uploadRentalGate === "sres_installer_accreditation" || uploadRentalGate === "sres_designer_accreditation";
   const fixedCredentialType = isSresCredential ? "accreditation"
@@ -832,10 +878,16 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
   return <div className={styles.workspace}>
     <div className={styles.heading}><div><h4>{archivedView ? "Archived team" : "Your team"}</h4><p>{archivedView ? "Former team members with access revoked. Their details, documents and history remain saved." : "Keep each person's contact details, access, availability and documents in one place."}</p></div>{!archivedView && <button type="button" className={styles.primary} disabled={Boolean(busy)} onClick={openNew}>Add team member</button>}</div>
     <nav className={styles.actions} aria-label="Team views"><button type="button" className={archivedView ? styles.secondary : styles.primary} aria-pressed={!archivedView} disabled={Boolean(busy)} onClick={() => changeRosterView(false)}>Your team</button><button type="button" className={archivedView ? styles.primary : styles.secondary} aria-pressed={archivedView} disabled={Boolean(busy)} onClick={() => changeRosterView(true)}>Archived team</button>{isOwner && <button type="button" className={styles.secondary} onClick={() => setTeamView("crews")}>Crews</button>}<button type="button" className={styles.secondary} onClick={() => setTeamView("time")}>Time</button></nav>
-    {!archivedView && <section className={styles.setupGuide} aria-label="Set up TLink for a team member">
-      <div><span>1</span><strong>Add the person</strong><small>Enter their email and choose their access.</small></div>
-      <div><span>2</span><strong>Invitation sent</strong><small>They set their password from the email.</small></div>
-      <div><span>3</span><strong>Using the field app?</strong><small>Generate PIN below. TLink emails the username and PIN.</small></div>
+    {!archivedView && <section className={styles.onboarding} aria-label="Team onboarding">
+      <header><div><strong>Get your team started</strong><p>One next step for each person, using their saved access and training.</p></div><button type="button" className={styles.secondary} disabled={onboardingLoading || Boolean(busy)} onClick={() => setTrainingRevision(value => value + 1)}>{onboardingLoading ? "Checking training..." : "Refresh setup"}</button></header>
+      <div className={styles.setupGuide} aria-label="Set up TLink for a team member">
+        <div><span>1</span><strong>Invite and join</strong><small>Add their email and access. They accept the invitation, or use the app PIN.</small></div>
+        <div><span>2</span><strong>Crew, if needed</strong><small>Group subcontractors under their own lead. People can also work independently.</small>{isOwner && <button type="button" onClick={() => setTeamView("crews")}>Manage crews</button>}</div>
+        <div><span>3</span><strong>Required training</strong><small>On-site workers complete their own modules. Office-only staff skip installation training.</small></div>
+        <div><span>4</span><strong>First assigned job</strong><small>Choose the person when scheduling. Job checks confirm the required credentials.</small>{canOpenSchedule && <button type="button" onClick={onOpenSchedule}>Open schedule</button>}</div>
+      </div>
+      <p className={styles.hint}>{joinedOnPage} joined on this page{!onboardingLoading && !onboardingError ? ` | ${onboardingCurrentOnPage} with current training or office setup` : ""}. Setup status does not replace the eligibility checks for each job.</p>
+      {onboardingError && <p className={styles.error} role="alert">{onboardingError} Open a person&apos;s training for a fresh check, or use Refresh setup.</p>}
     </section>}
     {message && <p className={styles.status} role="status">{message}</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}
@@ -853,7 +905,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
               <td><strong>{member.lastName || "Not added"}</strong></td>
               <td>{member.phone ? <a href={`tel:${member.phone}`}>{member.phone}</a> : <span>Not added</span>}</td>
               <td>{member.email ? <a href={`mailto:${member.email}`}>{member.email}</a> : <span>Not added</span>}</td>
-              <td><span className={`${styles.state} ${member.status === "active" ? styles.current : styles.expired}`}>{statusName(member)}</span></td>
+              <td><span className={`${styles.state} ${member.status === "active" ? styles.current : styles.expired}`}>{statusName(member)}</span>{!archivedView && member.status === "active" && <div className={styles.nextStep}><strong>{memberOnboarding(member).label}</strong><button type="button" disabled={Boolean(busy)} onClick={() => openOnboarding(member)} aria-label={`${memberOnboarding(member).action} for ${memberLabel(member)}`}>{memberOnboarding(member).action}</button></div>}</td>
               <td><span className={styles.colourName}><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span></td>
               <td><div className={styles.actions}><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" className={styles.memberMenuButton} disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "archived" && <button type="button" className={styles.secondary} aria-label={`Reinstate access for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "active")}>{busy === `status:${member.id}` ? "Reinstating..." : "Reinstate access"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status !== "archived" && <button type="button" className={styles.danger} aria-label={`Delete ${memberLabel(member)} from team`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "archived")}>Delete</button>}</div></td>
             </tr>)}</tbody>
@@ -863,6 +915,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
         <header className={styles.memberHeader}><div><strong><TradeTeamStatusDot name={memberLabel(member)} presence={member.presence} active={member.status === "active"} /> {member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>TLink username: {member.fieldUsername || "Not set"}</small><small>{statusName(member)}</small></div><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></header>
         <div className={styles.chips}><span><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span><span>{member.permissions.jobScope === "own" ? "Assigned jobs only" : "All team jobs"}</span><span>{member.fileCount || 0} documents</span>{member.capabilities?.length ? <span>{member.capabilities.length} services</span> : null}</div>
         <small>Last active: {member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleString("en-AU") : "Not signed in yet"}</small>
+        {!archivedView && member.status === "active" && <div className={styles.nextStep}><strong>{memberOnboarding(member).label}</strong><span>{memberOnboarding(member).detail}</span><button type="button" disabled={Boolean(busy)} onClick={() => openOnboarding(member)} aria-label={`${memberOnboarding(member).action} for ${memberLabel(member)}`}>{memberOnboarding(member).action}</button></div>}
         <div className={styles.actions}><button type="button" disabled={Boolean(busy)} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button>{!member.isOwner && member.status === "active" && !member.hasLogin && member.email && <button type="button" disabled={Boolean(busy)} aria-label={`Send new portal invitation to ${memberLabel(member)}`} onClick={() => void createLogin(member)}>{busy === `invite:${member.id}` ? "Sending..." : "Re-invite"}</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button>{!member.isOwner && !isCurrentMember(member) && member.status === "archived" && <button type="button" className={styles.secondary} aria-label={`Reinstate access for ${memberLabel(member)}`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "active")}>{busy === `status:${member.id}` ? "Reinstating..." : "Reinstate access"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status !== "archived" && <button type="button" className={styles.danger} aria-label={`Delete ${memberLabel(member)} from team`} disabled={Boolean(busy)} onClick={() => void updateMemberStatus(member, "archived")}>Delete</button>}</div>
       </article>)}</div></> : <p className={styles.empty}>No team members match these filters.</p>}
       {roster.totalPages > 1 && <nav className={styles.pagination} aria-label="Team member pages"><button type="button" className={styles.secondary} disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {roster.page} of {roster.totalPages}</span><button type="button" className={styles.secondary} disabled={page >= roster.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Next</button></nav>}
@@ -871,7 +924,8 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
     {menu && <><button aria-label="Close team member menu" style={{ background: "transparent", border: 0, inset: 0, padding: 0, position: "fixed", zIndex: 1299 }} onClick={closeMenu} /><div ref={menuRef} className={styles.contextMenu} role="menu" style={{ left: menu.x, top: menu.y }} onKeyDown={handleMenuKey}><button type="button" role="menuitem" onClick={() => openEdit(menu.member)}>{menu.member.isOwner ? "Set up my TLink app" : "Open member details"}</button><button type="button" role="menuitem" onClick={() => void openFiles(menu.member)}>Open documents</button></div></>}
 
     {editing && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeMemberDialog(); }}><div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="team-member-dialog-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeMemberDialog)}><header className={styles.dialogHeader}><div><span>{editing === "new" ? "Add team member" : editing.status === "archived" ? "Archived team member" : "Edit team member"}</span><h4 id="team-member-dialog-title">Person and access</h4></div><button type="button" className={styles.iconButton} aria-label="Close" disabled={Boolean(busy)} onClick={closeMemberDialog}>X</button></header>
-      {editing !== "new" && editing.status === "archived" ? <div className={styles.form} aria-label="Archived member details">
+      {isOwner && editing !== "new" && <nav className={styles.actions} aria-label="Member details sections"><button type="button" className={memberDetailTab === "profile" ? styles.primary : styles.secondary} aria-pressed={memberDetailTab === "profile"} disabled={Boolean(busy) || engagementBusy} onClick={() => setMemberDetailTab("profile")}>Person &amp; access</button><button type="button" className={memberDetailTab === "engagement" ? styles.primary : styles.secondary} aria-pressed={memberDetailTab === "engagement"} disabled={Boolean(busy) || engagementBusy} onClick={() => { setEngagementOpened(true); setMemberDetailTab("engagement"); }}>Pay &amp; onboarding</button></nav>}
+      <div hidden={memberDetailTab === "engagement"}>{editing !== "new" && editing.status === "archived" ? <div className={styles.form} aria-label="Archived member details">
         {error && <p className={styles.error} role="alert">{error}</p>}
         {message && <p className={styles.status} role="status">{message}</p>}
         <p className={styles.status}>This person is archived. Their access is revoked and they cannot be assigned new work. Their records are read-only.</p>
@@ -886,8 +940,9 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
       </div> : <form className={styles.form} onSubmit={saveMember}>
         {error && <p className={styles.error} role="alert">{error}</p>}
         {message && <p className={styles.status} role="status">{message}</p>}
-        {editingOwner ? <><p className={styles.status}>This is your main business account. TLink will email the app username and one-time PIN to <strong>{editing.email}</strong>.</p><div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing.lastName} /></label></div><p className={styles.hint}>Your personal name is used for technician sign-off when a job is assigned to you. TLink will not use the business name as the signer.</p></> : <div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email for invitation<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>Adding a person with an email sends their team invitation automatically. Leave it blank for a roster-only person.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>}
-        <section className={styles.portalAccessPanel} aria-label="TLink portal access">
+        {editing !== "new" && <section className={styles.memberSetup} aria-label="Member setup next step"><strong>{memberOnboarding(editing).label}</strong><p>{memberOnboarding(editing).detail}</p><small>Crew assignment is optional. Use Crews after saving if this person works under a crew lead.</small></section>}
+        {editingOwner ? <><p className={styles.status}>This is your main business account. TLink will email the app username and one-time PIN to <strong>{editing.email}</strong>.</p><div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing.lastName} /></label></div><p className={styles.hint}>Your personal name is used for technician sign-off when a job is assigned to you. TLink will not use the business name as the signer.</p></> : <div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email for invitation<input name="email" type="email" autoComplete="email" data-onboarding-section="contact" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>Adding a person with an email sends their team invitation automatically. Leave it blank for a roster-only person.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>}
+        <section className={styles.portalAccessPanel} aria-label="TLink portal access" data-onboarding-section="access" tabIndex={-1}>
           <div><strong>TLink portal access</strong><p>Use TLink in a browser with an email and password, or Google.</p></div>
           {editing === "new" ? <p className={styles.hint}>Save with an email address to send their portal invitation automatically.</p> : <>
             <p className={styles.hint}>{editing.status !== "active" ? "Reactivate this person before they can sign in or receive a new invitation." : editing.hasLogin ? `Login ready for ${editing.email}. Use the portal link to sign in.` : editing.email ? `Send a fresh invitation to ${editing.email}. Their details and permissions stay the same.` : "Add and save their email address, then send an invitation."}</p>
@@ -903,7 +958,7 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
         <section className={styles.fieldAccessPanel} aria-label="TLink app access">
           <img src="/tlink-icon-192.png" alt="" />
           <div className={styles.fieldAccessBody}>
-            <div><strong>TLink app access</strong><p>The worker types this username and a one-time six-digit PIN on their phone.</p></div>
+            <div><strong>TLink app access</strong><p>The worker types this username and a one-time six-digit PIN on their phone. TLink emails the username and PIN.</p></div>
             <label>TLink username<input name="fieldUsername" autoCapitalize="none" autoComplete="off" maxLength={60} placeholder="Uses first and last name if left blank" value={fieldUsernameDraft} onChange={(event) => { setFieldUsernameDraft(event.target.value); setFieldUsernameDirty(true); setFieldSetup(undefined); }} /><small className={styles.hint}>You control this username. It must be unique inside your team.</small></label>
             {editing === "new" ? <p className={styles.fieldPrompt}>Save the team member first, then their PIN button appears here.</p> : <>
               <div className={styles.actions}>
@@ -938,7 +993,8 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining }:
           {permissionGroups.map((group) => <fieldset className={styles.permissionGroup} key={group.label}><legend>{group.label}</legend>{group.items.map((item) => <label className={styles.check} key={item.key}><input type="checkbox" disabled={!isOwner && !actorPermissions[item.key]} checked={Boolean(formPermissions[item.key])} onChange={(event) => setPermission(item.key, event.target.checked)} /><span>{item.label}<small>{!isOwner && !actorPermissions[item.key] ? "You cannot grant access you do not have." : item.detail}</small></span></label>)}</fieldset>)}
         </> : <p className={styles.status}>{editingOwnAccess ? "You cannot edit your own access permissions." : "You can update this person's contact details and status. Only the owner or a delegated access manager can change permissions."}</p>}</>}
         <div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy === "member"}>{busy === "member" ? "Saving..." : editing === "new" ? "Add team member" : editingOwner ? "Save my details" : "Save changes"}</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={closeMemberDialog}>{editing === "new" ? "Cancel" : "Done"}</button></div>
-      </form>}</div></div>}
+      </form>}</div>
+      {isOwner && editing !== "new" && engagementOpened && <div hidden={memberDetailTab !== "engagement"}><TradeMemberEngagementPanel key={`${user.uid}:${editing.id}`} user={user} memberId={editing.id} displayName={memberLabel(editing)} onDirtyChange={setEngagementDirty} onBusyChange={setEngagementBusy} /></div>}</div></div>}
 
     {!archivedView && <section className={styles.devices} aria-label="Field devices"><header className={styles.listHeader}><div><strong>Field devices</strong><p className={styles.hint}>Find and revoke any lost or replaced phone or tablet. Authorising again lets its active user register securely.</p></div><span>{deviceRoster.total} devices | {pendingPushEvents} alerts queued</span></header>
       <form className={styles.filters} onSubmit={(event) => { event.preventDefault(); setDevicePage(1); setAppliedDeviceQuery(deviceQuery.trim()); }}><label>Find a device<input type="search" value={deviceQuery} onChange={(event) => setDeviceQuery(event.target.value)} placeholder="Device, ID, member or email" /></label><label>Status<select value={deviceStatus} onChange={(event) => { setDeviceStatus(event.target.value as "" | "active" | "revoked"); setDevicePage(1); }}><option value="">All device states</option><option value="active">Active</option><option value="revoked">Revoked</option></select></label><label>Team member<select value={deviceMemberId} onChange={(event) => { setDeviceMemberId(event.target.value); setDevicePage(1); }}><option value="">Everyone</option>{members.map((member) => <option value={member.id} key={member.id}>{memberLabel(member)}</option>)}</select></label><button type="submit" className={styles.secondary} disabled={devicesLoading}>{devicesLoading ? "Searching..." : "Search"}</button></form>

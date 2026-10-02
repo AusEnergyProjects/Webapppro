@@ -33,7 +33,7 @@ function render(permissions = {}, view = 'business', crmView = 'jobs', crewId) {
 
 test('field staff use one Home and Jobs workflow with Connect and their schedule', () => {
   const ui = render();
-  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'To do & training']);
+  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'Tasks & training']);
   assert.equal(ui.tree.props['aria-label'], 'Staff workspace');
   assert.equal(ui.button('Jobs').props['aria-current'], 'page');
   assert.equal(ui.button('My work'), undefined);
@@ -118,13 +118,22 @@ test('legacy work and saved job links open the canonical workspace and preserve 
   assert.equal(context.workspaceLocation('').target.id, 'today');
 });
 
-test('training, communication and time deep links keep their existing destinations', () => {
-  for (const view of ['training', 'messages', 'time']) {
+test('tasks, training, communication and time deep links keep their destinations', () => {
+  for (const view of ['tasks', 'training', 'messages', 'time']) {
     const result = context.workspaceLocation('?workspace=' + view);
     assert.equal(result.view, view); assert.equal(result.target, null);
   }
   assert.match(portal, /window\.addEventListener\("popstate", applyWorkspaceLink\)/);
   assert.match(portal, /<TradePersonalNameSettings/);
+});
+
+test('tasks and training share one visible navigation entry', () => {
+  for (const view of ['tasks', 'training']) {
+    const ui = render({}, view);
+    assert.equal(ui.button('Tasks & training').props['aria-current'], 'page');
+    ui.button('Tasks & training').props.onClick();
+    assert.deepEqual(ui.destinations, [['portal', 'tasks']]);
+  }
 });
 
 

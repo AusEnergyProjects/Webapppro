@@ -16,15 +16,16 @@ function load(path, dependencies = {}) {
 
 function fixture() {
   const database = new DatabaseSync(':memory:');
-  database.exec(`CREATE TABLE trade_team_members(id TEXT,owner_uid TEXT,display_name TEXT,status TEXT);
+  database.exec(`CREATE TABLE trade_team_members(id TEXT PRIMARY KEY,owner_uid TEXT,display_name TEXT,status TEXT,UNIQUE(owner_uid,id));
     INSERT INTO trade_team_members VALUES('member','owner','Alex Assessor','active');
-    CREATE TABLE trade_team_member_files(id TEXT,owner_uid TEXT,team_member_id TEXT,category TEXT,description TEXT,
-      title TEXT,expires_at TEXT,file_name TEXT,content_type TEXT,size_bytes INTEGER,sha256 TEXT,object_key TEXT,status TEXT,
-      cleanup_attempts INTEGER,next_cleanup_at TEXT,last_cleanup_error TEXT,uploaded_by_uid TEXT,created_at TEXT,updated_at TEXT,deleted_at TEXT);
     CREATE TABLE trade_team_member_credentials(id TEXT,owner_uid TEXT,team_member_id TEXT,credential_type TEXT,name TEXT,
       credential_number TEXT,issuer TEXT,jurisdiction TEXT,rental_gate TEXT,status TEXT,file_id TEXT,expires_at TEXT,created_at TEXT,updated_at TEXT);
     CREATE TABLE trade_team_member_events(id TEXT,owner_uid TEXT,team_member_id TEXT,actor_uid TEXT,entity_type TEXT,
       entity_id TEXT,event_type TEXT,metadata TEXT,created_at TEXT);`);
+  const original = fs.readFileSync(new URL('../drizzle/0131_trade_team_permissions_and_member_files.sql',import.meta.url),'utf8');
+  database.exec(original.match(/CREATE TABLE `trade_team_member_files` \([\s\S]*?\n\);/)[0]);
+  database.exec("ALTER TABLE trade_team_member_files ADD COLUMN title TEXT NOT NULL DEFAULT ''; ALTER TABLE trade_team_member_files ADD COLUMN expires_at TEXT NOT NULL DEFAULT '';");
+  database.exec(fs.readFileSync(new URL('../drizzle/0235_trade_member_engagement.sql',import.meta.url),'utf8'));
   function statement(sql, values = []) {
     return { bind(...next) { return statement(sql, next); },
       async first() { return database.prepare(sql).get(...values) || null; },
@@ -37,9 +38,9 @@ function fixture() {
     catch(error) { database.exec('ROLLBACK');throw error; }
   } };
   const access={ownerUid:'owner',actorUid:'owner',isOwner:true,canManageTeam:false};
-  const stored=[];
+  const stored=[]; const downloads=[];
   const route=load('../src/app/api/trade-team/member-files/route.ts',{
-    'cloudflare:workers':{env:{EVIDENCE:{put:async(key)=>stored.push(key),get:async()=>null,delete:async()=>{}}}},
+    'cloudflare:workers':{env:{EVIDENCE:{put:async(key)=>stored.push(key),get:async(key)=>{downloads.push(key);return stored.includes(key)?{body:'%PDF-1.7\nFixture',httpMetadata:{contentType:'application/pdf'}}:null;},delete:async()=>{}}}},
     '../../../../../db':{getD1:()=>db},
     '@/lib/admin-server':{ mfaErrorResponse,adminJson:(value,status=200)=>Response.json(value,{status}),sameOrigin:()=>true,cleanAdminText:(value,max)=>String(value||'').trim().slice(0,max)},
     '@/lib/trade-team-server':{requireInstallerTeamAccess:async()=>access},
@@ -55,7 +56,7 @@ function fixture() {
     request.headers.set('content-length',String((await request.clone().arrayBuffer()).byteLength));
     return route.POST(request);
   }
-  return { database,access,stored,route,upload };
+  return { database,access,stored,downloads,route,upload };
 }
 
 test('insurance upload retains its category and expiry without creating a trade credential',async()=>{
@@ -95,4 +96,45 @@ test('insurance files retain owner or delegated manager access and do not cross 
   const f=fixture();
   try { Object.assign(f.access,{isOwner:false,canManageTeam:true});assert.equal((await f.upload()).status,201); }
   finally { f.database.close(); }
+});
+
+test('owner-only contracts use the real file constraints and stay out of general lists and audit titles',async()=>{
+  const f=fixture();
+  try {
+    const response=await f.upload({scope:'employment',category:'other',expiresAt:'',title:'Private agreement at confidential rate'});
+    const body=await response.json();assert.equal(response.status,201,JSON.stringify(body));
+    assert.equal(f.database.prepare('SELECT owner_private FROM trade_team_member_files').get().owner_private,1);
+    const general=await f.route.GET(new Request('https://example.test/api/trade-team/member-files?memberId=member'));
+    assert.equal((await general.json()).files.length,0);
+    const privateList=await f.route.GET(new Request('https://example.test/api/trade-team/member-files?memberId=member&scope=employment'));
+    assert.equal((await privateList.json()).files[0].id,body.file.id);
+    const document=await f.route.GET(new Request(`https://example.test/api/trade-team/member-files?memberId=member&fileId=${body.file.id}`));
+    assert.equal(document.status,200);assert.equal(f.downloads.length,1);
+    assert.doesNotMatch(JSON.stringify(f.database.prepare('SELECT metadata FROM trade_team_member_events').all()),/confidential rate/);
+    Object.assign(f.access,{isOwner:false,canManageTeam:true});
+    assert.equal((await f.route.GET(new Request('https://example.test/api/trade-team/member-files?memberId=member&scope=employment'))).status,403);
+    assert.equal((await f.route.GET(new Request(`https://example.test/api/trade-team/member-files?memberId=member&fileId=${body.file.id}`))).status,404);
+    assert.equal((await f.route.DELETE(new Request(`https://example.test/api/trade-team/member-files?memberId=member&fileId=${body.file.id}`,{method:'DELETE'}))).status,404);
+    assert.equal(f.downloads.length,1,'denied reads never reach private object storage');
+    assert.equal((await f.upload({scope:'employment',category:'other',expiresAt:''})).status,403);
+    assert.equal(f.database.prepare('SELECT status FROM trade_team_member_files').get().status,'active');
+  } finally {f.database.close();}
+});
+
+test('private uploads cannot become shared credentials or renewal alerts and do not consume general capacity',async()=>{
+  const f=fixture();
+  try {
+    assert.equal((await f.upload({scope:'employment',category:'other',expiresAt:'2027-01-01'})).status,400);
+    assert.equal((await f.upload({scope:'employment',category:'insurance',expiresAt:''})).status,400);
+    const result=await f.upload({scope:'employment',category:'other',expiresAt:''});assert.equal(result.status,201);
+    const row=f.database.prepare('SELECT * FROM trade_team_member_files').get();
+    const keys=Object.keys(row);const insert=f.database.prepare(`INSERT INTO trade_team_member_files(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`);
+    for(let i=1;i<40;i++) insert.run(...keys.map(key=>key==='id'?`private-${i}`:key==='object_key'?`trade-team-members/owner/member/private-${i}`:row[key]));
+    Object.assign(f.access,{isOwner:false,canManageTeam:true});
+    assert.equal((await f.upload()).status,201,'general manager upload is not blocked by invisible private documents');
+    const list=await f.route.GET(new Request('https://example.test/api/trade-team/member-files?memberId=member'));
+    assert.equal((await list.json()).files.length,1);
+    f.access.ownerUid='another-business';f.access.isOwner=true;
+    assert.equal((await f.route.GET(new Request('https://example.test/api/trade-team/member-files?memberId=member&scope=employment'))).status,404);
+  } finally {f.database.close();}
 });

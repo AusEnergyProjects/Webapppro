@@ -1,9 +1,19 @@
 # Next task handover
 
-Status: Six approved workflow improvements and removal of superseded screens.
+Status: Team onboarding, everyday tasks and private pay/onboarding records.
 Prepared: 2 October 2026
 
-## Active contract: one connected business workflow
+## Active contract: simple team setup and everyday tasks
+
+Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Baseline source `817400aba224de689dd2c58a65c8138f87f327f5`, Sites 737.
+
+Outcome: clear invitation/joining, optional crew, own training and schedule next steps; quick self/team tasks on Home and a shared Tasks & training destination; owner-only member engagement records and private contracts. Keep employee/contractor type separate from hourly/salary/per-job rates. Store payment/super details encrypted with the existing key, without payroll, TFN collection, automatic payment or signature execution.
+
+Additional approved scope: editable employee and contractor agreement starters with saved details, unsigned PDF download/private storage and existing-document upload. Draft generation never signs or sends an agreement. Keep role-specific terms and official guidance visible and omit private account identifiers from prefills.
+
+Acceptance: existing verified-business/MFA access remains mandatory, live crew and member boundaries apply to tasks, edits use revisions, private records/documents never enter shared manager lists or renewal alerts, and task status never changes job or training completion. Migrations 0234/0235 preserve existing records. Validate focused boundaries, full release checks, publication build, exact source/deployment provenance and desktop/mobile web flows. Evidence: `C:/Webproject/outputs/tlink-team-tasks-20261002/`. MYOB remains outside this slice.
+
+## Previous contract: one connected business workflow
 
 Worktree `C:/Webproject/aea-energy-tlink-home-dashboard`, branch `codex/tlink-home-dashboard`. Baseline source `3cf7138192b099389b3e96a122ad2386d71ace61`, Sites 731.
 
