@@ -1,0 +1,44 @@
+.workspace { --portal-ink: var(--trade-ink,#143b42); --portal-line: var(--trade-line,#d7e5e5); --portal-surface: var(--trade-surface,#fff); --portal-soft: var(--trade-surface-soft,#f3f8f7); --portal-accent: var(--trade-accent-readable,#166b64); color:var(--portal-ink); padding:clamp(16px,2.5vw,32px); display:grid; gap:20px; min-width:0; }
+.heading span { font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.12em; color:var(--portal-accent); }
+.heading h2 { margin:6px 0; font-size:1.7rem; }
+.heading p { margin:0; }
+.workspace label { display:grid; gap:6px; font-size:.88rem; font-weight:600; min-width:0; }
+.workspace input,.workspace select,.workspace textarea { min-width:0; width:100%; box-sizing:border-box; border:1px solid var(--portal-line); border-radius:9px; padding:10px 12px; background:var(--portal-surface); color:inherit; font:inherit; }
+.workspace button { min-height:40px; padding:9px 15px; border:1px solid var(--portal-line); border-radius:9px; background:var(--portal-surface); color:inherit; font:inherit; font-size:.86rem; font-weight:650; cursor:pointer; }
+.workspace button:hover:not(:disabled),.workspace button[aria-pressed=true] { border-color:var(--portal-accent); background:var(--portal-soft); }
+.workspace button:disabled { opacity:.5; cursor:default; }
+.workspace :is(button,input,textarea,select):focus-visible { outline:3px solid var(--portal-accent); outline-offset:2px; }
+.error { margin:0; padding:12px; background:#fff1e6; color:#6f3519; border:1px solid #e7c4ad; border-radius:10px; }
+.error button { margin-left:10px; color:#6f3519; }
+.connect { display:grid; grid-template-columns:minmax(210px,280px) minmax(0,1fr); border:1px solid var(--portal-line); border-radius:14px; overflow:hidden; background:var(--portal-surface); }
+.people { padding:16px; background:var(--portal-soft); display:flex; flex-direction:column; gap:10px; border-right:1px solid var(--portal-line); }
+.people button { display:grid; text-align:left; gap:4px; }
+.people small { font-weight:400; text-transform:capitalize; }
+.people p { font-size:.85rem; }
+.conversation { display:grid; grid-template-rows:auto auto 1fr auto; min-width:0; }
+.conversation>header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px; border-bottom:1px solid var(--portal-line); }
+.conversation h3 { margin:0; font-size:1rem; }
+.conversation>.error { margin:12px; }
+.messages { min-height:220px; max-height:520px; overflow:auto; padding:16px; display:flex; flex-direction:column; align-items:flex-start; gap:12px; }
+.message,.mine { max-width:88%; min-width:150px; padding:12px 15px; border-radius:12px; background:var(--portal-soft); border:1px solid var(--portal-line); overflow-wrap:anywhere; }
+.mine { align-self:flex-end; }
+.messages article header { display:flex; flex-wrap:wrap; align-items:center; gap:14px; font-size:.8rem; }
+.messages time { font-size:.72rem; opacity:.8; }
+.messages p { margin:6px 0 0; white-space:pre-wrap; }
+.compose { padding:16px; border-top:1px solid var(--portal-line); display:grid; gap:10px; }
+.compose>button { justify-self:end; background:var(--portal-accent); color:white; }
+.toolbar { display:flex; align-items:end; gap:12px; flex-wrap:wrap; }
+.toolbar>button:last-child { margin-left:auto; background:var(--portal-accent); color:white; }
+.tasks { display:grid; gap:12px; }
+.task { display:flex; align-items:start; justify-content:space-between; gap:18px; padding:18px; border:1px solid var(--portal-line); border-radius:12px; background:var(--portal-surface); }
+.task h3 { font-size:1rem; margin:0 0 7px; overflow-wrap:anywhere; }
+.task p { margin:6px 0; font-size:.88rem; }
+.taskDetail { white-space:pre-wrap; overflow-wrap:anywhere; }
+.task small { font-size:.76rem; }
+.actions { display:flex; flex-wrap:wrap; gap:8px; }
+.editor { display:grid; gap:14px; border:1px solid var(--portal-accent); border-radius:12px; padding:20px; background:var(--portal-surface); }
+.editor h3 { margin:0; font-size:1rem; }
+.editorRow { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+.empty { padding:36px 22px; align-self:center; text-align:center; font-size:.93rem; }
+.pagination { display:flex; justify-content:center; align-items:center; gap:16px; }
+@media(max-width:760px) { .connect { grid-template-columns:1fr; } .people { border-right:0; border-bottom:1px solid var(--portal-line); max-height:230px; overflow:auto; } .editorRow { grid-template-columns:1fr; } .task { flex-direction:column; } .task .actions { width:100%; } .messages { max-height:420px; } .toolbar>button:last-child { margin-left:0; } }

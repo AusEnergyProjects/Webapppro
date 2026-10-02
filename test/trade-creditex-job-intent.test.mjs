@@ -180,8 +180,8 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 236);
-  assert.match(completeMigrationChain.at(-1), /^0236_trade_form_authoring_permission\.sql$/);
+  assert.equal(completeMigrationChain.length, 239);
+  assert.match(completeMigrationChain.at(-1), /^0239_portal_team_workspace\.sql$/);
   assert.match(completeMigrationChain[0], /^0000_/);
   assert.ok(
     completeMigrationChain.includes("0190_trade_activity_master_drafts.sql"),
@@ -831,7 +831,7 @@ test("Creditex register retains every assigned status and opens an audited full 
   assert.match(creditexQueueUi, /const auditLauncherRef = useRef<HTMLElement \| null>\(null\)/);
   assert.match(
     creditexQueueUi,
-    /onClick=\{\(event\) => void openAudit\(item, event\.currentTarget\)\}/,
+    /onClick=\{\(event\) => openAudit\(item, event\.currentTarget\)\}/,
   );
   assert.match(creditexQueueUi, /aria-controls="creditex-full-audit-workspace"/);
   assert.match(
@@ -923,13 +923,9 @@ test("returning from an audit restores the remounted job row and table position"
     const environment = {
       auditItem: { id: "job-intent-42" },
       auditLauncherRef: { current: original },
-      auditSequence: { current: 3 },
       tableRef,
       tableScroll: { current: { top: 315, left: 280 } },
       setAuditItem: value => cleared.push(["item", value]),
-      setAudit: value => cleared.push(["audit", value]),
-      setAuditMessage: value => cleared.push(["message", value]),
-      setAuditLoading: value => cleared.push(["loading", value]),
       window: { requestAnimationFrame: callback => { frame = callback; } },
       document: { getElementById: id => {
         assert.equal(id, "creditex-job-job-intent-42");
@@ -937,8 +933,7 @@ test("returning from an audit restores the remounted job row and table position"
       } },
     };
     new Function("environment", `const { ${Object.keys(environment).join(", ")} } = environment; ${closeSource}; closeAudit();`)(environment);
-    assert.equal(environment.auditSequence.current, 4, "Late audit responses must be invalidated.");
-    assert.deepEqual(cleared, [["item", null], ["audit", null], ["message", ""], ["loading", false]]);
+    assert.deepEqual(cleared, [["item", null]], "Closing unmounts the keyed audit desk; its own cleanup cancels private reads.");
     assert.deepEqual(focused, [], "Focus waits for the register to remount.");
     tableRef.current = { scrollTop: 0, scrollLeft: 0 };
     frame();

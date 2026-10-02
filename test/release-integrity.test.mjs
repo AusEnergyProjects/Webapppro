@@ -97,7 +97,9 @@ test("the dated audit is immutable evidence and current truth has one documented
   );
   assert.match(handover, /Current production: Sites version 499/);
   assert.match(releaseTruth, /Last reconciled locally: 2 October 2026/);
-  assert.match(releaseTruth, /## Current implementation: visible business Forms workspace/);
+  assert.match(releaseTruth, /## Current implementation: Creditex and Admin daily work and job audits/);
+  assert.match(releaseTruth, /Migrations 0237 to 0239/);
+  assert.match(releaseTruth, /## Previous implementation: visible business Forms workspace/);
   assert.match(releaseTruth, /Migrations 0234 and 0235/);
   assert.match(releaseTruth, /## Previous implementation: streamlined daily work and dashboard setup/);
   assert.match(releaseTruth, /## Previous implementation: default optional SWMS/);

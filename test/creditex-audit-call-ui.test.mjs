@@ -62,7 +62,7 @@ function harness(options = {}) {
   const window = { isSecureContext: true, RTCPeerConnection: class {}, setTimeout, clearTimeout, setInterval(callback) { const id = ++intervalId; intervals.set(id, callback); return id; }, clearInterval(id) { intervals.delete(id); } };
   const document = options.document || {};
   Function("require", "exports", "fetch", "window", "document", "navigator", "URL", compiled)(require, exports, fetch, window, document, { mediaDevices: { getUserMedia: microphone } }, { createObjectURL: () => "blob:private-audit-audio", revokeObjectURL: url => revoked.push(url) });
-  const render = () => { cursor = 0; const tree = exports.CreditexAuditCallPanel({ user, ...(options.target || { caseId: "case-1" }) }); for (const effect of queued.splice(0)) effect(); return tree; };
+  const render = () => { cursor = 0; const tree = exports.CreditexAuditCallPanel({ user, ...(options.target || { caseId: "case-1" }), ...options.props }); for (const effect of queued.splice(0)) effect(); return tree; };
   return { render, requests, clients, revoked, intervals, get microphoneRequests() { return microphoneRequests; }, get streamStops() { return streamStops; }, async mount() { render(); await flush(); return render(); }, async settle() { await flush(); return render(); }, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
 }
 
@@ -75,6 +75,48 @@ test("one Call customer action creates one bound intent and never supplies an ar
   assert.equal(h.streamStops, 1); assert.match(text(live), /Recording has not been confirmed/);
   button(live, "Mute microphone").props.onClick(); assert.equal(h.clients[0].call.isAudioMuted, true);
   button(h.render(), "End call").props.onClick(); await h.settle(); assert.ok(h.clients[0].disconnected); h.cleanup();
+});
+
+test("completed call association requires an explicit choice and never selects active, declined or failed calls", async () => {
+  const selected = [];
+  const calls = contracts.CREDITEX_AUDIT_CALL_STATUS.map(status => callRecord({ id: `call-${status}`, status }));
+  const h = harness({ workspace: { calls }, props: { onCallSelected: id => selected.push(id) } });
+  const tree = await h.mount();
+  assert.deepEqual(selected, []);
+  const choices = nodes(tree, node => node.type === "button" && text(node) === "Use for this audit");
+  assert.equal(choices.length, 1);
+  assert.equal(choices[0].props["aria-pressed"], false);
+  choices[0].props.onClick();
+  assert.deepEqual(selected, ["call-completed"]);
+  assert.equal(h.requests.filter(request => request.body).length, 0);
+  assert.equal(h.microphoneRequests, 0);
+  assert.equal(h.clients.length, 0);
+  h.cleanup();
+});
+
+test("completed calls without saved audio can be associated without claiming a saved recording", async () => {
+  const selected = [];
+  const props = { onCallSelected: id => selected.push(id), selectedCallId: null };
+  const h = harness({ workspace: { calls: [callRecord({ recordingStatus: "unknown", savedAt: "" })] }, props });
+  let tree = await h.mount();
+  assert.match(text(tree), /Recording not confirmed/);
+  assert.match(text(tree), /not a saved audit recording/);
+  assert.equal(button(tree, "Play recording"), undefined);
+  button(tree, "Use for this audit").props.onClick();
+  assert.deepEqual(selected, ["audit-call-1"]);
+  props.selectedCallId = selected[0];
+  tree = h.render();
+  assert.equal(button(tree, "Selected for this audit").props["aria-pressed"], true);
+  h.cleanup();
+});
+
+test("existing call panel consumers have no association controls without the optional callback", async () => {
+  const h = harness({ workspace: { calls: [callRecord()] } });
+  const tree = await h.mount();
+  assert.ok(button(tree, "Play recording"));
+  assert.equal(button(tree, "Use for this audit"), undefined);
+  assert.equal(button(tree, "Selected for this audit"), undefined);
+  h.cleanup();
 });
 
 test("microphone denial explains browser recovery and does not create or dial an intent", async () => {

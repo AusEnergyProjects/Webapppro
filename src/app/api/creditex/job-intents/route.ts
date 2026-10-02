@@ -9,6 +9,7 @@ import { isCreditexCertificateType } from "@/lib/creditex-certificate-types";
 import { creditexJobSubmissionSummary, deriveCreditexJobLifecycle, type CreditexJobSubmissionPacket } from "@/lib/creditex-job-lifecycle";
 import { creditexIntentOpenCorrectionSql } from "@/lib/creditex-job-lifecycle-sql";
 import { SUBMISSION_PACKETS_SQL, FIELD_PROGRESS_SQL, WORK_PACK_PROGRESS_SQL, CREDITEX_AUDIT_SQL, TRADE_REVIEW_SQL, CREDITEX_PAYOUT_SQL, CREDITEX_CASE_CORRECTION_SQL } from "@/lib/creditex-job-lifecycle-projection";
+import { loadCreditexAuditSummaries } from "@/lib/creditex-job-audit-server";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -247,6 +248,10 @@ export async function GET(request: Request) {
         (page - 1) * PAGE_SIZE,
       )
       .all<Record<string, unknown>>();
+    const auditSummaries = new Map((await loadCreditexAuditSummaries(database, {
+      kind: 'compliance', uid: access.uid, memberId: access.membershipId, name: access.displayName,
+      role: access.role, organisationId: access.organisationId,
+    }, rows.results.map(row => String(row.id)))).map(summary => [summary.intentId, summary]));
     return json({
       ok: true,
       status,
@@ -348,6 +353,8 @@ export async function GET(request: Request) {
           evidenceStatus: String(row.evidence_status || ""),
           submission: creditexJobSubmissionSummary(packets),
           lifecycle,
+          auditCompleted: auditSummaries.get(String(row.id))?.auditCompleted || false,
+          operationalCorrectionRequired: auditSummaries.get(String(row.id))?.correctionRequired || false,
           updatedAt: String(row.updated_at),
         };
       }),

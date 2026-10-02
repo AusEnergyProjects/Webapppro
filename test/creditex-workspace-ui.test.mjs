@@ -38,7 +38,7 @@ function runtime(name, props={}, options={}) {
   const stubs=new Map();
   const rowActions={};
   const mfa={};
-  const require=id=>id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./FirebaseMfa'?mfa:id==='firebase/app'?firebaseApp:id==='firebase/auth'?firebaseAuth:id==='@/lib/firebase-mfa'?firebaseMfa:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/creditex-certificate-types'?certificateTypes:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:()=>()=>null}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
+  const require=id=>id==='./PortalWorkspacePreferences'?{usePortalWorkspacePreferences:()=>({rootProps:{},profile:{displayName:'Test Reviewer'}}),PortalWorkspacePreferences:Object.assign(()=>null,{displayName:'PortalWorkspacePreferences'})}:id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./FirebaseMfa'?mfa:id==='firebase/app'?firebaseApp:id==='firebase/auth'?firebaseAuth:id==='@/lib/firebase-mfa'?firebaseMfa:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/creditex-certificate-types'?certificateTypes:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:()=>()=>null}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
   Function('require','exports',compile('FirebaseMfa'))(require,mfa);
   Function('require','exports',compile('JobRowActions'))(require,rowActions);
   const api=async(path,init)=>{requests.push(path);requestOptions.push(init);if(options.api)return options.api(path,init);return path.includes('?')?{ok:true,items:jobs,total:150,totalPages:3,page:Number(new URL(path,'https://test.invalid').searchParams.get('page'))}:audit(jobs.find(item=>path.endsWith(item.id)));};
@@ -116,10 +116,10 @@ test('Clear filters immediately resets drafts, applied filters, primary controls
 });
 
 test('column sorting uses API direction and exposes the actual selected sort',async()=>{
-  const h=runtime('CreditexPlannedIntakeQueue');let tree=await h.mount();button(tree,'First name ↕').props.onClick();tree=await h.settle();
-  assert.match(h.requests.at(-1),/sort=customerFirstName/);assert.match(h.requests.at(-1),/sortDirection=asc/);
-  assert.equal(nodes(tree,n=>n.type==='th'&&normalize(text(n))==='First name ↑')[0].props['aria-sort'],'ascending');
-  button(tree,'First name ↑').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sortDirection=desc/);assert.ok(button(tree,'First name ↓'));h.cleanup();
+  const h=runtime('CreditexPlannedIntakeQueue');let tree=await h.mount();button(tree,'Customer ↕').props.onClick();tree=await h.settle();
+  assert.match(h.requests.at(-1),/sort=customerName/);assert.match(h.requests.at(-1),/sortDirection=asc/);
+  assert.equal(nodes(tree,n=>n.type==='th'&&normalize(text(n))==='Customer ↑')[0].props['aria-sort'],'ascending');
+  button(tree,'Customer ↑').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sortDirection=desc/);assert.ok(button(tree,'Customer ↓'));h.cleanup();
 });
 
 test('created date and saved names have independent filters, sorts and paired calendar controls',async()=>{
@@ -137,7 +137,7 @@ test('created date and saved names have independent filters, sorts and paired ca
     assert.equal(field(tree,`${prefix} from`).props['data-date-range-group'],group);assert.equal(field(tree,`${prefix} to`).props['data-date-range-group'],group);
     assert.equal(field(tree,`${prefix} from`).props['data-date-range-role'],'start');assert.equal(field(tree,`${prefix} to`).props['data-date-range-role'],'end');
   }
-  button(tree,'Last name ↕').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sort=customerLastName/);
+  button(tree,'Customer ↕').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sort=customerName/);
   button(tree,'Created ↕').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sort=createdAt/);assert.match(h.requests.at(-1),/sortDirection=asc/);
   button(tree,'Created ↑').props.onClick();tree=await h.settle();assert.match(h.requests.at(-1),/sortDirection=desc/);
   button(tree,'Clear filters').props.onClick();await h.settle();const reset=new URL(h.requests.at(-1),'https://test.invalid').searchParams;
@@ -193,77 +193,96 @@ test('unmount aborts the active list load and ignores subsequent success or fail
   }
 });
 
-test('one job action opens its audited work area and stale details cannot switch customer',async()=>{
-  let resolveFirst;
-  const h=runtime('CreditexPlannedIntakeQueue',{}, {api:async path=>path.includes('?')?{ok:true,items:jobs,total:2,page:1,totalPages:1}:path.endsWith('job-1')?new Promise(resolve=>{resolveFirst=resolve;}):audit(jobs[1])});
-  let tree=await h.mount();const jobButtons=()=>openJobButtons(h.render());
-  assert.equal(jobButtons().length,2);assert.doesNotMatch(text(tree),/View summary|Open full audit workspace/);
-  jobButtons()[0].props.onClick({currentTarget:{isConnected:true,focus(){}}});await flush();tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexAuditCallPanel').length,0);
-  assert.equal(jobButtons().length,0);
-  button(tree,'Back to jobs').props.onClick();tree=h.render();
-  jobButtons()[1].props.onClick({currentTarget:{isConnected:true,focus(){}}});await flush();tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexAuditCallPanel')[0].props.jobIntentId,'job-2');
-  resolveFirst(audit(jobs[0]));await flush();tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexAuditCallPanel')[0].props.jobIntentId,'job-2');
-  button(tree,'Back to jobs').props.onClick();tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexAuditCallPanel').length,0);h.cleanup();
+test('one job action delegates the exact identity and intent to the audit desk without fetching private detail in the register',async()=>{
+  const changed=[];
+  const h=runtime('CreditexPlannedIntakeQueue',{onDirtyChange:value=>changed.push(value)});let tree=await h.mount();
+  openJobButtons(tree)[0].props.onClick({currentTarget:{isConnected:true,focus(){}}});tree=h.render();
+  const desk=()=>nodes(h.render(),n=>n.type?.displayName==='CreditexJobAuditDesk')[0];
+  assert.equal(openJobButtons(tree).length,0);assert.equal(desk().props.intentId,'job-1');assert.equal(desk().props.user,user);assert.equal(desk().props.actorMode,'creditex');
+  assert.equal(h.requests.length,1,'the dedicated audit desk owns its fresh authorised read');
+  assert.equal(desk().props.customer,undefined);assert.equal(desk().props.answers,undefined,'queue snapshots never become audit answers');
+  desk().props.onDirtyChange(true);assert.deepEqual(changed,[true]);
+  const firstKey=desk().key;desk().props.onClose();tree=h.render();
+  openJobButtons(tree)[1].props.onClick({currentTarget:{isConnected:true,focus(){}}});tree=h.render();
+  assert.equal(desk().props.intentId,'job-2');assert.notEqual(desk().key,firstKey,'changing jobs remounts the isolated desk');
+  desk().props.onClose();assert.equal(nodes(h.render(),n=>n.type?.displayName==='CreditexJobAuditDesk').length,0);h.cleanup();
 });
 
-test('selected work replaces the register, uses fresh private details and returns to the same filters',async()=>{
-  const h=runtime('CreditexPlannedIntakeQueue',{}, {api:async path=>path.includes('?')?{ok:true,items:jobs,total:2,page:1,totalPages:1}:{...audit(jobs[0]),customer:{first_name:'Current',last_name:'Customer',phone:'+61400000003'},serviceSite:{address_line_1:'Updated site address'}}});
-  let tree=await h.mount();button(tree,'Filters').props.onClick({currentTarget:h.filterLauncher});tree=h.render();field(tree,'Filter customer').props.onChange({target:{value:'Alex'}});tree=h.render();submitFilters(tree);tree=await h.settle();
-  openJobButtons(tree)[0].props.onClick({currentTarget:{isConnected:false,focus(){}}});await flush();tree=h.render();
-  assert.equal(field(tree,'Filter customer'),undefined);assert.match(text(tree),/Current Customer/);assert.match(text(tree),/Updated site address/);assert.doesNotMatch(text(tree),/Alex Example/);
-  button(tree,'Back to jobs').props.onClick();tree=h.render();assert.equal(field(tree,'Filter customer').props.value,'Alex');h.cleanup();
+test('selected work replaces the register and returns to the same filters',async()=>{
+  const h=runtime('CreditexPlannedIntakeQueue');let tree=await h.mount();button(tree,'Filters').props.onClick({currentTarget:h.filterLauncher});tree=h.render();
+  field(tree,'Filter customer').props.onChange({target:{value:'Alex'}});tree=h.render();submitFilters(tree);tree=await h.settle();
+  openJobButtons(tree)[0].props.onClick({currentTarget:{isConnected:false,focus(){}}});tree=h.render();
+  assert.equal(field(tree,'Filter customer'),undefined);assert.doesNotMatch(text(tree),/Alex Example/);
+  nodes(tree,n=>n.type?.displayName==='CreditexJobAuditDesk')[0].props.onClose();tree=h.render();
+  assert.equal(field(tree,'Filter customer').props.value,'Alex');h.cleanup();
 });
 
-test('Jobs keeps the canonical status and displays export as detail, with recoverable Bin actions',async()=>{
-  const current = {...jobs[0], lifecycle:{status:'audited',label:'Audited',detail:'Exported, awaiting lodgement'}};
-  const h=runtime('CreditexPlannedIntakeQueue',{}, {api:async path=>path.includes('?')?{ok:true,items:[current],total:1,page:1,totalPages:1}:audit(current)});
-  let tree=await h.mount();
+test('Jobs keeps canonical status and export detail; Bin delegates reversible actions to the audit desk',async()=>{
+  const current={...jobs[0],lifecycle:{status:'audited',label:'Audited',detail:'Exported, awaiting lodgement'}};
+  const h=runtime('CreditexPlannedIntakeQueue',{}, {api:async()=>({ok:true,items:[current],total:1,page:1,totalPages:1})});let tree=await h.mount();
   const statusCell=nodes(tree,n=>n.type==='td'&&text(n).includes('Audited'))[0];
-  assert.equal(text(nodes(statusCell,n=>n.type==='span')[0]),'Audited');
-  assert.equal(text(nodes(statusCell,n=>n.type==='small')[0]),'Exported, awaiting lodgement');
-  assert.ok(nodes(tree,n=>n.type==='th'&&text(n)==='Customer paid').length);
-  button(tree,'Bin').props.onClick();tree=await h.settle();
-  assert.equal(new URL(h.requests.at(-1),'https://test.invalid').searchParams.get('view'),'bin');
-  assert.equal(button(tree,'Back to active jobs').props['aria-pressed'],true);
-  openJobButtons(tree)[0].props.onClick({currentTarget:{isConnected:false,focus(){}}});await flush();tree=h.render();
-  const actions=nodes(tree,n=>n.type?.displayName==='CreditexJobLifecycleActions')[0];
-  assert.equal(actions.props.intentId,current.id);assert.equal(actions.props.user,user);
-  actions.props.onChanged();tree=await h.settle();
-  assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexJobLifecycleActions').length,0);
-  button(tree,'Back to active jobs').props.onClick();await h.settle();
+  assert.equal(text(nodes(statusCell,n=>n.type==='span')[0]),'Audited');assert.equal(text(nodes(statusCell,n=>n.type==='small')[0]),'Exported, awaiting lodgement');
+  button(tree,'Bin').props.onClick();tree=await h.settle();assert.equal(new URL(h.requests.at(-1),'https://test.invalid').searchParams.get('view'),'bin');
+  openJobButtons(tree)[0].props.onClick({currentTarget:{isConnected:false,focus(){}}});tree=h.render();
+  const desk=nodes(tree,n=>n.type?.displayName==='CreditexJobAuditDesk')[0];assert.equal(desk.props.intentId,current.id);assert.equal(desk.props.user,user);
+  const before=h.requests.length;desk.props.onChanged();await flush();assert.equal(h.requests.length,before+1);
+  desk.props.onClose();tree=h.render();button(tree,'Back to active jobs').props.onClick();await h.settle();
   assert.equal(new URL(h.requests.at(-1),'https://test.invalid').searchParams.has('view'),false);h.cleanup();
+});
+
+test('a current checklist cannot hide later lifecycle outcomes or claim they await approval',async()=>{
+  for(const status of ['submitted','paid','failed','cancelled','deleted','no_show','correction_required']) {
+    const current={...jobs[0],auditCompleted:true,operationalCorrectionRequired:status==='failed',lifecycle:{status,label:`Lifecycle ${status}`,detail:'Authoritative detail'}};
+    const h=runtime('CreditexPlannedIntakeQueue',{}, {api:async()=>({ok:true,items:[current],total:1,page:1,totalPages:1})});const tree=await h.mount();
+    const cell=nodes(tree,n=>n.type==='td'&&text(n).includes(`Lifecycle ${status}`))[0];
+    assert.equal(text(nodes(cell,n=>n.type==='span')[0]),`Lifecycle ${status}`);assert.match(text(cell),/Audit completed/);assert.doesNotMatch(text(cell),/Awaiting submission approval/);h.cleanup();
+  }
 });
 
 // Keep the real MFA hook's resolver and the portal's mfaRequired state at their
 // initial values; the session fixture follows those two state slots.
 function portal(role='admin', options={}) {return runtime('CreditexCompliancePortal',{}, {noEffects:true,...options,seed:{2:user,3:true,4:{role,email:'reviewer@example.invalid',displayName:'Test Reviewer',governanceIdentityVerified:true,canEditFieldMasters:role==='admin',organisation:{code:'creditex',legalName:'Creditex',tradingName:'Creditex'}},5:false}});}
 
-test('Jobs defaults and Submissions, Training and Activity forms stay directly visible in the left rail',()=>{
-  const h=portal();let tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
-  for(const label of ['Jobs','Cases','Submissions','Training','Activity forms','Trade onboarding','Official sources','Government rules','Team access'])assert.ok(button(tree,label));
+test('Home defaults and daily work plus compliance tools stay directly visible in the left rail',()=>{
+  const h=portal();let tree=h.render();assert.equal(button(tree,'Home dashboard').props['aria-selected'],true);
+  const home=nodes(tree,n=>n.type?.displayName==='CreditexHomeDashboard')[0];assert.equal(home.props.user,user);assert.equal(home.props.canManageTeam,true);
+  for(const label of ['Home dashboard','Jobs','Connect','Tasks','Cases','Submissions','Training','Forms','Trade onboarding','Official sources','Government rules','Team','Settings'])assert.ok(button(tree,label));
   assert.doesNotMatch(text(tree),/Setup & rules|VEU test pilot/);
   assert.equal(nodes(tree,n=>n.props?.role==='tablist')[0].props['aria-orientation'],'vertical');
   button(tree,'Cases').props.onClick();tree=h.render();assert.equal(button(tree,'Cases').props['aria-selected'],true);assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexOperationsWorkspace').length,1);
-  button(tree,'Activity forms').props.onClick();tree=h.render();assert.ok(nodes(tree,n=>n.props?.id==='creditex-panel-forms')[0]);
+  button(tree,'Forms').props.onClick();tree=h.render();assert.ok(nodes(tree,n=>n.props?.id==='creditex-panel-forms')[0]);
   assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexRegistryWorkspace').length,0);
   button(tree,'Submissions').props.onClick();tree=h.render();assert.ok(nodes(tree,n=>n.props?.id==='creditex-panel-submissions')[0]);
   assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexRegistryWorkspace').length,1);
   assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexOutputActions').length,1);h.cleanup();
 });
 
+test('Connect, tasks and profile use the active Creditex identity, and unsaved audit blocks leaving Jobs',()=>{
+  const h=portal('admin',{confirm:false});let tree=h.render();
+  for(const [label,view] of [['Connect','connect'],['Tasks','tasks']]) {
+    button(tree,label).props.onClick();tree=h.render();const workspace=nodes(tree,n=>n.type?.displayName==='PortalTeamWorkspace')[0];
+    assert.equal(workspace.props.workspace,'creditex');assert.equal(workspace.props.user,user);assert.equal(workspace.props.view,view);
+  }
+  button(tree,'Settings').props.onClick();tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='PortalWorkspacePreferences').length,1);
+  button(tree,'Jobs').props.onClick();tree=h.render();nodes(tree,n=>n.type?.displayName==='CreditexPlannedIntakeQueue')[0].props.onDirtyChange(true);
+  button(tree,'Tasks').props.onClick();tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
+  button(tree,'Jobs').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
+  nodes(tree,n=>n.type==='select'&&n.props.value==='cases')[0].props.onChange({target:{value:'forms'}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);h.cleanup();
+});
+
 test('auditors retain forms and source access but never gain training or administrator tools',()=>{
   const h=portal('auditor');const tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexVoiceSetupPanel').length,0);
-  assert.ok(button(tree,'Official sources'));assert.ok(button(tree,'Activity forms'));
-  for(const label of ['Government rules','Training','Trade onboarding','Team access'])assert.equal(button(tree,label),undefined);
-  const selector=nodes(tree,n=>n.type==='select'&&n.props.value==='cases')[0];assert.deepEqual(nodes(selector,n=>n.type==='option').map(n=>n.props.value),['cases','operations','submissions','forms','sources']);h.cleanup();
+  assert.ok(button(tree,'Official sources'));assert.ok(button(tree,'Forms'));
+  for(const label of ['Government rules','Training','Trade onboarding','Team'])assert.equal(button(tree,label),undefined);
+  const selector=nodes(tree,n=>n.type==='select'&&n.props.value==='home')[0];assert.deepEqual(nodes(selector,n=>n.type==='option').map(n=>n.props.value),['home','cases','connect','tasks','operations','submissions','forms','sources','settings']);h.cleanup();
 });
 
 test('vertical keyboard navigation cycles through the visible authorised tabs',()=>{
-  const h=portal();let tree=h.render();let prevented=false;button(tree,'Jobs').props.onKeyDown({key:'ArrowDown',preventDefault(){prevented=true;}});tree=h.render();assert.equal(prevented,true);assert.equal(button(tree,'Cases').props['aria-selected'],true);
-  button(tree,'Cases').props.onKeyDown({key:'End',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Team access').props['aria-selected'],true);
-  button(tree,'Team access').props.onKeyDown({key:'ArrowDown',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);
-  button(tree,'Jobs').props.onKeyDown({key:'ArrowUp',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Team access').props['aria-selected'],true);
-  button(tree,'Team access').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Jobs').props['aria-selected'],true);h.cleanup();
+  const h=portal();let tree=h.render();let prevented=false;button(tree,'Home dashboard').props.onKeyDown({key:'ArrowDown',preventDefault(){prevented=true;}});tree=h.render();assert.equal(prevented,true);assert.equal(button(tree,'Jobs').props['aria-selected'],true);
+  button(tree,'Jobs').props.onKeyDown({key:'End',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Settings').props['aria-selected'],true);
+  button(tree,'Settings').props.onKeyDown({key:'ArrowDown',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Home dashboard').props['aria-selected'],true);
+  button(tree,'Home dashboard').props.onKeyDown({key:'ArrowUp',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Settings').props['aria-selected'],true);
+  button(tree,'Settings').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Home dashboard').props['aria-selected'],true);h.cleanup();
 });
 
 test('mobile section selector opens the same panels and ignores unavailable destinations',()=>{
@@ -280,12 +299,12 @@ test('desktop, keyboard and mobile changes all respect unsaved training edits',(
 });
 
 test('activity form drafts survive desktop, keyboard, mobile and team-access navigation until discard is confirmed',()=>{
-  const h=portal('admin',{confirm:false});let tree=h.render();button(tree,'Activity forms').props.onClick();tree=h.render();
+  const h=portal('admin',{confirm:false});let tree=h.render();button(tree,'Forms').props.onClick();tree=h.render();
   const governance=nodes(tree,n=>typeof n.props?.onFieldFormDirtyChange==='function')[0];governance.props.onFieldFormDirtyChange(true);
-  button(tree,'Jobs').props.onClick();tree=h.render();assert.equal(button(tree,'Activity forms').props['aria-selected'],true);
-  button(tree,'Activity forms').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Activity forms').props['aria-selected'],true);
-  nodes(tree,n=>n.type==='select'&&n.props.value==='forms')[0].props.onChange({target:{value:'team'}});tree=h.render();assert.equal(button(tree,'Activity forms').props['aria-selected'],true);
-  governance.props.onManageFormAccess();tree=h.render();assert.equal(button(tree,'Activity forms').props['aria-selected'],true);
-  governance.props.onFieldFormDirtyChange(false);governance.props.onManageFormAccess();tree=h.render();assert.equal(button(tree,'Team access').props['aria-selected'],true);
+  button(tree,'Jobs').props.onClick();tree=h.render();assert.equal(button(tree,'Forms').props['aria-selected'],true);
+  button(tree,'Forms').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Forms').props['aria-selected'],true);
+  nodes(tree,n=>n.type==='select'&&n.props.value==='forms')[0].props.onChange({target:{value:'team'}});tree=h.render();assert.equal(button(tree,'Forms').props['aria-selected'],true);
+  governance.props.onManageFormAccess();tree=h.render();assert.equal(button(tree,'Forms').props['aria-selected'],true);
+  governance.props.onFieldFormDirtyChange(false);governance.props.onManageFormAccess();tree=h.render();assert.equal(button(tree,'Team').props['aria-selected'],true);
   assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexTeamAccess').length,1);h.cleanup();
 });

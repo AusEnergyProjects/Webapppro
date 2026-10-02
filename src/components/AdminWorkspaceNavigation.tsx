@@ -1,13 +1,17 @@
 "use client";
 
-export type AdminWorkspaceTab = "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "assistant-reviews" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "compliance-submissions" | "compliance-questions" | "field-pilot" | "database" | "access";
+export type AdminWorkspaceTab = "inbox" | "overview" | "connect" | "tasks" | "settings" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "assistant-reviews" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "compliance-submissions" | "compliance-questions" | "field-pilot" | "database" | "access";
 type Role = "owner" | "admin" | "reviewer" | "support";
 type Item = { id: AdminWorkspaceTab; label: string; ownerOnly?: boolean; excludeSupport?: boolean };
 const groups: Array<{ label: string; secondary?: boolean; items: Item[] }> = [
-  { label: "Work", items: [
-    { id: "inbox", label: "Inbox" }, { id: "overview", label: "Overview" },
+  { label: "Daily work", items: [
+    { id: "overview", label: "Home dashboard" }, { id: "inbox", label: "Inbox" },
     { id: "jobs", label: "Jobs" }, { id: "customers", label: "Customers" },
+    { id: "connect", label: "Connect" }, { id: "tasks", label: "Tasks" },
+  ] },
+  { label: "Business tools", items: [
     { id: "partners", label: "Trades & suppliers" }, { id: "opportunities", label: "Leads" },
+    { id: "access", label: "Team", ownerOnly: true }, { id: "settings", label: "Profile & appearance" },
   ] },
   { label: "Compliance", items: [
     { id: "compliance-submissions", label: "Submissions", excludeSupport: true },
@@ -23,7 +27,7 @@ const groups: Array<{ label: string; secondary?: boolean; items: Item[] }> = [
     { id: "directory", label: "All accounts" }, { id: "assistant-leads", label: "Guide follow-ups" },
     { id: "assistant-reviews", label: "AI answer reviews", excludeSupport: true },
     { id: "field-pilot", label: "Field testing" },
-    { id: "database", label: "Database", ownerOnly: true }, { id: "access", label: "Access & audit", ownerOnly: true },
+    { id: "database", label: "Database", ownerOnly: true },
   ] },
 ];
 
@@ -37,13 +41,16 @@ export function adminWorkspaceHash(tab: AdminWorkspaceTab) {
 }
 
 export function adminWorkspaceTabFromHash(hash: string, role: Role): AdminWorkspaceTab | null {
-  const id = !hash || hash === "#operations-inbox" ? "inbox" : hash.replace(/^#/, "");
+  const id = !hash ? "overview" : hash === "#operations-inbox" ? "inbox" : hash.replace(/^#/, "");
   return visibleGroups(role).flatMap((group) => group.items).find((item) => item.id === id)?.id || null;
 }
 
 const iconPaths: Record<AdminWorkspaceTab, string> = {
   inbox: "M4 4h16v16H4z M4 13h5l2 3h2l2-3h5",
   overview: "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z",
+  connect: "M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.7 2z",
+  tasks: "M9 3h6v4H9z M9 5H5v16h14V5h-4 M8 13l2 2 5-5",
+  settings: "M4 6h16 M4 12h16 M4 18h16 M8 3v6 M16 9v6 M10 15v6",
   jobs: "M8 7V4h8v3 M3 7h18v13H3z M3 12h18 M10 12v3h4v-3",
   customers: "M15 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M5 21v-3a7 7 0 0 1 14 0v3",
   partners: "M3 21V9l6-4v16 M9 11l6-4 6 4v10 M1 21h22 M13 15h4 M13 18h4 M5 11h1 M5 15h1",

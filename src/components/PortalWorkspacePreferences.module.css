@@ -1,0 +1,25 @@
+.panel { background: var(--portal-surface, white); border: 1px solid var(--portal-line, #d6e4e4); border-radius: 18px; color: var(--portal-ink, #123b3c); margin: 0 auto; max-width: 1040px; padding: clamp(18px, 3vw, 32px); }
+.panel header { margin-bottom: 26px; }
+.panel header > span { color: var(--portal-muted, #567074); font-size: .75rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.panel h1 { color: inherit; font-size: 1.6rem; margin: 6px 0 10px; }
+.panel p, .panel small { color: var(--portal-muted, #567074); font-size: .875rem; line-height: 1.5; }
+.panel form { display: grid; gap: 25px; }
+.name { display: grid; font-weight: 650; gap: 9px; max-width: 500px; }
+.name input { background: var(--portal-background, #f3f8f7); border: 1px solid var(--portal-line, #d6e4e4); border-radius: 9px; color: inherit; font: inherit; min-height: 44px; padding: 10px 12px; width: 100%; }
+.name small { font-weight: 400; }
+.panel fieldset { border: 0; margin: 0; min-width: 0; padding: 0; }
+.panel legend { font-weight: 750; margin-bottom: 12px; }
+.palettes { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.palettes label { align-items: center; border: 2px solid var(--portal-line, #d6e4e4); border-radius: 10px; cursor: pointer; display: grid; gap: 8px; grid-template-columns: 18px 1fr; padding: 9px; }
+.palettes label.selected { border-color: #1c9678; box-shadow: 0 0 0 1px #1c9678; }
+.palettes span { border-radius: 6px; grid-column: span 2; grid-row: 1; height: 38px; }
+.palettes strong { font-size: .75rem; }
+.modes { display: flex; gap: 24px; }
+.modes label { align-items: center; cursor: pointer; display: flex; gap: 9px; min-height: 44px; }
+.panel input[type=radio] { accent-color: #178368; height: 17px; margin: 0; width: 17px; }
+.actions { align-items: center; display: flex; flex-wrap: wrap; gap: 15px; }
+.actions button { background: var(--portal-gradient, #126b58); border: 0; border-radius: 9px; color: white; cursor: pointer; font: inherit; font-weight: 700; min-height: 44px; padding: 10px 20px; }
+.actions button:disabled { cursor: wait; opacity: .6; }
+.panel :is(input, button):focus-visible { outline: 3px solid #39b699; outline-offset: 3px; }
+.panel .error { background: #fff0ef; border-radius: 8px; color: #963833; padding: 12px; }
+@media(max-width: 650px) { .palettes { grid-template-columns: repeat(2, minmax(0,1fr)); } }

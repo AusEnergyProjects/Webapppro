@@ -43,13 +43,20 @@ import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkben
 import { CreditexOperationsWorkspace, CreditexTeamAccess } from "./CreditexOperationsWorkspace";
 import { CreditexPlannedIntakeQueue } from "./CreditexPlannedIntakeQueue";
 import CreditexVoiceSetupPanel from "./CreditexVoiceSetupPanel";
+import { PortalWorkspacePreferences, usePortalWorkspacePreferences } from "./PortalWorkspacePreferences";
+import { PortalTeamWorkspace } from "./PortalTeamWorkspace";
+import { CreditexHomeDashboard } from "./CreditexHomeDashboard";
 import styles from "./CreditexCompliancePortal.module.css";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
-type WorkspaceTab = "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance" | "team";
+type WorkspaceTab = "home" | "connect" | "tasks" | "settings" | "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance" | "team";
 
 function WorkspaceIcon({ tab }: { tab: WorkspaceTab }) {
   const paths: Record<WorkspaceTab, string> = {
+    home: "m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8",
+    connect: "M8 3H4c-3 8 9 20 17 17v-4l-5-2-2 3c-4-2-5-3-7-7l3-2z",
+    tasks: "M8 4h12v17H4V4h4M8 2h8v5H8zM8 13l2 2 5-5",
+    settings: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2",
     cases: "M8 6V4h8v2M4 6h16v14H4zM4 11h16M10 11v3h4v-3",
     operations: "M4 5h6l2 2h8v13H4zM8 12h8M8 16h5",
     submissions: "M14 3H5v18h14V8zM14 3v5h5M8 14l3 3 5-6",
@@ -343,20 +350,31 @@ export function CreditexCompliancePortal() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tab, setTab] = useState<WorkspaceTab>("cases");
+  const [tab, setTab] = useState<WorkspaceTab>("home");
+  const preferences = usePortalWorkspacePreferences({ workspace: "creditex", user: session ? user : null, currentDisplayName: session?.displayName || "" });
+  const auditDirty = useRef(false);
+  const reportAuditDirty = useCallback((dirty: boolean) => { auditDirty.current = dirty; }, []);
   const questionnaireDirty = useRef(false);
   const fieldFormDirty = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
   const reportFieldFormDirty = useCallback((dirty: boolean) => { fieldFormDirty.current = dirty; }, []);
   function selectTab(next: typeof tab) {
     if (next === tab) return true;
+    if (auditDirty.current && !window.confirm("Discard the unsaved audit answers?")) return false;
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
     if (fieldFormDirty.current && !window.confirm("Discard the unsaved changes to this activity form?")) return false;
+    auditDirty.current = false;
+    if (noticeKind === "success") setNotice("");
     questionnaireDirty.current = false;
     fieldFormDirty.current = false;
     setTab(next);
     return true;
   }
+  useEffect(() => {
+    if (!notice || noticeKind !== "success") return;
+    const timer = window.setTimeout(() => setNotice(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [notice, noticeKind]);
   const [cases, setCases] = useState<CaseQueueItem[]>([]);
   const [caseQuery, setCaseQuery] = useState("");
   const [caseStatus, setCaseStatus] =
@@ -621,7 +639,7 @@ export function CreditexCompliancePortal() {
         else {
           setPrograms([]);
           setActivities([]);
-          setTab("cases");
+          setTab("home");
         }
       } catch (error) {
         if (firebaseAuth.currentUser?.uid !== activeUid) return;
@@ -667,7 +685,7 @@ export function CreditexCompliancePortal() {
           setActivityTemplateId("");
           setProgramForm(emptyProgramForm());
           setActivityForm(emptyActivityForm());
-          setTab("cases");
+          setTab("home");
           setNotice("");
         }
         setUser(nextUser);
@@ -1054,20 +1072,24 @@ export function CreditexCompliancePortal() {
   }
 
   const primaryTabs: { id: WorkspaceTab; label: string }[] = [
+    { id: "home", label: "Home dashboard" },
     { id: "cases", label: "Jobs" },
-    { id: "operations", label: "Cases" },
-    { id: "submissions", label: "Submissions" },
+    { id: "connect", label: "Connect" },
+    { id: "tasks", label: "Tasks" },
   ];
   const toolsTabs: { id: WorkspaceTab; label: string }[] = [
+    { id: "operations", label: "Cases" },
+    { id: "submissions", label: "Submissions" },
     ...(canOpenQuestionnaires ? [{ id: "compliance-questions" as const, label: "Training" }] : []),
-    { id: "forms", label: "Activity forms" },
+    { id: "forms", label: "Forms" },
   ];
   const reviewTabs: { id: WorkspaceTab; label: string }[] = [
     ...(canReviewTraining ? [{ id: "onboarding" as const, label: "Trade onboarding" }] : []),
     { id: "sources", label: "Official sources" },
     ...(session?.role === "admin" ? [{ id: "governance" as const, label: "Government rules" }] : []),
-    ...(session?.role === "admin" ? [{ id: "team" as const, label: "Team access" }] : []),
+    ...(session?.role === "admin" ? [{ id: "team" as const, label: "Team" }] : []),
   ];
+  reviewTabs.push({ id: "settings", label: "Settings" });
   const visibleTabs = [...primaryTabs, ...toolsTabs, ...reviewTabs];
 
   function handleWorkspaceTabKeyDown(
@@ -1124,12 +1146,9 @@ export function CreditexCompliancePortal() {
                   <span>Creditex compliance</span>
                 </div>
               </div>
-              <h1>Controlled compliance operations</h1>
+              <h1>Your Creditex workspace</h1>
               <p>
-                Review privacy-minimised queues, open audited full case records
-                and govern official program activity versions. Access is limited
-                to pre-approved, active Creditex memberships with a verified
-                Firebase identity.
+                Review jobs, work with your team and prepare activity submissions.
               </p>
             </div>
             <form
@@ -1235,6 +1254,7 @@ export function CreditexCompliancePortal() {
     <main
       className={styles.shell}
       id="site-content"
+      {...preferences.rootProps}
     >
       <div className={styles.frame}>
         <aside className={styles.sidebar} aria-label="Creditex navigation">
@@ -1262,11 +1282,11 @@ export function CreditexCompliancePortal() {
           </label>
           <nav className={styles.tabs} aria-label="Creditex workspace" role="tablist" aria-orientation="vertical">
             <div className={styles.navGroup} role="presentation">
-              <span className={styles.groupLabel}>Work</span>
+              <span className={styles.groupLabel}>Daily work</span>
               {primaryTabs.map((item) => <button key={item.id} className={styles.tab} type="button" role="tab" id={`creditex-tab-${item.id}`} aria-controls={`creditex-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={handleWorkspaceTabKeyDown}><WorkspaceIcon tab={item.id} /><span>{item.label}</span></button>)}
             </div>
             <div className={styles.navGroup} role="presentation">
-              <span className={styles.groupLabel}>Training &amp; forms</span>
+              <span className={styles.groupLabel}>Compliance</span>
               {toolsTabs.map((item) => <button key={item.id} className={styles.tab} type="button" role="tab" id={`creditex-tab-${item.id}`} aria-controls={`creditex-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={handleWorkspaceTabKeyDown}><WorkspaceIcon tab={item.id} /><span>{item.label}</span></button>)}
             </div>
             <div className={styles.navGroup} role="presentation">
@@ -1286,9 +1306,10 @@ export function CreditexCompliancePortal() {
             <strong>{visibleTabs.find((item) => item.id === tab)?.label}</strong>
           </div>
           <div className={styles.identity}>
+            <button className={styles.secondaryButton} type="button" onClick={() => selectTab("settings")}>Profile &amp; colours</button>
             <div>
               <strong>
-                {session.displayName || session.email} | {readable(session.role)}
+                {preferences.profile.displayName || session.displayName || session.email}
               </strong>
               <span>
                 {session.organisation.tradingName ||
@@ -1305,7 +1326,7 @@ export function CreditexCompliancePortal() {
           </div>
         </header>
         <div className={styles.content}>
-        {!["cases", "operations", "submissions", "forms", "compliance-questions", "team"].includes(tab) && (
+        {!["home", "connect", "tasks", "settings", "cases", "operations", "submissions", "forms", "compliance-questions", "team"].includes(tab) && (
           <section className={styles.hero}>
             <div className={styles.heroCopy}>
               <h1>
@@ -1348,14 +1369,17 @@ export function CreditexCompliancePortal() {
           </p>
         )}
 
+        {tab === "home" && <section id="creditex-panel-home" role="tabpanel" aria-labelledby="creditex-tab-home"><CreditexHomeDashboard user={user} canManageTeam={session.role === "admin"} onNavigate={selectTab} /></section>}
+        {(tab === "connect" || tab === "tasks") && <section id={`creditex-panel-${tab}`} role="tabpanel" aria-labelledby={`creditex-tab-${tab}`}><PortalTeamWorkspace key={`${user.uid}:${tab}`} workspace="creditex" user={user} view={tab}/>{tab === "connect" && <p className={styles.callHint}>Customer audit calls are available inside each job. Open Jobs, choose Audit, then Call customer.</p>}</section>}
+        {tab === "settings" && <section id="creditex-panel-settings" role="tabpanel" aria-labelledby="creditex-tab-settings"><PortalWorkspacePreferences controller={preferences}/>{session.role === "admin" && <details className={styles.voiceSettings}><summary>Audit phone setup</summary><CreditexVoiceSetupPanel user={user}/></details>}</section>}
+
         {tab === "cases" && (
           <div
             id="creditex-panel-cases"
             role="tabpanel"
             aria-labelledby="creditex-tab-cases"
           >
-            {session.role === "admin" && user && <CreditexVoiceSetupPanel user={user} />}
-            <CreditexPlannedIntakeQueue api={api} />
+            <CreditexPlannedIntakeQueue api={api} onDirtyChange={reportAuditDirty} />
           </div>
         )}
 

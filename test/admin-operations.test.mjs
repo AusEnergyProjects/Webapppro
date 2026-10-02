@@ -195,7 +195,7 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
 });
 
 test("operations UI covers accounts, evidence, projects, access and audit", () => {
-  assert.match(portal, /Network overview/);
+  assert.match(portal, /Home dashboard/);
   assert.match(portal, /tlink-icon-192\.png/);
   assert.match(portal, /AdminTLinkBrand/);
   assert.match(portal, /fixedType="customer"/);

@@ -24,9 +24,10 @@ test("desktop and mobile navigation preserve every role boundary", () => {
     for (const link of links) link.props.onClick();
     const options = nodes(tree, node => node.type === "option").map(node => node.props.value);
     assert.deepEqual(selected, options);
-    assert.equal(selected.length, role === "owner" ? 20 : role === "support" ? 15 : 18);
+    assert.equal(selected.length, role === "owner" ? 23 : role === "support" ? 18 : 21);
     assert.equal(Boolean(button(tree, "Database")), role === "owner");
-    assert.equal(Boolean(button(tree, "Access & audit")), role === "owner");
+    assert.equal(Boolean(button(tree, "Team")), role === "owner");
+    for (const name of ["Home dashboard", "Connect", "Tasks", "Profile & appearance"]) assert.ok(button(tree, name));
     assert.equal(Boolean(button(tree, "Training")), role !== "support");
     assert.equal(Boolean(button(tree, "Submissions")), role !== "support");
     assert.equal(Boolean(button(tree, "AI answer reviews")), role !== "support");
@@ -45,7 +46,7 @@ test("Submissions, Training and Activity forms are direct visible compliance sec
   assert.equal(nodes(tree, node => node.props?.["aria-current"] === "page").length, 1);
   assert.equal(nodes(tree, node => node.props?.["aria-label"] === "4 unread alerts").length, 1);
   const html = renderToStaticMarkup(tree);
-  assert.equal((html.match(/<svg /g) || []).length, 20);
+  assert.equal((html.match(/<svg /g) || []).length, 23);
   assert.match(html, /aria-hidden="true" focusable="false"/);
 });
 
@@ -65,7 +66,7 @@ test("selected secondary groups open and rejected mobile changes restore the con
 test("deep links resolve only available sections, including the existing inbox anchor", () => {
   assert.equal(navigation.adminWorkspaceTabFromHash("#form-governance", "owner"), "form-governance");
   assert.equal(navigation.adminWorkspaceTabFromHash("#operations-inbox", "admin"), "inbox");
-  assert.equal(navigation.adminWorkspaceTabFromHash("", "admin"), "inbox");
+  assert.equal(navigation.adminWorkspaceTabFromHash("", "admin"), "overview");
   assert.equal(navigation.adminWorkspaceTabFromHash("#database", "reviewer"), null);
   assert.equal(navigation.adminWorkspaceTabFromHash("#compliance-questions", "support"), null);
   assert.equal(navigation.adminWorkspaceTabFromHash("#compliance-submissions", "support"), null);
@@ -105,6 +106,7 @@ function portalHarness({ hash = "", role = "owner" } = {}) {
   const mfa = {};
   const require = name => name === "react" ? hooks : name === "react/jsx-runtime" ? jsx
     : name === "./AdminWorkspaceNavigation" ? navigation
+      : name === "./PortalWorkspacePreferences" ? { usePortalWorkspacePreferences: () => ({ rootProps: {}, profile: { displayName: "Owner" } }), PortalWorkspacePreferences: () => null }
       : name === "./FirebaseMfa" ? mfa
       : name === "firebase/app" ? firebaseApp
       : name === "@/lib/firebase-mfa" ? firebaseMfa
@@ -169,7 +171,21 @@ test("unsaved activity form edits block tab and browser-history navigation until
   assert.equal(h.historyIndex, 1);
   assert.deepEqual(h.confirmations, ["Discard the unsaved changes to this activity form?", "Discard the unsaved changes to this activity form?"]);
   h.permitDiscard(true); h.back(); tree = h.settle();
-  assert.equal(h.nav(tree).selected, "inbox");
+  assert.equal(h.nav(tree).selected, "overview");
+  h.cleanup();
+});
+
+test("unsaved job audit blocks workspace and browser-history navigation until discard is confirmed", () => {
+  const h = portalHarness(); let tree = h.settle();
+  h.nav(tree).onSelect("jobs"); tree = h.settle();
+  nodes(tree, node => typeof node.props?.onAuditDirtyChange === "function")[0].props.onAuditDirtyChange(true);
+  assert.equal(h.nav(tree).onSelect("tasks"), false);
+  h.back(); tree = h.settle();
+  assert.equal(h.nav(tree).selected, "jobs");
+  assert.equal(h.window.location.hash, "#jobs");
+  assert.deepEqual(h.confirmations, ["Leave this audit without saving your changes?", "Leave this audit without saving your changes?"]);
+  h.permitDiscard(true); h.back(); tree = h.settle();
+  assert.equal(h.nav(tree).selected, "overview");
   h.cleanup();
 });
 

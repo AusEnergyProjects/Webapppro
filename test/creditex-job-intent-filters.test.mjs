@@ -173,10 +173,16 @@ test("route applies identical filter bindings to count and page query while reta
   ] }) }; } }) };
   const dependencies = { "../../../../../db": { getD1: () => database }, "@/lib/compliance-access-server": { ComplianceAccessError: AccessError, requireComplianceAccess: async () => ({ organisationCode, organisationId: "authorised-org" }) }, "@/lib/trade-compliance-intent": { CREDITEX_PARTNER_ORGANISATION_CODE: "creditex" }, "@/lib/creditex-job-intent-filters": filters, "@/lib/creditex-certificate-types": certificateTypes, "@/lib/creditex-job-lifecycle": lifecycle, "@/lib/creditex-job-lifecycle-sql": lifecycleSql, "@/lib/creditex-job-lifecycle-projection": lifecycleProjection };
   const exported = {};
+  dependencies["@/lib/creditex-job-audit-server"] = { loadCreditexAuditSummaries: async (db, actor, intentIds) => {
+    assert.equal(db, database); assert.equal(actor.organisationId, 'authorised-org');
+    assert.deepEqual(intentIds, ['current', 'retained']);
+    return [{ intentId: 'current', auditCompleted: true, correctionRequired: false }];
+  } };
   Function("require", "exports", compiled)(name => { assert.ok(dependencies[name]); return dependencies[name]; }, exported);
   const request = new Request("https://example.test/api/creditex/job-intents?certificateType=VEEC&program=VEU&installer=Acme&plannedFrom=2026-09-21&createdFrom=2026-09-20&createdTo=2026-09-20&firstName=Mary&lastName=Example&sort=priority&sortDirection=desc&page=2");
   const response = await exported.GET(request); assert.equal(response.status, 200);
   const result = await response.json(); assert.equal(result.total, 76); assert.equal(result.page, 2); assert.equal(result.sort, "priority");
+  assert.equal(result.items[0].auditCompleted, true); assert.equal(result.items[1].auditCompleted, false);
   assert.equal(result.pageSize, 50); assert.equal(result.totalPages, 2); assert.equal(result.certificateType, "VEEC");
   assert.equal(result.items[0].certificateType, "VEEC"); assert.equal(result.items[0].claimOutputCode, "VEEC"); assert.equal(result.items[0].activityTitle, "Heat pump installation");
   assert.equal(result.items[0].caseNumber, "CX-100"); assert.equal(result.items[0].caseStatus, "submitted"); assert.equal(result.items[0].evidenceStatus, "verified"); assert.equal(result.items[0].siteSuburb, "Melbourne"); assert.equal(result.items[0].sitePostcode, "3000");

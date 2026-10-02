@@ -56,7 +56,11 @@ function disconnectHeadset(client: TelnyxRTC | null, call: Call | null) {
 
 type AuditCallTarget = { caseId: string; jobIntentId?: never } | { jobIntentId: string; caseId?: never };
 
-export function CreditexAuditCallPanel({ user, caseId, jobIntentId }: { user: User } & AuditCallTarget) {
+export function CreditexAuditCallPanel({ user, caseId, jobIntentId, selectedCallId, onCallSelected }: {
+  user: User;
+  selectedCallId?: string | null;
+  onCallSelected?: (callId: string) => void;
+} & AuditCallTarget) {
   const [data, setData] = useState<CreditexAuditCallsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -281,6 +285,7 @@ export function CreditexAuditCallPanel({ user, caseId, jobIntentId }: { user: Us
         {call.recordingStatus === "unknown" && <p className={styles.muted}>A recording could not be confirmed. This is not a saved audit recording.</p>}
         {call.recordingStatus === "saved" && (playback?.id === call.id ? <div className={styles.playback}><audio controls autoPlay preload="metadata" src={playback.url} aria-label="Private audit call recording" /><button type="button" className={styles.secondary} onClick={closePlayback}>Close recording</button></div> : <button type="button" className={styles.secondary} disabled={Boolean(recordingBusy)} onClick={() => void playRecording(call.id)}>{recordingBusy === call.id ? "Opening recording..." : "Play recording"}</button>)}
         {call.recordingStatus === "failed" && <button type="button" className={styles.secondary} disabled={Boolean(recordingBusy)} onClick={() => void retryRecording(call.id)}>{recordingBusy === call.id ? "Checking storage..." : "Retry saving recording"}</button>}
+        {onCallSelected && call.status === "completed" && <button type="button" className={styles.secondary} aria-pressed={selectedCallId === call.id} onClick={() => onCallSelected(call.id)}>{selectedCallId === call.id ? "Selected for this audit" : "Use for this audit"}</button>}
       </li>)}</ol> : <p className={styles.empty}>No calls for this audit yet.</p>}
     </>}
   </section>;

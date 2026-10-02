@@ -9,6 +9,7 @@ import {
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const page = read("../src/app/creditex/compliance/page.tsx");
 const portal = read("../src/components/CreditexCompliancePortal.tsx");
+const jobAuditDesk = read("../src/components/CreditexJobAuditDesk.tsx");
 const evidenceGovernance = read(
   "../src/components/CreditexEvidencePolicyGovernance.tsx",
 );
@@ -388,7 +389,6 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /trade_crm_job_media|object_key|firebase_id_token|refresh_token|password_hash|session_cookie/i,
   );
   for (const contract of [
-    /Find a job, review its records and call the customer from their audit workspace/,
     /Open job/,
     /All records/,
     /Superseded history/,
@@ -397,18 +397,12 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /item\.customerFirstName/,
     /item\.customerLastName/,
     /item\.customerBusinessName/,
-    /<td>\{item\.customerPhone \|\| "Not recorded"\}<\/td>/,
-    /<td>\{item\.customerEmail \|\| "Not recorded"\}<\/td>/,
     /item\.serviceAddress/,
-    /AuditRecordView title="Customer" record=\{audit\.customer\}/,
-    /AuditRecordView title="Service site" record=\{audit\.serviceSite\}/,
-    /AuditRecordView title="Job details" record=\{audit\.jobDetails\}/,
-    /AuditRecordView title="Work order" record=\{audit\.workOrder\}/,
-    /item\.quotedValueCents/,
-    /item\.invoicedValueCents/,
-    /Re-plan required/,
-    /All saved fields and references/,
+    /<CreditexJobAuditDesk key=\{auditItem\.id\} user=\{firebaseAuth\.currentUser\} intentId=\{auditItem\.id\} actorMode="creditex"/,
+    /onDirtyChange=\{onDirtyChange\}/,
+    /label: "Audit"/,
   ]) assert.match(plannedIntakeQueue, contract);
+  assert.doesNotMatch(plannedIntakeQueue, /AuditRecordView|All saved fields and references|<td>\{item\.customerPhone/);
 
   for (const contract of [
     /requireComplianceAccess\(request, \{\}, database\)/,
@@ -457,14 +451,10 @@ test("planned intake exposes private job context only to the exact Creditex orga
     plannedJobAuditRoute,
     /groups\.map\(\(group\) => group\.statement\)/,
   );
-  for (const lazyUiContract of [
-    /const loadAuditGroup = useCallback/,
-    /group: groupKey/,
-    /event\.currentTarget\.open[\s\S]*!group\.loaded/,
-    /Open to load/,
-    /Load 50 more records/,
-    /retryCursor: cursor/,
-  ]) assert.match(plannedIntakeQueue, lazyUiContract);
+  assert.match(plannedIntakeQueue, /import \{ CreditexJobAuditDesk \} from "\.\/CreditexJobAuditDesk"/);
+  assert.match(jobAuditDesk, /\/api\/creditex\/job-audit\?intentId=\$\{encodeURIComponent\(intentId\)\}/);
+  assert.match(jobAuditDesk, /Authorization: `Bearer \$\{token\}`/);
+  assert.match(jobAuditDesk, /controller\.abort\(\)/);
   for (const provenanceContract of [
     /function addressProvenance\(serviceSite: Row\)/,
     /serviceSite\.address_entry_mode \|\| "manual_pending_review"/,
@@ -475,16 +465,8 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /reviewRequired: !providerVerified/,
     /serviceSiteAddressProvenance: requestedGroup[\s\S]*addressProvenance\(serviceSite\)/,
   ]) assert.match(plannedJobAuditRoute, provenanceContract);
-  for (const reviewContract of [
-    /serviceSiteAddressProvenance: ServiceSiteAddressProvenance/,
-    /Manual address: review required/,
-    /Creditex must compare it with the job evidence before relying on it for compliance/,
-    /Provider-selected address/,
-    /provenance\.providerReference/,
-    /provenance\.formattedAddress/,
-    /provenance\.verifiedAt/,
-    /<AddressProvenanceView provenance=\{audit\.serviceSiteAddressProvenance\} \/>/,
-  ]) assert.match(plannedIntakeQueue, reviewContract);
+  assert.match(jobAuditDesk, /workspace\.target\.addressReviewRequired/);
+  assert.match(jobAuditDesk, /Manual address: compare it with the job evidence/);
   assert.doesNotMatch(
     plannedJobAuditRoute,
     /customer_id = \?[\s\S]{0,100}\(\? = '' OR service_site_id = \?\)/,
@@ -986,7 +968,7 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
   assert.match(portal, /handleWorkspaceTabKeyDown/);
   assert.ok(
     portal.indexOf('className={styles.tabs}')
-      < portal.indexOf('{!["cases", "operations", "submissions", "forms", "compliance-questions", "team"].includes(tab) && ('),
+      < portal.indexOf('id="creditex-panel-home"'),
     "The permanent workspace tabs must render before tab-specific content.",
   );
   assert.match(

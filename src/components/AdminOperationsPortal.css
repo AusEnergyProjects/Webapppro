@@ -529,6 +529,22 @@
 
 .admin-workspace h1, .admin-workspace h2, .admin-workspace h3 { font-family: inherit; }
 
+.admin-shell.admin-workspace[data-portal-theme] { --color-aea-muted: var(--portal-muted); --color-aea-text: var(--portal-ink); --color-aea-ink: var(--portal-ink); --color-aea-line: var(--portal-line); background: var(--portal-background); }
+.admin-workspace[data-portal-theme] > .admin-topbar { background: var(--portal-gradient); }
+.admin-workspace[data-portal-theme] .admin-sidebar { background: var(--portal-gradient); }
+.admin-workspace[data-portal-theme] .admin-content { background: var(--portal-background); }
+.admin-workspace[data-portal-theme] :is(.admin-card,.admin-panel,.admin-metric-grid article,.admin-register-filters,.admin-register-table,.admin-register-table td:first-child) { background: var(--portal-surface); border-color: var(--portal-line); }
+.admin-workspace[data-portal-theme] :is(.admin-access-metrics article,.admin-register-table th,.admin-queue-list button) { background: var(--portal-soft); border-color: var(--portal-line); color: var(--portal-ink); }
+.admin-workspace[data-portal-theme] :is(.admin-register-table td,.admin-register-filters label,.admin-register-heading h1) { color: var(--portal-ink); }
+.admin-home-shortcuts { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 24px; }
+.admin-home-shortcuts button { background: var(--portal-surface); border: 1px solid var(--portal-line); border-radius: 9px; color: var(--portal-ink); cursor: pointer; font: inherit; font-size: .875rem; font-weight: 650; min-height: 44px; padding: 10px 16px; }
+.admin-home-shortcuts button:first-child { background: var(--portal-gradient); border-color: transparent; color: white; }
+.admin-profile-security { margin: 20px auto 0; max-width: 1040px; }
+.admin-workspace[data-portal-mode="night"] :is(.admin-content input,.admin-content select,.admin-content textarea) { background: var(--portal-soft); border-color: var(--portal-line); color: var(--portal-ink); }
+.admin-workspace[data-portal-mode="night"] :is(.admin-register-heading p,.admin-register-filters label,.admin-register-toolbar p,.admin-register-pagination,.admin-access-metrics small,.admin-access-metrics span) { color: var(--portal-muted); }
+.admin-workspace[data-portal-mode="night"] .admin-register-table tr:hover td { background: var(--portal-soft); }
+.admin-workspace[data-portal-mode="night"] :is(.admin-register-table td,.admin-admin-list article,.admin-audit-list article,.admin-audit-table article) { border-color: var(--portal-line); }
+
 .admin-account-security-note > summary { cursor: pointer; font-weight: 650; }
 @media(max-width: 560px) {
   .admin-directory-list .admin-table-header { display: grid; }

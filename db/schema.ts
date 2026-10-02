@@ -5,6 +5,9 @@ export * from "./trade-crews-schema";
 export * from "./trade-swms-schema";
 export * from "./trade-business-tasks-schema";
 export * from "./trade-member-engagement-schema";
+export * from "./portal-workspace-profile-schema";
+export * from "./portal-team-workspace-schema";
+export * from "./creditex-job-audit-schema";
 
 export const tradeMapLocationCache = sqliteTable("trade_map_location_cache", {
   ownerUid: text("owner_uid").notNull(), addressKey: text("address_key").notNull(), address: text("address").notNull(),

@@ -36,6 +36,7 @@ import { jobCustomerBillingStatus, jobInvoicePaymentStatus, jobInvoiceSettlement
 import { tradeMapQuery } from "@/lib/trade-map-contract";
 import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import { defaultTradeMapDateRange } from "@/lib/trade-map-date-range";
+import { useWorkspaceNotice } from "@/lib/use-workspace-notice";
 import { CUSTOMER_REGISTER_FILTER_VERSION, defaultCustomerCreatedRange } from "@/lib/customer-register-range";
 import type {
   InstallerCustomerRegisterSort,
@@ -510,7 +511,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [savedCustomerPreferencesReady, setSavedCustomerPreferencesReady] = useState(false);
   const customerPreferencesReady = mapWorkspace || Boolean(staffPermissions) || savedCustomerPreferencesReady;
   const [busy, setBusy] = useState("");
-  const [status, setStatus] = useState("");
+  const { notice, setStatus, dismissStatus } = useWorkspaceNotice(`${view}:${focusedJobId}:${focusedJobTab}:${selectedCustomerId}:${creating}`);
   const [mfaRequired, setMfaRequired] = useState(false);
   const [bookingTraining, setBookingTraining] = useState<BookingTrainingModule[]>([]);
   const newJobHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -607,10 +608,10 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     let active = true;
     void load().catch((error) => {
       bootstrapStarted.current = false;
-      if (active) setStatus(error instanceof Error ? error.message : "The installer CRM tools could not be loaded.");
+      if (active) setStatus(error instanceof Error ? error.message : "The installer CRM tools could not be loaded.", "error");
     });
     return () => { active = false; };
-  }, [creating, focusedJobId, load, view]);
+  }, [creating, focusedJobId, load, setStatus, view]);
 
   useEffect(() => {
     const isJobs = view === "jobs";
@@ -667,11 +668,11 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       loadedRef.current = false;
       if (active && !controller.signal.aborted) {
         if (isCustomers) setSavedCustomerPreferencesReady(true);
-        setStatus(error instanceof Error ? error.message : "The saved list view could not be loaded.");
+        setStatus(error instanceof Error ? error.message : "The saved list view could not be loaded.", "error");
       }
     });
     return () => { active = false; controller.abort(); if (!applied) loadedRef.current = false; };
-  }, [fetch, mapWorkspace, staffPermissions, user, view]);
+  }, [fetch, mapWorkspace, setStatus, staffPermissions, user, view]);
 
   const jobIndexParams = useCallback((page: number, pageSize: number, cursor = "", includeTotal = true) => {
     const params = new URLSearchParams({ mode: "index", resource: "jobs", service: jobService,
@@ -717,7 +718,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const downloadAllFilteredJobs = useCallback(async () => {
     if (jobExporting) return;
     setJobExporting(true);
-    setStatus("Preparing the complete filtered Creditex job register export...");
+    setStatus("Preparing the complete filtered Creditex job register export...", "progress");
     try {
       const { DATAFORCE_JOB_CSV_HEADERS, exportDataforceJobCsv } = await import("@/lib/creditex-dataforce-job-csv");
       const token = await user.getIdToken();
@@ -788,13 +789,13 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       download.click();
       download.remove();
       URL.revokeObjectURL(csvUrl);
-      setStatus(`${records.length} filtered ${records.length === 1 ? "job" : "jobs"} downloaded in the approved Creditex register order.`);
+      setStatus(`${records.length} filtered ${records.length === 1 ? "job" : "jobs"} downloaded in the approved Creditex register order.`, "success");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "The complete filtered job export could not be created.");
+      setStatus(error instanceof Error ? error.message : "The complete filtered job export could not be created.", "error");
     } finally {
       setJobExporting(false);
     }
-  }, [fetch, jobExporting, jobIndexParams, user]);
+  }, [fetch, jobExporting, jobIndexParams, setStatus, user]);
 
   const customerIndexParams = useCallback(() => {
     const params = new URLSearchParams({ mode: "index", resource: "customers", search: customerSearch, firstName: customerFirstName,
@@ -850,7 +851,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       void loadJobIndex(controller.signal).catch((error) => {
         if (!active) return;
         setIndexedJobs([]);
-        setStatus(error instanceof Error ? error.message : "The job list could not be loaded.");
+        setStatus(error instanceof Error ? error.message : "The job list could not be loaded.", "error");
       })
         .finally(() => active && setIndexLoading(false));
     };
@@ -859,7 +860,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     const timer = delay ? window.setTimeout(run, delay) : 0;
     if (!delay) run();
     return () => { active = false; controller.abort(); if (timer) window.clearTimeout(timer); };
-  }, [creating, focusedJobId, jobIndexKey, loadJobIndex, refreshNonce, usesJobIndex, view]);
+  }, [creating, focusedJobId, jobIndexKey, loadJobIndex, refreshNonce, setStatus, usesJobIndex, view]);
 
   useEffect(() => {
     if (view !== "customers" || creating === "customer" || !customerPreferencesReady || mapWorkspace || customerLayout === "map") return;
@@ -870,7 +871,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       void loadCustomerIndex(controller.signal).catch((error) => {
         if (!active) return;
         setIndexedCustomers([]);
-        setStatus(error instanceof Error ? error.message : "The customer list could not be loaded.");
+        setStatus(error instanceof Error ? error.message : "The customer list could not be loaded.", "error");
       })
         .finally(() => active && setIndexLoading(false));
     };
@@ -879,7 +880,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     const timer = delay ? window.setTimeout(run, delay) : 0;
     if (!delay) run();
     return () => { active = false; controller.abort(); if (timer) window.clearTimeout(timer); };
-  }, [creating, customerIndexKey, customerLayout, customerPreferencesReady, loadCustomerIndex, mapWorkspace, refreshNonce, view]);
+  }, [creating, customerIndexKey, customerLayout, customerPreferencesReady, loadCustomerIndex, mapWorkspace, refreshNonce, setStatus, view]);
 
   useEffect(() => {
     if (view !== "jobs" || !focusedJobId) return;
@@ -892,9 +893,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok || !result.job) throw new Error(result.error || "The job record could not be loaded.");
       if (active) { setSelectedJobDetail(result.job); setSelectedJobCustomer(result.customer || null); setSelectedJobSites(result.sites || []); setFocusedJobRefreshing(false); }
-    }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The job record could not be loaded."));
+    }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The job record could not be loaded.", "error"));
     return () => { active = false; controller.abort(); };
-  }, [fetch, focusedJobId, refreshNonce, user, view]);
+  }, [fetch, focusedJobId, refreshNonce, setStatus, user, view]);
 
   useEffect(() => {
     if (view !== "jobs" || !focusedJobId) return;
@@ -930,9 +931,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         setSelectedCustomerJobs(result.jobs || []);
         setSelectedCustomerSites(result.sites || []);
       }
-    }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The customer record could not be loaded."));
+    }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The customer record could not be loaded.", "error"));
     return () => { active = false; controller.abort(); };
-  }, [fetch, refreshNonce, selectedCustomerId, user, view]);
+  }, [fetch, refreshNonce, selectedCustomerId, setStatus, user, view]);
 
   useEffect(() => {
     if (view !== "jobs" || jobLayout !== "board") return;
@@ -951,9 +952,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         setBoardJobs(Object.fromEntries(results.map(([stage, items]) => [stage, items])));
         setBoardCounts(Object.fromEntries(results.map(([stage, , total]) => [stage, total])));
       }
-    }).catch((error) => active && setStatus(error instanceof Error ? error.message : "The job board could not be loaded."));
+    }).catch((error) => active && setStatus(error instanceof Error ? error.message : "The job board could not be loaded.", "error"));
     return () => { active = false; };
-  }, [fetch, jobLayout, refreshNonce, user, view]);
+  }, [fetch, jobLayout, refreshNonce, setStatus, user, view]);
 
   useEffect(() => {
     if (
@@ -1013,7 +1014,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   }, [allowedViews, canCreateCustomer, canCreateJob, navigationTarget, teamAccess, setCreating, setJobLayout, setSelectedCustomerId, setView]);
 
   function openFocusedJob(id: string, tab: JobDetailTab = "summary", returnTarget: JobReturnTarget = { kind: "jobs" }) {
-    if (indexedJobs.some(job => job.id === id && job.recordStatus === "archived")) { setStatus("This job is in the bin. Choose Actions, then Restore job to open it."); return; }
+    if (indexedJobs.some(job => job.id === id && job.recordStatus === "archived")) { setStatus("This job is in the bin. Choose Actions, then Restore job to open it.", "warning"); return; }
     void mapNavigation.run(() => {
       setCreatingState("");
       setJobReturnTarget(returnTarget);
@@ -1043,7 +1044,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   }
 
   async function crmRequest(method: "POST" | "PATCH", body: Record<string, unknown>, busyKey: string, success: string) {
-    setBusy(busyKey); setStatus("Saving your private business record...");
+    setBusy(busyKey); setStatus("Saving your private business record...", "progress");
     try {
       const token = await user.getIdToken();
       const response = await fetch("/api/trade-crm", {
@@ -1064,14 +1065,14 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       await load(); setRefreshNonce((value) => value + 1);
       setStatus(calendarFailed
         ? `${success} Calendar sync needs another try. ${calendarFailed} ${calendarFailed === 1 ? "update was" : "updates were"} not completed.`
-        : success);
+        : success, calendarFailed ? "warning" : "success", calendarFailed > 0);
       return true;
-    } catch (error) { setStatus(error instanceof Error ? error.message : "The CRM update could not be saved."); return false; }
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The CRM update could not be saved.", "error"); return false; }
     finally { setBusy(""); }
   }
 
   async function bulkRequest(body: Record<string, unknown>, busyKey: string, success: string) {
-    setBusy(busyKey); setStatus("Updating the selected records...");
+    setBusy(busyKey); setStatus("Updating the selected records...", "progress");
     try {
       const token = await user.getIdToken();
       const response = await fetch("/api/trade-crm", {
@@ -1080,8 +1081,8 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       const result = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
       if (isMfaRequiredResponse(result)) setMfaRequired(true);
       if (!response.ok || !result.ok) throw new Error(result.error || "The selected records could not be updated.");
-      setSelectedCustomerIds([]); setRefreshNonce((value) => value + 1); setStatus(success);
-    } catch (error) { setStatus(error instanceof Error ? error.message : "The selected records could not be updated."); }
+      setSelectedCustomerIds([]); setRefreshNonce((value) => value + 1); setStatus(success, "success");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The selected records could not be updated.", "error"); }
     finally { setBusy(""); }
   }
 
@@ -1182,11 +1183,11 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       setIndexedJobs(current => current.filter(item => item.id !== job.id));
       jobCursors.current = [""]; jobTotalReady.current = false;
       setJobPage(1); setRefreshNonce(value => value + 1);
-      setStatus(restore ? 'Job restored.' : 'Job moved to the bin. Restore it from the Deleted status filter.');
+      setStatus(restore ? 'Job restored.' : 'Job moved to the bin. Restore it from the Deleted status filter.', "success");
       saved = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The job could not be updated.';
-      if (restore) setStatus(message); else setBinError(message);
+      if (restore) setStatus(message, "error"); else setBinError(message);
     } finally {
       binPendingRef.current = false; setBusy('');
       if (saved && !restore) closeJobBin();
@@ -1302,8 +1303,8 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         if (method === "DELETE") applyListPreferences(viewKey, preferences);
         setCustomerViewSaved(method === "PATCH");
       }
-      setStatus(method === "PATCH" ? "Default list view saved." : "Default list view reset.");
-    } catch (error) { setStatus(error instanceof Error ? error.message : "The default list view could not be saved."); }
+      setStatus(method === "PATCH" ? "Default list view saved." : "Default list view reset.", "success");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The default list view could not be saved.", "error"); }
     finally { setViewBusy(false); }
   }
 
@@ -1325,9 +1326,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       } else {
         setCustomerPresets((current) => [preset, ...current.filter((item) => item.id !== preset.id)]); setActiveCustomerPresetId(preset.id);
       }
-      setStatus(presetId ? "Saved view updated." : "Saved view created.");
+      setStatus(presetId ? "Saved view updated." : "Saved view created.", "success");
       return true;
-    } catch (error) { setStatus(error instanceof Error ? error.message : "The saved view could not be updated."); return false; }
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The saved view could not be updated.", "error"); return false; }
     finally { setViewBusy(false); }
   }
 
@@ -1341,8 +1342,8 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       if (!response.ok || !result.ok) throw new Error(result.error || "The saved view could not be deleted.");
       if (viewKey === "installer-jobs") { setJobPresets((current) => current.filter((item) => item.id !== presetId)); setActiveJobPresetId(""); }
       else { setCustomerPresets((current) => current.filter((item) => item.id !== presetId)); setActiveCustomerPresetId(""); }
-      setStatus("Saved view deleted.");
-    } catch (error) { setStatus(error instanceof Error ? error.message : "The saved view could not be deleted."); }
+      setStatus("Saved view deleted.", "success");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The saved view could not be deleted.", "error"); }
     finally { setViewBusy(false); }
   }
 
@@ -1359,7 +1360,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   async function createJob(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
     setBookingTraining([]);
-    setBusy("create-job"); setStatus("Creating the customer, service site and job together...");
+    setBusy("create-job"); setStatus("Creating the customer, service site and job together...", "progress");
     try {
       const token = await user.getIdToken();
       const body = Object.fromEntries(data);
@@ -1389,10 +1390,12 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         calendarFailed ? `Calendar sync needs another try. ${calendarFailed} ${calendarFailed === 1 ? "update was" : "updates were"} not completed.` : "",
         result.customerDocuments?.requested ? result.customerDocuments.message : "",
       ].filter(Boolean).join(" ");
-      setStatus(creationResults);
+      const needsAttention = calendarFailed > 0 || (result.complianceIntentPlanned && !result.workPackReady)
+        || (result.customerDocuments?.requested && ["failed", "unavailable"].includes(result.customerDocuments.status));
+      setStatus(creationResults, needsAttention ? "warning" : "success", calendarFailed > 0);
       form.reset(); setNewJobSeed(null); setCreating(""); setView("jobs");
       if (result.id && navigationTarget?.kind === "new-job" && navigationTarget.jobTab === "quote") openFocusedJob(result.id, "quote");
-    } catch (error) { setStatus(error instanceof Error ? error.message : "The customer, service site and job were not created."); }
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The customer, service site and job were not created.", "error"); }
     finally { setBusy(""); }
   }
 
@@ -1412,7 +1415,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       jobCursors.current = [""]; jobTotalReady.current = false;
       openJobsForStage("", reopened ? "all" : jobFilter === "lost" ? "lost" : "all");
       setRefreshNonce(value => value + 1);
-      setStatus(reopened ? "Opportunity reopened. Review the quote before sending a fresh customer link." : "Marked as lost. Its records are kept in Lost archive and queued follow-ups have stopped.");
+      setStatus(reopened ? "Opportunity reopened. Review the quote before sending a fresh customer link." : "Marked as lost. Its records are kept in Lost archive and queued follow-ups have stopped.", "success");
     }} />}
     {binJob && <dialog ref={binDialogRef} className={registerStyles.paymentDialog} aria-labelledby={binDialogTitleId} aria-describedby={binDialogDescriptionId} onCancel={event => { event.preventDefault(); closeJobBin(); }} onKeyDown={event => event.stopPropagation()}>
       <form aria-busy={busy === `bin:${binJob.id}`} onSubmit={event => { event.preventDefault(); void changeJobBin(binJob, false); }}>
@@ -1513,7 +1516,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       {jobFilter === "active" && <div className="crm-filter-notice"><span>Showing open jobs</span><button type="button" onClick={() => setJobFilter("all")}>Show all jobs</button></div>}
       {pipelineFocus && <div className="crm-filter-notice"><span>Showing {pipelineLabels[pipelineFocus] || pipelineFocus}</span><button type="button" onClick={() => setPipelineFocus("")}>Clear stage</button></div>}
       {jobLayout !== "board" && <div className="crm-index-view-tools">{!staffPermissions && <WorkspaceSavedViews presets={jobPresets} activeId={activeJobPresetId} busy={viewBusy}
-        onApply={(preset) => { applyListPreferences("installer-jobs", preset.preferences); setActiveJobPresetId(preset.id); setStatus(`${preset.name} view applied.`); }}
+        onApply={(preset) => { applyListPreferences("installer-jobs", preset.preferences); setActiveJobPresetId(preset.id); setStatus(`${preset.name} view applied.`, "success"); }}
         onClear={() => setActiveJobPresetId("")}
         onCreate={(name) => saveNamedView("installer-jobs", name)} onRename={(id, name) => saveNamedView("installer-jobs", name, id)} onDelete={(id) => deleteNamedView("installer-jobs", id)} />}
         {jobLayout === "list" && <WorkspaceTableTools columns={jobIndexColumns} visibleKeys={[...jobColumns]} onVisibleKeys={(keys) => { setJobColumns(safeJobRegisterColumns(keys)); setActiveJobPresetId(""); }} noun="jobs"
@@ -1570,7 +1573,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         <button type="button" onClick={() => { setCustomerSearch(""); setCustomerFirstName(""); setCustomerLastName(""); setCustomerBusinessName(""); setCustomerEmail(""); setCustomerStreet(""); setCustomerPhone(""); setCustomerPostcode(""); setCustomerSuburb(""); setCustomerState(""); setCustomerService(""); setCustomerJobId(""); setCustomerPipeline(""); setCustomerPage(1); setSelectedCustomerIds([]); }}>Clear detailed filters</button>
       </div></details>
       <div className="crm-index-view-tools">{!staffPermissions && <WorkspaceSavedViews presets={customerPresets} activeId={activeCustomerPresetId} busy={viewBusy}
-        onApply={(preset) => { applyListPreferences("installer-customers", preset.preferences); setActiveCustomerPresetId(preset.id); setStatus(`${preset.name} view applied.`); }}
+        onApply={(preset) => { applyListPreferences("installer-customers", preset.preferences); setActiveCustomerPresetId(preset.id); setStatus(`${preset.name} view applied.`, "success"); }}
         onClear={() => setActiveCustomerPresetId("")}
         onCreate={(name) => saveNamedView("installer-customers", name)} onRename={(id, name) => saveNamedView("installer-customers", name, id)} onDelete={(id) => deleteNamedView("installer-customers", id)} />}
         {customerLayout === "list" && <WorkspaceTableTools columns={customerIndexColumns} visibleKeys={customerColumns} onVisibleKeys={(keys) => { setCustomerColumns(safeCustomerRegisterColumns(keys)); setActiveCustomerPresetId(""); }} noun="customers" exportDisabled={!indexedCustomers.length}
@@ -1620,7 +1623,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     {view === "assets" && <div className="crm-view"><TradeAssetWorkspace user={user} /></div>}
     {view === "integrations" && <div className="crm-view"><TradeIntegrationCentre user={user} /></div>}
     <BookingTrainingLinks modules={bookingTraining} teamPortal={Boolean(staffPermissions)} />
-    {status && <p className="crm-status" role="status">{status}{mfaRequired && <> <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</>}{status.includes("Calendar sync needs another try.") && <> <a href="/direct-trade/dashboard?workspace=schedule">Open Schedule and retry calendar sync</a>.</>}</p>}
+    {notice && <p className="crm-status" role={notice.kind === "error" || notice.kind === "warning" ? "alert" : "status"}>{notice.message}{notice.kind === "error" && mfaRequired && <> <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</>}{notice.calendarRetry && <> <a href="/direct-trade/dashboard?workspace=schedule">Open Schedule and retry calendar sync</a>.</>}{notice.kind !== "progress" && <button type="button" onClick={dismissStatus} aria-label="Dismiss notification" style={{ marginLeft: "1rem" }}>Dismiss</button>}</p>}
   </section>;
 }
 

@@ -20,6 +20,12 @@
   color-scheme: light;
 }
 
+.shell[data-portal-mode="night"] { color-scheme: dark; --portal-warn: #f1c777; }
+.shell[data-portal-mode="day"] { color-scheme: light; }
+.callHint { margin: 18px 0 0; color: var(--portal-muted); font-size: 13px; }
+.voiceSettings { margin-top: 22px; border: 1px solid var(--portal-line); border-radius: 12px; padding: 18px; background: var(--portal-soft); }
+.voiceSettings > summary { font-weight: 750; cursor: pointer; margin-bottom: 12px; }
+
 :global(html[data-tlink-colour-mode="night"]) .shell {
   --portal-ink: #f4fbff;
   --portal-text: #d7e7eb;
@@ -48,7 +54,7 @@
   gap: 28px;
   padding: 26px 14px 18px;
   overflow: auto;
-  background: #102b36;
+  background: var(--portal-gradient, #102b36);
   color: #e4eff1;
   border-right: 1px solid #213f4a;
 }
@@ -145,12 +151,12 @@
 
 .topbar .brand strong,
 .topbar .identity strong {
-  color: #f4fbff;
+  color: var(--portal-ink);
 }
 
 .topbar .brand span,
 .topbar .identity span {
-  color: #9fb7bf;
+  color: var(--portal-muted);
 }
 
 .topbar .secondaryButton {

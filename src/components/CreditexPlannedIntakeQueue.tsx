@@ -8,12 +8,11 @@ import {
 } from "react";
 import styles from "./CreditexPlannedIntakeQueue.module.css";
 import { firebaseAuth } from "@/lib/firebase-client";
-import { CreditexAuditCallPanel } from "./CreditexAuditCallPanel";
-import { CreditexJobLifecycleActions } from "./CreditexJobLifecycleActions";
+import { CreditexJobAuditDesk } from "./CreditexJobAuditDesk";
 import { JobActionsButton, JobRowMenu, useJobRowMenu } from "./JobRowActions";
 import { jobCreationDate } from "@/lib/job-register-dates";
 import { CREDITEX_CERTIFICATE_TYPES } from "@/lib/creditex-certificate-types";
-import type { CreditexJobLifecycle, CreditexJobSubmission } from "@/lib/creditex-job-lifecycle";
+import type { CreditexJobLifecycle } from "@/lib/creditex-job-lifecycle";
 
 type QueueStatus = "all" | "planned" | "case_linked" | "superseded";
 const PAGE_SIZE = 50;
@@ -26,101 +25,23 @@ type PlannedIntake = {
   jobNumber: string;
   createdAt: string;
   jobTitle: string;
-  jobStage: string;
-  jobPriority: string;
-  workRecordStatus: string;
-  jobDetailRecordStatus: string;
-  scheduledStart: string;
-  scheduledEnd: string;
   assigneeLabel: string;
-  pipelineStage: string;
-  buildingType: string;
-  jobDescription: string;
-  nextAction: string;
-  jobTags: string;
-  estimatedValueCents: number;
-  quotedValueCents: number;
-  invoicedValueCents: number;
-  paidValueCents: number;
-  quoteStatus: string;
-  invoiceStatus: string;
   installerBusiness: string;
-  customerNumber: string;
-  customerType: string;
   customerName: string;
   customerFirstName: string;
   customerLastName: string;
   customerBusinessName: string;
-  businessNumber: string;
-  customerEmail: string;
   customerPhone: string;
-  customerTags: string;
-  customerPrivateNotes: string;
-  customerRecordStatus: string;
-  siteLabel: string;
   serviceAddress: string;
-  accessInstructions: string;
-  parkingInstructions: string;
-  hazardNotes: string;
-  siteRecordStatus: string;
-  planningCurrent: boolean;
-  siteJurisdiction: string;
   plannedStart: string;
   programCode: string;
-  claimOutputCode: string;
   certificateType: string;
-  caseNumber: string;
-  caseStatus: string;
-  evidenceStatus: string;
-  submission: CreditexJobSubmission;
   lifecycle: CreditexJobLifecycle;
-  siteSuburb: string;
-  sitePostcode: string;
-  claimOutputLabel: string;
+  auditCompleted: boolean;
+  operationalCorrectionRequired: boolean;
   registryActivityCode: string;
   activityKey: string;
   activityTitle: string;
-  serviceCategory: string;
-  catalogueReviewedOn: string;
-  status: string;
-  complianceCaseId: string;
-  updatedAt: string;
-};
-
-type AuditRecord = Record<string, unknown>;
-type AuditGroupCursor = {
-  value: string;
-  id: string;
-};
-type AuditGroup = {
-  key: string;
-  label: string;
-  rows: AuditRecord[];
-  loaded: boolean;
-  loading?: boolean;
-  hasMore: boolean;
-  nextCursor: AuditGroupCursor | null;
-  retryCursor?: AuditGroupCursor | null;
-  error?: string;
-};
-type ServiceSiteAddressProvenance = {
-  entryMode: string;
-  provider: string;
-  providerReference: string;
-  formattedAddress: string;
-  verifiedAt: string;
-  status: "provider_verified" | "manual_review_required";
-  reviewRequired: boolean;
-};
-type AuditWorkspace = {
-  intent: AuditRecord | null;
-  workOrder: AuditRecord | null;
-  jobDetails: AuditRecord | null;
-  installer: AuditRecord | null;
-  customer: AuditRecord | null;
-  serviceSite: AuditRecord | null;
-  serviceSiteAddressProvenance: ServiceSiteAddressProvenance;
-  groups: AuditGroup[];
 };
 
 type Api = (
@@ -137,13 +58,6 @@ function dateTime(value: string) {
     : "Not scheduled";
 }
 
-function money(cents: number) {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-  }).format(cents / 100);
-}
-
 function humanField(field: string) {
   return field
     .replaceAll("_", " ")
@@ -151,80 +65,7 @@ function humanField(field: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function auditValue(value: unknown) {
-  if (value === null || value === undefined || value === "") {
-    return "Not recorded";
-  }
-  if (typeof value === "object") return JSON.stringify(value, null, 2);
-  const text = String(value);
-  if (
-    (text.startsWith("{") && text.endsWith("}"))
-    || (text.startsWith("[") && text.endsWith("]"))
-  ) {
-    try {
-      return JSON.stringify(JSON.parse(text), null, 2);
-    } catch {
-      return text;
-    }
-  }
-  return text;
-}
-
-function AuditRecordView({
-  title,
-  record,
-}: {
-  title: string;
-  record: AuditRecord | null;
-}) {
-  return <section className={styles.auditRecord}>
-    <h4>{title}</h4>
-    {record
-      ? <dl>{Object.entries(record).map(([field, value]) => <div key={field}>
-        <dt>{humanField(field)}</dt>
-        <dd>{auditValue(value)}</dd>
-      </div>)}</dl>
-      : <p>No record is currently stored.</p>}
-  </section>;
-}
-
-function AddressProvenanceView({
-  provenance,
-}: {
-  provenance: ServiceSiteAddressProvenance;
-}) {
-  return <section className={`${styles.auditRecord} ${provenance.reviewRequired
-    ? styles.addressReviewRequired
-    : styles.addressProviderVerified}`}>
-    <div className={styles.addressProvenanceHeading}>
-      <h4>Service-site address provenance</h4>
-      <strong>{provenance.reviewRequired
-        ? "Manual address: review required"
-        : "Provider-selected address"}</strong>
-    </div>
-    <p>{provenance.reviewRequired
-      ? "This address was entered manually. Creditex must compare it with the job evidence before relying on it for compliance."
-      : "This address was selected from the configured provider and retains its provider reference for audit."}</p>
-    <dl>
-      <div><dt>Entry mode</dt><dd>{humanField(provenance.entryMode)}</dd></div>
-      <div><dt>Provider</dt><dd>{provenance.provider || "No provider: manual entry"}</dd></div>
-      <div><dt>Provider reference</dt><dd>{provenance.providerReference || "Not recorded"}</dd></div>
-      <div><dt>Formatted address</dt><dd>{provenance.formattedAddress || "Not recorded"}</dd></div>
-      <div><dt>Verified at</dt><dd>{provenance.verifiedAt
-        ? dateTime(provenance.verifiedAt)
-        : "Not verified"}</dd></div>
-    </dl>
-  </section>;
-}
-
-function itemStatus(item: PlannedIntake) {
-  if (item.status === "case_linked") return "Case linked";
-  if (item.status === "superseded") return "Superseded history";
-  if (!item.planningCurrent) return "Re-plan required";
-  return "Setup required";
-}
-
-export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
+export function CreditexPlannedIntakeQueue({ api, onDirtyChange }: { api: Api; onDirtyChange?: (dirty: boolean) => void }) {
   const [items, setItems] = useState<PlannedIntake[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<QueueStatus>("all");
@@ -239,9 +80,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const [loadedQuery, setLoadedQuery] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [auditItem, setAuditItem] = useState<PlannedIntake | null>(null);
-  const [audit, setAudit] = useState<AuditWorkspace | null>(null);
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [auditMessage, setAuditMessage] = useState("");
+  const [focusCall, setFocusCall] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const [certificateType, setCertificateType] = useState("all");
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
@@ -252,11 +91,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   const requestSequence = useRef(0);
   const requestController = useRef<AbortController | null>(null);
   const loadTimer = useRef<number | null>(null);
-  const auditSequence = useRef(0);
-  const auditHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const auditLauncherRef = useRef<HTMLElement | null>(null);
-  const callPanelRef = useRef<HTMLDivElement | null>(null);
-  const focusCallRef = useRef(false);
   const tableRef = useRef<HTMLDivElement | null>(null);
   const tableScroll = useRef({ top: 0, left: 0 });
 
@@ -325,65 +160,18 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
     if (showFilters) filterHeadingRef.current?.focus();
   }, [showFilters]);
 
-  const openAudit = useCallback(async (item: PlannedIntake, launcher: HTMLElement, focusCall = false) => {
-    const requestId = auditSequence.current + 1;
-    auditSequence.current = requestId;
+  function openAudit(item: PlannedIntake, launcher: HTMLElement, call = false) {
     auditLauncherRef.current = launcher;
-    focusCallRef.current = focusCall;
     if (tableRef.current) tableScroll.current = { top: tableRef.current.scrollTop, left: tableRef.current.scrollLeft };
+    setFocusCall(call);
     setAuditItem(item);
-    setAudit(null);
-    setAuditMessage("");
-    setAuditLoading(true);
-    try {
-      const result = await api(
-        `/api/creditex/job-intents/${encodeURIComponent(item.id)}`,
-      );
-      if (result.ok !== true) {
-        throw new Error(
-          String(result.error || "The full audit workspace could not be opened."),
-        );
-      }
-      if (requestId !== auditSequence.current) return;
-      setAudit({
-        intent: (result.intent || null) as AuditRecord | null,
-        workOrder: (result.workOrder || null) as AuditRecord | null,
-        jobDetails: (result.jobDetails || null) as AuditRecord | null,
-        installer: (result.installer || null) as AuditRecord | null,
-        customer: (result.customer || null) as AuditRecord | null,
-        serviceSite: (result.serviceSite || null) as AuditRecord | null,
-        serviceSiteAddressProvenance: result.serviceSiteAddressProvenance as ServiceSiteAddressProvenance,
-        groups: ((result.groups || []) as AuditGroup[]).map((group) => ({
-          ...group,
-          rows: group.rows || [],
-          loaded: group.loaded === true,
-          loading: false,
-          hasMore: group.hasMore === true,
-          nextCursor: group.nextCursor?.value && group.nextCursor?.id
-            ? group.nextCursor
-            : null,
-          retryCursor: null,
-        })),
-      });
-    } catch (error) {
-      if (requestId !== auditSequence.current) return;
-      setAuditMessage(
-        error instanceof Error
-          ? error.message
-          : "The full audit workspace could not be opened.",
-      );
-    } finally {
-      if (requestId === auditSequence.current) {
-        setAuditLoading(false);
-        window.requestAnimationFrame(() => {
-          if (focusCallRef.current && callPanelRef.current) {
-            callPanelRef.current.focus({ preventScroll: true });
-            callPanelRef.current.scrollIntoView({ block: "nearest" });
-          } else auditHeadingRef.current?.focus();
-        });
-      }
-    }
-  }, [api]);
+  }
+
+  useEffect(() => {
+    if (!actionMessage) return;
+    const timer = window.setTimeout(() => setActionMessage(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [actionMessage]);
 
   async function copyJobValue(value: string, label: string) {
     try { await navigator.clipboard.writeText(value); setActionMessage(`${label} copied.`); }
@@ -392,98 +180,17 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
 
   function rowActions(item: PlannedIntake, launcher: HTMLElement) {
     return [
-      { label: "Open job audit", run: () => { void openAudit(item, launcher); } },
+      { label: "Audit", run: () => { void openAudit(item, launcher); } },
       ...(item.customerPhone ? [{ label: "Call customer", run: () => { void openAudit(item, launcher, true); } }] : []),
       { label: "Copy job reference", run: () => { void copyJobValue(item.jobNumber || item.jobId, "Job reference"); } },
       ...(item.serviceAddress ? [{ label: "Copy site address", run: () => { void copyJobValue(item.serviceAddress, "Site address"); } }] : []),
     ];
   }
 
-  const loadAuditGroup = useCallback(async (
-    groupKey: string,
-    cursor: AuditGroupCursor | null = null,
-  ) => {
-    const itemId = auditItem?.id;
-    const requestId = auditSequence.current;
-    if (!itemId) return;
-    setAudit((current) => current
-      ? {
-        ...current,
-        groups: current.groups.map((group) => group.key === groupKey
-          ? { ...group, loading: true, error: "" }
-          : group),
-      }
-      : current);
-    try {
-      const query = new URLSearchParams({ group: groupKey });
-      if (cursor) {
-        query.set("cursorValue", cursor.value);
-        query.set("cursorId", cursor.id);
-      }
-      const result = await api(
-        `/api/creditex/job-intents/${encodeURIComponent(itemId)}?${query}`,
-      );
-      if (result.ok !== true) {
-        throw new Error(
-          String(result.error || "This audit record group could not be loaded."),
-        );
-      }
-      const loadedGroup = ((result.groups || []) as AuditGroup[])
-        .find((group) => group.key === groupKey && group.loaded === true);
-      if (!loadedGroup) {
-        throw new Error("The requested audit record group was not returned.");
-      }
-      if (requestId !== auditSequence.current) return;
-      setAudit((current) => current
-        ? {
-          ...current,
-          groups: current.groups.map((group) => group.key === groupKey
-            ? {
-              ...group,
-              rows: cursor
-                ? [...group.rows, ...(loadedGroup.rows || [])]
-                : (loadedGroup.rows || []),
-              loaded: true,
-              loading: false,
-              hasMore: loadedGroup.hasMore === true,
-              nextCursor: loadedGroup.nextCursor?.value
-                && loadedGroup.nextCursor?.id
-                ? loadedGroup.nextCursor
-                : null,
-              retryCursor: null,
-              error: "",
-            }
-            : group),
-        }
-        : current);
-    } catch (error) {
-      if (requestId !== auditSequence.current) return;
-      setAudit((current) => current
-        ? {
-          ...current,
-          groups: current.groups.map((group) => group.key === groupKey
-            ? {
-              ...group,
-              loading: false,
-              retryCursor: cursor,
-              error: error instanceof Error
-                ? error.message
-                : "This audit record group could not be loaded.",
-            }
-            : group),
-        }
-        : current);
-    }
-  }, [api, auditItem?.id]);
-
   function closeAudit() {
     const launcher = auditLauncherRef.current;
     const returnJobId = auditItem?.id;
-    auditSequence.current += 1;
     setAuditItem(null);
-    setAudit(null);
-    setAuditMessage("");
-    setAuditLoading(false);
     auditLauncherRef.current = null;
     window.requestAnimationFrame(() => {
       if (tableRef.current) { tableRef.current.scrollTop = tableScroll.current.top; tableRef.current.scrollLeft = tableScroll.current.left; }
@@ -526,10 +233,6 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
   }
 
   const activeFilters = Object.values(filters).filter(Boolean).length + (status !== "all" ? 1 : 0) + (certificateType !== "all" ? 1 : 0);
-  const auditCustomerName = String(audit?.customer?.business_name || "").trim()
-    || [audit?.customer?.first_name, audit?.customer?.last_name].filter((value) => typeof value === "string" && value.trim()).join(" ");
-  const auditAddress = [audit?.serviceSite?.address_line_1, audit?.serviceSite?.address_line_2, audit?.serviceSite?.suburb, audit?.serviceSite?.address_state, audit?.serviceSite?.postcode]
-    .filter((value) => typeof value === "string" && value.trim()).join(", ");
 
   return <section
     className={styles.queue}
@@ -580,53 +283,30 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
       }}>{queueView === "bin" ? "Back to active jobs" : "Bin"}</button>
     </div>
     <div className={styles.resultBar} aria-live="polite"><span>{updating ? "Updating jobs..." : message ? hasLoaded ? `${items.length} previously loaded ${items.length === 1 ? "record" : "records"} shown` : "Job count unavailable" : `${total} matching ${total === 1 ? "record" : "records"}${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}{!updating && !message && activeFilters ? ` · ${activeFilters} filters applied` : ""}</span>{(search || activeFilters || sort !== "plannedStart" || sortDirection !== "asc") && <button type="button" className={styles.detailButton} onClick={resetFilters}>Reset filters & sort</button>}</div>
-    <p className={styles.tableHint}>Each row is a job activity. Click its Job ID to open it, or right-click for options. Scroll across for all details.</p>
+    <p className={styles.tableHint}>Each row is a job activity. Click a row and choose Audit to review its answers, files and verification call.</p>
     {actionMessage && <p className={styles.tableHint} role="status">{actionMessage}</p>}
     {message && <div className={`${styles.message} ${styles.loadError}`} role="alert"><div><strong>{hasLoaded ? "Jobs could not be updated" : "Jobs could not be loaded"}</strong><p>{message}</p>{hasLoaded && <p>Showing the last loaded results. They may not match the current filters.</p>}</div><button type="button" onClick={() => void load()} disabled={updating}>Retry</button></div>}
-      <div ref={tableRef} className={styles.tableWrap} aria-busy={updating} data-stale={stale || undefined} tabIndex={0} role="region" aria-label="Assigned jobs. Scroll horizontally for all columns."><table>
-        <thead><tr>{sortableHeading("Job ID", "jobNumber")}{sortableHeading("Created", "createdAt")}{sortableHeading("Certificate", "certificateType")}{sortableHeading("First name", "customerFirstName")}{sortableHeading("Last name", "customerLastName")}<th scope="col">Job title</th><th scope="col">Status</th><th scope="col">Case number</th><th scope="col">Case status</th><th scope="col">Evidence status</th>{sortableHeading("Program", "programCode")}<th scope="col">Activity code</th><th scope="col">Activity name</th><th scope="col">Service</th>{sortableHeading("Installer", "installerBusiness")}<th scope="col">Phone</th><th scope="col">Email</th><th scope="col">Customer ID</th><th scope="col">Business</th><th scope="col">ABN</th><th scope="col">Service address</th><th scope="col">Suburb</th><th scope="col">State</th><th scope="col">Postcode</th>{sortableHeading("Planned", "plannedStart")}<th scope="col">Scheduled end</th>{sortableHeading("Priority", "priority")}<th scope="col">Assigned to</th><th scope="col">Quote amount</th><th scope="col">Quote status</th><th scope="col">Invoice amount</th><th scope="col">Invoice status</th><th scope="col">Customer paid</th><th scope="col">Record status</th><th scope="col">Next action</th>{sortableHeading("Updated", "updatedAt")}</tr></thead>
-        <tbody>{items.map((item) => <tr key={item.id} onContextMenu={event => { if (!updating) openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher)); }}>
-            <td><div className={styles.jobActions}>
-              <button type="button" id={`creditex-job-${item.id}`} className={styles.jobButton} onClick={(event) => void openAudit(item, event.currentTarget)} aria-label={`Open job ${item.jobNumber || item.jobId}`} aria-controls="creditex-full-audit-workspace">{item.jobNumber || item.jobId}</button>
-              <JobActionsButton label={item.jobNumber || item.jobId} menuId={`creditex-job-menu-${item.id}`} expanded={menu?.id === `creditex-job-menu-${item.id}`} onClick={event => openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher))} />
-            </div></td>
-            <td title="Job creation date in Australia/Sydney">{jobCreationDate(item.createdAt)}</td>
-            <td title={item.claimOutputLabel || undefined}><strong>{item.certificateType || item.claimOutputCode || "Not recorded"}</strong></td>
-            <td>{item.customerFirstName || "Not recorded"}</td>
-            <td>{item.customerLastName || "Not recorded"}</td>
-            <td className={styles.longCell} title={item.jobTitle}>{item.jobTitle || "Retained job record"}</td>
-            <td><span className={styles.status}>{item.lifecycle?.label || "Status unavailable"}</span>{item.lifecycle?.detail && <small>{item.lifecycle.detail}</small>}</td>
-            <td>{item.caseNumber || "No case"}</td>
-            <td>{item.caseStatus ? humanField(item.caseStatus) : "No case"}</td>
-            <td>{item.evidenceStatus ? humanField(item.evidenceStatus) : "No case"}</td>
-            <td>{item.programCode}</td>
-            <td>{item.registryActivityCode || item.activityKey}</td>
-            <td className={styles.longCell} title={item.activityTitle}>{item.activityTitle || "Not recorded"}</td>
-            <td>{humanField(item.serviceCategory || "")}</td>
-            <td>{item.installerBusiness || "Not recorded"}</td>
-            <td>{item.customerPhone || "Not recorded"}</td>
-            <td>{item.customerEmail || "Not recorded"}</td>
-            <td>{item.customerNumber}</td>
-            <td>{item.customerBusinessName || "Not recorded"}</td>
-            <td>{item.businessNumber || "Not recorded"}</td>
-            <td>{item.serviceAddress || "Retained site record"}</td>
-            <td>{item.siteSuburb || "Not recorded"}</td>
-            <td>{item.siteJurisdiction}</td>
-            <td>{item.sitePostcode || "Not recorded"}</td>
-            <td>{dateTime(item.plannedStart)}</td>
-            <td>{dateTime(item.scheduledEnd)}</td>
-            <td><span className={styles.priority} data-priority={item.jobPriority}>{humanField(item.jobPriority)}</span></td>
-            <td>{item.assigneeLabel || "Unassigned"}</td>
-            <td className={styles.moneyCell}>{money(item.quotedValueCents)}</td>
-            <td>{humanField(item.quoteStatus)}</td>
-            <td className={styles.moneyCell}>{money(item.invoicedValueCents)}</td>
-            <td>{humanField(item.invoiceStatus)}</td>
-            <td className={styles.moneyCell}>{money(item.paidValueCents)}</td>
-            <td><span className={styles.status}>{itemStatus(item)}</span></td>
-            <td className={styles.longCell} title={item.nextAction}>{item.nextAction || "Not recorded"}</td>
-            <td>{item.updatedAt ? dateTime(item.updatedAt) : "Not recorded"}</td>
-          </tr>
-        )}{!items.length && <tr><td colSpan={36}><div className={styles.empty}><strong>{updating ? "Loading jobs..." : message ? "Results unavailable for these filters" : "No matching jobs"}</strong><span>{message ? "Retry or adjust the filters." : "Change the filters or reset your search."}</span></div></td></tr>}</tbody>
+      <div ref={tableRef} className={styles.tableWrap} aria-busy={updating} data-stale={stale || undefined} tabIndex={0} role="region" aria-label="Assigned jobs"><table>
+        <thead><tr>{sortableHeading("Job ID", "jobNumber")}{sortableHeading("Created", "createdAt")}{sortableHeading("Customer", "customerName")}<th scope="col">Activity</th>{sortableHeading("Installer", "installerBusiness")}{sortableHeading("Planned", "plannedStart")}<th scope="col">Assigned to</th><th scope="col">Status</th></tr></thead>
+        <tbody>{items.map((item) => {
+          const reviewStage = ["unscheduled", "assigned", "partial", "complete", "reviewed"].includes(item.lifecycle?.status);
+          const statusLabel = reviewStage && item.operationalCorrectionRequired ? "Correction required" : reviewStage && item.auditCompleted ? "Audit completed" : item.lifecycle?.label || "Status unavailable";
+          const auditDetail = !item.auditCompleted ? "" : item.lifecycle?.status === "audited" ? "Submission approval recorded" : reviewStage && !item.operationalCorrectionRequired ? "Awaiting submission approval" : "Audit completed";
+          return <tr key={item.id}
+          onClick={event => { if (!updating && event.target instanceof HTMLElement && !event.target.closest("button, a, input")) openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher)); }}
+          onContextMenu={event => { if (!updating) openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher)); }}>
+          <td><div className={styles.jobActions}>
+            <button type="button" id={`creditex-job-${item.id}`} className={styles.jobButton} onClick={(event) => openAudit(item, event.currentTarget)} aria-label={`Open job ${item.jobNumber || item.jobId}`} aria-controls="creditex-full-audit-workspace">{item.jobNumber || item.jobId}</button>
+            <JobActionsButton label={item.jobNumber || item.jobId} menuId={`creditex-job-menu-${item.id}`} expanded={menu?.id === `creditex-job-menu-${item.id}`} onClick={event => openMenu(event, `creditex-job-menu-${item.id}`, item.jobNumber || item.jobId, launcher => rowActions(item, launcher))} />
+          </div></td>
+          <td>{jobCreationDate(item.createdAt)}</td>
+          <td className={styles.longCell}><strong>{item.customerBusinessName || [item.customerFirstName, item.customerLastName].filter(Boolean).join(" ") || item.customerName || "Not recorded"}</strong><small>{item.serviceAddress || "Address not recorded"}</small></td>
+          <td className={styles.longCell}><strong>{item.activityTitle || item.jobTitle}</strong><small>{item.certificateType || item.programCode} · {item.registryActivityCode || item.activityKey}</small></td>
+          <td>{item.installerBusiness || "Not recorded"}</td>
+          <td>{dateTime(item.plannedStart)}</td>
+          <td>{item.assigneeLabel || "Unassigned"}</td>
+          <td><span className={styles.status}>{statusLabel}</span>{auditDetail && <small>{auditDetail}</small>}{item.lifecycle?.detail && <small>{item.lifecycle.detail}</small>}</td>
+        </tr>; })}{!items.length && <tr><td colSpan={8}><div className={styles.empty}><strong>{updating ? "Loading jobs..." : message ? "Results unavailable for these filters" : "No matching jobs"}</strong><span>{message ? "Retry or adjust the filters." : "Change the filters or reset your search."}</span></div></td></tr>}</tbody>
       </table></div>
     {!updating && !message && <nav className={styles.pagination} aria-label="Certificate-work register pages">
       <span className={styles.pageSize}>{PAGE_SIZE} records per page</span>
@@ -659,102 +339,12 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
             <label>Customer{filterInput("customer", "Filter customer", "Business or customer ID")}</label>
             <label>Service site{filterInput("serviceSite", "Filter service site", "Address or suburb")}</label>
           </div></details>
-          <details><summary>Quotes & invoices</summary><div className={styles.filterGroup}>
-            <label>Quote status{filterSelect("quoteStatus", "Filter quote status", "All quotes", ["not_started", "draft", "issued", "sent", "accepted", "declined"])}</label>
-            <label>Invoice status{filterSelect("invoiceStatus", "Filter invoice status", "All invoices", ["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"])}</label>
-          </div></details>
         </div>
         <footer><button type="button" onClick={resetFilters}>Clear filters</button><button type="submit">Search</button></footer>
       </form>
     </aside>}
     </>}
-    {auditItem && <section id="creditex-full-audit-workspace" className={styles.auditWorkspace} aria-labelledby="creditex-full-audit-title">
-      <header>
-        <div>
-          <span>Selected job</span>
-          <h3 id="creditex-full-audit-title" tabIndex={-1} ref={auditHeadingRef}>
-            {auditItem.jobNumber || auditItem.jobId} · {audit ? auditCustomerName || "Job audit" : auditItem.customerName || "Job audit"}
-          </h3>
-          <p>{auditItem.jobTitle || auditItem.activityTitle} · {auditItem.installerBusiness}</p>
-        </div>
-        <button type="button" onClick={closeAudit}>Back to jobs</button>
-      </header>
-      {auditLoading && <p className={styles.message} role="status">Loading the authorised job overview...</p>}
-      {auditMessage && <p className={styles.message} role="alert">{auditMessage}</p>}
-      {audit && <>
-        {firebaseAuth.currentUser && <CreditexJobLifecycleActions user={firebaseAuth.currentUser} intentId={auditItem.id} onChanged={() => { closeAudit(); void load(); }} />}
-        <div className={styles.auditSummary}>
-          <div><span>Customer</span><strong>{auditCustomerName || "Not recorded"}</strong><p>{String(audit.customer?.phone || "No phone recorded")}</p><p>{String(audit.customer?.email || "")}</p></div>
-          <div><span>Service site</span><strong>{auditAddress || "Not recorded"}</strong><p>{dateTime(String(audit.intent?.planned_start || ""))}</p></div>
-          <div><span>Activity</span><strong>{auditItem.programCode} · {auditItem.registryActivityCode || auditItem.activityKey}</strong><p>{auditItem.activityTitle}</p><p>{itemStatus(auditItem)}</p></div>
-          <div><span>Next action</span><strong>{String(audit.jobDetails?.next_action || "Review the job records")}</strong><p>{humanField(String(audit.workOrder?.stage || "Not recorded"))} · {String(audit.workOrder?.assignee_label || "Unassigned")}</p></div>
-        </div>
-        {!auditLoading && audit.customer && typeof audit.customer.phone === "string" && audit.customer.phone.trim() && firebaseAuth.currentUser && <div ref={callPanelRef} tabIndex={-1} className={styles.callTarget} aria-label="Customer audit call controls"><CreditexAuditCallPanel key={`${firebaseAuth.currentUser.uid}:${auditItem.id}`} user={firebaseAuth.currentUser} jobIntentId={auditItem.id} /></div>}
-        <details className={styles.fullDetails}><summary>Job, customer & site details <span>All saved fields and references</span></summary><div className={styles.auditCore}>
-          <AuditRecordView title="Compliance intent" record={audit.intent} />
-          <AuditRecordView title="Work order" record={audit.workOrder} />
-          <AuditRecordView title="Job details" record={audit.jobDetails} />
-          <AuditRecordView title="Installer business" record={audit.installer} />
-          <AuditRecordView title="Customer" record={audit.customer} />
-          <AuditRecordView title="Service site" record={audit.serviceSite} />
-          <AddressProvenanceView provenance={audit.serviceSiteAddressProvenance} />
-        </div></details>
-        <div className={styles.auditGroups}>
-          {audit.groups.map((group) => <details
-            key={group.key}
-            onToggle={(event) => {
-              if (
-                event.currentTarget.open
-                && !group.loaded
-                && !group.loading
-                && !group.error
-              ) {
-                void loadAuditGroup(group.key);
-              }
-            }}
-          >
-            <summary><strong>{group.label}</strong><span>{
-              group.loading
-                ? "Loading..."
-                : group.loaded
-                  ? `${group.rows.length}${group.hasMore ? "+" : ""} records`
-                  : "Open to load"
-            }</span></summary>
-            {group.error && <p className={styles.message} role="alert">
-              {group.error}
-              <button
-                type="button"
-                className={styles.detailButton}
-                onClick={() => void loadAuditGroup(
-                  group.key,
-                  group.retryCursor || null,
-                )}
-              >Retry</button>
-            </p>}
-            {!group.loaded && !group.loading && !group.error
-              && <p>Open this section to load its authorised records.</p>}
-            {group.loading && <p role="status">Loading authorised records...</p>}
-            {group.loaded && group.rows.length
-              ? <div className={styles.auditGroupRows}>{group.rows.map((record, index) => <AuditRecordView
-                key={String(record.id || `${group.key}-${index}`)}
-                title={`${group.label} ${index + 1}`}
-                record={record}
-              />)}{group.hasMore && group.nextCursor !== null && <button
-                type="button"
-                className={styles.detailButton}
-                disabled={group.loading}
-                onClick={() => void loadAuditGroup(
-                  group.key,
-                  group.nextCursor,
-                )}
-              >Load 50 more records</button>}</div>
-              : group.loaded
-                ? <p>No records are stored for this job.</p>
-                : null}
-          </details>)}
-        </div>
-      </>}
-    </section>}
+    {auditItem && firebaseAuth.currentUser && <CreditexJobAuditDesk key={auditItem.id} user={firebaseAuth.currentUser} intentId={auditItem.id} actorMode="creditex" focusCall={focusCall} onClose={closeAudit} onChanged={() => void load()} onDirtyChange={onDirtyChange} />}
     <JobRowMenu menu={menu} onClose={closeMenu} />
   </section>;
 }

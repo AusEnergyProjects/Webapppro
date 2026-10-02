@@ -45,6 +45,8 @@ import AdminDemoCleanupPanel from "@/components/AdminDemoCleanupPanel";
 import { AdminDatabaseWorkspace } from "@/components/AdminDatabaseWorkspace";
 import { AdminEnergyAssistantLeads } from "@/components/AdminEnergyAssistantLeads";
 import { AdminSurgeAnswerReviews } from "@/components/AdminSurgeAnswerReviews";
+import { PortalWorkspacePreferences, usePortalWorkspacePreferences } from "./PortalWorkspacePreferences";
+import { PortalTeamWorkspace } from "./PortalTeamWorkspace";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -150,19 +152,23 @@ export function AdminOperationsPortal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
-  const [tab, setTab] = useState<AdminWorkspaceTab>("inbox");
+  const [tab, setTab] = useState<AdminWorkspaceTab>("overview");
   const questionnaireDirty = useRef(false);
   const fieldFormDirty = useRef(false);
+  const auditDirty = useRef(false);
   const historyIndex = useRef<number | null>(null);
   const restoringHistory = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
   const reportFieldFormDirty = useCallback((dirty: boolean) => { fieldFormDirty.current = dirty; }, []);
+  const reportAuditDirty = useCallback((dirty: boolean) => { auditDirty.current = dirty; }, []);
   const selectTab = useCallback((next: AdminWorkspaceTab, updateHistory = true) => {
     if (next === tab) return true;
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
     if (fieldFormDirty.current && !window.confirm("Discard the unsaved changes to this activity form?")) return false;
+    if (auditDirty.current && !window.confirm("Leave this audit without saving your changes?")) return false;
     questionnaireDirty.current = false;
     fieldFormDirty.current = false;
+    auditDirty.current = false;
     setTab(next);
     if (updateHistory && window.location.hash !== adminWorkspaceHash(next)) {
       const index = (historyIndex.current ?? 0) + 1;
@@ -232,6 +238,7 @@ export function AdminOperationsPortal() {
   const [partnerTarget, setPartnerTarget] = useState<{ uid: string; nonce: number } | null>(null);
   const [partnerVerificationTarget, setPartnerVerificationTarget] = useState("");
   const [assistantLeadTarget, setAssistantLeadTarget] = useState<{ id: string; nonce: number } | null>(null);
+  const preferences = usePortalWorkspacePreferences({ workspace: "admin", user, currentDisplayName: session?.displayName || session?.email || "" });
 
   const api = useCallback(async (path: string, init: RequestInit = {}) => {
     const activeUser = firebaseAuth.currentUser;
@@ -714,7 +721,7 @@ export function AdminOperationsPortal() {
     );
 
   return (
-    <main className="admin-shell admin-workspace">
+    <main className="admin-shell admin-workspace" {...preferences.rootProps}>
       <a className="admin-skip-link" href="#admin-workspace-content" onClick={(event) => {
         event.preventDefault();
         const content = document.getElementById("admin-workspace-content");
@@ -740,9 +747,10 @@ export function AdminOperationsPortal() {
             {session.role}
           </span>
           <div>
-            <strong>{session.displayName || session.email}</strong>
+            <strong>{preferences.profile.displayName || session.displayName || session.email}</strong>
             <small>{session.email}</small>
           </div>
+          <button type="button" onClick={() => selectTab("settings")} aria-label="Open profile and appearance">Settings</button>
           <button type="button" onClick={() => void signOut(firebaseAuth)}>
             Sign out
           </button>
@@ -767,6 +775,8 @@ export function AdminOperationsPortal() {
               onCounts={setNotificationCounts}
             />
           </div>
+          {(tab === "connect" || tab === "tasks") && user && <PortalTeamWorkspace key={`${user.uid}-${tab}`} workspace="admin" user={user} view={tab} />}
+          {tab === "settings" && user && <><PortalWorkspacePreferences controller={preferences} /><section className="admin-panel admin-profile-security"><FirebaseAccountSecurity user={user} /></section></>}
           {tab === "directory" && (
             <AdminAccountDirectory
               api={api}
@@ -782,7 +792,7 @@ export function AdminOperationsPortal() {
               }}
             />
           )}
-          {tab === "jobs" && <AdminJobDirectory api={api} user={user&&["owner","admin"].includes(session.role)?user:undefined} />}
+          {tab === "jobs" && <AdminJobDirectory api={api} user={user&&["owner","admin"].includes(session.role)?user:undefined} onAuditDirtyChange={reportAuditDirty} />}
           {tab === "customers" && (
             <AdminAccountDirectory
               api={api}
@@ -838,13 +848,13 @@ export function AdminOperationsPortal() {
           {tab === "overview" && (
             <>
               <header className="admin-page-heading">
-                <span>Operational view</span>
-                <h1>Network overview</h1>
+                <span>Your workspace at a glance</span>
+                <h1>Home dashboard</h1>
                 <p>
-                  Account health, verification work, fair opportunity flow,
-                  catalogue review and recent administrator activity.
+                  See what needs attention and keep your team moving.
                 </p>
               </header>
+              <nav className="admin-home-shortcuts" aria-label="Quick actions"><button type="button" onClick={() => selectTab("jobs")}>Open jobs</button><button type="button" onClick={() => selectTab("tasks")}>My team tasks</button><button type="button" onClick={() => selectTab("connect")}>Message the team</button>{session.role === "owner" && <button type="button" onClick={() => selectTab("access")}>Manage team</button>}</nav>
               <section className="admin-metric-grid">
                 <article>
                   <span>Action notifications</span>
@@ -990,7 +1000,7 @@ export function AdminOperationsPortal() {
             <>
               <header className="admin-page-heading">
                 <span>Owner controls</span>
-                <h1>Operations access and audit</h1>
+                <h1>Team</h1>
                 <p>
                   Invite named team members, apply least-privilege roles and
                   suspend access without deleting the accountability record.

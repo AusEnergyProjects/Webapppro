@@ -37,8 +37,9 @@ function harness(name, options = {}) {
   };
   function WorkspaceTableTools() {}
   function CreditexAuditCallPanel() {}
+  function CreditexJobAuditDesk() {}
   const shared = {};
-  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./JobRowActions" ? shared : id === "@/lib/job-register-dates" ? dateHelpers : id === "@/lib/trade-job-lifecycle" ? tradeLifecycle : id === "@/lib/creditex-certificate-types" ? certificateTypes : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : id === "./WorkspaceTableTools" ? { WorkspaceTableTools, downloadWorkspaceCsv() {} } : id === "./CreditexAuditCallPanel" ? { CreditexAuditCallPanel } : id === "@/lib/firebase-client" ? { firebaseAuth: { currentUser: { uid: "reviewer" } } } : {};
+  const require = id => id === "./CreditexJobAuditDesk" ? {CreditexJobAuditDesk} : id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./JobRowActions" ? shared : id === "@/lib/job-register-dates" ? dateHelpers : id === "@/lib/trade-job-lifecycle" ? tradeLifecycle : id === "@/lib/creditex-certificate-types" ? certificateTypes : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : id === "./WorkspaceTableTools" ? { WorkspaceTableTools, downloadWorkspaceCsv() {} } : id === "./CreditexAuditCallPanel" ? { CreditexAuditCallPanel } : id === "@/lib/firebase-client" ? { firebaseAuth: { currentUser: { uid: "reviewer" } } } : {};
   Function("require", "exports", "window", "document", compile("JobRowActions"))(require, shared, window, document);
   const exported = {};
   if (name !== "JobRowMenu" && name !== "JobActionsButton") Function("require", "exports", "window", "document", "navigator", compile(name))(require, exported, window, document, navigator);
@@ -48,7 +49,7 @@ function harness(name, options = {}) {
   const menu = tree => nodes(tree, node => node.type === shared.JobRowMenu)[0].props;
   const trigger = tree => nodes(tree, node => node.type === shared.JobActionsButton)[0];
   const event = (type = "click") => ({ type, clientX: 385, clientY: 495, currentTarget: launcher, preventDefault() {} });
-  return { render, shared, requests, copied, menu, trigger, event, launcher, document, window, documentEvents, windowEvents, get dialogOpens() { return dialogOpens; }, get focusCount() { return focusCount; },
+  return { render, shared, CreditexJobAuditDesk, requests, copied, menu, trigger, event, launcher, document, window, documentEvents, windowEvents, get dialogOpens() { return dialogOpens; }, get focusCount() { return focusCount; },
     async settle() { render(); for (const callback of timers.values()) callback(); timers.clear(); await flush(); return render(); },
     async mount() { render(); for (const callback of timers.values()) callback(); timers.clear(); await flush(); return render(); },
     cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
@@ -76,43 +77,37 @@ test("copy reference stays local and clipboard denial produces a useful failure 
   }
 });
 
-test("Creditex displays flat, distinct activity, case, contact, address and commercial columns", async () => {
-  const h = harness("CreditexPlannedIntakeQueue", { job: { certificateType: "VEEC", caseNumber: "CX-QA-1", caseStatus: "draft", evidenceStatus: "pending", customerBusinessName: "Example Business", businessNumber: "12345678901", siteSuburb: "Melbourne", siteJurisdiction: "VIC", sitePostcode: "3000", paidValueCents: 25000, nextAction: "Confirm appointment" } }); const tree = await h.mount();
+test("Creditex keeps eight scan-friendly columns while the audit desk owns detailed records", async () => {
+  const h = harness("CreditexPlannedIntakeQueue", { job: { certificateType: "VEEC", customerBusinessName: "Example Business", registryActivityCode:"ACT-1", lifecycle:{label:"Audited",detail:"Exported, awaiting lodgement"} } }); const tree = await h.mount();
   const headings = nodes(tree, node => node.type === "th").map(node => text(node).replace(/[↑↓↕]/g, "").trim());
-  assert.deepEqual(headings, ["Job ID", "Created", "Certificate", "First name", "Last name", "Job title", "Status", "Case number", "Case status", "Evidence status", "Program", "Activity code", "Activity name", "Service", "Installer", "Phone", "Email", "Customer ID", "Business", "ABN", "Service address", "Suburb", "State", "Postcode", "Planned", "Scheduled end", "Priority", "Assigned to", "Quote amount", "Quote status", "Invoice amount", "Invoice status", "Customer paid", "Record status", "Next action", "Updated"]);
-  const row = nodes(tree, node => node.type === "tr" && node.props.onContextMenu)[0];
-  const cells = nodes(row, node => node.type === "td"); assert.equal(cells.length, headings.length);
-  const values = Object.fromEntries(headings.map((heading, index) => [heading, text(cells[index])]));
-  for (const [heading, value] of [["Certificate", "VEEC"], ["Case number", "CX-QA-1"], ["Case status", "Draft"], ["Evidence status", "Pending"], ["Phone", job.customerPhone], ["Email", job.customerEmail], ["Business", "Example Business"], ["ABN", "12345678901"], ["Suburb", "Melbourne"], ["State", "VIC"], ["Postcode", "3000"], ["Assigned to", "Assigned technician"], ["Quote amount", "$1,234.00"], ["Quote status", "Accepted"], ["Invoice amount", "$500.00"], ["Invoice status", "Issued"], ["Customer paid", "$250.00"], ["Next action", "Confirm appointment"]]) assert.equal(values[heading], value, heading);
-  assert.equal(nodes(row, node => node.type === "small" || node.type === "br").length, 0, "details belong in independent columns rather than stacked metadata");
-  assert.match(text(tree), /50\s+records per page/); assert.equal(button(tree, "Open job"), undefined); h.cleanup();
+  assert.deepEqual(headings, ["Job ID", "Created", "Customer", "Activity", "Installer", "Planned", "Assigned to", "Status"]);
+  const row=nodes(tree,node=>node.type==='tr'&&node.props.onContextMenu)[0];const cells=nodes(row,node=>node.type==='td');assert.equal(cells.length,8);
+  assert.match(text(cells[2]),/Example Business/);assert.match(text(cells[2]),/Example site VIC 3000/);assert.match(text(cells[3]),/Hot water/);assert.match(text(cells[3]),/VEEC.*ACT-1/);
+  assert.equal(text(cells[4]),'Example Installer');assert.equal(text(cells[6]),'Assigned technician');assert.match(text(cells[7]),/Audited/);
+  assert.doesNotMatch(text(row),/customer@example.invalid|\+61400000000|\$1,234/);assert.match(text(tree),/50\s+records per page/);h.cleanup();
 });
 
-test("Creditex names remain stored fields and business-only customers never receive guessed personal names", async () => {
-  const h = harness("CreditexPlannedIntakeQueue", { job: { customerFirstName: "", customerLastName: "", customerName: "Example Business Pty Ltd", customerBusinessName: "Example Business Pty Ltd", createdAt: "2026-09-20T14:01:00.000Z" } });
-  const tree = await h.mount(); const row = nodes(tree, node => node.type === "tr" && node.props.onContextMenu)[0];
-  const cells = nodes(row, node => node.type === "td");
-  assert.equal(text(cells[1]), "21 Sept 2026");
-  assert.equal(text(cells[3]), "Not recorded"); assert.equal(text(cells[4]), "Not recorded");
-  const headings = nodes(tree, node => node.type === "th").map(node => text(node).replace(/[↑↓↕]/g, "").trim());
-  assert.equal(text(cells[headings.indexOf("Business")]), "Example Business Pty Ltd"); h.cleanup();
+test("Creditex displays the saved business identity without inventing personal names", async () => {
+  const h=harness('CreditexPlannedIntakeQueue',{job:{customerFirstName:'',customerLastName:'',customerName:'Example Business Pty Ltd',customerBusinessName:'Example Business Pty Ltd',createdAt:'2026-09-20T14:01:00.000Z'}});
+  const tree=await h.mount();const row=nodes(tree,node=>node.type==='tr'&&node.props.onContextMenu)[0];const cells=nodes(row,node=>node.type==='td');
+  assert.equal(text(cells[1]),'21 Sept 2026');assert.equal(text(nodes(cells[2],node=>node.type==='strong')[0]),'Example Business Pty Ltd');h.cleanup();
 });
 
 test("Creditex context actions copy only selected values and Call customer opens authorised controls without dialing", async () => {
   const h = harness("CreditexPlannedIntakeQueue"); let tree = await h.mount();
   nodes(tree, node => node.type === "tr" && node.props.onContextMenu)[0].props.onContextMenu(h.event("contextmenu")); tree = h.render();
-  let actions = h.menu(tree).menu.actions; assert.deepEqual(actions.map(action => action.label), ["Open job audit", "Call customer", "Copy job reference", "Copy site address"]);
+  let actions = h.menu(tree).menu.actions; assert.deepEqual(actions.map(action => action.label), ["Audit", "Call customer", "Copy job reference", "Copy site address"]);
   actions[2].run(); actions[3].run(); await flush(); assert.deepEqual(h.copied, [job.jobNumber, job.serviceAddress]); assert.equal(h.requests.length, 1);
   h.menu(tree).onClose(); actions[1].run(); await flush(); tree = h.render();
-  assert.equal(h.requests.at(-1).path, "/api/creditex/job-intents/intent-1");
+  assert.equal(h.requests.length, 1, "opening controls does not fetch private records or dial from the queue");
   assert.ok(h.requests.every(request => !request.init?.method && !request.init?.body), "context actions only read authorised records");
   assert.ok(h.requests[0].init.signal instanceof AbortSignal, "the list read supports cancellation");
-  assert.ok(nodes(tree, node => node.props?.["aria-label"] === "Customer audit call controls").length); assert.match(text(tree), /Fresh Customer/); h.cleanup();
+  const desk=nodes(tree,node=>node.type===h.CreditexJobAuditDesk)[0]; assert.equal(desk.props.intentId,"intent-1"); assert.equal(desk.props.actorMode,"creditex"); assert.equal(desk.props.focusCall,true); assert.equal(desk.props.user.uid,"reviewer"); h.cleanup();
 });
 
 test("missing phone and address never create unavailable calling or copy actions; refresh dismisses a stale menu", async () => {
   const h = harness("CreditexPlannedIntakeQueue", { job: { customerPhone: "", serviceAddress: "" } }); let tree = await h.mount();
-  h.trigger(tree).props.onClick(h.event()); tree = h.render(); assert.deepEqual(h.menu(tree).menu.actions.map(action => action.label), ["Open job audit", "Copy job reference"]);
+  h.trigger(tree).props.onClick(h.event()); tree = h.render(); assert.deepEqual(h.menu(tree).menu.actions.map(action => action.label), ["Audit", "Copy job reference"]);
   button(tree, "Refresh").props.onClick(); await flush(); assert.equal(h.menu(h.render()).menu, null); h.cleanup();
 });
 

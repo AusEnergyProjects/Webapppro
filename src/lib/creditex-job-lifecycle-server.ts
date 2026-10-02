@@ -296,7 +296,7 @@ export async function dispatchJobCorrectionEmail(db:D1Database,actor:JobLifecycl
 
 /** One business decision binds every current activity source in the job, or none of them. */
 export async function reviewTradeJob(db:D1Database,actor:JobLifecycleActor,input:Input,
-  options:{now?:()=>string;send?:typeof sendServiceReminderProviderMessage}={}) {
+  options:{now?:()=>string;send?:typeof sendServiceReminderProviderMessage;auditStatements?:readonly D1PreparedStatement[]}={}) {
   const workOrderId=clean(input.workOrderId,"a job"),action=clean(input.action,"a review outcome");
   if(!["reviewed","correction_required"].includes(action)) return fail("JOB_REVIEW_INPUT","Choose Pass or Correction required.",400);
   if(action==="reviewed"&&!permissions(actor).review) return fail("JOB_REVIEW_PERMISSION","Only the trade business can pass its internal review.",403);
@@ -359,7 +359,7 @@ export async function reviewTradeJob(db:D1Database,actor:JobLifecycleActor,input
   }
   statements.push(...jobSyncChangeStatements(db,{ownerUid:row.owner_uid,workOrderId,revision:row.revision+1,changedAt:now,
     audienceMemberId:row.assignee_member_id,operation:"upsert"}));
-  try{await db.batch(statements);}catch(error){if(error instanceof Error&&/UNIQUE constraint failed|trade_work_order_events.summary/.test(error.message))
+  try{await db.batch(action==="correction_required"?[...(options.auditStatements||[]),...statements]:statements);}catch(error){if(error instanceof Error&&/UNIQUE constraint failed|trade_work_order_events.summary/.test(error.message))
     return fail("JOB_REVIEW_SOURCE_CHANGED","The job or review changed. Refresh before continuing.");throw error;}
   if(action==="correction_required") await dispatchJobCorrectionEmail(db,actor,deliveryId,options);
   return loadTradeJobReview(db,actor,workOrderId);

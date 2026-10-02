@@ -78,3 +78,23 @@ test('imported history cannot become reviewed or audited even when original evid
  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_lifecycle_events').get().n,0);
  assert.equal(f.sqlite.prepare('SELECT stage FROM trade_work_orders').get().stage,'imported');
 });
+
+test('audit checklist guard and correction share one transaction before any technician delivery',async t=>{
+ const f=fixture(t);f.intent();f.sqlite.exec('CREATE TABLE test_audit_receipt(id TEXT PRIMARY KEY,revision INTEGER NOT NULL)');
+ const input=await f.input('correction_required');
+ const auditStatements=[f.db.prepare("INSERT INTO test_audit_receipt VALUES('audit',(SELECT revision FROM trade_work_orders WHERE id='job' AND revision=99))")];
+ await assert.rejects(f.service.reviewTradeJob(f.db,trade,input,{...f.options,auditStatements}),/NOT NULL/);
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM test_audit_receipt').get().n,0);
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_lifecycle_events').get().n,0);
+ assert.equal(f.sqlite.prepare('SELECT revision FROM trade_work_orders').get().revision,1);assert.equal(f.sent.length,0);
+});
+test('correction source race rolls back an inserted audit receipt; successful retry stays idempotent',async t=>{
+ const f=fixture(t);f.intent();f.sqlite.exec('CREATE TABLE test_audit_receipt(id TEXT PRIMARY KEY,revision INTEGER NOT NULL)');
+ const input=await f.input('correction_required'),auditStatements=[f.db.prepare("INSERT INTO test_audit_receipt VALUES('audit',1)")];
+ f.intercept(()=>f.sqlite.exec('UPDATE trade_activity_field_records SET revision=2'));
+ await assert.rejects(f.service.reviewTradeJob(f.db,trade,input,{...f.options,auditStatements}),e=>e.code==='JOB_REVIEW_SOURCE_CHANGED');
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM test_audit_receipt').get().n,0);assert.equal(f.sent.length,0);
+ const refreshed=await f.input('correction_required');await f.service.reviewTradeJob(f.db,trade,refreshed,{...f.options,auditStatements});
+ await f.service.reviewTradeJob(f.db,trade,refreshed,{...f.options,auditStatements});
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM test_audit_receipt').get().n,1);assert.equal(f.sent.length,1);
+});

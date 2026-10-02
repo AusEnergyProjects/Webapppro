@@ -198,9 +198,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 236);
+  assert.equal(completeMigrationChain.length, 239);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0236_trade_form_authoring_permission\.sql$/);
+  assert.match(completeMigrationChain.at(-1), /^0239_portal_team_workspace\.sql$/);
   assert.ok(
     completeMigrationChain.includes("0190_trade_activity_master_drafts.sql"),
     "the complete migration chain must include activity master drafts",
@@ -2562,5 +2562,5 @@ test("Retained calculators, audit views and server priorities preserve their saf
   }
 
   assert.doesNotMatch(portal, /CreditexVeuPilotWorkspace|creditex-tab-pilot|creditex-panel-pilot|VEU test pilot/);
-  assert.match(portal, /<CreditexPlannedIntakeQueue api=\{api\} \/>/);
+  assert.match(portal, /<CreditexPlannedIntakeQueue api=\{api\} onDirtyChange=\{reportAuditDirty\} \/>/);
 });

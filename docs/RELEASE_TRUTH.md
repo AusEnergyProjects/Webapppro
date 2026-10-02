@@ -6,7 +6,17 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 2 October 2026
 
-## Current implementation: visible business Forms workspace
+## Current implementation: Creditex and Admin daily work and job audits
+
+Creditex opens on an activity-based compliance dashboard: awaiting audit, corrections required, current completed audits and governed submission readiness. These counts cover all currently authorised activities, not the first queue page, and contain no revenue metrics. The job queue is reduced to eight useful columns and opens one shared audit desk with labelled field answers, private file previews, previous/next controls and a short verification checklist. Completed calls may be explicitly linked through the existing Creditex softphone. Operational audit completion does not grant formal submission approval or bypass the existing two-reviewer controls.
+
+Admin and Creditex expose visible Home, Connect, Tasks, Team and personal profile/colour controls subject to their existing roles. Internal conversations and tasks use fresh portal membership and organisation scope, with participant-only conversations and scoped task permissions. Personal display labels never replace the authoritative owner identity used for approval. The Admin-only identity has no new softphone authority; customer calls still require the existing Creditex voice membership.
+
+Audit revisions record the source snapshot and actor. Changes to forms, evidence or assignment invalidate an earlier completion; correction writes and their audit record commit atomically. Private previews recheck current access and evidence integrity. Unsaved audit answers are protected from navigation and job-management reloads. TLink routine success messages clear after three seconds or navigation; actionable errors and warnings remain dismissible.
+
+Migrations 0237 to 0239 add audit checklists, personal portal profiles and scoped internal tasks/messages. This implementation starts from Sites 740/source `7b15af51c07fed5ed957512b2df05daf6c693842`. Exact publication and validation receipts belong in `C:/Webproject/outputs/tlink-creditex-admin-20261002/`. No native app code changes or real customer calls/messages are part of validation. The live Creditex queue was empty before release; populated audit interactions use isolated local fixtures and SQL-backed tests.
+
+## Previous implementation: visible business Forms workspace
 
 Forms is a direct left-sidebar destination for owners and staff. Creditex compliance forms expose only current official definitions for read-only exploration, phone preview and mind maps. Business Forms provides a tenant-scoped designer, reusable pages, conditional questions, mind map and preview; published versions remain immutable in existing job snapshots. Create and edit forms is an independent, explicit team permission. Existing nonowners default off; owners retain access. Business templates and records never cross owner scope.
 
