@@ -62,6 +62,13 @@ for (const mode of ["day", "night"]) {
       assert.ok(contrast(style[`--portal-${state}-ink`], style[`--portal-${state}-bg`]) >= 4.5, state);
     }
     assert.ok(contrast(style["--portal-button-ink"], style["--portal-green"]) >= 4.5, "primary button");
+    const queueCss = read("components/CreditexPlannedIntakeQueue.module.css");
+    const resolveColour = (colour) => colour.replace(/^var\((--[\w-]+)\)$/, (_, token) => style[token]);
+    for (const selector of [".controls button", '.filterDrawer button[type="submit"]']) {
+      const foreground = resolveColour(value(queueCss, selector, "color"));
+      const background = resolveColour(value(queueCss, selector, "background"));
+      assert.ok(contrast(foreground, background) >= 4.5, `${mode} ${selector} contrast`);
+    }
   });
 }
 
