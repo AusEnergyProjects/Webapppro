@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { onIdTokenChanged, type User } from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase-client";
 import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 import type { TradeHubQuestion } from "@/lib/customer-quote-hub";
 import styles from "./TradeCustomerHubPanel.module.css";
@@ -11,6 +13,7 @@ type CustomerQaTarget = { customerId: string; workOrderId: string };
 type RequestKind = TradeHubQuestion["kind"];
 type Scope = { workOrderId: string; matchId?: never } | { matchId: string; workOrderId?: never };
 type Operation = "ask" | "download" | "interest" | `reply:${string}`;
+type PanelProps = Scope & { interestOnly?: boolean; onOpenQa?: (target: CustomerQaTarget) => void; disabled?: boolean };
 const requestKinds: { kind: RequestKind; label: string }[] = [
   { kind: "text", label: "Answer" }, { kind: "photo", label: "Photo" }, { kind: "document", label: "Document" },
 ];
@@ -32,10 +35,17 @@ export function TradeCustomerHubInterest({ matchId, onOpenQa, disabled = false }
   return <Panel key={`${business?.ownerUid || ""}:match:${matchId}`} matchId={matchId} interestOnly onOpenQa={onOpenQa} disabled={disabled} />;
 }
 
-function Panel({ workOrderId, matchId, interestOnly = false, onOpenQa, disabled = false }: Scope & {
-  interestOnly?: boolean; onOpenQa?: (target: CustomerQaTarget) => void; disabled?: boolean;
-}) {
-  const request = useTradeBusinessFetch();
+function Panel(props: PanelProps) {
+  const business = useTradeBusiness();
+  const [user, setUser] = useState<User | null>(firebaseAuth.currentUser);
+  useEffect(() => onIdTokenChanged(firebaseAuth, setUser), []);
+  if (!user?.emailVerified) return <p className={styles.status} role="status">Sign in with your verified account to open Customer Q&amp;A.</p>;
+  if (!business?.ownerUid) return <p className={styles.status} role="status">Choose your business to open Customer Q&amp;A.</p>;
+  return <AuthenticatedPanel key={`${user.uid}:${business.ownerUid}`} {...props} user={user} />;
+}
+
+function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, onOpenQa, disabled = false }: PanelProps & { user: User }) {
+  const businessRequest = useTradeBusinessFetch();
   const [data, setData] = useState<Result | null>(null);
   const [prompt, setPrompt] = useState("");
   const [kind, setKind] = useState<RequestKind>("text");
@@ -43,11 +53,23 @@ function Panel({ workOrderId, matchId, interestOnly = false, onOpenQa, disabled 
   const [message, setMessage] = useState("");
   const [replies, setReplies] = useState<Record<string, string>>({});
   const generation = useRef(0), active = useRef(true), acting = useRef(false);
+  const cancellation = useRef<AbortController | null>(null);
   const input = useRef<HTMLTextAreaElement | null>(null);
   const endpoint = `/api/trade-customer-hub?${matchId ? `matchId=${encodeURIComponent(matchId)}` : `workOrderId=${encodeURIComponent(workOrderId || "")}`}`;
   const questions = data?.questions || [];
   const duplicate = prompt.trim() ? questions.find(question => question.prompt.trim().toLowerCase() === prompt.trim().toLowerCase()) : undefined;
   const canWrite = Boolean(data?.interested && data.accepting && data.canAsk);
+  const isCurrent = useCallback(() => active.current && firebaseAuth.currentUser?.uid === user.uid && firebaseAuth.currentUser.emailVerified, [user.uid]);
+  const request = useCallback(async (path: string, init?: RequestInit) => {
+    const currentUser = firebaseAuth.currentUser, controller = cancellation.current;
+    if (!currentUser || !isCurrent() || !controller || controller.signal.aborted) throw new Error("Sign in again to open Customer Q&A.");
+    const token = await currentUser.getIdToken();
+    if (!token || !isCurrent() || controller.signal.aborted) throw new Error("Your account changed. Reopen Customer Q&A.");
+    const headers = new Headers(init?.headers); headers.set("Authorization", `Bearer ${token}`);
+    const response = await businessRequest(path, { ...init, headers, signal: controller.signal });
+    if (!isCurrent() || controller.signal.aborted) throw new Error("Your account changed. Reopen Customer Q&A.");
+    return response;
+  }, [businessRequest, isCurrent]);
 
   const load = useCallback(async () => {
     if (acting.current) return;
@@ -55,42 +77,44 @@ function Panel({ workOrderId, matchId, interestOnly = false, onOpenQa, disabled 
     try {
       const response = await request(endpoint, { cache: "no-store" });
       const result = await response.json() as Result;
-      if (!active.current || current !== generation.current) return;
+      if (!isCurrent() || current !== generation.current) return;
       if (!response.ok || !result.ok) throw new Error(result.error || "Shared requests could not be opened.");
       setData(result);
     } catch (error) {
-      if (!active.current || current !== generation.current) return;
+      if (!isCurrent() || current !== generation.current) return;
       setData(null); setMessage(error instanceof Error ? error.message : "Shared requests could not be opened.");
     }
-  }, [request, endpoint]);
+  }, [request, endpoint, isCurrent]);
 
   useEffect(() => {
     active.current = true;
+    const controller = new AbortController(); cancellation.current = controller;
     const refresh = () => void load();
     refresh(); window.addEventListener("focus", refresh);
-    return () => { active.current = false; window.removeEventListener("focus", refresh); };
+    return () => { active.current = false; controller.abort(); window.removeEventListener("focus", refresh); };
   }, [load]);
 
   function begin(operation: Operation) {
-    if (acting.current) return false;
+    if (!isCurrent() || acting.current) return false;
     acting.current = true; ++generation.current; setBusy(operation); setMessage("");
     return true;
   }
   function finish() {
     acting.current = false;
-    if (active.current) { setBusy(""); void load(); }
+    if (isCurrent()) { setBusy(""); void load(); }
   }
   async function save(method: "POST" | "PATCH", body: object) {
     const response = await request("/api/trade-customer-hub", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const result = await response.json() as Result;
     if (!response.ok || !result.ok) {
-      if (active.current && [401, 403, 404].includes(response.status)) setData(null);
+      if (isCurrent() && [401, 403, 404].includes(response.status)) setData(null);
       throw new Error(result.error || "The request could not be shared.");
     }
-    if (active.current) setData(result);
+    if (isCurrent()) setData(result);
     return result;
   }
   function openQa(result: Result) {
+    if (!isCurrent()) return;
     if (!result.customerId || !result.workOrderId) throw new Error("Customer Q&A could not be opened. Try Interested again to reopen the same customer safely.");
     onOpenQa?.({ customerId: result.customerId, workOrderId: result.workOrderId });
   }
@@ -98,19 +122,19 @@ function Panel({ workOrderId, matchId, interestOnly = false, onOpenQa, disabled 
     if (disabled || !data?.canManageInterest || !Number.isSafeInteger(data.interestRevision) || !begin("interest")) return;
     try {
       const result = await save("PATCH", { ...(matchId ? { matchId } : { workOrderId }), interested: !data.interested, revision: data.interestRevision });
-      if (active.current && interestOnly && result.interested) openQa(result);
-      if (active.current) setMessage(data.interested ? "Customer updates are off. Existing quotes and records are unchanged." : "You're interested. Customer Q&A updates will appear in your notifications.");
-    } catch (error) { if (active.current) setMessage(error instanceof Error ? error.message : "Could not change interest."); }
+      if (isCurrent() && interestOnly && result.interested) openQa(result);
+      if (isCurrent()) setMessage(data.interested ? "Customer updates are off. Existing quotes and records are unchanged." : "You're interested. Customer Q&A updates will appear in your notifications.");
+    } catch (error) { if (isCurrent()) setMessage(error instanceof Error ? error.message : "Could not change interest."); }
     finally { finish(); }
   }
   async function ask() {
     if (!canWrite || duplicate || prompt.trim().length < 5 || !begin("ask")) return;
     try {
       await save("POST", { workOrderId: data?.workOrderId || workOrderId, prompt: prompt.trim(), kind });
-      if (!active.current) return;
+      if (!isCurrent()) return;
       setPrompt(""); setMessage("Request added to the customer's project.");
     } catch (error) {
-      if (active.current) setMessage(error instanceof Error ? error.message : "Could not add request.");
+      if (isCurrent()) setMessage(error instanceof Error ? error.message : "Could not add request.");
     } finally { finish(); }
   }
   async function reply(questionId: string) {
@@ -118,28 +142,28 @@ function Panel({ workOrderId, matchId, interestOnly = false, onOpenQa, disabled 
     if (!canWrite || !body || !begin(`reply:${questionId}`)) return;
     try {
       await save("POST", { workOrderId: data?.workOrderId || workOrderId, action: "reply", questionId, body });
-      if (!active.current) return;
+      if (!isCurrent()) return;
       setReplies(current => { const next = { ...current }; delete next[questionId]; return next; });
       setMessage("Reply shared with the customer and participating businesses.");
-    } catch (error) { if (active.current) setMessage(error instanceof Error ? error.message : "Could not share reply."); }
+    } catch (error) { if (isCurrent()) setMessage(error instanceof Error ? error.message : "Could not share reply."); }
     finally { finish(); }
   }
   async function download(id: string, name: string) {
     if (!begin("download")) return;
     try {
       const response = await request(`${endpoint}&fileId=${encodeURIComponent(id)}`);
-      if (!active.current) return;
+      if (!isCurrent()) return;
       if (!response.ok) {
         if ([401, 403, 404].includes(response.status)) setData(null);
         throw new Error("This shared file is no longer available.");
       }
       const blob = await response.blob();
-      if (!active.current) return;
+      if (!isCurrent()) return;
       const url = URL.createObjectURL(blob), link = document.createElement("a");
       link.href = url; link.download = name; link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
-      if (active.current) setMessage(error instanceof Error ? error.message : "Could not download.");
+      if (isCurrent()) setMessage(error instanceof Error ? error.message : "Could not download.");
     } finally { finish(); }
   }
 

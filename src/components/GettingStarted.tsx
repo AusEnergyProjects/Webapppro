@@ -8,7 +8,7 @@ import styles from "./GettingStarted.module.css";
 
 const steps = [
   ["01", "Tell us what you need", "Choose your service and tell us a little about your property."],
-  ["02", "Connect with the right team", "Australian Energy Assessments handles assessments and safety checks directly. Upgrade requests can reach approved trades in your area."],
+  ["02", "Compare your options", "Your request reaches every approved TLink business that offers a selected service and covers your area."],
   ["03", "Choose your next step", "Discuss your options. You decide who to work with and when to go ahead."],
 ] as const;
 

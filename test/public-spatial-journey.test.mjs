@@ -55,8 +55,8 @@ test("the retired planner scene and its global styles stay removed", () => {
 test("landing and planner visuals retain meaningful semantic journey content", () => {
   assert.match(landing, /aria-label="How your request works"/);
   assert.match(landing, /Tell us what you need/);
-  assert.match(landing, /Connect with the right team/);
-  assert.match(landing, /Australian Energy Assessments handles assessments and safety checks directly/);
-  assert.match(landing, /Upgrade requests can reach approved trades in your area/);
+  assert.match(landing, /Compare your options/);
+  assert.match(landing, /every approved TLink business that offers a selected service and covers your area/);
+  assert.doesNotMatch(landing, /Australian Energy Assessments handles assessments and safety checks directly/);
   assert.match(landing, /Choose your next step/);
 });

@@ -34,6 +34,14 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const response = opportunities => ({ ok: true, json: async () => ({ opportunities }) });
 const lead = matchId => ({ matchId, title: matchId });
+
+test('lead location uses already released contact locality and retains protected broad-location fallbacks', () => {
+  const location = find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'opportunityBroadLocation').getText(parsed);
+  const { format } = evaluate(`${location}; exports.format = opportunityBroadLocation;`);
+  assert.equal(format({ suburb: '', postcode: '', state: 'VIC', customerContact: { suburb: 'COTTLES BRIDGE', postcode: '3099', addressState: 'VIC' } }), 'COTTLES BRIDGE 3099, VIC');
+  assert.equal(format({ suburb: 'Melbourne', postcode: '3000', state: 'VIC', customerContact: null }), 'Melbourne 3000, VIC');
+  assert.equal(format({ suburb: '', postcode: '', state: 'NSW', customerContact: null }), 'NSW region');
+});
 const profile = { partnerType: 'installer', entitlements: { features: { installer_leads: true } } };
 
 function harness(fetchResult = async () => response([]), props = {}) {

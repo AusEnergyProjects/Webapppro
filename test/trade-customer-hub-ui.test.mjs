@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import { createTradeBusinessFetch } from "../src/lib/trade-business-client.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradeCustomerHubPanel.tsx", import.meta.url), "utf8");
 const crmSource = fs.readFileSync(new URL("../src/components/InstallerCrmWorkspace.tsx", import.meta.url), "utf8");
@@ -31,7 +32,9 @@ const view = { ok: true, available: true, accepting: true, interested: true, int
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
 
 function harness(t, api, options = {}) {
-  let cursor = 0, dirty = false, props = options.props || { workOrderId: "job-one" }, ownerUid = "owner-one";
+  const initialUser = Object.hasOwn(options, "user") ? options.user : { uid: "signed-in-person", emailVerified: true, getIdToken: async () => "current-user-token" };
+  const firebaseAuth = { currentUser: initialUser }, authListeners = new Set();
+  let cursor = 0, dirty = false, props = { user: initialUser, ...(options.props || { workOrderId: "job-one" }) }, ownerUid = options.ownerUid ?? "owner-one";
   const slots = [], effects = [], callbacks = [], queued = [], requests = [], listeners = new Map(), downloads = [];
   const changed = (before, after) => !before || before.length !== after.length || after.some((value, index) => !Object.is(value, before[index]));
   const hooks = {
@@ -46,12 +49,18 @@ function harness(t, api, options = {}) {
       if (changed(effects[index]?.dependencies, dependencies)) { effects[index]?.cleanup?.(); effects[index] = { dependencies };
         queued.push(() => { effects[index].cleanup = effect(); }); } },
   };
-  const request = async (path, init = {}) => { requests.push({ path, init }); return api(path, init); };
+  const transport = async (path, init = {}) => { requests.push({ path, init }); return api(path, init); };
+  let scopedOwner = ownerUid, request = createTradeBusinessFetch(ownerUid, "https://ausenergyassessments.com", transport);
   const loaded = {};
-  Function("require", "exports", "window", "URL", "document", `${options.qa ? qaCompiled : compiled + "\nexports.Panel=Panel;"}`)(name => {
+  Function("require", "exports", "window", "URL", "document", `${options.qa ? qaCompiled : compiled + "\nexports.Panel=Panel;exports.AuthenticatedPanel=AuthenticatedPanel;"}`)(name => {
     if (name === "react") return hooks;
     if (name === "react/jsx-runtime") return jsx;
-    if (name === "./TradeBusinessProvider") return { useTradeBusinessFetch: () => request, useTradeBusiness: () => ({ ownerUid }) };
+    if (name === "./TradeBusinessProvider") return { useTradeBusinessFetch: () => {
+      if (scopedOwner !== ownerUid) { scopedOwner = ownerUid; request = createTradeBusinessFetch(ownerUid, "https://ausenergyassessments.com", transport); }
+      return request;
+    }, useTradeBusiness: () => ({ ownerUid }) };
+    if (name === "@/lib/firebase-client") return { firebaseAuth };
+    if (name === "firebase/auth") return { onIdTokenChanged: (_auth, listener) => { authListeners.add(listener); listener(firebaseAuth.currentUser); return () => authListeners.delete(listener); } };
     if (name.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => key }) };
     throw new Error(`Unexpected trade hub UI dependency: ${name}`);
   }, loaded, {
@@ -59,14 +68,16 @@ function harness(t, api, options = {}) {
     removeEventListener: (name, callback) => { if (listeners.get(name) === callback) listeners.delete(name); },
     setTimeout: callback => { callback(); return 1; },
   }, { createObjectURL: () => "blob:download", revokeObjectURL() {} }, { createElement: () => ({ click() { downloads.push(this.download); } }) });
-  const render = () => { cursor = 0; dirty = false; const tree = loaded[options.component || "Panel"](props);
+  const render = () => { cursor = 0; dirty = false; const tree = loaded[options.component || "AuthenticatedPanel"](props);
     options.beforeEffects?.(tree); for (const effect of queued.splice(0)) effect(); return tree; };
   const settle = async () => { for (let attempt = 0; attempt < 8; attempt++) {
     const tree = render(); await flush(); if (!dirty) return tree;
   } assert.fail("Trade customer hub did not settle after eight renders"); };
   const cleanup = () => { for (const effect of effects) effect?.cleanup?.(); };
   t.after(cleanup);
-  return { loaded, render, settle, cleanup, requests, listeners, downloads, setOwner: owner => { ownerUid = owner; }, setProps: next => { props = next; } };
+  return { loaded, render, settle, cleanup, requests, listeners, downloads, authListeners,
+    setUser: user => { firebaseAuth.currentUser = user; for (const listener of authListeners) listener(user); },
+    setOwner: owner => { ownerUid = owner; }, setProps: next => { props = { user: initialUser, ...next }; } };
 }
 
 test("tenant and job identities key separate workspaces with an encoded uncached read", async t => {
@@ -93,6 +104,7 @@ test("visible segmented composer and starters prefill only, then one explicit As
   assert.equal(h.requests.length, 1, "A starter must never auto-send");
   button(tree, "Ask customer").props.onClick(); button(tree, "Ask customer").props.onClick(); tree = h.render();
   assert.equal(button(tree, "Adding…").props.disabled, true);
+  await flush();
   const posts = h.requests.filter(item => item.init.method === "POST"); assert.equal(posts.length, 1);
   assert.deepEqual(JSON.parse(posts[0].init.body), { workOrderId: "job-one", prompt: "Please share a clear photo of the switchboard.", kind: "photo" });
   pending.resolve(response(view)); tree = await h.settle(); assert.equal(textareas(tree)[0].props.value, "");
@@ -132,6 +144,7 @@ test("explicit interest PATCH uses its revision and a stale GET cannot turn upda
     : ++reads === 1 ? response(view) : reads === 2 ? background.promise : response(off));
   let tree = await h.settle(); h.listeners.get("focus")(); await flush();
   toggle(tree).props.onClick(); tree = h.render(); assert.equal(toggle(tree).props.disabled, true);
+  await flush();
   assert.deepEqual(JSON.parse(h.requests.find(item => item.init.method === "PATCH").init.body), { workOrderId: "job-one", interested: false, revision: 4 });
   h.listeners.get("focus")(); assert.equal(reads, 2);
   patch.resolve(response(off)); tree = await h.settle(); assert.equal(toggle(tree).props["aria-checked"], false);
@@ -199,10 +212,86 @@ test("revoked refresh clears private content and an unmounted download never sav
   assert.doesNotMatch(text(tree), /In the garage|switchboard|private-plan/); assert.equal(toggle(tree), undefined);
   assert.match(text(tree), /unavailable/);
   const pending = deferred(); const d = harness(t, async path => path.includes("fileId=") ? pending.promise : response(view));
-  tree = await d.settle(); button(tree, "private-plan.pdf").props.onClick(); d.cleanup();
+  tree = await d.settle(); button(tree, "private-plan.pdf").props.onClick(); await flush(); d.cleanup();
   assert.equal(d.listeners.has("focus"), false);
   pending.resolve({ ok: true, status: 200, blob: async () => new Blob(["private"]) }); await flush();
   assert.deepEqual(d.downloads, []); assert.match(d.requests.at(-1).path, /fileId=file%2Fone/);
+  assert.equal(d.requests.at(-1).init.signal.aborted, true);
+});
+
+test("real business fetch receives fresh bearer and selected business for reads, interest, questions, replies and downloads", async t => {
+  let tokens = 0;
+  const user = { uid: "person", emailVerified: true, getIdToken: async () => `fresh-token-${++tokens}` };
+  const h = harness(t, async (path, init) => path.includes("fileId=")
+    ? { ok: true, status: 200, blob: async () => new Blob(["shared file"]) }
+    : response(init.method === "PATCH" ? { ...view, interested: false, interestRevision: 5 } : view), { user });
+  let tree = await h.settle();
+  textareas(tree)[0].props.onChange({ target: { value: "Please share the site access details" } }); tree = h.render();
+  button(tree, "Ask customer").props.onClick(); tree = await h.settle();
+  textareas(tree)[1].props.onChange({ target: { value: "We can arrange that access" } }); tree = h.render();
+  button(tree, "Share reply").props.onClick(); tree = await h.settle();
+  button(tree, "private-plan.pdf").props.onClick(); tree = await h.settle();
+  toggle(tree).props.onClick(); await h.settle();
+  assert.ok(h.requests.some(item => item.init.method === "PATCH"));
+  assert.equal(h.requests.filter(item => item.init.method === "POST").length, 2);
+  assert.ok(h.requests.some(item => item.path.includes("fileId=")));
+  assert.deepEqual(h.downloads, ["private-plan.pdf"]);
+  for (const [index, { init }] of h.requests.entries()) {
+    assert.equal(init.headers.get("Authorization"), `Bearer fresh-token-${index + 1}`);
+    assert.equal(init.headers.get("X-TLink-Business"), "owner-one");
+    assert.equal(init.signal.aborted, false);
+    if (init.method === "POST" || init.method === "PATCH") assert.equal(init.headers.get("Content-Type"), "application/json");
+  }
+  assert.equal(tokens, h.requests.length);
+});
+
+test("identity boundary sends nothing without a verified user and selected business, and remounts on identity changes", async t => {
+  const user = { uid: "person", emailVerified: true, getIdToken: async () => "token" };
+  for (const options of [{ user: null }, { user: { ...user, emailVerified: false } }, { user, ownerUid: "" }]) {
+    const h = harness(t, async () => assert.fail("Unauthorised transport"), { ...options, component: "Panel" });
+    const tree = await h.settle();
+    assert.equal(tree.type, "p"); assert.match(text(tree), /Sign in|Choose your business/); assert.equal(h.requests.length, 0);
+    h.cleanup(); assert.equal(h.authListeners.size, 0);
+  }
+  const h = harness(t, async () => response(view), { user, component: "Panel" });
+  const first = await h.settle(); assert.equal(first.key, "person:owner-one");
+  h.setUser({ ...user, uid: "other-person" });
+  const changed = await h.settle(); assert.equal(changed.key, "other-person:owner-one");
+  h.setOwner("owner-two"); assert.equal(h.render().key, "other-person:owner-two");
+  h.setUser(null); assert.match(text(await h.settle()), /Sign in/);
+});
+
+test("identity change or unmount while obtaining a token prevents every protected action reaching transport", async t => {
+  for (const action of ["read", "interest", "ask", "reply", "download"]) {
+    const pending = deferred(); let calls = 0;
+    const user = { uid: "person", emailVerified: true, getIdToken: () => ++calls === (action === "read" ? 1 : 2) ? pending.promise : Promise.resolve("first-token") };
+    const h = harness(t, async () => response(view), { user });
+    if (action === "read") h.render();
+    else {
+      let tree = await h.settle();
+      if (action === "interest") toggle(tree).props.onClick();
+      if (action === "ask") { textareas(tree)[0].props.onChange({ target: { value: "Please share the access details" } }); tree = h.render(); button(tree, "Ask customer").props.onClick(); }
+      if (action === "reply") { textareas(tree)[1].props.onChange({ target: { value: "We can help with access" } }); tree = h.render(); button(tree, "Share reply").props.onClick(); }
+      if (action === "download") button(tree, "private-plan.pdf").props.onClick();
+    }
+    h.setUser({ ...user, uid: "different-person" }); pending.resolve("old-account-token"); await flush();
+    assert.equal(h.requests.length, action === "read" ? 0 : 1, action);
+    assert.deepEqual(h.downloads, []);
+  }
+  const pending = deferred();
+  const h = harness(t, async () => assert.fail("Unmounted request reached transport"), {
+    user: { uid: "person", emailVerified: true, getIdToken: () => pending.promise },
+  });
+  h.render(); h.cleanup(); pending.resolve("old-business-token"); await flush(); assert.equal(h.requests.length, 0);
+});
+
+test("token failures and empty tokens never fall back to an unauthenticated request", async t => {
+  for (const getIdToken of [async () => { throw new Error("Session expired"); }, async () => ""]) {
+    const h = harness(t, async () => assert.fail("Unauthenticated transport"), {
+      user: { uid: "person", emailVerified: true, getIdToken }, props: { matchId: "match", interestOnly: true },
+    });
+    const tree = await h.settle(); assert.equal(h.requests.length, 0); assert.ok(button(tree, "Retry"));
+  }
 });
 
 const job = { id: "job-one", crmCustomerId: "customer-one", sourceType: "public_lead", customerSource: "public_lead_released", recordStatus: "active", workNumber: "JOB-1", title: "Home upgrade" };

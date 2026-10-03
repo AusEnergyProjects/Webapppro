@@ -351,11 +351,12 @@ function contactFieldIsRedacted(
 }
 
 function opportunityBroadLocation(opportunity: DashboardOpportunity) {
-  const locality = [opportunity.suburb, opportunity.postcode]
+  const contact = opportunity.customerContact;
+  const locality = [contact?.suburb || opportunity.suburb, contact?.postcode || opportunity.postcode]
     .filter(Boolean)
     .join(" ");
   return locality
-    ? `${locality}, ${opportunity.state}`
+    ? `${locality}, ${contact?.addressState || opportunity.state}`
     : `${opportunity.state} region`;
 }
 

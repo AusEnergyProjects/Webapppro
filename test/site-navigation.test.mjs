@@ -380,9 +380,9 @@ test("homepage uses an accessible static journey without persistent rendering wo
   assert.match(guide, /aria-labelledby="home-title"/);
   assert.match(guide, /aria-label="How your request works"/);
   assert.match(guide, /Tell us what you need/);
-  assert.match(guide, /Connect with the right team/);
-  assert.match(guide, /Australian Energy Assessments handles assessments and safety checks directly/);
-  assert.match(guide, /Upgrade requests can reach approved trades in your area/);
+  assert.match(guide, /Compare your options/);
+  assert.match(guide, /every approved TLink business that offers a selected service and covers your area/);
+  assert.doesNotMatch(guide, /Australian Energy Assessments handles assessments and safety checks directly/);
   assert.match(guide, /Choose your next step/);
   assert.match(fs.readFileSync(path.resolve(directory, "../src/components/HomeHeroScene.tsx"), "utf8"), /fetchPriority="high"/);
   assert.doesNotMatch(guide, /use client|<canvas|pointermove|onPointerMove/);
