@@ -18,6 +18,8 @@ import {
   ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
   publicPlanContactReleaseDisclosedFieldsAreValid,
   publicPlanContactReleaseAccessSql,
+  allQualifiedTradeOpportunitySql,
+  isAllQualifiedTradeConsent,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "@/lib/public-plan-enquiry.mjs";
@@ -511,12 +513,14 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
   const id = crypto.randomUUID();
   const createdAt = submittedAt.toISOString();
   const contactRelease = publicContactRelease(payload);
+  const allQualifiedConsent = Boolean(contactRelease && isAllQualifiedTradeConsent(contactRelease.noticeVersion, contactRelease.consentPurpose));
+  const aeaOnly = requiresAeaDelivery(categories) && !allQualifiedConsent;
   const protectedPublicLead = payload.sourceJourney === "public-home-energy-plan"
     || payload.sourceJourney === "energy-assistant"
     || payload.sourceJourney === QUICK_UPGRADE_SOURCE_JOURNEY;
   const assistantDurableDispatch = payload.sourceJourney === "energy-assistant";
   const opportunityStatus =
-    requiresAeaDelivery(categories)
+    aeaOnly
     || assistantDurableDispatch
     || payload.directTradeTriage?.autoSend === false
     || (protectedPublicLead && !contactRelease)
@@ -564,14 +568,14 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
       createdAt,
     );
   }
-  const allocation = assistantDurableDispatch && !requiresAeaDelivery(categories)
+  const allocation = assistantDurableDispatch && !aeaOnly
     ? {
         allocated: [],
         activeCount: 0,
         eligibleCount: 0,
         dispatchRequired: true,
       }
-    : requiresAeaDelivery(categories) && protectedPublicLead && stored.contactIsCurrent
+    : aeaOnly && protectedPublicLead && stored.contactIsCurrent
       && payload.directTradeTriage?.autoSend !== false && !assistantDurableDispatch
       && ["draft", "open"].includes(stored.status)
       ? await routeAeaServiceOpportunity(stored.id, "automatic-aea-lead-intake")
@@ -617,10 +621,11 @@ function candidateFromRow(
   const capabilities = parseJsonList(row.capabilities);
   const categories = parseJsonList(opportunity.service_categories);
   const state = canonicalMarketplaceState(opportunity.state);
-  const aeaOnly = requiresAeaDelivery(categories);
+  const allQualifiedConsent = Number(opportunity.all_qualified_consent) === 1;
+  const aeaOnly = requiresAeaDelivery(categories) && !allQualifiedConsent;
   const matchedCategories = aeaOnly
     ? Number(row.aea_delivery_authorised) === 1 ? categories : []
-    : matchedServiceCategories(categories, capabilities);
+    : matchedServiceCategories(categories, capabilities, allQualifiedConsent);
   if (!state || !matchedCategories.length || (!aeaOnly && !serviceStates.includes(state))) return null;
   // These are the company's own enquiries nationwide, not a local trade offer.
   // Distance is retained as metadata only; it does not restrict the recipient.
@@ -660,8 +665,10 @@ export async function allocateNearestInstallers(
   const db = getD1();
   const opportunity = await db
     .prepare(
-      `SELECT id, title, postcode, state, service_categories, status, expires_at, COALESCE(is_synthetic, 0) is_synthetic
-    FROM trade_opportunities WHERE id = ?`,
+      `SELECT opportunity.id, opportunity.title, opportunity.postcode, opportunity.state, opportunity.service_categories,
+        opportunity.status, opportunity.expires_at, COALESCE(opportunity.is_synthetic, 0) is_synthetic,
+        ${allQualifiedTradeOpportunitySql('opportunity')} all_qualified_consent
+    FROM trade_opportunities opportunity WHERE opportunity.id = ?`,
     )
     .bind(opportunityId)
     .first<Record<string, unknown>>();
@@ -669,7 +676,7 @@ export async function allocateNearestInstallers(
   if (!tradeOpportunityServiceScopeAllowed(opportunity.service_categories, true)) {
     return { allocated: [], activeCount: 0, eligibleCount: 0, alreadyAllocatedCount: 0 };
   }
-  const aeaOnly = requiresAeaDelivery(parseJsonList(opportunity.service_categories));
+  const aeaOnly = requiresAeaDelivery(parseJsonList(opportunity.service_categories)) && Number(opportunity.all_qualified_consent) !== 1;
   if (allowAeaDraft && !aeaOnly) throw new Error("AEA_SERVICE_REQUIRED");
   const openAeaDraft = allowAeaDraft && aeaOnly && opportunity.status === "draft";
   if (opportunity.status !== "open" && !openAeaDraft) throw new Error("OPPORTUNITY_NOT_OPEN");

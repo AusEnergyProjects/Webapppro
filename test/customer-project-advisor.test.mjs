@@ -659,7 +659,7 @@ test("split fabric work remains precise through opportunity matching and trade w
     adminOpportunitiesUi,
   ]) assert.match(source, /energy-service-catalogue\.mjs/);
   assert.match(tradeBusinessHub, /InstallerCrmWorkspace/);
-  assert.match(opportunityServer, /matchedServiceCategories\(categories, capabilities\)/);
+  assert.match(opportunityServer, /matchedServiceCategories\(categories, capabilities, allQualifiedConsent\)/);
   assert.match(opportunityServer, /json_extract\(m\.matched_categories, '\$\[0\]'\)/);
   assert.match(tradeWorkOrdersRoute, /m\.matched_categories/);
   assert.match(tradeWorkOrdersRoute, /JSON\.stringify\(serviceCategories\)/);

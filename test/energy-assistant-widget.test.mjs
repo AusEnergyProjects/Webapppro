@@ -62,23 +62,52 @@ const wattzunRoute = read("../src/app/wattzun/page.tsx");
 const legacySurgeRoute = read("../src/app/surge/page.tsx");
 const surgeRouteStyles = read("../src/app/surge/surge-page.module.css");
 
-test("Australian Energy Assessments follow-up requires both email and phone", () => {
+test("matched-trade enquiry requires private plan contact and address details", () => {
   assert.doesNotMatch(widget, /Email or phone required|Add an email address or phone number/);
-  assert.match(widget, /if \(!lead\.email\.trim\(\) \|\| !lead\.phone\.trim\(\)\)/);
-  assert.match(widget, /Email <small>Required<\/small><\/span><input required type="email"/);
-  assert.match(widget, /Phone <small>Required<\/small><\/span><input required type="tel"/);
+  assert.match(widget, /if \(!lead\.email\.trim\(\) \|\| !lead\.phone\.trim\(\) \|\| !lead\.streetAddress\.trim\(\)\)/);
+  assert.match(widget, /Email<\/span><input required type="email"/);
+  assert.match(widget, /Phone<\/span><input required type="tel"/);
 });
 
-test("contact-sharing choices start selected while enquiry and marketing consent remain opt-in", () => {
+test("contact-sharing choices start selected while enquiry consent remains opt-in", () => {
   const defaults = widget.slice(widget.indexOf("shareName: true,"), widget.indexOf("shareName: true,") + 1000);
   assert.match(defaults, /sharePhone: true/);
   assert.match(defaults, /shareAddress: true/);
   assert.match(widget, /serviceConsent: false/);
-  assert.match(widget, /marketingConsent: false/);
   assert.match(widget, /shareName: event\.target\.checked/);
   assert.match(widget, /sharePhone: event\.target\.checked/);
   const consentReset = widget.slice(widget.indexOf("const RESET_LEAD_CONSENT"), widget.indexOf("const EMPTY_LEAD"));
   assert.doesNotMatch(consentReset, /shareName|sharePhone|shareAddress/);
+});
+
+test("opening a trade enquiry preserves the draft and requires fresh consent on every entry", () => {
+  const source = ts.createSourceFile("widget.tsx", widget, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let declaration;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(source) === "openLeadForm") declaration = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.ok(declaration?.initializer);
+  const calls = [];
+  const existing = { postcode: "3000", services: ["assessment", "solar"], suburb: "MELBOURNE", state: "VIC",
+    serviceConsent: true, shareKnownPlanFacts: true, sharePhone: false, message: "Keep my draft" };
+  let draft = existing;
+  const pending = { current: false };
+  const open = new Function("setLead", "messagesRef", "profile", "RESET_LEAD_CONSENT", "resetLeadAttempt",
+    "setLeadStage", "setLeadStartedAt", "leadFormScrollPendingRef", "setLeadOpen",
+    `return (${declaration.initializer.getText(source)});`)(
+    update => { draft = update(draft); }, { current: [{ content: "Solar in 2000" }] }, { postcode: "4000" },
+    { serviceConsent: false, shareKnownPlanFacts: false }, () => calls.push("reset"),
+    stage => calls.push(stage), () => {}, pending, value => calls.push(value));
+  open();
+  assert.deepEqual(draft, { ...existing, serviceConsent: false, shareKnownPlanFacts: false });
+  assert.deepEqual(calls, ["reset", "scope", true]);
+  assert.equal(pending.current, true);
+  draft = { ...draft, serviceConsent: true, shareKnownPlanFacts: true };
+  open();
+  assert.equal(draft.serviceConsent, false);
+  assert.equal(draft.shareKnownPlanFacts, false);
 });
 const surgeOpenButton = read("../src/components/SurgeOpenButton.tsx");
 const surgeNavigation = read("../src/lib/surge-page-navigation.ts");
@@ -351,7 +380,7 @@ test("same-browser local continuation is explicit and does not create tracking i
   assert.doesNotMatch(widget, /Last active \$\{lastActive\}/);
   assert.doesNotMatch(widget, /document\.cookie|canvas\.toDataURL|navigator\.plugins/);
   assert.match(widget, /setLead\(EMPTY_LEAD\)/);
-  assert.match(widget, /setLeadRequestId\(""\)/);
+  assert.match(widget, /setLeadPublicPlanSubmissionId\(""\)/);
 });
 
 test("the model reply parser accepts one follow-up question and ignores legacy extras", () => {
@@ -394,7 +423,7 @@ test("public and customer widget copy never exposes internal platform names", ()
   assert.match(widget, /customerVisibleText\(message\.directAnswer \|\| message\.content, context\.audience\)/);
   assert.doesNotMatch(widget, /matched TLink trades/);
   assert.doesNotMatch(widget, /approved matched TLink trades/);
-  assert.match(widget, /shared with matched trades/);
+  assert.match(widget, /shared with approved matched trades/);
   assert.match(widget, /approved matched trades/);
 
   const compiled = ts.transpileModule(functionSource(widget, "customerVisibleText"), {
@@ -922,22 +951,22 @@ test("optional help is available after intake and routes one consented destinati
   assert.equal(signalsInterest("I already have one quote but want more quotes for comparisons"), true);
   assert.equal(signalsInterest("Is there anybody who will service this regional area?"), true);
   assert.equal(signalsInterest("Help me find a service provider"), true);
-  assert.match(widget, /const openMatchedTradesLeadForm = \(\) =>/);
+  assert.match(widget, /const openLeadForm = \(\) =>/);
   assert.match(widget, /enquiry = messagesRef\.current\.slice\(-4\)\.map[\s\S]{0,180}join\(" "\)/);
-  assert.match(widget, /postcode: continuingMatchedTradeDraft \? current\.postcode : enquiry\.match\(\/\\b\\d\{4\}\\b\/\)\?\.\[0\] \|\| ""/);
-  assert.match(widget, /services: continuingMatchedTradeDraft \? current\.services : \/\\bsolar\\b\/i\.test\(enquiry\) \? \["solar"\] : \[\]/);
+  assert.match(widget, /postcode: current\.postcode \|\| profile\.postcode \|\| enquiry\.match/);
+  assert.match(widget, /services: current\.services\.length \? current\.services : \/\\bsolar\\b\/i\.test\(enquiry\) \? \["solar"\] : \[\]/);
   assert.match(widget, /setLeadStage\("scope"\)/);
-  assert.match(widget, /serviceInterest \? "Get competing quotes" : "See optional help paths"/);
-  assert.match(widget, /serviceInterest \? "Start trade enquiry" : "See optional help paths"/);
-  assert.match(widget, /message\.directAnswer\.includes\("Get competing quotes"\)[\s\S]{0,320}onClick=\{openMatchedTradesLeadForm\}[\s\S]{0,160}Get competing quotes/);
+  assert.match(widget, /serviceInterest \? "Get competing quotes" : "Request trade quotes"/);
+  assert.match(widget, /serviceInterest \? "Start trade enquiry" : "Request trade quotes"/);
+  assert.match(widget, /message\.directAnswer\.includes\("Get competing quotes"\)[\s\S]{0,320}onClick=\{openLeadForm\}[\s\S]{0,160}Get competing quotes/);
   assert.match(widget, /message\.role === "user" && signalsServiceInterest\(message\.content\)/);
   assert.match(widget, /Based on your saved context/);
   assert.match(widget, /Quick guidance/);
   assert.match(widget, /className=\{styles\.guidanceRail\}/);
   assert.match(widget, /className=\{styles\.mobileGuidance\}/);
-  assert.match(widget, /Your chat and private plan stay private unless you deliberately choose a follow-up path/);
+  assert.match(widget, /Your chat and private plan stay private\. Requesting trade quotes is optional/);
   assert.match(widget, /Approved trades can quote your job/);
-  assert.match(widget, /serviceInterest \? openMatchedTradesLeadForm : openLeadForm/);
+  assert.match(widget, /onClick=\{openLeadForm\}/);
   assert.doesNotMatch(widget, /Keep exploring or change subject/);
   assert.match(widget, /Back to Wattzun AI/);
   assert.match(widget, /className=\{styles\.leadReturn\}/);
@@ -948,9 +977,9 @@ test("optional help is available after intake and routes one consented destinati
   assert.match(styles, /\.leadSecondary\s*\{[\s\S]{0,180}border:\s*1px solid #75ac9d/);
   assert.match(widget, /const ask = async[\s\S]{0,240}if \(leadOpen\)[\s\S]{0,120}setLeadOpen\(false\)[\s\S]{0,120}setLeadStatus\(""\)/);
   assert.match(widget, /container\.scrollTo\(\{[\s\S]{0,180}container\.scrollHeight/);
-  assert.match(widget, /Australian Energy Assessments only/);
-  assert.match(widget, /Matched trades \+ my private plan by email/);
-  assert.match(widget, /Nothing is shared by default/);
+  assert.doesNotMatch(widget, /aea-follow-up|requiresAeaDelivery|destinationChoices|marketingConsent/);
+  assert.match(widget, /Nothing is shared until you consent/);
+  assert.match(widget, /all approved trades matching at least one selected service and my area/);
   assert.equal((widget.match(/buildEnergyAssistantEnquirySubmission\(/g) || []).length, 1);
   assert.match(widget, /await import\([\s\S]*energy-assistant-enquiry-adapter\.mjs/);
   assert.doesNotMatch(widget, /^import[\s\S]{0,200}energy-assistant-enquiry-adapter\.mjs/m);
@@ -969,24 +998,17 @@ test("optional help is available after intake and routes one consented destinati
   ]) {
     assert.ok(leadClient.includes(field), `missing canonical lead field: ${field}`);
   }
-  assert.match(widget, /buildEnergyAssistantLeadPayload\(\{/);
-  assert.match(widget, /createEnergyAssistantSubmissionKey\(\)/);
   assert.match(widget, /publicPlanQuoteQuestionsForSnapshot\(lead\.services, leadPlanSnapshot\)/);
   assert.match(widget, /\/api\/address-localities\?postcode=/);
   assert.match(widget, /locality\.suburb\.toLocaleLowerCase\("en-AU"\) === pendingLocality\.suburb\.toLocaleLowerCase\("en-AU"\)/);
   assert.match(widget, /suburb: canonicalLocality\.suburb,[\s\S]*state: canonicalLocality\.state/);
   assert.match(widget, /unitNumber: selection\.addressLine2/);
-  assert.match(widget, /Only the details you enter here go to Australian Energy Assessments/);
   assert.match(widget, /Only the fields you select on the next screen are shared with approved matched trades/);
   assert.match(widget, /ENERGY_ASSISTANT_MATCHING_PRIVACY_EXPLANATION/);
   assert.match(widget, /unchecked by default/);
   assert.match(leadClient, /tradeSharingConsent: lead\?\.tradeSharingConsent === true/);
   assert.match(leadClient, /additionalContext: additionalContext\(lead\?\.message, documentSummary\)/);
   assert.doesNotMatch(widget, /sessionId:\s*credentials|accessKey:\s*credentials/);
-  assert.match(widget, /marketingConsent:\s*false/);
-  assert.match(widget, /This is optional and is not required for a response/);
-  assert.match(widget, /const requestId = leadRequestId \|\| makeRequestId\("lead"\)/);
-  assert.match(widget, /const submissionKey = leadSubmissionKey \|\| createEnergyAssistantSubmissionKey\(\)/);
   assert.match(widget, /const grantedAt = leadGrantedAt \|\| new Date\(\)\.toISOString\(\)/);
   assert.match(widget, /if \(leadBusy \|\| leadStatus \|\| !lead\.serviceConsent\) return/);
   assert.doesNotMatch(widget, /setLead\(EMPTY_LEAD\)[\s\S]{0,160}catch/);
@@ -1000,7 +1022,7 @@ test("optional help is available after intake and routes one consented destinati
 });
 
 test("the matched-trade brief is progressive, phone-safe and privacy explicit", () => {
-  assert.match(widget, /type LeadStage = "destination" \| "scope" \| "questions" \| "contact" \| "preferences" \| "consent"/);
+  assert.match(widget, /type LeadStage = "scope" \| "questions" \| "contact" \| "preferences" \| "consent"/);
   assert.doesNotMatch(widget, /setLeadStage\("basics"\)|leadStage === "basics"/);
   assert.match(widget, /quoteQuestions\.slice\(leadQuestionPage \* 3, leadQuestionPage \* 3 \+ 3\)/);
   assert.match(widget, /currentQuoteQuestions\.map\(\(question\) =>/);

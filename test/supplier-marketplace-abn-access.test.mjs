@@ -36,34 +36,16 @@ test("the shared supplier predicate binds approval to the exact authoritative re
     accessServer,
     /export function verifiedTradeAccountPredicate[\s\S]*approvedTradeReviewPredicate\(account\)/,
   );
-  assert.match(
-    accessServer,
-    /verified_review\.id = \$\{account\}\.verification_review_id/,
-  );
-  assert.match(
-    accessServer,
-    /verified_review\.firebase_uid = \$\{account\}\.firebase_uid/,
-  );
-  assert.match(
-    accessServer,
-    /verified_review\.abn = \$\{account\}\.verified_abn/,
-  );
-  assert.match(
-    accessServer,
-    /verified_review\.business_name = \$\{account\}\.business_name/,
-  );
-  assert.match(
-    accessServer,
-    /verified_review\.partner_type = \$\{account\}\.partner_type/,
-  );
-  assert.match(accessServer, /verified_review\.decision = 'approved'/);
-  assert.match(accessServer, /verified_review\.review_method = 'official_abr_lookup'/);
-  assert.match(
-    accessServer,
-    /verified_review\.reviewed_by_uid = \$\{account\}\.verification_reviewed_by_uid/,
-  );
-  assert.match(
-    accessServer,
-    /verified_review\.reviewed_at = \$\{account\}\.verification_reviewed_at/,
-  );
+  const comparison = accessServer.match(/WHERE \(verified_review\.id,([\s\S]*?)\) =\s*\(([\s\S]*?)\)/);
+  assert.ok(comparison, "current review fields must be compared atomically");
+  assert.deepEqual(('verified_review.id,' + comparison[1]).split(',').map(field => field.trim()), [
+    'verified_review.id', 'verified_review.firebase_uid', 'verified_review.abn', 'verified_review.business_name',
+    'verified_review.partner_type', 'verified_review.decision', 'verified_review.review_method',
+    'verified_review.reviewed_by_uid', 'verified_review.reviewed_at',
+  ]);
+  assert.deepEqual(comparison[2].split(',').map(field => field.trim()), [
+    '${account}.verification_review_id', '${account}.firebase_uid', '${account}.verified_abn',
+    '${account}.business_name', '${account}.partner_type', "'approved'", "'official_abr_lookup'",
+    '${account}.verification_reviewed_by_uid', '${account}.verification_reviewed_at',
+  ]);
 });

@@ -8,7 +8,7 @@ import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
 import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
 import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
-import { publicPlanContactReleaseAccessSql } from "@/lib/public-plan-enquiry.mjs";
+import { allQualifiedTradeOpportunitySql, publicPlanContactReleaseAccessSql } from "@/lib/public-plan-enquiry.mjs";
 
 export const runtime = "edge";
 
@@ -45,7 +45,7 @@ function cleanCategories(value: unknown) {
 
 function shape(row: Record<string, unknown>) {
   return { id: row.id, title: row.title, projectType: row.project_type, postcode: row.postcode, state: row.state,
-    serviceCategories: parseJsonList(row.service_categories), priority: row.priority, timing: row.timing,
+    serviceCategories: parseJsonList(row.service_categories), allQualifiedConsent: Boolean(row.all_qualified_consent), priority: row.priority, timing: row.timing,
     summary: row.summary, status: row.status, sourceReference: row.source_reference,
     contactLimit: Number(row.contact_limit || DEFAULT_CONTACT_LIMIT), maximumConnectedInstallers: Number(row.maximum_connected_installers || DEFAULT_CONNECTED_INSTALLERS),
     isSynthetic: Boolean(row.is_synthetic),
@@ -130,6 +130,7 @@ export async function GET(request: Request) {
     const [countRow, rows] = await timer.databases([
       includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_opportunities o ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
       db.prepare(`SELECT o.*,
+      ${allQualifiedTradeOpportunitySql("o")} all_qualified_consent,
       COUNT(m.id) match_count,
       SUM(CASE WHEN m.status = 'interested' THEN 1 ELSE 0 END) interested_count,
       SUM(CASE WHEN m.status = 'connected' THEN 1 ELSE 0 END) connected_count
@@ -216,9 +217,11 @@ export async function PATCH(request: Request) {
     if (!id || !STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid opportunity and status." }, 400);
     if (status === "expired") return adminJson({ ok: false, error: "Expiry is automatic and cannot be applied manually." }, 400);
     const db = getD1();
-    const current = await db.prepare("SELECT status, expires_at, service_categories FROM trade_opportunities WHERE id = ?").bind(id).first<Record<string, unknown>>();
+    const current = await db.prepare(`SELECT opportunity.status, opportunity.expires_at, opportunity.service_categories,
+      ${allQualifiedTradeOpportunitySql("opportunity")} all_qualified_consent
+      FROM trade_opportunities opportunity WHERE opportunity.id = ?`).bind(id).first<Record<string, unknown>>();
     if (!current) return adminJson({ ok: false, error: "Opportunity not found." }, 404);
-    if (["open", "paused"].includes(status) && !tradeOpportunityServiceScopeAllowed(current.service_categories)) {
+    if (["open", "paused"].includes(status) && !tradeOpportunityServiceScopeAllowed(current.service_categories, false, Boolean(current.all_qualified_consent))) {
       return adminJson({ ok: false, error: "This enquiry is reserved for Australian Energy Assessments." }, 409);
     }
     if (status === "open" && current.expires_at && new Date(String(current.expires_at)).getTime() <= Date.now()) {

@@ -61,7 +61,6 @@ const TradeJobReviewPanel = dynamic(() => import("./TradeJobReviewPanel").then((
 const TradeRentalActivityPicker = dynamic(() => import("./TradeRentalActivityPicker").then((module) => module.TradeRentalActivityPicker));
 const TradeJobFormsPanel = dynamic(() => import("./TradeJobFormsPanel").then((module) => module.TradeJobFormsPanel));
 const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspace").then((module) => module.TradeDataImportWorkspace));
-const TradeAssetWorkspace = dynamic(() => import("./TradeAssetWorkspace").then((module) => module.TradeAssetWorkspace));
 const TradeQuotePanel = dynamic(() => import("./TradeQuotePanel").then((module) => module.TradeQuotePanel));
 const TradePhotoRequestPanel = dynamic(() => import("./TradePhotoRequestPanel").then((module) => module.TradePhotoRequestPanel));
 const TradePhotoTemplateLibrary = dynamic(() => import("./TradePhotoTemplateLibrary").then((module) => module.TradePhotoTemplateLibrary));
@@ -144,7 +143,7 @@ type CreateJobResult = {
 type IndexPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type CrmIndexResult = { ok?: boolean; items?: Job[] | Customer[]; pagination?: IndexPagination; error?: string };
 type CrmDetailResult = { ok?: boolean; job?: Job; customer?: Customer | null; sites?: ServiceSite[]; jobs?: Job[]; error?: string };
-type View = "today" | "leads" | "jobs" | "schedule" | "customers" | "pricebook" | "assets" | "templates" | "reports" | "import" | "integrations";
+type View = "today" | "leads" | "jobs" | "schedule" | "customers" | "pricebook" | "templates" | "reports" | "import" | "integrations";
 type JobTab = "summary" | "schedule" | "quote" | "field" | "invoice" | "review";
 type JobDetailTab = JobTab | "files" | "forms" | "tasks" | "notes" | "handover" | "messages";
 type JobReturnTarget = { kind: "jobs" } | { kind: "customer"; customerId: string; customerName: string };
@@ -525,7 +524,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const appliedNavigationTargetNonce = useRef(0);
   const appliedCustomerQaNonce = useRef<number | null>(null);
   const allowedViews = useMemo<View[]>(() => {
-    if (!staffPermissions) return ["today", "leads", "jobs", "schedule", "customers", "pricebook", "assets", "templates", "reports", "import", "integrations"];
+    if (!staffPermissions) return ["today", "leads", "jobs", "schedule", "customers", "pricebook", "templates", "reports", "import", "integrations"];
     const views: View[] = ["today", "jobs"];
     if (staffPermissions.scheduleScope) views.push("schedule");
     if (staffPermissions.canViewCustomers && staffPermissions.canSearchCustomers) views.push("customers");
@@ -1631,7 +1630,6 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     {view === "reports" && <div className="crm-view"><TradeBusinessReports user={user} onOpenJobCosts={!staffPermissions ? (id) => openFocusedJob(id, "field") : undefined} onOpenJobInvoice={(!staffPermissions || staffPermissions.canViewInvoices) ? (id) => openFocusedJob(id, "invoice") : undefined} onOpenJobs={() => setView("jobs")} onOpenSchedule={() => openVisualSchedule()} onOpenInvoices={(!staffPermissions || staffPermissions.canViewInvoices) ? onOpenInvoices : undefined} /></div>}
     {view === "import" && <div className="crm-view"><TradeDataImportWorkspace user={user} partnerType="installer" onImported={async () => { await load(); setRefreshNonce((value) => value + 1); }} /></div>}
     {view === "pricebook" && <div className="crm-view"><TradePriceBookWorkspace key={priceBookView} user={user} initialView={priceBookView} permissions={staffPermissions} /></div>}
-    {view === "assets" && <div className="crm-view"><TradeAssetWorkspace user={user} /></div>}
     {view === "integrations" && <div className="crm-view"><TradeIntegrationCentre user={user} /></div>}
     <BookingTrainingLinks modules={bookingTraining} teamPortal={Boolean(staffPermissions)} />
     {notice && <p className="crm-status" role={notice.kind === "error" || notice.kind === "warning" ? "alert" : "status"}>{notice.message}{notice.kind === "error" && mfaRequired && <> <a href={MFA_SETUP_URL}>Set up or verify authenticator</a>.</>}{notice.calendarRetry && <> <a href="/direct-trade/dashboard?workspace=schedule">Open Schedule and retry calendar sync</a>.</>}{notice.kind !== "progress" && <button type="button" onClick={dismissStatus} aria-label="Dismiss notification" style={{ marginLeft: "1rem" }}>Dismiss</button>}</p>}

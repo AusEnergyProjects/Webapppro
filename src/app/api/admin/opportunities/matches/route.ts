@@ -1,4 +1,6 @@
-import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "@/lib/aea-trade-routing.mjs";
+import { tradeOpportunityServiceScopeAllowed } from "@/lib/aea-trade-routing.mjs";
+import { allQualifiedTradeOpportunitySql } from "@/lib/public-plan-enquiry.mjs";
+import { tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { getD1 } from "../../../../../../db";
 import {
   adminError,
@@ -60,7 +62,8 @@ export async function POST(request: Request) {
     const [opportunity, account] = await Promise.all([
       db
         .prepare(
-          "SELECT id, title, status, postcode, state, service_categories FROM trade_opportunities WHERE id = ?",
+          `SELECT opportunity.id, opportunity.title, opportunity.status, opportunity.postcode, opportunity.state, opportunity.service_categories,
+            ${allQualifiedTradeOpportunitySql("opportunity")} all_qualified_consent FROM trade_opportunities opportunity WHERE opportunity.id = ?`,
         )
         .bind(opportunityId)
         .first<Record<string, unknown>>(),
@@ -87,7 +90,7 @@ export async function POST(request: Request) {
         { ok: false, error: "The opportunity or business could not be found." },
         404,
       );
-    if (!tradeOpportunityServiceScopeAllowed(opportunity.service_categories)) {
+    if (!tradeOpportunityServiceScopeAllowed(opportunity.service_categories, false, Boolean(opportunity.all_qualified_consent))) {
       return adminJson({ ok: false, error: "This enquiry is reserved for Australian Energy Assessments." }, 409);
     }
     if (opportunity.status !== "open")
@@ -149,7 +152,7 @@ export async function POST(request: Request) {
       );
     const serviceArea = qualifyingServiceArea(account, String(opportunity.postcode));
     if (!await certificateLeadEligible(db, firebaseUid, matchedCategories, String(opportunity.state))) {
-      return adminJson({ ok: false, code: "CREDITEX_ELIGIBILITY_REQUIRED", error: "Complete Creditex business onboarding and confirm the saved services and service area before receiving this lead." }, 403);
+      return adminJson({ ok: false, code: "LEAD_ELIGIBILITY_REQUIRED", error: "Check the business verification, offered services and service area before assigning this lead." }, 403);
     }
     if (!serviceArea)
       return adminJson(
@@ -178,7 +181,7 @@ export async function POST(request: Request) {
       WHERE ${await certificateLeadEligibilitySql("certificate_candidate.owner_uid", "certificate_candidate.categories", "certificate_candidate.state")}
       AND EXISTS (SELECT 1 FROM trade_opportunities current_opportunity
         WHERE current_opportunity.id = ? AND current_opportunity.status = 'open'
-          AND ${tradeOpportunityServiceScopeSql("current_opportunity")})
+          AND ${tradeOpportunityOwnerScopeSql("current_opportunity", "certificate_candidate.owner_uid")})
       ON CONFLICT(opportunity_id, firebase_uid) DO UPDATE SET admin_note = excluded.admin_note, updated_at = excluded.updated_at`,
       )
       .bind(
@@ -240,7 +243,7 @@ export async function PATCH(request: Request) {
     const current = await db
       .prepare(
         `SELECT m.status, m.firebase_uid, m.opportunity_id, o.status opportunity_status, o.maximum_connected_installers,
-        o.service_categories opportunity_service_categories,
+        o.service_categories opportunity_service_categories, ${allQualifiedTradeOpportunitySql("o")} all_qualified_consent,
         CASE WHEN ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'installer'
           AND ${await certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
           THEN 1 ELSE 0 END installer_access_approved
@@ -254,7 +257,7 @@ export async function PATCH(request: Request) {
     if (!current)
       return adminJson({ ok: false, error: "Assignment not found." }, 404);
     if (ACCESS_REQUIRED_MATCH_STATUSES.has(status)
-      && !tradeOpportunityServiceScopeAllowed(current.opportunity_service_categories)) {
+      && !tradeOpportunityServiceScopeAllowed(current.opportunity_service_categories, false, Boolean(current.all_qualified_consent))) {
       return adminJson({ ok: false, error: "This enquiry is reserved for Australian Energy Assessments." }, 409);
     }
     if (
@@ -312,8 +315,8 @@ export async function PATCH(request: Request) {
           JOIN trade_opportunities current_opportunity
             ON current_opportunity.id = trade_opportunity_matches.opportunity_id
           WHERE a.firebase_uid = trade_opportunity_matches.firebase_uid
-            AND ${tradeOpportunityServiceScopeSql("current_opportunity")}
-            AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'installer'
+            AND ${tradeOpportunityOwnerScopeSql("current_opportunity", "trade_opportunity_matches.firebase_uid")}
+            AND a.partner_type = 'installer'
             AND ${await certificateLeadEligibilitySql("a.firebase_uid", "trade_opportunity_matches.matched_categories", "current_opportunity.state")}
         )
       )`,

@@ -23,7 +23,6 @@ import {
   QUICK_UPGRADE_ENQUIRY_KIND,
 } from "@/lib/quick-upgrade-enquiry.mjs";
 import { PUBLIC_SITE } from "@/lib/public-site";
-import { requiresAeaDelivery } from "@/lib/aea-service-identity.mjs";
 import styles from "./QuickUpgradeEnquiry.module.css";
 
 type AddressLocality = { suburb: string; state: string };
@@ -69,7 +68,6 @@ export function QuickUpgradeEnquiryDialog({
   const lastAttemptCore = useRef("");
   const [step, setStep] = useState<1 | 2>(1);
   const [services, setServices] = useState<string[]>(startingServices);
-  const aeaOnly = requiresAeaDelivery(services);
   const [postcode, setPostcode] = useState(startingPostcode);
   const [localities, setLocalities] = useState<AddressLocality[]>([]);
   const [locality, setLocality] = useState<AddressLocality | null>(null);
@@ -312,8 +310,8 @@ export function QuickUpgradeEnquiryDialog({
             email: true,
             postcode: true,
             address: true,
-            name: !aeaOnly && shareName,
-            phone: !aeaOnly && sharePhone,
+            name: shareName,
+            phone: sharePhone,
           },
           website,
           clientStartedAt: clientStartedAt.current,
@@ -362,9 +360,9 @@ export function QuickUpgradeEnquiryDialog({
       >
         <header className={styles.header}>
           <div>
-            <span>{aeaOnly ? PUBLIC_SITE.name : submitState.kind === "success" ? `${PUBLIC_SITE.name} + TLink` : "Independent service matching"}</span>
-            <h2 id={titleId}>{submitState.kind === "success" ? "Thank you. Your request has been received." : aeaOnly ? "Enquire about Australian Energy Assessments services" : "Get upgrade options without the runaround"}</h2>
-            <p id={descriptionId}>{submitState.kind === "success" ? submitState.message : aeaOnly ? "Tell our team what you need. Your enquiry stays with Australian Energy Assessments, including any additional services you select." : "Choose what you need and send one clear request to approved TLink trade businesses that cover your area."}</p>
+            <span>{submitState.kind === "success" ? `${PUBLIC_SITE.name} + TLink` : "Independent service matching"}</span>
+            <h2 id={titleId}>{submitState.kind === "success" ? "Thank you. Your request has been received." : "Get upgrade options without the runaround"}</h2>
+            <p id={descriptionId}>{submitState.kind === "success" ? submitState.message : "Choose what you need and send one clear request to all approved TLink businesses that offer at least one selected service and cover your area."}</p>
           </div>
           <button className={styles.closeButton} type="button" onClick={onClose} disabled={!dismissible} aria-label="Close upgrade options">Close</button>
         </header>
@@ -379,8 +377,8 @@ export function QuickUpgradeEnquiryDialog({
             </div>
             <div className={styles.receiptNext}>
               <h3>What happens next</h3>
-              <p>{aeaOnly ? "Australian Energy Assessments will contact you to confirm the service, property and next step." : "Your request is matched to approved TLink trade businesses based on your selected services and their service areas."}</p>
-              <p>{aeaOnly ? "This enquiry has not been distributed to other TLink businesses. Your booking is confirmed separately." : "Suitable businesses can review the details you agreed to share. Responses depend on availability."}</p>
+              <p>{"Your request is matched to approved TLink trade businesses based on your selected services and their service areas."}</p>
+              <p>{"Suitable businesses can review the details you agreed to share. Responses depend on availability."}</p>
             </div>
             <div className={styles.receiptHelp}>
               <h3>Need a hand?</h3>
@@ -419,7 +417,7 @@ export function QuickUpgradeEnquiryDialog({
             ) : (
               <div className={styles.body}>
                 <div className={styles.requestSummary}><p><strong>Your request:</strong> {ENERGY_SERVICE_CATALOGUE.filter((service) => services.includes(service.id)).map((service) => serviceLabel(service.id, service.label)).join(", ")}</p><button type="button" disabled={!dismissible} onClick={() => setStep(1)}>Edit or add services</button></div>
-                <div className={styles.stepHeading}><span>Step 2 of 2</span><h3>Where is the property?</h3><p>{aeaOnly ? "Australian Energy Assessments uses the address to confirm service availability and arrange your visit." : "We use the address to find approved businesses that service the right area."}</p></div>
+                <div className={styles.stepHeading}><span>Step 2 of 2</span><h3>Where is the property?</h3><p>{"We use the address to find approved businesses that service the right area."}</p></div>
                 <div className={styles.addressGrid}>
                   <label><span>Postcode *</span><input ref={postcodeRef} value={postcode} onChange={(event) => changePostcode(event.target.value)} inputMode="numeric" autoComplete="postal-code" pattern="\d{4}" maxLength={4} required /></label>
                   <label className={styles.suburb}><span>Suburb *</span><select value={locality ? localityValue(locality) : ""} onChange={(event) => changeLocality(event.target.value)} disabled={lookupState !== "ready"} required><option value="">{lookupState === "loading" ? "Loading suburbs..." : "Choose the listed suburb"}</option>{localities.map((entry) => <option value={localityValue(entry)} key={localityValue(entry)}>{entry.suburb}, {entry.state}</option>)}</select>{lookupError ? <small className={styles.fieldError}>{lookupError}</small> : null}</label>
@@ -427,20 +425,20 @@ export function QuickUpgradeEnquiryDialog({
                   <AustralianAddressLookup className={styles.street} label="Street address *" value={streetAddress} onChange={setStreetAddress} onSelect={selectAddress} required />
                 </div>
 
-                <div className={styles.stepHeading}><h3>Your contact details</h3><p>{aeaOnly ? "Your name, email and phone are required so Australian Energy Assessments can contact you about your services." : "Your name, email and phone are required so Australian Energy Assessments can manage your request. Matching businesses always receive your email so they can respond. You choose whether to share your name and phone."}</p></div>
+                <div className={styles.stepHeading}><h3>Your contact details</h3><p>{"Your name, email and phone are required so Australian Energy Assessments can manage your request. Matching businesses always receive your email so they can respond. You choose whether to share your name and phone."}</p></div>
                 <div className={styles.contactGrid}>
                   <label className={styles.full}><span>Email *</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" maxLength={254} required /></label>
                   <label><span>First name *</span><input value={firstName} onChange={(event) => setFirstName(event.target.value)} autoComplete="given-name" maxLength={60} required /></label>
                   <label><span>Last name *</span><input value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete="family-name" maxLength={60} required /></label>
                   <label className={styles.full}><span>Phone *</span><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" maxLength={40} required /></label>
                 </div>
-                {!aeaOnly ? <div className={styles.optionalSharing}>
+                {<div className={styles.optionalSharing}>
                   <span>Your name and phone are selected by default. Untick either box to keep that detail private from matching businesses.</span>
                   <label><input type="checkbox" checked={shareName} onChange={(event) => setShareName(event.target.checked)} /> Share my name</label>
                   <label><input type="checkbox" checked={sharePhone} onChange={(event) => setSharePhone(event.target.checked)} /> Share my phone number</label>
-                </div> : null}
+                </div>}
                 <label className={styles.notes}><span>Anything useful to add?</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} maxLength={500} placeholder="For example: what you want to improve, when you hope to start, or what you are unsure about." /><small>Do not include account numbers, meter numbers, access codes or payment details.</small></label>
-                {aeaOnly ? <div className={styles.sharingSummary}><h4>Sent directly to Australian Energy Assessments</h4><p>Australian Energy Assessments will use your property and contact details to arrange your assessment or safety service. This enquiry, including any additional services, is not distributed to other TLink businesses.</p></div> : <div className={styles.sharingSummary}>
+                {<div className={styles.sharingSummary}>
                   <h4>What matching businesses will receive</h4>
                   <ul>
                     <li><strong>Request:</strong> Your selected services, full property address and your notes.</li>

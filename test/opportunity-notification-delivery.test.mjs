@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { expandCreditexLeadSql, qualifyLeadFixture } from "./helpers/creditex-training-sql.mjs";
-import { certificateTestDependency, installAeaTradeOwnerFixtureSchema } from "./helpers/creditex-training-fixture.mjs";
+import { certificateTestDependency, installAeaTradeOwnerFixtureSchema, installOpportunityConsentFixtureSchema } from "./helpers/creditex-training-fixture.mjs";
 import {
   OPPORTUNITY_INBOX_URL,
   opportunityNotificationDraft,
@@ -520,6 +520,7 @@ test("coverage repair dynamically inserts only a missing active-match delivery",
   const db = notificationDatabase();
   db.exec(`CREATE TABLE trade_opportunities (id text PRIMARY KEY, service_categories text NOT NULL);
     INSERT INTO trade_opportunities VALUES ('opportunity-repair', '["solar"]');`);
+  installOpportunityConsentFixtureSchema(db);
   const now = "2026-08-11T00:00:00.000Z";
   const insertMatch = db.prepare(`INSERT INTO trade_opportunity_matches
     (id, opportunity_id, firebase_uid, status, matched_at, updated_at)

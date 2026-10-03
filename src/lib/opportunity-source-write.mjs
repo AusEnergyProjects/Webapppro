@@ -1,11 +1,13 @@
 import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "./aea-trade-routing.mjs";
+import { isAllQualifiedTradeConsent } from "./public-plan-enquiry.mjs";
 export async function persistLeadOpportunity(
   database,
   record,
   contactRelease,
   currentConsent,
 ) {
-  const tradeScopeAllowed = tradeOpportunityServiceScopeAllowed(record.serviceCategories);
+  const allQualifiedConsent = Boolean(contactRelease && isAllQualifiedTradeConsent(contactRelease.noticeVersion, contactRelease.consentPurpose));
+  const tradeScopeAllowed = tradeOpportunityServiceScopeAllowed(record.serviceCategories, false, allQualifiedConsent);
   const initialStatus = record.publicPlanEnquiry || !tradeScopeAllowed ? "draft" : record.requestedStatus;
   await database.prepare(`INSERT INTO trade_opportunities
     (id, title, project_type, postcode, state, service_categories, priority, timing, summary, status,
@@ -144,7 +146,7 @@ export async function persistLeadOpportunity(
   if (
     record.requestedStatus === "open"
     && tradeScopeAllowed
-    && tradeOpportunityServiceScopeAllowed(canonical.service_categories)
+    && tradeOpportunityServiceScopeAllowed(canonical.service_categories, false, allQualifiedConsent)
     && contactIsCurrent
     && canonical.status === "draft"
   ) {

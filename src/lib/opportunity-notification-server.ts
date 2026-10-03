@@ -18,10 +18,13 @@ import {
   publicPlanContactReleaseAccessSql,
   publicPlanContactReleaseConsentSql,
   publicPlanContactReleaseDisclosedFieldsAreValid,
+  isAllQualifiedTradeConsent,
 } from "@/lib/public-plan-enquiry.mjs";
 import {
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
@@ -100,6 +103,8 @@ async function deliveryContext(deliveryId: string) {
           AND public_contact.consent_purpose = '${QUICK_UPGRADE_CONSENT_PURPOSE}')
           OR (public_contact.notice_version = '${AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
           AND public_contact.consent_purpose = '${AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE}')
+          OR (public_contact.notice_version = '${AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
+          AND public_contact.consent_purpose = '${AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE}')
           OR (public_contact.notice_version = '${LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION}'
           AND public_contact.consent_purpose = '${LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE}')
           THEN 'quick_upgrade_enquiry'
@@ -179,7 +184,8 @@ function ineligibility(context: DeliveryRow) {
   // This authorization is projected from the current owner/account records in
   // deliveryContext, never accepted from a request or stored opportunity flag.
   if (!tradeOpportunityServiceScopeAllowed(context.opportunity_service_categories,
-    Number(context.aea_delivery_authorised) === 1)) {
+    Number(context.aea_delivery_authorised) === 1,
+    isAllQualifiedTradeConsent(context.public_contact_notice_version, context.public_contact_consent_purpose))) {
     return "This service enquiry is reserved for Australian Energy Assessments.";
   }
   if (Number(context.installer_access_approved || 0) !== 1) {
@@ -509,6 +515,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
               SELECT 1
               FROM public_trade_lead_contact_releases mandatory_public_email
               WHERE mandatory_public_email.opportunity_id = current_opportunity.id
+                AND mandatory_public_email.source_reference = current_opportunity.source_reference
                 AND mandatory_public_email.status = 'active'
                 AND ${publicPlanContactReleaseConsentSql("mandatory_public_email")}
                 AND mandatory_public_email.postcode = current_opportunity.postcode
@@ -532,6 +539,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
                 SELECT 1
                 FROM public_trade_lead_contact_releases current_public_contact
                 WHERE current_public_contact.opportunity_id = current_opportunity.id
+                  AND current_public_contact.source_reference = current_opportunity.source_reference
                   AND (current_public_contact.id, current_public_contact.notice_version,
                     current_public_contact.consent_purpose, current_public_contact.disclosed_fields) = (?, ?, ?, ?)
                   AND current_public_contact.status = 'active'

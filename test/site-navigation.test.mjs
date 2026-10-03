@@ -213,7 +213,7 @@ test("public navigation keeps TLink clearly branded", () => {
   assert.match(chrome, /title="TLink"/);
   assert.match(styles, /\.site-tlink-mark \{[^}]*flex: 0 0 34px;[^}]*object-fit: contain;[^}]*width: 34px;/);
   assert.match(quickUpgradeEnquiry, /No account needed/);
-  assert.match(quickUpgradeEnquiry, /matching approved businesses/);
+  assert.match(quickUpgradeEnquiry, /all approved (?:TLink businesses|trades) that offer at least one selected service and cover your area/);
   assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
 });
 
@@ -473,12 +473,13 @@ test("getting-started copy preserves comparison and privacy boundaries", () => {
   assert.match(guide, /electricity and mains gas plans/);
   assert.match(guide, /href="\/compare"/);
   assert.match(guide, /href="\/gas-compare"/);
-  assert.match(quickUpgradeEnquiry, /For upgrade requests, you choose the contact details shared with matching approved businesses/);
-  assert.match(quickUpgradeEnquiry, /requiresAeaDelivery\(\[service\]\) \?/);
-  assert.match(quickUpgradeEnquiry, /This enquiry goes to Australian Energy Assessments\. It is not distributed to other TLink businesses/);
+  assert.match(quickUpgradeEnquiry, /all approved (?:TLink businesses|trades) that offer at least one selected service and cover your area/);
+  assert.match(quickUpgradeEnquiry, /You choose whether to share your name and phone/);
+  assert.doesNotMatch(quickUpgradeEnquiry, /requiresAeaDelivery|not distributed to other TLink businesses/);
   assert.match(matchingDialog, /Your selected services, full property address and your notes/);
   assert.match(matchingDialog, /Your email is always included\. Your name and phone are included unless you untick their boxes/);
-  assert.match(matchingDialog, /including any additional services, is not distributed to other TLink businesses/);
+  assert.match(matchingDialog, /all approved (?:TLink businesses|trades).*at least one selected service/);
+  assert.doesNotMatch(matchingDialog, /is not distributed to other TLink businesses/);
   assert.match(guide, /Prices, rebates and rules can change/);
   assert.doesNotMatch(guide, /household evidence|Charge-level calculation evidence|recorded capability|confirmed NSW approval pathway/i);
   assert.doesNotMatch(guide, /\u2013|\u2014/);

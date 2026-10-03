@@ -29,9 +29,10 @@ test("customer evidence and public job uploads require the shared reviewed ABN g
 
 test("shared customer hub participants require the same authoritative reviewed ABN predicate", () => {
   const hub = read("../src/lib/customer-quote-hub-server.ts");
-  const participantJoins = hub.slice(hub.indexOf("export const hubParticipantJoins"), hub.indexOf("export function hubJson"));
+  const participantJoins = hub.slice(hub.indexOf("export const hubParticipantContactJoins"), hub.indexOf("export function hubJson"));
   assert.equal(predicateCallCount(participantJoins), 1);
   assert.match(participantJoins, /JOIN trade_accounts trade ON trade\.firebase_uid=match\.firebase_uid AND trade\.partner_type='installer' AND \$\{verifiedTradeAccountPredicate\("trade"\)\}/);
+  assert.match(participantJoins, /export const hubParticipantJoins=`\$\{hubParticipantContactJoins\}/);
 });
 
 test("account and secure-link quote decisions stop when current trade access is revoked", () => {

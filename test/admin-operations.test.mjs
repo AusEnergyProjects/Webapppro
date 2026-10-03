@@ -125,10 +125,9 @@ test("moderation, evidence and matching actions have durable audit records", () 
 });
 
 test("admin opportunity transitions and ecosystem readiness use the current ABN review ledger", () => {
-  assert.ok(
-    (matchesRoute.match(/verifiedTradeAccountPredicate\("a"\)/g) || []).length >= 2,
-    "both transition preflight and update must use the authoritative installer predicate",
-  );
+  assert.match(matchesRoute, /verifiedTradeAccountPredicate\("a"\)/);
+  assert.match(matchesRoute, /certificateLeadEligibilitySql\("a.firebase_uid", "trade_opportunity_matches.matched_categories", "current_opportunity.state"\)/,
+    "the atomic update reuses lead eligibility, including the authoritative reviewed ABN predicate");
   assert.match(matchesRoute, /ACCESS_REQUIRED_MATCH_STATUSES/);
   assert.match(matchesRoute, /"connected"/);
   assert.match(matchesRoute, /installer_access_approved/);
@@ -182,11 +181,13 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
   assert.match(dashboard, /Platform coordination active/);
   assert.match(dashboard, /no active contact release is available/);
   assert.match(dashboard, /<InstallerPlatformQuote/);
-  assert.match(dashboard, /Save for review/);
+  assert.doesNotMatch(dashboard, /Save for review/);
+  assert.match(dashboard, /<TradeCustomerHubInterest/);
+  assert.match(dashboard, /customerSection: "qa", workOrderId/);
   assert.match(dashboard, /: "Quote"/);
   assert.match(
     dashboard,
-    /Remove this lead from your business\? This does not remove it for other matched trades\./,
+    /Remove this lead from your business\? Customer Q&A updates will stop\.[\s\S]*This does not remove it for other matched trades\./,
   );
   assert.match(
     dashboard,

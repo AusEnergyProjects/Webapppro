@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import * as customerHubEmail from "../src/lib/customer-hub-email.mjs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import {
@@ -127,14 +128,14 @@ async function hubDeliveryFixture(t, { status = "open", services = ["solar"], qu
   t.after(() => database.close());
   const db = databaseAdapter(database), bucket = memoryBucket(), value = record();
   database.exec(`CREATE TABLE trade_opportunities (id TEXT PRIMARY KEY, source_reference TEXT, created_by_uid TEXT,
-    status TEXT, expires_at TEXT, service_categories TEXT);
+    status TEXT, expires_at TEXT, service_categories TEXT, postcode TEXT);
     CREATE TABLE public_trade_lead_contact_releases (id TEXT PRIMARY KEY, opportunity_id TEXT, source_reference TEXT,
       customer_first_name TEXT, customer_email TEXT, status TEXT, notice_version TEXT, consent_purpose TEXT,
       disclosed_fields TEXT, granted_at TEXT, withdrawn_at TEXT, postcode TEXT);
     CREATE TABLE trade_opportunity_matches (opportunity_id TEXT, status TEXT);
     CREATE TABLE admin_notifications (event_key TEXT, entity_type TEXT, entity_id TEXT);`);
   database.exec(fs.readFileSync("drizzle/0245_customer_quote_hub.sql", "utf8").split("--> statement-breakpoint")[0]);
-  database.prepare("INSERT INTO trade_opportunities VALUES (?, ?, 'lead-intake', ?, '2099-12-31T00:00:00.000Z', ?)")
+  database.prepare("INSERT INTO trade_opportunities VALUES (?, ?, 'lead-intake', ?, '2099-12-31T00:00:00.000Z', ?, '3000')")
     .run("opportunity-1", value.sourceReference, status, JSON.stringify(services));
   database.prepare("INSERT INTO public_trade_lead_contact_releases VALUES ('contact-1', 'opportunity-1', ?, 'Jamie', 'jamie@example.test', 'active', ?, ?, ?, ?, '', '3000')")
     .run(value.sourceReference, quick ? QUICK_UPGRADE_CONSENT_NOTICE_VERSION : PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
@@ -160,6 +161,7 @@ async function hubDeliveryFixture(t, { status = "open", services = ["solar"], qu
     "@/lib/public-plan-delivery-cleanup.mjs": { cleanupPublicPlanDeliveryObjectsWrite },
     "@/lib/public-plan-customer-email-write.mjs": { recordPublicPlanCustomerPdfWrite },
     "@/lib/customer-hub-links": hubLinks,
+    "@/lib/customer-hub-email.mjs": customerHubEmail,
     "@/lib/quick-upgrade-receipt.mjs": quickReceipt,
     "@/lib/quick-upgrade-receipt-delivery.mjs": quickDelivery,
     "@/lib/public-plan-intake-write.mjs": { confirmPublicPlanIntakeOpportunityWrite, persistPublicPlanDeliveryIntake },

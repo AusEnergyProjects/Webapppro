@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { useState, type FormEvent } from "react";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
-import { requiresAeaDelivery } from "@/lib/aea-service-identity.mjs";
 import styles from "./GettingStarted.module.css";
 
 const QuickUpgradeEnquiryDialog = dynamic(
@@ -23,7 +22,7 @@ export function QuickUpgradeEnquiry() {
     <section className={styles.enquiry} id="home-enquiry" aria-labelledby="home-enquiry-title">
       <div className={styles.enquiryTop}><span>Start here</span><span>01 / 02</span></div>
       <h2 id="home-enquiry-title">I want help with...</h2>
-      <p>{requiresAeaDelivery([service]) ? "Australian Energy Assessments handles your assessment or safety enquiry directly." : "Choose an Australian Energy Assessments service or request help with an energy upgrade."}</p>
+      <p>Choose the assessment, safety service or energy upgrade you need.</p>
       <form onSubmit={continueRequest}>
         <label className={styles.field}><span>What do you need?</span><select name="service" value={service} onChange={(event) => setService(event.target.value)} required>
           <option value="" disabled>Choose a service</option>
@@ -34,7 +33,7 @@ export function QuickUpgradeEnquiry() {
       </form>
       <p className={styles.enquiryNote}>Choose any other services next, then add your property and contact details.</p>
       <div className={styles.enquiryTrust}><span>No account needed</span><span>No obligation</span></div>
-      <p className={styles.sharingNote}>{requiresAeaDelivery([service]) ? "This enquiry goes to Australian Energy Assessments. It is not distributed to other TLink businesses." : "For upgrade requests, you choose the contact details shared with matching approved businesses. Australian Energy Assessments assessment and safety requests stay with our team."}</p>
+      <p className={styles.sharingNote}>Your request goes to all approved TLink businesses that offer at least one selected service and cover your area. You choose whether to share your name and phone.</p>
     </section>
     {open ? <QuickUpgradeEnquiryDialog initialPostcode={postcode} initialServices={[service]} onClose={() => setOpen(false)} /> : null}
   </>;

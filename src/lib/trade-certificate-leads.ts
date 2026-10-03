@@ -1,25 +1,28 @@
-import { aeaTradeOwnerSql } from "./aea-trade-owner-server";
-import { aeaDeliveredServiceScopeSql } from "./aea-trade-routing.mjs";
+import { verifiedTradeAccountPredicate } from "./trade-access-server";
 
 function expression(value: string) {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) throw new Error("A static qualified SQL column is required.");
   return value;
 }
 /** Rechecked at allocation, disclosure and notification claim, including old matches.
- * Receiving an opportunity requires current business onboarding and service/location
- * coverage. Verified Australian Energy Assessments owners receive reserved assessment leads nationwide.
- * Training and installer credentials are enforced when booking the work.
+ * Ordinary enquiries require a verified TLink business and offered service/state
+ * coverage. Creditex onboarding and activity training apply to programme work,
+ * never to ordinary enquiries, questions or quotes. The allocator separately
+ * checks configured service-area distance and availability. Historical AEA-only
+ * consent is enforced by the opportunity owner scope.
  * Consent and customer-contact disclosure remain separate checks at each caller.
  */
 export function certificateLeadEligibilitySql(ownerColumn: string, categoriesColumn: string, stateColumn: string) {
   const owner = expression(ownerColumn); const categories = expression(categoriesColumn); const state = expression(stateColumn);
-  const [categoryAlias, categoryColumn] = categories.split(".");
-  return `(CASE WHEN ${aeaDeliveredServiceScopeSql(categoryAlias, categoryColumn)} THEN
-    ${aeaTradeOwnerSql(owner)} ELSE
-    EXISTS (SELECT 1 FROM creditex_current_business_jurisdictions approved_business
-    WHERE (approved_business.owner_uid,approved_business.state) = (${owner},${state})
-      AND EXISTS (SELECT 1 FROM trade_accounts offered_business
+  return `EXISTS (SELECT 1 FROM trade_accounts offered_business
         WHERE offered_business.firebase_uid = ${owner}
+          AND (${verifiedTradeAccountPredicate("offered_business")})
+          AND ${state} IN ('ACT','NSW','NT','QLD','SA','TAS','VIC','WA')
+          AND CASE WHEN json_valid(offered_business.service_states) THEN
+            json_type(offered_business.service_states) = 'array'
+            AND EXISTS (SELECT 1 FROM json_each(offered_business.service_states) offered_state
+              WHERE offered_state.type = 'text' AND offered_state.value = ${state})
+          ELSE 0 END
           AND CASE WHEN (json_valid(${categories}),json_valid(offered_business.capabilities)) = (1,1) THEN
             (json_type(${categories}),json_type(offered_business.capabilities)) = ('array','array')
             AND json_array_length(${categories}) > 0
@@ -27,7 +30,7 @@ export function certificateLeadEligibilitySql(ownerColumn: string, categoriesCol
               WHERE NOT EXISTS (
                 SELECT 1 FROM json_each(offered_business.capabilities) offered_category
                 WHERE (offered_category.type,offered_category.value,matched_category.type) = ('text',matched_category.value,'text')))
-          ELSE 0 END)) END)`;
+          ELSE 0 END)`;
 }
 
 export async function certificateLeadEligible(db: D1Database, ownerUid: string, categories: readonly string[], state: string) {

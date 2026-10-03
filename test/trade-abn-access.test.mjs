@@ -79,8 +79,7 @@ test("access requires the exact checksum-valid ABN projection recorded by an ide
   assert.match(accessServer, /Boolean\(account\.verificationReviewedAt\)/);
   assert.match(accessServer, /Boolean\(account\.verificationReviewedByUid\)/);
   assert.match(accessServer, /SELECT 1 FROM trade_account_verification_reviews verified_review/);
-  assert.match(accessServer, /verified_review\.business_name = \$\{account\}\.business_name/);
-  assert.match(accessServer, /verified_review\.partner_type = \$\{account\}\.partner_type/);
+  assert.match(accessServer, /verified_review\.business_name, verified_review\.partner_type[\s\S]*\$\{account\}\.business_name, \$\{account\}\.partner_type/);
   assert.match(accessServer, /account\.verification_status, account\.verified_abn, account\.verification_review_id/);
   assert.match(accessServer, /projection\.approvedAbnAccess = approvedAbnAccess\(projection\)/);
   assert.match(accessServer, /ABN_REVIEW_REQUIRED/);

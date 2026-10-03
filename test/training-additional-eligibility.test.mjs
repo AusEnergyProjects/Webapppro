@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
+import { certificateTestDependency, installCreditexTrainingFixture, installVerifiedTradeLeadFixture } from './helpers/creditex-training-fixture.mjs';
 
 const training = certificateTestDependency('trade-training-server');
 const forms = certificateTestDependency('training-questionnaire-store');
@@ -23,6 +23,7 @@ function fixture() {
     INSERT INTO trade_accounts VALUES('owner','53004085616','Example Pty Ltd','["hot-water"]','["VIC"]','VIC');
     INSERT INTO trade_team_members VALUES('owner-person','owner','active','Owner','owner','["hot-water"]'),('installer','owner','active','Installer','installer','["hot-water"]');`);
   installCreditexTrainingFixture(sql);
+  installVerifiedTradeLeadFixture(sql);
   const db = { prepare: query => new Statement(sql, query), batch: async statements => {
     sql.exec('BEGIN');
     try { const results = []; for (const statement of statements) results.push(await statement.run()); sql.exec('COMMIT'); return results; }
@@ -45,6 +46,23 @@ async function bookable(f, activityTemplateIds = ['veu-1']) {
 }
 const leadable = f => leads.certificateLeadEligible(f.db, 'owner', ['hot-water'], 'VIC');
 const booking = { ownerUid: 'owner', actorMemberId: 'owner-person', assignedMemberId: 'installer', activityTemplateIds: ['veu-1'], serviceState: 'VIC' };
+
+test('ordinary leads remain available while government programme booking enforces Creditex insurance and approval', async () => {
+  const f = fixture();
+  try {
+    assert.equal(await leadable(f), true); assert.equal(await bookable(f), true);
+    for (const change of [
+      "UPDATE creditex_business_onboarding SET insurance_expires_on='2000-01-01'",
+      "UPDATE creditex_business_onboarding SET status='draft',insurance_expires_on='2099-12-31',agreement_reference=''",
+      'DELETE FROM creditex_business_onboarding',
+    ]) {
+      f.sql.exec(change);
+      assert.equal(await leadable(f), true, change);
+      assert.equal(await bookable(f), false, change);
+      assert.equal((await training.getCertificateActivityEligibility(f.db, booking)).eligible, false, change);
+    }
+  } finally { f.sql.close(); }
+});
 async function pass(f, course, memberId) {
   const actor = { ownerUid: 'owner', memberId, actorUid: memberId === 'owner-person' ? 'owner' : 'installer', moduleId: course.id };
   const attempt = await training.startTrainingAttempt(f.db, actor); const answers = {};

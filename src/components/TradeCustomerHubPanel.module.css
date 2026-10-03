@@ -2,6 +2,8 @@
 .heading h4 { margin: 0; font-size: 1rem; }
 .interest { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
 .interest > div { display: grid; gap: 4px; }
+.interest .leadInterest { display: flex; gap: 4px; flex-shrink: 0; padding: 3px; border-radius: 10px; background: var(--trade-surface-soft, #f4f8f6); }
+.leadInterest button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--trade-accent-readable, #087567); }
 .interest strong { font-size: .82rem; }
 .interest small { color: var(--trade-muted, #5d7068); font-size: .75rem; line-height: 1.5; }
 .interest button { flex-shrink: 0; }

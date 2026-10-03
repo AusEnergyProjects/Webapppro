@@ -4,14 +4,13 @@ import { publicPlanContactReleaseAccessSql } from "./public-plan-enquiry.mjs";
 
 export type HubAuthority = { id: string; opportunity_id: string; release_id: string; token_hash: string; email_hash: string; recipient_email:string; expires_at: string };
 export const hubContactSql = `FROM trade_opportunities opportunity
-  JOIN public_trade_lead_contact_releases contact ON contact.opportunity_id=opportunity.id AND contact.source_reference=opportunity.source_reference
+  JOIN public_trade_lead_contact_releases contact ON contact.opportunity_id=opportunity.id AND contact.source_reference=opportunity.source_reference AND contact.postcode=opportunity.postcode
   WHERE opportunity.id=? AND opportunity.status='open' AND opportunity.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND contact.status='active' AND contact.withdrawn_at=''
     AND ${publicPlanContactReleaseAccessSql("contact")} AND datetime(contact.granted_at) IS NOT NULL`;
 
-/** Only customer-email delivery may call this. Never add the result to a trade response or shared lead envelope. */
-export async function customerHubEmailUrl(db: D1Database, opportunityId: string, email: string) {
+async function prepareCustomerHub(db: D1Database, opportunityId: string, email: string, expectedReleaseId = '', onlyMissing = false) {
   const contact = await db.prepare(`SELECT contact.id,contact.customer_email ${hubContactSql}`).bind(opportunityId).first<{id:string;customer_email:string}>();
-  if (!contact || contact.customer_email.trim().toLowerCase() !== email.trim().toLowerCase()) throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
+  if (!contact || (expectedReleaseId && contact.id !== expectedReleaseId) || contact.customer_email.trim().toLowerCase() !== email.trim().toLowerCase()) throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
   const emailHash = await hashQuoteLinkSecret(email.trim().toLowerCase());
   const existing=await db.prepare('SELECT id FROM customer_quote_hubs WHERE opportunity_id=?').bind(opportunityId).first<{id:string}>();
   const id=existing?.id||crypto.randomUUID(), secret=newQuoteLinkSecret(), now=new Date().toISOString();
@@ -20,13 +19,24 @@ export async function customerHubEmailUrl(db: D1Database, opportunityId: string,
     SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 ${hubContactSql} AND contact.id=? AND lower(trim(contact.customer_email))=?)
     ON CONFLICT(opportunity_id) DO UPDATE SET release_id=excluded.release_id,email_hash=excluded.email_hash,recipient_email=excluded.recipient_email,
       token_hash=excluded.token_hash,encrypted_token=excluded.encrypted_token,expires_at=excluded.expires_at,revoked_at=''
-    WHERE customer_quote_hubs.id=excluded.id AND (customer_quote_hubs.release_id<>excluded.release_id OR customer_quote_hubs.email_hash<>excluded.email_hash
+    WHERE ?=0 AND customer_quote_hubs.id=excluded.id AND (customer_quote_hubs.release_id<>excluded.release_id OR customer_quote_hubs.email_hash<>excluded.email_hash
       OR customer_quote_hubs.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR customer_quote_hubs.revoked_at<>'')`)
     .bind(id,opportunityId,contact.id,emailHash,email.trim().toLowerCase(),await hashQuoteLinkSecret(secret),encrypted,new Date(Date.now()+90*86400000).toISOString(),now,
-      opportunityId,contact.id,email.trim().toLowerCase()).run();
+      opportunityId,contact.id,email.trim().toLowerCase(),onlyMissing?1:0).run();
   const stored=await db.prepare(`SELECT id,encrypted_token,token_hash FROM customer_quote_hubs WHERE opportunity_id=? AND release_id=? AND email_hash=? AND revoked_at='' AND expires_at>?`)
     .bind(opportunityId,contact.id,emailHash,now).first<{id:string;encrypted_token:string;token_hash:string}>();
   if(!stored) throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
+  return stored;
+}
+
+/** Provision only a missing hub after the caller has checked the owner's exact matched lead. Never return its private token. */
+export async function ensureCustomerHubForReleasedLead(db: D1Database, opportunityId: string, releaseId: string, email: string) {
+  await prepareCustomerHub(db, opportunityId, email, releaseId, true);
+}
+
+/** Only customer-email delivery may call this. Never add the result to a trade response or shared lead envelope. */
+export async function customerHubEmailUrl(db: D1Database, opportunityId: string, email: string) {
+  const stored = await prepareCustomerHub(db, opportunityId, email);
   const recovered=await decryptProtectedPayload(stored.encrypted_token);
   if(recovered.kind!=="customer_quote_hub" || recovered.id!==stored.id || typeof recovered.secret!=="string" || await hashQuoteLinkSecret(recovered.secret)!==stored.token_hash) throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
   return `https://ausenergyassessments.com/customer-hub/${encodeURIComponent(`${stored.id}.${recovered.secret}`)}`;

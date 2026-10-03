@@ -3,14 +3,13 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
-import * as routing from "../src/lib/aea-trade-routing.mjs";
 import * as publicContact from "../src/lib/public-trade-lead-access.mjs";
 import * as projectContact from "../src/lib/trade-opportunity-read-projection.mjs";
 import { PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE } from "../src/lib/public-plan-enquiry.mjs";
 import { CUSTOMER_CONTACT_RELEASE_FIELDS, CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION } from "../src/lib/customer-projects.mjs";
 import { PUBLIC_SITE } from "../src/lib/public-site.ts";
-import * as abn from "../src/lib/trade-abn.ts";
 import * as collaboration from "../src/lib/trade-job-collaboration.ts";
+import { certificateTestDependency, installVerifiedTradeLeadFixture } from "./helpers/creditex-training-fixture.mjs";
 
 const cache = new Map();
 function load(path, dependencies) {
@@ -22,8 +21,8 @@ function load(path, dependencies) {
   }, record, record.exports);
   return record.exports;
 }
-const aea = load("../src/lib/aea-trade-owner-server.ts", { "./aea-trade-routing.mjs": routing, "./public-site": { PUBLIC_SITE }, "./trade-abn": abn });
-const certificate = load("../src/lib/trade-certificate-leads.ts", { "./aea-trade-owner-server": aea, "./aea-trade-routing.mjs": routing });
+const aea = certificateTestDependency("aea-trade-owner-server");
+const certificate = certificateTestDependency("trade-certificate-leads");
 const owner = { ownerUid: "owner", actorUid: "owner", memberId: "", isOwner: true, canViewCustomers: true, canManageCustomers: true, canManageJobs: true, canSendQuotes: true, canManageInvoices: true, canSearchCustomers: true, jobScope: "team" };
 const assignedMember = { ...owner, actorUid: "staff", memberId: "member", isOwner: false, canSearchCustomers: false, jobScope: "assigned" };
 const now = new Date().toISOString();
@@ -46,15 +45,14 @@ function fixture() {
     customer_project_quotes: "id opportunity_match_id project_id opportunity_id installer_uid updated_at",
     customer_project_contact_releases: "id opportunity_match_id project_id opportunity_id quote_id customer_uid installer_uid status notice_version disclosed_fields customer_name customer_email customer_phone address_line_1 address_line_2 suburb address_state postcode granted_at withdrawn_at updated_at",
     public_trade_lead_contact_releases: "id opportunity_id source_reference status withdrawn_at disclosed_fields customer_first_name customer_last_name customer_email customer_phone customer_unit_number customer_street_address customer_suburb customer_address_state postcode customer_message notice_version consent_purpose granted_at updated_at",
-    trade_accounts: "firebase_uid abn verified_abn business_name partner_type account_status verification_status verification_review_id verification_reviewed_by_uid verification_reviewed_at capabilities",
+    trade_accounts: "firebase_uid abn verified_abn business_name partner_type account_status verification_status verification_review_id verification_reviewed_by_uid verification_reviewed_at capabilities service_states",
     admin_users: "firebase_uid status role",
     trade_account_verification_reviews: "id firebase_uid abn business_name partner_type decision review_method reviewed_by_uid reviewed_at",
-    creditex_current_business_jurisdictions: "owner_uid state",
   };
   for (const [table, columns] of Object.entries(tables)) sqlite.exec(`CREATE TABLE ${table} (${columns.split(" ").map((column) => `${column} TEXT NOT NULL DEFAULT ''`).join(",")})`);
   const insert = (table, row) => sqlite.prepare(`INSERT INTO ${table} (${Object.keys(row).join(",")}) VALUES (${Object.keys(row).map(() => "?").join(",")})`).run(...Object.values(row));
-  insert("trade_accounts", { firebase_uid: "owner", capabilities: '["solar"]' });
-  insert("creditex_current_business_jurisdictions", { owner_uid: "owner", state: "VIC" });
+  insert("trade_accounts", { firebase_uid: "owner", abn: "53004085616", business_name: "Synthetic business", capabilities: '["solar"]', service_states: '["VIC"]' });
+  installVerifiedTradeLeadFixture(sqlite);
   const statement = (sql, bindings = []) => ({ bind: (...values) => statement(sql, values), first: async () => sqlite.prepare(sql).get(...bindings) || null });
   const db = { prepare: statement };
   const recipient = load("../src/lib/trade-email-recipient-server.ts", {
@@ -218,9 +216,9 @@ test("Public lead email requires current match, scope, jurisdiction and explicit
     assert.equal(await resolve(), "lead@example.test");
     await assert.rejects(resolve(assignedMember), /EMAIL_ACCESS_REQUIRED/);
     await assert.rejects(resolve({ ...owner, ownerUid: "other" }), /EMAIL_RECIPIENT_UNAVAILABLE/);
-    f.sqlite.exec("DELETE FROM creditex_current_business_jurisdictions");
+    f.sqlite.exec("UPDATE trade_accounts SET service_states='[]'");
     await assert.rejects(resolve(), /EMAIL_RECIPIENT_UNAVAILABLE/);
-    f.insert("creditex_current_business_jurisdictions", { owner_uid: "owner", state: "VIC" });
+    f.sqlite.exec("UPDATE trade_accounts SET service_states='[\"VIC\"]'");
     f.sqlite.exec("UPDATE public_trade_lead_contact_releases SET disclosed_fields = '[\"postcode\",\"service_categories\"]'");
     await assert.rejects(resolve(), /EMAIL_RECIPIENT_UNAVAILABLE/);
   } finally { f.close(); }
@@ -246,10 +244,11 @@ test("Expired and closed opportunities and inactive matches cannot receive email
   }
 });
 
-test("Mixed AEA scope cannot escape to another trade, including a lookalike name", async () => {
+test("Legacy mixed AEA consent cannot escape to another trade, including a lookalike name", async () => {
   const f = fixture();
   try {
-    f.lead("public:source", '["solar","assessment"]'); f.publicRelease();
+    f.lead("public:source", '["solar","assessment"]');
+    f.publicRelease({ notice_version: '2026-09-14-aea-services-and-upgrade-sharing-v9', consent_purpose: 'Email my private plan. Australian Energy Assessments handles safety and assessments. Other requests and selected quote details go to approved matching trades.' });
     f.sqlite.exec("UPDATE trade_accounts SET business_name = 'Australian Energy Assessments', capabilities = '[\"solar\",\"assessment\"]'");
     await assert.rejects(f.recipient.resolveTradeEmailRecipient(owner, { enquiryId: "match" }, f.db), /EMAIL_RECIPIENT_UNAVAILABLE/);
     const aeaAbn = PUBLIC_SITE.abn.replace(/\D/g, "");

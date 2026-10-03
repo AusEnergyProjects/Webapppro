@@ -9,7 +9,7 @@ import { requiresAeaDelivery } from '../src/lib/aea-service-identity.mjs';
 import { matchedServiceCategories } from '../src/lib/trade-service-matching.mjs';
 import { closestQualifyingTradeServiceArea } from '../src/lib/trade-service-area-matching.mjs';
 import { selectEveryQualifiedTradeRecipient } from '../src/lib/direct-trade-matching.mjs';
-import { publicPlanContactReleaseAccessSql, PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE } from '../src/lib/public-plan-enquiry.mjs';
+import { publicPlanContactReleaseAccessSql, allQualifiedTradeOpportunitySql, PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE, AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION, AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE } from '../src/lib/public-plan-enquiry.mjs';
 
 const source = fs.readFileSync(new URL('../src/lib/opportunity-server.ts', import.meta.url), 'utf8');
 const allocationCode = ts.transpileModule(source.slice(source.indexOf('export function qualifyingServiceArea(')), {
@@ -31,7 +31,7 @@ function fixture(categories = ['assessment']) {
     CREATE TABLE public_trade_lead_contact_releases(opportunity_id TEXT, source_reference TEXT, postcode TEXT,
       status TEXT, withdrawn_at TEXT, granted_at TEXT, notice_version TEXT, consent_purpose TEXT,
       disclosed_fields TEXT, customer_email TEXT);
-    INSERT INTO trade_accounts VALUES ('aea','Australian Energy Assessments','3000','3000',50,'["VIC"]','["solar"]','open',0);
+    INSERT INTO trade_accounts VALUES ('aea','Australian Energy Assessments','3000','3000',50,'["VIC"]','["solar","assessment"]','open',0);
     INSERT INTO trade_accounts VALUES ('other','External trade','3000','3000',50,'["VIC"]','["solar","assessment"]','open',0);`);
   installCreditexTrainingFixture(sql, { qualified: false });
   for (const uid of ['aea', 'other']) {
@@ -46,7 +46,7 @@ function fixture(categories = ['assessment']) {
   sql.exec("INSERT INTO admin_users(id,firebase_uid,status,role) VALUES ('admin','aea','active','owner')");
   sql.prepare("INSERT INTO trade_opportunities VALUES ('lead','Energy assessment','3000','VIC',?,'draft','2099-01-01',0,'AEA-test','2026-09-01')").run(JSON.stringify(categories));
   sql.prepare("INSERT INTO public_trade_lead_contact_releases VALUES ('lead','AEA-test','3000','active','','2026-09-01',?,?,?,?)")
-    .run(PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE, '["customer_email","postcode","service_categories"]', 'test@example.test');
+    .run(AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION, AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE, '["customer_email","postcode","service_categories"]', 'test@example.test');
   const db = {
     prepare(query) {
       let bindings = [];
@@ -61,7 +61,7 @@ function fixture(categories = ['assessment']) {
     ...scope, ...certificateTestDependency('aea-trade-owner-server'), ...certificateTestDependency('trade-access-server'),
     ...certificateTestDependency('trade-certificate-leads'),
     requiresAeaDelivery, matchedServiceCategories, closestQualifyingTradeServiceArea, selectEveryQualifiedTradeRecipient,
-    publicPlanContactReleaseAccessSql,
+    publicPlanContactReleaseAccessSql, allQualifiedTradeOpportunitySql,
     parseJsonList: value => JSON.parse(value || '[]'), canonicalMarketplaceState: value => value,
     postcodeDistanceKm: (from, to) => from === to ? 0 : 1000,
     getD1: () => db, expireStaleOpportunities: async () => {},
@@ -109,7 +109,7 @@ test('reserved draft remains held when consent, AEA authority, availability or d
   }
 });
 
-test('owned assessment enquiries route to AEA nationwide outside its local trade states and radius', async () => {
+test('legacy ownership does not claim services or states the business has not offered', async () => {
   for (const [state, postcode] of [['ACT','2600'],['NSW','2000'],['NT','0800'],['QLD','4000'],['SA','5000'],['TAS','7000'],['VIC','3500'],['WA','6000']]) {
     const f = fixture(['assessment','solar']);
     try {
@@ -117,9 +117,44 @@ test('owned assessment enquiries route to AEA nationwide outside its local trade
       f.sql.prepare('UPDATE public_trade_lead_contact_releases SET postcode=?').run(postcode);
       f.sql.exec("UPDATE trade_accounts SET service_states='[]',service_radius_km=1,capabilities='[]' WHERE firebase_uid='aea'");
       const result = await f.routeAeaServiceOpportunity('lead','admin');
-      assert.deepEqual(result.allocated.map(candidate => candidate.firebaseUid),['aea'],state);
-      assert.equal(result.allocated[0].distanceKm,1000,state);
-      assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_opportunity_matches').get().count,1,state);
+      assert.deepEqual(result.allocated, [], state);
+      assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_opportunity_matches').get().count,0,state);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('new assessment, mixed and hot-water enquiries reach every matching verified business without Creditex approval', async () => {
+  for (const services of [['assessment'], ['assessment','solar'], ['hot-water']]) {
+    const f = fixture(services);
+    try {
+      f.sql.prepare('UPDATE public_trade_lead_contact_releases SET notice_version=?,consent_purpose=?')
+        .run(PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE);
+      f.sql.exec("UPDATE trade_opportunities SET status='open'");
+      f.sql.prepare("UPDATE trade_accounts SET capabilities=?,availability_status='limited'").run(JSON.stringify(services));
+      assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM creditex_business_onboarding').get().count, 0);
+      const result = await f.allocateNearestInstallers('lead','automatic-lead-intake');
+      assert.deepEqual(result.allocated.map(candidate => candidate.firebaseUid).sort(), ['aea','other']);
+      assert.equal((await f.allocateNearestInstallers('lead','automatic-lead-intake')).allocated.length, 0);
+      assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_opportunity_matches').get().count, 2);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('new all-qualified allocation excludes unrelated, out-of-area, paused and unverified businesses', async () => {
+  for (const change of [
+    "UPDATE trade_accounts SET capabilities='[\"hot-water\"]' WHERE firebase_uid='other'",
+    "UPDATE trade_accounts SET service_base_postcode='2000' WHERE firebase_uid='other'",
+    "UPDATE trade_accounts SET service_states='[\"NSW\"]' WHERE firebase_uid='other'",
+    "UPDATE trade_accounts SET availability_status='paused' WHERE firebase_uid='other'",
+    "UPDATE trade_accounts SET verification_status='pending' WHERE firebase_uid='other'",
+  ]) {
+    const f = fixture(['assessment','solar']);
+    try {
+      f.sql.prepare('UPDATE public_trade_lead_contact_releases SET notice_version=?,consent_purpose=?')
+        .run(PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE);
+      f.sql.exec("UPDATE trade_opportunities SET status='open'"); f.sql.exec(change);
+      const result = await f.allocateNearestInstallers('lead','automatic-lead-intake');
+      assert.deepEqual(result.allocated.map(candidate => candidate.firebaseUid), ['aea'], change);
     } finally { f.sql.close(); }
   }
 });

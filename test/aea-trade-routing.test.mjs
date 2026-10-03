@@ -7,8 +7,8 @@ import { AEA_RESERVED_SERVICE_IDS } from "../src/lib/aea-services.mjs";
 import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "../src/lib/aea-trade-routing.mjs";
 import { publicTradeContactForMatchedLead } from "../src/lib/public-trade-lead-access.mjs";
 import { projectPublicMarketplaceEnquiry } from "../src/lib/public-marketplace-enquiry-projection.mjs";
-import { PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE, publicPlanContactReleaseConsentSql } from "../src/lib/public-plan-enquiry.mjs";
-import { certificateTestDependency, installAeaTradeOwnerFixtureSchema } from "./helpers/creditex-training-fixture.mjs";
+import { AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION, AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE, publicPlanContactReleaseConsentSql } from "../src/lib/public-plan-enquiry.mjs";
+import { certificateTestDependency, installAeaTradeOwnerFixtureSchema, installOpportunityConsentFixtureSchema } from "./helpers/creditex-training-fixture.mjs";
 const { OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL, OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL } = certificateTestDependency("opportunity-notification-retry");
 
 const source = (file) => fs.readFileSync(new URL(file, import.meta.url), "utf8");
@@ -16,7 +16,8 @@ const scopeSql = (sql) => expandCreditexLeadSql(sql).replaceAll(/\$\{tradeOpport
 
 test("complete stored scope rejects every AEA service and mixed enquiries in JS and SQLite", () => {
   const db = new DatabaseSync(":memory:");
-  db.exec("CREATE TABLE opportunity (service_categories text)");
+  db.exec("CREATE TABLE opportunity (service_categories text, id TEXT DEFAULT 'opportunity', source_reference TEXT DEFAULT 'source', postcode TEXT DEFAULT '3000')");
+  installOpportunityConsentFixtureSchema(db);
   const fixtures = [
     ['["solar"]', true], ['["legacy-upgrade"]', true], ['[]', false], ['{}', false],
     ['null', false], ['broken', false], ['', false], ['[1,"solar"]', false],
@@ -25,7 +26,7 @@ test("complete stored scope rejects every AEA service and mixed enquiries in JS 
   ];
   for (const [services, expected] of fixtures) {
     db.exec("DELETE FROM opportunity");
-    db.prepare("INSERT INTO opportunity VALUES (?)").run(services);
+    db.prepare("INSERT INTO opportunity(service_categories) VALUES (?)").run(services);
     assert.equal(tradeOpportunityServiceScopeAllowed(services), expected, services);
     assert.equal(Boolean(db.prepare(`SELECT ${tradeOpportunityServiceScopeSql("opportunity")} allowed FROM opportunity`).get().allowed), expected, services);
   }
@@ -67,8 +68,8 @@ function contactRow() {
     public_contact_release_id: "release-1", public_contact_status: "active",
     public_contact_source_reference: "AEA-routing-test", public_contact_withdrawn_at: "",
     public_contact_disclosed_fields: '["customer_email","postcode","service_categories"]',
-    public_contact_notice_version: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
-    public_contact_consent_purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
+    public_contact_notice_version: AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    public_contact_consent_purpose: AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE,
     public_contact_postcode: "3000", public_contact_granted_at: "2026-09-14T00:00:00.000Z",
     public_customer_email: "customer@example.test", matched_categories: '["solar"]',
   };
@@ -110,6 +111,7 @@ test("actual notification enqueue and final claim deny legacy mixed scope and a 
     INSERT INTO trade_accounts VALUES ('trade-1','trade@example.test',1,'2026-09-14T00:00:00.000Z','open','installer',1);`);
   const now = "2026-09-14T01:00:00.000Z";
   installAeaTradeOwnerFixtureSchema(db);
+  installOpportunityConsentFixtureSchema(db);
   const enqueue = db.prepare(OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL);
   assert.equal(enqueue.run(now, "opportunity-1").changes, 0);
   db.prepare("UPDATE trade_opportunities SET service_categories = ?").run('["solar"]');

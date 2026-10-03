@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
+import { certificateTestDependency, installCreditexTrainingFixture, installVerifiedTradeLeadFixture } from './helpers/creditex-training-fixture.mjs';
 
 const { certificateLeadEligibilitySql, certificateLeadEligibleOwners } = certificateTestDependency('trade-certificate-leads');
 function fixture() {
@@ -11,6 +11,7 @@ function fixture() {
     INSERT INTO trade_team_members(id,owner_uid,member_uid,status) VALUES
       ('owner-member','owner','owner','active'),('worker','owner','worker-user','active');`);
   installCreditexTrainingFixture(sql);
+  installVerifiedTradeLeadFixture(sql);
   const predicate = certificateLeadEligibilitySql('lead.owner_uid', 'lead.categories', 'lead.state');
   return { sql, predicate, eligible(categories = ['heating-cooling'], state = 'VIC') {
     return Boolean(sql.prepare(`SELECT 1 FROM (SELECT ? owner_uid, ? categories, ? state) lead WHERE ${predicate}`)
@@ -39,11 +40,14 @@ test('staff service selections and missing personal training do not prevent busi
   } finally { f.sql.close(); }
 });
 
-test('business approval and current declared services remain mandatory regardless of owner training', () => {
+test('TLink verification and current declared services remain mandatory independently of Creditex approval', () => {
   const f = fixture();
   try {
     f.sql.exec("UPDATE creditex_business_onboarding SET status='submitted'");
-    assert.equal(f.eligible(), false);
+    assert.equal(f.eligible(), true, 'Creditex approval is not ordinary lead authority');
+    f.sql.exec("UPDATE trade_accounts SET verification_status='pending'");
+    assert.equal(f.eligible(), false, 'ordinary leads still require authoritative TLink verification');
+    f.sql.exec("UPDATE trade_accounts SET verification_status='approved'");
     f.sql.exec("UPDATE creditex_business_onboarding SET status='approved'");
     f.sql.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE member_id='owner-member' AND module_id='veu-6'");
     assert.equal(f.eligible(), true, 'a revoked quiz pass does not suspend incoming leads');
@@ -65,20 +69,22 @@ test('staff training and capabilities do not change the business service scope f
   } finally { f.sql.close(); }
 });
 
-test('lead disclosure always requires an active business owner, including categories without a course requirement', () => {
+test('lead disclosure requires an active verified business without a Creditex team setup prerequisite', () => {
   const f = fixture();
   try {
     f.sql.exec("UPDATE trade_accounts SET capabilities='[\"heating-cooling\",\"plumbing\"]'");
     const categories = [['heating-cooling'], ['plumbing']];
     for (const category of categories) assert.equal(f.eligible(category), true);
     f.sql.exec("UPDATE trade_team_members SET status='inactive' WHERE id='owner-member'");
-    for (const category of categories) assert.equal(f.eligible(category), false);
+    for (const category of categories) assert.equal(f.eligible(category), true);
     f.sql.exec("DELETE FROM trade_team_members WHERE id='owner-member'");
+    for (const category of categories) assert.equal(f.eligible(category), true);
+    f.sql.exec("UPDATE trade_accounts SET account_status='suspended'");
     for (const category of categories) assert.equal(f.eligible(category), false);
   } finally { f.sql.close(); }
 });
 
-test('current served states govern pending lead disclosure and allocation with legacy address fallback only', () => {
+test('explicit current served states govern pending lead disclosure and allocation', () => {
   const f = fixture();
   try {
     f.sql.exec("UPDATE trade_accounts SET service_states='[\"VIC\"]',address_state='NSW'");
@@ -95,7 +101,7 @@ test('current served states govern pending lead disclosure and allocation with l
     assert.equal(f.eligible(), true);
     assert.equal(f.eligible(['heating-cooling'], 'NSW'), true);
     f.sql.exec("UPDATE trade_accounts SET service_states='[]'");
-    assert.equal(f.eligible(), true, 'only undeclared legacy accounts use their address state');
+    assert.equal(f.eligible(), false, 'an address does not substitute for offered service coverage');
     assert.equal(f.eligible(['heating-cooling'], 'NSW'), false);
   } finally { f.sql.close(); }
 });
@@ -125,7 +131,7 @@ test('allocation predicate rechecks eligibility at the database mutation', () =>
   const f = fixture();
   try {
     assert.equal(f.eligible(), true);
-    f.sql.exec("CREATE TABLE allocations(owner_uid TEXT); UPDATE creditex_business_onboarding SET status='suspended'");
+    f.sql.exec("CREATE TABLE allocations(owner_uid TEXT); UPDATE trade_accounts SET account_status='suspended'");
     const result = f.sql.prepare(`INSERT INTO allocations SELECT lead.owner_uid
       FROM (SELECT ? owner_uid, ? categories, ? state) lead WHERE ${f.predicate}`)
       .run('owner', '["heating-cooling"]', 'VIC');
@@ -170,6 +176,8 @@ test('bulk allocation remains bounded and excludes unapproved businesses without
     f.sql.exec("UPDATE trade_training_completions SET revoked_at='2026-09-18' WHERE module_id='veu-6'");
     assert.deepEqual([...await certificateLeadEligibleOwners(db, candidates.slice(0, 1), 'VIC')], ['owner']);
     f.sql.exec("UPDATE creditex_business_onboarding SET status='suspended'");
+    assert.deepEqual([...await certificateLeadEligibleOwners(db, candidates.slice(0, 1), 'VIC')], ['owner']);
+    f.sql.exec("UPDATE trade_accounts SET verification_review_id='unbound-review'");
     assert.equal((await certificateLeadEligibleOwners(db, candidates.slice(0, 1), 'VIC')).size, 0);
   } finally { f.sql.close(); }
 });
@@ -189,15 +197,17 @@ test('lead categories must be nonempty saved service arrays and malformed accoun
 });
 
 
-test('removing the training prerequisite does not bypass business insurance or signed agreement requirements', () => {
+test('ordinary leads do not require Creditex insurance, agreement or onboarding records', () => {
   const f = fixture();
   try {
     f.sql.exec('DELETE FROM trade_training_completions; DELETE FROM trade_training_attempts');
     assert.equal(f.eligible(), true);
     f.sql.exec("UPDATE creditex_business_onboarding SET insurance_expires_on='2000-01-01'");
-    assert.equal(f.eligible(), false);
+    assert.equal(f.eligible(), true);
     assert.throws(() => f.sql.exec("UPDATE creditex_business_onboarding SET insurance_expires_on='2099-12-31',agreement_reference=''"), /CHECK constraint failed/);
     f.sql.exec("UPDATE creditex_business_onboarding SET status='draft',insurance_expires_on='2099-12-31',agreement_reference=''");
-    assert.equal(f.eligible(), false);
+    assert.equal(f.eligible(), true);
+    f.sql.exec('DELETE FROM creditex_business_onboarding');
+    assert.equal(f.eligible(), true);
   } finally { f.sql.close(); }
 });

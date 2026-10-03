@@ -11,7 +11,6 @@ const transferAdminRoute = read("../src/app/api/admin/asset-transfers/route.ts")
 const correctionRoute = read("../src/app/api/trade-handover-corrections/route.ts");
 const correctionAdminRoute = read("../src/app/api/admin/handover-corrections/route.ts");
 const documentRoute = read("../src/app/api/trade-handover/documents/route.ts");
-const tradeUi = read("../src/components/TradeHandoverCorrections.tsx");
 const adminUi = read("../src/components/AdminAssetGovernance.tsx");
 
 test("asset ownership, consent events and handover corrections are durable and indexed", () => {
@@ -72,7 +71,6 @@ test("published handover corrections retain the previous value and require admin
   assert.match(correctionAdminRoute, /status = 'published'/);
   assert.match(correctionAdminRoute, /handover_correction\.approve/);
   assert.match(correctionAdminRoute, /writeAdminAudit/);
-  assert.match(tradeUi, /previous approved value remains active/i);
   assert.match(adminUi, /Current approved value/);
 });
 

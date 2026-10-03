@@ -26,6 +26,7 @@ import {
 import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
+  allQualifiedTradeOpportunitySql,
 } from "@/lib/public-plan-enquiry.mjs";
 import { publicTradeContactForMatchedLead } from "@/lib/public-trade-lead-access.mjs";
 import { startPublicLeadQuoteWorkflow } from "@/lib/public-lead-quote-workflow-server";
@@ -785,14 +786,14 @@ export async function PATCH(request: Request) {
   await expireStaleOpportunities();
   const now = new Date().toISOString();
   const allowAeaDelivery = await isAeaTradeOwner(db, user.uid);
-  const serviceScope = await db.prepare(`SELECT o.service_categories
+  const serviceScope = await db.prepare(`SELECT o.service_categories,${allQualifiedTradeOpportunitySql("o")} all_qualified_consent
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE m.id = ? AND m.firebase_uid = ?
       AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND ${await certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")} LIMIT 1`)
-    .bind(matchId, user.uid).first<{ service_categories: string }>();
-  if (!serviceScope || !tradeOpportunityServiceScopeAllowed(serviceScope.service_categories, allowAeaDelivery)) {
+    .bind(matchId, user.uid).first<{ service_categories: string; all_qualified_consent: number }>();
+  if (!serviceScope || !tradeOpportunityServiceScopeAllowed(serviceScope.service_categories, allowAeaDelivery,Boolean(serviceScope.all_qualified_consent))) {
     return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   }
   if (action === "record_contact") {
@@ -1148,12 +1149,12 @@ export async function PATCH(request: Request) {
     WHERE m.id = ? AND m.firebase_uid = ?
       AND (
         (? = 'open_public_quote' AND o.status IN ('open', 'paused'))
-        OR (? != 'open_public_quote' AND o.status = 'open')
+        OR (? != 'open_public_quote' AND (o.status = 'open' OR (? = 'declined' AND o.status = 'paused')))
       )
       AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
       AND o.expires_at > ?`)
-    .bind(matchId, user.uid, action, action, now).first<Record<string, unknown>>();
+    .bind(matchId, user.uid, action, action, status, now).first<Record<string, unknown>>();
   if (!current) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   const currentPublicContact = await db.prepare(`SELECT
       public_contact.id public_contact_release_id,
@@ -1221,6 +1222,7 @@ export async function PATCH(request: Request) {
     offered: new Set(["viewed", "interested", "declined"]),
     viewed: new Set(["interested", "declined"]),
     interested: new Set(["declined"]),
+    ...(currentPublicContact ? { connected: new Set(["declined"]) } : {}),
   };
   const currentStatus = String(current.status || "");
   if (action === "open_public_quote") {
@@ -1240,12 +1242,6 @@ export async function PATCH(request: Request) {
       });
       return json({ ok: false, error: "The editable quote could not be reopened. Try again." }, 409);
     }
-  }
-  if (status === "declined" && currentPublicContact && currentStatus === "interested") {
-    return json({
-      ok: false,
-      error: "This lead is already stored as a customer and job. Manage it from Work instead.",
-    }, 409);
   }
   if (status === "interested" && currentPublicContact) {
     if (currentStatus !== status && !transitions[currentStatus]?.has(status)) {
@@ -1304,18 +1300,15 @@ export async function PATCH(request: Request) {
             SELECT 1 FROM trade_opportunities available_opportunity
             JOIN public_trade_lead_contact_releases active_public_contact
               ON active_public_contact.opportunity_id = available_opportunity.id
-            WHERE (available_opportunity.id, available_opportunity.status) = (?, 'open')
+            WHERE available_opportunity.id = ? AND (available_opportunity.status='open' OR (?='declined' AND available_opportunity.status='paused'))
               AND ${tradeOpportunityOwnerScopeSql("available_opportunity", "trade_opportunity_matches.firebase_uid")}
               AND ${certificateLeadEligibilitySql("trade_opportunity_matches.firebase_uid", "trade_opportunity_matches.matched_categories", "available_opportunity.state")}
               AND available_opportunity.expires_at > ?
               AND (available_opportunity.source_reference, available_opportunity.postcode, available_opportunity.state) = (?, ?, ?)
-              AND active_public_contact.id = ?
-              AND active_public_contact.source_reference = available_opportunity.source_reference
-              AND active_public_contact.status = 'active'
-              AND active_public_contact.withdrawn_at = ''
-              AND active_public_contact.postcode = available_opportunity.postcode
-              AND active_public_contact.disclosed_fields = ?
-              AND active_public_contact.updated_at = ?
+              AND (active_public_contact.id, active_public_contact.source_reference,
+                active_public_contact.status, active_public_contact.withdrawn_at,
+                active_public_contact.postcode, active_public_contact.disclosed_fields, active_public_contact.updated_at) =
+                (?, available_opportunity.source_reference, 'active', '', available_opportunity.postcode, ?, ?)
           )`)
       .bind(
         status,
@@ -1325,6 +1318,7 @@ export async function PATCH(request: Request) {
         currentStatus,
         current.opportunity_id,
         current.opportunity_id,
+        status,
         now,
         currentPublicContact.source_reference,
         currentPublicContact.opportunity_postcode,
@@ -1418,7 +1412,16 @@ export async function PATCH(request: Request) {
             )`)
           .bind(now, matchId, user.uid, matchId, user.uid),
       ])
-    : [await updateStatement.run()];
+    : status === "declined" && currentPublicContact
+      ? await db.batch([
+          updateStatement,
+          db.prepare(`UPDATE customer_hub_interests SET interested=0,revision=revision+1,updated_at=?,updated_by_uid=?
+            WHERE match_id=? AND opportunity_id=? AND interested=1 AND changes()=1
+              AND EXISTS(SELECT 1 FROM trade_opportunity_matches removed WHERE removed.id=customer_hub_interests.match_id
+                AND removed.opportunity_id=customer_hub_interests.opportunity_id AND removed.firebase_uid=? AND removed.status='declined' AND removed.updated_at=?)`)
+            .bind(now,user.uid,matchId,current.opportunity_id,user.uid,now),
+        ])
+      : [await updateStatement.run()];
   if (!result.meta.changes) {
     const raced = await db.prepare(`SELECT status FROM trade_opportunity_matches
       WHERE id = ? AND firebase_uid = ? AND opportunity_id = ? LIMIT 1`)

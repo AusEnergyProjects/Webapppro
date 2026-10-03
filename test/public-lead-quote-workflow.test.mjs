@@ -368,7 +368,7 @@ test("deterministic workflow writes replay once and an incomplete transaction ro
   assert.throws(failAtomically, /CHECK constraint failed/);
   assert.equal(broken.prepare("SELECT COUNT(*) count FROM customers").get().count, 0);
   assert.match(server, /const existing = await existingWorkflow\(db, installerUid, matchId, ids\);[\s\S]*if \(existing\) return workflowResponse\(existing, true\);[\s\S]*if \(expectedMatchStatus === "connected"\)[\s\S]*PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE/);
-  assert.match(opportunityRoute, /\? = 'open_public_quote' AND o\.status IN \('open', 'paused'\)[\s\S]*\? != 'open_public_quote' AND o\.status = 'open'[\s\S]*o\.expires_at > \?/);
+  assert.match(opportunityRoute, /\? = 'open_public_quote' AND o\.status IN \('open', 'paused'\)[\s\S]*\? != 'open_public_quote' AND \(o\.status = 'open' OR \(\? = 'declined' AND o\.status = 'paused'\)\)[\s\S]*o\.expires_at > \?/);
   assert.match(server, /JOIN trade_crm_quote_versions v[\s\S]*v\.quote_id = q\.id[\s\S]*v\.version_number = q\.current_version_number/);
   assert.doesNotMatch(server, /JOIN trade_crm_quote_versions v\s*ON v\.id = \?/);
   assert.match(server, /PUBLIC_LEAD_QUOTE_STATE_CHANGED[\s\S]*UPDATE trade_opportunity_matches[\s\S]*INSERT OR IGNORE INTO trade_crm_customers/);

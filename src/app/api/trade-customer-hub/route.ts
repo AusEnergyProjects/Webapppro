@@ -6,6 +6,8 @@ import {hubError,hubJson} from "@/lib/customer-quote-hub-server";
 import {getCustomerProjectEvidenceBucket} from "@/lib/customer-project-evidence-bucket";
 import {hubEmailStatement,drainCustomerHubEmails} from "@/lib/customer-hub-email-server";
 import {startPublicLeadQuoteWorkflow} from "@/lib/public-lead-quote-workflow-server";
+import {ensureCustomerHubForReleasedLead} from "@/lib/customer-hub-links";
+import {syncMarketplaceEnquiries} from "@/lib/opportunity-server";
 export const runtime='edge';
 export async function GET(request:Request){try{
   const access=await requireInstallerTeamAccess(request),db=getD1(),url=new URL(request.url),workOrderId=url.searchParams.get('workOrderId')||'';
@@ -28,11 +30,23 @@ export async function PATCH(request:Request){
     if(!access.canManageQuotes)return hubJson({ok:false,error:'Quote management permission is required.'},403);
     if(typeof body.interested!=='boolean'||!Number.isSafeInteger(body.revision)||body.revision<0)return hubJson({ok:false,error:'Refresh before changing your interest.'},400);
     const workOrderId=String(body.workOrderId||''),matchId=String(body.matchId||'');
-    const context=await tradeHubContext(db,access,workOrderId,matchId);if(!context)throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
-    if(context.interest_revision!==body.revision)throw new Error('CUSTOMER_HUB_CONFLICT');
+    let context=await tradeHubContext(db,access,workOrderId,matchId);if(!context)throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
+    if(context.interest_revision!==body.revision){
+      if(context.interest_revision===body.revision+1&&Boolean(context.interested)===body.interested&&context.id
+        &&(!body.interested||(context.work_order_id&&context.customer_id)))return hubJson(await tradeHubView(db,access,workOrderId,matchId));
+      throw new Error('CUSTOMER_HUB_CONFLICT');
+    }
+    if(context.id&&Boolean(context.interested)===body.interested&&(!body.interested||(context.work_order_id&&context.customer_id)))return hubJson(await tradeHubView(db,access,workOrderId,matchId));
     const now=new Date().toISOString();
-    if(body.interested&&!context.work_order_id){
+    if(!context.id){
+      if(!body.interested)return hubJson(await tradeHubView(db,access,workOrderId,matchId));
+      await ensureCustomerHubForReleasedLead(db,context.opportunity_id,context.release_id,context.recipient_email);
+      context=await tradeHubContext(db,access,workOrderId,matchId);
+      if(!context?.id)throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
+    }
+    if(body.interested&&(!context.work_order_id||!context.customer_id)){
       if(!access.isOwner)throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
+      await syncMarketplaceEnquiries(db,context.opportunity_id,access.ownerUid);
       await startPublicLeadQuoteWorkflow(db,access.ownerUid,context.match_id,now,context.match_status);
     }
     const scope=tradeHubScope(access,workOrderId,true,matchId);

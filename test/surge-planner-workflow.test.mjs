@@ -260,54 +260,19 @@ test("equivalent complete answers create the same versioned planner session and 
   );
 });
 
-test("the final enquiry choice selects exactly one existing endpoint and rejects mixed routing", () => {
-  const assistantPayload = {
-    requestId: "lead-request-00000001",
-    tradeSharingConsent: { accepted: false },
-  };
-  assert.deepEqual(
-    buildEnergyAssistantEnquirySubmission({
-      destination: "aea-follow-up",
-      assistantPayload,
-    }),
-    {
-      endpoint: "/api/energy-assistant/leads",
-      payload: assistantPayload,
-    },
-  );
-
-  const matched = buildEnergyAssistantEnquirySubmission({
-    destination: "matched-trades",
-    tradeEnquiry: matchedTradeEnquiry(),
-  });
+test("the final enquiry uses one current consented endpoint and rejects earlier AEA-only routing", () => {
+  const assistantPayload = { requestId: "lead-request-00000001", tradeSharingConsent: { accepted: false } };
+  const matched = buildEnergyAssistantEnquirySubmission({ destination: "matched-trades", tradeEnquiry: matchedTradeEnquiry() });
   assert.deepEqual(Object.keys(matched).sort(), ["endpoint", "payload"]);
   assert.equal(matched.endpoint, "/api/leads");
-  assert.throws(
-    () => buildEnergyAssistantEnquirySubmission({
-      destination: "matched-trades",
-      assistantPayload,
-      tradeEnquiry: matchedTradeEnquiry(),
-    }),
-    /not both/i,
-  );
-  assert.throws(
-    () => buildEnergyAssistantEnquirySubmission({
-      destination: "aea-follow-up",
-      assistantPayload,
-      tradeEnquiry: matchedTradeEnquiry(),
-    }),
-    /not both/i,
-  );
-  assert.throws(
-    () => buildEnergyAssistantEnquirySubmission({
-      destination: "aea-follow-up",
-      assistantPayload: {
-        ...assistantPayload,
-        tradeSharingConsent: { accepted: true },
-      },
-    }),
-    /must use the private-plan trade enquiry path/i,
-  );
+  assert.throws(() => buildEnergyAssistantEnquirySubmission({
+    destination: "matched-trades", assistantPayload, tradeEnquiry: matchedTradeEnquiry(),
+  }), /not both/i);
+  for (const tradeSharingConsent of [{ accepted: false }, { accepted: true }]) {
+    assert.throws(() => buildEnergyAssistantEnquirySubmission({
+      destination: "aea-follow-up", assistantPayload: { ...assistantPayload, tradeSharingConsent },
+    }), /new matched-trade enquiry.*current sharing consent/i);
+  }
 });
 
 test("the Surge matched-trade handoff uses the public-plan consent contract without chat, photos or private plan items", () => {

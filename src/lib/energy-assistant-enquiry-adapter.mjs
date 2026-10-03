@@ -213,33 +213,23 @@ function buildPublicPlanPayload(raw) {
 }
 
 /**
- * Selects exactly one existing enquiry pipeline. This function performs no network request.
+ * Builds the consented matched-trade enquiry. This function performs no network request.
  * The caller submits the returned payload only to the returned endpoint.
  */
 export function buildEnergyAssistantEnquirySubmission(raw) {
   const input = record(raw, "The enquiry route");
   exactKeys(input, ADAPTER_KEYS, "The enquiry route");
   if (input.destination === "aea-follow-up") {
-    if (input.tradeEnquiry !== undefined) {
-      throw new Error("Choose either Australian Energy Assessments follow-up or matched trades, not both.");
-    }
-    const assistantPayload = record(input.assistantPayload, "The Australian Energy Assessments follow-up");
-    if (assistantPayload.tradeSharingConsent?.accepted !== false) {
-      throw new Error("Matched-trade consent must use the private-plan trade enquiry path.");
-    }
-    return {
-      endpoint: "/api/energy-assistant/leads",
-      payload: assistantPayload,
-    };
+    throw new Error("Start a new matched-trade enquiry and confirm the current sharing consent. Your earlier Australian Energy Assessments-only choice has not been changed.");
   }
   if (input.destination === "matched-trades") {
     if (input.assistantPayload !== undefined) {
-      throw new Error("Choose either matched trades or Australian Energy Assessments follow-up, not both.");
+      throw new Error("Submit the matched-trade enquiry only, not both enquiry payloads.");
     }
     return {
       endpoint: "/api/leads",
       payload: buildPublicPlanPayload(input.tradeEnquiry),
     };
   }
-  throw new Error("Choose Australian Energy Assessments follow-up or matched trades.");
+  throw new Error("Start a matched-trade enquiry and confirm the current sharing consent.");
 }

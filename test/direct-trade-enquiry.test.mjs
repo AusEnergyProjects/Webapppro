@@ -22,9 +22,9 @@ test("Direct Trade uses the account-free consented enquiry while the homepage pr
   assert.match(homepage, /href="\/plan">Build my home energy plan/);
   assert.match(homepage, /QuickUpgradeEnquiry/);
   assert.match(homeRequest, /No account needed/);
-  assert.match(homeRequest, /For upgrade requests, you choose the contact details shared with matching approved businesses/);
-  assert.match(homeRequest, /requiresAeaDelivery\(\[service\]\) \?/);
-  assert.match(homeRequest, /This enquiry goes to Australian Energy Assessments\. It is not distributed to other TLink businesses/);
+  assert.match(homeRequest, /all approved (?:TLink businesses|trades) that offer at least one selected service and cover your area/);
+  assert.match(homeRequest, /You choose whether to share your name and phone/);
+  assert.doesNotMatch(homeRequest, /requiresAeaDelivery|not distributed to other TLink businesses/);
   assert.match(brief, /PublicPlanEnquiryForm/);
   assert.match(brief, /No customer account is required/);
   assert.doesNotMatch(homepage, /direct-trade-status|Live service, expanding tool/);

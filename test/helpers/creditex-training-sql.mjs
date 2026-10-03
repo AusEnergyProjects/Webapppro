@@ -1,4 +1,4 @@
-import { certificateTestDependency, installCreditexTrainingFixture } from './creditex-training-fixture.mjs';
+import { certificateTestDependency, installCreditexTrainingFixture, installOpportunityConsentFixtureSchema, installVerifiedTradeLeadFixture } from './creditex-training-fixture.mjs';
 const { certificateLeadEligibilitySql } = certificateTestDependency('trade-certificate-leads');
 const { tradeOpportunityOwnerScopeSql, aeaTradeOwnerSql } = certificateTestDependency('aea-trade-owner-server');
 
@@ -20,4 +20,6 @@ export function qualifyLeadFixture(database) {
     }
   }
   installCreditexTrainingFixture(database);
+  installOpportunityConsentFixtureSchema(database);
+  installVerifiedTradeLeadFixture(database);
 }

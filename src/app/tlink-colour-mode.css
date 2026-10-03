@@ -1323,84 +1323,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   color: var(--trade-accent-readable);
 }
 
-/* Installed-asset navigation is dark; customer-facing document output is unaffected. */
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .asset-review,
-  .asset-list > article,
-  .asset-timeline
-) {
-  background: var(--trade-surface-soft);
-  border-color: var(--trade-line);
-  color: var(--trade-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-review article {
-  background: var(--trade-surface-raised);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .asset-hero span,
-  .asset-review header span,
-  .asset-timeline header span,
-  .asset-list article > header span,
-  .asset-timeline li > span
-) {
-  color: var(--trade-accent-readable);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .asset-hero h2,
-  .asset-review h3,
-  .asset-timeline h3,
-  .asset-list article > header h3,
-  .asset-list dd,
-  .asset-timeline li > strong
-) {
-  color: var(--trade-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .asset-hero p,
-  .asset-review header p,
-  .asset-timeline header p,
-  .asset-review article span,
-  .asset-review article small,
-  .asset-list article > header p,
-  .asset-list dt,
-  .asset-list footer label span,
-  .asset-timeline li > p,
-  .asset-timeline li > small
-) {
-  color: var(--trade-muted);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-workspace.compact,
-html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-list footer,
-html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-timeline li {
-  border-color: var(--trade-line);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-list article > header em {
-  background: var(--trade-accent-soft);
-  color: var(--trade-accent-soft-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-list article > header em.expired {
-  background: #3a201d;
-  color: #ffb8ad;
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-list article > header em.due_90,
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(.asset-notice, .asset-review) {
-  background: #342f18;
-  border-color: #796b39;
-  color: #f4d982;
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .asset-timeline li::before {
-  border-color: var(--trade-surface-soft);
-}
-
 /* Leads and marketplace retain status/accent hue on night-safe surfaces. */
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .dashboard-lead-filters,
@@ -1935,7 +1857,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-import-close {
   color: var(--trade-accent-readable);
 }
 
-/* Business operations and asset service tools in night mode. */
+/* Business operations in night mode. */
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-hub-create,
   .business-hub-toolbar > div,
@@ -1944,11 +1866,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-work-tasks li,
   .business-hub-empty,
   .business-hub-activity li,
-  .handover-add-record,
-  .trade-lifecycle-metrics > div,
-  .lifecycle-plan,
-  .lifecycle-event-list article,
-  .trade-lifecycle-toggle,
   .crm-form-library,
   .crm-form-library article,
   .crm-job-form > summary,
@@ -1965,9 +1882,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-work-tasks button,
   .business-work-assignee button,
   .business-work-card > footer button,
-  .lifecycle-plan button,
-  .trade-lifecycle-assets > article > header > strong,
-  .trade-lifecycle-automation button,
   .crm-form-library button,
   .crm-job-form-actions button:not(.complete)
 ) {
@@ -1979,11 +1893,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-work-card > header > div:first-child > span,
   .business-hub-activity summary,
-  .handover-add-record > summary,
-  .trade-lifecycle-workspace > header span,
-  .trade-lifecycle-assets > article > header span,
-  .lifecycle-plan-summary span,
-  .lifecycle-plan summary,
   .crm-job-forms > header span,
   .crm-form-library article span
 ) {
@@ -1991,8 +1900,7 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .business-hub-access.is-member,
-  .trade-lifecycle-automation
+  .business-hub-access.is-member
 ) {
   background: #143329;
   border-color: #376d5c;
@@ -2002,24 +1910,10 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-hub-access.is-free,
   .business-hub-metrics article.attention,
-  .trade-safety-notices,
   .crm-job-form > div > p
 ) {
   background: #352b16;
   border-color: #735f2d;
-  color: #f4d58d;
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .trade-safety-notices > article {
-  background: #3a2e17;
-  border-color: #735f2d;
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .trade-safety-notices > h5,
-  .trade-safety-notices article span,
-  .trade-safety-notices article a
-) {
   color: #f4d58d;
 }
 
@@ -2028,18 +1922,9 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .business-work-tasks,
   .business-work-card > footer,
   .business-hub-activity,
-  .trade-lifecycle-workspace,
-  .lifecycle-plan details,
-  .trade-lifecycle-assets > article,
   .crm-job-form
 ) {
   border-color: var(--trade-line);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .handover-inline-status {
-  background: var(--trade-accent-soft);
-  border-color: var(--trade-line);
-  color: var(--trade-accent-soft-ink);
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-form > summary b {
@@ -2050,28 +1935,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-form > summary
 html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-form.status-complete > summary b {
   background: #143329;
   color: #9ce3c7;
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .handover-corrections {
-  background: color-mix(in srgb, #6f4795 18%, var(--trade-surface));
-  border-color: #6d5481;
-  color: var(--trade-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .handover-correction-list article,
-  .handover-correction-list dl div
-) {
-  background: var(--trade-surface-raised);
-  border-color: #6d5481;
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .handover-corrections > header span,
-  .handover-corrections form label,
-  .handover-correction-list article b
-) {
-  color: #d6b8ee;
 }
 
 /* Business settings and supplier operational surfaces. */

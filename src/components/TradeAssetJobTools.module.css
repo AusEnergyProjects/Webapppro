@@ -1,6 +1,0 @@
-.tools { border: 1px solid var(--color-aea-line, #d7e5df); border-radius: 12px; background: var(--trade-surface-raised, #fff); color: var(--color-aea-ink, #092f35); margin-top: 12px; }
-.tools summary { min-height: 48px; padding: 14px 16px; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
-.body { padding: 0 16px 16px; display: grid; gap: 16px; min-width: 0; }
-.body > p, .body > div > p { margin: 0; }
-.body button { min-height: 44px; }
-.tools summary:focus-visible { outline: 3px solid var(--trade-accent, #087b7c); outline-offset: 3px; }

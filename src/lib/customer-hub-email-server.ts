@@ -2,6 +2,7 @@ import {encryptProtectedPayload,decryptProtectedPayload} from "./trade-integrati
 import { hubParticipantJoins } from './customer-quote-hub-server';
 import { authoriseCustomerHub, customerHubEmailUrl } from './customer-hub-links';
 import { sendServiceReminderProviderMessage, serviceReminderProviderConfiguration, serviceReminderRetryAt } from './service-reminder-delivery';
+import {customerHubEmailCta,customerHubUpdateEmailHtml} from './customer-hub-email.mjs';
 
 /** Queued with the shared question/reply so email failure cannot lose the conversation. */
 export function hubEmailStatement(db:D1Database,eventId:string,opportunityId:string,now:string){
@@ -44,9 +45,11 @@ export async function drainCustomerHubEmails(db:D1Database,eventId=''){
         const link=await customerHubEmailUrl(db,row.opportunity_id,recipient.recipient_email);
         const action=row.event_type==='asked'?'asked you a question':'replied to a shared question';
         const title=row.title.replace(/[\r\n\u0000-\u001f]/g,' ').slice(0,180);
+        const message=`A trade business has ${action} about your job: ${title}. Reply once to share your answer with the businesses quoting on your job.`;
         payload={eventId:row.event_id,recipient:recipient.recipient_email,link,
           subject:`TLink: a business ${action} about ${title}`,
-          body:`A trade business has ${action} about your job: ${title}.\n\nOpen Customer Q&A to view it and reply once for the businesses quoting on your job.\n\n${link}?section=qa\n\nKeep this private link to yourself. You can pause quotes and questions in your hub.`};
+          body:message+customerHubEmailCta(`${link}?section=qa`).text,
+          html:customerHubUpdateEmailHtml(message,`${link}?section=qa`)};
         const encrypted=await encryptProtectedPayload(payload);
         const saved=await db.prepare("UPDATE customer_hub_email_deliveries SET encrypted_payload=? WHERE event_id=? AND status='sending' AND encrypted_payload='' AND attempts=?")
           .bind(encrypted,row.event_id,row.attempts+1).run();
@@ -62,6 +65,7 @@ export async function drainCustomerHubEmails(db:D1Database,eventId=''){
         await db.prepare("UPDATE customer_hub_email_deliveries SET status='stopped',updated_at=? WHERE event_id=? AND status='sending' AND attempts=?").bind(now,row.event_id,row.attempts+1).run();continue;
       }
       const result=await sendServiceReminderProviderMessage({channel:'email',recipient:recipient.recipient_email,subject:payload.subject,body:payload.body,
+        html:typeof payload.html==='string'?payload.html:undefined,
         idempotencyKey:`customer-hub-${row.event_id}`,callbackUrl:'',messageType:'customer_hub_qa'});
       await db.prepare("UPDATE customer_hub_email_deliveries SET status='accepted',provider_id=?,updated_at=? WHERE event_id=? AND status='sending' AND attempts=?")
         .bind(result.providerMessageId,new Date().toISOString(),row.event_id,row.attempts+1).run();

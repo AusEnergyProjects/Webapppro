@@ -4,10 +4,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { migratedDataforceD1 } from "./helpers/trade-dataforce-database.mjs";
 
 import {
   ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
   ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+  LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+  LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+  AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
   publicPlanContactReleaseConsentSql,
@@ -17,6 +22,8 @@ import {
   PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE,
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
@@ -86,6 +93,8 @@ function topLevelProjectionCount(sql) {
 }
 
 function d1StatementBudget(sql) {
+  // Consent wording is data, not SQL operators or expression depth.
+  sql = sql.replace(/'(?:''|[^'])*'/g, "''");
   const projection = topLevelProjectionCount(sql);
   const booleans = (sql.match(/\b(?:AND|OR)\b/gi) || []).length;
   const joins = (sql.match(/\bJOIN\b/gi) || []).length;
@@ -101,11 +110,16 @@ function d1StatementBudget(sql) {
   };
 }
 
-function assertD1StatementIsBounded(sql) {
+function assertD1StatementShapeIsBounded(sql) {
   const budget = d1StatementBudget(sql);
   assert.ok(budget.projection <= 40, `D1 projection is too wide: ${JSON.stringify(budget)}`);
-  assert.ok(budget.booleans <= 30, `D1 boolean tree is too deep: ${JSON.stringify(budget)}`);
   assert.ok(budget.joins <= 6, `D1 join graph is too wide: ${JSON.stringify(budget)}`);
+  return budget;
+}
+
+function assertD1StatementIsBounded(sql) {
+  const budget = assertD1StatementShapeIsBounded(sql);
+  assert.ok(budget.booleans <= 30, `D1 boolean tree is too deep: ${JSON.stringify(budget)}`);
   assert.ok(budget.total <= 60, `D1 conservative expression budget is too high: ${JSON.stringify(budget)}`);
   return budget;
 }
@@ -138,11 +152,57 @@ function releaseRow(overrides = {}) {
   };
 }
 
-test("trade lead reads split base rows from any-release context and validate before serialization", () => {
+async function assertD1ConsentAuthorization(db, authorizationRead) {
+  const now = "2026-10-04T02:00:00.000Z";
+  async function insert(table, values) {
+    const supplied = { ...values };
+    const columns = (await db.prepare(`PRAGMA table_info(${table})`).all()).results;
+    for (const column of columns) if (column.notnull && column.dflt_value === null && !Object.hasOwn(supplied, column.name)) {
+      supplied[column.name] = column.type === "INTEGER" ? 0 : "";
+    }
+    const fields = Object.keys(supplied);
+    await db.prepare(`INSERT INTO ${table} (${fields.join(",")}) VALUES (${fields.map(() => "?").join(",")})`).bind(...Object.values(supplied)).run();
+  }
+  await insert("trade_accounts", { firebase_uid: "d1-trade", email: "business@example.test", business_name: "Independent Trade",
+    abn: "53004085616", verified_abn: "53004085616", partner_type: "installer", account_status: "active", verification_status: "approved",
+    verification_review_id: "d1-review", verification_reviewed_at: now, verification_reviewed_by_uid: "reviewer",
+    capabilities: '["solar"]', service_states: '["VIC"]', address_state: "VIC", availability_status: "open", created_at: now, updated_at: now });
+  await insert("trade_account_verification_reviews", { id: "d1-review", firebase_uid: "d1-trade", abn: "53004085616", business_name: "Independent Trade",
+    partner_type: "installer", decision: "approved", review_method: "official_abr_lookup", reviewed_by_uid: "reviewer", reviewed_at: now });
+  await insert("trade_opportunities", { id: "d1-opportunity", title: "Assessment and solar", project_type: "home", postcode: "3000", state: "VIC",
+    service_categories: '["assessment","solar"]', status: "open", source_reference: "d1-reference", expires_at: "2099-01-01", created_at: now, updated_at: now });
+  await insert("trade_opportunity_matches", { id: "d1-match", opportunity_id: "d1-opportunity", firebase_uid: "d1-trade", status: "offered",
+    matched_categories: '["solar"]', matched_at: now, updated_at: now });
+  await insert("public_trade_lead_contact_releases", { id: "d1-release", opportunity_id: "d1-opportunity", source_reference: "d1-reference",
+    status: "active", notice_version: PUBLIC_PLAN_CONSENT_NOTICE_VERSION, consent_purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
+    disclosed_fields: JSON.stringify(requiredFields), customer_email: "private@example.test", postcode: "3000", granted_at: now,
+    withdrawn_at: "", created_at: now, updated_at: now });
+  const authorized = async (owner = "d1-trade") => (await db.prepare(authorizationRead).bind(owner, "d1-match", "d1-match").all()).results;
+  assert.deepEqual(await authorized(), [{ authorized_match_id: "d1-match" }], "D1 returns only the authorized ID, never private contacts");
+  assert.deepEqual(await authorized("other-trade"), []);
+  for (const [column, denied, restored] of [
+    ["status", "withdrawn", "active"], ["withdrawn_at", now, ""],
+    ["notice_version", "unknown-notice", PUBLIC_PLAN_CONSENT_NOTICE_VERSION],
+    ["consent_purpose", AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE, PUBLIC_PLAN_CONSENT_PURPOSE],
+    ["source_reference", "other-project", "d1-reference"], ["postcode", "2000", "3000"],
+    ["disclosed_fields", '["postcode","service_categories"]', JSON.stringify(requiredFields)],
+  ]) {
+    await db.prepare(`UPDATE public_trade_lead_contact_releases SET ${column}=? WHERE id='d1-release'`).bind(denied).run();
+    assert.deepEqual(await authorized(), [], `${column} revocation must deny in actual D1`);
+    await db.prepare(`UPDATE public_trade_lead_contact_releases SET ${column}=? WHERE id='d1-release'`).bind(restored).run();
+    assert.equal((await authorized()).length, 1);
+  }
+  await assert.rejects(db.prepare("UPDATE public_trade_lead_contact_releases SET disclosed_fields='broken' WHERE id='d1-release'").run(), /CHECK constraint failed/);
+  assert.equal((await authorized()).length, 1, "invalid JSON cannot replace the durable receipt");
+  await db.prepare("UPDATE trade_accounts SET account_status='suspended' WHERE firebase_uid='d1-trade'").run();
+  assert.deepEqual(await authorized(), []);
+}
+
+test("trade lead reads split base rows and execute consent authorization within real D1 limits", async (t) => {
   const consentGuard = publicPlanContactReleaseConsentSql("public_contact");
-  // Ten exact policy pairs retain one shallow CASE expression for D1.
-  assert.ok(consentGuard.length < 2_200, "lead read consent guard must stay shallow for D1");
-  assert.equal((consentGuard.match(/\bWHEN\b/g) || []).length, 10);
+  // Thirteen exact policy pairs retain one shallow CASE expression for D1.
+  assert.ok(consentGuard.length < 2_900, "lead read consent guard must stay bounded for D1");
+  assert.equal((consentGuard.match(/\bWHEN\b/g) || []).length, 13);
   assert.equal((consentGuard.match(/\bCASE\b/g) || []).length, 1, "Additional exact notice versions must not add nested CASE expressions");
   assert.equal((consentGuard.match(/\bELSE\b/g) || []).length, 1);
 
@@ -155,6 +215,9 @@ test("trade lead reads split base rows from any-release context and validate bef
   insert.run("v8", V8_NOTICE, V8_PURPOSE);
   insert.run("quick-previous", PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, PREVIOUS_QUICK_UPGRADE_CONSENT_PURPOSE);
   insert.run("quick-aea-v3", AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE);
+  insert.run("quick-aea-v4", AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE);
+  insert.run("public-aea-v9", AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION, AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE);
+  insert.run("assistant-legacy", LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION, LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE);
   insert.run(
     "current",
     PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
@@ -181,7 +244,7 @@ test("trade lead reads split base rows from any-release context and validate bef
     database.prepare(`SELECT id FROM public_contact WHERE ${consentGuard} ORDER BY id`)
       .all()
       .map((row) => row.id),
-    ["assistant", "current", "quick", "quick-aea-v3", "quick-legacy", "quick-previous", "v4", "v6", "v7", "v8"],
+    ["assistant", "assistant-legacy", "current", "public-aea-v9", "quick", "quick-aea-v3", "quick-aea-v4", "quick-legacy", "quick-previous", "v4", "v6", "v7", "v8"],
   );
   database.close();
 
@@ -275,15 +338,14 @@ test("trade lead reads split base rows from any-release context and validate bef
   const patchContextRead = sqlTemplateContaining(route, "o.source_reference, o.postcode opportunity_postcode, o.state");
   const patchProjectConsentRead = sqlTemplateContaining(route, "SELECT p.id customer_project_id, p.firebase_uid customer_uid");
   const patchProjectUpdate = sqlTemplateContaining(route, "JOIN customer_projects current_project");
-  assert.doesNotMatch(patchBaseRead, /public_trade_lead_contact_releases|public_contact/);
+  // The owner gate reads exact current consent for new all-qualified receipts;
+  // the base row must still neither join nor project private customer details.
+  assert.doesNotMatch(patchBaseRead.split(/\bFROM\b/)[0], /contact|customer|email|phone|address/);
+  assert.doesNotMatch(patchBaseRead, /JOIN public_trade_lead_contact_releases public_contact/);
   assert.match(patchContextRead, /JOIN public_trade_lead_contact_releases public_contact/);
   assert.doesNotMatch(patchContextRead, /public_contact\.status = 'active'/);
   assert.match(route, /currentPublicContact && !publicTradeContactForMatchedLead\(currentPublicContact, allowAeaDelivery\)/);
-  assert.match(route, /active_public_contact\.id = \?/);
-  assert.match(route, /active_public_contact\.source_reference = available_opportunity\.source_reference/);
-  assert.match(route, /active_public_contact\.postcode = available_opportunity\.postcode/);
-  assert.match(route, /active_public_contact\.disclosed_fields = \?/);
-  assert.match(route, /active_public_contact\.updated_at = \?/);
+  assert.match(route.replace(/\s+/g, " "), /\(active_public_contact\.id, active_public_contact\.source_reference,[\s\S]*active_public_contact\.status, active_public_contact\.withdrawn_at, active_public_contact\.postcode,[\s\S]*active_public_contact\.disclosed_fields, active_public_contact\.updated_at\) =[\s\S]*\(\?, available_opportunity\.source_reference, 'active', '', available_opportunity\.postcode, \?, \?\)/);
   assert.match(patchProjectConsentRead, /current_matching_consent\.purpose = 'anonymized_installer_matching'/);
   assert.match(patchProjectConsentRead, /current_matching_consent\.withdrawn_at = ''/);
   assert.match(route, /isCustomerProject && \(!currentProjectConsent \|\| currentPublicContact\)/);
@@ -309,10 +371,23 @@ test("trade lead reads split base rows from any-release context and validate bef
     sqlTemplateContaining(route, "JOIN public_trade_lead_contact_releases active_public_contact"),
     sqlTemplateContaining(route, "WHERE any_public_contact.opportunity_id = ?"),
   ];
+  const runtime = await migratedDataforceD1();
+  t.after(() => runtime.close());
+  const db = runtime.db;
   for (const [index, statement] of leadStatements.entries()) {
-    try { assertD1StatementIsBounded(statement); }
+    try {
+      if (statement.includes("public_trade_lead_contact_releases all_trade_contact")) {
+        // Independent, consent-bearing authorization branches exceed the old
+        // aggregate heuristic. Keep read-shape bounds and let D1 enforce its
+        // actual expression depth on the complete production statement.
+        assertD1StatementShapeIsBounded(statement);
+        const parameters = (statement.replace(/'(?:''|[^'])*'/g, "''").match(/\?/g) || []).length;
+        await db.prepare(`EXPLAIN ${statement}`).bind(...Array(parameters).fill(null)).all();
+      } else assertD1StatementIsBounded(statement);
+    }
     catch (error) { error.message = `Lead statement ${index}: ${error.message}`; throw error; }
   }
+  await assertD1ConsentAuthorization(db, authorizationRead);
   const legacyOversizedRead = `SELECT ${Array.from({ length: 84 }, (_, index) => `t.c${index}`).join(", ")}
     FROM t ${Array.from({ length: 6 }, (_, index) => `JOIN j${index} ON j${index}.id = t.id`).join(" ")}
     WHERE ${Array.from({ length: 18 }, (_, index) => `t.c${index} = ?`).join(" AND ")}`;

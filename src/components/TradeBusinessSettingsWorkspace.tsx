@@ -1209,9 +1209,9 @@ export function TradeBusinessSettingsWorkspace({
                   }}
                 >
                   Choose the services your business performs. Team uses the same
-                  list for each person. Eligible services can be used for future
-                  lead matching, subject to approval, training and coverage.
-                  AEA-managed enquiries remain with Australian Energy Assessments.
+                  list for each person. New leads match your verified business,
+                  selected services and service area. Creditex approval and
+                  activity training apply to government-program work, not ordinary leads.
                   Changes do not remove leads already assigned. Licences and
                   verification do not automatically add services.
                 </p>

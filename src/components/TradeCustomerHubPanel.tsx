@@ -6,7 +6,8 @@ import type { TradeHubQuestion } from "@/lib/customer-quote-hub";
 import styles from "./TradeCustomerHubPanel.module.css";
 
 type Result = { ok?: boolean; available?: boolean; accepting?: boolean; canAsk?: boolean; questions?: TradeHubQuestion[]; error?: string;
-  interested?: boolean; interestRevision?: number; canManageInterest?: boolean; workOrderId?: string };
+  interested?: boolean; interestRevision?: number; canManageInterest?: boolean; workOrderId?: string; customerId?: string };
+type CustomerQaTarget = { customerId: string; workOrderId: string };
 type RequestKind = TradeHubQuestion["kind"];
 type Scope = { workOrderId: string; matchId?: never } | { matchId: string; workOrderId?: never };
 type Operation = "ask" | "download" | "interest" | `reply:${string}`;
@@ -24,12 +25,16 @@ export function TradeCustomerHubPanel({ workOrderId }: { workOrderId: string }) 
   return <Panel key={`${business?.ownerUid || ""}:${workOrderId}`} workOrderId={workOrderId} />;
 }
 
-export function TradeCustomerHubInterest({ matchId }: { matchId: string }) {
+export function TradeCustomerHubInterest({ matchId, onOpenQa, disabled = false }: {
+  matchId: string; onOpenQa: (target: CustomerQaTarget) => void; disabled?: boolean;
+}) {
   const business = useTradeBusiness();
-  return <Panel key={`${business?.ownerUid || ""}:match:${matchId}`} matchId={matchId} interestOnly />;
+  return <Panel key={`${business?.ownerUid || ""}:match:${matchId}`} matchId={matchId} interestOnly onOpenQa={onOpenQa} disabled={disabled} />;
 }
 
-function Panel({ workOrderId, matchId, interestOnly = false }: Scope & { interestOnly?: boolean }) {
+function Panel({ workOrderId, matchId, interestOnly = false, onOpenQa, disabled = false }: Scope & {
+  interestOnly?: boolean; onOpenQa?: (target: CustomerQaTarget) => void; disabled?: boolean;
+}) {
   const request = useTradeBusinessFetch();
   const [data, setData] = useState<Result | null>(null);
   const [prompt, setPrompt] = useState("");
@@ -83,11 +88,17 @@ function Panel({ workOrderId, matchId, interestOnly = false }: Scope & { interes
       throw new Error(result.error || "The request could not be shared.");
     }
     if (active.current) setData(result);
+    return result;
+  }
+  function openQa(result: Result) {
+    if (!result.customerId || !result.workOrderId) throw new Error("Customer Q&A could not be opened. Try Interested again to reopen the same customer safely.");
+    onOpenQa?.({ customerId: result.customerId, workOrderId: result.workOrderId });
   }
   async function toggleInterest() {
-    if (!data?.canManageInterest || !Number.isSafeInteger(data.interestRevision) || !begin("interest")) return;
+    if (disabled || !data?.canManageInterest || !Number.isSafeInteger(data.interestRevision) || !begin("interest")) return;
     try {
-      await save("PATCH", { ...(matchId ? { matchId } : { workOrderId }), interested: !data.interested, revision: data.interestRevision });
+      const result = await save("PATCH", { ...(matchId ? { matchId } : { workOrderId }), interested: !data.interested, revision: data.interestRevision });
+      if (active.current && interestOnly && result.interested) openQa(result);
       if (active.current) setMessage(data.interested ? "Customer updates are off. Existing quotes and records are unchanged." : "You're interested. Customer Q&A updates will appear in your notifications.");
     } catch (error) { if (active.current) setMessage(error instanceof Error ? error.message : "Could not change interest."); }
     finally { finish(); }
@@ -132,11 +143,17 @@ function Panel({ workOrderId, matchId, interestOnly = false }: Scope & { interes
     } finally { finish(); }
   }
 
-  if (!data?.available) return message ? <p className={styles.status} role="status">{message}</p> : null;
+  if (!data?.available) return interestOnly ? <div className={styles.panel}><p className={styles.status} role="status">{message || (data ? "Customer Q&A is unavailable for this lead." : "Loading lead interest...")}</p>
+    {(message || data) && <button type="button" onClick={() => void load()}>Retry</button>}</div> : message ? <p className={styles.status} role="status">{message}</p> : null;
   return <section className={styles.panel} aria-label="Shared customer requests" aria-busy={Boolean(busy)}>
-    <div className={styles.interest}><div><strong>Customer Q&amp;A updates</strong><small>{data.interested ? "Receive updates for this customer's shared questions and files." : "Choose Interested to receive updates and join the conversation."}</small></div>
+    {interestOnly ? <div className={styles.interest}><div><strong>Interested in this job?</strong><small>{data.interested ? "Updates are on. Click Interested to open Customer Q&A." : "Interested adds the customer, turns on updates and opens Customer Q&A."}</small></div>
+      <div className={styles.leadInterest} role="group" aria-label="Lead interest">
+        <button type="button" aria-pressed={!data.interested} disabled={disabled || Boolean(busy) || !data.canManageInterest || !data.interested} onClick={() => void toggleInterest()}>Not interested</button>
+        <button type="button" aria-pressed={Boolean(data.interested)} className={styles.primary} disabled={disabled || Boolean(busy) || !data.canManageInterest}
+          onClick={() => { if (!data.interested) void toggleInterest(); else { try { openQa(data); } catch (error) { setMessage(error instanceof Error ? error.message : "Customer Q&A could not be opened."); } } }}>{busy === "interest" ? "Saving..." : "Interested"}</button>
+      </div></div> : <div className={styles.interest}><div><strong>Customer Q&amp;A updates</strong><small>{data.interested ? "Receive updates for this customer's shared questions and files." : "Choose Interested to receive updates and join the conversation."}</small></div>
       <button type="button" role="switch" aria-label="Interested in customer updates" aria-checked={Boolean(data.interested)} disabled={Boolean(busy) || !data.canManageInterest}
-        onClick={() => void toggleInterest()}>{busy === "interest" ? "Saving…" : data.interested ? "Interested" : "Not interested"}</button></div>
+        onClick={() => void toggleInterest()}>{busy === "interest" ? "Saving…" : data.interested ? "Interested" : "Not interested"}</button></div>}
     {!interestOnly && <><header className={styles.heading}><h4>Ask customer</h4><p>Answers and files are shared with invited businesses. Quote pricing stays private.</p></header>
     {!data.accepting ? <p className={styles.status} role="status">The customer has closed quotes and questions. Existing records remain available.</p>
       : data.canAsk ? <div className={styles.composer}>

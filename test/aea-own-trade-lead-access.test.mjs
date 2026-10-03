@@ -139,7 +139,7 @@ function fixture(contactOverrides = {}) {
     insert(database, "trade_accounts", { firebase_uid: uid, email: `${uid}@example.test`,
       business_name: uid, abn, verified_abn: abn, partner_type: "installer",
       account_status: "active", verification_status: "approved", verification_review_id: `review-${uid}`,
-      verification_reviewed_at: now, verification_reviewed_by_uid: "reviewer", capabilities: '["solar"]',
+      verification_reviewed_at: now, verification_reviewed_by_uid: "reviewer", capabilities: '["assessment","solar"]',
       service_states: '["VIC"]', address_state: "VIC", created_at: now, updated_at: now });
     insert(database, "trade_account_verification_reviews", { id: `review-${uid}`, firebase_uid: uid,
       abn, business_name: uid, partner_type: "installer", decision: "approved", review_method: "official_abr_lookup",
@@ -152,7 +152,7 @@ function fixture(contactOverrides = {}) {
   insert(database, "trade_opportunity_matches", { id: matchId, opportunity_id: "opportunity-1", firebase_uid: "aea-owner",
     status: "offered", matched_categories: categories, matched_at: now, updated_at: now });
   insert(database, "public_trade_lead_contact_releases", { id: "release-1", opportunity_id: "opportunity-1", source_reference: reference,
-    status: "active", notice_version: plan.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, consent_purpose: plan.PUBLIC_PLAN_CONSENT_PURPOSE,
+    status: "active", notice_version: plan.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION, consent_purpose: plan.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE,
     disclosed_fields: '["customer_email","postcode","service_categories"]', customer_email: "customer@example.test",
     customer_first_name: "Not", customer_last_name: "Disclosed", customer_phone: "0400000000",
     customer_street_address: "1 Private Street", postcode: "3000", granted_at: now, withdrawn_at: "", created_at: now, updated_at: now,
@@ -168,7 +168,7 @@ function contactRow(overrides = {}) {
     opportunity_service_categories: categories, opportunity_postcode: "3000", state: "VIC", opportunity_state: "VIC",
     public_contact_release_id: "release-1", public_contact_status: "active", public_contact_source_reference: reference,
     public_contact_withdrawn_at: "", public_contact_disclosed_fields: '["customer_email","postcode","service_categories"]',
-    public_contact_notice_version: plan.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, public_contact_consent_purpose: plan.PUBLIC_PLAN_CONSENT_PURPOSE,
+    public_contact_notice_version: plan.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION, public_contact_consent_purpose: plan.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE,
     public_contact_postcode: "3000", public_contact_granted_at: now, public_customer_email: "customer@example.test",
     public_customer_first_name: "Not", public_customer_last_name: "Disclosed", public_customer_phone: "0400000000", matched_categories: categories,
     match_status: "interested", opportunity_status: "open", expires_at: "2099-09-22T00:00:00.000Z", ...overrides,
@@ -245,8 +245,8 @@ test("AEA quick enquiry retains its contact in lead and quote projections withou
 
 test("new mandatory-email AEA consent retains name and phone without external sharing", () => {
   const row = quickContactRow({
-    public_contact_notice_version: quick.QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
-    public_contact_consent_purpose: quick.QUICK_UPGRADE_CONSENT_PURPOSE,
+    public_contact_notice_version: quick.AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    public_contact_consent_purpose: quick.AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
     public_contact_disclosed_fields: JSON.stringify([...JSON.parse(quickContact.disclosed_fields), "customer_email"]),
   });
   const contact = publicTradeContactForMatchedLead(row, true);
@@ -302,7 +302,7 @@ test("AEA quick enquiry contact still requires a current valid receipt and valid
     { public_contact_withdrawn_at: now }, { public_contact_status: "withdrawn" },
     { public_contact_source_reference: "another" }, { public_contact_postcode: "3001" },
     { public_contact_granted_at: "invalid" }, { public_contact_release_id: "" },
-    { public_contact_consent_purpose: plan.PUBLIC_PLAN_CONSENT_PURPOSE },
+    { public_contact_consent_purpose: plan.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE },
     { public_contact_notice_version: "unknown" }, { public_contact_disclosed_fields: "[]" },
     { opportunity_service_categories: '["assessment",null]' },
     { public_customer_email: "invalid" }, { public_customer_email: "" },
@@ -332,7 +332,7 @@ test("real quote handoff creates one owner-scoped job and quote with retained AE
   const detail = database.prepare("SELECT * FROM trade_crm_job_details WHERE work_order_id=?").get(first.workOrderId);
   const disclosure = JSON.parse(detail.accepted_disclosure_snapshot);
   assert.deepEqual(disclosure.enquiry.categories, ["assessment", "solar"]);
-  assert.equal(disclosure.source.consentPurpose, plan.PUBLIC_PLAN_CONSENT_PURPOSE);
+  assert.equal(disclosure.source.consentPurpose, plan.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE);
   assert.match(detail.accepted_disclosure_sha256, /^[a-f0-9]{64}$/);
   await assert.rejects(server.startPublicLeadQuoteWorkflow(db, "external-owner", matchId, now), /UNAVAILABLE/);
   database.close();
@@ -445,7 +445,7 @@ test("production photo download query retains owner authority and both consent b
   assert.ok(sql);
   const statement = database.prepare(expand(sql));
   const download = (uid) => statement.get(preparation.PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION, preparation.PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
-    uid, plan.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, plan.PUBLIC_PLAN_CONSENT_PURPOSE, "photo-1");
+    uid, plan.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION, plan.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE, "photo-1");
   assert.ok(download("aea-owner"));
   assert.equal(download("external-owner"), undefined);
   database.exec("UPDATE admin_users SET status='suspended'");

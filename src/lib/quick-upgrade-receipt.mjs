@@ -1,6 +1,7 @@
 import { ENERGY_SERVICE_LABELS } from "./energy-service-catalogue.mjs";
 import { PUBLIC_SITE } from "./public-site.ts";
 import { AEA_SERVICE_IDENTITIES, AEA_BUNDLE_IDENTITIES, requiresAeaDelivery } from "./aea-service-identity.mjs";
+import { isAllQualifiedTradeConsent } from "./public-plan-enquiry.mjs";
 
 export const QUICK_UPGRADE_RECEIPT_KIND = "quick-upgrade-receipt/v1";
 export const QUICK_UPGRADE_RECEIPT_PREFIX = "quick-upgrade/receipt/";
@@ -17,7 +18,7 @@ export function quickUpgradeReceiptDraft(receipt) {
   if (!reference || !services.length || !["matched", "review"].includes(receipt.matchingState)) {
     throw new Error("QUICK_UPGRADE_RECEIPT_CONTENT_INVALID");
   }
-  const aeaOnly = requiresAeaDelivery(receipt.services);
+  const aeaOnly = requiresAeaDelivery(receipt.services) && !isAllQualifiedTradeConsent(receipt.noticeVersion, receipt.consentPurpose);
   const next = aeaOnly
     ? "Australian Energy Assessments will handle your service enquiry directly. Our team has been notified to confirm your property, the selected services and the next step. This request is not distributed to other TLink businesses."
     : receipt.matchingState === "matched"

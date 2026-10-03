@@ -31,7 +31,7 @@ test("the permanent Leads tab uses an accessible list and full selected preview"
   assert.match(dashboard, /dashboard-connected-customer-contact-grid/);
   assert.match(dashboard, /dashboard-property-context/);
   assert.match(dashboard, /className="dashboard-lead-dismiss"/);
-  assert.match(dashboard, /\["offered", "viewed"\]\.includes\(opportunity\.matchStatus\)[\s\S]*opportunity\.platformOnly && opportunity\.matchStatus === "interested"/);
+  assert.match(dashboard, /\["offered", "viewed", "interested"\]\.includes\(opportunity\.matchStatus\)[\s\S]*!opportunity\.platformOnly && opportunity\.matchStatus === "connected"/);
   assert.match(dashboard, /Remove .* from this business's leads/);
   assert.match(dashboard, /This does not remove it for other matched trades/);
   assert.match(dashboard, /dashboard-lead-preview-actions/);
@@ -76,7 +76,7 @@ test("removing a lead is owner scoped, reversible only through allocation, and l
   assert.match(opportunityRoute, /status === "declined" && currentProjectConsent[\s\S]*await db\.batch\(\[[\s\S]*UPDATE customer_project_quotes[\s\S]*status = 'withdrawn'[\s\S]*customer_decision != 'accepted'[\s\S]*declined_match\.status = 'declined'/);
   assert.match(opportunityRoute, /customer_project_quotes accepted_quote[\s\S]*accepted_quote\.opportunity_match_id = \?[\s\S]*accepted_quote\.installer_uid = \?[\s\S]*accepted_quote\.customer_decision = 'accepted'/);
   assert.match(opportunityRoute, /action === "open_public_quote"[\s\S]*\["interested", "connected"\]\.includes\(currentStatus\)[\s\S]*publicLeadQuoteWorkflowOutcome\(db, user\.uid, matchId, now, currentStatus\)/);
-  assert.match(opportunityRoute, /status === "declined" && currentPublicContact && currentStatus === "interested"[\s\S]*already stored as a customer and job/);
+  assert.doesNotMatch(opportunityRoute, /already stored as a customer and job/);
   assert.match(opportunityRoute, /PLATFORM_QUOTE_STATE_CHANGED[\s\S]*INSERT INTO customer_project_quotes/);
   assert.match(opportunityRoute, /guarded_match\.status IN \('interested', 'connected'\)[\s\S]*guarded_consent\.withdrawn_at = ''/);
   assert.match(opportunityRoute, /mutationResults\[1\]\?\.meta\.changes/);

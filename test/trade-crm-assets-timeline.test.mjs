@@ -13,7 +13,6 @@ const handoverMigration = read("../drizzle/0016_fair_ultragirl.sql");
 const assetMigration = read("../drizzle/0049_customer_asset_timeline.sql");
 const route = read("../src/app/api/trade-assets/route.ts");
 const handoverRoute = read("../src/app/api/trade-handover/route.ts");
-const workspace = read("../src/components/TradeAssetWorkspace.tsx");
 const crmWorkspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const styles = read("../src/app/globals.css");
 
@@ -55,15 +54,12 @@ test("asset APIs are owner scoped and require explicit handover review", () => {
   assert.match(handoverRoute, /directCustomerId && directSiteId \? "confirmed" : "pending_review"/);
 });
 
-test("the asset register writes the four first-class home-fabric categories", () => {
+test("the asset API retains the four first-class home-fabric categories", () => {
   const allowed = route.match(/const ASSET_CATEGORIES = new Set\(\[([\s\S]*?)\]\);/)?.[1] || "";
-  const selectable = workspace.match(/const CATEGORIES = \[([\s\S]*?)\];/)?.[1] || "";
   for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
     assert.match(allowed, new RegExp(`"${category}"`));
-    assert.match(selectable, new RegExp(`"${category}"`));
   }
   assert.doesNotMatch(allowed, /insulation-draughts/);
-  assert.doesNotMatch(selectable, /insulation-draughts/);
 });
 
 test("the timeline unifies all required direct-customer sources deterministically", () => {
@@ -135,14 +131,16 @@ test("asset list, review and split timeline SQL execute against the production m
   }
 });
 
-test("the CRM exposes asset search, warranty filters, review and customer timeline", () => {
-  for (const label of ["Installed asset register", "Search installed assets", "All warranties", "Ends within 90 days", "Installer review required", "Confirm link", "Customer and site timeline", "Add installed asset"]) assert.match(workspace, new RegExp(label));
-  assert.match(crmWorkspace, /"assets"/);
-  assert.match(crmWorkspace, /view === "assets"[\s\S]*<TradeAssetWorkspace user=\{user\}/);
-  assert.match(styles, /\.asset-list \{[^}]*grid-template-columns: repeat\(2/);
-  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.asset-list \{ grid-template-columns: 1fr; \}/);
+test("standalone Assets UI is retired while saved job completion records remain accessible", () => {
+  assert.doesNotMatch(crmWorkspace, /TradeAssetWorkspace|"assets"/);
+  assert.match(crmWorkspace, /<TradeHandoverHistory user=\{user\} workOrderId=\{job\.id\}/);
+  assert.match(crmWorkspace, /<TradeQuotePanel/);
+  for (const name of ["TradeAssetWorkspace.tsx", "TradeAssetJobTools.tsx", "TradeAssetJobTools.module.css", "TradeAssetLifecycle.tsx", "TradeHandoverCorrections.tsx"]) {
+    assert.equal(fs.existsSync(new URL(`../src/components/${name}`, import.meta.url)), false, `${name} must not remain as orphaned UI`);
+  }
+  assert.doesNotMatch(styles, /\.asset-(?:workspace|hero|filters|review|list|timeline)\b/);
 });
 
-test("asset register copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${route}\n${handoverRoute}\n${workspace}`, /[\u2013\u2014]/);
+test("retained asset and handover API copy avoids prohibited dash characters", () => {
+  assert.doesNotMatch(`${route}\n${handoverRoute}`, /[\u2013\u2014]/);
 });

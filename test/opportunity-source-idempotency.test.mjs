@@ -4,6 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
+  AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "../src/lib/public-plan-enquiry.mjs";
 import { persistLeadOpportunity } from "../src/lib/opportunity-source-write.mjs";
 import { AEA_RESERVED_SERVICE_IDS } from "../src/lib/aea-services.mjs";
@@ -138,14 +140,35 @@ const currentConsent = {
   purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
 };
 
-test("every AEA service and mixed source stays draft through an open-request replay", async () => {
+test("legacy AEA-only services stay draft through a replay and cannot be upgraded to new consent", async () => {
   for (const reserved of AEA_RESERVED_SERVICE_IDS) {
     for (const services of [[reserved], [reserved, "solar"]]) {
       const database = sourceDatabase();
       const record = opportunity("reserved-opportunity", { serviceCategories: JSON.stringify(services) });
       for (const id of ["contact-first", "contact-replay"]) {
-        const stored = await persistLeadOpportunity(databaseAdapter(database), record, contact(id), currentConsent);
+        const stored = await persistLeadOpportunity(databaseAdapter(database), record, contact(id, {
+          noticeVersion: AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+          consentPurpose: AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE,
+        }), { noticeVersion: AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION, purpose: AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE });
         assert.equal(stored.status, "draft", JSON.stringify(services));
+      }
+      await assert.rejects(() => persistLeadOpportunity(databaseAdapter(database), record, contact('new-consent-replay'), currentConsent), /OPPORTUNITY_SOURCE_REFERENCE_MISMATCH/);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_opportunities").get().count, 1);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM public_trade_lead_contact_releases").get().count, 1);
+      database.close();
+    }
+  }
+});
+
+test("new all-qualified consent opens every assessment, safety and mixed service enquiry exactly once", async () => {
+  for (const service of AEA_RESERVED_SERVICE_IDS) {
+    for (const services of [[service], [service, "solar"]]) {
+      const database = sourceDatabase();
+      const record = opportunity("new-services", { serviceCategories: JSON.stringify(services) });
+      for (const id of ["contact-first", "contact-replay"]) {
+        const stored = await persistLeadOpportunity(databaseAdapter(database), record, contact(id), currentConsent);
+        assert.equal(stored.status, "open", JSON.stringify(services));
+        assert.equal(stored.contactIsCurrent, true);
       }
       assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_opportunities").get().count, 1);
       assert.equal(database.prepare("SELECT COUNT(*) count FROM public_trade_lead_contact_releases").get().count, 1);

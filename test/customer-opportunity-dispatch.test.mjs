@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { installOpportunityConsentFixtureSchema } from "./helpers/creditex-training-fixture.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8")
   .replaceAll(/\$\{tradeOpportunityServiceScopeSql\("([^"]+)"\)\}/g, (_, alias) => tradeOpportunityServiceScopeSql(alias));
@@ -108,6 +109,7 @@ test("a future-due exact notification remains outstanding and prevents false com
     (match_id, status, next_attempt_at)
     VALUES ('match-1', 'failed', '2099-01-01T00:00:00.000Z')`).run();
   assert.equal(Number(db.prepare(statements[0]).get("notification-1").count), 1);
+  installOpportunityConsentFixtureSchema(db);
   assert.equal(Number(db.prepare(statements[1]).get("opportunity-1").count), 1);
   db.close();
 });

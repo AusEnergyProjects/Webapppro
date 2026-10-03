@@ -8,6 +8,8 @@ import { cleanupPublicPlanDeliveryObjectsWrite } from "../src/lib/public-plan-de
 import {
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
 } from "../src/lib/quick-upgrade-enquiry.mjs";
@@ -166,6 +168,8 @@ test("receipt delivery rejects mismatched current and historical consent pairs",
 test("AEA-only and mixed drafts enqueue and send one private customer receipt", async (t) => {
   for (const services of [["assessment"], ["solar", "smoke-alarm-blind-safety"]]) {
     const f = fixture(t, { matched: false });
+    f.sqlite.prepare("UPDATE public_trade_lead_contact_releases SET notice_version=?, consent_purpose=?")
+      .run(AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE);
     f.sqlite.prepare("UPDATE trade_opportunities SET status = 'draft', service_categories = ?")
       .run(JSON.stringify(services));
     const saved = await enqueueQuickUpgradeReceipt(input, f);
@@ -185,6 +189,19 @@ test("AEA-only and mixed drafts enqueue and send one private customer receipt", 
     assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM trade_opportunity_matches").get().n, 0);
     assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM public_plan_internal_relay_deliveries").get().n, 0);
   }
+});
+
+test("new all-qualified assessment receipts describe trade matching and retain the private hub", async (t) => {
+  const f = fixture(t);
+  f.sqlite.exec(`UPDATE trade_opportunities SET service_categories='["assessment","solar"]'`);
+  const hubUrl = "https://ausenergyassessments.com/customer-hub/synthetic-all-service-hub";
+  await enqueueQuickUpgradeReceipt(input, { ...f, customerHubUrl: async () => hubUrl });
+  const frozen = JSON.parse(new TextDecoder().decode(f.objects.values().next().value));
+  assert.equal(frozen.receipt.noticeVersion, QUICK_UPGRADE_CONSENT_NOTICE_VERSION);
+  assert.match(frozen.draft.body, /available to suitable approved TLink businesses/);
+  assert.doesNotMatch(frozen.draft.body, /not distributed to other TLink businesses|handle your service enquiry directly/);
+  assert.ok(frozen.draft.body.includes(hubUrl));
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM public_plan_internal_relay_deliveries").get().n, 0);
 });
 
 test("non-AEA drafts, invalid reserved scopes and closed or withdrawn requests cannot queue receipts", async (t) => {

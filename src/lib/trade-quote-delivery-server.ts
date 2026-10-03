@@ -241,9 +241,14 @@ async function defaultPrepareMessage(db: D1Database, row: Row, now: Date) {
     String(row.token_hash),
   );
   const shareUrl = `${origin}${quoteReviewPath(String(row.quote_link_id), secret)}`;
+  const customerHubUrl = Number(row.email_renderer_revision) >= 4
+    ? await (await import("./trade-quote-hub-email-server.ts")).tradeQuoteCustomerHubEmailUrl(db, {
+      ownerUid: String(row.firebase_uid), workOrderId: String(row.work_order_id),
+      customerId: String(row.crm_customer_id), recipientEmail: recipient,
+    }) : undefined;
   const content = await buildVerifiedTradeQuoteEmailForRevision({
     revision: Number(row.email_renderer_revision),
-    email: { snapshot, shareUrl, expiresAt: String(row.expires_at) },
+    email: { snapshot, shareUrl, expiresAt: String(row.expires_at), customerHubUrl },
     expectedSubject: String(row.subject_snapshot || ""),
     expectedContentSha256: String(row.email_content_sha256 || ""),
   });
@@ -258,6 +263,10 @@ async function defaultPrepareMessage(db: D1Database, row: Row, now: Date) {
     filename !== String(row.attachment_filename || "")
     || issuedPdf.reference.sha256 !== String(row.attachment_sha256 || "")
   ) throw new Error("QUOTE_DELIVERY_CONTENT_CHANGED");
+  if (customerHubUrl !== undefined && await (await import("./trade-quote-hub-email-server.ts")).tradeQuoteCustomerHubEmailUrl(db, {
+    ownerUid: String(row.firebase_uid), workOrderId: String(row.work_order_id),
+    customerId: String(row.crm_customer_id), recipientEmail: recipient,
+  }) !== customerHubUrl) throw new Error("QUOTE_DELIVERY_HUB_AUTHORITY_CHANGED");
   // Keep the payload stable across mailbox changes. Legacy revisions promise an attachment.
   const includeAttachment = Number(row.email_renderer_revision) < 3
     || issuedPdf.bytes.byteLength <= MAX_QUOTE_EMAIL_PDF_ATTACHMENT_BYTES;
@@ -289,15 +298,17 @@ async function finishFailure(
   const current = now.toISOString();
   const indeterminate = reminderProviderFailureOutcome(error) === "indeterminate";
   const code = indeterminate ? "QUOTE_DELIVERY_RECONCILIATION_REQUIRED" : boundedTradeQuoteDeliveryFailure(error);
+  const contentChanged = ["QUOTE_DELIVERY_HUB_AUTHORITY_CHANGED", "QUOTE_DELIVERY_CONTENT_CHANGED"].includes(code);
   const attachmentTooLarge = code === "EMAIL_MESSAGE_TOO_LARGE";
-  const retryAt = indeterminate || attachmentTooLarge ? "" : tradeQuoteDeliveryRetryAt(attempts, now.getTime());
-  const status = indeterminate ? "reconciliation_required" : "failed";
+  const retryAt = indeterminate || contentChanged || attachmentTooLarge ? "" : tradeQuoteDeliveryRetryAt(attempts, now.getTime());
+  const status = indeterminate || contentChanged ? "reconciliation_required" : "failed";
   const failed = await db.prepare(`UPDATE trade_crm_quote_deliveries
     SET status = ?, next_attempt_at = ?, lease_expires_at = '',
       failure_code = ?, last_error = ?, updated_at = ?
     WHERE id = ? AND firebase_uid = ? AND status = 'sending' AND attempts = ?`)
     .bind(status, retryAt, code,
       indeterminate ? "Check the outgoing mailbox before sending again. Delivery could not be confirmed."
+        : contentChanged ? "The frozen quote email or its customer access changed. Review delivery before sending a new quote version."
         : attachmentTooLarge ? "The quote PDF exceeds this mailbox's attachment limit. No email was sent. Reduce the document size and issue a new version."
         : retryAt ? "Delivery was not accepted and will retry automatically." : "Delivery needs attention.",
       current, row.id, row.firebase_uid, attempts)

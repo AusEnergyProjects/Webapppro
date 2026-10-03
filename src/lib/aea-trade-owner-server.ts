@@ -1,6 +1,7 @@
 import { opportunityServiceScopeSqlParts } from "./aea-trade-routing.mjs";
 import { PUBLIC_SITE } from "./public-site";
 import { isValidAbn } from "./trade-abn";
+import { allQualifiedTradeOpportunitySql } from "./public-plan-enquiry.mjs";
 
 function qualifiedColumn(value: string) {
   if (!/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
@@ -37,8 +38,10 @@ export function tradeOpportunityOwnerScopeSql(opportunityAlias: string, ownerCol
   return `(CASE WHEN json_valid(${raw}) THEN
     ((json_type(${raw}), json_array_length(${raw}) > 0) = ('array', 1)
       AND NOT EXISTS (SELECT 1 FROM json_each(${raw}) scope_service
-        WHERE scope_service.type <> 'text' OR trim(scope_service.value) = ''
-          OR (lower(trim(scope_service.value)) IN (${reserved}) AND NOT ${aeaTradeOwnerSql(ownerColumn)})))
+        WHERE scope_service.type <> 'text' OR trim(scope_service.value) = '')
+      AND (NOT EXISTS (SELECT 1 FROM json_each(${raw}) reserved_scope
+        WHERE lower(trim(reserved_scope.value)) IN (${reserved}))
+        OR ${aeaTradeOwnerSql(ownerColumn)} OR ${allQualifiedTradeOpportunitySql(opportunityAlias)}))
     ELSE 0 END)`;
 }
 

@@ -275,7 +275,7 @@ function rendererSnapshot() {
   };
 }
 
-test("0137 pins existing deliveries to renderer v1 and fresh issuance uses v3", () => {
+test("0137 pins existing deliveries to renderer v1 and fresh issuance uses v4", () => {
   const { database } = fixture();
   insertLegacy(database, { status: "delivered" });
   apply(database, migration);
@@ -285,7 +285,7 @@ test("0137 pins existing deliveries to renderer v1 and fresh issuance uses v3", 
   assert.equal(row.email_renderer_revision, 1);
   assert.equal(resolveTradeQuoteEmailRendererRevision(1), 1);
   assert.equal(resolveTradeQuoteEmailRendererRevision(2), 2);
-  assert.equal(resolveTradeQuoteEmailRendererRevision(), 3);
+  assert.equal(resolveTradeQuoteEmailRendererRevision(), 4);
   assert.throws(
     () => resolveTradeQuoteEmailRendererRevision(99),
     /QUOTE_DELIVERY_RENDERER_REVISION_UNSUPPORTED/,
@@ -365,7 +365,7 @@ test("frozen v1 and v2 rebuild and dispatch their exact immutable email content"
   }
 });
 
-async function preparedPdfDelivery({ revision = 3, sizeBytes, mismatchedPdf = false }) {
+async function preparedPdfDelivery({ revision = 3, sizeBytes, mismatchedPdf = false, customerHubUrl, hubLookup }) {
   const { database, db } = fixture();
   insertLegacy(database);
   apply(database, migration);
@@ -376,6 +376,7 @@ async function preparedPdfDelivery({ revision = 3, sizeBytes, mismatchedPdf = fa
   const snapshot = rendererSnapshot();
   const email = {
     snapshot,
+    customerHubUrl,
     shareUrl: "https://compare.ausenergyassessments.com/quote-review/link-1.legacy-secret",
     expiresAt: "2026-09-12T23:59:59.999Z",
   };
@@ -390,6 +391,11 @@ async function preparedPdfDelivery({ revision = 3, sizeBytes, mismatchedPdf = fa
   const pdf = new Uint8Array(sizeBytes);
   let pdfReads = 0;
   const dependencies = {
+    "./trade-quote-hub-email-server.ts": { tradeQuoteCustomerHubEmailUrl: async (_db, input, provisionMissing) => {
+      assert.deepEqual(input, { ownerUid: "owner-1", workOrderId: "work-1", customerId: "customer-1", recipientEmail: "customer@example.com" });
+      assert.equal(provisionMissing, undefined, 'delivery retries must never provision or rotate a capability');
+      return hubLookup ? hubLookup() : customerHubUrl;
+    } },
     "./service-reminder-delivery.ts": await import("../src/lib/service-reminder-delivery.ts"),
     "./trade-quote-delivery-policy.mjs": await import("../src/lib/trade-quote-delivery-policy.mjs"),
     "./trade-quote-email.ts": await import("../src/lib/trade-quote-email.ts"),
@@ -1507,4 +1513,72 @@ test("SQLite revoke guard preserves links with unsettled delivery generations", 
   assert.equal(Number(revoked.changes), 1);
   assert.equal(database.prepare("SELECT status FROM trade_crm_quote_links WHERE id='link-1'").get().status, "revoked");
   database.close();
+});
+
+
+test('renderer v3 stays byte-for-byte frozen when the modern input includes a customer hub',async()=>{
+  const input={snapshot:rendererSnapshot(),shareUrl:'https://compare.ausenergyassessments.com/quote-review/link-1.legacy-secret',expiresAt:'2026-09-12T23:59:59.999Z',customerHubUrl:'https://ausenergyassessments.com/customer-hub/private-hub'};
+  const historical=await buildTradeQuoteEmailForRevision(3,input);
+  assert.equal(await tradeQuoteEmailContentSha256(historical),'800d9fb15474a3c61eab9e7ba160415c20f7288fad2bd2a9f53539aea01b0320');
+  assert.doesNotMatch(historical.html,/customer-hub/);
+  const modern=await buildTradeQuoteEmailForRevision(4,input);
+  assert.match(modern.html,/Open my quotes &amp; questions/);
+  assert.ok(modern.html.includes('href="https://ausenergyassessments.com/customer-hub/private-hub"'));
+  assert.match(modern.html,/Review your quote/);assert.match(modern.text,/Download a PDF copy/);
+  assert.ok(modern.html.indexOf('Open my quotes')<modern.html.indexOf('Review your quote'));
+  const expected={revision:4,email:input,expectedSubject:modern.subject,expectedContentSha256:await tradeQuoteEmailContentSha256(modern)};
+  assert.deepEqual(await buildVerifiedTradeQuoteEmailForRevision(expected),modern);
+  await assert.rejects(buildVerifiedTradeQuoteEmailForRevision({...expected,email:{...input,customerHubUrl:'https://ausenergyassessments.com/customer-hub/rotated'}}),/CONTENT_CHANGED/);
+  await assert.rejects(buildVerifiedTradeQuoteEmailForRevision({...expected,email:{...input,customerHubUrl:undefined}}),/CONTENT_CHANGED/);
+});
+
+test('v4 customer hub, quote and PDF content remain identical after a definite provider failure',async()=>{
+  const hub='https://ausenergyassessments.com/customer-hub/private-hub';
+  const f=await preparedPdfDelivery({revision:4,sizeBytes:100,customerHubUrl:hub});
+  try{
+    const messages=[];
+    const first=await f.drain({...f.options,sendEmail:async message=>{messages.push(message);throw new Error('PROVIDER_REJECTED');}});
+    assert.equal(first.outcomes[0].outcome,'retrying');
+    const second=await f.drain({...f.options,now:new Date('2026-08-13T01:06:00.000Z'),sendEmail:async message=>{
+      messages.push(message);return {provider:'test',providerMessageId:'accepted',providerStatus:'accepted'};}});
+    assert.equal(second.outcomes[0].outcome,'provider_accepted');assert.deepEqual(messages[1],messages[0]);
+    assert.equal(messages[0].attachments.length,1);assert.match(messages[0].html,/Open my quotes/);
+    assert.ok(messages[0].body.includes('quote-review/link-1'));assert.ok(messages[0].body.includes('customer-hub/private-hub'));
+  }finally{f.database.close();}
+});
+
+test('v4 changed, omitted or revoked hub authority requires reconciliation without sending or minting on retry',async()=>{
+  for(const mode of ['rotated','omitted','revoked','changed_after_pdf']){
+    let calls=0;
+    const original='https://ausenergyassessments.com/customer-hub/private-hub';
+    const f=await preparedPdfDelivery({revision:4,sizeBytes:100,customerHubUrl:original,hubLookup:()=>{
+      calls++;
+      if(mode==='revoked')throw new Error('QUOTE_DELIVERY_HUB_AUTHORITY_CHANGED');
+      if(mode==='omitted')return undefined;
+      if(mode==='changed_after_pdf'&&calls===1)return original;
+      return 'https://ausenergyassessments.com/customer-hub/rotated';
+    }});
+    try{
+      let sends=0;
+      const options={...f.options,sendEmail:async()=>{sends++;throw new Error('MUST_NOT_SEND');}};
+      const result=await f.drain(options);
+      assert.equal(sends,0,mode);assert.equal(result.outcomes[0].outcome,'reconciliation_required',mode);
+      assert.equal(result.outcomes[0].nextAttemptAt,'');
+      const second=await f.drain({...options,now:new Date('2026-08-13T02:00:00.000Z')});
+      assert.equal(second.outcomes.length,0);assert.equal(sends,0);
+    }finally{f.database.close();}
+  }
+});
+
+test('a new standalone v4 quote remains deliverable when no shared hub authority is available',async()=>{
+  const f=await preparedPdfDelivery({revision:4,sizeBytes:100,customerHubUrl:undefined});
+  try{
+    let sent;
+    const result=await f.drain({...f.options,sendEmail:async message=>{
+      sent=message;return {provider:'test',providerMessageId:'standalone',providerStatus:'accepted'};
+    }});
+    assert.equal(result.outcomes[0].outcome,'provider_accepted');
+    assert.equal(sent.attachments.length,1);assert.match(sent.html,/Review your quote/);
+    assert.doesNotMatch(sent.html,/customer-hub/);assert.equal(sent.body,f.content.text);
+  }finally{f.database.close();}
 });

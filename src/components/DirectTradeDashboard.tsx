@@ -1823,12 +1823,11 @@ function DirectTradeDashboardContent() {
   }
 
   function dismissOpportunity(opportunity: DashboardOpportunity) {
-    if (!(["offered", "viewed"].includes(opportunity.matchStatus)
-      || (opportunity.platformOnly && opportunity.matchStatus === "interested"))) return;
+    if (!["offered", "viewed", "interested", ...(!opportunity.platformOnly ? ["connected"] : [])].includes(opportunity.matchStatus)) return;
     const confirmed = window.confirm(
       opportunity.platformOnly && opportunity.matchStatus === "interested"
         ? "Remove this lead from your business and withdraw its unaccepted quote? This does not remove it for other matched trades."
-        : "Remove this lead from your business? This does not remove it for other matched trades.",
+        : "Remove this lead from your business? Customer Q&A updates will stop. Saved customers, jobs and quotes remain available. This does not remove it for other matched trades.",
     );
     if (confirmed) void respondToOpportunity(opportunity.matchId, "declined");
   }
@@ -2748,7 +2747,7 @@ function DirectTradeDashboardContent() {
                             aria-controls={`opportunity-${opportunity.matchId}`}
                             onClick={() => setSelectedOpportunityMatchId(opportunity.matchId)}
                           >
-                            <span>{opportunity.platformOnly ? "Australian Energy Assessments protected lead" : "Australian Energy Assessments supplied lead"} | {opportunity.matchStatus === "offered" ? "New" : opportunity.matchStatus.replaceAll("_", " ")}</span>
+                            <span>{opportunity.platformOnly ? "Australian Energy Assessments protected lead" : "Australian Energy Assessments supplied lead"} | {opportunity.matchStatus === "offered" ? "New" : !opportunity.platformOnly && opportunity.matchStatus === "interested" ? "Customer added" : opportunity.matchStatus.replaceAll("_", " ")}</span>
                             <strong>{customerName}</strong>
                             <p>{opportunity.enquiryPack?.summary || opportunity.summary}</p>
                             <small>{opportunityBroadLocation(opportunity)} | {opportunity.timing.replaceAll("_", " ")}</small>
@@ -2788,7 +2787,7 @@ function DirectTradeDashboardContent() {
                             <div className="dashboard-opportunity-heading">
                               <span>
                                 {releasedCustomerContact?.releaseScope === "aea_only"
-                                  ? "Australian Energy Assessments enquiry · Australia-wide"
+                                  ? <>Australian Energy Assessments enquiry · {opportunityBroadLocation(opportunity)}</>
                                   : <>{opportunityBroadLocation(opportunity)} | {opportunity.distanceBand}</>}
                               </span>
                               <h3 id={previewHeadingId}>{customerDisplayName}</h3>
@@ -2802,10 +2801,11 @@ function DirectTradeDashboardContent() {
                               <strong>
                                 {opportunity.matchStatus === "offered"
                                   ? "New"
+                                  : !opportunity.platformOnly && opportunity.matchStatus === "interested" ? "Customer added"
                                   : opportunity.matchStatus.replaceAll("_", " ")}
                               </strong>
-                              {(["offered", "viewed"].includes(opportunity.matchStatus)
-                                || (opportunity.platformOnly && opportunity.matchStatus === "interested")) && <button
+                              {(["offered", "viewed", "interested"].includes(opportunity.matchStatus)
+                                || (!opportunity.platformOnly && opportunity.matchStatus === "connected")) && <button
                                 type="button"
                                 className="dashboard-lead-dismiss"
                                 aria-label={`Remove ${customerDisplayName} from this business's leads`}
@@ -2817,6 +2817,15 @@ function DirectTradeDashboardContent() {
                               </button>}
                             </div>
                           </header>
+                          {isExpanded && !opportunity.platformOnly && releasedCustomerContact && <TradeCustomerHubInterest
+                            matchId={opportunity.matchId}
+                            disabled={opportunityBusy === opportunity.matchId}
+                            onOpenQa={({ customerId, workOrderId }) => {
+                              setOpportunities(current => current.map(item => item.matchId === opportunity.matchId && item.matchStatus !== "connected" ? { ...item, matchStatus: "interested" } : item));
+                              setCommandTarget({ workspace: "work", kind: "customer", id: customerId, query: "", customerSection: "qa", workOrderId, nonce: Date.now() });
+                              setWorkspace("work");
+                            }}
+                          />}
                             <section
                               id={customerIdentityId}
                               className="dashboard-connected-customer-identity"
@@ -2999,14 +3008,13 @@ function DirectTradeDashboardContent() {
                             <section className="dashboard-opportunity-conversion" aria-label="Customer contact workflow action"><div><strong>Create the CRM job when you are ready to arrange the work</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>
                           </>}
                           {opportunity.platformOnly && opportunity.matchStatus === "connected" && !releasedCustomerContact && opportunity.quote?.customerDecision !== "accepted" && <div className="dashboard-contact-allowance"><div><strong>Waiting for the customer to choose a business</strong><span>Contact details remain protected until the customer chooses to get in touch with this business.</span></div></div>}
-                          {!opportunity.platformOnly && releasedCustomerContact?.releaseScope === "all_qualified_trades" && <TradeCustomerHubInterest matchId={opportunity.matchId} />}
                           {(opportunity.matchStatus !== "connected" || !opportunity.platformOnly) && <div className="dashboard-opportunity-actions dashboard-lead-preview-actions">
-                            {opportunity.matchStatus === "offered" && <button
+                            {opportunity.platformOnly && ["offered", "viewed"].includes(opportunity.matchStatus) && <button
                               type="button"
                               disabled={opportunityBusy === opportunity.matchId}
-                              onClick={() => void respondToOpportunity(opportunity.matchId, "viewed")}
+                              onClick={() => void respondToOpportunity(opportunity.matchId, "interested")}
                             >
-                              Save for review
+                              Interested
                             </button>}
                             <button
                               type="button"
@@ -3061,9 +3069,9 @@ function DirectTradeDashboardContent() {
                     <div className="dashboard-empty-state">
                       <strong>No opportunities assigned</strong>
                       <p>
-                        Matching uses postcode distance, your service radius,
-                        verified capability, availability and recent allocation
-                        load. No opportunity is opened to every installer.
+                        New enquiries are shared with every verified TLink business
+                        offering the requested service in the customer&apos;s area.
+                        Check your services, coverage and availability in Business settings.
                       </p>
                     </div>
                   )}
@@ -3074,9 +3082,9 @@ function DirectTradeDashboardContent() {
                   )}
                   <div className="dashboard-profile-summary">
                     <div>
-                      <span>{selectedLeadOpportunity?.customerContact?.releaseScope === "aea_only" ? "Enquiry coverage" : "Serviceability"}</span>
+                      <span>{selectedLeadOpportunity ? "Job location" : "Your service area"}</span>
                       <strong>
-                        {selectedLeadOpportunity?.customerContact?.releaseScope === "aea_only" ? "Australia-wide" : <>{profile.serviceBasePostcode || profile.postcode} ·{" "}
+                        {selectedLeadOpportunity ? opportunityBroadLocation(selectedLeadOpportunity) : <>{profile.serviceBasePostcode || profile.postcode} ·{" "}
                         {profile.serviceRadiusKm || 50} km radius ·{" "}
                         {profile.serviceStates.join(", ")}</>}
                       </strong>

@@ -10,6 +10,7 @@ import { validateLeadPayload } from "../src/lib/lead-validation.mjs";
 import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
+  isAllQualifiedTradeConsent,
 } from "../src/lib/public-plan-enquiry.mjs";
 import { PUBLIC_PLAN_QUOTE_PREPARATION_VERSION } from "../src/lib/public-plan-quote-preparation.mjs";
 
@@ -101,6 +102,22 @@ test("matched-trade selection builds the canonical no-photo public-plan request 
   ]);
 });
 
+test("assessment, safety and mixed service selections keep the same all-qualified consented enquiry path", () => {
+  for (const services of [["assessment"], ["gas-safety-check"], ["minimum-rental-standards", "solar"]]) {
+    const submission = buildEnergyAssistantEnquirySubmission({
+      destination: "matched-trades", tradeEnquiry: tradeEnquiry({ services, shareKnownPlanFacts: false }),
+    });
+    assert.equal(submission.endpoint, "/api/leads");
+    const validated = validateLeadPayload(submission.payload);
+    assert.equal(validated.ok, true, validated.error);
+    const envelope = createLeadEnvelope(validated.value);
+    assert.deepEqual(envelope.projectCategories, services);
+    const receipt = envelope.directTradeTriage.contactConsentReceipt;
+    assert.equal(isAllQualifiedTradeConsent(receipt.noticeVersion, receipt.purpose), true);
+    assert.equal(submission.payload.quotePreparation.expectedPhotoCount, 0);
+  }
+});
+
 test("saved plan facts remain private unless separately selected as quote answers", () => {
   const submission = buildEnergyAssistantEnquirySubmission({
     destination: "matched-trades",
@@ -144,42 +161,18 @@ test("only the optional contact fields selected by the customer enter the trade 
   ]);
 });
 
-test("AEA-only follow-up selects only the existing assistant-lead endpoint", () => {
-  const assistantPayload = {
-    requestId: "lead-request-00000001",
-    tradeSharingConsent: { accepted: false },
-  };
-  const submission = buildEnergyAssistantEnquirySubmission({
-    destination: "aea-follow-up",
-    assistantPayload,
-  });
-  assert.deepEqual(submission, {
-    endpoint: "/api/energy-assistant/leads",
-    payload: assistantPayload,
-  });
-  assert.throws(
-    () => buildEnergyAssistantEnquirySubmission({
-      destination: "aea-follow-up",
-      assistantPayload,
-      tradeEnquiry: tradeEnquiry(),
-    }),
-    /not both/i,
-  );
-  assert.throws(
-    () => buildEnergyAssistantEnquirySubmission({
-      destination: "aea-follow-up",
-      assistantPayload: { ...assistantPayload, tradeSharingConsent: { accepted: true } },
-    }),
-    /must use the private-plan trade enquiry path/i,
-  );
-  assert.throws(
-    () => buildEnergyAssistantEnquirySubmission({
-      destination: "matched-trades",
-      assistantPayload,
-      tradeEnquiry: tradeEnquiry(),
-    }),
-    /not both/i,
-  );
+test("an earlier AEA-only destination requires fresh matched-trade consent and cannot be reinterpreted", () => {
+  const assistantPayload = { requestId: "lead-request-00000001", tradeSharingConsent: { accepted: false } };
+  for (const payload of [
+    { destination: "aea-follow-up", assistantPayload },
+    { destination: "aea-follow-up", assistantPayload, tradeEnquiry: tradeEnquiry() },
+    { destination: "aea-follow-up", assistantPayload: { ...assistantPayload, tradeSharingConsent: { accepted: true } } },
+  ]) {
+    assert.throws(() => buildEnergyAssistantEnquirySubmission(payload), /new matched-trade enquiry.*current sharing consent/i);
+  }
+  assert.throws(() => buildEnergyAssistantEnquirySubmission({
+    destination: "matched-trades", assistantPayload, tradeEnquiry: tradeEnquiry(),
+  }), /not both/i);
 });
 
 test("trade matching fails closed without explicit consent, selected services, required private records or a safe bounded contract", () => {
@@ -207,7 +200,7 @@ test("trade matching fails closed without explicit consent, selected services, r
 test("public matching copy is direct, independent, provider-neutral and truthful about the privacy boundary", () => {
   assert.match(ENERGY_ASSISTANT_MATCHING_EXPLANATION, /provider-neutral, independent guidance/i);
   assert.match(ENERGY_ASSISTANT_MATCHING_EXPLANATION, /one structured enquiry/i);
-  assert.match(ENERGY_ASSISTANT_MATCHING_EXPLANATION, /selected upgrade and area/i);
+  assert.match(ENERGY_ASSISTANT_MATCHING_EXPLANATION, /all approved trades matching at least one selected service and your area/i);
   assert.match(ENERGY_ASSISTANT_MATCHING_EXPLANATION, /deal directly/i);
   assert.match(ENERGY_ASSISTANT_MATCHING_EXPLANATION, /does not rank or recommend brands, products, suppliers or installers/i);
   assert.doesNotMatch(ENERGY_ASSISTANT_MATCHING_EXPLANATION, /no middleman|without a .*middleman/i);

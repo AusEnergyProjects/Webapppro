@@ -1,14 +1,15 @@
 import { tradeOpportunityServiceScopeAllowed } from "./aea-trade-routing.mjs";
 import {
-  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
-  PUBLIC_PLAN_CONSENT_PURPOSE,
+  AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE,
+  isAllQualifiedTradeConsent,
   publicPlanContactReleaseDisclosedFieldsAreValid,
 } from "./public-plan-enquiry.mjs";
 import {
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
-  QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
-  QUICK_UPGRADE_CONSENT_PURPOSE,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
 } from "./quick-upgrade-enquiry.mjs";
 
 function exactStoredDisclosedFields(value) {
@@ -25,18 +26,19 @@ export function aeaServiceContactConsentAllows(row, allowAeaDelivery = false) {
     && tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories, true)
     && !tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories)
     && (
-      (row.public_contact_notice_version === QUICK_UPGRADE_CONSENT_NOTICE_VERSION
-        && row.public_contact_consent_purpose === QUICK_UPGRADE_CONSENT_PURPOSE)
+      (row.public_contact_notice_version === AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION
+        && row.public_contact_consent_purpose === AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE)
       || (row.public_contact_notice_version === AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION
         && row.public_contact_consent_purpose === AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE)
-      || (row.public_contact_notice_version === PUBLIC_PLAN_CONSENT_NOTICE_VERSION
-        && row.public_contact_consent_purpose === PUBLIC_PLAN_CONSENT_PURPOSE)
+      || (row.public_contact_notice_version === AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION
+        && row.public_contact_consent_purpose === AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE)
     );
 }
 
 export function publicTradeContactForMatchedLead(row, allowAeaDelivery = false) {
+  const allQualifiedConsent = isAllQualifiedTradeConsent(row?.public_contact_notice_version, row?.public_contact_consent_purpose);
   if (!row?.public_contact_release_id
-    || !tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories, allowAeaDelivery)) return null;
+    || !tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories, allowAeaDelivery, allQualifiedConsent)) return null;
   const disclosedFields = exactStoredDisclosedFields(
     row.public_contact_disclosed_fields,
   );
@@ -126,7 +128,7 @@ export function publicTradeContactForMatchedLead(row, allowAeaDelivery = false) 
     grantedAt: row.public_contact_granted_at,
     noticeVersion: row.public_contact_notice_version,
     message,
-    releaseScope: tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories)
+    releaseScope: tradeOpportunityServiceScopeAllowed(row.opportunity_service_categories, false, allQualifiedConsent)
       ? "all_qualified_trades" : "aea_only",
   };
 }

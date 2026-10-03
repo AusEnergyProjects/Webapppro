@@ -27,7 +27,7 @@ const question = { id: "question-one", prompt: "Where is the switchboard?", kind
   answer: "In the garage", replies: [{ id: "reply-one", body: "Thanks, that helps", authorType: "trade", createdAt: "2026-10-03" }],
   revision: 1, closed: false, files: [{ id: "file/one", name: "private-plan.pdf", type: "application/pdf" }] };
 const view = { ok: true, available: true, accepting: true, interested: true, interestRevision: 4, canManageInterest: true,
-  canAsk: true, workOrderId: "job-one", questions: [question] };
+  canAsk: true, workOrderId: "job-one", customerId: "customer-one", questions: [question] };
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
 
 function harness(t, api, options = {}) {
@@ -140,15 +140,35 @@ test("explicit interest PATCH uses its revision and a stale GET cannot turn upda
   assert.equal(textareas(tree)[0].props.disabled, true); assert.equal(button(tree, "Share reply"), undefined);
 });
 
-test("the compact released-lead switch works before a job exists without invoking quote actions", async t => {
+test("Interested adds the customer and opens exact Q&A in one click; off and re-on preserve the same record", async t => {
+  const opened = [];
   let current = { ...view, interested: false, interestRevision: 0, workOrderId: "", questions: [] };
-  const h = harness(t, async (_path, init) => { if (init.method === "PATCH") current = { ...view, interestRevision: 1 }; return response(current); },
-    { props: { matchId: "match/one", interestOnly: true } });
+  const h = harness(t, async (_path, init) => { if (init.method === "PATCH") current = { ...view, interested: JSON.parse(init.body).interested, interestRevision: current.interestRevision + 1 }; return response(current); },
+    { props: { matchId: "match/one", interestOnly: true, onOpenQa: target => opened.push(target) } });
   let tree = await h.settle(); assert.equal(h.requests[0].path, "/api/trade-customer-hub?matchId=match%2Fone");
   assert.equal(textareas(tree).length, 0); assert.equal(button(tree, "Ask customer"), undefined);
-  toggle(tree).props.onClick(); tree = await h.settle(); assert.equal(toggle(tree).props["aria-checked"], true);
+  button(tree, "Interested").props.onClick(); button(tree, "Interested").props.onClick(); tree = await h.settle();
+  assert.equal(button(tree, "Interested").props["aria-pressed"], true);
+  assert.deepEqual(opened, [{ customerId: "customer-one", workOrderId: "job-one" }]);
   assert.deepEqual(JSON.parse(h.requests.find(item => item.init.method === "PATCH").init.body), { matchId: "match/one", interested: true, revision: 0 });
   assert.equal(h.requests.some(item => item.init.method === "POST"), false);
+  assert.equal(h.requests.filter(item => item.init.method === "PATCH").length, 1);
+  button(tree, "Not interested").props.onClick(); tree = await h.settle();
+  assert.equal(button(tree, "Not interested").props["aria-pressed"], true); assert.equal(opened.length, 1);
+  button(tree, "Interested").props.onClick(); tree = await h.settle();
+  assert.equal(opened.length, 2); assert.deepEqual(opened[1], opened[0]);
+  button(tree, "Interested").props.onClick(); assert.equal(opened.length, 3);
+  assert.equal(h.requests.filter(item => item.init.method === "PATCH").length, 3, "Opening an already interested customer does not create another write");
+});
+
+test("lead interest failure and missing customer identity never navigate or report success", async t => {
+  for (const result of [response({ ok: false, error: "Interest could not be saved." }, 409), response({ ...view, customerId: "" })]) {
+    const opened = [];
+    const h = harness(t, async (_path, init) => init.method === "PATCH" ? result : response({ ...view, interested: false }),
+      { props: { matchId: "match-one", interestOnly: true, onOpenQa: target => opened.push(target) } });
+    let tree = await h.settle(); button(tree, "Interested").props.onClick(); tree = await h.settle();
+    assert.equal(opened.length, 0); assert.match(text(tree), /could not be/); assert.doesNotMatch(text(tree), /You're interested/);
+  }
 });
 
 test("closed or permission-limited views retain existing answers and prevent asking and replying", async t => {

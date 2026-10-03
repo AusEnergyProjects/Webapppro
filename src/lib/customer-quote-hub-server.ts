@@ -11,14 +11,15 @@ import { customerHubBusinessProfile } from "./customer-hub-business-profile";
 
 type Row=Record<string,unknown>;
 const strings=(value:unknown):string[]=>{ try { const list=JSON.parse(String(value||"[]")); return Array.isArray(list)?list.filter((item):item is string=>typeof item==="string"):[]; } catch{return [];} };
-export const hubParticipantJoins=`FROM trade_opportunity_matches match
+export const hubParticipantContactJoins=`FROM trade_opportunity_matches match
   JOIN trade_opportunities opportunity ON opportunity.id=match.opportunity_id AND opportunity.status='open' AND opportunity.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
     AND ${tradeOpportunityOwnerScopeSql("opportunity","match.firebase_uid")}
     AND ${certificateLeadEligibilitySql("match.firebase_uid","match.matched_categories","opportunity.state")}
   JOIN trade_accounts trade ON trade.firebase_uid=match.firebase_uid AND trade.partner_type='installer' AND ${verifiedTradeAccountPredicate("trade")}
-  JOIN public_trade_lead_contact_releases contact ON contact.opportunity_id=opportunity.id AND contact.source_reference=opportunity.source_reference
+  JOIN public_trade_lead_contact_releases contact ON contact.opportunity_id=opportunity.id AND contact.source_reference=opportunity.source_reference AND contact.postcode=opportunity.postcode
     AND contact.status='active' AND contact.withdrawn_at='' AND ${publicPlanContactReleaseAccessSql("contact")}
-    AND datetime(contact.granted_at) IS NOT NULL
+    AND datetime(contact.granted_at) IS NOT NULL`;
+export const hubParticipantJoins=`${hubParticipantContactJoins}
   JOIN customer_quote_hubs hub ON hub.opportunity_id=opportunity.id AND hub.release_id=contact.id
     AND hub.recipient_email=lower(trim(contact.customer_email)) AND hub.revoked_at='' AND hub.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
   WHERE match.status IN ('offered','viewed','interested','connected')`;

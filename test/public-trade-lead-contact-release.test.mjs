@@ -670,7 +670,7 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(adminMatchesRoute, /accountHasFeature\(firebaseUid, "installer", "installer_leads"\)/);
   assert.match(adminMatchesRoute, /qualifyingServiceArea\(account, String\(opportunity\.postcode\)\)/);
   assert.doesNotMatch(`${opportunityServer}\n${tradeRoute}\n${tradeEnquiriesRoute}\n${adminMatchesRoute}`, /trade_capability|capability_review|service qualification/i);
-  assert.match(tradeLeadAccess, /releaseScope: tradeOpportunityServiceScopeAllowed\(row.opportunity_service_categories\)[\s\S]*\? "all_qualified_trades" : "aea_only"/);
+  assert.match(tradeLeadAccess, /releaseScope: tradeOpportunityServiceScopeAllowed\(row.opportunity_service_categories, false, allQualifiedConsent\)[\s\S]*\? "all_qualified_trades" : "aea_only"/);
   assert.doesNotMatch(tradeRoute, /SELECT \* FROM public_trade_lead_contact_releases/);
   assert.match(tradeDashboard, /every verified matching trade/);
   assert.doesNotMatch(tradeDashboard, /Allocation \{opportunity\.allocationRank\} of 6/);

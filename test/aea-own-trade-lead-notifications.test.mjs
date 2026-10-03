@@ -25,8 +25,8 @@ function load(name, dependencies) {
 // Use the real verification SQL. Unused authentication/service dependencies are
 // isolated; no identity, provider or production database is contacted by tests.
 const access = load('trade-access-server', { '../../db': {}, './firebase-server': {}, './creditex-schema-guards': {}, './trade-abn': {}, './trade-mfa-server': certificateTestDependency('./trade-mfa-server') });
-const owner = load('aea-trade-owner-server', { './aea-trade-routing.mjs': routing, './public-site': publicSite, './trade-abn': tradeAbn });
-const eligibility = load('trade-certificate-leads', { './aea-trade-owner-server': owner, './aea-trade-routing.mjs': routing });
+const owner = load('aea-trade-owner-server', { './aea-trade-routing.mjs': routing, './public-plan-enquiry.mjs': notices, './public-site': publicSite, './trade-abn': tradeAbn });
+const eligibility = load('trade-certificate-leads', { './trade-access-server': access });
 const retry = load('opportunity-notification-retry', { './aea-trade-owner-server.ts': owner });
 
 function fixture(t, { scope = ['assessment', 'solar'], status = 'open' } = {}) {
@@ -58,7 +58,8 @@ function fixture(t, { scope = ['assessment', 'solar'], status = 'open' } = {}) {
   }
   sql.exec("INSERT INTO admin_users VALUES ('aea','active','owner')");
   sql.prepare('INSERT INTO trade_opportunities VALUES (?,?,?,?,?,?,?,?,?,?)').run('opportunity', JSON.stringify(scope), 'Private suburb', '3000', 'VIC', 'planning', '2099-01-01T00:00:00.000Z', now, status, 'public-enquiry');
-  sql.prepare('INSERT INTO public_trade_lead_contact_releases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('release', 'opportunity', 'active', notices.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, notices.PUBLIC_PLAN_CONSENT_PURPOSE, '["customer_email","postcode","service_categories"]', 'Private', 'Customer', '', '', '', '3000', '', 'private-customer@example.test', '0412345678', now, '');
+  sql.prepare('INSERT INTO public_trade_lead_contact_releases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('release', 'opportunity', 'active', notices.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION, notices.AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE, '["customer_email","postcode","service_categories"]', 'Private', 'Customer', '', '', '', '3000', '', 'private-customer@example.test', '0412345678', now, '');
+  sql.exec("ALTER TABLE public_trade_lead_contact_releases ADD COLUMN source_reference TEXT NOT NULL DEFAULT 'public-enquiry'");
   for (const uid of ['aea', 'external']) sql.prepare('INSERT INTO trade_opportunity_matches VALUES (?,?,?,?,?,?)').run(`match-${uid}`, 'opportunity', uid, 'offered', JSON.stringify(scope), now);
   const sent = []; const db = { beforeClaim: null };
   const statement = (query, values = []) => ({
@@ -96,11 +97,48 @@ test('reserved assessment and mixed notifications enqueue only the verified AEA 
   }
 });
 
+test('new all-qualified consent sends each verified matching business one notification without Creditex onboarding', async t => {
+  for (const scope of [['assessment'], ['assessment', 'solar'], ['hot-water']]) {
+    const f = fixture(t, { scope });
+    f.sql.exec("DELETE FROM creditex_business_onboarding; DELETE FROM trade_training_completions; DELETE FROM trade_training_attempts");
+    f.sql.prepare('UPDATE trade_accounts SET capabilities=?,availability_status=?').run(JSON.stringify(scope), 'limited');
+    f.sql.prepare('UPDATE public_trade_lead_contact_releases SET notice_version=?,consent_purpose=?')
+      .run(notices.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, notices.PUBLIC_PLAN_CONSENT_PURPOSE);
+    f.sql.exec('DELETE FROM trade_opportunity_notification_deliveries');
+    assert.deepEqual(await f.server.ensureOpportunityNotificationDeliveries('opportunity'), { activeMatchCount: 2, deliveryCount: 2 });
+    assert.deepEqual(await f.server.ensureOpportunityNotificationDeliveries('opportunity'), { activeMatchCount: 2, deliveryCount: 2 });
+    assert.equal((await f.drain()).sent, 2, JSON.stringify(scope));
+    assert.deepEqual(f.sent.map(message => message.recipient).sort(), ['aea@example.test', 'external@example.test']);
+    for (const message of f.sent) assert.doesNotMatch(message.body, /private-customer@example|0412345678|Private Customer|Private suburb/);
+    assert.equal((await f.drain()).attempted, 0);
+  }
+});
+
+test('new all-qualified final claim rechecks exact consent, verification and offered services after preflight', async t => {
+  for (const change of [
+    "UPDATE public_trade_lead_contact_releases SET source_reference='different-project'",
+    "UPDATE public_trade_lead_contact_releases SET status='withdrawn'",
+    "UPDATE public_trade_lead_contact_releases SET notice_version='unrecognised'",
+    "UPDATE trade_accounts SET verification_status='pending'",
+    "UPDATE trade_accounts SET capabilities='[\"hot-water\"]'",
+    "UPDATE trade_accounts SET service_states='[\"NSW\"]'",
+    "UPDATE trade_accounts SET availability_status='paused'",
+  ]) {
+    const f = fixture(t);
+    f.sql.prepare('UPDATE public_trade_lead_contact_releases SET notice_version=?,consent_purpose=?')
+      .run(notices.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, notices.PUBLIC_PLAN_CONSENT_PURPOSE);
+    f.db.beforeClaim = () => f.sql.exec(change);
+    await f.drain();
+    assert.equal(f.sent.length, 0, change);
+    assert.equal(f.sql.prepare('SELECT SUM(attempts) count FROM trade_opportunity_notification_deliveries').get().count, 0, change);
+  }
+});
+
 function quickReceipt(f, { shareEmail = false, current = false } = {}) {
   f.sql.prepare(`UPDATE public_trade_lead_contact_releases SET notice_version=?, consent_purpose=?,
     disclosed_fields=?, customer_street_address='10 Private Street', customer_suburb='Melbourne', customer_address_state='VIC'`)
-    .run(current ? quickNotices.QUICK_UPGRADE_CONSENT_NOTICE_VERSION : quickNotices.AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
-      current ? quickNotices.QUICK_UPGRADE_CONSENT_PURPOSE : quickNotices.AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+    .run(current ? quickNotices.AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION : quickNotices.AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+      current ? quickNotices.AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE : quickNotices.AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
       JSON.stringify(['postcode', 'service_categories', 'customer_address', ...(shareEmail ? ['customer_email'] : [])]));
 }
 
@@ -145,13 +183,13 @@ test('pre-existing external matches never receive reserved data and ordinary ser
   const ordinary = fixture(t, { scope: ['solar'] }); assert.equal((await ordinary.drain()).sent, 2);
 });
 
-test('verified AEA receives reserved enquiries nationwide without exposing them to external trades', async t => {
+test('a verified business outside its offered state does not receive an enquiry', async t => {
   const f = fixture(t);
   f.sql.exec("UPDATE trade_accounts SET service_states='[\"NSW\"]' WHERE firebase_uid='aea'");
   const result = await f.drain();
-  assert.equal(result.sent, 1);
-  assert.equal(result.skipped, 1);
-  assert.deepEqual(f.sent.map(message => message.recipient), ['aea@example.test']);
+  assert.equal(result.sent, 0);
+  assert.equal(result.skipped, 2);
+  assert.deepEqual(f.sent, []);
 });
 
 test('draft, malformed scope, withdrawn consent, unavailable owner and revoked authority fail closed', async t => {
@@ -226,7 +264,7 @@ test('Cloudflare D1 compiles and executes notification recovery, context and ato
   });
   f.db.prepare = query => runtimeStatement(query);
   f.db.batch = statements => d1.batch(statements.map(statement => statement.native));
-  await d1.prepare('UPDATE trade_accounts SET service_states=? WHERE firebase_uid=?').bind('["NSW"]', 'aea').run();
+  await d1.prepare('UPDATE trade_accounts SET service_states=? WHERE firebase_uid=?').bind('["VIC"]', 'aea').run();
   await d1.prepare('DELETE FROM trade_opportunity_notification_deliveries').run();
   assert.deepEqual(await f.server.ensureOpportunityNotificationDeliveries('opportunity'), { activeMatchCount: 1, deliveryCount: 1 });
   await d1.prepare("UPDATE trade_opportunity_notification_deliveries SET status='skipped',eligibility_reason='Optional opportunity emails are disabled.'").run();
@@ -264,4 +302,11 @@ test('Cloudflare D1 compiles and executes notification recovery, context and ato
     await d1.prepare(restore).run();
   }
   assert.equal(f.sent.length, 3);
+  await d1.prepare('UPDATE public_trade_lead_contact_releases SET notice_version=?,consent_purpose=?')
+    .bind(notices.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, notices.PUBLIC_PLAN_CONSENT_PURPOSE).run();
+  await d1.prepare('DELETE FROM creditex_business_onboarding').run();
+  await d1.prepare('DELETE FROM trade_opportunity_notification_deliveries').run();
+  assert.deepEqual(await f.server.ensureOpportunityNotificationDeliveries('opportunity'), { activeMatchCount: 2, deliveryCount: 2 });
+  assert.equal((await f.drain()).sent, 2, 'actual D1 sends the new all-qualified enquiry without Creditex approval');
+  assert.equal(f.sent.length, 5);
 });

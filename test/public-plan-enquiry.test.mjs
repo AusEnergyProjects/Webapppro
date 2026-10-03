@@ -323,7 +323,7 @@ test("the public component sends the visible contact fields and bounded plan sel
   assert.doesNotMatch(component, /residentialStateFromPostcode\(postcode\)/);
   assert.match(component, /maxLength=\{500\}/);
   assert.match(component, /if \(result\.filtered\)/);
-  assert.match(component, /approved trades that service my area and offer at least one selected service/);
+  assert.match(component, /all approved trades that service my area and offer at least one selected service/);
   assert.doesNotMatch(component, /TLink|Creditex/);
   assert.match(component, /full plan and PDF stay private/);
   assert.match(component, /Share my first and last name/);

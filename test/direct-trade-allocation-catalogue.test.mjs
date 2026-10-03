@@ -38,7 +38,7 @@ test("opportunity allocation reaches every qualified trade and preserves determi
   assert.match(opportunityServer, /fairnessLoad - right\.fairnessLoad/);
   assert.match(opportunityServer, /service_radius_km/);
   assert.match(opportunityServer, /verifiedTradeAccountPredicate\("a"\)/);
-  assert.match(opportunityServer, /matchedServiceCategories\(categories, capabilities\)/);
+  assert.match(opportunityServer, /matchedServiceCategories\(categories, capabilities, allQualifiedConsent\)/);
   assert.doesNotMatch(opportunityServer, /trade_capability|verified_service_categories|CAPABILITY_REVIEW/);
   assert.match(
     opportunityServer,

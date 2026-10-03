@@ -14,7 +14,6 @@ const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0017_brief_timeslip.sql");
 const tradeRoute = read("../src/app/api/trade-asset-lifecycle/route.ts");
 const adminRoute = read("../src/app/api/admin/asset-safety/route.ts");
-const tradeUi = read("../src/components/TradeAssetLifecycle.tsx");
 const adminUi = read("../src/components/AdminAssetSafety.tsx");
 
 test("service cadence dates preserve the last valid day of a target month", () => {
@@ -77,7 +76,6 @@ test("installer lifecycle actions require reviewed ABN access, installer role an
   assert.doesNotMatch(tradeRoute, /billing_status/);
   assert.match(tradeRoute, /work_order_id = \? AND firebase_uid = \?/);
   assert.match(tradeRoute, /Keep customer names, contact details and addresses out of service records/);
-  assert.match(tradeUi, /No household identity was used/);
 });
 
 test("administrators require sourced HTTPS notices and audited publication controls", () => {

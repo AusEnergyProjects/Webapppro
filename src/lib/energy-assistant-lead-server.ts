@@ -2,6 +2,11 @@ import { requiresAeaDelivery } from "./aea-service-identity.mjs";
 import { tradeOpportunityServiceScopeSql } from "./aea-trade-routing.mjs";
 import { addressLocalitiesForPostcode } from "./address-localities.mjs";
 import {
+  isAllQualifiedTradeConsent,
+  LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+  LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+} from "./public-plan-enquiry.mjs";
+import {
   ENERGY_ASSISTANT_QUOTE_BRIEF_VERSION,
   ENERGY_ASSISTANT_SERVICE_CONSENT_PURPOSE,
   ENERGY_ASSISTANT_SERVICE_CONSENT_VERSION,
@@ -159,6 +164,8 @@ type NormalizedLead = {
   marketingConsent: boolean;
   marketingConsentGrantedAt: string;
   tradeSharingConsent: boolean;
+  tradeSharingNoticeVersion: string;
+  tradeSharingPurpose: string;
   tradeSharingGrantedAt: string;
   tradeDisclosedFields: string[];
   tradeDisclosedSnapshot: Record<string, unknown>;
@@ -495,7 +502,7 @@ function tradeReceiptFrom(value: unknown, now: Date, phone: string | null) {
   const receipt = objectFrom(value, "Trade-sharing choice") as ConsentReceipt;
   if (receipt.accepted === false) {
     exactKeys(receipt as Record<string, unknown>, new Set(["accepted"]), "Trade-sharing choice");
-    return { accepted: false, grantedAt: "", sharePhone: false };
+    return { accepted: false, noticeVersion: "", purpose: "", grantedAt: "", sharePhone: false };
   }
   exactKeys(
     receipt as Record<string, unknown>,
@@ -503,11 +510,16 @@ function tradeReceiptFrom(value: unknown, now: Date, phone: string | null) {
     "Trade-sharing consent",
   );
   const grantedAt = typeof receipt.grantedAt === "string" ? receipt.grantedAt : "";
+  const noticeVersion = typeof receipt.noticeVersion === "string" ? receipt.noticeVersion : "";
+  const purpose = typeof receipt.purpose === "string" ? receipt.purpose : "";
+  const currentReceipt = noticeVersion === ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION
+    && purpose === ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE;
+  const legacyReceipt = noticeVersion === LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION
+    && purpose === LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE;
   const parsed = Date.parse(grantedAt);
   if (
     receipt.accepted !== true
-    || receipt.noticeVersion !== ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION
-    || receipt.purpose !== ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE
+    || (!currentReceipt && !legacyReceipt)
     || typeof receipt.sharePhone !== "boolean"
     || (receipt.sharePhone && !phone)
     || !Number.isFinite(parsed)
@@ -515,7 +527,7 @@ function tradeReceiptFrom(value: unknown, now: Date, phone: string | null) {
   ) {
     throw new EnergyAssistantLeadError(400, "TRADE_CONSENT_INVALID", "Confirm the current trade-sharing choice.");
   }
-  return { accepted: true, grantedAt: new Date(parsed).toISOString(), sharePhone: receipt.sharePhone };
+  return { accepted: true, noticeVersion, purpose, grantedAt: new Date(parsed).toISOString(), sharePhone: receipt.sharePhone };
 }
 
 async function sha256Hex(value: string) {
@@ -589,7 +601,7 @@ async function normalizeLead(input: EnergyAssistantLeadInput, now: Date): Promis
     : [];
   const tradeDisclosedSnapshot: Record<string, unknown> = tradeReceipt.accepted
     ? {
-      version: ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+      version: tradeReceipt.noticeVersion,
       grantedAt: tradeReceipt.grantedAt,
       disclosedFields: tradeDisclosedFields,
       contact: {
@@ -621,6 +633,8 @@ async function normalizeLead(input: EnergyAssistantLeadInput, now: Date): Promis
     marketingConsent: input.marketingConsent,
     marketingConsentGrantedAt: input.marketingConsent ? serviceConsentGrantedAt : "",
     tradeSharingConsent: tradeReceipt.accepted,
+    tradeSharingNoticeVersion: tradeReceipt.noticeVersion,
+    tradeSharingPurpose: tradeReceipt.purpose,
     tradeSharingGrantedAt: tradeReceipt.grantedAt,
     tradeDisclosedFields,
     tradeDisclosedSnapshot,
@@ -658,8 +672,8 @@ function sameLead(row: EnergyAssistantLeadRow, input: NormalizedLead) {
     && Boolean(row.marketing_consent) === input.marketingConsent
     && row.marketing_consent_granted_at === input.marketingConsentGrantedAt
     && Boolean(row.trade_sharing_consent) === input.tradeSharingConsent
-    && row.trade_sharing_notice_version === (input.tradeSharingConsent ? ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION : "")
-    && row.trade_sharing_purpose === (input.tradeSharingConsent ? ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE : "")
+    && row.trade_sharing_notice_version === input.tradeSharingNoticeVersion
+    && row.trade_sharing_purpose === input.tradeSharingPurpose
     && row.trade_sharing_granted_at === input.tradeSharingGrantedAt
     && JSON.stringify(parseJson(row.trade_disclosed_fields_json, null)) === JSON.stringify(input.tradeDisclosedFields)
     && row.trade_disclosed_snapshot_json === input.tradeDisclosedSnapshotJson
@@ -740,8 +754,8 @@ function opportunityPayload(leadId: string, input: NormalizedLead, createdAt: st
       autoSend: true,
       contactConsentReceipt: {
         accepted: true,
-        purpose: ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
-        noticeVersion: ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+        purpose: input.tradeSharingPurpose,
+        noticeVersion: input.tradeSharingNoticeVersion,
         grantedAt: input.tradeSharingGrantedAt,
       },
     },
@@ -757,13 +771,18 @@ function assistantDispatchIds(leadId: string) {
   };
 }
 
+function requiresLegacyAeaDelivery(input: NormalizedLead) {
+  return requiresAeaDelivery(input.services)
+    && !isAllQualifiedTradeConsent(input.tradeSharingNoticeVersion, input.tradeSharingPurpose);
+}
+
 async function reconcileAssistantTradeDispatch(
   row: EnergyAssistantLeadRow,
   input: NormalizedLead,
   opportunityId: string,
   dependencies: CreateLeadDependencies,
 ) {
-  if (requiresAeaDelivery(input.services)) throw new Error("ENERGY_ASSISTANT_AEA_DELIVERY_REQUIRED");
+  if (requiresLegacyAeaDelivery(input)) throw new Error("ENERGY_ASSISTANT_AEA_DELIVERY_REQUIRED");
   const now = (dependencies.now ? dependencies.now() : new Date()).toISOString();
   const dueAt = new Date(Date.parse(now) + 8 * 60 * 60 * 1000).toISOString();
   const ids = assistantDispatchIds(row.id);
@@ -812,8 +831,8 @@ async function reconcileAssistantTradeDispatch(
         opportunityId,
         opportunityId,
         ids.sourceReference,
-        ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
-        ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+        input.tradeSharingNoticeVersion,
+        input.tradeSharingPurpose,
       ),
     dependencies.database.prepare(`INSERT INTO energy_assistant_lead_events
       (id, lead_id, actor_type, actor_uid, action, note, metadata_json, created_at)
@@ -845,8 +864,8 @@ async function reconcileAssistantTradeDispatch(
         opportunityId,
         opportunityId,
         ids.sourceReference,
-        ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
-        ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+        input.tradeSharingNoticeVersion,
+        input.tradeSharingPurpose,
       ),
     dependencies.database.prepare(`INSERT INTO admin_notifications
       (id, event_key, event_type, category, priority, title, summary,
@@ -942,7 +961,7 @@ async function ensureTradeOpportunity(
   createdAt: string,
   dependencies: CreateLeadDependencies,
 ) {
-  if (requiresAeaDelivery(input.services) || !input.tradeSharingConsent) {
+  if (requiresLegacyAeaDelivery(input) || !input.tradeSharingConsent) {
     return { opportunityId: "", allocation: null, dispatchJobId: "" };
   }
   if (input.quoteBrief.readiness.state !== "quote_ready") {
@@ -991,10 +1010,14 @@ export async function createEnergyAssistantLead(raw: unknown, dependencies: Crea
       status: canonical?.status || existing.status,
       opportunityId: canonical?.opportunity_id || opportunity.opportunityId,
       dispatchJobId: opportunity.dispatchJobId,
-      tradeSharing: requiresAeaDelivery(input.services) ? "aea_delivery" : input.tradeSharingConsent
+      tradeSharing: requiresLegacyAeaDelivery(input) ? "aea_delivery" : input.tradeSharingConsent
         ? (canonical?.opportunity_id ? "shared" : "pending_information")
         : "not_requested",
     };
+  }
+
+  if (!input.tradeSharingConsent || !isAllQualifiedTradeConsent(input.tradeSharingNoticeVersion, input.tradeSharingPurpose)) {
+    throw new EnergyAssistantLeadError(400, "CURRENT_TRADE_CONSENT_REQUIRED", "Start a new matched-trade enquiry and confirm the current sharing consent. Your earlier sharing choice has not been changed.");
   }
 
   const leadId = (dependencies.randomUUID ? dependencies.randomUUID() : crypto.randomUUID()).toLowerCase();
@@ -1025,8 +1048,8 @@ export async function createEnergyAssistantLead(raw: unknown, dependencies: Crea
         ENERGY_ASSISTANT_SERVICE_CONSENT_PURPOSE, input.serviceConsentGrantedAt,
         input.marketingConsent ? 1 : 0, input.marketingConsentGrantedAt,
         input.tradeSharingConsent ? 1 : 0,
-        input.tradeSharingConsent ? ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION : "",
-        input.tradeSharingConsent ? ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE : "",
+        input.tradeSharingNoticeVersion,
+        input.tradeSharingPurpose,
         input.tradeSharingGrantedAt, JSON.stringify(input.tradeDisclosedFields),
         input.tradeDisclosedSnapshotJson, input.tradeDisclosedSnapshotSha256,
         initialStatus, nowIso, nowIso,
@@ -1034,7 +1057,7 @@ export async function createEnergyAssistantLead(raw: unknown, dependencies: Crea
     dependencies.database.prepare(`INSERT INTO energy_assistant_lead_events
       (id, lead_id, actor_type, actor_uid, action, note, metadata_json, created_at)
       SELECT ?, id, 'visitor', '', 'created',
-        'The visitor explicitly requested Australian Energy Assessments follow-up after receiving information.', ?, ?
+        'The visitor explicitly consented to matching this enquiry with all qualified TLink businesses after receiving information.', ?, ?
       FROM energy_assistant_leads
       WHERE request_id = ?
         AND NOT EXISTS (
@@ -1062,7 +1085,7 @@ export async function createEnergyAssistantLead(raw: unknown, dependencies: Crea
     status: stored?.status || canonical.status,
     opportunityId: stored?.opportunity_id || opportunity.opportunityId,
     dispatchJobId: opportunity.dispatchJobId,
-    tradeSharing: requiresAeaDelivery(input.services) ? "aea_delivery" : input.tradeSharingConsent
+    tradeSharing: requiresLegacyAeaDelivery(input) ? "aea_delivery" : input.tradeSharingConsent
       ? (stored?.opportunity_id ? "shared" : "pending_information")
       : "not_requested",
   };

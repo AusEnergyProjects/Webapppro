@@ -52,6 +52,7 @@ import {
   resolveTradeQuoteEmailRendererRevision,
   tradeQuoteEmailContentSha256,
 } from "@/lib/trade-quote-email";
+import { tradeQuoteCustomerHubEmailUrl } from "@/lib/trade-quote-hub-email-server";
 import {
   deleteTradeQuoteIssuedPdf,
   issuedTradeQuotePdf,
@@ -1010,7 +1011,10 @@ export async function POST(request: Request) {
         const expiresAt = new Date(Math.min(validExpiry.getTime(), Date.now() + 30 * 86400000)).toISOString();
         const publicOrigin = tradeQuoteDeliveryPublicOrigin(origin);
         const shareUrl = `${publicOrigin}${quoteReviewPath(linkId, secret)}`;
-        const emailContent = buildTradeQuoteEmail({ snapshot: documentSnapshot, shareUrl, expiresAt });
+        const customerHubUrl = await tradeQuoteCustomerHubEmailUrl(db, {
+          ownerUid: access.ownerUid, workOrderId, customerId: documentSnapshot.customer.id, recipientEmail: customerEmail,
+        }, true);
+        const emailContent = buildTradeQuoteEmail({ snapshot: documentSnapshot, shareUrl, expiresAt, customerHubUrl });
         const emailContentSha256 = await tradeQuoteEmailContentSha256(emailContent);
         const attachmentFilename = await quotePdfFilename(documentSnapshot);
         const idempotencyKey = `quote:${version.id}:${tokenIssue}:email:initial`;
@@ -1579,9 +1583,12 @@ export async function POST(request: Request) {
         const emailRendererRevision = resolveTradeQuoteEmailRendererRevision(
           manualRetryRequested ? predecessor?.email_renderer_revision : undefined,
         );
+        const customerHubUrl = emailRendererRevision >= 4 ? await tradeQuoteCustomerHubEmailUrl(db, {
+          ownerUid: access.ownerUid, workOrderId, customerId: snapshot.customer.id, recipientEmail: email,
+        }, !manualRetryRequested) : undefined;
         const emailContent = await buildTradeQuoteEmailForRevision(
           emailRendererRevision,
-          { snapshot, shareUrl, expiresAt: String(link.expires_at) },
+          { snapshot, shareUrl, expiresAt: String(link.expires_at), customerHubUrl },
         );
         const issuedPdf = await issuedTradeQuotePdf({
           ownerUid: access.ownerUid,

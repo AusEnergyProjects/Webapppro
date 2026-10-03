@@ -80,7 +80,7 @@ test("Business settings expose bounded branding, service, template and closure c
   assert.match(businessSettings, /serviceAreas\.length >= 6/);
   assert.match(businessSettings, /Business services and travel coverage/);
   assert.match(businessSettings, /ENERGY_SERVICE_CATALOGUE\.map/);
-  assert.match(businessSettings, /AEA-managed enquiries remain with Australian Energy Assessments/);
+  assert.match(businessSettings, /Creditex approval and\s+activity training apply to government-program work, not ordinary leads/);
   assert.match(businessSettings, /Quote and invoice preview/);
   assert.match(businessSettings, /business-settings-pdf-preview/);
   assert.match(businessSettings, /TradeDocumentSamplePreview/);

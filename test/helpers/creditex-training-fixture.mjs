@@ -8,6 +8,7 @@ import * as energyServices from '../../src/lib/energy-service-catalogue.mjs';
 import * as teamServiceStates from '../../src/lib/trade-team-service-states.ts';
 import * as trainingSections from '../../src/lib/training-service-sections.mjs';
 import * as aeaRouting from '../../src/lib/aea-trade-routing.mjs';
+import * as publicPlanConsent from '../../src/lib/public-plan-enquiry.mjs';
 import * as publicSite from '../../src/lib/public-site.ts';
 import * as tradeAbn from '../../src/lib/trade-abn.ts';
 import * as firebaseMfa from '../../src/lib/firebase-mfa.ts';
@@ -23,7 +24,7 @@ const runtimeModules = {
 };
 const modules = { 'node:crypto': crypto, 'creditex-training-curriculum': curriculum,
   'australian-government-program-catalogue': catalogue, 'creditex-onboarding-server': onboarding, 'energy-service-catalogue.mjs': energyServices, 'trade-team-service-states': teamServiceStates, 'training-service-sections.mjs': trainingSections,
-  'aea-trade-routing.mjs': aeaRouting, 'public-site': publicSite, 'trade-abn': tradeAbn, 'firebase-mfa': firebaseMfa, 'myob-security-audit': myobSecurityAudit };
+  'aea-trade-routing.mjs': aeaRouting, 'public-plan-enquiry.mjs': publicPlanConsent, 'public-site': publicSite, 'trade-abn': tradeAbn, 'firebase-mfa': firebaseMfa, 'myob-security-audit': myobSecurityAudit };
 export function certificateTestDependency(specifier) {
   return modules[specifier] || modules[specifier.split('/').at(-1).replace(/\.ts$/, '')];
 }
@@ -60,6 +61,37 @@ export function installAeaTradeOwnerFixtureSchema(database) {
         : table === 'trade_accounts' && column === 'business_name' ? 'Training fixture Pty Ltd' : '';
       database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT NOT NULL DEFAULT '${fallback}'`);
     }
+  }
+}
+
+/** Empty consent schema for SQL-only fixtures. This grants no disclosure. */
+export function installOpportunityConsentFixtureSchema(database) {
+  database.exec(`CREATE TABLE IF NOT EXISTS public_trade_lead_contact_releases(id TEXT PRIMARY KEY);`);
+  for (const [table, fields] of [
+    ['public_trade_lead_contact_releases', ['opportunity_id', 'source_reference', 'postcode', 'status', 'withdrawn_at', 'granted_at', 'notice_version', 'consent_purpose', 'disclosed_fields', 'customer_email']],
+    ['trade_opportunities', ['source_reference', 'postcode']],
+  ]) {
+    const existing = new Set(database.prepare(`PRAGMA table_info(${table})`).all().map(row => row.name));
+    if (!existing.size) continue;
+    for (const field of fields) if (!existing.has(field)) database.exec(`ALTER TABLE ${table} ADD COLUMN ${field} TEXT NOT NULL DEFAULT ''`);
+  }
+}
+
+/** Explicit ordinary-business approval for fixtures, independent of Creditex. */
+export function installVerifiedTradeLeadFixture(database) {
+  installAeaTradeOwnerFixtureSchema(database);
+  const now = new Date().toISOString();
+  for (const account of database.prepare('SELECT * FROM trade_accounts').all()) {
+    if (account.verification_status || account.account_status || account.verification_review_id) continue;
+    const partnerType = account.partner_type || 'installer';
+    const reviewId = `lead-fixture-review-${account.firebase_uid}`;
+    database.prepare(`UPDATE trade_accounts SET partner_type=?, account_status='active', verification_status='approved',
+      verified_abn=abn, verification_review_id=?, verification_reviewed_at=?, verification_reviewed_by_uid='lead-fixture-reviewer'
+      WHERE firebase_uid=?`).run(partnerType, reviewId, now, account.firebase_uid);
+    database.prepare(`INSERT INTO trade_account_verification_reviews
+      (id,firebase_uid,abn,business_name,partner_type,decision,review_method,reviewed_by_uid,reviewed_at)
+      VALUES (?,?,?,?,?,'approved','official_abr_lookup','lead-fixture-reviewer',?)`)
+      .run(reviewId, account.firebase_uid, account.abn, account.business_name, partnerType, now);
   }
 }
 

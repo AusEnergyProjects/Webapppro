@@ -9,6 +9,7 @@ import * as catalogue from "../src/lib/energy-service-catalogue.mjs";
 import * as collaboration from "../src/lib/trade-job-collaboration.ts";
 import * as businessProfile from "../src/lib/customer-hub-business-profile.ts";
 import * as privateImages from "../src/lib/private-image-evidence.ts";
+import * as hubEmailContent from "../src/lib/customer-hub-email.mjs";
 
 const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
 function load(path, dependencies) {
@@ -45,6 +46,10 @@ const hubServer = load("../src/lib/customer-quote-hub-server.ts", {
 });
 const tradeServer = load("../src/lib/trade-customer-hub-server.ts", {
   "./customer-quote-hub-server": hubServer, "./trade-job-collaboration": collaboration,
+});
+const quoteHubEmail = load("../src/lib/trade-quote-hub-email-server.ts", {
+  "./customer-quote-hub-server": hubServer, "./customer-hub-links": links,
+  "./trade-integration-crypto": protectedPayload, "./trade-quote-links": quoteLinks,
 });
 const now = new Date().toISOString();
 const future = "2099-12-31T23:59:59.000Z";
@@ -88,7 +93,7 @@ async function fixture(t) {
       service_categories: categories, source_reference: `source-${id}`, expires_at: future, created_at: now, updated_at: now });
     insert("public_trade_lead_contact_releases", { id: `release-${id}`, opportunity_id: id, source_reference: `source-${id}`,
       customer_email: customerEmail, customer_name: "PRIVATE CUSTOMER", postcode: "3000", customer_street_address: "42 Private Street",
-      notice_version: consent.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, consent_purpose: consent.PUBLIC_PLAN_CONSENT_PURPOSE,
+      notice_version: '2026-09-14-aea-services-and-upgrade-sharing-v9', consent_purpose: 'Email my private plan. Australian Energy Assessments handles safety and assessments. Other requests and selected quote details go to approved matching trades.',
       disclosed_fields: JSON.stringify(["customer_email", "postcode", "service_categories"]), granted_at: now, created_at: now, updated_at: now });
   }
   for (const owner of ["solar", "ac", "foreign"]) {
@@ -107,6 +112,7 @@ async function fixture(t) {
     insert("trade_opportunity_matches", { id: `match-${owner}`, opportunity_id: project, firebase_uid: owner, status: "interested",
       matched_categories: JSON.stringify([service]), matched_at: now, updated_at: now });
     insert("customer_hub_interests", {match_id: `match-${owner}`,opportunity_id:project,interested:1,interested_since:past,updated_at:now,updated_by_uid:owner});
+    insert("trade_crm_customers", { id: `customer-${owner}`,firebase_uid:owner,customer_number:`CUS-${owner}`,created_at:now,updated_at:now });
     insert("trade_work_orders", { id: `work-${owner}`, firebase_uid: owner, partner_type: "installer", work_number: `JOB-${owner}`, title: "PRIVATE STAFF TITLE",
       source_type: "public_lead", source_reference: `match-${owner}`, service_categories: JSON.stringify([service]), created_at: now, updated_at: now });
     insert("trade_crm_job_details", { id: `detail-${owner}`, work_order_id: `work-${owner}`, firebase_uid: owner,
@@ -138,6 +144,7 @@ async function fixture(t) {
   });
   const emails=load("../src/lib/customer-hub-email-server.ts",{
     "./trade-integration-crypto":protectedPayload,
+    "./customer-hub-email.mjs":hubEmailContent,
     "./customer-quote-hub-server":hubServer,"./customer-hub-links":links,
     "./service-reminder-delivery":{serviceReminderProviderConfiguration:()=>({email:{configured:false}})},
   });
@@ -146,6 +153,8 @@ async function fixture(t) {
     "../../../../db": { getD1: () => db }, "@/lib/admin-server": { sameOrigin: () => true, mfaErrorResponse: () => null },
     "@/lib/customer-hub-email-server":emails,
     "@/lib/public-lead-quote-workflow-server":{startPublicLeadQuoteWorkflow:(...args)=>onHandoff(...args)},
+    "@/lib/customer-hub-links":links,
+    "@/lib/opportunity-server":{syncMarketplaceEnquiries:async()=>{}},
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access },
     "@/lib/trade-customer-hub-server": tradeServer, "@/lib/customer-quote-hub-server": hubServer,
     "@/lib/customer-project-evidence-bucket": { getCustomerProjectEvidenceBucket: () => bucket },
@@ -233,6 +242,8 @@ test("customer authority fails closed after consent, project, recipient or token
     ["customer_quote_hubs", { token_hash: "replaced" }, "opportunity_id='project-a'"],
     ["customer_quote_hubs", { email_hash: "replaced" }, "opportunity_id='project-a'"],
     ["trade_opportunities", { status: "closed" }, "id='project-a'"],
+    ["trade_opportunities", { postcode: "3001" }, "id='project-a'"],
+    ["trade_opportunities", { source_reference: "replacement-source" }, "id='project-a'"],
     ["public_trade_lead_contact_releases", { status: "withdrawn", withdrawn_at: now }, "opportunity_id='project-a'"],
     ["public_trade_lead_contact_releases", { customer_email: "replacement@example.invalid" }, "opportunity_id='project-a'"],
     ["public_trade_lead_contact_releases", { disclosed_fields: '["postcode","service_categories"]' }, "opportunity_id='project-a'"],
@@ -250,10 +261,8 @@ test("both customer quotes and current trade reads enforce current invitation, v
     ["trade_opportunity_matches", { firebase_uid: "foreign" }, "id='match-solar'"],
     ["trade_accounts", { account_status: "suspended" }, "firebase_uid='solar'"],
     ["trade_accounts", { verification_review_id: "unbound-review" }, "firebase_uid='solar'"],
-    ["creditex_business_onboarding", { status: "rejected" }, "owner_uid='solar'"],
     ["trade_accounts", { capabilities: '["air-conditioning"]' }, "firebase_uid='solar'"],
     ["trade_accounts", { service_states: '["WA"]', address_state: "WA" }, "firebase_uid='solar'"],
-    ["trade_team_members", { status: "inactive" }, "owner_uid='solar'"],
     ["trade_opportunities", { service_categories: '["solar","nathers-existing"]' }, "id='project-a'"],
   ];
   for (const [table, values, where] of cases) await t.test(`${table} ${Object.keys(values).join(",")}`, async child => {
@@ -262,6 +271,14 @@ test("both customer quotes and current trade reads enforce current invitation, v
     assert.equal(await tradeServer.tradeHubContext(f.db, f.access(), "work-solar"), null);
     await assert.rejects(hubServer.hubQuoteView(f.db, f.token, "link-solar"), /ACCESS_ENDED/);
   });
+});
+
+test("ordinary customer quotes and Q&A require verified services without Creditex onboarding or team setup", async t => {
+  const f = await fixture(t);
+  f.update("creditex_business_onboarding", { status: "rejected", insurance_expires_on: "2000-01-01" }, "owner_uid='solar'");
+  f.update("trade_team_members", { status: "inactive" }, "owner_uid='solar'");
+  assert.equal((await f.view()).quotes.some(row => row.id === "link-solar"), true);
+  assert.equal((await tradeServer.tradeHubContext(f.db, f.access(), "work-solar")).customer_id, "customer-solar");
 });
 
 test("trade read permission, job assignment and archived jobs are checked against the current owner", async t => {
@@ -555,6 +572,141 @@ test("lead interest works before a quote job exists and provisions only the curr
   const patch=(matchId,interested,revision)=>f.tradeRoute.PATCH(new Request('https://example.invalid/api/trade-customer-hub',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({matchId,interested,revision})}));
   assert.equal((await patch('match-ac',true,0)).status,404);
   assert.equal((await patch('match-solar',false,0)).status,200);assert.equal(handoffs,0);
-  const result=await patch('match-solar',true,1);assert.equal(result.status,200);assert.equal(handoffs,1);
-  const body=await result.json();assert.equal(body.workOrderId,'work-solar');assert.equal(body.interested,true);
+  const result=await patch('match-solar',true,0);assert.equal(result.status,200);assert.equal(handoffs,1);
+  const body=await result.json();assert.equal(body.workOrderId,'work-solar');assert.equal(body.customerId,'customer-solar');assert.equal(body.interested,true);
+  const replay=await patch('match-solar',true,0);assert.equal(replay.status,200);assert.equal(handoffs,1);assert.equal((await replay.json()).interestRevision,1);
+});
+
+
+function leadInterestRequest(matchId, interested, revision) {
+  return new Request('https://example.invalid/api/trade-customer-hub', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({matchId,interested,revision})});
+}
+
+test("eligible legacy lead GET is read-only and Interested creates a missing hub without exposing its customer capability",async t=>{
+  const f=await fixture(t);
+  f.sqlite.exec("DELETE FROM customer_quote_hubs WHERE opportunity_id='project-a'; DELETE FROM customer_hub_interests WHERE match_id='match-solar'");
+  const available=await tradeServer.tradeHubView(f.db,f.access(),'','match-solar');
+  assert.equal(available.available,true);assert.equal(available.interested,false);assert.equal(available.interestRevision,0);
+  assert.equal(available.customerId,'customer-solar');assert.equal(available.workOrderId,'work-solar');assert.deepEqual(available.questions,[]);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM customer_quote_hubs WHERE opportunity_id='project-a'").get().n,0);
+  assert.deepEqual(await tradeServer.tradeHubView(f.db,ownerAccess('ac'),'','match-solar'),{ok:true,available:false});
+  const result=await f.tradeRoute.PATCH(leadInterestRequest('match-solar',true,0));
+  assert.equal(result.status,200);
+  const body=await result.json();assert.equal(body.interested,true);assert.equal(body.customerId,'customer-solar');assert.equal(body.workOrderId,'work-solar');
+  assert.doesNotMatch(JSON.stringify(body),/recipient_email|customer@example|token|secret|encrypted|email_hash/);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM customer_quote_hubs WHERE opportunity_id='project-a'").get().n,1);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM customer_hub_email_deliveries").get().n,0,'interest itself does not send the customer an email');
+  assert.equal((await f.tradeRoute.PATCH(leadInterestRequest('match-solar',false,1))).status,200);
+  assert.equal((await f.tradeRoute.PATCH(leadInterestRequest('match-solar',true,2))).status,200);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM trade_work_orders WHERE source_reference='match-solar'").get().n,1);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM trade_crm_customers WHERE id='customer-solar'").get().n,1);
+});
+
+test("an existing revoked or expired hub cannot be revived by a trade's Interested action",async t=>{
+  const f=await fixture(t);
+  for(const values of [{revoked_at:now},{revoked_at:'',expires_at:past}]){
+    f.update('customer_quote_hubs',values,"opportunity_id='project-a'");
+    assert.deepEqual(await tradeServer.tradeHubView(f.db,f.access(),'','match-solar'),{ok:true,available:false});
+    assert.equal((await f.tradeRoute.PATCH(leadInterestRequest('match-solar',true,1))).status,404);
+  }
+});
+
+test("returned Customer Q&A IDs are the exact active customer and job belonging to this owner",async t=>{
+  const f=await fixture(t);
+  f.update('trade_crm_job_details',{crm_customer_id:'customer-ac'},"work_order_id='work-solar'");
+  let view=await tradeServer.tradeHubView(f.db,f.access(),'','match-solar');
+  assert.equal(view.customerId,'');assert.equal(view.workOrderId,'');
+  f.update('trade_crm_job_details',{crm_customer_id:'customer-solar'},"work_order_id='work-solar'");
+  f.update('trade_crm_customers',{record_status:'archived'},"id='customer-solar'");
+  view=await tradeServer.tradeHubView(f.db,f.access(),'','match-solar');
+  assert.equal(view.customerId,'');assert.equal(view.workOrderId,'');
+  f.update('trade_crm_customers',{record_status:'active'},"id='customer-solar'");
+  view=await tradeServer.tradeHubView(f.db,f.access(),'work-solar');
+  assert.equal(view.customerId,'customer-solar');assert.equal(view.workOrderId,'work-solar');
+});
+
+test("missing-hub provision uses the exact consent release and fails if it changes during creation",async t=>{
+  const f=await fixture(t);
+  f.sqlite.exec("DELETE FROM customer_quote_hubs WHERE opportunity_id='project-a'; DELETE FROM customer_hub_interests WHERE match_id='match-solar'");
+  f.hook((sql,method)=>{if(method==='run'&&sql.includes('INSERT INTO customer_quote_hubs')){f.hook(null);f.update('public_trade_lead_contact_releases',{withdrawn_at:now},"id='release-project-a'");}});
+  assert.equal((await f.tradeRoute.PATCH(leadInterestRequest('match-solar',true,0))).status,404);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM customer_quote_hubs WHERE opportunity_id='project-a'").get().n,0);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM customer_hub_interests WHERE match_id='match-solar'").get().n,0);
+});
+
+test("legacy AEA-only consent retains private Q&A for its verified AEA owner before and after hub provisioning",async t=>{
+  const f=await fixture(t);
+  f.sqlite.exec("DELETE FROM customer_quote_hubs WHERE opportunity_id='project-a'; DELETE FROM customer_hub_interests WHERE match_id='match-solar'");
+  // This legacy policy intentionally stays unchanged when new all-qualified consent is introduced.
+  f.update('public_trade_lead_contact_releases',{notice_version:'2026-09-14-aea-services-and-upgrade-sharing-v9',consent_purpose:'Email my private plan. Australian Energy Assessments handles safety and assessments. Other requests and selected quote details go to approved matching trades.'},"id='release-project-a'");
+  f.update('trade_opportunities',{service_categories:'["assessment","solar"]'},"id='project-a'");
+  f.update('trade_opportunity_matches',{matched_categories:'["assessment","solar"]'},"id='match-solar'");
+  f.update('trade_accounts',{capabilities:'["assessment","solar"]'},"firebase_uid='solar'");
+  assert.deepEqual(await tradeServer.tradeHubView(f.db,f.access(),'','match-solar'),{ok:true,available:false});
+  f.update('trade_accounts',{verified_abn:''},"firebase_uid='foreign'");
+  const aeaReview=f.sqlite.prepare("SELECT * FROM trade_account_verification_reviews WHERE id='review-solar'").get();
+  f.insert('trade_account_verification_reviews',{...aeaReview,id:'review-aea',abn:'73675233557'});
+  f.update('trade_accounts',{abn:'73675233557',verified_abn:'73675233557',verification_review_id:'review-aea'},"firebase_uid='solar'");
+  f.insert('admin_users',{firebase_uid:'solar',email:'solar@example.invalid',role:'admin',status:'active',created_at:now,updated_at:now});
+  const view=await tradeServer.tradeHubView(f.db,f.access(),'','match-solar');assert.equal(view.available,true);
+  assert.equal((await f.tradeRoute.PATCH(leadInterestRequest('match-solar',true,0))).status,200);
+  assert.deepEqual(await tradeServer.tradeHubView(f.db,ownerAccess('ac'),'','match-ac'),{ok:true,available:false});
+});
+
+function prepareQuoteHubRecipient(f, owner='solar') {
+  const project=owner==='foreign'?'project-b':'project-a';
+  f.update('trade_crm_customers',{email:customerEmail},"id=?",[`customer-${owner}`]);
+  f.update('trade_crm_job_details',{accepted_disclosure_sha256:'a'.repeat(64),accepted_disclosure_snapshot:JSON.stringify({
+    contract:'tlink-public-lead-accepted-disclosure-v1',source:{opportunityMatchId:`match-${owner}`,sourceReference:`source-${project}`,releaseId:`release-${project}`},customer:{email:customerEmail}})},'id=?',[`detail-${owner}`]);
+  return {ownerUid:owner,workOrderId:`work-${owner}`,customerId:`customer-${owner}`,recipientEmail:customerEmail};
+}
+
+test('quote email hub capability is exact to owner, job, accepted release and recipient, never aggregated by email',async t=>{
+  const f=await fixture(t), input=prepareQuoteHubRecipient(f), other=prepareQuoteHubRecipient(f,'foreign');
+  const url=await quoteHubEmail.tradeQuoteCustomerHubEmailUrl(f.db,input);
+  assert.equal(decodeURIComponent(new URL(url).pathname.split('/').at(-1)),f.token);
+  assert.notEqual(await quoteHubEmail.tradeQuoteCustomerHubEmailUrl(f.db,other),url,'same recipient on a different enquiry has a different hub');
+  for(const change of [{ownerUid:'ac'},{workOrderId:'work-ac'},{customerId:'customer-ac'},{recipientEmail:'other@example.invalid'}])
+    assert.equal(await quoteHubEmail.tradeQuoteCustomerHubEmailUrl(f.db,{...input,...change}),undefined);
+  const cases=[
+    ['public_trade_lead_contact_releases',{postcode:'3001'},"id='release-project-a'"],
+    ['public_trade_lead_contact_releases',{source_reference:'replaced'},"id='release-project-a'"],
+    ['public_trade_lead_contact_releases',{withdrawn_at:now},"id='release-project-a'"],
+    ['customer_quote_hubs',{revoked_at:now},"opportunity_id='project-a'"],
+    ['customer_quote_hubs',{expires_at:past},"opportunity_id='project-a'"],
+    ['customer_quote_hubs',{email_hash:'replacement'},"opportunity_id='project-a'"],
+    ['customer_quote_hubs',{token_hash:'replacement'},"opportunity_id='project-a'"],
+    ['trade_crm_customers',{email:'replaced@example.invalid'},"id='customer-solar'"],
+    ['trade_crm_job_details',{accepted_disclosure_snapshot:'{}'},"id='detail-solar'"],
+    ['trade_crm_job_details',{crm_customer_id:'customer-foreign'},"id='detail-solar'"],
+    ['trade_work_orders',{source_reference:'match-foreign'},"id='work-solar'"],
+    ['trade_opportunity_matches',{status:'declined'},"id='match-solar'"],
+    ['trade_accounts',{verification_review_id:'foreign'},"firebase_uid='solar'"],
+  ];
+  for(const [table,change,where] of cases){
+    f.sqlite.exec('SAVEPOINT quote_email_scope');
+    try{f.update(table,change,where);assert.equal(await quoteHubEmail.tradeQuoteCustomerHubEmailUrl(f.db,input),undefined,table);}
+    finally{f.sqlite.exec('ROLLBACK TO quote_email_scope; RELEASE quote_email_scope');}
+  }
+});
+
+test('quote delivery retry never creates or revives a missing or withdrawn customer hub',async t=>{
+  const f=await fixture(t),input=prepareQuoteHubRecipient(f);
+  f.sqlite.exec("DELETE FROM customer_quote_hubs WHERE opportunity_id='project-a'");
+  assert.equal(await quoteHubEmail.tradeQuoteCustomerHubEmailUrl(f.db,input),undefined);
+  assert.equal(f.sqlite.prepare("SELECT count(*) n FROM customer_quote_hubs WHERE opportunity_id='project-a'").get().n,0);
+  const url=await quoteHubEmail.tradeQuoteCustomerHubEmailUrl(f.db,input,true);
+  assert.ok(url.startsWith('https://ausenergyassessments.com/customer-hub/'));
+  const before=f.sqlite.prepare("SELECT * FROM customer_quote_hubs WHERE opportunity_id='project-a'").get();
+  f.update('customer_quote_hubs',{revoked_at:now},"opportunity_id='project-a'");
+  assert.equal(await quoteHubEmail.tradeQuoteCustomerHubEmailUrl(f.db,input,true),undefined);
+  const after=f.sqlite.prepare("SELECT * FROM customer_quote_hubs WHERE opportunity_id='project-a'").get();
+  assert.equal(after.token_hash,before.token_hash);assert.equal(after.revoked_at,now);
+});
+
+test('quote hub email rechecks release authority after decrypting a stored capability',async t=>{
+  const f=await fixture(t),input=prepareQuoteHubRecipient(f);let reads=0;
+  f.hook((sql,operation)=>{if(operation==='first'&&sql.includes('hub.id hub_id')&&++reads===2)
+    f.update('public_trade_lead_contact_releases',{withdrawn_at:now},"id='release-project-a'");});
+  assert.equal(await quoteHubEmail.tradeQuoteCustomerHubEmailUrl(f.db,input),undefined);
 });

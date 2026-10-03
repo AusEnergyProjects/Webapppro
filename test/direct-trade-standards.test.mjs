@@ -63,7 +63,7 @@ test("standards enforce open qualified matching and household-controlled contact
   assert.match(opportunities, /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/);
   assert.match(opportunities, /distanceBand: distanceBand\(row\.distance_metres\)/);
   assert.match(opportunities, /public_trade_lead_contact_releases/);
-  assert.match(opportunities, /public_contact\.status = 'active'/);
+  assert.match(opportunities, /active_public_contact\.status, active_public_contact\.withdrawn_at,[\s\S]*?\(\?, available_opportunity\.source_reference, 'active', '', available_opportunity\.postcode, \?, \?\)/);
   assert.match(opportunities, /m\.firebase_uid = \?/);
   assert.match(opportunities, /Wholesalers cannot access or respond to household opportunities/);
 });

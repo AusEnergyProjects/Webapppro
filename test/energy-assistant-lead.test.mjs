@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createHash } from "node:crypto";
+import { LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION, LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE } from "../src/lib/public-plan-enquiry.mjs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
@@ -32,7 +34,10 @@ const tradeServiceExpansionMigration = fs.readFileSync(
 const aeaServiceExpansionMigration = fs.readFileSync(
   new URL("../drizzle/0175_expand_aea_service_enquiries.sql", import.meta.url), "utf8",
 );
-const NOW = new Date("2026-08-20T02:00:00.000Z");
+const allQualifiedConsentMigration = fs.readFileSync(
+  new URL("../drizzle/0248_energy_assistant_all_qualified_consent.sql", import.meta.url), "utf8",
+);
+const NOW = new Date("2026-10-04T02:00:00.000Z");
 const leadId = "22222222-2222-4222-8222-222222222222";
 const createdEventId = "33333333-3333-4333-8333-333333333333";
 const sharedEventId = "44444444-4444-4444-8444-444444444444";
@@ -59,10 +64,12 @@ function fixture() {
   database.exec(serviceCategoryExpansionMigration);
   database.exec(tradeServiceExpansionMigration);
   database.exec(aeaServiceExpansionMigration);
+  database.exec(allQualifiedConsentMigration);
   database.exec(`CREATE TABLE trade_opportunities (
     id text PRIMARY KEY NOT NULL,
     source_reference text NOT NULL UNIQUE,
     service_categories text NOT NULL DEFAULT '["hot-water"]',
+    postcode text NOT NULL DEFAULT '3000',
     status text NOT NULL,
     updated_at text NOT NULL
   );
@@ -73,7 +80,11 @@ function fixture() {
     status text NOT NULL,
     notice_version text NOT NULL,
     consent_purpose text NOT NULL,
-    withdrawn_at text NOT NULL
+    withdrawn_at text NOT NULL,
+    postcode text NOT NULL,
+    customer_email text NOT NULL,
+    granted_at text NOT NULL,
+    disclosed_fields text NOT NULL
   );
   CREATE TABLE admin_notifications (
     id text PRIMARY KEY NOT NULL,
@@ -224,8 +235,9 @@ function stageAssistantOpportunity(database, opportunityId, exactLeadId = leadId
   ).get(sourceReference);
   database.prepare(`INSERT INTO public_trade_lead_contact_releases
     (id, opportunity_id, source_reference, status, notice_version,
-     consent_purpose, withdrawn_at)
-    VALUES (?, ?, ?, 'active', ?, ?, '')
+     consent_purpose, withdrawn_at, postcode, customer_email, granted_at, disclosed_fields)
+    SELECT ?, ?, ?, 'active', ?, ?, '', postcode, email, trade_sharing_granted_at, trade_disclosed_fields_json
+    FROM energy_assistant_leads WHERE id = ?
     ON CONFLICT(source_reference) DO NOTHING`)
     .run(
       `release:${exactLeadId}`,
@@ -233,6 +245,7 @@ function stageAssistantOpportunity(database, opportunityId, exactLeadId = leadId
       sourceReference,
       ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
       ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+      exactLeadId,
     );
   return canonical.id;
 }
@@ -253,8 +266,37 @@ function shareablePayload(overrides = {}) {
   });
 }
 
-test("reserved and mixed assistant requests stay with AEA on creation and replay", async (t) => {
-  for (const services of [["assessment"], ["assessment", "hot-water"], ["minimum-rental-standards", "solar"]]) {
+// Stage a canonical historical record, with dispatch stopped before any external release.
+async function seedHistoricalLead(database, d1, input) {
+  const stagedOnly = new Error("fixture: stop before dispatch");
+  try {
+    await createEnergyAssistantLead({ ...input, tradeSharingConsent: shareablePayload().tradeSharingConsent },
+      dependencies(d1, { createOpportunity: async () => { throw stagedOnly; } }));
+  } catch (error) {
+    if (error !== stagedOnly) throw error;
+  }
+  const row = database.prepare("SELECT * FROM energy_assistant_leads WHERE request_id = ?").get(input.requestId);
+  const receipt = input.tradeSharingConsent;
+  const snapshot = receipt.accepted ? { ...JSON.parse(row.trade_disclosed_snapshot_json), version: receipt.noticeVersion } : {};
+  const snapshotJson = JSON.stringify(snapshot);
+  database.prepare(`UPDATE energy_assistant_leads SET trade_sharing_consent = ?, trade_sharing_notice_version = ?,
+    trade_sharing_purpose = ?, trade_sharing_granted_at = ?, trade_disclosed_fields_json = ?,
+    trade_disclosed_snapshot_json = ?, trade_disclosed_snapshot_sha256 = ? WHERE id = ?`)
+    .run(receipt.accepted ? 1 : 0, receipt.accepted ? receipt.noticeVersion : "", receipt.accepted ? receipt.purpose : "",
+      receipt.accepted ? receipt.grantedAt : "", receipt.accepted ? row.trade_disclosed_fields_json : "[]", snapshotJson,
+      receipt.accepted ? createHash("sha256").update(snapshotJson).digest("hex") : "", row.id);
+}
+
+function legacySharingPayload(overrides = {}) {
+  return shareablePayload({
+    tradeSharingConsent: { ...shareablePayload().tradeSharingConsent,
+      noticeVersion: LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+      purpose: LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE }, ...overrides,
+  });
+}
+
+test("new assessment and mixed enquiries use current consent and durable matched-trade dispatch", async (t) => {
+  for (const services of [["assessment"], ["assessment", "hot-water"], ["thermal-imaging", "solar"]]) {
     const { database, d1 } = fixture();
     t.after(() => database.close());
     const input = shareablePayload({ services, quoteBrief: {
@@ -263,19 +305,83 @@ test("reserved and mixed assistant requests stay with AEA on creation and replay
       knownFacts: [], siteConstraints: [], explicitUnknowns: [],
     } });
     let createCalls = 0;
-    const createOpportunity = async () => { createCalls += 1; throw new Error("Reserved enquiry reached matching"); };
+    const createOpportunity = async (envelope) => {
+      createCalls += 1;
+      assert.deepEqual(envelope.projectCategories, services);
+      assert.equal(envelope.directTradeTriage.contactConsentReceipt.noticeVersion, ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION);
+      const id = stageAssistantOpportunity(database, "all-qualified-opportunity");
+      database.prepare("UPDATE trade_opportunities SET service_categories = ? WHERE id = ?").run(JSON.stringify(services), id);
+      return { id, allocation: {} };
+    };
     const created = await createEnergyAssistantLead(input, dependencies(d1, { createOpportunity }));
     const replay = await createEnergyAssistantLead(input, dependencies(d1, { createOpportunity }));
     for (const result of [created, replay]) {
-      assert.equal(result.tradeSharing, "aea_delivery");
-      assert.equal(result.dispatchJobId, "");
-      assert.equal(result.opportunityId, "");
-      assert.notEqual(result.status, "shared_with_trades");
+      assert.equal(result.tradeSharing, "shared");
+      assert.ok(result.dispatchJobId);
+      assert.equal(result.opportunityId, "all-qualified-opportunity");
+      assert.equal(result.status, "shared_with_trades");
     }
-    assert.equal(createCalls, 0);
+    assert.equal(createCalls, 1);
     assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_leads").get().total, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM customer_opportunity_dispatch_jobs").get().total, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_lead_events WHERE action = 'trade_opportunity_created'").get().total, 1);
+  }
+});
+
+test("new submissions reject absent or historical consent without storing or distributing anything", async (t) => {
+  const { database, d1 } = fixture(); t.after(() => database.close());
+  for (const input of [payload(), legacySharingPayload(), legacySharingPayload({ services: ["assessment"], quoteBrief: {
+    ...payload().quoteBrief, answers: quoteAnswersForServices(["assessment"]), knownFacts: [], siteConstraints: [], explicitUnknowns: [] } })]) {
+    await assert.rejects(createEnergyAssistantLead(input, dependencies(d1)), error => error.code === "CURRENT_TRADE_CONSENT_REQUIRED");
+  }
+  assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_leads").get().total, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) total FROM customer_opportunity_dispatch_jobs").get().total, 0);
+});
+
+test("existing AEA-only and mixed receipts replay unchanged and cannot acquire wider sharing by replay", async (t) => {
+  for (const services of [["assessment"], ["assessment", "hot-water"], ["minimum-rental-standards", "solar"]]) {
+    const { database, d1 } = fixture(); t.after(() => database.close());
+    const input = legacySharingPayload({ services, quoteBrief: { ...payload().quoteBrief,
+      answers: quoteAnswersForServices(services), knownFacts: [], siteConstraints: [], explicitUnknowns: [] } });
+    await seedHistoricalLead(database, d1, input);
+    const before = database.prepare("SELECT * FROM energy_assistant_leads").get();
+    const replay = await createEnergyAssistantLead(input, dependencies(d1, {
+      createOpportunity: async () => { throw new Error("Historical AEA-only enquiry must not reach matching"); },
+    }));
+    assert.equal(replay.tradeSharing, "aea_delivery");
+    assert.equal(replay.opportunityId, "");
+    assert.equal(replay.dispatchJobId, "");
+    assert.deepEqual(database.prepare("SELECT * FROM energy_assistant_leads").get(), before);
+    await assert.rejects(createEnergyAssistantLead({ ...input, tradeSharingConsent: shareablePayload().tradeSharingConsent }, dependencies(d1)),
+      error => error.code === "REQUEST_ID_CONFLICT");
     assert.equal(database.prepare("SELECT COUNT(*) total FROM customer_opportunity_dispatch_jobs").get().total, 0);
-    assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_lead_events WHERE action = 'trade_opportunity_created'").get().total, 0);
+  }
+});
+
+test("the all-qualified consent migration preserves legacy rows, events, indexes and foreign keys", async (t) => {
+  for (const input of [payload(), legacySharingPayload()]) {
+    const { database, d1 } = fixture(); t.after(() => database.close());
+    await seedHistoricalLead(database, d1, input);
+    // Recreate the exact deployed pre-0248 contract with a populated historical record.
+    database.exec(aeaServiceExpansionMigration);
+    const beforeLeads = database.prepare("SELECT * FROM energy_assistant_leads").all();
+    const beforeEvents = database.prepare("SELECT * FROM energy_assistant_lead_events").all();
+    const beforeIndexes = database.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name LIKE 'energy_assistant_lead%' ORDER BY name").all();
+    database.exec(allQualifiedConsentMigration);
+    assert.deepEqual(database.prepare("SELECT * FROM energy_assistant_leads").all(), beforeLeads);
+    assert.deepEqual(database.prepare("SELECT * FROM energy_assistant_lead_events").all(), beforeEvents);
+    assert.deepEqual(database.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name LIKE 'energy_assistant_lead%' ORDER BY name").all(), beforeIndexes);
+    assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
+    assert.equal(database.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
+    const foreignKey = database.prepare("PRAGMA foreign_key_list(energy_assistant_lead_events)").get();
+    assert.equal(foreignKey.table, "energy_assistant_leads");
+    assert.equal(foreignKey.on_delete, "CASCADE");
+    if (input.tradeSharingConsent.accepted) {
+      assert.throws(() => database.prepare("UPDATE energy_assistant_leads SET trade_sharing_notice_version = ?").run(ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION), /CHECK constraint failed/);
+      assert.throws(() => database.prepare("UPDATE energy_assistant_leads SET trade_sharing_purpose = ?").run(ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE), /CHECK constraint failed/);
+    }
+    database.prepare("DELETE FROM energy_assistant_leads").run();
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_lead_events").get().total, 0);
   }
 });
 
@@ -310,7 +416,7 @@ test("quote preparation exposes bounded service-specific triage questions with a
   }
 });
 
-test("the widget-shaped client payload is accepted by the canonical standalone lead service", async (t) => {
+test("the historical widget payload cannot create an AEA-only new enquiry", async (t) => {
   const { database, d1 } = fixture();
   t.after(() => database.close());
   const submissionKey = createEnergyAssistantSubmissionKey({
@@ -354,27 +460,19 @@ test("the widget-shaped client payload is accepted by the canonical standalone l
   assert.deepEqual(widgetPayload.tradeSharingConsent, { accepted: false });
   assert.equal(widgetPayload.quoteBrief.additionalContext, "Please explain electrical upgrade assumptions before quoting.");
   assert.doesNotMatch(JSON.stringify(widgetPayload), /transcript|documentSummary|raw file|sessionId|accessKey/i);
-  assert.deepEqual(
-    await createEnergyAssistantLead(widgetPayload, dependencies(d1)),
-    {
-      leadId,
-      created: true,
-      status: "quote_ready",
-      opportunityId: "",
-      dispatchJobId: "",
-      tradeSharing: "not_requested",
-    },
-  );
+  await assert.rejects(createEnergyAssistantLead(widgetPayload, dependencies(d1)),
+    error => error.code === "CURRENT_TRADE_CONSENT_REQUIRED");
+  assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_leads").get().total, 0);
 });
 
-test("assistant follow-up is optional, canonical, locality-validated and idempotent without a chat session", async (t) => {
+test("existing private assistant follow-up remains canonical and idempotent without a chat session", async (t) => {
   const { database, d1 } = fixture();
   t.after(() => database.close());
-  const firstDependencies = dependencies(d1);
-  const created = await createEnergyAssistantLead(payload(), firstDependencies);
+  await seedHistoricalLead(database, d1, payload());
+  const created = await createEnergyAssistantLead(payload(), dependencies(d1));
   assert.deepEqual(created, {
     leadId,
-    created: true,
+    created: false,
     status: "quote_ready",
     opportunityId: "",
     dispatchJobId: "",
@@ -455,7 +553,7 @@ test("every follow-up requires name, email and phone regardless of preferred con
   assert.equal(database.prepare("SELECT COUNT(*) total FROM energy_assistant_lead_events").get().total, 0);
 });
 
-test("trade sharing remains AEA-only until the hot-water brief captures every required fact or explicit unknown", async (t) => {
+test("trade sharing waits for information until the hot-water brief captures every required fact or explicit unknown", async (t) => {
   const { database, d1 } = fixture();
   t.after(() => database.close());
   const complete = payload();
@@ -532,6 +630,7 @@ test("service-specific quote briefs require bounded current-system, load, site a
         explicitUnknowns: [],
       },
     };
+    await seedHistoricalLead(readyFixture.database, readyFixture.d1, readyPayload);
     const ready = await createEnergyAssistantLead(readyPayload, dependencies(readyFixture.d1));
     assert.equal(ready.status, "quote_ready", `${service} with explicit unknowns should be triage ready`);
     const storedReady = JSON.parse(readyFixture.database.prepare("SELECT quote_brief_json FROM energy_assistant_leads").get().quote_brief_json);
@@ -550,13 +649,13 @@ test("service-specific quote briefs require bounded current-system, load, site a
         answers: [{ questionId: "timing", answer: "Not sure" }],
       },
     };
-    const incomplete = await createEnergyAssistantLead(incompletePayload, dependencies(incompleteFixture.d1));
+    const incomplete = await createEnergyAssistantLead({ ...incompletePayload, tradeSharingConsent: shareablePayload().tradeSharingConsent }, dependencies(incompleteFixture.d1));
     assert.equal(incomplete.status, "needs_information", `${service} must expose unanswered triage facts`);
     incompleteFixture.database.close();
   }
 });
 
-test("a fully unknown all-service brief stays AEA-only even after every question is explicitly captured", async (t) => {
+test("a fully unknown all-service brief awaits information even after every question is explicitly captured", async (t) => {
   const { database, d1 } = fixture();
   t.after(() => database.close());
   const services = [...ENERGY_SERVICE_IDS];
@@ -596,7 +695,7 @@ test("a fully unknown all-service brief stays AEA-only even after every question
     status: "needs_information",
     opportunityId: "",
     dispatchJobId: "",
-    tradeSharing: "aea_delivery",
+    tradeSharing: "pending_information",
   });
   const row = database.prepare("SELECT quote_brief_json, opportunity_id FROM energy_assistant_leads").get();
   const brief = JSON.parse(row.quote_brief_json);
@@ -614,7 +713,7 @@ test("a fully unknown all-service brief stays AEA-only even after every question
   );
 });
 
-test("the bounded all-service brief preserves known upgrade facts and identifies new AEA services needing triage", async (t) => {
+test("the bounded all-service brief preserves known upgrade facts and identifies services needing triage", async (t) => {
   const { database, d1 } = fixture();
   t.after(() => database.close());
   const services = [...ENERGY_SERVICE_IDS];
@@ -657,10 +756,10 @@ test("the bounded all-service brief preserves known upgrade facts and identifies
     },
   });
   const result = await createEnergyAssistantLead(allServicePayload, dependencies(d1, {
-    createOpportunity: async () => { throw new Error("Mixed AEA services must not reach trade dispatch"); },
+    createOpportunity: async () => { throw new Error("Incomplete service briefs must not reach trade dispatch"); },
   }));
   assert.equal(result.status, "needs_information");
-  assert.equal(result.tradeSharing, "aea_delivery");
+  assert.equal(result.tradeSharing, "pending_information");
   assert.equal(result.opportunityId, "");
   assert.equal(result.dispatchJobId, "");
   const row = database.prepare("SELECT quote_brief_json, trade_disclosed_snapshot_json FROM energy_assistant_leads").get();
@@ -848,7 +947,7 @@ for (const postPersistFailure of [
 test("request IDs are bound to a secret submission hash and cannot be replayed with changed personal data", async (t) => {
   const { database, d1 } = fixture();
   t.after(() => database.close());
-  await createEnergyAssistantLead(payload(), dependencies(d1));
+  await seedHistoricalLead(database, d1, payload());
   await assert.rejects(
     createEnergyAssistantLead(payload({ name: "Different Person" }), dependencies(d1)),
     (error) => error instanceof EnergyAssistantLeadError && error.status === 409,

@@ -1,7 +1,8 @@
 import { AEA_RESERVED_SERVICE_IDS, requiresAeaDelivery } from "./aea-service-identity.mjs";
+import { allQualifiedTradeOpportunitySql } from "./public-plan-enquiry.mjs";
 
 // Authorize the complete stored scope before exposing any part of an enquiry.
-export function tradeOpportunityServiceScopeAllowed(value, allowAeaDelivery = false) {
+export function tradeOpportunityServiceScopeAllowed(value, allowAeaDelivery = false, allQualifiedConsent = false) {
   let services;
   try {
     services = Array.isArray(value) ? value : JSON.parse(String(value ?? ""));
@@ -12,7 +13,7 @@ export function tradeOpportunityServiceScopeAllowed(value, allowAeaDelivery = fa
     || services.some((service) => typeof service !== "string" || !service.trim())) {
     return false;
   }
-  return allowAeaDelivery === true || !requiresAeaDelivery(services.map((service) => service.trim().toLowerCase()));
+  return allowAeaDelivery === true || allQualifiedConsent === true || !requiresAeaDelivery(services.map((service) => service.trim().toLowerCase()));
 }
 
 // Only server-owned SQL aliases are accepted; service IDs come from the catalogue.
@@ -28,8 +29,9 @@ export function tradeOpportunityServiceScopeSql(alias) {
   const { raw, reserved } = opportunityServiceScopeSqlParts(alias);
   return "(CASE WHEN json_valid(" + raw + ") THEN (json_type(" + raw + ") = 'array' AND json_array_length(" + raw + ") > 0"
     + " AND NOT EXISTS (SELECT 1 FROM json_each(" + raw + ") scope_service"
-    + " WHERE scope_service.type <> 'text' OR trim(scope_service.value) = ''"
-    + " OR lower(trim(scope_service.value)) IN (" + reserved + "))) ELSE 0 END)";
+    + " WHERE scope_service.type <> 'text' OR trim(scope_service.value) = '')"
+    + " AND (NOT EXISTS (SELECT 1 FROM json_each(" + raw + ") reserved_scope"
+    + " WHERE lower(trim(reserved_scope.value)) IN (" + reserved + ")) OR " + allQualifiedTradeOpportunitySql(alias) + ")) ELSE 0 END)";
 }
 
 // Customer delivery may use reserved drafts, but invalid scope is never permission.

@@ -17,6 +17,8 @@ import {
   isQuickUpgradeSubmissionId,
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
@@ -220,9 +222,17 @@ test("current quick contact releases require email and address while name and ph
     public_customer_message: "Please help me compare practical options.",
     state: "VIC",
   };
-  for (const scope of [undefined, "[]", "not-json", '["solar","assessment"]']) {
+  for (const scope of [undefined, "[]", "not-json"]) {
     assert.equal(publicTradeContactForMatchedLead({ ...baseRow, opportunity_service_categories: scope }), null);
   }
+  const newMixed = publicTradeContactForMatchedLead({ ...baseRow, opportunity_service_categories: '["solar","assessment"]' });
+  assert.equal(newMixed.releaseScope, "all_qualified_trades");
+  assert.equal(newMixed.email, "jamie@example.com");
+  assert.equal(newMixed.name, "");
+  assert.equal(newMixed.phone, "");
+  assert.equal(publicTradeContactForMatchedLead({ ...baseRow, opportunity_service_categories: '["solar","assessment"]',
+    public_contact_notice_version: AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    public_contact_consent_purpose: AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE }), null);
   const requiredOnly = publicTradeContactForMatchedLead(baseRow);
   assert.deepEqual({
     name: requiredOnly.name,

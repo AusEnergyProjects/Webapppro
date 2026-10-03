@@ -8,6 +8,8 @@ import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 import {
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
   LEGACY_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   LEGACY_QUICK_UPGRADE_CONSENT_PURPOSE,
   PREVIOUS_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
@@ -19,10 +21,15 @@ import {
 export const PUBLIC_PLAN_ENQUIRY_KIND = "home-plan-upgrade";
 
 export const PUBLIC_PLAN_CONSENT_PURPOSE =
-  "Email my private plan. Australian Energy Assessments handles safety and assessments. Other requests and selected quote details go to approved matching trades.";
+  "Email my private plan and share my enquiry and selected quote details with all approved TLink businesses matching at least one selected service and my area.";
 
 export const PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
+  "2026-10-04-all-qualified-service-area-sharing-v10";
+
+export const AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
   "2026-09-14-aea-services-and-upgrade-sharing-v9";
+export const AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE =
+  "Email my private plan. Australian Energy Assessments handles safety and assessments. Other requests and selected quote details go to approved matching trades.";
 
 const PREVIOUS_PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
   "2026-08-21-quote-preparation-sharing-notice-v8";
@@ -36,9 +43,14 @@ const LEGACY_PUBLIC_PLAN_CONSENT_PURPOSE =
   "Email my private plan and share my email, postcode, services, message, quote answers and selected photos with approved matched TLink trades";
 
 export const ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION =
+  "2026-10-04-energy-assistant-all-qualified-v2";
+export const ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE =
+  "Share this quote brief and selected contact details with all approved TLink businesses matching at least one selected service and my area";
+
+export const LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION =
   "2026-08-20-energy-assistant-trade-sharing-v1";
 
-export const ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE =
+export const LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE =
   "Share this quote brief and selected contact details with approved matched TLink trades";
 
 const publicPlanContactReleaseRequiredFields = Object.freeze([
@@ -54,6 +66,24 @@ const quickUpgradeContactReleaseRequiredFields = Object.freeze([
 ]);
 
 const publicPlanContactReleasePolicies = Object.freeze([
+  Object.freeze({
+    noticeVersion: LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+    purpose: LEGACY_ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+    requiredDisclosedFields: Object.freeze([...publicPlanContactReleaseRequiredFields, "state", "quote_brief", "customer_name"]),
+    allowedDisclosedFields: Object.freeze([...publicPlanContactReleaseRequiredFields, "state", "quote_brief", "customer_name", "customer_phone"]),
+  }),
+  Object.freeze({
+    noticeVersion: AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    purpose: AEA_RESTRICTED_PUBLIC_PLAN_CONSENT_PURPOSE,
+    requiredDisclosedFields: publicPlanContactReleaseRequiredFields,
+    allowedDisclosedFields: Object.freeze([...publicPlanContactReleaseRequiredFields, "customer_name", "customer_phone", "customer_address", "customer_message"]),
+  }),
+  Object.freeze({
+    noticeVersion: AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+    purpose: AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
+    requiredDisclosedFields: Object.freeze([...quickUpgradeContactReleaseRequiredFields, "customer_email"]),
+    allowedDisclosedFields: Object.freeze([...quickUpgradeContactReleaseRequiredFields, "customer_email", "customer_name", "customer_phone", "customer_message"]),
+  }),
   Object.freeze({
     noticeVersion: PREVIOUS_PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
     purpose: PREVIOUS_PUBLIC_PLAN_CONSENT_PURPOSE,
@@ -198,6 +228,25 @@ export function isRecognizedPublicPlanContactReleaseConsent(
   return Boolean(publicPlanContactReleasePolicy(noticeVersion, purpose));
 }
 
+// New receipts explicitly include assessment and safety services. Earlier notices
+// remain recognized for their original disclosure scope, never widened in place.
+export function isAllQualifiedTradeConsent(noticeVersion, purpose) {
+  return (noticeVersion === QUICK_UPGRADE_CONSENT_NOTICE_VERSION && purpose === QUICK_UPGRADE_CONSENT_PURPOSE)
+    || (noticeVersion === PUBLIC_PLAN_CONSENT_NOTICE_VERSION && purpose === PUBLIC_PLAN_CONSENT_PURPOSE)
+    || (noticeVersion === ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION && purpose === ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE);
+}
+
+export function allQualifiedTradeOpportunitySql(opportunityAlias) {
+  const opportunity = publicPlanContactReleaseAlias(opportunityAlias);
+  return `EXISTS (SELECT 1 FROM public_trade_lead_contact_releases all_trade_contact
+    WHERE (all_trade_contact.opportunity_id, all_trade_contact.source_reference,
+      all_trade_contact.postcode, all_trade_contact.status, all_trade_contact.withdrawn_at) =
+      (${opportunity}.id, ${opportunity}.source_reference, ${opportunity}.postcode, 'active', '')
+      AND datetime(all_trade_contact.granted_at) IS NOT NULL
+      AND ${contactReleaseAccessSql('all_trade_contact', publicPlanContactReleasePolicies.filter(policy =>
+        isAllQualifiedTradeConsent(policy.noticeVersion, policy.purpose)))})`;
+}
+
 export function publicPlanContactReleaseConsentSql(releaseAlias) {
   const alias = publicPlanContactReleaseAlias(releaseAlias);
   return `CASE ${alias}.notice_version ${publicPlanContactReleasePolicies.map((policy) =>
@@ -220,43 +269,36 @@ export function publicPlanContactReleaseDisclosedFieldsAreValid(
 }
 
 export function publicPlanContactReleaseAccessSql(releaseAlias) {
+  return contactReleaseAccessSql(releaseAlias, publicPlanContactReleasePolicies);
+}
+
+function contactReleaseAccessSql(releaseAlias, policies) {
   const alias = publicPlanContactReleaseAlias(releaseAlias);
-  const safeFields = `CASE
-    WHEN json_valid(${alias}.disclosed_fields) THEN CASE
-      WHEN json_type(${alias}.disclosed_fields) = 'array'
-        THEN ${alias}.disclosed_fields
-      ELSE '[]'
-    END
-    ELSE '[]'
-  END`;
-  const policySql = publicPlanContactReleasePolicies.map((policy) => `(
-    ${alias}.notice_version = ${sqlLiteral(policy.noticeVersion)}
-    AND ${alias}.consent_purpose = ${sqlLiteral(policy.purpose)}
-    AND NOT EXISTS (
-      SELECT 1 FROM json_each(${safeFields}) disclosed_policy_field
-      WHERE typeof(disclosed_policy_field.value) <> 'text'
-        OR disclosed_policy_field.value NOT IN (${policy.allowedDisclosedFields.map(sqlLiteral).join(", ")})
-    )
-    AND ${policy.requiredDisclosedFields.map((requiredField) => `EXISTS (
-      SELECT 1 FROM json_each(${safeFields}) required_disclosed_field
-      WHERE required_disclosed_field.value = ${sqlLiteral(requiredField)}
-    )`).join(" AND ")}
-  )`).join(" OR ");
-  return `(
-    json_valid(${alias}.disclosed_fields)
-    AND json_type(CASE WHEN json_valid(${alias}.disclosed_fields)
-      THEN ${alias}.disclosed_fields ELSE 'null' END) = 'array'
-    AND trim(${alias}.customer_email) <> ''
-    AND length(${alias}.postcode) = 4
-    AND ${alias}.postcode NOT GLOB '*[^0-9]*'
-    AND (${policySql})
+  // Select one exact policy row instead of nesting one expression per historical
+  // version. Allocation and notification guards must fit D1's expression depth.
+  const policyRows = sqlLiteral(JSON.stringify(policies));
+  // CASE guards every JSON read once. Repeating a nested sanitising CASE in
+  // each subquery unnecessarily consumes D1's expression-depth allowance.
+  return `(CASE WHEN json_valid(${alias}.disclosed_fields) THEN (
+    (json_type(${alias}.disclosed_fields), trim(${alias}.customer_email) <> '',
+      length(${alias}.postcode), ${alias}.postcode NOT GLOB '*[^0-9]*') = ('array', 1, 4, 1)
+    AND EXISTS (SELECT 1 FROM json_each(${policyRows}) consent_policy
+      WHERE (${alias}.notice_version, ${alias}.consent_purpose) =
+        (json_extract(consent_policy.value, '$.noticeVersion'), json_extract(consent_policy.value, '$.purpose'))
+        AND NOT EXISTS (SELECT 1 FROM json_each(${alias}.disclosed_fields) disclosed_policy_field
+          WHERE typeof(disclosed_policy_field.value) <> 'text' OR NOT EXISTS (
+            SELECT 1 FROM json_each(json_extract(consent_policy.value, '$.allowedDisclosedFields')) allowed_field
+            WHERE allowed_field.value = disclosed_policy_field.value))
+        AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(consent_policy.value, '$.requiredDisclosedFields')) required_field
+          WHERE NOT EXISTS (SELECT 1 FROM json_each(${alias}.disclosed_fields) disclosed_required_field
+            WHERE disclosed_required_field.value = required_field.value)))
     AND (
-      SELECT COUNT(*) FROM json_each(${safeFields}) disclosed_field_count
+      SELECT COUNT(*) FROM json_each(${alias}.disclosed_fields) disclosed_field_count
     ) = (
       SELECT COUNT(DISTINCT disclosed_unique_field.value)
-      FROM json_each(${safeFields}) disclosed_unique_field
+      FROM json_each(${alias}.disclosed_fields) disclosed_unique_field
     )
-  )`;
+  ) ELSE 0 END)`;
 }
 
 export const PUBLIC_PLAN_SNAPSHOT_VERSION =

@@ -3,12 +3,15 @@ import { aeaDeliveredServiceScopeSql } from "./aea-trade-routing.mjs";
 import {
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
+  AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_CONSENT_NOTICE_VERSION,
   QUICK_UPGRADE_CONSENT_PURPOSE,
 } from "./quick-upgrade-enquiry.mjs";
 import { QUICK_UPGRADE_RECEIPT_KIND, QUICK_UPGRADE_RECEIPT_PREFIX, quickUpgradeReceiptDraft } from "./quick-upgrade-receipt.mjs";
 import { publicPlanDeliveryRetryAt } from "./public-plan-delivery-retry.ts";
 import { ReminderProviderDeliveryError, sendServiceReminderProviderMessage, serviceReminderProviderConfiguration } from "./service-reminder-delivery.ts";
+import { customerHubEmailCta } from "./customer-hub-email.mjs";
 
 const CALLBACK_URL = "https://ausenergyassessments.com/api/service-reminder-provider-events/resend";
 const RETRYABLE = new Set(["pending", "failed", "provider_failed", "waiting_for_channel"]);
@@ -30,7 +33,7 @@ async function sha256(value) {
 }
 
 async function currentContact(db, opportunityId, reference) {
-  return db.prepare(`SELECT contact.customer_first_name, contact.customer_email, opportunity.service_categories,
+  return db.prepare(`SELECT contact.customer_first_name, contact.customer_email, contact.notice_version, contact.consent_purpose, opportunity.service_categories,
       (SELECT COUNT(*) FROM trade_opportunity_matches assignment WHERE assignment.opportunity_id = opportunity.id
         AND assignment.status IN ('offered', 'viewed', 'interested', 'connected')) matched_count,
       EXISTS (SELECT 1 FROM admin_notifications notification
@@ -44,10 +47,12 @@ async function currentContact(db, opportunityId, reference) {
         OR (opportunity.status = 'draft' AND ${aeaDeliveredServiceScopeSql("opportunity")}))
       AND contact.status = 'active'
       AND ((contact.notice_version = ? AND contact.consent_purpose = ?)
+        OR (contact.notice_version = ? AND contact.consent_purpose = ?)
         OR (contact.notice_version = ? AND contact.consent_purpose = ?))
       AND datetime(contact.granted_at) IS NOT NULL AND contact.withdrawn_at = '' LIMIT 1`)
     .bind(opportunityId, reference,
       QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE,
+      AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_RESTRICTED_QUICK_UPGRADE_CONSENT_PURPOSE,
       AEA_SERVICE_QUICK_UPGRADE_CONSENT_NOTICE_VERSION, AEA_SERVICE_QUICK_UPGRADE_CONSENT_PURPOSE).first();
 }
 
@@ -95,14 +100,15 @@ export async function enqueueQuickUpgradeReceipt(input, { db, bucket, now = () =
   }
   const receipt = { kind: QUICK_UPGRADE_RECEIPT_KIND, reference: input.reference, opportunityId: input.opportunityId,
     firstName: String(contact.customer_first_name), email, services,
+    noticeVersion: String(contact.notice_version), consentPurpose: String(contact.consent_purpose),
     matchingState: Number(contact.matched_count) > 0 ? "matched" : "review" };
   // Freeze the complete provider content so matching changes and later deployments cannot change a retry.
   const hubUrl=customerHubUrl?await customerHubUrl(input.opportunityId,email):'';
   const draft=quickUpgradeReceiptDraft(receipt);
   if(hubUrl){
-    draft.body+=`\n\nYour private project: ${hubUrl}\nAll your quotes and shared requests in one place. Keep this link private.`;
-    const safeUrl=hubUrl.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
-    draft.html=draft.html.replace('<h2 style="margin:28px 0 20px',`<p style="padding:18px;background:#e7f7f1"><a href="${safeUrl}" style="font-weight:bold;color:#096957">Open your private project</a><br>All your quotes and shared requests in one place. Keep this link private.</p><h2 style="margin:28px 0 20px`);
+    const hubCta=customerHubEmailCta(hubUrl);
+    draft.body+=hubCta.text;
+    draft.html=draft.html.replace('<h2 style="margin:28px 0 20px',`${hubCta.html}<h2 style="margin:28px 0 20px`);
   }
   const source = JSON.stringify({ receipt, draft });
   // Each writer owns its candidate object, so a failed concurrent writer cannot delete the winner's payload.

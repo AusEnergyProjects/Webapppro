@@ -1,17 +1,24 @@
-import {hubParticipantJoins,hubQuestions} from "./customer-quote-hub-server";
+import {hubParticipantContactJoins,hubParticipantJoins,hubQuestions} from "./customer-quote-hub-server";
 import {jobMemberSql} from "./trade-job-collaboration";
 import type {TeamAccess} from "./trade-team-server";
 import type {TradeHubQuestion} from "./customer-quote-hub";
 
-export type TradeHubContext={id:string;opportunity_id:string;work_order_id:string;accepting:number;matched_categories:string;service_categories:string;match_id:string;match_status:string;interested:number;interest_revision:number};
-export function tradeHubScope(access:TeamAccess,workOrderId:string,writing=false,matchId=''){
+export type TradeHubContext={id:string;release_id:string;recipient_email:string;opportunity_id:string;work_order_id:string;customer_id:string;accepting:number;matched_categories:string;service_categories:string;match_id:string;match_status:string;interested:number;interest_revision:number};
+export function tradeHubScope(access:TeamAccess,workOrderId:string,writing=false,matchId='',missingHub=false){
   const owner=access.isOwner&&access.actorUid===access.ownerUid;
   const leadOnly=Boolean(matchId&&owner);
-  return {sql:`SELECT hub.id,hub.opportunity_id,hub.accepting,match.matched_categories,opportunity.service_categories,match.id match_id,match.status match_status,
+  const customerJob=`FROM trade_work_orders work
+    JOIN trade_crm_job_details detail ON detail.work_order_id=work.id AND detail.firebase_uid=work.firebase_uid AND detail.customer_source='public_lead_released'
+    JOIN trade_crm_customers customer ON customer.id=detail.crm_customer_id AND customer.firebase_uid=work.firebase_uid AND customer.record_status='active'
+    WHERE work.source_type='public_lead' AND work.source_reference=match.id AND work.firebase_uid=match.firebase_uid AND work.record_status='active'
+      AND (?='' OR work.id=?) ORDER BY work.id LIMIT 1`;
+  return {sql:`SELECT ${missingHub?"'' id,contact.id release_id,lower(trim(contact.customer_email)) recipient_email,opportunity.id opportunity_id,1 accepting":"hub.id,hub.release_id,hub.recipient_email,hub.opportunity_id,hub.accepting"},match.matched_categories,opportunity.service_categories,match.id match_id,match.status match_status,
     COALESCE((SELECT interested FROM customer_hub_interests WHERE match_id=match.id),0) interested,
     COALESCE((SELECT revision FROM customer_hub_interests WHERE match_id=match.id),0) interest_revision,
-    COALESCE((SELECT id FROM trade_work_orders WHERE source_type='public_lead' AND source_reference=match.id AND firebase_uid=match.firebase_uid AND record_status='active' LIMIT 1),'') work_order_id
-  ${hubParticipantJoins} AND match.firebase_uid=?
+    COALESCE((SELECT work.id ${customerJob}),'') work_order_id,
+    COALESCE((SELECT customer.id ${customerJob}),'') customer_id
+  ${missingHub?`${hubParticipantContactJoins} WHERE match.status IN ('offered','viewed','interested','connected')
+    AND NOT EXISTS(SELECT 1 FROM customer_quote_hubs existing WHERE existing.opportunity_id=opportunity.id)`:hubParticipantJoins} AND match.firebase_uid=?
   AND ${leadOnly?'match.id=?':`EXISTS(SELECT 1 FROM trade_work_orders work JOIN trade_crm_job_details detail ON detail.work_order_id=work.id AND detail.firebase_uid=work.firebase_uid
     WHERE work.id=? AND work.firebase_uid=match.firebase_uid AND work.source_type='public_lead' AND work.source_reference=match.id
       AND work.record_status='active' AND detail.customer_source='public_lead_released'
@@ -19,17 +26,20 @@ export function tradeHubScope(access:TeamAccess,workOrderId:string,writing=false
         AND member.can_view_quotes=1 ${writing?'AND member.can_manage_quotes=1':''}
         AND ((member.job_scope='team' AND NOT EXISTS(SELECT 1 FROM trade_crew_members crew WHERE crew.owner_uid=member.owner_uid AND crew.member_id=member.id)) OR ${jobMemberSql('work','member.id')}))`}
       AND (?<>'own' OR ${jobMemberSql("work")}))`}`,
-    values:[access.ownerUid,...(leadOnly?[matchId]:[workOrderId,...(owner?[]:[access.memberId,access.actorUid]),!access.isOwner&&access.jobScope==='own'?'own':'team',access.memberId||''])]};
+    values:[workOrderId,workOrderId,workOrderId,workOrderId,access.ownerUid,...(leadOnly?[matchId]:[workOrderId,...(owner?[]:[access.memberId,access.actorUid]),!access.isOwner&&access.jobScope==='own'?'own':'team',access.memberId||''])]};
 }
 export async function tradeHubContext(db:D1Database,access:TeamAccess,workOrderId:string,matchId=''){
   if(!access.canViewQuotes)throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
   const scope=tradeHubScope(access,workOrderId,false,matchId);
-  return db.prepare(scope.sql).bind(...scope.values).first<TradeHubContext>();
+  const current=await db.prepare(scope.sql).bind(...scope.values).first<TradeHubContext>();
+  if(current||!matchId||!access.isOwner||access.actorUid!==access.ownerUid)return current;
+  const eligible=tradeHubScope(access,workOrderId,false,matchId,true);
+  return db.prepare(eligible.sql).bind(...eligible.values).first<TradeHubContext>();
 }
 export async function tradeHubView(db:D1Database,access:TeamAccess,workOrderId:string,matchId=''){
   const context=await tradeHubContext(db,access,workOrderId,matchId);
   if(!context)return {ok:true,available:false};
-  const shared=await hubQuestions(db,context.opportunity_id,Boolean(context.accepting),JSON.parse(context.matched_categories));
+  const shared=context.id?await hubQuestions(db,context.opportunity_id,Boolean(context.accepting),JSON.parse(context.matched_categories)):[];
   // Explicit projection keeps other businesses' identities and quote information private.
   const questions:TradeHubQuestion[]=shared.map(q=>({id:q.id,prompt:q.prompt,kind:q.kind,services:q.services,authorType:q.authorType,
     answer:q.answer,revision:q.revision,closed:q.closed,files:q.files,
@@ -37,7 +47,7 @@ export async function tradeHubView(db:D1Database,access:TeamAccess,workOrderId:s
   const current=await tradeHubContext(db,access,workOrderId,matchId);
   if(!current)throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
   return {ok:true,available:true,accepting:Boolean(current.accepting),interested:Boolean(current.interested),interestRevision:current.interest_revision,
-    workOrderId:current.work_order_id,canManageInterest:access.canManageQuotes,canAsk:access.canManageQuotes,questions};
+    workOrderId:current.work_order_id,customerId:current.customer_id,canManageInterest:access.canManageQuotes,canAsk:access.canManageQuotes&&Boolean(current.id),questions};
 }
 export async function hubTradeNotifications(db:D1Database,access:TeamAccess){
   if(!access.canViewQuotes||(!access.isOwner&&(!access.canReceiveCustomerQaNotifications||!access.canViewCustomers)))return [];

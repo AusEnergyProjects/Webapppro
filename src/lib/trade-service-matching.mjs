@@ -6,8 +6,8 @@ function uniqueStrings(value) {
     : [];
 }
 
-export function matchedServiceCategories(categories, capabilities) {
-  if (requiresAeaDelivery(categories)) return [];
+export function matchedServiceCategories(categories, capabilities, allQualifiedConsent = false) {
+  if (requiresAeaDelivery(categories) && !allQualifiedConsent) return [];
   const capabilitySet = new Set(uniqueStrings(capabilities));
   return uniqueStrings(categories).filter((category) => capabilitySet.has(category));
 }

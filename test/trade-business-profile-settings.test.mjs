@@ -193,8 +193,8 @@ test("approved installers can save business services with protected future lead 
   assert.match(profileRoute, /JSON\.stringify\(capabilities\)/);
   assert.match(profileRoute, /settings_updated_at = \?, updated_at = \?/);
   assert.match(settingsUi, /Choose the services your business performs/);
-  assert.match(settingsUi, /subject to approval, training and coverage/);
-  assert.match(settingsUi, /AEA-managed enquiries remain with Australian Energy Assessments/);
+  assert.match(settingsUi, /New leads match your verified business,\s+selected services and service area/);
+  assert.match(settingsUi, /Creditex approval and\s+activity training apply to government-program work, not ordinary leads/);
   assert.match(settingsUi, /Changes do not remove leads already assigned/);
   assert.match(settingsUi, /Licences and[\s\S]*do not automatically add services/);
   assert.match(settingsUi, /ENERGY_SERVICE_CATALOGUE\.map/);

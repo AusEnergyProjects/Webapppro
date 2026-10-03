@@ -415,7 +415,8 @@ test("job and customer directories open focused records without automatic or inl
 });
 
 test("owner and staff CRM destinations follow the primary navigation and saved access", () => {
-  assert.match(crm, /if \(!staffPermissions\) return \["today", "leads", "jobs", "schedule", "customers", "pricebook", "assets", "templates", "reports", "import", "integrations"\]/);
+  assert.match(crm, /if \(!staffPermissions\) return \["today", "leads", "jobs", "schedule", "customers", "pricebook", "templates", "reports", "import", "integrations"\]/);
+  assert.doesNotMatch(crm, /TradeAssetWorkspace|view === "assets"/);
   assert.doesNotMatch(crm, /TradeEnquiryInbox|"enquiries" as View/);
   assert.match(crm, /navigationTarget\?\.kind === "crm-view"[\s\S]*allowedViews\.some\(\(item\) => item === navigationTarget\.id\)[\s\S]*appliedNavigationTargetNonce\.current !== navigationTarget\.nonce[\s\S]*view !== navigationTarget\.id[\s\S]*\) return;[\s\S]*onViewChange\?\.\(view\)/);
   assert.match(crm, /appliedNavigationTargetNonce\.current = navigationTarget\.nonce;[\s\S]*setView\(navigationTarget\.id\)/);

@@ -208,7 +208,8 @@ test("Business and Team expose the identical authoritative service catalogue", (
   assert.deepEqual(labels, services.ENERGY_SERVICE_CATALOGUE.map((service) => service.label));
   assert.match(read("../src/components/TradeTeamSettings.tsx"), /ENERGY_SERVICE_CATALOGUE\.map/);
   assert.equal(nodes(fieldset, (node) => node.type === "input").length, services.ENERGY_SERVICE_IDS.length);
-  assert.match(text(fieldset), /AEA-managed enquiries remain with Australian Energy Assessments/);
+  assert.match(text(fieldset), /New leads match your verified business, selected services and service area/);
+  assert.match(text(fieldset), /Creditex approval and activity training apply to government-program work, not ordinary leads/);
 });
 
 test("selected count only includes unique supported services and normalises legacy capabilities", () => {

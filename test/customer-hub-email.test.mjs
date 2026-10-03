@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as emailContent from "../src/lib/customer-hub-email.mjs";
 
 const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
 function load(path, dependencies) {
@@ -40,10 +41,10 @@ async function fixture(t, options = {}) {
     CREATE TABLE trade_crm_quote_versions(id TEXT,quote_id TEXT,firebase_uid TEXT,status TEXT);
     CREATE TABLE trade_crm_quotes(id TEXT,work_order_id TEXT,firebase_uid TEXT);
     CREATE TABLE trade_work_orders(id TEXT,firebase_uid TEXT,source_reference TEXT,source_type TEXT);
-    CREATE TABLE trade_opportunities(id TEXT PRIMARY KEY,title TEXT,status TEXT,expires_at TEXT,source_reference TEXT,state TEXT);
+    CREATE TABLE trade_opportunities(id TEXT PRIMARY KEY,title TEXT,status TEXT,expires_at TEXT,source_reference TEXT,state TEXT,postcode TEXT);
     CREATE TABLE trade_opportunity_matches(id TEXT PRIMARY KEY,opportunity_id TEXT,firebase_uid TEXT,status TEXT,matched_categories TEXT);
     CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,partner_type TEXT,eligible INTEGER);
-    CREATE TABLE public_trade_lead_contact_releases(id TEXT PRIMARY KEY,opportunity_id TEXT,source_reference TEXT,status TEXT,withdrawn_at TEXT,consented INTEGER,granted_at TEXT,customer_email TEXT);
+    CREATE TABLE public_trade_lead_contact_releases(id TEXT PRIMARY KEY,opportunity_id TEXT,source_reference TEXT,status TEXT,withdrawn_at TEXT,consented INTEGER,granted_at TEXT,customer_email TEXT,postcode TEXT);
     CREATE TABLE public_plan_customer_email_suppressions(email_hash TEXT PRIMARY KEY);
     CREATE TABLE customer_accounts(firebase_uid TEXT PRIMARY KEY,email TEXT,account_status TEXT,account_updates INTEGER);
     CREATE TABLE customer_service_reminder_opt_outs(customer_uid TEXT,channel TEXT);
@@ -51,10 +52,10 @@ async function fixture(t, options = {}) {
   for (const file of ["0245_customer_quote_hub.sql", "0247_customer_hub_conversations.sql"]) sqlite.exec(read("../drizzle/" + file));
   const now = new Date().toISOString();
   sqlite.exec(`
-    INSERT INTO trade_opportunities VALUES ('project','Home energy upgrade','open','2099-01-01T00:00:00.000Z','source','VIC');
+    INSERT INTO trade_opportunities VALUES ('project','Home energy upgrade','open','2099-01-01T00:00:00.000Z','source','VIC','3000');
     INSERT INTO trade_opportunity_matches VALUES ('business','project','owner','interested','["solar"]');
     INSERT INTO trade_accounts VALUES ('owner','installer',1);
-    INSERT INTO public_trade_lead_contact_releases VALUES ('release','project','source','active','',1,'2026-01-01T00:00:00.000Z','customer@example.test');
+    INSERT INTO public_trade_lead_contact_releases VALUES ('release','project','source','active','',1,'2026-01-01T00:00:00.000Z','customer@example.test','3000');
     INSERT INTO customer_accounts VALUES ('customer','customer@example.test','active',1);
     INSERT INTO customer_quote_hubs(id,opportunity_id,release_id,email_hash,recipient_email,token_hash,encrypted_token,expires_at,created_at)
       VALUES ('hub','project','release','email-hash','customer@example.test','token-hash','fixture','2099-01-01T00:00:00.000Z','${now}');
@@ -104,6 +105,7 @@ async function fixture(t, options = {}) {
   const server = load("../src/lib/customer-hub-email-server.ts", {
     "./customer-quote-hub-server": participant, "./customer-hub-links": links,
     "./service-reminder-delivery": delivery, "./trade-integration-crypto": cryptoBoundary,
+    "./customer-hub-email.mjs": emailContent,
   });
   const queue = async (id = "event", type = "asked") => {
     await db.batch([
@@ -134,6 +136,7 @@ test("customer Q&A and its outbox commit together, with one customer email per e
   assert.equal(f.sent[0].recipient, "customer@example.test");
   assert.equal(f.sent[0].idempotencyKey, "customer-hub-event");
   assert.match(f.sent[0].body, /customer-hub\/hub\.token-hash\?section=qa/);
+  assert.match(f.sent[0].html, /Open my quotes &amp; questions/);
   assert.doesNotMatch(JSON.stringify(f.sent), /PRIVATE QUESTION CONTENT|owner@example/);
 });
 

@@ -10,7 +10,6 @@ const migration = read("../drizzle/0029_busy_deathstrike.sql");
 const formsRoute = read("../src/app/api/trade-job-forms/route.ts");
 const recurringServer = read("../src/lib/trade-recurring-jobs-server.ts");
 const lifecycleRoute = read("../src/app/api/trade-asset-lifecycle/route.ts");
-const lifecycleUi = read("../src/components/TradeAssetLifecycle.tsx");
 const formsUi = read("../src/components/TradeJobFormsPanel.tsx");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 const mobileJob = read("../mobile/src/app/job/[id].tsx");
@@ -110,15 +109,13 @@ test("recurring jobs use system numbers, a due-date ledger and protected custome
   assert.doesNotMatch(recurringServer, /customer_email|customer_phone|address_line/i);
 });
 
-test("schedule automation has daily and manual controls without duplicate entry points", () => {
+test("schedule automation retains daily and owner-scoped API triggers", () => {
   assert.match(vite, /triggers: \{ crons: \["\* \* \* \* \*", "15 20 \* \* \*", "5 13,14 \* \* \*", "25 13,14 \* \* \*"\] \}/);
   assert.match(worker, /async scheduled/);
   assert.match(worker, /controller\.cron === DAILY_MAINTENANCE_CRON[\s\S]*generateDueServiceJobs/);
   assert.match(worker, /controller\.cron === NOTIFICATION_DELIVERY_CRON/);
   assert.match(lifecycleRoute, /action === "generate_due_jobs"/);
   assert.match(lifecycleRoute, /auto_create_enabled/);
-  assert.match(lifecycleUi, /Create recurring jobs automatically/);
-  assert.match(lifecycleUi, /protected against duplicates/);
 });
 
 test("web and native field interfaces expose forms progressively", () => {
@@ -133,5 +130,5 @@ test("web and native field interfaces expose forms progressively", () => {
 });
 
 test("new field form and recurring job copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${formsRoute}\n${recurringServer}\n${lifecycleRoute}\n${lifecycleUi}\n${formsUi}\n${mobileJob}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${formsRoute}\n${recurringServer}\n${lifecycleRoute}\n${formsUi}\n${mobileJob}`, /[\u2013\u2014]/);
 });

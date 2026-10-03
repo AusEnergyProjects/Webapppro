@@ -165,18 +165,13 @@ test("new and reset plan enquiries select contact sharing without pre-accepting 
   assert.match(reset, /setConsent\(false\)/);
 });
 
-test("customer consent describes approved matched trades without internal product names", () => {
-  assert.match(enquiryForm, /approved trades that service my area and offer at least one selected service/);
+test("customer consent describes all qualified matches without internal product names in the public form", () => {
+  assert.match(enquiryForm, /all approved trades that service my area and offer at least one selected service/);
   assert.doesNotMatch(enquiryForm, /TLink|Creditex/);
-  for (const purpose of [
-    PUBLIC_PLAN_CONSENT_PURPOSE,
-    PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
-  ]) {
-    assert.doesNotMatch(purpose, /TLink|Creditex/);
-  }
-  assert.match(PUBLIC_PLAN_CONSENT_PURPOSE, /Australian Energy Assessments handles safety and assessments/);
-  assert.match(PUBLIC_PLAN_CONSENT_PURPOSE, /Other requests .*approved matching trades/);
+  assert.doesNotMatch(PUBLIC_PLAN_CONSENT_PURPOSE, /Creditex|handles safety and assessments|Other requests/);
+  assert.match(PUBLIC_PLAN_CONSENT_PURPOSE, /all approved TLink businesses matching at least one selected service and my area/);
   assert.ok(PUBLIC_PLAN_CONSENT_PURPOSE.length <= 160);
+  assert.doesNotMatch(PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE, /TLink|Creditex/);
   assert.match(PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE, /approved trades matched/);
 });
 

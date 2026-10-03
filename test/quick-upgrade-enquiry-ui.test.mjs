@@ -67,8 +67,8 @@ test("new quick requests default to name and phone sharing while preserving expl
     assert.match(dialog, new RegExp(`checked=\\{share${field}\\} onChange=\\{\\(event\\) => setShare${field}\\(event\\.target\\.checked\\)\\}`));
     assert.doesNotMatch(dialog, new RegExp(`setShare${field}\\((?:true|false)\\)`));
   }
-  assert.match(dialog, /name: !aeaOnly && shareName/);
-  assert.match(dialog, /phone: !aeaOnly && sharePhone/);
+  assert.match(dialog, /name: shareName/);
+  assert.match(dialog, /phone: sharePhone/);
   assert.match(dialog, /Your name and phone are selected by default\. Untick either box/);
   assert.match(dialog, /const \[consentAccepted, setConsentAccepted\] = useState\(false\)/);
 });
@@ -89,13 +89,10 @@ test("receipt confirms the saved request without promising responses or email de
   assert.doesNotMatch(dialog, /email (?:has been sent|delivered)|confirmation email|quotes (?:will arrive|soon)/i);
 });
 
-test("compact sharing summary retains address, notes, chosen contact details and AEA handling disclosures", () => {
+test("all service categories use the explicit matching-business sharing summary", () => {
   const summaries = [...dialog.matchAll(/<div className=\{styles\.sharingSummary\}>([\s\S]*?)<\/div>/g)].map((match) => match[1]);
   const summary = summaries.find((item) => item.includes("What matching businesses will receive"));
-  const aeaSummary = summaries.find((item) => item.includes("Sent directly to Australian Energy Assessments"));
-  assert.ok(aeaSummary, "AEA-only enquiry disclosure must be present");
-  assert.match(aeaSummary, /not distributed to other TLink businesses/);
-  assert.match(dialog, /aeaOnly \? <div className=\{styles\.sharingSummary\}/);
+  assert.doesNotMatch(dialog, /aeaOnly|not distributed to other TLink businesses|Sent directly to Australian Energy Assessments/);
   assert.ok(summary, "sharing summary must be present");
   assert.match(summary, /<ul>[\s\S]*<li><strong>Request:<\/strong> Your selected services, full property address and your notes\.<\/li>/);
   assert.match(summary, /<li><strong>Contact:<\/strong> Your email is always included\. Your name and phone are included unless you untick their boxes\.<\/li>/);

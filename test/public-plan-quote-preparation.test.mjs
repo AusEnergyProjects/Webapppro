@@ -710,7 +710,7 @@ test("the public form progressively renders mobile capture, explicit sharing con
   assert.match(form, /<details className=\{styles\.quotePhotos\}>/);
   assert.doesNotMatch(form, /<details className=\{styles\.quotePhotos\} open>/);
   assert.match(form, /Optional\. Add photos that help explain the property and your request/);
-  assert.match(form, /aeaOnly \? "Help Australian Energy Assessments prepare for your service" : "Help trades prepare a desktop quote"/);
+  assert.doesNotMatch(form, /aeaOnly|Help Australian Energy Assessments prepare for your service/);
   assert.match(form, /Close-up labels are secondary/);
   assert.match(form, /accept="image\/jpeg,image\/png"/);
   assert.doesNotMatch(form, /image\/webp|WebP/);
@@ -970,7 +970,8 @@ test("matched trade photo reads fail closed after preparation withdrawal or lead
   assert.equal(query.get(...bindings), undefined, "an original AEA scope blocks a matching upgrade photo subset");
   database.prepare("UPDATE trade_opportunities SET service_categories = ?").run('["hot-water"]');
   assert.equal(query.get(...bindings)?.match_id, "match-1");
-  database.exec(`INSERT INTO public_trade_lead_contact_releases VALUES
+  database.exec(`INSERT INTO public_trade_lead_contact_releases
+    (id, opportunity_id, source_reference, status, notice_version, consent_purpose, granted_at, withdrawn_at, updated_at) VALUES
     ('release-2', 'opportunity-1', 'AEA-TEST', 'withdrawn',
      '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}', '${PUBLIC_PLAN_CONSENT_PURPOSE}',
      '2026-08-12T01:00:00.000Z', '2026-08-12T01:01:00.000Z',

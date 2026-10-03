@@ -106,29 +106,24 @@ export function approvedTradeReviewPredicate(alias: string) {
   return `${account}.verification_review_id <> ''
     AND EXISTS (
       SELECT 1 FROM trade_account_verification_reviews verified_review
-      WHERE verified_review.id = ${account}.verification_review_id
-        AND verified_review.firebase_uid = ${account}.firebase_uid
-        AND verified_review.abn = ${account}.verified_abn
-        AND verified_review.business_name = ${account}.business_name
-        AND verified_review.partner_type = ${account}.partner_type
-        AND verified_review.decision = 'approved'
-        AND verified_review.review_method = 'official_abr_lookup'
-        AND verified_review.reviewed_by_uid = ${account}.verification_reviewed_by_uid
-        AND verified_review.reviewed_at = ${account}.verification_reviewed_at
+      WHERE (verified_review.id, verified_review.firebase_uid, verified_review.abn,
+        verified_review.business_name, verified_review.partner_type, verified_review.decision,
+        verified_review.review_method, verified_review.reviewed_by_uid, verified_review.reviewed_at) =
+        (${account}.verification_review_id, ${account}.firebase_uid, ${account}.verified_abn,
+          ${account}.business_name, ${account}.partner_type, 'approved', 'official_abr_lookup',
+          ${account}.verification_reviewed_by_uid, ${account}.verification_reviewed_at)
     )`;
 }
 
 export function verifiedTradeAccountPredicate(alias: string) {
   const account = checkedSqlAlias(alias);
   return `${account}.partner_type IN ('installer', 'supplier')
-    AND ${account}.account_status = 'active'
-    AND ${account}.verification_status = 'approved'
-    AND ${account}.verified_abn = ${account}.abn
-    AND ${account}.verified_abn <> ''
-    AND ${validAbnSqlPredicate(account)}
-    AND ${account}.verification_reviewed_at <> ''
-    AND ${account}.verification_reviewed_by_uid <> ''
-    AND ${approvedTradeReviewPredicate(account)}`;
+    AND (${account}.account_status, ${account}.verification_status,
+      ${account}.verified_abn, ${account}.verified_abn <> '',
+      ${account}.verification_reviewed_at <> '', ${account}.verification_reviewed_by_uid <> '') =
+      ('active', 'approved', ${account}.abn, 1, 1, 1)
+    AND (${validAbnSqlPredicate(account)})
+    AND (${approvedTradeReviewPredicate(account)})`;
 }
 
 export async function tradeAccountProjection(firebaseUid: string) {
