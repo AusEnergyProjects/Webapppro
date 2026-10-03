@@ -247,4 +247,3 @@ export function buildTradeQuoteEmailV3(
     replyTo: cleanText(snapshot.business.email, 254) || undefined,
   };
 }
-
