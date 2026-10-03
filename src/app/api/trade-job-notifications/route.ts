@@ -6,6 +6,7 @@ import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-se
 import { listTradeTeamDocumentExpiryWarnings } from "@/lib/trade-team-document-expiry-server";
 import { tradeQuoteDeliveryPresentation } from "@/lib/trade-quote-delivery-policy.mjs";
 import { listNetworkLeadNotifications } from "@/lib/trade-network-server";
+import { hubTradeNotifications } from "@/lib/trade-customer-hub-server";
 
 export const runtime = "edge";
 
@@ -223,6 +224,7 @@ async function notifications(access: TeamAccess) {
   ]);
 
   const items: Omit<JobNotification, "read">[] = [
+    ...await hubTradeNotifications(db,access),
     ...photoCompletions.results.map((row) => ({ id: `customer-photos-ready:${String(row.id)}`,
       targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer photos ready",

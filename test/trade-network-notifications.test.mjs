@@ -13,8 +13,9 @@ const lead = { id: postId, title: "Plumber needed", summary: "Plumbing in Richmo
 
 function routeHarness() {
   const access = { ownerUid: "owner-a", actorUid: "manager-a", isOwner: false, jobScope: "team", canManageJobs: true, canViewFieldEvidence: true };
-  const reads = [], networkCalls = [];
+  const reads = [], networkCalls = [], hubCalls = [];
   let leads = [lead];
+  let hubNotifications = [];
   const db = { prepare(sql) { return { bind(...values) { return {
     async all() {
       if (sql.includes("FROM trade_job_notification_reads")) return { results: reads.filter(row => row.ownerUid === values[0] && row.actorUid === values[1]).map(row => ({ notification_key: row.key })) };
@@ -34,10 +35,13 @@ function routeHarness() {
     "@/lib/trade-team-document-expiry-server": { listTradeTeamDocumentExpiryWarnings: async () => [] },
     "@/lib/trade-quote-delivery-policy.mjs": { tradeQuoteDeliveryPresentation: () => ({}) },
     "@/lib/trade-network-server": { listNetworkLeadNotifications: async scope => { networkCalls.push({ ...scope }); return leads; } },
+    "@/lib/trade-customer-hub-server": { hubTradeNotifications: async (database, scope) => {
+      assert.equal(database, db); hubCalls.push({ ...scope }); return hubNotifications;
+    } },
   };
   const route = {}; Function("require", "exports", routeCode)(id => { assert.ok(dependencies[id], id); return dependencies[id]; }, route);
   const request = body => new Request("https://tlink.test/api/trade-job-notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  return { access, reads, networkCalls, setLeads(value) { leads = value; },
+  return { access, reads, networkCalls, hubCalls, setLeads(value) { leads = value; }, setHubNotifications(value) { hubNotifications = value; },
     async get() { return (await route.GET(new Request("https://tlink.test/api/trade-job-notifications?ownerUid=foreign"))).json(); },
     patch: body => route.PATCH(request(body)),
   };
@@ -68,6 +72,26 @@ test("clear marks current eligible network and existing notifications read witho
   const result = await response.json(); assert.equal(response.status, 200); assert.equal(result.unreadCount, 0);
   assert.equal(result.items.length, 2); assert.ok(result.items.every(item => item.read));
   assert.deepEqual(h.reads.map(row => row.key).sort(), ["customer-photos-ready:photos-1", `network:${postId}`].sort());
+});
+
+test("shared customer updates join the bell using the authenticated scope and preserve actor-owned read receipts", async () => {
+  const h = routeHarness();
+  const update = { id: "customer-hub:answer-1", targetKind: "job", targetId: "job-2", workOrderId: "job-2", workNumber: "JB-2",
+    title: "Customer answered a shared question", summary: "Open the shared customer requests in this job.",
+    createdAt: "2026-09-27T11:00:00.000Z", targetTab: "quote", source: "customer" };
+  h.setHubNotifications([update]);
+  const result = await h.get();
+  assert.equal(result.unreadCount, 3);
+  assert.deepEqual(result.items[0], { ...update, read: false });
+  assert.deepEqual(h.hubCalls, [h.access]);
+  const response = await h.patch({ notificationKey: update.id, ownerUid: "foreign", actorUid: "foreign" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(h.reads, [{ ownerUid: "owner-a", actorUid: "manager-a", key: update.id }]);
+  h.access.actorUid = "manager-b";
+  assert.equal((await h.get()).items[0].read, false);
+  h.setHubNotifications([]);
+  assert.equal((await h.patch({ notificationKey: update.id })).status, 404);
+  assert.equal(h.reads.length, 1);
 });
 
 const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);

@@ -150,6 +150,7 @@ async function revokeOwnedQuoteLink(
 }
 
 function errorResponse(error: unknown) {
+  if(error instanceof Error && error.message.includes('CUSTOMER_HUB_CLOSED'))return adminJson({ok:false,error:'The customer is no longer accepting quotes or questions. Existing issued quotes remain available.'},409);
   if (error instanceof Error && /^(PRODUCT_DOCUMENT_|QUOTE_PRODUCT_DOCUMENTS_)/.test(error.message)) return adminJson({ ok: false, error: error.message.includes("LIMIT") ? "The quote's product PDFs are too large. Use smaller documents or fewer pages in the price book." : "A product PDF could not be verified. Check the product documents in your price book, then save the draft again." }, 400);
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;

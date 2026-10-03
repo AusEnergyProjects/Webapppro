@@ -21,6 +21,7 @@ const RETRYABLE = new Set(["pending", "failed", "provider_failed", "waiting_for_
  * @property {typeof fetch} [fetchImpl]
  * @property {() => string} [now]
  * @property {typeof sendServiceReminderProviderMessage} [sendProvider]
+ * @property {(opportunityId:string,email:string)=>Promise<string>} [customerHubUrl]
  */
 
 async function sha256(value) {
@@ -69,9 +70,9 @@ function verifyCanonical(row, input) {
 /**
  * Stores only a customer receipt after the opportunity and any required no-match review are durable.
  * @param {{ opportunityId: string, reference: string, fingerprint: string }} input
- * @param {Pick<QuickUpgradeReceiptDependencies, "db" | "bucket" | "now">} dependencies
+ * @param {Pick<QuickUpgradeReceiptDependencies, "db" | "bucket" | "now" | "customerHubUrl">} dependencies
  */
-export async function enqueueQuickUpgradeReceipt(input, { db, bucket, now = () => new Date().toISOString() }) {
+export async function enqueueQuickUpgradeReceipt(input, { db, bucket, now = () => new Date().toISOString(), customerHubUrl }) {
   if (!/^AEA-\d{8}-[A-F0-9]{16}$/.test(input.reference) || !/^[a-f0-9]{64}$/.test(input.fingerprint)) {
     throw new Error("QUICK_UPGRADE_RECEIPT_IDENTITY_INVALID");
   }
@@ -96,7 +97,14 @@ export async function enqueueQuickUpgradeReceipt(input, { db, bucket, now = () =
     firstName: String(contact.customer_first_name), email, services,
     matchingState: Number(contact.matched_count) > 0 ? "matched" : "review" };
   // Freeze the complete provider content so matching changes and later deployments cannot change a retry.
-  const source = JSON.stringify({ receipt, draft: quickUpgradeReceiptDraft(receipt) });
+  const hubUrl=customerHubUrl?await customerHubUrl(input.opportunityId,email):'';
+  const draft=quickUpgradeReceiptDraft(receipt);
+  if(hubUrl){
+    draft.body+=`\n\nYour private project: ${hubUrl}\nAll your quotes and shared requests in one place. Keep this link private.`;
+    const safeUrl=hubUrl.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
+    draft.html=draft.html.replace('<h2 style="margin:28px 0 20px',`<p style="padding:18px;background:#e7f7f1"><a href="${safeUrl}" style="font-weight:bold;color:#096957">Open your private project</a><br>All your quotes and shared requests in one place. Keep this link private.</p><h2 style="margin:28px 0 20px`);
+  }
+  const source = JSON.stringify({ receipt, draft });
   // Each writer owns its candidate object, so a failed concurrent writer cannot delete the winner's payload.
   const intakeId = crypto.randomUUID();
   const key = `${QUICK_UPGRADE_RECEIPT_PREFIX}${input.reference}/${intakeId}/${await sha256(source)}.json`;

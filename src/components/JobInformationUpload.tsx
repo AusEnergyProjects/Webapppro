@@ -36,7 +36,8 @@ function appointmentLabel(startsAt: string, endsAt: string) {
   return `${date}, ${startTime} to ${endTime}`;
 }
 
-export function JobInformationUpload({ token }: { token: string }) {
+export function JobInformationUpload({ token, endpoint: suppliedEndpoint, embedded = false, refreshVersion = 0, onCompleted }: { token: string; endpoint?: string; embedded?: boolean; refreshVersion?: number; onCompleted?: () => void }) {
+  const Surface = embedded ? "section" : "main";
   const [data, setData] = useState<Result>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -44,7 +45,7 @@ export function JobInformationUpload({ token }: { token: string }) {
   const [staged, setStaged] = useState<Record<string, StagedPhoto[]>>({});
   const [checks, setChecks] = useState({ clarity: false, relevance: false, privacy: false });
   const [completionConfirmed, setCompletionConfirmed] = useState(false);
-  const endpoint = `/api/job-information/${encodeURIComponent(token)}`;
+  const endpoint = suppliedEndpoint || `/api/job-information/${encodeURIComponent(token)}`;
 
   useEffect(() => {
     let active = true;
@@ -53,16 +54,16 @@ export function JobInformationUpload({ token }: { token: string }) {
         const response = await fetch(endpoint, { cache: "no-store" });
         const result = await response.json().catch(() => ({})) as Result;
         if (!response.ok || !result.ok) throw new Error(result.error || "This photo request could not be opened.");
-        if (active) setData(result);
+        if (active) { setData(result); setStatus(""); }
       } catch (error) {
-        if (active) setStatus(error instanceof Error ? error.message : "This photo request could not be opened.");
+        if (active) { setData({}); setStatus(error instanceof Error ? error.message : "This photo request could not be opened."); }
       } finally {
         if (active) setLoading(false);
       }
     }
     void load();
     return () => { active = false; };
-  }, [endpoint]);
+  }, [endpoint, refreshVersion]);
 
   const counts = useMemo(() => Object.fromEntries((data.uploads || []).map((item) => item.requirementId)
     .map((id) => [id, (data.uploads || []).filter((item) => item.requirementId === id).length])), [data.uploads]);
@@ -143,13 +144,14 @@ export function JobInformationUpload({ token }: { token: string }) {
       if (!response.ok || !result.ok) throw new Error(result.missingRequirements?.length
         ? `Still needed: ${result.missingRequirements.join(", ")}.` : result.error || "The request could not be finished.");
       setData(result); setCompletionConfirmed(false); setStatus("Your photos were uploaded and are ready for installer review.");
+      onCompleted?.();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The photos could not be uploaded.");
     } finally { setBusy(""); }
   }
 
-  if (loading) return <main className={styles.shell}><section className={styles.state}><span>Secure photo request</span><h1>Opening your installer request</h1><p>Checking the private link...</p></section></main>;
-  if (!data.ok || !data.request || !data.job) return <main className={styles.shell}><section className={styles.state}><span>Secure photo request</span><h1>This link cannot be used</h1><p>{status || data.error || "Ask the installer for a new link."}</p></section></main>;
+  if (loading) return <Surface className={styles.shell}><section className={styles.state}><span>Secure photo request</span><h1>Opening your installer request</h1><p>Checking the private link...</p></section></Surface>;
+  if (!data.ok || !data.request || !data.job) return <Surface className={styles.shell}><section className={styles.state}><span>Secure photo request</span><h1>This link cannot be used</h1><p>{status || data.error || "Ask the installer for a new link."}</p></section></Surface>;
 
   const required = data.request.requirements.filter((item) => item.required);
   const suppliedCount = (requirementId: string) => Number(counts[requirementId] || 0) + (staged[requirementId]?.length || 0);
@@ -159,15 +161,15 @@ export function JobInformationUpload({ token }: { token: string }) {
   const outstandingCount = Array.from(outstandingIds).filter((id) => !(staged[id]?.length)).length;
   const reviewChecksOutstanding = stagedTotal > 0 && !allConfirmed;
   const currentCompletion = data.request.completion?.current && stagedTotal === 0;
-  return <main className={styles.shell}>
-    <header className={styles.header}><Link href="/">Australian Energy Assessments</Link><span>Private customer upload</span></header>
+  return <Surface className={`${styles.shell} ${embedded ? styles.embedded : ""}`}>
+    {!embedded && <header className={styles.header}><Link href="/">Australian Energy Assessments</Link><span>Private customer upload</span></header>}
     <section className={styles.hero}>
       <span>Requested by {data.businessName || "your installer"}</span>
       <h1>Add photos to {data.job.workNumber}</h1>
       <p>{data.job.title}</p>
       <div><strong>{requiredComplete} of {required.length}</strong><span>required photo types ready</span></div>
     </section>
-    {data.appointment && <section className={styles.appointment}>
+    {!embedded && data.appointment && <section className={styles.appointment}>
       <div><span>Appointment</span><h2>{appointmentLabel(data.appointment.startsAt, data.appointment.endsAt)}</h2><p>The calendar entry contains the installer and job reference, not your address.</p></div>
       <a href={data.appointment.googleCalendarUrl} target="_blank" rel="noreferrer">Add to Google Calendar</a>
     </section>}
@@ -215,6 +217,6 @@ export function JobInformationUpload({ token }: { token: string }) {
       {currentCompletion && <strong className={styles.complete}>Ready for installer review</strong>}
     </section>
     {status && <p className={styles.status} role="status">{status}</p>}
-    <footer className={styles.footer}><span>Secure link expires {new Date(data.request.expiresAt).toLocaleDateString("en-AU", { dateStyle: "long" })}</span><a href="/privacy">Privacy</a></footer>
-  </main>;
+    {!embedded && <footer className={styles.footer}><span>Secure link expires {new Date(data.request.expiresAt).toLocaleDateString("en-AU", { dateStyle: "long" })}</span><a href="/privacy">Privacy</a></footer>}
+  </Surface>;
 }

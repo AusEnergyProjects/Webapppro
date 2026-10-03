@@ -103,6 +103,35 @@ test("one durable source creates one receipt only, preserving its original conte
   await assert.rejects(enqueueQuickUpgradeReceipt({ ...input, fingerprint: "b".repeat(64) }, f), /IDENTITY_CONFLICT/);
 });
 
+test("the private hub capability uses the saved customer and stays frozen through enqueue and provider retries", async t => {
+  const f = fixture(t);
+  const hubUrl = "https://ausenergyassessments.com/customer-hub/synthetic-customer-capability";
+  const issuedFor = [];
+  const customerHubUrl = async (...args) => { issuedFor.push(args); return hubUrl; };
+  await enqueueQuickUpgradeReceipt(input, { ...f, customerHubUrl });
+  assert.deepEqual(issuedFor, [[input.opportunityId, "jamie@example.test"]]);
+  const frozen = JSON.parse(new TextDecoder().decode(f.objects.values().next().value));
+  assert.ok(frozen.draft.body.includes(hubUrl));
+  assert.ok(frozen.draft.html.includes(hubUrl));
+  assert.equal(JSON.stringify(frozen.receipt).includes(hubUrl), false);
+  await enqueueQuickUpgradeReceipt(input, { ...f, customerHubUrl: async () => { throw new Error("An identical retry must not issue another capability"); } });
+  const calls = [];
+  const fetchImpl = async (_url, options) => {
+    calls.push({ key: options.headers["Idempotency-Key"], body: JSON.parse(options.body) });
+    if (calls.length === 1) throw new Error("uncertain provider transport");
+    return Response.json({ id: "provider-hub-receipt" });
+  };
+  await dispatchQuickUpgradeReceipt(f.row(), { ...f, fetchImpl });
+  f.advance(6);
+  await dispatchQuickUpgradeReceipt(f.row(), { ...f, fetchImpl });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1], calls[0]);
+  assert.deepEqual(calls[1].body.to, ["jamie@example.test"]);
+  assert.ok(calls[1].body.text.includes(hubUrl));
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM public_plan_internal_relay_deliveries").get().n, 0);
+  assert.equal(f.delivery().status, "sent");
+});
+
 test("a receipt cannot be queued without durable intake and required no-match review", async (t) => {
   const f = fixture(t, { matched: false, reviewed: false });
   await assert.rejects(enqueueQuickUpgradeReceipt(input, f), /INTAKE_INCOMPLETE/);

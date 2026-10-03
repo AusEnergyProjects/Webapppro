@@ -1,5 +1,30 @@
 # Next task handover
 
+Status: One customer project hub with manual control of quotes and questions.
+Prepared: 3 October 2026
+
+The customer receives one private link for all services in their enquiry. Overview, Quotes and Requests keep competing quotes and shared answers/files together. Phone capture supplements uploads; individual quote emails and PDFs remain available. The customer alone changes the global "Accepting quotes and questions" switch. Accepting a quote never changes that switch. Closed projects retain existing records and may be reopened.
+
+Migration 0245 adds separate customer capabilities, shared requests/files/events and an atomic quote-issuance pause. New answers/files disclose their sharing scope and produce eligible-business notifications. Current consent, approved business access, staff permissions, project expiry and exact customer/job identity are rechecked. Customer-only links travel in customer receipts, never in business envelopes. AEA-only draft enquiries retain their original receipt flow.
+
+Confirmed source boundaries:
+- The live shared enquiry aggregate is trade_opportunities.id; invited businesses are trade_opportunity_matches. Their jobs join by source_type=public_lead, source_reference=match.id and the matching business owner.
+- Never group independent trade-owned customers/jobs by email, phone or address.
+- A business quote token cannot grant cross-business hub access. Issue a separate customer capability.
+- Existing shared answers/photos are restricted by service category, current consent, invitation/eligibility and AEA routing. Preserve those controls and historical disclosure snapshots.
+- Quote acceptance and invoice creation retain their existing business/job scope. There is no automatic winner, competing-quote cancellation or service-package award.
+- The former customer account quote routes and customer evidence upload route are retired. Do not silently reactivate them.
+
+The original quote link also exposes a compact job overview, appointment and requested-photo actions when current job access remains valid. Historical receipts never imply continuing access to job details. Upload compensation preserves committed evidence after a lost database acknowledgement.
+
+Workspace C:/Webproject/aea-energy-tlink-home-dashboard, branch codex/tlink-home-dashboard. Validation, screenshots and exact GitHub/Sites publication receipts are recorded in C:/Webproject/outputs/tlink-customer-journey-20261003/. This source statement precedes publication; use that release receipt for the final deployment identity. Actual customer inbox receipt and physical phone camera capture remain separate from browser/SQL fixture evidence.
+
+---
+
+## Previous handover record
+
+# Next task handover
+
 Status: Visible business Forms workspace and explicit authoring permission.
 Prepared: 2 October 2026
 

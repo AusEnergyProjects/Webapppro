@@ -171,18 +171,21 @@ function displayDate(value: string) {
   }).format(parsed);
 }
 
-function QuoteDecisionReceiptView({
+export function QuoteDecisionReceiptView({
   receipt,
   receiptPdfUrl,
   conversation,
+  embedded = false,
 }: {
   receipt: QuoteDecisionReceipt;
   receiptPdfUrl: string;
   conversation?: ReactNode;
+  embedded?: boolean;
 }) {
+  const Surface = embedded ? "section" : "main";
   if (receipt.decision === "declined") {
     return (
-      <main className="quote-link-shell">
+      <Surface className="quote-link-shell">
         <section className="quote-link-receipt quote-link-receipt-declined">
           <span>Decision recorded</span>
           <h1>Quote declined</h1>
@@ -198,7 +201,7 @@ function QuoteDecisionReceiptView({
             </div>
           </dl>
         </section>
-      </main>
+      </Surface>
     );
   }
 
@@ -212,7 +215,7 @@ function QuoteDecisionReceiptView({
     Boolean(payment.accountName && payment.bsb && payment.accountNumber);
 
   return (
-    <main className="quote-link-shell">
+    <Surface className="quote-link-shell">
       <section className="quote-link-receipt">
         <header>
           <span>Decision recorded</span>
@@ -329,7 +332,7 @@ function QuoteDecisionReceiptView({
           <small>Recorded {displayDate(receipt.decidedAt)}</small>
         </footer>
       </section>
-    </main>
+    </Surface>
   );
 }
 
@@ -389,8 +392,10 @@ function QuoteLines({ lines }: { lines: Line[] }) {
   );
 }
 
-export function QuoteLinkReview({ token }: { token: string }) {
+export function QuoteLinkReview({ token, embedded = false, refreshVersion = 0, onDecisionRecorded }: { token: string; embedded?: boolean; refreshVersion?: number; onDecisionRecorded?: () => void }) {
+  const Surface = embedded ? "section" : "main";
   const decisionIdFallback = useRef("");
+  const loadedQuoteVersion = useRef("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [receipt, setReceipt] = useState<QuoteDecisionReceipt | null>(null);
   const [conversation, setConversation] = useState<{ questions: Question[] } | null>(null);
@@ -431,7 +436,14 @@ export function QuoteLinkReview({ token }: { token: string }) {
         const current = required.get(key);
         if (!current || choice.recommended) required.set(key, choice);
       }
-      setSelected([...required.values()].map((item) => item.id));
+      if (loadedQuoteVersion.current !== nextQuote.quoteVersionId) {
+        setSelected([...required.values()].map((item) => item.id));
+        loadedQuoteVersion.current = nextQuote.quoteVersionId;
+        setConsent(false);
+      }
+    } catch (error) {
+      setQuote(null); setReceipt(null); setConversation(null);
+      throw error;
     } finally {
       setOpening(false);
     }
@@ -447,7 +459,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
       ),
     );
     return () => window.cancelAnimationFrame(frame);
-  }, [load]);
+  }, [load, refreshVersion]);
 
   const selectedChoices = useMemo(
     () =>
@@ -601,6 +613,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
         );
       }
       setReceipt(result.receipt);
+      onDecisionRecorded?.();
       setQuote(null);
       // Communication is loaded separately so its availability cannot change the accepted financial result.
       if (result.receipt.decision === "accepted") await refreshQuestions();
@@ -619,6 +632,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
     return (
       <QuoteDecisionReceiptView
         receipt={receipt}
+        embedded={embedded}
         receiptPdfUrl={`${endpoint}/receipt`}
         conversation={receipt.decision === "accepted" && conversation ? <QuoteQuestions questions={conversation.questions}
           question={question} onChange={setQuestion} onSend={() => void ask()} onRefresh={() => void refreshQuestions()} busy={busy} message={message} /> : undefined}
@@ -627,7 +641,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
   }
   if (!quote) {
     return (
-      <main className="quote-link-shell">
+      <Surface className="quote-link-shell">
         <section className="quote-link-loading">
           <strong>
             {opening ? "Opening secure quote" : "Quote could not be opened"}
@@ -650,7 +664,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
             </button>
           )}
         </section>
-      </main>
+      </Surface>
     );
   }
   const groups = [
@@ -662,7 +676,7 @@ export function QuoteLinkReview({ token }: { token: string }) {
   ];
   const addons = quote.choices.filter((choice) => choice.kind === "addon");
   return (
-    <main
+    <Surface
       className="quote-link-shell"
       data-theme={quote.business.themeKey}
       data-border={quote.business.borderStyle}
@@ -904,6 +918,6 @@ export function QuoteLinkReview({ token }: { token: string }) {
           </p>
         )}
       </article>
-    </main>
+    </Surface>
   );
 }

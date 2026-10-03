@@ -4,9 +4,17 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 2 October 2026
+Last reconciled locally: 3 October 2026
 
-## Current implementation: Creditex and Admin daily work and job audits
+## Current implementation: one customer project hub
+
+One private customer link covers every service in a public trade enquiry, with Overview, Quotes and shared Requests. A separate customer capability protects competing quote visibility; business links grant no access to the hub. Customer answers, sanitised photos and PDF uploads are shared with currently eligible invited businesses and appear in their job notifications. Phone capture is offered on touch devices. Individual quote emails and immutable PDFs retain their existing flow.
+
+The customer controls "Accepting quotes and questions". Closing prevents new requests, shared updates and quote issuance; existing records remain available and the customer can reopen. Quote acceptance never changes this setting or selects a winner across businesses. Migration 0245 enforces issuance closure at the database boundary. Existing consent, AEA-only routing, service disclosure, staff permissions and revocation remain authoritative. Independent trade-owned customers are never joined by contact details.
+
+The original quote link gains a compact overview with current appointment/photo actions and preserves historical receipts when current job access ends. All private routes exclude analytics. Evidence and exact publication provenance are in C:/Webproject/outputs/tlink-customer-journey-20261003/. The source milestone starts at Sites 746/source e19f7cbfe55aa46bce7d4868dcd46d625155d9ff; actual inbox delivery and physical camera capture are not established by local fixture tests.
+
+## Previous implementation: Creditex and Admin daily work and job audits
 
 Creditex opens on an activity-based compliance dashboard: awaiting audit, corrections required, current completed audits and governed submission readiness. These counts cover all currently authorised activities, not the first queue page, and contain no revenue metrics. The job queue is reduced to eight useful columns and opens one shared audit desk with labelled field answers, private file previews, previous/next controls and a short verification checklist. Completed calls may be explicitly linked through the existing Creditex softphone. Operational audit completion does not grant formal submission approval or bypass the existing two-reviewer controls.
 

@@ -4,6 +4,7 @@ import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider
 
 import type { QuoteProductDocumentSummary } from "@/lib/trade-quote-product-documents";
 import { TradeQuoteStockNotice } from "./TradeQuoteStockNotice";
+import { TradeCustomerHubPanel } from "./TradeCustomerHubPanel";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import "./TradeRebateDocumentActions.css";
@@ -936,6 +937,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     && quoteValidationIssue.lineIndex === finalPercentIndex ? quoteValidationIssue : null;
   const finalPercentErrorId = "quote-final-percent-error";
   return <section className="trade-quote-panel">
+    <TradeCustomerHubPanel workOrderId={workOrderId}/>
     <header><div><span>Prepare quote</span><h4>{quote?.quoteNumber || "New quote"}{current ? ` | Version ${current.versionNumber}` : ""}</h4><p>Add your items and prices, then check the customer preview.</p></div>{current && <strong className={`quote-status ${current.status}`}>{current.status.replaceAll("_", " ")}</strong>}</header>
     {busy === "load" && <p role="status">Loading the authorised quote...</p>}
     <div className={showLivePreview ? previewStyles.composer : undefined} style={showLivePreview ? undefined : { display: "contents" }}><div className={showLivePreview ? previewStyles.editor : undefined} style={showLivePreview ? undefined : { display: "contents" }}>

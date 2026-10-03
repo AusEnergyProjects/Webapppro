@@ -1,10 +1,11 @@
-import { QuoteLinkReview } from "@/components/QuoteLinkReview";
+import { CustomerJobWorkspace } from "@/components/CustomerJobWorkspace";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 export const metadata: Metadata = {
+  title: "Your job | TLink",
   robots: {
     index: false,
     follow: false,
@@ -20,5 +21,5 @@ export default async function QuoteReviewPage({
 }: {
   params: Promise<{ token: string }>;
 }) {
-  return <QuoteLinkReview token={(await params).token} />;
+  return <CustomerJobWorkspace token={(await params).token} />;
 }

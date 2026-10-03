@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 2 October 2026
+Last reconciled: 3 October 2026
 
 Current delivery: visible Forms sidebar workspace, read-only Creditex compliance previews, private business form design/mind maps with explicit Create and edit forms permission, optional job Files attachment, shared web/native conditions and immutable saved versions. Migration0236 defaults nonowner authoring off. Includes the Sites738 task/private-record audit-constraint repair; exact publication receipt lives in C:/Webproject/outputs/tlink-forms-20261002/.
 
@@ -20,13 +20,15 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 
 ## Current product direction: complete daily workflows
 
-Keep several useful steps ahead visible across four pillars: customer communication through business email and account-free document links; compliance gates and audit evidence; a free core with minimal administration for sole traders; and owner/business, crew and assigned-job controls for larger teams. Preserve existing visible capabilities. Do not introduce customer accounts, a customer portal, commercial access gates or automatic chasing of quiet lost work.
+Keep several useful steps ahead visible across four pillars: customer communication through business email and account-free project/document links; compliance gates and audit evidence; a free core with minimal administration for sole traders; and owner/business, crew and assigned-job controls for larger teams. Preserve existing visible capabilities. The explicitly requested customer project hub needs no account. Do not introduce customer accounts, commercial access gates or automatic chasing of quiet lost work.
 
 Source baseline `ca7ce51` includes form-driven progress, per-page timing, crew scope, Home task/issue links and the consolidated job Files workflow. Those capabilities are not a new publication gate. Exact deployment and physical-device evidence remain in release truth. Elapsed form time, active app time and chargeable labour remain distinct.
 
 ### Current delivery and remaining proof
 
-The active scope is team onboarding and everyday tasks, plus the user's added private pay/onboarding records. Clear joining/training/crew/schedule next steps, self/team assignment and owner-only engagement records are implemented in source with migrations 0234/0235; publication and live proof are tracked separately in `C:/Webproject/outputs/tlink-team-tasks-20261002/`. Employment type stays separate from pay basis. Payroll calculation, automated payments, contract signing, broader AI work and provider integration changes are not part of this milestone.
+The current slice is one customer hub for every service in a public trade enquiry. A customer-controlled switch pauses quotes and questions; accepting a quote does not change it. Shared answers/files, current eligible-business notifications and the original quote/job record stay together without per-service hubs. Migration 0245 and focused permission/concurrency tests accompany it. Exact browser evidence and GitHub/Sites receipts belong in C:/Webproject/outputs/tlink-customer-journey-20261003/. Next, simplify the chosen business's post-acceptance job updates through the same link while retaining explicit customer sharing control.
+
+The previous scope was team onboarding and everyday tasks, plus the user's added private pay/onboarding records. Clear joining/training/crew/schedule next steps, self/team assignment and owner-only engagement records are implemented in source with migrations 0234/0235; publication and live proof are tracked separately in `C:/Webproject/outputs/tlink-team-tasks-20261002/`. Employment type stays separate from pay basis. Payroll calculation, automated payments, contract signing, broader AI work and provider integration changes are not part of this milestone.
 
 The quote-aware scheduling queue and quiet Lost archive were released in Sites 730. The default optional SWMS was released in Sites 731 from 3cf7138. This source milestone completes the following six workflow changes; release receipts and live checks are recorded separately in C:/Webproject/outputs/tlink-workflow-cleanup-20261002/.
 

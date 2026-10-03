@@ -7462,3 +7462,24 @@ export const creditexNotificationReceipts = sqliteTable("creditex_notification_r
   index("creditex_notification_receipts_member").on(table.memberId, table.organisationId),
   check("creditex_notification_receipts_event_key_check", sql`length(${table.eventKey}) BETWEEN 1 AND 1200`),
   check("creditex_notification_receipts_state_check", sql`${table.readAt} <> '' OR ${table.dismissedAt} <> ''`)]);
+
+export const customerQuoteHubs=sqliteTable("customer_quote_hubs",{
+  id:text("id").primaryKey(),opportunityId:text("opportunity_id").notNull().unique(),releaseId:text("release_id").notNull(),
+  emailHash:text("email_hash").notNull(),recipientEmail:text("recipient_email").notNull(),tokenHash:text("token_hash").notNull(),encryptedToken:text("encrypted_token").notNull(),
+  expiresAt:text("expires_at").notNull(),revokedAt:text("revoked_at").notNull().default(""),createdAt:text("created_at").notNull(),
+  accepting:integer("accepting").notNull().default(1),revision:integer("revision").notNull().default(1),
+},t=>[check("customer_quote_hubs_accepting",sql`${t.accepting} IN (0,1)`)]);
+export const customerHubQuestions=sqliteTable("customer_hub_questions",{
+  id:text("id").primaryKey(),opportunityId:text("opportunity_id").notNull(),matchId:text("match_id").notNull(),
+  serviceCategoriesJson:text("service_categories_json").notNull(),kind:text("kind").notNull(),prompt:text("prompt").notNull(),
+  answer:text("answer").notNull().default(""),answerRevision:integer("answer_revision").notNull().default(0),createdAt:text("created_at").notNull(),updatedAt:text("updated_at").notNull(),
+},t=>[index("customer_hub_questions_opportunity").on(t.opportunityId,t.createdAt),check("customer_hub_questions_kind",sql`${t.kind} IN ('text','photo','document')`),
+  check("customer_hub_questions_services",sql`json_valid(${t.serviceCategoriesJson}) AND json_type(${t.serviceCategoriesJson})='array' AND json_array_length(${t.serviceCategoriesJson})>0`)]);
+export const customerHubFiles=sqliteTable("customer_hub_files",{
+  id:text("id").primaryKey(),questionId:text("question_id").notNull(),opportunityId:text("opportunity_id").notNull(),fileName:text("file_name").notNull(),
+  contentType:text("content_type").notNull(),sizeBytes:integer("size_bytes").notNull(),objectKey:text("object_key").notNull().unique(),sha256:text("sha256").notNull(),createdAt:text("created_at").notNull(),
+},t=>[index("customer_hub_files_question").on(t.questionId,t.createdAt),uniqueIndex("customer_hub_files_duplicate").on(t.questionId,t.sha256),
+  check("customer_hub_files_type",sql`${t.contentType} IN ('image/jpeg','image/png','image/webp','application/pdf')`),check("customer_hub_files_size",sql`${t.sizeBytes}>0 AND ${t.sizeBytes}<=8388608`)]);
+export const customerHubEvents=sqliteTable("customer_hub_events",{
+  id:text("id").primaryKey(),opportunityId:text("opportunity_id").notNull(),questionId:text("question_id").notNull(),eventType:text("event_type").notNull(),createdAt:text("created_at").notNull(),
+},t=>[index("customer_hub_events_opportunity").on(t.opportunityId,t.createdAt),check("customer_hub_events_type",sql`${t.eventType} IN ('answered','file_added','opened','closed')`)]);

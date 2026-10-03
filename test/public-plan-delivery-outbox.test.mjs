@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
+import ts from "typescript";
 import {
   confirmPublicPlanIntakeOpportunityWrite,
   persistPublicPlanDeliveryIntake,
@@ -9,7 +10,12 @@ import {
 import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
+  publicPlanContactReleaseAccessSql,
 } from "../src/lib/public-plan-enquiry.mjs";
+import * as deliveryPayload from "../src/lib/public-plan-delivery-payload.mjs";
+import * as quickReceipt from "../src/lib/quick-upgrade-receipt.mjs";
+import * as quickDelivery from "../src/lib/quick-upgrade-receipt-delivery.mjs";
+import { QUICK_UPGRADE_CONSENT_NOTICE_VERSION, QUICK_UPGRADE_CONSENT_PURPOSE } from "../src/lib/quick-upgrade-enquiry.mjs";
 import {
   PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
   PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
@@ -36,7 +42,8 @@ function databaseAdapter(database) {
       return database.prepare(sql).get(...initialBindings) || null;
     },
     async run() {
-      return database.prepare(sql).run(...initialBindings);
+      const result = database.prepare(sql).run(...initialBindings);
+      return { ...result, meta: { changes: Number(result.changes) } };
     },
     async all() {
       return { results: database.prepare(sql).all(...initialBindings) };
@@ -77,6 +84,10 @@ function memoryBucket() {
     get deleteCalls() { return deleteCalls; },
     async put(key, value) { objects.set(key, value); },
     async head(key) { return objects.has(key) ? {} : null; },
+    async get(key) {
+      const bytes = objects.get(key);
+      return bytes ? { async arrayBuffer() { return bytes; } } : null;
+    },
     async delete(key) { deleteCalls += 1; objects.delete(key); },
   };
 }
@@ -97,6 +108,141 @@ function record(overrides = {}) {
     ...overrides,
   };
 }
+
+function loadDeliveryModule(path, dependencies, expose = "") {
+  const source = fs.readFileSync(new URL(path, import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const exports = {};
+  Function("require", "exports", `${compiled}\n${expose}`)(name => {
+    assert.ok(Object.hasOwn(dependencies, name), `Unexpected delivery dependency: ${name}`);
+    return dependencies[name];
+  }, exports);
+  return exports;
+}
+
+async function hubDeliveryFixture(t, { status = "open", services = ["solar"], quick = false } = {}) {
+  const database = sourceDatabase();
+  t.after(() => database.close());
+  const db = databaseAdapter(database), bucket = memoryBucket(), value = record();
+  database.exec(`CREATE TABLE trade_opportunities (id TEXT PRIMARY KEY, source_reference TEXT, created_by_uid TEXT,
+    status TEXT, expires_at TEXT, service_categories TEXT);
+    CREATE TABLE public_trade_lead_contact_releases (id TEXT PRIMARY KEY, opportunity_id TEXT, source_reference TEXT,
+      customer_first_name TEXT, customer_email TEXT, status TEXT, notice_version TEXT, consent_purpose TEXT,
+      disclosed_fields TEXT, granted_at TEXT, withdrawn_at TEXT, postcode TEXT);
+    CREATE TABLE trade_opportunity_matches (opportunity_id TEXT, status TEXT);
+    CREATE TABLE admin_notifications (event_key TEXT, entity_type TEXT, entity_id TEXT);`);
+  database.exec(fs.readFileSync("drizzle/0245_customer_quote_hub.sql", "utf8").split("--> statement-breakpoint")[0]);
+  database.prepare("INSERT INTO trade_opportunities VALUES (?, ?, 'lead-intake', ?, '2099-12-31T00:00:00.000Z', ?)")
+    .run("opportunity-1", value.sourceReference, status, JSON.stringify(services));
+  database.prepare("INSERT INTO public_trade_lead_contact_releases VALUES ('contact-1', 'opportunity-1', ?, 'Jamie', 'jamie@example.test', 'active', ?, ?, ?, ?, '', '3000')")
+    .run(value.sourceReference, quick ? QUICK_UPGRADE_CONSENT_NOTICE_VERSION : PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+      quick ? QUICK_UPGRADE_CONSENT_PURPOSE : PUBLIC_PLAN_CONSENT_PURPOSE,
+      JSON.stringify(["customer_email", "postcode", "service_categories", ...(quick ? ["customer_address"] : [])]), value.now);
+  database.exec("INSERT INTO admin_notifications VALUES ('quick-upgrade-no-match:opportunity-1', 'trade_opportunity', 'opportunity-1')");
+  if (status === "open") database.exec("INSERT INTO trade_opportunity_matches VALUES ('opportunity-1', 'offered')");
+  // Production dispatch and capability SQL run unchanged. Only the environment-owned
+  // encryption boundary is replaced; provider requests are captured below.
+  const protection = { encryptProtectedPayload: async data => JSON.stringify(data), decryptProtectedPayload: async data => JSON.parse(data) };
+  const quoteLinks = loadDeliveryModule("../src/lib/trade-quote-links.ts", { "@/lib/trade-integration-crypto": protection });
+  const hubLinks = loadDeliveryModule("../src/lib/customer-hub-links.ts", {
+    "./trade-integration-crypto": protection, "./trade-quote-links": quoteLinks,
+    "./public-plan-enquiry.mjs": { publicPlanContactReleaseAccessSql },
+  });
+  const unavailable = () => { throw new Error("This fixture must use its injected database, bucket and cached PDF"); };
+  const server = loadDeliveryModule("../src/lib/public-plan-delivery-server.ts", {
+    "../../db": { getD1: unavailable },
+    "@/lib/customer-project-evidence-bucket": { getCustomerProjectEvidenceBucket: unavailable },
+    "@/lib/customer-plan-pdf-fonts": { loadCustomerPlanPdfFonts: unavailable },
+    "@/lib/public-plan-delivery-payload.mjs": deliveryPayload,
+    "@/lib/public-plan-delivery-retry": { publicPlanDeliveryRetryAt },
+    "@/lib/public-plan-delivery-cleanup.mjs": { cleanupPublicPlanDeliveryObjectsWrite },
+    "@/lib/public-plan-customer-email-write.mjs": { recordPublicPlanCustomerPdfWrite },
+    "@/lib/customer-hub-links": hubLinks,
+    "@/lib/quick-upgrade-receipt.mjs": quickReceipt,
+    "@/lib/quick-upgrade-receipt-delivery.mjs": quickDelivery,
+    "@/lib/public-plan-intake-write.mjs": { confirmPublicPlanIntakeOpportunityWrite, persistPublicPlanDeliveryIntake },
+    "@/lib/public-plan-enquiry.mjs": { PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE },
+    "@/lib/public-plan-quote-preparation.mjs": { PUBLIC_PLAN_QUOTE_PREPARATION_VERSION, PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION, PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE },
+    "@/lib/service-reminder-delivery": { sendServiceReminderProviderMessage, serviceReminderProviderConfiguration },
+  }, "exports.dispatchCustomer=dispatchCustomer; exports.dispatchInternalRelay=dispatchInternalRelay;");
+  const sent = [], relayed = [];
+  const dependencies = { db, bucket, runtime: { RESEND_API_KEY: "synthetic-key", RESEND_FROM_EMAIL: "receipts@example.test",
+    AEA_LEAD_WEBHOOK_URL: "https://relay.example.test/intake", AEA_LEAD_WEBHOOK_SIGNING_SECRET: "synthetic-signing-secret-at-least-32-characters" },
+    fetchImpl: async (url, options) => {
+      if (url === "https://relay.example.test/intake") { relayed.push(JSON.parse(options.body)); return new Response("ok"); }
+      sent.push(JSON.parse(options.body)); return Response.json({ id: `provider-${sent.length}` });
+    } };
+  const payload = { envelope: { reference: value.sourceReference, email: "jamie@example.test", name: "Jamie", projectCategories: services,
+    customerPlanDelivery: { private: "customer PDF input" } } };
+  const originalEnvelope = structuredClone(payload.envelope);
+  const row = () => database.prepare(`SELECT intake.*, customer.id customer_delivery_id, customer.status customer_status,
+    customer.attempts customer_attempts, customer.idempotency_key customer_idempotency_key,
+    customer.attachment_object_key, customer.attachment_filename, customer.attachment_sha256,
+    relay.id relay_delivery_id, relay.status relay_status, relay.attempts relay_attempts, relay.idempotency_key relay_idempotency_key
+    FROM public_plan_lead_intakes intake JOIN public_plan_customer_email_deliveries customer ON customer.intake_id=intake.id
+    LEFT JOIN public_plan_internal_relay_deliveries relay ON relay.intake_id=intake.id`).get();
+  if (!quick) {
+    await persistPublicPlanDeliveryIntake(db, bucket, value);
+    database.exec("UPDATE public_plan_lead_intakes SET opportunity_id='opportunity-1'");
+    database.exec("UPDATE public_plan_customer_email_deliveries SET attachment_object_key='cached-private-plan.pdf', attachment_filename='plan.pdf'");
+    await bucket.put("cached-private-plan.pdf", new TextEncoder().encode("Synthetic cached PDF fixture").buffer);
+  }
+  return { database, server, hubLinks, dependencies, payload, originalEnvelope, row, sent, relayed, value, bucket };
+}
+
+test("open public-plan dispatch creates a customer hub without adding its capability to the shared envelope or relay", async t => {
+  const f = await hubDeliveryFixture(t);
+  await f.server.dispatchCustomer(f.row(), f.payload, f.dependencies);
+  await f.server.dispatchInternalRelay(f.row(), f.payload, f.dependencies);
+  assert.equal(f.sent.length, 1);
+  assert.deepEqual(f.sent[0].to, ["jamie@example.test"]);
+  const url = f.sent[0].text.match(/https:\/\/ausenergyassessments\.com\/customer-hub\/[^\s]+/)?.[0];
+  assert.ok(url, "customer email must contain its private hub link");
+  assert.ok(f.sent[0].html.includes(url));
+  assert.equal(f.sent[0].attachments.length, 1);
+  const token = decodeURIComponent(new URL(url).pathname.split("/").at(-1));
+  assert.equal((await f.hubLinks.authoriseCustomerHub(f.dependencies.db, token)).opportunity_id, "opportunity-1");
+  assert.deepEqual(f.payload.envelope, f.originalEnvelope);
+  assert.equal(f.relayed.length, 1);
+  const relay = JSON.parse(Buffer.from(f.relayed[0].payload, "base64url").toString("utf8"));
+  assert.deepEqual(relay, deliveryPayload.internalRelayPayload(f.originalEnvelope));
+  assert.doesNotMatch(JSON.stringify(relay), /customer-hub|customer PDF input/);
+  assert.equal(JSON.stringify(relay).includes(token), false);
+  assert.equal(f.row().customer_status, "sent");
+  assert.equal(f.row().relay_status, "sent");
+});
+
+test("AEA-only and mixed draft public plans still send their PDF without creating a hub", async t => {
+  for (const services of [["assessment"], ["solar", "assessment"]]) {
+    const f = await hubDeliveryFixture(t, { status: "draft", services });
+    await f.server.dispatchCustomer(f.row(), f.payload, f.dependencies);
+    assert.equal(f.sent.length, 1);
+    assert.deepEqual(f.sent[0].to, ["jamie@example.test"]);
+    assert.equal(f.sent[0].attachments.length, 1);
+    assert.doesNotMatch(f.sent[0].text + f.sent[0].html, /customer-hub|private project/);
+    assert.equal(f.database.prepare("SELECT COUNT(*) n FROM customer_quote_hubs").get().n, 0);
+    assert.equal(f.row().customer_status, "sent");
+    assert.deepEqual(f.payload.envelope, f.originalEnvelope);
+  }
+});
+
+test("production quick-receipt hook creates a hub only for eligible open enquiries", async t => {
+  for (const [status, services] of [["open", ["solar"]], ["draft", ["assessment"]], ["draft", ["solar", "assessment"]]]) {
+    const f = await hubDeliveryFixture(t, { status, services, quick: true });
+    await f.server.enqueueQuickUpgradeReceiptDelivery({ opportunityId: "opportunity-1", reference: f.value.sourceReference,
+      fingerprint: f.value.submissionFingerprint }, f.dependencies);
+    await quickDelivery.dispatchQuickUpgradeReceipt(f.row(), f.dependencies);
+    assert.equal(f.sent.length, 1);
+    assert.deepEqual(f.sent[0].to, ["jamie@example.test"]);
+    assert.equal(f.sent[0].text.includes("/customer-hub/"), status === "open");
+    assert.equal(f.sent[0].html.includes("/customer-hub/"), status === "open");
+    assert.equal(f.database.prepare("SELECT COUNT(*) n FROM customer_quote_hubs").get().n, status === "open" ? 1 : 0);
+    assert.equal(f.database.prepare("SELECT COUNT(*) n FROM public_plan_internal_relay_deliveries").get().n, 0);
+    assert.equal(f.row().customer_status, "sent");
+  }
+});
 
 test("one source reference durably creates one intake and both independent outboxes", async () => {
   const database = sourceDatabase();

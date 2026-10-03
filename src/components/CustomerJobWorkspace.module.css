@@ -1,0 +1,52 @@
+.shell { --job-accent: #c8ef96; background: #0b1422; color: #eef3f9; min-height: 100vh; padding: 28px 24px 48px; font-size: 1rem; line-height: 1.55; }
+.container { max-width: 1000px; margin: 0 auto; }
+.brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #a6b5c7; font-size: .875rem; margin-bottom: 32px; }
+.brand strong { color: #f7fafc; font-size: 1.5rem; letter-spacing: -.04em; }
+.brand strong span { color: var(--job-accent); font-size: .65rem; margin-left: 4px; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.eyebrow { color: #acc0d7; font-size: .875rem; font-weight: 600; }
+.header h1 { color: #f6f8fc; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 600; letter-spacing: -.035em; line-height: 1.2; margin: 7px 0; overflow-wrap: anywhere; }
+.header p { color: #a6b5c7; font-size: .875rem; margin: 0; }
+.shell button, .shell a { -webkit-tap-highlight-color: transparent; }
+.shell button { cursor: pointer; font: inherit; }
+.shell button:disabled { cursor: wait; opacity: .6; }
+.shell button:focus-visible, .shell a:focus-visible { outline: 3px solid #92d8ff; outline-offset: 4px; }
+.refresh { flex-shrink: 0; background: transparent; border: 1px solid #34465d; border-radius: 10px; color: #e3ecf7; font-size: .875rem !important; padding: 10px 16px; min-height: 44px; }
+.nav { display: flex; gap: 4px; border-bottom: 1px solid #2b3b50; margin-bottom: 24px; }
+.nav button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; background: transparent; border: 0; border-bottom: 2px solid transparent; color: #aebdd0; padding: 13px 20px; min-height: 48px; font-size: .9375rem; }
+.nav button[aria-current] { color: #f6f9fe; border-bottom-color: var(--job-accent); }
+.actionDot { background: var(--job-accent); width: 7px; height: 7px; border-radius: 50%; }
+.overview[hidden], .embedded[hidden] { display: none; }
+.next { border: 1px solid #344b55; border-radius: 18px; background: linear-gradient(115deg,#182c31,#152233); padding: 28px; }
+.next .eyebrow { color: var(--job-accent); }
+.next h2 { color: #f7fafc; font-size: clamp(1.35rem,3vw,1.8rem); font-weight: 600; letter-spacing: -.025em; line-height: 1.25; margin: 8px 0; }
+.next p { color: #c3cfdb; max-width: 630px; margin: 0 0 20px; }
+.next button, .actions button { background: var(--job-accent); border: 1px solid var(--job-accent); color: #172817; font-weight: 650; border-radius: 10px; padding: 12px 20px; min-height: 48px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,275px),1fr)); gap: 16px; margin-top: 18px; }
+.card { display: flex; align-items: flex-start; flex-direction: column; background: #132033; border: 1px solid #2b3d54; border-radius: 16px; padding: 24px; min-width: 0; }
+.card h2 { color: #f0f5fa; font-size: 1.125rem; font-weight: 600; line-height: 1.4; margin: 10px 0 6px; }
+.card p { color: #acbbcd; margin: 0 0 18px; }
+.card a, .card button { display: inline-flex; color: #d7edba; background: transparent; border: 0; padding: 8px 0; margin-top: auto; font-size: .9375rem; font-weight: 600; min-height: 44px; text-decoration: underline; text-underline-offset: 4px; }
+.footer { display: flex; justify-content: space-between; gap: 16px; color: #95a7bc; font-size: .875rem; margin-top: 28px; }
+.footer a { color: #b8c9dd; }
+.state { border: 1px solid #34465d; border-radius: 18px; padding: 28px; background: #132033; }
+.state h1 { font-size: 1.5rem; line-height: 1.3; color: #f6f9fe; margin: 0 0 12px; }
+.state p { color: #bdccdc; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.actions .secondary { background: transparent; color: #dce8f6; border-color: #60758c; }
+.embedded { border-radius: 16px; overflow: hidden; }
+.embedded :global(.quote-link-shell) { min-height: 0; padding: 0; }
+.embedded :global(.quote-link-document), .embedded :global(.quote-link-receipt) { margin: 0; max-width: none; box-shadow: none; }
+@media(max-width:600px) {
+  .shell { padding: 20px 14px 32px; }
+  .brand { margin-bottom: 24px; font-size: .8125rem; }
+  .header { gap: 12px; align-items: flex-start; }
+  .header h1 { font-size: 1.5rem; }
+  .refresh { padding: 8px 12px; }
+  .nav { gap: 0; }
+  .nav button { padding: 12px; flex: 1; font-size: .875rem; }
+  .next, .card, .state { padding: 22px 18px; }
+  .next button { width: 100%; }
+  .footer { flex-wrap: wrap; }
+}
+@media print { .shell { background: white; color: black; padding: 0; }.brand,.header,.nav,.overview,.footer { display:none; }.embedded { overflow:visible; } }

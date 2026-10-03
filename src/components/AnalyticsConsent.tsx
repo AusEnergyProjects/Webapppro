@@ -14,6 +14,7 @@ const CONSENT_DEFAULT_ATTRIBUTE = "data-australian-energy-assessments-consent-de
 const PRIVATE_PATH_PREFIXES = [
   "/account",
   "/creditex",
+  "/customer-hub",
   "/direct-trade/dashboard",
   "/direct-trade/reset-password",
   "/direct-trade/team",

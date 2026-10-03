@@ -1,4 +1,5 @@
 .shell { background: #eef5f2; color: #072f31; min-height: 100vh; padding: 0 18px 48px; }
+.embedded { min-height: 0; padding-top: 24px; }
 .header { align-items: center; background: #03232d; color: #d8fff1; display: flex; justify-content: space-between; margin: 0 -18px 28px; padding: 18px clamp(18px, 5vw, 72px); }
 .header a { color: #fff; font-size: 1.2rem; font-weight: 850; text-decoration: none; }
 .header span { color: #83ddbf; font-size: .76rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
