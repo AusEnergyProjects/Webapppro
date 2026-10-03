@@ -74,6 +74,7 @@ const TradeQuickInvoicePanel = dynamic(() => import("./TradeQuickInvoicePanel").
 const TradeScheduleWorkspace = recoverableTradeWorkspace(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace));
 const TradeCustomerDocumentDeliveryPanel = dynamic(() => import("./TradeCustomerDocumentDeliveryPanel").then((module) => module.TradeCustomerDocumentDeliveryPanel));
 const TradeCustomerSmsPanel = dynamic(() => import("./TradeCustomerSmsPanel").then((module) => module.TradeCustomerSmsPanel));
+const TradeCustomerHubPanel = dynamic(() => import("./TradeCustomerHubPanel").then((module) => module.TradeCustomerHubPanel));
 const TradeRecordMap = dynamic(() => import("./TradeRecordMap").then((module) => module.TradeRecordMap));
 
 type Customer = {
@@ -522,6 +523,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const jobIndexRequested = useRef(false);
   const customerIndexRequested = useRef(false);
   const appliedNavigationTargetNonce = useRef(0);
+  const appliedCustomerQaNonce = useRef<number | null>(null);
   const allowedViews = useMemo<View[]>(() => {
     if (!staffPermissions) return ["today", "leads", "jobs", "schedule", "customers", "pricebook", "assets", "templates", "reports", "import", "integrations"];
     const views: View[] = ["today", "jobs"];
@@ -925,13 +927,17 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     })).then(async (response) => {
       const result = await response.json().catch(() => ({})) as CrmDetailResult;
       if (isMfaRequiredResponse(result)) setMfaRequired(true);
-      if (!response.ok || !result.ok || !result.customer) throw new Error(result.error || "The customer record could not be loaded.");
+      if (!response.ok || !result.ok || result.customer?.id !== selectedCustomerId) throw new Error(result.error || "The customer record could not be loaded.");
       if (active) {
         setSelectedCustomerDetail(result.customer);
-        setSelectedCustomerJobs(result.jobs || []);
-        setSelectedCustomerSites(result.sites || []);
+        setSelectedCustomerJobs((result.jobs || []).filter(job => job.crmCustomerId === selectedCustomerId));
+        setSelectedCustomerSites((result.sites || []).filter(site => site.customerId === selectedCustomerId));
       }
-    }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The customer record could not be loaded.", "error"));
+    }).catch((error) => {
+      if (!active || controller.signal.aborted) return;
+      setSelectedCustomerDetail(null); setSelectedCustomerJobs([]); setSelectedCustomerSites([]);
+      setStatus(error instanceof Error ? error.message : "The customer record could not be loaded.", "error");
+    });
     return () => { active = false; controller.abort(); };
   }, [fetch, refreshNonce, selectedCustomerId, setStatus, user, view]);
 
@@ -1540,7 +1546,12 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
 
     {view === "customers" && creating !== "customer" && selectedCustomerId && <div className="crm-view crm-customer-focus">
       <div className="crm-page-heading"><div><span>Customer workspace</span><h3>{selectedCustomerDetail?.id === selectedCustomerId ? selectedCustomerDetail.displayName : "Opening customer"}</h3><p>Contact details and linked jobs in one place.</p></div><button type="button" className="crm-back-button" onClick={() => { setSelectedCustomerId(""); setSelectedCustomerDetail(null); }}>{mapWorkspace ? "Back to map" : "Back to all customers"}</button></div>
-      {selectedCustomerDetail?.id === selectedCustomerId ? <CustomerDetail key={`${selectedCustomerDetail.id}:${refreshNonce}`} user={user} customer={selectedCustomerDetail} sites={selectedCustomerSites} jobs={selectedCustomerJobs} busy={busy} readOnly={Boolean(staffPermissions && !staffPermissions.canManageCustomers)} canUseSms={!staffPermissions} onOpenIntegrations={() => setView("integrations")} onSave={crmRequest} onOpenJob={(id) => openFocusedJob(id, "summary", { kind: "customer", customerId: selectedCustomerDetail.id, customerName: selectedCustomerDetail.displayName })} /> : <div className="crm-empty"><strong>Loading customer...</strong><span>The private customer record will open here.</span></div>}
+      {selectedCustomerDetail?.id === selectedCustomerId ? <>
+        <CustomerQa key={selectedCustomerDetail.id} customerId={selectedCustomerDetail.id} jobs={selectedCustomerJobs}
+          target={navigationTarget?.kind === "customer" && navigationTarget.id === selectedCustomerId && navigationTarget.customerSection === "qa" && appliedCustomerQaNonce.current !== navigationTarget.nonce ? navigationTarget : undefined}
+          onNavigationApplied={nonce => { appliedCustomerQaNonce.current = nonce; }} />
+        <CustomerDetail key={`${selectedCustomerDetail.id}:${refreshNonce}`} user={user} customer={selectedCustomerDetail} sites={selectedCustomerSites} jobs={selectedCustomerJobs} busy={busy} readOnly={Boolean(staffPermissions && !staffPermissions.canManageCustomers)} canUseSms={!staffPermissions} onOpenIntegrations={() => setView("integrations")} onSave={crmRequest} onOpenJob={(id) => openFocusedJob(id, "summary", { kind: "customer", customerId: selectedCustomerDetail.id, customerName: selectedCustomerDetail.displayName })} />
+      </> : <div className="crm-empty"><strong>Loading customer...</strong><span>The private customer record will open here.</span></div>}
     </div>}
 
     {!mapWorkspace && view === "customers" && creating !== "customer" && !selectedCustomerId && <div className="crm-view">
@@ -2104,4 +2115,41 @@ function CustomerDetail({ user, customer, sites, jobs, busy, readOnly = false, c
       <div className={registerStyles.panelBody}>{jobs.length ? <div className={registerStyles.customerJobs}>{jobs.map((job) => <button type="button" key={job.id} onClick={() => onOpenJob(job.id)}><span>{job.workNumber}</span><strong>{job.title}</strong><small>{sites.find((site) => site.id === job.serviceSiteId)?.siteLabel || "Site not selected"} | {pipelineLabels[job.pipelineStage] || job.pipelineStage} | {job.scheduledStart ? `Scheduled ${dateLabel(job.scheduledStart)}` : `Created ${dateLabel(job.createdAt)}`}</small></button>)}</div> : <p className={registerStyles.emptyMessage}>No jobs linked yet.</p>}</div>
     </details>
   </fieldset></section>;
+}
+
+function CustomerQa({ customerId, jobs, target, onNavigationApplied }: {
+  customerId: string; jobs: Job[]; target?: TLinkCommandTarget; onNavigationApplied: (nonce: number) => void;
+}) {
+  const eligibleJobs = jobs.filter(job => job.crmCustomerId === customerId && job.sourceType === "public_lead"
+    && job.customerSource === "public_lead_released" && job.recordStatus !== "archived");
+  const section = useRef<HTMLDetailsElement | null>(null);
+  const entries = useRef<Record<string, HTMLDetailsElement | null>>({});
+  const applied = useRef<number | null>(null);
+  const targetId = target?.kind === "customer" && target.id === customerId && target.customerSection === "qa" ? target.workOrderId : undefined;
+  const matchedId = eligibleJobs.find(job => job.id === targetId)?.id;
+  useEffect(() => {
+    if (!target || !matchedId || applied.current === target.nonce) return;
+    const entry = entries.current[matchedId];
+    if (!section.current || !entry) return;
+    section.current.open = true; entry.open = true;
+    entry.scrollIntoView({ behavior: "smooth", block: "start" });
+    entry.querySelector("summary")?.focus({ preventScroll: true });
+    applied.current = target.nonce; onNavigationApplied(target.nonce);
+  }, [matchedId, onNavigationApplied, target]);
+  if (!eligibleJobs.length) return null;
+  return <details ref={section} className={registerStyles.customerPanel}>
+    <summary><span><strong>Customer Q&amp;A</strong><small>Shared questions, answers and files for TLink enquiries</small></span><b>{eligibleJobs.length}</b></summary>
+    <div className={registerStyles.panelBody}>
+      {targetId && !matchedId && <p className={registerStyles.emptyMessage}>This conversation is no longer available in this customer record.</p>}
+      {eligibleJobs.map(job => <CustomerQaJob key={job.id} job={job} register={element => { entries.current[job.id] = element; }} />)}
+    </div>
+  </details>;
+}
+
+function CustomerQaJob({ job, register }: { job: Job; register: (element: HTMLDetailsElement | null) => void }) {
+  const [opened, setOpened] = useState(false);
+  return <details ref={register} className={registerStyles.customerPanel} onToggle={event => { if (event.currentTarget.open) setOpened(true); }}>
+    <summary><span><strong>{job.workNumber} | {job.title}</strong><small>Shared customer conversation</small></span></summary>
+    {opened && <TradeCustomerHubPanel workOrderId={job.id} />}
+  </details>;
 }

@@ -9,7 +9,7 @@ import { useTradeMessageAlerts } from "./TradeMessageAlerts";
 
 type JobNotification = {
   id: string;
-  targetKind: "job" | "opportunity" | "team" | "network";
+  targetKind: "job" | "customer" | "opportunity" | "team" | "network";
   targetId: string;
   workOrderId: string;
   workNumber: string;
@@ -133,6 +133,10 @@ export function TradeJobNotifications({
       return;
     }
     navigationNonce.current += 1;
+    if (item.targetKind === "customer") {
+      onNavigate({workspace:"work",kind:"customer",id:item.targetId,query:"",nonce:navigationNonce.current,customerSection:"qa",workOrderId:item.workOrderId});
+      return;
+    }
     if (item.targetKind === "team") {
       onNavigate({ workspace: "team", kind: "team", id: item.targetId, query: item.summary, nonce: navigationNonce.current });
       return;

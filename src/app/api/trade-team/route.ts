@@ -90,6 +90,7 @@ type MemberPermissions = {
   canManageQuotes: boolean;
   canSendQuotes: boolean;
   canSendSms: boolean;
+  canReceiveCustomerQaNotifications: boolean;
   canViewInvoices: boolean;
   canManageInvoices: boolean;
   canViewPriceBook: boolean;
@@ -108,7 +109,7 @@ type MemberPermissions = {
 
 const BOOLEAN_PERMISSION_KEYS = [
   "canCreateJobs", "canManageJobs", "canAssignJobs", "canViewCustomers", "canManageCustomers",
-  "canViewQuotes", "canManageQuotes", "canSendQuotes", "canSendSms", "canViewInvoices",
+  "canViewQuotes", "canManageQuotes", "canSendQuotes", "canSendSms", "canReceiveCustomerQaNotifications", "canViewInvoices",
   "canManageInvoices", "canViewPriceBook", "canManagePriceBook", "canApplyDiscounts",
   "canRescheduleJobs",
   "canManageTeam", "canEditTeamPermissions", "canViewFieldEvidence", "canManageFieldEvidence", "canManageForms", "canRunReports",
@@ -145,7 +146,7 @@ function permissionInput(body: Record<string, unknown>) {
 const SAFE_MEMBER_PERMISSIONS: MemberPermissions = {
   canCreateJobs: false, canManageJobs: false, canAssignJobs: false, jobScope: "own",
   canViewCustomers: false, canManageCustomers: false,
-  canViewQuotes: false, canManageQuotes: false, canSendQuotes: false, canSendSms: false,
+  canViewQuotes: false, canManageQuotes: false, canSendQuotes: false, canSendSms: false, canReceiveCustomerQaNotifications: false,
   canViewInvoices: false, canManageInvoices: false,
   canViewPriceBook: false, canManagePriceBook: false, canApplyDiscounts: false,
   scheduleScope: "own", canRescheduleJobs: false,
@@ -177,6 +178,7 @@ function memberPermissions(body: Record<string, unknown>, current?: Record<strin
     canViewQuotes: value("canViewQuotes", "can_view_quotes") || canManageQuotes || canSendQuotes,
     canManageQuotes: canManageQuotes || canSendQuotes,
     canSendQuotes, canSendSms: value("canSendSms", "can_send_sms"),
+    canReceiveCustomerQaNotifications: value("canReceiveCustomerQaNotifications", "can_receive_customer_qa_notifications"),
     canViewInvoices: value("canViewInvoices", "can_view_invoices") || canManageInvoices,
     canManageInvoices,
     canViewPriceBook: value("canViewPriceBook", "can_view_price_book") || canManagePriceBook,
@@ -200,7 +202,7 @@ function permissionBindings(value: MemberPermissions) {
   return [
     value.canCreateJobs ? 1 : 0, value.canManageJobs ? 1 : 0, value.canAssignJobs ? 1 : 0, value.jobScope,
     value.canViewCustomers ? 1 : 0, value.canManageCustomers ? 1 : 0,
-    value.canViewQuotes ? 1 : 0, value.canManageQuotes ? 1 : 0, value.canSendQuotes ? 1 : 0, value.canSendSms ? 1 : 0,
+    value.canViewQuotes ? 1 : 0, value.canManageQuotes ? 1 : 0, value.canSendQuotes ? 1 : 0, value.canSendSms ? 1 : 0, value.canReceiveCustomerQaNotifications ? 1 : 0,
     value.canViewInvoices ? 1 : 0, value.canManageInvoices ? 1 : 0,
     value.canViewPriceBook ? 1 : 0, value.canManagePriceBook ? 1 : 0, value.canApplyDiscounts ? 1 : 0,
     value.scheduleScope, value.canRescheduleJobs ? 1 : 0,
@@ -227,6 +229,7 @@ function assertPermissionGrant(access: TeamAccess, permissions: MemberPermission
     canViewQuotes: access.canViewQuotes,
     canManageQuotes: access.canManageQuotes,
     canSendQuotes: access.canSendQuotes, canSendSms: access.isOwner || Boolean(access.canSendSms),
+    canReceiveCustomerQaNotifications: access.isOwner || access.canReceiveCustomerQaNotifications,
     canViewInvoices: access.canViewInvoices,
     canManageInvoices: access.canManageInvoices,
     canViewPriceBook: access.canViewPriceBook,
@@ -255,7 +258,7 @@ function assertPermissionGrant(access: TeamAccess, permissions: MemberPermission
 const PERMISSION_COLUMNS: Record<(typeof BOOLEAN_PERMISSION_KEYS)[number], string> = {
   canCreateJobs: "can_create_jobs", canManageJobs: "can_manage_jobs", canAssignJobs: "can_assign_jobs",
   canViewCustomers: "can_view_customers", canManageCustomers: "can_manage_customers",
-  canViewQuotes: "can_view_quotes", canManageQuotes: "can_manage_quotes", canSendQuotes: "can_send_quotes", canSendSms: "can_send_sms",
+  canViewQuotes: "can_view_quotes", canManageQuotes: "can_manage_quotes", canSendQuotes: "can_send_quotes", canSendSms: "can_send_sms", canReceiveCustomerQaNotifications: "can_receive_customer_qa_notifications",
   canViewInvoices: "can_view_invoices", canManageInvoices: "can_manage_invoices",
   canViewPriceBook: "can_view_price_book", canManagePriceBook: "can_manage_price_book",
   canApplyDiscounts: "can_apply_discounts", canRescheduleJobs: "can_reschedule_jobs",
@@ -482,7 +485,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const memberRows = !canManageTeam(access) ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT id, member_uid, email, display_name,
       first_name, last_name, phone, field_username, schedule_colour, capabilities, service_states, status,
       can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
-      can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_view_invoices, can_manage_invoices,
+      can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_receive_customer_qa_notifications, can_view_invoices, can_manage_invoices,
       can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
       can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
       can_view_field_evidence, can_manage_field_evidence, can_manage_forms, can_run_reports, can_search_customers,
@@ -529,7 +532,8 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
         jobScope: access.jobScope, canViewCustomers: access.canViewCustomers,
         canManageCustomers: access.canManageCustomers,
         canViewQuotes: access.canViewQuotes, canManageQuotes: access.canManageQuotes,
-        canSendQuotes: access.canSendQuotes, canSendSms: access.isOwner || Boolean(access.canSendSms), canViewInvoices: access.canViewInvoices,
+        canSendQuotes: access.canSendQuotes, canSendSms: access.isOwner || Boolean(access.canSendSms),
+        canReceiveCustomerQaNotifications: access.isOwner || access.canReceiveCustomerQaNotifications, canViewInvoices: access.canViewInvoices,
         canManageInvoices: access.canManageInvoices, canViewPriceBook: access.canViewPriceBook,
         canManagePriceBook: access.canManagePriceBook, canApplyDiscounts: access.canApplyDiscounts,
         scheduleScope: access.scheduleScope,
@@ -556,7 +560,8 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
         jobScope: row.job_scope === "team" ? "team" : "own",
         canViewCustomers: Boolean(row.can_view_customers), canManageCustomers: Boolean(row.can_manage_customers),
         canViewQuotes: Boolean(row.can_view_quotes), canManageQuotes: Boolean(row.can_manage_quotes),
-        canSendQuotes: Boolean(row.can_send_quotes), canSendSms: String(row.member_uid) === access.ownerUid || Boolean(row.can_send_sms), canViewInvoices: Boolean(row.can_view_invoices),
+        canSendQuotes: Boolean(row.can_send_quotes), canSendSms: String(row.member_uid) === access.ownerUid || Boolean(row.can_send_sms),
+        canReceiveCustomerQaNotifications: String(row.member_uid) === access.ownerUid || Boolean(row.can_receive_customer_qa_notifications), canViewInvoices: Boolean(row.can_view_invoices),
         canManageInvoices: Boolean(row.can_manage_invoices), canViewPriceBook: Boolean(row.can_view_price_book),
         canManagePriceBook: Boolean(row.can_manage_price_book),
         canApplyDiscounts: Boolean(row.can_apply_discounts),
@@ -701,7 +706,7 @@ export async function POST(request: Request) {
         db.prepare(`INSERT INTO trade_team_members
           (id, owner_uid, member_uid, email, display_name, first_name, last_name, phone, field_username, field_username_normalized, schedule_colour, capabilities, role,
            can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope,
-           can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms,
+           can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_receive_customer_qa_notifications,
            can_view_invoices, can_manage_invoices, can_view_price_book, can_manage_price_book, can_apply_discounts,
            schedule_scope, can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
            can_view_field_evidence,
@@ -712,7 +717,7 @@ export async function POST(request: Request) {
              ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?,
-             ?, ?, 'active', '', '', '', ?, ?, ? WHERE ${createGuard.sql}`)
+             ?, ?, ?, 'active', '', '', '', ?, ?, ? WHERE ${createGuard.sql}`)
           .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour, JSON.stringify(capabilities), "field",
             ...permissionBindings(permissions), now, now, serviceStates, ...createGuard.bindings),
         conditionalMemberAuditStatement(db, access, memberId, "member.created", {
@@ -727,7 +732,7 @@ export async function POST(request: Request) {
     } else if (action === "reissue_invite") {
       const existing = await db.prepare(`SELECT id, member_uid, email, display_name, first_name, last_name, phone, field_username, field_username_normalized, schedule_colour, capabilities,
           status, updated_at, can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope,
-          can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms,
+          can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_receive_customer_qa_notifications,
           can_view_invoices, can_manage_invoices, can_view_price_book, can_manage_price_book, can_apply_discounts,
           schedule_scope, can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
           can_view_field_evidence, can_manage_field_evidence, can_manage_forms,
@@ -766,7 +771,7 @@ export async function POST(request: Request) {
       if (memberId) {
         const current = await db.prepare(`SELECT id, member_uid, status, updated_at, field_username, field_username_normalized, schedule_colour, service_states,
             can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
-            can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_view_invoices, can_manage_invoices,
+            can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_receive_customer_qa_notifications, can_view_invoices, can_manage_invoices,
             can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
             can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
             can_view_field_evidence, can_manage_field_evidence, can_manage_forms, can_run_reports, can_search_customers
@@ -797,7 +802,7 @@ export async function POST(request: Request) {
         const invited = await db.batch([
           db.prepare(`UPDATE trade_team_members SET email = ?, display_name = ?, first_name = ?, last_name = ?,
             phone = ?, field_username = ?, field_username_normalized = ?, schedule_colour = ?, capabilities = ?, service_states = ?, can_create_jobs = ?, can_manage_jobs = ?, can_assign_jobs = ?, job_scope = ?, can_view_customers = ?,
-            can_manage_customers = ?, can_view_quotes = ?, can_manage_quotes = ?, can_send_quotes = ?, can_send_sms = ?,
+            can_manage_customers = ?, can_view_quotes = ?, can_manage_quotes = ?, can_send_quotes = ?, can_send_sms = ?, can_receive_customer_qa_notifications = ?,
             can_view_invoices = ?, can_manage_invoices = ?, can_view_price_book = ?, can_manage_price_book = ?, can_apply_discounts = ?,
             schedule_scope = ?, can_reschedule_jobs = ?, can_manage_team = ?, can_edit_team_permissions = ?, can_view_field_evidence = ?,
             can_manage_field_evidence = ?, can_manage_forms = ?, can_run_reports = ?, can_search_customers = ?, invited_at = ?, updated_at = ?
@@ -820,7 +825,7 @@ export async function POST(request: Request) {
         db.prepare(`INSERT INTO trade_team_members
           (id, owner_uid, member_uid, email, display_name, first_name, last_name, phone, field_username, field_username_normalized, schedule_colour, capabilities, role,
            can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope,
-           can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms,
+           can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_receive_customer_qa_notifications,
            can_view_invoices, can_manage_invoices, can_view_price_book, can_manage_price_book, can_apply_discounts,
            schedule_scope, can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
            can_view_field_evidence,
@@ -831,7 +836,7 @@ export async function POST(request: Request) {
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, 'active', ?, '', '', ?, ?, ? WHERE ${createGuard.sql}`)
+            ?, ?, ?, 'active', ?, '', '', ?, ?, ? WHERE ${createGuard.sql}`)
           .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone, appUsername.username, appUsername.normalized, scheduleColour,
             JSON.stringify(capabilities), "field",
             ...permissionBindings(permissions), now, now, now, serviceStates, ...createGuard.bindings),
@@ -872,7 +877,7 @@ export async function PATCH(request: Request) {
       const current = await db.prepare(`SELECT member_uid, email, display_name, first_name, last_name, phone, field_username, field_username_normalized, schedule_colour,
           capabilities, service_states, status, updated_at,
           can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
-          can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_view_invoices, can_manage_invoices,
+          can_view_quotes, can_manage_quotes, can_send_quotes, can_send_sms, can_receive_customer_qa_notifications, can_view_invoices, can_manage_invoices,
           can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
           can_reschedule_jobs, can_manage_team, can_edit_team_permissions,
           can_view_field_evidence, can_manage_field_evidence, can_manage_forms, can_run_reports, can_search_customers
@@ -953,7 +958,7 @@ export async function PATCH(request: Request) {
         db.prepare(`UPDATE trade_team_members SET email = ?, display_name = ?, first_name = ?, last_name = ?,
           phone = ?, field_username = ?, field_username_normalized = ?, schedule_colour = ?, capabilities = ?, service_states = ?, status = ?,
           can_create_jobs = ?, can_manage_jobs = ?, can_assign_jobs = ?, job_scope = ?, can_view_customers = ?,
-          can_manage_customers = ?, can_view_quotes = ?, can_manage_quotes = ?, can_send_quotes = ?, can_send_sms = ?,
+          can_manage_customers = ?, can_view_quotes = ?, can_manage_quotes = ?, can_send_quotes = ?, can_send_sms = ?, can_receive_customer_qa_notifications = ?,
           can_view_invoices = ?, can_manage_invoices = ?, can_view_price_book = ?, can_manage_price_book = ?,
           can_apply_discounts = ?, schedule_scope = ?, can_reschedule_jobs = ?,
           can_manage_team = ?, can_edit_team_permissions = ?, can_view_field_evidence = ?,

@@ -236,18 +236,45 @@ test("the New Job handoff carries a bounded ordered set of planned government ac
 });
 
 test("saved preferences and job or customer reads cancel stale requests before they can replace current state", () => {
-  assert.match(crm, /loadJobIndex = useCallback\(async \(signal: AbortSignal\)/);
-  assert.match(crm, /loadCustomerIndex = useCallback\(async \(signal: AbortSignal\)/);
-  assert.equal((crm.match(/const controller = new AbortController\(\);/g) || []).length, 5);
-  assert.equal((crm.match(/signal\.aborted\) return;/g) || []).length, 2);
-  assert.equal((crm.match(/controller\.abort\(\); if \(timer\) window\.clearTimeout\(timer\)/g) || []).length, 2);
-  assert.match(crm, /loadJobIndex\(controller\.signal\)/);
-  assert.match(crm, /loadCustomerIndex\(controller\.signal\)/);
-  assert.equal((crm.match(/signal: controller\.signal/g) || []).length, 3);
-  assert.equal((crm.match(/active && !controller\.signal\.aborted/g) || []).length, 3);
-  assert.equal((crm.match(/return \(\) => \{ active = false; controller\.abort\(\); \};/g) || []).length, 2);
-  assert.match(crm, /loadedRef\.current = true;\s+applied = true;/);
-  assert.match(crm, /return \(\) => \{ active = false; controller\.abort\(\); if \(!applied\) loadedRef\.current = false; \};/);
+  const source = ts.createSourceFile("InstallerCrmWorkspace.tsx", crm, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const effects = [], loaders = new Map();
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(source) === "useEffect") effects.push(node.arguments[0].getText(source));
+    if (ts.isVariableDeclaration(node) && ["loadJobIndex", "loadCustomerIndex"].includes(node.name.getText(source))) {
+      loaders.set(node.name.getText(source), node.getText(source));
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  function effectContaining(marker) {
+    const matches = effects.filter(effect => effect.includes(marker));
+    assert.equal(matches.length, 1, `Expected one request effect for ${marker}`);
+    assert.match(matches[0], /const controller = new AbortController\(\);/);
+    assert.match(matches[0], /return \(\) => \{ active = false; controller\.abort\(\);/);
+    return matches[0];
+  }
+  for (const name of ["loadJobIndex", "loadCustomerIndex"]) {
+    assert.ok(loaders.has(name));
+    assert.match(loaders.get(name), /useCallback\(async \(signal: AbortSignal\)/);
+    assert.match(loaders.get(name), /if \(signal\.aborted\) return;\s+const items = [^\n]+;\s+setIndexed/);
+    const effect = effectContaining(`${name}(controller.signal)`);
+    assert.match(effect, /controller\.abort\(\); if \(timer\) window\.clearTimeout\(timer\)/);
+  }
+  const preferences = effectContaining("/api/trade-list-views?view=");
+  const jobDetail = effectContaining("mode=detail&resource=job&id=");
+  const customerDetail = effectContaining("mode=detail&resource=customer&id=");
+  for (const effect of [preferences, jobDetail, customerDetail]) assert.match(effect, /signal: controller\.signal/);
+  assert.match(preferences, /if \(!active\) return;\s+const preferences/);
+  assert.match(preferences, /if \(active && !controller\.signal\.aborted\) \{/);
+  assert.match(preferences, /loadedRef\.current = true;\s+applied = true;/);
+  assert.match(preferences, /if \(!applied\) loadedRef\.current = false;/);
+  assert.match(jobDetail, /if \(active\) \{ setSelectedJobDetail\(result\.job\)/);
+  assert.match(jobDetail, /catch\(\(error\) => active && !controller\.signal\.aborted && setStatus/);
+  assert.match(customerDetail, /result\.customer\?\.id !== selectedCustomerId/);
+  assert.match(customerDetail, /if \(active\) \{\s+setSelectedCustomerDetail\(result\.customer\)/);
+  assert.match(customerDetail, /filter\(job => job\.crmCustomerId === selectedCustomerId\)/);
+  assert.match(customerDetail, /filter\(site => site\.customerId === selectedCustomerId\)/);
+  assert.match(customerDetail, /catch\(\(error\) => \{\s+if \(!active \|\| controller\.signal\.aborted\) return;\s+setSelectedCustomerDetail\(null\); setSelectedCustomerJobs\(\[\]\); setSelectedCustomerSites\(\[\]\);\s+setStatus/);
 });
 
 test("job and customer directories expose granular server filters and single-line data columns", () => {

@@ -234,3 +234,30 @@ test("worker drains member file cleanup from health and minute cron", async () =
   assert.match(worker, /url\.pathname === "\/api\/health"/);
   assert.match(worker, /controller\.cron === NOTIFICATION_DELIVERY_CRON/);
 });
+
+
+test("customer Q&A migration enables only identified owners, leaves all staff off and enforces booleans", async () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON; CREATE TABLE trade_work_orders (id text PRIMARY KEY NOT NULL)");
+    for (const file of ["0025_dizzy_spot.sql", "0070_frictionless_team_roster.sql", "0131_trade_team_permissions_and_member_files.sql"]) {
+      apply(db, await read("../drizzle/" + file));
+    }
+    const insert = db.prepare("INSERT INTO trade_team_members (id,owner_uid,member_uid,email,display_name,role,status,invited_at,created_at,updated_at) VALUES (?,'owner',?,?,?,?,'active','','','')");
+    for (const [id, uid, role] of [["owner-member", "owner", "manager"], ["manager", "manager", "manager"], ["subcontractor", "subcontractor", "subcontractor"], ["field", "", "field"]]) {
+      insert.run(id, uid, id + "@example.test", id, role);
+    }
+    apply(db, await read("../drizzle/0246_trade_team_customer_qa_permission.sql"));
+    const value = id => db.prepare("SELECT can_receive_customer_qa_notifications flag FROM trade_team_members WHERE id=?").get(id).flag;
+    assert.equal(value("owner-member"), 1);
+    for (const id of ["manager", "subcontractor", "field"]) assert.equal(value(id), 0, id);
+    insert.run("new-subcontractor", "new-worker", "new@example.test", "New worker", "subcontractor");
+    assert.equal(value("new-subcontractor"), 0);
+    for (const malformed of [-1, 2, null, "true"]) {
+      assert.throws(() => db.prepare("UPDATE trade_team_members SET can_receive_customer_qa_notifications=? WHERE id='subcontractor'").run(malformed));
+    }
+    db.exec("UPDATE trade_team_members SET can_receive_customer_qa_notifications=1 WHERE id='subcontractor'");
+    const row = db.prepare("SELECT can_receive_customer_qa_notifications,can_view_customers,can_view_quotes,can_manage_quotes FROM trade_team_members WHERE id='subcontractor'").get();
+    assert.deepEqual({ ...row }, { can_receive_customer_qa_notifications: 1, can_view_customers: 0, can_view_quotes: 0, can_manage_quotes: 0 });
+  } finally { db.close(); }
+});

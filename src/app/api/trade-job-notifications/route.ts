@@ -14,7 +14,7 @@ type Row = Record<string, unknown>;
 type JobTab = "schedule" | "quote" | "field" | "invoice";
 type JobNotification = {
   id: string;
-  targetKind: "job" | "opportunity" | "team" | "network";
+  targetKind: "job" | "customer" | "opportunity" | "team" | "network";
   targetId: string;
   workOrderId: string;
   workNumber: string;

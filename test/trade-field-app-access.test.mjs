@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
 
 import {
   FIELD_ACCESS_MAX_ATTEMPTS,
@@ -162,4 +164,23 @@ test("new rental jobs separate the exact selected scope from the legacy minimum-
   assert.match(guards, /COALESCE\(inspection\.selected_modules_snapshot, inspection\.module_selection_snapshot\)/);
   assert.match(report, /inspection\.selected_modules_snapshot \|\| inspection\.module_selection_snapshot/);
   assert.match(sync, /rental\.selected_modules_snapshot \|\| rental\.module_selection_snapshot/);
+});
+
+
+test("field session Q&A notification receipt follows the explicit saved grant", async () => {
+  const source = await read("src/lib/trade-field-session-server.ts");
+  const ast = ts.createSourceFile("trade-field-session-server.ts", source, ts.ScriptTarget.Latest, true);
+  const declaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "accessFromRow");
+  assert.ok(declaration);
+  const script = ts.transpileModule(declaration.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const hydrate = runInNewContext(script + "; accessFromRow;");
+  for (const flag of [undefined, 0, 1]) {
+    const access = hydrate({ owner_uid: "owner", id: "subcontractor", can_receive_customer_qa_notifications: flag, can_view_quotes: 1 }, "session");
+    assert.equal(access.canReceiveCustomerQaNotifications, flag === 1);
+    assert.equal(access.canViewQuotes, true);
+    assert.equal(access.canViewCustomers, false);
+    assert.equal(access.isOwner, false);
+  }
+  const projection = source.slice(source.indexOf("const MEMBER_ACCESS_COLUMNS"), source.indexOf(";", source.indexOf("const MEMBER_ACCESS_COLUMNS")));
+  assert.match(projection, /m\.can_receive_customer_qa_notifications/);
 });

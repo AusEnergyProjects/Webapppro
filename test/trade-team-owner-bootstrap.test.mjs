@@ -30,7 +30,7 @@ class Statement {
   }
 }
 
-function loadServer(database) {
+function loadServer(database, overrides = {}) {
   const output = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
     fileName: "src/lib/trade-team-server.ts",
@@ -55,6 +55,7 @@ function loadServer(database) {
       isFieldSessionRequest: () => false,
       requireFieldSessionAccess: async () => { throw new Error("not used"); },
     },
+    ...overrides,
   };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
@@ -80,7 +81,7 @@ function fixture() {
     "can_view_quotes", "can_manage_quotes", "can_send_quotes", "can_view_invoices", "can_manage_invoices",
     "can_view_price_book", "can_manage_price_book", "can_apply_discounts", "can_reschedule_jobs",
     "can_manage_team", "can_edit_team_permissions", "can_view_field_evidence", "can_manage_field_evidence",
-    "can_manage_forms", "can_run_reports", "can_search_customers",
+    "can_manage_forms", "can_receive_customer_qa_notifications", "can_run_reports", "can_search_customers",
   ];
   database.exec(`CREATE TABLE trade_team_members (
     id text PRIMARY KEY, owner_uid text NOT NULL, member_uid text NOT NULL, email text NOT NULL,
@@ -114,7 +115,7 @@ test("owner access bootstrap does not change the member revision when authoritat
 test("owner access bootstrap updates the revision only when authoritative owner details need repair", async () => {
   const { database, permissionColumns } = fixture();
   const revision = "2026-08-25T00:00:00.000Z";
-  const permissions = permissionColumns.map((column) => ["can_manage_team", "can_manage_forms"].includes(column) ? "0" : "1").join(", ");
+  const permissions = permissionColumns.map((column) => ["can_manage_team", "can_manage_forms", "can_receive_customer_qa_notifications"].includes(column) ? "0" : "1").join(", ");
   database.prepare(`INSERT INTO trade_team_members (
       id, owner_uid, member_uid, email, display_name, role, ${permissionColumns.join(", ")},
       job_scope, schedule_scope, status, invited_at, accepted_at, last_active_at, created_at, updated_at
@@ -126,11 +127,12 @@ test("owner access bootstrap updates the revision only when authoritative owner 
   const server = loadServer(database);
   await server.ensureOwnerTeamMember("owner-1", "owner@test.invalid", "Owner Business");
 
-  const owner = database.prepare(`SELECT display_name, can_manage_team, can_manage_forms, updated_at
+  const owner = database.prepare(`SELECT display_name, can_manage_team, can_manage_forms, can_receive_customer_qa_notifications, updated_at
     FROM trade_team_members WHERE id = 'owner-member'`).get();
   assert.equal(owner.display_name, "Owner Business");
   assert.equal(owner.can_manage_team, 1);
   assert.equal(owner.can_manage_forms, 1);
+  assert.equal(owner.can_receive_customer_qa_notifications, 1);
   assert.notEqual(owner.updated_at, revision);
 });
 
@@ -138,7 +140,31 @@ test("new owner membership receives explicit form authoring without relying on a
   const { database } = fixture();
   try {
     const memberId = await loadServer(database).ensureOwnerTeamMember("owner-1", "owner@test.invalid", "Owner Business");
-    const row = database.prepare("SELECT member_uid,can_manage_forms,status FROM trade_team_members WHERE id=?").get(memberId);
-    assert.deepEqual({ ...row }, { member_uid: "owner-1", can_manage_forms: 1, status: "active" });
+    const row = database.prepare("SELECT member_uid,can_manage_forms,can_receive_customer_qa_notifications,status FROM trade_team_members WHERE id=?").get(memberId);
+    assert.deepEqual({ ...row }, { member_uid: "owner-1", can_manage_forms: 1, can_receive_customer_qa_notifications: 1, status: "active" });
+  } finally { database.close(); }
+});
+
+
+test("office team access reads the current Q&A notification grant without deriving it from other permissions", async () => {
+  const { database } = fixture();
+  try {
+    database.exec("ALTER TABLE trade_team_members ADD can_send_sms INTEGER NOT NULL DEFAULT 0; CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,business_name TEXT); INSERT INTO trade_accounts VALUES ('owner-1','Business');");
+    await loadServer(database).ensureOwnerTeamMember("owner-1", "owner@test.invalid", "Business");
+    database.exec("UPDATE trade_team_members SET id='staff',member_uid='staff-uid',can_receive_customer_qa_notifications=0");
+    const server = loadServer(database, {
+      "./firebase-server": { requireFirebaseIdentity: async () => ({ uid: "staff-uid", email: "staff@example.test", emailVerified: true }) },
+      "./trade-access-server": { tradeAccountProjection: async () => ({ partnerType: "installer", approvedAbnAccess: true }) },
+      "./trade-business-context-server": { selectTradeBusiness: async () => ({ role: "member", ownerUid: "owner-1", memberId: "staff" }) },
+      "./trade-mfa-server": { requireTradeMyobSecondFactor: async () => {} },
+    });
+    const request = new Request("https://test/api/trade-team");
+    for (const flag of [0, 1, 0]) {
+      database.prepare("UPDATE trade_team_members SET can_receive_customer_qa_notifications=? WHERE id='staff'").run(flag);
+      const access = await server.requireInstallerTeamAccess(request);
+      assert.equal(access.canReceiveCustomerQaNotifications, Boolean(flag));
+      assert.equal(access.isOwner, false);
+      assert.equal(access.canViewQuotes, true);
+    }
   } finally { database.close(); }
 });

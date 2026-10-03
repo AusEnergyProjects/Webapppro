@@ -7,6 +7,7 @@ import { certificateTestDependency } from "./helpers/creditex-training-fixture.m
 import * as consent from "../src/lib/public-plan-enquiry.mjs";
 import * as catalogue from "../src/lib/energy-service-catalogue.mjs";
 import * as collaboration from "../src/lib/trade-job-collaboration.ts";
+import * as businessProfile from "../src/lib/customer-hub-business-profile.ts";
 import * as privateImages from "../src/lib/private-image-evidence.ts";
 
 const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -34,6 +35,7 @@ const links = load("../src/lib/customer-hub-links.ts", {
 });
 const receivedDecisions = new Map();
 const hubServer = load("../src/lib/customer-quote-hub-server.ts", {
+  "./customer-hub-business-profile": businessProfile,
   "./trade-access-server": certificateTestDependency("trade-access-server"),
   "./aea-trade-owner-server": certificateTestDependency("aea-trade-owner-server"),
   "./trade-certificate-leads": certificateTestDependency("trade-certificate-leads"),
@@ -50,7 +52,7 @@ const past = "2000-01-01T00:00:00.000Z";
 const categories = JSON.stringify(["solar", "air-conditioning"]);
 const customerEmail = "customer@example.invalid";
 const ownerAccess = ownerUid => ({ ownerUid, actorUid: ownerUid, isOwner: true, memberId: `member-${ownerUid}`,
-  canViewQuotes: true, canManageQuotes: true, jobScope: "team" });
+  canViewQuotes: true, canManageQuotes: true, canViewCustomers:true, canReceiveCustomerQaNotifications:true, jobScope: "team" });
 
 async function fixture(t) {
   const { sqlite } = migratedDataforceSqlite();
@@ -104,6 +106,7 @@ async function fixture(t) {
     const service = owner === "ac" ? "air-conditioning" : "solar";
     insert("trade_opportunity_matches", { id: `match-${owner}`, opportunity_id: project, firebase_uid: owner, status: "interested",
       matched_categories: JSON.stringify([service]), matched_at: now, updated_at: now });
+    insert("customer_hub_interests", {match_id: `match-${owner}`,opportunity_id:project,interested:1,interested_since:past,updated_at:now,updated_by_uid:owner});
     insert("trade_work_orders", { id: `work-${owner}`, firebase_uid: owner, partner_type: "installer", work_number: `JOB-${owner}`, title: "PRIVATE STAFF TITLE",
       source_type: "public_lead", source_reference: `match-${owner}`, service_categories: JSON.stringify([service]), created_at: now, updated_at: now });
     insert("trade_crm_job_details", { id: `detail-${owner}`, work_order_id: `work-${owner}`, firebase_uid: owner,
@@ -133,8 +136,16 @@ async function fixture(t) {
     "../../../../../db": { getD1: () => db }, "@/lib/admin-server": { sameOrigin: () => true },
     "@/lib/customer-hub-links": links, "@/lib/customer-quote-hub-server": hubServer,
   });
+  const emails=load("../src/lib/customer-hub-email-server.ts",{
+    "./trade-integration-crypto":protectedPayload,
+    "./customer-quote-hub-server":hubServer,"./customer-hub-links":links,
+    "./service-reminder-delivery":{serviceReminderProviderConfiguration:()=>({email:{configured:false}})},
+  });
+  let onHandoff=async()=>{throw new Error("Unexpected job creation");};
   const tradeRoute = load("../src/app/api/trade-customer-hub/route.ts", {
     "../../../../db": { getD1: () => db }, "@/lib/admin-server": { sameOrigin: () => true, mfaErrorResponse: () => null },
+    "@/lib/customer-hub-email-server":emails,
+    "@/lib/public-lead-quote-workflow-server":{startPublicLeadQuoteWorkflow:(...args)=>onHandoff(...args)},
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access },
     "@/lib/trade-customer-hub-server": tradeServer, "@/lib/customer-quote-hub-server": hubServer,
     "@/lib/customer-project-evidence-bucket": { getCustomerProjectEvidenceBucket: () => bucket },
@@ -154,6 +165,7 @@ async function fixture(t) {
     return fileRoute.POST(new Request("https://example.invalid/api/customer-hub/synthetic/files", { method: "POST", body: form }), { params: Promise.resolve({ token }) });
   };
   return { sqlite, db, insert, update, token, otherToken, authority, customer, ask, tradeRoute, upload, objects, deletedObjects,
+    onHandoff: callback=>{onHandoff=callback;},
     access: () => access, setAccess: value => { access = value; }, hook: callback => { beforeQuery = callback; },
     onCommit: callback => { afterCommit = callback; }, onDownload: callback => { duringDownload = callback; },
     view: () => hubServer.loadCustomerQuoteHub(db, authority),
@@ -321,7 +333,7 @@ test("shared questions and answers stay inside one project and are visible to it
   assert.equal((await f.customer("POST", { questionId: "shared", answer: "Stale overwrite", revision: 0 })).status, 409);
   assert.equal((await tradeServer.tradeHubView(f.db, ownerAccess("ac"), "work-ac")).questions[0].answer, "The switchboard is outside");
   const notifications = await tradeServer.hubTradeNotifications(f.db, ownerAccess("ac"));
-  assert.equal(notifications.length, 1); assert.equal(notifications[0].targetId, "work-ac");
+  assert.equal(notifications.length, 1); assert.equal(notifications[0].targetId, "customer-ac");assert.equal(notifications[0].workOrderId,"work-ac");assert.equal(notifications[0].targetKind,"customer");
   assert.deepEqual(await tradeServer.hubTradeNotifications(f.db, ownerAccess("foreign")), []);
   f.update("trade_opportunity_matches", { status: "declined" }, "id='match-ac'");
   assert.deepEqual(await tradeServer.tradeHubView(f.db, ownerAccess("ac"), "work-ac"), { ok: true, available: false });
@@ -472,4 +484,77 @@ test("upload rolls back and removes staged bytes when the customer closes before
   assert.equal(f.sqlite.prepare("SELECT COUNT(*) count FROM customer_hub_files").get().count, 0);
   assert.equal(f.sqlite.prepare("SELECT COUNT(*) count FROM customer_hub_events WHERE event_type='file_added'").get().count, 0);
   assert.equal(f.objects.size, 0); assert.equal(f.deletedObjects.length, 1);
+});
+
+test("business interest defaults off, uses CAS, stops updates immediately and does not reopen customer enquiries", async t => {
+  const f=await fixture(t);
+  f.sqlite.prepare("DELETE FROM customer_hub_interests").run();
+  const req=body=>new Request('https://example.invalid/api/trade-customer-hub',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({workOrderId:'work-solar',...body})});
+  let view=await tradeServer.tradeHubView(f.db,f.access(),'work-solar');
+  assert.equal(view.interested,false);assert.equal(view.interestRevision,0);
+  assert.equal((await f.ask()).status,409);
+  assert.equal((await f.tradeRoute.PATCH(req({interested:true,revision:0}))).status,200);
+  assert.equal((await f.tradeRoute.PATCH(req({interested:false,revision:0}))).status,409);
+  assert.equal((await f.ask()).status,200);
+  let notes=await tradeServer.hubTradeNotifications(f.db,f.access());
+  assert.equal(notes.length,1);assert.equal(notes[0].targetKind,'customer');assert.equal(notes[0].targetId,'customer-solar');
+  await f.customer('PATCH',{accepting:false,revision:1});
+  assert.equal((await f.tradeRoute.PATCH(req({interested:false,revision:1}))).status,200);
+  assert.deepEqual(await tradeServer.hubTradeNotifications(f.db,f.access()),[]);
+  assert.equal((await f.tradeRoute.PATCH(req({interested:true,revision:2}))).status,200);
+  assert.equal((await f.view()).accepting,false);
+  assert.deepEqual(await tradeServer.hubTradeNotifications(f.db,f.access()),[],'resubscribing does not flood old updates');
+});
+
+test("shared customer questions and trade replies notify interested businesses without sharing business identities",async t=>{
+  const f=await fixture(t);
+  assert.equal((await f.customer('POST',{action:'ask',prompt:'Can we keep the existing switchboard?'})).status,200);
+  const question=(await f.view()).questions[0];assert.equal(question.authorType,'customer');
+  assert.equal((await f.ask({action:'reply',questionId:question.id,body:'Please share a clear photo so this can be assessed.'})).status,200);
+  const trade=await tradeServer.tradeHubView(f.db,ownerAccess('ac'),'work-ac');
+  assert.equal(trade.questions[0].replies[0].authorType,'trade');
+  assert.equal(trade.questions[0].replies[0].body,'Please share a clear photo so this can be assessed.');
+  assert.doesNotMatch(JSON.stringify(trade),/Synthetic solar|businessProfile|business_name|websiteUrl|match-solar|firebase_uid|quote_number/);
+  const customer=await f.view();assert.equal(customer.questions[0].replies[0].business,'Synthetic solar');
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) count FROM customer_hub_email_deliveries').get().count,1,'customer own question does not email itself');
+  assert.equal((await tradeServer.hubTradeNotifications(f.db,ownerAccess('ac'))).length,2);
+  assert.equal((await f.ask({action:'reply',questionId:question.id,body:'Please share a clear photo so this can be assessed.'})).status,409);
+  assert.equal((await f.ask({action:'reply',questionId:'foreign-question',body:'Wrong project'})).status,409);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) count FROM customer_hub_replies').get().count,1);
+  assert.equal((await f.customer('POST',{action:'reply',questionId:question.id,body:'I will upload that now.'})).status,200);
+  assert.equal((await f.view()).questions[0].replies.length,2);
+});
+
+test("notification permission defaults off for staff and is rechecked after reading events",async t=>{
+  const f=await fixture(t);assert.equal((await f.ask()).status,200);
+  f.insert('trade_team_members',{id:'staff',owner_uid:'solar',member_uid:'staff',email:'staff@example.invalid',role:'member',status:'active',job_scope:'team',can_view_quotes:1,can_manage_quotes:1,can_view_customers:1,created_at:now,updated_at:now});
+  const access={...f.access(),isOwner:false,actorUid:'staff',memberId:'staff',canReceiveCustomerQaNotifications:false};
+  assert.deepEqual(await tradeServer.hubTradeNotifications(f.db,access),[]);
+  access.canReceiveCustomerQaNotifications=true;
+  assert.deepEqual(await tradeServer.hubTradeNotifications(f.db,access),[],'stale request permission cannot grant receipt');
+  f.update('trade_team_members',{can_receive_customer_qa_notifications:1},"id='staff'");
+  assert.equal((await tradeServer.hubTradeNotifications(f.db,access)).length,1);
+  f.hook((sql,method)=>{if(method==='first'&&sql.includes('match.id match_id')){f.hook(null);f.update('trade_team_members',{can_receive_customer_qa_notifications:0},"id='staff'");}});
+  assert.deepEqual(await tradeServer.hubTradeNotifications(f.db,access),[]);
+});
+
+test("interest revocation during question write rolls back question, event and customer email",async t=>{
+  const f=await fixture(t);
+  f.hook((sql,method)=>{if(method==='run'&&sql.includes('INSERT INTO customer_hub_questions')){f.hook(null);f.update('customer_hub_interests',{interested:0},"match_id='match-solar'");}});
+  assert.equal((await f.ask()).status,409);
+  for(const table of ['customer_hub_questions','customer_hub_events','customer_hub_email_deliveries'])assert.equal(f.sqlite.prepare(`SELECT COUNT(*) count FROM ${table}`).get().count,0);
+});
+
+test("lead interest works before a quote job exists and provisions only the current owner's exact match",async t=>{
+  const f=await fixture(t);const saved=f.sqlite.prepare("SELECT * FROM trade_work_orders WHERE id='work-solar'").get();
+  f.sqlite.prepare("DELETE FROM customer_hub_interests WHERE match_id='match-solar'").run();
+  f.sqlite.prepare("DELETE FROM trade_work_orders WHERE id='work-solar'").run();
+  const view=await tradeServer.tradeHubView(f.db,f.access(),'','match-solar');
+  assert.equal(view.available,true);assert.equal(view.workOrderId,'');assert.equal(view.interested,false);
+  let handoffs=0;f.onHandoff(async(db,owner,match)=>{assert.equal(db,f.db);assert.equal(owner,'solar');assert.equal(match,'match-solar');handoffs++;f.insert('trade_work_orders',saved);});
+  const patch=(matchId,interested,revision)=>f.tradeRoute.PATCH(new Request('https://example.invalid/api/trade-customer-hub',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({matchId,interested,revision})}));
+  assert.equal((await patch('match-ac',true,0)).status,404);
+  assert.equal((await patch('match-solar',false,0)).status,200);assert.equal(handoffs,0);
+  const result=await patch('match-solar',true,1);assert.equal(result.status,200);assert.equal(handoffs,1);
+  const body=await result.json();assert.equal(body.workOrderId,'work-solar');assert.equal(body.interested,true);
 });

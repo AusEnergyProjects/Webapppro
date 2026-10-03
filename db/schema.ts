@@ -577,6 +577,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   canManageInvoices: integer("can_manage_invoices", { mode: "boolean" }).notNull().default(false),
   canViewPriceBook: integer("can_view_price_book", { mode: "boolean" }).notNull().default(false),
   canSendSms: integer("can_send_sms", { mode: "boolean" }).notNull().default(false),
+  canReceiveCustomerQaNotifications: integer("can_receive_customer_qa_notifications", { mode: "boolean" }).notNull().default(false),
   canManagePriceBook: integer("can_manage_price_book", { mode: "boolean" }).notNull().default(false),
   canApplyDiscounts: integer("can_apply_discounts", { mode: "boolean" }).notNull().default(false),
   scheduleScope: text("schedule_scope").notNull().default("own"),
@@ -606,6 +607,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   check("trade_team_members_schedule_colour_check", sql`${table.scheduleColour} IN ('emerald', 'teal', 'blue', 'violet', 'amber', 'rose')`),
   check("trade_team_members_permission_editor_check", sql`${table.canEditTeamPermissions} = 0 OR ${table.canManageTeam} = 1`),
   check("trade_team_members_manage_forms_check", sql`${table.canManageForms} IN (0, 1)`),
+  check("trade_team_members_customer_qa_notifications_check", sql`${table.canReceiveCustomerQaNotifications} IN (0, 1)`),
 ]);
 
 export const tradeTeamMemberFiles = sqliteTable("trade_team_member_files", {
@@ -7469,17 +7471,31 @@ export const customerQuoteHubs=sqliteTable("customer_quote_hubs",{
   expiresAt:text("expires_at").notNull(),revokedAt:text("revoked_at").notNull().default(""),createdAt:text("created_at").notNull(),
   accepting:integer("accepting").notNull().default(1),revision:integer("revision").notNull().default(1),
 },t=>[check("customer_quote_hubs_accepting",sql`${t.accepting} IN (0,1)`)]);
+export const customerHubInterests=sqliteTable("customer_hub_interests",{
+  matchId:text("match_id").primaryKey(),opportunityId:text("opportunity_id").notNull(),interested:integer("interested").notNull(),revision:integer("revision").notNull().default(1),
+  interestedSince:text("interested_since").notNull(),updatedAt:text("updated_at").notNull(),updatedByUid:text("updated_by_uid").notNull(),
+},t=>[check("customer_hub_interests_value",sql`${t.interested} IN (0,1)`)]);
 export const customerHubQuestions=sqliteTable("customer_hub_questions",{
   id:text("id").primaryKey(),opportunityId:text("opportunity_id").notNull(),matchId:text("match_id").notNull(),
-  serviceCategoriesJson:text("service_categories_json").notNull(),kind:text("kind").notNull(),prompt:text("prompt").notNull(),
+  serviceCategoriesJson:text("service_categories_json").notNull(),kind:text("kind").notNull(),prompt:text("prompt").notNull(),authorType:text("author_type").notNull().default("trade"),
   answer:text("answer").notNull().default(""),answerRevision:integer("answer_revision").notNull().default(0),createdAt:text("created_at").notNull(),updatedAt:text("updated_at").notNull(),
-},t=>[index("customer_hub_questions_opportunity").on(t.opportunityId,t.createdAt),check("customer_hub_questions_kind",sql`${t.kind} IN ('text','photo','document')`),
+},t=>[index("customer_hub_questions_opportunity").on(t.opportunityId,t.createdAt),check("customer_hub_questions_author",sql`${t.authorType} IN ('customer','trade')`),check("customer_hub_questions_kind",sql`${t.kind} IN ('text','photo','document')`),
   check("customer_hub_questions_services",sql`json_valid(${t.serviceCategoriesJson}) AND json_type(${t.serviceCategoriesJson})='array' AND json_array_length(${t.serviceCategoriesJson})>0`)]);
 export const customerHubFiles=sqliteTable("customer_hub_files",{
   id:text("id").primaryKey(),questionId:text("question_id").notNull(),opportunityId:text("opportunity_id").notNull(),fileName:text("file_name").notNull(),
   contentType:text("content_type").notNull(),sizeBytes:integer("size_bytes").notNull(),objectKey:text("object_key").notNull().unique(),sha256:text("sha256").notNull(),createdAt:text("created_at").notNull(),
 },t=>[index("customer_hub_files_question").on(t.questionId,t.createdAt),uniqueIndex("customer_hub_files_duplicate").on(t.questionId,t.sha256),
   check("customer_hub_files_type",sql`${t.contentType} IN ('image/jpeg','image/png','image/webp','application/pdf')`),check("customer_hub_files_size",sql`${t.sizeBytes}>0 AND ${t.sizeBytes}<=8388608`)]);
+export const customerHubReplies=sqliteTable("customer_hub_replies",{
+  id:text("id").primaryKey(),opportunityId:text("opportunity_id").notNull(),questionId:text("question_id").notNull(),authorType:text("author_type").notNull(),
+  matchId:text("match_id").notNull().default(""),body:text("body").notNull(),createdAt:text("created_at").notNull(),
+},t=>[index("customer_hub_replies_question").on(t.opportunityId,t.questionId,t.createdAt),check("customer_hub_replies_author",sql`${t.authorType} IN ('customer','trade')`),check("customer_hub_replies_body",sql`length(${t.body}) BETWEEN 1 AND 2000`)]);
 export const customerHubEvents=sqliteTable("customer_hub_events",{
-  id:text("id").primaryKey(),opportunityId:text("opportunity_id").notNull(),questionId:text("question_id").notNull(),eventType:text("event_type").notNull(),createdAt:text("created_at").notNull(),
-},t=>[index("customer_hub_events_opportunity").on(t.opportunityId,t.createdAt),check("customer_hub_events_type",sql`${t.eventType} IN ('answered','file_added','opened','closed')`)]);
+  id:text("id").primaryKey(),opportunityId:text("opportunity_id").notNull(),questionId:text("question_id").notNull(),eventType:text("event_type").notNull(),authorMatchId:text("author_match_id").notNull().default(""),createdAt:text("created_at").notNull(),
+},t=>[index("customer_hub_events_opportunity").on(t.opportunityId,t.createdAt),check("customer_hub_events_type",sql`${t.eventType} IN ('asked','replied','answered','file_added','opened','closed')`)]);
+
+export const customerHubEmailDeliveries=sqliteTable("customer_hub_email_deliveries",{
+  eventId:text("event_id").primaryKey(),releaseId:text("release_id").notNull(),emailHash:text("email_hash").notNull(),status:text("status").notNull().default("pending"),
+  attempts:integer("attempts").notNull().default(0),nextAttemptAt:text("next_attempt_at").notNull().default(""),firstAttemptAt:text("first_attempt_at").notNull().default(""),
+  encryptedPayload:text("encrypted_payload").notNull().default(""),updatedAt:text("updated_at").notNull(),providerId:text("provider_id").notNull().default(""),
+},t=>[index("customer_hub_email_pending").on(t.status,t.nextAttemptAt),check("customer_hub_email_status",sql`${t.status} IN ('pending','sending','accepted','failed','unknown','stopped')`)]);

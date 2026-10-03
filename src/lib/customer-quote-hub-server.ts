@@ -7,6 +7,7 @@ import { authoriseCustomerHub, hubAuthorityScope, type HubAuthority } from "./cu
 import { recoverQuoteLinkSecret } from "./trade-quote-links";
 import { storedQuoteDecision, type AuthorisedTradeQuoteDecisionLink } from "./trade-quote-decision-server";
 import type { CustomerQuoteHub, HubQuestion } from "./customer-quote-hub";
+import { customerHubBusinessProfile } from "./customer-hub-business-profile";
 
 type Row=Record<string,unknown>;
 const strings=(value:unknown):string[]=>{ try { const list=JSON.parse(String(value||"[]")); return Array.isArray(list)?list.filter((item):item is string=>typeof item==="string"):[]; } catch{return [];} };
@@ -33,13 +34,19 @@ export function hubWriteGuard(db:D1Database,hub:HubAuthority,requireOpen=false){
     .bind(crypto.randomUUID(),hub.opportunity_id,new Date().toISOString(),...scope.values,...(requireOpen?[hub.id]:[]));}
 
 export async function hubQuestions(db:D1Database,opportunityId:string,accepting:boolean,allowed?:string[]):Promise<HubQuestion[]>{
-  const [rows,files]=await Promise.all([
-    db.prepare(`SELECT question.*,trade.business_name FROM customer_hub_questions question
-      JOIN trade_opportunity_matches match ON match.id=question.match_id AND match.opportunity_id=question.opportunity_id
-      JOIN trade_accounts trade ON trade.firebase_uid=match.firebase_uid WHERE question.opportunity_id=? ORDER BY question.created_at,question.id`).bind(opportunityId).all<Row>(),
-    db.prepare("SELECT id,question_id,file_name,content_type FROM customer_hub_files WHERE opportunity_id=? ORDER BY created_at,id").bind(opportunityId).all<Row>()]);
+  const [rows,files,replies]=await Promise.all([
+    db.prepare(`SELECT question.*,trade.business_name,trade.business_website,trade.google_business_profile_url,match.id business_id FROM customer_hub_questions question
+      LEFT JOIN trade_opportunity_matches match ON match.id=question.match_id AND match.opportunity_id=question.opportunity_id
+      LEFT JOIN trade_accounts trade ON trade.firebase_uid=match.firebase_uid WHERE question.opportunity_id=? ORDER BY question.created_at,question.id`).bind(opportunityId).all<Row>(),
+    db.prepare("SELECT id,question_id,file_name,content_type FROM customer_hub_files WHERE opportunity_id=? ORDER BY created_at,id").bind(opportunityId).all<Row>(),
+    db.prepare(`SELECT reply.*,trade.business_name,trade.business_website,trade.google_business_profile_url,match.id business_id FROM customer_hub_replies reply
+      LEFT JOIN trade_opportunity_matches match ON match.id=reply.match_id AND match.opportunity_id=reply.opportunity_id
+      LEFT JOIN trade_accounts trade ON trade.firebase_uid=match.firebase_uid WHERE reply.opportunity_id=? ORDER BY reply.created_at,reply.id`).bind(opportunityId).all<Row>()]);
   return rows.results.filter(row=>!allowed||strings(row.service_categories_json).some(service=>allowed.includes(service))).map(row=>({id:String(row.id),prompt:String(row.prompt),kind:row.kind as HubQuestion["kind"],
-    services:strings(row.service_categories_json),business:String(row.business_name),answer:String(row.answer),revision:Number(row.answer_revision),closed:!accepting,
+    services:strings(row.service_categories_json),authorType:row.author_type==='customer'?'customer':'trade',business:String(row.business_name||''),
+    ...(row.business_id?{businessProfile:customerHubBusinessProfile(row)}:{}),answer:String(row.answer),revision:Number(row.answer_revision),closed:!accepting,
+    replies:replies.results.filter(reply=>reply.question_id===row.id).map(reply=>({id:String(reply.id),body:String(reply.body),authorType:reply.author_type==='customer'?'customer':'trade',
+      business:String(reply.business_name||''),...(reply.business_id?{businessProfile:customerHubBusinessProfile(reply)}:{}),createdAt:String(reply.created_at)})),
     files:files.results.filter(file=>file.question_id===row.id).map(file=>({id:String(file.id),name:String(file.file_name),type:String(file.content_type)}))}));
 }
 
@@ -49,7 +56,7 @@ export async function loadCustomerQuoteHub(db:D1Database,hub:HubAuthority):Promi
     FROM customer_quote_hubs hub JOIN trade_opportunities opportunity ON opportunity.id=hub.opportunity_id WHERE hub.id=? AND ${scope.sql}`)
     .bind(hub.id,...scope.values).first<Row>();
   if(!details)throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
-  const quotes=await db.prepare(`SELECT link.id,trade.business_name,quote.quote_number,version.total_cents,link.status,work.service_categories,
+  const quotes=await db.prepare(`SELECT link.id,trade.business_name,trade.business_website,trade.google_business_profile_url,participation.id business_id,quote.quote_number,version.total_cents,link.status,work.service_categories,
       link.expires_at,version.valid_until,version.status version_status
     FROM trade_crm_quote_links link
     JOIN trade_crm_quote_versions version ON version.id=link.quote_version_id AND version.quote_id=link.quote_id AND version.firebase_uid=link.firebase_uid
@@ -67,7 +74,7 @@ export async function loadCustomerQuoteHub(db:D1Database,hub:HubAuthority):Promi
   if(!await db.prepare(`SELECT 1 WHERE ${scope.sql}`).bind(...scope.values).first())throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
   return {title:String(details.title),reference:String(details.source_reference),expiresAt:hub.expires_at,accepting:Boolean(details.accepting),revision:Number(details.revision),
     services:strings(details.service_categories).map(id=>({id,label:ENERGY_SERVICE_LABELS[id]||id})),
-    quotes:quotes.results.map(row=>({id:String(row.id),business:String(row.business_name),number:String(row.quote_number),services:strings(row.service_categories),
+    quotes:quotes.results.map(row=>({id:String(row.id),business:String(row.business_name),businessProfile:customerHubBusinessProfile(row),number:String(row.quote_number),services:strings(row.service_categories),
       totalCents:Number(row.total_cents),status:String(row.status),blocked:row.status==='active'&&(String(row.expires_at)<=now || (Boolean(row.valid_until)&&String(row.valid_until)<now.slice(0,10)))})),questions};
 }
 

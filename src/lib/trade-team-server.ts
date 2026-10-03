@@ -32,6 +32,7 @@ export type TeamAccess = {
   canManageQuotes: boolean;
   canSendQuotes: boolean;
   canSendSms?: boolean;
+  canReceiveCustomerQaNotifications: boolean;
   canViewInvoices: boolean;
   canManageInvoices: boolean;
   canViewPriceBook: boolean;
@@ -63,6 +64,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
       can_create_jobs = 1, can_manage_jobs = 1, can_assign_jobs = 1, job_scope = 'team',
       can_view_customers = 1, can_manage_customers = 1,
       can_view_quotes = 1, can_manage_quotes = 1, can_send_quotes = 1,
+      can_receive_customer_qa_notifications = 1,
       can_view_invoices = 1, can_manage_invoices = 1,
       can_view_price_book = 1, can_manage_price_book = 1, can_apply_discounts = 1,
       schedule_scope = 'team', can_reschedule_jobs = 1, can_manage_team = 1,
@@ -75,6 +77,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
           OR can_create_jobs <> 1 OR can_manage_jobs <> 1 OR can_assign_jobs <> 1 OR job_scope <> 'team'
           OR can_view_customers <> 1 OR can_manage_customers <> 1
           OR can_view_quotes <> 1 OR can_manage_quotes <> 1 OR can_send_quotes <> 1
+          OR can_receive_customer_qa_notifications <> 1
           OR can_view_invoices <> 1 OR can_manage_invoices <> 1
           OR can_view_price_book <> 1 OR can_manage_price_book <> 1 OR can_apply_discounts <> 1
           OR schedule_scope <> 'team' OR can_reschedule_jobs <> 1 OR can_manage_team <> 1
@@ -89,13 +92,13 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
   await db.prepare(`INSERT INTO trade_team_members
     (id, owner_uid, member_uid, email, display_name, role, can_create_jobs, can_manage_jobs, can_assign_jobs,
      job_scope, can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes,
-     can_send_quotes, can_view_invoices, can_manage_invoices, can_view_price_book,
+     can_send_quotes, can_receive_customer_qa_notifications, can_view_invoices, can_manage_invoices, can_view_price_book,
       can_manage_price_book, can_apply_discounts, schedule_scope, can_reschedule_jobs, can_manage_team,
      can_edit_team_permissions,
      can_view_field_evidence, can_manage_field_evidence, can_manage_forms, can_run_reports,
      can_search_customers, status, invited_at,
      accepted_at, last_active_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 'manager', 1, 1, 1, 'team', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    VALUES (?, ?, ?, ?, ?, 'manager', 1, 1, 1, 'team', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
       'team', 1, 1, 1, 1, 1, 1, 1, 1, 'active', '', ?, ?, ?, ?)`)
     .bind(id, ownerUid, ownerUid, email, displayName, now, now, now, now).run();
   return id;
@@ -123,6 +126,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
       canCreateJobs: true, canManageJobs: true, canAssignJobs: true, jobScope: "team",
       canViewCustomers: true, canManageCustomers: true,
       canViewQuotes: true, canManageQuotes: true, canSendQuotes: true, canSendSms: true,
+      canReceiveCustomerQaNotifications: true,
       canViewInvoices: true, canManageInvoices: true,
       canViewPriceBook: true, canManagePriceBook: true, canApplyDiscounts: true,
       scheduleScope: "team", canRescheduleJobs: true, canManageTeam: true,
@@ -135,6 +139,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
       m.can_create_jobs, m.can_manage_jobs, m.can_assign_jobs, m.job_scope,
       m.can_view_customers, m.can_manage_customers,
       m.can_view_quotes, m.can_manage_quotes, m.can_send_quotes, m.can_send_sms,
+      m.can_receive_customer_qa_notifications,
       m.can_view_invoices, m.can_manage_invoices, m.can_view_price_book, m.can_manage_price_book,
       m.can_apply_discounts,
       m.schedule_scope, m.can_reschedule_jobs, m.can_manage_team,
@@ -162,6 +167,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
     canViewCustomers: Boolean(member.can_view_customers), canManageCustomers: Boolean(member.can_manage_customers),
     canViewQuotes: Boolean(member.can_view_quotes), canManageQuotes: Boolean(member.can_manage_quotes),
     canSendQuotes: Boolean(member.can_send_quotes), canSendSms: Boolean(member.can_send_sms),
+    canReceiveCustomerQaNotifications: Boolean(member.can_receive_customer_qa_notifications),
     canViewInvoices: Boolean(member.can_view_invoices), canManageInvoices: Boolean(member.can_manage_invoices),
     canViewPriceBook: Boolean(member.can_view_price_book), canManagePriceBook: Boolean(member.can_manage_price_book),
     canApplyDiscounts: Boolean(member.can_apply_discounts),

@@ -58,6 +58,7 @@ import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
 import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlerts";
 
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
+const TradeCustomerHubInterest = dynamic(() => import("./TradeCustomerHubPanel").then((module) => module.TradeCustomerHubInterest));
 const DirectTradePartnerForm = dynamic(() => import("./DirectTradePartnerForm").then((module) => module.DirectTradePartnerForm), { loading: () => <p role="status">Opening business setup...</p> });
 const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace").then((module) => module.TradePriceBookWorkspace));
 const TradeEmailTemplatesWorkspace = dynamic(() => import("./TradeEmailTemplatesWorkspace").then((module) => module.TradeEmailTemplatesWorkspace));
@@ -2998,6 +2999,7 @@ function DirectTradeDashboardContent() {
                             <section className="dashboard-opportunity-conversion" aria-label="Customer contact workflow action"><div><strong>Create the CRM job when you are ready to arrange the work</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>
                           </>}
                           {opportunity.platformOnly && opportunity.matchStatus === "connected" && !releasedCustomerContact && opportunity.quote?.customerDecision !== "accepted" && <div className="dashboard-contact-allowance"><div><strong>Waiting for the customer to choose a business</strong><span>Contact details remain protected until the customer chooses to get in touch with this business.</span></div></div>}
+                          {!opportunity.platformOnly && releasedCustomerContact?.releaseScope === "all_qualified_trades" && <TradeCustomerHubInterest matchId={opportunity.matchId} />}
                           {(opportunity.matchStatus !== "connected" || !opportunity.platformOnly) && <div className="dashboard-opportunity-actions dashboard-lead-preview-actions">
                             {opportunity.matchStatus === "offered" && <button
                               type="button"

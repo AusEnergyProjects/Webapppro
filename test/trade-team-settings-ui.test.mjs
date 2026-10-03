@@ -729,3 +729,19 @@ test("archived documents keep View and Download while upload and Delete are abse
   actions.forEach(button => button.props.onClick());
   assert.deepEqual(calls, [["file-1", false], ["file-1", true]]);
 });
+
+
+test("all staff access presets keep customer Q&A notifications off and granting receipt does not imply access", () => {
+  const definitions = settings.slice(settings.indexOf("const fullPermissions"), settings.indexOf("const accessPresets"));
+  const dependencies = settings.slice(settings.indexOf("function normalizePermissions"), settings.indexOf("function bytesLabel"));
+  const script = ts.transpileModule(definitions + dependencies, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const result = runInNewContext(script + "; ({ presets: [fullPermissions,officePermissions,fieldPermissions].map(value => value.canReceiveCustomerQaNotifications), granted: enforcePermissionDependencies({...fieldPermissions,canReceiveCustomerQaNotifications:true}) });");
+  assert.deepEqual(Array.from(result.presets), [false, false, false]);
+  assert.equal(result.granted.canReceiveCustomerQaNotifications, true);
+  assert.equal(result.granted.canViewCustomers, false);
+  assert.equal(result.granted.canViewQuotes, false);
+  assert.equal(result.granted.canManageQuotes, false);
+  assert.match(settings, /key: "canReceiveCustomerQaNotifications", label: "Receive customer Q&A notifications"/);
+  assert.match(settings, /Requires View customer records and access to the job/);
+  assert.match(settings, /This does not grant access or permission to ask questions/);
+});

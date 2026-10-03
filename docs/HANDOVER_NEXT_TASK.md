@@ -3,7 +3,7 @@
 Status: One customer project hub with manual control of quotes and questions.
 Prepared: 3 October 2026
 
-The customer receives one private link for all services in their enquiry. Overview, Quotes and Requests keep competing quotes and shared answers/files together. Phone capture supplements uploads; individual quote emails and PDFs remain available. The customer alone changes the global "Accepting quotes and questions" switch. Accepting a quote never changes that switch. Closed projects retain existing records and may be reopened.
+The customer receives one private link for all services in their enquiry. Overview, Quotes and Q&A keep competing quotes and shared answers/files together. Phone capture supplements uploads; individual quote emails and PDFs remain available. The customer alone changes the global "Accepting quotes and questions" switch. Accepting a quote never changes that switch. Closed projects retain existing records and may be reopened.
 
 Migration 0245 adds separate customer capabilities, shared requests/files/events and an atomic quote-issuance pause. New answers/files disclose their sharing scope and produce eligible-business notifications. Current consent, approved business access, staff permissions, project expiry and exact customer/job identity are rechecked. Customer-only links travel in customer receipts, never in business envelopes. AEA-only draft enquiries retain their original receipt flow.
 
@@ -14,6 +14,8 @@ Confirmed source boundaries:
 - Existing shared answers/photos are restricted by service category, current consent, invitation/eligibility and AEA routing. Preserve those controls and historical disclosure snapshots.
 - Quote acceptance and invoice creation retain their existing business/job scope. There is no automatic winner, competing-quote cancellation or service-package award.
 - The former customer account quote routes and customer evidence upload route are retired. Do not silently reactivate them.
+
+This hub is a shopping and quote-comparison space. Keep appointments and post-acceptance operations in their existing workflows. Businesses explicitly opt into Q&A updates with Interested; team notification permission defaults off for staff. Q&A events open the exact business-owned customer record; customer notifications use a durable email outbox. Business websites and verified Google ratings appear only to the customer; the trade projection omits other business identities. Migrations 0246/0247 add notification permission, interest, replies and email delivery state.
 
 The original quote link also exposes a compact job overview, appointment and requested-photo actions when current job access remains valid. Historical receipts never imply continuing access to job details. Upload compensation preserves committed evidence after a lost database acknowledgement.
 

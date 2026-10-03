@@ -27,8 +27,8 @@ const data = {
   services: [{ id: "solar", label: "Solar" }, { id: "air-conditioning", label: "Air conditioning" }],
   quotes: [{ id: "quote-one", business: "Private Solar Business", number: "Q-123", services: ["solar"], totalCents: 100000, status: "active", blocked: false }],
   questions: [
-    { id: "answer-one", prompt: "Where is the switchboard?", kind: "text", services: ["solar"], business: "Private Solar Business", answer: "", revision: 0, closed: false, files: [] },
-    { id: "file-one", prompt: "Share the floor plan", kind: "document", services: ["air-conditioning"], business: "Private AC Business", answer: "", revision: 0, closed: false, files: [] },
+    { id: "answer-one", prompt: "Where is the switchboard?", kind: "text", services: ["solar"], business: "Private Solar Business", answer: "", revision: 0, closed: false, authorType: "trade", replies: [], files: [] },
+    { id: "file-one", prompt: "Share the floor plan", kind: "document", services: ["air-conditioning"], business: "Private AC Business", answer: "", revision: 0, closed: false, authorType: "trade", replies: [], files: [] },
   ],
 };
 const ok = hub => response({ ok: true, hub });
@@ -46,7 +46,7 @@ function locate(node, predicate, path = [], ancestors = []) {
   return locate(node.props?.children, predicate, [...path, "children"], [...ancestors, node]);
 }
 
-function harness(t, api, token = "private-hub-token") {
+function harness(t, api, token = "private-hub-token", search = "") {
   let cursor = 0, dirty = false;
   const slots = [], effects = [], callbacks = [], queued = [], requests = [], listeners = new Map();
   const changed = (before, after) => !before || before.length !== after.length || after.some((value, index) => !Object.is(value, before[index]));
@@ -74,6 +74,7 @@ function harness(t, api, token = "private-hub-token") {
     if (name.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => key }) };
     throw new Error(`Unexpected hub UI dependency: ${name}`);
   }, loaded, async (path, init = {}) => { requests.push({ path, init }); return api(path, init); }, {
+    location: { search },
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
     requestAnimationFrame: callback => { callback(); return 1; }, cancelAnimationFrame() {},
     addEventListener: (name, callback) => listeners.set(name, callback),
@@ -128,15 +129,15 @@ test("answer drafts and selected files survive tab navigation without premature 
     if (path.endsWith("/files")) uploaded = init.body;
     return ok(data);
   });
-  let tree = await h.settle(); navigate(tree, "Requests"); tree = h.render();
-  nodes(tree, node => node.type === "textarea")[0].props.onChange({ target: { value: "Inside the private garage" } });
+  let tree = await h.settle(); navigate(tree, "Q&A"); tree = h.render();
+  nodes(tree, node => node.type === "textarea" && node.props.id === "answer-answer-one")[0].props.onChange({ target: { value: "Inside the private garage" } });
   tree = h.render();
   const file = new File(["%PDF-fixture"], "private-plan.pdf", { type: "application/pdf" });
   const selection = { files: [file], value: "C:\\fakepath\\private-plan.pdf" };
   nodes(tree, node => node.type === "input" && node.props.type === "file")[0].props.onChange({ target: selection });
   assert.equal(selection.value, ""); tree = h.render();
-  for (const tab of ["Overview", "Quotes", "Requests"]) { navigate(tree, tab); tree = h.render(); }
-  assert.equal(nodes(tree, node => node.type === "textarea")[0].props.value, "Inside the private garage");
+  for (const tab of ["Overview", "Quotes", "Q&A"]) { navigate(tree, tab); tree = h.render(); }
+  assert.equal(nodes(tree, node => node.type === "textarea" && node.props.id === "answer-answer-one")[0].props.value, "Inside the private garage");
   assert.match(text(tree), /private-plan\.pdf/);
   assert.equal(h.requests.length, 1, "Editing and navigation must not submit or reload the project");
   button(tree, "Share file").props.onClick(); tree = await h.settle();
@@ -144,7 +145,7 @@ test("answer drafts and selected files survive tab navigation without premature 
   assert.equal(uploaded.get("questionId"), "file-one");
   assert.equal(uploaded.get("file").name, file.name);
   assert.equal(await uploaded.get("file").text(), await file.text());
-  assert.equal(nodes(tree, node => node.type === "textarea")[0].props.value, "Inside the private garage");
+  assert.equal(nodes(tree, node => node.type === "textarea" && node.props.id === "answer-answer-one")[0].props.value, "Inside the private garage");
 });
 
 test("an opened quote retains its key and React position while hidden on other tabs", async t => {
@@ -154,7 +155,7 @@ test("an opened quote retains its key and React position while hidden on other t
   const original = locate(tree, node => node.type === "QuoteLinkReview");
   assert.equal(original.node.key, "quote-one"); assert.equal(original.node.props.token, "quote-one.secret");
   assert.equal(original.node.props.embedded, true);
-  for (const tab of ["Requests", "Overview", "Quotes"]) {
+  for (const tab of ["Q&A", "Overview", "Quotes"]) {
     navigate(tree, tab); tree = h.render();
     const retained = locate(tree, node => node.type === "QuoteLinkReview");
     assert.ok(retained); assert.deepEqual(retained.path, original.path);
@@ -188,4 +189,12 @@ test("unmount ignores a late private response and removes the focus listener", a
   pending.resolve(ok(data)); await flush();
   assert.doesNotMatch(text(h.render()), /Private home upgrade|PRIVATE-PROJECT-123/);
   assert.equal(toggle(h.render()), undefined);
+});
+
+test("customer email opens Q&A directly without losing other project navigation",async t=>{
+  const h=harness(t,async()=>ok(data),"private-hub-token","?section=qa");
+  const tree=await h.settle();
+  const qa=nodes(tree,node=>node.type==="button"&&text(node).startsWith("Q&A"))[0];
+  assert.equal(qa.props["aria-current"],"page");
+  assert.ok(nodes(tree,node=>node.type==="textarea"&&node.props.id==="answer-answer-one").length);
 });

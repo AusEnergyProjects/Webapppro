@@ -46,6 +46,7 @@ export type TradeTeamPermissions = {
   canManageQuotes: boolean;
   canSendQuotes: boolean;
   canSendSms: boolean;
+  canReceiveCustomerQaNotifications: boolean;
   canApplyDiscounts: boolean;
   canViewInvoices: boolean;
   canManageInvoices: boolean;
@@ -159,6 +160,7 @@ const fullPermissions: TradeTeamPermissions = {
   canViewCustomers: true, canManageCustomers: true,
   canSearchCustomers: true,
   canViewQuotes: true, canManageQuotes: true, canSendQuotes: true, canSendSms: false, canApplyDiscounts: true,
+  canReceiveCustomerQaNotifications: false,
   canViewInvoices: true, canManageInvoices: true,
   canViewPriceBook: true, canManagePriceBook: true,
   scheduleScope: "team", canRescheduleJobs: true, canManageTeam: true, canEditTeamPermissions: true,
@@ -179,6 +181,7 @@ const fieldPermissions: TradeTeamPermissions = {
   canViewCustomers: false, canManageCustomers: false,
   canSearchCustomers: false,
   canViewQuotes: false, canManageQuotes: false, canSendQuotes: false, canSendSms: false, canApplyDiscounts: false,
+  canReceiveCustomerQaNotifications: false,
   canViewInvoices: false, canManageInvoices: false,
   canViewPriceBook: true, canManagePriceBook: false,
   scheduleScope: "own", canRescheduleJobs: false, canManageTeam: false, canEditTeamPermissions: false,
@@ -203,6 +206,7 @@ const permissionGroups: Array<{ label: string; items: Array<{ key: BooleanPermis
     { key: "canCreateJobs", label: "Create jobs", detail: "Start a new customer job." },
     { key: "canManageJobs", label: "Edit job details and status", detail: "Edit work, tasks and job progress within their job scope." },
     { key: "canSendSms", label: "Send and receive job SMS", detail: "Use the business SMS number on jobs within their access. The business can see and reply. Provider charges apply." },
+    { key: "canReceiveCustomerQaNotifications", label: "Receive customer Q&A notifications", detail: "Receive shared customer answers for leads this business marks Interested. Requires View customer records and access to the job. This does not grant access or permission to ask questions." },
     { key: "canAssignJobs", label: "Assign and reassign jobs", detail: "Choose who owns work within their job scope." },
     { key: "canViewCustomers", label: "View customer records", detail: "Open standalone customer records. Assigned jobs, quotes and invoices still show the customer context needed for that work." },
     { key: "canManageCustomers", label: "Update customers", detail: "Edit customer records they can access." },

@@ -40,6 +40,7 @@ function fixture(t, options = {}) {
   database.exec(fs.readFileSync(new URL("../drizzle/0230_trade_manager_name.sql", import.meta.url), "utf8"));
   database.exec(fs.readFileSync(new URL("../drizzle/0231_trade_crews.sql", import.meta.url), "utf8"));
   database.exec(fs.readFileSync(new URL("../drizzle/0236_trade_form_authoring_permission.sql", import.meta.url), "utf8"));
+  database.exec(fs.readFileSync(new URL("../drizzle/0246_trade_team_customer_qa_permission.sql", import.meta.url), "utf8"));
   const identity = { uid: "person-1", email: "person@example.invalid", emailVerified: true,
     authTime: 1, signInProvider: "password", ...options.identity };
   const calls = { mfa: [], schema: [] };
@@ -166,9 +167,11 @@ test("owner and staff permissions remain separate for the same identity", async 
   assert.equal(staff.ownerUid, "business-a"); assert.equal(staff.actorUid, f.identity.uid);
   assert.equal(staff.isOwner, false); assert.equal(staff.memberId, "staff-a"); assert.equal(staff.businessName, "Employer");
   assert.equal(staff.canManageJobs, false); assert.equal(staff.canManageTeam, false); assert.equal(staff.canViewQuotes, true);
+  assert.equal(staff.canReceiveCustomerQaNotifications, false);
   const owner = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
   assert.equal(owner.ownerUid, f.identity.uid); assert.equal(owner.isOwner, true);
   assert.equal(owner.canManageJobs, true); assert.equal(owner.canManageTeam, true);
+  assert.equal(owner.canReceiveCustomerQaNotifications, true);
   assert.notEqual(owner.memberId, staff.memberId);
   assert.equal(f.database.prepare("SELECT can_manage_team FROM trade_team_members WHERE id='staff-a'").get().can_manage_team, 0);
 });

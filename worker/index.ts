@@ -1,3 +1,4 @@
+import { drainCustomerHubEmails } from "../src/lib/customer-hub-email-server";
 import handler from "vinext/server/app-router-entry";
 import { getD1 } from "../db";
 import { getCustomerProjectEvidenceBucket } from "../src/lib/customer-project-evidence-bucket";
@@ -625,6 +626,7 @@ const worker = {
         }).catch((error) => {
           console.error("Public quote photo cleanup failed.", error instanceof Error ? error.message : "Unknown error");
         }),
+        drainCustomerHubEmails(getD1()).catch(() => console.error("Customer Q&A email dispatch failed.")),
         drainPublicPlanDeliveries({
           createOpportunityFromLead,
           dispatchOpportunityNotifications: (opportunityId) =>

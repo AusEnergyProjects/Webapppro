@@ -120,7 +120,7 @@ function fixture() {
     "can_manage_customers", "can_view_quotes", "can_manage_quotes", "can_send_quotes", "can_send_sms", "can_view_invoices",
     "can_manage_invoices", "can_view_price_book", "can_manage_price_book", "can_apply_discounts",
     "can_reschedule_jobs", "can_manage_team", "can_edit_team_permissions", "can_view_field_evidence",
-    "can_manage_field_evidence", "can_manage_forms", "can_run_reports", "can_search_customers"];
+    "can_manage_field_evidence", "can_manage_forms", "can_receive_customer_qa_notifications", "can_run_reports", "can_search_customers"];
   database.exec(`
     CREATE TABLE trade_team_members (
       id text PRIMARY KEY, owner_uid text NOT NULL, member_uid text NOT NULL, email text NOT NULL,
@@ -836,6 +836,84 @@ for (const race of ["manager_revoked", "member_changed", "already_restored_same_
       assert.deepEqual({ ...database.prepare("SELECT * FROM trade_team_members WHERE id='target-1'").get() }, concurrentMember);
       assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events").get().count, 0);
       assert.deepEqual(aborted, []);
+    } finally { database.close(); }
+  });
+}
+
+
+test("new staff start without customer Q&A notifications even when granted quote access", async () => {
+  const database = fixture();
+  try {
+    const route = loadRoute(database, [], { ...managerAccess, isOwner: true, actorUid: "owner-1", memberId: "owner-member" });
+    for (const action of ["add_member", "invite_member"]) {
+      const response = await post(route, { action, displayName: action, fieldUsername: action,
+        email: action + "@example.test", permissions: { canViewQuotes: true, canManageQuotes: true } });
+      const payload = await response.json();
+      assert.equal(response.status, 201, payload.error);
+      const row = database.prepare("SELECT * FROM trade_team_members WHERE email=?").get(action + "@example.test");
+      assert.equal(row.can_receive_customer_qa_notifications, 0);
+      assert.equal(row.can_view_quotes, 1);
+      assert.equal(payload.members.find(member => member.id === row.id).permissions.canReceiveCustomerQaNotifications, false);
+    }
+  } finally { database.close(); }
+});
+
+test("owner can independently grant and revoke customer Q&A notifications with an audit trail", async () => {
+  const database = fixture();
+  try {
+    const route = loadRoute(database, [], { ...managerAccess, isOwner: true, actorUid: "owner-1", memberId: "owner-member" });
+    const change = body => patch(route, { action: "update_member", memberId: "target-1",
+      expectedUpdatedAt: database.prepare("SELECT updated_at FROM trade_team_members WHERE id='target-1'").get().updated_at, ...body });
+    const response = await change({ permissions: { canReceiveCustomerQaNotifications: true } });
+    const payload = await response.json();
+    assert.equal(response.status, 200, payload.error);
+    assert.equal(payload.access.permissions.canReceiveCustomerQaNotifications, true);
+    assert.equal(payload.members.find(member => member.id === "target-1").permissions.canReceiveCustomerQaNotifications, true);
+    const granted = database.prepare("SELECT * FROM trade_team_members WHERE id='target-1'").get();
+    assert.equal(granted.can_receive_customer_qa_notifications, 1);
+    for (const key of ["can_view_quotes", "can_manage_quotes", "can_view_customers", "can_manage_customers"]) assert.equal(granted[key], 0, key);
+    assert.equal((await change({ displayName: "Updated name" })).status, 200);
+    assert.equal(database.prepare("SELECT can_receive_customer_qa_notifications flag FROM trade_team_members WHERE id='target-1'").get().flag, 1);
+    assert.equal((await change({ permissions: { canReceiveCustomerQaNotifications: false } })).status, 200);
+    assert.equal(database.prepare("SELECT can_receive_customer_qa_notifications flag FROM trade_team_members WHERE id='target-1'").get().flag, 0);
+    const events = database.prepare("SELECT metadata FROM trade_team_member_events WHERE team_member_id='target-1'").all().map(row => JSON.parse(row.metadata));
+    assert.ok(events.some(event => event.permissionsAfter?.canReceiveCustomerQaNotifications === true));
+    assert.ok(events.some(event => event.permissionsBefore?.canReceiveCustomerQaNotifications === true && event.permissionsAfter?.canReceiveCustomerQaNotifications === false));
+  } finally { database.close(); }
+});
+
+test("customer Q&A notification permission rejects malformed input and delegated escalation", async () => {
+  const database = fixture();
+  try {
+    database.exec("UPDATE trade_team_members SET can_edit_team_permissions=1 WHERE id='manager-1'");
+    const route = loadRoute(database, [], { ...managerAccess, canEditTeamPermissions: true, canReceiveCustomerQaNotifications: false });
+    for (const value of [1, "true", null]) {
+      const response = await patch(route, { action: "update_member", memberId: "target-1", expectedUpdatedAt: "2026-08-12T00:00:00.000Z",
+        permissions: { canReceiveCustomerQaNotifications: value } });
+      assert.equal(response.status, 400);
+    }
+    const denied = await patch(route, { action: "update_member", memberId: "target-1", expectedUpdatedAt: "2026-08-12T00:00:00.000Z",
+      permissions: { canReceiveCustomerQaNotifications: true } });
+    assert.equal(denied.status, 403);
+    assert.equal(database.prepare("SELECT can_receive_customer_qa_notifications flag FROM trade_team_members WHERE id='target-1'").get().flag, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_team_member_events").get().n, 0);
+  } finally { database.close(); }
+});
+
+for (const revocation of ["can_receive_customer_qa_notifications=0", "can_edit_team_permissions=0", "status='suspended'"]) {
+  test("customer Q&A permission grant checks live authority in its transaction: " + revocation, async () => {
+    const database = fixture();
+    try {
+      database.exec("UPDATE trade_team_members SET can_edit_team_permissions=1,can_receive_customer_qa_notifications=1 WHERE id='manager-1'");
+      const before = { ...database.prepare("SELECT * FROM trade_team_members WHERE id='target-1'").get() };
+      const route = loadRoute(database, [], { ...managerAccess, canEditTeamPermissions: true, canReceiveCustomerQaNotifications: true }, {
+        beforeBatch: () => database.exec("UPDATE trade_team_members SET " + revocation + " WHERE id='manager-1'"),
+      });
+      const response = await patch(route, { action: "update_member", memberId: "target-1", expectedUpdatedAt: before.updated_at,
+        permissions: { canReceiveCustomerQaNotifications: true } });
+      assert.ok([403, 409].includes(response.status), await response.text());
+      assert.deepEqual({ ...database.prepare("SELECT * FROM trade_team_members WHERE id='target-1'").get() }, before);
+      assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_team_member_events").get().n, 0);
     } finally { database.close(); }
   });
 }

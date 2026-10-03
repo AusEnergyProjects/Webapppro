@@ -1,27 +1,165 @@
 "use client";
-import {useCallback,useEffect,useRef,useState} from 'react';
-import {useTradeBusiness,useTradeBusinessFetch} from './TradeBusinessProvider';
-import type {HubQuestion} from '@/lib/customer-quote-hub';
-type Result={ok?:boolean;available?:boolean;accepting?:boolean;canAsk?:boolean;questions?:HubQuestion[];error?:string};
-export function TradeCustomerHubPanel({workOrderId}:{workOrderId:string}){const business=useTradeBusiness();return <Panel key={`${business?.ownerUid||''}:${workOrderId}`} workOrderId={workOrderId}/>;}
-function Panel({workOrderId}:{workOrderId:string}){
-  const request=useTradeBusinessFetch(),[data,setData]=useState<Result|null>(null),[prompt,setPrompt]=useState(''),[kind,setKind]=useState('text'),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
-  const endpoint=`/api/trade-customer-hub?workOrderId=${encodeURIComponent(workOrderId)}`;
-  const generation=useRef(0),active=useRef(true),acting=useRef(false);
-  const load=useCallback(async()=>{if(acting.current)return;const current=++generation.current;try{
-    const response=await request(endpoint,{cache:'no-store'}),result=await response.json() as Result;if(!active.current||current!==generation.current)return;
-    if(!response.ok||!result.ok)throw new Error(result.error||'Shared requests could not be opened.');setData(result);
-  }catch(error){if(!active.current||current!==generation.current)return;setData(null);setMessage(error instanceof Error?error.message:'Shared requests could not be opened.');}},[request,endpoint]);
-  useEffect(()=>{active.current=true;const refresh=()=>void load();refresh();window.addEventListener('focus',refresh);return()=>{active.current=false;window.removeEventListener('focus',refresh);};},[load]);
-  async function ask(){if(acting.current)return;acting.current=true;++generation.current;setBusy(true);setMessage('');try{const response=await request('/api/trade-customer-hub',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workOrderId,prompt,kind})}),result=await response.json() as Result;
-    if(!active.current)return;if(!response.ok||!result.ok)throw new Error(result.error||'The request could not be shared.');setData(result);setPrompt('');setMessage('Request added to the customer’s project.');}catch(error){if(active.current)setMessage(error instanceof Error?error.message:'Could not add request.');}finally{acting.current=false;if(active.current){setBusy(false);void load();}}}
-  async function download(id:string,name:string){setBusy(true);try{const response=await request(`${endpoint}&fileId=${encodeURIComponent(id)}`);if(!response.ok)throw new Error('This shared file is no longer available.');const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=name;link.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){setMessage(error instanceof Error?error.message:'Could not download.');}finally{setBusy(false);}}
-  if(!data?.available)return message?<p role="status">{message}</p>:null;
-  return <details className="trade-quote-customer-message" style={{margin:'16px 0',padding:16,border:'1px solid var(--trade-line, #cadbd5)',borderRadius:12}}><summary style={{cursor:'pointer',minHeight:44}}>Shared customer requests {data.questions?.length?`(${data.questions.length})`:''}</summary>
-    <p>Check existing answers before asking. These requests are shared across the customer’s project; your quote and pricing stay private.</p>
-    {!data.accepting&&<p role="status"><strong>The customer is no longer accepting quotes or questions.</strong> Existing records remain available.</p>}
-    {data.questions?.map(question=><article key={question.id} style={{borderTop:'1px solid var(--trade-line, #cadbd5)',padding:'14px 0'}}><strong>{question.prompt}</strong><p>{question.answer|| (question.files.length?'Files shared by customer':'Awaiting customer')}</p>{question.files.map(file=><button key={file.id} disabled={busy} onClick={()=>void download(file.id,file.name)}>{file.name}</button>)}</article>)}
-    {data.accepting&&data.canAsk&&<div style={{display:'grid',gap:10}}><label>What do you need? <select value={kind} onChange={event=>setKind(event.target.value)}><option value="text">An answer</option><option value="photo">A photo</option><option value="document">A document</option></select></label><label>Request<textarea maxLength={500} rows={2} value={prompt} onChange={event=>setPrompt(event.target.value)} placeholder="For example: Please share a clear photo of the switchboard."/></label><button disabled={busy||prompt.trim().length<5} onClick={()=>void ask()}>{busy?'Adding…':'Ask customer'}</button></div>}
-    {message&&<p role="status">{message}</p>}
-  </details>;
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+import type { TradeHubQuestion } from "@/lib/customer-quote-hub";
+import styles from "./TradeCustomerHubPanel.module.css";
+
+type Result = { ok?: boolean; available?: boolean; accepting?: boolean; canAsk?: boolean; questions?: TradeHubQuestion[]; error?: string;
+  interested?: boolean; interestRevision?: number; canManageInterest?: boolean; workOrderId?: string };
+type RequestKind = TradeHubQuestion["kind"];
+type Scope = { workOrderId: string; matchId?: never } | { matchId: string; workOrderId?: never };
+type Operation = "ask" | "download" | "interest" | `reply:${string}`;
+const requestKinds: { kind: RequestKind; label: string }[] = [
+  { kind: "text", label: "Answer" }, { kind: "photo", label: "Photo" }, { kind: "document", label: "Document" },
+];
+const starters: { label: string; kind: RequestKind; prompt: string }[] = [
+  { label: "Switchboard photo", kind: "photo", prompt: "Please share a clear photo of the switchboard." },
+  { label: "Site access", kind: "text", prompt: "How can we access the site, and are there any access restrictions?" },
+  { label: "Document", kind: "document", prompt: "Please upload the plans or documents for this work." },
+];
+
+export function TradeCustomerHubPanel({ workOrderId }: { workOrderId: string }) {
+  const business = useTradeBusiness();
+  return <Panel key={`${business?.ownerUid || ""}:${workOrderId}`} workOrderId={workOrderId} />;
+}
+
+export function TradeCustomerHubInterest({ matchId }: { matchId: string }) {
+  const business = useTradeBusiness();
+  return <Panel key={`${business?.ownerUid || ""}:match:${matchId}`} matchId={matchId} interestOnly />;
+}
+
+function Panel({ workOrderId, matchId, interestOnly = false }: Scope & { interestOnly?: boolean }) {
+  const request = useTradeBusinessFetch();
+  const [data, setData] = useState<Result | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [kind, setKind] = useState<RequestKind>("text");
+  const [busy, setBusy] = useState<"" | Operation>("");
+  const [message, setMessage] = useState("");
+  const [replies, setReplies] = useState<Record<string, string>>({});
+  const generation = useRef(0), active = useRef(true), acting = useRef(false);
+  const input = useRef<HTMLTextAreaElement | null>(null);
+  const endpoint = `/api/trade-customer-hub?${matchId ? `matchId=${encodeURIComponent(matchId)}` : `workOrderId=${encodeURIComponent(workOrderId || "")}`}`;
+  const questions = data?.questions || [];
+  const duplicate = prompt.trim() ? questions.find(question => question.prompt.trim().toLowerCase() === prompt.trim().toLowerCase()) : undefined;
+  const canWrite = Boolean(data?.interested && data.accepting && data.canAsk);
+
+  const load = useCallback(async () => {
+    if (acting.current) return;
+    const current = ++generation.current;
+    try {
+      const response = await request(endpoint, { cache: "no-store" });
+      const result = await response.json() as Result;
+      if (!active.current || current !== generation.current) return;
+      if (!response.ok || !result.ok) throw new Error(result.error || "Shared requests could not be opened.");
+      setData(result);
+    } catch (error) {
+      if (!active.current || current !== generation.current) return;
+      setData(null); setMessage(error instanceof Error ? error.message : "Shared requests could not be opened.");
+    }
+  }, [request, endpoint]);
+
+  useEffect(() => {
+    active.current = true;
+    const refresh = () => void load();
+    refresh(); window.addEventListener("focus", refresh);
+    return () => { active.current = false; window.removeEventListener("focus", refresh); };
+  }, [load]);
+
+  function begin(operation: Operation) {
+    if (acting.current) return false;
+    acting.current = true; ++generation.current; setBusy(operation); setMessage("");
+    return true;
+  }
+  function finish() {
+    acting.current = false;
+    if (active.current) { setBusy(""); void load(); }
+  }
+  async function save(method: "POST" | "PATCH", body: object) {
+    const response = await request("/api/trade-customer-hub", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const result = await response.json() as Result;
+    if (!response.ok || !result.ok) {
+      if (active.current && [401, 403, 404].includes(response.status)) setData(null);
+      throw new Error(result.error || "The request could not be shared.");
+    }
+    if (active.current) setData(result);
+  }
+  async function toggleInterest() {
+    if (!data?.canManageInterest || !Number.isSafeInteger(data.interestRevision) || !begin("interest")) return;
+    try {
+      await save("PATCH", { ...(matchId ? { matchId } : { workOrderId }), interested: !data.interested, revision: data.interestRevision });
+      if (active.current) setMessage(data.interested ? "Customer updates are off. Existing quotes and records are unchanged." : "You're interested. Customer Q&A updates will appear in your notifications.");
+    } catch (error) { if (active.current) setMessage(error instanceof Error ? error.message : "Could not change interest."); }
+    finally { finish(); }
+  }
+  async function ask() {
+    if (!canWrite || duplicate || prompt.trim().length < 5 || !begin("ask")) return;
+    try {
+      await save("POST", { workOrderId: data?.workOrderId || workOrderId, prompt: prompt.trim(), kind });
+      if (!active.current) return;
+      setPrompt(""); setMessage("Request added to the customer's project.");
+    } catch (error) {
+      if (active.current) setMessage(error instanceof Error ? error.message : "Could not add request.");
+    } finally { finish(); }
+  }
+  async function reply(questionId: string) {
+    const body = (replies[questionId] || "").trim();
+    if (!canWrite || !body || !begin(`reply:${questionId}`)) return;
+    try {
+      await save("POST", { workOrderId: data?.workOrderId || workOrderId, action: "reply", questionId, body });
+      if (!active.current) return;
+      setReplies(current => { const next = { ...current }; delete next[questionId]; return next; });
+      setMessage("Reply shared with the customer and participating businesses.");
+    } catch (error) { if (active.current) setMessage(error instanceof Error ? error.message : "Could not share reply."); }
+    finally { finish(); }
+  }
+  async function download(id: string, name: string) {
+    if (!begin("download")) return;
+    try {
+      const response = await request(`${endpoint}&fileId=${encodeURIComponent(id)}`);
+      if (!active.current) return;
+      if (!response.ok) {
+        if ([401, 403, 404].includes(response.status)) setData(null);
+        throw new Error("This shared file is no longer available.");
+      }
+      const blob = await response.blob();
+      if (!active.current) return;
+      const url = URL.createObjectURL(blob), link = document.createElement("a");
+      link.href = url; link.download = name; link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      if (active.current) setMessage(error instanceof Error ? error.message : "Could not download.");
+    } finally { finish(); }
+  }
+
+  if (!data?.available) return message ? <p className={styles.status} role="status">{message}</p> : null;
+  return <section className={styles.panel} aria-label="Shared customer requests" aria-busy={Boolean(busy)}>
+    <div className={styles.interest}><div><strong>Customer Q&amp;A updates</strong><small>{data.interested ? "Receive updates for this customer's shared questions and files." : "Choose Interested to receive updates and join the conversation."}</small></div>
+      <button type="button" role="switch" aria-label="Interested in customer updates" aria-checked={Boolean(data.interested)} disabled={Boolean(busy) || !data.canManageInterest}
+        onClick={() => void toggleInterest()}>{busy === "interest" ? "Saving…" : data.interested ? "Interested" : "Not interested"}</button></div>
+    {!interestOnly && <><header className={styles.heading}><h4>Ask customer</h4><p>Answers and files are shared with invited businesses. Quote pricing stays private.</p></header>
+    {!data.accepting ? <p className={styles.status} role="status">The customer has closed quotes and questions. Existing records remain available.</p>
+      : data.canAsk ? <div className={styles.composer}>
+        <div className={styles.kinds} role="group" aria-label="Request type">{requestKinds.map(option => <button key={option.kind} type="button"
+          aria-pressed={kind === option.kind} disabled={Boolean(busy) || !data.interested} onClick={() => setKind(option.kind)}>{option.label}</button>)}</div>
+        <div className={styles.starters} role="group" aria-label="Quick request starters"><span>Start with</span>{starters.map(starter => <button key={starter.label} type="button" disabled={Boolean(busy) || !data.interested}
+          onClick={() => { setKind(starter.kind); setPrompt(starter.prompt); setMessage(""); input.current?.focus(); }}>{starter.label}</button>)}</div>
+        <label className={styles.prompt}>What do you need?<textarea ref={input} maxLength={500} rows={2} disabled={Boolean(busy) || !data.interested} value={prompt}
+          onChange={event => setPrompt(event.target.value)} placeholder="Type a question or choose a starter above." /></label>
+        {duplicate && <p className={styles.duplicate} role="status">This request is already shared. Its {duplicate.answer || duplicate.files.length ? "answer or files" : "status"} is shown below.</p>}
+        <div className={styles.actions}><small>The customer sees this in their private project.</small><button type="button" className={styles.primary}
+          disabled={Boolean(busy) || !canWrite || prompt.trim().length < 5 || Boolean(duplicate)} onClick={() => void ask()}>{busy === "ask" ? "Adding…" : "Ask customer"}</button></div>
+      </div> : <p className={styles.status}>{data.interested ? "You can view shared requests. Quote management permission is needed to ask a question." : "Turn on Interested to ask questions and reply."}</p>}
+    {questions.length > 0 && <div className={styles.history}><h5>Shared requests <span>{questions.length}</span></h5>{questions.map(question => <details className={styles.question} key={question.id} open={duplicate?.id === question.id || undefined}>
+      <summary><strong>{question.prompt}</strong><span>{question.answer || question.replies.length ? "Replied" : question.files.length ? "Files shared" : question.authorType === "customer" ? "Customer question" : "Awaiting reply"}</span></summary>
+      <div className={styles.answer}><small>{question.authorType === "customer" ? "Asked by customer" : "Shared business question"}</small>{question.answer && <p>{question.answer}</p>}
+        {question.replies.map(item => <div className={styles.reply} key={item.id}><small>{item.authorType === "customer" ? "Customer" : "Business"}</small><p>{item.body}</p></div>)}
+        {question.files.length > 0 && <div className={styles.files}>{question.files.map(file => <button key={file.id} type="button" disabled={Boolean(busy)} onClick={() => void download(file.id, file.name)}>{file.name}</button>)}</div>}
+        {canWrite && <div className={styles.replyComposer}><label>Reply<textarea rows={2} maxLength={2000} value={replies[question.id] || ""} disabled={Boolean(busy)}
+          onChange={event => setReplies(current => ({ ...current, [question.id]: event.target.value }))} /></label><button type="button" disabled={Boolean(busy) || !(replies[question.id] || "").trim()}
+          onClick={() => void reply(question.id)}>{busy === `reply:${question.id}` ? "Sharing…" : "Share reply"}</button></div>}
+      </div>
+    </details>)}</div>}</>}
+    {message && <p className={styles.status} role="status">{message}</p>}
+  </section>;
 }
