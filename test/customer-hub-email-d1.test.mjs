@@ -100,6 +100,7 @@ test('actual D1 sends and safely recovers current enquiry Q&A with legacy accoun
   await server.drainCustomerHubEmails(db, 'first');
   assert.equal((await row('first')).status, 'accepted');
   assert.equal(sent.length, 1);
+  assert.match(sent[0].body.html, /section=qa&amp;question=question-first/);
   assert.deepEqual(sent[0].body.to, [email]);
   assert.match(sent[0].body.html, /Open my quotes &amp; questions/);
   assert.doesNotMatch(JSON.stringify(sent), /PRIVATE QUESTION/);

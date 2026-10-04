@@ -120,3 +120,4 @@
 .financeActions strong, .financeActions small { display: block; }
 .financeActions small { margin-top: 4px; color: var(--trade-muted, #637a7b); font-size: .8rem; }
 .financeActions b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.deliveryAttention { margin-top: 18px; }

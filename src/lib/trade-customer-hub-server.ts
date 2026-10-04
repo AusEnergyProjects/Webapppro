@@ -51,7 +51,7 @@ export async function tradeHubView(db:D1Database,access:TeamAccess,workOrderId:s
 }
 export async function hubTradeNotifications(db:D1Database,access:TeamAccess){
   if(!access.canViewQuotes||(!access.isOwner&&(!access.canReceiveCustomerQaNotifications||!access.canViewCustomers)))return [];
-  const rows=await db.prepare(`SELECT event.id,event.event_type,event.author_match_id,event.created_at,work.id work_order_id,work.work_number,detail.crm_customer_id
+  const rows=await db.prepare(`SELECT event.id,event.question_id,event.event_type,event.author_match_id,event.created_at,work.id work_order_id,work.work_number,detail.crm_customer_id
     FROM customer_hub_events event JOIN trade_opportunity_matches participation ON participation.opportunity_id=event.opportunity_id AND participation.firebase_uid=?
     JOIN customer_hub_interests interest ON interest.match_id=participation.id AND interest.opportunity_id=event.opportunity_id AND interest.interested=1 AND event.created_at>=interest.interested_since
     JOIN trade_work_orders work ON work.source_reference=participation.id AND work.source_type='public_lead' AND work.firebase_uid=participation.firebase_uid AND work.record_status='active'
@@ -63,11 +63,11 @@ export async function hubTradeNotifications(db:D1Database,access:TeamAccess){
         AND member.can_receive_customer_qa_notifications=1 AND member.can_view_customers=1))
     ORDER BY event.created_at DESC,event.id DESC LIMIT 80`)
     .bind(access.ownerUid,!access.isOwner&&access.jobScope==='own'?'own':'team',access.memberId||'',access.isOwner?1:0,access.memberId||'',access.actorUid)
-    .all<{id:string;event_type:string;author_match_id:string;created_at:string;work_order_id:string;work_number:string;crm_customer_id:string}>();
+    .all<{id:string;question_id:string;event_type:string;author_match_id:string;created_at:string;work_order_id:string;work_number:string;crm_customer_id:string}>();
   const permitted=await Promise.all(rows.results.map(async row=>{const current=await tradeHubContext(db,access,row.work_order_id);return current?.interested?row:null;}));
   if(!access.isOwner&&!await db.prepare(`SELECT 1 FROM trade_team_members WHERE id=? AND owner_uid=? AND member_uid=? AND status='active'
     AND can_receive_customer_qa_notifications=1 AND can_view_customers=1 AND can_view_quotes=1`).bind(access.memberId,access.ownerUid,access.actorUid).first())return [];
-  return permitted.filter(row=>row!==null).map(row=>({id:`customer-hub:${row.id}`,targetKind:'customer' as const,targetId:row.crm_customer_id,workOrderId:row.work_order_id,workNumber:row.work_number,
+  return permitted.filter(row=>row!==null).map(row=>({id:`customer-hub:${row.id}`,targetKind:'customer' as const,targetId:row.crm_customer_id,workOrderId:row.work_order_id,workNumber:row.work_number,questionId:row.question_id,
     title:row.event_type==='asked'?(row.author_match_id?'New shared job question':'Customer asked a shared question'):row.event_type==='replied'?'New reply in Customer Q&A':row.event_type==='answered'?'Customer answered a shared question':row.event_type==='file_added'?'Customer uploaded a file for review':row.event_type==='closed'?'Customer closed quotes and questions':'Customer reopened quotes and questions',
     summary:'Open Customer Q&A to review the update.',createdAt:row.created_at,targetTab:'quote' as const,source:'customer' as const}));
 }

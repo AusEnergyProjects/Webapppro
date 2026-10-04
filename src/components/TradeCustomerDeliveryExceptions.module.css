@@ -13,4 +13,8 @@
 .panel li span { display: block; margin-top: 4px; font-size: .75rem; color: var(--trade-muted, #637971); }
 .panel .empty { margin-top: 14px; }
 .panel nav { margin-top: 12px; justify-content: flex-end; font-size: .8rem; }
-@media (max-width: 480px) { .panel { padding: 14px; } .panel li { align-items: flex-start; } .panel h3 { font-size: .9rem; } }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.panel .secondary { background: transparent; }
+.handover { border-top: 1px solid var(--trade-line, #cadbd5); padding-top: 14px; }
+.handover > p { margin-bottom: 12px; }
+@media (max-width: 600px) { .panel { padding: 14px; } .panel li { align-items: flex-start; flex-direction: column; } .panel h3 { font-size: .9rem; } .actions { justify-content: flex-start; } }

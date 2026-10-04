@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import { canReviewCustomerDeliveries } from "../src/lib/trade-customer-delivery-exceptions.ts";
 
 // Execute the production TSX and handlers with the same isolated hook pattern as
 // the other UI tests. Child services, effects, DOM and requests stay local.
@@ -82,7 +83,7 @@ function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides
     ...jobOverrides,
   };
   const dependencies = {
-    ...componentStubs(workspace, "JobDetail"), ...hooks,
+    ...componentStubs(workspace, "JobDetail"), ...hooks, canReviewCustomerDeliveries,
     useTradeBusinessFetch: () => async () => { throw new Error("Unexpected request"); },
     useJobTimeTracking: () => {},
     nextAppointmentSlot: () => "2026-10-01T09:00", lifecycleLabel: value => value,

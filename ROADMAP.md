@@ -6,9 +6,9 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 3 October 2026
+Last reconciled: 4 October 2026
 
-Current delivery: visible Forms sidebar workspace, read-only Creditex compliance previews, private business form design/mind maps with explicit Create and edit forms permission, optional job Files attachment, shared web/native conditions and immutable saved versions. Migration0236 defaults nonowner authoring off. Includes the Sites738 task/private-record audit-constraint repair; exact publication receipt lives in C:/Webproject/outputs/tlink-forms-20261002/.
+Current delivery: customer question deep links and issued-quote comparison; direct ordinary quote creation and simplified import entry; delegated delivery exceptions through existing Tasks; precise Creditex evidence correction/closeout; optional source-linked AI assistance using the existing provider. No new lead or commercial gates. Exact release identity and check results: C:/Webproject/outputs/workflow-optimisation-release.md.
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 

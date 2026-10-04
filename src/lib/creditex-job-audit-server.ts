@@ -7,7 +7,7 @@ import { getCreditexCustodyBucket } from './creditex-custody-bucket';
 import { CREDITEX_JOB_AUDIT_QUESTIONS, CREDITEX_JOB_AUDIT_VERSION, creditexJobAuditComplete,
   type CreditexJobAuditAnswer, type CreditexJobAuditFile, type CreditexJobAuditFileKind,
   type CreditexJobAuditRecord, type CreditexJobAuditSaved, type CreditexJobAuditSaveInput,
-  type CreditexJobAuditWorkspace } from './creditex-job-audit';
+  type CreditexJobAuditWorkspace, type CreditexJobAuditFinding, type CreditexJobAuditCorrection } from './creditex-job-audit';
 import type { ActivityRecord } from './trade-activity-form-types';
 import type { CreditexActivityWorkPack, CreditexActivityWorkPackResponse } from './creditex-activity-work-pack';
 import { creditexPermissionSql } from './creditex-permissions';
@@ -23,7 +23,7 @@ const identifier = (value: unknown) => {
   if (typeof value !== 'string' || !value.trim() || value.length > 180) return fail('AUDIT_INPUT', 'Choose a valid audit job.', 400);
   return value.trim();
 };
-type StoredFile = { id: string; parentId: string; label: string; contentType: string; sizeBytes: number; sha256: string; objectKey: string; capturedAt: string };
+type StoredFile = { id: string; parentId: string; label: string; contentType: string; sizeBytes: number; sha256: string; objectKey: string; capturedAt: string; status?: string };
 type FieldSource = { id: string; revision: number; status: string; pdfKey: string; pdfHash: string; updatedAt: string; payload: ActivityRecord };
 type PackSource = { id: string; revision: number; status: string; updatedAt: string; responseHash: string;
   definition: CreditexActivityWorkPack; response: CreditexActivityWorkPackResponse; finals: StoredFile[];
@@ -32,7 +32,7 @@ type JobFormSource = { id: string; title: string; revision: number; status: stri
   template: { fields: { key: string; label: string; section?: string }[] }; answers: Record<string, unknown> };
 type Source = { target: CreditexJobAuditWorkspace['target']; intentRevision: number; intentHash: string;
   fieldRecords: FieldSource[]; workPacks: PackSource[]; jobForms: JobFormSource[]; jobMedia: StoredFile[]; caseEvidence: StoredFile[] };
-type Context = { source_snapshot: string; source: Source; role: string; can_audit: number; can_call: number; can_correct: number; active: number; submission_ready: number; correction_scope: number; evidence_access: number };
+type Context = { source_snapshot: string; source: Source; role: string; can_audit: number; can_call: number; can_correct: number; active: number; submission_ready: number; correction_scope: number; evidence_access: number; case_open: number };
 type AuditRow = { id: string; revision: number; outcome: CreditexJobAuditSaved['outcome']; checklist_version: string;
   answers_json: string; call_outcome: CreditexJobAuditSaved['callOutcome']; call_reason: string; call_id: string; note: string;
   source_sha256: string; actor_uid: string; actor_name: string; created_at: string; request_sha256: string; intent_id: string };
@@ -88,6 +88,8 @@ function sourceQuery(actor: CreditexJobAuditActor, scope: SourceScope = 'single'
     'sizeBytes',f.size_bytes,'sha256',f.original_sha256,'objectKey',f.object_key,'capturedAt',f.received_at,'status',f.status,'updatedAt',f.updated_at) item
     FROM compliance_case_evidence f WHERE f.case_id=linked_case.id AND f.organisation_id=linked_case.organisation_id ORDER BY f.id`);
   return `WITH actor AS (${actorSql(actor)}) SELECT actor.role, actor.can_audit, actor.can_call, actor.can_correct,
+    COALESCE(linked_case.status<>'closed',0) case_open,
+    EXISTS(SELECT 1 FROM compliance_case_findings finding WHERE finding.case_id=linked_case.id AND finding.organisation_id=linked_case.organisation_id AND finding.status='open') open_findings,
     CASE WHEN work.record_status='active' AND work.stage NOT IN ('cancelled','imported') AND intent.status IN ('planned','case_linked') THEN 1 ELSE 0 END active,
     ${actor.kind === 'admin' ? '1' : `actor.role='admin' OR NOT EXISTS(SELECT 1 FROM trade_work_order_compliance_intents affected
       WHERE affected.work_order_id=work.id AND affected.installer_uid=work.firebase_uid AND affected.compliance_organisation_id=intent.compliance_organisation_id
@@ -124,9 +126,9 @@ function sourceBindings(actor: CreditexJobAuditActor, intentId: string, scope: S
 function auditProjection(actor: CreditexJobAuditActor, scope: 'all' | 'selection') {
   return `WITH sources AS MATERIALIZED (${sourceQuery(actor, scope)}), projected AS (
     SELECT json_extract(source.source_snapshot,'$.target.intentId') intent_id, source.submission_ready,
-      (source.correction_required OR EXISTS(SELECT 1 FROM json_each(source.packets) packet WHERE json_extract(packet.value,'$.status')='rejected' AND json_extract(packet.value,'$.lodged')<>1)) correction_required,
+      (source.correction_required OR source.open_findings OR EXISTS(SELECT 1 FROM json_each(source.packets) packet WHERE json_extract(packet.value,'$.status')='rejected' AND json_extract(packet.value,'$.lodged')<>1)) correction_required,
       (json_array_length(source.packets)>0 AND NOT EXISTS(SELECT 1 FROM json_each(source.packets) packet WHERE json_extract(packet.value,'$.lodged')<>1)) submitted,
-      COALESCE((SELECT audit.outcome='audited' AND audit.source_snapshot=source.source_snapshot FROM creditex_job_audit_versions audit
+      COALESCE((SELECT audit.outcome='audited' AND NOT source.open_findings AND audit.source_snapshot=source.source_snapshot FROM creditex_job_audit_versions audit
         WHERE audit.organisation_id=? AND audit.intent_id=json_extract(source.source_snapshot,'$.target.intentId') ORDER BY audit.revision DESC LIMIT 1),0) audit_completed,
       (json_array_length(source.source_snapshot,'$.fieldRecords')+json_array_length(source.source_snapshot,'$.workPacks')>0
         AND NOT EXISTS(SELECT 1 FROM json_each(source.source_snapshot,'$.fieldRecords') field WHERE json_extract(field.value,'$.status')<>'submitted_for_creditex_review' OR length(json_extract(field.value,'$.pdfHash'))<>64 OR json_extract(field.value,'$.pdfKey')='')
@@ -197,6 +199,7 @@ function fileDto(file: StoredFile & { kind: CreditexJobAuditFileKind }, actor: C
     : `/api/creditex/job-audit/file?intentId=${encodeURIComponent(intentId)}&kind=${file.kind}&id=${encodeURIComponent(file.id)}&parentId=${encodeURIComponent(file.parentId)}${actor.kind === 'admin' ? '&actorMode=admin' : ''}`;
   const restricted = file.kind === 'case_evidence' && !evidenceAccess;
   return { kind: file.kind, id: file.id, parentId: file.parentId, label: file.label, contentType: file.contentType, sizeBytes: file.sizeBytes, sha256: file.sha256, capturedAt: file.capturedAt,
+    ...(file.kind === 'case_evidence' ? { evidenceStatus: file.status } : {}),
     previewPath: restricted ? '' : previewPath, ...(restricted ? { unavailableReason: 'This evidence requires an assigned reviewer or auditor to open it.' } : {}) };
 }
 function saved(row: AuditRow): CreditexJobAuditSaved {
@@ -216,19 +219,47 @@ async function loadWorkspace(db: D1Database, actor: CreditexJobAuditActor, inten
     ORDER BY audit.revision DESC`).bind(actor.organisationId, intentId, ...sourceBindings(actor, intentId)).all<AuditRow>();
   const latest = history.results[0] ? saved(history.results[0]) : null;
   const lifecycle = await loadJobLifecycle(db, lifecycleActor(actor, current.role), intentId);
+  const caseId = current.source.target.caseId;
+  const evidenceLinks = await db.prepare('SELECT id,requirement_id FROM compliance_case_evidence WHERE case_id=? AND organisation_id=?')
+    .bind(caseId, actor.organisationId).all<{ id: string; requirement_id: string }>();
+  const requirements = await db.prepare(`SELECT requirement.id,requirement.title,requirement.description
+    FROM compliance_evidence_requirements requirement JOIN compliance_cases c ON c.evidence_policy_version_id=requirement.policy_version_id AND c.organisation_id=requirement.organisation_id
+    WHERE c.id=? AND c.organisation_id=? ORDER BY requirement.sort_order,requirement.id`)
+    .bind(caseId, actor.organisationId).all<CreditexJobAuditWorkspace['requirements'][number]>();
+  const findings = await db.prepare(`SELECT finding.id,finding.evidence_id evidenceId,finding.requirement_id requirementId,
+    COALESCE(evidence.file_name,'') evidenceLabel,COALESCE(requirement.title,'') requirementTitle,
+    finding.severity,finding.description,finding.status,finding.raised_at raisedAt,finding.resolved_at resolvedAt,finding.resolution_note resolutionNote,
+    COALESCE(json_extract((SELECT event.metadata FROM compliance_audit_events event WHERE event.organisation_id=finding.organisation_id
+      AND event.target_type='compliance_case_finding' AND event.target_id=finding.id AND event.event_type='case.finding_resolved'
+      ORDER BY event.created_at DESC,event.id DESC LIMIT 1),'$.reviewedEvidenceId'),'') reviewedEvidenceId,
+    COALESCE(json_extract((SELECT event.metadata FROM compliance_audit_events event WHERE event.organisation_id=finding.organisation_id
+      AND event.target_type='compliance_case_finding' AND event.target_id=finding.id AND event.event_type='case.finding_resolved'
+      ORDER BY event.created_at DESC,event.id DESC LIMIT 1),'$.reviewedEvidenceLabel'),'') reviewedEvidenceLabel
+    FROM compliance_case_findings finding
+    LEFT JOIN compliance_case_evidence evidence ON evidence.id=finding.evidence_id AND evidence.case_id=finding.case_id AND evidence.organisation_id=finding.organisation_id
+    LEFT JOIN compliance_evidence_requirements requirement ON requirement.id=finding.requirement_id AND requirement.organisation_id=finding.organisation_id
+    WHERE finding.case_id=? AND finding.organisation_id=? ORDER BY finding.status='open' DESC,finding.raised_at,finding.id`)
+    .bind(caseId, actor.organisationId).all<CreditexJobAuditFinding>();
+  const openFindings = findings.results.some(finding => finding.status === 'open');
   const realRecords = [...current.source.fieldRecords, ...current.source.workPacks];
   const complete = realRecords.length > 0 && current.source.fieldRecords.every(row => row.status === 'submitted_for_creditex_review' && Boolean(row.pdfKey) && row.pdfHash.length === 64)
     && current.source.workPacks.every(row => row.status === 'completed' && row.finals.length > 0);
-  return { target: current.source.target, sourceSha256, records: records(current.source), files: storedFiles(current.source).map(file => fileDto(file, actor, intentId, Boolean(current.evidence_access))),
-    checklist: latest, history: history.results.map(saved), auditCompleted: latest?.outcome === 'audited' && latest.sourceSha256 === sourceSha256,
-    submissionReady: Boolean(current.submission_ready), capabilities: { canSave: Boolean(current.active && current.can_audit), canComplete: Boolean(current.active && current.can_audit && complete), canCall: Boolean(current.can_call),
+  return { target: current.source.target, sourceSha256, records: records(current.source), files: storedFiles(current.source).map(file => ({ ...fileDto(file, actor, intentId, Boolean(current.evidence_access)),
+      ...(file.kind === 'case_evidence' ? { requirementId: evidenceLinks.results.find(item => item.id === file.id)?.requirement_id || '' } : {}) })),
+    checklist: latest, history: history.results.map(saved), requirements: requirements.results, findings: findings.results, notifications: lifecycle.notifications,
+    auditCompleted: !openFindings && latest?.outcome === 'audited' && latest.sourceSha256 === sourceSha256,
+    submissionReady: Boolean(current.submission_ready), capabilities: { canSave: Boolean(current.active && current.can_audit), canComplete: Boolean(current.active && current.can_audit && complete && !openFindings), canCall: Boolean(current.can_call),
+      canResolveFindings: Boolean(current.active && current.can_audit && current.can_correct && current.evidence_access && current.case_open && caseId),
       canRequestCorrection: Boolean(current.active && current.can_correct && current.correction_scope && lifecycle.capabilities.canRequestCorrection),
-      reason: !current.can_audit ? 'Your team access allows viewing this job. Audit permission is required to change its audit.' : !current.active ? 'This job is inactive, imported or superseded.' : !complete ? 'The assigned field forms must be completed before completing the audit.' : '' } };
+      reason: !current.can_audit ? 'Your team access allows viewing this job. Audit permission is required to change its audit.' : !current.active ? 'This job is inactive, imported or superseded.' : !complete ? 'The assigned field forms must be completed before completing the audit.' : openFindings ? 'Review and close the outstanding corrections before marking this job audited.' : '' } };
 }
 export async function loadCreditexJobAudit(db: D1Database, actor: CreditexJobAuditActor, intentId: string) {
   const workspace = await loadWorkspace(db, actor, intentId);
   const latest = await context(db, actor, intentId);
   if (hash(latest.source_snapshot) !== workspace.sourceSha256) return fail('AUDIT_SOURCE_CHANGED', 'The job changed while opening the audit. Refresh and try again.');
+  if (Boolean(latest.active && latest.can_audit) !== workspace.capabilities.canSave
+    || (!latest.evidence_access && workspace.files.some(file => file.kind === 'case_evidence' && !file.unavailableReason)))
+    return fail('AUDIT_ACCESS_CHANGED', 'Your audit permissions changed while opening this job. Refresh and try again.', 403);
   await accessReceipt(db, actor, latest, 'job.audit_opened', 'creditex_job_audit', intentId);
   return workspace;
 }
@@ -257,7 +288,51 @@ function inputValue(value: unknown): CreditexJobAuditSaveInput {
     expectedSourceSha256: raw.expectedSourceSha256, requestId: raw.requestId, callOutcome: raw.callOutcome,
     answers: { activityDateConfirmed: answer(answers.activityDateConfirmed), customerDetailsConfirmed: answer(answers.customerDetailsConfirmed),
       workConfirmed: answer(answers.workConfirmed), evidenceReviewed: answer(answers.evidenceReviewed), documentsConfirmed: answer(answers.documentsConfirmed), noUnresolvedIssues: answer(answers.noUnresolvedIssues) },
-    callReason: raw.callReason.trim(), note: raw.note.trim(), callId: raw.callId || '' };
+    callReason: raw.callReason.trim(), note: raw.note.trim(), callId: raw.callId || '',
+    ...(raw.correction !== undefined ? { correction: correctionValue(raw.correction) } : {}) };
+}
+function correctionValue(value: unknown): CreditexJobAuditCorrection {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('AUDIT_INPUT', 'Choose a valid correction target.', 400);
+  const raw = Object.fromEntries(Object.entries(value));
+  const correction: CreditexJobAuditCorrection = {};
+  if (raw.requirementId !== undefined) correction.requirementId = identifier(raw.requirementId);
+  if (raw.file !== undefined) {
+    if (!raw.file || typeof raw.file !== 'object' || Array.isArray(raw.file)) return fail('AUDIT_INPUT', 'Choose a valid correction file.', 400);
+    const file = Object.fromEntries(Object.entries(raw.file)), kind = file.kind;
+    if (kind !== 'field_evidence' && kind !== 'field_pdf' && kind !== 'work_pack_pdf' && kind !== 'work_pack_evidence' && kind !== 'work_pack_signature' && kind !== 'job_media' && kind !== 'case_evidence') return fail('AUDIT_INPUT', 'Choose a valid correction file.', 400);
+    correction.file = { kind, id: identifier(file.id), parentId: identifier(file.parentId) };
+  }
+  if (!correction.file && !correction.requirementId) return fail('AUDIT_INPUT', 'Choose a correction file or requirement.', 400);
+  return correction;
+}
+async function correctionDetails(db: D1Database, actor: CreditexJobAuditActor, current: Context, input: CreditexJobAuditSaveInput, now: string) {
+  const target = input.correction, statements: D1PreparedStatement[] = [];
+  if (!target) return { note: input.note, statements };
+  if (input.action !== 'correction_required') return fail('AUDIT_INPUT', 'A correction target can only be sent with a correction request.', 400);
+  const file = target.file && storedFiles(current.source).find(file => file.kind === target.file?.kind && file.id === target.file.id && file.parentId === target.file.parentId);
+  if (target.file && (!file || (file.kind === 'case_evidence' && !current.evidence_access))) return fail('AUDIT_CORRECTION_TARGET', 'This correction file is not available in your current audit.', 404);
+  if ((file?.kind === 'case_evidence' || target.requirementId) && !current.case_open) return fail('AUDIT_CORRECTION_TARGET', 'A current open case is required for a linked correction.', 404);
+  const evidence = file?.kind === 'case_evidence' ? await db.prepare(`SELECT id,requirement_id FROM compliance_case_evidence WHERE id=? AND case_id=? AND organisation_id=? AND status NOT IN ('superseded','withdrawn')`)
+    .bind(file.id, current.source.target.caseId, actor.organisationId).first<{ id: string; requirement_id: string }>() : null;
+  if (file?.kind === 'case_evidence' && !evidence) return fail('AUDIT_CORRECTION_TARGET', 'Choose the current case evidence before requesting a correction.');
+  if (evidence && target.requirementId && target.requirementId !== evidence.requirement_id) return fail('AUDIT_CORRECTION_TARGET', 'The selected evidence belongs to a different requirement.');
+  const requirementId = evidence?.requirement_id || target.requirementId || '';
+  const requirement = requirementId ? await db.prepare(`SELECT requirement.id,requirement.title FROM compliance_evidence_requirements requirement
+    JOIN compliance_cases c ON c.organisation_id=requirement.organisation_id AND c.evidence_policy_version_id=requirement.policy_version_id
+    WHERE c.id=? AND c.organisation_id=? AND requirement.id=?`).bind(current.source.target.caseId, actor.organisationId, requirementId).first<{ id: string; title: string }>() : null;
+  if (requirementId && !requirement) return fail('AUDIT_CORRECTION_TARGET', 'The requirement is not part of this activity case.', 404);
+  const note = [requirement && `Requirement: ${requirement.title.slice(0, 160)}`, file && `File: ${file.label.slice(0, 160)}`, input.note].filter(Boolean).join('\n');
+  if (note.length > 2000) return fail('AUDIT_INPUT', 'Shorten the correction details so the file and requirement can be included in the notification.', 400);
+  if (evidence || requirement) {
+    const findingId = crypto.randomUUID();
+    statements.push(db.prepare(`INSERT INTO compliance_case_findings(id,organisation_id,case_id,evidence_id,requirement_id,finding_code,severity,description,status,raised_by_uid,raised_at,created_at,updated_at)
+      VALUES(?,?,?,?,?,'job_audit_correction','minor',?,'open',?,?,?,?)`).bind(findingId, actor.organisationId, current.source.target.caseId, evidence?.id || '', requirementId, input.note, actor.uid, now, now, now),
+    db.prepare(`INSERT INTO compliance_audit_events(id,organisation_id,actor_type,actor_uid,event_type,target_type,target_id,summary,metadata,created_at)
+      VALUES(?,?,?,?,'case.finding_created','compliance_case_finding',?,'An audit correction was linked to case evidence or a requirement.',?,?)`)
+      .bind(crypto.randomUUID(), actor.organisationId, actor.kind === 'admin' ? 'platform' : 'compliance', actor.uid, findingId,
+        JSON.stringify({ caseId: current.source.target.caseId, intentId: input.intentId, evidenceId: evidence?.id || '', requirementId, sourceSha256: input.expectedSourceSha256 }), now));
+  }
+  return { note, statements };
 }
 export async function saveCreditexJobAudit(db: D1Database, actor: CreditexJobAuditActor, value: unknown) {
   const input = inputValue(value), current = await context(db, actor, input.intentId);
@@ -283,30 +358,78 @@ export async function saveCreditexJobAudit(db: D1Database, actor: CreditexJobAud
     if (!call) return fail('AUDIT_CALL_MISMATCH', 'The selected call does not belong to this audit or is not complete.');
   }
   const id = crypto.randomUUID(), now = new Date().toISOString(), outcome = input.action === 'save' ? 'draft' : input.action;
+  const correction = await correctionDetails(db, actor, current, input, now);
   const auditStatements = [db.prepare(`INSERT INTO creditex_job_audit_versions
     (id,organisation_id,intent_id,work_order_id,owner_uid,revision,outcome,checklist_version,answers_json,call_outcome,call_reason,call_id,note,
      source_snapshot,source_sha256,actor_kind,actor_uid,actor_member_id,actor_name,request_id,request_sha256,created_at)
-    VALUES(?,?,?,?,?,(SELECT ?+1 FROM (${sourceQuery(actor)}) live WHERE live.active=1 AND live.can_audit=1 AND (?<>'correction_required' OR (live.can_correct=1 AND live.correction_scope=1)) AND live.source_snapshot=?
+    VALUES(?,?,?,?,?,(SELECT ?+1 FROM (${sourceQuery(actor)}) live WHERE live.active=1 AND live.can_audit=1 AND (?<>'correction_required' OR (live.can_correct=1 AND live.correction_scope=1)) AND (?=0 OR live.evidence_access=1) AND (?=0 OR live.case_open=1) AND (?<>'audited' OR NOT live.open_findings) AND live.source_snapshot=?
       AND COALESCE((SELECT MAX(revision) FROM creditex_job_audit_versions WHERE organisation_id=? AND intent_id=?),0)=?),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(id, actor.organisationId, input.intentId, current.source.target.workOrderId, current.source.target.ownerUid, input.expectedAuditRevision,
-      ...sourceBindings(actor, input.intentId), input.action, current.source_snapshot, actor.organisationId, input.intentId, input.expectedAuditRevision,
-      outcome, CREDITEX_JOB_AUDIT_VERSION, JSON.stringify(input.answers), input.callOutcome, input.callReason, input.callId || '', input.note,
+      ...sourceBindings(actor, input.intentId), input.action, input.correction?.file?.kind === 'case_evidence' ? 1 : 0, input.correction?.file?.kind === 'case_evidence' || input.correction?.requirementId ? 1 : 0, input.action, current.source_snapshot, actor.organisationId, input.intentId, input.expectedAuditRevision,
+      outcome, CREDITEX_JOB_AUDIT_VERSION, JSON.stringify(input.answers), input.callOutcome, input.callReason, input.callId || '', correction.note,
       current.source_snapshot, input.expectedSourceSha256, actor.kind, actor.uid, actor.memberId, actor.name, input.requestId, requestHash, now),
     db.prepare(`INSERT INTO compliance_audit_events(id,organisation_id,actor_type,actor_uid,event_type,target_type,target_id,summary,metadata,created_at)
       VALUES(?,?,?,?,?,'creditex_job_audit',?,'Saved a versioned job audit checklist.',?,?)`)
       .bind(crypto.randomUUID(), actor.organisationId, actor.kind === 'admin' ? 'platform' : 'compliance', actor.uid, `job.audit_${outcome}`, id,
-        JSON.stringify({ intentId: input.intentId, auditRevision: input.expectedAuditRevision + 1, sourceSha256: input.expectedSourceSha256 }), now)];
+        JSON.stringify({ intentId: input.intentId, auditRevision: input.expectedAuditRevision + 1, sourceSha256: input.expectedSourceSha256 }), now), ...correction.statements];
   try {
     if (input.action === 'correction_required') {
       const lifecycle = await loadJobLifecycle(db, lifecycleActor(actor, current.role), input.intentId);
       await reviewTradeJob(db, lifecycleActor(actor, current.role), { workOrderId: current.source.target.workOrderId, action: 'correction_required',
-        requestId: `audit-${id}`, note: input.note, expectedRevision: current.source.target.jobRevision, expectedSourceSha256: lifecycle.correctionSourceSha256 }, { auditStatements });
+        requestId: `audit-${id}`, note: correction.note, expectedRevision: current.source.target.jobRevision, expectedSourceSha256: lifecycle.correctionSourceSha256 }, { auditStatements });
     } else await db.batch(auditStatements);
   } catch (error) {
     if (error instanceof Error && /creditex_job_audit_versions\.(revision|actor_kind)|UNIQUE constraint failed.*creditex_job_audit/.test(error.message)) return fail('AUDIT_SOURCE_CHANGED', 'The audit, job or your access changed before saving. Refresh and try again.');
     throw error;
   }
   return loadWorkspace(db, actor, input.intentId);
+}
+
+/** Close an existing finding against the current evidence; this never grants submission approval. */
+export async function resolveCreditexJobAuditFinding(db: D1Database, actor: CreditexJobAuditActor, value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('AUDIT_INPUT', 'Send a valid correction review.', 400);
+  const raw = Object.fromEntries(Object.entries(value)), intentId = identifier(raw.intentId), findingId = identifier(raw.findingId);
+  if (raw.action !== 'resolve_finding' || typeof raw.requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,100}$/.test(raw.requestId)
+    || typeof raw.expectedSourceSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(raw.expectedSourceSha256)
+    || typeof raw.resolutionNote !== 'string' || !raw.resolutionNote.trim() || raw.resolutionNote.length > 2000
+    || typeof raw.reviewedEvidenceId !== 'string' || raw.reviewedEvidenceId.length > 180) return fail('AUDIT_INPUT', 'Record what was checked and how the correction was resolved.', 400);
+  const current = await context(db, actor, intentId), caseId = current.source.target.caseId;
+  if (!current.active || !current.can_audit || !current.can_correct || !current.evidence_access || !current.case_open || !caseId) return fail('AUDIT_FINDING_PERMISSION', 'An assigned reviewer with audit and correction access must close this finding on an open case.', 403);
+  const requestHash = hash(JSON.stringify([intentId, findingId, raw.expectedSourceSha256, raw.resolutionNote.trim(), raw.reviewedEvidenceId]));
+  const eventId = `audit-finding-${hash(JSON.stringify([actor.organisationId, actor.kind, actor.uid, raw.requestId]))}`;
+  const previous = await db.prepare('SELECT metadata FROM compliance_audit_events WHERE id=? AND organisation_id=?').bind(eventId, actor.organisationId).first<{ metadata: string }>();
+  if (previous) {
+    if (JSON.parse(previous.metadata).requestSha256 !== requestHash) return fail('AUDIT_REQUEST_CHANGED', 'This request already records a different correction review.');
+    return loadWorkspace(db, actor, intentId);
+  }
+  if (hash(current.source_snapshot) !== raw.expectedSourceSha256) return fail('AUDIT_SOURCE_CHANGED', 'The job evidence changed. Review the current record before closing the correction.');
+  const finding = await db.prepare(`SELECT id,requirement_id FROM compliance_case_findings WHERE id=? AND case_id=? AND organisation_id=? AND status='open'`)
+    .bind(findingId, caseId, actor.organisationId).first<{ id: string; requirement_id: string }>();
+  if (!finding) return fail('AUDIT_FINDING_NOT_FOUND', 'This open finding is not available on the current activity.', 404);
+  const evidence = raw.reviewedEvidenceId ? await db.prepare(`SELECT id,file_name,original_sha256 FROM compliance_case_evidence
+    WHERE id=? AND case_id=? AND organisation_id=? AND (?='' OR requirement_id=?) AND status IN ('received','under_review','accepted')`)
+    .bind(raw.reviewedEvidenceId, caseId, actor.organisationId, finding.requirement_id, finding.requirement_id).first<{ id: string; file_name: string; original_sha256: string }>() : null;
+  if (raw.reviewedEvidenceId && !evidence) return fail('AUDIT_CORRECTION_TARGET', 'Choose current evidence for this finding and requirement.', 404);
+  const now = new Date().toISOString();
+  try {
+    await db.batch([
+      db.prepare(`INSERT INTO compliance_audit_events(id,organisation_id,actor_type,actor_uid,event_type,target_type,target_id,summary,metadata,created_at)
+        VALUES(?,?,?,?,(SELECT 'case.finding_resolved' FROM (${sourceQuery(actor)}) live WHERE live.active=1 AND live.can_audit=1 AND live.can_correct=1 AND live.evidence_access=1 AND live.case_open=1 AND live.source_snapshot=?
+          AND EXISTS(SELECT 1 FROM compliance_case_findings f WHERE f.id=? AND f.case_id=? AND f.organisation_id=? AND f.status='open')),
+        'compliance_case_finding',?,'An audit finding was closed after reviewing the current evidence.',?,?)`)
+        .bind(eventId, actor.organisationId, actor.kind === 'admin' ? 'platform' : 'compliance', actor.uid,
+          ...sourceBindings(actor, intentId), current.source_snapshot, findingId, caseId, actor.organisationId, findingId,
+          JSON.stringify({ caseId, intentId, requestSha256: requestHash, sourceSha256: raw.expectedSourceSha256,
+            reviewedEvidenceId: evidence?.id || '', reviewedEvidenceLabel: evidence?.file_name || '', reviewedEvidenceSha256: evidence?.original_sha256 || '', resolutionNote: raw.resolutionNote.trim() }), now),
+      db.prepare(`UPDATE compliance_case_findings SET status='resolved',resolved_by_uid=?,resolved_at=?,resolution_note=?,updated_at=? WHERE id=? AND case_id=? AND organisation_id=? AND status='open'`)
+        .bind(actor.uid, now, raw.resolutionNote.trim(), now, findingId, caseId, actor.organisationId),
+      db.prepare('UPDATE compliance_cases SET revision=revision+1,updated_at=? WHERE id=? AND organisation_id=?').bind(now, caseId, actor.organisationId),
+    ]);
+  } catch (error) {
+    if (error instanceof Error && /compliance_audit_events\.(event_type|id)/.test(error.message)) return fail('AUDIT_SOURCE_CHANGED', 'The finding, evidence or your access changed before closeout. Refresh and review it again.');
+    throw error;
+  }
+  return loadWorkspace(db, actor, intentId);
 }
 
 type AuditObject = { arrayBuffer(): Promise<ArrayBuffer>; httpMetadata?: { contentType?: string } };

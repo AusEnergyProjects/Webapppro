@@ -147,7 +147,7 @@ test("active jobs with no outstanding actions retain the up-to-date state", asyn
   const data = fixture(); Object.assign(data.metrics, { awaitingSchedule: 0, waitingJobs: 0, overdueTasks: 0, openIssues: 0 });
   data.overdueTasks = []; data.openIssues = [];
   const h = harness(async () => response(data)); const tree = await h.mount();
-  assert.match(text(tree), /You are up to date/); assert.doesNotMatch(text(tree), /No active jobs/);
+  assert.match(text(tree), /No outstanding job follow-ups/); assert.doesNotMatch(text(tree), /No active jobs/);
   button(tree, "View jobs").props.onClick(); assert.deepEqual(h.calls, [["jobs", "all"]]); h.cleanup();
 });
 

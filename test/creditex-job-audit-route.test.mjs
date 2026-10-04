@@ -19,6 +19,7 @@ function fixture(){
     './bounded-json-request':bounded,'./creditex-job-lifecycle-server':{JobLifecycleError:AccessError},'./creditex-job-audit-server':{CreditexJobAuditError:AuditError},
   });
   const service={loadCreditexAuditDashboard:async(db,actor)=>({total:3,countsUnit:'activities',actor:actor.kind}),loadCreditexJobAudit:async(db,actor,intentId)=>{events.push(['load',actor.kind,intentId]);return {target:{intentId}};},saveCreditexJobAudit:async(db,actor,input)=>{events.push(['save',actor.kind,input]);return {checklist:{revision:1}};},readCreditexJobAuditFile:async(db,actor,input)=>{events.push(['file',actor.kind,input]);return {bytes:new Uint8Array([1,2]),contentType:'application/pdf',fileName:'test"\r\n.pdf'};}};
+  service.resolveCreditexJobAuditFinding=async(db,actor,input)=>{events.push(['resolve',actor.kind,input]);return {findings:[{id:input.findingId,status:'resolved'}]};};
   const routes=load('../src/app/api/creditex/job-audit/route.ts',{'../../../../../db':{getD1:()=>db},'@/lib/bounded-json-request':bounded,'@/lib/creditex-job-audit-server':service,'@/lib/creditex-job-audit-route-server':helper});
   const files=load('../src/app/api/creditex/job-audit/file/route.ts',{'../../../../../../db':{getD1:()=>db},'@/lib/creditex-job-audit-server':service,'@/lib/creditex-job-audit-route-server':helper});
   return {routes,files,events,deny:()=>denied=true};
@@ -41,4 +42,11 @@ test('dashboard API is scoped and read failures preserve actionable MFA/access r
 test('private file route uses same actor gate and browser-safe inline headers',async()=>{
   const f=fixture(),response=await f.files.GET(new Request('https://example.test/api/creditex/job-audit/file?actorMode=admin&intentId=job&kind=field_pdf&id=file&parentId=field'));
   assert.equal(response.status,200);assert.equal(response.headers.get('x-content-type-options'),'nosniff');assert.equal(response.headers.get('cross-origin-resource-policy'),'same-origin');assert.equal(response.headers.get('content-security-policy'),"sandbox; default-src 'none'");assert.doesNotMatch(response.headers.get('content-disposition'),/[\r\n]/);assert.deepEqual([...new Uint8Array(await response.arrayBuffer())],[1,2]);assert.equal(f.events.at(-1)[1],'admin');
+});
+test('finding closeout uses the same authenticated bounded POST boundary and does not trust body authority',async()=>{
+  const f=fixture(),body={action:'resolve_finding',findingId:'finding',actorMode:'admin'};
+  const response=await f.routes.POST(new Request('https://example.test/api/creditex/job-audit',{method:'POST',body:JSON.stringify(body)}));
+  assert.equal(response.status,200);assert.deepEqual(f.events.at(-1),['resolve','compliance',body]);
+  f.deny();const denied=await f.routes.POST(new Request('https://example.test/api/creditex/job-audit',{method:'POST',body:JSON.stringify(body)}));assert.equal(denied.status,403);
+  assert.equal(f.events.filter(event=>event[0]==='resolve').length,1);
 });

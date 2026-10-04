@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { User } from 'firebase/auth';
 import { useTradeBusiness, useTradeBusinessFetch } from './TradeBusinessProvider';
-import type { BusinessTask, BusinessTaskList, BusinessTaskStatus, TaskPerson } from '@/lib/trade-business-tasks';
-import { taskStatus } from '@/lib/trade-business-tasks';
+import type { BusinessTask, BusinessTaskDraft, BusinessTaskList, BusinessTaskStatus, TaskPerson } from '@/lib/trade-business-tasks';
+import { taskJobHref, taskStatus } from '@/lib/trade-business-tasks';
 import styles from './TradeTasksWorkspace.module.css';
 
 type Result = BusinessTaskList & { ok: boolean; error?: string };
@@ -12,16 +12,17 @@ type PeopleResult = { ok: boolean; people: TaskPerson[]; hasMore: boolean; error
 const statusNames = { open: 'To do', in_progress: 'In progress', done: 'Done' };
 const dateLabel = (date: string) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
 
-export function TradeTasksWorkspace({ user, compact = false }: { user: User; compact?: boolean }) {
+type WorkspaceProps = { user: User; compact?: boolean; draft?: BusinessTaskDraft; onCreated?: () => void };
+export function TradeTasksWorkspace({ user, compact = false, draft, onCreated }: WorkspaceProps) {
   const business = useTradeBusiness();
-  return <TaskList key={`${user.uid}:${business?.ownerUid}:${business?.memberId}`} user={user} compact={compact} />;
+  return <TaskList key={`${user.uid}:${business?.ownerUid}:${business?.memberId}:${draft?.key || ''}`} user={user} compact={compact} draft={draft} onCreated={onCreated} />;
 }
-function TaskList({ user, compact }: { user: User; compact: boolean }) {
+function TaskList({ user, compact, draft, onCreated }: WorkspaceProps) {
   const request = useTradeBusinessFetch(); const business = useTradeBusiness();
   const [view, setView] = useState('mine'); const [status, setStatus] = useState('active'); const [page, setPage] = useState(1);
   const [data, setData] = useState<{ key: string; value: Result } | null>(null);
   const [error, setError] = useState(''); const [notice, setNotice] = useState(''); const [busy, setBusy] = useState(false);
-  const [title, setTitle] = useState(''); const [detail, setDetail] = useState(''); const [dueOn, setDueOn] = useState('');
+  const [title, setTitle] = useState(draft?.title || ''); const [detail, setDetail] = useState(draft?.detail || ''); const [dueOn, setDueOn] = useState('');
   const [assignee, setAssignee] = useState(business?.memberId || ''); const [assigneeName, setAssigneeName] = useState('Me');
   const [peopleSearch, setPeopleSearch] = useState(''); const [people, setPeople] = useState<TaskPerson[]>([]);
   const [peopleMore, setPeopleMore] = useState(false); const [peopleError, setPeopleError] = useState('');
@@ -83,7 +84,9 @@ function TaskList({ user, compact }: { user: User; compact: boolean }) {
     createId.current ||= crypto.randomUUID();
     const assignedName = assigneeName;
     if (await mutate({ action: editing ? 'edit' : 'create', id: editing?.id || createId.current, revision: editing?.revision, title, detail, dueOn, assigneeMemberId: assignee || current?.memberId })) {
-      setNotice(editing ? 'Task updated.' : `Task added for ${assignedName === 'Me' ? 'you' : assignedName}.`); clearForm(); titleInput.current?.focus();
+      setNotice(editing ? 'Task updated.' : `Task added for ${assignedName === 'Me' ? 'you' : assignedName}.`);
+      if (!editing) onCreated?.();
+      clearForm(); titleInput.current?.focus();
     }
   }
   async function changeStatus(task: BusinessTask, next: BusinessTaskStatus) {
@@ -96,20 +99,20 @@ function TaskList({ user, compact }: { user: User; compact: boolean }) {
   const today = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const tasks = compact ? current?.tasks.slice(0, 3) : current?.tasks;
   const tasksHref = `${business?.role === 'member' ? '/direct-trade/team' : '/direct-trade/dashboard'}?workspace=tasks`;
-  return <section className={`${styles.workspace} ${compact ? styles.compact : ''}`} aria-label={compact ? 'Quick tasks' : 'Business tasks'}>
-    <header className={styles.heading}><div><h2>{compact ? 'Your tasks' : 'Tasks'}</h2><p>{compact ? 'Capture a quick to-do for you or a teammate.' : 'Keep everyday work moving. Assign it, track it, tick it off.'}</p></div>{compact ? <a className={styles.secondary} href={tasksHref}>View all tasks{current ? ` (${current.total})` : ''}</a> : <button className={styles.secondary} type="button" onClick={() => void load()} disabled={busy}>Refresh</button>}</header>
+  return <section className={`${styles.workspace} ${compact ? styles.compact : ''}`} aria-label={draft ? 'Assign delivery follow-up' : compact ? 'Quick tasks' : 'Business tasks'}>
+    <header className={styles.heading}><div><h2>{draft ? 'Assign follow-up' : compact ? 'Your tasks' : 'Tasks'}</h2><p>{draft ? 'Choose who will check this delivery and when it is due.' : compact ? 'Capture a quick to-do for you or a teammate.' : 'Keep everyday work moving. Assign it, track it, tick it off.'}</p></div>{compact ? <a className={styles.secondary} href={tasksHref}>View all tasks{current ? ` (${current.total})` : ''}</a> : <button className={styles.secondary} type="button" onClick={() => void load()} disabled={busy}>Refresh</button>}</header>
     <form className={styles.composer} onSubmit={event => void save(event)} aria-label={editing ? 'Edit task' : 'Quick task'}>
       <div className={styles.quickRow}><label className={styles.titleField}>{editing ? 'Edit task' : 'What needs doing?'}<input ref={titleInput} value={title} onChange={event => setTitle(event.target.value)} maxLength={180} required placeholder="e.g. Order parts for tomorrow" disabled={busy} /></label>
         <div className={styles.assignee}><span>Assign to</span><button type="button" className={styles.secondary} aria-expanded={choosingPerson} onClick={() => setChoosingPerson(value => !value)} disabled={busy}>{assigneeName}</button></div>
         <button className={styles.primary} type="submit" disabled={busy || !current}>{busy ? 'Saving...' : editing ? 'Save changes' : 'Add task'}</button>
         {editing && <button type="button" className={styles.secondary} disabled={busy} onClick={clearForm}>Cancel</button>}</div>
       {choosingPerson && <div className={styles.people}><label>Find a teammate<input type="search" value={peopleSearch} onChange={event => setPeopleSearch(event.target.value)} placeholder="Search by name" /></label><div className={styles.personOptions}><button type="button" onClick={() => { setAssignee(current?.memberId || business?.memberId || ''); setAssigneeName('Me'); setChoosingPerson(false); }}>Me</button>{people.filter(person => person.id !== current?.memberId).map(person => <button type="button" key={person.id} onClick={() => { setAssignee(person.id); setAssigneeName(person.name); setChoosingPerson(false); }}>{person.name}</button>)}</div>{peopleMore && <p>Search a name to find more people.</p>}{peopleError && <p role="alert">{peopleError}</p>}</div>}
-      <details className={styles.details} key={editing?.id || 'new'} open={editing ? true : undefined}><summary>{dueOn ? `Due ${dateLabel(dueOn)}` : 'Due date and notes (optional)'}</summary><div className={styles.extraFields}><label>Due date<input type="date" value={dueOn} onChange={event => setDueOn(event.target.value)} disabled={busy} /></label><label>Notes<textarea value={detail} onChange={event => setDetail(event.target.value)} maxLength={3000} rows={2} disabled={busy} /></label></div></details>
+      <details className={styles.details} key={editing?.id || 'new'} open={editing || draft ? true : undefined}><summary>{dueOn ? `Due ${dateLabel(dueOn)}` : 'Due date and notes (optional)'}</summary><div className={styles.extraFields}><label>Due date<input type="date" value={dueOn} onChange={event => setDueOn(event.target.value)} disabled={busy} /></label><label>Notes<textarea value={detail} onChange={event => setDetail(event.target.value)} maxLength={3000} rows={2} disabled={busy} /></label></div></details>
     </form>
     {notice && <p className={styles.notice} role="status">{notice}</p>}{error && <p className={styles.error} role="alert">{error} <button type="button" onClick={() => void load()}>Refresh tasks</button></p>}
     {!compact && <div className={styles.filters}><nav aria-label="Task lists">{[['mine', 'My tasks'], ['delegated', 'Assigned by me'], ...(current?.canViewTeam ? [['team', 'Team tasks']] : [])].map(([value, label]) => <button type="button" key={value} aria-pressed={view === value} onClick={() => { setView(value); setPage(1); }}>{label}</button>)}</nav><label>Show<select value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}><option value="active">To do and in progress</option><option value="done">Done</option><option value="all">All tasks</option></select></label></div>}
     {!current && !error && <p role="status">Loading tasks...</p>}
-    {current && <><ul className={styles.list}>{tasks?.map(task => <li className={styles.task} key={task.id}><div className={styles.taskContent}>{task.canEdit ? <button className={styles.taskTitle} type="button" onClick={() => edit(task)} disabled={busy}>{task.title}</button> : <strong>{task.title}</strong>}<small>{task.assigneeMemberId === current.memberId ? 'For you' : `For ${task.assigneeName}`} · {task.createdByMemberId === current.memberId ? 'Assigned by you' : `From ${task.createdByName}`}{task.dueOn && <span className={task.status !== 'done' && task.dueOn < today ? styles.overdue : ''}> · {task.status !== 'done' && task.dueOn < today ? 'Overdue: ' : 'Due '}{dateLabel(task.dueOn)}</span>}</small>{task.detail && <details><summary>Notes</summary><p>{task.detail}</p></details>}</div><label className={styles.status}><span className={styles.srOnly}>Status for {task.title}</span><select aria-label={`Status for ${task.title}`} value={task.status} disabled={busy} onChange={event => void changeStatus(task, taskStatus(event.target.value))}>{Object.entries(statusNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></li>)}</ul>{!current.total && <p className={styles.empty}>{status === 'done' ? 'Completed tasks will appear here.' : view === 'delegated' ? 'Tasks you assign to teammates appear here.' : 'No tasks here. Add one above when something needs doing.'}</p>}{!compact && current.totalPages > 1 && <nav className={styles.pagination} aria-label="Task pages"><button type="button" disabled={page <= 1 || busy} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {current.totalPages}</span><button type="button" disabled={page >= current.totalPages || busy} onClick={() => setPage(value => value + 1)}>Next</button></nav>}</>}
+    {current && !draft && <><ul className={styles.list}>{tasks?.map(task => <li className={styles.task} key={task.id}><div className={styles.taskContent}>{task.canEdit ? <button className={styles.taskTitle} type="button" onClick={() => edit(task)} disabled={busy}>{task.title}</button> : <strong>{task.title}</strong>}<small>{task.assigneeMemberId === current.memberId ? 'For you' : `For ${task.assigneeName}`} · {task.createdByMemberId === current.memberId ? 'Assigned by you' : `From ${task.createdByName}`}{task.dueOn && <span className={task.status !== 'done' && task.dueOn < today ? styles.overdue : ''}> · {task.status !== 'done' && task.dueOn < today ? 'Overdue: ' : 'Due '}{dateLabel(task.dueOn)}</span>}</small>{taskJobHref(task.detail, business?.ownerUid || user.uid, business?.role === 'member') && <a className={styles.secondary} href={taskJobHref(task.detail, business?.ownerUid || user.uid, business?.role === 'member')}>Open job</a>}{task.detail && <details><summary>Notes</summary><p>{task.detail}</p></details>}</div><label className={styles.status}><span className={styles.srOnly}>Status for {task.title}</span><select aria-label={`Status for ${task.title}`} value={task.status} disabled={busy} onChange={event => void changeStatus(task, taskStatus(event.target.value))}>{Object.entries(statusNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></li>)}</ul>{!current.total && <p className={styles.empty}>{status === 'done' ? 'Completed tasks will appear here.' : view === 'delegated' ? 'Tasks you assign to teammates appear here.' : 'No tasks here. Add one above when something needs doing.'}</p>}{!compact && current.totalPages > 1 && <nav className={styles.pagination} aria-label="Task pages"><button type="button" disabled={page <= 1 || busy} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {current.totalPages}</span><button type="button" disabled={page >= current.totalPages || busy} onClick={() => setPage(value => value + 1)}>Next</button></nav>}</>}
   </section>;
 }
 

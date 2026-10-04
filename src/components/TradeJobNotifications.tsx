@@ -12,6 +12,7 @@ type JobNotification = {
   targetKind: "job" | "customer" | "opportunity" | "team" | "network";
   targetId: string;
   workOrderId: string;
+  questionId?: string;
   workNumber: string;
   title: string;
   summary: string;
@@ -134,7 +135,7 @@ export function TradeJobNotifications({
     }
     navigationNonce.current += 1;
     if (item.targetKind === "customer") {
-      onNavigate({workspace:"work",kind:"customer",id:item.targetId,query:"",nonce:navigationNonce.current,customerSection:"qa",workOrderId:item.workOrderId});
+      onNavigate({workspace:"work",kind:"customer",id:item.targetId,query:"",nonce:navigationNonce.current,customerSection:"qa",workOrderId:item.workOrderId,questionId:item.questionId});
       return;
     }
     if (item.targetKind === "team") {

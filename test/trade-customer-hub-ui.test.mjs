@@ -64,6 +64,7 @@ function harness(t, api, options = {}) {
   const loaded = {};
   Function("require", "exports", "window", "URL", "document", "HTMLElement", `${options.qa ? qaCompiled : compiled + "\nexports.Panel=Panel;exports.AuthenticatedPanel=AuthenticatedPanel;exports.SharedFilePreview=SharedFilePreview;"}`)(name => {
     if (name === "react") return hooks;
+    if (name === "./TradeCustomerHubAssist") return { TradeCustomerHubAssist: "TradeCustomerHubAssist" };
     if (name === "react/jsx-runtime") return jsx;
     if (name === "./TradeBusinessProvider") return { useTradeBusinessFetch: () => {
       if (scopedOwner !== ownerUid) { scopedOwner = ownerUid; request = createTradeBusinessFetch(ownerUid, "https://ausenergyassessments.com", transport); }
@@ -471,23 +472,24 @@ test("token failures and empty tokens never fall back to an unauthenticated requ
 });
 
 const job = { id: "job-one", crmCustomerId: "customer-one", sourceType: "public_lead", customerSource: "public_lead_released", recordStatus: "active", workNumber: "JOB-1", title: "Home upgrade" };
-const target = { kind: "customer", id: "customer-one", customerSection: "qa", workOrderId: "job-one", nonce: 12 };
+const target = { kind: "customer", id: "customer-one", customerSection: "qa", workOrderId: "job-one", questionId: "question-one", nonce: 12 };
 
 test("customer Q&A includes only this customer's released, active TLink jobs and focuses the exact notification once", async t => {
-  const focused = [], applied = [], entries = new Map(); const section = { open: false };
+  const focused = [], entries = new Map(); const section = { open: false };
   const entry = id => { if (!entries.has(id)) entries.set(id, { open: false, scrollIntoView: () => focused.push(`scroll:${id}`), querySelector: () => ({ focus: () => focused.push(`focus:${id}`) }) }); return entries.get(id); };
   const jobs = [job, { ...job, id: "other-customer", crmCustomerId: "customer-two" }, { ...job, id: "trade-owned", customerSource: "trade_owned" },
     { ...job, id: "protected", customerSource: "platform_private" }, { ...job, id: "other-source", sourceType: "manual" }, { ...job, id: "archived", recordStatus: "archived" }];
-  const h = harness(t, async () => response(view), { qa: true, component: "CustomerQa", props: { customerId: "customer-one", jobs, target, onNavigationApplied: nonce => applied.push(nonce) },
+  const h = harness(t, async () => response(view), { qa: true, component: "CustomerQa", props: { customerId: "customer-one", jobs, target },
     beforeEffects(tree) { if (!tree) return; tree.props.ref.current = section;
       for (const node of nodes(tree, node => typeof node.type === "function" && node.type.name === "CustomerQaJob")) node.props.register(entry(node.props.job.id)); } });
   let tree = await h.settle(); const children = nodes(tree, node => typeof node.type === "function" && node.type.name === "CustomerQaJob");
   assert.deepEqual(children.map(node => node.props.job.id), ["job-one"]);
+  assert.equal(children[0].props.questionId, "question-one"); assert.equal(children[0].props.navigationNonce, 12);
   assert.equal(section.open, true); assert.equal(entries.get("job-one").open, true);
-  assert.deepEqual(focused, ["scroll:job-one", "focus:job-one"]); assert.deepEqual(applied, [12]);
+  assert.deepEqual(focused, ["scroll:job-one", "focus:job-one"]);
   tree = await h.settle(); assert.equal(focused.length, 2);
-  h.setProps({ customerId: "customer-one", jobs, target: { ...target, workOrderId: "other-customer", nonce: 13 }, onNavigationApplied: nonce => applied.push(nonce) });
-  tree = await h.settle(); assert.match(text(tree), /no longer available in this customer record/); assert.equal(focused.length, 2); assert.deepEqual(applied, [12]);
+  h.setProps({ customerId: "customer-one", jobs, target: { ...target, workOrderId: "other-customer", nonce: 13 } });
+  tree = await h.settle(); assert.match(text(tree), /no longer available in this customer record/); assert.equal(focused.length, 2);
 });
 
 test("a customer record mounts its job conversation on first expansion and preserves it when collapsed", async t => {

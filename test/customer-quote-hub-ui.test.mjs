@@ -46,7 +46,7 @@ function locate(node, predicate, path = [], ancestors = []) {
   return locate(node.props?.children, predicate, [...path, "children"], [...ancestors, node]);
 }
 
-function harness(t, api, token = "private-hub-token", search = "") {
+function harness(t, api, token = "private-hub-token", search = "", beforeEffects = () => {}) {
   let cursor = 0, dirty = false;
   const slots = [], effects = [], callbacks = [], queued = [], requests = [], listeners = new Map();
   const changed = (before, after) => !before || before.length !== after.length || after.some((value, index) => !Object.is(value, before[index]));
@@ -81,7 +81,7 @@ function harness(t, api, token = "private-hub-token", search = "") {
     removeEventListener: (name, callback) => { if (listeners.get(name) === callback) listeners.delete(name); },
   });
   const render = () => { cursor = 0; dirty = false; const tree = loaded.HubWorkspace({ token });
-    for (const effect of queued.splice(0)) effect(); return tree; };
+    beforeEffects(tree); for (const effect of queued.splice(0)) effect(); return tree; };
   const settle = async () => { for (let attempt = 0; attempt < 8; attempt++) {
     const tree = render(); await flush(); if (!dirty) return tree;
   } assert.fail("Customer quote hub did not settle after eight renders"); };
@@ -197,4 +197,51 @@ test("customer email opens Q&A directly without losing other project navigation"
   const qa=nodes(tree,node=>node.type==="button"&&text(node).startsWith("Q&A"))[0];
   assert.equal(qa.props["aria-current"],"page");
   assert.ok(nodes(tree,node=>node.type==="textarea"&&node.props.id==="answer-answer-one").length);
+});
+
+test('question links focus the exact authorised question once and keep other requests compact',async t=>{
+  const events=[],elements=new Map();
+  const h=harness(t,async()=>ok(data),'private-hub-token','?section=qa&question=file-one',tree=>{
+    for(const node of nodes(tree,node=>node.type==='details'&&node.key&&node.props.ref)){
+      if(!elements.has(node.key))elements.set(node.key,{open:false,scrollIntoView:()=>events.push('scroll:'+node.key),querySelector:()=>({focus:()=>events.push('focus:'+node.key)})});
+      node.props.ref(elements.get(node.key));
+    }
+  });
+  let tree=await h.settle();assert.deepEqual(events,['scroll:file-one','focus:file-one']);
+  assert.equal(nodes(tree,node=>node.key==='answer-one')[0].props.open,undefined);
+  assert.equal(elements.get('file-one').open,true);await h.settle();assert.equal(events.length,2);
+  assert.equal(nodes(tree,node=>node.key==='answer-one'&&node.type==='details').length,1);
+});
+
+test('unanswered text has one response control and answered text moves to reply history',async t=>{
+  let hub=structuredClone(data);
+  const h=harness(t,async(_path,init)=>{if(init.method==='POST'){const body=JSON.parse(init.body);assert.equal(body.questionId,'answer-one');assert.equal(body.answer,'Beside the garage');hub.questions[0].answer=body.answer;hub.questions[0].revision++;}return ok(hub);});
+  let tree=await h.settle();navigate(tree,'Q&A');tree=h.render();
+  let question=nodes(tree,node=>node.key==='answer-one')[0];
+  assert.equal(nodes(question,node=>node.type==='textarea').length,1);
+  nodes(question,node=>node.type==='textarea')[0].props.onChange({target:{value:'Beside the garage'}});tree=h.render();
+  button(tree,'Share answer').props.onClick();tree=await h.settle();question=nodes(tree,node=>node.key==='answer-one')[0];
+  assert.equal(nodes(question,node=>node.props?.id==='answer-answer-one').length,0);
+  assert.equal(nodes(question,node=>node.type==='textarea').length,1);assert.match(text(question),/Beside the garage/);
+  assert.equal(question.props.open,undefined);assert.match(text(tree),/Answer shared with the participating businesses/);
+});
+
+test('unknown question links do not focus another conversation or leak inaccessible text',async t=>{
+  const h=harness(t,async()=>ok(data),'private-hub-token','?section=qa&question=foreign-question');
+  const tree=await h.settle();assert.match(text(tree),/That question is no longer available/);
+  assert.equal(nodes(tree,node=>node.type==='details'&&node.key&&node.props.open).length,0);
+});
+
+test('comparison is limited to three quotes sharing a service and uses the issued summary',async t=>{
+  const hub={...data,quotes:[...data.quotes,...[2,3,4].map(n=>({...data.quotes[0],id:'quote-'+n,business:'Business '+n})),{...data.quotes[0],id:'quote-ac',services:['air-conditioning']}]};
+  let revoked=false;
+  const h=harness(t,async(path)=>{if(revoked)return response({ok:false,error:'Link withdrawn'},404);if(path.includes('?summary=1'))return response({ok:true,comparison:{id:path.split('/').at(-1).split('?')[0],totalCents:100000,scope:'Install supplied system',terms:'Excludes switchboard upgrade',validUntil:'2099-01-01',items:[],choices:[{name:'Extra circuit',kind:'addon',groupKey:'',summary:'If selected',totalCents:20000}]}});return ok(hub);});
+  let tree=await h.settle();navigate(tree,'Quotes');tree=h.render();
+  const checks=()=>nodes(tree,node=>node.type==='input'&&node.props.type==='checkbox');
+  checks()[0].props.onChange({target:{checked:true}});tree=h.render();assert.equal(checks()[4].props.disabled,true);
+  checks()[1].props.onChange({target:{checked:true}});tree=h.render();checks()[2].props.onChange({target:{checked:true}});tree=h.render();assert.equal(checks()[3].props.disabled,true);
+  button(tree,'Compare selected quotes').props.onClick();tree=await h.settle();
+  assert.equal(h.requests.filter(item=>item.path.includes('?summary=1')).length,3);
+  assert.match(text(tree),/Install supplied system/);assert.match(text(tree),/Excludes switchboard upgrade/);assert.match(text(tree),/Base quote/);assert.match(text(tree),/Optional extra/);
+  revoked=true;h.listeners.get('focus')();tree=await h.settle();assert.doesNotMatch(text(tree),/Install supplied system|Extra circuit/);
 });

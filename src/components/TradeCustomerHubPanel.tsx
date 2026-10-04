@@ -6,6 +6,7 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 import type { TradeHubQuestion } from "@/lib/customer-quote-hub";
 import styles from "./TradeCustomerHubPanel.module.css";
+import { TradeCustomerHubAssist } from "./TradeCustomerHubAssist";
 
 type Result = { ok?: boolean; available?: boolean; accepting?: boolean; canAsk?: boolean; questions?: TradeHubQuestion[]; error?: string;
   interested?: boolean; interestRevision?: number; canManageInterest?: boolean; workOrderId?: string; customerId?: string };
@@ -15,7 +16,7 @@ type Scope = { workOrderId: string; matchId?: never } | { matchId: string; workO
 type Operation = "ask" | "interest" | `reply:${string}`;
 type SharedFile = TradeHubQuestion["files"][number];
 type SharedFileSelection = { file: SharedFile; question: string };
-type PanelProps = Scope & { interestOnly?: boolean; onOpenQa?: (target: CustomerQaTarget) => void; disabled?: boolean };
+type PanelProps = Scope & { interestOnly?: boolean; onOpenQa?: (target: CustomerQaTarget) => void; disabled?: boolean; questionId?: string; navigationNonce?: number };
 const requestKinds: { kind: RequestKind; label: string }[] = [
   { kind: "text", label: "Answer" }, { kind: "photo", label: "Photo" }, { kind: "document", label: "Document" },
 ];
@@ -24,9 +25,9 @@ const starters: { label: string; kind: RequestKind; prompt: string }[] = [
   { label: "Document", kind: "document", prompt: "Please upload the plans or documents for this work." },
 ];
 
-export function TradeCustomerHubPanel({ workOrderId }: { workOrderId: string }) {
+export function TradeCustomerHubPanel({ workOrderId, questionId, navigationNonce }: { workOrderId: string; questionId?: string; navigationNonce?: number }) {
   const business = useTradeBusiness();
-  return <Panel key={`${business?.ownerUid || ""}:${workOrderId}`} workOrderId={workOrderId} />;
+  return <Panel key={`${business?.ownerUid || ""}:${workOrderId}`} workOrderId={workOrderId} questionId={questionId} navigationNonce={navigationNonce} />;
 }
 
 export function TradeCustomerHubInterest({ matchId, onOpenQa, disabled = false }: {
@@ -45,7 +46,7 @@ function Panel(props: PanelProps) {
   return <AuthenticatedPanel key={`${user.uid}:${business.ownerUid}`} {...props} user={user} />;
 }
 
-function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, onOpenQa, disabled = false }: PanelProps & { user: User }) {
+function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, onOpenQa, disabled = false, questionId, navigationNonce }: PanelProps & { user: User }) {
   const businessRequest = useTradeBusinessFetch();
   const [data, setData] = useState<Result | null>(null);
   const [prompt, setPrompt] = useState("");
@@ -57,10 +58,21 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
   const generation = useRef(0), active = useRef(true), acting = useRef(false);
   const cancellation = useRef<AbortController | null>(null);
   const input = useRef<HTMLTextAreaElement | null>(null);
+  const questionElements = useRef<Record<string, HTMLDetailsElement | null>>({});
+  const appliedQuestion = useRef("");
   const endpoint = `/api/trade-customer-hub?${matchId ? `matchId=${encodeURIComponent(matchId)}` : `workOrderId=${encodeURIComponent(workOrderId || "")}`}`;
   const questions = data?.questions || [];
   const duplicate = prompt.trim() ? questions.find(question => question.prompt.trim().toLowerCase() === prompt.trim().toLowerCase()) : undefined;
   const canWrite = Boolean(data?.interested && data.accepting && data.canAsk);
+  useEffect(() => {
+    const target = questionId && data?.questions?.some(question => question.id === questionId) ? questionElements.current[questionId] : null;
+    const key = `${navigationNonce}:${questionId}`;
+    if (!target || appliedQuestion.current === key) return;
+    target.open = true;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.querySelector("summary")?.focus({ preventScroll: true });
+    appliedQuestion.current = key;
+  }, [data, questionId, navigationNonce]);
   const isCurrent = useCallback(() => active.current && firebaseAuth.currentUser?.uid === user.uid && firebaseAuth.currentUser.emailVerified, [user.uid]);
   const request = useCallback(async (path: string, init?: RequestInit) => {
     const currentUser = firebaseAuth.currentUser, controller = cancellation.current;
@@ -178,7 +190,8 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
         <div className={styles.actions}><small>The customer sees this in their private project.</small><button type="button" className={styles.primary}
           disabled={Boolean(busy) || !canWrite || prompt.trim().length < 5 || Boolean(duplicate)} onClick={() => void ask()}>{busy === "ask" ? "Adding…" : "Ask customer"}</button></div>
       </div> : <p className={styles.status}>{data.interested ? "You can view shared requests. Quote management permission is needed to ask a question." : "Turn on Interested to ask questions and reply."}</p>}
-    {questions.length > 0 && <div className={styles.history}><h5>Customer answers &amp; uploads <span>{questions.length}</span></h5><p className={styles.historyHelp}>Replies and uploaded files appear below the question they answer.</p>{questions.map(question => <details className={styles.question} key={question.id} open={duplicate?.id === question.id || question.files.length > 0 || undefined}>
+    {data.interested && data.canAsk && workOrderId && <TradeCustomerHubAssist workOrderId={workOrderId} questions={questions} onOpenQuestion={id => { const element = questionElements.current[id]; if (element) { element.open = true; element.scrollIntoView({ behavior: "smooth", block: "center" }); element.querySelector("summary")?.focus({ preventScroll: true }); } }} />}
+    {questions.length > 0 && <div className={styles.history}><h5>Customer answers &amp; uploads <span>{questions.length}</span></h5><p className={styles.historyHelp}>Replies and uploaded files appear below the question they answer.</p>{questions.map(question => <details className={styles.question} key={question.id} ref={element => { questionElements.current[question.id] = element; }} open={questionId === question.id || duplicate?.id === question.id || question.files.length > 0 || undefined}>
       <summary><strong>{question.prompt}</strong><span>{question.files.length ? `${question.files.length} customer ${question.files.length === 1 ? "file" : "files"}` : question.answer || question.replies.length ? "Replied" : question.authorType === "customer" ? "Customer question" : "Awaiting reply"}</span></summary>
       <div className={styles.answer}><small>{question.authorType === "customer" ? "Asked by customer" : "Shared business question"}</small>{question.answer && <p>{question.answer}</p>}
         {question.replies.map(item => <div className={styles.reply} key={item.id}><small>{item.authorType === "customer" ? "Customer" : "Business"}</small><p>{item.body}</p></div>)}

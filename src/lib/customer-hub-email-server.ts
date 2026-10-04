@@ -55,13 +55,13 @@ export async function drainCustomerHubEmails(db:D1Database,eventId=''){
   // Retry only inside the provider's 24-hour idempotency window. Never blindly resend old ambiguous attempts.
   await db.prepare(`UPDATE customer_hub_email_deliveries SET status='unknown',updated_at=? WHERE status IN ('sending','failed')
     AND first_attempt_at<>'' AND first_attempt_at<=?`).bind(now,new Date(Date.now()-23*3600000).toISOString()).run();
-  const rows=await db.prepare(`SELECT delivery.*,event.opportunity_id,event.event_type,event.author_match_id,opportunity.title
+  const rows=await db.prepare(`SELECT delivery.*,event.opportunity_id,event.question_id,event.event_type,event.author_match_id,opportunity.title
     FROM customer_hub_email_deliveries delivery JOIN customer_hub_events event ON event.id=delivery.event_id
     JOIN trade_opportunities opportunity ON opportunity.id=event.opportunity_id
     WHERE (?='' OR delivery.event_id=?) AND delivery.attempts<4 AND delivery.next_attempt_at<=?
       AND (delivery.status IN ('pending','failed') OR (delivery.status='sending' AND delivery.updated_at<?))
     ORDER BY delivery.updated_at LIMIT 20`).bind(eventId,eventId,now,new Date(Date.now()-10*60000).toISOString())
-    .all<{event_id:string;release_id:string;email_hash:string;opportunity_id:string;author_match_id:string;event_type:string;title:string;attempts:number;encrypted_payload:string}>();
+    .all<{event_id:string;release_id:string;email_hash:string;opportunity_id:string;question_id:string;author_match_id:string;event_type:string;title:string;attempts:number;encrypted_payload:string}>();
   for(const row of rows.results){
     const claim=await db.prepare(`UPDATE customer_hub_email_deliveries SET status='sending',attempts=attempts+1,
       first_attempt_at=CASE WHEN first_attempt_at='' THEN ? ELSE first_attempt_at END,updated_at=?
@@ -94,8 +94,8 @@ export async function drainCustomerHubEmails(db:D1Database,eventId=''){
         const message=`A trade business has ${action} about your job: ${title}. Reply once to share your answer with the businesses quoting on your job.`;
         payload={eventId:row.event_id,recipient:recipient.recipient_email,link,
           subject:`TLink: a business ${action} about ${title}`,
-          body:message+customerHubEmailCta(`${link}?section=qa`).text,
-          html:customerHubUpdateEmailHtml(message,`${link}?section=qa`)};
+          body:message+customerHubEmailCta(`${link}?section=qa&question=${encodeURIComponent(row.question_id)}`).text,
+          html:customerHubUpdateEmailHtml(message,`${link}?section=qa&question=${encodeURIComponent(row.question_id)}`)};
         const encrypted=await encryptProtectedPayload(payload);
         const saved=await db.prepare("UPDATE customer_hub_email_deliveries SET encrypted_payload=? WHERE event_id=? AND status='sending' AND encrypted_payload='' AND attempts=?")
           .bind(encrypted,row.event_id,row.attempts+1).run();

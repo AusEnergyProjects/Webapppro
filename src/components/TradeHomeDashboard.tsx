@@ -11,12 +11,14 @@ import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import styles from "./TradeHomeDashboard.module.css";
 import { TradeTasksWorkspace } from './TradeTasksWorkspace';
+import { TradeCustomerDeliveryExceptions } from "./TradeCustomerDeliveryExceptions";
+import type { CustomerDeliveryTab } from "@/lib/trade-customer-delivery-exceptions";
 
 type HomeResponse = { ok?: boolean; dashboard?: HomeDashboard; error?: string };
 export type TradeHomeDashboardProps = {
   user: User;
   staffPermissions?: TradeTeamPermissions;
-  onOpenJob: (id: string, tab?: "tasks" | "notes") => void;
+  onOpenJob: (id: string, tab?: "tasks" | "notes" | CustomerDeliveryTab) => void;
   onOpenSchedule: (weekStart?: string) => void;
   onOpenJobs: (filter?: string) => void;
   onNewJob?: () => void;
@@ -167,9 +169,10 @@ export function TradeHomeDashboard({ user, staffPermissions, onOpenJob, onOpenSc
             {dashboard.metrics.openJobs === 0 ? <><Icon kind="briefcase" /><strong>No active jobs</strong>
               <p>{canCreate ? "Create a job to start planning your next piece of work." : staffPermissions?.crewLead ? "Your crew's next assigned jobs will appear here." : staffPermissions?.jobScope === "own" ? "Your dispatcher can assign your next job." : "No active jobs are available in this view."}</p>
               {canCreate ? <button type="button" onClick={onNewJob}>Create job</button> : <button type="button" onClick={() => onOpenSchedule()}>View schedule</button>}
-            </> : <><Icon kind="check" /><strong>You are up to date</strong><p>No waiting jobs, overdue tasks or open issues to follow up.</p><button type="button" onClick={() => onOpenJobs("all")}>View jobs</button></>}
+            </> : <><Icon kind="check" /><strong>No outstanding job follow-ups</strong><p>No waiting jobs, overdue tasks or open issues to follow up.</p><button type="button" onClick={() => onOpenJobs("all")}>View jobs</button></>}
           </div>}
           {(dashboard.metrics.overdueTasks > 3 || dashboard.metrics.openIssues > 2) && <p className={styles.footnote}>Showing {Math.min(3, dashboard.overdueTasks.length)} of {plural(dashboard.metrics.overdueTasks, "overdue task")} and {Math.min(2, dashboard.openIssues.length)} of {plural(dashboard.metrics.openIssues, "open issue")}.</p>}
+          <div className={styles.deliveryAttention}><TradeCustomerDeliveryExceptions user={user} permissions={staffPermissions} refreshKey={refreshKey + refresh} onOpenJob={onOpenJob} /></div>
         </section>
       </div>
       <footer className={styles.updated}>Updated {new Intl.DateTimeFormat("en-AU", { hour: "numeric", minute: "2-digit", timeZone: dashboard.timeZone }).format(new Date(dashboard.generatedAt))} · Showing the jobs available to you.</footer>

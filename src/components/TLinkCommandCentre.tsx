@@ -12,6 +12,7 @@ export type TLinkCommandTarget = {
   query: string;
   nonce: number;
   customerSection?: "qa";
+  questionId?: string;
   workOrderId?: string;
   jobTab?: "summary" | "schedule" | "quote" | "field" | "invoice";
 };

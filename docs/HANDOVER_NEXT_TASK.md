@@ -1,5 +1,21 @@
 # Next task handover
 
+Status: Simpler customer, trade and audit workflows; implementation complete, release verification in progress.
+Prepared: 4 October 2026
+
+## Active delivery: simpler customer and business actions
+
+Prepared: 4 October 2026. Base: 6db128a6, Sites 755. User authorises implementation and matching GitHub/Sites publication across the five reviewed priorities.
+
+- Outcome: customers and authorised staff reach the exact action, complete it without duplicate entry, and see a truthful result.
+- Independently owned slices: customer hub/notification navigation and quote comparison; direct ordinary quote creation and existing import entry; delegated delivery exceptions and existing task handover; evidence-linked Creditex corrections. Coordinator owns integration and release.
+- Reuse current private capabilities, business/job records, quote engine, role grants, tasks and findings. Keep customer shopping separate from appointments; keep ordinary leads independent of program approval. No new pricing gates, parallel workflow engines or speculative features.
+- Acceptance: exact authorised notification destination; one customer response control; preserved drafts, quotes, files and manual accepting switch; ordinary quote creation skips program/appointment steps; scoped staff exception handling; precise evidence corrections and preserved audit history. Verify desktop and mobile plus denied/revoked access and retry boundaries.
+- Validate each slice with focused behaviour tests, then typecheck, lint, complete tests where permissions/contracts change, build and exact source/publication provenance. Record observed failures separately.
+- AI work is authorised using the existing hosted OpenAI key and configured model. Both assistants are optional, read-only and source-linked; customer sends, quote changes, audit decisions and submissions remain explicit human actions.
+
+## Previous delivery context
+
 Status: One customer project hub with manual control of quotes and questions.
 Prepared: 3 October 2026
 

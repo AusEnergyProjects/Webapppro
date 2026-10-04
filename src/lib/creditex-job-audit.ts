@@ -16,6 +16,7 @@ export type CreditexJobAuditFileKind = 'field_evidence' | 'field_pdf' | 'work_pa
 export type CreditexJobAuditFile = {
   kind: CreditexJobAuditFileKind; id: string; parentId: string; label: string; contentType: string;
   sizeBytes: number; sha256: string; previewPath: string; capturedAt: string; unavailableReason?: string;
+  requirementId?: string; evidenceStatus?: string;
 };
 export type CreditexJobAuditAnswerRow = { key: string; label: string; section: string; value: unknown };
 export type CreditexJobAuditRecord = {
@@ -27,6 +28,15 @@ export type CreditexJobAuditSaved = {
   answers: CreditexJobAuditAnswers; callOutcome: CreditexJobAuditCallOutcome; callReason: string;
   callId: string; note: string; sourceSha256: string; actorUid: string; actorName: string; createdAt: string;
 };
+export type CreditexJobAuditFinding = {
+  id: string; evidenceId: string; requirementId: string; evidenceLabel: string; requirementTitle: string;
+  severity: string; description: string; status: 'open' | 'resolved' | 'waived'; raisedAt: string;
+  resolvedAt: string; resolutionNote: string; reviewedEvidenceId: string; reviewedEvidenceLabel: string;
+};
+export type CreditexJobAuditCorrection = {
+  file?: Pick<CreditexJobAuditFile, 'kind' | 'id' | 'parentId'>;
+  requirementId?: string;
+};
 export type CreditexJobAuditWorkspace = {
   target: { intentId: string; caseId: string; workOrderId: string; ownerUid: string; jobRevision: number;
     caseRevision: number; jobNumber: string; jobTitle: string; activityDate: string; activityTitle: string;
@@ -34,13 +44,21 @@ export type CreditexJobAuditWorkspace = {
     addressReviewRequired: boolean; addressVerificationLabel: string };
   sourceSha256: string; records: CreditexJobAuditRecord[]; files: CreditexJobAuditFile[];
   checklist: CreditexJobAuditSaved | null; history: CreditexJobAuditSaved[];
+  requirements: { id: string; title: string; description: string }[];
+  findings: CreditexJobAuditFinding[];
+  notifications: { id: string; status: string; recipient: string; error: string }[];
   auditCompleted: boolean; submissionReady: boolean;
-  capabilities: { canSave: boolean; canComplete: boolean; canRequestCorrection: boolean; canCall: boolean; reason: string };
+  capabilities: { canSave: boolean; canComplete: boolean; canRequestCorrection: boolean; canResolveFindings: boolean; canCall: boolean; reason: string };
 };
 export type CreditexJobAuditSaveInput = {
   intentId: string; expectedAuditRevision: number; expectedSourceSha256: string; requestId: string;
   action: 'save' | 'audited' | 'correction_required'; answers: CreditexJobAuditAnswers;
   callOutcome: CreditexJobAuditCallOutcome; callReason: string; callId?: string; note: string;
+  correction?: CreditexJobAuditCorrection;
+};
+export type CreditexJobAuditResolveInput = {
+  action: 'resolve_finding'; intentId: string; expectedSourceSha256: string; requestId: string;
+  findingId: string; resolutionNote: string; reviewedEvidenceId: string;
 };
 export function emptyCreditexJobAuditAnswers(): CreditexJobAuditAnswers {
   return { activityDateConfirmed: 'not_checked', customerDetailsConfirmed: 'not_checked', workConfirmed: 'not_checked',

@@ -219,16 +219,23 @@ test('new-customer quick quote creates an unscheduled unassigned job once and ig
   } finally { database.close(); }
 });
 
-test('new-customer quick quote allows a separate customer with matching contact and address details', async () => {
+test('new-customer quick quote requires explicit duplicate review and still allows a different customer sharing details', async () => {
   const { database, post, insertCustomer } = fixture();
   try {
     insertCustomer('existing', 'owner-1', {
       first_name: 'Casey', last_name: 'Client', email: 'casey@example.test', phone: '0412 345 678',
     });
-    const result = await post(quick({
+    const request = quick({
       clientRequestId: 'duplicate-customer-0001', phone: '0412 345 678',
       addressLine1: '12 Main St', suburb: 'Melbourne', addressState: 'VIC', postcode: '3000',
-    }));
+    });
+    const duplicate = await post(request);
+    assert.equal(duplicate.status, 409, JSON.stringify(duplicate.body));
+    assert.equal(duplicate.body.code, 'CUSTOMER_DUPLICATE');
+    assert.equal(duplicate.body.duplicateCandidates, undefined, 'Narrow quoting access must not widen the customer register permission');
+    assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_work_orders').get().count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_crm_customers').get().count, 1);
+    const result = await post({ ...request, duplicateOverride: true });
     assert.equal(result.status, 201, JSON.stringify(result.body));
     assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_customers WHERE firebase_uid = 'owner-1'").get().count, 2);
     assert.equal(database.prepare("SELECT COUNT(DISTINCT id) count FROM trade_crm_customers WHERE firebase_uid = 'owner-1' AND email = 'casey@example.test'").get().count, 2);
@@ -247,6 +254,24 @@ test('existing-customer quick quote needs matching owner/site/email without cust
     const foreign = await post({ ...body, clientRequestId: 'foreign-owner-000001', crmCustomerId: 'foreign', serviceSiteId: 'site-foreign', email: 'foreign@example.test' });
     assert.equal(foreign.status, 404, JSON.stringify(foreign.body));
     assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_work_orders').get().count, 1);
+  } finally { database.close(); }
+});
+
+test('quick-quote duplicate review sees only current-business active customers and retains authorised review detail', async () => {
+  const { database, post, insertCustomer } = fixture({ canViewCustomers: true, canSearchCustomers: true });
+  try {
+    insertCustomer('foreign-match', 'owner-2', { email: 'casey@example.test', phone: '0412 345 678' });
+    insertCustomer('archived-match', 'owner-1', { email: 'casey@example.test', record_status: 'archived' });
+    const created = await post(quick());
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const duplicate = await post(quick({ clientRequestId: 'review-next-quote-0001' }));
+    assert.equal(duplicate.status, 409); assert.equal(duplicate.body.code, 'CUSTOMER_DUPLICATE');
+    assert.ok(duplicate.body.duplicateCandidates.length > 0);
+    assert.deepEqual([...new Set(duplicate.body.duplicateCandidates.map(candidate => candidate.customerId))], [created.body.customerId]);
+    const selected = await post(quick({ clientRequestId: 'reuse-reviewed-customer-0001', customerMode: 'existing', crmCustomerId: created.body.customerId, serviceSiteId: created.body.serviceSiteId }));
+    assert.equal(selected.status, 201, JSON.stringify(selected.body));
+    assert.equal(selected.body.customerId, created.body.customerId); assert.equal(selected.body.serviceSiteId, created.body.serviceSiteId);
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_customers WHERE firebase_uid = 'owner-1' AND record_status = 'active'").get().count, 1);
   } finally { database.close(); }
 });
 

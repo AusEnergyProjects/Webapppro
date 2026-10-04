@@ -403,7 +403,7 @@ test("job and customer directories open focused records without automatic or inl
   assert.match(crm, /jobReturnTarget\.kind === "customer"/);
   assert.match(crm, /kind: "customer", customerId: selectedCustomerDetail\.id, customerName: selectedCustomerDetail\.displayName/);
 
-  const jobDirectoryStart = crm.indexOf('{!mapWorkspace && view === "jobs" && creating !== "job" && !focusedJobId');
+  const jobDirectoryStart = crm.indexOf('{!mapWorkspace && view === "jobs" && creating !== "job" && creating !== "quote" && !focusedJobId');
   const jobDirectoryEnd = crm.indexOf('{view === "schedule"', jobDirectoryStart);
   assert.ok(jobDirectoryStart >= 0 && jobDirectoryEnd > jobDirectoryStart);
   assert.doesNotMatch(crm.slice(jobDirectoryStart, jobDirectoryEnd), /<JobDetail/);
@@ -635,7 +635,7 @@ test("new job and schedule loaders recover instead of leaving stale chunks blank
   assert.match(recoverableWorkspace, /if \(!sessionStorage\.getItem\(key\)\)/);
   assert.match(recoverableWorkspace, /location\.reload\(\)/);
   assert.match(recoverableWorkspace, /return function TradeWorkspaceLoadFailure/);
-  assert.match(crm, /if \(creating !== "job"\) return;[\s\S]*?newJobHeadingRef\.current\?\.scrollIntoView\(\{ block: "start" \}\);[\s\S]*?newJobHeadingRef\.current\?\.focus\(\{ preventScroll: true \}\);/);
+  assert.match(crm, /if \(creating !== "job" && creating !== "quote"\) return;[\s\S]*?newJobHeadingRef\.current\?\.scrollIntoView\(\{ block: "start" \}\);[\s\S]*?newJobHeadingRef\.current\?\.focus\(\{ preventScroll: true \}\);/);
   assert.match(crm, /<h3 ref=\{newJobHeadingRef\} tabIndex=\{-1\}>Create job<\/h3>/);
 });
 

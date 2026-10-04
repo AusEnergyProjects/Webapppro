@@ -4,9 +4,21 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 3 October 2026
+Last reconciled locally: 4 October 2026
 
-## Current implementation: one customer project hub
+## Current implementation: simpler customer, trade and audit workflows
+
+Customer updates carry the exact shared-question destination. The hub presents unanswered requests first, one answer control per unanswered text request and a compact conversation after it is answered. Customers can compare up to three current quotes for a shared service using their issued document snapshots, including scope, base price, optional extras and terms. Customer access, current versions and expiry are checked again before a comparison is returned.
+
+New quote uses the existing quick-commercial engine directly: select an exact customer/property or enter a new customer, describe the work, then open pricing. No appointment or government-program selection is required. The map reuses the same form. Existing import matching and review remain behind one primary customers/jobs entry.
+
+Home includes delivery failures in Needs attention. Staff see only exception types they can act on for currently accessible jobs; owner-only operations remain owner-only. Handover uses the existing task composer and validated job destination. Creditex corrections can identify a registered requirement/evidence finding or name another existing file in the correction note. Closing a finding retains the reviewed source and audit event, and open findings prevent audit completion. Existing correction delivery receipts remain visible.
+
+Optional AI assistance reuses the existing hosted OpenAI key, configured model and shared usage limits. Trades can generate a cited enquiry brief and draft scope for explicit review/copy. Creditex can request a source-linked preliminary check of structured answers, requirements, findings and permitted file metadata. Neither assistant reads attachment bytes, sends messages, edits a quote, closes findings, approves an audit or submits a claim. Current access and source identity are checked before and after generation; incomplete or unsupported citations fail visibly.
+
+No migration, dependency, commercial gate or new provider configuration is introduced. Release evidence, full check results and exact publication identity are recorded in C:/Webproject/outputs/workflow-optimisation-release.md. Local synthetic browser checks do not prove physical camera behaviour or customer inbox receipt.
+
+## Previous implementation: one customer project hub
 
 One private customer link covers every service in a public trade enquiry, with Overview, Quotes and shared Q&A. A separate customer capability protects competing quote visibility; business links grant no access to the hub. Shared questions, replies, sanitised photos and PDF uploads stay within the enquiry. A business must explicitly switch Interested on to receive Q&A notifications; turning it off immediately stops those updates. Staff require an explicit notification permission, which defaults off. Clicking a notification opens that business's customer record and Q&A section. Customer emails are queued atomically, encrypted and retried with stable provider idempotency. Phone capture is offered on touch devices. Individual quote emails and immutable PDFs retain their existing flow.
 

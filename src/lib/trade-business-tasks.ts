@@ -6,6 +6,23 @@ export type BusinessTask = {
   revision: number; createdAt: string; updatedAt: string; completedAt: string; canEdit: boolean;
 };
 export type TaskPerson = { id: string; name: string };
+export type BusinessTaskDraft = { key: string; title: string; detail: string };
+const taskJobTabs = new Set(['quote', 'invoice', 'summary', 'schedule', 'messages', 'files']);
+
+/** Notes may contain a job link, but never supply a different business or external destination. */
+export function taskJobHref(detail: string, ownerUid: string, memberPortal: boolean): string | undefined {
+  if (!ownerUid) return;
+  const line = detail.split(/\r?\n/).find(value => value.startsWith('Job: /direct-trade/dashboard?'));
+  if (!line) return;
+  const url = new URL(line.slice(5), 'https://tlink.invalid');
+  const id = url.searchParams.get('jobId') || '';
+  const tab = url.searchParams.get('jobTab') || '';
+  if (url.origin !== 'https://tlink.invalid' || url.pathname !== '/direct-trade/dashboard'
+    || url.searchParams.get('workspace') !== 'work' || url.searchParams.get('business') !== ownerUid
+    || !/^[A-Za-z0-9:_-]{1,180}$/.test(id) || !taskJobTabs.has(tab)) return;
+  const jobTab = tab === 'files' ? 'field' : tab === 'messages' ? 'summary' : tab;
+  return `/direct-trade/${memberPortal ? 'team' : 'dashboard'}?${new URLSearchParams({ workspace: 'work', jobId: id, jobTab, business: ownerUid })}`;
+}
 export type BusinessTaskList = {
   tasks: BusinessTask[]; memberId: string; canViewTeam: boolean;
   page: number; total: number; totalPages: number;

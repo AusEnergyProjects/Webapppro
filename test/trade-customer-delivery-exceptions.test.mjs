@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { migratedDataforceSqlite } from "./helpers/trade-dataforce-database.mjs";
+import { migratedDataforceD1, migratedDataforceSqlite } from "./helpers/trade-dataforce-database.mjs";
 import { customerDeliveryFailureDiagnostic, loadCustomerDeliveryExceptions } from "../src/lib/trade-customer-delivery-exceptions-server.ts";
 
 const now = "2026-10-02T03:00:00.000Z";
 const later = "2026-10-02T04:00:00.000Z";
-const owner = { ownerUid: "owner", isOwner: true };
+const owner = { ownerUid: "owner", actorUid: "owner", memberId: "owner-member", isOwner: true };
 
 // Node SQLite permits 500 compound terms, but workerd setupSecurity() sets
 // SQLITE_LIMIT_COMPOUND_SELECT to 5. Enforce that boundary before executing the real query.
@@ -52,6 +52,7 @@ function fixture(t) {
     }
     sqlite.prepare(`INSERT INTO ${table} (${Object.keys(row).join(",")}) VALUES (${Object.keys(row).map(() => "?").join(",")})`).run(...Object.values(row));
   }
+  insert("trade_team_members", { id: owner.memberId, owner_uid: owner.ownerUid, member_uid: owner.actorUid, display_name: "Owner", status: "active" });
   const prepare = (sql, values = []) => ({ bind: (...args) => prepare(sql, args), all: async () => {
     assertD1CompoundLimit(sql);
     return { results: sqlite.prepare(sql).all(...values) };
@@ -163,7 +164,7 @@ test("follow-up actions require the current active recipient and invoice custome
   assert.equal(f.sqlite.prepare("SELECT status FROM trade_follow_up_messages WHERE id='original-failed'").get().status, "uncertain");
 });
 
-test("owner-only projection scopes every row, redacts protected jobs and preserves bounded paging", async t => {
+test("projection scopes every row, redacts protected jobs and preserves bounded paging", async t => {
   const f = fixture(t);
   for (let i = 0; i < 13; i++) {
     const id = `job-${i}`; f.job(id);
@@ -176,7 +177,7 @@ test("owner-only projection scopes every row, redacts protected jobs and preserv
   for (const [id, work, details] of [["private", { source_type: "opportunity" }, {}], ["internal-private", {}, { customer_source: "platform_private" }], ["bin", { record_status: "archived" }, {}], ["foreign", { firebase_uid: "foreign" }, {}]]) {
     f.job(id, work, details); f.quote(id); f.delivery(id, id);
   }
-  await assert.rejects(f.load({}, { ...owner, isOwner: false }), /EMAIL_OWNER_REQUIRED/);
+  assert.equal((await f.load({}, { ...owner, memberId: "missing", isOwner: false })).total, 0);
   const first = await f.load(); assert.equal(first.total, 13); assert.equal(first.items.length, 10); assert.equal(first.hasNext, true);
   const second = await f.load({ page: 2 }); assert.equal(second.total, 13); assert.equal(second.items.length, 3); assert.equal(second.hasNext, false);
   assert.deepEqual(first.items.map(item => item.label), [...Array(7).fill("Quote email"), ...Array(3).fill("Booking email")], "global ordering crosses commercial and operational groups before paging");
@@ -239,4 +240,60 @@ test("booking documents require a current activity binding and latest receipt", 
   f.insert("trade_activity_customer_document_deliveries", { ...document, id: "accepted-doc", idempotency_key: "accepted-doc", delivery_generation: 2,
     status: "provider_accepted", provider_message_id: "provider-doc", accepted_at: later, failed_at: "", created_at: later, updated_at: later });
   assert.equal((await f.load()).total, 0);
+});
+
+function staff(f, id, permissions = {}) {
+  f.insert('trade_team_members', { id, owner_uid: 'owner', member_uid: `uid-${id}`, display_name: id, status: 'active',
+    job_scope: 'team', schedule_scope: 'team', can_view_quotes: 0, can_send_quotes: 0, can_view_invoices: 0,
+    can_manage_invoices: 0, can_view_customers: 0, can_reschedule_jobs: 0, ...permissions });
+  return { ownerUid: 'owner', memberId: id, actorUid: `uid-${id}`, isOwner: false };
+}
+
+test('office and finance staff see only the delivery categories their current grants can resolve', async t => {
+  const f = fixture(t); f.job('job'); f.quote('job'); f.delivery('quote', 'job');
+  f.insert('trade_crm_quick_invoices', { id: 'invoice', work_order_id: 'job', firebase_uid: 'owner', invoice_number: 'INV-1', status: 'issued', delivery_status: 'failed' });
+  f.insert('trade_crm_appointments', { id: 'job', work_order_id: 'job', firebase_uid: 'owner', status: 'scheduled', revision: 1 }); f.receipt('job', 'failed');
+  const finance = staff(f, 'finance', { can_view_invoices: 1, can_manage_invoices: 1 });
+  const office = staff(f, 'office', { can_view_quotes: 1, can_send_quotes: 1, can_view_customers: 1, can_reschedule_jobs: 1 });
+  const readOnly = staff(f, 'read-only', { can_view_quotes: 1, can_view_invoices: 1 });
+  assert.deepEqual((await f.load({}, finance)).items.map(i => i.tab), ['invoice']);
+  assert.deepEqual((await f.load({}, office)).items.map(i => i.tab).sort(), ['quote', 'schedule']);
+  assert.equal((await f.load({}, readOnly)).total, 0);
+  assert.equal((await f.load()).total, 3);
+  f.sqlite.exec("UPDATE trade_team_members SET can_manage_invoices=0 WHERE id='finance'");
+  assert.equal((await f.load({}, { ...finance, canManageInvoices: true })).total, 0, 'cached grants cannot survive a current revocation');
+  f.sqlite.exec("UPDATE trade_team_members SET status='inactive' WHERE id='office'");
+  assert.equal((await f.load({}, office)).total, 0);
+  assert.equal((await f.load({}, { ...finance, actorUid: 'foreign-login', isOwner: true })).total, 0, 'actor identity and claimed owner flags cannot impersonate a member');
+});
+
+test('assigned-only staff include current visit collaboration and lose access when reassigned', async t => {
+  const f = fixture(t); const finance = staff(f, 'finance', { job_scope: 'own', can_view_invoices: 1, can_manage_invoices: 1 });
+  for (const id of ['own', 'visit', 'other', 'private', 'foreign']) {
+    f.job(id, { assignee_member_id: id === 'own' ? finance.memberId : '', ...(id === 'foreign' ? { firebase_uid: 'foreign' } : {}), ...(id === 'private' ? { source_type: 'opportunity' } : {}) });
+    f.insert('trade_crm_quick_invoices', { id, work_order_id: id, firebase_uid: 'owner', invoice_number: `INV-${id}`, status: 'issued', delivery_status: 'failed' });
+  }
+  f.insert('trade_crm_appointments', { id: 'visit', work_order_id: 'visit', firebase_uid: 'owner', assignee_member_id: finance.memberId, status: 'scheduled' });
+  assert.deepEqual((await f.load({}, finance)).items.map(i => i.workOrderId).sort(), ['own', 'visit']);
+  assert.equal((await f.load({ workOrderId: 'other' }, finance)).total, 0);
+  f.sqlite.exec("UPDATE trade_work_orders SET assignee_member_id='' WHERE id='own'; UPDATE trade_crm_appointments SET status='cancelled' WHERE id='visit'");
+  assert.equal((await f.load({}, finance)).total, 0);
+});
+
+test('crew assignment masks stale finance grants and own schedule grants cannot expose another booking', async t => {
+  const f = fixture(t); const member = staff(f, 'staff', { can_view_invoices: 1, can_manage_invoices: 1, can_view_customers: 1, can_reschedule_jobs: 1, schedule_scope: 'own' });
+  f.job('job', { assignee_member_id: member.memberId });
+  f.insert('trade_crm_quick_invoices', { id: 'invoice', work_order_id: 'job', firebase_uid: 'owner', invoice_number: 'INV-1', status: 'issued', delivery_status: 'failed' });
+  f.insert('trade_crm_appointments', { id: 'job', work_order_id: 'job', firebase_uid: 'owner', assignee_member_id: 'other', status: 'scheduled', revision: 1 }); f.receipt('job', 'failed');
+  assert.deepEqual((await f.load({}, member)).items.map(i => i.tab), ['invoice']);
+  f.sqlite.exec("UPDATE trade_crm_appointments SET assignee_member_id='staff'");
+  assert.equal((await f.load({}, member)).total, 2);
+  f.insert('trade_crews', { id: 'crew', owner_uid: 'owner', name: 'Subcontractor', lead_member_id: member.memberId });
+  f.insert('trade_crew_members', { owner_uid: 'owner', crew_id: 'crew', member_id: member.memberId });
+  assert.equal((await f.load({}, member)).total, 0, 'joining a crew immediately removes commercial access without relying on cached flags');
+});
+
+test('Cloudflare D1 accepts the complete live-grant exception query', async t => {
+  const f = await migratedDataforceD1(); t.after(() => f.close());
+  assert.deepEqual(await loadCustomerDeliveryExceptions(f.db, owner), { items: [], total: 0, page: 1, hasNext: false });
 });

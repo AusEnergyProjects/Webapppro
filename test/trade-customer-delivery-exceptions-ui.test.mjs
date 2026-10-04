@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import * as deliveryPolicy from "../src/lib/trade-customer-delivery-exceptions.ts";
 
 const source = fs.readFileSync(new URL("../src/components/TradeCustomerDeliveryExceptions.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -17,15 +18,16 @@ function harness(responder) {
   let business = { ownerUid: "owner" };
   const state = [], effects = [], pending = [], requests = [], opened = [], exports = {};
   const user = { uid: "owner", getIdToken: async () => "token" };
+  const props = {};
   const hooks = {
     useState(initial) { const index = cursor++; if (!(index in state)) state[index] = initial; return [state[index], next => state[index] = typeof next === "function" ? next(state[index]) : next]; },
     useEffect(callback, deps) { const index = cursor++, old = effects[index]; if (!old || deps.some((value, i) => value !== old.deps[i])) { old?.cleanup?.(); effects[index] = { deps }; pending.push(() => effects[index].cleanup = callback()); } },
   };
   const fetch = async (url, init) => { requests.push({ url, init }); return responder(url, init); };
-  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./TradeBusinessProvider" ? { useTradeBusinessFetch: () => fetch, useTradeBusiness: () => business } : { default: {} };
+  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./TradeBusinessProvider" ? { useTradeBusinessFetch: () => fetch, useTradeBusiness: () => business } : id === "@/lib/trade-customer-delivery-exceptions" ? deliveryPolicy : id === "./TradeTasksWorkspace" ? { TradeTasksWorkspace: "task-workspace" } : { default: {} };
   Function("require", "exports", compiled)(require, exports);
-  const render = (workOrderId = "") => { cursor = 0; const tree = exports.TradeCustomerDeliveryExceptions({ user, workOrderId, onOpenJob: (id, tab) => opened.push({ id, tab }) }); for (const effect of pending.splice(0)) effect(); return tree; };
-  return { render, requests, opened, setBusiness(ownerUid) { business = { ownerUid }; }, async mount(id = "") { render(id); await flush(); return render(id); }, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
+  const render = (workOrderId = "") => { cursor = 0; const tree = exports.TradeCustomerDeliveryExceptions({ user, workOrderId, ...props, onOpenJob: (id, tab) => opened.push({ id, tab }) }); for (const effect of pending.splice(0)) effect(); return tree; };
+  return { render, props, requests, opened, setBusiness(ownerUid) { business = { ownerUid }; }, async mount(id = "") { render(id); await flush(); return render(id); }, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };
 }
 
 test("delivery exceptions show actual action and open its source without sending anything", async t => {
@@ -34,7 +36,7 @@ test("delivery exceptions show actual action and open its source without sending
   assert.equal(new URL(request.url, "https://tlink.test").searchParams.get("workOrderId"), "one");
   assert.equal(request.init.headers.Authorization, "Bearer token"); assert.equal(request.init.cache, "no-store");
   assert.equal(request.init.method, undefined); assert.match(text(tree), /Check the outgoing mailbox/);
-  button(tree, "Review").props.onClick(); assert.deepEqual(h.opened, [{ id: "one", tab: "invoice" }]); assert.equal(h.requests.length, 1);
+  button(tree, "Review invoice").props.onClick(); assert.deepEqual(h.opened, [{ id: "one", tab: "invoice" }]); assert.equal(h.requests.length, 1);
   assert.equal(button(tree, "Send"), undefined); assert.equal(button(tree, "Retry"), undefined);
 });
 
@@ -65,4 +67,38 @@ test("switching business immediately removes the previous business delivery reco
   let tree = await h.mount(); assert.match(text(tree), /JOB-previous-business/);
   h.setBusiness("other-business"); tree = h.render(); assert.doesNotMatch(text(tree), /JOB-previous-business/); assert.match(text(tree), /Checking delivery records/);
   await flush(); release(response([item("new-business")])); await flush(); tree = h.render(); assert.match(text(tree), /JOB-new-business/);
+});
+
+test('handover uses the existing task composer without copying customer details or resolving the delivery', async t => {
+  const h = harness(async () => response([{ ...item('one'), jobTitle: 'Private customer name and address' }])); t.after(() => h.cleanup());
+  let tree = await h.mount(); button(tree, 'Assign follow-up').props.onClick(); tree = h.render();
+  const task = nodes(tree, node => node.type === 'task-workspace')[0];
+  assert.equal(task.props.compact, true); assert.equal(task.props.draft.title, 'Review invoice email for JOB-one');
+  assert.match(task.props.draft.detail, /jobId=one&jobTab=invoice&business=owner/);
+  assert.doesNotMatch(task.props.draft.detail, /Private customer name|address/);
+  assert.match(text(tree), /existing job access still applies/);
+  assert.equal(h.requests.length, 1, 'opening a handover never sends email or creates a task');
+  task.props.onCreated(); tree = h.render();
+  assert.equal(button(tree, 'Assign follow-up'), undefined, 'the same mounted issue does not offer another task after successful assignment');
+  assert.ok(button(tree, 'Review invoice'), 'assigning a task does not mark email resolved');
+  assert.match(text(tree), /Follow-up task added/);
+});
+
+test('permission revocation hides delivery records and drafts immediately; limited field roles make no request', async t => {
+  const h = harness(async () => response()); t.after(() => h.cleanup());
+  h.props.permissions = { canViewInvoices: true, canManageInvoices: true };
+  let tree = await h.mount(); assert.ok(button(tree, 'Review invoice'));
+  button(tree, 'Assign follow-up').props.onClick(); tree = h.render(); assert.equal(nodes(tree, n => n.type === 'task-workspace').length, 1);
+  h.props.permissions = { canViewInvoices: true, canManageInvoices: false };
+  assert.equal(h.render(), null); await flush(); assert.equal(h.requests.length, 1);
+  h.props.permissions = { canViewInvoices: true, canManageInvoices: true, crewLead: true };
+  assert.equal(h.render(), null); await flush(); assert.equal(h.requests.length, 1);
+});
+
+test('changing the job resets paging and discards the previous handover', async t => {
+  const h = harness(async () => response([item('one')], { total: 11, hasNext: true })); t.after(() => h.cleanup());
+  let tree = await h.mount('old'); button(tree, 'Next').props.onClick(); h.render('old'); await flush(); tree = h.render('old');
+  button(tree, 'Assign follow-up').props.onClick(); h.render('old');
+  tree = h.render('new'); assert.equal(nodes(tree, n => n.type === 'task-workspace').length, 0);
+  await flush(); h.render('new'); assert.equal(new URL(h.requests.at(-1).url, 'https://tlink.test').searchParams.get('page'), '1');
 });

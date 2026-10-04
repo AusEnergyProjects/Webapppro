@@ -1,0 +1,13 @@
+.panel { border: 1px solid var(--trade-line, #d9e5df); border-radius: 12px; color: var(--trade-ink, #183a2e); padding: 12px 14px; margin-top: 14px; }
+.panel summary { cursor: pointer; font-weight: 700; min-height: 44px; align-content: center; }
+.help { color: var(--trade-muted, #5b716a); font-size: .875rem; line-height: 1.5; }
+.action, .sources button { background: var(--trade-field, #fff); border: 1px solid var(--trade-line, #d9e5df); border-radius: 8px; color: var(--trade-ink, #183a2e); cursor: pointer; font: inherit; min-height: 44px; padding: 8px 12px; }
+.action:disabled, .sources button:disabled { opacity: .6; cursor: default; }
+.panel :is(button, summary):focus-visible { outline: 3px solid var(--trade-accent-readable, #087567); outline-offset: 2px; }
+.result { display: grid; gap: 16px; margin-top: 16px; }
+.result h4 { margin: 0; }
+.items { padding-left: 20px; }
+.items li { margin: 12px 0; overflow-wrap: anywhere; }
+.items p { margin: 0 0 6px; line-height: 1.5; }
+.sources { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; color: var(--trade-muted, #5b716a); font-size: .8rem; }
+@media (max-width: 540px) { .action { width: 100%; } }

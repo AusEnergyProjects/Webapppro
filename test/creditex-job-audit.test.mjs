@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { Miniflare } from 'miniflare';
 import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import * as permissions from '../src/lib/creditex-permissions.ts';
@@ -9,6 +10,7 @@ import * as contract from '../src/lib/creditex-job-audit.ts';
 import * as projection from '../src/lib/creditex-job-lifecycle-projection.ts';
 import * as lifecycleSql from '../src/lib/creditex-job-lifecycle-sql.ts';
 import { migratedDataforceSqlite } from './helpers/trade-dataforce-database.mjs';
+import { CREDITEX_SCHEMA_GUARD_DEFINITIONS } from '../src/lib/creditex-schema-guards.ts';
 
 const NOW='2026-10-02T02:00:00.000Z', SHA='a'.repeat(64), BYTES=new TextEncoder().encode('private evidence');
 const FILE_SHA=createHash('sha256').update(BYTES).digest('hex');
@@ -84,13 +86,17 @@ function fixture(t){
     ALTER TABLE compliance_case_assignments ADD COLUMN assignment_role TEXT DEFAULT 'primary_reviewer';
   `);
   const auditDDL=readFileSync(new URL('../drizzle/0094_creditex_operations_control.sql',import.meta.url),'utf8').match(/CREATE TABLE `compliance_audit_events`[^;]+;/)[0];
+  sqlite.exec(readFileSync(new URL('../drizzle/0094_creditex_operations_control.sql',import.meta.url),'utf8').match(/CREATE TABLE `compliance_evidence_requirements`[^;]+;/)[0]);
+  sqlite.exec(readFileSync(new URL('../drizzle/0095_creditex_operations_workflows.sql',import.meta.url),'utf8').match(/CREATE TABLE `compliance_case_findings`[^;]+;/)[0]);
+  sqlite.exec("ALTER TABLE compliance_cases ADD COLUMN evidence_policy_version_id TEXT DEFAULT 'policy'; ALTER TABLE compliance_case_evidence ADD COLUMN requirement_id TEXT DEFAULT 'requirement';");
+  for (const guard of CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(guard => guard.name.startsWith('compliance_case_findings_'))) sqlite.exec(guard.sql);
   sqlite.exec("ALTER TABLE compliance_users ADD COLUMN permissions_json TEXT DEFAULT NULL;");
   sqlite.exec(auditDDL);sqlite.exec(readFileSync(new URL('../drizzle/0237_creditex_job_audit_checklists.sql',import.meta.url),'utf8'));
   const payload={recordNumber:'FORM-1',form:{title:'Safety form',fields:[{key:'result',label:'Inspection result',section:'Inspection'}]},answers:{result:'Safe'},evidence:[{id:'photo',fileName:'Before.jpg',contentType:'image/jpeg',size:BYTES.length,sha256:FILE_SHA,objectKey:'private/photo',capturedAt:NOW}],signatures:[{id:'signature',role:'customer',signerName:'Laura Customer',signedAt:NOW,phase:'after',declarationText:'I confirm this assessment.',declarationSha256:SHA}],submittedAt:NOW};
   sqlite.prepare('INSERT INTO trade_activity_field_records VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run('field','intent','org','owner','job','activity',1,'submitted_for_creditex_review','private/final.pdf',SHA,NOW,JSON.stringify(payload),'');
   const db=database(sqlite),corrections=[];
   const service=loadService({'./creditex-job-lifecycle-server':{
-    loadJobLifecycle:async()=>({capabilities:{canRequestCorrection:true},correctionSourceSha256:SHA}),
+    loadJobLifecycle:async()=>({capabilities:{canRequestCorrection:true},correctionSourceSha256:SHA,notifications:[{id:'delivery',status:'failed',recipient:'technician@example.test',error:'Check email configuration and retry.'}]}),
     reviewTradeJob:async(db,actor,input,options)=>{await db.batch([...options.auditStatements,db.prepare("UPDATE trade_work_orders SET revision=revision+1,stage='in_progress' WHERE id=?").bind(input.workOrderId)]);corrections.push(input);},
   }});
   async function input(action='save',overrides={}){const w=await service.loadCreditexJobAudit(db,actor,'intent');return {intentId:'intent',expectedAuditRevision:w.checklist?.revision||0,expectedSourceSha256:w.sourceSha256,requestId:crypto.randomUUID(),action,answers:allYes,callOutcome:'completed',callReason:'',note:'Checked',...overrides};}
@@ -137,15 +143,15 @@ test('custom audit permission is rechecked for read capabilities and inside the 
   f.sqlite.prepare('UPDATE compliance_users SET permissions_json=?').run('[]');
   await assert.rejects(f.service.loadCreditexJobAudit(f.db, actor, 'intent'), e => e.status === 404);
 });
-test('correction calls the existing engine once and its scope covers every affected assigned case',async t=>{const f=fixture(t);f.sqlite.exec(`INSERT INTO trade_work_order_compliance_intents SELECT 'other-intent',work_order_id,installer_uid,compliance_organisation_id,status,'other-case',revision,intent_snapshot_sha256,activity_template_id,intent_snapshot,planned_start,program_code FROM trade_work_order_compliance_intents;INSERT INTO compliance_cases SELECT 'other-case',organisation_id,work_order_id,installer_uid,'other-intent',revision,activity_date,status,evidence_status,updated_at FROM compliance_cases`);assert.equal((await f.service.loadCreditexJobAudit(f.db,actor,'intent')).capabilities.canRequestCorrection,false);await assert.rejects(f.service.saveCreditexJobAudit(f.db,actor,await f.input('correction_required')),e=>e.code==='AUDIT_CORRECTION_UNAVAILABLE');f.sqlite.exec("INSERT INTO compliance_case_assignments VALUES('org','other-case','member','assigned','primary_reviewer')");const input=await f.input('correction_required');await f.service.saveCreditexJobAudit(f.db,actor,input);await f.service.saveCreditexJobAudit(f.db,actor,input);assert.equal(f.corrections.length,1);assert.equal(f.sqlite.prepare('SELECT revision FROM trade_work_orders').get().revision,2);});
+test('correction calls the existing engine once and its scope covers every affected assigned case',async t=>{const f=fixture(t);f.sqlite.exec(`INSERT INTO trade_work_order_compliance_intents SELECT 'other-intent',work_order_id,installer_uid,compliance_organisation_id,status,'other-case',revision,intent_snapshot_sha256,activity_template_id,intent_snapshot,planned_start,program_code FROM trade_work_order_compliance_intents;INSERT INTO compliance_cases SELECT 'other-case',organisation_id,work_order_id,installer_uid,'other-intent',revision,activity_date,status,evidence_status,updated_at,evidence_policy_version_id FROM compliance_cases`);assert.equal((await f.service.loadCreditexJobAudit(f.db,actor,'intent')).capabilities.canRequestCorrection,false);await assert.rejects(f.service.saveCreditexJobAudit(f.db,actor,await f.input('correction_required')),e=>e.code==='AUDIT_CORRECTION_UNAVAILABLE');f.sqlite.exec("INSERT INTO compliance_case_assignments VALUES('org','other-case','member','assigned','primary_reviewer')");const input=await f.input('correction_required');await f.service.saveCreditexJobAudit(f.db,actor,input);await f.service.saveCreditexJobAudit(f.db,actor,input);assert.equal(f.corrections.length,1);assert.equal(f.sqlite.prepare('SELECT revision FROM trade_work_orders').get().revision,2);});
 test('private previews verify scoped identity, content type, stored hash and access after storage read',async t=>{const f=fixture(t),input={intentId:'intent',kind:'field_evidence',id:'photo',parentId:'field'};const storage={get:async key=>{assert.equal(key,'private/photo');return {arrayBuffer:async()=>BYTES.buffer};}};const file=await f.service.readCreditexJobAuditFile(f.db,actor,input,storage);assert.deepEqual(file.bytes,BYTES);await assert.rejects(f.service.readCreditexJobAuditFile(f.db,actor,{...input,parentId:'other'},storage),e=>e.status===404);await assert.rejects(f.service.readCreditexJobAuditFile(f.db,actor,input,{get:async()=>({arrayBuffer:async()=>new TextEncoder().encode('tampered').buffer})}),e=>e.code==='AUDIT_FILE_INTEGRITY');await assert.rejects(f.service.readCreditexJobAuditFile(f.db,actor,input,{get:async()=>{f.sqlite.exec("UPDATE compliance_users SET status='suspended'");return {arrayBuffer:async()=>BYTES.buffer};}}),e=>e.status===404);f.sqlite.exec("UPDATE compliance_users SET status='active'");f.payload.evidence[0].contentType='text/html';f.sqlite.prepare('UPDATE trade_activity_field_records SET payload=?').run(JSON.stringify(f.payload));await assert.rejects(f.service.readCreditexJobAuditFile(f.db,actor,input,storage),e=>e.status===415);});
-test('compliance case-evidence uses existing access-receipt viewer and cannot bypass it',async t=>{const f=fixture(t);f.sqlite.prepare('INSERT INTO compliance_case_evidence VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('evidence','case','org','Evidence.jpg','image/jpeg',BYTES.length,FILE_SHA,'private/evidence',NOW,'received',NOW);const w=await f.service.loadCreditexJobAudit(f.db,actor,'intent');assert.equal(w.files.find(file=>file.kind==='case_evidence').previewPath,'/api/creditex/evidence/evidence');await assert.rejects(f.service.readCreditexJobAuditFile(f.db,actor,{intentId:'intent',kind:'case_evidence',id:'evidence',parentId:'case'},{get:async()=>null}),e=>e.status===404);});
+test('compliance case-evidence uses existing access-receipt viewer and cannot bypass it',async t=>{const f=fixture(t);f.sqlite.prepare('INSERT INTO compliance_case_evidence(id,case_id,organisation_id,file_name,content_type,size_bytes,original_sha256,object_key,received_at,status,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('evidence','case','org','Evidence.jpg','image/jpeg',BYTES.length,FILE_SHA,'private/evidence',NOW,'received',NOW);const w=await f.service.loadCreditexJobAudit(f.db,actor,'intent');assert.equal(w.files.find(file=>file.kind==='case_evidence').previewPath,'/api/creditex/evidence/evidence');await assert.rejects(f.service.readCreditexJobAuditFile(f.db,actor,{intentId:'intent',kind:'case_evidence',id:'evidence',parentId:'case'},{get:async()=>null}),e=>e.status===404);});
 
 test('dashboard counts the whole assigned workload and source edits invalidate audit summaries',async t=>{
   const f=fixture(t);
   f.sqlite.exec(`INSERT INTO trade_work_orders SELECT 'job-two',firebase_uid,partner_type,source_type,record_status,stage,revision,'TLJ-2',title,assignee_label FROM trade_work_orders;
     INSERT INTO trade_work_order_compliance_intents SELECT 'intent-two','job-two',installer_uid,compliance_organisation_id,status,'case-two',revision,intent_snapshot_sha256,activity_template_id,intent_snapshot,planned_start,program_code FROM trade_work_order_compliance_intents;
-    INSERT INTO compliance_cases SELECT 'case-two',organisation_id,'job-two',installer_uid,'intent-two',revision,activity_date,status,evidence_status,updated_at FROM compliance_cases;
+    INSERT INTO compliance_cases SELECT 'case-two',organisation_id,'job-two',installer_uid,'intent-two',revision,activity_date,status,evidence_status,updated_at,evidence_policy_version_id FROM compliance_cases;
     INSERT INTO trade_crm_job_details SELECT 'job-two',firebase_uid,customer_source,crm_customer_id,service_site_id FROM trade_crm_job_details;
     INSERT INTO trade_activity_field_records SELECT 'field-two','intent-two',organisation_id,owner_uid,'job-two',activity_template_id,revision,status,pdf_object_key,pdf_sha256,updated_at,payload,supersedes_record_id FROM trade_activity_field_records;`);
   assert.deepEqual(await f.service.loadCreditexAuditDashboard(f.db,actor),{total:1,awaitingAudit:1,correctionsRequired:0,auditCompleted:0,readyForSubmission:0,inProgress:0,countsUnit:'activities'});
@@ -162,7 +168,127 @@ test('dashboard counts the whole assigned workload and source edits invalidate a
 });
 test('case-manager case evidence preview restrictions are explicit without changing the existing viewer',async t=>{
   const f=fixture(t);f.sqlite.exec("UPDATE compliance_users SET role='case_manager'");
-  f.sqlite.prepare('INSERT INTO compliance_case_evidence VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('evidence','case','org','Evidence.jpg','image/jpeg',BYTES.length,FILE_SHA,'private/evidence',NOW,'received',NOW);
+  f.sqlite.prepare('INSERT INTO compliance_case_evidence(id,case_id,organisation_id,file_name,content_type,size_bytes,original_sha256,object_key,received_at,status,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('evidence','case','org','Evidence.jpg','image/jpeg',BYTES.length,FILE_SHA,'private/evidence',NOW,'received',NOW);
   const file=(await f.service.loadCreditexJobAudit(f.db,actor,'intent')).files.find(file=>file.kind==='case_evidence');
   assert.equal(file.previewPath,'');assert.match(file.unavailableReason,/assigned reviewer or auditor/);
+});
+
+function requirement(f, id='requirement', policy='policy') {
+  f.sqlite.prepare(`INSERT INTO compliance_evidence_requirements(id,organisation_id,policy_version_id,requirement_code,title,evidence_type,capture_timing,source_citation,created_by_uid,created_at,updated_at)
+    VALUES(?,'org',?,?,?,'photo','post_install','Fixture requirement','reviewer',?,?)`).run(id, policy, id, `${id} title`, NOW, NOW);
+}
+function evidence(f, id='evidence', requirementId='requirement', caseId='case', status='received') {
+  f.sqlite.prepare(`INSERT INTO compliance_case_evidence(id,case_id,organisation_id,file_name,content_type,size_bytes,original_sha256,object_key,received_at,status,updated_at,requirement_id)
+    VALUES(?,?,'org',?,'image/jpeg',?,?,?, ?,?,?,?)`).run(id, caseId, `${id}.jpg`, BYTES.length, FILE_SHA, `private/${id}`, NOW, status, NOW, requirementId);
+}
+async function linkedCorrection(f) {
+  requirement(f); evidence(f);
+  const input = await f.input('correction_required', { note: 'Replace the blurred equipment label.', correction: { file: { kind:'case_evidence', id:'evidence', parentId:'case' } } });
+  const workspace = await f.service.saveCreditexJobAudit(f.db, actor, input);
+  return { input, workspace, findingId: workspace.findings[0].id };
+}
+async function resolution(f, findingId, overrides={}) {
+  const workspace = await f.service.loadCreditexJobAudit(f.db, actor, 'intent');
+  return { action:'resolve_finding', intentId:'intent', findingId, requestId:crypto.randomUUID(), expectedSourceSha256:workspace.sourceSha256,
+    resolutionNote:'Read the replacement label and matched it to the equipment record.', reviewedEvidenceId:'replacement', ...overrides };
+}
+
+test('a precise case correction creates one immutable finding and forwards its context through the existing technician notification', async t => {
+  const f=fixture(t), {input,workspace}=await linkedCorrection(f);
+  assert.equal(workspace.findings.length,1); assert.equal(workspace.findings[0].evidenceId,'evidence'); assert.equal(workspace.findings[0].requirementId,'requirement');
+  assert.match(f.corrections[0].note,/Requirement: requirement title\nFile: evidence.jpg\nReplace the blurred/);
+  assert.equal(workspace.notifications[0].status,'failed'); assert.equal(workspace.notifications[0].error,'Check email configuration and retry.');
+  await f.service.saveCreditexJobAudit(f.db,actor,input);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM compliance_case_findings').get().n,1); assert.equal(f.corrections.length,1);
+  assert.throws(()=>f.sqlite.exec("UPDATE compliance_case_findings SET description='changed'"),/COMPLIANCE_FINDING_ORIGINAL_IMMUTABLE/);
+  assert.throws(()=>f.sqlite.exec('DELETE FROM compliance_case_findings'),/COMPLIANCE_FINDING_NO_DELETE/);
+  assert.equal(workspace.capabilities.canComplete,false);
+  await assert.rejects(f.service.saveCreditexJobAudit(f.db,actor,await f.input('audited')),e=>e.code==='AUDIT_INCOMPLETE');
+  assert.equal((await f.service.loadCreditexAuditDashboard(f.db,actor)).correctionsRequired,1);
+});
+
+test('requirement-only corrections cover missing evidence while other file families retain precise named-file notes',async t=>{
+  const f=fixture(t); requirement(f);
+  let w=await f.service.saveCreditexJobAudit(f.db,actor,await f.input('correction_required',{note:'Capture the required label.',correction:{requirementId:'requirement'}}));
+  assert.equal(w.findings[0].evidenceId,''); assert.equal(w.findings[0].requirementTitle,'requirement title');
+  w=await f.service.saveCreditexJobAudit(f.db,actor,await f.input('correction_required',{note:'Retake the photo in focus.',correction:{file:{kind:'field_evidence',id:'photo',parentId:'field'}}}));
+  assert.equal(w.findings.length,1); assert.match(f.corrections[1].note,/File: Before.jpg\nRetake the photo in focus/);
+});
+
+test('foreign activity, file, policy and mismatched requirement targets are rejected without partial corrections',async t=>{
+  const f=fixture(t); requirement(f); requirement(f,'other-requirement'); requirement(f,'foreign-policy','other-policy'); evidence(f);
+  for (const correction of [{file:{kind:'case_evidence',id:'evidence',parentId:'foreign-case'}}, {file:{kind:'field_evidence',id:'foreign-file',parentId:'field'}},
+    {requirementId:'foreign-policy'}, {requirementId:'missing'}, {file:{kind:'case_evidence',id:'evidence',parentId:'case'},requirementId:'other-requirement'}]) {
+    await assert.rejects(f.service.saveCreditexJobAudit(f.db,actor,await f.input('correction_required',{correction})),e=>e.code==='AUDIT_CORRECTION_TARGET');
+  }
+  assert.equal(f.corrections.length,0); assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM compliance_case_findings').get().n,0);
+  f.sqlite.exec("UPDATE trade_work_order_compliance_intents SET compliance_case_id='',status='planned'; UPDATE compliance_users SET role='admin'");
+  await assert.rejects(f.service.saveCreditexJobAudit(f.db,actor,await f.input('correction_required',{correction:{requirementId:'requirement'}})),e=>e.code==='AUDIT_CORRECTION_TARGET');
+});
+
+test('closing a finding records replacement integrity and actor, preserves the original and requires a new current audit',async t=>{
+  const f=fixture(t), {findingId}=await linkedCorrection(f); evidence(f,'replacement'); f.sqlite.exec("UPDATE compliance_case_evidence SET status='superseded' WHERE id='evidence'");
+  const input=await resolution(f,findingId), before=f.sqlite.prepare('SELECT revision FROM compliance_cases').get().revision;
+  let w=await f.service.resolveCreditexJobAuditFinding(f.db,actor,input);
+  assert.equal(w.findings[0].status,'resolved'); assert.equal(w.findings[0].evidenceId,'evidence'); assert.equal(w.findings[0].reviewedEvidenceId,'replacement'); assert.equal(w.findings[0].reviewedEvidenceLabel,'replacement.jpg');
+  assert.equal(w.capabilities.canComplete,true); assert.equal(w.auditCompleted,false); assert.equal(w.submissionReady,false);
+  const closed=f.sqlite.prepare('SELECT resolved_by_uid,resolution_note FROM compliance_case_findings').get(); assert.equal(closed.resolved_by_uid,'reviewer'); assert.equal(closed.resolution_note,input.resolutionNote);
+  const event=f.sqlite.prepare("SELECT metadata FROM compliance_audit_events WHERE event_type='case.finding_resolved'").get(); assert.equal(JSON.parse(event.metadata).reviewedEvidenceSha256,FILE_SHA);
+  await f.service.resolveCreditexJobAuditFinding(f.db,actor,input); assert.equal(f.sqlite.prepare('SELECT revision FROM compliance_cases').get().revision,before+1);
+  await assert.rejects(f.service.resolveCreditexJobAuditFinding(f.db,actor,{...input,resolutionNote:'Changed'}),e=>e.code==='AUDIT_REQUEST_CHANGED');
+  w=await f.service.saveCreditexJobAudit(f.db,actor,await f.input('audited')); assert.equal(w.auditCompleted,true); assert.equal(w.submissionReady,false);
+});
+
+test('closeout rejects foreign, rejected, superseded or wrong-requirement evidence and requires a review explanation',async t=>{
+  const f=fixture(t), {findingId}=await linkedCorrection(f); requirement(f,'other'); evidence(f,'wrong','other'); evidence(f,'foreign','requirement','foreign-case'); evidence(f,'rejected','requirement','case','rejected'); evidence(f,'superseded','requirement','case','superseded');
+  for (const reviewedEvidenceId of ['wrong','foreign','rejected','superseded']) await assert.rejects(f.service.resolveCreditexJobAuditFinding(f.db,actor,await resolution(f,findingId,{reviewedEvidenceId})),e=>e.code==='AUDIT_CORRECTION_TARGET');
+  await assert.rejects(f.service.resolveCreditexJobAuditFinding(f.db,actor,await resolution(f,findingId,{resolutionNote:'',reviewedEvidenceId:''})),e=>e.code==='AUDIT_INPUT');
+  await assert.rejects(f.service.resolveCreditexJobAuditFinding(f.db,actor,await resolution(f,'foreign-finding',{reviewedEvidenceId:''})),e=>e.code==='AUDIT_FINDING_NOT_FOUND');
+  assert.equal(f.sqlite.prepare('SELECT status FROM compliance_case_findings').get().status,'open');
+  assert.equal((await f.service.resolveCreditexJobAuditFinding(f.db,actor,await resolution(f,findingId,{reviewedEvidenceId:'',resolutionNote:'The dated declaration resolves this discrepancy; no replacement image was required.'}))).findings[0].status,'resolved');
+});
+
+test('closeout enforces current reviewer assignment and explicit audit/correction permissions',async t=>{
+  const f=fixture(t),{findingId}=await linkedCorrection(f),input=await resolution(f,findingId,{reviewedEvidenceId:''});
+  for(const sql of ["UPDATE compliance_users SET permissions_json='[\"jobs\",\"audit\"]'", "UPDATE compliance_users SET permissions_json='[\"jobs\",\"corrections\"]'", "UPDATE compliance_users SET role='case_manager'", "UPDATE compliance_case_assignments SET assignment_role='observer'", "UPDATE compliance_cases SET status='closed'"]) {
+    f.sqlite.exec('SAVEPOINT authority'); f.sqlite.exec(sql);
+    assert.equal((await f.service.loadCreditexJobAudit(f.db,actor,'intent')).capabilities.canResolveFindings,false);
+    await assert.rejects(f.service.resolveCreditexJobAuditFinding(f.db,actor,input),e=>e.code==='AUDIT_FINDING_PERMISSION');
+    f.sqlite.exec('ROLLBACK TO authority; RELEASE authority');
+  }
+});
+
+test('source and permission changes inside closeout roll back finding resolution, audit event and case revision',async t=>{
+  for(const sql of ["UPDATE compliance_case_evidence SET original_sha256='"+'b'.repeat(64)+"' WHERE id='replacement'", "UPDATE compliance_users SET permissions_json='[\"jobs\",\"audit\"]'", "UPDATE compliance_case_assignments SET assignment_role='observer'"]) {
+    const f=fixture(t),{findingId}=await linkedCorrection(f); evidence(f,'replacement');
+    const input=await resolution(f,findingId), revision=f.sqlite.prepare('SELECT revision FROM compliance_cases').get().revision;
+    f.db.intercept(()=>f.sqlite.exec(sql)); await assert.rejects(f.service.resolveCreditexJobAuditFinding(f.db,actor,input),e=>e.code==='AUDIT_SOURCE_CHANGED');
+    assert.equal(f.sqlite.prepare('SELECT status FROM compliance_case_findings').get().status,'open'); assert.equal(f.sqlite.prepare('SELECT revision FROM compliance_cases').get().revision,revision);
+    assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM compliance_audit_events WHERE event_type='case.finding_resolved'").get().n,0);
+  }
+});
+
+test('a finding raised at the completion boundary prevents an audit even without a stale client hash',async t=>{
+  const f=fixture(t); requirement(f); const input=await f.input('audited');
+  f.db.intercept(()=>f.sqlite.prepare(`INSERT INTO compliance_case_findings(id,organisation_id,case_id,requirement_id,finding_code,severity,description,raised_by_uid,raised_at,created_at,updated_at)
+    VALUES('concurrent','org','case','requirement','check','minor','Review new evidence','reviewer',?,?,?)`).run(NOW,NOW,NOW));
+  await assert.rejects(f.service.saveCreditexJobAudit(f.db,actor,input),e=>e.code==='AUDIT_SOURCE_CHANGED'); assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_audit_versions').get().n,0);
+});
+
+test('actual D1 runs composed audit reads, linked correction and guarded reviewer closeout without depth errors',async t=>{
+  const f=fixture(t);requirement(f);evidence(f);evidence(f,'replacement');
+  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',compatibilityDate:'2026-05-01',d1Databases:['DB']});t.after(()=>mf.dispose());
+  const db=await mf.getD1Database('DB');
+  const schema=f.sqlite.prepare("SELECT type,name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END").all();
+  for(const item of schema.filter(item=>item.type==='table')) {
+    await db.prepare(item.sql).run();
+    const rows=f.sqlite.prepare(`SELECT * FROM "${item.name}"`).all();
+    for(const row of rows)await db.prepare(`INSERT INTO "${item.name}"(${Object.keys(row).map(key=>`"${key}"`).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).bind(...Object.values(row)).run();
+  }
+  for(const item of schema.filter(item=>item.type!=='table'))await db.prepare(item.sql).run();
+  let w=await f.service.loadCreditexJobAudit(db,actor,'intent');assert.equal(w.requirements[0].id,'requirement');
+  w=await f.service.saveCreditexJobAudit(db,actor,{intentId:'intent',expectedAuditRevision:0,expectedSourceSha256:w.sourceSha256,requestId:crypto.randomUUID(),action:'correction_required',answers:allYes,callOutcome:'completed',callReason:'',note:'Read a clear label.',correction:{file:{kind:'case_evidence',id:'evidence',parentId:'case'}}});
+  assert.equal((await f.service.loadCreditexAuditDashboard(db,actor)).correctionsRequired,1);
+  w=await f.service.resolveCreditexJobAuditFinding(db,actor,{action:'resolve_finding',intentId:'intent',findingId:w.findings[0].id,requestId:crypto.randomUUID(),expectedSourceSha256:w.sourceSha256,resolutionNote:'Verified the replacement label.',reviewedEvidenceId:'replacement'});
+  assert.equal(w.findings[0].status,'resolved');assert.equal(w.findings[0].reviewedEvidenceId,'replacement');assert.equal(w.submissionReady,false);
 });

@@ -17,6 +17,7 @@ type JobNotification = {
   targetKind: "job" | "customer" | "opportunity" | "team" | "network";
   targetId: string;
   workOrderId: string;
+  questionId?: string;
   workNumber: string;
   title: string;
   summary: string;

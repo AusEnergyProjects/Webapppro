@@ -34,6 +34,7 @@ import type { DataforceJobCsvRecord } from "@/lib/creditex-dataforce-job-csv";
 import { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES, type JobRegisterRecord } from "@/lib/trade-crm-job-register";
 import { jobCustomerBillingStatus, jobInvoicePaymentStatus, jobInvoiceSettlementStatus, jobProgressStatusLabel } from "@/lib/trade-job-payment-status";
 import { tradeMapQuery } from "@/lib/trade-map-contract";
+import { canReviewCustomerDeliveries } from "@/lib/trade-customer-delivery-exceptions";
 import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import { defaultTradeMapDateRange } from "@/lib/trade-map-date-range";
 import { useWorkspaceNotice } from "@/lib/use-workspace-notice";
@@ -68,6 +69,7 @@ const TradePriceBookWorkspace = dynamic(() => import("./TradePriceBookWorkspace"
 const TradeHomeDashboard = dynamic(() => import("./TradeHomeDashboard").then((module) => module.TradeHomeDashboard));
 const TradeBusinessReports = dynamic(() => import("./TradeBusinessReports").then((module) => module.TradeBusinessReports));
 const TradeJobReadinessPanel = dynamic(() => import("./TradeJobReadinessPanel").then((module) => module.TradeJobReadinessPanel));
+const TradeQuickQuoteForm = recoverableTradeWorkspace(() => import("./TradeQuickQuoteForm").then((module) => module.TradeQuickQuoteForm));
 const TradeNewJobForm = recoverableTradeWorkspace(() => import("./TradeNewJobForm").then((module) => module.TradeNewJobForm));
 const TradeQuickInvoicePanel = dynamic(() => import("./TradeQuickInvoicePanel").then((module) => module.TradeQuickInvoicePanel));
 const TradeScheduleWorkspace = recoverableTradeWorkspace(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace));
@@ -399,7 +401,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [view, setViewState] = useState<View>(() => mapWorkspace ? "jobs" : "today");
   const [scheduleWeekStart, setScheduleWeekStart] = useState("");
   const [priceBookView, setPriceBookView] = useState<"items" | "packets">("items");
-  const [creating, setCreatingState] = useState<"" | "job" | "customer">("");
+  const [creating, setCreatingState] = useState<"" | "job" | "quote" | "customer">("");
   const [newJobSeed, setNewJobSeed] = useState<TradeNewJobInitial | null>(null);
   const [focusedJobId, setFocusedJobId] = useState("");
   const [focusedJobTab, setFocusedJobTab] = useState<JobDetailTab>("summary");
@@ -413,7 +415,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     mapNavigation.register(save); onRegisterMapSave?.(save);
   }, [mapNavigation, onRegisterMapSave]);
   const setView = useCallback((next: SetStateAction<View>) => { void mapNavigation.run(() => setViewState(next)); }, [mapNavigation]);
-  const setCreating = useCallback((next: SetStateAction<"" | "job" | "customer">) => { void mapNavigation.run(() => setCreatingState(next)); }, [mapNavigation]);
+  const setCreating = useCallback((next: SetStateAction<"" | "job" | "quote" | "customer">) => { void mapNavigation.run(() => setCreatingState(next)); }, [mapNavigation]);
   const setSelectedCustomerId = useCallback((next: SetStateAction<string>) => { void mapNavigation.run(() => setSelectedCustomerIdState(next)); }, [mapNavigation]);
   const setJobLayout = useCallback((next: SetStateAction<"list" | "board" | "map">) => { void mapNavigation.run(() => setJobLayoutState(next)); }, [mapNavigation]);
   const setCustomerLayout = useCallback((next: SetStateAction<"list" | "map">) => { void mapNavigation.run(() => setCustomerLayoutState(next)); }, [mapNavigation]);
@@ -522,7 +524,6 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const jobIndexRequested = useRef(false);
   const customerIndexRequested = useRef(false);
   const appliedNavigationTargetNonce = useRef(0);
-  const appliedCustomerQaNonce = useRef<number | null>(null);
   const allowedViews = useMemo<View[]>(() => {
     if (!staffPermissions) return ["today", "leads", "jobs", "schedule", "customers", "pricebook", "templates", "reports", "import", "integrations"];
     const views: View[] = ["today", "jobs"];
@@ -540,11 +541,13 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const canCreateCustomer = !staffPermissions || staffPermissions.canManageCustomers;
   const mapQuoteAccess = mapQuotePermissions(staffPermissions);
   const canCreateJob = !staffPermissions || staffPermissions.canCreateJobs;
+  const canCreateQuote = canCreateJob && (!staffPermissions || (staffPermissions.jobScope === "team" && staffPermissions.canViewQuotes && staffPermissions.canManageQuotes));
+  const [quickQuoteBusy, setQuickQuoteBusy] = useState(false);
   const canSearchCustomerFields = true;
   const canSearchCustomerDirectory = !staffPermissions || (staffPermissions.canViewCustomers && staffPermissions.canSearchCustomers);
 
   useEffect(() => {
-    if (creating !== "job") return;
+    if (creating !== "job" && creating !== "quote") return;
     const frame = window.requestAnimationFrame(() => {
       newJobHeadingRef.current?.scrollIntoView({ block: "start" });
       newJobHeadingRef.current?.focus({ preventScroll: true });
@@ -990,9 +993,11 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         setSelectedCustomerId(navigationTarget.id);
         setView("customers");
       } else if (navigationTarget.kind === "new-job" && canCreateJob) {
+        if (navigationTarget.jobTab === "quote" && !canCreateQuote) { setStatus("Creating a quote requires quote management and access to team jobs.", "error"); return; }
         setNewJobSeed(null);
+        setFocusedJobId("");
         setView("jobs");
-        setCreating("job");
+        setCreating(navigationTarget.jobTab === "quote" ? "quote" : "job");
       } else if (navigationTarget.kind === "new-customer" && canCreateCustomer) {
         setView("customers");
         setCreating("customer");
@@ -1016,7 +1021,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [allowedViews, canCreateCustomer, canCreateJob, navigationTarget, teamAccess, setCreating, setJobLayout, setSelectedCustomerId, setView]);
+  }, [allowedViews, canCreateCustomer, canCreateJob, canCreateQuote, navigationTarget, teamAccess, setCreating, setJobLayout, setSelectedCustomerId, setView, setStatus]);
 
   function openFocusedJob(id: string, tab: JobDetailTab = "summary", returnTarget: JobReturnTarget = { kind: "jobs" }) {
     if (indexedJobs.some(job => job.id === id && job.recordStatus === "archived")) { setStatus("This job is in the bin. Choose Actions, then Restore job to open it.", "warning"); return; }
@@ -1485,18 +1490,21 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       onOpenInvoices={(!staffPermissions || staffPermissions.canViewInvoices) ? onOpenInvoices : undefined}
       onOpenReports={(!staffPermissions || staffPermissions.canRunReports) ? () => { if (onOpenFinance) onOpenFinance("reports"); else setView("reports"); } : undefined}
     />}
-    {view === "today" && !staffPermissions && <TradeCustomerDeliveryExceptions user={user} onOpenJob={openFocusedJob} />}
+    {view === "jobs" && creating === "quote" && canCreateQuote && <div className="crm-view crm-create-screen">
+      <div className="crm-page-heading"><div><h3 ref={newJobHeadingRef} tabIndex={-1}>New quote</h3><p>Choose the customer and work, then add your price.</p></div><button type="button" className="crm-back-button" disabled={quickQuoteBusy} onClick={() => setCreating("")}>Back to all jobs</button></div>
+      <section className="crm-create-card"><TradeQuickQuoteForm user={user} canCreateCustomer={canCreateCustomer} onBusyChange={setQuickQuoteBusy} onCreated={id => { setCreating(""); setRefreshNonce(value => value + 1); openFocusedJob(id, "quote"); }} /></section>
+    </div>}
     {view === "jobs" && creating === "job" && <div className="crm-view crm-create-screen">
       <div className="crm-page-heading"><div><h3 ref={newJobHeadingRef} tabIndex={-1}>Create job</h3></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>Back to all jobs</button></div>
       <section className="crm-create-card"><TradeNewJobForm key={newJobSeed?.sourceEnquiryId || "blank-job"} user={user} templates={templates} teamMembers={teamMembers} allowCustomerSearch={canSearchCustomerDirectory} canAssignJobs={!staffPermissions || staffPermissions.canAssignJobs} assignmentScope={staffPermissions?.jobScope || "team"} busy={busy === "create-job"} initial={newJobSeed || undefined} onSubmit={createJob} /></section>
     </div>}
 
-    {view === "jobs" && creating !== "job" && focusedJobId && <div className="crm-view crm-job-workspace">
+    {view === "jobs" && creating !== "job" && creating !== "quote" && focusedJobId && <div className="crm-view crm-job-workspace">
       <div className="crm-page-heading"><div><span>Job workspace</span><h3>{selectedJobDetail?.id === focusedJobId ? selectedJobDetail.workNumber : "Opening job"}</h3><p>Manage the job, schedule, files, quote and invoice in one place.</p></div><button type="button" className="crm-back-button" onClick={closeFocusedJob}>{jobReturnTarget.kind === "customer" ? `Back to ${jobReturnTarget.customerName}` : mapWorkspace ? "Back to map" : jobFilter === "lost" ? "Back to Lost archive" : "Back to all jobs"}</button></div>
       {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} refreshing={focusedJobRefreshing} teamMembers={teamMembers} permissions={staffPermissions} initialTab={focusedJobTab} onSalesOutcome={setSalesOutcomeJob} onEditPayment={() => editInvoicePayment(selectedJobDetail)} onCrm={crmRequest} onWorkOrder={crmRequest} onOpenJob={(workOrderId) => openFocusedJob(workOrderId, "schedule")} onOpenPriceBook={() => openPriceBook()} onOpenCustomer={(customerId) => { setFocusedJobId(""); setSelectedJobDetail(null); setSelectedCustomerId(customerId); setView("customers"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => { setFocusedJobRefreshing(true); setRefreshNonce((value) => value + 1); }} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
     </div>}
 
-    {!mapWorkspace && view === "jobs" && creating !== "job" && !focusedJobId && <div className="crm-view">
+    {!mapWorkspace && view === "jobs" && creating !== "job" && creating !== "quote" && !focusedJobId && <div className="crm-view">
       <div className="crm-page-heading"><div><span>Job management</span><h3>{jobFilter === "lost" ? "Lost archive" : "Jobs"}</h3><p>{jobFilter === "lost" ? "Unwon opportunities, kept for reference. No scheduling or follow-up is required. Reopen one if the customer returns." : jobFilter === "awaiting_schedule" ? "Accepted or approved work without a future visit. Quotes awaiting a customer decision stay out of this list." : "Find work by customer, reference, activity, installer, suburb or status. Open only the job you need."}</p></div><button type="button" className="crm-back-button" onClick={() => openJobsForStage("", jobFilter === "lost" || jobFilter === "awaiting_schedule" ? "all" : "lost")}>{jobFilter === "lost" || jobFilter === "awaiting_schedule" ? "Back to current jobs" : "Lost archive"}</button></div>
       <div className={`${registerStyles.toolbar} crm-job-toolbar`}>
         {canSearchCustomerFields && <label><span>Find a job</span><input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setJobPage(1); }} placeholder="Name, number, email, address or job ID" /></label>}
@@ -1547,8 +1555,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       <div className="crm-page-heading"><div><span>Customer workspace</span><h3>{selectedCustomerDetail?.id === selectedCustomerId ? selectedCustomerDetail.displayName : "Opening customer"}</h3><p>Contact details and linked jobs in one place.</p></div><button type="button" className="crm-back-button" onClick={() => { setSelectedCustomerId(""); setSelectedCustomerDetail(null); }}>{mapWorkspace ? "Back to map" : "Back to all customers"}</button></div>
       {selectedCustomerDetail?.id === selectedCustomerId ? <>
         <CustomerQa key={selectedCustomerDetail.id} customerId={selectedCustomerDetail.id} jobs={selectedCustomerJobs}
-          target={navigationTarget?.kind === "customer" && navigationTarget.id === selectedCustomerId && navigationTarget.customerSection === "qa" && appliedCustomerQaNonce.current !== navigationTarget.nonce ? navigationTarget : undefined}
-          onNavigationApplied={nonce => { appliedCustomerQaNonce.current = nonce; }} />
+          target={navigationTarget?.kind === "customer" && navigationTarget.id === selectedCustomerId && navigationTarget.customerSection === "qa" ? navigationTarget : undefined} />
         <CustomerDetail key={`${selectedCustomerDetail.id}:${refreshNonce}`} user={user} customer={selectedCustomerDetail} sites={selectedCustomerSites} jobs={selectedCustomerJobs} busy={busy} readOnly={Boolean(staffPermissions && !staffPermissions.canManageCustomers)} canUseSms={!staffPermissions} onOpenIntegrations={() => setView("integrations")} onSave={crmRequest} onOpenJob={(id) => openFocusedJob(id, "summary", { kind: "customer", customerId: selectedCustomerDetail.id, customerName: selectedCustomerDetail.displayName })} />
       </> : <div className="crm-empty"><strong>Loading customer...</strong><span>The private customer record will open here.</span></div>}
     </div>}
@@ -1940,7 +1947,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     {activeTab === "messages" && !isProtected && !isLost && <section className="crm-job-section">
       {canEmailCustomer && <section className="crm-job-next-actions" aria-label="Customer email"><div><h4>Keep the customer informed</h4><p>Email booking details, updates and completion information from your business mailbox. Customers can review quotes and invoices without creating an account.</p>{!customer?.email && <p>Add a customer email address before sending.</p>}</div><div className="crm-job-next-actions-buttons">{customer?.email && <><TradeCustomerEmailComposer user={user} workOrderId={job.id} recipient={customer.email} recipientName={customer.displayName} label="Email customer" initialSubject={`${job.workNumber} | ${job.title}`} /><button type="button" onClick={() => setCustomerFollowUpOpen(true)}>Use email template</button></>}{canViewQuotes && <button type="button" onClick={() => setTab("quote")}>Quote and delivery</button>}{canViewInvoices && <button type="button" onClick={() => setTab("invoice")}>Invoice and delivery</button>}</div></section>}
       {canEmailCustomer && requiresBookingDocuments && <TradeCustomerDocumentDeliveryPanel delivery={job.customerDocuments} jobId={job.id} onReload={onReload} user={user} />}
-      {!permissions && <TradeCustomerDeliveryExceptions key={job.id} user={user} workOrderId={job.id} onOpenJob={(_id, next) => setTab(next)} />}
+      {canReviewCustomerDeliveries(permissions) && <TradeCustomerDeliveryExceptions key={job.id} user={user} permissions={permissions} workOrderId={job.id} onOpenJob={(_id, next) => setTab(next)} />}
       {(!permissions || permissions.canSendSms) && <details className="crm-field-secondary"><summary>Text messages</summary><TradeCustomerSmsPanel key={`${job.id}:${customer?.id || ""}`} user={user} workOrderId={job.id} customerId={customer?.id || ""} onOpenIntegrations={permissions ? undefined : onOpenIntegrations} /></details>}
       {customerFollowUpOpen && canEmailCustomer && <TradeFollowUpDialog user={user} workOrderId={job.id} onClose={() => setCustomerFollowUpOpen(false)} />}
     </section>}
@@ -2115,8 +2122,8 @@ function CustomerDetail({ user, customer, sites, jobs, busy, readOnly = false, c
   </fieldset></section>;
 }
 
-function CustomerQa({ customerId, jobs, target, onNavigationApplied }: {
-  customerId: string; jobs: Job[]; target?: TLinkCommandTarget; onNavigationApplied: (nonce: number) => void;
+function CustomerQa({ customerId, jobs, target }: {
+  customerId: string; jobs: Job[]; target?: TLinkCommandTarget;
 }) {
   const eligibleJobs = jobs.filter(job => job.crmCustomerId === customerId && job.sourceType === "public_lead"
     && job.customerSource === "public_lead_released" && job.recordStatus !== "archived");
@@ -2132,22 +2139,22 @@ function CustomerQa({ customerId, jobs, target, onNavigationApplied }: {
     section.current.open = true; entry.open = true;
     entry.scrollIntoView({ behavior: "smooth", block: "start" });
     entry.querySelector("summary")?.focus({ preventScroll: true });
-    applied.current = target.nonce; onNavigationApplied(target.nonce);
-  }, [matchedId, onNavigationApplied, target]);
+    applied.current = target.nonce;
+  }, [matchedId, target]);
   if (!eligibleJobs.length) return null;
   return <details ref={section} className={registerStyles.customerPanel}>
     <summary><span><strong>Customer Q&amp;A</strong><small>Shared questions, answers and files for TLink enquiries</small></span><b>{eligibleJobs.length}</b></summary>
     <div className={registerStyles.panelBody}>
       {targetId && !matchedId && <p className={registerStyles.emptyMessage}>This conversation is no longer available in this customer record.</p>}
-      {eligibleJobs.map(job => <CustomerQaJob key={job.id} job={job} register={element => { entries.current[job.id] = element; }} />)}
+      {eligibleJobs.map(job => <CustomerQaJob key={job.id} job={job} questionId={targetId === job.id ? target?.questionId : undefined} navigationNonce={target?.nonce} register={element => { entries.current[job.id] = element; }} />)}
     </div>
   </details>;
 }
 
-function CustomerQaJob({ job, register }: { job: Job; register: (element: HTMLDetailsElement | null) => void }) {
+function CustomerQaJob({ job, register, questionId, navigationNonce }: { job: Job; register: (element: HTMLDetailsElement | null) => void; questionId?: string; navigationNonce?: number }) {
   const [opened, setOpened] = useState(false);
   return <details ref={register} className={registerStyles.customerPanel} onToggle={event => { if (event.currentTarget.open) setOpened(true); }}>
     <summary><span><strong>{job.workNumber} | {job.title}</strong><small>Shared customer conversation</small></span></summary>
-    {opened && <TradeCustomerHubPanel workOrderId={job.id} />}
+    {opened && <TradeCustomerHubPanel workOrderId={job.id} questionId={questionId} navigationNonce={navigationNonce} />}
   </details>;
 }

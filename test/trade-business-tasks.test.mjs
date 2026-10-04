@@ -146,3 +146,13 @@ test('tasks and training stay one navigation destination while old training link
   assert.match(read('src/components/TradeHomeDashboard.tsx'),/<TradeTasksWorkspace user=\{user\} compact/);
   const ui=read('src/components/TradeTasksWorkspace.tsx');assert.match(ui,/Assigned by me/);assert.match(ui,/crypto\.randomUUID/);assert.match(ui,/AbortController/);assert.match(ui,/type="date"/);assert.doesNotMatch(ui,/localStorage|dangerouslySetInnerHTML/);
 });
+
+test('delivery task job links use the reader portal and only the current business', () => {
+  const detail = 'Review this invoice\nJob: /direct-trade/dashboard?workspace=work&jobId=job:1&jobTab=invoice&business=business-a';
+  assert.equal(contracts.taskJobHref(detail, 'business-a', false), '/direct-trade/dashboard?workspace=work&jobId=job%3A1&jobTab=invoice&business=business-a');
+  assert.equal(contracts.taskJobHref(detail, 'business-a', true), '/direct-trade/team?workspace=work&jobId=job%3A1&jobTab=invoice&business=business-a');
+  assert.equal(contracts.taskJobHref(detail, 'business-b', true), undefined);
+  for (const invalid of [detail.replace('job:1', '../foreign'), detail.replace('jobTab=invoice', 'jobTab=unknown-tab'), detail.replace('workspace=work', 'workspace=team'), detail.replace('/direct-trade/dashboard?', 'https://evil.test/?'), 'Ordinary notes', 'Job: javascript:alert(1)']) {
+    assert.equal(contracts.taskJobHref(invalid, 'business-a', true), undefined);
+  }
+});
