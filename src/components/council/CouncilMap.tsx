@@ -2,13 +2,14 @@
 /// <reference types="google.maps" />
 /* eslint-disable @next/next/no-img-element -- Map tiles must retain their native pixel size and standard browser cache. */
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import type { CouncilReport } from "@/lib/council-reporting";
 import type { CouncilMapTrade } from "@/lib/council-map-directory";
 import type { CouncilApi } from "../CouncilPortal";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import { loadGoogleMaps, onGoogleMapsAuthFailure } from "@/lib/google-maps-client";
 import { councilPreviewTiles, fitCouncilMap, layoutCouncilMapMarkers, moveCouncilMap, preferredCouncilMapLayer, MAP_MAX_ZOOM, MAP_MIN_ZOOM, type CouncilMapView } from "@/lib/council-map-view";
+import { councilMapHeat, COUNCIL_MAP_HEAT_GRADIENT } from "@/lib/council-map-heat";
 import { CouncilIcon } from "./CouncilPrimitives";
 import styles from "./CouncilMap.module.css";
 
@@ -23,7 +24,7 @@ export type CouncilMapPublicLayer = {
 };
 const number = (value: number | null) => value === null ? "Protected" : value.toLocaleString("en-AU");
 const publicValue = (value: number | null | undefined) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
-const publicNumber = (value: number | null, compact = false) => value === null ? (compact ? "No data" : "Not available") : value.toLocaleString("en-AU", { notation: compact ? "compact" : "standard", maximumSignificantDigits: compact ? 3 : 12 });
+const publicNumber = (value: number | null) => value === null ? "Not available" : value.toLocaleString("en-AU", { maximumSignificantDigits: 12 });
 const serviceLabel = (value: string) => ENERGY_SERVICE_LABELS[value] || value;
 const areaName = (label: string, postcode: string) => label.endsWith(` · ${postcode}`) ? label.slice(0,-(` · ${postcode}`).length) : label;
 
@@ -161,7 +162,7 @@ export function CouncilMap({ report, api, publicLayers = [] }: { report: Council
   const positions = report.map.cells.flatMap(cell => cell.position ? [cell.position] : []);
   const tiles = demonstration ? councilPreviewTiles(view,size.width,size.height) : [];
   const markers = layoutCouncilMapMarkers(report.map.cells.flatMap(cell=>cell.position?[{key:cell.postcode,position:cell.position}]:[]),view,size.width,size.height,selectedPostcode);
-  const markerPositions = new Map(markers.visible.map(marker=>[marker.key,marker]));
+  const markerLabels = new Map(markers.labels.map(label=>[label.key,label]));
   const anchors = new Map(markers.anchors.map(marker=>[marker.key,marker]));
   const tradeGroups = new Map(pinGroups.map(group=>[group[0].postcode,group]));
   const postcodeRows = report.map.cells.filter(cell=>`${cell.postcode} ${cell.label}`.toLowerCase().includes(postcodeQuery.trim().toLowerCase()));
@@ -199,10 +200,13 @@ export function CouncilMap({ report, api, publicLayers = [] }: { report: Council
     </div>}
     <div className={styles.toolbar}><div className={styles.layers} aria-label="Map layers">
       <button type="button" aria-pressed={showTrades} onClick={()=>setShowTrades(!showTrades)}><span className={styles.tradeDot}/>Local trades</button>
-      <button type="button" aria-pressed={heat} onClick={()=>setHeat(!heat)}><span className={`${styles.heatDot} ${publicLayer ? styles.publicDot : ""}`}/>{publicLayer ? "Public data heat" : "Activity heat"}</button>
+      <button type="button" aria-pressed={heat} onClick={()=>setHeat(!heat)}><span className={styles.heatDot} style={{background:COUNCIL_MAP_HEAT_GRADIENT}}/>{publicLayer ? "Public data heat" : "Activity heat"}</button>
       <button type="button" aria-pressed={showArea} onClick={()=>setShowArea(!showArea)}><span className={styles.areaDot}/>Reporting postcodes</button>
-    </div><button type="button" className={styles.fit} onClick={fitArea}><CouncilIcon name="map" size={16}/>Fit council area</button></div>
-    {markers.hidden>0&&ready&&<p className={styles.densityNotice}>Dots stay at postcode centres. Zoom in for labels or search the postcode list below.</p>}
+    </div><div className={styles.navigation}><button type="button" className={styles.fit} onClick={fitArea}><CouncilIcon name="map" size={16}/>Fit council area</button>{ready&&<div className={styles.zoom}><button type="button" aria-label="Zoom in" disabled={view.zoom>=MAP_MAX_ZOOM} onClick={()=>setView(current=>({...current,zoom:Math.min(MAP_MAX_ZOOM,current.zoom+1)}))}>+</button><button type="button" aria-label="Zoom out" disabled={view.zoom<=MAP_MIN_ZOOM} onClick={()=>setView(current=>({...current,zoom:Math.max(MAP_MIN_ZOOM,current.zoom-1)}))}>−</button></div>}</div></div>
+    {ready&&<div className={styles.mapSummary}>
+      {showArea&&<p className={styles.densityNotice}>{markers.labels.length} of {positions.length} postcodes in view. Each label shows its postcode and {publicLayer?.unit ?? "TLink upgrades"}.{markers.crowded>0&&" Zoom in to separate nearby labels, or select one to inspect it."}</p>}
+      {heat&&highestActivity>0&&<div className={styles.legend} aria-label={`Heat scale: 0 to ${publicNumber(highestActivity)} ${publicLayer?.unit ?? "TLink upgrades"}, across all reporting postcodes`}><strong>{publicLayer?.unit ?? "TLink upgrades"}</strong><div><span>0 · Cool</span><i style={{background:COUNCIL_MAP_HEAT_GRADIENT}}/><span>{publicNumber(highestActivity)} · Hot</span></div><small>Across all reporting postcodes</small></div>}
+    </div>}
     <div className={styles.layout}>
       <div ref={container} className={styles.map} tabIndex={0} role="region" aria-label="Interactive postcode map. Use arrow keys to pan and plus or minus to zoom." onKeyDown={event=>{
         if(event.target!==event.currentTarget)return;
@@ -217,22 +221,21 @@ export function CouncilMap({ report, api, publicLayers = [] }: { report: Council
             const point=anchors.get(cell.postcode);
             if(!point)return null;
             const value=activityValue(cell);
-            const intensity=(value??0)/maxActivity;
+            const shade=councilMapHeat(value,maxActivity);
+            const intensity=shade?.ratio??0;
+            const label=markerLabels.get(cell.postcode);
             const group=showTrades ? tradeGroups.get(cell.postcode) : undefined;
             const selected=selectedPostcode===cell.postcode;
             const description=`${cell.postcode}: ${publicLayer ? `${publicNumber(value)} ${publicLayer.unit}` : `${number(cell.completedJobs)} TLink upgrades`}${group ? `. ${group.length} local trades` : ""}. Select to explore this postcode.`;
-            return <div className={`${styles.areaAnchor} ${selected ? styles.selectedAnchor : ""}`} key={cell.postcode} style={{left:point.x,top:point.y}}>
-              {heat&&value!==null&&value>0&&<span className={`${styles.heat} ${publicLayer ? styles.publicHeat : ""}`} style={{width:28+intensity*52,height:28+intensity*52,opacity:.3+intensity*.35}}/>}
-              {(showArea||group)&&<button type="button" className={`${styles.anchorButton} ${group ? styles.tradeAnchor : ""} ${value===null ? styles.unknownAnchor : ""}`} aria-pressed={selected} aria-label={description} title={description} onClick={()=>group?.length===1&&!showArea?chooseTrade(group[0]):chooseArea(cell)}>{group&&<CouncilIcon name="business" size={13}/>}</button>}
-              {showArea&&markerPositions.has(cell.postcode)&&<span className={styles.postcode} aria-hidden="true">{cell.postcode}<span>{publicLayer ? publicNumber(value,true) : `${number(cell.completedJobs)} upgrades`}</span></span>}
+            const markerStyle: CSSProperties & {"--heat-colour":string} = {left:point.x,top:point.y,"--heat-colour":shade?.color??"#788894"};
+            return <div className={`${styles.areaAnchor} ${selected ? styles.selectedAnchor : ""}`} key={cell.postcode} style={markerStyle}>
+              {heat&&value!==null&&value>0&&<span className={styles.heat} style={{width:64+intensity*56,height:64+intensity*56}}/>}
+              {(showArea||group)&&<button type="button" className={`${styles.anchorButton} ${group ? styles.tradeAnchor : ""} ${value===null ? styles.unknownAnchor : ""}`} aria-pressed={selected} aria-label={description} title={description} onClick={()=>group?.length===1&&!showArea?chooseTrade(group[0]):chooseArea(cell)}>{group&&<CouncilIcon name="business" size={13}/>}{showArea&&label&&<span className={styles.postcode} style={{left:label.x-point.x+14,top:label.y-point.y+14}} aria-hidden="true">{cell.postcode}<span>{publicLayer ? publicNumber(value) : number(cell.completedJobs)}</span></span>}</button>}
             </div>;
           })}
         </div>}
-        <div className={styles.mapBadge}><span/> {publicLayer ? "Public data · postcode areas" : demonstration?"Illustrative outcomes · real geography":"Your community in TLink"}</div>
-        {ready&&<div className={styles.zoom}><button type="button" aria-label="Zoom in" disabled={view.zoom>=MAP_MAX_ZOOM} onClick={()=>setView(current=>({...current,zoom:Math.min(MAP_MAX_ZOOM,current.zoom+1)}))}>+</button><button type="button" aria-label="Zoom out" disabled={view.zoom<=MAP_MIN_ZOOM} onClick={()=>setView(current=>({...current,zoom:Math.max(MAP_MIN_ZOOM,current.zoom-1)}))}>−</button></div>}
         {!ready&&<div className={styles.unavailable} role="status"><CouncilIcon name="map" size={30}/><strong>{state==="loading"?"Loading your community…":state==="unconfigured"?"Map connection is not configured":state==="auth"?"Map connection needs attention":"Map temporarily unavailable"}</strong><p>{state==="loading"?"Preparing postcode overlays and local trade pins.":"Your postcode results and business directory remain available below. TLink support can check the map connection."}</p>{state!=="loading"&&<button type="button" onClick={()=>{setState("loading");setAttempt(current=>current+1);}}>Retry map</button>}</div>}
         {tileError&&<div className={styles.tileNotice} role="status">Some basemap tiles are unavailable. Postcode positions remain approximate.</div>}
-        {heat&&ready&&highestActivity>0&&<div className={`${styles.legend} ${publicLayer ? styles.publicLegend : ""}`}><span>{publicLayer ? "Lower value" : "Fewer upgrades"}</span><i/><span>{publicLayer ? "Higher" : "More"}</span></div>}
         {demonstration&&<div className={styles.attribution}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a> · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noreferrer">Map issue</a></div>}
       </div>
       <aside ref={directoryPanel} className={`${styles.directory} ${selectedTrade?styles.profileDirectory:""}`}>

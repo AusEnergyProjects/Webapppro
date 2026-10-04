@@ -52,20 +52,26 @@ export function moveCouncilMap(view: CouncilMapView, dx: number, dy: number): Co
   return { lat: Math.max(-80, Math.min(80, next.lat)), lng: ((next.lng + 540) % 360) - 180, zoom: view.zoom };
 }
 
-/** Keep every marker at its geographic anchor; omit labels that would obscure the map. */
+/** Keep every postcode labelled, with labels immediately beside their true anchors. */
 export function layoutCouncilMapMarkers(areas: Array<{key:string;position:MapPosition}>, view: CouncilMapView, width: number, height: number, selectedKey?: string) {
   const anchors = areas.map(area => ({key:area.key,...councilMapPoint(area.position,view,width,height)}))
     .filter(point => point.x >= 0 && point.x <= width && point.y >= 0 && point.y <= height);
-  const visible: Array<{key:string;x:number;y:number}> = [];
+  const labels: Array<{key:string;x:number;y:number}> = [];
+  const labelWidth = 76, labelHeight = 36, gap = 3;
+  const overlap = (a: {x:number;y:number}, b: {x:number;y:number}) => Math.max(0,labelWidth+gap-Math.abs(a.x-b.x))*Math.max(0,labelHeight+gap-Math.abs(a.y-b.y));
   const ranked = [...anchors].sort((a,b) => Number(b.key === selectedKey) - Number(a.key === selectedKey) || a.key.localeCompare(b.key));
   for (const point of ranked) {
-    // Labels are fixed 84 x 36 px directly below their anchor, never repositioned.
-    if (point.x < 50 || point.x > width - 50 || point.y < 60 || point.y + 54 > height - 82) continue;
-    if (visible.some(other => Math.abs(other.x-point.x) < 94 && Math.abs(other.y-point.y) < 46)) continue;
-    if (anchors.some(other => other.key !== point.key && Math.abs(other.x-point.x) < 54 && other.y > point.y+3 && other.y < point.y+66)) continue;
-    visible.push(point);
+    // Try only adjacent positions, never a distant grid or leader lines. At very
+    // wide zooms labels may overlap; hover/focus raises them and zoom separates them.
+    const candidates = [[-38,14],[-38,-50],[14,-18],[-90,-18],[14,14],[-90,14],[14,-50],[-90,-50]]
+      .map(([dx,dy]) => ({x:Math.max(4,Math.min(width-labelWidth-4,point.x+dx)),y:Math.max(4,Math.min(height-labelHeight-24,point.y+dy))}));
+    const score = (candidate: {x:number;y:number}) => labels.reduce((total,label)=>total+overlap(candidate,label),0)
+      + anchors.filter(other=>other.key!==point.key&&other.x>candidate.x-7&&other.x<candidate.x+labelWidth+7&&other.y>candidate.y-7&&other.y<candidate.y+labelHeight+7).length*120;
+    const chosen = candidates.reduce((best,candidate)=>score(candidate)<score(best)?candidate:best);
+    labels.push({key:point.key,...chosen});
   }
-  return { anchors, visible, hidden: anchors.length - visible.length };
+  const crowded = labels.filter((label,index)=>labels.some((other,otherIndex)=>otherIndex!==index&&overlap(label,other)>0)).length;
+  return { anchors, labels, crowded };
 }
 
 /** Prefer usable public VEU data while preserving real zero values and council scope. */

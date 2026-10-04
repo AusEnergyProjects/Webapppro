@@ -6,6 +6,7 @@ import React from "react";
 import * as jsx from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as mapView from "../src/lib/council-map-view.ts";
+import * as mapHeat from "../src/lib/council-map-heat.ts";
 
 const css = { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
 function load(relative, dependencies) {
@@ -35,12 +36,52 @@ function renderer() {
   const hooks={...React,useEffect(){},useRef:value=>({current:value}),useMemo:factory=>factory(),useState(initial){const index=cursor++;if(!(index in states))states[index]=typeof initial==="function"?initial():initial;return [states[index],value=>{states[index]=typeof value==="function"?value(states[index]):value;}];}};
   const {CouncilMap}=load("../src/components/council/CouncilMap.tsx",{
     react:hooks,"react/jsx-runtime":jsx,"@/lib/energy-service-catalogue.mjs":{ENERGY_SERVICE_LABELS:{}},
-    "@/lib/google-maps-client":{},"@/lib/council-map-view":mapView,"./CouncilPrimitives":primitives,"./CouncilMap.module.css":css,
+    "@/lib/google-maps-client":{},"@/lib/council-map-view":mapView,"@/lib/council-map-heat":mapHeat,"./CouncilPrimitives":primitives,"./CouncilMap.module.css":css,
   });
   function elements(element=tree,result=[]) {if(React.isValidElement(element)){result.push(element);React.Children.forEach(element.props.children,child=>elements(child,result));}return result;}
   return {render(publicLayers=[]){cursor=0;tree=CouncilMap({report,publicLayers});return renderToStaticMarkup(tree);},find(predicate){const found=elements().find(predicate);assert.ok(found,"Expected control not found");return found;},all(predicate){return elements().filter(predicate);}};
 }
 const plain=html=>html.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();
+const hasClass=(node,name)=>node.props.className?.split(" ").includes(name);
+
+test("all 73 map postcodes retain complete numeric labels and operable marker buttons",()=>{
+  const values=Object.fromEntries(postcodes.map((postcode,index)=>[postcode,12345+index]));
+  const ui=renderer(),html=ui.render([layer("public-upgrades",values)]);
+  const labels=ui.all(node=>hasClass(node,"postcode"));
+  assert.equal(labels.length,73);
+  for(const postcode of postcodes) {
+    const marker=ui.find(node=>node.type==="button"&&node.props["aria-label"]?.startsWith(`${postcode}:`));
+    const markerText=plain(renderToStaticMarkup(marker));
+    assert.match(markerText,new RegExp(`^${postcode} ${values[postcode].toLocaleString("en-AU")}$`));
+    assert.equal(marker.props.type,"button");
+    assert.equal(typeof marker.props.onClick,"function");
+  }
+  assert.match(plain(html),/73 of 73 postcodes in view/);
+  assert.doesNotMatch(renderToStaticMarkup(labels[0]),/12\.3K|12k|No data/);
+});
+
+test("map colours match a numeric cool-to-hot legend while zero and unknown have no heat",()=>{
+  const ui=renderer(),layers=[layer("public-upgrades",{"3805":12345,"3920":0,"3000":null,"3001":6172.5})];
+  ui.render(layers);
+  const anchor=postcode=>ui.find(node=>hasClass(node,"areaAnchor")&&node.key===postcode);
+  assert.equal(anchor("3805").props.style["--heat-colour"],"rgb(220, 38, 38)");
+  assert.equal(anchor("3001").props.style["--heat-colour"],"rgb(250, 204, 21)");
+  assert.equal(anchor("3920").props.style["--heat-colour"],"rgb(37, 99, 235)");
+  assert.notEqual(anchor("3000").props.style["--heat-colour"],anchor("3920").props.style["--heat-colour"]);
+  for(const postcode of ["3920","3000"]) assert.doesNotMatch(renderToStaticMarkup(anchor(postcode)),/class="heat"/);
+  assert.match(renderToStaticMarkup(anchor("3805")),/class="heat"/);
+  assert.match(plain(renderToStaticMarkup(anchor("3920"))),/^3920 0$/);
+  assert.match(plain(renderToStaticMarkup(anchor("3000"))),/^3000 Not available$/);
+  const legend=ui.find(node=>hasClass(node,"legend"));
+  assert.equal(legend.props["aria-label"],"Heat scale: 0 to 12,345 activities, across all reporting postcodes");
+  assert.match(plain(renderToStaticMarkup(legend)),/activities 0 · Cool 12,345 · Hot Across all reporting postcodes/);
+  assert.equal(ui.find(node=>node.type==="i").props.style.background,mapHeat.COUNCIL_MAP_HEAT_GRADIENT);
+  ui.find(node=>node.type==="button"&&React.Children.toArray(node.props.children).includes("Public data heat")).props.onClick();
+  ui.render(layers);
+  assert.equal(ui.all(node=>hasClass(node,"heat")).length,0);
+  assert.equal(ui.all(node=>hasClass(node,"legend")).length,0);
+  assert.equal(ui.all(node=>hasClass(node,"postcode")).length,73,"Turning heat off must preserve postcode and number labels");
+});
 
 test("asynchronous public layers become the default without overriding explicit TLink selection",()=>{
   const ui=renderer();ui.render();

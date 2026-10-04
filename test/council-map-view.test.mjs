@@ -41,43 +41,49 @@ test("pan follows screen pixels and keeps coordinates finite near the world edge
   assert.ok(edge.lng>=-180&&edge.lng<=180&&edge.lat<=80&&edge.lat>=-80);
 });
 
-test("nearby postcode anchors stay geographic while overlapping labels are omitted", () => {
+function assertAdjacentLabels(layout, width, height) {
+  assert.equal(layout.labels.length, layout.anchors.length, "Every in-view postcode needs its numeric label");
+  assert.equal(new Set(layout.labels.map(label => label.key)).size, layout.anchors.length);
+  for (const label of layout.labels) {
+    const anchor = layout.anchors.find(point => point.key === label.key);
+    assert.ok(anchor, `Label ${label.key} must belong to a geographic anchor`);
+    assert.ok(label.x >= 4 && label.x + 76 <= width - 4, `Label ${label.key} must stay within the map width`);
+    assert.ok(label.y >= 4 && label.y + 36 <= height - 24, `Label ${label.key} must clear the map attribution`);
+    const distanceX = Math.max(label.x - anchor.x, anchor.x - (label.x + 76), 0);
+    const distanceY = Math.max(label.y - anchor.y, anchor.y - (label.y + 36), 0);
+    const verticalLimit = Math.max(14, anchor.y - (height - 24));
+    assert.ok(distanceX <= 14 && distanceY <= verticalLimit, `Label ${label.key} must remain adjacent to its anchor, allowing the attribution inset at the bottom edge`);
+  }
+}
+
+test("nearby postcode anchors stay geographic and every postcode retains an adjacent label", () => {
   const areas=["3805","3806","3977","3980"].map(key=>{const [lat,lng]=postcodeCoordinate(key);return {key,position:{lat,lng}};});
   for(const width of [260,300,355,1000]) {
     const height=width>500?590:390;
     const view=fitCouncilMap(areas.map(area=>area.position),width,height);
     const layout=layoutCouncilMapMarkers(areas,view,width,height);
     assert.equal(layout.anchors.length,4);
-    assert.equal(layout.visible.length+layout.hidden,4);
+    assertAdjacentLabels(layout,width,height);
     for(const marker of layout.anchors) {
       const actual=councilMapPoint(areas.find(area=>area.key===marker.key).position,view,width,height);
       assert.equal(marker.x,actual.x); assert.equal(marker.y,actual.y);
     }
-    for(let i=0;i<layout.visible.length;i++) {
-      const marker=layout.visible[i];
-      assert.ok(marker.y+54<=height-82,"Postcode labels must clear the heat legend and attribution");
-      const actual=councilMapPoint(areas.find(area=>area.key===marker.key).position,view,width,height);
-      assert.equal(marker.x,actual.x);assert.equal(marker.y,actual.y);
-      for(const other of layout.visible.slice(i+1))assert.ok(Math.abs(marker.x-other.x)>=94||Math.abs(marker.y-other.y)>=46,`${width}: ${marker.key} overlaps ${other.key}`);
-    }
+    assert.equal(layout.crowded,0,"These four separated postcode labels have enough space without collisions");
   }
 });
 
 const councilPostcodes = "3169 3172 3182 3183 3184 3186 3187 3188 3189 3190 3191 3192 3193 3194 3195 3196 3197 3202 3205 3206 3207 3804 3805 3806 3807 3808 3809 3810 3812 3813 3814 3815 3910 3911 3912 3913 3915 3916 3918 3919 3920 3922 3925 3926 3927 3928 3929 3930 3931 3933 3934 3936 3939 3940 3941 3942 3943 3944 3953 3956 3959 3975 3976 3977 3978 3979 3980 3981 3984 3991 3992 3995 3996".split(" ");
-test("73-postcode extent retains every true centre without grid reflow or label collisions", () => {
+test("73-postcode extent retains every true centre and label even when labels are crowded", () => {
   const areas=councilPostcodes.map(key=>{const coordinate=postcodeCoordinate(key);assert.ok(coordinate,key);return {key,position:{lat:coordinate[0],lng:coordinate[1]}};});
   assert.equal(areas.length,73);
   for(const [width,height] of [[260,390],[300,390],[355,390],[1000,590]]) {
     const view=fitCouncilMap(areas.map(area=>area.position),width,height);
     const layout=layoutCouncilMapMarkers(areas,view,width,height);
     assert.equal(layout.anchors.length,73);
-    assert.ok(layout.hidden>0,"Dense maps must suppress labels instead of displacing them");
+    assertAdjacentLabels(layout,width,height);
+    assert.ok(layout.crowded>0,"Dense maps must disclose crowding without hiding postcode labels");
     for(const marker of layout.anchors)assert.deepEqual({x:marker.x,y:marker.y},councilMapPoint(areas.find(area=>area.key===marker.key).position,view,width,height));
-    for(const [index,marker] of layout.visible.entries()) {
-      assert.ok(marker.x>=50&&marker.x<=width-50&&marker.y>=60&&marker.y+54<=height-82);
-      for(const other of layout.visible.slice(index+1))assert.ok(Math.abs(marker.x-other.x)>=94||Math.abs(marker.y-other.y)>=46);
-      assert.ok(!layout.anchors.some(other=>other.key!==marker.key&&Math.abs(other.x-marker.x)<54&&other.y>marker.y+3&&other.y<marker.y+66),"A label must not cover another postcode marker");
-    }
+    assert.deepEqual(layout.labels,layoutCouncilMapMarkers([...areas].reverse(),view,width,height).labels,"Label placement must be deterministic regardless of source order");
   }
 });
 
@@ -87,8 +93,19 @@ test("selected postcode receives label priority without moving either anchor", (
   const normal=layoutCouncilMapMarkers(areas,view,800,590);
   const selected=layoutCouncilMapMarkers(areas,view,800,590,"b");
   assert.deepEqual(normal.anchors,selected.anchors);
-  assert.deepEqual(normal.visible.map(marker=>marker.key),["a"]);
-  assert.deepEqual(selected.visible.map(marker=>marker.key),["b"]);
+  assert.deepEqual(normal.labels.map(marker=>marker.key),["a","b"]);
+  assert.deepEqual(selected.labels.map(marker=>marker.key),["b","a"]);
+  assertAdjacentLabels(normal,800,590);
+  assertAdjacentLabels(selected,800,590);
+});
+
+test("viewport edges keep labels readable while genuinely offscreen postcodes are excluded", () => {
+  const width=300,height=390,view={lat:-38,lng:145,zoom:10},centre=mapWorldPoint(view,view.zoom);
+  const screenPosition=(x,y)=>mapWorldPosition({x:centre.x-width/2+x,y:centre.y-height/2+y},view.zoom);
+  const areas=[{key:"left",position:screenPosition(1,1)},{key:"right",position:screenPosition(width-1,height-1)},{key:"offscreen",position:screenPosition(-100,height/2)}];
+  const layout=layoutCouncilMapMarkers(areas,view,width,height);
+  assert.deepEqual(layout.anchors.map(point=>point.key),["left","right"]);
+  assertAdjacentLabels(layout,width,height);
 });
 
 test("public default prefers usable VEU data, then first known public layer, including real zeros", () => {
