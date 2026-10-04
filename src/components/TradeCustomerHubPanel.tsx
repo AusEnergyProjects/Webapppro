@@ -19,7 +19,6 @@ const requestKinds: { kind: RequestKind; label: string }[] = [
 ];
 const starters: { label: string; kind: RequestKind; prompt: string }[] = [
   { label: "Switchboard photo", kind: "photo", prompt: "Please share a clear photo of the switchboard." },
-  { label: "Site access", kind: "text", prompt: "How can we access the site, and are there any access restrictions?" },
   { label: "Document", kind: "document", prompt: "Please upload the plans or documents for this work." },
 ];
 
