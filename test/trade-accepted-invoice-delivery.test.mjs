@@ -15,8 +15,7 @@ function compile(source, modules = {}) {
   Function("require", "exports", code)((id) => { assert.ok(id in modules, `Unexpected import ${id}`); return modules[id]; }, exports);
   return exports;
 }
-const accessSource = read("../src/lib/trade-access-server.ts");
-const access = compile(accessSource.slice(accessSource.indexOf("function checkedSqlAlias"), accessSource.indexOf("export async function tradeAccountProjection")));
+const access = compile(read("../src/lib/trade-account-predicates.ts"));
 const pdf = compile(read("../src/lib/trade-accepted-invoice-pdf-server.ts"), { "pdf-lib": pdfLib, "./trade-document-pdf-layout.mjs": layout });
 const delivery = compile(read("../src/lib/trade-accepted-invoice-delivery-server.ts"), {
   "./trade-accepted-invoice": accepted, "./trade-access-server": access,

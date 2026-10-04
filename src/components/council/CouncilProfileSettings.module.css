@@ -1,0 +1,60 @@
+.layout { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(270px,1fr); align-items: start; gap: 24px; }
+.editor { min-width: 0; display: grid; gap: 20px; }
+.section { margin: 0; min-width: 0; border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-surface); padding: 23px; }
+.section legend { background: var(--c-surface); color: var(--c-ink); font-size: 15px; font-weight: 700; padding: 0 7px; margin-left: -7px; }
+.section:disabled { opacity: .78; }
+.intro { font-size: 12px; line-height: 1.8; color: var(--c-muted); margin: 0 0 20px; }
+.logoEditor { display: flex; gap: 20px; align-items: center; margin-bottom: 22px; }
+.logoEditor > div:last-child { min-width: 0; }
+.logoEditor button + button { margin-left: 14px; }
+.logoBox { width: 92px; height: 92px; flex-shrink: 0; display: grid; place-items: center; color: var(--c-accent); border: 1px dashed var(--c-line); border-radius: 14px; background: var(--c-soft); }
+.logoBox img, .previewLogo img { width: 100%; height: 100%; padding: 9px; object-fit: contain; background: white; border-radius: inherit; }
+.fileInput { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.hint { font-size: 11px; color: var(--c-muted); line-height: 1.8; margin: 10px 0 0; }
+.field { display: grid; gap: 8px; font-size: 12px; color: var(--c-ink); font-weight: 600; }
+.field input, .postcodeEntry input { width: 100%; min-width: 0; min-height: 43px; border: 1px solid var(--c-line); border-radius: 7px; color: var(--c-ink); background: var(--c-field); padding: 10px 12px; font-size: 13px; }
+.state { margin-top: 15px; color: var(--c-muted); display: flex; align-items: center; gap: 15px; font-size: 12px; }
+.state strong { background: var(--c-soft); border-radius: 5px; color: var(--c-ink); padding: 4px 9px; }
+.postcodeChips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 22px; }
+.postcodeChips > span { display: flex; gap: 7px; align-items: center; border: 1px solid var(--c-line); border-radius: 7px; background: var(--c-accent-soft); padding: 5px 7px 5px 12px; color: var(--c-accent); font-size: 13px; font-weight: 600; }
+.postcodeChips button { border: 0; background: transparent; font-size: 20px; color: inherit; width: 29px; height: 29px; border-radius: 5px; }
+.postcodeChips button:hover { background: var(--c-surface); }
+.postcodeEntry { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
+.presets { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
+.presets button { border: 1px solid var(--c-line); color: var(--c-ink); background: var(--c-soft); border-radius: 9px; padding: 12px 8px; font-size: 11px; display: grid; place-items: center; gap: 8px; }
+.presets button[aria-pressed="true"] { border-color: var(--c-accent); outline: 1px solid var(--c-accent); background: var(--c-accent-soft); }
+.swatch { width: 32px; height: 32px; border-radius: 50%; box-shadow: 0 0 0 3px var(--c-surface); }
+.colours { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+.colours label { display: grid; gap: 8px; color: var(--c-ink); font-size: 12px; }
+.colours label > div { border: 1px solid var(--c-line); border-radius: 7px; padding: 5px; display: flex; gap: 9px; align-items: center; min-width: 0; }
+.colours input { width: 39px; height: 34px; border: 0; background: transparent; padding: 0; cursor: pointer; flex-shrink: 0; }
+.colours .hexInput { width: 100%; min-width: 0; flex-shrink: 1; color: var(--c-muted); font-family: monospace; font-size: 12px; padding: 3px 0; cursor: text; }
+.saveBar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 13px; padding: 17px 0; border-top: 1px solid var(--c-line); }
+.saveBar > span { color: var(--c-muted); font-size: 12px; }
+.saveBar > div { display: flex; flex-wrap: wrap; gap: 9px; }
+.previewColumn { position: sticky; top: 96px; min-width: 0; }
+.preview { overflow: hidden; border: 1px solid var(--c-line); border-radius: 15px; background: var(--c-surface); box-shadow: 0 15px 40px #12382d0a; }
+.previewHeader { display: flex; align-items: center; gap: 12px; padding: 24px; background: linear-gradient(125deg,var(--c-header-start),var(--c-header-end)); color: #fff; }
+.previewLogo { width: 53px; height: 53px; display: grid; place-items: center; background: #ffffff18; border-radius: 10px; flex-shrink: 0; }
+.previewHeader h2 { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.previewHeader small { display: block; color: #ffffffc9; font-size: 10px; margin-bottom: 3px; }
+.previewBody { padding: 27px; }
+.previewBody h3 { font-size: 29px; line-height: 1.18; letter-spacing: -1px; font-weight: 500; color: var(--c-ink); }
+.previewBody p { color: var(--c-muted); font-size: 12px; line-height: 1.8; margin: 12px 0 24px; }
+.previewScope { display: flex; align-items: center; gap: 14px; color: var(--c-muted); font-size: 11px; line-height: 1.8; }
+.previewScope strong { color: var(--c-accent); font-size: 36px; line-height: 1; font-weight: 500; }
+.previewBars { display: flex; align-items: flex-end; gap: 9px; height: 86px; margin: 25px 0; border-bottom: 1px solid var(--c-line); }
+.previewBars span { flex: 1; height: 30%; border-radius: 4px 4px 0 0; background: var(--c-chart); opacity: .55; }
+.previewBars span:nth-child(2) { height: 50%; }.previewBars span:nth-child(3) { height: 62%; }.previewBars span:nth-child(4) { height: 47%; }.previewBars span:nth-child(5) { height: 83%; opacity: 1; }
+.previewTag { font-size: 10px; color: var(--c-muted); }
+.previewNote { display: flex; align-items: flex-start; gap: 11px; color: var(--c-muted); padding: 22px 8px; font-size: 11px; line-height: 1.8; }
+.previewNote svg { flex-shrink: 0; color: var(--c-accent); margin-top: 3px; }
+.reset { border-top: 1px solid var(--c-line); padding: 22px 8px; }
+.reset h3 { font-size: 13px; color: var(--c-ink); }
+.reset p { font-size: 11px; color: var(--c-muted); line-height: 1.8; margin: 9px 0; }
+.reset .resetQuestion { font-weight: 700; color: var(--c-ink); }
+.reset > div { display: flex; gap: 8px; flex-wrap: wrap; }
+@media(max-width:1050px) { .layout { grid-template-columns: minmax(0,1fr) 270px; gap: 18px; }.section { padding: 20px; }.logoEditor { flex-wrap: wrap; gap: 13px; }.previewBody { padding: 22px; }.previewHeader { padding: 20px; }.colours { grid-template-columns: 1fr; gap: 12px; } }
+@media(max-width:800px) { .layout { grid-template-columns: 1fr; }.previewColumn { position: static; }.preview { display: none; }.previewNote { padding-top: 0; }.colours { grid-template-columns: 1fr 1fr; } }
+@media(max-width:420px) { .section { padding: 17px; }.logoBox { width: 72px; height: 72px; }.logoEditor { gap: 14px; }.presets { grid-template-columns: repeat(2,minmax(0,1fr)); }.colours { gap: 9px; }.colours .hexInput { font-size: 10px; }.saveBar > div { width: 100%; }.saveBar button { flex: 1; }.logoEditor button + button { margin-left: 0; display: flex; } }
+@media print { .layout { display: block; }.previewColumn, .saveBar, .postcodeEntry, .fileInput, .presets, .logoEditor button, .postcodeChips button { display: none; }.section { break-inside: avoid; margin-bottom: 20px; } }

@@ -1,0 +1,32 @@
+.wrapper{display:grid;gap:16px;margin-bottom:30px}.hero{background:linear-gradient(125deg,var(--c-header-start),var(--c-header-end));color:#fff;border-radius:20px;display:grid;grid-template-columns:1fr 1fr;gap:32px;padding:30px 34px;overflow:hidden;position:relative}.hero:after{content:"";width:350px;height:350px;border:1px solid #ffffff15;border-radius:50%;position:absolute;right:-190px;top:-100px;box-shadow:0 0 0 50px #ffffff06,0 0 0 110px #ffffff04;pointer-events:none}.intro,.figures{position:relative;z-index:1}.eyebrow{display:flex;gap:8px;align-items:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#fff}.intro h2{font-size:clamp(27px,3vw,40px);line-height:1.1;letter-spacing:-.045em;margin:18px 0 13px;font-weight:650}.intro p{font-size:12px;line-height:1.65;color:#ffffffe0;max-width:390px;margin:0}.controls{display:flex;align-items:end;gap:10px;margin-top:21px}.controls label{display:grid;gap:6px;font-size:10px;color:#ffffffdc}.controls select,.controls button{border:1px solid #ffffff60;background:#ffffff12;color:#fff;border-radius:8px;padding:8px 12px;font-size:12px}.controls option{color:#173336;background:white}.controls button{height:35px;cursor:pointer}.figures{display:grid;align-content:center;gap:22px;border-left:1px solid #ffffff30;padding-left:32px}.figures>div{display:grid;gap:4px}.figures span{font-size:12px;color:#ffffffe0}.figures strong{font-size:clamp(32px,4vw,57px);line-height:1.12;letter-spacing:-.05em;font-weight:650;font-variant-numeric:tabular-nums}.figures small{font-size:11px;color:#ffffffcf}.secondaryFigure strong{font-size:30px}.source{display:flex;flex-wrap:wrap;gap:7px 16px;font-size:10px;color:var(--c-muted)}.source>span:first-child{font-weight:750;color:var(--c-accent)}.note{font-size:12px;color:var(--c-muted);line-height:1.65;margin:0}.columns{display:grid;grid-template-columns:1.3fr 1fr;gap:20px}.tabs{display:flex;gap:6px;margin-bottom:20px}.tabs button{background:var(--c-soft);color:var(--c-muted);border:1px solid var(--c-line);padding:7px 10px;border-radius:7px;font-size:11px}.tabs button[aria-pressed=true]{color:var(--c-accent);background:var(--c-accent-soft);border-color:var(--c-accent)}.bars{display:grid;gap:16px;max-height:500px;overflow:auto;padding-right:5px}.bars>div{display:grid;grid-template-columns:1fr auto;gap:7px 14px}.bars span{font-size:12px;line-height:1.4}.bars strong{font-size:12px;font-variant-numeric:tabular-nums}.bars i{grid-column:1/-1;height:7px;border-radius:4px;background:var(--c-line);overflow:hidden}.bars b{display:block;height:100%;background:var(--c-accent);border-radius:4px}.postcodes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:340px;overflow:auto;margin-bottom:20px}.postcodes button{display:grid;gap:5px;justify-items:start;padding:15px;background:var(--c-soft);color:var(--c-ink);border:1px solid var(--c-line);border-radius:10px}.postcodes button[aria-pressed=true]{border-color:var(--c-accent);background:var(--c-accent-soft)}.postcodes span{font-size:12px;color:var(--c-muted)}.postcodes strong{font-size:23px;letter-spacing:-.04em}.postcodes small{font-size:10px;color:var(--c-muted)}.detail{padding:15px;border:1px solid var(--c-line);border-radius:10px;background:var(--c-accent-soft);margin-bottom:18px;font-size:12px}.detail p{margin:7px 0 0;line-height:1.6}.method{font-size:12px;color:var(--c-muted);line-height:1.7}.method summary{cursor:pointer;font-weight:700;color:var(--c-ink)}.method a{color:var(--c-accent)}.method svg{display:inline;vertical-align:middle}
+@media(max-width:1000px){.hero{gap:22px;padding:26px}.figures{padding-left:22px}.columns{grid-template-columns:1fr}}@media(max-width:600px){.hero{grid-template-columns:1fr;padding:23px}.figures{grid-template-columns:1.2fr 1fr;border-left:0;padding:19px 0 0;border-top:1px solid #ffffff30;gap:12px}.figures strong{font-size:30px}.figures span{font-size:10px}.figures small{font-size:9px}.secondaryFigure strong{font-size:27px}.intro h2{font-size:30px;margin-top:12px}.controls{margin-top:15px}.source{line-height:1.6}.wrapper{gap:12px}}@media print {
+  .controls, .tabs { display: none; }
+  .wrapper { display: block; margin-bottom: 20px; break-inside: auto; }
+  .wrapper > * { margin-bottom: 12px; }
+  .hero { grid-template-columns: 1fr 1fr; padding: 22px; gap: 22px; border-radius: 12px; break-inside: avoid; print-color-adjust: exact; }
+  .intro h2 { font-size: 28px; margin: 10px 0; }
+  .intro p { font-size: 11px; line-height: 1.5; }
+  .figures { grid-template-columns: 1fr; gap: 14px; border-top: 0; border-left: 1px solid #ffffff30; padding: 0 0 0 22px; }
+  .figures strong { font-size: 38px; }
+  .secondaryFigure strong { font-size: 25px; }
+  .figures span, .figures small { font-size: 10px; }
+  .source { font-size: 9px; break-inside: avoid; }
+  .note { font-size: 11px; line-height: 1.5; }
+  .columns { display: block; }
+  .columns > * { margin-bottom: 12px; }
+  .bars, .postcodes { max-height: none; overflow: visible; }
+  .bars { display: block; padding-right: 0; }
+  .bars > div { margin-bottom: 10px; gap: 5px 12px; break-inside: avoid; }
+  .bars span, .bars strong { font-size: 11px; }
+  .postcodes { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; margin-bottom: 12px; }
+  .postcodes button { padding: 10px; break-inside: avoid; }
+  .postcodes strong { font-size: 20px; }
+  .detail { break-inside: avoid; }
+  .method { font-size: 10px; line-height: 1.5; }
+  .method::details-content { content-visibility: visible; }
+  .method summary { list-style: none; break-after: avoid; }
+  .method summary::-webkit-details-marker { display: none; }
+  .method ul { padding-left: 18px; margin: 8px 0; }
+  .method li, .method p { margin: 0 0 6px; break-inside: avoid; }
+  .method a { overflow-wrap: anywhere; }
+}

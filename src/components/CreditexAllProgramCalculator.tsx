@@ -799,11 +799,13 @@ export function CreditexAllProgramCalculator({
   api,
   role,
   initialProgramCode = "SRES",
+  initialActivityCode,
   documentDraftOwnerUid = "",
 }: {
   api: Api;
   role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade" | "public";
   initialProgramCode?: string;
+  initialActivityCode?: string;
   documentDraftOwnerUid?: string;
 }) {
   const [programCode, setProgramCode] = useState(initialProgramCode);
@@ -1119,6 +1121,7 @@ export function CreditexAllProgramCalculator({
           key={`${governedProgram}:${registryRefreshVersion}`}
           api={api}
           programCode={governedProgram}
+          initialActivityCode={initialActivityCode}
           onEstimate={acceptGovernedEstimate}
           onEstimateInvalidated={invalidateLatestEstimate}
         />

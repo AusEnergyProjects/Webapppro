@@ -12,7 +12,7 @@ const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0079_trade_abn_access_gate.sql");
 const adminAccounts = read("../src/app/api/admin/accounts/route.ts");
 const tradeProfile = read("../src/app/api/trade-profile/route.ts");
-const accessServer = read("../src/lib/trade-access-server.ts");
+const accessServer = read("../src/lib/trade-access-server.ts") + read("../src/lib/trade-account-predicates.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 
 function hasApprovedAbnProjection(account) {

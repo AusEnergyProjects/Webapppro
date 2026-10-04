@@ -13,7 +13,7 @@ const providerLayer = read("../src/lib/trade-integrations-server.ts");
 const stripeWebhook = read("../src/app/api/stripe/webhook/route.ts");
 const squareWebhook = read("../src/app/api/square/webhook/route.ts");
 const paymentUi = read("../src/components/TradePaymentPanel.tsx");
-const accessServer = read("../src/lib/trade-access-server.ts");
+const accessServer = read("../src/lib/trade-access-server.ts") + read("../src/lib/trade-account-predicates.ts");
 
 function apply(database, sql) {
   sql.split("--> statement-breakpoint")

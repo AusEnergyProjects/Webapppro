@@ -3007,43 +3007,7 @@ export async function fetchCreditexVeuProductSources(
     const resumed = await resumeVeuAcquisitionWithoutUpstream(acquisitionContext);
     if (resumed) return resumed;
   }
-  const jar = new BoundedCookieJar();
-  const html = await fetchSalesforceText(
-    fetchImpl,
-    jar,
-    VEU_PUBLIC_REGISTRY_URL,
-    { method: "GET", headers: { Accept: "text/html" } },
-    "VEU public registry page",
-    200_000,
-    TEXT_HTML,
-  );
-  const context = auraContext(html);
-  const nonce = crypto.randomUUID().replace(/-/g, "");
-  const replayToken = await auraAction(
-    fetchImpl,
-    jar,
-    context,
-    101,
-    "PowerBiReplayDetectionGuest",
-    "getToken",
-    { nonce, timestamp: Date.now() },
-  );
-  requiredText(replayToken, "Aura replay token", 20_000);
-  const embed = await auraAction(
-    fetchImpl,
-    jar,
-    context,
-    102,
-    "PowerBiEmbedManagerGuest",
-    "getEmbeddingDataForReportUsingDataSets",
-    {
-      ReportWorkspaceId: VEU_REPORT_WORKSPACE_ID,
-      ReportId: CREDITEX_VEU_REPORT_ID,
-      DataSetWorkspaceId: VEU_DATASET_WORKSPACE_ID,
-      DataSetId: CREDITEX_VEU_DATASET_ID,
-    },
-  );
-  const { clusterUrl, embedToken } = embeddingData(embed);
+  const {clusterUrl,embedToken} = await openVeuPublicSession(fetchImpl);
   if (acquisitionContext) {
     return acquireCreditexVeuPowerBiEvidenceDurably(
       fetchImpl,
@@ -3091,3 +3055,55 @@ export const CREDITEX_VEU_PRODUCT_REGISTRY_FETCH =
 
 export const CREDITEX_VEU_SCHEMA_PROPERTY_COUNT =
   Object.keys(CREDITEX_VEU_DIM_PRODUCT_SCHEMA).length;
+
+async function openVeuPublicSession(fetchImpl: CreditexOfficialProductFetch) {
+  const jar = new BoundedCookieJar();
+  const html = await fetchSalesforceText(
+    fetchImpl,
+    jar,
+    VEU_PUBLIC_REGISTRY_URL,
+    { method: "GET", headers: { Accept: "text/html" } },
+    "VEU public registry page",
+    200_000,
+    TEXT_HTML,
+  );
+  const context = auraContext(html);
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const replayToken = await auraAction(
+    fetchImpl,
+    jar,
+    context,
+    101,
+    "PowerBiReplayDetectionGuest",
+    "getToken",
+    { nonce, timestamp: Date.now() },
+  );
+  requiredText(replayToken, "Aura replay token", 20_000);
+  const embed = await auraAction(
+    fetchImpl,
+    jar,
+    context,
+    102,
+    "PowerBiEmbedManagerGuest",
+    "getEmbeddingDataForReportUsingDataSets",
+    {
+      ReportWorkspaceId: VEU_REPORT_WORKSPACE_ID,
+      ReportId: CREDITEX_VEU_REPORT_ID,
+      DataSetWorkspaceId: VEU_DATASET_WORKSPACE_ID,
+      DataSetId: CREDITEX_VEU_DATASET_ID,
+    },
+  );
+  const { clusterUrl, embedToken } = embeddingData(embed);
+  return {clusterUrl,embedToken};
+}
+
+/** Read-only public report evidence. Credentials remain inside this server module. */
+export async function fetchVeuPublicRegistryEvidence(fetchImpl: CreditexOfficialProductFetch, commands: Record<string,unknown>[] = []) {
+  if(commands.length>6) throw new Error("Too many public registry queries");
+  const {clusterUrl,embedToken}=await openVeuPublicSession(fetchImpl);
+  const model=await powerBiText(fetchImpl,clusterUrl,embedToken,`/explore/reports/${CREDITEX_VEU_REPORT_ID}/modelsAndExploration?preferReadOnlySession=true&datasetObjectId=${CREDITEX_VEU_DATASET_ID}&skipQueryData=true`,{method:"GET"},"Public report model",4000000);
+  const schema=await powerBiText(fetchImpl,clusterUrl,embedToken,"/explore/conceptualschema",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ModelObjectIds:[CREDITEX_VEU_DATASET_ID],userPreferredLocale:"en"})},"Public report schema",12000000);
+  const refreshed=await queryPowerBi(fetchImpl,clusterUrl,embedToken,refreshQuery(),"Registry refresh");
+  const responses=[]; for(const command of commands) responses.push(await queryPowerBi(fetchImpl,clusterUrl,embedToken,queryEnvelope(command),"Community activity",8000000));
+  return {model,schema,sourceRefreshedAt:decodeCreditexVeuPowerBiRefreshTimestamp(refreshed),responses};
+}

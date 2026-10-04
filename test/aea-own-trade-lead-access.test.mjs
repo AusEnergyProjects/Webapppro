@@ -51,7 +51,7 @@ function loadTypescript(path, overrides = {}) {
     if (Object.hasOwn(overrides, specifier)) return overrides[specifier];
     const name = specifier.split("/").at(-1).replace(/\.ts$/, "");
     if (modules.has(name)) return modules.get(name);
-    assert.ok(["public-site", "trade-abn", "firebase-mfa", "myob-security-audit", "trade-mfa-server", "trade-access-server", "aea-trade-owner-server", "trade-certificate-leads"].includes(name), `Unexpected dependency: ${specifier}`);
+    assert.ok(["public-site", "trade-abn", "firebase-mfa", "myob-security-audit", "trade-mfa-server", "trade-account-predicates", "trade-access-server", "aea-trade-owner-server", "trade-certificate-leads"].includes(name), `Unexpected dependency: ${specifier}`);
     const loaded = loadTypescript(`src/lib/${name}.ts`);
     modules.set(name, loaded);
     return loaded;

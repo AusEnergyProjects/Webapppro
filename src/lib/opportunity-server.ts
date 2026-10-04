@@ -467,7 +467,7 @@ function readable(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export async function createOpportunityFromLead(payload: DirectTradeLead) {
+export async function createOpportunityFromLead(payload: DirectTradeLead, referral?: { councilReference: string }) {
   if (payload.eventType !== "direct_trade.project") return null;
   const postcode = String(payload.postcode || "");
   const state = canonicalMarketplaceState(payload.state);
@@ -481,6 +481,9 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
 
   const reference = String(payload.reference || "").slice(0, 80);
   const db = getD1();
+  const councilAttribution = referral
+    ? await import("./council-campaign-server").then(({ resolveCouncilReferral }) => resolveCouncilReferral(db, referral.councilReference, postcode, state))
+    : null;
   const submittedAt = Number.isFinite(
     Date.parse(String(payload.submittedAt || "")),
   )
@@ -557,7 +560,7 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
       : payload.sourceJourney === QUICK_UPGRADE_SOURCE_JOURNEY
         ? QUICK_UPGRADE_CONSENT_PURPOSE
         : PUBLIC_PLAN_CONSENT_PURPOSE,
-  });
+  }, councilAttribution);
   if (payload.sourceJourney === "public-home-energy-plan") {
     await persistPublicQuotePreparation(
       db,

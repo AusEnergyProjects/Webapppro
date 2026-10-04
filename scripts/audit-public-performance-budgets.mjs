@@ -129,6 +129,7 @@ const adminKey = "src/components/AdminOperationsPortal.tsx";
 const protectedStylesKey = "src/components/ProtectedWorkspaceStyles.tsx";
 const adapterKey = "src/lib/energy-assistant-enquiry-adapter.mjs";
 const publicSearchKey = requireNamedEntryKey(manifest, "PublicSiteSearch");
+const publicCalculatorKey = requireNamedEntryKey(manifest, "PublicRebateCalculatorWorkspace");
 const linkKey = requireNamedEntryKey(manifest, "Link");
 const imageKey = requireNamedEntryKey(manifest, "Image");
 const teamStylesKey = requireNamedEntryKey(manifest, "TeamPageStyles");
@@ -183,7 +184,7 @@ const routeDefinitions = {
   },
   calculator: {
     page: "src/app/calculator/page.tsx",
-    clientEntries: ["src/components/PublicRebateCalculatorWorkspace.tsx"],
+    clientEntries: [publicCalculatorKey],
     boundaries: [["src/app/calculator/page.tsx", "PublicRebateCalculatorWorkspace"]],
   },
   team: {

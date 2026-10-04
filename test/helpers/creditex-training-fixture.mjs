@@ -28,7 +28,7 @@ const modules = { 'node:crypto': crypto, 'creditex-training-curriculum': curricu
 export function certificateTestDependency(specifier) {
   return modules[specifier] || modules[specifier.split('/').at(-1).replace(/\.ts$/, '')];
 }
-for (const name of ['trade-mfa-server', 'trade-access-server', 'aea-trade-owner-server', 'opportunity-notification-retry', 'training-questionnaire-store', 'trade-training-server', 'trade-certificate-eligibility', 'trade-certificate-leads']) {
+for (const name of ['trade-account-predicates', 'trade-mfa-server', 'trade-access-server', 'aea-trade-owner-server', 'opportunity-notification-retry', 'training-questionnaire-store', 'trade-training-server', 'trade-certificate-eligibility', 'trade-certificate-leads']) {
   const output = ts.transpileModule(read(`src/lib/${name}.ts`), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;

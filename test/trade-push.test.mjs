@@ -1,5 +1,6 @@
 import * as presence from '../src/lib/trade-team-presence.ts';
 import * as calls from '../src/lib/trade-team-calls.ts';
+import * as accountPredicates from '../src/lib/trade-account-predicates.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -16,7 +17,7 @@ function load(path,dependencies) {
   return loadedModule.exports;
 }
 const access = load('../src/lib/trade-message-media-access.ts',{});
-const account = load('../src/lib/trade-access-server.ts',{'../../db':{},'./firebase-server':{},'./creditex-schema-guards':{},'./trade-abn':{},'./trade-mfa-server':{}});
+const account = load('../src/lib/trade-access-server.ts',{'../../db':{},'./firebase-server':{},'./creditex-schema-guards':{},'./trade-abn':{},'./trade-mfa-server':{},'./trade-account-predicates':accountPredicates});
 const b64 = bytes => Buffer.from(bytes).toString('base64url');
 const subscriberKeys = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
 const p256dh = b64(await crypto.subtle.exportKey('raw',subscriberKeys.publicKey));

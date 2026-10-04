@@ -11,7 +11,7 @@ import { locateTradeMapRecords } from "../src/lib/trade-map-location-cache.ts";
 const read = path => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const NOW = Date.parse("2026-10-01T05:00:00.000Z");
 // Use the production access predicate without importing Cloudflare/Firebase runtime bindings.
-const accessAst = ts.createSourceFile("access.ts", read("../src/lib/trade-access-server.ts"), ts.ScriptTarget.Latest, true);
+const accessAst = ts.createSourceFile("access.ts", read("../src/lib/trade-account-predicates.ts"), ts.ScriptTarget.Latest, true);
 const predicateSource = accessAst.statements.filter(node => ts.isFunctionDeclaration(node)
   && ["checkedSqlAlias", "validAbnSqlPredicate", "approvedTradeReviewPredicate", "verifiedTradeAccountPredicate"].includes(node.name?.text));
 const transpile = code => ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;

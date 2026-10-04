@@ -48,10 +48,12 @@ function serviceLabel(id: string, label: string) {
 export function QuickUpgradeEnquiryDialog({
   initialPostcode = "",
   initialServices = [],
+  councilReference,
   onClose,
 }: {
   initialPostcode?: string;
   initialServices?: string[];
+  councilReference?: string;
   onClose: () => void;
 }) {
   const startingPostcode = /^\d{4}$/.test(initialPostcode) ? initialPostcode : "";
@@ -293,6 +295,7 @@ export function QuickUpgradeEnquiryDialog({
         body: JSON.stringify({
           submissionType: "upgrade",
           enquiry: QUICK_UPGRADE_ENQUIRY_KIND,
+          ...(councilReference ? { councilReference } : {}),
           submissionId: submissionId.current,
           name: [firstName.trim(), lastName.trim()].filter(Boolean).join(" "),
           email: email.trim(),

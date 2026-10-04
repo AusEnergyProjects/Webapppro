@@ -7,11 +7,12 @@ import * as contract from "../src/lib/trade-network.ts";
 import * as serviceAreaMatching from "../src/lib/trade-service-area-matching.mjs";
 import * as australianPostcodes from "../src/lib/australian-postcodes.mjs";
 import * as australianDates from "../src/lib/creditex-australian-regulator-date.ts";
+import * as accountPredicates from "../src/lib/trade-account-predicates.ts";
 
 const compile = file => ts.transpileModule(fs.readFileSync(new URL(file, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 const compiled = compile("../src/lib/trade-network-server.ts");
 const accessContract = {};
-Function("require", "exports", compile("../src/lib/trade-access-server.ts"))(() => ({}), accessContract);
+Function("require", "exports", compile("../src/lib/trade-access-server.ts"))((id) => id === "./trade-account-predicates" ? accountPredicates : {}, accessContract);
 const geography = {};
 Function("require", "exports", compile("../src/lib/postcode-distance.ts"))(() => ({ default: JSON.parse(fs.readFileSync(new URL("../src/data/postcode-centroids.json", import.meta.url), "utf8")) }), geography);
 const owner = (ownerUid = "owner-a", changes = {}) => ({ ownerUid, actorUid: ownerUid, memberId: `${ownerUid}-member`, isOwner: true, canManageJobs: true, jobScope: "team", ...changes });

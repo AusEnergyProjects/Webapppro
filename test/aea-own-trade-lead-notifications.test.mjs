@@ -24,7 +24,7 @@ function load(name, dependencies) {
 }
 // Use the real verification SQL. Unused authentication/service dependencies are
 // isolated; no identity, provider or production database is contacted by tests.
-const access = load('trade-access-server', { '../../db': {}, './firebase-server': {}, './creditex-schema-guards': {}, './trade-abn': {}, './trade-mfa-server': certificateTestDependency('./trade-mfa-server') });
+const access = load('trade-access-server', { '../../db': {}, './firebase-server': {}, './creditex-schema-guards': {}, './trade-abn': {}, './trade-mfa-server': certificateTestDependency('./trade-mfa-server'), './trade-account-predicates': certificateTestDependency('./trade-account-predicates') });
 const owner = load('aea-trade-owner-server', { './aea-trade-routing.mjs': routing, './public-plan-enquiry.mjs': notices, './public-site': publicSite, './trade-abn': tradeAbn });
 const eligibility = load('trade-certificate-leads', { './trade-access-server': access });
 const retry = load('opportunity-notification-retry', { './aea-trade-owner-server.ts': owner });

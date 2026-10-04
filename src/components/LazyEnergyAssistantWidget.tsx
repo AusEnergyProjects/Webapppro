@@ -1,11 +1,9 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { usePathname } from "next/navigation";
 import styles from "./LazyEnergyAssistantWidget.module.css";
 
-const DISPLAY_PREFERENCE_KEY = "aea-surge-display-v1";
-const DISPLAY_PREFERENCE_TUCKED = "tucked";
 function loadEnergyAssistant() {
   return import("./EnergyAssistantWidget").then((module) => ({
     default: module.EnergyAssistantWidget,
@@ -13,17 +11,9 @@ function loadEnergyAssistant() {
 }
 
 const DeferredEnergyAssistantWidget = lazy(loadEnergyAssistant);
+const DeferredEnergyAssistantLauncher = lazy(() => import("./EnergyAssistantLauncher").then((module) => ({ default: module.EnergyAssistantLauncher })));
 
-const hiddenRoute = (pathname: string) => /\/(print|pdf|reset-password|customer-hub)(\/|$)/.test(pathname);
-
-function storeTucked(tucked: boolean) {
-  try {
-    if (tucked) window.localStorage.setItem(DISPLAY_PREFERENCE_KEY, DISPLAY_PREFERENCE_TUCKED);
-    else window.localStorage.removeItem(DISPLAY_PREFERENCE_KEY);
-  } catch {
-    // Storage can be unavailable in strict privacy modes. The control still works for this page.
-  }
-}
+const hiddenRoute = (pathname: string) => /\/(print|pdf|reset-password|customer-hub|council)(\/|$)/.test(pathname);
 
 function QuickChatLoader() {
   return (
@@ -38,31 +28,7 @@ function QuickChatLoader() {
 export function LazyEnergyAssistantWidget() {
   const pathname = usePathname() || "/";
   const dedicated = pathname === "/wattzun";
-  const [tucked, setTucked] = useState(false);
   const [quickChatMounted, setQuickChatMounted] = useState(false);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      try {
-        setTucked(window.localStorage.getItem(DISPLAY_PREFERENCE_KEY) === DISPLAY_PREFERENCE_TUCKED);
-      } catch {
-        setTucked(false);
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    const syncPreference = (event: StorageEvent) => {
-      if (event.key === DISPLAY_PREFERENCE_KEY) {
-        setTucked(event.newValue === DISPLAY_PREFERENCE_TUCKED);
-      }
-    };
-    window.addEventListener("storage", syncPreference);
-    return () => {
-      window.removeEventListener("storage", syncPreference);
-    };
-  }, []);
 
   if (hiddenRoute(pathname)) return null;
 
@@ -75,50 +41,8 @@ export function LazyEnergyAssistantWidget() {
   }
 
   return (
-    <div
-      className={`${styles.root}${tucked ? ` ${styles.rootTucked}` : ""}`}
-      data-surge-loader
-      onPointerEnter={loadEnergyAssistant}
-      onFocusCapture={loadEnergyAssistant}
-      onTouchStart={loadEnergyAssistant}
-    >
-      {tucked ? (
-        <button
-          className={styles.peek}
-          type="button"
-          aria-label="Bring Wattzun AI back and open chat"
-          onClick={() => {
-            setTucked(false);
-            storeTucked(false);
-            setQuickChatMounted(true);
-          }}
-        >
-          <span className={`${styles.mascot} ${styles.mascotPeeking}`} aria-hidden="true" />
-        </button>
-      ) : (
-        <>
-          <button
-            className={styles.launcher}
-            type="button"
-            aria-label="Open Wattzun AI chat"
-            onClick={() => setQuickChatMounted(true)}
-          >
-            <span className={styles.mascot} aria-hidden="true" />
-          </button>
-          <button
-            className={styles.dismiss}
-            type="button"
-            aria-label="Hide Wattzun AI mascot"
-            title="Hide Wattzun AI"
-            onClick={() => {
-              setTucked(true);
-              storeTucked(true);
-            }}
-          >
-            <span aria-hidden="true">×</span>
-          </button>
-        </>
-      )}
-    </div>
+    <Suspense fallback={<QuickChatLoader />}>
+      <DeferredEnergyAssistantLauncher onPreload={loadEnergyAssistant} onOpen={() => setQuickChatMounted(true)} />
+    </Suspense>
   );
 }

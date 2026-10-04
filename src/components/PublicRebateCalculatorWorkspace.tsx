@@ -14,7 +14,15 @@ type ApiResult = Record<string, unknown> & {
 const PUBLIC_CALCULATOR_RECOVERY_TIMEOUT_MS = 60_000;
 const PUBLIC_CALCULATOR_MAXIMUM_ATTEMPTS = 20;
 
-export function PublicRebateCalculatorWorkspace() {
+export function PublicRebateCalculatorWorkspace({
+  embedded = false,
+  initialProgramCode = "SRES",
+  initialActivityCode,
+}: {
+  embedded?: boolean;
+  initialProgramCode?: string;
+  initialActivityCode?: string;
+} = {}) {
   const [preparingMessage, setPreparingMessage] = useState("");
 
   const api = useCallback(async (
@@ -99,10 +107,11 @@ export function PublicRebateCalculatorWorkspace() {
 
   return (
     <section
-      className="dashboard-panel public-rebate-calculator"
-      aria-labelledby="public-rebate-calculator-title"
+      className={`${embedded ? "" : "dashboard-panel "}public-rebate-calculator`}
+      aria-labelledby={embedded ? undefined : "public-rebate-calculator-title"}
+      aria-label={embedded ? "Rebate calculator" : undefined}
     >
-      <header className="dashboard-panel-heading">
+      {!embedded && <header className="dashboard-panel-heading">
         <span>REBATE CALCULATOR</span>
         <h1 id="public-rebate-calculator-title">
           See the calculated rebate value before you request a quote
@@ -113,14 +122,14 @@ export function PublicRebateCalculatorWorkspace() {
           date and source version. Certificate creation, eligibility and
           provider acceptance are separate. No account is needed.
         </p>
-      </header>
+      </header>}
       {preparingMessage && (
         <p className="trade-rebate-calculator-status" role="status">
           {preparingMessage}
         </p>
       )}
-      <div className={styles.tradeCalculatorSurface}>
-        <CreditexAllProgramCalculator api={api} role="public" />
+      <div className={styles.tradeCalculatorSurface} data-calculator-surface>
+        <CreditexAllProgramCalculator api={api} role="public" initialProgramCode={initialProgramCode} initialActivityCode={initialActivityCode} />
       </div>
     </section>
   );

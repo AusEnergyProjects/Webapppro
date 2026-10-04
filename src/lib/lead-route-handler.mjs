@@ -131,6 +131,11 @@ export function createLeadPostHandler({
     if (!result.ok) {
       return respond({ ok: false, error: result.error }, 400, "validation_rejected");
     }
+    // Explicit campaign links only. No inferred attribution, cookies or altered consent.
+    const councilReference = raw?.councilReference;
+    if (councilReference !== undefined && (!quickUpgradeEnquiry || typeof councilReference !== "string" || !/^[a-f0-9]{32}$/.test(councilReference))) {
+      return respond({ ok: false, error: "The council campaign reference is invalid." }, 400, "council_reference_rejected");
+    }
 
     let payload = createLeadEnvelope(result.value);
     const metrics = { submissionType: payload.submissionType };
@@ -186,8 +191,11 @@ export function createLeadPostHandler({
         }
         let createdOpportunity;
         try {
-          createdOpportunity = await createOpportunityFromLead(payload);
+          createdOpportunity = await createOpportunityFromLead(payload, councilReference ? { councilReference } : undefined);
         } catch (error) {
+          if (error instanceof Error && error.message === "COUNCIL_REFERENCE_INVALID") {
+            return respond({ ok: false, error: "This campaign is not active for your postcode. Contact the council or start a new TLink enquiry." }, 400, "council_reference_rejected", metrics);
+          }
           if (error instanceof Error && error.message === "OPPORTUNITY_SOURCE_REFERENCE_MISMATCH") {
             return respond({
               ok: false,

@@ -6,6 +6,7 @@ import ts from "typescript";
 import * as journey from "../src/lib/customer-job-journey.ts";
 import * as photos from "../src/lib/trade-photo-requests.ts";
 import * as calendar from "../src/lib/customer-appointment-calendar.ts";
+import * as accountPredicates from "../src/lib/trade-account-predicates.ts";
 
 const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
 function load(path, dependencies) {
@@ -21,7 +22,7 @@ function load(path, dependencies) {
 }
 const access = load("../src/lib/trade-access-server.ts", {
   "../../db": {}, "./firebase-server": {}, "./creditex-schema-guards": {},
-  "./trade-abn": {}, "./trade-mfa-server": {},
+  "./trade-abn": {}, "./trade-mfa-server": {}, "./trade-account-predicates": accountPredicates,
 });
 const questions = load("../src/lib/trade-quote-questions-server.ts", { "@/lib/trade-access-server": access });
 const now = "2026-10-04T00:30:00.000Z";

@@ -1,19 +1,25 @@
 import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "./aea-trade-routing.mjs";
 import { isAllQualifiedTradeConsent } from "./public-plan-enquiry.mjs";
+/** @param {import("./council-campaign-server.ts").CouncilReferral | null} councilAttribution */
 export async function persistLeadOpportunity(
   database,
   record,
   contactRelease,
   currentConsent,
+  councilAttribution = null,
 ) {
   const allQualifiedConsent = Boolean(contactRelease && isAllQualifiedTradeConsent(contactRelease.noticeVersion, contactRelease.consentPurpose));
   const tradeScopeAllowed = tradeOpportunityServiceScopeAllowed(record.serviceCategories, false, allQualifiedConsent);
   const initialStatus = record.publicPlanEnquiry || !tradeScopeAllowed ? "draft" : record.requestedStatus;
-  await database.prepare(`INSERT INTO trade_opportunities
+  const referralGuard = councilAttribution ? ` WHERE EXISTS (
+    SELECT 1 FROM council_campaigns c JOIN council_organisations org ON org.id=c.council_id AND org.status='active'
+    JOIN council_postcodes p ON p.council_id=c.council_id AND p.state=? AND p.postcode=?
+    WHERE c.id=? AND c.council_id=? AND c.code=? AND c.status='active')` : "";
+  const insert = database.prepare(`INSERT INTO trade_opportunities
     (id, title, project_type, postcode, state, service_categories, priority, timing, summary, status,
      source_reference, contact_limit, maximum_connected_installers, expires_at, expired_at,
      created_by_uid, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'lead-intake', ?, ?)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'lead-intake', ?, ? ${referralGuard}
     ON CONFLICT(source_reference) WHERE source_reference <> '' DO NOTHING`)
     .bind(
       record.id,
@@ -32,8 +38,20 @@ export async function persistLeadOpportunity(
       record.expiresAt,
       record.createdAt,
       record.createdAt,
-    )
-    .run();
+      ...(councilAttribution ? [record.state,record.postcode,councilAttribution.campaignId,councilAttribution.councilId,councilAttribution.code] : []),
+    );
+  if (councilAttribution) {
+    await database.batch([insert, database.prepare(`INSERT INTO council_attributions
+      (opportunity_id,campaign_id,council_id,attributed_at,source)
+      SELECT o.id,c.id,c.council_id,?,'explicit_referral'
+      FROM trade_opportunities o JOIN council_campaigns c ON c.id=? AND c.council_id=? AND c.code=? AND c.status='active'
+      JOIN council_organisations org ON org.id=c.council_id AND org.status='active'
+      JOIN council_postcodes p ON p.council_id=c.council_id AND p.state=o.state AND p.postcode=o.postcode
+      WHERE o.id=? ON CONFLICT(opportunity_id) DO NOTHING`)
+      .bind(record.createdAt,councilAttribution.campaignId,councilAttribution.councilId,councilAttribution.code,record.id)]);
+  } else {
+    await insert.run();
+  }
   const canonical = await database.prepare(record.sourceReference
     ? `SELECT id, status, postcode, state, service_categories
       FROM trade_opportunities WHERE source_reference = ? LIMIT 1`
@@ -41,7 +59,7 @@ export async function persistLeadOpportunity(
       FROM trade_opportunities WHERE id = ? LIMIT 1`)
     .bind(record.sourceReference || record.id)
     .first();
-  if (!canonical) throw new Error("OPPORTUNITY_CANONICAL_RECORD_UNAVAILABLE");
+  if (!canonical) throw new Error(councilAttribution ? "COUNCIL_REFERENCE_INVALID" : "OPPORTUNITY_CANONICAL_RECORD_UNAVAILABLE");
   const canonicalCategories = (() => {
     try {
       const parsed = JSON.parse(String(canonical.service_categories || "[]"));

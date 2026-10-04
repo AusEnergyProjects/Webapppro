@@ -1,4 +1,4 @@
-import postcodeCentroids from "@/data/postcode-centroids.json";
+import postcodeCentroids from "../data/postcode-centroids.json" with { type: "json" };
 
 type Coordinate = readonly [latitude: number, longitude: number];
 const centroids = postcodeCentroids as unknown as Record<string, Coordinate>;

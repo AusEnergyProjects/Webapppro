@@ -9,6 +9,7 @@ import * as clicksend from "../src/lib/trade-clicksend-provider.ts";
 import * as billing from "../src/lib/trade-sms-billing.ts";
 import * as stripe from "../src/lib/trade-sms-stripe.ts";
 import * as abn from "../src/lib/trade-abn.ts";
+import * as accountPredicates from "../src/lib/trade-account-predicates.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 function load(path, dependencies) {
@@ -60,7 +61,7 @@ async function fixture(balance = 1_000_000) {
   const account = load("../src/lib/trade-sms-account-server.ts", { ...dependencies, "./trade-sms-wallet-server": wallet,
     "./admin-notifications": { adminNotificationStatement: () => { throw new Error("Unexpected rental notification in managed send fixture"); } } });
   const twilio = load("../src/lib/trade-sms-provider.ts", { "./trade-sms": pure });
-  const tradeAccess=load("../src/lib/trade-access-server.ts",{"../../db":{getD1:()=>db},"./firebase-server":{},"./creditex-schema-guards":{},"./trade-abn":abn,"./trade-mfa-server":{}});
+  const tradeAccess=load("../src/lib/trade-access-server.ts",{"../../db":{getD1:()=>db},"./firebase-server":{},"./creditex-schema-guards":{},"./trade-abn":abn,"./trade-mfa-server":{},"./trade-account-predicates":accountPredicates});
   const server = load("../src/lib/trade-sms-server.ts", { ...dependencies, "@/lib/trade-integration-crypto": protectedPayload,
     "./trade-access-server":tradeAccess,
     "@/lib/service-reminder-delivery": reminders, "./trade-sms": pure, "./trade-sms-provider": twilio,

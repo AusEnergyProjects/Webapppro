@@ -1,0 +1,985 @@
+[
+  {
+    "version": 1,
+    "postcodes": [
+      "3805",
+      "3806",
+      "3977",
+      "3980"
+    ],
+    "period": {
+      "key": "all",
+      "label": "All published history",
+      "startDate": null,
+      "endDate": null,
+      "dateBasis": "activity_date"
+    },
+    "rows": [
+      {
+        "activity": "10(18) - Space heating - Room air to air heat pump",
+        "postcode": "3805",
+        "activities": 58,
+        "reportedVeecEquivalents": 576
+      },
+      {
+        "activity": "10(18) - Space heating - Room air to air heat pump",
+        "postcode": "3806",
+        "activities": 28,
+        "reportedVeecEquivalents": 260
+      },
+      {
+        "activity": "10(18) - Space heating - Room air to air heat pump",
+        "postcode": "3977",
+        "activities": 100,
+        "reportedVeecEquivalents": 965
+      },
+      {
+        "activity": "10(18) - Space heating - Room air to air heat pump",
+        "postcode": "3980",
+        "activities": 5,
+        "reportedVeecEquivalents": 73
+      },
+      {
+        "activity": "13 - Double glazed window",
+        "postcode": "3805",
+        "activities": 4,
+        "reportedVeecEquivalents": 31
+      },
+      {
+        "activity": "13 - Double glazed window",
+        "postcode": "3806",
+        "activities": 7,
+        "reportedVeecEquivalents": 43.01
+      },
+      {
+        "activity": "13 - Double glazed window",
+        "postcode": "3977",
+        "activities": 6,
+        "reportedVeecEquivalents": 39.59
+      },
+      {
+        "activity": "15 - Weather sealing",
+        "postcode": "3805",
+        "activities": 12212,
+        "reportedVeecEquivalents": 28557
+      },
+      {
+        "activity": "15 - Weather sealing",
+        "postcode": "3806",
+        "activities": 9314,
+        "reportedVeecEquivalents": 20442
+      },
+      {
+        "activity": "15 - Weather sealing",
+        "postcode": "3977",
+        "activities": 22681,
+        "reportedVeecEquivalents": 45988
+      },
+      {
+        "activity": "15 - Weather sealing",
+        "postcode": "3980",
+        "activities": 356,
+        "reportedVeecEquivalents": 849
+      },
+      {
+        "activity": "17 - Low flow shower rose",
+        "postcode": "3805",
+        "activities": 6617,
+        "reportedVeecEquivalents": 12752
+      },
+      {
+        "activity": "17 - Low flow shower rose",
+        "postcode": "3806",
+        "activities": 5231,
+        "reportedVeecEquivalents": 10137
+      },
+      {
+        "activity": "17 - Low flow shower rose",
+        "postcode": "3977",
+        "activities": 14732,
+        "reportedVeecEquivalents": 27841
+      },
+      {
+        "activity": "17 - Low flow shower rose",
+        "postcode": "3980",
+        "activities": 271,
+        "reportedVeecEquivalents": 506
+      },
+      {
+        "activity": "1A - Water heating - Gas/LPG storage replacing electric resistance",
+        "postcode": "3805",
+        "activities": 1,
+        "reportedVeecEquivalents": 27
+      },
+      {
+        "activity": "1A - Water heating - Gas/LPG storage replacing electric resistance",
+        "postcode": "3977",
+        "activities": 2,
+        "reportedVeecEquivalents": 74
+      },
+      {
+        "activity": "1B - Water heating - Gas/LPG instantaneous replacing electric resistance",
+        "postcode": "3805",
+        "activities": 2,
+        "reportedVeecEquivalents": 68
+      },
+      {
+        "activity": "1B - Water heating - Gas/LPG instantaneous replacing electric resistance",
+        "postcode": "3806",
+        "activities": 3,
+        "reportedVeecEquivalents": 101
+      },
+      {
+        "activity": "1B - Water heating - Gas/LPG instantaneous replacing electric resistance",
+        "postcode": "3977",
+        "activities": 6,
+        "reportedVeecEquivalents": 160
+      },
+      {
+        "activity": "1C(18) - Water heating - Electric boosted solar replacing electric resistance",
+        "postcode": "3805",
+        "activities": 3,
+        "reportedVeecEquivalents": 66
+      },
+      {
+        "activity": "1C(18) - Water heating - Electric boosted solar replacing electric resistance",
+        "postcode": "3806",
+        "activities": 1,
+        "reportedVeecEquivalents": 12
+      },
+      {
+        "activity": "1C(18) - Water heating - Electric boosted solar replacing electric resistance",
+        "postcode": "3977",
+        "activities": 2,
+        "reportedVeecEquivalents": 48
+      },
+      {
+        "activity": "1C(18) - Water heating - Electric boosted solar replacing electric resistance",
+        "postcode": "3980",
+        "activities": 1,
+        "reportedVeecEquivalents": 34
+      },
+      {
+        "activity": "1D(18) - Water heating - Heat pump replacing electric resistance",
+        "postcode": "3805",
+        "activities": 88,
+        "reportedVeecEquivalents": 1876
+      },
+      {
+        "activity": "1D(18) - Water heating - Heat pump replacing electric resistance",
+        "postcode": "3806",
+        "activities": 124,
+        "reportedVeecEquivalents": 2841
+      },
+      {
+        "activity": "1D(18) - Water heating - Heat pump replacing electric resistance",
+        "postcode": "3977",
+        "activities": 662,
+        "reportedVeecEquivalents": 15143
+      },
+      {
+        "activity": "1D(18) - Water heating - Heat pump replacing electric resistance",
+        "postcode": "3980",
+        "activities": 354,
+        "reportedVeecEquivalents": 9089
+      },
+      {
+        "activity": "21A(18) - Lighting - Incandescent GLS or CFL replacement",
+        "postcode": "3805",
+        "activities": 6493,
+        "reportedVeecEquivalents": 60865
+      },
+      {
+        "activity": "21A(18) - Lighting - Incandescent GLS or CFL replacement",
+        "postcode": "3806",
+        "activities": 4914,
+        "reportedVeecEquivalents": 45845
+      },
+      {
+        "activity": "21A(18) - Lighting - Incandescent GLS or CFL replacement",
+        "postcode": "3977",
+        "activities": 10665,
+        "reportedVeecEquivalents": 88428
+      },
+      {
+        "activity": "21A(18) - Lighting - Incandescent GLS or CFL replacement",
+        "postcode": "3980",
+        "activities": 289,
+        "reportedVeecEquivalents": 2597
+      },
+      {
+        "activity": "21B - Lighting - Incandescent reflector lamp replacement",
+        "postcode": "3805",
+        "activities": 3640,
+        "reportedVeecEquivalents": 10919
+      },
+      {
+        "activity": "21B - Lighting - Incandescent reflector lamp replacement",
+        "postcode": "3806",
+        "activities": 3061,
+        "reportedVeecEquivalents": 9165
+      },
+      {
+        "activity": "21B - Lighting - Incandescent reflector lamp replacement",
+        "postcode": "3977",
+        "activities": 5066,
+        "reportedVeecEquivalents": 13583
+      },
+      {
+        "activity": "21B - Lighting - Incandescent reflector lamp replacement",
+        "postcode": "3980",
+        "activities": 184,
+        "reportedVeecEquivalents": 563
+      },
+      {
+        "activity": "21C - Lighting - 12V halogen lamp replacement",
+        "postcode": "3805",
+        "activities": 1307,
+        "reportedVeecEquivalents": 10931
+      },
+      {
+        "activity": "21C - Lighting - 12V halogen lamp replacement",
+        "postcode": "3806",
+        "activities": 1276,
+        "reportedVeecEquivalents": 13402
+      },
+      {
+        "activity": "21C - Lighting - 12V halogen lamp replacement",
+        "postcode": "3977",
+        "activities": 1511,
+        "reportedVeecEquivalents": 14204
+      },
+      {
+        "activity": "21C - Lighting - 12V halogen lamp replacement",
+        "postcode": "3980",
+        "activities": 52,
+        "reportedVeecEquivalents": 390
+      },
+      {
+        "activity": "21D - Lighting - 12V downlight and transformer replacement",
+        "postcode": "3805",
+        "activities": 21,
+        "reportedVeecEquivalents": 368
+      },
+      {
+        "activity": "21D - Lighting - 12V downlight and transformer replacement",
+        "postcode": "3806",
+        "activities": 52,
+        "reportedVeecEquivalents": 918
+      },
+      {
+        "activity": "21D - Lighting - 12V downlight and transformer replacement",
+        "postcode": "3977",
+        "activities": 76,
+        "reportedVeecEquivalents": 1121
+      },
+      {
+        "activity": "21D - Lighting - 12V downlight and transformer replacement",
+        "postcode": "3980",
+        "activities": 1,
+        "reportedVeecEquivalents": 81
+      },
+      {
+        "activity": "21E - Lighting - Mains voltage GU10 halogen lamp replaced with GU10 lamp",
+        "postcode": "3805",
+        "activities": 896,
+        "reportedVeecEquivalents": 5458
+      },
+      {
+        "activity": "21E - Lighting - Mains voltage GU10 halogen lamp replaced with GU10 lamp",
+        "postcode": "3806",
+        "activities": 762,
+        "reportedVeecEquivalents": 4859
+      },
+      {
+        "activity": "21E - Lighting - Mains voltage GU10 halogen lamp replaced with GU10 lamp",
+        "postcode": "3977",
+        "activities": 1293,
+        "reportedVeecEquivalents": 8589
+      },
+      {
+        "activity": "21E - Lighting - Mains voltage GU10 halogen lamp replaced with GU10 lamp",
+        "postcode": "3980",
+        "activities": 53,
+        "reportedVeecEquivalents": 260
+      },
+      {
+        "activity": "21F - Lighting - Mains voltage GU10 downlight replaced with integrated downlight",
+        "postcode": "3806",
+        "activities": 2,
+        "reportedVeecEquivalents": 37
+      },
+      {
+        "activity": "21F - Lighting - Mains voltage GU10 downlight replaced with integrated downlight",
+        "postcode": "3977",
+        "activities": 12,
+        "reportedVeecEquivalents": 264
+      },
+      {
+        "activity": "22 - High efficiency refrigerator and freezer",
+        "postcode": "3806",
+        "activities": 2,
+        "reportedVeecEquivalents": 2
+      },
+      {
+        "activity": "22 - High efficiency refrigerator and freezer",
+        "postcode": "3977",
+        "activities": 1,
+        "reportedVeecEquivalents": 1
+      },
+      {
+        "activity": "24 - High efficiency television",
+        "postcode": "3806",
+        "activities": 3,
+        "reportedVeecEquivalents": 3
+      },
+      {
+        "activity": "25 - Energy efficient clothes dryer",
+        "postcode": "3805",
+        "activities": 6,
+        "reportedVeecEquivalents": 6
+      },
+      {
+        "activity": "25 - Energy efficient clothes dryer",
+        "postcode": "3806",
+        "activities": 6,
+        "reportedVeecEquivalents": 6
+      },
+      {
+        "activity": "25 - Energy efficient clothes dryer",
+        "postcode": "3977",
+        "activities": 11,
+        "reportedVeecEquivalents": 11
+      },
+      {
+        "activity": "30 - In-home display unit",
+        "postcode": "3805",
+        "activities": 7021,
+        "reportedVeecEquivalents": 12305
+      },
+      {
+        "activity": "30 - In-home display unit",
+        "postcode": "3806",
+        "activities": 6506,
+        "reportedVeecEquivalents": 11545
+      },
+      {
+        "activity": "30 - In-home display unit",
+        "postcode": "3977",
+        "activities": 14669,
+        "reportedVeecEquivalents": 26197
+      },
+      {
+        "activity": "30 - In-home display unit",
+        "postcode": "3980",
+        "activities": 408,
+        "reportedVeecEquivalents": 758
+      },
+      {
+        "activity": "32(18) - HE Refrigerated Display Cabinet",
+        "postcode": "3805",
+        "activities": 14,
+        "reportedVeecEquivalents": 453
+      },
+      {
+        "activity": "32(18) - HE Refrigerated Display Cabinet",
+        "postcode": "3806",
+        "activities": 11,
+        "reportedVeecEquivalents": 1273
+      },
+      {
+        "activity": "32(18) - HE Refrigerated Display Cabinet",
+        "postcode": "3977",
+        "activities": 37,
+        "reportedVeecEquivalents": 4305
+      },
+      {
+        "activity": "32(18) - HE Refrigerated Display Cabinet",
+        "postcode": "3980",
+        "activities": 2,
+        "reportedVeecEquivalents": 380
+      },
+      {
+        "activity": "32(21) - Refrigerated cabinet",
+        "postcode": "3805",
+        "activities": 181,
+        "reportedVeecEquivalents": 9840
+      },
+      {
+        "activity": "32(21) - Refrigerated cabinet",
+        "postcode": "3806",
+        "activities": 129,
+        "reportedVeecEquivalents": 12204
+      },
+      {
+        "activity": "32(21) - Refrigerated cabinet",
+        "postcode": "3977",
+        "activities": 363,
+        "reportedVeecEquivalents": 24776
+      },
+      {
+        "activity": "32(21) - Refrigerated cabinet",
+        "postcode": "3980",
+        "activities": 27,
+        "reportedVeecEquivalents": 2989
+      },
+      {
+        "activity": "34 Non J6(18) - Building based lighting upgrade",
+        "postcode": "3805",
+        "activities": 235,
+        "reportedVeecEquivalents": 67101
+      },
+      {
+        "activity": "34 Non J6(18) - Building based lighting upgrade",
+        "postcode": "3806",
+        "activities": 163,
+        "reportedVeecEquivalents": 17636
+      },
+      {
+        "activity": "34 Non J6(18) - Building based lighting upgrade",
+        "postcode": "3977",
+        "activities": 455,
+        "reportedVeecEquivalents": 56485
+      },
+      {
+        "activity": "34 Non J6(18) - Building based lighting upgrade",
+        "postcode": "3980",
+        "activities": 38,
+        "reportedVeecEquivalents": 3181
+      },
+      {
+        "activity": "35(18) - Non building based lighting upgrade",
+        "postcode": "3805",
+        "activities": 15,
+        "reportedVeecEquivalents": 1738
+      },
+      {
+        "activity": "35(18) - Non building based lighting upgrade",
+        "postcode": "3806",
+        "activities": 13,
+        "reportedVeecEquivalents": 3256
+      },
+      {
+        "activity": "35(18) - Non building based lighting upgrade",
+        "postcode": "3977",
+        "activities": 48,
+        "reportedVeecEquivalents": 6942
+      },
+      {
+        "activity": "35(18) - Non building based lighting upgrade",
+        "postcode": "3980",
+        "activities": 12,
+        "reportedVeecEquivalents": 4074
+      },
+      {
+        "activity": "36 - Water efficient pre-rinse spray valve",
+        "postcode": "3805",
+        "activities": 90,
+        "reportedVeecEquivalents": 420
+      },
+      {
+        "activity": "36 - Water efficient pre-rinse spray valve",
+        "postcode": "3806",
+        "activities": 58,
+        "reportedVeecEquivalents": 236
+      },
+      {
+        "activity": "36 - Water efficient pre-rinse spray valve",
+        "postcode": "3977",
+        "activities": 129,
+        "reportedVeecEquivalents": 582
+      },
+      {
+        "activity": "36 - Water efficient pre-rinse spray valve",
+        "postcode": "3980",
+        "activities": 10,
+        "reportedVeecEquivalents": 38
+      },
+      {
+        "activity": "3B - Water heating - Gas/LPG boosted solar replacing gas/LPG",
+        "postcode": "3805",
+        "activities": 1,
+        "reportedVeecEquivalents": 10
+      },
+      {
+        "activity": "3B - Water heating - Gas/LPG boosted solar replacing gas/LPG",
+        "postcode": "3806",
+        "activities": 2,
+        "reportedVeecEquivalents": 20
+      },
+      {
+        "activity": "3B - Water heating - Gas/LPG boosted solar replacing gas/LPG",
+        "postcode": "3977",
+        "activities": 3,
+        "reportedVeecEquivalents": 28
+      },
+      {
+        "activity": "3C - Water heating - Heat pump replacing gas",
+        "postcode": "3805",
+        "activities": 1464,
+        "reportedVeecEquivalents": 12083
+      },
+      {
+        "activity": "3C - Water heating - Heat pump replacing gas",
+        "postcode": "3806",
+        "activities": 1259,
+        "reportedVeecEquivalents": 10198
+      },
+      {
+        "activity": "3C - Water heating - Heat pump replacing gas",
+        "postcode": "3977",
+        "activities": 2810,
+        "reportedVeecEquivalents": 23308
+      },
+      {
+        "activity": "3C - Water heating - Heat pump replacing gas",
+        "postcode": "3980",
+        "activities": 21,
+        "reportedVeecEquivalents": 194
+      },
+      {
+        "activity": "43 - Cold Room",
+        "postcode": "3806",
+        "activities": 3,
+        "reportedVeecEquivalents": 132
+      },
+      {
+        "activity": "43 - Cold Room",
+        "postcode": "3977",
+        "activities": 5,
+        "reportedVeecEquivalents": 360
+      },
+      {
+        "activity": "44 - Commercial and industrial heat pump water heater",
+        "postcode": "3805",
+        "activities": 44,
+        "reportedVeecEquivalents": 2990
+      },
+      {
+        "activity": "44 - Commercial and industrial heat pump water heater",
+        "postcode": "3806",
+        "activities": 32,
+        "reportedVeecEquivalents": 3877
+      },
+      {
+        "activity": "44 - Commercial and industrial heat pump water heater",
+        "postcode": "3977",
+        "activities": 166,
+        "reportedVeecEquivalents": 14397
+      },
+      {
+        "activity": "44 - Commercial and industrial heat pump water heater",
+        "postcode": "3980",
+        "activities": 18,
+        "reportedVeecEquivalents": 1394
+      },
+      {
+        "activity": "45 - Home energy rating assessment",
+        "postcode": "3805",
+        "activities": 17,
+        "reportedVeecEquivalents": 34
+      },
+      {
+        "activity": "45 - Home energy rating assessment",
+        "postcode": "3806",
+        "activities": 29,
+        "reportedVeecEquivalents": 58
+      },
+      {
+        "activity": "45 - Home energy rating assessment",
+        "postcode": "3977",
+        "activities": 16,
+        "reportedVeecEquivalents": 32
+      },
+      {
+        "activity": "45 - Home energy rating assessment",
+        "postcode": "3980",
+        "activities": 1,
+        "reportedVeecEquivalents": 2
+      },
+      {
+        "activity": "46 - Induction cooktops",
+        "postcode": "3805",
+        "activities": 9,
+        "reportedVeecEquivalents": 18
+      },
+      {
+        "activity": "46 - Induction cooktops",
+        "postcode": "3806",
+        "activities": 7,
+        "reportedVeecEquivalents": 14
+      },
+      {
+        "activity": "46 - Induction cooktops",
+        "postcode": "3977",
+        "activities": 10,
+        "reportedVeecEquivalents": 20
+      },
+      {
+        "activity": "5(18) - Space heating - Ducted gas heater",
+        "postcode": "3805",
+        "activities": 63,
+        "reportedVeecEquivalents": 784
+      },
+      {
+        "activity": "5(18) - Space heating - Ducted gas heater",
+        "postcode": "3806",
+        "activities": 53,
+        "reportedVeecEquivalents": 681
+      },
+      {
+        "activity": "5(18) - Space heating - Ducted gas heater",
+        "postcode": "3977",
+        "activities": 79,
+        "reportedVeecEquivalents": 901
+      },
+      {
+        "activity": "6(23) - Space heating and cooling - High efficiency air conditioner",
+        "postcode": "3805",
+        "activities": 2151,
+        "reportedVeecEquivalents": 156588
+      },
+      {
+        "activity": "6(23) - Space heating and cooling - High efficiency air conditioner",
+        "postcode": "3806",
+        "activities": 1790,
+        "reportedVeecEquivalents": 121048
+      },
+      {
+        "activity": "6(23) - Space heating and cooling - High efficiency air conditioner",
+        "postcode": "3977",
+        "activities": 3910,
+        "reportedVeecEquivalents": 274719
+      },
+      {
+        "activity": "6(23) - Space heating and cooling - High efficiency air conditioner",
+        "postcode": "3980",
+        "activities": 27,
+        "reportedVeecEquivalents": 1302
+      },
+      {
+        "activity": "PBA measurement and verification",
+        "postcode": "3805",
+        "activities": 7,
+        "reportedVeecEquivalents": 6865
+      },
+      {
+        "activity": "PBA measurement and verification",
+        "postcode": "3806",
+        "activities": 2,
+        "reportedVeecEquivalents": 4737
+      },
+      {
+        "activity": "PBA measurement and verification",
+        "postcode": "3977",
+        "activities": 2,
+        "reportedVeecEquivalents": 1276
+      }
+    ],
+    "totals": {
+      "activities": 159161,
+      "reportedVeecEquivalents": 1378258.6
+    },
+    "fetchedAt": "2026-10-04T15:30:25.884Z",
+    "sourceRefreshedAt": "2026-10-03T18:06:32.000Z",
+    "provenance": {
+      "responseSha256": "466181ae2bf2efc432cf0e32ad7f53243df19c32925e03f63bebd9890d0e68a8",
+      "querySha256": "a5293a086770263c0cc15fef5c935cdb55af5f766969f5f2d87296855571a769",
+      "modelSha256": "07ef7bc39a4d3f3844003ebd9cc4e4ad19e3ac080ab54e04f9078ba75e8a6e3b",
+      "schemaSha256": "c265e615cb51081eefa85542d0571807b32d42a0c322a5021b82fcb11c793d85"
+    }
+  },
+  {
+    "version": 1,
+    "postcodes": [
+      "3805",
+      "3806",
+      "3977",
+      "3980"
+    ],
+    "period": {
+      "key": "year",
+      "label": "This calendar year",
+      "startDate": "2026-01-01",
+      "endDate": "2026-10-05",
+      "dateBasis": "activity_date"
+    },
+    "rows": [
+      {
+        "activity": "13 - Double glazed window",
+        "postcode": "3805",
+        "activities": 1,
+        "reportedVeecEquivalents": 3
+      },
+      {
+        "activity": "13 - Double glazed window",
+        "postcode": "3977",
+        "activities": 4,
+        "reportedVeecEquivalents": 29
+      },
+      {
+        "activity": "15 - Weather sealing",
+        "postcode": "3805",
+        "activities": 149,
+        "reportedVeecEquivalents": 193
+      },
+      {
+        "activity": "15 - Weather sealing",
+        "postcode": "3806",
+        "activities": 161,
+        "reportedVeecEquivalents": 210
+      },
+      {
+        "activity": "15 - Weather sealing",
+        "postcode": "3977",
+        "activities": 326,
+        "reportedVeecEquivalents": 426
+      },
+      {
+        "activity": "15 - Weather sealing",
+        "postcode": "3980",
+        "activities": 2,
+        "reportedVeecEquivalents": 5
+      },
+      {
+        "activity": "17 - Low flow shower rose",
+        "postcode": "3805",
+        "activities": 87,
+        "reportedVeecEquivalents": 92
+      },
+      {
+        "activity": "17 - Low flow shower rose",
+        "postcode": "3806",
+        "activities": 117,
+        "reportedVeecEquivalents": 129
+      },
+      {
+        "activity": "17 - Low flow shower rose",
+        "postcode": "3977",
+        "activities": 223,
+        "reportedVeecEquivalents": 237
+      },
+      {
+        "activity": "17 - Low flow shower rose",
+        "postcode": "3980",
+        "activities": 1,
+        "reportedVeecEquivalents": 1
+      },
+      {
+        "activity": "1D(18) - Water heating - Heat pump replacing electric resistance",
+        "postcode": "3805",
+        "activities": 1,
+        "reportedVeecEquivalents": 9
+      },
+      {
+        "activity": "1D(18) - Water heating - Heat pump replacing electric resistance",
+        "postcode": "3806",
+        "activities": 7,
+        "reportedVeecEquivalents": 68
+      },
+      {
+        "activity": "1D(18) - Water heating - Heat pump replacing electric resistance",
+        "postcode": "3977",
+        "activities": 22,
+        "reportedVeecEquivalents": 205
+      },
+      {
+        "activity": "1D(18) - Water heating - Heat pump replacing electric resistance",
+        "postcode": "3980",
+        "activities": 2,
+        "reportedVeecEquivalents": 17
+      },
+      {
+        "activity": "25 - Energy efficient clothes dryer",
+        "postcode": "3805",
+        "activities": 4,
+        "reportedVeecEquivalents": 4
+      },
+      {
+        "activity": "25 - Energy efficient clothes dryer",
+        "postcode": "3977",
+        "activities": 4,
+        "reportedVeecEquivalents": 4
+      },
+      {
+        "activity": "30 - In-home display unit",
+        "postcode": "3805",
+        "activities": 32,
+        "reportedVeecEquivalents": 32
+      },
+      {
+        "activity": "30 - In-home display unit",
+        "postcode": "3806",
+        "activities": 37,
+        "reportedVeecEquivalents": 37
+      },
+      {
+        "activity": "30 - In-home display unit",
+        "postcode": "3977",
+        "activities": 113,
+        "reportedVeecEquivalents": 113
+      },
+      {
+        "activity": "34 Non J6(18) - Building based lighting upgrade",
+        "postcode": "3805",
+        "activities": 1,
+        "reportedVeecEquivalents": 50
+      },
+      {
+        "activity": "34 Non J6(18) - Building based lighting upgrade",
+        "postcode": "3806",
+        "activities": 1,
+        "reportedVeecEquivalents": 7
+      },
+      {
+        "activity": "34 Non J6(18) - Building based lighting upgrade",
+        "postcode": "3977",
+        "activities": 1,
+        "reportedVeecEquivalents": 34
+      },
+      {
+        "activity": "35(18) - Non building based lighting upgrade",
+        "postcode": "3977",
+        "activities": 1,
+        "reportedVeecEquivalents": 141
+      },
+      {
+        "activity": "3C - Water heating - Heat pump replacing gas",
+        "postcode": "3805",
+        "activities": 262,
+        "reportedVeecEquivalents": 2244
+      },
+      {
+        "activity": "3C - Water heating - Heat pump replacing gas",
+        "postcode": "3806",
+        "activities": 245,
+        "reportedVeecEquivalents": 2064
+      },
+      {
+        "activity": "3C - Water heating - Heat pump replacing gas",
+        "postcode": "3977",
+        "activities": 609,
+        "reportedVeecEquivalents": 5205
+      },
+      {
+        "activity": "3C - Water heating - Heat pump replacing gas",
+        "postcode": "3980",
+        "activities": 5,
+        "reportedVeecEquivalents": 44
+      },
+      {
+        "activity": "45 - Home energy rating assessment",
+        "postcode": "3805",
+        "activities": 5,
+        "reportedVeecEquivalents": 10
+      },
+      {
+        "activity": "45 - Home energy rating assessment",
+        "postcode": "3806",
+        "activities": 11,
+        "reportedVeecEquivalents": 22
+      },
+      {
+        "activity": "45 - Home energy rating assessment",
+        "postcode": "3977",
+        "activities": 4,
+        "reportedVeecEquivalents": 8
+      },
+      {
+        "activity": "45 - Home energy rating assessment",
+        "postcode": "3980",
+        "activities": 1,
+        "reportedVeecEquivalents": 2
+      },
+      {
+        "activity": "46 - Induction cooktops",
+        "postcode": "3805",
+        "activities": 6,
+        "reportedVeecEquivalents": 12
+      },
+      {
+        "activity": "46 - Induction cooktops",
+        "postcode": "3806",
+        "activities": 2,
+        "reportedVeecEquivalents": 4
+      },
+      {
+        "activity": "46 - Induction cooktops",
+        "postcode": "3977",
+        "activities": 4,
+        "reportedVeecEquivalents": 8
+      },
+      {
+        "activity": "6(23) - Space heating and cooling - High efficiency air conditioner",
+        "postcode": "3805",
+        "activities": 677,
+        "reportedVeecEquivalents": 54631
+      },
+      {
+        "activity": "6(23) - Space heating and cooling - High efficiency air conditioner",
+        "postcode": "3806",
+        "activities": 560,
+        "reportedVeecEquivalents": 42419
+      },
+      {
+        "activity": "6(23) - Space heating and cooling - High efficiency air conditioner",
+        "postcode": "3977",
+        "activities": 1097,
+        "reportedVeecEquivalents": 85284
+      },
+      {
+        "activity": "6(23) - Space heating and cooling - High efficiency air conditioner",
+        "postcode": "3980",
+        "activities": 3,
+        "reportedVeecEquivalents": 153
+      },
+      {
+        "activity": "PBA measurement and verification",
+        "postcode": "3805",
+        "activities": 1,
+        "reportedVeecEquivalents": 407
+      }
+    ],
+    "totals": {
+      "activities": 4789,
+      "reportedVeecEquivalents": 194563
+    },
+    "fetchedAt": "2026-10-04T15:37:30.472Z",
+    "sourceRefreshedAt": "2026-10-03T18:06:32.000Z",
+    "provenance": {
+      "responseSha256": "4a1b0dc262def40191841f437d6ddca0977209b3ac98f39592fb44f4ab23fe1e",
+      "querySha256": "08cc9b47a0a8de0035b6fa4f53557ecc18b94b52e310fbf8dd05586f4ff59b5e",
+      "modelSha256": "07ef7bc39a4d3f3844003ebd9cc4e4ad19e3ac080ab54e04f9078ba75e8a6e3b",
+      "schemaSha256": "c265e615cb51081eefa85542d0571807b32d42a0c322a5021b82fcb11c793d85"
+    }
+  },
+  {
+    "version": 1,
+    "postcodes": [
+      "3805",
+      "3806",
+      "3977",
+      "3980"
+    ],
+    "period": {
+      "key": "quarter",
+      "label": "This calendar quarter",
+      "startDate": "2026-10-01",
+      "endDate": "2026-10-05",
+      "dateBasis": "activity_date"
+    },
+    "rows": [],
+    "totals": {
+      "activities": 0,
+      "reportedVeecEquivalents": 0
+    },
+    "fetchedAt": "2026-10-04T15:37:57.769Z",
+    "sourceRefreshedAt": "2026-10-03T18:06:32.000Z",
+    "provenance": {
+      "responseSha256": "65e79e6bdc04464c4a39a2e31e4567dcada049af531b994a787e3a553d7e2595",
+      "querySha256": "f8456c8389b2a4b2bce55842f432630f2c9f19f6b74a30e39006b55ab6b484c7",
+      "modelSha256": "07ef7bc39a4d3f3844003ebd9cc4e4ad19e3ac080ab54e04f9078ba75e8a6e3b",
+      "schemaSha256": "c265e615cb51081eefa85542d0571807b32d42a0c322a5021b82fcb11c793d85"
+    }
+  }
+]

@@ -8,6 +8,7 @@ import * as providerExport from "../src/lib/trade-accounting-export.ts";
 import * as mfa from "../src/lib/firebase-mfa.ts";
 import * as automation from "../src/lib/trade-accounting-automation.ts";
 import { buildAcceptedInvoiceSnapshot } from "../src/lib/trade-accepted-invoice.ts";
+import * as accountPredicates from "../src/lib/trade-account-predicates.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const statements = (sql) => sql.split("--> statement-breakpoint").map((part) => part.trim()).filter(Boolean);
@@ -21,7 +22,7 @@ const accessPolicy = {};
 // Run the real ABN/review SQL predicate without importing worker-only access IO.
 Function("require", "exports", ts.transpileModule(read("../src/lib/trade-access-server.ts"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-}).outputText)(() => ({}), accessPolicy);
+}).outputText)((id) => id === "./trade-account-predicates" ? accountPredicates : {}, accessPolicy);
 
 const job = {
   id: "job-one", invoice_source: "quick_invoice", quick_invoice_id: "invoice-one",

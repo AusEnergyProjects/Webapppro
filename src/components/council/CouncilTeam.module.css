@@ -1,0 +1,52 @@
+.layout { color: var(--c-ink); display: grid; gap: 20px; min-width: 0; }
+.heading { display: flex; gap: 20px; align-items: center; justify-content: space-between; }
+.heading h2 { font-size: 22px; font-weight: 600; margin: 0; }
+.heading p, .invite p, .share p { color: var(--c-muted); font-size: 13px; line-height: 1.7; margin: 6px 0 0; }
+.note, .error { font-size: 13px; line-height: 1.7; padding: 13px 16px; border: 1px solid var(--c-line); border-radius: 9px; background: var(--c-soft); margin: 0; }
+.error { color: #a62020; background: #fff2f2; border-color: #e7b8b8; }
+.stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.stats > div { border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-surface); padding: 20px; display: grid; gap: 6px; }
+.stats strong { font-size: 30px; color: var(--c-accent); font-weight: 500; }
+.stats span { color: var(--c-muted); font-size: 12px; }
+.invite { border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-surface); padding: 22px; }
+.invite h3, .rosterHeading h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.invite fieldset { border: 0; margin: 18px 0 0; padding: 0; display: grid; gap: 12px; align-items: end; grid-template-columns: minmax(130px,1fr) minmax(180px,1.3fr) 115px auto; min-width: 0; }
+.invite label { font-size: 12px; display: grid; gap: 8px; }
+.invite label > span { color: var(--c-muted); display: contents; }
+.layout input, .layout select { min-height: 43px; min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid var(--c-line); border-radius: 7px; background: var(--c-field); color: var(--c-ink); font-size: 13px; }
+.layout button { min-height: 43px; padding: 10px 15px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.layout button:disabled, .layout fieldset:disabled { opacity: .6; cursor: default; }
+.layout :is(button,input,select):focus-visible { outline: 3px solid var(--c-accent); outline-offset: 3px; }
+.primary { background: var(--c-button); color: var(--c-button-ink); border: 1px solid var(--c-button); }
+.primary:hover:not(:disabled) { background: var(--c-button-hover); }
+.secondary { color: var(--c-ink); border: 1px solid var(--c-line); background: var(--c-surface); }
+.secondary:hover:not(:disabled) { background: var(--c-soft); }
+.danger { color: #a62020; border: 1px solid #e7b8b8; background: #fff2f2; }
+.share { padding: 18px 20px; border: 1px solid var(--c-line); background: var(--c-accent-soft); border-radius: 10px; }
+.share strong { font-size: 13px; overflow-wrap: anywhere; }
+.shareControls { display: flex; gap: 10px; margin-top: 14px; }
+.shareControls input { flex: 1; }
+.shareControls button { flex-shrink: 0; }
+.roster { border: 1px solid var(--c-line); border-radius: 12px; overflow: hidden; background: var(--c-surface); }
+.rosterHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 19px 22px; background: var(--c-soft); }
+.rosterHeading > span { font-size: 12px; color: var(--c-muted); }
+.member { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 20px 22px; border-top: 1px solid var(--c-line); }
+.person { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.avatar { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: var(--c-accent-soft); color: var(--c-accent); font-size: 16px; }
+.person > div { min-width: 0; display: grid; gap: 5px; }
+.person strong { font-size: 13px; overflow-wrap: anywhere; }
+.person strong small { color: var(--c-accent); padding-left: 6px; font-weight: 500; }
+.person > div > span { color: var(--c-muted); font-size: 12px; overflow-wrap: anywhere; }
+.person > div > .status { font-size: 11px; }
+.memberActions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
+.roleLabel { width: 110px; }
+.role { font-size: 12px; text-transform: capitalize; border-radius: 6px; background: var(--c-soft); padding: 7px 12px; }
+.confirm { display: flex; align-items: center; gap: 8px; }
+.confirm > span { font-size: 12px; }
+.roles { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 22px; padding: 4px 2px; }
+.roles strong { font-size: 12px; }
+.roles p { color: var(--c-muted); font-size: 12px; line-height: 1.7; margin: 7px 0 0; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media(max-width:1150px) { .invite fieldset { grid-template-columns: repeat(2,minmax(0,1fr)); }.member { flex-wrap: wrap; }.memberActions { flex-wrap: wrap; }.confirm { flex-wrap: wrap; } }
+@media(max-width:600px) { .heading { align-items: flex-start; }.heading h2 { font-size: 18px; }.heading > button { flex-shrink: 0; }.stats { gap: 8px; }.stats > div { padding: 15px 12px; }.stats strong { font-size: 25px; }.stats span { font-size: 10px; }.invite, .member, .rosterHeading { padding: 17px; }.invite fieldset { grid-template-columns: 1fr; }.memberActions { width: 100%; justify-content: flex-start; padding-left: 52px; }.roles { grid-template-columns: 1fr; gap: 10px; }.roles p { margin-top: 4px; }.share { padding: 16px; } }
+@media print { .invite,.share,.heading > button,.memberActions button { display: none; }.member { break-inside: avoid; } }

@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import ts from 'typescript';
 import * as calls from '../src/lib/trade-team-calls.ts';
+import * as accountPredicates from '../src/lib/trade-account-predicates.ts';
 
 const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 function load(path, dependencies) {
@@ -13,7 +14,7 @@ function load(path, dependencies) {
   return loaded.exports;
 }
 const cryptoLib = load('../src/lib/trade-integration-crypto.ts', { 'cloudflare:workers': { env: { CRM_INTEGRATION_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64url') } }, '@/lib/trade-integration-state': {} });
-const account = load('../src/lib/trade-access-server.ts', { '../../db': {}, './firebase-server': {}, './creditex-schema-guards': {}, './trade-abn': {}, './trade-mfa-server': {} });
+const account = load('../src/lib/trade-access-server.ts', { '../../db': {}, './firebase-server': {}, './creditex-schema-guards': {}, './trade-abn': {}, './trade-mfa-server': {}, './trade-account-predicates': accountPredicates });
 function fixture() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(`CREATE TABLE trade_accounts(firebase_uid TEXT PRIMARY KEY,business_name TEXT,abn TEXT,partner_type TEXT,account_status TEXT,verification_status TEXT,verified_abn TEXT,verification_review_id TEXT,verification_reviewed_at TEXT,verification_reviewed_by_uid TEXT);

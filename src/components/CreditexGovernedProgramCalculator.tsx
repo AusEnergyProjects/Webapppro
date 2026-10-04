@@ -1147,14 +1147,18 @@ function resetVeuApprovedProductInputs(
 
 function CreditexVeuCalculator({
   api,
+  initialActivityCode,
   onEstimate,
   onEstimateInvalidated,
 }: {
   api: Api;
+  initialActivityCode?: string;
   onEstimate?: (estimate: CreditexGovernedEstimate) => void;
   onEstimateInvalidated?: () => void;
 }) {
-  const firstActivity = CREDITEX_VEU_ACTIVITY_DEFINITIONS[0];
+  const firstActivity = CREDITEX_VEU_ACTIVITY_DEFINITIONS.find(
+    (activity) => activity.activityCode === initialActivityCode,
+  ) || CREDITEX_VEU_ACTIVITY_DEFINITIONS[0];
   const [activityCode, setActivityCode] = useState<string>(firstActivity.activityCode);
   const [date, setDate] = useState(todayIso());
   const [postcode, setPostcode] = useState("3000");
@@ -2100,11 +2104,13 @@ function CreditexVeuCalculator({
 export function CreditexGovernedProgramCalculator({
   api,
   programCode,
+  initialActivityCode,
   onEstimate,
   onEstimateInvalidated,
 }: {
   api: Api;
   programCode: "VEU" | "NSW-PDRS-2026" | "NSW-ESS-2026";
+  initialActivityCode?: string;
   onEstimate?: (estimate: CreditexGovernedEstimate) => void;
   onEstimateInvalidated?: () => void;
 }) {
@@ -2112,6 +2118,7 @@ export function CreditexGovernedProgramCalculator({
     return (
       <CreditexVeuCalculator
         api={api}
+        initialActivityCode={initialActivityCode}
         onEstimate={onEstimate}
         onEstimateInvalidated={onEstimateInvalidated}
       />

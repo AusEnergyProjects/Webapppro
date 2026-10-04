@@ -6,7 +6,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const marketplaceRoute = read("../src/app/api/product-marketplace/route.ts");
 const supplierRoute = read("../src/app/api/product-marketplace/supplier/route.ts");
 const searchRoute = read("../src/app/api/tlink-search/route.ts");
-const accessServer = read("../src/lib/trade-access-server.ts");
+const accessServer = read("../src/lib/trade-access-server.ts") + read("../src/lib/trade-account-predicates.ts");
 
 test("supplier marketplace surfaces use the authoritative ABN review predicate", () => {
   assert.match(
