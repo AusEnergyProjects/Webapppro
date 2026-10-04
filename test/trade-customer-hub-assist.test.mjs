@@ -37,8 +37,9 @@ function fixture(t) {
     sqlite.prepare(`INSERT INTO ${table} (${Object.keys(input).join(",")}) VALUES (${Object.keys(input).map(() => "?").join(",")})`).run(...Object.values(input));
   }
   const writes = [], calls = [];
-  function statement(sql, values = []) { return { bind: (...next) => statement(sql, next), first: async () => sqlite.prepare(sql).get(...values) || null,
-    all: async () => ({ results: sqlite.prepare(sql).all(...values) }), run: async () => { writes.push(sql); return { meta: sqlite.prepare(sql).run(...values) }; } }; }
+  let beforeRead = () => {};
+  function statement(sql, values = []) { return { bind: (...next) => statement(sql, next), first: async () => { beforeRead(sql); return sqlite.prepare(sql).get(...values) || null; },
+    all: async () => { beforeRead(sql); return { results: sqlite.prepare(sql).all(...values) }; }, run: async () => { writes.push(sql); return { meta: sqlite.prepare(sql).run(...values) }; } }; }
   const db = { prepare: statement };
   insert("trade_opportunities", { id: "project", title: "Shared project", project_type: "residential", state: "VIC", postcode: "3000", status: "open", service_categories: '["solar","hot-water"]', source_reference: "public-project", expires_at: future, created_at: now, updated_at: now });
   insert("public_trade_lead_contact_releases", { id: "release", opportunity_id: "project", source_reference: "public-project", customer_email: "PRIVATE_RECIPIENT@example.invalid", customer_name: "PRIVATE_CUSTOMER", postcode: "3000", customer_street_address: "PRIVATE_ADDRESS", notice_version: consent.PUBLIC_PLAN_CONSENT_NOTICE_VERSION, consent_purpose: consent.PUBLIC_PLAN_CONSENT_PURPOSE, disclosed_fields: '["customer_email","postcode","service_categories"]', granted_at: now, created_at: now, updated_at: now });
@@ -60,7 +61,7 @@ function fixture(t) {
   const server = load("../src/lib/trade-customer-hub-assist-server.ts", { "./trade-customer-hub-server": trade, "./trade-customer-hub-assist": contract,
     "./workflow-ai-server": { workflowAiSourceHash: async value => createHash("sha256").update(JSON.stringify(value)).digest("hex"), requestWorkflowAi: async options => { calls.push(options); return provider(options); } } });
   const route = load("../src/app/api/trade-customer-hub/assist/route.ts", { "../../../../../db": { getD1: () => db }, "@/lib/admin-server": { sameOrigin: () => sameOrigin, mfaErrorResponse: () => null }, "@/lib/trade-team-server": { requireInstallerTeamAccess: () => auth() }, "@/lib/customer-quote-hub-server": hub, "@/lib/trade-customer-hub-assist-server": server, "@/lib/bounded-json-request": bounded });
-  return { sqlite, db, calls, writes, access, server, insert, setProvider: fn => { provider = fn; }, setAuth: fn => { auth = fn; }, setOrigin: value => { sameOrigin = value; },
+  return { sqlite, db, calls, writes, access, server, insert, beforeRead: fn => { beforeRead = fn; }, setProvider: fn => { provider = fn; }, setAuth: fn => { auth = fn; }, setOrigin: value => { sameOrigin = value; },
     async post(body = { workOrderId: "work-solar", requestId: "synthetic-request-0001" }) { const response = await route.POST(new Request("https://example.test/api/trade-customer-hub/assist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })); return { status: response.status, headers: response.headers, body: await response.json() }; } };
 }
 
@@ -92,8 +93,23 @@ test("question, reply, file and job changes while AI runs invalidate its entire 
     ["answer", f => f.sqlite.exec("UPDATE customer_hub_questions SET answer='Changed',answer_revision=answer_revision+1 WHERE id='q-solar'")],
     ["job", f => f.sqlite.exec("UPDATE trade_crm_job_details SET description='Changed scope' WHERE work_order_id='work-solar'")],
     ["reply", f => f.insert("customer_hub_replies", { id: "new-reply", opportunity_id: "project", question_id: "q-solar", author_type: "customer", body: "Changed requirement", created_at: now })],
-    ["file removed", f => f.sqlite.exec("DELETE FROM customer_hub_files WHERE id='file-solar'")],
+    ["file removed", f => f.sqlite.exec("UPDATE customer_hub_files SET removed_at='2026-10-05T00:00:00.000Z' WHERE id='file-solar'")],
   ]) await t.test(label, async child => { const f = fixture(child); f.setProvider(async () => { mutate(f); return validDraft(); }); const result = await f.post(); assert.equal(result.status, 409); assert.equal(result.body.brief, undefined); });
+});
+
+test("file removal during the final source read invalidates the generated draft", async t => {
+  const f = fixture(t);
+  f.setProvider(async () => {
+    f.beforeRead(sql => {
+      if (sql.startsWith('SELECT work.title,detail.description')) {
+        f.sqlite.exec("UPDATE customer_hub_files SET removed_at='2026-10-05T00:00:00.000Z' WHERE id='file-solar'");
+        f.beforeRead(() => {});
+      }
+    });
+    return validDraft();
+  });
+  const result = await f.post();
+  assert.equal(result.status, 409); assert.equal(result.body.brief, undefined); assert.equal(f.calls.length, 1);
 });
 
 test("interest or permission revoked during generation prevents returning the private draft", async t => {

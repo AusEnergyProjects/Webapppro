@@ -71,6 +71,7 @@ function harness(t, api, token = "private-hub-token", search = "", beforeEffects
     if (name === "react/jsx-runtime") return jsx;
     if (name === "@/lib/customer-photo-upload") return { prepareCustomerPhotoUpload: async file => file };
     if (name === "./QuoteLinkReview") return { QuoteLinkReview: "QuoteLinkReview", QuoteDecisionReceiptView: "QuoteDecisionReceiptView" };
+    if (name === "./CustomerHubFilePreview") return { CustomerHubFilePreview: "CustomerHubFilePreview" };
     if (name.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => key }) };
     throw new Error(`Unexpected hub UI dependency: ${name}`);
   }, loaded, async (path, init = {}) => { requests.push({ path, init }); return api(path, init); }, {
@@ -244,4 +245,62 @@ test('comparison is limited to three quotes sharing a service and uses the issue
   assert.equal(h.requests.filter(item=>item.path.includes('?summary=1')).length,3);
   assert.match(text(tree),/Install supplied system/);assert.match(text(tree),/Excludes switchboard upgrade/);assert.match(text(tree),/Base quote/);assert.match(text(tree),/Optional extra/);
   revoked=true;h.listeners.get('focus')();tree=await h.settle();assert.doesNotMatch(text(tree),/Install supplied system|Extra circuit/);
+});
+
+const sharedFile={id:'private/file ?one',name:'switchboard.jpg',type:'image/jpeg'};
+const withFile=(accepting=true)=>({...structuredClone(data),accepting,questions:[{...data.questions[1],files:[sharedFile]}]});
+const previewButton=tree=>nodes(tree,node=>node.type==='button'&&node.props['aria-label']==='Preview switchboard.jpg')[0];
+const deleteButton=tree=>nodes(tree,node=>node.type==='button'&&node.props['aria-label']==='Delete switchboard.jpg for everyone')[0];
+const filePreview=tree=>nodes(tree,node=>node.type==='CustomerHubFilePreview')[0];
+
+test('customer file opens the shared preview with an encoded private URL and no automatic download',async t=>{
+  const h=harness(t,async()=>ok(withFile()),'hub/private','?section=qa');
+  let tree=await h.settle();assert.ok(previewButton(tree));assert.ok(deleteButton(tree));
+  assert.equal(h.requests.length,1);assert.equal(nodes(tree,node=>node.type==='a'&&node.props.href?.includes('/files')).length,0);
+  previewButton(tree).props.onClick();tree=h.render();
+  assert.equal(filePreview(tree).props.fileUrl,'/api/customer-hub/hub%2Fprivate/files?id=private%2Ffile%20%3Fone');
+  assert.deepEqual(filePreview(tree).props.file,sharedFile);assert.equal(filePreview(tree).props.customer,true);
+  assert.equal(filePreview(tree).props.ownerLabel,'Your upload');assert.equal(filePreview(tree).props.isCurrent(),true);
+  filePreview(tree).props.onClose();tree=h.render();assert.equal(filePreview(tree),undefined);
+});
+
+test('paused projects still allow preview and explicit delete for everyone; cancel never writes',async t=>{
+  const h=harness(t,async()=>ok(withFile(false)),'private-hub-token','?section=qa');
+  let tree=await h.settle();assert.ok(previewButton(tree));deleteButton(tree).props.onClick();tree=h.render();
+  assert.match(text(tree),/Delete this file for everyone/);assert.match(text(tree),/Copies already downloaded cannot be recalled/);
+  assert.equal(h.requests.filter(item=>item.init.method==='DELETE').length,0);
+  button(tree,'Cancel').props.onClick();tree=h.render();assert.equal(button(tree,'Delete for everyone'),undefined);
+  assert.ok(previewButton(tree));assert.equal(h.requests.filter(item=>item.init.method==='DELETE').length,0);
+});
+
+test('confirmed removal uses one scoped DELETE, refreshes the question and closes its existing preview',async t=>{
+  let hub=withFile();const pending=deferred();
+  const h=harness(t,async(path,init)=>{if(init.method==='DELETE'){assert.equal(path,'/api/customer-hub/private-hub-token/files?id=private%2Ffile%20%3Fone');await pending.promise;hub={...hub,questions:hub.questions.map(question=>({...question,files:[]}))};}return ok(hub);},'private-hub-token','?section=qa');
+  let tree=await h.settle();previewButton(tree).props.onClick();tree=h.render();assert.ok(filePreview(tree));
+  deleteButton(tree).props.onClick();tree=h.render();const confirm=button(tree,'Delete for everyone');
+  confirm.props.onClick();confirm.props.onClick();tree=h.render();assert.equal(button(tree,'Deleting…').props.disabled,true);
+  assert.equal(h.requests.filter(item=>item.init.method==='DELETE').length,1);pending.resolve();tree=await h.settle();
+  assert.equal(previewButton(tree),undefined);assert.equal(filePreview(tree),undefined);assert.equal(deleteButton(tree),undefined);
+  assert.match(text(tree),/File deleted from this project for everyone/);assert.match(text(tree),/File needed/);
+});
+
+test('failed removal keeps the shared file and offers a retry without success copy',async t=>{
+  const h=harness(t,async(_path,init)=>init.method==='DELETE'?response({ok:false,error:'Could not remove the file. Try again.'},503):ok(withFile()),'private-hub-token','?section=qa');
+  let tree=await h.settle();deleteButton(tree).props.onClick();tree=h.render();button(tree,'Delete for everyone').props.onClick();tree=await h.settle();
+  assert.ok(previewButton(tree));assert.ok(button(tree,'Delete for everyone'));assert.match(text(tree),/Could not remove the file/);
+  assert.doesNotMatch(text(tree),/File deleted from this project/);
+});
+
+test('refresh after deletion elsewhere clears the open preview and pending confirmation',async t=>{
+  let hub=withFile();const h=harness(t,async()=>ok(hub),'private-hub-token','?section=qa');
+  let tree=await h.settle();previewButton(tree).props.onClick();deleteButton(tree).props.onClick();tree=h.render();assert.ok(filePreview(tree));
+  hub={...hub,questions:hub.questions.map(question=>({...question,files:[]}))};h.listeners.get('focus')();tree=await h.settle();
+  assert.equal(filePreview(tree),undefined);assert.equal(button(tree,'Delete for everyone'),undefined);assert.equal(previewButton(tree),undefined);
+});
+
+test('revoked customer link clears its file preview and deletion controls',async t=>{
+  let revoked=false;const h=harness(t,async()=>revoked?response({ok:false,error:'Link withdrawn'},404):ok(withFile()),'private-hub-token','?section=qa');
+  let tree=await h.settle();previewButton(tree).props.onClick();deleteButton(tree).props.onClick();tree=h.render();
+  revoked=true;h.listeners.get('focus')();tree=await h.settle();assert.equal(filePreview(tree),undefined);assert.equal(deleteButton(tree),undefined);
+  assert.doesNotMatch(text(tree),/switchboard.jpg|Delete for everyone/);
 });

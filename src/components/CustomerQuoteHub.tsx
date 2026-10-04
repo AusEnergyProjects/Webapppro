@@ -3,12 +3,14 @@ import {useCallback,useEffect,useRef,useState,type ComponentProps} from "react";
 import type {CustomerQuoteHub as Hub,HubQuestion,HubBusinessProfile,HubQuoteComparison} from "@/lib/customer-quote-hub";
 import {prepareCustomerPhotoUpload} from "@/lib/customer-photo-upload";
 import {QuoteLinkReview,QuoteDecisionReceiptView} from "./QuoteLinkReview";
+import {CustomerHubFilePreview} from "./CustomerHubFilePreview";
 import styles from "./CustomerQuoteHub.module.css";
 import type {CustomerHubBusinessRating} from "@/lib/customer-hub-business-profile";
 
 type Receipt=ComponentProps<typeof QuoteDecisionReceiptView>["receipt"];
 type Result={ok?:boolean;hub?:Hub;quoteToken?:string;receipt?:Receipt;comparison?:HubQuoteComparison;error?:string};
 type Tab='overview'|'quotes'|'requests';
+type SharedFileSelection={file:HubQuestion['files'][number];question:string};
 export function CustomerQuoteHub({token}:{token:string}){return <HubWorkspace key={token} token={token}/>;}
 function HubWorkspace({token}:{token:string}){
   const endpoint=`/api/customer-hub/${encodeURIComponent(token)}`;
@@ -22,7 +24,12 @@ function HubWorkspace({token}:{token:string}){
   const requestedRatings=useRef(new Set<string>());
   const [opened,setOpened]=useState<{id:string;token?:string;receipt?:Receipt}|null>(null);
   const generation=useRef(0),active=useRef(true),acting=useRef(false);
+  const [preview,setPreview]=useState<SharedFileSelection|null>(null),[removingFile,setRemovingFile]=useState('');
+  const isCurrent=useCallback(()=>active.current,[]);
+  const closePreview=useCallback(()=>setPreview(null),[]);
   const applyHub=useCallback((next:Hub)=>{setHub(next);setOpened(current=>current&&next.quotes.some(quote=>quote.id===current.id)?current:null);
+    const currentFile=(id:string)=>next.questions.some(question=>question.files.some(file=>file.id===id));
+    setPreview(current=>current&&currentFile(current.file.id)?current:null);setRemovingFile(current=>currentFile(current)?current:'');
     const currentQuote=(id:string)=>next.quotes.some(quote=>quote.id===id&&quote.status==='active'&&!quote.blocked);
     setSelectedQuotes(current=>current.filter(currentQuote));setComparison(current=>current.every(item=>currentQuote(item.id))?current:[]);
   },[]);
@@ -32,7 +39,7 @@ function HubWorkspace({token}:{token:string}){
     try{const response=await fetch(endpoint,{cache:'no-store'}),result=await response.json() as Result;
       if(!active.current||request!==generation.current)return;
       if(!response.ok||!result.ok||!result.hub)throw new Error(result.error||'Your project could not be opened.');applyHub(result.hub);setError('');
-    }catch(failure){if(!active.current||request!==generation.current)return;setHub(null);setOpened(null);setComparison([]);setSelectedQuotes([]);setError(failure instanceof Error?failure.message:'Your project could not be opened.');}
+    }catch(failure){if(!active.current||request!==generation.current)return;setHub(null);setOpened(null);setPreview(null);setRemovingFile('');setComparison([]);setSelectedQuotes([]);setError(failure instanceof Error?failure.message:'Your project could not be opened.');}
   },[endpoint,applyHub]);
   useEffect(()=>{
     active.current=true;
@@ -92,6 +99,12 @@ function HubWorkspace({token}:{token:string}){
     const form=new FormData();form.append('questionId',question.id);form.append('file',file);await update('POST',form,'/files');
     setPending(current=>{const next={...current};delete next[question.id];return next;});setNotice('File shared. The participating businesses have an update to review.');
   }catch(failure){setNotice(failure instanceof Error&&failure.message==='PHOTO_CONVERSION_FAILED'?'This photo could not be opened. Try a JPG or PNG, or take another photo.':failure instanceof Error?failure.message:'Could not upload.');}finally{finish();void load();}}
+  async function deleteFile(id:string){if(removingFile!==id||!begin('delete:'+id))return;try{
+    const question=hub?.questions.find(question=>question.files.some(file=>file.id===id));
+    await update('DELETE',{},`/files?id=${encodeURIComponent(id)}`);setRemovingFile('');
+    setNotice('File deleted from this project for everyone. Interested businesses have an update to review.');
+    if(active.current&&question)questionElements.current[question.id]?.querySelector('summary')?.focus({preventScroll:true});
+  }catch(failure){setNotice(failure instanceof Error?failure.message:'The file could not be deleted. Try again.');}finally{finish();void load();}}
   async function openQuote(id:string){if(!begin(id))return;try{const response=await fetch(`${endpoint}/quotes/${encodeURIComponent(id)}`,{cache:'no-store'}),result=await response.json() as Result;
     if(!response.ok||!result.ok||(!result.quoteToken&&!result.receipt))throw new Error(result.error||'The quote could not be opened.');if(active.current)setOpened({id,token:result.quoteToken,receipt:result.receipt});
   }catch(failure){setNotice(failure instanceof Error?failure.message:'Could not open quote.');}finally{finish();}}
@@ -140,7 +153,11 @@ function HubWorkspace({token}:{token:string}){
           {question.answer&&<p><strong>Your answer</strong><br/>{question.answer}</p>}
           {(question.replies||[]).map(reply=><div className={styles.reply} key={reply.id}><small>{reply.authorType==='customer'?'You':business(reply.business||'Trade business',reply.businessProfile)}</small><p>{reply.body}</p></div>)}
           {hub.accepting&&!(question.authorType!=='customer'&&question.kind==='text'&&!question.answer)&&<details className={styles.replyComposer}><summary>Reply to this conversation</summary><div className={styles.answer}><label htmlFor={'reply-'+question.id}>Your reply</label><textarea id={'reply-'+question.id} rows={2} maxLength={2000} value={replies[question.id]||''} onChange={event=>setReplies({...replies,[question.id]:event.target.value})}/><button disabled={Boolean(busy)||!replies[question.id]?.trim()} onClick={()=>void shareConversation(question.id)}>Share reply</button></div></details>}
-          {question.files.length>0&&<ul className={styles.files}>{question.files.map(file=><li key={file.id}><a href={`${endpoint}/files?id=${encodeURIComponent(file.id)}`}>{file.name}</a></li>)}</ul>}
+          {question.files.length>0&&<section className={styles.sharedFiles} aria-label="Your shared files"><h3>Your shared files</h3><p>Preview a file or remove it from this project for everyone.</p><ul className={styles.files}>{question.files.map(file=><li key={file.id}>
+            <div className={styles.fileRow}><button type="button" className={styles.filePreview} disabled={Boolean(busy)} aria-label={`Preview ${file.name}`} onClick={()=>setPreview({file,question:question.prompt})}><span className={styles.fileKind} aria-hidden="true">{file.type==='application/pdf'?'PDF':'Photo'}</span><span><strong>{file.type==='application/pdf'?'View PDF':'View photo'}</strong><small>{file.name}</small></span></button>
+              <button type="button" className={styles.deleteFile} disabled={Boolean(busy)} aria-label={`Delete ${file.name} for everyone`} aria-expanded={removingFile===file.id} onClick={()=>setRemovingFile(current=>current===file.id?'':file.id)}>Delete</button></div>
+            {removingFile===file.id&&<div className={styles.deleteConfirmation} role="group" aria-label={`Confirm deletion of ${file.name}`}><strong>Delete this file for everyone?</strong><p>It will be removed from your project and all participating businesses. Copies already downloaded cannot be recalled.</p><div><button type="button" disabled={Boolean(busy)} onClick={()=>setRemovingFile('')}>Cancel</button><button type="button" className={styles.confirmDelete} disabled={Boolean(busy)} onClick={()=>void deleteFile(file.id)}>{busy==='delete:'+file.id?'Deleting…':'Delete for everyone'}</button></div></div>}
+          </li>)}</ul></section>}
           {hub.accepting&&question.authorType!=='customer'&&(question.kind==='text'?!question.answer&&<div className={styles.answer}><label htmlFor={`answer-${question.id}`}>Your answer</label><textarea id={`answer-${question.id}`} maxLength={2000} rows={3} value={drafts[question.id]??question.answer} onChange={event=>setDrafts({...drafts,[question.id]:event.target.value})}/><button disabled={Boolean(busy)||!(drafts[question.id]??question.answer).trim()} onClick={()=>void answer(question)}>{busy===question.id?'Sharing…':'Share answer'}</button></div>:<div className={styles.upload}>
             <div className={styles.uploadActions}>{capture&&<label className={styles.fileButton}>Capture photo<input type="file" accept="image/*" capture="environment" disabled={Boolean(busy)} onChange={event=>{const file=event.target.files?.[0];if(file)setPending({...pending,[question.id]:file});event.target.value='';}}/></label>}<label className={styles.fileButton}>Upload {question.kind==='photo'?'photo':'file'}<input type="file" accept={question.kind==='photo'?'image/jpeg,image/png,image/webp':'image/jpeg,image/png,image/webp,application/pdf'} disabled={Boolean(busy)} onChange={event=>{const file=event.target.files?.[0];if(file)setPending({...pending,[question.id]:file});event.target.value='';}}/></label></div>
             <small>{question.kind==='photo'?'Photos':'Photos or PDFs'} up to 8 MB. Check that private information is not visible.</small>
@@ -149,6 +166,7 @@ function HubWorkspace({token}:{token:string}){
         </details>)}
       </section>}
       <footer className={styles.footer}><span>{hub.reference}</span><span>Keep this link private · <a href="/privacy">Privacy</a></span></footer>
+      {preview&&<CustomerHubFilePreview key={preview.file.id} file={preview.file} question={preview.question} fileUrl={`${endpoint}/files?id=${encodeURIComponent(preview.file.id)}`} request={fetch} isCurrent={isCurrent} onClose={closePreview} ownerLabel="Your upload" customer />}
     </>}
   </div></main>;
 }

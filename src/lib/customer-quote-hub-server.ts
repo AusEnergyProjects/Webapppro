@@ -39,7 +39,7 @@ export async function hubQuestions(db:D1Database,opportunityId:string,accepting:
     db.prepare(`SELECT question.*,trade.business_name,trade.business_website,trade.google_business_profile_url,match.id business_id FROM customer_hub_questions question
       LEFT JOIN trade_opportunity_matches match ON match.id=question.match_id AND match.opportunity_id=question.opportunity_id
       LEFT JOIN trade_accounts trade ON trade.firebase_uid=match.firebase_uid WHERE question.opportunity_id=? ORDER BY question.created_at,question.id`).bind(opportunityId).all<Row>(),
-    db.prepare("SELECT id,question_id,file_name,content_type FROM customer_hub_files WHERE opportunity_id=? ORDER BY created_at,id").bind(opportunityId).all<Row>(),
+    db.prepare("SELECT id,question_id,file_name,content_type FROM customer_hub_files WHERE opportunity_id=? AND removed_at='' ORDER BY created_at,id").bind(opportunityId).all<Row>(),
     db.prepare(`SELECT reply.*,trade.business_name,trade.business_website,trade.google_business_profile_url,match.id business_id FROM customer_hub_replies reply
       LEFT JOIN trade_opportunity_matches match ON match.id=reply.match_id AND match.opportunity_id=reply.opportunity_id
       LEFT JOIN trade_accounts trade ON trade.firebase_uid=match.firebase_uid WHERE reply.opportunity_id=? ORDER BY reply.created_at,reply.id`).bind(opportunityId).all<Row>()]);

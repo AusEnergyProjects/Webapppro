@@ -12,14 +12,18 @@ export const runtime='edge';
 export async function GET(request:Request){try{
   const access=await requireInstallerTeamAccess(request),db=getD1(),url=new URL(request.url),workOrderId=url.searchParams.get('workOrderId')||'';
   if(!url.searchParams.has('fileId'))return hubJson(await tradeHubView(db,access,workOrderId,url.searchParams.get('matchId')||''));
-  const context=await tradeHubContext(db,access,workOrderId);if(!context)throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
-  const file=await db.prepare(`SELECT file.file_name,file.content_type,file.object_key FROM customer_hub_files file
+  if(!access.canViewQuotes)throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
+  const scope=tradeHubScope(access,workOrderId);
+  const currentFile=()=>db.prepare(`SELECT file.file_name,file.content_type,file.object_key FROM customer_hub_files file
     JOIN customer_hub_questions question ON question.id=file.question_id AND question.opportunity_id=file.opportunity_id
-    WHERE file.id=? AND file.opportunity_id=? AND EXISTS(SELECT 1 FROM json_each(question.service_categories_json) service
-      JOIN json_each(?) allowed ON allowed.value=service.value)`)
-    .bind(url.searchParams.get('fileId'),context.opportunity_id,context.matched_categories).first<{file_name:string;content_type:string;object_key:string}>();
+    JOIN (${scope.sql}) current ON current.opportunity_id=file.opportunity_id
+    WHERE file.id=? AND file.removed_at='' AND EXISTS(SELECT 1 FROM json_each(question.service_categories_json) service
+      JOIN json_each(current.matched_categories) allowed ON allowed.value=service.value)`)
+    .bind(...scope.values,url.searchParams.get('fileId')).first<{file_name:string;content_type:string;object_key:string}>();
+  const file=await currentFile();
   if(!file)throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
-  const object=await getCustomerProjectEvidenceBucket().get(file.object_key);if(!object||!await tradeHubContext(db,access,workOrderId))throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
+  const object=await getCustomerProjectEvidenceBucket().get(file.object_key);
+  if(!object||(await currentFile())?.object_key!==file.object_key)throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
   return new Response(object.body,{headers:{'Content-Type':file.content_type,'Content-Disposition':`attachment; filename="${file.file_name.replace(/[^a-zA-Z0-9._-]/g,'_')}"`,
     'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Referrer-Policy':'no-referrer'}});
 }catch(error){return mfaErrorResponse(error)||hubError(error);}}

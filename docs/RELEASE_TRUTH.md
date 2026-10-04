@@ -4,7 +4,11 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 4 October 2026
+Last reconciled locally: 5 October 2026
+
+## Current adjustment: customer shared-file control
+
+Customers preview photos and PDFs in the same protected modal used by trades, with Download kept separate. Delete requires a clear in-context confirmation and works while enquiries are paused. Migration 0249 records removal before storage cleanup, hides the file from customer/trade/AI projections and allows reupload as a new file. Both file routes recheck current file access after reading storage. A removal produces one generic update for interested businesses through existing notification permissions. Cleanup failures remain recorded for bounded retry on later authorised file activity. Existing downloaded copies cannot be recalled. Private quotes and compliance evidence are unaffected. Scoped evidence and final source/publication identity: C:/Webproject/outputs/customer-hub-files-20261005/.
 
 ## Current implementation: simpler customer, trade and audit workflows
 

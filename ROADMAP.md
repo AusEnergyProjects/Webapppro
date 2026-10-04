@@ -6,7 +6,9 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 4 October 2026
+Last reconciled: 5 October 2026
+
+Current customer-hub adjustment: preview shared photos/PDFs and delete a mistaken upload for all participants. Migration 0249 preserves removal history and retryable object cleanup. This is a bounded extension of the existing Q&A workflow; it does not introduce another customer workspace. Release evidence: C:/Webproject/outputs/customer-hub-files-20261005/.
 
 Current delivery: customer question deep links and issued-quote comparison; direct ordinary quote creation and simplified import entry; delegated delivery exceptions through existing Tasks; precise Creditex evidence correction/closeout; optional source-linked AI assistance using the existing provider. No new lead or commercial gates. Exact release identity and check results: C:/Webproject/outputs/workflow-optimisation-release.md.
 

@@ -1,0 +1,19 @@
+.preview { box-sizing: border-box; width: min(1000px, calc(100vw - 32px)); max-width: none; height: min(880px, calc(100dvh - 32px)); max-height: none; margin: auto; padding: 0; border: 1px solid var(--trade-line, #d7e5df); border-radius: 14px; background: var(--trade-surface, #fff); color: var(--trade-ink, #153e39); box-shadow: 0 24px 80px #0005; }
+.customer { --trade-line: #405a75; --trade-surface: #132033; --trade-surface-soft: #0d192a; --trade-ink: #edf3fa; --trade-muted: #afc0d5; --trade-field: #1a2b3d; --trade-accent-readable: #9adeff; color-scheme: dark; }
+.preview::backdrop { background: #041820bd; }
+.previewLayout { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.preview header { display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--trade-line, #d7e5df); }
+.preview header > div { min-width: 0; flex: 1; }
+.preview header span { color: var(--trade-muted, #5d7068); font-size: .75rem; }
+.preview h2 { margin: 4px 0; font-size: 1.2rem; }
+.preview header p { margin: 0; overflow-wrap: anywhere; font-size: .82rem; line-height: 1.5; }
+.preview button { min-height: 44px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; padding: 8px 12px; background: var(--trade-field, #fff); color: var(--trade-ink, #153e39); font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; }
+.previewContent { min-height: 0; flex: 1; display: grid; place-items: center; overflow: auto; padding: 12px; background: var(--trade-surface-soft, #f4f8f6); }
+.previewContent img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+.previewContent iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.previewContent p { padding: 20px; font-size: .9rem; line-height: 1.5; }
+.preview footer { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-top: 1px solid var(--trade-line, #d7e5df); }
+.preview footer small { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--trade-muted, #5d7068); }
+.preview footer a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border: 1px solid var(--trade-line, #d7e5df); border-radius: 8px; font-size: .82rem; color: var(--trade-ink, #153e39); text-decoration: none; }
+.preview :is(a, button):focus-visible { outline: 3px solid var(--trade-accent-readable, #087567); outline-offset: 3px; }
+@media (max-width: 600px) { .preview { width: calc(100vw - 16px); height: calc(100dvh - 16px); border-radius: 10px; }.preview header, .preview footer { padding: 12px; }.previewContent { padding: 6px; } }

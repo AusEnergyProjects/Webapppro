@@ -1,9 +1,15 @@
 # Next task handover
 
-Status: Simpler customer, trade and audit workflows; implementation complete, release verification in progress.
-Prepared: 4 October 2026
+Status: Customer shared-file preview and removal; scoped validation and release verification.
+Prepared: 5 October 2026
 
-## Active delivery: simpler customer and business actions
+## Active delivery: customer control of shared uploads
+
+Base c7a8b0fb, Sites 757. Customers can preview their shared photos/PDFs and explicitly delete a mistaken upload for every participant, including while enquiries are paused. CustomerQuoteHub owns the controls; CustomerHubFilePreview is shared with trades. Customer/trade file routes, hub projections and existing notification events own access removal. Migration 0249 preserves removal history and retryable storage cleanup; removed uploads no longer count towards active limits or duplicate matching.
+
+Acceptance: modal preview without forced download; cancel causes no write; one confirmed deletion revokes both file URLs and listings; foreign/revoked links cannot remove a file; race checks prevent a removed object being returned after storage read; interested businesses receive the existing scoped in-app update; private quotes and compliance evidence remain outside this workflow. Test real migrated D1, storage failure/retry, UI lifecycle, source invalidation, desktop/mobile and exact GitHub/Sites provenance. Stop if broader identity, document or storage architecture is required. No production customer deletion is performed as QA. Release evidence is in C:/Webproject/outputs/customer-hub-files-20261005/.
+
+## Previous delivery: simpler customer and business actions
 
 Prepared: 4 October 2026. Base: 6db128a6, Sites 755. User authorises implementation and matching GitHub/Sites publication across the five reviewed priorities.
 

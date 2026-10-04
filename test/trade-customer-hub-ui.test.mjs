@@ -11,6 +11,7 @@ const compile = source => ts.transpileModule(source, { compilerOptions: {
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
 } }).outputText;
 const compiled = compile(source);
+const previewCompiled = compile(fs.readFileSync(new URL("../src/components/CustomerHubFilePreview.tsx", import.meta.url), "utf8"));
 const qaCompiled = compile(`import {useRef,useEffect,useState} from 'react';
 const registerStyles = {}; const TradeCustomerHubPanel = 'TradeCustomerHubPanel';
 ${crmSource.slice(crmSource.indexOf("function CustomerQa("))}
@@ -61,9 +62,10 @@ function harness(t, api, options = {}) {
   };
   const transport = async (path, init = {}) => { requests.push({ path, init }); return api(path, init); };
   let scopedOwner = ownerUid, request = createTradeBusinessFetch(ownerUid, "https://ausenergyassessments.com", transport);
-  const loaded = {};
-  Function("require", "exports", "window", "URL", "document", "HTMLElement", `${options.qa ? qaCompiled : compiled + "\nexports.Panel=Panel;exports.AuthenticatedPanel=AuthenticatedPanel;exports.SharedFilePreview=SharedFilePreview;"}`)(name => {
+  const loaded = {}, sharedPreview = {};
+  const execute = (code, target) => Function("require", "exports", "window", "URL", "document", "HTMLElement", code)(name => {
     if (name === "react") return hooks;
+    if (name === "./CustomerHubFilePreview") return sharedPreview;
     if (name === "./TradeCustomerHubAssist") return { TradeCustomerHubAssist: "TradeCustomerHubAssist" };
     if (name === "react/jsx-runtime") return jsx;
     if (name === "./TradeBusinessProvider") return { useTradeBusinessFetch: () => {
@@ -74,17 +76,19 @@ function harness(t, api, options = {}) {
     if (name === "firebase/auth") return { onIdTokenChanged: (_auth, listener) => { authListeners.add(listener); listener(firebaseAuth.currentUser); return () => authListeners.delete(listener); } };
     if (name.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => key }) };
     throw new Error(`Unexpected trade hub UI dependency: ${name}`);
-  }, loaded, {
+  }, target, {
     addEventListener: (name, callback) => listeners.set(name, callback),
     removeEventListener: (name, callback) => { if (listeners.get(name) === callback) listeners.delete(name); },
     setTimeout: callback => { callback(); return 1; },
   }, { createObjectURL: blob => { const url = `blob:customer-upload-${objectUrls.length + 1}`; objectUrls.push({ url, blob }); return url; },
     revokeObjectURL: url => revokedUrls.push(url) }, document, Element);
+  execute(previewCompiled, sharedPreview);
+  execute(options.qa ? qaCompiled : compiled + "\nexports.Panel=Panel;exports.AuthenticatedPanel=AuthenticatedPanel;", loaded);
   const cleanupFrame = state => { if (!state || state.cleaned) return; state.cleaned = true; for (const effect of state.effects) effect?.cleanup?.(); };
   const render = () => {
     currentFrame = rootFrame; rootFrame.cursor = 0; dirty = false;
     let tree = loaded[options.component || "AuthenticatedPanel"](props);
-    const selected = nodes(tree, node => node.type === loaded.SharedFilePreview)[0];
+    const selected = nodes(tree, node => node.type === sharedPreview.CustomerHubFilePreview)[0];
     if (!selected || selected.key !== previewKey) { cleanupFrame(previewFrame); previewFrame = null; previewKey = null; }
     if (selected) {
       if (!previewFrame) {
@@ -94,7 +98,7 @@ function harness(t, api, options = {}) {
         dialogs.push(previewFrame.element);
       }
       currentFrame = previewFrame; previewFrame.cursor = 0;
-      const previewTree = selected.type(selected.props); previewTree.props.ref.current = previewFrame.element;
+      const previewTree = selected.type({ ...selected.props, ...options.previewProps }); previewTree.props.ref.current = previewFrame.element;
       const expand = node => Array.isArray(node) ? node.map(expand) : node === selected ? previewTree
         : !node || typeof node !== "object" ? node : { ...node, props: { ...node.props, children: expand(node.props?.children) } };
       tree = expand(tree);
@@ -330,6 +334,39 @@ test("supported previews retain a local URL until explicit close and expose a se
     h.cleanup(); assert.deepEqual(h.revokedUrls, h.objectUrls.map(item => item.url));
     assert.equal(h.document.body.style.overflow, "auto");
   }
+});
+
+test("the shared preview accepts a complete customer file URL and customer presentation without trade URL rewriting", async t => {
+  const fileUrl = "/api/customer-hub/customer-token/files/file%2Fone";
+  const h = harness(t, async path => path === fileUrl ? fileResponse() : response(view),
+    { previewProps: { fileUrl, ownerLabel: "Your upload", customer: true } });
+  let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+  assert.equal(h.requests.at(-1).path, fileUrl);
+  assert.equal(h.requests.at(-1).init.cache, "no-store");
+  assert.equal(dialog(tree).props["aria-label"], "Your PDF preview");
+  assert.match(dialog(tree).props.className, /customer/); assert.match(text(dialog(tree)), /Your upload/);
+  assert.equal(nodes(tree, node => node.type === "iframe")[0].props.title, "Your document: private-plan.pdf");
+  assert.equal(download(tree).props.download, "private-plan.pdf");
+  h.cleanup(); assert.deepEqual(h.revokedUrls, h.objectUrls.map(item => item.url));
+});
+
+test("the shared preview does not request bytes when authority has already ended", async t => {
+  const h = harness(t, async path => { assert.ok(!path.includes("fileId=")); return response(view); },
+    { previewProps: { isCurrent: () => false } });
+  let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+  assert.equal(h.requests.length, 1); assert.deepEqual(h.objectUrls, []); assert.equal(download(tree), undefined);
+});
+
+test("changing the shared preview resource clears the old file immediately and aborts its request", async t => {
+  const pending = deferred(), options = { previewProps: {} };
+  const h = harness(t, async path => path === "/replacement-file" ? pending.promise : path.includes("fileId=") ? fileResponse() : response(view), options);
+  let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+  const oldUrl = download(tree).props.href, oldRequest = h.requests.at(-1);
+  options.previewProps.fileUrl = "/replacement-file"; tree = h.render();
+  assert.equal(download(tree), undefined); assert.equal(nodes(tree, node => node.type === "iframe").length, 0);
+  assert.equal(oldRequest.init.signal.aborted, true); assert.deepEqual(h.revokedUrls, [oldUrl]);
+  pending.resolve({ ok: false, status: 404 }); tree = await h.settle();
+  assert.match(text(dialog(tree)), /no longer available/); assert.equal(download(tree), undefined); assert.equal(h.objectUrls.length, 1);
 });
 
 test("Close, Escape and backdrop dismissals abort pending response or body reads without creating private URLs", async t => {

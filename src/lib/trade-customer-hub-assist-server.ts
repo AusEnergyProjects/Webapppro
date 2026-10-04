@@ -26,8 +26,16 @@ export async function tradeHubAssistSource(db: D1Database, access: TeamAccess, w
   }));
   const input = { job: { id: "job", title: job.title, description: job.description }, questions,
     attachmentContentsReviewed: false };
-  return { input, sourceIds: ["job", ...questions.map(question => question.id)],
-    sourceHash: await workflowAiSourceHash({ ownerUid: access.ownerUid, workOrderId, interestRevision: current.interest_revision, input }) };
+  const sourceHash = await workflowAiSourceHash({ ownerUid: access.ownerUid, workOrderId, interestRevision: current.interest_revision, input });
+  const attachmentIds = questions.flatMap(question => question.attachments.map(file => file.id));
+  // The file list precedes other awaited reads. A removal during those reads must
+  // invalidate the draft even when this is the final source check after generation.
+  if (attachmentIds.length) {
+    const active = await db.prepare(`SELECT count(*) total FROM customer_hub_files WHERE opportunity_id=? AND removed_at=''
+      AND id IN (SELECT value FROM json_each(?))`).bind(current.opportunity_id, JSON.stringify(attachmentIds)).first<{ total: number }>();
+    if (active?.total !== attachmentIds.length) throw new Error("WORKFLOW_AI_SOURCE_CHANGED");
+  }
+  return { input, sourceIds: ["job", ...questions.map(question => question.id)], sourceHash };
 }
 
 export async function createTradeHubAssist(db: D1Database, access: TeamAccess, workOrderId: string, requestId: string) {
