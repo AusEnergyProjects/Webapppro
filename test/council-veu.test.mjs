@@ -138,6 +138,17 @@ test("forged or different-scope cached snapshots never become council data; abse
   await assert.rejects(loadCouncilVeuSnapshot(["3805"], "all", { now, cache, baseline: [], loadEvidence: async () => evidence() }), /postcode/);
 });
 
+test("the default lazy VEU baseline retains dated matching-scope evidence after an upstream failure", async () => {
+  let downloads = 0;
+  const loaded = await loadCouncilVeuSnapshot(area, "year", { now: Date.parse("2026-10-06T00:00:00Z"),
+    loadEvidence: async () => { downloads++; throw new Error("Source unavailable"); } });
+  assert.equal(downloads, 1);
+  assert.equal(loaded.dataOrigin, "baseline");
+  assert.equal(loaded.refreshFailed, true);
+  assert.deepEqual(loaded.snapshot.totals, { activities: 4789, reportedVeecEquivalents: 194563 });
+  assert.equal(loaded.snapshot.sourceRefreshedAt, "2026-10-03T18:06:32.000Z");
+});
+
 function routeFixture() {
   let accessCalls = 0, downloads = 0, next;
   let council = { id: "ours", name: "Our council", state: "VIC", postcodes: area, role: "viewer" };

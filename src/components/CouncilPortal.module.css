@@ -23,8 +23,6 @@
 .benefits li { padding-left:24px; position:relative; color:#557164; font-size:14px; line-height:1.5; }
 .benefits li:before { content:'↗'; position:absolute; left:0; color:#2c9568; }
 .benefits strong { display:block; color:#214b38; margin-bottom:3px; }
-.switcher { display:flex; align-items:center; justify-content:flex-end; gap:12px; padding:8px 24px; background:#112f28; color:#e5f0e9; font:12px Arial,Helvetica,sans-serif; }
-.switcher select,.switcher button { background:#23453a; color:white; border:1px solid #46675a; border-radius:6px; padding:7px 10px; }
 .admin { max-width:980px; margin:auto; }
 .adminList { display:grid; gap:16px; margin-top:24px; }
 .adminCard { border:1px solid #d7e3db; border-radius:12px; padding:20px; background:#fafcf9; }
@@ -33,5 +31,5 @@
 .adminCard .form { margin-top:14px; }
 .member { display:flex; flex-wrap:wrap; gap:9px; align-items:center; justify-content:space-between; border-top:1px solid #e0e9e1; padding:12px 0; font-size:13px; }
 .entry :is(button,a,input,select,textarea):focus-visible { outline:3px solid #75b9a7; outline-offset:3px; }
-@media(max-width:680px){.split{grid-template-columns:1fr;gap:28px}.entry{padding:18px}.entryPanel{padding:28px 22px}.brand{margin-bottom:35px}.switcher{justify-content:flex-start;flex-wrap:wrap;padding:10px 15px}}
-@media print {.switcher{display:none}.entry{display:block;background:white;padding:0}.entryPanel{border:0;box-shadow:none}}
+@media(max-width:680px){.split{grid-template-columns:1fr;gap:28px}.entry{padding:18px}.entryPanel{padding:28px 22px}.brand{margin-bottom:35px}}
+@media print {.entry{display:block;background:white;padding:0}.entryPanel{border:0;box-shadow:none}}

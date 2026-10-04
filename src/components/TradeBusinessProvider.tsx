@@ -7,7 +7,7 @@ import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { createTradeBusinessFetch, readTradeBusinessSelection, resolveTradeBusinessSelection, saveTradeBusinessSelection, type TradeBusinessChoice } from "@/lib/trade-business-client";
 import styles from "./TradeBusinessProvider.module.css";
 import { TradeWorkTimeProvider } from "./TradeWorkTimeTracking";
-import { TLinkPortalSwitcher } from "./TLinkPortalSwitcher";
+import { TLinkWorkspaceBar } from "./TLinkWorkspaceBar";
 
 type BusinessContext = { business: TradeBusinessChoice; request: typeof fetch; updatePersonalName?: (name: string) => void };
 const Context = createContext<BusinessContext | null>(null);
@@ -100,7 +100,7 @@ export function TradeBusinessGate({ destination, children }: { destination: "own
     return () => { active = false; controller.abort(); };
   }, [choose, retry, user]);
 
-  const portalEntry = <div className={styles.portalEntry}><TLinkPortalSwitcher current="trade" user={user} /></div>;
+  const portalEntry = <TLinkWorkspaceBar current="trade" user={user} organisation="TLink trades" displayName={user?.displayName?.trim().split(/\s+/)[0]} businessContext />;
   if (!authReady || loading) return <>{portalEntry}<section className={styles.state} role="status">Opening your businesses...</section></>;
   if (!user?.emailVerified) return <>{portalEntry}{children}</>;
   if (error) return <>{portalEntry}<section className={styles.state}><h1>Choose your business</h1><p role="alert">{error}</p><button type="button" onClick={() => { setError(""); setLoading(true); setRetry(value => value + 1); }}>Try again</button></section></>;
@@ -110,5 +110,5 @@ export function TradeBusinessGate({ destination, children }: { destination: "own
   if (!selected) return <>{portalEntry}<section className={styles.chooser}><span>TLink workspace</span><h1>Which business are you working with?</h1><p>Choose a business to open its jobs, customers and team.</p><div className={styles.choices}>{businesses.map(business => <button type="button" key={business.ownerUid} onClick={() => choose(business, true)}><strong>{business.businessName}</strong><span>{business.role === "owner" ? "Your business" : "Team member"}</span><b aria-hidden="true">→</b></button>)}</div></section></>;
   const personalName = selected.role === "owner" ? selected.managerName : selected.displayName;
   const firstName = personalName?.trim().split(/\s+/)[0] || "";
-  return <TradeBusinessProvider key={`${user.uid}:${selected.ownerUid}`} business={selected} onAccessLost={refreshAccess} onPersonalNameChange={updatePersonalName}><div className={styles.switcher} data-tlink-business-switcher><div><span>Working with</span><strong>{selected.businessName}</strong><small data-tlink-welcome>{firstName ? `Welcome ${firstName}` : "Welcome"}</small>{switchError && <p role="alert">{switchError}</p>}</div><div className={styles.portalTools}><TLinkPortalSwitcher current="trade" user={user} />{businesses.length > 1 && <button type="button" disabled={switching} onClick={() => void switchBusiness()}>{switching ? "Switching..." : "Switch business"}</button>}</div></div>{children}</TradeBusinessProvider>;
+  return <TradeBusinessProvider key={`${user.uid}:${selected.ownerUid}`} business={selected} onAccessLost={refreshAccess} onPersonalNameChange={updatePersonalName}><TLinkWorkspaceBar current="trade" user={user} organisation={selected.businessName} displayName={firstName} error={switchError} businessContext actions={businesses.length > 1 ? <button type="button" disabled={switching} onClick={() => void switchBusiness()}>{switching ? "Switching..." : "Switch business"}</button> : undefined} />{children}</TradeBusinessProvider>;
 }

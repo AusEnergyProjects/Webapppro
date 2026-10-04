@@ -201,6 +201,20 @@ test("shipped baseline is real, structurally validated and contains only aggrega
   assert.equal(snapshot.datasets.find(dataset => dataset.id === "batteryInstallations").rows.reduce((sum, row) => sum + row.total, 0), 510949);
 });
 
+test("the default lazy baseline keeps official CER reporting available when the upstream refresh fails", async () => {
+  let downloads = 0;
+  const loaded = await loadCommunitySnapshot({ now: Date.parse("2026-10-06T00:00:00Z"),
+    fetchImpl: async () => { downloads++; throw new Error("Source unavailable"); } });
+  assert.equal(downloads, 1);
+  assert.equal(loaded.dataOrigin, "baseline");
+  assert.equal(loaded.refreshFailed, true);
+  assert.equal(loaded.snapshot.sourceAsOf, "2026-08-31");
+  const report = communityReport(loaded.snapshot, { ...scope, postcodes: ["3805", "3806", "3977", "3980"] }, "year", loaded);
+  assert.equal(report.totals.solarInstallations, 2656);
+  assert.equal(report.totals.batteryInstallations, 4482);
+  assert.equal(report.stale, true);
+});
+
 test("authenticated route rechecks authority and uses only the latest approved postcode scope", async () => {
   const snapshot = await fixture(); let calls = 0; let deny = false;
   const access = async () => {

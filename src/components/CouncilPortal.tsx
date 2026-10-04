@@ -16,7 +16,7 @@ import { CouncilMap } from "./council/CouncilMap";
 import { CouncilRebateCalculator } from "./council/CouncilRebateCalculator";
 import { CouncilAdministration } from "./CouncilAdministration";
 import { TLinkBrand } from "./TLinkChrome";
-import { TLinkPortalSwitcher } from "./TLinkPortalSwitcher";
+import { TLinkWorkspaceBar } from "./TLinkWorkspaceBar";
 import { CouncilTeam } from "./council/CouncilTeam";
 import { createCouncilDemoTeam } from "@/lib/council-team";
 import { CouncilCommunity, type CouncilCommunityState } from "./council/CouncilCommunity";
@@ -249,17 +249,15 @@ export function CouncilPortal({ demonstration = false, demoAsOf }: { demonstrati
   ];
   if(resolver) return <main id="site-content" className={styles.entry}><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge}/></main>;
   if(user&&security) return <main id="site-content" className={styles.entry}><div className={styles.entryPanel}><FirebaseAccountSecurity user={user} onComplete={async()=>{setSecurity(false);await refreshAccess();}}/><button type="button" className={styles.secondary} onClick={()=>setSecurity(false)}>Back to councils</button></div></main>;
-  if(user&&access?.canProvision&&adminOpen)return <main id="site-content" className={styles.entry}><TLinkPortalSwitcher current="council" user={user} /><CouncilAdministration api={api} email={user.email||""} onBack={()=>{setAdminOpen(false);setRefresh(value=>value+1);}}/></main>;
-  if(report&&profile&&(demonstration||(user&&council&&report.scope.councilId===selected&&profile.councilId===selected))) return <>
-    {!demonstration&&access&&(access.councils.length>1||access.canProvision)&&<div className={styles.switcher}>
+  if(user&&access?.canProvision&&adminOpen)return <><TLinkWorkspaceBar current="council" user={user} organisation="Council administration" displayName={user.displayName || undefined} /><main id="site-content" className={styles.entry}><CouncilAdministration api={api} email={user.email||""} onBack={()=>{setAdminOpen(false);setRefresh(value=>value+1);}}/></main></>;
+  const workspaceActions = !demonstration&&access&&(access.councils.length>1||access.canProvision) ? <>
       {access.councils.length>1&&<label>Council <select value={selected} onChange={event=>selectCouncil(event.target.value)}>{access.councils.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
       {access.canProvision&&<button type="button" onClick={()=>setAdminOpen(true)}>Manage council access</button>}
-    </div>}
-    <CouncilWorkspace portalUser={demonstration ? null : user} communitySlot={<><CouncilVeu {...veuProps}/><CouncilCommunity {...communityProps}/></>} communitySummarySlot={<><CouncilVeu {...veuProps} compact/><CouncilCommunity {...communityProps} compact/></>} teamSlot={<CouncilTeam councilId={report.scope.councilId} demonstration={demonstration} role={demonstration ? "owner" : council?.role ?? "viewer"} api={demonstration ? undefined : api} demoTeam={demoTeam} onDemoTeamChange={setDemoTeam}/>} key={report.scope.councilId} report={report} profile={profile} onSaveProfile={saveProfile} onResetDemo={demonstration?resetDemo:undefined} calculatorSlot={<CouncilRebateCalculator demonstration={demonstration} postcodes={profile.postcodes} state={profile.state}/>} mapSlot={<CouncilMap key={report.scope.postcodes.join(",")} report={report} api={demonstration?undefined:api} publicLayers={publicLayers}/>} campaigns={campaigns} loading={loading} error={error} notice={notice} canManage={demonstration||council?.role==="owner"||council?.role==="editor"} onPeriodChange={changePeriod} onRefresh={()=>{if(demonstration)applyDemo(demoState.current,false);setRefresh(value=>value+1);}} onSignOut={demonstration?undefined:()=>{void signOut(firebaseAuth);}} onSaveCampaign={saveCampaign} onExport={exportReport}/>
-  </>;
-  return <main id="site-content" className={styles.entry}><section className={styles.entryPanel}>
+    </> : undefined;
+  if(report&&profile&&(demonstration||(user&&council&&report.scope.councilId===selected&&profile.councilId===selected))) return <CouncilWorkspace workspaceActions={workspaceActions} portalUser={demonstration ? null : user} communitySlot={<><CouncilVeu {...veuProps}/><CouncilCommunity {...communityProps}/></>} communitySummarySlot={<><CouncilVeu {...veuProps} compact/><CouncilCommunity {...communityProps} compact/></>} teamSlot={<CouncilTeam councilId={report.scope.councilId} demonstration={demonstration} role={demonstration ? "owner" : council?.role ?? "viewer"} api={demonstration ? undefined : api} demoTeam={demoTeam} onDemoTeamChange={setDemoTeam}/>} key={report.scope.councilId} report={report} profile={profile} onSaveProfile={saveProfile} onResetDemo={demonstration?resetDemo:undefined} calculatorSlot={<CouncilRebateCalculator demonstration={demonstration} postcodes={profile.postcodes} state={profile.state}/>} mapSlot={<CouncilMap key={report.scope.postcodes.join(",")} report={report} api={demonstration?undefined:api} publicLayers={publicLayers}/>} campaigns={campaigns} loading={loading} error={error} notice={notice} canManage={demonstration||council?.role==="owner"||council?.role==="editor"} onPeriodChange={changePeriod} onRefresh={()=>{if(demonstration)applyDemo(demoState.current,false);setRefresh(value=>value+1);}} onSignOut={demonstration?undefined:()=>{void signOut(firebaseAuth);}} onSaveCampaign={saveCampaign} onExport={exportReport}/>;
+  return <><TLinkWorkspaceBar current="council" user={user} organisation="TLink Council" displayName={user?.displayName || undefined} /><main id="site-content" className={styles.entry}><section className={styles.entryPanel}>
     <Link className={styles.brand} href="/council"><TLinkBrand context="Council workspace" /></Link>
-    <TLinkPortalSwitcher current="council" user={user} /><span className={styles.eyebrow}>Council workspace</span><h1>Local action.<br/>Visible impact.</h1>
+    <span className={styles.eyebrow}>Council workspace</span><h1>Local action.<br/>Visible impact.</h1>
     <p className={styles.lead}>Connect your community with energy upgrades. See the work, the local business opportunity and the outcomes of your council campaigns.</p>
     {error&&<p className={styles.error} role="alert">{error}</p>}{notice&&<p className={styles.notice} role="status">{notice}</p>}
     {!authReady||loading?<p role="status">{!authReady?"Checking your sign-in…":"Loading your council workspace…"}</p>:user?<>
@@ -284,5 +282,5 @@ export function CouncilPortal({ demonstration = false, demoAsOf }: { demonstrati
       {!register&&<button type="button" disabled={busy} className={styles.textButton} onClick={()=>void resetPassword()}>Reset password</button>}
       <p className={styles.fine}>Council access is by invitation. Creating an account does not grant access to council or customer records.</p>
     </form></div>}
-  </section></main>;
+  </section></main></>;
 }

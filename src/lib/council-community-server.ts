@@ -85,7 +85,7 @@ export async function fetchCommunitySnapshot(options: { fetchImpl?: SourceFetch;
 }
 
 export async function bundledCommunitySnapshot(): Promise<CommunitySnapshot> {
-  const imported = await import("../data/council-community-baseline.json", { with: { type: "json" } });
+  const imported = await import("./council-community-baseline.ts");
   const value: unknown = imported.default;
   if (!isCommunitySnapshot(value)) throw new Error("Invalid saved community baseline");
   return value;

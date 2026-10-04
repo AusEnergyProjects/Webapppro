@@ -6,7 +6,7 @@ import { AeaProductLink, TLinkBrand } from "./TLinkChrome";
 import type { PortalWorkspacePreferencesController } from "./PortalWorkspacePreferences";
 import styles from "./PortalWorkspaceHeader.module.css";
 import { PortalProfileAvatar } from './PortalProfileAvatar';
-import { TLinkPortalSwitcher } from "./TLinkPortalSwitcher";
+import { TLinkWorkspaceBar } from "./TLinkWorkspaceBar";
 
 export function PortalWorkspaceHeader({ context, organisation, displayName, preferences, onSearch, onNotifications, notificationCount, notificationControl, onSettings, onProfile, onSignOut, onPortalSwitch }: {
   context: string; organisation: string; displayName: string;
@@ -36,7 +36,7 @@ export function PortalWorkspaceHeader({ context, organisation, displayName, pref
   }, []);
   const night = preferences.profile.colourMode === "night";
   return <header ref={header} className={styles.header} aria-label={`${context} header`}>
-    <div className={styles.businessBar}><TLinkPortalSwitcher current={preferences.workspace} user={preferences.user} onBeforeSwitch={onPortalSwitch} /><span>Working with <strong>{organisation}</strong></span><span>Welcome {displayName}</span></div>
+    <TLinkWorkspaceBar current={preferences.workspace} user={preferences.user} organisation={organisation} displayName={displayName} onBeforeSwitch={onPortalSwitch} />
     <div className={styles.bar}>
       <div className={styles.brand}><TLinkBrand context={context} /></div>
       <form className={styles.search} role="search" aria-label="Search workspace jobs" onSubmit={event => { event.preventDefault(); onSearch(query.trim()); }}>

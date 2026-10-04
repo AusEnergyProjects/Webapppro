@@ -73,6 +73,20 @@ const workerDynamicEntries = new Set(
     (entryKey) => serverManifest[entryKey]?.dynamicImports || [],
   ),
 );
+// The deployment must load retained council evidence through emitted modules.
+// Dynamic JSON imports with attributes can survive bundling as missing source paths.
+for (const name of ["council-community-baseline", "council-veu-baseline"]) {
+  const entryKey = `src/lib/${name}.ts`;
+  if (!serverManifest[entryKey] || eagerWorkerEntries.has(entryKey) || !workerDynamicEntries.has(entryKey)) {
+    throw new Error(`Sites server bundle audit failed: ${name} must be a deferred emitted module.`);
+  }
+  entryBytes(entryKey);
+  for (const key of eagerWorkerEntries) {
+    if (builtEntrySource(key).includes(`../data/${name}.json`)) {
+      throw new Error(`Sites server bundle audit failed: ${name} still references an unpackaged source JSON file.`);
+    }
+  }
+}
 const guardedPdfEntryKeys = [
   "src/lib/trade-accepted-invoice-pdf-server.ts",
   "src/lib/creditex-activity-work-pack-pdf-renderer.ts",

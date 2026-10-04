@@ -14,7 +14,7 @@ import { CouncilIcon, CouncilPanel, type CouncilIconName, councilDateTime, counc
 import { CouncilProfileSettings } from "./CouncilProfileSettings";
 import styles from "./CouncilWorkspace.module.css";
 import type { User } from "firebase/auth";
-import { TLinkPortalSwitcher } from "../TLinkPortalSwitcher";
+import { TLinkWorkspaceBar } from "../TLinkWorkspaceBar";
 
 type CouncilView = "overview" | "community" | "map" | "calculator" | "activities" | "economy" | "campaigns" | "sessions" | "reports" | "settings" | "team";
 const navigation: Array<{ id: CouncilView; label: string; icon: CouncilIconName }> = [
@@ -36,6 +36,7 @@ const headings: Record<CouncilView, { title: string; description: string; eyebro
 
 export type CouncilWorkspaceProps = {
   portalUser?: User | null;
+  workspaceActions?: ReactNode;
   report: CouncilReport;
   profile: CouncilProfile;
   campaigns: CouncilCampaign[];
@@ -58,7 +59,7 @@ export type CouncilWorkspaceProps = {
   teamSlot?: ReactNode;
 };
 
-export function CouncilWorkspace({ report, profile, campaigns, loading = false, error, notice, canManage, onPeriodChange, onRefresh, onSignOut, onSaveCampaign, onSaveProfile, onExport, onExitDemo, mapSlot, calculatorSlot, onResetDemo, communitySlot, communitySummarySlot, teamSlot, portalUser = null }: CouncilWorkspaceProps) {
+export function CouncilWorkspace({ report, profile, campaigns, loading = false, error, notice, canManage, onPeriodChange, onRefresh, onSignOut, onSaveCampaign, onSaveProfile, onExport, onExitDemo, mapSlot, calculatorSlot, onResetDemo, communitySlot, communitySummarySlot, teamSlot, portalUser = null, workspaceActions }: CouncilWorkspaceProps) {
   const [view, setView] = useState<CouncilView>("overview");
   const [createOnOpen, setCreateOnOpen] = useState(false);
   const [colourMode, setColourMode] = useState<TLinkColourMode>("day");
@@ -96,9 +97,9 @@ export function CouncilWorkspace({ report, profile, campaigns, loading = false, 
   }
   function navigate(next: CouncilView, create = false) { setCreateOnOpen(create); setView(next); requestAnimationFrame(() => { window.scrollTo({ top: 0, behavior: "instant" }); headingRef.current?.focus({ preventScroll: true }); }); }
   return <div className={styles.workspace} data-colour-mode={colourMode} style={{ ...themeVariables, color: "var(--c-ink)" }}>
+    <TLinkWorkspaceBar current="council" user={portalUser} organisation={identity.name || "Your council"} displayName={portalUser?.displayName?.trim().split(/\s+/)[0]} actions={workspaceActions} onBeforeSwitch={() => !profileDirty || window.confirm("Leave without saving your council profile changes?")} />
     <aside className={styles.sidebar}><div className={styles.brand}><TLinkMark className={styles.brandMark} size={42} /><div><strong>TLink</strong><small>Council workspace</small></div></div><p className={styles.navCaption}>Community impact</p><nav className={styles.nav} aria-label="Council workspace">{navigation.filter(item => (item.id !== "map" || mapSlot) && (item.id !== "calculator" || calculatorSlot) && (item.id !== "community" || communitySlot) && (item.id !== "team" || teamSlot)).map(item => <button type="button" key={item.id} onClick={() => navigate(item.id)} aria-current={view === item.id ? "page" : undefined}><CouncilIcon name={item.icon} size={18} />{item.label}</button>)}</nav><div className={styles.sidebarBottom}><div className={styles.privacyBadge}><CouncilIcon name="shield" size={19} /><div><strong>Private by design</strong>Local insights.<br />Customer details stay private.</div></div><p className={styles.poweredBy}>TLink Council<br />Community impact workspace</p></div></aside>
     <div className={styles.main}>
-      <div className={styles.portalBar}><TLinkPortalSwitcher current="council" user={portalUser} onBeforeSwitch={() => !profileDirty || window.confirm("Leave without saving your council profile changes?")} /></div>
       <header className={styles.topbar}><div className={styles.councilIdentity}><span className={styles.councilMonogram}>{identity.logoDataUrl ? <NextImage unoptimized src={identity.logoDataUrl} alt={`${identity.name} logo`} width={40} height={40} /> : initials}</span><div><strong>{identity.name || "Your council"}</strong><small>{profile.state} · {profileDraft ? identity.postcodes.length : report.scope.postcodes.length} reporting postcodes{profileDirty ? " · Preview" : ""}</small></div></div><div className={styles.topbarTools}><span>{demo ? "TLink Council demonstration" : "TLink Council"}</span><button type="button" className={styles.colourModeToggle} aria-label="Night mode" aria-pressed={colourMode === "night"} title={colourMode === "night" ? "Switch to day mode" : "Switch to night mode"} onClick={toggleColourMode}><span className={colourMode === "day" ? styles.modeActive : undefined} aria-hidden="true"><CouncilIcon name="sun" size={16} /></span><span className={colourMode === "night" ? styles.modeActive : undefined} aria-hidden="true"><CouncilIcon name="moon" size={16} /></span></button><button type="button" className={styles.iconButton} onClick={onRefresh} disabled={loading} aria-label="Refresh council report"><CouncilIcon name="refresh" size={17} /></button>{onSignOut && <button type="button" className={styles.iconButton} onClick={onSignOut} aria-label="Sign out"><CouncilIcon name="logout" size={17} /></button>}</div></header>
       {demo && <div className={styles.demoBanner}><div><strong>Explore TLink Council</strong>Official public community data alongside clearly labelled sample TLink outcomes. Profile and campaign changes are saved only in this browser.</div>{onExitDemo ? <button type="button" className={styles.textButton} onClick={onExitDemo}>Exit demo</button> : <a href="/council">Council sign in</a>}</div>}
       <main className={styles.content} id="site-content">

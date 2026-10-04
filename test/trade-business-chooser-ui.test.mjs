@@ -3,13 +3,22 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import * as portals from "../src/lib/tlink-portals.ts";
 import * as businessClient from "../src/lib/trade-business-client.ts";
+
+const workspaceBarExports = {};
+const workspaceBarSource = readFileSync(new URL("../src/components/TLinkWorkspaceBar.tsx", import.meta.url), "utf8");
+const workspaceBarDependencies = { react: { useRef: () => ({ current: null }), useEffect() {} }, "react/jsx-runtime": jsx,
+  "@/lib/tlink-portals": portals, "./TLinkPortalSwitcher": { TLinkPortalSwitcher: "portal-switcher" }, "./TLinkWorkspaceBar.module.css": { default: {} } };
+Function("require", "exports", ts.transpileModule(workspaceBarSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText)(id => workspaceBarDependencies[id], workspaceBarExports);
+const workspaceBar = workspaceBarExports.TLinkWorkspaceBar;
+const renderedChildren = node => node?.type === workspaceBar ? workspaceBar(node.props) : node?.props?.children;
 
 const source = readFileSync(new URL("../src/components/TradeBusinessProvider.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const choice = (ownerUid, role = "member") => ({ ownerUid, role, businessName: `Business ${ownerUid}`, memberId: `${ownerUid}-member`, displayName: "Person" });
-const nodes = (node, matches) => node == null || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, matches)) : [...(matches(node) ? [node] : []), ...nodes(node.props?.children, matches)];
-const text = node => node == null || typeof node === "boolean" ? "" : typeof node !== "object" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
+const nodes = (node, matches) => node == null || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, matches)) : [...(matches(node) ? [node] : []), ...nodes(renderedChildren(node), matches)];
+const text = node => node == null || typeof node === "boolean" ? "" : typeof node !== "object" ? String(node) : Array.isArray(node) ? node.map(text).join(" ").replace(/\s+/g, " ") : text(renderedChildren(node));
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function harness(initialChoices, { destination = "member", saved = "", disableNotifications = async () => {}, user = { uid: "person", emailVerified: true, getIdToken: async () => "identity-token" } } = {}) {
@@ -31,7 +40,7 @@ function harness(initialChoices, { destination = "member", saved = "", disableNo
     saveTradeBusinessSelection: (uid, ownerUid) => businessClient.saveTradeBusinessSelection(uid, ownerUid, store),
   };
   const fetch = async (url, init) => { requests.push({ url, init }); return Response.json({ businesses, requiresSelection: businesses.length > 1 }); };
-  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": { onIdTokenChanged(_auth, callback) { authObserver = callback; callback(user); return () => {}; } }, "@/lib/firebase-client": { firebaseAuth: {} }, "@/lib/trade-device-client": { disableTradeDeviceNotifications: disableNotifications }, "@/lib/trade-business-client": context, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children }, "./TLinkPortalSwitcher": { TLinkPortalSwitcher: "portal-switcher" } };
+  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": { onIdTokenChanged(_auth, callback) { authObserver = callback; callback(user); return () => {}; } }, "@/lib/firebase-client": { firebaseAuth: {} }, "@/lib/trade-device-client": { disableTradeDeviceNotifications: disableNotifications }, "@/lib/trade-business-client": context, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children }, "./TLinkWorkspaceBar": { TLinkWorkspaceBar: workspaceBar } };
   const exports = {};
   const window = { location: { origin: "https://tlink.test", replace: url => redirects.push(url) }, history: { replaceState() {} } };
   Function("require", "exports", "fetch", "window", compiled)(id => { assert.ok(dependencies[id], id); return dependencies[id]; }, exports, fetch, window);
@@ -224,7 +233,7 @@ test("an unmounted business provider cannot replace the active chooser from a de
   let respond;
   const request = new Promise(resolve => { respond = resolve; });
   const react = { createContext: () => ({ Provider: () => null }), useRef: value => ({ current: value }), useCallback: callback => callback, useMemo: create => create(), useEffect: effect => cleanups.push(effect()) };
-  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": {}, "@/lib/firebase-client": {}, "@/lib/trade-device-client": {}, "@/lib/trade-business-client": businessClient, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children }, "./TLinkPortalSwitcher": { TLinkPortalSwitcher: "portal-switcher" } };
+  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": {}, "@/lib/firebase-client": {}, "@/lib/trade-device-client": {}, "@/lib/trade-business-client": businessClient, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children }, "./TLinkWorkspaceBar": { TLinkWorkspaceBar: workspaceBar } };
   const exports = {};
   Function("require", "exports", "fetch", "window", compiled)(id => dependencies[id], exports, () => request, { location: { origin: "https://tlink.test" } });
   const tree = exports.TradeBusinessProvider({ business: choice("old-business"), onAccessLost: () => lost.push(true), children: null });

@@ -14,6 +14,8 @@ Built from live Sites version 758 source `c1af563504b26f76ba895fc9b72d80f8565b3f
 - New business registration supports trades only. Existing supplier records remain editable; the API rejects new supplier accounts and partner-type conversion. No existing account data is deleted.
 - Council access for the existing support email is provisioned through the audited Admin council workflow, with a verified email-bound membership. There is no hard-coded email bypass or separate password.
 
+Production owner access for `info@ausenergyassessments.com` was provisioned through that workflow on 5 October 2026, in the internal `TLink Council Preview` workspace covering 3805, 3806, 3977 and 3980. Its real authenticated dashboard opened successfully. This name does not represent a real council affiliation.
+
 ## Reporting boundaries
 
 The workspace keeps three independent views: official community activity, recorded TLink participation, and explicitly tagged council campaign referrals. They are not added together. An enquiry carrying a campaign reference establishes attribution, not causal additionality. Registered businesses and completed upgrades do not measure employment created.
@@ -75,3 +77,7 @@ Validation evidence is retained under `C:\Webproject\outputs\council-*`:
 The shared ABN predicate extraction replaced the prior inline definition; affected test fixtures load that same authoritative implementation. Temporary comparison files were removed. No dependency versions or performance budgets were changed, and the old council checkout remains preserved.
 
 The user's follow-up explicitly authorises Git and Sites publication and council access for `info@ausenergyassessments.com`. Production provisioning and authenticated live checks are only confirmed by the release receipt, not by local fixture tests.
+
+The first live verification on Sites 759 found a production packaging defect: dynamic JSON imports still referenced absent source files, so both official-data endpoints returned 503 before loading their retained evidence. The correction lazily imports normal modules containing static JSON imports. The build audit now requires deferred emitted baseline modules and rejects the broken raw JSON paths. Both corrected public endpoints returned 200 in the actual built Cloudflare Worker; all 150 council tests passed. Corrective publication and live proof are recorded in the release receipt.
+
+Trades, Admin, Creditex and Council now render the same full-width `TLinkWorkspaceBar`: business/council identity and welcome on the left, the dashboard selector at the right edge, and workspace management actions immediately before it. Responsive wrapping, theme colours and measured sticky offsets are shared; the replaced per-workspace selector rows were removed. Focused header, provider, selector and council checks passed 183/183.

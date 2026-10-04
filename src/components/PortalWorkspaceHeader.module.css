@@ -1,6 +1,4 @@
 .header { flex: 0 0 auto; position: relative; z-index: 30; color: #fff; }
-.businessBar { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; padding: 8px 24px; background: var(--portal-surface); color: var(--portal-muted); font-size: .8rem; line-height: 1.35; border-bottom: 1px solid var(--portal-line); }
-.businessBar strong { color: var(--portal-ink); margin-left: 6px; }
 .bar { display: flex; align-items: center; gap: 16px; min-height: 78px; padding: 12px 22px; background: var(--portal-gradient); border-bottom: 1px solid #ffffff24; }
 .brand { width: 192px; flex: 0 0 auto; }
 .brand :global(.tlink-brand) { display: flex; align-items: center; gap: 12px; color: #fff; }
@@ -40,7 +38,7 @@
 .error { margin: 0; padding: 10px 22px; background: var(--portal-error-bg); color: var(--portal-error-ink); font-size: .82rem; }
 .error button { color: inherit; border-color: currentColor; background: transparent; margin-left: 8px; }
 @media(max-width:1600px) { .bar { flex-wrap: wrap; gap: 10px 16px; } .search { max-width: none; } .actions { flex: 1 1 auto; justify-content: flex-end; } .account { max-width: 180px; } }
-@media(max-width:850px) { .brand { width: auto; } .bar { padding: 10px 14px; } .actions { flex-wrap: wrap; justify-content: flex-start; width: 100%; margin: 0; gap: 8px; } .aea,.account,.signedIn { display: none; } .search { min-width: 170px; } .search kbd { display: none; } .businessBar { padding: 7px 14px; font-size: .75rem; } .businessBar > span:last-child { display: none; } }
+@media(max-width:850px) { .brand { width: auto; } .bar { padding: 10px 14px; } .actions { flex-wrap: wrap; justify-content: flex-start; width: 100%; margin: 0; gap: 8px; } .aea,.account,.signedIn { display: none; } .search { min-width: 170px; } .search kbd { display: none; } }
 @media(max-width:480px) { .brand :global(.tlink-brand) small { max-width: 118px; font-size: .7rem; } .search { order: 3; flex: 1 1 100%; } .actions { gap: 6px; } .header button,.app { font-size: .7rem; padding: 7px 9px; min-height: 38px; } .app span { display: none; } }
 .settings { text-transform: capitalize; } @media(max-width:480px) { .settingsPrefix { display:none; } }
 .profile { display:inline-flex; align-items:center; gap:7px; }

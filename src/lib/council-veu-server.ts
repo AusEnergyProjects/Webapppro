@@ -85,7 +85,7 @@ export async function runtimeCouncilVeuCache(): Promise<VeuCache | undefined> {
 }
 
 export async function councilVeuBaseline(): Promise<CouncilVeuSnapshot[]> {
-  const file = await import("../data/council-veu-baseline.json", { with: { type: "json" } });
+  const file = await import("./council-veu-baseline.ts");
   const value: unknown = file.default;
   if (!Array.isArray(value) || !value.every(isCouncilVeuSnapshot)) throw new Error("Invalid retained VEU baseline");
   return value;

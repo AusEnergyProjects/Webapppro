@@ -3,10 +3,19 @@ import fs from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import * as portals from "../src/lib/tlink-portals.ts";
+
+const workspaceBarExports = {};
+const workspaceBarSource = fs.readFileSync(new URL("../src/components/TLinkWorkspaceBar.tsx", import.meta.url), "utf8");
+const workspaceBarDependencies = { react: { useRef: () => ({ current: null }), useEffect() {} }, "react/jsx-runtime": jsx,
+  "@/lib/tlink-portals": portals, "./TLinkPortalSwitcher": { TLinkPortalSwitcher: "portal-switcher" }, "./TLinkWorkspaceBar.module.css": { default: {} } };
+Function("require", "exports", ts.transpileModule(workspaceBarSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText)(id => workspaceBarDependencies[id], workspaceBarExports);
+const workspaceBar = workspaceBarExports.TLinkWorkspaceBar;
+const renderedChildren = node => node?.type === workspaceBar ? workspaceBar(node.props) : node?.props?.children;
 
 const read = path => fs.readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
-const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
-const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
+const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ").replace(/\s+/g, " ") : text(renderedChildren(node));
+const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(renderedChildren(node), predicate)];
 const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node) === label)[0];
 const labelled = (tree, label) => nodes(tree, node => node.props?.["aria-label"] === label)[0];
 const flush = () => new Promise(resolve => setImmediate(resolve));
@@ -75,7 +84,7 @@ function headerHarness() {
     react: h.hooks, "react/jsx-runtime": jsx, "next/image": { default: () => null },
     "./TLinkChrome": { AeaProductLink: () => null, TLinkBrand: () => null }, "./PortalWorkspaceHeader.module.css": css,
     "./PortalProfileAvatar": { PortalProfileAvatar: () => null },
-    "./TLinkPortalSwitcher": { TLinkPortalSwitcher: "portal-switcher" },
+    "./TLinkWorkspaceBar": { TLinkWorkspaceBar: workspaceBar },
   }, { window: { addEventListener: (type, callback) => listeners.set(type, callback), removeEventListener: (type, callback) => { if (listeners.get(type) === callback) listeners.delete(type); } }, ResizeObserver });
   const render = () => {
     h.begin();
