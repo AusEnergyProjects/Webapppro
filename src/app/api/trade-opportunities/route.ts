@@ -263,9 +263,7 @@ export async function GET(request: Request) {
         AND bounded_match.id IN (SELECT value FROM json_each(?))
         AND bounded_opportunity.status IN ('open', 'paused')
         AND bounded_match.status IN ('offered', 'viewed', 'interested', 'connected')
-      ORDER BY (bounded_match.status = 'offered') DESC, (bounded_match.status = 'viewed') DESC,
-        (bounded_match.status = 'interested') DESC,
-        bounded_match.updated_at DESC, bounded_match.id ASC
+      ORDER BY bounded_opportunity.created_at DESC, bounded_match.matched_at DESC, bounded_match.id ASC
       LIMIT 100
     )`;
   const authorizedLeadIdsStatement = db.prepare(`SELECT m.id authorized_match_id
@@ -287,9 +285,7 @@ export async function GET(request: Request) {
             AND matching_consent.withdrawn_at = ''
         )
       )
-    ORDER BY (m.status = 'offered') DESC, (m.status = 'viewed') DESC,
-      (m.status = 'interested') DESC,
-      m.updated_at DESC, m.id ASC
+    ORDER BY o.created_at DESC, m.matched_at DESC, m.id ASC
     LIMIT 100`).bind(user.uid, requestedMatchId, requestedMatchId);
   // Keep extensions bounded without repeating the entire authorization graph in
   // every query. The batch below re-runs this authoritative read in the same
@@ -306,16 +302,14 @@ export async function GET(request: Request) {
       o.id, o.title, o.project_type, o.suburb opportunity_suburb,
       o.postcode opportunity_postcode, o.state, o.service_categories,
       o.priority, o.timing, o.summary, o.status, o.contact_limit,
-      o.expires_at, o.source_reference,
+      o.expires_at, o.source_reference, o.created_at,
       p.id customer_project_id, p.firebase_uid customer_uid
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     LEFT JOIN customer_projects p ON p.opportunity_id = o.id
       AND o.source_reference = 'customer-project:' || p.id
     WHERE m.firebase_uid = ? AND m.id IN (SELECT value FROM json_each(?))
-    ORDER BY (m.status = 'offered') DESC, (m.status = 'viewed') DESC,
-      (m.status = 'interested') DESC,
-      m.updated_at DESC, m.id ASC
+    ORDER BY o.created_at DESC, m.matched_at DESC, m.id ASC
     LIMIT 100`).bind(user.uid, authorizedMatchIdsJson);
   const projectContextStatement = db.prepare(`SELECT
       m.id project_match_id, p.id customer_project_id, p.firebase_uid customer_uid,
@@ -343,9 +337,7 @@ export async function GET(request: Request) {
           AND matching_consent.purpose = 'anonymized_installer_matching'
           AND matching_consent.withdrawn_at = ''
       )
-    ORDER BY CASE m.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1
-      WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END,
-      m.updated_at DESC, m.id ASC
+    ORDER BY o.created_at DESC, m.matched_at DESC, m.id ASC
     LIMIT 100`).bind(user.uid, authorizedMatchIdsJson);
   const matchingLocalityStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT
@@ -701,6 +693,7 @@ export async function GET(request: Request) {
         connectedAt: row.connected_at,
         expiresAt: row.expires_at,
         matchedAt: row.matched_at,
+        createdAt: row.created_at,
         updatedAt: row.updated_at,
         id: row.id,
         title: row.title,

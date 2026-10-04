@@ -33,7 +33,14 @@ const text = node => node == null || typeof node === 'boolean' ? '' : typeof nod
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const response = opportunities => ({ ok: true, json: async () => ({ opportunities }) });
-const lead = matchId => ({ matchId, title: matchId });
+const lead = (matchId, extra = {}) => ({ matchId, title: matchId, summary: '', projectType: 'home', suburb: 'Melbourne', postcode: '3000', state: 'VIC',
+  distanceBand: 'Within 25 km', matchedCategories: ['solar'], serviceCategories: ['solar'], matchStatus: 'offered', customerContact: null,
+  createdAt: '2026-10-04T00:00:00.000Z', matchedAt: '2026-10-04T01:00:00.000Z', updatedAt: '2026-10-04T02:00:00.000Z', ...extra });
+const visibleLeads = (opportunities, filters = {}) => evaluate(`const ${declaration('visibleLeadOpportunities')};
+  const ${declaration('selectedLeadOpportunity')}; exports.visible = visibleLeadOpportunities; exports.selected = selectedLeadOpportunity;`, {
+  opportunities, leadSearch: '', leadStatusFilter: '', leadServiceFilter: '', leadStateFilter: '', selectedOpportunityMatchId: '',
+  useMemo: callback => callback(), ...filters,
+});
 
 test('lead location uses already released contact locality and retains protected broad-location fallbacks', () => {
   const location = find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'opportunityBroadLocation').getText(parsed);
@@ -106,10 +113,47 @@ test('failed refresh retains loaded leads, exposes the error and allows manual r
 
 test('refresh retains an explicitly opened match outside the broad inbox and replaces it when returned', async () => {
   let returned = [lead('new')]; const h = harness(async () => response(returned));
-  h.exactOpportunityMatchId.current = 'exact'; h.state.opportunities = [lead('exact')]; await h.mount();
+  h.exactOpportunityMatchId.current = 'exact'; h.state.opportunities = [lead('exact', { createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2099-01-01T00:00:00.000Z' })]; await h.mount();
   assert.deepEqual(h.state.opportunities.map(item => item.matchId), ['exact', 'new']);
+  const shown = visibleLeads(h.state.opportunities, { selectedOpportunityMatchId: 'exact' });
+  assert.deepEqual(shown.visible.map(item => item.matchId), ['new', 'exact'], 'Retaining a notification target does not promote an older enquiry');
+  assert.equal(shown.selected.matchId, 'exact', 'The explicit notification target remains selected');
   returned = [{ ...lead('exact'), title: 'Updated exact match' }]; await h.refresh();
   assert.equal(h.state.opportunities.length, 1); assert.equal(h.state.opportunities[0].title, 'Updated exact match'); h.cleanup();
+});
+
+test('the production visible list sorts by enquiry creation, matching time and stable ID without mutating loaded rows', () => {
+  const opportunities = [
+    lead('old-offered', { createdAt: '2026-08-01T00:00:00.000Z', matchedAt: '2099-01-01T00:00:00.000Z', updatedAt: '2099-01-01T00:00:00.000Z' }),
+    lead('tie-b', { matchStatus: 'viewed' }),
+    lead('tie-a', { matchStatus: 'connected' }),
+    lead('earlier-match', { matchStatus: 'interested', matchedAt: '2026-10-04T00:30:00.000Z' }),
+    lead('newest-connected', { matchStatus: 'connected', createdAt: '2026-10-04T00:00:01.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }),
+  ];
+  const snapshot = structuredClone(opportunities);
+  const shown = visibleLeads(opportunities);
+  assert.deepEqual(shown.visible.map(item => item.matchId), ['newest-connected', 'tie-a', 'tie-b', 'earlier-match', 'old-offered']);
+  assert.equal(shown.selected.matchId, 'newest-connected');
+  assert.deepEqual(opportunities, snapshot, 'Sorting the view must not reorder the loaded state');
+  assert.equal(shown.visible[0], opportunities[4]);
+});
+
+test('newest-first ordering preserves each status, state, matched-service and released-contact search filter', () => {
+  const opportunities = [
+    lead('older-visible', { createdAt: '2026-08-01T00:00:00.000Z', title: 'Roof project' }),
+    lead('newer-visible', { title: 'Roof solar' }),
+    lead('wrong-state', { state: 'NSW', title: 'Roof solar' }),
+    lead('wrong-status', { matchStatus: 'connected', title: 'Roof solar' }),
+    lead('wrong-matched-service', { matchedCategories: ['air-conditioning'], serviceCategories: ['solar'], title: 'Roof solar' }),
+    lead('wrong-search', { title: 'Battery storage' }),
+  ];
+  const filters = { leadSearch: '  ROOF ', leadStatusFilter: 'offered', leadServiceFilter: 'solar', leadStateFilter: 'VIC', selectedOpportunityMatchId: 'wrong-state' };
+  const shown = visibleLeads(opportunities, filters);
+  assert.deepEqual(shown.visible.map(item => item.matchId), ['newer-visible', 'older-visible']);
+  assert.equal(shown.selected.matchId, 'newer-visible', 'A target outside the active filters does not bypass them');
+  const released = lead('released', { matchedCategories: [], customerContact: { email: 'consented@example.test' } });
+  const withheld = lead('withheld', { customerContact: null, customerEmail: 'consented@example.test' });
+  assert.deepEqual(visibleLeads([withheld, released], { leadSearch: 'consented@example.test', leadServiceFilter: 'solar' }).visible.map(item => item.matchId), ['released']);
 });
 
 test('identity changes abort the old request and ignore late results without clearing the newer loading state', async () => {

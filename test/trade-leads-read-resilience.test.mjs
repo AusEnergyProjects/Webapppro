@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { migratedDataforceD1 } from "./helpers/trade-dataforce-database.mjs";
+import { migratedDataforceD1, migratedDataforceSqlite } from "./helpers/trade-dataforce-database.mjs";
 
 import {
   ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
@@ -280,11 +280,12 @@ test("trade lead reads split base rows and execute consent authorization within 
   assert.doesNotMatch(baseRead, /customer_project_quotes|customer_project_contact_releases|customer_project_arrival_proposals/);
   assert.doesNotMatch(baseRead, /property_context|customer_goal|contact_release_id|arrival_proposal_id/);
   assert.doesNotMatch(baseRead, /any_public_contact|public_contact\.id IS NOT NULL/);
-  assert.equal(d1StatementBudget(baseRead).projection, 27);
+  assert.equal(d1StatementBudget(baseRead).projection, 28);
   assert.match(baseRead, /LIMIT 100/);
-  assert.match(baseRead, /m\.updated_at DESC, m\.id ASC/);
-  assert.match(projectRead, /m\.updated_at DESC, m\.id ASC/);
-  assert.match(boundedMatchRead, /bounded_match\.updated_at DESC, bounded_match\.id ASC/);
+  assert.match(baseRead, /o\.created_at DESC, m\.matched_at DESC, m\.id ASC/);
+  assert.match(projectRead, /o\.created_at DESC, m\.matched_at DESC, m\.id ASC/);
+  assert.match(boundedMatchRead, /bounded_opportunity\.created_at DESC, bounded_match\.matched_at DESC, bounded_match\.id ASC/);
+  assert.match(route, /createdAt: row\.created_at/);
   assert.match(projectRead, /EXISTS \([\s\S]*matching_consent\.withdrawn_at = ''/);
   assert.match(route, /platformOnly && !customerProjectContextMatchesBase\(baseRow, projectContext\)[\s\S]*return \[\]/);
   assert.match(route, /platformQuoteForMatchedLead\(/);
@@ -423,7 +424,7 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
       id TEXT PRIMARY KEY, title TEXT DEFAULT '', project_type TEXT DEFAULT '', suburb TEXT DEFAULT '',
       postcode TEXT DEFAULT '', state TEXT DEFAULT '', service_categories TEXT DEFAULT '[]',
       priority TEXT DEFAULT '', timing TEXT DEFAULT '', summary TEXT DEFAULT '', status TEXT DEFAULT 'open',
-      contact_limit INTEGER DEFAULT 2, expires_at TEXT DEFAULT '', source_reference TEXT DEFAULT ''
+      contact_limit INTEGER DEFAULT 2, expires_at TEXT DEFAULT '', source_reference TEXT DEFAULT '', created_at TEXT DEFAULT ''
     );
     CREATE TABLE customer_projects (id TEXT PRIMARY KEY, firebase_uid TEXT, opportunity_id TEXT);
     CREATE TABLE customer_consent_receipts (
@@ -500,6 +501,62 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
     ('active', 'project-1', 'customer-1', 'anonymized_installer_matching', '')`).run();
   assert.equal(loadBase("project-match").length, 1);
   database.close();
+});
+
+test("all four lead reads choose the newest 100 enquiries before status, updates or later matching", t => {
+  const { sqlite: database } = migratedDataforceSqlite();
+  t.after(() => database.close());
+  const now = "2026-10-04T02:00:00.000Z";
+  const insert = (table, values) => {
+    const supplied = { ...values };
+    for (const column of database.prepare(`PRAGMA table_info(${table})`).all()) {
+      if (column.notnull && column.dflt_value === null && !Object.hasOwn(supplied, column.name)) supplied[column.name] = column.type === "INTEGER" ? 0 : "";
+    }
+    const fields = Object.keys(supplied);
+    database.prepare(`INSERT INTO ${table} (${fields.join(",")}) VALUES (${fields.map(() => "?").join(",")})`).run(...Object.values(supplied));
+  };
+  insert("trade_accounts", { firebase_uid: "sort-owner", email: "sort@example.test", business_name: "Sort Test Trade",
+    abn: "53004085616", verified_abn: "53004085616", partner_type: "installer", account_status: "active", verification_status: "approved",
+    verification_review_id: "sort-review", verification_reviewed_at: now, verification_reviewed_by_uid: "reviewer",
+    capabilities: '["solar"]', service_states: '["VIC"]', address_state: "VIC", availability_status: "open", created_at: now, updated_at: now });
+  insert("trade_account_verification_reviews", { id: "sort-review", firebase_uid: "sort-owner", abn: "53004085616", business_name: "Sort Test Trade",
+    partner_type: "installer", decision: "approved", review_method: "official_abr_lookup", reviewed_by_uid: "reviewer", reviewed_at: now });
+  const matchId = index => `sort-match-${String(index).padStart(3, "0")}`;
+  const allIds = [];
+  for (let index = 0; index < 107; index++) {
+    const opportunityId = `sort-opportunity-${index}`, projectId = `sort-project-${index}`;
+    const createdAt = index >= 102 ? "2026-06-01T00:00:00.000Z" : new Date(Date.UTC(2026, 0, 1 + index)).toISOString();
+    const matchedAt = index === 0 ? "2099-01-01T00:00:00.000Z"
+      : index >= 103 ? "2026-06-02T00:00:00.000Z" : createdAt;
+    const owner = index === 105 ? "another-owner" : "sort-owner";
+    const status = index === 106 ? "declined" : ["offered", "viewed", "interested", "connected"][index % 4];
+    insert("trade_opportunities", { id: opportunityId, title: `Enquiry ${index}`, project_type: "home", postcode: "3000", state: "VIC",
+      service_categories: '["solar"]', status: "open", source_reference: `customer-project:${projectId}`, expires_at: "2099-01-01", created_at: createdAt, updated_at: now });
+    insert("trade_opportunity_matches", { id: matchId(index), opportunity_id: opportunityId, firebase_uid: owner, status,
+      matched_categories: '["solar"]', matched_at: matchedAt, updated_at: index === 0 ? "2099-12-31T00:00:00.000Z" : "2026-01-01T00:00:00.000Z" });
+    insert("customer_projects", { id: projectId, firebase_uid: "sort-customer", opportunity_id: opportunityId, postcode: "3000", address_state: "VIC",
+      service_categories: '["solar"]', created_at: createdAt, updated_at: now });
+    insert("customer_consent_receipts", { id: `sort-consent-${index}`, project_id: projectId, firebase_uid: "sort-customer",
+      purpose: "anonymized_installer_matching", notice_version: "2026-07-18", granted_at: now, withdrawn_at: "" });
+    if (index < 105) allIds.push(matchId(index));
+  }
+  const expected = [103, 104, 102, ...Array.from({ length: 97 }, (_, index) => 101 - index)].map(matchId);
+  const authorizationRead = sqlTemplateContaining(route, "SELECT m.id authorized_match_id");
+  const baseRead = sqlTemplateContaining(route, "m.id match_id, m.firebase_uid installer_uid");
+  const boundedRead = sqlTemplateContaining(route, "SELECT bounded_match.id match_id");
+  const projectRead = sqlTemplateContaining(route, "m.id project_match_id, p.id customer_project_id");
+  const authorized = database.prepare(authorizationRead).all("sort-owner", "", "");
+  assert.deepEqual(authorized.map(row => row.authorized_match_id), expected);
+  const scope = JSON.stringify(allIds.reverse());
+  const base = database.prepare(baseRead).all("sort-owner", scope);
+  assert.deepEqual(base.map(row => row.match_id), expected);
+  assert.equal(base[0].created_at, "2026-06-01T00:00:00.000Z");
+  assert.deepEqual(database.prepare(`${boundedRead} SELECT match_id FROM authoritative_matches`).all("sort-owner", scope).map(row => row.match_id), expected);
+  assert.deepEqual(database.prepare(projectRead).all("sort-owner", scope).map(row => row.project_match_id), expected);
+  assert.deepEqual(database.prepare(authorizationRead).all("sort-owner", matchId(0), matchId(0)).map(row => row.authorized_match_id), [matchId(0)], "An older explicit notification target remains retrievable");
+  assert.deepEqual(database.prepare(authorizationRead).all("sort-owner", matchId(105), matchId(105)), [], "Exact reads cannot cross owners");
+  database.prepare("UPDATE customer_consent_receipts SET withdrawn_at=? WHERE project_id='sort-project-104'").run(now);
+  assert.deepEqual(database.prepare(authorizationRead).all("sort-owner", matchId(104), matchId(104)), [], "Newest-first ordering cannot bypass current consent");
 });
 
 test("project quote, exact contact and arrival extensions validate every relation before disclosure", () => {

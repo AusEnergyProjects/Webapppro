@@ -87,6 +87,7 @@ type DashboardOpportunity = {
   matchStatus:
     "offered" | "viewed" | "interested" | "declined" | "connected" | "closed";
   matchedAt: string;
+  createdAt: string;
   updatedAt: string;
   id: string;
   title: string;
@@ -1473,7 +1474,9 @@ function DirectTradeDashboardContent() {
       .filter((item) => !leadStatusFilter || item.matchStatus === leadStatusFilter)
       .filter((item) => !leadStateFilter || item.state === leadStateFilter)
       .filter((item) => !leadServiceFilter || (item.matchedCategories.length ? item.matchedCategories : item.serviceCategories).includes(leadServiceFilter))
-      .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.suburb} ${item.postcode} ${item.state} ${item.distanceBand} ${item.customerContact?.name || ""} ${item.customerContact?.email || ""} ${item.customerContact?.phone || ""}`.toLowerCase().includes(term));
+      .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.suburb} ${item.postcode} ${item.state} ${item.distanceBand} ${item.customerContact?.name || ""} ${item.customerContact?.email || ""} ${item.customerContact?.phone || ""}`.toLowerCase().includes(term))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)
+        || right.matchedAt.localeCompare(left.matchedAt) || left.matchId.localeCompare(right.matchId));
   }, [leadSearch, leadServiceFilter, leadStateFilter, leadStatusFilter, opportunities]);
   const selectedLeadOpportunity = visibleLeadOpportunities.find((item) => item.matchId === selectedOpportunityMatchId)
     || visibleLeadOpportunities[0]
@@ -2721,6 +2724,7 @@ function DirectTradeDashboardContent() {
                         <div>
                           <strong>{visibleLeadOpportunities.length}</strong>
                           <span>matching lead{visibleLeadOpportunities.length === 1 ? "" : "s"}</span>
+                          <span>Newest first</span>
                           {(leadSearch || leadStatusFilter || leadServiceFilter || leadStateFilter) && (
                             <button type="button" onClick={() => {
                               setLeadSearch("");
@@ -2750,6 +2754,7 @@ function DirectTradeDashboardContent() {
                           >
                             <span>{opportunity.platformOnly ? "Australian Energy Assessments protected lead" : "Australian Energy Assessments supplied lead"} | {opportunity.matchStatus === "offered" ? "New" : !opportunity.platformOnly && opportunity.matchStatus === "interested" ? "Customer added" : opportunity.matchStatus.replaceAll("_", " ")}</span>
                             <strong>{customerName}</strong>
+                            <small><time dateTime={opportunity.createdAt}>Enquired {new Date(opportunity.createdAt).toLocaleString("en-AU", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</time></small>
                             <p>{opportunity.enquiryPack?.summary || opportunity.summary}</p>
                             <small>{opportunityBroadLocation(opportunity)} | {opportunity.timing.replaceAll("_", " ")}</small>
                           </button>;
