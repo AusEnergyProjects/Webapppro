@@ -259,6 +259,9 @@
 .workspace[data-colour-mode="night"] .textButton:hover { color: var(--c-accent); }
 .workspace[data-colour-mode="night"] .secondaryButton:hover { background: #1c333a; }
 .workspace[data-colour-mode="night"] .empty h3 { color: var(--c-ink); }
+.portalBar { padding: 8px 24px; background: var(--c-surface); border-bottom: 1px solid var(--c-line); --portal-surface: var(--c-surface); --portal-ink: var(--c-ink); --portal-line: var(--c-line); }
+@media(max-width:700px) { .portalBar { padding: 8px 14px; } }
+@media print { .portalBar { display: none; } }
 @media (min-width: 1700px) { .workspace { grid-template-columns: 240px minmax(0,1fr); } .content { padding-top: 40px; } }
 @media (max-width: 1180px) { .workspace { grid-template-columns: 185px minmax(0,1fr); } .sidebar { padding-left: 10px; padding-right: 10px; } .content { padding: 25px 23px 35px; } .twoColumns, .evenColumns { gap: 15px; } .panel { padding: 19px; } .metric { padding: 17px; } .shareLayout { gap: 12px; } .donut { width: 125px; height: 125px; } .topbarTools > span { display: none; } .heading { align-items: flex-start; } .metrics { gap: 10px; } .metricLabel { font-size: 11px; } .filterNote { display: none; } }
 @media (max-width: 950px) { .twoColumns, .evenColumns { grid-template-columns: 1fr; } .shareLayout { justify-content: flex-start; } .shareList { max-width: 360px; } .heading { flex-wrap: wrap; gap: 17px; } .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .metric strong { font-size: 32px; } .campaignGrid { grid-template-columns: 1fr; } }

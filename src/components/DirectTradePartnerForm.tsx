@@ -73,8 +73,6 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
   const [authBusy, setAuthBusy] = useState(false);
   const [authStatus, setAuthStatus] = useState("");
   const [partnerType, setPartnerType] = useState<PartnerType>("installer");
-  const [existingPartnerType, setExistingPartnerType] =
-    useState<PartnerType | null>(null);
   const [businessName, setBusinessName] = useState("");
   const [abn, setAbn] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
@@ -102,7 +100,7 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
     if (!nextUser) {
       setProfileLoaded(false);
       setProfileSaved(false);
-      setExistingPartnerType(null);
+      setPartnerType("installer");
     }
   }), []);
 
@@ -134,7 +132,6 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
           const savedPartnerType =
             profile.partnerType === "supplier" ? "supplier" : "installer";
           setPartnerType(savedPartnerType);
-          setExistingPartnerType(savedPartnerType);
           setBusinessWebsite(profile.businessWebsite || "");
           setServiceStates(Array.isArray(profile.serviceStates) ? profile.serviceStates : []);
           setSelectedCategories(Array.isArray(profile.capabilities) ? profile.capabilities : []);
@@ -274,7 +271,6 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "Your business profile could not be saved.");
       setProfileSaved(true);
-      setExistingPartnerType(partnerType);
       setStatusType("ok");
       setStatus(
         "Your business profile has been submitted for review. Protected trade access remains locked until the ABN and required business evidence are approved.",
@@ -308,58 +304,10 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
         </form>
         {authStatus && <p className="trade-auth-status" role="status">{authStatus}</p>}
       </div>
-      <aside className="trade-auth-benefits"><strong>Build the profile first</strong><ul><li>National service-area and capability profile</li><li>Installer or wholesaler-specific setup</li><li>No payment details or per-lead charge</li><li>Core workspace access after approval</li></ul></aside>
+      <aside className="trade-auth-benefits"><strong>Build the profile first</strong><ul><li>National service-area and capability profile</li><li>Customers, quotes, jobs and team tools</li><li>No payment details or per-lead charge</li><li>Core workspace access after approval</li></ul></aside>
     </section> : !profileLoaded ? <section className="dashboard-state-card" role="status"><p>Loading your business details...</p></section> : profileError ? <section className="dashboard-state-card" role="alert"><h2>Business details could not be loaded</h2><p>{profileError}</p><button type="button" onClick={() => { setProfileLoaded(false); setProfileRetry(value => value + 1); }}>Try again</button></section> : <>
       <section className="trade-signed-in" aria-label="Signed in account"><div><span>{profileSaved ? "Business profile" : "Secure account connected"}</span><strong>{user.email}</strong><small>{profileSaved ? "Keep your business and contact details up to date." : "Complete the business profile to begin review."}</small></div><div className="trade-signed-in-actions"><a href="/direct-trade/security">Account security</a><button type="button" onClick={() => void onSignOut()}>Sign out</button></div></section>
       <form className="direct-trade-brief" onSubmit={submitProfile} noValidate>
-        <section
-          className="direct-trade-form-section"
-          aria-labelledby="partner-type-title"
-        >
-          <div className="direct-trade-form-heading">
-            <span>Business type</span>
-            <h2 id="partner-type-title">Set up the business profile</h2>
-            <p>
-              {existingPartnerType
-                ? "The account type was fixed when this business account was created. Other business details can still be updated."
-                : "Choose the role that best describes the business. This choice is fixed after the account is created. Protected access remains locked until the ABN and required evidence are reviewed and approved."}
-            </p>
-          </div>
-          <div className="partner-type-grid">
-            <label className={partnerType === "installer" ? "selected" : ""}>
-              <input
-                type="radio"
-                name="partner-type"
-                checked={partnerType === "installer"}
-                disabled={Boolean(existingPartnerType)}
-                onChange={() => setPartnerType("installer")}
-              />
-              <span>
-                <strong>Trade or service business</strong>
-                <small>
-                  Manage customers, quotes, jobs and your team across your
-                  service areas.
-                </small>
-              </span>
-            </label>
-            <label className={partnerType === "supplier" ? "selected" : ""}>
-              <input
-                type="radio"
-                name="partner-type"
-                checked={partnerType === "supplier"}
-                disabled={Boolean(existingPartnerType)}
-                onChange={() => setPartnerType("supplier")}
-              />
-              <span>
-                <strong>Product supplier or wholesaler</strong>
-                <small>
-                  Support qualified trades with suitable products, warranty
-                  pathways and technical service.
-                </small>
-              </span>
-            </label>
-          </div>
-        </section>
         <section className="direct-trade-form-section" aria-labelledby="partner-business-title"><div className="direct-trade-form-heading"><span>Business details</span><h2 id="partner-business-title">Where you work and what you do</h2><p>A business address is required for account integrity and verification. Approved local business names, suburbs, postcodes and capabilities appear automatically in the local council trade directory. Your street address and private contact details are not included.</p></div><div className="direct-trade-field-grid trade-account-fields"><Field label="Business name"><input required type="text" value={businessName} onChange={(event) => setBusinessName(event.target.value)} autoComplete="organization" /></Field><Field label="ABN"><input required type="text" inputMode="numeric" pattern="[0-9]{11}" maxLength={11} value={abn} onChange={(event) => setAbn(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="11 digit ABN" /></Field><Field label="Business website" optional="optional"><input type="url" value={businessWebsite} onChange={(event) => setBusinessWebsite(event.target.value)} inputMode="url" placeholder="https://example.com.au" /></Field><AustralianAddressLookup className="f" label="Business street address" required value={addressLine1} onChange={setAddressLine1} onSelect={selectBusinessAddress} /><Field label="Suburb or locality"><input required type="text" value={suburb} onChange={(event) => setSuburb(event.target.value)} autoComplete="address-level2" /></Field><Field label="State or territory"><select required value={addressState} onChange={(event) => setAddressState(event.target.value)} autoComplete="address-level1"><option value="">Choose one</option>{states.map((value) => <option value={value} key={value}>{value}</option>)}</select></Field><Field label="Postcode"><input required type="text" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={postcode} onChange={(event) => setPostcode(event.target.value.replace(/\D/g, "").slice(0, 4))} autoComplete="postal-code" /></Field></div><fieldset className="partner-check-group"><legend>States and territories served</legend><div className="partner-chip-grid">{states.map((value) => <label className={serviceStates.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={serviceStates.includes(value)} onChange={() => toggle(value, serviceStates, setServiceStates)} />{value}</label>)}</div></fieldset><fieldset className="partner-check-group"><legend>{partnerType === "installer" ? "Installation capabilities" : "Product categories"}</legend><div className="partner-category-grid">{categories.map(([value, label]) => <label className={selectedCategories.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={selectedCategories.includes(value)} onChange={() => toggle(value, selectedCategories, setSelectedCategories)} />{label}</label>)}</div></fieldset><Field label={partnerType === "installer" ? "Capabilities and credential summary" : "Products, warranties and support summary"} optional="optional" hint="Maximum 800 characters. Do not upload or paste licence documents, identity records, customer lists, wholesale price files or confidential contracts."><textarea maxLength={800} rows={5} value={partnerNotes} onChange={(event) => setPartnerNotes(event.target.value)} /></Field></section>
         <section className="direct-trade-form-section" aria-labelledby="partner-contact-title"><div className="direct-trade-form-heading"><span>Account contact</span><h2 id="partner-contact-title">Who manages this account?</h2><p>This person receives account, profile, verification and suitable-opportunity communication.</p></div><div className="direct-trade-field-grid"><Field label="Contact name"><input required type="text" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></Field><Field label="Account email"><input required type="email" value={user.email || ""} readOnly aria-readonly="true" /></Field><Field label="Business contact number"><input required type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" /></Field></div><label className="direct-trade-consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I agree that Australian Energy Assessments, as the operator of TLink, may maintain this business profile, display the approved business details described above to local councils and contact me about account activity, verification and suitable opportunities. Account creation does not replace licensing, accreditation, insurance or scheme requirements.</span></label><button className="btn direct-trade-submit" disabled={sending}>{sending ? "Saving..." : profileSaved ? "Update business profile" : "Submit business profile for review"}</button>{status && <p className={`direct-trade-form-status ${statusType}`} role="status">{status}</p>}</section>
       </form>

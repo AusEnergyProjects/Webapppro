@@ -11,7 +11,11 @@
 .switcher button, .state button { min-height: 44px; border: 1px solid var(--trade-line, #cfdfda); border-radius: 9px; padding: .6rem .9rem; background: var(--trade-surface-soft, #f4faf7); color: inherit; font-weight: 650; cursor: pointer; white-space: nowrap; }
 @media (max-width: 600px) { .switcher > div { display: grid; gap: .15rem; }.switcher small { display: none; }.chooser { margin-top: 1.5rem; } }
 .switcher small[data-tlink-welcome] { display: inline; }
+.portalEntry { padding: 14px clamp(1rem, 3vw, 2rem); border-bottom: 1px solid var(--trade-line, #cfdfda); background: var(--trade-surface, #fff); }
+.switcher > .portalTools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+@media(max-width:700px) { .switcher { flex-wrap: wrap; gap: 10px; }.switcher > .portalTools { width: 100%; justify-content: space-between; }.portalTools > div { flex: 1; } }
+@media print { .portalEntry, .portalTools { display: none; } }
 
 .switcher button:disabled { opacity: .65; cursor: wait; }
 .switcher p { flex-basis: 100%; margin: .25rem 0 0; font-size: .85rem; }
-:global(html[data-tlink-colour-mode="night"]) :is(.state, .chooser, .switcher) { --trade-ink: #e9f3f0; --trade-muted: #adc2be; --trade-line: #2d4b50; --trade-surface: #102027; --trade-surface-soft: #162c32; }
+:global(html[data-tlink-colour-mode="night"]) :is(.state, .chooser, .switcher, .portalEntry) { --trade-ink: #e9f3f0; --trade-muted: #adc2be; --trade-line: #2d4b50; --trade-surface: #102027; --trade-surface-soft: #162c32; }

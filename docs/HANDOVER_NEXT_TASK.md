@@ -1,9 +1,15 @@
 # Next task handover
 
-Status: Customer shared-file preview and removal; scoped validation and release verification.
+Status: Council workspace and shared TLink dashboard access; authorised publication and live account verification.
 Prepared: 5 October 2026
 
-## Active delivery: customer control of shared uploads
+## Active delivery: council reporting and portal switching
+
+Workspace C:/Webproject/aea-energy-council-community, branch codex/council-community, base Sites 758/source c1af563504b26f76ba895fc9b72d80f8565b3f43. Publish the council workspace with migrations 0250/0251 and the common Dashboard selector. TLink trades remains the default; Admin, Creditex and Council share the existing identity with destination-specific permission/MFA checks. Provision the requested support-email council membership through the audited Admin workflow; do not introduce an email bypass or claim a real council affiliation. Preserve business selection, legacy supplier records and private customer data. New supplier registration is rejected.
+
+Acceptance: signed-out selection reaches each sign-in route; authenticated choices reflect existing access without mutations; previous-user access and aborted responses are discarded; unsaved work guards survive switching; council profile/team/report access works for the requested identity. Run full regression checks for the shared auth and migration scope. Record existing expired Surge source approvals separately without changing approval dates. Exact GitHub/Sites identity, checks and live provisioning evidence belong in C:/Webproject/outputs/tlink-portals-release.md.
+
+## Previous delivery: customer control of shared uploads
 
 Base c7a8b0fb, Sites 757. Customers can preview their shared photos/PDFs and explicitly delete a mistaken upload for every participant, including while enquiries are paused. CustomerQuoteHub owns the controls; CustomerHubFilePreview is shared with trades. Customer/trade file routes, hub projections and existing notification events own access removal. Migration 0249 preserves removal history and retryable storage cleanup; removed uploads no longer count towards active limits or duplicate matching.
 

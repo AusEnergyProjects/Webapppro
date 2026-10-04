@@ -6,13 +6,13 @@ import ts from 'typescript';
 const source = fs.readFileSync(new URL('../src/lib/native-system-calls.ts', import.meta.url), 'utf8');
 const swift = fs.readFileSync(new URL('../modules/tlink-calls/ios/TLinkCallsModule.swift', import.meta.url), 'utf8');
 function load(native) {
-  const module = { exports: {} };
+  const loadedModule = { exports: {} };
   const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   new Function('require', 'module', 'exports', code)(id => {
     assert.equal(id, 'expo');
     return { requireOptionalNativeModule: () => native };
-  }, module, module.exports);
-  return module.exports;
+  }, loadedModule, loadedModule.exports);
+  return loadedModule.exports;
 }
 const entry = (overrides = {}) => ({ timestamp: new Date(Date.now() - 1000).toISOString(), stage: 'push_received',
   localEnabled: true, appState: 'background', managedCallCount: 0, managedConnectedCount: 0,

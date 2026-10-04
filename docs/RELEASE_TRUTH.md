@@ -6,6 +6,12 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 5 October 2026
 
+## Current delivery: council reporting and shared TLink dashboard access
+
+The council workspace adds scoped community maps, approved local trade participation, protected enquiry aggregates, editable council profiles, teams, campaign attribution, the governed rebate calculator and separate reports. VEU and CER public community data retain source dates, definitions and coverage. Official activity is separate from TLink outcomes and council referrals; unavailable installer locality remains unknown. Migrations 0250 and 0251 add council organisations, memberships, attribution and profile storage.
+
+Public TLink defaults to trades with a Dashboard selector for trades, Admin, Creditex and Council. Signed-in availability is read-only and each destination retains its authoritative access gate. Dashboard navigation preserves the selected trade business. New wholesaler registration is removed without deleting existing supplier records. The user authorised GitHub/Sites publication and a council membership for their existing support email. Base is Sites 758/source c1af563504b26f76ba895fc9b72d80f8565b3f43. Exact validation, deployment and account provisioning evidence: C:/Webproject/outputs/tlink-portals-release.md. Source-review expiry remains a separately recorded existing Surge audit failure; no human approval dates are altered.
+
 ## Current adjustment: customer shared-file control
 
 Customers preview photos and PDFs in the same protected modal used by trades, with Download kept separate. Delete requires a clear in-context confirmation and works while enquiries are paused. Migration 0249 records removal before storage cleanup, hides the file from customer/trade/AI projections and allows reupload as a new file. Both file routes recheck current file access after reading storage. A removal produces one generic update for interested businesses through existing notification permissions. Cleanup failures remain recorded for bounded retry on later authorised file activity. Existing downloaded copies cannot be recalled. Private quotes and compliance evidence are unaffected. Scoped evidence and final source/publication identity: C:/Webproject/outputs/customer-hub-files-20261005/.

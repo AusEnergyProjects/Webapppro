@@ -1,0 +1,8 @@
+.switcher { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 10px; min-width: 0; color: var(--portal-ink, var(--trade-ink, #173c3e)); font-family: inherit; }
+.switcher label { font-size: 11px; font-weight: 750; letter-spacing: .04em; color: inherit; }
+.switcher select { width: 230px; max-width: 100%; min-height: 40px; border: 1px solid var(--portal-line, var(--trade-line, #c9ddd7)); border-radius: 9px; padding: 8px 30px 8px 12px; font: inherit; font-size: 12px; font-weight: 650; color: var(--portal-ink, var(--trade-ink, #173c3e)); background: var(--portal-surface, var(--trade-surface, #fff)); cursor: pointer; }
+.switcher select:focus-visible { outline: 3px solid #55c9a8; outline-offset: 2px; }
+.error { flex-basis: 100%; font-size: 11px; }
+.switcher .error button { color: inherit; font: inherit; padding: 0; min-height: 0; border: 0; background: none; text-decoration: underline; cursor: pointer; }
+@media(max-width:600px) { .switcher { gap: 5px; }.switcher label { font-size: 10px; }.switcher select { width: 210px; font-size: 12px; } }
+@media print { .switcher { display: none; } }

@@ -840,11 +840,16 @@ export async function POST(request: Request) {
       error: "The account type is fixed after setup. Contact TLink support if the business was registered incorrectly.",
     }, 409);
   }
-  const partnerType = (existingAccount?.partner_type === "supplier"
+  if (!existingAccount && requestedPartnerType === "supplier") {
+    return json({
+      ok: false,
+      code: "ACCOUNT_TYPE_UNAVAILABLE",
+      error: "New TLink accounts are for trade and service businesses. Supplier account registration is no longer available.",
+    }, 400);
+  }
+  const partnerType: PartnerType = existingAccount?.partner_type === "supplier"
     ? "supplier"
-    : existingAccount?.partner_type === "installer"
-      ? "installer"
-      : requestedPartnerType || "installer") as PartnerType;
+    : "installer";
 
   if (!businessName) return json({ ok: false, error: "Enter the business name." }, 400);
   if (businessWebsite === null) {
@@ -953,8 +958,8 @@ export async function POST(request: Request) {
       eventType: "trade.signup",
       category: "approval",
       priority: "high",
-      title: partnerType === "supplier" ? "New wholesaler account" : "New installer account",
-      summary: `${businessName} created a ${partnerType === "supplier" ? "wholesaler" : "installer"} profile and is ready for operations review.`,
+      title: "New trade account",
+      summary: `${businessName} created a trade profile and is ready for operations review.`,
       entityType: "trade_account",
       entityId: identity.uid,
       actorType: partnerType,

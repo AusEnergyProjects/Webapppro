@@ -8,6 +8,8 @@ Engineering owner: technical lead
 
 Last reconciled: 5 October 2026
 
+Current council delivery: scoped community maps, source-dated VEU/CER reporting, TLink participation and protected enquiries, profile/themes, teams, campaign attribution, calculator and exports. Migrations 0250/0251 accompany the workspace. The common Dashboard selector defaults to trades and switches among authorised Admin, Creditex and Council portals while preserving business context. New supplier registration is retired; existing records remain. The user authorises publication and council access for the existing support identity. Validation, exact GitHub/Sites release and live membership evidence: C:/Webproject/outputs/tlink-portals-release.md. Reporting boundaries are in docs/COUNCIL_WORKSPACE.md.
+
 Current customer-hub adjustment: preview shared photos/PDFs and delete a mistaken upload for all participants. Migration 0249 preserves removal history and retryable object cleanup. This is a bounded extension of the existing Q&A workflow; it does not introduce another customer workspace. Release evidence: C:/Webproject/outputs/customer-hub-files-20261005/.
 
 Current delivery: customer question deep links and issued-quote comparison; direct ordinary quote creation and simplified import entry; delegated delivery exceptions through existing Tasks; precise Creditex evidence correction/closeout; optional source-linked AI assistance using the existing provider. No new lead or commercial gates. Exact release identity and check results: C:/Webproject/outputs/workflow-optimisation-release.md.

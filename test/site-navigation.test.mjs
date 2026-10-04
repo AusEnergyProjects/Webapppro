@@ -281,9 +281,9 @@ test("direct trade proposition presents the free verified operating model honest
   assert.doesNotMatch(guide, /Live service, expanding tool|direct-trade-status/);
 });
 
-test("direct trade marketplace includes reputable wholesalers", () => {
-  assert.match(guide, /Approved trades and reputable suppliers/);
-  assert.match(guide, /Trade and supplier participation/);
+test("direct trade participation is for trade and service businesses", () => {
+  assert.match(guide, /Connect your trade or service business through TLink/);
+  assert.match(guide, /Trade participation/);
 });
 
 test("trade workspace approval does not imply government accreditation", () => {

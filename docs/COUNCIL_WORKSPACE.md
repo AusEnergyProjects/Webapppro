@@ -1,7 +1,7 @@
 # TLink council workspace
 
 Implementation checkout: `C:\Webproject\aea-energy-council-community`, branch `codex/council-community`.
-Built from live Sites version 758 source `c1af563504b26f76ba895fc9b72d80f8565b3f43` on 5 October 2026. The older council-portal checkout is preserved and is not the release base. This document describes the local candidate, not a deployed release.
+Built from live Sites version 758 source `c1af563504b26f76ba895fc9b72d80f8565b3f43` on 5 October 2026. The older council-portal checkout is preserved and is not the release base. The user has authorised matching GitHub and Sites publication; exact publication identity and live account checks are recorded in `C:/Webproject/outputs/tlink-portals-release.md` after deployment.
 
 ## Routes and access
 
@@ -10,6 +10,9 @@ Built from live Sites version 758 source `c1af563504b26f76ba895fc9b72d80f8565b3f
 - `/council/program/[code]`: published campaign landing page and explicit referral capture.
 - `/api/council/*`: tenant-scoped membership checks, no-store responses, origin checks for mutations. Owner/editor/viewer permissions and atomic audit guards apply to writes. Team owners create email-bound invitations and share the council sign-in link; the workflow does not send invitation emails automatically.
 - Migrations `0250_council_workspace.sql` and `0251_council_profile.sql` follow the current 0249 migration. The shared current ABN predicate is extracted unchanged into `trade-account-predicates.ts`.
+- Public TLink entry defaults to TLink trades. The Dashboard selector on all four sign-in screens and signed-in headers links to trades, Admin, Creditex and Council. Authenticated availability is a read-only navigation hint; each destination enforces its existing permissions, verified identity and applicable MFA. Switching preserves the current trade business and protects unsaved audit/profile changes. It does not create memberships or change roles.
+- New business registration supports trades only. Existing supplier records remain editable; the API rejects new supplier accounts and partner-type conversion. No existing account data is deleted.
+- Council access for the existing support email is provisioned through the audited Admin council workflow, with a verified email-bound membership. There is no hard-coded email bypass or separate password.
 
 ## Reporting boundaries
 
@@ -67,8 +70,8 @@ Validation evidence is retained under `C:\Webproject\outputs\council-*`:
 - `npm.cmd run build`: passed, including exact-migration server audit and unchanged public performance budgets. Wattzun route JavaScript is 346,738 bytes against a 347,000-byte limit. The council lazy entry and deferred public launcher avoid loading council features on public pages.
 - Browser checks: official dataset totals and period selectors, map layers/trade search, logo/name/theme persistence, day/night, demo team invitation, real induction calculator, official CSV downloads, responsive 390px viewport and public launcher navigation. All six pages of the final A4 print/PDF were rendered and visually checked. Production council provisioning and authenticated live-tenant flows have not been exercised against the live database.
 
-`npm.cmd run validate` is not green: the unchanged live base has a mobile lint error at `mobile/test/native-call-diagnostics.test.mjs:9` and expired official-source approval windows. The source-approval failure was reproduced in the clean live-base checkout. These failures were not waived or changed. They remain release blockers outside this council implementation.
+`npm.cmd run validate` has a pre-existing official-source approval failure, reproduced in the clean live-base checkout. All 36 evidence hashes match but their human review windows expired on 20 September or 1 October. The runtime excludes expired approvals; the council import graph does not depend on them. No approval was restamped or waived. This remains an unrelated audit failure and the scoped release receipt records it explicitly. The test-only mobile lint error was repaired by renaming a loader variable without changing assertions.
 
 The shared ABN predicate extraction replaced the prior inline definition; affected test fixtures load that same authoritative implementation. Temporary comparison files were removed. No dependency versions or performance budgets were changed, and the old council checkout remains preserved.
 
-No push, remote migration or Sites publication is authorized by the current request. The user's supplied Git rules require explicit release approval after the local candidate is concrete and reviewable.
+The user's follow-up explicitly authorises Git and Sites publication and council access for `info@ausenergyassessments.com`. Production provisioning and authenticated live checks are only confirmed by the release receipt, not by local fixture tests.

@@ -67,7 +67,7 @@ function headerHarness() {
   }
   const props = {
     context: "Compliance workspace", organisation: "Creditex", displayName: "Named reviewer",
-    preferences: { profile: { displayName: "Named reviewer", themeKey: "indigo_orchid", colourMode: "day" }, loading: false, savingProfile: false, error: "", saveProfile: async value => { saved.push(value); return true; } },
+    preferences: { workspace: "creditex", user: { uid: "reviewer-1" }, profile: { displayName: "Named reviewer", themeKey: "indigo_orchid", colourMode: "day" }, loading: false, savingProfile: false, error: "", saveProfile: async value => { saved.push(value); return true; } },
     onSearch: query => { searches.push(query); return true; }, onNotifications: () => { calls.notifications++; }, onProfile: () => { calls.profile++; },
     onSettings: () => { calls.settings++; }, onSignOut: () => { calls.signOut++; },
   };
@@ -75,6 +75,7 @@ function headerHarness() {
     react: h.hooks, "react/jsx-runtime": jsx, "next/image": { default: () => null },
     "./TLinkChrome": { AeaProductLink: () => null, TLinkBrand: () => null }, "./PortalWorkspaceHeader.module.css": css,
     "./PortalProfileAvatar": { PortalProfileAvatar: () => null },
+    "./TLinkPortalSwitcher": { TLinkPortalSwitcher: "portal-switcher" },
   }, { window: { addEventListener: (type, callback) => listeners.set(type, callback), removeEventListener: (type, callback) => { if (listeners.get(type) === callback) listeners.delete(type); } }, ResizeObserver });
   const render = () => {
     h.begin();
@@ -174,6 +175,19 @@ test("header hosts the workspace notification dropdown without a second navigati
   h.props.notificationControl=jsx.jsx('button',{'aria-label':'Work updates',children:'Bell'});
   const tree=h.render();assert.ok(labelled(tree,'Work updates'));
   assert.equal(labelled(tree,'Open notifications'),undefined);assert.equal(h.calls.notifications,0);h.cleanup();
+});
+
+test("header supplies the active portal, current user and unsaved-change guard to the switcher", () => {
+  const h = headerHarness();
+  h.props.onPortalSwitch = () => false;
+  for (const workspace of ["creditex", "admin"]) {
+    h.props.preferences.workspace = workspace;
+    const portal = nodes(h.render(), node => node.type === "portal-switcher")[0];
+    assert.equal(portal.props.current, workspace);
+    assert.equal(portal.props.user, h.props.preferences.user);
+    assert.equal(portal.props.onBeforeSwitch, h.props.onPortalSwitch);
+  }
+  h.cleanup();
 });
 
 function preferencesHarness() {

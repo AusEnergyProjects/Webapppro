@@ -50,11 +50,11 @@ test("retired pages execute one-way redirects into the dashboard", () => {
 
 const saved = { businessName: "Example", abn: "73675233557", addressLine1: "1 Example Street", suburb: "Sydney", addressState: "NSW", postcode: "2000", contactName: "Owner", phone: "0412345678", partnerType: "installer", serviceStates: ["NSW"], capabilities: ["electrical"] };
 const formCode = compile(read("../src/components/DirectTradePartnerForm.tsx"));
-function formHarness({ loadOk = true, saveOk = true } = {}) {
+function formHarness({ loadOk = true, saveOk = true, savedProfile = saved } = {}) {
   const state = [], effectState = [], pending = [], requests = [];
   let cursor = 0, savedCount = 0, signOutCount = 0;
   const user = { uid: "owner", email: "owner@example.test", getIdToken: async () => "test-token" };
-  const fetch = async (url, init = {}) => { requests.push({ url, ...init }); return { ok: init.method ? saveOk : loadOk, json: async () => init.method ? { ok: saveOk, error: "Business review is required" } : { profile: saved, error: "Could not load saved profile" } }; };
+  const fetch = async (url, init = {}) => { requests.push({ url, ...init }); return { ok: init.method ? saveOk : loadOk, json: async () => init.method ? { ok: saveOk, error: "Business review is required" } : { profile: savedProfile, error: "Could not load saved profile" } }; };
   const hooks = {
     useState(value) { const i = cursor++; if (!(i in state)) state[i] = typeof value === "function" ? value() : value; return [state[i], next => { state[i] = typeof next === "function" ? next(state[i]) : next; }]; },
     useEffect(callback, deps) { const i = cursor++; const old = effectState[i]; if (!old || deps.some((value, index) => !Object.is(value, old.deps[index]))) { old?.cleanup?.(); effectState[i] = { deps }; pending.push(() => { effectState[i].cleanup = callback(); }); } },
@@ -82,15 +82,24 @@ test("saved business details load before editing and profile errors cannot submi
 });
 
 test("profile save returns to dashboard only after server success and sign-out uses the dashboard callback", async () => {
-  for (const saveOk of [true, false]) {
-    const h = formHarness({ saveOk }); let tree = await h.settle();
-    assert.equal(nodes(tree, node => node.type === "input" && node.props.type === "radio" && node.props.disabled).length, 2);
-    await nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {} }); tree = h.render();
-    assert.equal(h.savedCount, saveOk ? 1 : 0);
-    assert.equal(h.requests.at(-1).headers.Authorization, "Bearer test-token");
-    assert.equal(JSON.parse(h.requests.at(-1).body).abn, saved.abn);
-    if (!saveOk) assert.match(text(tree), /Business review is required/);
-    await nodes(tree, node => node.type === "button" && text(node) === "Sign out")[0].props.onClick();
-    assert.equal(h.signOutCount, 1);
+  for (const partnerType of ["installer", "supplier"]) {
+    for (const saveOk of [true, false]) {
+      const h = formHarness({ saveOk, savedProfile: { ...saved, partnerType } }); let tree = await h.settle();
+      assert.equal(nodes(tree, node => node.type === "input" && node.props.type === "radio").length, 0);
+      assert.doesNotMatch(text(tree), /Business type|Product supplier or wholesaler/);
+      const contactField = nodes(tree, node => node.type === "Field" && node.props.label === "Business contact number")[0];
+      const contactInput = nodes(contactField, node => node.type === "input")[0];
+      assert.equal(contactInput.props.value, saved.phone);
+      contactInput.props.onChange({ target: { value: "0498765432" } }); tree = h.render();
+      await nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {} }); tree = h.render();
+      assert.equal(h.savedCount, saveOk ? 1 : 0);
+      assert.equal(h.requests.at(-1).headers.Authorization, "Bearer test-token");
+      assert.equal(JSON.parse(h.requests.at(-1).body).abn, saved.abn);
+      assert.equal(JSON.parse(h.requests.at(-1).body).partnerType, partnerType);
+      assert.equal(JSON.parse(h.requests.at(-1).body).phone, "0498765432");
+      if (!saveOk) assert.match(text(tree), /Business review is required/);
+      await nodes(tree, node => node.type === "button" && text(node) === "Sign out")[0].props.onClick();
+      assert.equal(h.signOutCount, 1);
+    }
   }
 });

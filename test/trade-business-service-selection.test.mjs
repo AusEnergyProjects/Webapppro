@@ -116,7 +116,7 @@ function routeFixture(capabilities = ["solar"], serviceStates = ["VIC"], actorUi
       ...ownerAccess,
       approvedTradeReviewPredicate: () => "1 = 1" },
     "@/lib/postcode-distance": { postcodeCoordinate: (postcode) => ({ "3000": [-37.81, 144.96], "2000": [-33.86, 151.20] })[postcode] || null },
-    "@/lib/admin-notifications": {}, "@/lib/direct-trade-entitlements": entitlements,
+    "@/lib/admin-notifications": { adminNotificationStatement: () => d1.prepare("SELECT 1") }, "@/lib/direct-trade-entitlements": entitlements,
     "@/lib/australian-postcodes.mjs": states, "@/lib/trade-abn": abn,
     "@/lib/trade-google-business-profile.mjs": googleProfile,
     "@/lib/trade-business-branding": branding, "@/lib/energy-service-catalogue.mjs": services,
@@ -407,4 +407,57 @@ test("profile setup uses the same strict served-state contract", async () => {
     assert.equal(saved.status, 200);
     assert.deepEqual((await (await f.get()).json()).profile.serviceStates, ["NSW", "VIC"]);
   } finally { f.database.close(); }
+});
+
+const signupProfile = { businessName: "Test trade", abn: "51824753556", addressLine1: "1 Example Street",
+  suburb: "Melbourne", addressState: "VIC", postcode: "3000", contactName: "Example Owner",
+  phone: "0412345678", capabilities: ["solar"], serviceStates: ["VIC"], consent: true };
+
+test("new business signup rejects supplier accounts without creating a record", async () => {
+  const f = routeFixture([], ["VIC"], "new-owner");
+  try {
+    const response = await f.post({ ...signupProfile, partnerType: "supplier" });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, "ACCOUNT_TYPE_UNAVAILABLE");
+    assert.equal(f.database.prepare("SELECT COUNT(*) AS count FROM trade_accounts WHERE firebase_uid='new-owner'").get().count, 0);
+  } finally { f.database.close(); }
+});
+
+test("new business signup defaults to a trade account and still requires approval", async () => {
+  for (const partnerType of [undefined, "installer"]) {
+    const f = routeFixture([], ["VIC"], "new-owner");
+    try {
+      const response = await f.post({ ...signupProfile, partnerType });
+      assert.equal(response.status, 200);
+      const account = f.database.prepare("SELECT partner_type, verification_status, verified_abn FROM trade_accounts WHERE firebase_uid='new-owner'").get();
+      assert.deepEqual({ ...account }, { partner_type: "installer", verification_status: "submitted", verified_abn: "" });
+    } finally { f.database.close(); }
+  }
+});
+
+test("existing suppliers can update their profile with no account conversion", async () => {
+  for (const partnerType of [undefined, "supplier"]) {
+    const f = routeFixture();
+    try {
+      f.database.exec("UPDATE trade_accounts SET partner_type='supplier' WHERE firebase_uid='owner-1'");
+      const response = await f.post({ ...signupProfile, partnerType, phone: "0499999999" });
+      assert.equal(response.status, 200);
+      const account = f.database.prepare("SELECT partner_type, phone FROM trade_accounts WHERE firebase_uid='owner-1'").get();
+      assert.deepEqual({ ...account }, { partner_type: "supplier", phone: "0499999999" });
+    } finally { f.database.close(); }
+  }
+});
+
+test("profile updates cannot convert an existing account in either direction", async () => {
+  for (const [savedType, requestedType] of [["installer", "supplier"], ["supplier", "installer"]]) {
+    const f = routeFixture();
+    try {
+      f.database.prepare("UPDATE trade_accounts SET partner_type=? WHERE firebase_uid='owner-1'").run(savedType);
+      const response = await f.post({ ...signupProfile, partnerType: requestedType, phone: "0499999999" });
+      assert.equal(response.status, 409);
+      assert.equal((await response.json()).code, "ACCOUNT_TYPE_LOCKED");
+      const account = f.database.prepare("SELECT partner_type, phone FROM trade_accounts WHERE firebase_uid='owner-1'").get();
+      assert.deepEqual({ ...account }, { partner_type: savedType, phone: "0412345678" });
+    } finally { f.database.close(); }
+  }
 });

@@ -109,7 +109,7 @@ test("owner and team entry points gate tenant mounts and invitation acceptance s
   assert.match(portal, /TradeBusinessGate destination="member"><TradeTeamPortalContent/);
   assert.match(portal, /if \(accepted\.ownerUid && onInvitationAccepted\)/);
   assert.match(portal, /saveTradeBusinessSelection\(user\.uid, accepted\.ownerUid\)/);
-  assert.match(provider, /if \(!selected\) return <section/);
+  assert.match(provider, /if \(!selected\) return <>\{portalEntry\}<section/);
   assert.match(provider, /key=\{`\$\{user\.uid\}:\$\{selected\.ownerUid\}`\}/);
   assert.match(provider, /Switch business/);
   assert.doesNotMatch(provider, /localStorage|document\.cookie|globalThis\.fetch\s*=/);

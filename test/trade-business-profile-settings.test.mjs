@@ -85,7 +85,7 @@ test("the trade account type is immutable after initial setup", () => {
   assert.match(profileRoute, /\}, 409\);/);
   assert.match(
     profileRoute,
-    /const partnerType = \(existingAccount\?\.partner_type === "supplier"[\s\S]*requestedPartnerType \|\| "installer"/,
+    /const partnerType: PartnerType = existingAccount\?\.partner_type === "supplier"\s*\? "supplier"\s*: "installer"/,
   );
   assert.doesNotMatch(
     profileRoute,

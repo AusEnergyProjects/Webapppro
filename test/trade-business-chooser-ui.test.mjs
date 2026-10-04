@@ -31,7 +31,7 @@ function harness(initialChoices, { destination = "member", saved = "", disableNo
     saveTradeBusinessSelection: (uid, ownerUid) => businessClient.saveTradeBusinessSelection(uid, ownerUid, store),
   };
   const fetch = async (url, init) => { requests.push({ url, init }); return Response.json({ businesses, requiresSelection: businesses.length > 1 }); };
-  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": { onIdTokenChanged(_auth, callback) { authObserver = callback; callback(user); return () => {}; } }, "@/lib/firebase-client": { firebaseAuth: {} }, "@/lib/trade-device-client": { disableTradeDeviceNotifications: disableNotifications }, "@/lib/trade-business-client": context, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children } };
+  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": { onIdTokenChanged(_auth, callback) { authObserver = callback; callback(user); return () => {}; } }, "@/lib/firebase-client": { firebaseAuth: {} }, "@/lib/trade-device-client": { disableTradeDeviceNotifications: disableNotifications }, "@/lib/trade-business-client": context, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children }, "./TLinkPortalSwitcher": { TLinkPortalSwitcher: "portal-switcher" } };
   const exports = {};
   const window = { location: { origin: "https://tlink.test", replace: url => redirects.push(url) }, history: { replaceState() {} } };
   Function("require", "exports", "fetch", "window", compiled)(id => { assert.ok(dependencies[id], id); return dependencies[id]; }, exports, fetch, window);
@@ -46,12 +46,16 @@ test("multiple memberships mount no tenant content until the user selects a busi
   let tree = await h.settle();
   assert.match(text(tree), /Which business are you working with/);
   assert.equal(nodes(tree, node => node.props?.["data-tenant"]).length, 0);
+  const portal = nodes(tree, node => node.type === "portal-switcher")[0];
+  assert.equal(portal.props.current, "trade");
+  assert.equal(portal.props.user.uid, "person");
   assert.deepEqual(h.requests.map(request => request.url), ["/api/trade-businesses"]);
   nodes(tree, node => node.type === "button" && text(node).includes("Business two"))[0].props.onClick();
   tree = h.render();
   assert.equal(tree.props.business.ownerUid, "two");
   assert.match(text(tree), /Working with Business two/);
   assert.equal(nodes(tree, node => node.props?.["data-tenant"]).length, 1);
+  assert.equal(nodes(tree, node => node.type === "portal-switcher")[0].props.current, "trade");
 });
 
 test("switching removes the entire selected subtree and remounts with the next tenant key", async () => {
@@ -220,7 +224,7 @@ test("an unmounted business provider cannot replace the active chooser from a de
   let respond;
   const request = new Promise(resolve => { respond = resolve; });
   const react = { createContext: () => ({ Provider: () => null }), useRef: value => ({ current: value }), useCallback: callback => callback, useMemo: create => create(), useEffect: effect => cleanups.push(effect()) };
-  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": {}, "@/lib/firebase-client": {}, "@/lib/trade-device-client": {}, "@/lib/trade-business-client": businessClient, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children } };
+  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": {}, "@/lib/firebase-client": {}, "@/lib/trade-device-client": {}, "@/lib/trade-business-client": businessClient, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children }, "./TLinkPortalSwitcher": { TLinkPortalSwitcher: "portal-switcher" } };
   const exports = {};
   Function("require", "exports", "fetch", "window", compiled)(id => dependencies[id], exports, () => request, { location: { origin: "https://tlink.test" } });
   const tree = exports.TradeBusinessProvider({ business: choice("old-business"), onAccessLost: () => lost.push(true), children: null });

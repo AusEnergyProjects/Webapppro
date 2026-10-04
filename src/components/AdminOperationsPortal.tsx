@@ -49,6 +49,7 @@ import { PortalWorkspacePreferences, usePortalWorkspacePreferences } from "./Por
 import { PortalTeamWorkspace } from "./PortalTeamWorkspace";
 import { PortalConnectWorkspace } from "./PortalConnectWorkspace";
 import { PortalWorkspaceHeader } from "./PortalWorkspaceHeader";
+import { TLinkPortalSwitcher } from "./TLinkPortalSwitcher";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -565,13 +566,13 @@ export function AdminOperationsPortal() {
     (item) => item.role === "owner" && item.status === "active",
   ).length;
   if (resolver) return <main className="admin-shell"><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
-  if (user && mfaRequired) return <main className="admin-shell"><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); await loadSession(); }} /><p style={{ textAlign: "center" }}><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></p></main>;
+  if (user && mfaRequired) return <main className="admin-shell"><TLinkPortalSwitcher current="admin" user={user} /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); await loadSession(); }} /><p style={{ textAlign: "center" }}><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></p></main>;
 
   if (!authReady || loading)
     return (
       <main className="admin-shell">
         <section className="admin-auth-card">
-          <AdminTLinkBrand context="Operations control centre" />
+          <TLinkPortalSwitcher current="admin" user={user} /><AdminTLinkBrand context="Operations control centre" />
           <h1>Preparing the control centre</h1>
           <p>
             Validating the signed-in account and loading the protected
@@ -586,7 +587,7 @@ export function AdminOperationsPortal() {
     return (
       <main className="admin-shell">
         <section className="admin-auth-card">
-          <AdminTLinkBrand context="Restricted operations portal" />
+          <TLinkPortalSwitcher current="admin" user={user} /><AdminTLinkBrand context="Restricted operations portal" />
           <span>Authorised team access</span>
           <h1>Sign in to the operations control centre</h1>
           <p>
@@ -655,7 +656,7 @@ export function AdminOperationsPortal() {
     return (
       <main className="admin-shell">
         <section className="admin-auth-card">
-          <AdminTLinkBrand context={`Operations access | ${user.email || "verified account"}`} />
+          <TLinkPortalSwitcher current="admin" user={user} /><AdminTLinkBrand context={`Operations access | ${user.email || "verified account"}`} />
           {canRecoverOwner || (!canBootstrap && user.email) ? (
             <>
               <span>Verified owner recovery</span>
@@ -734,7 +735,7 @@ export function AdminOperationsPortal() {
         content?.focus({ preventScroll: true });
         content?.scrollIntoView({ block: "start" });
       }}>Skip to workspace</a>
-      <PortalWorkspaceHeader context="Administration" organisation="Australian Energy Assessments" displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences} notificationCount={notificationCounts.unread || 0}
+      <PortalWorkspaceHeader onPortalSwitch={() => (!callActive.current || window.confirm("End the active call and switch dashboard?")) && (!auditDirty.current || window.confirm("Leave this audit without saving your changes?"))} context="Administration" organisation="Australian Energy Assessments" displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences} notificationCount={notificationCounts.unread || 0}
         onSearch={query => { if (tab === "jobs" && auditDirty.current && !window.confirm("Leave this audit without saving your changes?")) return false; if (!selectTab("jobs")) return false; auditDirty.current = false; setJobSearch(current => ({ query, nonce: current.nonce + 1 })); return true; }}
         onNotifications={openNotificationInbox} onProfile={() => selectTab("settings")} onSettings={() => selectTab("settings")} onSignOut={() => { if (!callActive.current || window.confirm("End the active customer call and sign out?")) void signOut(firebaseAuth); }} />
       <div className="admin-layout">

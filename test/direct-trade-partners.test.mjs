@@ -13,9 +13,9 @@ const firebaseClient = read("../src/lib/firebase-client.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const dashboardPage = read("../src/app/direct-trade/dashboard/page.tsx");
 
-test("the homepage connects installers and suppliers to a participation route", () => {
-  assert.match(homepage, /href="\/direct-trade\/dashboard\?setup=1">Trade and supplier participation/);
-  assert.match(homepage, /reputable suppliers/i);
+test("the homepage connects trade businesses to a participation route", () => {
+  assert.match(homepage, /href="\/direct-trade\/dashboard\?setup=1">Trade participation/);
+  assert.match(homepage, /trade or service business/i);
   assert.match(form, /Create your free TLink account/);
   assert.match(form, /No payment details required/i);
   assert.match(page, /redirect\("\/direct-trade\/dashboard\?setup=1"\)/);
@@ -54,26 +54,15 @@ test("the starter dashboard makes verified core access free", () => {
   assert.match(dashboard, /Core trade operations cost A\$0/);
   assert.match(dashboard, /No payment details are required/);
   assert.match(form, /Submit business profile for review/);
-  assert.match(form, /Protected access remains locked until the ABN and required evidence are reviewed and approved/);
+  assert.match(form, /A valid ABN and the required business evidence must be supplied, reviewed and approved before trade tools become available/);
   assert.match(dashboard, /partnerType === "supplier"/);
 });
 
-test("installer or wholesaler account type is immutable after initial setup", () => {
-  assert.match(form, /existingPartnerType/);
-  assert.match(form, /setExistingPartnerType\(savedPartnerType\)/);
-  assert.match(form, /setExistingPartnerType\(partnerType\)/);
-  assert.equal(
-    [...form.matchAll(/disabled=\{Boolean\(existingPartnerType\)\}/g)].length,
-    2,
-  );
-  assert.match(
-    form,
-    /The account type was fixed when this business account was created/,
-  );
-  assert.match(
-    form,
-    /This choice is fixed after the account is created/,
-  );
+test("new trade setup has no business-type choice and preserves existing account roles", () => {
+  assert.match(form, /useState<PartnerType>\("installer"\)/);
+  assert.match(form, /setPartnerType\(savedPartnerType\)/);
+  assert.doesNotMatch(form, /partner-type-grid|name="partner-type"|existingPartnerType|wholesaler-specific|Product supplier or wholesaler/);
+  assert.match(profileRoute, /code: "ACCOUNT_TYPE_UNAVAILABLE"/);
   assert.match(
     profileRoute,
     /existingAccount\.partner_type !== requestedPartnerType/,
@@ -98,7 +87,8 @@ test("partner form uses visible shared controls and required address fields", ()
   assert.match(css, /--color-aea-line-strong: #a9c9bd/);
   assert.match(css, /\.direct-trade-form-section \.field-control > input/);
   assert.match(css, /\.direct-trade-form-section \.field-control > select/);
-  assert.match(css, /\.partner-type-grid label:focus-within/);
+  assert.match(css, /\.partner-chip-grid label:focus-within/);
+  assert.doesNotMatch(css, /\.partner-type-grid/);
 });
 
 test("unconfigured enquiry copy is suitable for any hosted environment", () => {

@@ -374,14 +374,9 @@ h3, h4 { font-family: var(--font-aea-heading); font-size: var(--type-card-title)
 .direct-trade-review span { color: var(--color-aea-green-dark); display: block; font-size: .64rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .direct-trade-review strong { color: var(--color-aea-ink); display: block; font-size: .72rem; line-height: 1.48; margin-top: 6px; overflow-wrap: anywhere; }
 .direct-trade-partner-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
-.partner-type-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.partner-type-grid label { align-items: flex-start; background: #f8fbfc; border: 1px solid var(--color-aea-line-strong); border-radius: var(--radius-card); box-shadow: 0 4px 12px rgba(3, 25, 45, .035); cursor: pointer; display: flex; gap: 12px; min-height: 130px; padding: 20px; transition: background .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
-.partner-type-grid label:hover, .partner-chip-grid label:hover, .partner-category-grid label:hover { background: #fff; border-color: #78bca7; transform: translateY(-1px); }
-.partner-type-grid label:focus-within, .partner-chip-grid label:focus-within, .partner-category-grid label:focus-within { border-color: var(--color-aea-green); box-shadow: 0 0 0 3px rgba(20, 168, 100, .13); }
-.partner-type-grid label.selected { background: #edfff8; border-color: var(--color-aea-teal); box-shadow: 0 0 0 3px rgba(32, 203, 184, .1); }
-.partner-type-grid input, .partner-check-group input { accent-color: var(--color-aea-green); flex: 0 0 auto; margin-top: 3px; }
-.partner-type-grid strong { color: var(--color-aea-ink); display: block; font-size: .86rem; }
-.partner-type-grid small { color: var(--color-aea-muted); display: block; font-size: .7rem; line-height: 1.5; margin-top: 6px; }
+.partner-chip-grid label:hover, .partner-category-grid label:hover { background: #fff; border-color: #78bca7; transform: translateY(-1px); }
+.partner-chip-grid label:focus-within, .partner-category-grid label:focus-within { border-color: var(--color-aea-green); box-shadow: 0 0 0 3px rgba(20, 168, 100, .13); }
+.partner-check-group input { accent-color: var(--color-aea-green); flex: 0 0 auto; margin-top: 3px; }
 .partner-check-group { border: 0; margin: 20px 0; min-width: 0; padding: 0; }
 .partner-check-group legend { color: var(--color-aea-ink); font-size: .8rem; font-weight: 800; margin-bottom: 9px; }
 .partner-chip-grid, .partner-category-grid { display: grid; gap: 8px; }
@@ -1583,9 +1578,8 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .direct-trade-service-grid label { min-height: 0; }
   .direct-trade-priorities > div { grid-template-columns: 1fr; }
   .direct-trade-review > div { min-height: 0; }
-  .partner-type-grid, .partner-chip-grid, .partner-category-grid { grid-template-columns: 1fr; }
+  .partner-chip-grid, .partner-category-grid { grid-template-columns: 1fr; }
   .dashboard-activity-grid { grid-template-columns: 1fr; }
-  .partner-type-grid label { min-height: 0; }
   .trade-signed-in { align-items: flex-start; flex-direction: column; gap: 12px; }
   .standards-actions { align-items: flex-start; flex-direction: column; }
   .standards-actions > div:last-child { justify-content: flex-start; }

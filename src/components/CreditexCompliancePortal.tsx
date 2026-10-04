@@ -47,6 +47,7 @@ import { PortalWorkspacePreferences, usePortalWorkspacePreferences } from "./Por
 import { PortalTeamWorkspace } from "./PortalTeamWorkspace";
 import { PortalConnectWorkspace } from "./PortalConnectWorkspace";
 import { PortalWorkspaceHeader } from "./PortalWorkspaceHeader";
+import { TLinkPortalSwitcher } from "./TLinkPortalSwitcher";
 import { CreditexHomeDashboard } from "./CreditexHomeDashboard";
 import { CreditexCustomerDirectory } from './CreditexCustomerDirectory';
 import { CreditexNotifications } from './CreditexNotifications';
@@ -1010,7 +1011,7 @@ export function CreditexCompliancePortal() {
   }
 
   if (resolver) return <main className={styles.shell}><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
-  if (user && mfaRequired) return <main className={styles.shell}><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); await loadWorkspace(); }} /><p style={{ textAlign: "center" }}><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></p></main>;
+  if (user && mfaRequired) return <main className={styles.shell}><TLinkPortalSwitcher current="creditex" user={user} /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); await loadWorkspace(); }} /><p style={{ textAlign: "center" }}><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></p></main>;
 
   if (!authReady || (user && loading)) {
     return (
@@ -1041,7 +1042,7 @@ export function CreditexCompliancePortal() {
                   <span>Creditex compliance</span>
                 </div>
               </div>
-              <h1>Your Creditex workspace</h1>
+              <TLinkPortalSwitcher current="creditex" user={user} /><h1>Your Creditex workspace</h1>
               <p>
                 Review jobs, work with your team and prepare activity submissions.
               </p>
@@ -1151,7 +1152,7 @@ export function CreditexCompliancePortal() {
       id="site-content"
       {...preferences.rootProps}
     >
-      <PortalWorkspaceHeader context="Compliance workspace" organisation={session.organisation.tradingName || session.organisation.legalName} displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences}
+      <PortalWorkspaceHeader onPortalSwitch={() => (!callActive.current || window.confirm("End the active call and switch dashboard?")) && (!auditDirty.current || window.confirm("Discard the unsaved audit answers?"))} context="Compliance workspace" organisation={session.organisation.tradingName || session.organisation.legalName} displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences}
         onSearch={query => { if (tab === "cases" && auditDirty.current && !window.confirm("Discard the unsaved audit answers?")) return false; if (!selectTab("cases")) return false; auditDirty.current = false; setJobTarget(null); setJobSearch(current => ({ query, nonce: current.nonce + 1 })); return true; }}
         notificationControl={<CreditexNotifications key={user.uid} user={user} onOpen={openNotification}/>} onProfile={() => selectTab('profile')} onSettings={() => selectTab("settings")} onSignOut={() => { if (!callActive.current || window.confirm("End the active customer call and sign out?")) void signOut(firebaseAuth); }} />
       <div className={styles.frame}>
