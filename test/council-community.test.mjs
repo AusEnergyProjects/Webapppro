@@ -120,6 +120,110 @@ test("unknown postcodes and empty scopes remain unavailable, with explicit metri
   assert.equal(communityReport(snapshot, { ...scope, postcodes: [] }, "all", freshness, now).totals.solarInstallations, null);
 });
 
+test("reported totals preserve known observations while full-area totals and unknown postcode values remain unavailable", async () => {
+  const snapshot = await fixture();
+  const report = communityReport(snapshot, { ...scope, postcodes: ["3175", "3998"] }, "year", freshness, now);
+  for (const metric of COMMUNITY_METRICS) {
+    assert.equal(report.totals[metric.id], null);
+    assert.equal(report.reportedTotals[metric.id], 12);
+    assert.deepEqual(report.coverage[metric.id], { availablePostcodes: 1, requestedPostcodes: 2 });
+    assert.equal(report.postcodes.find(row => row.postcode === "3998").values[metric.id], null);
+    for (const point of report.trend) {
+      assert.equal(point.values[metric.id], null);
+      assert.equal(point.reportedValues[metric.id], 1);
+      assert.deepEqual(point.coverage[metric.id], { availablePostcodes: 1, requestedPostcodes: 2 });
+    }
+  }
+});
+
+test("reported observations distinguish a real zero from all-missing or empty scope", async () => {
+  const snapshot = await fixture();
+  for (const dataset of snapshot.datasets) {
+    const row = dataset.rows.find(item => item.postcode === "3175");
+    row.total = 0; row.monthly.fill(0);
+  }
+  for (const period of ["quarter", "year", "all"]) {
+    const observedZero = communityReport(snapshot, { ...scope, postcodes: ["3175", "3998"] }, period, freshness, now);
+    for (const metric of COMMUNITY_METRICS) {
+      assert.equal(observedZero.totals[metric.id], null);
+      assert.equal(observedZero.reportedTotals[metric.id], 0);
+      assert.equal(observedZero.coverage[metric.id].availablePostcodes, 1);
+      assert.ok(observedZero.trend.every(point => point.reportedValues[metric.id] === 0 && point.coverage[metric.id].availablePostcodes === 1));
+    }
+    for (const postcodes of [["3998"], []]) {
+      const missing = communityReport(snapshot, { ...scope, postcodes }, period, freshness, now);
+      for (const metric of COMMUNITY_METRICS) {
+        assert.equal(missing.reportedTotals[metric.id], null);
+        assert.deepEqual(missing.coverage[metric.id], { availablePostcodes: 0, requestedPostcodes: postcodes.length });
+        assert.ok(missing.trend.every(point => point.reportedValues[metric.id] === null && point.coverage[metric.id].availablePostcodes === 0));
+      }
+    }
+  }
+});
+
+test("a blank month excludes the whole postcode period from reported totals and retains month-specific coverage", async () => {
+  const snapshot = await fixture();
+  const solar = snapshot.datasets.find(dataset => dataset.id === "solarInstallations");
+  Object.assign(solar, parseCerPostcodeCsv(csv("solarInstallations", [
+    { postcode: "3175", value: 1, blank: true }, { postcode: "3805", value: 2 },
+  ]), "solarInstallations", sourceAsOf));
+  const selected = { ...scope, postcodes: ["3175", "3805"] };
+  const yearly = communityReport(snapshot, selected, "year", freshness, now);
+  assert.equal(yearly.totals.solarInstallations, null);
+  assert.equal(yearly.reportedTotals.solarInstallations, 24);
+  assert.deepEqual(yearly.coverage.solarInstallations, { availablePostcodes: 1, requestedPostcodes: 2 });
+  assert.equal(yearly.postcodes.find(row => row.postcode === "3175").values.solarInstallations, null);
+  assert.equal(yearly.trend[0].reportedValues.solarInstallations, 3);
+  assert.equal(yearly.trend[0].coverage.solarInstallations.availablePostcodes, 2);
+  assert.equal(yearly.trend.at(-1).reportedValues.solarInstallations, 2);
+  assert.equal(yearly.trend.at(-1).coverage.solarInstallations.availablePostcodes, 1);
+  assert.equal(yearly.reportedTotals.batteryInstallations, 36);
+  assert.equal(yearly.coverage.batteryInstallations.availablePostcodes, 2);
+  assert.equal(communityReport(snapshot, selected, "all", freshness, now).reportedTotals.solarInstallations, 584);
+  solar.rows[0].total = null;
+  assert.equal(communityReport(snapshot, selected, "all", freshness, now).reportedTotals.solarInstallations, 386);
+});
+
+test("reported totals use each metric's own coverage and duplicate scope postcodes cannot increase values or counts", async () => {
+  const snapshot = await fixture();
+  const solar = snapshot.datasets.find(dataset => dataset.id === "solarInstallations");
+  solar.rows = solar.rows.filter(row => row.postcode === "3175");
+  const selected = { ...scope, postcodes: ["3175", "3805"] };
+  const report = communityReport(snapshot, selected, "year", freshness, now);
+  assert.equal(report.reportedTotals.solarInstallations, 12);
+  assert.deepEqual(report.coverage.solarInstallations, { availablePostcodes: 1, requestedPostcodes: 2 });
+  assert.equal(report.reportedTotals.solarCapacityKw, 36);
+  assert.deepEqual(report.coverage.solarCapacityKw, { availablePostcodes: 2, requestedPostcodes: 2 });
+  assert.equal(report.trend[0].reportedValues.solarInstallations, 1);
+  assert.equal(report.trend[0].reportedValues.solarCapacityKw, 3);
+  assert.deepEqual(communityReport(snapshot, { ...scope, postcodes: ["3805", "3175", "3805", "3175"] }, "year", freshness, now), report);
+});
+
+test("the 73-postcode regional scope retains all six recorded CER metrics across every period with 72-postcode coverage", async () => {
+  const postcodes = ["3169","3172","3182","3183","3184","3186","3187","3188","3189","3190","3191","3192","3193","3194","3195","3196","3197","3202","3205","3206","3207","3804","3805","3806","3807","3808","3809","3810","3812","3813","3814","3815","3910","3911","3912","3913","3915","3916","3918","3919","3920","3922","3925","3926","3927","3928","3929","3930","3931","3933","3934","3936","3939","3940","3941","3942","3943","3944","3953","3956","3959","3975","3976","3977","3978","3979","3980","3981","3984","3991","3992","3995","3996"];
+  const expected = {
+    quarter: [1940, 16260.43, 1810, 48, 1943, 48193.604],
+    year: [11834, 109130.79, 8997, 467, 16714, 504130.805],
+    all: [156297, 1023923.303, 53362, 70514, 18750, 538938.534],
+  };
+  const snapshot = await bundledCommunitySnapshot();
+  assert.equal(postcodes.length, 73);
+  for (const period of ["quarter", "year", "all"]) {
+    const report = communityReport(snapshot, { ...scope, postcodes }, period, freshness, now);
+    assert.deepEqual(COMMUNITY_METRICS.map(metric => report.reportedTotals[metric.id]), expected[period]);
+    for (const metric of COMMUNITY_METRICS) {
+      assert.equal(report.totals[metric.id], null);
+      assert.deepEqual(report.coverage[metric.id], { availablePostcodes: 72, requestedPostcodes: 73 });
+      assert.equal(report.postcodes.find(row => row.postcode === "3920").values[metric.id], null);
+      for (const point of report.trend) {
+        assert.equal(point.values[metric.id], null);
+        assert.notEqual(point.reportedValues[metric.id], null);
+        assert.deepEqual(point.coverage[metric.id], { availablePostcodes: 72, requestedPostcodes: 73 });
+      }
+    }
+  }
+});
+
 test("freshness separates source age, checking failures and fetch time", async () => {
   const snapshot = await fixture();
   assert.equal(communityReport(snapshot, scope, "year", freshness, now).stale, false);

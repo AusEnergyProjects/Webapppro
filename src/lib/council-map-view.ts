@@ -52,39 +52,25 @@ export function moveCouncilMap(view: CouncilMapView, dx: number, dy: number): Co
   return { lat: Math.max(-80, Math.min(80, next.lat)), lng: ((next.lng + 540) % 360) - 180, zoom: view.zoom };
 }
 
-/** Declutter display labels only; leader lines retain each actual postcode anchor. */
-export function layoutCouncilMapMarkers(areas: Array<{key:string;position:MapPosition}>, view: CouncilMapView, width: number, height: number) {
-  const visible: Array<{key:string;x:number;y:number;anchorX:number;anchorY:number}> = [];
-  const inFrame: Array<{key:string;anchorX:number;anchorY:number}> = [];
-  let hidden = 0;
-  const halfWidth=48,topSpace=88,bottomSpace=145;
-  for(const area of areas) {
-    const anchor=councilMapPoint(area.position,view,width,height);
-    if(anchor.x < -50 || anchor.x > width+50 || anchor.y < -65 || anchor.y > height+65)continue;
-    inFrame.push({key:area.key,anchorX:anchor.x,anchorY:anchor.y});
-    const candidates=[{x:anchor.x,y:anchor.y}];
-    for(let ring=1;ring<=5;ring++)for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]])candidates.push({x:anchor.x+dx*ring*103,y:anchor.y+dy*ring*116});
-    const candidate=candidates.map(point=>({x:Math.max(halfWidth+8,Math.min(width-halfWidth-8,point.x)),y:Math.max(topSpace,Math.min(height-bottomSpace,point.y))}))
-      .find(point=>visible.every(other=>Math.abs(other.x-point.x)>=103 || Math.abs(other.y-point.y)>=116));
-    if(candidate)visible.push({key:area.key,...candidate,anchorX:anchor.x,anchorY:anchor.y});
-    else hidden++;
+/** Keep every marker at its geographic anchor; omit labels that would obscure the map. */
+export function layoutCouncilMapMarkers(areas: Array<{key:string;position:MapPosition}>, view: CouncilMapView, width: number, height: number, selectedKey?: string) {
+  const anchors = areas.map(area => ({key:area.key,...councilMapPoint(area.position,view,width,height)}))
+    .filter(point => point.x >= 0 && point.x <= width && point.y >= 0 && point.y <= height);
+  const visible: Array<{key:string;x:number;y:number}> = [];
+  const ranked = [...anchors].sort((a,b) => Number(b.key === selectedKey) - Number(a.key === selectedKey) || a.key.localeCompare(b.key));
+  for (const point of ranked) {
+    // Labels are fixed 84 x 36 px directly below their anchor, never repositioned.
+    if (point.x < 50 || point.x > width - 50 || point.y < 60 || point.y + 54 > height - 82) continue;
+    if (visible.some(other => Math.abs(other.x-point.x) < 94 && Math.abs(other.y-point.y) < 46)) continue;
+    if (anchors.some(other => other.key !== point.key && Math.abs(other.x-point.x) < 54 && other.y > point.y+3 && other.y < point.y+66)) continue;
+    visible.push(point);
   }
-  // A compact viewport can fit a neat grid even when a central first label
-  // prevents greedy placement. Reflow the labels, retaining geographic leaders.
-  const columns=Math.max(1,Math.floor((width-16)/103));
-  const rows=Math.max(1,Math.floor((height-topSpace-bottomSpace)/116)+1);
-  if(hidden>0&&inFrame.length<=columns*rows) {
-    const slots:Array<{x:number;y:number}>=[];
-    for(let row=0;row<rows;row++)for(let column=0;column<columns;column++)slots.push({
-      x:columns===1?width/2:halfWidth+8+column*(width-2*(halfWidth+8))/(columns-1),
-      y:rows===1?(topSpace+height-bottomSpace)/2:topSpace+row*(height-topSpace-bottomSpace)/(rows-1),
-    });
-    const arranged=inFrame.map(marker=>{
-      const ranked=slots.map((slot,index)=>({index,distance:(slot.x-marker.anchorX)**2+(slot.y-marker.anchorY)**2})).sort((a,b)=>a.distance-b.distance);
-      const [slot]=slots.splice(ranked[0].index,1);
-      return {...marker,...slot};
-    });
-    return {visible:arranged,hidden:0};
-  }
-  return {visible,hidden};
+  return { anchors, visible, hidden: anchors.length - visible.length };
+}
+
+/** Prefer usable public VEU data while preserving real zero values and council scope. */
+export function preferredCouncilMapLayer(layers: Array<{id:string;postcodes:Array<{postcode:string;value:number|null}>}>, postcodes: string[]) {
+  const scope = new Set(postcodes);
+  const available = layers.filter(layer => layer.postcodes.some(row => scope.has(row.postcode) && row.value !== null && Number.isFinite(row.value) && row.value >= 0));
+  return available.find(layer => layer.id === "public-upgrades")?.id ?? available[0]?.id ?? "";
 }

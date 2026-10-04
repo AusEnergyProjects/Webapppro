@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapWorldPoint, mapWorldPosition, councilMapPoint, fitCouncilMap, councilPreviewTiles, moveCouncilMap, layoutCouncilMapMarkers } from "../src/lib/council-map-view.ts";
+import { mapWorldPoint, mapWorldPosition, councilMapPoint, fitCouncilMap, councilPreviewTiles, moveCouncilMap, layoutCouncilMapMarkers, preferredCouncilMapLayer } from "../src/lib/council-map-view.ts";
 import { postcodeCoordinate } from "../src/lib/postcode-distance.ts";
 
 test("council overlay projection round-trips Australian locations across zoom levels", () => {
@@ -41,19 +41,62 @@ test("pan follows screen pixels and keeps coordinates finite near the world edge
   assert.ok(edge.lng>=-180&&edge.lng<=180&&edge.lat<=80&&edge.lat>=-80);
 });
 
-test("nearby southeast Melbourne postcode controls stay separately clickable on mobile", () => {
+test("nearby postcode anchors stay geographic while overlapping labels are omitted", () => {
   const areas=["3805","3806","3977","3980"].map(key=>{const [lat,lng]=postcodeCoordinate(key);return {key,position:{lat,lng}};});
   for(const width of [260,300,355,1000]) {
     const height=width>500?590:390;
     const view=fitCouncilMap(areas.map(area=>area.position),width,height);
     const layout=layoutCouncilMapMarkers(areas,view,width,height);
-    assert.equal(layout.hidden,0); assert.equal(layout.visible.length,4);
+    assert.equal(layout.anchors.length,4);
+    assert.equal(layout.visible.length+layout.hidden,4);
+    for(const marker of layout.anchors) {
+      const actual=councilMapPoint(areas.find(area=>area.key===marker.key).position,view,width,height);
+      assert.equal(marker.x,actual.x); assert.equal(marker.y,actual.y);
+    }
     for(let i=0;i<layout.visible.length;i++) {
       const marker=layout.visible[i];
-      assert.ok(marker.y+66<=height-79,"Postcode labels must clear the heat legend and attribution");
+      assert.ok(marker.y+54<=height-82,"Postcode labels must clear the heat legend and attribution");
       const actual=councilMapPoint(areas.find(area=>area.key===marker.key).position,view,width,height);
-      assert.equal(marker.anchorX,actual.x);assert.equal(marker.anchorY,actual.y);
-      for(const other of layout.visible.slice(i+1))assert.ok(Math.abs(marker.x-other.x)>=103||Math.abs(marker.y-other.y)>=116,`${width}: ${marker.key} overlaps ${other.key}`);
+      assert.equal(marker.x,actual.x);assert.equal(marker.y,actual.y);
+      for(const other of layout.visible.slice(i+1))assert.ok(Math.abs(marker.x-other.x)>=94||Math.abs(marker.y-other.y)>=46,`${width}: ${marker.key} overlaps ${other.key}`);
     }
   }
+});
+
+const councilPostcodes = "3169 3172 3182 3183 3184 3186 3187 3188 3189 3190 3191 3192 3193 3194 3195 3196 3197 3202 3205 3206 3207 3804 3805 3806 3807 3808 3809 3810 3812 3813 3814 3815 3910 3911 3912 3913 3915 3916 3918 3919 3920 3922 3925 3926 3927 3928 3929 3930 3931 3933 3934 3936 3939 3940 3941 3942 3943 3944 3953 3956 3959 3975 3976 3977 3978 3979 3980 3981 3984 3991 3992 3995 3996".split(" ");
+test("73-postcode extent retains every true centre without grid reflow or label collisions", () => {
+  const areas=councilPostcodes.map(key=>{const coordinate=postcodeCoordinate(key);assert.ok(coordinate,key);return {key,position:{lat:coordinate[0],lng:coordinate[1]}};});
+  assert.equal(areas.length,73);
+  for(const [width,height] of [[260,390],[300,390],[355,390],[1000,590]]) {
+    const view=fitCouncilMap(areas.map(area=>area.position),width,height);
+    const layout=layoutCouncilMapMarkers(areas,view,width,height);
+    assert.equal(layout.anchors.length,73);
+    assert.ok(layout.hidden>0,"Dense maps must suppress labels instead of displacing them");
+    for(const marker of layout.anchors)assert.deepEqual({x:marker.x,y:marker.y},councilMapPoint(areas.find(area=>area.key===marker.key).position,view,width,height));
+    for(const [index,marker] of layout.visible.entries()) {
+      assert.ok(marker.x>=50&&marker.x<=width-50&&marker.y>=60&&marker.y+54<=height-82);
+      for(const other of layout.visible.slice(index+1))assert.ok(Math.abs(marker.x-other.x)>=94||Math.abs(marker.y-other.y)>=46);
+      assert.ok(!layout.anchors.some(other=>other.key!==marker.key&&Math.abs(other.x-marker.x)<54&&other.y>marker.y+3&&other.y<marker.y+66),"A label must not cover another postcode marker");
+    }
+  }
+});
+
+test("selected postcode receives label priority without moving either anchor", () => {
+  const view={lat:-38,lng:145,zoom:10},centre=mapWorldPoint(view,view.zoom);
+  const areas=[{key:"a",position:view},{key:"b",position:mapWorldPosition({x:centre.x+80,y:centre.y},view.zoom)}];
+  const normal=layoutCouncilMapMarkers(areas,view,800,590);
+  const selected=layoutCouncilMapMarkers(areas,view,800,590,"b");
+  assert.deepEqual(normal.anchors,selected.anchors);
+  assert.deepEqual(normal.visible.map(marker=>marker.key),["a"]);
+  assert.deepEqual(selected.visible.map(marker=>marker.key),["b"]);
+});
+
+test("public default prefers usable VEU data, then first known public layer, including real zeros", () => {
+  const layer=(id,value,postcode="3805")=>({id,postcodes:[{postcode,value}]});
+  assert.equal(preferredCouncilMapLayer([],councilPostcodes),"");
+  assert.equal(preferredCouncilMapLayer([layer("solar",12),layer("public-upgrades",9)],councilPostcodes),"public-upgrades");
+  assert.equal(preferredCouncilMapLayer([layer("solar",12),layer("public-upgrades",0)],councilPostcodes),"public-upgrades");
+  for(const unknown of [null,NaN,Infinity,-1])assert.equal(preferredCouncilMapLayer([layer("public-upgrades",unknown),layer("solar",12)],councilPostcodes),"solar");
+  assert.equal(preferredCouncilMapLayer([layer("public-upgrades",9,"9999"),layer("solar",0)],councilPostcodes),"solar");
+  assert.equal(preferredCouncilMapLayer([layer("public-upgrades",null)],councilPostcodes),"");
 });

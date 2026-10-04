@@ -44,6 +44,8 @@ Six official postcode datasets cover solar systems, solar capacity, heat pump wa
 
 The selector uses the latest 3 or 12 published months, or all published history, rather than implying current calendar coverage. All six files must validate together; missing cells remain unavailable. Bounded refresh checks run on request at most every 12 hours per cache location. The regional cache is evictable; this is not a durable daily archive. The demo reads the retained server-side official snapshot without upstream requests. `scripts/capture-council-community.mjs` refreshes the retained baseline explicitly.
 
+CER cards and monthly charts show recorded subtotals with explicit postcode coverage when part of the selected area has no published figures. A missing postcode no longer hides the observations from the rest of the area. The API retains strict full-area `totals` and per-postcode nulls, alongside `reportedTotals`; monthly points carry strict `values`, `reportedValues` and metric-specific coverage. No observations remains unavailable, while a published zero remains zero. Compact and detailed views identify missing postcodes, and CSV exports distinguish recorded subtotals from full-area totals and include coverage. The 73-postcode production scope exposed this case because postcode 3920 is absent from all six retained CER files.
+
 ### Solar Victoria
 
 Source: <https://www.solar.vic.gov.au/solar-homes-program-reporting>.
@@ -54,7 +56,7 @@ This is council/LGA data, not a postcode series. The workspace links the source 
 
 ## Demonstration and reports
 
-- Map: switch TLink heat, public approved activities, lifetime impact, solar, batteries and hot-water installations; search local trades; toggle trade pins, heat and approximate postcode areas. Pins use postcode centres, never private addresses.
+- Map: defaults to usable public approved activities, with explicit choices for TLink heat, lifetime impact, solar, batteries and hot-water installations. Markers stay at real postcode centres; crowded labels are omitted until zoomed in instead of displaced with connecting lines. Search local trades or the paginated postcode table, select an area to focus the map, and toggle trade pins, heat and reporting postcodes. Pins never use private addresses.
 - Profile: sample/uploaded logo, editable identity/postcodes, presets or custom colours, persistent header and day/night mode. Profile and campaign practice changes persist locally; team practice changes last for the current page visit.
 - Calculator: existing governed rebate calculator embedded with Victorian defaults. Product calculations retain their existing register requirements; calculator results never change reporting totals.
 - Exports: separate CSVs for TLink, official installations and public upgrade impact, with dates, scope, definitions and source evidence. The Reports view supports browser print/PDF. Printed reports expand source definitions, preserve stale-data notices, fit all 12 monthly chart values and use flowing pagination.

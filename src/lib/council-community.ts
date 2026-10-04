@@ -9,6 +9,7 @@ export const COMMUNITY_METRICS = [
 ] as const;
 export type CommunityMetricId = typeof COMMUNITY_METRICS[number]["id"];
 export type CommunityMeasures = Record<CommunityMetricId, number | null>;
+export type CommunityCoverage = Record<CommunityMetricId, { availablePostcodes: number; requestedPostcodes: number }>;
 export type CommunityPeriodKey = "quarter" | "year" | "all";
 export type CommunityDataRow = { postcode: string; total: number | null; monthly: Array<number | null> };
 export type CommunityDataset = { id: CommunityMetricId; url: string; sha256: string; months: string[]; rows: CommunityDataRow[] };
@@ -20,9 +21,10 @@ export type CouncilCommunityReport = {
   sourceAsOf: string; fetchedAt: string; checkedAt: string; refreshFailed: boolean; stale: boolean;
   dataOrigin: "live" | "cache" | "baseline";
   totals: CommunityMeasures;
-  coverage: Record<CommunityMetricId, { availablePostcodes: number; requestedPostcodes: number }>;
+  reportedTotals: CommunityMeasures;
+  coverage: CommunityCoverage;
   postcodes: Array<{ postcode: string; values: CommunityMeasures }>;
-  trend: Array<{ month: string; values: CommunityMeasures }>;
+  trend: Array<{ month: string; values: CommunityMeasures; reportedValues: CommunityMeasures; coverage: CommunityCoverage }>;
   sources: CommunitySource[];
   provenance: Array<{ metric: CommunityMetricId; url: string; sha256: string }>;
   notes: string[];
@@ -133,6 +135,11 @@ export function isCommunitySnapshot(value: unknown): value is CommunitySnapshot 
 
 const blankMeasures = (): CommunityMeasures => ({ solarInstallations: null, solarCapacityKw: null, heatPumpInstallations: null, solarHotWaterInstallations: null, batteryInstallations: null, batteryCapacityKwh: null });
 const sumKnown = (values: Array<number | null>) => values.length && values.every(value => value !== null) ? Math.round(values.reduce((sum, value) => sum + value, 0) * 1000) / 1000 : null;
+const sumReported = (values: Array<number | null>) => sumKnown(values.filter(value => value !== null));
+function blankCoverage(requestedPostcodes: number): CommunityCoverage {
+  const empty = () => ({ availablePostcodes: 0, requestedPostcodes });
+  return { solarInstallations: empty(), solarCapacityKw: empty(), heatPumpInstallations: empty(), solarHotWaterInstallations: empty(), batteryInstallations: empty(), batteryCapacityKwh: empty() };
+}
 
 export function communityReport(snapshot: CommunitySnapshot, scope: CouncilCommunityReport["scope"], period: CommunityPeriodKey,
   freshness: Pick<CouncilCommunityReport, "checkedAt" | "refreshFailed" | "dataOrigin">, now = Date.now()): CouncilCommunityReport {
@@ -142,10 +149,10 @@ export function communityReport(snapshot: CommunitySnapshot, scope: CouncilCommu
   const startMonth = period === "all" ? "2001-01" : fromMonthIndex(monthIndex(endMonth) - (period === "quarter" ? 2 : 11));
   const trendMonths = Array.from({ length: period === "quarter" ? 3 : 12 }, (_, index) => fromMonthIndex(monthIndex(endMonth) - (period === "quarter" ? 2 : 11) + index));
   const areas = postcodes.map(postcode => ({ postcode, values: blankMeasures() }));
-  const trend = trendMonths.map(month => ({ month, values: blankMeasures() }));
+  const trend = trendMonths.map(month => ({ month, values: blankMeasures(), reportedValues: blankMeasures(), coverage: blankCoverage(postcodes.length) }));
   const totals = blankMeasures();
-  const emptyCoverage = () => ({ availablePostcodes: 0, requestedPostcodes: postcodes.length });
-  const coverage: CouncilCommunityReport["coverage"] = { solarInstallations: emptyCoverage(), solarCapacityKw: emptyCoverage(), heatPumpInstallations: emptyCoverage(), solarHotWaterInstallations: emptyCoverage(), batteryInstallations: emptyCoverage(), batteryCapacityKwh: emptyCoverage() };
+  const reportedTotals = blankMeasures();
+  const coverage = blankCoverage(postcodes.length);
   for (const dataset of snapshot.datasets) {
     const rows = new Map(dataset.rows.map(row => [row.postcode, row]));
     for (const area of areas) {
@@ -156,17 +163,23 @@ export function communityReport(snapshot: CommunitySnapshot, scope: CouncilCommu
       }));
     }
     totals[dataset.id] = sumKnown(areas.map(area => area.values[dataset.id]));
+    reportedTotals[dataset.id] = sumReported(areas.map(area => area.values[dataset.id]));
     coverage[dataset.id] = { availablePostcodes: areas.filter(area => area.values[dataset.id] !== null).length, requestedPostcodes: postcodes.length };
-    for (const point of trend) point.values[dataset.id] = sumKnown(postcodes.map(postcode => {
-      const index = dataset.months.indexOf(point.month);
-      return index < 0 ? null : rows.get(postcode)?.monthly[index] ?? null;
-    }));
+    for (const point of trend) {
+      const values = postcodes.map(postcode => {
+        const index = dataset.months.indexOf(point.month);
+        return index < 0 ? null : rows.get(postcode)?.monthly[index] ?? null;
+      });
+      point.values[dataset.id] = sumKnown(values);
+      point.reportedValues[dataset.id] = sumReported(values);
+      point.coverage[dataset.id] = { availablePostcodes: values.filter(value => value !== null).length, requestedPostcodes: postcodes.length };
+    }
   }
   return {
     scope: { ...scope, postcodes }, period: { key: period, label: period === "all" ? "All published history" : period === "quarter" ? "Latest 3 published months" : "Latest 12 published months", startMonth, endMonth },
     sourceAsOf: snapshot.sourceAsOf, fetchedAt: snapshot.fetchedAt, checkedAt: freshness.checkedAt, refreshFailed: freshness.refreshFailed, dataOrigin: freshness.dataOrigin,
     stale: freshness.refreshFailed || now - Date.parse(snapshot.sourceAsOf) > 75 * 86400_000 || now - Date.parse(freshness.checkedAt) > 86400_000,
-    totals, coverage, postcodes: areas, trend,
+    totals, reportedTotals, coverage, postcodes: areas, trend,
     provenance: snapshot.datasets.map(dataset => ({ metric: dataset.id, url: dataset.url, sha256: dataset.sha256 })),
     sources: [
       { id: "cer", name: "Clean Energy Regulator", url: CER_COMMUNITY_URL, status: "connected", cadence: "Monthly", coverage: "Installation postcode and month", note: "Systems with validly created certificates. Recent figures can increase as certificates are lodged, up to 12 months after installation." },
@@ -177,7 +190,8 @@ export function communityReport(snapshot: CommunitySnapshot, scope: CouncilCommu
       "These are community installations reported to the Clean Energy Regulator, not work delivered by TLink or caused by a council campaign. Never add the two datasets together.",
       "The selected period ends at the latest published month. This is not a live count. Recent installation figures can be revised for up to 12 months.",
       "Counts include new systems, upgrades and off-grid systems. They are not a count of unique homes. Postcodes can cross council boundaries.",
-      "Battery coverage starts in July 2025. Missing postcodes or blank cells are shown as unavailable; they are not assumed to be zero. A total is unavailable when any selected postcode is missing.",
+      "Battery coverage starts in July 2025. Missing postcodes or blank cells remain unavailable and are never assumed to be zero. Full-area totals are unavailable when any selected postcode is missing. Reported totals sum only postcodes with complete observations for the selected period and must be read with their coverage counts; they are partial when coverage is incomplete.",
+      "Monthly reported figures sum available postcode observations for that month. Monthly coverage can differ, so changes in a partial series can reflect coverage as well as installations. No available observations means unavailable, including in reported totals.",
       "Capacity is installed solar power (kW) or usable battery storage (kWh), not energy produced or carbon saved. Installer locality is unavailable in this source.",
       "Based on Clean Energy Regulator material licensed under a Creative Commons Attribution 4.0 licence. Data has been filtered and aggregated for the council's selected postcodes.",
     ],
