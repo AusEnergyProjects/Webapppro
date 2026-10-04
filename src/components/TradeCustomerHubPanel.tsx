@@ -12,7 +12,9 @@ type Result = { ok?: boolean; available?: boolean; accepting?: boolean; canAsk?:
 type CustomerQaTarget = { customerId: string; workOrderId: string };
 type RequestKind = TradeHubQuestion["kind"];
 type Scope = { workOrderId: string; matchId?: never } | { matchId: string; workOrderId?: never };
-type Operation = "ask" | "download" | "interest" | `reply:${string}`;
+type Operation = "ask" | "interest" | `reply:${string}`;
+type SharedFile = TradeHubQuestion["files"][number];
+type SharedFileSelection = { file: SharedFile; question: string };
 type PanelProps = Scope & { interestOnly?: boolean; onOpenQa?: (target: CustomerQaTarget) => void; disabled?: boolean };
 const requestKinds: { kind: RequestKind; label: string }[] = [
   { kind: "text", label: "Answer" }, { kind: "photo", label: "Photo" }, { kind: "document", label: "Document" },
@@ -51,6 +53,7 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
   const [busy, setBusy] = useState<"" | Operation>("");
   const [message, setMessage] = useState("");
   const [replies, setReplies] = useState<Record<string, string>>({});
+  const [preview, setPreview] = useState<SharedFileSelection | null>(null);
   const generation = useRef(0), active = useRef(true), acting = useRef(false);
   const cancellation = useRef<AbortController | null>(null);
   const input = useRef<HTMLTextAreaElement | null>(null);
@@ -65,8 +68,9 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
     const token = await currentUser.getIdToken();
     if (!token || !isCurrent() || controller.signal.aborted) throw new Error("Your account changed. Reopen Customer Q&A.");
     const headers = new Headers(init?.headers); headers.set("Authorization", `Bearer ${token}`);
-    const response = await businessRequest(path, { ...init, headers, signal: controller.signal });
-    if (!isCurrent() || controller.signal.aborted) throw new Error("Your account changed. Reopen Customer Q&A.");
+    const signal = init?.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal;
+    const response = await businessRequest(path, { ...init, headers, signal });
+    if (!isCurrent() || signal.aborted) throw new Error("Your account changed. Reopen Customer Q&A.");
     return response;
   }, [businessRequest, isCurrent]);
 
@@ -79,6 +83,7 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
       if (!isCurrent() || current !== generation.current) return;
       if (!response.ok || !result.ok) throw new Error(result.error || "Shared requests could not be opened.");
       setData(result);
+      setPreview(current => current && result.questions?.some(question => question.files.some(file => file.id === current.file.id)) ? current : null);
     } catch (error) {
       if (!isCurrent() || current !== generation.current) return;
       setData(null); setMessage(error instanceof Error ? error.message : "Shared requests could not be opened.");
@@ -147,24 +152,7 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
     } catch (error) { if (isCurrent()) setMessage(error instanceof Error ? error.message : "Could not share reply."); }
     finally { finish(); }
   }
-  async function download(id: string, name: string) {
-    if (!begin("download")) return;
-    try {
-      const response = await request(`${endpoint}&fileId=${encodeURIComponent(id)}`);
-      if (!isCurrent()) return;
-      if (!response.ok) {
-        if ([401, 403, 404].includes(response.status)) setData(null);
-        throw new Error("This shared file is no longer available.");
-      }
-      const blob = await response.blob();
-      if (!isCurrent()) return;
-      const url = URL.createObjectURL(blob), link = document.createElement("a");
-      link.href = url; link.download = name; link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      if (isCurrent()) setMessage(error instanceof Error ? error.message : "Could not download.");
-    } finally { finish(); }
-  }
+  const closePreview = useCallback(() => setPreview(null), []);
 
   if (!data?.available) return interestOnly ? <div className={styles.panel}><p className={styles.status} role="status">{message || (data ? "Customer Q&A is unavailable for this lead." : "Loading lead interest...")}</p>
     {(message || data) && <button type="button" onClick={() => void load()}>Retry</button>}</div> : message ? <p className={styles.status} role="status">{message}</p> : null;
@@ -190,16 +178,70 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
         <div className={styles.actions}><small>The customer sees this in their private project.</small><button type="button" className={styles.primary}
           disabled={Boolean(busy) || !canWrite || prompt.trim().length < 5 || Boolean(duplicate)} onClick={() => void ask()}>{busy === "ask" ? "Adding…" : "Ask customer"}</button></div>
       </div> : <p className={styles.status}>{data.interested ? "You can view shared requests. Quote management permission is needed to ask a question." : "Turn on Interested to ask questions and reply."}</p>}
-    {questions.length > 0 && <div className={styles.history}><h5>Shared requests <span>{questions.length}</span></h5>{questions.map(question => <details className={styles.question} key={question.id} open={duplicate?.id === question.id || undefined}>
-      <summary><strong>{question.prompt}</strong><span>{question.answer || question.replies.length ? "Replied" : question.files.length ? "Files shared" : question.authorType === "customer" ? "Customer question" : "Awaiting reply"}</span></summary>
+    {questions.length > 0 && <div className={styles.history}><h5>Customer answers &amp; uploads <span>{questions.length}</span></h5><p className={styles.historyHelp}>Replies and uploaded files appear below the question they answer.</p>{questions.map(question => <details className={styles.question} key={question.id} open={duplicate?.id === question.id || question.files.length > 0 || undefined}>
+      <summary><strong>{question.prompt}</strong><span>{question.files.length ? `${question.files.length} customer ${question.files.length === 1 ? "file" : "files"}` : question.answer || question.replies.length ? "Replied" : question.authorType === "customer" ? "Customer question" : "Awaiting reply"}</span></summary>
       <div className={styles.answer}><small>{question.authorType === "customer" ? "Asked by customer" : "Shared business question"}</small>{question.answer && <p>{question.answer}</p>}
         {question.replies.map(item => <div className={styles.reply} key={item.id}><small>{item.authorType === "customer" ? "Customer" : "Business"}</small><p>{item.body}</p></div>)}
-        {question.files.length > 0 && <div className={styles.files}>{question.files.map(file => <button key={file.id} type="button" disabled={Boolean(busy)} onClick={() => void download(file.id, file.name)}>{file.name}</button>)}</div>}
+        {question.files.length > 0 && <section className={styles.uploads} aria-label="Customer uploads"><strong>Customer uploads</strong><p>Shared here for quoting. Select a file to preview it.</p><div className={styles.files}>{question.files.map(file => <button key={file.id} type="button" className={styles.fileCard} disabled={Boolean(busy)} aria-label={`${file.type === "application/pdf" ? "View PDF" : "View photo"}: ${file.name}`} onClick={() => setPreview({ file, question: question.prompt })}>
+          <span className={styles.fileKind} aria-hidden="true">{file.type === "application/pdf" ? "PDF" : "Photo"}</span><span><strong>{file.type === "application/pdf" ? "View PDF" : "View photo"}</strong><small>{file.name}</small></span><span aria-hidden="true">↗</span>
+        </button>)}</div></section>}
         {canWrite && <div className={styles.replyComposer}><label>Reply<textarea rows={2} maxLength={2000} value={replies[question.id] || ""} disabled={Boolean(busy)}
           onChange={event => setReplies(current => ({ ...current, [question.id]: event.target.value }))} /></label><button type="button" disabled={Boolean(busy) || !(replies[question.id] || "").trim()}
           onClick={() => void reply(question.id)}>{busy === `reply:${question.id}` ? "Sharing…" : "Share reply"}</button></div>}
       </div>
     </details>)}</div>}</>}
     {message && <p className={styles.status} role="status">{message}</p>}
+    {preview && <SharedFilePreview key={preview.file.id} selection={preview} endpoint={endpoint} request={request} isCurrent={isCurrent} onClose={closePreview} />}
   </section>;
+}
+
+function SharedFilePreview({ selection: { file, question }, endpoint, request, isCurrent, onClose }: {
+  selection: SharedFileSelection; endpoint: string; request: (path: string, init?: RequestInit) => Promise<Response>;
+  isCurrent: () => boolean; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement | null>(null);
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+  const pdf = file.type === "application/pdf";
+  useEffect(() => {
+    const element = dialog.current;
+    const opener = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    element?.showModal(); document.body.style.overflow = "hidden";
+    return () => {
+      element?.close(); document.body.style.overflow = previousOverflow;
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController(); let objectUrl = "";
+    const current = () => !controller.signal.aborted && isCurrent();
+    void (async () => {
+      try {
+        const response = await request(`${endpoint}&fileId=${encodeURIComponent(file.id)}`, { cache: "no-store", signal: controller.signal });
+        if (!current()) return;
+        if (!response.ok) throw new Error("This shared file is no longer available. Close the preview and refresh Customer Q&A.");
+        const blob = await response.blob();
+        if (!current()) return;
+        if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(blob.type) || blob.type !== file.type) throw new Error("This file could not be safely previewed.");
+        objectUrl = URL.createObjectURL(blob); setUrl(objectUrl);
+      } catch (failure) { if (current()) setError(failure instanceof Error ? failure.message : "The preview could not be opened."); }
+    })();
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [endpoint, file.id, file.type, isCurrent, request]);
+  return <dialog ref={dialog} className={styles.preview} aria-label={pdf ? "Customer PDF preview" : "Customer photo preview"}
+    onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className={styles.previewLayout}><header><div><span>Customer upload</span><h2>{pdf ? "Document preview" : "Photo preview"}</h2><p>{question}</p></div><button type="button" onClick={onClose} aria-label="Close file preview" autoFocus>Close</button></header>
+      <div className={styles.previewContent} aria-busy={!url && !error}>
+        {!url && !error && <p role="status">Opening customer {pdf ? "document" : "photo"}...</p>}
+        {error && <p role="alert">{error}</p>}
+        {/* Chrome blocks its native PDF viewer in sandboxed iframes. Only an authenticated,
+            exact application/pdf blob is allowed here; HTML and SVG are never embedded. */}
+        {url && (pdf ? <iframe title={`Customer document: ${file.name}`} src={url} referrerPolicy="no-referrer" />
+          // Authenticated local object URL, revoked when this preview closes.
+          // eslint-disable-next-line @next/next/no-img-element
+          : <img src={url} alt={`Customer photo for: ${question}`} onError={() => setError("This photo could not be displayed. You can download the file below.")} />)}
+      </div><footer><small>{file.name}</small>{url && <a href={url} download={file.name} onClick={event => { if (!isCurrent()) { event.preventDefault(); onClose(); } }}>Download</a>}</footer>
+    </div>
+  </dialog>;
 }

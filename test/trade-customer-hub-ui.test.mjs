@@ -20,10 +20,14 @@ const text = node => node == null || typeof node === "boolean" ? "" : typeof nod
 const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node)
   ? node.flatMap(child => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
 const button = (tree, label) => nodes(tree, node => node.type === "button" && text(node) === label)[0];
+const fileButton = (tree, name = "private-plan.pdf") => nodes(tree, node => node.type === "button" && node.props["aria-label"]?.endsWith(`: ${name}`))[0];
+const dialog = tree => nodes(tree, node => node.type === "dialog")[0];
+const download = tree => nodes(tree, node => node.type === "a" && text(node) === "Download")[0];
 const toggle = tree => nodes(tree, node => node.props?.role === "switch")[0];
 const textareas = tree => nodes(tree, node => node.type === "textarea");
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+const fileResponse = (type = "application/pdf") => ({ ok: true, status: 200, blob: async () => new Blob(["private customer upload"], { type }) });
 const question = { id: "question-one", prompt: "Where is the switchboard?", kind: "text", services: ["solar"], authorType: "customer",
   answer: "In the garage", replies: [{ id: "reply-one", body: "Thanks, that helps", authorType: "trade", createdAt: "2026-10-03" }],
   revision: 1, closed: false, files: [{ id: "file/one", name: "private-plan.pdf", type: "application/pdf" }] };
@@ -34,25 +38,31 @@ function deferred() { let resolve; const promise = new Promise(done => { resolve
 function harness(t, api, options = {}) {
   const initialUser = Object.hasOwn(options, "user") ? options.user : { uid: "signed-in-person", emailVerified: true, getIdToken: async () => "current-user-token" };
   const firebaseAuth = { currentUser: initialUser }, authListeners = new Set();
-  let cursor = 0, dirty = false, props = { user: initialUser, ...(options.props || { workOrderId: "job-one" }) }, ownerUid = options.ownerUid ?? "owner-one";
-  const slots = [], effects = [], callbacks = [], queued = [], requests = [], listeners = new Map(), downloads = [];
+  let dirty = false, props = { user: initialUser, ...(options.props || { workOrderId: "job-one" }) }, ownerUid = options.ownerUid ?? "owner-one";
+  const frame = () => ({ cursor: 0, slots: [], effects: [], callbacks: [], queued: [], cleaned: false });
+  const rootFrame = frame(); let currentFrame = rootFrame, previewFrame = null, previewKey = null;
+  const requests = [], listeners = new Map(), downloads = [], objectUrls = [], revokedUrls = [], dialogs = [];
+  let restoredFocus = 0;
+  class Element { isConnected = true; focus() { restoredFocus++; } }
+  const document = { activeElement: new Element(), body: { style: { overflow: "auto" } },
+    createElement: () => ({ click() { downloads.push(this.download); } }) };
   const changed = (before, after) => !before || before.length !== after.length || after.some((value, index) => !Object.is(value, before[index]));
   const hooks = {
-    useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
+    useState(initial) { const { slots } = currentFrame, index = currentFrame.cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
       return [slots[index], value => { const next = typeof value === "function" ? value(slots[index]) : value;
         if (!Object.is(next, slots[index])) { slots[index] = next; dirty = true; } }]; },
-    useRef(initial) { const index = cursor++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; },
-    useCallback(callback, dependencies) { const index = cursor++;
+    useRef(initial) { const { slots } = currentFrame, index = currentFrame.cursor++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; },
+    useCallback(callback, dependencies) { const { callbacks } = currentFrame, index = currentFrame.cursor++;
       if (changed(callbacks[index]?.dependencies, dependencies)) callbacks[index] = { callback, dependencies };
       return callbacks[index].callback; },
-    useEffect(effect, dependencies) { const index = cursor++;
+    useEffect(effect, dependencies) { const { effects, queued } = currentFrame, index = currentFrame.cursor++;
       if (changed(effects[index]?.dependencies, dependencies)) { effects[index]?.cleanup?.(); effects[index] = { dependencies };
         queued.push(() => { effects[index].cleanup = effect(); }); } },
   };
   const transport = async (path, init = {}) => { requests.push({ path, init }); return api(path, init); };
   let scopedOwner = ownerUid, request = createTradeBusinessFetch(ownerUid, "https://ausenergyassessments.com", transport);
   const loaded = {};
-  Function("require", "exports", "window", "URL", "document", `${options.qa ? qaCompiled : compiled + "\nexports.Panel=Panel;exports.AuthenticatedPanel=AuthenticatedPanel;"}`)(name => {
+  Function("require", "exports", "window", "URL", "document", "HTMLElement", `${options.qa ? qaCompiled : compiled + "\nexports.Panel=Panel;exports.AuthenticatedPanel=AuthenticatedPanel;exports.SharedFilePreview=SharedFilePreview;"}`)(name => {
     if (name === "react") return hooks;
     if (name === "react/jsx-runtime") return jsx;
     if (name === "./TradeBusinessProvider") return { useTradeBusinessFetch: () => {
@@ -67,15 +77,40 @@ function harness(t, api, options = {}) {
     addEventListener: (name, callback) => listeners.set(name, callback),
     removeEventListener: (name, callback) => { if (listeners.get(name) === callback) listeners.delete(name); },
     setTimeout: callback => { callback(); return 1; },
-  }, { createObjectURL: () => "blob:download", revokeObjectURL() {} }, { createElement: () => ({ click() { downloads.push(this.download); } }) });
-  const render = () => { cursor = 0; dirty = false; const tree = loaded[options.component || "AuthenticatedPanel"](props);
-    options.beforeEffects?.(tree); for (const effect of queued.splice(0)) effect(); return tree; };
+  }, { createObjectURL: blob => { const url = `blob:customer-upload-${objectUrls.length + 1}`; objectUrls.push({ url, blob }); return url; },
+    revokeObjectURL: url => revokedUrls.push(url) }, document, Element);
+  const cleanupFrame = state => { if (!state || state.cleaned) return; state.cleaned = true; for (const effect of state.effects) effect?.cleanup?.(); };
+  const render = () => {
+    currentFrame = rootFrame; rootFrame.cursor = 0; dirty = false;
+    let tree = loaded[options.component || "AuthenticatedPanel"](props);
+    const selected = nodes(tree, node => node.type === loaded.SharedFilePreview)[0];
+    if (!selected || selected.key !== previewKey) { cleanupFrame(previewFrame); previewFrame = null; previewKey = null; }
+    if (selected) {
+      if (!previewFrame) {
+        previewFrame = frame(); previewKey = selected.key;
+        previewFrame.element = { open: false, shown: 0, closed: 0,
+          showModal() { this.open = true; this.shown++; }, close() { this.open = false; this.closed++; } };
+        dialogs.push(previewFrame.element);
+      }
+      currentFrame = previewFrame; previewFrame.cursor = 0;
+      const previewTree = selected.type(selected.props); previewTree.props.ref.current = previewFrame.element;
+      const expand = node => Array.isArray(node) ? node.map(expand) : node === selected ? previewTree
+        : !node || typeof node !== "object" ? node : { ...node, props: { ...node.props, children: expand(node.props?.children) } };
+      tree = expand(tree);
+    }
+    currentFrame = rootFrame;
+    options.beforeEffects?.(tree);
+    for (const effect of rootFrame.queued.splice(0)) effect();
+    for (const effect of previewFrame?.queued.splice(0) || []) effect();
+    return tree;
+  };
   const settle = async () => { for (let attempt = 0; attempt < 8; attempt++) {
     const tree = render(); await flush(); if (!dirty) return tree;
   } assert.fail("Trade customer hub did not settle after eight renders"); };
-  const cleanup = () => { for (const effect of effects) effect?.cleanup?.(); };
+  const cleanup = () => { cleanupFrame(previewFrame); cleanupFrame(rootFrame); };
   t.after(cleanup);
-  return { loaded, render, settle, cleanup, requests, listeners, downloads, authListeners,
+  return { loaded, render, settle, cleanup, requests, listeners, downloads, authListeners, objectUrls, revokedUrls, dialogs, document,
+    get restoredFocus() { return restoredFocus; },
     setUser: user => { firebaseAuth.currentUser = user; for (const listener of authListeners) listener(user); },
     setOwner: owner => { ownerUid = owner; }, setProps: next => { props = { user: initialUser, ...next }; } };
 }
@@ -96,7 +131,7 @@ test("visible segmented composer and starters prefill only, then one explicit As
   const h = harness(t, async (_path, init) => init.method === "POST" ? pending.promise : response(view));
   let tree = await h.settle();
   assert.equal(nodes(tree, node => node.type === "select").length, 0);
-  assert.equal(nodes(tree, node => node.type === "details")[0].props.open, undefined, "Previous answers are initially collapsed");
+  assert.equal(nodes(tree, node => node.type === "details")[0].props.open, true, "An answer with customer uploads is initially visible");
   assert.equal(button(tree, "Ask customer").props.disabled, true);
   button(tree, "Switchboard photo").props.onClick(); tree = h.render();
   assert.equal(textareas(tree)[0].props.value, "Please share a clear photo of the switchboard.");
@@ -205,37 +240,39 @@ test("business replies are scoped and show roles without exposing competing busi
   assert.equal(textareas(tree)[0].props.value, "Keep this unrelated request draft"); assert.equal(textareas(tree)[1].props.value, "");
 });
 
-test("revoked refresh clears private content and an unmounted download never saves a file", async t => {
+test("revoked refresh clears private content and an unmounted preview never exposes a file", async t => {
   let revoked = false;
   const h = harness(t, async () => revoked ? response({ ok: false, error: "This conversation is unavailable." }, 404) : response(view));
   let tree = await h.settle(); revoked = true; h.listeners.get("focus")(); tree = await h.settle();
   assert.doesNotMatch(text(tree), /In the garage|switchboard|private-plan/); assert.equal(toggle(tree), undefined);
   assert.match(text(tree), /unavailable/);
   const pending = deferred(); const d = harness(t, async path => path.includes("fileId=") ? pending.promise : response(view));
-  tree = await d.settle(); button(tree, "private-plan.pdf").props.onClick(); await flush(); d.cleanup();
+  tree = await d.settle(); fileButton(tree).props.onClick(); await d.settle(); d.cleanup();
   assert.equal(d.listeners.has("focus"), false);
-  pending.resolve({ ok: true, status: 200, blob: async () => new Blob(["private"]) }); await flush();
+  pending.resolve({ ok: true, status: 200, blob: async () => new Blob(["private"], { type: "application/pdf" }) }); await flush();
   assert.deepEqual(d.downloads, []); assert.match(d.requests.at(-1).path, /fileId=file%2Fone/);
+  assert.deepEqual(d.objectUrls, []);
   assert.equal(d.requests.at(-1).init.signal.aborted, true);
 });
 
-test("real business fetch receives fresh bearer and selected business for reads, interest, questions, replies and downloads", async t => {
+test("real business fetch receives fresh bearer and selected business for reads, interest, questions, replies and previews", async t => {
   let tokens = 0;
   const user = { uid: "person", emailVerified: true, getIdToken: async () => `fresh-token-${++tokens}` };
   const h = harness(t, async (path, init) => path.includes("fileId=")
-    ? { ok: true, status: 200, blob: async () => new Blob(["shared file"]) }
+    ? { ok: true, status: 200, blob: async () => new Blob(["shared file"], { type: "application/pdf" }) }
     : response(init.method === "PATCH" ? { ...view, interested: false, interestRevision: 5 } : view), { user });
   let tree = await h.settle();
   textareas(tree)[0].props.onChange({ target: { value: "Please share the site access details" } }); tree = h.render();
   button(tree, "Ask customer").props.onClick(); tree = await h.settle();
   textareas(tree)[1].props.onChange({ target: { value: "We can arrange that access" } }); tree = h.render();
   button(tree, "Share reply").props.onClick(); tree = await h.settle();
-  button(tree, "private-plan.pdf").props.onClick(); tree = await h.settle();
+  fileButton(tree).props.onClick(); tree = await h.settle();
+  assert.equal(download(tree).props.download, "private-plan.pdf");
   toggle(tree).props.onClick(); await h.settle();
   assert.ok(h.requests.some(item => item.init.method === "PATCH"));
   assert.equal(h.requests.filter(item => item.init.method === "POST").length, 2);
   assert.ok(h.requests.some(item => item.path.includes("fileId=")));
-  assert.deepEqual(h.downloads, ["private-plan.pdf"]);
+  assert.deepEqual(h.downloads, [], "Opening a preview must not save a file automatically");
   for (const [index, { init }] of h.requests.entries()) {
     assert.equal(init.headers.get("Authorization"), `Bearer fresh-token-${index + 1}`);
     assert.equal(init.headers.get("X-TLink-Business"), "owner-one");
@@ -243,6 +280,145 @@ test("real business fetch receives fresh bearer and selected business for reads,
     if (init.method === "POST" || init.method === "PATCH") assert.equal(init.headers.get("Content-Type"), "application/json");
   }
   assert.equal(tokens, h.requests.length);
+});
+
+test("customer uploads have visible counts and format actions while answers without files remain collapsed", async t => {
+  const photo = { id: "photo-one", name: "switchboard.jpg", type: "image/jpeg" };
+  const current = { ...view, questions: [{ ...question, files: [...question.files, photo] },
+    { ...question, id: "answer-only", prompt: "When can we access the property?", files: [] }] };
+  const h = harness(t, async path => path.includes("fileId=") ? fileResponse(photo.type) : response(current));
+  let tree = await h.settle();
+  const questions = nodes(tree, node => node.type === "details");
+  assert.equal(questions[0].props.open, true); assert.match(text(questions[0]), /2 customer files/);
+  assert.equal(questions[1].props.open, undefined);
+  assert.equal(nodes(tree, node => node.type === "section" && node.props["aria-label"] === "Customer uploads").length, 1);
+  assert.match(text(fileButton(tree)), /View PDF/); assert.match(text(fileButton(tree, photo.name)), /View photo/);
+  assert.equal(h.requests.length, 1, "The list does not prefetch private bytes");
+  fileButton(tree, photo.name).props.onClick(); tree = await h.settle();
+  assert.equal(dialog(tree).props["aria-label"], "Customer photo preview");
+  assert.match(text(dialog(tree)), /Where is the switchboard\?/);
+  assert.match(h.requests.at(-1).path, /fileId=photo-one$/);
+  assert.deepEqual(h.downloads, []);
+});
+
+test("supported previews retain a local URL until explicit close and expose a separate named download", async t => {
+  for (const type of ["application/pdf", "image/jpeg", "image/png", "image/webp"]) {
+    const file = { ...question.files[0], type };
+    const h = harness(t, async path => path.includes("fileId=") ? fileResponse(type)
+      : response({ ...view, questions: [{ ...question, files: [file] }] }));
+    let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+    assert.equal(h.dialogs[0].shown, 1); assert.equal(h.dialogs[0].open, true);
+    assert.equal(h.document.body.style.overflow, "hidden");
+    assert.equal(h.objectUrls.length, 1); assert.deepEqual(h.revokedUrls, []);
+    const media = nodes(tree, node => node.type === (type === "application/pdf" ? "iframe" : "img"))[0];
+    assert.equal(media.props.src, h.objectUrls[0].url);
+    if (type === "application/pdf") {
+      assert.equal(media.props.referrerPolicy, "no-referrer");
+      assert.equal(media.props.title, "Customer document: private-plan.pdf");
+    } else assert.match(media.props.alt, /Where is the switchboard\?/);
+    assert.equal(download(tree).props.href, media.props.src); assert.equal(download(tree).props.download, file.name);
+    assert.equal(h.requests.at(-1).init.cache, "no-store");
+    assert.equal(h.requests.at(-1).init.signal.aborted, false);
+    assert.deepEqual(h.downloads, []);
+    button(tree, "Close").props.onClick(); tree = await h.settle();
+    assert.equal(dialog(tree), undefined); assert.equal(h.dialogs[0].closed, 1);
+    assert.equal(h.document.body.style.overflow, "auto"); assert.equal(h.restoredFocus, 1);
+    assert.deepEqual(h.revokedUrls, [media.props.src]); assert.equal(h.requests.at(-1).init.signal.aborted, true);
+    fileButton(tree).props.onClick(); tree = await h.settle();
+    assert.equal(h.objectUrls.length, 2); assert.notEqual(download(tree).props.href, media.props.src);
+    h.cleanup(); assert.deepEqual(h.revokedUrls, h.objectUrls.map(item => item.url));
+    assert.equal(h.document.body.style.overflow, "auto");
+  }
+});
+
+test("Close, Escape and backdrop dismissals abort pending response or body reads without creating private URLs", async t => {
+  for (const stage of ["response", "body"]) for (const action of ["Close", "Escape", "backdrop"]) {
+    const pending = deferred();
+    const h = harness(t, async path => !path.includes("fileId=") ? response(view) : stage === "response" ? pending.promise
+      : { ok: true, status: 200, blob: () => pending.promise });
+    let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+    const modal = dialog(tree), request = h.requests.at(-1);
+    assert.match(text(modal), /Opening customer document/); assert.equal(download(tree), undefined);
+    modal.props.onClick({ target: {}, currentTarget: h.dialogs[0] });
+    assert.ok(dialog(h.render()), "Clicks inside the preview do not dismiss it");
+    if (action === "Close") button(tree, "Close").props.onClick();
+    if (action === "Escape") { let prevented = false; modal.props.onCancel({ preventDefault() { prevented = true; } }); assert.equal(prevented, true); }
+    if (action === "backdrop") modal.props.onClick({ target: h.dialogs[0], currentTarget: h.dialogs[0] });
+    tree = await h.settle(); assert.equal(dialog(tree), undefined); assert.equal(request.init.signal.aborted, true);
+    pending.resolve(stage === "response" ? fileResponse() : new Blob(["late private bytes"], { type: "application/pdf" }));
+    await flush(); tree = await h.settle();
+    assert.deepEqual(h.objectUrls, []); assert.deepEqual(h.downloads, []); assert.equal(dialog(tree), undefined);
+  }
+});
+
+test("unsupported content, mismatched MIME and denied requests never create a preview or download URL", async t => {
+  const cases = [
+    { stored: "application/pdf", actual: "text/html" }, { stored: "application/pdf", actual: "image/svg+xml" },
+    { stored: "image/svg+xml", actual: "image/svg+xml" }, { stored: "image/jpeg", actual: "image/png" },
+    { stored: "application/pdf", actual: "" }, ...[401, 403, 404, 500].map(status => ({ stored: "application/pdf", status })),
+  ];
+  for (const item of cases) {
+    const h = harness(t, async path => !path.includes("fileId=")
+      ? response({ ...view, questions: [{ ...question, files: [{ ...question.files[0], type: item.stored }] }] })
+      : item.status ? { ok: false, status: item.status, blob: async () => assert.fail("Denied bytes must not be consumed") }
+        : fileResponse(item.actual));
+    let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+    assert.equal(nodes(tree, node => node.props?.role === "alert").length, 1);
+    assert.match(text(dialog(tree)), item.status ? /no longer available/ : /safely previewed/);
+    assert.equal(download(tree), undefined); assert.equal(nodes(tree, node => ["img", "iframe"].includes(node.type)).length, 0);
+    assert.deepEqual(h.objectUrls, []); assert.deepEqual(h.downloads, []);
+    h.cleanup();
+  }
+});
+
+test("identity replacement during private body consumption cannot expose the previous account's bytes", async t => {
+  const pending = deferred();
+  const h = harness(t, async path => path.includes("fileId=") ? { ok: true, status: 200, blob: () => pending.promise } : response(view));
+  let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+  h.setUser({ uid: "another-person", emailVerified: true, getIdToken: async () => "another-token" });
+  pending.resolve(new Blob(["previous person's private file"], { type: "application/pdf" }));
+  await flush(); tree = await h.settle();
+  assert.deepEqual(h.objectUrls, []); assert.equal(download(tree), undefined);
+  assert.equal(nodes(tree, node => ["iframe", "img"].includes(node.type)).length, 0);
+});
+
+test("an explicit Download stays available to the current identity and closes without saving after identity loss", async t => {
+  for (const user of [null, { uid: "another-person", emailVerified: true }, { uid: "signed-in-person", emailVerified: false }]) {
+    const h = harness(t, async path => path.includes("fileId=") ? fileResponse() : response(view));
+    let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+    const link = download(tree), url = link.props.href;
+    let prevented = false;
+    link.props.onClick({ preventDefault() { prevented = true; } });
+    assert.equal(prevented, false, "The current account may explicitly download the loaded upload");
+    assert.ok(dialog(h.render())); assert.deepEqual(h.revokedUrls, []);
+    h.setUser(user);
+    link.props.onClick({ preventDefault() { prevented = true; } }); tree = await h.settle();
+    assert.equal(prevented, true); assert.equal(dialog(tree), undefined); assert.equal(download(tree), undefined);
+    assert.deepEqual(h.revokedUrls, [url]); assert.deepEqual(h.downloads, []);
+  }
+});
+
+test("revoked conversation refresh removes an already loaded preview and revokes its private URL", async t => {
+  let revoked = false;
+  const h = harness(t, async path => path.includes("fileId=") ? fileResponse() : revoked
+    ? response({ ok: false, error: "This conversation is unavailable." }, 404) : response(view));
+  let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+  const url = download(tree).props.href;
+  revoked = true; h.listeners.get("focus")(); tree = await h.settle();
+  assert.equal(dialog(tree), undefined); assert.equal(download(tree), undefined);
+  assert.doesNotMatch(text(tree), /Where is the switchboard|private-plan|In the garage/);
+  assert.deepEqual(h.revokedUrls, [url]); assert.equal(h.document.body.style.overflow, "auto");
+});
+
+test("refresh removing the selected upload closes its preview even while the conversation remains available", async t => {
+  let current = view;
+  const h = harness(t, async path => path.includes("fileId=") ? fileResponse() : response(current));
+  let tree = await h.settle(); fileButton(tree).props.onClick(); tree = await h.settle();
+  const url = download(tree).props.href;
+  current = { ...view, questions: [{ ...question, files: [] }] };
+  h.listeners.get("focus")(); tree = await h.settle();
+  assert.equal(dialog(tree), undefined); assert.equal(download(tree), undefined);
+  assert.match(text(tree), /In the garage/); assert.deepEqual(h.revokedUrls, [url]);
 });
 
 test("identity boundary sends nothing without a verified user and selected business, and remounts on identity changes", async t => {
@@ -262,7 +438,7 @@ test("identity boundary sends nothing without a verified user and selected busin
 });
 
 test("identity change or unmount while obtaining a token prevents every protected action reaching transport", async t => {
-  for (const action of ["read", "interest", "ask", "reply", "download"]) {
+  for (const action of ["read", "interest", "ask", "reply", "preview"]) {
     const pending = deferred(); let calls = 0;
     const user = { uid: "person", emailVerified: true, getIdToken: () => ++calls === (action === "read" ? 1 : 2) ? pending.promise : Promise.resolve("first-token") };
     const h = harness(t, async () => response(view), { user });
@@ -272,7 +448,7 @@ test("identity change or unmount while obtaining a token prevents every protecte
       if (action === "interest") toggle(tree).props.onClick();
       if (action === "ask") { textareas(tree)[0].props.onChange({ target: { value: "Please share the access details" } }); tree = h.render(); button(tree, "Ask customer").props.onClick(); }
       if (action === "reply") { textareas(tree)[1].props.onChange({ target: { value: "We can help with access" } }); tree = h.render(); button(tree, "Share reply").props.onClick(); }
-      if (action === "download") button(tree, "private-plan.pdf").props.onClick();
+      if (action === "preview") { fileButton(tree).props.onClick(); h.render(); }
     }
     h.setUser({ ...user, uid: "different-person" }); pending.resolve("old-account-token"); await flush();
     assert.equal(h.requests.length, action === "read" ? 0 : 1, action);
