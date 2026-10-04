@@ -3,12 +3,13 @@ import { adminError, adminJson, cleanAdminText, requireAdminIdentity, sameOrigin
 import { serviceReminderProviderConfiguration } from "@/lib/service-reminder-delivery";
 import { retryAppointmentNotificationDelivery } from "@/lib/appointment-notification-server";
 import { retryPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
+import { customerHubEmailRetryable, retryCustomerHubEmail } from "@/lib/customer-hub-email-server";
 
 export const runtime = "edge";
 
 async function payload() {
   const db = getD1(); const providers = serviceReminderProviderConfiguration();
-  const [settings, counts, failures, appointmentCounts, appointmentDeliveries, photoRequestCounts, photoRequestDeliveries] = await Promise.all([
+  const [settings, counts, failures, appointmentCounts, appointmentDeliveries, photoRequestCounts, photoRequestDeliveries, customerHubDeliveries] = await Promise.all([
     db.prepare(`SELECT channel, provider, enabled, sender_label, daily_limit, revision, updated_at
       FROM service_reminder_channel_settings ORDER BY channel`).all<Record<string, unknown>>(),
     db.prepare(`SELECT channel, status, COUNT(*) total FROM service_reminder_deliveries GROUP BY channel, status`).all<Record<string, unknown>>(),
@@ -26,6 +27,14 @@ async function payload() {
       GROUP BY channel, status ORDER BY channel, status`).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, channel, provider, intent, status, eligibility_reason, attempts, provider_status, last_error, updated_at
       FROM trade_crm_photo_request_deliveries ORDER BY updated_at DESC LIMIT 50`).all<Record<string, unknown>>(),
+    db.prepare(`SELECT delivery.event_id, event.event_type, delivery.status, delivery.attempts, delivery.updated_at,
+      delivery.provider_id, delivery.encrypted_payload, delivery.first_attempt_at
+      FROM customer_hub_email_deliveries delivery
+      JOIN customer_hub_events event ON event.id = delivery.event_id
+      ORDER BY delivery.updated_at DESC, delivery.event_id DESC LIMIT 50`).all<{
+        event_id: string; event_type: string; status: string; attempts: number; updated_at: string;
+        provider_id: string; encrypted_payload: string; first_attempt_at: string;
+      }>(),
   ]);
   return {
     settings: settings.results.map((row) => ({ channel: String(row.channel), provider: String(row.provider), enabled: Boolean(row.enabled),
@@ -45,6 +54,8 @@ async function payload() {
     photoRequestDeliveries: photoRequestDeliveries.results.map((row) => ({ id: String(row.id), channel: String(row.channel),
       provider: String(row.provider), intent: String(row.intent), status: String(row.status), eligibilityReason: String(row.eligibility_reason),
       attempts: Number(row.attempts), providerStatus: String(row.provider_status), lastError: String(row.last_error), updatedAt: String(row.updated_at) })),
+    customerHubDeliveries: customerHubDeliveries.results.map((row) => ({ id: row.event_id, eventType: row.event_type,
+      status: row.status, attempts: Number(row.attempts), updatedAt: row.updated_at, canRetry: customerHubEmailRetryable(row) })),
     smsSenderApproved: String(process.env.TLINK_SMS_SENDER_APPROVED || "").toLowerCase() === "true",
   };
 }
@@ -83,8 +94,16 @@ export async function POST(request: Request) {
   try {
     const admin = await requireAdminIdentity(request, ["owner", "admin"]); const body = await request.json() as Record<string, unknown>;
     const action = cleanAdminText(body.action, 40);
-    if (action !== "retry_appointment_delivery" && action !== "retry_photo_request_delivery") return adminJson({ ok: false, error: "Unsupported delivery action." }, 400);
+    if (action !== "retry_appointment_delivery" && action !== "retry_photo_request_delivery" && action !== "retry_customer_hub_email") return adminJson({ ok: false, error: "Unsupported delivery action." }, 400);
     const deliveryId = cleanAdminText(body.deliveryId, 180); if (!deliveryId) return adminJson({ ok: false, error: "Choose a delivery." }, 400);
+    if (action === "retry_customer_hub_email") {
+      const result = await retryCustomerHubEmail(getD1(), deliveryId);
+      if (!result.ok) return adminJson({ ok: false, error: result.error === "DELIVERY_NOT_FOUND"
+        ? "Delivery not found." : "This delivery cannot be retried." }, result.error === "DELIVERY_NOT_FOUND" ? 404 : 409);
+      await writeAdminAudit(admin, "customer_hub.email_retry", "customer_hub_email_delivery", deliveryId,
+        "Rechecked a Customer Q&A email through current consent and delivery controls.", { deliveryId, result: result.status });
+      return adminJson({ ok: true, customerHubRetry: { id: deliveryId, status: result.status }, ...(await payload()) });
+    }
     const photoRequest = action === "retry_photo_request_delivery";
     const result = photoRequest ? await retryPhotoRequestDelivery(deliveryId, new URL(request.url).origin)
       : await retryAppointmentNotificationDelivery(deliveryId, new URL(request.url).origin);

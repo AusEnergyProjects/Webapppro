@@ -357,7 +357,8 @@ test("protected lead photos open inline with an accessible closeable lightbox", 
 
 test("lead summaries explain both public-plan consent and protected customer-account projects", () => {
   assert.match(dashboard, /function opportunityBroadLocation/);
-  assert.match(dashboard, /opportunity\.suburb, opportunity\.postcode/);
+  assert.match(dashboard, /const contact = opportunity\.customerContact/);
+  assert.match(dashboard, /contact\?\.suburb \|\| opportunity\.suburb, contact\?\.postcode \|\| opportunity\.postcode/);
   assert.match(
     dashboard,
     /\{opportunityBroadLocation\(opportunity\)\} \| \{opportunity\.distanceBand\}/,

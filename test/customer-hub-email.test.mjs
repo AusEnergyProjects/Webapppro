@@ -6,15 +6,15 @@ import ts from "typescript";
 import * as emailContent from "../src/lib/customer-hub-email.mjs";
 
 const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
-function load(path, dependencies) {
+function load(path, dependencies, diagnostics = console) {
   const exports = {};
   const source = ts.transpileModule(read(path), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  Function("require", "exports", source)(name => {
+  Function("require", "exports", "console", source)(name => {
     assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency: ${name}`);
     return dependencies[name];
-  }, exports);
+  }, exports, diagnostics);
   return exports;
 }
 
@@ -63,6 +63,7 @@ async function fixture(t, options = {}) {
   `);
   const hooks = { beforeQuery: null, afterQuery: null, afterLink: null, beforeAuthorise: null, provider: null };
   const sent = [];
+  const diagnostics = [];
   const statement = (sql, values = []) => ({
     sql, values, bind: (...next) => statement(sql, next),
     first: async () => { await hooks.beforeQuery?.(sql, "first"); return sqlite.prepare(sql).get(...values) || null; },
@@ -106,7 +107,7 @@ async function fixture(t, options = {}) {
     "./customer-quote-hub-server": participant, "./customer-hub-links": links,
     "./service-reminder-delivery": delivery, "./trade-integration-crypto": cryptoBoundary,
     "./customer-hub-email.mjs": emailContent,
-  });
+  }, { error: (...values) => diagnostics.push(values) });
   const queue = async (id = "event", type = "asked") => {
     await db.batch([
       db.prepare(`INSERT INTO customer_hub_questions(id,opportunity_id,match_id,service_categories_json,kind,prompt,created_at,updated_at)
@@ -118,7 +119,7 @@ async function fixture(t, options = {}) {
   };
   const row = (id = "event") => sqlite.prepare("SELECT * FROM customer_hub_email_deliveries WHERE event_id=?").get(id);
   const drain = id => server.drainCustomerHubEmails(db, id);
-  return { sqlite, db, hooks, sent, server, queue, row, drain };
+  return { sqlite, db, hooks, sent, diagnostics, server, queue, row, drain };
 }
 
 test("customer Q&A and its outbox commit together, with one customer email per event", async t => {
@@ -180,7 +181,6 @@ test("provider failure preserves the question and retries the identical event pa
 
 for (const [reason, sql] of [
   ["public email suppression", "INSERT INTO public_plan_customer_email_suppressions VALUES ('email-hash')"],
-  ["account updates opt-out", "UPDATE customer_accounts SET account_updates=0"],
   ["inactive customer account", "UPDATE customer_accounts SET account_status='disabled'"],
   ["email reminder opt-out", "INSERT INTO customer_service_reminder_opt_outs VALUES ('customer','email')"],
   ["closed hub", "UPDATE customer_quote_hubs SET accepting=0"],
@@ -199,7 +199,7 @@ for (const [reason, sql] of [
 
 for (const [reason, sql] of [
   ["email suppression", "INSERT INTO public_plan_customer_email_suppressions VALUES ('email-hash')"],
-  ["account opt-out", "UPDATE customer_accounts SET account_updates=0"],
+  ["explicit reminder opt-out", "INSERT INTO customer_service_reminder_opt_outs VALUES ('customer','email')"],
   ["paused hub", "UPDATE customer_quote_hubs SET accepting=0"],
   ["revoked business", "UPDATE trade_opportunity_matches SET status='withdrawn'"],
 ]) {
@@ -345,4 +345,114 @@ test("an expired worker cannot overwrite a newer accepted delivery with stopped"
   await f.drain();
   assert.equal(f.sent.length, 1);
   assert.equal(f.row().status, "accepted", "late scope checks must not overwrite the newer attempt's outcome");
+});
+
+test("a current enquiry sends Q&A when optional retired-account project updates are off", async t => {
+  const f = await fixture(t); await f.queue();
+  f.sqlite.exec("UPDATE customer_accounts SET account_updates=0");
+  await f.drain();
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.row().status, "accepted");
+  assert.equal(f.sqlite.prepare("SELECT account_updates FROM customer_accounts").get().account_updates, 0);
+});
+
+test("recovery sends one previously stopped valid enquiry without draining unrelated events", async t => {
+  const f = await fixture(t); await f.queue(); await f.queue("unrelated");
+  f.sqlite.exec("UPDATE customer_accounts SET account_updates=0; UPDATE customer_hub_email_deliveries SET status='stopped',attempts=1 WHERE event_id='event'");
+  const retry = await f.server.retryCustomerHubEmail(f.db, "event");
+  assert.deepEqual(retry, { ok: true, status: "accepted" });
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.row().attempts, 2, "never reset the attempt budget");
+  assert.equal(f.row("unrelated").status, "pending");
+  assert.deepEqual(await f.server.retryCustomerHubEmail(f.db, "event"), { ok: false, error: "DELIVERY_NOT_RETRYABLE" });
+  assert.equal(f.sent.length, 1);
+  assert.deepEqual(await f.server.retryCustomerHubEmail(f.db, "missing"), { ok: false, error: "DELIVERY_NOT_FOUND" });
+});
+
+for (const [reason, sql] of [
+  ["public email suppression", "INSERT INTO public_plan_customer_email_suppressions VALUES ('email-hash')"],
+  ["inactive customer account", "UPDATE customer_accounts SET account_status='disabled'"],
+  ["explicit email opt-out", "INSERT INTO customer_service_reminder_opt_outs VALUES ('customer','email')"],
+  ["withdrawn release", "UPDATE public_trade_lead_contact_releases SET withdrawn_at='withdrawn'"],
+  ["closed hub", "UPDATE customer_quote_hubs SET accepting=0"],
+]) {
+  test(`recovery revalidates ${reason} without bypassing it`, async t => {
+    const f = await fixture(t); await f.queue();
+    f.sqlite.exec("UPDATE customer_hub_email_deliveries SET status='stopped',attempts=1");
+    f.sqlite.exec(sql);
+    assert.deepEqual(await f.server.retryCustomerHubEmail(f.db, "event"), { ok: true, status: "stopped" });
+    assert.equal(f.sent.length, 0);
+    assert.equal(f.row().attempts, 2);
+  });
+}
+
+test("older stopped events can recover only with proof no provider payload was ever prepared", async t => {
+  const f = await fixture(t); await f.queue();
+  const old = new Date(Date.now() - 48 * 3600000).toISOString();
+  f.sqlite.prepare("UPDATE customer_hub_email_deliveries SET status='stopped',attempts=1,first_attempt_at=?").run(old);
+  assert.deepEqual(await f.server.retryCustomerHubEmail(f.db, "event"), { ok: true, status: "accepted" });
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.row().attempts, 2);
+  assert.ok(f.row().first_attempt_at > old);
+});
+
+for (const [name, change] of [
+  ["accepted", { status: "accepted" }],
+  ["provider identifier", { provider_id: "provider-message" }],
+  ["active claim", { status: "sending" }],
+  ["already pending", { status: "pending" }],
+  ["exhausted attempts", { attempts: 4 }],
+  ["expired possible provider attempt", { encrypted_payload: "protected", first_attempt_at: new Date(Date.now() - 24 * 3600000).toISOString() }],
+  ["invalid possible-attempt time", { encrypted_payload: "protected", first_attempt_at: "" }],
+  ["old unknown outcome", { status: "unknown", first_attempt_at: new Date(Date.now() - 24 * 3600000).toISOString() }],
+]) {
+  test(`recovery refuses ${name}`, async t => {
+    const f = await fixture(t); await f.queue();
+    const fields = { status: "stopped", attempts: 1, first_attempt_at: new Date().toISOString(), ...change };
+    f.sqlite.prepare(`UPDATE customer_hub_email_deliveries SET ${Object.keys(fields).map(key => `${key}=?`).join(",")}`).run(...Object.values(fields));
+    const before = f.row();
+    assert.equal(f.server.customerHubEmailRetryable(before), false);
+    assert.deepEqual(await f.server.retryCustomerHubEmail(f.db, "event"), { ok: false, error: "DELIVERY_NOT_RETRYABLE" });
+    assert.deepEqual(f.row(), before);
+    assert.equal(f.sent.length, 0);
+  });
+}
+
+test("retry of a possible provider attempt reuses its frozen content and idempotency key", async t => {
+  const f = await fixture(t); await f.queue();
+  f.hooks.provider = () => { throw new Error("ambiguous provider outcome"); };
+  await f.drain();
+  f.hooks.provider = null;
+  f.sqlite.exec("UPDATE trade_opportunities SET title='New title'");
+  assert.deepEqual(await f.server.retryCustomerHubEmail(f.db, "event"), { ok: true, status: "accepted" });
+  assert.equal(f.sent.length, 2);
+  assert.deepEqual(f.sent[1], f.sent[0]);
+});
+
+test("simultaneous recovery requests cannot claim the same stopped event twice", async t => {
+  const f = await fixture(t); await f.queue();
+  f.sqlite.exec("UPDATE customer_hub_email_deliveries SET status='stopped',attempts=1");
+  const results = await Promise.all([f.server.retryCustomerHubEmail(f.db, "event"), f.server.retryCustomerHubEmail(f.db, "event")]);
+  assert.equal(results.filter(result => result.ok).length, 1);
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.row().attempts, 2);
+});
+
+test("a recovery snapshot cannot overwrite a newer provider acceptance", async t => {
+  const f = await fixture(t); await f.queue();
+  f.sqlite.exec("UPDATE customer_hub_email_deliveries SET status='stopped',attempts=1");
+  f.hooks.beforeQuery = sql => {
+    if (sql.includes("SET status='pending'")) f.sqlite.exec("UPDATE customer_hub_email_deliveries SET status='accepted',provider_id='new-provider',attempts=2");
+  };
+  assert.deepEqual(await f.server.retryCustomerHubEmail(f.db, "event"), { ok: false, error: "DELIVERY_NOT_RETRYABLE" });
+  assert.equal(f.sent.length, 0);
+  assert.equal(f.row().provider_id, "new-provider");
+});
+
+test("delivery diagnostics expose event and failure stage without exception or customer content", async t => {
+  const f = await fixture(t); await f.queue();
+  f.hooks.provider = () => { throw new Error("SELECT private SQL customer@example.test token-hash PRIVATE QUESTION CONTENT"); };
+  await f.drain();
+  assert.deepEqual(f.diagnostics, [["Customer Q&A email delivery.", { eventId: "event", stage: "provider", code: "DELIVERY_ATTEMPT_FAILED" }]]);
+  assert.doesNotMatch(JSON.stringify(f.diagnostics), /SELECT|customer@example|token-hash|PRIVATE QUESTION/);
 });
