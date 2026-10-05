@@ -52,18 +52,38 @@ export function moveCouncilMap(view: CouncilMapView, dx: number, dy: number): Co
   return { lat: Math.max(-80, Math.min(80, next.lat)), lng: ((next.lng + 540) % 360) - 180, zoom: view.zoom };
 }
 
+/** Zoom around the pointer, retaining the same geographic point beneath it. */
+export function zoomCouncilMap(view: CouncilMapView, zoom: number, x: number, y: number, width: number, height: number): CouncilMapView {
+  const nextZoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, zoom));
+  if (nextZoom === view.zoom) return view;
+  const centre = mapWorldPoint(view, view.zoom);
+  const scale = 2 ** (nextZoom - view.zoom);
+  const next = mapWorldPosition({
+    x: (centre.x + x - width / 2) * scale - x + width / 2,
+    y: (centre.y + y - height / 2) * scale - y + height / 2,
+  }, nextZoom);
+  return { ...next, zoom: nextZoom };
+}
+
+/** Wheel input is handled only inside the map, including Ctrl-wheel trackpad pinch. */
+export function councilMapWheelDelta(deltaY: number, deltaMode: number, ctrlKey: boolean): number {
+  if (!Number.isFinite(deltaY)) return 0;
+  return deltaY * (deltaMode === 1 ? 16 : deltaMode === 2 ? 160 : 1) * (ctrlKey ? 5 : 1);
+}
+
 /** Keep every postcode labelled, with labels immediately beside their true anchors. */
-export function layoutCouncilMapMarkers(areas: Array<{key:string;position:MapPosition}>, view: CouncilMapView, width: number, height: number, selectedKey?: string) {
+export function layoutCouncilMapMarkers(areas: Array<{key:string;position:MapPosition}>, view: CouncilMapView, width: number, height: number, selectedKey?: string, compact = false) {
   const anchors = areas.map(area => ({key:area.key,...councilMapPoint(area.position,view,width,height)}))
     .filter(point => point.x >= 0 && point.x <= width && point.y >= 0 && point.y <= height);
   const labels: Array<{key:string;x:number;y:number}> = [];
-  const labelWidth = 76, labelHeight = 36, gap = 3;
+  const labelWidth = compact ? 42 : 76, labelHeight = compact ? 20 : 36, gap = 3;
   const overlap = (a: {x:number;y:number}, b: {x:number;y:number}) => Math.max(0,labelWidth+gap-Math.abs(a.x-b.x))*Math.max(0,labelHeight+gap-Math.abs(a.y-b.y));
   const ranked = [...anchors].sort((a,b) => Number(b.key === selectedKey) - Number(a.key === selectedKey) || a.key.localeCompare(b.key));
   for (const point of ranked) {
     // Try only adjacent positions, never a distant grid or leader lines. At very
     // wide zooms labels may overlap; hover/focus raises them and zoom separates them.
-    const candidates = [[-38,14],[-38,-50],[14,-18],[-90,-18],[14,14],[-90,14],[14,-50],[-90,-50]]
+    const offsets = compact ? [[-21,-10],[-21,8],[-21,-28],[8,-10],[-50,-10],[8,8],[-50,8]] : [[-38,14],[-38,-50],[14,-18],[-90,-18],[14,14],[-90,14],[14,-50],[-90,-50]];
+    const candidates = offsets
       .map(([dx,dy]) => ({x:Math.max(4,Math.min(width-labelWidth-4,point.x+dx)),y:Math.max(4,Math.min(height-labelHeight-24,point.y+dy))}));
     const score = (candidate: {x:number;y:number}) => labels.reduce((total,label)=>total+overlap(candidate,label),0)
       + anchors.filter(other=>other.key!==point.key&&other.x>candidate.x-7&&other.x<candidate.x+labelWidth+7&&other.y>candidate.y-7&&other.y<candidate.y+labelHeight+7).length*120;

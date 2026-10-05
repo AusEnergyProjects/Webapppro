@@ -7,16 +7,17 @@ import * as jsx from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as mapView from "../src/lib/council-map-view.ts";
 import * as mapHeat from "../src/lib/council-map-heat.ts";
+import * as mapBoundaries from "../src/lib/council-postcode-boundaries.ts";
 
 const css = { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
 function load(relative, dependencies) {
   const source = readFileSync(new URL(relative, import.meta.url), "utf8");
   const code = transformSync(source, { loader: "tsx", format: "cjs", target: "es2022", jsx: "automatic" }).code;
   const record = { exports: {} };
-  Function("require", "module", "exports", code)(id => {
+  Function("require", "module", "exports", "window", code)(id => {
     assert.ok(Object.hasOwn(dependencies, id), `Unexpected dependency: ${id}`);
     return dependencies[id];
-  }, record, record.exports);
+  }, record, record.exports, {matchMedia:()=>({matches:false})});
   return record.exports;
 }
 const primitives = load("../src/components/council/CouncilPrimitives.tsx", { "react/jsx-runtime": jsx, "./CouncilWorkspace.module.css": css });
@@ -31,15 +32,15 @@ function layer(id, values = {}) {
   return { id,label:id === "public-upgrades" ? "Approved community upgrades" : "Public solar installations",unit:"activities",sourceLabel:"Public test source · 2026",
     postcodes:postcodes.map(postcode=>({postcode,value:Object.hasOwn(values,postcode)?values[postcode]:12})) };
 }
-function renderer() {
-  const states=[];let cursor=0,tree;
-  const hooks={...React,useEffect(){},useRef:value=>({current:value}),useMemo:factory=>factory(),useState(initial){const index=cursor++;if(!(index in states))states[index]=typeof initial==="function"?initial():initial;return [states[index],value=>{states[index]=typeof value==="function"?value(states[index]):value;}];}};
+function renderer(boundaries=[]) {
+  const states=[],effects=[];let cursor=0,tree;
+  const hooks={...React,useEffect(effect){effects.push(effect);},useRef:value=>({current:value}),useMemo:factory=>factory(),useState(initial){const index=cursor++;if(!(index in states))states[index]=typeof initial==="function"?initial():initial;return [states[index],value=>{states[index]=typeof value==="function"?value(states[index]):value;}];}};
   const {CouncilMap}=load("../src/components/council/CouncilMap.tsx",{
     react:hooks,"react/jsx-runtime":jsx,"@/lib/energy-service-catalogue.mjs":{ENERGY_SERVICE_LABELS:{}},
-    "@/lib/google-maps-client":{},"@/lib/council-map-view":mapView,"@/lib/council-map-heat":mapHeat,"./CouncilPrimitives":primitives,"./CouncilMap.module.css":css,
+    "@/lib/google-maps-client":{},"@/lib/council-map-view":mapView,"@/lib/council-map-heat":mapHeat,"@/lib/council-postcode-boundaries":{...mapBoundaries,loadCouncilPostcodeBoundaries:async()=>({features:boundaries,missingPostcodes:[]})},"./CouncilPostcodeDetails":{CouncilPostcodeDetails:()=>null},"./CouncilPrimitives":primitives,"./CouncilMap.module.css":css,
   });
   function elements(element=tree,result=[]) {if(React.isValidElement(element)){result.push(element);React.Children.forEach(element.props.children,child=>elements(child,result));}return result;}
-  return {render(publicLayers=[]){cursor=0;tree=CouncilMap({report,publicLayers});return renderToStaticMarkup(tree);},find(predicate){const found=elements().find(predicate);assert.ok(found,"Expected control not found");return found;},all(predicate){return elements().filter(predicate);}};
+  return {render(publicLayers=[]){cursor=0;effects.length=0;tree=CouncilMap({report,publicLayers});return renderToStaticMarkup(tree);},async load(){for(const effect of effects)effect();await Promise.resolve();},find(predicate){const found=elements().find(predicate);assert.ok(found,"Expected control not found");return found;},all(predicate){return elements().filter(predicate);}};
 }
 const plain=html=>html.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();
 const hasClass=(node,name)=>node.props.className?.split(" ").includes(name);
@@ -130,4 +131,24 @@ test("map selection, keyboard zoom and Fit retain genuine coordinate anchors",()
   const map=ui.find(node=>node.props.role==="region"&&node.props["aria-label"]?.startsWith("Interactive postcode"));
   const target={};map.props.onKeyDown({target,currentTarget:target,key:"+",preventDefault(){prevented=true;}});ui.render(layers);assert.equal(prevented,true);
   ui.find(node=>node.type==="button"&&node.props.className==="fit").props.onClick();ui.render(layers);assert.equal(marker().props["aria-pressed"],false);
+});
+
+test("loaded boundaries replace heat spots, preserve missing data and select the postcode breakdown",async()=>{
+  const boundaries=mapBoundaries.parseCouncilPostcodeBoundaries({type:"FeatureCollection",features:["3805","3920","3000"].map((postcode,index)=>({type:"Feature",properties:{postcode},geometry:{type:"Polygon",coordinates:[[[144.999+index*.004,-38.001-index*.003],[145.001+index*.004,-38.001-index*.003],[145.001+index*.004,-37.999-index*.003],[144.999+index*.004,-37.999-index*.003],[144.999+index*.004,-38.001-index*.003]]]}}))});
+  const ui=renderer(boundaries),layers=[layer("public-upgrades",{"3805":12,"3920":0,"3000":null})];
+  ui.render(layers);await ui.load();const html=ui.render(layers);
+  assert.match(plain(html),/3 of 73 postcode boundaries available/);
+  const paths=ui.all(node=>node.type==="path"&&node.props["data-postcode"]);
+  assert.equal(paths.length,3);
+  assert.equal(paths.find(node=>node.props["data-postcode"]==="3920").props.fill,"rgb(37, 99, 235)");
+  assert.equal(paths.find(node=>node.props["data-postcode"]==="3000").props.strokeDasharray,"4 3");
+  assert.equal(paths[0].props.fillRule,"evenodd");
+  for(const postcode of ["3805","3920","3000"]){
+    const anchor=ui.find(node=>hasClass(node,"areaAnchor")&&node.key===postcode);
+    assert.equal(React.Children.toArray(anchor.props.children).some(child=>hasClass(child,"heat")),false);
+  }
+  ui.find(node=>node.type==="button"&&node.props["aria-label"]?.startsWith("3805:")).props.onClick();
+  ui.render(layers);
+  assert.equal(ui.find(node=>node.type==="aside").props["aria-label"],"Postcode 3805 breakdown");
+  assert.ok(ui.all(node=>node.type==="path"&&node.props.strokeWidth===3).length>0);
 });

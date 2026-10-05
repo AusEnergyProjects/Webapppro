@@ -1,0 +1,403 @@
+{
+  "name": "Australian Bureau of Statistics, Postal Areas 2021",
+  "url": "https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs/edition-3-july-2021-june-2026/non-abs-structures/postal-areas",
+  "serviceUrl": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0",
+  "attribution": "Postal areas: Australian Bureau of Statistics, 2021, CC BY 4.0. Boundaries simplified for display.",
+  "licence": "https://creativecommons.org/licenses/by/4.0/",
+  "note": "ABS 2021 Postal Areas approximate postcodes for statistical purposes. They may differ from current Australia Post delivery areas.",
+  "simplificationDegrees": 0.00025,
+  "retrievedAt": "2026-10-05T02:01:51.764Z",
+  "coordinateReferenceSystem": "WGS84 longitude, latitude (EPSG:4326)",
+  "transformation": "ABS ArcGIS maxAllowableOffset 0.00025 degrees (at most about 28 metres at the equator), rounded to 5 decimal places. Rings and polygon holes retained. Partitioned by first two postcode digits.",
+  "spatialFeatures": 2641,
+  "omittedNonSpatialCodes": [
+    "9494",
+    "9797"
+  ],
+  "responses": [
+    {
+      "prefix": "0",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%270%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 34,
+      "spatialFeatures": 34,
+      "sha256": "61174376abd83081d79563de338aedf6f4684a4c097b884fb91e0c1e70032cb8"
+    },
+    {
+      "prefix": "1",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%271%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 0,
+      "spatialFeatures": 0,
+      "sha256": "ed778c73ea51338d6576fb5992b189f2b94d9f3d5e199f46c1af520d6b0b3e6c"
+    },
+    {
+      "prefix": "2",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%272%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 638,
+      "spatialFeatures": 638,
+      "sha256": "42d170d9407ea4b20b7a02b98f9849c0070fa6d9b4062e4fcc1e7c6fb098f5a3"
+    },
+    {
+      "prefix": "3",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%273%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 694,
+      "spatialFeatures": 694,
+      "sha256": "3ca4789ab49cf899c36d507f5f8f3a584595c0220bb53ec5b1bdb73bee2c3d43"
+    },
+    {
+      "prefix": "4",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%274%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 433,
+      "spatialFeatures": 433,
+      "sha256": "f8b84c3328d3cad8e964640ee3a9355ab9adb4b708bbac2c9cb893d0462b5f54"
+    },
+    {
+      "prefix": "5",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%275%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 341,
+      "spatialFeatures": 341,
+      "sha256": "c1e455605e8631234a65b5c223b89d11640d5e3a8fb230fae17cd9e2f96839f8"
+    },
+    {
+      "prefix": "6",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%276%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 386,
+      "spatialFeatures": 386,
+      "sha256": "82c211b2b0ededb7ab2223d55deb4228f9456d9ecc2d2db6c9c324db97ba93e0"
+    },
+    {
+      "prefix": "7",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%277%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 115,
+      "spatialFeatures": 115,
+      "sha256": "f75920c3c801de4296f7d17c786eb16ab05f895992cce8f39dd98814e83c44fc"
+    },
+    {
+      "prefix": "8",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%278%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 0,
+      "spatialFeatures": 0,
+      "sha256": "ed778c73ea51338d6576fb5992b189f2b94d9f3d5e199f46c1af520d6b0b3e6c"
+    },
+    {
+      "prefix": "9",
+      "url": "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/0/query?where=poa_code_2021+LIKE+%279%25%27&outFields=poa_code_2021&returnGeometry=true&outSR=4326&maxAllowableOffset=0.00025&geometryPrecision=5&f=geojson",
+      "sourceFeatures": 2,
+      "spatialFeatures": 0,
+      "sha256": "efd6267752db665c607f7298ae859503f6edd58bf37d1aecfae227836628950d"
+    }
+  ],
+  "files": [
+    {
+      "file": "abs-2021-08.json",
+      "features": 34,
+      "bytes": 795737,
+      "sha256": "192657cce15ce90201c81a49d854aa9375c281956f7d17a2b8fe561b362ed694"
+    },
+    {
+      "file": "abs-2021-20.json",
+      "features": 79,
+      "bytes": 147428,
+      "sha256": "8aa3ca0dd5f47e270e9d39466dd713b7ae4dc0f08001d27ce2a8364793d43457"
+    },
+    {
+      "file": "abs-2021-21.json",
+      "features": 83,
+      "bytes": 180567,
+      "sha256": "6aabe5037f354f1c9afe6a46b9584391a565688a1621edc4c2037ca5965a2383"
+    },
+    {
+      "file": "abs-2021-22.json",
+      "features": 65,
+      "bytes": 218843,
+      "sha256": "35c3a1a4156775f3d9a7602817ccb818899bba671d9e01f7ec7d874af94a033d"
+    },
+    {
+      "file": "abs-2021-23.json",
+      "features": 71,
+      "bytes": 909524,
+      "sha256": "e5aa99eacb0b2d219e6a69cc28ca14903cddcb4897fe1560ebb37571ed469c84"
+    },
+    {
+      "file": "abs-2021-24.json",
+      "features": 68,
+      "bytes": 832708,
+      "sha256": "a7410c7795595c44bbf2ef740e71d9c074e0b6d714245edf9950c183e55393d1"
+    },
+    {
+      "file": "abs-2021-25.json",
+      "features": 65,
+      "bytes": 685103,
+      "sha256": "ca211fab4801d76e6b59b53eea35c0dfd09af15a0791fa0c96eb43ed624b1712"
+    },
+    {
+      "file": "abs-2021-26.json",
+      "features": 61,
+      "bytes": 735898,
+      "sha256": "78c541bab5fcb34dae8e6560b8b9ee2d2d2de6cf7b991e771623ab82cf4f7ba7"
+    },
+    {
+      "file": "abs-2021-27.json",
+      "features": 77,
+      "bytes": 746103,
+      "sha256": "0992736fb2951f22e5d54598a6265b7b80a0b91311274d56c8b42fca28d54fea"
+    },
+    {
+      "file": "abs-2021-28.json",
+      "features": 59,
+      "bytes": 798607,
+      "sha256": "111213b61e0182c60ef766699a186d75640f1d11968878748ae0bb7659774070"
+    },
+    {
+      "file": "abs-2021-29.json",
+      "features": 10,
+      "bytes": 19955,
+      "sha256": "4b08f7294d5d75d951932bdf7be6e5f63ff76a7cea3d70fe288e224e0e36698d"
+    },
+    {
+      "file": "abs-2021-30.json",
+      "features": 85,
+      "bytes": 134845,
+      "sha256": "f4690d34587003466554209ca456b085e7832e0fbfdecfe7d807cf6f4f3f1972"
+    },
+    {
+      "file": "abs-2021-31.json",
+      "features": 90,
+      "bytes": 138776,
+      "sha256": "252f7d0b547efcc996e8c2212bd222cd88750101617f83a1de966a2cff2f4b24"
+    },
+    {
+      "file": "abs-2021-32.json",
+      "features": 72,
+      "bytes": 328073,
+      "sha256": "3bdfe5a2911a267ed52088e7666507f3e105fcc525f01a664ad2e39a5142ba11"
+    },
+    {
+      "file": "abs-2021-33.json",
+      "features": 66,
+      "bytes": 401902,
+      "sha256": "3615ef60d864aaa11598bfc1bf4caa405db5c69d2ffc7d092f73fb4e353dc970"
+    },
+    {
+      "file": "abs-2021-34.json",
+      "features": 60,
+      "bytes": 314723,
+      "sha256": "9a7e162e8be4a985796931c59b5952c2041801eab31b2ea370b73ba5fcf13c3d"
+    },
+    {
+      "file": "abs-2021-35.json",
+      "features": 64,
+      "bytes": 319244,
+      "sha256": "bb23bd02751a70122627ba5cdc39619e4e0612a9dbb12a78798374166b4fe160"
+    },
+    {
+      "file": "abs-2021-36.json",
+      "features": 55,
+      "bytes": 319110,
+      "sha256": "eac4c84630d3b6456cae844c1af9f5fb9c3a8c3f5993678038b4b0d98fba1fda"
+    },
+    {
+      "file": "abs-2021-37.json",
+      "features": 73,
+      "bytes": 425077,
+      "sha256": "ab8154e8ecde6810f7954c53c732a1239d46638bcaf9f2fa20c032d29927cd68"
+    },
+    {
+      "file": "abs-2021-38.json",
+      "features": 62,
+      "bytes": 500599,
+      "sha256": "e3d52e05b1cdb104c275e7145cf1ca95ac1cbfb230b8b7f1fdaf7ebbc082706b"
+    },
+    {
+      "file": "abs-2021-39.json",
+      "features": 67,
+      "bytes": 301803,
+      "sha256": "2fa7c5499453403524ee9def45f8b776e08d5792021fbb234a2e277b284b0dea"
+    },
+    {
+      "file": "abs-2021-40.json",
+      "features": 45,
+      "bytes": 88165,
+      "sha256": "1174ce179c3ef882e80ad09cc9ecc59ee7dd40318e28008c7fc37da92aac3866"
+    },
+    {
+      "file": "abs-2021-41.json",
+      "features": 56,
+      "bytes": 118904,
+      "sha256": "cbbc74215515197e82cf66a6d4f457cb792a24683e3d2453752dad53591af1eb"
+    },
+    {
+      "file": "abs-2021-42.json",
+      "features": 27,
+      "bytes": 142913,
+      "sha256": "038ed9f0659a609fb09071448149e818bf5cdf161f51b354403deefd4c9b5cbc"
+    },
+    {
+      "file": "abs-2021-43.json",
+      "features": 53,
+      "bytes": 501968,
+      "sha256": "df6e526c84e81bd2cd12faf0f2d5b753540a8f37f38ba8c86af440d692f289c8"
+    },
+    {
+      "file": "abs-2021-44.json",
+      "features": 55,
+      "bytes": 451929,
+      "sha256": "152512e0273fc09d49be26f2a3450fb773d2953f8c066717dc667a73c4c757af"
+    },
+    {
+      "file": "abs-2021-45.json",
+      "features": 49,
+      "bytes": 310473,
+      "sha256": "b1eeed65bda0d85ca23bcce5f5106b31012a467aa2854f8d38f044c6a433580a"
+    },
+    {
+      "file": "abs-2021-46.json",
+      "features": 34,
+      "bytes": 541971,
+      "sha256": "99f9d887b8b1291565afc65a35ff42976ce9a4aad942e6f11b4c4ffb385bfb1e"
+    },
+    {
+      "file": "abs-2021-47.json",
+      "features": 52,
+      "bytes": 902410,
+      "sha256": "64e37c57ffa3d75b3d7ab93ac7788000fc20a17d70177849b21e51669c767671"
+    },
+    {
+      "file": "abs-2021-48.json",
+      "features": 62,
+      "bytes": 1336413,
+      "sha256": "e8e1ab3131f192f91b5382a974a851b0eefd656ccce9a6ebe13be1cd7b342b7b"
+    },
+    {
+      "file": "abs-2021-50.json",
+      "features": 75,
+      "bytes": 65268,
+      "sha256": "66c0b015a868c398dc43c8934e31d2ac1b9bf25ce9fe53ec1443aa9f01cb4a8f"
+    },
+    {
+      "file": "abs-2021-51.json",
+      "features": 55,
+      "bytes": 110884,
+      "sha256": "8605b984442d3aa5474ed4750cf8dd553384c50bae6e307e4e14aba3d4761409"
+    },
+    {
+      "file": "abs-2021-52.json",
+      "features": 57,
+      "bytes": 306753,
+      "sha256": "bdd40d3ad3076321dae047af81d5fdc788de90b395f9319e886b30f465ce1fa4"
+    },
+    {
+      "file": "abs-2021-53.json",
+      "features": 38,
+      "bytes": 127544,
+      "sha256": "bd69d413e2cb6469c31975e2a3797f97bee9f2b401bc74508f6b01c37f52666e"
+    },
+    {
+      "file": "abs-2021-54.json",
+      "features": 42,
+      "bytes": 163216,
+      "sha256": "3dcc97475c283c95a54d3fc14f909cd797c06dd0abe5930483ee3b3889dfce6d"
+    },
+    {
+      "file": "abs-2021-55.json",
+      "features": 26,
+      "bytes": 117195,
+      "sha256": "8b79cd0b0bbc90507cc9d71c1404096b558c39ed16d44d288c4cc381cd0ed9ae"
+    },
+    {
+      "file": "abs-2021-56.json",
+      "features": 30,
+      "bytes": 324313,
+      "sha256": "6c9bd9a876d149e4c0d9e0e6c0ba63a168d6e211e9788739c604925cf1c0ba79"
+    },
+    {
+      "file": "abs-2021-57.json",
+      "features": 17,
+      "bytes": 371279,
+      "sha256": "3452baf4b5a9fff56faa5dcfd449a6ca10a0dfe076e19cb3aab5e97c04934704"
+    },
+    {
+      "file": "abs-2021-59.json",
+      "features": 1,
+      "bytes": 951,
+      "sha256": "ee43a7ac66c31531f1c2ef66a27bf9c8aa12240fc7478799aba2d2195340a8c2"
+    },
+    {
+      "file": "abs-2021-60.json",
+      "features": 74,
+      "bytes": 107194,
+      "sha256": "049c3bea240edfffa2458e32e4af3fcb29b3089eb12ccdb35f45c0eb44a34c5d"
+    },
+    {
+      "file": "abs-2021-61.json",
+      "features": 52,
+      "bytes": 85337,
+      "sha256": "35d4e9d649cd59db8c535bc4cb0d675ad57fbb92785c7cab2e777f1b10fde199"
+    },
+    {
+      "file": "abs-2021-62.json",
+      "features": 47,
+      "bytes": 285688,
+      "sha256": "d419e7dd92c6fca9b3b619976d50e5ff96a1ea18364141fe8524eed0cbeebf37"
+    },
+    {
+      "file": "abs-2021-63.json",
+      "features": 62,
+      "bytes": 419904,
+      "sha256": "52a2ed5fed3d4363cd25b0f66f42dea998603e82916e4205e62f653672e865ed"
+    },
+    {
+      "file": "abs-2021-64.json",
+      "features": 61,
+      "bytes": 303719,
+      "sha256": "3239b224dc960c5eac385ca787bea6afbabcc20a6dacff26e42d68d71b3aaa73"
+    },
+    {
+      "file": "abs-2021-65.json",
+      "features": 40,
+      "bytes": 248191,
+      "sha256": "a869d8608cb516004908f28439aeb72d50e1eee52a9e78e247db50387e5b6249"
+    },
+    {
+      "file": "abs-2021-66.json",
+      "features": 23,
+      "bytes": 71386,
+      "sha256": "25aed2cb11fdbce5904ee0cd25d121a2de2169758981092186b96a57f2d056b6"
+    },
+    {
+      "file": "abs-2021-67.json",
+      "features": 27,
+      "bytes": 1649824,
+      "sha256": "19e156df8644517e7c3c11e2eecd525182e4cde2064db35ce8817f79943a8106"
+    },
+    {
+      "file": "abs-2021-70.json",
+      "features": 28,
+      "bytes": 126396,
+      "sha256": "ee0316107f276bfb255fe43d220d1f0096c1655241568fe13f5ccbbcd85fab95"
+    },
+    {
+      "file": "abs-2021-71.json",
+      "features": 31,
+      "bytes": 681683,
+      "sha256": "e7b386ecc4b34c95c6064bd6d1520afff3fbd9ec5d66d917a951f1238520714f"
+    },
+    {
+      "file": "abs-2021-72.json",
+      "features": 34,
+      "bytes": 500149,
+      "sha256": "27aa8e63e28d8d32394572ed863e43cf74227da31567a00212266d096c55c7d7"
+    },
+    {
+      "file": "abs-2021-73.json",
+      "features": 17,
+      "bytes": 439336,
+      "sha256": "2aa58f9707e30200eaee2230926b33d90ef9e5cbf06f88c6e3256d43a7641cee"
+    },
+    {
+      "file": "abs-2021-74.json",
+      "features": 5,
+      "bytes": 174876,
+      "sha256": "8c4e8847872dd03a4d449ede0e3542a5fbd4548c18d2d848a8e63d1ecbfeeb60"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+.details{min-width:0;color:var(--c-ink,#123d4a);font-size:12px;line-height:1.55;overflow-wrap:anywhere}
+.source{padding:17px 0;border-top:1px solid var(--c-line,#d7e3e7)}
+.source h3{margin:0;font-size:15px;line-height:1.4;font-weight:700;color:var(--c-ink,#123d4a)}
+.period{margin:5px 0 13px;font-size:10px;line-height:1.6;color:var(--c-muted,#57727d)}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:0 0 15px}
+.metrics>div{padding:11px 9px;border:1px solid var(--c-line,#d7e3e7);border-radius:8px;background:var(--c-soft,#f3f8f5)}
+.metrics dt{font-size:10px;color:var(--c-muted,#57727d);line-height:1.45;min-height:30px}
+.metrics dd{margin:7px 0 0;font-size:20px;font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums}
+.metrics dd small{display:block;font-size:9px;font-weight:500;color:var(--c-muted,#57727d);margin-top:3px}
+.breakdown h4{font-size:12px;font-weight:650;margin:0 0 8px}
+.activities{list-style:none;padding:0;margin:0}
+.activities li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:3px 10px;padding:8px 0;border-top:1px solid var(--c-line,#d7e3e7)}
+.activities li>span{font-size:11px;line-height:1.5}
+.activities li>strong{text-align:right;font-size:12px;font-variant-numeric:tabular-nums;line-height:1.4}
+.activities li>small{grid-column:1/-1;color:var(--c-muted,#57727d);font-size:9px}
+.activities strong small{display:block;font-size:9px;font-weight:400;color:var(--c-muted,#57727d)}
+.installations{margin:0;display:grid;gap:0}
+.installations>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-top:1px solid var(--c-line,#d7e3e7)}
+.installations dt{font-size:11px;color:var(--c-muted,#57727d);min-width:0}
+.installations dd{margin:0;font-size:12px;font-weight:650;text-align:right;flex-shrink:0;max-width:55%;font-variant-numeric:tabular-nums}
+.details summary{cursor:pointer;padding:9px 0;color:var(--c-accent,#087963);font-size:11px;font-weight:650}
+.details summary:focus-visible,.details a:focus-visible{outline:3px solid #59bfb4;outline-offset:3px}
+.note,.basis,.notice{font-size:10px!important;line-height:1.65!important;color:var(--c-muted,#57727d);margin:11px 0 0}
+.sourceDate{display:grid;gap:3px;margin:12px 0 0;font-size:10px;color:var(--c-muted,#57727d)}
+.sourceDate a{color:var(--c-accent,#087963);text-decoration:underline;text-underline-offset:3px}
+.notice{padding:9px;border-radius:6px;background:var(--c-soft,#f3f8f5);border:1px solid var(--c-line,#d7e3e7)}
+.impact{margin-top:7px}
+.basis{padding:0 0 16px}
+@media(max-width:480px){.metrics dd{font-size:22px}.source{padding:18px 0}.installations dt,.activities li>span{font-size:12px}}

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapWorldPoint, mapWorldPosition, councilMapPoint, fitCouncilMap, councilPreviewTiles, moveCouncilMap, layoutCouncilMapMarkers, preferredCouncilMapLayer } from "../src/lib/council-map-view.ts";
+import { mapWorldPoint, mapWorldPosition, councilMapPoint, fitCouncilMap, councilPreviewTiles, moveCouncilMap, zoomCouncilMap, councilMapWheelDelta, layoutCouncilMapMarkers, preferredCouncilMapLayer } from "../src/lib/council-map-view.ts";
 import { postcodeCoordinate } from "../src/lib/postcode-distance.ts";
 
 test("council overlay projection round-trips Australian locations across zoom levels", () => {
@@ -39,6 +39,30 @@ test("pan follows screen pixels and keeps coordinates finite near the world edge
   assert.ok(Math.abs(point.x-420)<1e-8);
   const edge=moveCouncilMap({lat:80,lng:179,zoom:3},-9000,9000);
   assert.ok(edge.lng>=-180&&edge.lng<=180&&edge.lat<=80&&edge.lat>=-80);
+});
+
+test("pointer zoom retains its geographic anchor and clamps map limits", () => {
+  const view={lat:-38,lng:145,zoom:10},width=800,height=590;
+  for(const [x,y] of [[0,0],[400,295],[750,500]]) {
+    const centre=mapWorldPoint(view,view.zoom);
+    const anchor=mapWorldPosition({x:centre.x+x-width/2,y:centre.y+y-height/2},view.zoom);
+    for(const zoom of [3,9,11,16]) {
+      const changed=zoomCouncilMap(view,zoom,x,y,width,height);
+      const point=councilMapPoint(anchor,changed,width,height);
+      assert.ok(Math.abs(point.x-x)<1e-6); assert.ok(Math.abs(point.y-y)<1e-6);
+    }
+  }
+  assert.equal(zoomCouncilMap(view,90,400,295,width,height).zoom,16);
+  assert.equal(zoomCouncilMap(view,-90,400,295,width,height).zoom,3);
+  assert.equal(zoomCouncilMap(view,10,0,0,width,height),view);
+});
+
+test("wheel normalization supports wheel, line scrolling and Ctrl-wheel pinch",()=>{
+  assert.equal(councilMapWheelDelta(-100,0,false),-100);
+  assert.equal(councilMapWheelDelta(3,1,false),48);
+  assert.equal(councilMapWheelDelta(1,2,false),160);
+  assert.equal(councilMapWheelDelta(-8,0,true),-40);
+  assert.equal(councilMapWheelDelta(NaN,0,false),0);
 });
 
 function assertAdjacentLabels(layout, width, height) {

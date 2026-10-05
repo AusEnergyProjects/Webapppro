@@ -138,6 +138,32 @@ test("source acquisition retains four integrity hashes and refuses future source
   await assert.rejects(fetchCouncilVeuSnapshot(area, "all", { now, loadEvidence: async () => ({ ...evidence(), sourceRefreshedAt: { local: "", utc: "2099-01-01T00:00:00Z" } }) }), /snapshot/);
 });
 
+test("postcode activity breakdowns use only their source groups and preserve unknown versus zero", async () => {
+  const baseline = await councilVeuBaseline(), snapshot = baseline.find(item => item.period.key === "all");
+  const freshness = { checkedAt: snapshot.fetchedAt, refreshFailed: false, dataOrigin: "baseline" };
+  const report = contract.councilVeuReport(snapshot, scope, freshness, now);
+  for (const postcode of report.postcodes) {
+    const rows = snapshot.rows.filter(row => row.postcode === postcode.postcode);
+    assert.equal(postcode.activityBreakdown.length, rows.length);
+    assert.equal(postcode.activityBreakdown.reduce((sum, row) => sum + row.activities, 0), postcode.activities);
+    assert.ok(Math.abs(postcode.activityBreakdown.reduce((sum, row) => sum + row.estimatedLifetimeTonnesCo2e, 0) - postcode.estimatedLifetimeTonnesCo2e) < 0.00001);
+    for (const activity of postcode.activityBreakdown) {
+      const source = rows.find(row => row.activity === activity.activity);
+      assert.equal(activity.activities, source.activities);
+      assert.ok(Math.abs(activity.estimatedLifetimeTonnesCo2e - source.reportedVeecEquivalents) < 0.00001);
+    }
+  }
+  const incomplete = structuredClone(snapshot);
+  incomplete.rows[0].reportedVeecEquivalents = null; incomplete.totals.reportedVeecEquivalents = null;
+  const partial = contract.councilVeuReport(incomplete, { ...scope, postcodes: [...area, "3999"] }, freshness, now);
+  assert.equal(partial.postcodes.find(row => row.postcode === "3999").activityBreakdown, null);
+  const affected = partial.postcodes.find(row => row.postcode === incomplete.rows[0].postcode).activityBreakdown.find(row => row.activity === incomplete.rows[0].activity);
+  assert.equal(affected.activities, incomplete.rows[0].activities);
+  assert.equal(affected.estimatedLifetimeTonnesCo2e, null);
+  const empty = contract.councilVeuReport(baseline.find(item => item.period.key === "quarter"), scope, freshness, now);
+  assert.ok(empty.postcodes.every(row => row.activities === 0 && row.activityBreakdown.length === 0));
+});
+
 test("daily cache avoids repeat downloads, retains last good on failure and accepts reconciled downward corrections", async () => {
   const cache = memoryCache(); let calls = 0;
   const loadEvidence = async () => { calls++; return evidence(); };

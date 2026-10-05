@@ -2,6 +2,7 @@ export const COUNCIL_VEU_SOURCE_URL = "https://veu.esc.vic.gov.au/vpr/s/public-r
 export type CouncilVeuPeriodKey = "quarter" | "year" | "all";
 export type CouncilVeuPeriod = { key: CouncilVeuPeriodKey; label: string; startDate: string | null; endDate: string | null; dateBasis: "activity_date" };
 export type CouncilVeuMeasures = { activities: number | null; reportedVeecEquivalents: number | null; estimatedLifetimeTonnesCo2e: number | null };
+export type CouncilVeuActivity = CouncilVeuMeasures & { activity: string };
 export type CouncilVeuRow = { activity: string; postcode: string; activities: number; reportedVeecEquivalents: number | null };
 export type CouncilVeuSnapshot = {
   version: 1; postcodes: string[]; period: CouncilVeuPeriod; rows: CouncilVeuRow[];
@@ -13,8 +14,8 @@ export type CouncilVeuReport = {
   scope: { councilId: string; name: string; state: string; postcodes: string[] };
   period: CouncilVeuPeriod;
   totals: CouncilVeuMeasures;
-  postcodes: Array<CouncilVeuMeasures & { postcode: string }>;
-  activities: Array<CouncilVeuMeasures & { activity: string }>;
+  postcodes: Array<CouncilVeuMeasures & { postcode: string; activityBreakdown: CouncilVeuActivity[] | null }>;
+  activities: CouncilVeuActivity[];
   source: { url: typeof COUNCIL_VEU_SOURCE_URL; refreshedAt: string; fetchedAt: string; checkedAt: string; stale: boolean; refreshFailed: boolean; dataOrigin: "live" | "cache" | "baseline" };
   provenance: CouncilVeuSnapshot["provenance"];
   coverage: { availablePostcodes: number; requestedPostcodes: number; missingVeecGroups: number; installerLocality: "unavailable" };
@@ -186,7 +187,10 @@ export function councilVeuReport(snapshot: CouncilVeuSnapshot, scope: CouncilVeu
   const complete = available.length === area.length;
   return {
     scope: { ...scope, postcodes: area }, period: snapshot.period, totals: measures(rows, complete),
-    postcodes: area.map(postcode => ({ postcode, ...measures(rows.filter(row => row.postcode === postcode), available.includes(postcode)) })),
+    postcodes: area.map(postcode => {
+      const postcodeRows = rows.filter(row => row.postcode === postcode), known = available.includes(postcode);
+      return { postcode, ...measures(postcodeRows, known), activityBreakdown: known ? postcodeRows.map(row => ({ activity: row.activity, ...measures([row]) })) : null };
+    }),
     activities: [...new Set(rows.map(row => row.activity))].sort().map(activity => ({ activity, ...measures(rows.filter(row => row.activity === activity), complete) })),
     source: { url: COUNCIL_VEU_SOURCE_URL, refreshedAt: snapshot.sourceRefreshedAt, fetchedAt: snapshot.fetchedAt, ...freshness,
       stale: freshness.refreshFailed || now - Date.parse(snapshot.sourceRefreshedAt) > 48 * 3600_000 || now - Date.parse(freshness.checkedAt) > 24 * 3600_000 },
