@@ -1,0 +1,54 @@
+.shell {
+  --question-ink: #44377f;
+  --question-background: #f3f0fb;
+  --answer-ink: #124f43;
+  --answer-background: #edf8f3;
+  color: var(--trade-ink, #19372e);
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+:global(html[data-tlink-colour-mode="night"]) .shell {
+  --question-ink: #ddd0ff;
+  --question-background: #27263d;
+  --answer-ink: #c8f3e5;
+  --answer-background: #12332f;
+}
+.heading, .formHeading { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
+.heading h3, .formHeading h4 { color: inherit; margin: 0 0 6px; font-size: 1.15rem; }
+.heading p, .formHeading small, .selector > span { color: var(--trade-muted, #5d756d); font-size: .83rem; margin: 0; }
+.shell button, .selector select { background: var(--trade-field, #fff); border: 1px solid var(--trade-line, #cadbd4); border-radius: 8px; color: var(--trade-ink, #19372e); font: inherit; font-size: .84rem; min-height: 44px; padding: 10px 13px; }
+.shell button { cursor: pointer; }
+.shell button:disabled { cursor: wait; opacity: .6; }
+.shell :is(button, select):focus-visible { outline: 3px solid var(--trade-accent, #087f5b); outline-offset: 3px; }
+.selector { display: grid; gap: 8px; }
+.selector label { font-size: .85rem; font-weight: 800; }
+.selector select { width: 100%; max-width: 100%; }
+.form { background: var(--trade-surface, #fff); border: 1px solid var(--trade-line, #cadbd4); border-radius: 14px; overflow: hidden; min-width: 0; }
+.formHeading { padding: 20px; border-bottom: 1px solid var(--trade-line, #cadbd4); }
+.formHeading > div { min-width: 0; }
+.formHeading span { color: var(--trade-muted, #5d756d); display: block; font-size: .78rem; margin-bottom: 6px; }
+.status { background: var(--answer-background); border-radius: 999px; color: var(--answer-ink); font-size: .76rem; padding: 7px 11px; }
+.section { padding: 18px 20px 4px; }
+.section h5 { color: inherit; font-size: 1rem; margin: 0 0 12px; }
+.section dl { display: grid; gap: 12px; margin: 0 0 16px; }
+.row { border: 1px solid var(--trade-line, #cadbd4); border-radius: 10px; overflow: hidden; }
+.row dt { background: var(--question-background); color: var(--question-ink); font-size: .91rem; font-weight: 750; padding: 13px 16px; }
+.row dt p { color: inherit; font-size: .82rem; font-weight: 400; line-height: 1.6; margin: 8px 0 0; white-space: pre-wrap; }
+.row dd { background: var(--answer-background); color: var(--answer-ink); font-size: .96rem; line-height: 1.6; margin: 0; padding: 13px 16px; }
+.caption { display: block; font-size: .65rem; font-weight: 800; letter-spacing: .06em; margin-bottom: 5px; text-transform: uppercase; }
+.value { white-space: pre-wrap; }
+.form :is(h4, h5, p, dt, dd, strong, small), .error { overflow-wrap: anywhere; }
+.message { color: var(--trade-muted, #5d756d); font-size: .9rem; margin: 0; padding: 20px; }
+.error { background: var(--trade-surface-soft, #f9f2e6); border: 1px solid #ac7847; border-radius: 10px; padding: 16px; }
+.error p { font-size: .83rem; margin: 8px 0; }
+.signature { display: grid; gap: 4px; margin-top: 12px; }
+.signature small { color: inherit; }
+.signature svg { background: #fff; border: 1px solid var(--trade-line, #cadbd4); border-radius: 8px; display: block; max-width: 340px; width: 100%; }
+.signature polyline { fill: none; stroke: #173d32; stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; }
+@media (max-width: 640px) {
+  .heading > button { width: 100%; }
+  .formHeading { padding: 16px; }
+  .section { padding: 16px 12px 0; }
+  .row dt, .row dd { padding: 12px; }
+}

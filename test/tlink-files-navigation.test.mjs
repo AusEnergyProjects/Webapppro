@@ -247,6 +247,8 @@ test("collapsing Forms keeps the same rental editor and supporting forms mounted
 test("Files preserves staff visibility, commercial restrictions and imported read-only access", () => {
   const noEvidence = workspaceHarness({ permissions: { canViewFieldEvidence: false } }).render();
   assert.equal(tabButton(noEvidence, "Files"), undefined);
+  assert.equal(tabButton(noEvidence, "Answers"), undefined);
+  assert.equal(component(workspaceHarness({ initialTab: "answers", permissions: { canViewFieldEvidence: false } }).render(), "TradeJobAnswersPanel"), undefined);
   assert.equal(component(noEvidence, "TradeRentalActivityPicker"), undefined);
   assert.equal(component(noEvidence, "TradeJobFormsPanel"), undefined);
   assert.equal(component(noEvidence, "TradeFieldWorkPanel"), undefined);
@@ -305,13 +307,29 @@ test("a work-plan blocker opens its disclosure before scrolling to the retained 
   assert.deepEqual(events, [{ open: true, options: { behavior: "smooth", block: "start" } }]);
 });
 
-test("Files puts live requirements and open forms before the archive", () => {
+test("Files keeps field records and forms before the archive without a progress checklist", () => {
   const tree = workspaceHarness({ initialTab: "files" }).render();
   const ordered = nodes(tree, node => ["TradeFieldWorkPanel", "TradeJobFormsPanel", "TradeJobFilesPanel"].includes(node.type));
   assert.deepEqual(ordered.map(node => node.type), ["TradeFieldWorkPanel", "TradeJobFormsPanel", "TradeJobFilesPanel"]);
   assert.equal(ordered[0].props.embedded, true);
+  assert.equal(ordered[0].props.showProgress, false);
   assert.equal(byId(tree, "job-files-forms").props.open, true);
   assert.ok(!nodes(tree, node => node.type === "summary").map(text).includes("Time, sign-offs and uploads"), "Requirements are no longer hidden behind an unrelated records disclosure");
+});
+
+test("Answers is next to Files and opens only the job's read-only answer reader", () => {
+  const h = workspaceHarness({ initialTab: "files", permissions: { canViewFieldEvidence: true, canManageFieldEvidence: false } });
+  const before = h.render();
+  const labels = nodes(jobTabs(before), node => node.type === "button").map(text);
+  assert.equal(labels[labels.indexOf("Files") + 1], "Answers");
+  assert.equal(component(before, "TradeJobAnswersPanel"), undefined);
+  tabButton(before, "Answers").props.onClick();
+  const after = h.render();
+  assert.equal(tabButton(after, "Answers").props.className, "active");
+  assert.equal(component(after, "TradeJobAnswersPanel").props.workOrderId, "job-1");
+  assert.equal(component(after, "TradeFieldWorkPanel"), undefined);
+  const files = nodes(after, node => node.props?.["aria-label"] === "Job files and forms")[0];
+  assert.equal(files.props.hidden, true);
 });
 
 for (const [target, anchor] of [["rental-assessment", "job-files-rental"], ["activity-forms", "job-files-activity-records"]]) {
@@ -353,7 +371,7 @@ test("job next steps open forms directly without duplicate overview form buttons
   const h = workspaceHarness({ initialTab: "summary" });
   const before = h.render();
   const nextSteps = nodes(before, node => node.props?.["aria-label"] === "Job next steps")[0];
-  const button = nodes(nextSteps, node => node.type === "button" && text(node) === "Forms and job progress")[0];
+  const button = nodes(nextSteps, node => node.type === "button" && text(node) === "Forms and files")[0];
   assert.ok(button);
   button.props.onClick();
   assert.equal(tabButton(h.render(), "Files").props.className, "active");

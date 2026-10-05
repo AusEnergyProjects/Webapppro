@@ -57,6 +57,7 @@ const TradeCommercialHandoffPanel = dynamic(() => import("./TradeCommercialHando
 const TradeActivityFieldRecords = dynamic(() => import("./TradeActivityFieldRecords").then((module) => module.TradeActivityFieldRecords));
 const TradeComplianceIntake = dynamic(() => import("./TradeComplianceIntake").then((module) => module.TradeComplianceIntake));
 const TradeFieldWorkPanel = dynamic(() => import("./TradeFieldWorkPanel").then((module) => module.TradeFieldWorkPanel));
+const TradeJobAnswersPanel = dynamic(() => import("./TradeJobAnswersPanel").then((module) => module.TradeJobAnswersPanel));
 const TradeJobFilesPanel = dynamic(() => import("./TradeJobFilesPanel").then((module) => module.TradeJobFilesPanel));
 const TradeJobReviewPanel = dynamic(() => import("./TradeJobReviewPanel").then((module) => module.TradeJobReviewPanel));
 const TradeRentalActivityPicker = dynamic(() => import("./TradeRentalActivityPicker").then((module) => module.TradeRentalActivityPicker));
@@ -147,7 +148,7 @@ type CrmIndexResult = { ok?: boolean; items?: Job[] | Customer[]; pagination?: I
 type CrmDetailResult = { ok?: boolean; job?: Job; customer?: Customer | null; sites?: ServiceSite[]; jobs?: Job[]; error?: string };
 type View = "today" | "leads" | "jobs" | "schedule" | "customers" | "pricebook" | "templates" | "reports" | "import" | "integrations";
 type JobTab = "summary" | "schedule" | "quote" | "field" | "invoice" | "review";
-type JobDetailTab = JobTab | "files" | "forms" | "tasks" | "notes" | "handover" | "messages";
+type JobDetailTab = JobTab | "files" | "answers" | "forms" | "tasks" | "notes" | "handover" | "messages";
 type JobReturnTarget = { kind: "jobs" } | { kind: "customer"; customerId: string; customerName: string };
 
 const jobStatusFilters = JOB_REGISTER_OPERATIONAL_STATUSES;
@@ -1929,7 +1930,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   if (!isLost && !isProtected && (canEmailCustomer || !permissions || permissions.canSendSms)) mainTabs.push(["messages", "Messages"]);
   if (canOpenJobSchedule) mainTabs.push(["schedule", `Schedule (${visibleJobAppointments.length})`]);
   if (canViewQuotes) mainTabs.push(["quote", "Quote"]);
-  if (canViewFieldEvidence) mainTabs.push(["files", "Files"]);
+  if (canViewFieldEvidence) mainTabs.push(["files", "Files"], ["answers", "Answers"]);
   if (canManageJobs && canViewFieldEvidence && canManageFieldEvidence) mainTabs.push(["review", "Review"]);
   if (canViewInvoices) mainTabs.push(["invoice", "Invoice"]);
   const moreTabs: Array<readonly [JobDetailTab, string]> = [["tasks", `Tasks (${job.tasks.filter((task) => task.status === "pending").length})`], ["notes", `Notes${openIssues ? ` (${openIssues})` : ""}`]];
@@ -1958,9 +1959,9 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
         {acceptedPreparation && <TradeJobReadinessPanel key={job.id} user={user} workOrderId={job.id} onChanged={onReload} onOpenTeam={() => setTab("schedule")} preparation={{ hasBooking: hasActiveJobAppointment, onOpenFiles: () => { setTab("files"); setFormsOpen(true); }, onOpenPlan: () => { setTab("files"); setWorkPlanOpen(true); }, onOpenQuote: () => setTab("quote") }} />}
         {workComplete && !isLost && <section className="crm-job-next-actions" aria-label="Completed work"><div><h4>Work complete</h4><p>Review the saved records, check the invoice and keep the customer informed.</p></div><div className="crm-job-next-actions-buttons">{canViewFieldEvidence && <button type="button" onClick={() => setTab("files")}>View job files</button>}{canViewInvoices && <button type="button" onClick={() => setTab("invoice")}>View invoice</button>}{canEmailCustomer && <button type="button" onClick={() => setTab("messages")}>Email the customer</button>}</div></section>}
         {!isImported && !isLost && !workComplete && !quoteDecisionPending && !quotePreparation && !acceptedPreparation && <section className="crm-job-next-actions" aria-label="Job next steps">
-          <div><h4>Next steps</h4><p>{job.nextAction || (canViewFieldEvidence ? "Open the job requirements, complete the forms and see what still needs attention." : "Check your assigned tasks, notes and visit details.")}</p></div>
+          <div><h4>Next steps</h4><p>{job.nextAction || (canViewFieldEvidence ? "Open Files to complete forms or add evidence. Open Answers to read the saved responses." : "Check your assigned tasks, notes and visit details.")}</p></div>
           <div className="crm-job-next-actions-buttons">
-            {canViewFieldEvidence && <button type="button" onClick={() => { setTab("files"); setFormsOpen(true); }}>{canManageFieldEvidence ? "Forms and job progress" : "View job files"}</button>}
+            {canViewFieldEvidence && <button type="button" onClick={() => { setTab("files"); setFormsOpen(true); }}>{canManageFieldEvidence ? "Forms and files" : "View job files"}</button>}
             {canOpenJobSchedule && <button type="button" onClick={() => setTab("schedule")}>View schedule</button>}
             {job.tasks.some(task => task.status === "pending") && <button type="button" onClick={() => setTab("tasks")}>Tasks ({job.tasks.filter(task => task.status === "pending").length})</button>}
             {openIssues > 0 && <button type="button" onClick={() => setTab("notes")}>Open issues ({openIssues})</button>}
@@ -2013,7 +2014,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
       {complianceCases.length > 0 && <section className="crm-job-compliance"><header><div><span>Compliance intake</span><h4>{complianceCases.length} linked case{complianceCases.length === 1 ? "" : "s"}</h4></div><strong>Compliance review required</strong></header><div>{complianceCases.map((item) => <article key={item.id}><div><span>{item.caseNumber} | activity date {item.activityDate}</span><strong>{item.programCode} | {item.registryActivityCode || item.activityKey} | {item.title} | v{item.version}</strong><p>{[item.productCategory, item.scenarioCode ? `scenario ${item.scenarioCode}` : "", item.scenario].filter(Boolean).join(" | ")}</p></div><dl><div><dt>Case</dt><dd>{item.status.replaceAll("_", " ")}</dd></div><div><dt>Evidence</dt><dd>{item.evidenceStatus.replaceAll("_", " ")}</dd></div></dl>{item.officialSourceUrl && <a href={item.officialSourceUrl} target="_blank" rel="noreferrer">Open official {item.officialSourceVersion || item.officialSourceTitle || "activity"} source</a>}</article>)}</div><p>TLink has preserved the selected rule version for intake. This is not an eligibility decision, certificate calculation, evidence acceptance or rebate promise.</p></section>}
     </section>}
     {canViewFieldEvidence && <section className="crm-job-section" hidden={activeTab !== "files"} aria-label="Job files and forms">
-      {activeTab === "files" && <TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} showProgress={!isLost} embedded canOpenInvoice={canViewInvoices} refreshKey={job.revision + filesRevision} onNavigate={(next) => {
+      {activeTab === "files" && <TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} showProgress={false} embedded canOpenInvoice={canViewInvoices} refreshKey={job.revision + filesRevision} onNavigate={(next) => {
         if (next === "forms" || next === "rental-assessment" || next === "activity-forms") {
           setFormsOpen(true);
           if (next === "activity-forms") setActivityRecordsRequested(true);
@@ -2038,6 +2039,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
         {!permissions && job.handoverStatus && <TradeHandoverHistory user={user} workOrderId={job.id} />}
       </>}
     </section>}
+    {activeTab === "answers" && canViewFieldEvidence && <section className="crm-job-section" aria-label="Job form answers"><TradeJobAnswersPanel key={job.id} user={user} workOrderId={job.id} /></section>}
     {activeTab === "review" && canManageJobs && canViewFieldEvidence && canManageFieldEvidence && <section className="crm-job-section" aria-label="Business job review"><TradeJobReviewPanel user={user} workOrderId={job.id} onChanged={onReload} /><TradeJobFilesPanel user={user} workOrderId={job.id} includeRentalReports={rentalAttached} includeHandover={!permissions} includeQuotes={canViewQuotes} includeInvoices={canViewInvoices} /></section>}
     {activeTab === "schedule" && canOpenJobSchedule && <section className="crm-job-section crm-job-schedule-workspace">
       <div className="crm-job-schedule-layout">
