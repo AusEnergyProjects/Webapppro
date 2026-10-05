@@ -100,6 +100,12 @@ function cells(rows: unknown[], expected: Array<[string, number]>, dictionaries:
         if (value >= dictionary.length) throw new Error("VEU dictionary index out of range");
         return dictionary[value];
       }
+      // Power BI can encode decimal measures as JSON-number strings.
+      // Decode only schema-validated numeric cells, not counts or snapshot data.
+      if (field.T === 3 && typeof value === "string") {
+        if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)) throw new Error("Invalid VEU numeric cell");
+        return amount(Number(value));
+      }
       return value;
     });
     if (used !== source.length) throw new Error("Unused VEU aggregate cells");

@@ -153,7 +153,7 @@ export function TradeMapTools({ user, onRegisterMapSave, context, linkedDesign, 
     <section className={styles.toolSection} aria-label="Insulation measurements">
     <div className={styles.measureHeading}><div><h3>Insulation measurements</h3><p>Trace an area in m² or measure a distance, then add it to your quote.</p></div><button type="button" disabled={searching || capturing} aria-pressed={Boolean(mode)} onClick={() => {
       if (mode) setMode(null);
-      else { setView("satellite"); startMeasure("area"); }
+      else { setView("hybrid"); startMeasure("area"); }
     }}>Measure area</button></div>
     {mode && <div className={styles.measurement} aria-label="Map measurement">
       <div className={styles.measurementTop}>

@@ -38,7 +38,7 @@ test("incomplete pages, schema drift, malformed masks, duplicate/outside scope g
     value => { dataset(value).PH[1].DM1[0].C[0] = 99999; },
     value => { dataset(value).PH[1].DM1[0].C[3] = 0.5; },
     value => { dataset(value).PH[1].DM1[0].C[2] = -1; },
-    value => { dataset(value).PH[1].DM1[0].C[2] = "576"; },
+    value => { dataset(value).PH[1].DM1[0].C[2] = "576 VEECs"; },
     value => { dataset(value).ValueDicts.D1[0] = "2000"; },
     value => { dataset(value).PH[0].DM0[0].C[1] += 1; },
     value => { dataset(value).PH[0].DM0[0].C[0] += 1; },
@@ -47,6 +47,32 @@ test("incomplete pages, schema drift, malformed masks, duplicate/outside scope g
   ];
   for (const mutate of mutations) assert.throws(() => contract.parseCouncilVeuResponse(changed(mutate), area));
   assert.throws(() => contract.parseCouncilVeuResponse(fixture.responses.all, area.slice(1)), /postcode/);
+});
+
+test("Power BI numeric strings decode only inside typed decimal cells and still reconcile", () => {
+  for (const encoded of ["576", "576.0", "5.76e2"]) {
+    const response = changed(value => {
+      dataset(value).PH[1].DM1[0].C[2] = encoded;
+      dataset(value).PH[0].DM0[0].C[0] = "1378258.6";
+    });
+    assert.deepEqual(contract.parseCouncilVeuResponse(response, area).totals, { activities: 159161, reportedVeecEquivalents: 1378258.6 });
+  }
+  for (const encoded of ["", " ", " 576", "576 ", "0x240", "0576", "NaN", "Infinity", "1e309", "-1", "1000000000001", "577"]) {
+    assert.throws(() => contract.parseCouncilVeuResponse(changed(value => { dataset(value).PH[1].DM1[0].C[2] = encoded; }), area), encoded);
+  }
+  assert.throws(() => contract.parseCouncilVeuResponse(changed(value => {
+    dataset(value).PH[1].DM1[0].C[3] = String(dataset(value).PH[1].DM1[0].C[3]);
+  }), area), /activity count/);
+});
+
+test("the official 72-postcode response preserves precision strings and reconciles the full history", () => {
+  const large = JSON.parse(fs.readFileSync(new URL("./fixtures/council-veu/official-activities-72-postcodes.json", import.meta.url), "utf8"));
+  const parsed = contract.parseCouncilVeuResponse(large.response, large.postcodes);
+  assert.equal(large.postcodes.length, 72);
+  assert.equal(parsed.rows.length, 1701);
+  assert.deepEqual(parsed.totals, { activities: 606390, reportedVeecEquivalents: 6299643.38 });
+  assert.equal(parsed.rows.find(row => row.postcode === "3190" && row.activity === "13 - Double glazed window").reportedVeecEquivalents, 29.509999999999998);
+  assert.equal(parsed.rows.find(row => row.postcode === "3192" && row.activity === "13 - Double glazed window").reportedVeecEquivalents, 43.019999999999996);
 });
 
 test("unreported VEEC groups remain unavailable instead of being silently counted as zero", () => {
