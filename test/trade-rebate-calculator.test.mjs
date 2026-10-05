@@ -42,8 +42,8 @@ test("verified installers can open the governed rebate calculator from the trade
     assert.deepEqual(destinations, expected);
   }
   assert.match(workspace, /Calculate before you quote/);
-  assert.match(workspace, /const businessOwnerUid = useTradeBusiness\(\)\?\.ownerUid \|\| user\.uid/);
-  assert.match(workspace, /<CreditexAllProgramCalculator[\s\S]*api=\{api\}[\s\S]*role="trade"[\s\S]*documentDraftOwnerUid=\{businessOwnerUid\}/);
+  assert.match(workspace, /<CreditexAllProgramCalculator[\s\S]*api=\{api\}[\s\S]*role="trade"/);
+  assert.doesNotMatch(workspace, /documentDraftOwnerUid/);
   assert.match(workspace, /requestWithCreditexTokenRecovery/);
   assert.match(
     workspace,

@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   clearTradeRebateEstimateDraft,
   loadTradeRebateEstimateDraft,
-  saveTradeRebateEstimateDraft,
 } from "../src/lib/trade-rebate-draft.ts";
 
 function store() {
@@ -18,54 +17,65 @@ function store() {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
-test("rebate estimate drafts are identity-scoped and exact", () => {
+function existingDraft(storage, ownerUid, input = {}) {
+  const draft = {
+    programCode: "VEU", activityCode: "6", activityTitle: "Space heating and cooling",
+    quantity: "18", unit: "VEEC", customerDiscountDollars: "1200.00",
+    createdAt: new Date().toISOString(), ...input,
+  };
+  storage.setItem(`tlink-rebate-estimate-v1:${ownerUid}`, JSON.stringify(draft));
+  return draft;
+}
+
+test("previously saved rebate drafts remain identity-scoped and exact", () => {
   const storage = store();
-  const draft = saveTradeRebateEstimateDraft(storage, "installer-a", {
-    programCode: "VEU",
-    activityCode: "6",
-    activityTitle: "Space heating and cooling",
-    quantity: "18",
-    unit: "VEEC",
-    customerDiscountDollars: "1200",
-  });
-  assert.equal(draft?.customerDiscountDollars, "1200.00");
+  const draft = existingDraft(storage, "installer-a");
   assert.equal(loadTradeRebateEstimateDraft(storage, "installer-b"), null);
   assert.deepEqual(loadTradeRebateEstimateDraft(storage, "installer-a"), draft);
   clearTradeRebateEstimateDraft(storage, "installer-a");
   assert.equal(loadTradeRebateEstimateDraft(storage, "installer-a"), null);
 });
 
-test("invalid and excessive discounts fail closed", () => {
+test("invalid and excessive saved discounts fail closed and are removed", () => {
   const storage = store();
   for (const customerDiscountDollars of ["", "-1", "1.234", "1000001"] ) {
-    assert.equal(saveTradeRebateEstimateDraft(storage, "installer", {
-      programCode: "SRES",
-      activityCode: "solar_pv",
-      activityTitle: "Solar PV",
-      quantity: "39",
-      unit: "STC",
-      customerDiscountDollars,
-    }), null);
+    existingDraft(storage, "installer", {customerDiscountDollars});
+    assert.equal(loadTradeRebateEstimateDraft(storage, "installer"), null);
+    assert.equal(storage.getItem("tlink-rebate-estimate-v1:installer"), null);
   }
 });
 
-test("trade calculator offers one practical document handoff without a receipt", () => {
+test("saved drafts expire after 24 hours and reject future or corrupt timestamps", (context) => {
+  const now = Date.parse("2026-10-05T05:00:00.000Z");
+  context.mock.method(Date, "now", () => now);
+  const storage = store();
+  for (const offset of [0, -(24 * 60 * 60 * 1000), 60_000]) {
+    const draft = existingDraft(storage, "installer", {createdAt:new Date(now+offset).toISOString()});
+    assert.deepEqual(loadTradeRebateEstimateDraft(storage, "installer"), draft);
+  }
+  for (const createdAt of [new Date(now-24*60*60*1000-1).toISOString(),new Date(now+60_001).toISOString(),"2026-10-05Tinvalid"]) {
+    existingDraft(storage, "installer", {createdAt});
+    assert.equal(loadTradeRebateEstimateDraft(storage, "installer"), null);
+    assert.equal(storage.getItem("tlink-rebate-estimate-v1:installer"), null);
+  }
+  storage.setItem("tlink-rebate-estimate-v1:installer", "{broken");
+  assert.equal(loadTradeRebateEstimateDraft(storage, "installer"), null);
+  assert.equal(storage.getItem("tlink-rebate-estimate-v1:installer"), null);
+});
+
+test("calculator retains result values without a discount entry or document handoff", () => {
   const calculator = read("../src/components/CreditexAllProgramCalculator.tsx");
-  const action = read("../src/components/TradeRebateEstimateAction.tsx");
   const workspace = read("../src/components/TradeRebateCalculatorWorkspace.tsx");
-  assert.match(calculator, /TradeRebateEstimateAction/);
-  assert.match(workspace, /documentDraftOwnerUid=\{businessOwnerUid\}/);
-  assert.match(workspace, /const businessOwnerUid = useTradeBusiness\(\)\?\.ownerUid \|\| user\.uid/);
-  assert.match(action, /saveTradeRebateEstimateDraft\(\s*window\.sessionStorage,\s*ownerUid,/);
-  assert.match(action, /USE FOR QUOTE PLANNING/);
-  assert.match(action, /Use in next quote or invoice/);
-  assert.match(action, /Customer discount before GST/);
-  assert.match(
-    action,
-    /saving this does not create certificates[\s\S]*provider acceptance/,
-  );
-  assert.doesNotMatch(action, /USE THIS ESTIMATE/);
-  assert.doesNotMatch(action, /receipt|download|share/i);
+  assert.match(calculator, /<CreditexCertificateValueResult/);
+  for (const source of [calculator, workspace]) {
+    assert.doesNotMatch(source, /TradeRebateEstimateAction|documentDraftOwnerUid|saveTradeRebateEstimateDraft/);
+    assert.doesNotMatch(source, /USE FOR QUOTE PLANNING|Use in next quote or invoice|Customer discount before GST/);
+  }
+  assert.equal(fs.existsSync(new URL("../src/components/TradeRebateEstimateAction.tsx", import.meta.url)), false);
+  assert.doesNotMatch(read("../src/lib/trade-rebate-draft.ts"), /saveTradeRebateEstimateDraft|storage\.setItem/);
+  const styles = read("../src/components/TradeRebateDocumentActions.css");
+  assert.doesNotMatch(styles, /\.trade-rebate-document-action|\.trade-rebate-document-amount/);
+  assert.match(styles, /\.trade-rebate-document-offer/);
 });
 
 test("quotes and invoices consume the same business-scoped discount", () => {
@@ -91,8 +101,7 @@ test("quotes and invoices consume the same business-scoped discount", () => {
   }
 });
 
-test("one login's own and employer rebate drafts stay separate through calculator, quote and invoice handoffs", () => {
-  const calculator = read("../src/components/TradeRebateCalculatorWorkspace.tsx");
+test("one login's existing own and employer drafts stay separate in quotes and invoices", () => {
   const quote = read("../src/components/TradeQuotePanel.tsx");
   const invoice = read("../src/components/TradeQuickInvoicePanel.tsx");
   const user = { uid: "owner-and-team-member" };
@@ -101,14 +110,14 @@ test("one login's own and employer rebate drafts stay separate through calculato
     assert.ok(expression, "The component must derive its document scope from the selected business");
     return Function("useTradeBusiness", "user", `return ${expression};`)(() => business, user);
   };
-  for (const source of [calculator, quote, invoice]) {
+  for (const source of [quote, invoice]) {
     assert.equal(selectedScope(source, null), user.uid, "Standalone own-business rendering preserves existing drafts");
     assert.equal(selectedScope(source, { ownerUid: "employer" }), "employer");
   }
   const storage = store();
   const input = { programCode: "VEU", activityCode: "6", activityTitle: "Space heating and cooling", quantity: "18", unit: "VEEC", customerDiscountDollars: "1200" };
-  const own = saveTradeRebateEstimateDraft(storage, selectedScope(calculator, { ownerUid: user.uid }), input);
-  const employer = saveTradeRebateEstimateDraft(storage, selectedScope(calculator, { ownerUid: "employer" }), { ...input, customerDiscountDollars: "800" });
+  const own = existingDraft(storage, user.uid, {...input,customerDiscountDollars:"1200.00"});
+  const employer = existingDraft(storage, "employer", { ...input, customerDiscountDollars: "800.00" });
   for (const source of [quote, invoice]) {
     const businessOwnerUid = selectedScope(source, { ownerUid: "employer" });
     const loadCall = source.match(/loadTradeRebateEstimateDraft\(window\.sessionStorage, businessOwnerUid\)/)?.[0];
@@ -118,7 +127,7 @@ test("one login's own and employer rebate drafts stay separate through calculato
     assert.notDeepEqual(loaded, own);
   }
   for (const source of [quote, invoice]) {
-    saveTradeRebateEstimateDraft(storage, "employer", { ...input, customerDiscountDollars: "800" });
+    existingDraft(storage, "employer", { ...input, customerDiscountDollars: "800.00" });
     const clearCall = source.match(/clearTradeRebateEstimateDraft\(window\.sessionStorage, businessOwnerUid\)/)?.[0];
     assert.ok(clearCall);
     Function("clearTradeRebateEstimateDraft", "window", "businessOwnerUid", `${clearCall};`)(clearTradeRebateEstimateDraft, { sessionStorage: storage }, selectedScope(source, { ownerUid: "employer" }));

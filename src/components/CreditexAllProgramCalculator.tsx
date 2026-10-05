@@ -40,11 +40,15 @@ import {
   CreditexSresCalculator,
   type CreditexSresEstimateResult,
 } from "./CreditexSresCalculator";
-import {
-  TradeRebateEstimateAction,
-  type TradeRebateEstimateSummary,
-} from "./TradeRebateEstimateAction";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
+
+type TradeRebateEstimateSummary = Readonly<{
+  programCode: string;
+  activityCode: string;
+  activityTitle: string;
+  quantity: string;
+  unit: string;
+}>;
 
 type Api = (
   path: string,
@@ -828,13 +832,11 @@ export function CreditexAllProgramCalculator({
   role,
   initialProgramCode = "SRES",
   initialActivityCode,
-  documentDraftOwnerUid = "",
 }: {
   api: Api;
   role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade" | "public";
   initialProgramCode?: string;
   initialActivityCode?: string;
-  documentDraftOwnerUid?: string;
 }) {
   const [programCode, setProgramCode] = useState(initialProgramCode);
   const [registryRefreshVersion, setRegistryRefreshVersion] = useState(0);
@@ -1166,13 +1168,6 @@ export function CreditexAllProgramCalculator({
         dataset={certificatePriceDataset}
         estimate={latestEstimate}
       />
-      {role === "trade" && documentDraftOwnerUid && latestEstimate && (
-        <TradeRebateEstimateAction
-          key={`${latestEstimate.programCode}:${latestEstimate.activityCode}:${latestEstimate.quantity}:${latestEstimate.unit}`}
-          estimate={latestEstimate}
-          ownerUid={documentDraftOwnerUid}
-        />
-      )}
     </section>
   );
 }

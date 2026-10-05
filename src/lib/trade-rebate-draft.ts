@@ -8,7 +8,7 @@ export type TradeRebateEstimateDraft = Readonly<{
   createdAt: string;
 }>;
 
-type SessionStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+type SessionStore = Pick<Storage, "getItem" | "removeItem">;
 
 const STORAGE_PREFIX = "tlink-rebate-estimate-v1";
 const MAXIMUM_DRAFT_AGE_MS = 24 * 60 * 60 * 1_000;
@@ -66,22 +66,6 @@ export function normaliseTradeRebateEstimateDraft(
     customerDiscountDollars,
     createdAt,
   };
-}
-
-export function saveTradeRebateEstimateDraft(
-  storage: SessionStore,
-  ownerUid: string,
-  input: Omit<TradeRebateEstimateDraft, "createdAt">,
-) {
-  const key = storageKey(ownerUid);
-  if (!key) return null;
-  const draft = normaliseTradeRebateEstimateDraft({
-    ...input,
-    createdAt: new Date().toISOString(),
-  });
-  if (!draft) return null;
-  storage.setItem(key, JSON.stringify(draft));
-  return draft;
 }
 
 export function loadTradeRebateEstimateDraft(

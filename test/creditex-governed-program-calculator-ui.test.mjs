@@ -156,7 +156,7 @@ test("STC quote estimates retain activity-specific fees and the provider thresho
   assert.doesNotMatch(render("unrecognised_activity"),/Estimated rebate after fees/);
 });
 
-test("input invalidation clears stale certificate value and trade action state", () => {
+test("input invalidation clears stale certificate value", () => {
   const dataset = {
     asOf: "2026-08-11T08:30:00.000Z",
     source: {
@@ -188,7 +188,6 @@ test("input invalidation clears stale certificate value and trade action state",
     ).grossValueCents,
     47400,
   );
-  assert.equal(Boolean("trade-owner" && latest), true);
 
   latest = allProgramModule.creditexLatestEstimateReducer(latest, {
     type: "invalidate",
@@ -202,7 +201,6 @@ test("input invalidation clears stale certificate value and trade action state",
     ),
     null,
   );
-  assert.equal(Boolean("trade-owner" && latest), false);
 
   const allProgramSource = fs.readFileSync(
     "src/components/CreditexAllProgramCalculator.tsx",
@@ -234,9 +232,9 @@ test("input invalidation clears stale certificate value and trade action state",
     /async function calculate[\s\S]*?invalidateEstimate\(\)[\s\S]*?requestVersion/,
   );
   assert.match(sresSource, /onEstimateInvalidated\?\.\(\)/);
-  assert.match(
+  assert.doesNotMatch(
     allProgramSource,
-    /role === "trade" && documentDraftOwnerUid && latestEstimate/,
+    /TradeRebateEstimateAction|documentDraftOwnerUid/,
   );
 });
 

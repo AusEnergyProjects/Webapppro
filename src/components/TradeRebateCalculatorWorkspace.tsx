@@ -1,6 +1,6 @@
 "use client";
 
-import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { useCallback, useState } from "react";
 import type { User } from "firebase/auth";
@@ -21,7 +21,6 @@ type ApiAttempt = {
 
 export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
   const fetch = useTradeBusinessFetch();
-  const businessOwnerUid = useTradeBusiness()?.ownerUid || user.uid;
   const [preparingMessage, setPreparingMessage] = useState("");
 
   const api = useCallback(async (
@@ -146,7 +145,6 @@ export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
         <CreditexAllProgramCalculator
           api={api}
           role="trade"
-          documentDraftOwnerUid={businessOwnerUid}
         />
       </div>
     </section>
