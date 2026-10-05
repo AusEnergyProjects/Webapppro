@@ -111,8 +111,8 @@ test("all certificate programs use only current latest reported trades", () => {
   assert.match(source, /Latest market reference value/);
   assert.match(source, /Market data as of/);
   assert.doesNotMatch(source, /\bsourceName\b|\bsourceUrl\b|demandmanager/i);
-  assert.match(source, /Gross certificate value before registration, audit, compliance,/);
-  assert.match(source, /actual customer rebate will be lower/);
+  assert.match(source, /Gross market value before fees/);
+  assert.match(source, /Actual customer discounts depend on provider terms/);
   assert.doesNotMatch(
     fs.readFileSync(
       "src/components/CreditexGovernedProgramCalculator.tsx",
@@ -120,6 +120,40 @@ test("all certificate programs use only current latest reported trades", () => {
     ),
     /\/api\/certificate-prices/,
   );
+});
+
+test("certificate value shows the gross and an explicit after-fee quote allowance", () => {
+  const dataset = {
+    asOf: "2026-10-05T03:00:00Z",
+    source: {status:"current",lastCheckedAt:"2026-10-05T01:00:00Z"},
+    certificates: [{code:"VEEC",latest:{tradedOn:"2026-10-01",priceCents:8550}}],
+  };
+  const estimate = {programCode:"VEU",activityCode:"6",activityTitle:"Air conditioner",quantity:"82",unit:"VEEC"};
+  const render = (overrides={}) => renderToStaticMarkup(React.createElement(allProgramModule.CreditexCertificateValueResult, {dataset,estimate,asOf:"2026-10-05",...overrides}));
+  const html=render(), text=html.replace(/<[^>]*>/g," ").replace(/\s+/g," ");
+  assert.match(text,/82 VEEC x \$85\.50 = \$7,011\.00 gross/);
+  assert.match(text,/Estimated rebate after fees \$5,953\.20/);
+  assert.match(text,/Registration \(82 x \$4\.35\) -\$356\.70/);
+  assert.match(text,/Assumed 10% of gross value -\$701\.10/);
+  assert.match(text,/10% is an allowance, not a confirmed provider fee/);
+  assert.match(text,/GST not calculated/);
+  assert.match(html,/https:\/\//);
+  assert.equal(render({estimate:null}),"","Invalidating the calculation must clear both monetary results");
+  assert.equal(render({dataset:{...dataset,source:{...dataset.source,status:"stale"}}}),"","Stale market data must not leave an after-fee amount visible");
+  const expired=render({asOf:"2028-01-01"});
+  assert.match(expired,/7,011\.00/);
+  assert.doesNotMatch(expired,/Estimated rebate after fees/);
+  assert.match(expired,/after-fee quote estimate is unavailable/);
+});
+
+test("STC quote estimates retain activity-specific fees and the provider threshold assumption", () => {
+  const dataset={asOf:"2026-10-05T03:00:00Z",source:{status:"current",lastCheckedAt:"2026-10-05T01:00:00Z"},certificates:[{code:"STC",latest:{tradedOn:"2026-10-01",priceCents:4000}}]};
+  const render=activityCode=>renderToStaticMarkup(React.createElement(allProgramModule.CreditexCertificateValueResult,{dataset,estimate:{programCode:"SRES",activityCode,activityTitle:"SRES upgrade",quantity:"100",unit:"STC"},asOf:"2026-10-05"}));
+  const pv=render("solar_pv");
+  assert.match(pv,/3,553\.00/);assert.match(pv,/0\.47/);assert.match(pv,/250/);
+  const hotWater=render("air_source_heat_pump");
+  assert.match(hotWater,/3,592\.00/);assert.match(hotWater,/0\.08/);
+  assert.doesNotMatch(render("unrecognised_activity"),/Estimated rebate after fees/);
 });
 
 test("input invalidation clears stale certificate value and trade action state", () => {

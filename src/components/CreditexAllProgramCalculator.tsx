@@ -14,6 +14,7 @@ import {
   type CertificateCode,
 } from "@/lib/certificate-prices";
 import { todayIso } from "@/lib/date-picker";
+import { certificateQuoteEstimate } from "@/lib/certificate-quote-estimate";
 import {
   CREDITEX_LOCAL_PROGRAM_DEFINITIONS,
   type CreditexLocalActivityDefinition,
@@ -214,12 +215,16 @@ function useCreditexCertificatePriceDataset(api: Api) {
   return dataset;
 }
 
-function CreditexCertificateGrossValueResult({
+export function CreditexCertificateValueResult({
   dataset,
   estimate,
+  asOf = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Sydney", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date()),
 }: {
   dataset: unknown;
   estimate: TradeRebateEstimateSummary | null;
+  asOf?: string;
 }) {
   const value = creditexCertificateGrossValue(
     dataset,
@@ -227,12 +232,19 @@ function CreditexCertificateGrossValueResult({
     estimate?.quantity,
   );
   if (!value) return null;
+  const quote = certificateQuoteEstimate({
+    code: value.code,
+    activityCode: estimate?.activityCode || "",
+    certificateCount: value.certificateCount,
+    grossValueCents: value.grossValueCents,
+    asOf,
+  });
 
   return (
     <section
       className={styles.estimateResult}
       aria-live="polite"
-      aria-label="Reference gross certificate value"
+      aria-label="Certificate value and quote estimate"
     >
       <header>
         <div>
@@ -245,6 +257,23 @@ function CreditexCertificateGrossValueResult({
         </div>
         <b>Market reference only</b>
       </header>
+      {quote.status === "estimated" ? <div className={styles.certificateQuoteEstimate}>
+        <div className={styles.certificateQuoteAmount}>
+          <span>Estimated rebate after fees</span>
+          <strong>{certificateMoney(quote.estimatedValueCents)}</strong>
+        </div>
+        <dl className={styles.certificateQuoteDeductions}>
+          <div><dt>Registration ({value.certificateCount.toLocaleString("en-AU")} x {new Intl.NumberFormat("en-AU", {style:"currency",currency:"AUD",minimumFractionDigits:2,maximumFractionDigits:4}).format(quote.registrationFee.unitAmountTenThousandths / 10_000)})</dt><dd>-{certificateMoney(quote.registrationFeeCents)}</dd></div>
+          <div><dt>Compliance, audit and processing <small>Assumed 10% of gross value</small></dt><dd>-{certificateMoney(quote.allowanceCents)}</dd></div>
+        </dl>
+        <p>For quote planning only. The 10% is an allowance, not a confirmed provider fee. Confirm the actual customer discount and GST treatment with the provider.</p>
+        <details>
+          <summary>Fee assumptions and source</summary>
+          <p>{quote.registrationFee.note} Fee applicable on {certificateDate(quote.asOf)}.</p>
+          <a href={quote.registrationFee.officialUrl} target="_blank" rel="noreferrer">{quote.registrationFee.label}</a>
+          <small>Fee source checked {certificateDate(quote.registrationFee.checkedOn)}.</small>
+        </details>
+      </div> : <p className={styles.certificateQuoteUnavailable}>An after-fee quote estimate is unavailable. {quote.reason} Confirm the provider&apos;s deductions before quoting.</p>}
       <div className={styles.estimateResolution}>
         <span>
           Most recent reference trade {certificateDate(value.tradedOn)}.
@@ -254,8 +283,7 @@ function CreditexCertificateGrossValueResult({
           Market reference checked {certificateDate(value.sourceCheckedAt, true)}.
         </small>
         <small>
-          *Gross certificate value before registration, audit, compliance,
-          processing and other fees. The actual customer rebate will be lower.
+          *Gross market value before fees. Actual customer discounts depend on provider terms.
         </small>
       </div>
     </section>
@@ -1134,7 +1162,7 @@ export function CreditexAllProgramCalculator({
           onEstimateInvalidated={invalidateLatestEstimate}
         />
       ) : null}
-      <CreditexCertificateGrossValueResult
+      <CreditexCertificateValueResult
         dataset={certificatePriceDataset}
         estimate={latestEstimate}
       />
