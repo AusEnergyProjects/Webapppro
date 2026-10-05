@@ -11,6 +11,7 @@ import {
   dispatchAdminNotificationDeliveries,
 } from "@/lib/admin-notification-delivery";
 import {
+  adminAuditStatement,
   adminError,
   adminJson,
   cleanAdminText,
@@ -44,7 +45,7 @@ type ActivityItem = {
 
 function shape(row: Record<string, unknown>, assignees: Map<string, string>, activity: Map<string, ActivityItem[]>) {
   const dueAt = String(row.due_at || "");
-  const unresolved = row.status !== "resolved";
+  const unresolved = row.status !== "resolved" && !row.binned_at;
   const dueTime = Date.parse(dueAt);
   const now = Date.now();
   return {
@@ -63,6 +64,8 @@ function shape(row: Record<string, unknown>, assignees: Map<string, string>, act
     readAt: row.read_at,
     resolvedAt: row.resolved_at,
     resolutionNote: row.resolution_note,
+    binnedAt: row.binned_at || "",
+    binnedByUid: row.binned_by_uid || "",
     deliveryStatus: row.delivery_status || "not_queued",
     deliveryAttempts: Number(row.delivery_attempts || 0),
     deliveryLastAttemptAt: row.delivery_last_attempt_at || "",
@@ -96,7 +99,7 @@ export async function GET(request: Request) {
     const requiresAction = url.searchParams.get("requiresAction");
     const queue = cleanAdminText(url.searchParams.get("queue"), 30);
     const assignedTo = cleanAdminText(url.searchParams.get("assignedTo"), 180);
-    const clauses: string[] = ["event_type != 'platform.backfill_marker'"];
+    const clauses: string[] = ["event_type != 'platform.backfill_marker'", queue === "bin" ? "binned_at != ''" : "binned_at = ''"];
     const bindings: Array<string | number> = [];
     if (STATUSES.has(status)) { clauses.push("status = ?"); bindings.push(status); }
     if (CATEGORIES.has(category)) { clauses.push("category = ?"); bindings.push(category); }
@@ -141,8 +144,9 @@ export async function GET(request: Request) {
         SUM(CASE WHEN status != 'resolved' AND due_at != '' AND due_at <= ? THEN 1 ELSE 0 END) overdue,
         SUM(CASE WHEN status != 'resolved' AND due_at > ? AND due_at <= ? THEN 1 ELSE 0 END) due_soon,
         SUM(CASE WHEN status != 'resolved' AND assigned_to_uid = ? THEN 1 ELSE 0 END) mine,
-        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) resolved
-        FROM admin_notifications WHERE event_type != 'platform.backfill_marker'`)
+        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) resolved,
+        (SELECT COUNT(*) FROM admin_notifications WHERE binned_at != '' AND event_type != 'platform.backfill_marker') binned
+        FROM admin_notifications WHERE event_type != 'platform.backfill_marker' AND binned_at = ''`)
         .bind(now, now, soon, admin.uid).first<Record<string, number>>(),
       db.prepare(`SELECT firebase_uid, email, display_name, role
         FROM admin_users WHERE status = 'active' AND firebase_uid NOT LIKE 'pending:%'
@@ -159,7 +163,8 @@ export async function GET(request: Request) {
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) pending,
         SUM(CASE WHEN status = 'waiting_for_channel' THEN 1 ELSE 0 END) waiting_for_channel,
         SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) skipped
-        FROM admin_notification_deliveries`).first<Record<string, number>>(),
+        FROM admin_notification_deliveries WHERE notification_id IN
+          (SELECT id FROM admin_notifications WHERE binned_at = '')`).first<Record<string, number>>(),
     ]);
     const assigneeNames = new Map<string, string>(adminRows.results.map((row: Record<string, unknown>) => [
       String(row.firebase_uid),
@@ -213,7 +218,7 @@ export async function PATCH(request: Request) {
     const now = new Date().toISOString();
 
     if (action === "mark_all_read") {
-      const result = await db.prepare("UPDATE admin_notifications SET status = 'read', read_at = ?, read_by_uid = ?, updated_at = ? WHERE status = 'open' AND event_type != 'platform.backfill_marker'")
+      const result = await db.prepare("UPDATE admin_notifications SET status = 'read', read_at = ?, read_by_uid = ?, updated_at = ? WHERE status = 'open' AND event_type != 'platform.backfill_marker' AND binned_at = ''")
         .bind(now, admin.uid, now).run();
       const cleared = Number(result.meta.changes || 0);
       await writeAdminAudit(
@@ -250,9 +255,33 @@ export async function PATCH(request: Request) {
       return adminJson({ ok: true });
     }
     if (!id) return adminJson({ ok: false, error: "Choose a notification." }, 400);
-    const current = await db.prepare("SELECT id, title, status, priority, requires_action, assigned_to_uid, due_at FROM admin_notifications WHERE id = ?")
+    const current = await db.prepare("SELECT id, title, status, priority, requires_action, assigned_to_uid, due_at, binned_at, binned_by_uid FROM admin_notifications WHERE id = ? AND event_type != 'platform.backfill_marker'")
       .bind(id).first<Record<string, unknown>>();
     if (!current) return adminJson({ ok: false, error: "Notification not found." }, 404);
+
+    if (action === "bin" || action === "restore") {
+      if (!["owner", "admin", "reviewer"].includes(admin.role)) {
+        return adminJson({ ok: false, error: "Your operations role cannot move notifications to or from Bin." }, 403);
+      }
+      const bin = action === "bin";
+      if (Boolean(current.binned_at) === bin) return adminJson({ ok: true, changed: false });
+      const statements = [db.prepare(`UPDATE admin_notifications
+        SET binned_at = ?, binned_by_uid = ?, updated_at = ? WHERE id = ?`)
+        .bind(bin ? now : "", bin ? admin.uid : "", now, id)];
+      if (bin) statements.push(db.prepare(`UPDATE admin_notification_deliveries
+        SET status = 'skipped', last_error = 'Notification was moved to Bin before off-screen delivery.', updated_at = ?
+        WHERE notification_id = ? AND status IN ('pending', 'failed', 'waiting_for_channel')`)
+        .bind(now, id));
+      statements.push(adminAuditStatement(db, admin, `notification.${action}`, "admin_notification", id,
+        bin ? "Moved notification to Bin. The source record and case history are retained."
+          : "Restored notification from Bin with its previous case status.",
+        { status: current.status }));
+      await db.batch(statements);
+      return adminJson({ ok: true, changed: true });
+    }
+    if (current.binned_at && action !== "add_note") {
+      return adminJson({ ok: false, error: "Restore this notification from Bin before changing the case." }, 409);
+    }
 
     if (action === "mark_read") {
       await db.prepare(`UPDATE admin_notifications SET status = CASE WHEN status = 'open' THEN 'read' ELSE status END,

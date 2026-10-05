@@ -276,6 +276,8 @@ export const adminNotifications = sqliteTable("admin_notifications", {
   resolvedAt: text("resolved_at").notNull().default(""),
   resolvedByUid: text("resolved_by_uid").notNull().default(""),
   resolutionNote: text("resolution_note").notNull().default(""),
+  binnedAt: text("binned_at").notNull().default(""),
+  binnedByUid: text("binned_by_uid").notNull().default(""),
   assignedToUid: text("assigned_to_uid").notNull().default(""),
   assignedAt: text("assigned_at").notNull().default(""),
   dueAt: text("due_at").notNull().default(""),
@@ -290,6 +292,7 @@ export const adminNotifications = sqliteTable("admin_notifications", {
   index("admin_notifications_entity_idx").on(table.entityType, table.entityId),
   index("admin_notifications_assignee_idx").on(table.assignedToUid, table.status, table.dueAt),
   index("admin_notifications_due_idx").on(table.status, table.dueAt),
+  index("admin_notifications_bin_idx").on(table.binnedAt, table.status, table.createdAt),
 ]);
 
 export const adminNotificationDeliveries = sqliteTable("admin_notification_deliveries", {

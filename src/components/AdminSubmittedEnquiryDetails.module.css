@@ -1,0 +1,15 @@
+.panel { background: var(--portal-soft, #f0f8f4); border: 1px solid var(--portal-border, #9fc8b9); border-radius: 12px; color: var(--portal-text, #103b31); margin: 14px 0; min-width: 0; padding: 18px; }
+.panel h3 { color: inherit; font-size: 1.05rem; margin: 0; }
+.panel p { font-size: .85rem; line-height: 1.55; margin: 8px 0 14px; }
+.panel a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.fields { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 16px 0; }
+.fields dt { color: var(--portal-muted, #466457); font-size: .75rem; font-weight: 800; }
+.fields dd { font-size: .9rem; line-height: 1.5; margin: 4px 0 0; overflow-wrap: anywhere; }
+.wide { grid-column: 1 / -1; }
+.message { white-space: pre-wrap; }
+.consent { border-top: 1px solid var(--portal-border, #c4dace); padding-top: 14px; }
+.consent summary { cursor: pointer; font-size: .85rem; font-weight: 800; }
+.panel .notice { color: var(--portal-muted, #466457); font-size: .75rem; margin-bottom: 0; }
+.panel button { background: #0b7251; border: 0; border-radius: 8px; color: #fff; cursor: pointer; min-height: 40px; padding: 8px 14px; }
+.panel :is(a, button, summary):focus-visible { outline: 3px solid #198565; outline-offset: 3px; }
+@media (max-width: 560px) { .fields { grid-template-columns: 1fr; } .panel { padding: 14px; } }

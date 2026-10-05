@@ -12,6 +12,7 @@ import {
 import { dateTime, readable, resetWorkspaceListView, saveWorkspaceListView, workspaceError as errorMessage } from "@/components/admin-workspace";
 import { requiresAeaDelivery } from "@/lib/aea-service-identity.mjs";
 import { tradeOpportunityServiceScopeAllowed } from "@/lib/aea-trade-routing.mjs";
+import { AdminSubmittedEnquiryDetails } from "@/components/AdminSubmittedEnquiryDetails";
 import styles from "./AdminOpportunityWorkspace.module.css";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
@@ -58,18 +59,6 @@ type Opportunity = {
   updatedAt: string;
   allocations: OpportunityAllocation[];
 };
-type RetainedContact = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  unitNumber: string;
-  streetAddress: string;
-  suburb: string;
-  state: string;
-  postcode: string;
-  grantedAt: string;
-};
 type AdminApiResult = {
   allocated?: unknown[];
   eligibleCount?: number;
@@ -78,7 +67,6 @@ type AdminApiResult = {
   pagination?: Partial<ListPagination>;
   preferences?: WorkspaceListPreferences;
   saved?: boolean;
-  retainedContact?: RetainedContact;
 };
 
 const states = AUSTRALIAN_STATE_CODES;
@@ -90,9 +78,10 @@ export type AdminOpportunityWorkspaceProps = {
   api: (path: string, init?: RequestInit) => Promise<AdminApiResult>;
   role: AdminRole;
   setStatus: (status: string) => void;
+  targetOpportunityId?: string;
 };
 
-export function AdminOpportunityWorkspace({ api, role, setStatus }: AdminOpportunityWorkspaceProps) {
+export function AdminOpportunityWorkspace({ api, role, setStatus, targetOpportunityId = "" }: AdminOpportunityWorkspaceProps) {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [opportunitySynthetic, setOpportunitySynthetic] = useState("");
   const [opportunitySearch, setOpportunitySearch] = useState("");
@@ -111,9 +100,8 @@ export function AdminOpportunityWorkspace({ api, role, setStatus }: AdminOpportu
   const [expandedOpportunity, setExpandedOpportunity] = useState("");
   const [selectedOpportunity, setSelectedOpportunity] = useState("");
   const [selectedBusiness, setSelectedBusiness] = useState("");
-  const [retainedContact, setRetainedContact] = useState<{ opportunityId: string; details: RetainedContact } | null>(null);
-  const [retainedContactBusy, setRetainedContactBusy] = useState("");
-  const retainedContactRequest = useRef(0);
+  const [retainedContactId, setRetainedContactId] = useState("");
+  const [dismissedTarget, setDismissedTarget] = useState("");
   const [opportunityDraft, setOpportunityDraft] = useState({
     title: "", projectType: "", postcode: "", state: "", categories: [] as string[],
     priority: "standard", timing: "planning", summary: "", status: "draft",
@@ -134,9 +122,7 @@ export function AdminOpportunityWorkspace({ api, role, setStatus }: AdminOpportu
   }, [api]);
 
   const loadOpportunities = useCallback(async (announce = false) => {
-    retainedContactRequest.current += 1;
-    setRetainedContact(null);
-    setRetainedContactBusy("");
+    setRetainedContactId("");
     const params = new URLSearchParams({ page: String(opportunityPage), pageSize: String(opportunityPageSize), sort: opportunitySort });
     const cursor = opportunityCursors.current[opportunityPage - 1] || "";
     if (cursor) params.set("cursor", cursor);
@@ -159,25 +145,6 @@ export function AdminOpportunityWorkspace({ api, role, setStatus }: AdminOpportu
       if (announce) setStatus(`${result.pagination?.total || 0} leads and opportunities match this view.`);
     } catch (error) { setStatus(errorMessage(error)); }
   }, [api, opportunityPage, opportunityPageSize, opportunitySearch, opportunityServiceFilter, opportunitySort, opportunityStateFilter, opportunityStatusFilter, opportunitySynthetic, setStatus]);
-
-  useEffect(() => () => { retainedContactRequest.current += 1; }, []);
-
-  async function showRetainedContact(opportunityId: string) {
-    const requestNumber = ++retainedContactRequest.current;
-    setRetainedContact(null);
-    setRetainedContactBusy(opportunityId);
-    try {
-      const result = await api(`/api/admin/opportunities?contact=${encodeURIComponent(opportunityId)}`);
-      if (requestNumber !== retainedContactRequest.current) return;
-      if (!result.retainedContact) throw new Error("The retained contact record could not be opened.");
-      setRetainedContact({ opportunityId, details: result.retainedContact });
-      setStatus("Retained contact opened. This access has been recorded in the audit log.");
-    } catch (error) {
-      if (requestNumber === retainedContactRequest.current) setStatus(errorMessage(error));
-    } finally {
-      if (requestNumber === retainedContactRequest.current) setRetainedContactBusy("");
-    }
-  }
 
   useEffect(() => {
     let cancelled = false;
@@ -307,6 +274,12 @@ export function AdminOpportunityWorkspace({ api, role, setStatus }: AdminOpportu
 
   return <div className={styles.workspace}>
     <header className="admin-page-heading"><span>Customer demand and matching</span><h1>Leads and opportunities</h1><p>Review every submitted customer enquiry and privacy-safe lead, then coordinate matching with suitable verified installers.</p></header>
+    {targetOpportunityId && dismissedTarget !== targetOpportunityId && <section className="admin-panel" aria-label="Selected enquiry">
+      <div className="admin-panel-heading"><h2>Selected enquiry</h2><button type="button" onClick={() => setDismissedTarget(targetOpportunityId)}>Close selected enquiry</button></div>
+      {["owner", "admin", "support"].includes(role)
+        ? <AdminSubmittedEnquiryDetails key={targetOpportunityId} api={api} opportunityId={targetOpportunityId} />
+        : <p>Enquiry {targetOpportunityId}. Customer details are available to owners, administrators and support staff.</p>}
+    </section>}
     <div className="admin-context-filter admin-opportunity-filters">
       <label>Search enquiries<input aria-label="Search opportunities" placeholder="Title, scope, type or postcode" value={opportunitySearch} onChange={(event) => { setOpportunitySearch(event.target.value); setOpportunityPage(1); }} /></label>
       <label>Status<select value={opportunityStatusFilter} onChange={(event) => { setOpportunityStatusFilter(event.target.value); setOpportunityPage(1); }}><option value="">All statuses</option>{["draft", "open", "paused", "closed", "expired"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}</select></label>
@@ -335,7 +308,7 @@ export function AdminOpportunityWorkspace({ api, role, setStatus }: AdminOpportu
         <div className="admin-panel-heading"><span>Pipeline</span><h2>Current leads and opportunities</h2></div>
         <p>Received times use your local time zone. Expand a lead for its full scope, business assignments and follow-up actions.</p>
         {opportunities.length ? <div className={styles.tableScroll}><table className={styles.leadTable} aria-label="Leads and opportunities"><thead><tr><th>Received</th><th>Enquiry and services</th><th>Location</th><th>Routing and status</th><th>Businesses</th><th>Actions</th></tr></thead><tbody>{opportunities.map((opportunity) => {
-          const contact = retainedContact?.opportunityId === opportunity.id ? retainedContact.details : null;
+          const contactOpen = retainedContactId === opportunity.id;
           const aeaOnly = requiresAeaDelivery(opportunity.serviceCategories) && !opportunity.allQualifiedConsent;
           const tradeAllowed = tradeOpportunityServiceScopeAllowed(opportunity.serviceCategories, false, opportunity.allQualifiedConsent);
           const expanded = expandedOpportunity === opportunity.id;
@@ -356,15 +329,13 @@ export function AdminOpportunityWorkspace({ api, role, setStatus }: AdminOpportu
             <dl className={styles.detailMeta}><div><dt>Received</dt><dd>{dateTime(opportunity.createdAt)}</dd></div><div><dt>Last updated</dt><dd>{dateTime(opportunity.updatedAt)}</dd></div><div><dt>Expires</dt><dd>{dateTime(opportunity.expiresAt)}</dd></div><div><dt>Reference</dt><dd>{opportunity.sourceReference || opportunity.id}</dd></div><div><dt>Project type</dt><dd>{opportunity.projectType}</dd></div></dl>
             {opportunity.allocations?.length > 0 && <div className="admin-allocation-list">{opportunity.allocations.map((allocation) => <article key={allocation.id}><div><strong>{allocation.allocationRank}. {allocation.businessName}</strong><span>{aeaOnly ? "Australia-wide" : `${allocation.distanceKm.toFixed(1)} km`} · {readable(allocation.status)} · {readable(allocation.matchSource)}</span><span>Assigned {dateTime(allocation.matchedAt)}</span>{!allocation.businessEligible && <span>Business eligibility needs attention. Check business verification, services and service area.</span>}<span>Email status: {allocation.notificationStatus ? readable(allocation.notificationStatus) : "Not queued"}</span>{allocation.notificationSentAt && <span>Sent {dateTime(allocation.notificationSentAt)}</span>}{allocation.notificationDeliveredAt && <span>Delivery receipt {dateTime(allocation.notificationDeliveredAt)}</span>}</div><div>{allocation.status === "interested" && opportunity.connectedCount < opportunity.maximumConnectedInstallers && <button type="button" onClick={() => void updateAllocation(allocation.id, "connected")}>Progress in platform</button>}</div></article>)}</div>}
             <div className="admin-opportunity-actions">
-              {opportunity.sourceReference && ["owner", "admin", "support"].includes(role) && <button type="button" disabled={Boolean(retainedContactBusy)} aria-expanded={Boolean(contact)} onClick={() => contact ? setRetainedContact(null) : void showRetainedContact(opportunity.id)}>{retainedContactBusy === opportunity.id ? "Opening contact..." : contact ? "Hide retained contact" : "Show retained contact"}</button>}
+              {opportunity.sourceReference && ["owner", "admin", "support"].includes(role) && <button type="button" aria-expanded={contactOpen} onClick={() => setRetainedContactId(contactOpen ? "" : opportunity.id)}>{contactOpen ? "Hide customer details" : "Show customer details"}</button>}
               {["owner", "admin"].includes(role) && <>{aeaOnly && ["draft", "open"].includes(opportunity.status) && <button type="button" onClick={() => void allocateOpportunity(opportunity.id, true)}>Send to Australian Energy Assessments trade account</button>}{tradeAllowed && opportunity.status === "open" && <button type="button" onClick={() => void allocateOpportunity(opportunity.id)}>Send to every eligible service-area trade</button>}
               {tradeAllowed && ["draft", "paused"].includes(opportunity.status) && <button onClick={() => void setOpportunityStatus(opportunity.id, "open")}>Open for matching</button>}
               {tradeAllowed && opportunity.status === "open" && <button onClick={() => void setOpportunityStatus(opportunity.id, "paused")}>Pause</button>}
               {opportunity.status !== "closed" && <button onClick={() => void setOpportunityStatus(opportunity.id, "closed")}>Close enquiry</button>}</>}
             </div>
-            {contact && <section className={styles.retainedContact} aria-label="Retained customer contact"><strong>For Australian Energy Assessments support</strong><p>This access is audited. Trades only receive the contact details the customer chose to share.</p><dl>
-              <div><dt>Name</dt><dd>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Not provided"}</dd></div><div><dt>Email</dt><dd>{contact.email}</dd></div><div><dt>Phone</dt><dd>{contact.phone || "Not provided"}</dd></div><div><dt>Property</dt><dd>{[contact.unitNumber, contact.streetAddress, contact.suburb, contact.state, contact.postcode].filter(Boolean).join(", ")}</dd></div>
-            </dl></section>}
+            {contactOpen && ["owner", "admin", "support"].includes(role) && <AdminSubmittedEnquiryDetails key={opportunity.id} api={api} opportunityId={opportunity.id} />}
           </section></td></tr>}</Fragment>;
         })}</tbody></table></div> : <p className="admin-empty">No enquiries match these filters.</p>}
       </section>

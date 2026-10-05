@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { pinExpandedNotification } from "@/components/admin-notification-inbox-state";
+import { notificationMatchesQueue, pinExpandedNotification } from "@/components/admin-notification-inbox-state";
+import { AdminSubmittedEnquiryDetails } from "@/components/AdminSubmittedEnquiryDetails";
 
 type AdminNotificationActivity = {
   id: string;
@@ -47,6 +48,8 @@ export type AdminNotification = {
   status: "open" | "read" | "resolved";
   readAt: string;
   resolvedAt: string;
+  binnedAt: string;
+  binnedByUid: string;
   resolutionNote: string;
   deliveryStatus: "not_queued" | "pending" | "waiting_for_channel" | "delivered" | "failed" | "skipped";
   deliveryAttempts: number;
@@ -74,6 +77,7 @@ export type AdminNotificationCounts = {
   due_soon: number;
   mine: number;
   resolved: number;
+  binned: number;
 };
 
 type Props = {
@@ -110,6 +114,7 @@ const emptyCounts: AdminNotificationCounts = {
   due_soon: 0,
   mine: 0,
   resolved: 0,
+  binned: 0,
 };
 const emptyDelivery: AdminDeliveryHealth = {
   configured: false,
@@ -132,7 +137,10 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
   const [queue, setQueueState] = useState("action_required");
   const [actionOnly, setActionOnly] = useState(false);
   const [status, setStatus] = useState("");
+  const [loadingQueue, setLoadingQueue] = useState(false);
   const [clearingAlerts, setClearingAlerts] = useState(false);
+  const [binBusyId, setBinBusyId] = useState("");
+  const [lastBinnedId, setLastBinnedId] = useState("");
   const [browserAlerts, setBrowserAlerts] = useState(false);
   const [expandedId, setExpandedId] = useState("");
   const [caseNote, setCaseNote] = useState("");
@@ -145,19 +153,27 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
   const initialised = useRef(false);
   const expandedIdRef = useRef("");
   const expandedCard = useRef<HTMLElement | null>(null);
+  const queueRef = useRef("action_required");
+  const loadSequence = useRef(0);
 
   const load = useCallback(async (background = false) => {
+    const sequence = ++loadSequence.current;
+    const binQueue = queueRef.current === "bin";
+    if (!background) setLoadingQueue(true);
     try {
-      const result = await api("/api/admin/notifications");
+      const result = await api(binQueue ? "/api/admin/notifications?queue=bin" : "/api/admin/notifications");
+      if (sequence !== loadSequence.current || binQueue !== (queueRef.current === "bin")) return;
       const next = (result.notifications || []) as AdminNotification[];
       const nextCounts = { ...emptyCounts, ...((result.counts || {}) as Partial<AdminNotificationCounts>) };
-      if (initialised.current && browserAlerts && "Notification" in window && window.Notification.permission === "granted") {
-        next.filter((item) => !seen.current.has(item.id) && item.status === "open" && ["high", "urgent"].includes(item.priority))
-          .slice(0, 3)
-          .forEach((item) => new window.Notification(item.title, { body: item.summary, tag: item.id }));
+      if (!binQueue) {
+        if (initialised.current && browserAlerts && "Notification" in window && window.Notification.permission === "granted") {
+          next.filter((item) => !item.binnedAt && !seen.current.has(item.id) && item.status === "open" && ["high", "urgent"].includes(item.priority))
+            .slice(0, 3)
+            .forEach((item) => new window.Notification(item.title, { body: item.summary, tag: item.id }));
+        }
+        next.forEach((item) => seen.current.add(item.id));
+        initialised.current = true;
       }
-      next.forEach((item) => seen.current.add(item.id));
-      initialised.current = true;
       setNotifications(next);
       setCounts(nextCounts);
       setAssignees((result.assignees || []) as AdminAssignee[]);
@@ -166,17 +182,21 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
       onCounts(nextCounts);
       if (!background) setStatus("Operations queue refreshed.");
     } catch (error) {
+      if (sequence !== loadSequence.current) return;
       if (!background) setStatus(error instanceof Error ? error.message : "Notifications could not be loaded.");
+    } finally {
+      if (sequence === loadSequence.current) setLoadingQueue(false);
     }
   }, [api, browserAlerts, onCounts]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setBrowserAlerts(window.localStorage.getItem("aea-admin-browser-alerts") === "enabled");
-      setQueueState(window.localStorage.getItem("aea-admin-inbox-queue") || "action_required");
-      void load(true);
+      queueRef.current = window.localStorage.getItem("aea-admin-inbox-queue") || "action_required";
+      setQueueState(queueRef.current);
+      void load();
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(timer); loadSequence.current += 1; };
   }, [load]);
 
   useEffect(() => {
@@ -200,7 +220,13 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
   function setQueue(value: string) {
     resetExpandedCase();
     setQueueState(value);
+    const binChanged = (queueRef.current === "bin") !== (value === "bin");
+    queueRef.current = value;
     window.localStorage.setItem("aea-admin-inbox-queue", value);
+    if (binChanged) {
+      setNotifications([]);
+      void load();
+    }
   }
 
   function changeSearch(value: string) {
@@ -236,13 +262,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     const filtered = notifications.filter((item) => {
-      const matchesQueue = queue === "all"
-        || queue === "action_required" && item.requiresAction && item.status !== "resolved"
-        || queue === "mine" && item.assignedToUid === currentAdminUid && item.status !== "resolved"
-        || queue === "unassigned" && !item.assignedToUid && item.requiresAction && item.status !== "resolved"
-        || queue === "overdue" && item.slaState === "overdue" && item.status !== "resolved"
-        || queue === "due_soon" && item.slaState === "due_soon" && item.status !== "resolved"
-        || queue === "resolved" && item.status === "resolved";
+      const matchesQueue = notificationMatchesQueue(item, queue, currentAdminUid);
       return matchesQueue
         && (!term || `${item.title} ${item.summary} ${item.eventType} ${item.entityId}`.toLowerCase().includes(term))
         && (!category || item.category === category)
@@ -266,6 +286,11 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
     setStatus("Updating operations case...");
     try {
       await api("/api/admin/notifications", { method: "PATCH", body: JSON.stringify({ action, id, ...payload }) });
+      if (action === "bin" || action === "restore") {
+        if (id === expandedIdRef.current) resetExpandedCase();
+        setNotifications((current) => current.filter((item) => item.id !== id));
+        setLastBinnedId(action === "bin" ? id : "");
+      }
       await load(true);
       if (expandedTop !== undefined) {
         window.requestAnimationFrame(() => {
@@ -278,7 +303,9 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
           }
         });
       }
-      setStatus(action === "resolve"
+      setStatus(action === "bin" ? "Moved to Bin. The customer request and case history are retained."
+        : action === "restore" ? "Restored from Bin."
+        : action === "resolve"
         ? "Case resolved and added to the audit history."
         : action === "mark_all_read"
           ? "Alerts cleared. Cases that still need action remain in the inbox."
@@ -288,6 +315,13 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
       setStatus(error instanceof Error ? error.message : "The operations case could not be updated.");
       return false;
     }
+  }
+
+  async function moveBin(action: "bin" | "restore", id: string) {
+    if (binBusyId) return;
+    setBinBusyId(id);
+    try { await update(action, id); }
+    finally { setBinBusyId(""); }
   }
 
   async function clearAlerts() {
@@ -316,7 +350,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
     setDueDraft(localDateTimeInput(item.dueAt));
     setAssigneeDraft(item.assignedToUid || "");
     setPriorityDraft(item.priority);
-    if (item.status === "open") void update("mark_read", item.id);
+    if (item.status === "open" && !item.binnedAt) void update("mark_read", item.id);
   }
 
   async function saveNote(item: AdminNotification) {
@@ -388,7 +422,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
 
         </div>
       </header>
-      {status && <div className="admin-inline-status" role="status">{status}</div>}
+      {status && <div className="admin-inline-status" role="status">{status}{lastBinnedId && <button type="button" className="admin-bin-undo" disabled={Boolean(binBusyId)} onClick={() => void moveBin("restore", lastBinnedId)}>Undo move to Bin</button>}</div>}
       <details className="admin-alert-settings"><summary>Notification settings & delivery</summary>
         <div className="admin-alert-controls">
           {["owner", "admin"].includes(role) && <button type="button" onClick={() => void update("send_test")} disabled={!delivery.configured}>Send test alert</button>}
@@ -418,6 +452,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
         <article className={queue === "mine" ? "active" : ""}><button type="button" onClick={() => setQueue("mine")}><span>My queue</span><strong>{counts.mine || 0}</strong><small>Open cases assigned to you</small></button></article>
         <article className={queue === "action_required" ? "active" : ""}><button type="button" onClick={() => setQueue("action_required")}><span>Action required</span><strong>{counts.action_required || 0}</strong><small>All open follow-up</small></button></article>
         <article className={queue === "resolved" ? "active" : ""}><button type="button" onClick={() => setQueue("resolved")}><span>Resolved</span><strong>{counts.resolved || 0}</strong><small>Completed with an audit trail</small></button></article>
+        <article className={queue === "bin" ? "active" : ""}><button type="button" onClick={() => setQueue("bin")}><span>Bin</span><strong>{counts.binned || 0}</strong><small>Dismissed items you can restore</small></button></article>
       </section>
       <form className="admin-filterbar admin-notification-filter" onSubmit={submitFilters}>
         <input aria-label="Search notifications" placeholder="Search title, event or record ID" value={search} onChange={(event) => changeSearch(event.target.value)} />
@@ -444,7 +479,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
         <button type="submit">Apply filters</button>
       </form>
       <div className="admin-queue-summary"><strong>{readable(queue)} queue</strong><span>{visible.length} matching cases</span><button type="button" onClick={() => setQueue("all")}>Clear saved queue</button></div>
-      <section className="admin-notification-list" aria-label="Operations notifications">
+      <section className="admin-notification-list" aria-label="Operations notifications" aria-busy={loadingQueue}>
         {visible.length ? visible.map((item) => (
           <article
             key={item.id}
@@ -456,14 +491,16 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
               <div className="admin-notification-meta">
                 <span className={`admin-pill admin-priority-${item.priority}`}>{readable(item.priority)}</span>
                 <span>{readable(item.category)}</span>
-                {item.requiresAction && item.status !== "resolved" && <strong>Action required</strong>}
-                {item.slaState !== "none" && item.status !== "resolved" && <span className={`admin-sla admin-sla-${item.slaState}`}>{readable(item.slaState)}</span>}
+                {item.binnedAt && <strong>In Bin</strong>}
+                {!item.binnedAt && item.requiresAction && item.status !== "resolved" && <strong>Action required</strong>}
+                {!item.binnedAt && item.slaState !== "none" && item.status !== "resolved" && <span className={`admin-sla admin-sla-${item.slaState}`}>{readable(item.slaState)}</span>}
                 {item.deliveryStatus !== "not_queued" && <span className={`admin-delivery-state state-${item.deliveryStatus}`}>Off-screen: {readable(item.deliveryStatus)}</span>}
                 <time dateTime={item.createdAt}>{dateTime(item.createdAt)}</time>
               </div>
               <h2>{item.title}</h2>
               <p>{item.summary}</p>
               <div className="admin-inbox-row-facts"><span>{item.assignedToName || "Unassigned"}</span><span>{item.dueAt ? "Due " + dateTime(item.dueAt) : "No due date"}</span></div>
+              {expandedId === item.id && item.entityType === "trade_opportunity" && ["owner", "admin", "support"].includes(role) && <AdminSubmittedEnquiryDetails key={item.entityId} api={api} opportunityId={item.entityId} />}
               {expandedId === item.id && <dl className="admin-case-facts">
                 <div><dt>Owner</dt><dd>{item.assignedToName || "Unassigned"}</dd></div>
                 <div><dt>Response target</dt><dd>{item.dueAt ? dateTime(item.dueAt) : "No due date"}</dd></div>
@@ -473,6 +510,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
               {item.resolutionNote && <div className="admin-resolution-note"><strong>Resolution</strong><span>{item.resolutionNote}</span></div>}
               {expandedId === item.id && (
                 <section className="admin-notification-case" aria-label={`Manage ${item.title}`}>
+                  {!item.binnedAt && <>
                   <div className="admin-case-workflow">
                     <div>
                       <label htmlFor={`assignee-${item.id}`}>Responsible administrator</label>
@@ -519,6 +557,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
                     <textarea id={`resolution-${item.id}`} rows={2} maxLength={800} value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} placeholder="Record the decision, action taken and any follow-up." />
                     <button type="button" onClick={() => void resolve(item)}>Resolve case</button>
                   </div>}
+                  </>}
                   <div className="admin-case-history">
                     <h3>Case history</h3>
                     {item.activity.length ? <ol>{item.activity.map((entry) => <li key={entry.id}><div><strong>{entry.administrator}</strong><time dateTime={entry.createdAt}>{dateTime(entry.createdAt)}</time></div><p>{entry.summary}</p></li>)}</ol> : <p>No workflow actions have been recorded yet.</p>}
@@ -527,14 +566,17 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
               )}
             </div>
             <div className="admin-notification-actions">
-              <button type="button" onClick={() => { void update("mark_read", item.id); onOpen(item); }}>Open record</button>
-              <button type="button" className="secondary" onClick={() => manageCase(item)}>{expandedId === item.id ? "Close case" : "Manage case"}</button>
-              {item.status === "open" && <button type="button" className="secondary" onClick={() => void update("mark_read", item.id)}>Mark read</button>}
-              {["failed", "waiting_for_channel"].includes(item.deliveryStatus) && delivery.configured && ["owner", "admin"].includes(role) && <button type="button" className="secondary" onClick={() => void update("retry_delivery", item.id)}>Retry alert</button>}
-              {item.status === "resolved" && ["owner", "admin"].includes(role) && <button type="button" className="secondary" onClick={() => void update("reopen", item.id)}>Reopen</button>}
+              <button type="button" onClick={() => { if (!item.binnedAt) void update("mark_read", item.id); onOpen(item); }}>Open record</button>
+              <button type="button" className="secondary" onClick={() => manageCase(item)}>{expandedId === item.id ? "Close details" : "View details"}</button>
+              {!item.binnedAt && item.status === "open" && <button type="button" className="secondary" onClick={() => void update("mark_read", item.id)}>Mark read</button>}
+              {!item.binnedAt && ["failed", "waiting_for_channel"].includes(item.deliveryStatus) && delivery.configured && ["owner", "admin"].includes(role) && <button type="button" className="secondary" onClick={() => void update("retry_delivery", item.id)}>Retry alert</button>}
+              {!item.binnedAt && item.status === "resolved" && ["owner", "admin"].includes(role) && <button type="button" className="secondary" onClick={() => void update("reopen", item.id)}>Reopen</button>}
+              {canManageWorkflow && (item.binnedAt
+                ? <button type="button" className="secondary" disabled={Boolean(binBusyId)} onClick={() => void moveBin("restore", item.id)}>Restore</button>
+                : <button type="button" className="secondary admin-bin-button" disabled={Boolean(binBusyId)} aria-label={`Move ${item.title} to Bin`} title="Move to Bin. Keeps the request and history; you can restore it." onClick={() => void moveBin("bin", item.id)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg><span>Bin</span></button>)}
             </div>
           </article>
-        )) : <div className="admin-empty"><strong>No matching operations cases</strong><p>Choose another queue or clear the filters. New events will continue to arrive automatically.</p></div>}
+        )) : <div className="admin-empty"><strong>{loadingQueue ? "Loading operations cases..." : "No matching operations cases"}</strong>{!loadingQueue && <p>Choose another queue or clear the filters. New events will continue to arrive automatically.</p>}</div>}
       </section>
     </>
   );

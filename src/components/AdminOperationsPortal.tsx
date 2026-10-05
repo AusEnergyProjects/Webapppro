@@ -239,11 +239,13 @@ export function AdminOperationsPortal() {
     due_soon: 0,
     mine: 0,
     resolved: 0,
+    binned: 0,
   });
   const [directoryTarget, setDirectoryTarget] = useState<{ type: string; uid: string; nonce: number } | null>(null);
   const [partnerTarget, setPartnerTarget] = useState<{ uid: string; nonce: number } | null>(null);
   const [partnerVerificationTarget, setPartnerVerificationTarget] = useState("");
   const [assistantLeadTarget, setAssistantLeadTarget] = useState<{ id: string; nonce: number } | null>(null);
+  const [opportunityTarget, setOpportunityTarget] = useState<{ id: string; nonce: number } | null>(null);
   const [jobSearch, setJobSearch] = useState({ query: "", nonce: 0 });
   const preferences = usePortalWorkspacePreferences({ workspace: "admin", user, currentDisplayName: session?.displayName || session?.email || "" });
 
@@ -467,6 +469,10 @@ export function AdminOperationsPortal() {
   }
 
   function openNotificationRecord(notification: AdminNotification) {
+    if (notification.entityType === "trade_opportunity") {
+      if (selectTab("opportunities")) setOpportunityTarget({ id: notification.entityId, nonce: Date.now() });
+      return;
+    }
     if (notification.entityType === "energy_assistant_lead") {
       setAssistantLeadTarget({ id: notification.entityId, nonce: Date.now() });
       selectTab("assistant-leads");
@@ -959,7 +965,7 @@ export function AdminOperationsPortal() {
           )}
 
           {tab === "opportunities" && (
-            <AdminOpportunityWorkspace api={api} role={session.role} setStatus={setStatus} />
+            <AdminOpportunityWorkspace api={api} role={session.role} setStatus={setStatus} targetOpportunityId={opportunityTarget?.id} key={opportunityTarget?.nonce || "opportunities"} />
           )}
 
           {tab === "assistant-leads" && (

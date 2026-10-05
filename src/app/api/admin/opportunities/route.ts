@@ -9,6 +9,7 @@ import { ftsPrefixQuery } from "@/lib/fts-search";
 import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
 import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
 import { allQualifiedTradeOpportunitySql, publicPlanContactReleaseAccessSql } from "@/lib/public-plan-enquiry.mjs";
+import type { AdminSubmittedEnquiryResult } from "@/lib/admin-submitted-enquiry";
 
 export const runtime = "edge";
 
@@ -66,7 +67,10 @@ export async function GET(request: Request) {
       const contact = await db.prepare(`SELECT contact.id, contact.customer_first_name,
         contact.customer_last_name, contact.customer_email, contact.customer_phone,
         contact.customer_unit_number, contact.customer_street_address, contact.customer_suburb,
-        contact.customer_address_state, contact.postcode, contact.notice_version, contact.granted_at
+        contact.customer_address_state, contact.postcode, contact.notice_version, contact.granted_at,
+        contact.customer_message, contact.consent_purpose, contact.disclosed_fields,
+        o.id opportunity_id, o.title, o.service_categories, o.created_at, o.status opportunity_status,
+        o.source_reference
         FROM trade_opportunities o
         JOIN public_trade_lead_contact_releases contact ON contact.id = (
           SELECT current_contact.id FROM public_trade_lead_contact_releases current_contact
@@ -84,13 +88,21 @@ export async function GET(request: Request) {
       await writeAdminAudit(admin, "opportunity.contact_view", "trade_opportunity", contactId,
         "Opened retained customer contact details for enquiry support.",
         { role: admin.role, releaseId: contact.id, noticeVersion: contact.notice_version });
+      const text = (key: string) => String(contact[key] ?? "");
       return adminJson({ ok: true, retainedContact: {
-        firstName: contact.customer_first_name, lastName: contact.customer_last_name,
-        email: contact.customer_email, phone: contact.customer_phone,
-        unitNumber: contact.customer_unit_number, streetAddress: contact.customer_street_address,
-        suburb: contact.customer_suburb, state: contact.customer_address_state,
-        postcode: contact.postcode, grantedAt: contact.granted_at,
-      } });
+        firstName: text("customer_first_name"), lastName: text("customer_last_name"),
+        email: text("customer_email"), phone: text("customer_phone"),
+        unitNumber: text("customer_unit_number"), streetAddress: text("customer_street_address"),
+        suburb: text("customer_suburb"), state: text("customer_address_state"),
+        postcode: text("postcode"), grantedAt: text("granted_at"),
+      }, submittedEnquiry: {
+        id: text("opportunity_id"), title: text("title"), serviceCategories: parseJsonList(contact.service_categories),
+        createdAt: text("created_at"), status: text("opportunity_status"), sourceReference: text("source_reference"),
+        customerMessage: text("customer_message"), consent: {
+          noticeVersion: text("notice_version"), purpose: text("consent_purpose"), grantedAt: text("granted_at"),
+          disclosedFields: parseJsonList(contact.disclosed_fields),
+        },
+      } } satisfies AdminSubmittedEnquiryResult);
     }
     await expireStaleOpportunities();
     const timer = routeTimer();

@@ -2,13 +2,44 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-import { pinExpandedNotification } from "../src/components/admin-notification-inbox-state.ts";
+import { notificationMatchesQueue, pinExpandedNotification } from "../src/components/admin-notification-inbox-state.ts";
 
 const notification = (id, status = "open") => ({ id, status });
 const inbox = fs.readFileSync(
   new URL("../src/components/AdminNotificationInbox.tsx", import.meta.url),
   "utf8",
 );
+
+test("binned cases belong only to Bin regardless of their retained workflow state", () => {
+  const item = { binnedAt: "2026-10-05T00:00:00Z", status: "read", requiresAction: true, assignedToUid: "admin-a", slaState: "overdue" };
+  for (const status of ["open", "read", "resolved"]) {
+    for (const queue of ["all", "action_required", "mine", "unassigned", "overdue", "due_soon", "resolved", "bin"]) {
+      assert.equal(notificationMatchesQueue({...item, status}, queue, "admin-a"), queue === "bin");
+    }
+  }
+  assert.equal(notificationMatchesQueue({...item, binnedAt: ""}, "bin", "admin-a"), false);
+  assert.equal(notificationMatchesQueue({...item, binnedAt: ""}, "action_required", "admin-a"), true);
+  assert.equal(notificationMatchesQueue({...item, binnedAt: ""}, "mine", "admin-b"), false);
+});
+
+test("Bin loading is separated from active queues and stale responses cannot replace it", () => {
+  assert.match(inbox, /binQueue \? "\/api\/admin\/notifications\?queue=bin"/);
+  assert.match(inbox, /sequence !== loadSequence.current \|\| binQueue !== \(queueRef.current === "bin"\)/);
+  assert.match(inbox, /if \(binChanged\) \{\s*setNotifications\(\[\]\);\s*void load\(\);/);
+  assert.match(inbox, /if \(!binQueue\) \{[\s\S]*?seen.current.add\(item.id\)[\s\S]*?initialised.current = true;/);
+  assert.match(inbox, /Move \$\{item.title\} to Bin/);
+  assert.match(inbox, /Undo move to Bin/);
+  assert.match(inbox, /moveBin\("restore", item.id\)/);
+  assert.match(inbox, /item.entityType === "trade_opportunity"[\s\S]*?<AdminSubmittedEnquiryDetails key=\{item.entityId\} api=\{api\} opportunityId=\{item.entityId\}/);
+});
+
+test("Open record preserves the exact opportunity before generic customer routing", () => {
+  const portal = fs.readFileSync(new URL("../src/components/AdminOperationsPortal.tsx", import.meta.url), "utf8");
+  const handler = portal.slice(portal.indexOf("function openNotificationRecord"));
+  assert.ok(handler.indexOf('notification.entityType === "trade_opportunity"') < handler.indexOf('notification.actorType === "customer"'));
+  assert.match(handler, /setOpportunityTarget\(\{ id: notification.entityId, nonce: Date.now\(\) \}\)/);
+  assert.match(portal, /targetOpportunityId=\{opportunityTarget\?\.id\}/);
+});
 
 test("an expanded case keeps its queue position when a refresh reorders it", () => {
   const refreshed = [

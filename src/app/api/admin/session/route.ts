@@ -60,8 +60,9 @@ export async function GET(request: Request) {
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) unread,
         SUM(CASE WHEN requires_action = 1 AND status != 'resolved' THEN 1 ELSE 0 END) action_required,
-        SUM(CASE WHEN priority = 'urgent' AND status != 'resolved' THEN 1 ELSE 0 END) urgent
-        FROM admin_notifications`).first<Record<string, number>>(),
+        SUM(CASE WHEN priority = 'urgent' AND status != 'resolved' THEN 1 ELSE 0 END) urgent,
+        (SELECT COUNT(*) FROM admin_notifications WHERE binned_at != '' AND event_type != 'platform.backfill_marker') binned
+        FROM admin_notifications WHERE binned_at = '' AND event_type != 'platform.backfill_marker'`).first<Record<string, number>>(),
       db.prepare(`SELECT l.id, l.action, l.entity_type, l.entity_id, l.summary, l.created_at,
         COALESCE(a.display_name, a.email, 'Former administrator') administrator
         FROM admin_audit_log l LEFT JOIN admin_users a ON a.firebase_uid = l.admin_uid

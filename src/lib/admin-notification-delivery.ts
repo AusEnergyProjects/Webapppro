@@ -96,11 +96,17 @@ export async function dispatchAdminNotificationDeliveries({
   const db = getD1();
   const config = deliveryConfiguration();
   const now = new Date().toISOString();
+  await db.prepare(`UPDATE admin_notification_deliveries SET status = 'skipped',
+    last_error = 'Notification was moved to Bin before off-screen delivery.', updated_at = ?
+    WHERE status IN ('pending', 'failed', 'waiting_for_channel')
+    AND notification_id IN (SELECT id FROM admin_notifications WHERE binned_at != '')`)
+    .bind(now).run();
   if (!config.configured) {
     const filter = notificationId ? " AND notification_id = ?" : "";
     const statement = db.prepare(`UPDATE admin_notification_deliveries SET status = 'waiting_for_channel',
       last_error = 'No private off-screen alert destination is configured.', updated_at = ?
-      WHERE status IN ('pending', 'failed')${filter}`);
+      WHERE status IN ('pending', 'failed')
+      AND notification_id IN (SELECT id FROM admin_notifications WHERE binned_at = '')${filter}`);
     if (notificationId) await statement.bind(now, notificationId).run();
     else await statement.bind(now).run();
     return { configured: false, attempted: 0, delivered: 0, failed: 0 };
@@ -112,7 +118,7 @@ export async function dispatchAdminNotificationDeliveries({
     AND notification_id IN (SELECT id FROM admin_notifications WHERE status = 'resolved')`)
     .bind(now).run();
 
-  const clauses = ["d.status IN ('pending', 'failed', 'waiting_for_channel')", "n.status != 'resolved'"];
+  const clauses = ["d.status IN ('pending', 'failed', 'waiting_for_channel')", "n.status != 'resolved'", "n.binned_at = ''"];
   const bindings: string[] = [];
   if (!force) { clauses.push("(d.next_attempt_at = '' OR d.next_attempt_at <= ?)"); bindings.push(now); }
   if (notificationId) { clauses.push("d.notification_id = ?"); bindings.push(notificationId); }
@@ -124,23 +130,33 @@ export async function dispatchAdminNotificationDeliveries({
     .bind(...bindings).all<DeliveryRow>();
 
   const outcomes = await Promise.all(rows.results.map(async (row: DeliveryRow) => {
+    // Recheck after selection so an item binned while the queue loads is not sent.
+    const active = await db.prepare(`SELECT d.id FROM admin_notification_deliveries d
+      JOIN admin_notifications n ON n.id = d.notification_id
+      WHERE d.id = ? AND d.status IN ('pending', 'failed', 'waiting_for_channel')
+        AND n.binned_at = '' AND n.status != 'resolved'`).bind(row.id).first();
+    if (!active) return "not_attempted" as const;
     const attempts = Number(row.attempts || 0) + 1;
     const attemptedAt = new Date().toISOString();
     try {
       const responseCode = await deliver(row, config, fetchImpl);
+      // Binning cannot recall an alert already in flight. Record a confirmed send
+      // even if the notification moved to Bin while the destination responded.
       await db.prepare(`UPDATE admin_notification_deliveries SET status = 'delivered', attempts = ?, last_attempt_at = ?,
         delivered_at = ?, last_error = '', response_code = ?, next_attempt_at = '', updated_at = ? WHERE id = ?`)
         .bind(attempts, attemptedAt, attemptedAt, responseCode, attemptedAt, row.id).run();
       return "delivered" as const;
     } catch (error) {
       const errorType = error instanceof Error ? error.name : "DeliveryError";
-      await db.prepare(`UPDATE admin_notification_deliveries SET status = 'failed', attempts = ?, last_attempt_at = ?,
-        last_error = ?, response_code = 0, next_attempt_at = ?, updated_at = ? WHERE id = ?`)
+      const result = await db.prepare(`UPDATE admin_notification_deliveries SET status = 'failed', attempts = ?, last_attempt_at = ?,
+        last_error = ?, response_code = 0, next_attempt_at = ?, updated_at = ? WHERE id = ?
+        AND status IN ('pending', 'failed', 'waiting_for_channel')
+        AND notification_id IN (SELECT id FROM admin_notifications WHERE binned_at = '' AND status != 'resolved')`)
         .bind(attempts, attemptedAt, clean(errorType, 120), adminNotificationRetryAt(attempts), attemptedAt, row.id).run();
-      return "failed" as const;
+      return result.meta.changes ? "failed" as const : "skipped" as const;
     }
   }));
-  const delivered = outcomes.filter((outcome: "delivered" | "failed") => outcome === "delivered").length;
-  const failed = outcomes.filter((outcome: "delivered" | "failed") => outcome === "failed").length;
-  return { configured: true, attempted: rows.results.length, delivered, failed };
+  const delivered = outcomes.filter((outcome) => outcome === "delivered").length;
+  const failed = outcomes.filter((outcome) => outcome === "failed").length;
+  return { configured: true, attempted: outcomes.filter((outcome) => outcome !== "not_attempted").length, delivered, failed };
 }

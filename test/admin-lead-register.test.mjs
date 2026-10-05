@@ -15,16 +15,30 @@ const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarge
 const text=n=>n==null||typeof n==='boolean'?'':typeof n!=='object'?String(n):Array.isArray(n)?n.map(text).join(' '):text(n.props?.children);
 const nodes=(n,p)=>n==null||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(i=>nodes(i,p)):[...(p(n)?[n]:[]),...nodes(n.props?.children,p)];
 const lead={id:'lead-1',sourceReference:'AEA-REF',title:'Sunbury upgrade request',serviceCategories:['glazing','assessment','insulation'],postcode:'3429',state:'VIC',priority:'standard',timing:'planning',projectType:'Home',summary:'Scope',status:'draft',createdAt:'2026-09-20T06:03:13.398Z',updatedAt:'2026-09-20T06:03:13.398Z',expiresAt:'2026-10-20T06:03:13.398Z',matchCount:0,interestedCount:0,connectedCount:0,maximumConnectedInstallers:3,allocations:[]};
-function harness(opportunity=lead,role='owner'){
+const PrivateDetails=()=>null;
+function harness(opportunity=lead,role='owner',targetOpportunityId=''){
  const state=[];let cursor=0;const exports={};
- const require=id=>id==='react'?{Fragment,useState:initial=>{const key=cursor++;if(!(key in state))state[key]=key===0?[opportunity]:typeof initial==='function'?initial():initial;return[state[key],value=>state[key]=typeof value==='function'?value(state[key]):value]},useEffect:()=>{},useCallback:fn=>fn,useRef:value=>({current:value})}:id==='react/jsx-runtime'?jsx:id.includes('energy-service-catalogue')?catalogue:id.includes('aea-trade-routing')?routing:id.includes('aea-service-identity')?aea:id.includes('australian-postcodes')?{AUSTRALIAN_STATE_CODES:['VIC','NSW']}:id.includes('admin-workspace')?{dateTime:value=>value||'Not yet',readable:value=>value.replaceAll('_',' ')}:id.endsWith('.css')?{default:{}}:{};
+ const require=id=>id==='react'?{Fragment,useState:initial=>{const key=cursor++;if(!(key in state))state[key]=key===0?[opportunity]:typeof initial==='function'?initial():initial;return[state[key],value=>state[key]=typeof value==='function'?value(state[key]):value]},useEffect:()=>{},useCallback:fn=>fn,useRef:value=>({current:value})}:id==='react/jsx-runtime'?jsx:id.includes('energy-service-catalogue')?catalogue:id.includes('aea-trade-routing')?routing:id.includes('aea-service-identity')?aea:id.includes('australian-postcodes')?{AUSTRALIAN_STATE_CODES:['VIC','NSW']}:id.includes('admin-workspace')?{dateTime:value=>value||'Not yet',readable:value=>value.replaceAll('_',' ')}:id.includes('AdminSubmittedEnquiryDetails')?{AdminSubmittedEnquiryDetails:PrivateDetails}:id.endsWith('.css')?{default:{}}:{};
  Function('require','exports',compiled)(require,exports);
- return()=>{cursor=0;return exports.AdminOpportunityWorkspace({api:async()=>({}),role,setStatus:()=>{}})};
+ return()=>{cursor=0;return exports.AdminOpportunityWorkspace({api:async()=>({}),role,setStatus:()=>{},targetOpportunityId})};
 }
+
+test('target enquiry opens independently of visible rows and closes its private panel; reviewers never mount it',()=>{
+ for(const role of ['owner','admin','support','reviewer']){
+  const render=harness(lead,role,'other-page-enquiry');let tree=render();
+  const details=nodes(tree,n=>n.type===PrivateDetails);
+  assert.equal(details.length,role==='reviewer'?0:1);
+  if(details.length)assert.equal(details[0].props.opportunityId,'other-page-enquiry');
+  else assert.match(text(tree),/other-page-enquiry.*Customer details are available/);
+  nodes(tree,n=>n.type==='button'&&text(n)==='Close selected enquiry')[0].props.onClick();tree=render();
+  assert.equal(nodes(tree,n=>n.type===PrivateDetails).length,0);
+  assert.equal(nodes(tree,n=>n.props?.['aria-label']==='Selected enquiry').length,0);
+ }
+});
 test('lead register shows received timestamp and AEA routing before opening private details',()=>{
  const render=harness();let tree=render();assert.equal(nodes(tree,n=>n.type==='table').length,1);assert.match(text(tree),/2026-09-20T06:03:13.398Z/);assert.match(text(tree),/Australian Energy Assessments follow-up/);assert.match(text(tree),/Not available to other businesses/);
- assert.equal(nodes(tree,n=>n.type==='button'&&text(n)==='Show retained contact').length,0);
- nodes(tree,n=>n.type==='button'&&text(n)==='View lead')[0].props.onClick();tree=render();assert.match(text(tree),/customer's separate permission/);assert.equal(nodes(tree,n=>n.type==='button'&&text(n)==='Show retained contact').length,1);assert.equal(nodes(tree,n=>n.type==='button'&&/Open for matching|Send to every/.test(text(n))).length,0);
+ assert.equal(nodes(tree,n=>n.type==='button'&&text(n)==='Show customer details').length,0);
+ nodes(tree,n=>n.type==='button'&&text(n)==='View lead')[0].props.onClick();tree=render();assert.match(text(tree),/customer's separate permission/);assert.equal(nodes(tree,n=>n.type==='button'&&text(n)==='Show customer details').length,1);assert.equal(nodes(tree,n=>n.type==='button'&&/Open for matching|Send to every/.test(text(n))).length,0);
 });
 test('trade assignment display distinguishes sent email from delivery and flags current eligibility',()=>{
  const render=harness({...lead,serviceCategories:['hot-water'],status:'open',matchCount:1,allocations:[{id:'match1',businessName:'Trade business',allocationRank:1,distanceKm:2,status:'offered',matchSource:'automatic',matchedAt:lead.createdAt,notificationStatus:'sent',notificationSentAt:lead.createdAt,notificationDeliveredAt:'',businessEligible:false}]});
@@ -42,7 +56,7 @@ test('new consented assessment and mixed enquiries expose trade matching and rec
  }
 });
 test('support can open retained contact but cannot run allocation or status actions',()=>{
- const render=harness({...lead,serviceCategories:['hot-water'],status:'open'},'support');let tree=render();nodes(tree,n=>n.type==='button'&&text(n)==='View lead')[0].props.onClick();tree=render();assert.match(text(tree),/Show retained contact/);assert.equal(nodes(tree,n=>n.type==='button'&&/Send to every|Pause|Close enquiry/.test(text(n))).length,0);
+ const render=harness({...lead,serviceCategories:['hot-water'],status:'open'},'support');let tree=render();nodes(tree,n=>n.type==='button'&&text(n)==='View lead')[0].props.onClick();tree=render();assert.match(text(tree),/Show customer details/);assert.equal(nodes(tree,n=>n.type==='button'&&/Send to every|Pause|Close enquiry/.test(text(n))).length,0);
 });
 
 test('reserved enquiry recovery is available only to operations owners and admins',()=>{
