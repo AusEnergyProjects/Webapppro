@@ -302,6 +302,10 @@ function dashboardCommandTargetFromSearch(search: string): TLinkCommandTarget | 
   const jobTarget = jobNavigationFromSearch(search);
   if (jobTarget) return jobTarget;
   const parameters = new URLSearchParams(search);
+  const customerId = parameters.get("customerId") || "";
+  if (parameters.get("workspace") === "work" && workOrderIdPattern.test(customerId)) {
+    return { workspace: "work", kind: "customer", id: customerId, query: "", nonce: Date.now() };
+  }
   if (parameters.get("workspace") === "schedule") {
     return { workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() };
   }
@@ -1000,8 +1004,8 @@ function DirectTradeDashboardContent() {
         exactOpportunityMatchId.current = nextMatchId;
         if (nextMatchId) setOpportunityRouteRequestNonce((value) => value + 1);
         const nextTarget = dashboardCommandTargetFromSearch(nextSearch);
-        setCommandTarget((current) => nextTarget || (current?.kind === "job" && nextWorkspace === "work"
-          ? { workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() }
+        setCommandTarget((current) => nextTarget || ((current?.kind === "job" || current?.kind === "customer") && nextWorkspace === "work"
+          ? { workspace: "work", kind: "crm-view", id: current.kind === "customer" ? "customers" : "jobs", query: "", nonce: Date.now() }
           : null));
       }).then((changed) => {
         if (!changed && workspaceLocation.current) window.history.replaceState(window.history.state, "", workspaceLocation.current);
@@ -1012,9 +1016,9 @@ function DirectTradeDashboardContent() {
   }, [setWorkspace]);
 
   useEffect(() => {
-    const initialJobTarget = dashboardCommandTargetFromSearch(window.location.search);
-    if (!commandTarget && workspace === "work" && initialJobTarget?.kind === "job") {
-      setCommandTarget(initialJobTarget);
+    const initialRecordTarget = dashboardCommandTargetFromSearch(window.location.search);
+    if (!commandTarget && workspace === "work" && (initialRecordTarget?.kind === "job" || initialRecordTarget?.kind === "customer")) {
+      setCommandTarget(initialRecordTarget);
       return;
     }
     const nextUrl = new URL(window.location.href);
@@ -1052,6 +1056,9 @@ function DirectTradeDashboardContent() {
     const openJobTab = openJobId ? commandTarget?.jobTab || "summary" : "";
     if (openJobTab && nextUrl.searchParams.get("jobTab") !== openJobTab) { nextUrl.searchParams.set("jobTab", openJobTab); changed = true; }
     else if (!openJobTab && nextUrl.searchParams.has("jobTab")) { nextUrl.searchParams.delete("jobTab"); changed = true; }
+    const openCustomerId = workspace === "work" && commandTarget?.kind === "customer" ? commandTarget.id : "";
+    if (openCustomerId && nextUrl.searchParams.get("customerId") !== openCustomerId) { nextUrl.searchParams.set("customerId", openCustomerId); changed = true; }
+    else if (!openCustomerId && nextUrl.searchParams.has("customerId")) { nextUrl.searchParams.delete("customerId"); changed = true; }
     const nextLocation = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
     if (changed) {
       if (!workspaceRouteInitialised.current || workspacePopstateSync.current) window.history.replaceState(window.history.state, "", nextLocation);

@@ -8,6 +8,7 @@ export type TradeBusinessChoice = {
 };
 
 const selectionKey = (uid: string) => `tlink-business:${uid}`;
+export const TRADE_BUSINESS_SELECTION_CHANGED_EVENT = "tlink:business-selection-changed";
 
 export function readTradeBusinessSelection(uid: string, storage?: Pick<Storage, "getItem">): string {
   try { return (storage || sessionStorage).getItem(selectionKey(uid)) || ""; } catch { return ""; }
@@ -19,6 +20,9 @@ export function saveTradeBusinessSelection(uid: string, ownerUid: string, storag
     if (ownerUid) target.setItem(selectionKey(uid), ownerUid);
     else target.removeItem(selectionKey(uid));
   } catch { /* The current tab can still use its selected business without persistence. */ }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(TRADE_BUSINESS_SELECTION_CHANGED_EVENT, { detail: { uid, ownerUid } }));
+  }
 }
 
 export function resolveTradeBusinessSelection(businesses: TradeBusinessChoice[], savedOwnerUid: string): TradeBusinessChoice | null {

@@ -112,7 +112,7 @@ function fixture(overrides = {}) {
     '@/lib/trade-job-number-server': { nextTlinkJobNumber: async () => `TLJ-TEST-${++numbers}` },
     '@/lib/trade-integrations-server': { integrationEnvironment: () => ({}) },
     '@/lib/trade-address-verification': { TradeAddressVerificationError: DomainError,
-      resolveTradeAddressProvenance: async input => ({ ...Object.fromEntries(['addressLine1', 'addressLine2', 'suburb', 'addressState', 'postcode'].map(key => [key, clean(input[key], 180)])), addressEntryMode: 'manual_pending_review' }) },
+      resolveTradeAddressProvenance: async input => ({ ...Object.fromEntries(['addressLine1', 'addressLine2', 'suburb', 'addressState', 'postcode'].map(key => [key, clean(input[key], 180)])), addressEntryMode: 'manual_pending_review', addressProvider: '', addressProviderReference: '', addressFormatted: '', addressVerifiedAt: '' }) },
     '@/lib/trade-compliance-intent': { TradeComplianceIntentError: DomainError, resolveTradeComplianceIntents: deniedSideEffect },
     '@/lib/creditex-compliance-server': { ComplianceDomainError: DomainError, autoOpenReadyPlannedComplianceWorkPacks: deniedSideEffect },
     '@/lib/trade-calendar-sync-server': { syncCreatedAppointmentToConnectedCalendars: deniedSideEffect },
@@ -363,4 +363,54 @@ test('invoice picker GET requires manage-invoices permission even when the actor
   const { database, getInvoiceJobs } = fixture({ canManageInvoices: false });
   try { const result = await getInvoiceJobs({ search: 'Alex' }); assert.equal(result.status, 403, JSON.stringify(result.body)); }
   finally { database.close(); }
+});
+
+test('reviewed customer creation uses one deterministic customer, contact and site on recovery', async () => {
+  const { database, post } = fixture({ canManageCustomers: true });
+  try {
+    const body = { ...quick(), action: 'create_customer', clientRequestId: 'wattzun-customer-request-0001' };
+    const first = await post(body), replay = await post(body);
+    assert.equal(first.status, 200, JSON.stringify(first.body)); assert.equal(replay.status, 200, JSON.stringify(replay.body));
+    assert.equal(first.body.id, replay.body.id); assert.equal(replay.body.idempotentReplay, true);
+    assert.match(first.body.id, /^customer-request-[a-f0-9]{48}$/);
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_crm_customers').get().n, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_crm_customer_contacts').get().n, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_crm_service_sites').get().n, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_crm_site_contacts').get().n, 1);
+    const second = await post({ ...body, clientRequestId: 'wattzun-customer-request-0002', firstName: 'Another' });
+    assert.equal(second.status, 200, JSON.stringify(second.body)); assert.notEqual(second.body.customerNumber, first.body.customerNumber);
+  } finally { database.close(); }
+});
+
+test('customer recovery rejects changed names, contact details, address, notes and archived records', async () => {
+  const { database, post } = fixture({ canManageCustomers: true });
+  try {
+    const body = { ...quick(), action: 'create_customer', clientRequestId: 'wattzun-customer-request-0001' };
+    const first = await post(body); assert.equal(first.status, 200, JSON.stringify(first.body));
+    for (const changed of [{ firstName: 'Different' }, { email: 'different@example.test' }, { addressLine1: '14 Main Street' }, { privateNotes: 'Changed instructions' }]) {
+      const conflict = await post({ ...body, ...changed }); assert.equal(conflict.status, 409, JSON.stringify(conflict.body));
+    }
+    database.prepare("UPDATE trade_crm_customers SET record_status='archived' WHERE id=?").run(first.body.id);
+    assert.equal((await post(body)).status, 409);
+    assert.equal((await post({ ...body, clientRequestId: 'short' })).status, 400);
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_crm_customers').get().n, 1);
+  } finally { database.close(); }
+});
+
+test('customer recovery validates its actual primary property, contact and site-contact association', async () => {
+  for (const change of [
+    "UPDATE trade_crm_service_sites SET address_line_1='14 Main Street'",
+    "UPDATE trade_crm_service_sites SET record_status='archived'",
+    "UPDATE trade_crm_customer_contacts SET email='changed@example.test'",
+    "UPDATE trade_crm_customer_contacts SET record_status='archived'",
+    "DELETE FROM trade_crm_site_contacts",
+  ]) {
+    const { database, post } = fixture({ canManageCustomers: true }); try {
+      const body = { ...quick(), action: 'create_customer', clientRequestId: 'wattzun-customer-request-0001' };
+      assert.equal((await post(body)).status, 200); database.exec(change);
+      const response = await post(body); assert.equal(response.status, 409, JSON.stringify(response.body));
+      assert.equal(response.body.ok, false); assert.match(response.body.error, /different details/);
+      assert.equal(database.prepare('SELECT COUNT(*) n FROM trade_crm_customers').get().n, 1);
+    } finally { database.close(); }
+  }
 });

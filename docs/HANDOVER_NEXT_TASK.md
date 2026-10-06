@@ -1,9 +1,15 @@
 # Next task handover
 
-Status: Sales workspace and Wattzun integration; Wattzun Tools follow-up with GitHub/Sites publication authorised.
+Status: Sales workspace and Wattzun integration; persistent calls and reviewed customer/quote actions with GitHub/Sites publication authorised.
 Prepared: 6 October 2026
 
-## Active follow-up: Wattzun Tools and personal appearance
+## Active follow-up: useful Wattzun calls and real reviewed actions
+
+Outcome: Wattzun keeps an active call and conversation alive while the user works across authorised pages in the same portal and business, produces a real reviewed customer or quote draft through existing TLink services, and responds more promptly with a subtle Australian accent. The existing root assistant/navigation own call persistence; the narrow actions contract/review/route reuse customer, quick-quote and address-proof services; the provider gateway owns a Wattzun-only latency profile and fixed speech instructions. One writer owns each subsystem.
+
+Acceptance: minimising and same-portal job/quote navigation preserve one call and transcript; actor/business/portal changes and explicit Hang up release it. Existing unsaved navigation guards remain effective. Names require exact spelling confirmation and street addresses require signed, business-bound Google selection before creation. Unknown quantities, prices and GST remain explicit. Save only a draft after user review; show actual saved identity, distinguish partial failures, and safely replay the same reviewed request without duplicates or altered data. Existing role/job/customer permissions remain authoritative. Scoped job/file search opens the chosen existing record without sending its metadata or file bytes to the model. No public AEA calls, issuance, sends, paid gate or new provider key/model. Validate focused boundaries and responsive real React fixtures, typecheck, scoped lint, full suite for the changed privacy/write contracts, existing validate command and publication build. Measure actual live reply latency and report what was not physically tested. Stop if a migration, wider unscoped record access or new paid provider configuration is required. Exact source/publication evidence belongs in C:/Webproject/outputs/wattzun-companion-20261006/release-report.md.
+
+## Previous follow-up: Wattzun Tools and personal appearance
 
 Outcome: authenticated TLink, Council and Creditex users can open Wattzun from their left Tools navigation, message or call, inspect their recorded monthly usage, adjust speech speed and choose a cosmetic hat for the floating mascot. The shared Wattzun Tools component and existing portal navigation own the workflow; assistant presentation owns scoped settings and open actions; the current authorised routes and migration 0254 own successful text-message and voice-exchange counts. One writer owns each subsystem.
 

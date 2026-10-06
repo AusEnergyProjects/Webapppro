@@ -34,6 +34,7 @@ export function AustralianAddressLookup({
   onSelect,
   endpoint = "/api/address-suggestions",
   getAuthorization,
+  request = fetch,
   label = "Street address",
   placeholder = "Start typing an Australian address",
   maxLength = 140,
@@ -51,6 +52,7 @@ export function AustralianAddressLookup({
   onSelect: (selection: AustralianAddressSuggestion) => void;
   endpoint?: string;
   getAuthorization?: () => Promise<string>;
+  request?: typeof fetch;
   label?: string;
   placeholder?: string;
   maxLength?: number;
@@ -98,7 +100,7 @@ export function AustralianAddressLookup({
         const authorization = getAuthorization ? await getAuthorization() : "";
         const headers = new Headers({ "Content-Type": "application/json" });
         if (authorization) headers.set("Authorization", `Bearer ${authorization}`);
-        const response = await fetch(endpoint, {
+        const response = await request(endpoint, {
           method: "POST",
           body: JSON.stringify({
             action: "predict",
@@ -142,13 +144,13 @@ export function AustralianAddressLookup({
       }
       window.clearTimeout(timer);
     };
-  }, [endpoint, getAuthorization, value]);
+  }, [endpoint, getAuthorization, request, value]);
 
   useEffect(() => () => {
     predictionController.current?.abort();
     resolveController.current?.abort();
     sessionToken.current = "";
-  }, []);
+  }, [request]);
 
   async function choose(prediction: AustralianAddressPrediction) {
     if (resolving) return;
@@ -164,7 +166,7 @@ export function AustralianAddressLookup({
       const authorization = getAuthorization ? await getAuthorization() : "";
       const headers = new Headers({ "Content-Type": "application/json" });
       if (authorization) headers.set("Authorization", `Bearer ${authorization}`);
-      const response = await fetch(endpoint, {
+      const response = await request(endpoint, {
         method: "POST",
         body: JSON.stringify({
           action: "resolve",
@@ -182,6 +184,7 @@ export function AustralianAddressLookup({
         selection?: AustralianAddressSuggestion | null;
         error?: string;
       };
+      if (controller.signal.aborted || resolveController.current !== controller || sessionToken.current !== requestSessionToken) return;
       if (!response.ok || !result.configured || !result.selection) {
         throw new Error(
           result.error || "This address could not be resolved. Enter the address manually.",
@@ -235,6 +238,7 @@ export function AustralianAddressLookup({
           aria-invalid={invalid}
           aria-busy={searching || resolving}
           onChange={(event) => {
+            suppressLookup.current = false;
             resolveController.current?.abort();
             resolveController.current = null;
             setResolving(false);

@@ -1936,6 +1936,13 @@ export async function POST(request: Request) {
 
     if (action === "create_customer") {
       const fromMessages = body.source === "messages";
+      const creationRequestId = body.clientRequestId === undefined ? "" : cleanAdminText(body.clientRequestId, 120);
+      if (body.clientRequestId !== undefined && (!/^[A-Za-z0-9_-]{16,120}$/.test(creationRequestId) || fromMessages)) {
+        return adminJson({ ok: false, error: "Start this customer review again to save it safely." }, 400);
+      }
+      const creationId = creationRequestId
+        ? `customer-request-${(await sha256Text(`${identity.uid}|${identity.access.actorUid}|${creationRequestId}`)).slice(0, 48)}`
+        : "";
       if (fromMessages && !identity.access.isOwner) throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
       let chatCustomer: Awaited<ReturnType<typeof messageCustomerIdentity>> | null = null;
       if (fromMessages) {
@@ -1952,9 +1959,6 @@ export async function POST(request: Request) {
         }
         if (chatCustomer.existing) return adminJson({ok:true,id:chatCustomer.existing.id,customerNumber:chatCustomer.existing.customer_number,reused:true});
       }
-      const customerCount = await db.prepare("SELECT COUNT(*) count FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = 'active'")
-        .bind(identity.uid).first<Record<string, unknown>>();
-      if (Number(customerCount?.count || 0) >= CRM_CUSTOMER_LIMIT) throw new Error("CUSTOMER_LIMIT_REACHED");
       const customerType = CUSTOMER_TYPES.has(cleanAdminText(body.customerType, 20)) ? cleanAdminText(body.customerType, 20) : "residential";
       const firstName = cleanAdminText(body.firstName, 80);
       const lastName = cleanAdminText(body.lastName, 80);
@@ -1968,12 +1972,47 @@ export async function POST(request: Request) {
       if (!email && !fromMessages) return adminJson({ ok: false, error: "Add the customer email address." }, 400);
       if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
       if (phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Add a valid customer mobile number." }, 400);
-      const id = chatCustomer?.id || crypto.randomUUID();
-      const contactId = fromMessages ? `${id}-contact` : crypto.randomUUID();
-      const siteId = fromMessages ? `${id}-site` : crypto.randomUUID();
-      const replayConflict = fromMessages ? " ON CONFLICT(id) DO NOTHING" : "";
-      const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${(fromMessages ? id.slice(-8) : id.replaceAll("-", "").slice(0, 5)).toUpperCase()}`;
+      const id = chatCustomer?.id || creationId || crypto.randomUUID();
+      const contactId = fromMessages || creationId ? `${id}-contact` : crypto.randomUUID();
+      const siteId = fromMessages || creationId ? `${id}-site` : crypto.randomUUID();
+      const replayConflict = fromMessages || creationId ? " ON CONFLICT(id) DO NOTHING" : "";
+      const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${(fromMessages || creationId ? id.slice(-8) : id.replaceAll("-", "").slice(0, 5)).toUpperCase()}`;
       const address = await resolvedAddressWrite(body, identity);
+      const reviewedCustomer = {
+        customer_type: customerType, first_name: firstName, last_name: lastName, business_name: businessName,
+        business_number: businessNumber, email, phone, address_line_1: address.addressLine1,
+        address_line_2: address.addressLine2, suburb: address.suburb, address_state: address.addressState,
+        postcode: address.postcode, tags: JSON.stringify(cleanList(body.tags)), private_notes: cleanAdminText(body.privateNotes, 2000),
+      };
+      async function customerCreationReplay() {
+        if (!creationId) return null;
+        const saved = await db.prepare("SELECT * FROM trade_crm_customers WHERE id=? AND firebase_uid=?")
+          .bind(creationId, identity.uid).first<Record<string, unknown>>();
+        if (!saved) return null;
+        const savedSite = await db.prepare(`SELECT * FROM trade_crm_service_sites
+          WHERE id=? AND firebase_uid=? AND customer_id=? AND record_status='active'`)
+          .bind(siteId, identity.uid, creationId).first<Record<string, unknown>>();
+        const savedContact = await db.prepare(`SELECT c.* FROM trade_crm_customer_contacts c
+          JOIN trade_crm_site_contacts link ON link.customer_contact_id=c.id AND link.firebase_uid=c.firebase_uid
+          WHERE c.id=? AND c.firebase_uid=? AND c.customer_id=? AND c.record_status='active'
+            AND link.id=? AND link.service_site_id=? AND link.record_status='active'`)
+          .bind(contactId, identity.uid, creationId, `${id}-site-contact`, siteId).first<Record<string, unknown>>();
+        const reviewedSite = { address_line_1: address.addressLine1, address_line_2: address.addressLine2,
+          suburb: address.suburb, address_state: address.addressState, postcode: address.postcode,
+          address_entry_mode: address.addressEntryMode, address_provider: address.addressProvider,
+          address_provider_reference: address.addressProviderReference, address_formatted: address.addressFormatted };
+        if (saved.record_status !== "active" || Object.entries(reviewedCustomer).some(([key, value]) => String(saved[key] || "") !== value)
+          || !savedSite || Object.entries(reviewedSite).some(([key, value]) => String(savedSite[key] || "") !== value)
+          || !savedContact || savedContact.first_name !== firstName || savedContact.last_name !== lastName || savedContact.email !== email || savedContact.phone !== phone) {
+          return adminJson({ ok: false, error: "This customer review was already saved with different details. Open the saved customer before changing them." }, 409);
+        }
+        return adminJson({ ok: true, id: saved.id, customerNumber: saved.customer_number, idempotentReplay: true });
+      }
+      const replay = await customerCreationReplay();
+      if (replay) return replay;
+      const customerCount = await db.prepare("SELECT COUNT(*) count FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = 'active'")
+        .bind(identity.uid).first<Record<string, unknown>>();
+      if (Number(customerCount?.count || 0) >= CRM_CUSTOMER_LIMIT) throw new Error("CUSTOMER_LIMIT_REACHED");
       await db.batch([db.prepare(`INSERT INTO trade_crm_customers
         (id, firebase_uid, customer_number, customer_type, first_name, last_name, business_name, business_number, email,
          phone, address_line_1, address_line_2, suburb, address_state, postcode, tags, private_notes,
@@ -1997,8 +2036,9 @@ export async function POST(request: Request) {
         db.prepare(`INSERT INTO trade_crm_site_contacts
           (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
           VALUES (?, ?, ?, ?, 'Primary service contact', 1, 'active', ?, ?)${replayConflict}`)
-          .bind(fromMessages ? `${id}-site-contact` : crypto.randomUUID(), identity.uid, siteId, contactId, now, now),
+          .bind(fromMessages || creationId ? `${id}-site-contact` : crypto.randomUUID(), identity.uid, siteId, contactId, now, now),
       ]);
+      if (creationId) return (await customerCreationReplay()) || adminJson({ ok: false, error: "The saved customer could not be confirmed. Retry the same review." }, 503);
       return adminJson({ ok: true, id, customerNumber }, 201);
     }
 

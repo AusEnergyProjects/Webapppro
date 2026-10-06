@@ -1,0 +1,24 @@
+.review { --a-bg:#fff; --a-line:#ccd9de; --a-ink:#172f40; display:grid; gap:12px; min-width:0; padding:16px; border:1px solid var(--a-line); border-radius:16px; background:var(--a-bg); color:var(--a-ink); }
+:global([data-tlink-colour-mode="night"]) .review,:global([data-colour-mode="night"]) .review { --a-bg:#102625; --a-line:#304d46; --a-ink:#e0eeea; }
+.review h3,.review h4,.review p { margin:0; }
+.review p { font-size:.86rem; line-height:1.5; }
+.review fieldset { display:grid; gap:12px; min-width:0; margin:0; padding:0; border:0; }
+.review legend { margin-bottom:10px; font-weight:700; }
+.review label { display:grid; gap:5px; min-width:0; font-size:.86rem; font-weight:600; }
+.review input,.review select,.review textarea { box-sizing:border-box; width:100%; min-width:0; min-height:44px; border:1px solid var(--a-line); border-radius:8px; padding:9px; color:inherit; background:var(--a-bg); font:inherit; }
+.review input:focus-visible,.review select:focus-visible,.review textarea:focus-visible,.review button:focus-visible { outline:3px solid #0bb6a1; outline-offset:2px; }
+.review button { min-height:44px; padding:8px 12px; border:1px solid var(--a-line); border-radius:9px; color:inherit; background:var(--a-bg); font:inherit; cursor:pointer; }
+.review button:disabled { cursor:default; opacity:.6; }
+.review button[aria-pressed="true"],.actions button[type="submit"] { border-color:#08796e; background:#08796e; color:#fff; }
+.grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.modes,.actions { display:flex; flex-wrap:wrap; gap:8px; }
+.selected,.matches,.line { display:grid; min-width:0; gap:7px; }
+.selected { padding:10px; border:1px solid var(--a-line); border-radius:9px; }
+.selected span,.matches span,.address { overflow-wrap:anywhere; font-size:.86rem; }
+.matches button { display:grid; gap:3px; text-align:left; margin-top:6px; }
+.line { padding:10px; border:1px solid var(--a-line); border-radius:9px; }
+.lineNumbers { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.review .confirm { display:flex; align-items:flex-start; gap:9px; line-height:1.5; font-weight:400; }
+.review .confirm input { width:22px; min-width:22px; height:22px; min-height:22px; margin:0; accent-color:#08796e; }
+.note { opacity:.78; }
+@media (max-width:560px) { .grid { grid-template-columns:1fr; }.review { padding:12px; }.lineNumbers { grid-template-columns:repeat(2,minmax(0,1fr)); }.lineNumbers label:last-child { grid-column:1/-1; } }

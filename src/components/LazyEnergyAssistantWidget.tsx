@@ -11,7 +11,7 @@ const hiddenRoute = (pathname: string) => /\/(print|pdf|reset-password|customer-
 export function LazyEnergyAssistantWidget() {
   const pathname = usePathname() || "/";
   const portal = wattzunPortalForPath(pathname);
-  if (portal) return <Suspense fallback={null}><DeferredWattzunPortalAssistant key={portal} portal={portal} /></Suspense>;
+  if (portal) return <Suspense key={portal} fallback={null}><DeferredWattzunPortalAssistant portal={portal} /></Suspense>;
 
   if (hiddenRoute(pathname)) return null;
 

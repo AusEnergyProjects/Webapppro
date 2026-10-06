@@ -24,6 +24,23 @@ const defaults: WattzunRouteDependencies = {
 };
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 function json(body: object, status = 200) { return Response.json(body, { status, headers }); }
+function turnTimer() {
+  const started = performance.now();
+  const durations = new Map<"auth" | "access" | "stt" | "llm" | "tts" | "usage", number>();
+  return {
+    async run<T>(stage: "auth" | "access" | "stt" | "llm" | "tts" | "usage", operation: () => Promise<T>): Promise<T> {
+      const before = performance.now();
+      try { return await operation(); }
+      finally { durations.set(stage, (durations.get(stage) || 0) + Math.max(0, performance.now() - before)); }
+    },
+    response(response: Response) {
+      // Timings expose only bounded stage names and durations, never records or provider credentials.
+      response.headers.set("Server-Timing", [...durations].map(([name, duration]) => `${name};dur=${duration.toFixed(1)}`)
+        .concat(`total;dur=${Math.max(0, performance.now() - started).toFixed(1)}`).join(", "));
+      return response;
+    },
+  };
+}
 function failure(error: unknown) {
   if (error instanceof WattzunUsageError) return json({ ok: false, error: error.code === "conflict"
     ? "This request was already used for a different Wattzun exchange. Start a new turn."
@@ -102,26 +119,28 @@ export async function postWattzunPortal(request: Request, deps = defaults): Prom
   if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
     return json({ ok: false, error: "Send your question as JSON." }, 415);
   }
+  const timing = turnTimer();
   try {
-    await deps.authenticate(request);
+    await timing.run("auth", () => deps.authenticate(request));
     requireOpenConversation(request);
     const bytes = await boundedBody(request, 40_000);
     if (!bytes) return json({ ok: false, error: "The conversation is too large. Start a new conversation." }, 413);
     const input = parseWattzunTurn(JSON.parse(new TextDecoder().decode(bytes)));
-    const access = await deps.access(request, input.portal, input.scopeId);
+    const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
-    const reply = await deps.reply({ ...access, input });
-    const latest = await recheck(request, access, deps);
-    await deps.recordUsage({ access: latest, requestId: input.requestId, kind: "text" });
-    return json({ ok: true, reply });
-  } catch (error) { return failure(error); }
+    const reply = await timing.run("llm", () => deps.reply({ ...access, input }));
+    const latest = await timing.run("access", () => recheck(request, access, deps));
+    await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "text" }));
+    return timing.response(json({ ok: true, reply }));
+  } catch (error) { return timing.response(failure(error)); }
 }
 export async function postWattzunVoice(request: Request, deps = defaults): Promise<Response> {
   if (!acceptedOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   const contentType = request.headers.get("content-type") || "";
   if (!/^multipart\/form-data\s*;/i.test(contentType)) return json({ ok: false, error: "Send a recorded voice turn." }, 415);
+  const timing = turnTimer();
   try {
-    await deps.authenticate(request);
+    await timing.run("auth", () => deps.authenticate(request));
     requireOpenConversation(request);
     const bytes = await boundedBody(request, WATTZUN_MAX_AUDIO_BYTES + 50_000);
     if (!bytes) return json({ ok: false, error: "That voice turn is too large. Keep it under 45 seconds." }, 413);
@@ -134,16 +153,16 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
       throw new WattzunInputError("Use a supported microphone recording smaller than 2 MB.");
     }
     const input = parseWattzunTurn(JSON.parse(raw), true);
-    const access = await deps.access(request, input.portal, input.scopeId);
+    const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
-    const transcript = await deps.transcribe({ ...access, input, audio });
-    await recheck(request, access, deps);
+    const transcript = await timing.run("stt", () => deps.transcribe({ ...access, input, audio }));
+    await timing.run("access", () => recheck(request, access, deps));
     const spokenInput = { ...input, message: transcript };
-    const reply = await deps.reply({ ...access, input: spokenInput });
-    await recheck(request, access, deps);
-    const speech = await deps.speak({ ...access, input: spokenInput, reply });
-    const latest = await recheck(request, access, deps);
-    await deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" });
-    return json({ ok: true, transcript, reply, audio: speech });
-  } catch (error) { return failure(error); }
+    const reply = await timing.run("llm", () => deps.reply({ ...access, input: spokenInput }));
+    await timing.run("access", () => recheck(request, access, deps));
+    const speech = await timing.run("tts", () => deps.speak({ ...access, input: spokenInput, reply }));
+    const latest = await timing.run("access", () => recheck(request, access, deps));
+    await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
+    return timing.response(json({ ok: true, transcript, reply, audio: speech }));
+  } catch (error) { return timing.response(failure(error)); }
 }

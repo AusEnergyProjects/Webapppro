@@ -49,6 +49,10 @@ function teamWorkspaceLocation(search: string): { view: PortalView; target: TLin
     const jobTab = requestedTab === "quote" || requestedTab === "invoice" || requestedTab === "field" || requestedTab === "summary" ? requestedTab : requestedTab === "files" ? "field" : "schedule";
     return { view: "business", target: { workspace: "work", kind: "job", id: jobId, jobTab, query: "", nonce: Date.now() } };
   }
+  const customerId = parameters.get("customerId") || "";
+  if (workspace === "work" && /^[A-Za-z0-9:_-]{1,180}$/.test(customerId)) {
+    return { view: "business", target: { workspace: "work", kind: "customer", id: customerId, query: "", nonce: Date.now() } };
+  }
   const view: CrmShortcut = workspace === "work" || workspace === "jobs" ? "jobs" : workspace === "schedule" || workspace === "customers" || workspace === "pricebook" || workspace === "reports" ? workspace : "today";
   return { view: "business", target: { workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() } };
 }
@@ -144,6 +148,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   const setPortalView = useCallback((view: PortalView) => { void mapNavigation.run(() => setPortalViewState(view)); }, [mapNavigation, setPortalViewState]);
   const [crmTarget, setCrmTarget] = useState<TLinkCommandTarget | null>(null);
   const [crmView, setCrmView] = useState("today");
+  const workspaceLocation = useRef(typeof window === "undefined" ? "" : `${window.location.pathname}${window.location.search}${window.location.hash}`);
   const [colourMode, setColourMode] = useState<TLinkColourMode>("day");
   const teamReady = Boolean(user && emailVerified && data.access && invitationReady && !invitationError && !resolver && !mfaRequired);
 
@@ -259,15 +264,38 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   useEffect(() => {
     const applyWorkspaceLink = () => {
       const location = teamWorkspaceLocation(window.location.search);
+      const nextLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       void mapNavigation.run(() => {
         setPortalViewState(location.view);
-        if (location.target) { setCrmTarget(location.target); setCrmView(location.target.kind === "job" ? "jobs" : location.target.id); }
+        if (location.target) { setCrmTarget(location.target); setCrmView(location.target.kind === "job" ? "jobs" : location.target.kind === "customer" ? "customers" : location.target.id); }
+        workspaceLocation.current = nextLocation;
+      }).then(changed => {
+        if (!changed && workspaceLocation.current) window.history.replaceState(window.history.state, "", workspaceLocation.current);
       });
     };
     applyWorkspaceLink();
     window.addEventListener("popstate", applyWorkspaceLink);
     return () => window.removeEventListener("popstate", applyWorkspaceLink);
   }, [mapNavigation]);
+
+  useEffect(() => {
+    const nextUrl = new URL(window.location.href);
+    if (!nextUrl.searchParams.has("customerId") && crmTarget?.kind !== "customer") return;
+    if (!crmTarget && portalView === "business" && teamWorkspaceLocation(nextUrl.search).target?.kind === "customer") return;
+    if (portalView === "business" && crmTarget?.kind === "customer") {
+      nextUrl.searchParams.set("customerId", crmTarget.id);
+      nextUrl.searchParams.delete("jobId"); nextUrl.searchParams.delete("jobTab");
+    } else {
+      nextUrl.searchParams.delete("customerId");
+      if (portalView === "business" && crmTarget?.kind === "job") {
+        nextUrl.searchParams.set("jobId", crmTarget.id); nextUrl.searchParams.set("jobTab", crmTarget.jobTab || "summary");
+      } else { nextUrl.searchParams.delete("jobId"); nextUrl.searchParams.delete("jobTab"); }
+    }
+    nextUrl.searchParams.set("workspace", portalView === "business" ? crmTarget?.kind === "crm-view" ? crmTarget.id : "work" : portalView);
+    if (nextUrl.href === window.location.href) return;
+    workspaceLocation.current = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+    window.history.replaceState(window.history.state, "", workspaceLocation.current);
+  }, [crmTarget, portalView]);
 
   const loadAccess = useCallback(async () => {
     if (!user) return {} as Result;

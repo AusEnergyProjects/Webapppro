@@ -1,9 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
-import { readTradeBusinessSelection } from "@/lib/trade-business-client";
+import { readTradeBusinessSelection, TRADE_BUSINESS_SELECTION_CHANGED_EVENT } from "@/lib/trade-business-client";
+import { wattzunPortalForPath } from "@/lib/wattzun-portal-path";
+import { parseWattzunRecordLookup } from "@/lib/wattzun-records";
+import { parseWattzunActionProposal, type WattzunActionReceipt } from "@/lib/wattzun-actions";
 import {
   WATTZUN_MAX_HISTORY_TURNS, WATTZUN_MAX_HISTORY_CHARACTERS, wattzunSpokenReply,
   type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput,
@@ -12,6 +17,8 @@ import { WATTZUN_OPEN_EVENT, WATTZUN_READY_EVENT, WATTZUN_USAGE_CHANGED_EVENT, r
 import { createWattzunBrowserVoiceEnvironment, WattzunVoiceCall, type WattzunCallStatus } from "@/lib/wattzun-voice-client";
 import { EnergyAssistantLauncher } from "./EnergyAssistantLauncher";
 import { WattzunMascot } from "./WattzunMascot";
+import { WattzunRecordPicker } from "./WattzunRecordPicker";
+import { WattzunActionReview } from "./WattzunActionReview";
 import styles from "./WattzunPortalAssistant.module.css";
 
 type Message = WattzunTurn & { id: string; reply?: WattzunReply };
@@ -21,9 +28,20 @@ const callLabels: Record<WattzunCallStatus["state"], string> = {
 };
 function record(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function isReply(value: unknown): value is WattzunReply {
+  if (record(value) && value.action !== undefined && value.action !== null) {
+    try { parseWattzunActionProposal(value.action); } catch { return false; }
+  }
+  if (record(value) && value.lookup !== undefined && value.lookup !== null) {
+    try { parseWattzunRecordLookup(value.lookup); } catch { return false; }
+  }
   return record(value) && (value.kind === "answer" || value.kind === "clarification") && typeof value.message === "string"
     && Array.isArray(value.questions) && value.questions.every(question => typeof question === "string")
     && Array.isArray(value.links) && value.links.every(link => record(link) && typeof link.label === "string" && typeof link.href === "string" && /^\/(?!\/)/.test(link.href));
+}
+function workspaceHref(href: string, scope: WattzunScope, actorUid: string, pathname: string): string {
+  if (scope.portal !== "trade" || !/^\/direct-trade\/(dashboard|team)(?=[?#]|$)/.test(href)) return href;
+  const workspacePath = /^\/direct-trade\/(dashboard|team)\/?$/.test(pathname) ? pathname.replace(/\/$/, "") : actorUid === scope.scopeId ? "/direct-trade/dashboard" : "/direct-trade/team";
+  return href.replace(/^\/direct-trade\/(dashboard|team)/, workspacePath);
 }
 async function responsePayload(response: Response): Promise<Record<string, unknown>> {
   const payload: unknown = await response.json().catch(() => null);
@@ -41,6 +59,7 @@ function conversationHistory(messages: Message[]): WattzunTurn[] {
 export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
   const [user, setUser] = useState<User | null>(null);
   const currentActor = useRef<User | null>(null);
+  const selectedBusiness = useRef<string | null>(null);
   const [scopes, setScopes] = useState<WattzunScope[]>([]);
   const [scopeId, setScopeId] = useState("");
   const [open, setOpen] = useState(false);
@@ -50,9 +69,11 @@ export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
   const dialog = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const dismiss = useCallback(() => { setOpen(false); setOpenRequest(null); }, []);
+  const expand = useCallback(() => { setOpenRequest(null); setOpen(true); }, []);
 
   useEffect(() => onAuthStateChanged(firebaseAuth, authenticated => {
     currentActor.current = authenticated?.emailVerified ? authenticated : null;
+    selectedBusiness.current = null;
     setUser(currentActor.current);
     setScopes([]); setScopeId(""); setOpen(false); setOpenRequest(null);
   }), []);
@@ -68,8 +89,8 @@ export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
         if (controller.signal.aborted || currentActor.current?.uid !== user.uid || !Array.isArray(payload.scopes)) return;
         const authorizedScopes = payload.scopes.filter((scope): scope is WattzunScope => record(scope) && scope.portal === portal && typeof scope.scopeId === "string" && typeof scope.label === "string");
         setScopes(authorizedScopes);
-        const saved = portal === "trade" ? readTradeBusinessSelection(user.uid) : "";
-        setScopeId(authorizedScopes.find(scope => scope.scopeId === saved)?.scopeId || (authorizedScopes.length === 1 ? authorizedScopes[0].scopeId : ""));
+        const saved = portal === "trade" ? selectedBusiness.current ?? readTradeBusinessSelection(user.uid) : "";
+        setScopeId(authorizedScopes.find(scope => scope.scopeId === saved)?.scopeId || (selectedBusiness.current === null && authorizedScopes.length === 1 ? authorizedScopes[0].scopeId : ""));
       } catch { if (!controller.signal.aborted) setScopes([]); }
     })();
     return () => controller.abort();
@@ -91,6 +112,19 @@ export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
   }, [user, scopes, portal]);
 
   useEffect(() => {
+    if (!user || portal !== "trade") return;
+    const changeBusiness = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !record(event.detail) || event.detail.uid !== currentActor.current?.uid || event.detail.uid !== user.uid || typeof event.detail.ownerUid !== "string") return;
+      selectedBusiness.current = event.detail.ownerUid;
+      const nextScopeId = scopes.find(candidate => candidate.scopeId === event.detail.ownerUid)?.scopeId || "";
+      if (nextScopeId === scopeId) return;
+      setScopeId(nextScopeId); setOpen(false); setOpenRequest(null);
+    };
+    window.addEventListener(TRADE_BUSINESS_SELECTION_CHANGED_EVENT, changeBusiness);
+    return () => window.removeEventListener(TRADE_BUSINESS_SELECTION_CHANGED_EVENT, changeBusiness);
+  }, [user, portal, scopes, scopeId]);
+
+  useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButton.current?.focus();
@@ -109,22 +143,24 @@ export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
 
   if (!user || !scopes.length) return null;
   return <>
-    <EnergyAssistantLauncher hat={appearance.hat} onPreload={() => {}} onOpen={() => { setOpenRequest(null); setOpen(true); }} />
-    {open && <div className={styles.backdrop} onClick={event => { if (event.target === event.currentTarget) dismiss(); }}>
-      <div className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="wattzun-portal-title" ref={dialog}>
-        <header className={styles.header}>
+    <EnergyAssistantLauncher hat={appearance.hat} onPreload={() => {}} onOpen={expand} />
+    <div className={open ? styles.backdrop : undefined} onClick={event => { if (open && event.target === event.currentTarget) dismiss(); }}>
+      <div className={open ? styles.dialog : styles.docked} role={open ? "dialog" : undefined} aria-modal={open ? "true" : undefined} aria-labelledby={open ? "wattzun-portal-title" : undefined} ref={dialog}>
+        <header className={styles.header} hidden={!open}>
           <WattzunMascot hat={appearance.hat} />
           <div><h2 id="wattzun-portal-title">Wattzun</h2><p>Your {portalNames[portal]} assistant</p></div>
-          <button className={styles.close} type="button" aria-label="Close Wattzun" ref={closeButton} onClick={dismiss}>×</button>
+          <button className={styles.close} type="button" aria-label="Minimise Wattzun" title="Minimise and keep working" ref={closeButton} onClick={dismiss}>−</button>
         </header>
-        {scopes.length > 1 && <label className={styles.workspace}>Workspace<select aria-label="Workspace" value={scopeId} onChange={event => { setScopeId(event.target.value); if (scope) setOpenRequest(null); }}><option value="">Choose a workspace</option>{scopes.map(choice => <option key={choice.scopeId} value={choice.scopeId}>{choice.label}</option>)}</select></label>}
-        {scope ? <WattzunConversation key={`${user.uid}:${portal}:${scope.scopeId}`} user={user} scope={scope} openRequest={openRequest} /> : <p className={styles.empty}>Choose the workspace you want Wattzun to help with.</p>}
+        {scopes.length > 1 && <label className={styles.workspace} hidden={!open}>Workspace<select aria-label="Workspace" value={scopeId} onChange={event => { setScopeId(event.target.value); if (scope) setOpenRequest(null); }}><option value="">Choose a workspace</option>{scopes.map(choice => <option key={choice.scopeId} value={choice.scopeId}>{choice.label}</option>)}</select></label>}
+        {scope ? <WattzunConversation key={`${user.uid}:${portal}:${scope.scopeId}`} user={user} scope={scope} openRequest={openRequest} expanded={open} onExpand={expand} onMinimise={dismiss} /> : <p className={styles.empty} hidden={!open}>Choose the workspace you want Wattzun to help with.</p>}
       </div>
-    </div>}
+    </div>
   </>;
 }
 
-function WattzunConversation({ user, scope, openRequest }: { user: User; scope: WattzunScope; openRequest?: (WattzunOpenRequest & { id: string }) | null }) {
+function WattzunConversation({ user, scope, openRequest, expanded = true, onExpand, onMinimise }: { user: User; scope: WattzunScope; openRequest?: (WattzunOpenRequest & { id: string }) | null; expanded?: boolean; onExpand?: () => void; onMinimise?: () => void }) {
+  const pathname = usePathname() || "";
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesRef = useRef(messages);
   const [draft, setDraft] = useState("");
@@ -146,15 +182,12 @@ function WattzunConversation({ user, scope, openRequest }: { user: User; scope: 
   useEffect(() => { preferencesRef.current = { speed: presentation.speed }; }, [presentation.speed]);
   useEffect(() => {
     active.current = true;
-    const background = () => { if (document.hidden) { voiceCall.current?.hangUp(); setMuted(false); } };
     const leave = () => voiceCall.current?.dispose();
-    document.addEventListener("visibilitychange", background);
     window.addEventListener("pagehide", leave);
     return () => {
       active.current = false;
       textRequest.current?.abort();
       voiceCall.current?.dispose();
-      document.removeEventListener("visibilitychange", background);
       window.removeEventListener("pagehide", leave);
     };
   }, []);
@@ -163,6 +196,28 @@ function WattzunConversation({ user, scope, openRequest }: { user: User; scope: 
     messagesRef.current = [...messagesRef.current, ...turns];
     setMessages(messagesRef.current);
   }, []);
+  const navigate = useCallback((href: string) => {
+    const destination = workspaceHref(href, scope, user.uid, pathname);
+    if (!/^\/(?!\/)/.test(destination)) return;
+    const target = new URL(destination, window.location.origin);
+    if (target.origin !== window.location.origin || wattzunPortalForPath(target.pathname) !== scope.portal) return;
+    if (target.pathname === window.location.pathname) {
+      window.history.pushState(window.history.state, "", `${target.pathname}${target.search}${target.hash}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    } else router.push(destination, { scroll: false });
+    onMinimise?.();
+  }, [scope, user.uid, pathname, router, onMinimise]);
+  const dismissAction = useCallback((messageId: string) => {
+    if (!active.current) return;
+    messagesRef.current = messagesRef.current.map(message => message.id === messageId && message.reply ? { ...message, reply: { ...message.reply, action: null } } : message);
+    setMessages(messagesRef.current);
+  }, []);
+  const actionCreated = useCallback((messageId: string, receipt: WattzunActionReceipt) => {
+    if (!active.current) return;
+    dismissAction(messageId);
+    const message = receipt.kind === "quote_draft" ? "Your quote draft has been saved in TLink. Open it to review the details." : "The customer has been created in TLink. Open the saved record to review the details.";
+    append([{ id: crypto.randomUUID(), role: "assistant", content: message, reply: { kind: "answer", message, questions: [], links: [{ label: receipt.label, href: receipt.href }] } }]);
+  }, [append, dismissAction]);
   const requestInput = useCallback((message: string): WattzunTurnInput => ({
     portal: scope.portal, scopeId: scope.scopeId, requestId: crypto.randomUUID(), message,
     history: conversationHistory(messagesRef.current), preferences: { ...preferencesRef.current },
@@ -212,12 +267,13 @@ function WattzunConversation({ user, scope, openRequest }: { user: User; scope: 
         if (!active.current || voiceCall.current !== call) return;
         const id = crypto.randomUUID();
         append([{ id, role: "user", content: result.transcript }, { id: `${id}:reply`, role: "assistant", content: wattzunSpokenReply(result.reply), reply: result.reply }]);
+        if (result.reply.action || result.reply.lookup) onExpand?.();
         window.dispatchEvent(new CustomEvent(WATTZUN_USAGE_CHANGED_EVENT, { detail: { userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId } }));
       },
     });
     voiceCall.current = call;
     void call.start();
-  }, [busy, callActive, requestInput, user, scope, append]);
+  }, [busy, callActive, requestInput, user, scope, append, onExpand]);
 
   useEffect(() => {
     if (!openRequest || !presentation.ready || handledRequest.current === openRequest.id) return;
@@ -230,7 +286,15 @@ function WattzunConversation({ user, scope, openRequest }: { user: User; scope: 
     return () => window.cancelAnimationFrame(frame);
   }, [openRequest, presentation.ready, startCall]);
 
-  return <div className={styles.conversation}>
+  const hangUp = () => { voiceCall.current?.hangUp(); setMuted(false); };
+  return <>
+    {!expanded && callActive && <div className={`${styles.dockedCall} ${styles.dialog}`} role="region" aria-label="Wattzun call">
+      <span role="status"><span className={`${styles.activity} ${callStatus.state === "listening" ? styles.listening : ""}`} />{callLabels[callStatus.state]}</span>
+      <button type="button" onClick={onExpand}>Open Wattzun</button>
+      {callStatus.state === "confirming" && <button type="button" onClick={() => voiceCall.current?.continueCall()}>Continue call</button>}
+      <button className={styles.hangUp} type="button" onClick={hangUp}>Hang up</button>
+    </div>}
+    <div className={styles.conversation} hidden={!expanded}>
     <div className={styles.tools}>
       {!callActive ? <button className={styles.callButton} type="button" disabled={busy} onClick={startCall}><PhoneIcon />Call Wattzun</button> : <span className={styles.callBadge} role="status"><span className={`${styles.activity} ${callStatus.state === "listening" ? styles.listening : ""}`} />{callLabels[callStatus.state]}</span>}
       <details className={styles.settings}>
@@ -241,17 +305,22 @@ function WattzunConversation({ user, scope, openRequest }: { user: User; scope: 
         </div>
       </details>
     </div>
-    <p className={styles.disclosure}>Wattzun uses an AI-generated voice. Calling shares your spoken questions with our AI provider. Your microphone is used only while this call is open.</p>
+    <p className={styles.disclosure}>Wattzun uses an AI-generated voice. Calling shares your spoken questions with our AI provider. Minimise to keep working while your call stays connected. Hang up to stop your microphone.</p>
     {callActive && <div className={styles.callControls}>
       <button type="button" disabled={callStatus.state === "permission" || callStatus.state === "connecting"} aria-pressed={muted} onClick={() => { voiceCall.current?.toggleMute(); setMuted(current => !current); }}>{muted ? "Unmute microphone" : "Mute microphone"}</button>
       {callStatus.state === "speaking" && <button type="button" onClick={() => voiceCall.current?.interrupt()}>Stop speaking</button>}
-      <button className={styles.hangUp} type="button" onClick={() => { voiceCall.current?.hangUp(); setMuted(false); }}>Hang up</button>
+      <button className={styles.hangUp} type="button" onClick={hangUp}>Hang up</button>
     </div>}
     {callStatus.message && <p className={callStatus.state === "error" ? styles.error : styles.callHint} role={callStatus.state === "error" ? "alert" : "status"}>{callStatus.message}</p>}
     {callStatus.state === "confirming" && <div className={styles.idleConfirmation} role="group" aria-label="Call check-in"><p>{muted ? 'Unmute to respond, or choose Continue call.' : 'Speak to continue, or choose Continue call.'} This brief check-in uses your device voice when available.</p><div><button type="button" onClick={() => voiceCall.current?.continueCall()}>Continue call</button><button type="button" onClick={() => { voiceCall.current?.hangUp(); setMuted(false); }}>End call</button></div></div>}
     <div className={styles.messages} role="log" aria-live="polite" aria-label="Conversation with Wattzun">
       {!messages.length && <div className={styles.welcome}><h3>What can I help you with?</h3><p>Tell me what you want to get done. If I need more detail, I will ask.</p><div>{["What can you help me with?", "Help me find the next step"].map(example => <button key={example} type="button" disabled={callActive || busy} onClick={() => setDraft(example)}>{example}</button>)}</div></div>}
-      {messages.map(message => <article key={message.id} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}><strong>{message.role === "user" ? "You" : "Wattzun"}</strong><p>{message.reply ? message.reply.message : message.content}</p>{message.reply && message.reply.questions.length > 0 && <ol>{message.reply.questions.map((question, index) => <li key={index}>{question}</li>)}</ol>}{message.reply && message.reply.links.length > 0 && <div className={styles.links}>{message.reply.links.map(link => <a key={link.href} href={link.href}>{link.label} <span aria-hidden="true">↗</span></a>)}</div>}</article>)}
+      {messages.map(message => <article key={message.id} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}><strong>{message.role === "user" ? "You" : "Wattzun"}</strong><p>{message.reply ? message.reply.message : message.content}</p>{message.reply && message.reply.questions.length > 0 && <ol>{message.reply.questions.map((question, index) => <li key={index}>{question}</li>)}</ol>}{message.reply && message.reply.links.length > 0 && <div className={styles.links}>{message.reply.links.map(link => wattzunPortalForPath(link.href.split(/[?#]/)[0]) === scope.portal
+        ? <Link key={link.href} href={workspaceHref(link.href, scope, user.uid, pathname)} prefetch={false} onNavigate={event => { event.preventDefault(); navigate(link.href); }}>{link.label} <span aria-hidden="true">↗</span></Link>
+        : <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer">{link.label} <span aria-hidden="true">↗</span></a>)}</div>}
+        {scope.portal === "trade" && message.reply?.lookup && <WattzunRecordPicker user={user} scope={scope} lookup={message.reply.lookup} onNavigate={navigate} />}
+        {scope.portal === "trade" && message.reply?.action && <WattzunActionReview proposal={message.reply.action} user={user} scopeId={scope.scopeId} onCreated={receipt => actionCreated(message.id, receipt)} onCancel={() => dismissAction(message.id)} onNavigate={navigate} />}
+      </article>)}
       {busy && <p className={styles.callHint} role="status">Wattzun is thinking...</p>}
       <div ref={scrollEnd} />
     </div>
@@ -262,7 +331,7 @@ function WattzunConversation({ user, scope, openRequest }: { user: User; scope: 
       <button type="submit" disabled={busy || callActive || !draft.trim()}>{busy ? "Sending..." : "Send"}</button>
     </form>
     <p className={styles.footer}>Workspace: {scope.label}. Check important details before acting.</p>
-  </div>;
+  </div></>;
 }
 
 function PhoneIcon() { return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M7 3H4a1 1 0 0 0-1 1c0 9.4 7.6 17 17 17a1 1 0 0 0 1-1v-3l-5-2-2 2a14 14 0 0 1-7-7l2-2-2-5Z" /></svg>; }

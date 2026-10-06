@@ -36,6 +36,25 @@ const input = { portal: "trade", scopeId: "business-one", requestId: "synthetic-
 const access = { db: {}, actorUid: "staff-one", scope: { portal: "trade", scopeId: "business-one", label: "Trade One" } };
 const reply = { kind: "clarification", message: "I can draft that.", questions: ["Who is the follow-up for?"], links: [] };
 const usage = { portal: "trade", scopeId: "business-one", month: "2026-10", monthBasis: "UTC", audience: "personal", textMessages: 3, voiceExchanges: 2 };
+
+test("turn timings separate actual text and speech stages without leaking actor, records or provider data", async () => {
+  for (const voice of [false, true]) {
+    const result = await fixture().post(voice);
+    assert.equal(result.response.status, 200);
+    const timing = result.response.headers.get("server-timing");
+    assert.ok(timing);
+    const stages = timing.split(", ").map(item => {
+      assert.match(item, /^(auth|access|stt|llm|tts|usage|total);dur=\d+\.\d$/);
+      return item.split(";")[0];
+    });
+    assert.deepEqual(stages, voice ? ["auth", "access", "stt", "llm", "tts", "usage", "total"] : ["auth", "access", "llm", "usage", "total"]);
+    assert.doesNotMatch(timing, /business-one|staff-one|synthetic|Draft|Bearer|audio/);
+  }
+  const failed = await fixture({ providerError: new Error("WORKFLOW_AI_UNAVAILABLE") }).post();
+  assert.equal(failed.response.status, 503);
+  assert.match(failed.response.headers.get("server-timing"), /llm;dur=/);
+  assert.doesNotMatch(failed.response.headers.get("server-timing"), /usage;dur=/);
+});
 function fixture(options = {}) {
   const events = [], recorded = [];
   let count = 0;

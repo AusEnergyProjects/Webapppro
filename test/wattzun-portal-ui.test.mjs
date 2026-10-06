@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import * as portalContract from "../src/lib/wattzun-portal.ts";
+import * as recordContract from "../src/lib/wattzun-records.ts";
+import * as actionContract from "../src/lib/wattzun-actions.ts";
 
 const source = readFileSync(new URL("../src/components/WattzunPortalAssistant.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -16,9 +18,14 @@ function load({ values = [null, [], "", false, null], storage, events, fetchRequ
       useEffect: callback => effects.push(callback),
     },
     "react/jsx-runtime": { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: "Fragment" },
+    "next/link": { default: "Link" },
+    "next/navigation": { usePathname: () => "/direct-trade/dashboard", useRouter: () => ({ push() {} }) },
     "firebase/auth": { onAuthStateChanged: (_auth, callback) => { auth.callback = callback; return () => { auth.unsubscribed = true; }; } },
     "@/lib/firebase-client": { firebaseAuth: {} },
-    "@/lib/trade-business-client": { readTradeBusinessSelection: () => "business-b" },
+    "@/lib/trade-business-client": { readTradeBusinessSelection: () => "business-b", TRADE_BUSINESS_SELECTION_CHANGED_EVENT: "tlink:business-selection-changed" },
+    "@/lib/wattzun-portal-path": { wattzunPortalForPath: portalContract.wattzunPortalForPath },
+    "@/lib/wattzun-records": recordContract,
+    "@/lib/wattzun-actions": actionContract,
     "@/lib/wattzun-portal": portalContract,
     "@/lib/wattzun-appearance": {
       WATTZUN_OPEN_EVENT:'wattzun:open',WATTZUN_READY_EVENT:'wattzun:ready',WATTZUN_USAGE_CHANGED_EVENT:'wattzun:usage-changed',
@@ -28,10 +35,12 @@ function load({ values = [null, [], "", false, null], storage, events, fetchRequ
     "@/lib/wattzun-voice-client": {},
     "./EnergyAssistantLauncher": { EnergyAssistantLauncher: "Launcher" },
     "./WattzunMascot": { WattzunMascot: "Mascot" },
+    "./WattzunRecordPicker": { WattzunRecordPicker: "Picker" },
+    "./WattzunActionReview": { WattzunActionReview: "Review" },
     "./WattzunPortalAssistant.module.css": { default: {} },
   };
   const exported = {};
-  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {conversationHistory, responsePayload, isReply, WattzunConversation};`)(name => {
+  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {conversationHistory, responsePayload, isReply, WattzunConversation, workspaceHref};`)(name => {
     assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
   }, exported, { localStorage: storage, ...events }, fetchRequest);
   return { exported, effects, updates, auth };
@@ -120,4 +129,16 @@ test("reply links reject off-site and malformed destinations before rendering", 
   assert.equal(isReply(reply), true);
   for (const href of ["//evil.example", "javascript:alert(1)", "https://evil.example"]) assert.equal(isReply({ ...reply, links: [{ label: "Go", href }] }), false);
   assert.equal(isReply({ ...reply, questions: [17] }), false);
+  assert.equal(isReply({...reply,lookup:{kind:'file',query:'JOB-24'}}),true);
+  assert.equal(isReply({...reply,lookup:{kind:'customer',query:'JOB-24'}}),false);
+});
+
+test('workspace links retain the current owner or staff route while preserving the selected record',()=>{
+  const {workspaceHref}=load().exported.testHelpers;
+  const scope={portal:'trade',scopeId:'business-owner',label:'Business'};
+  assert.equal(workspaceHref('/direct-trade/dashboard?workspace=work&customerId=saved',scope,'staff-user','/direct-trade/team'),'/direct-trade/team?workspace=work&customerId=saved');
+  assert.equal(workspaceHref('/direct-trade/team?workspace=work&jobId=saved&jobTab=quote',scope,'business-owner','/direct-trade/dashboard'),'/direct-trade/dashboard?workspace=work&jobId=saved&jobTab=quote');
+  assert.equal(workspaceHref('/direct-trade/dashboard?workspace=work',scope,'staff-user','/direct-trade/messages'),'/direct-trade/team?workspace=work');
+  assert.equal(workspaceHref('/direct-trade/team?workspace=work',scope,'business-owner','/direct-trade/messages'),'/direct-trade/dashboard?workspace=work');
+  assert.equal(workspaceHref('/api/saved-file.pdf',scope,'staff-user','/direct-trade/team'),'/api/saved-file.pdf');
 });

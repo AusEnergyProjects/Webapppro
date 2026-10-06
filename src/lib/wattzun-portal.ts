@@ -1,3 +1,6 @@
+import type { WattzunActionProposal } from "./wattzun-actions";
+import type { WattzunRecordLookup } from "./wattzun-records";
+
 export const WATTZUN_PORTALS = ["trade", "creditex", "council"] as const;
 export type WattzunPortal = typeof WATTZUN_PORTALS[number];
 export const WATTZUN_BRAND_VOICE = "cedar";
@@ -13,6 +16,8 @@ export type WattzunTurnInput = {
 export type WattzunReply = {
   kind: "answer" | "clarification"; message: string; questions: string[];
   links: Array<{ label: string; href: string }>;
+  action?: WattzunActionProposal | null;
+  lookup?: WattzunRecordLookup | null;
 };
 export type WattzunVoiceResult = {
   ok: true; transcript: string; reply: WattzunReply; audio: { base64: string; mimeType: "audio/mpeg" };

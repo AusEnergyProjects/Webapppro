@@ -20,5 +20,5 @@ test('existing customer is reused, shared numbers require selection, archived co
   f.sqlite.exec("DELETE FROM trade_crm_customers WHERE id='second';UPDATE trade_crm_customers SET record_status='archived' WHERE firebase_uid='a'");await assert.rejects(messageCustomerIdentity(f.db,'a','0412345678'),/ARCHIVED/);
 }finally{f.sqlite.close();}});
 test('only owner Messages intake relaxes email and reuses canonical atomic customer/contact/site creation',()=>{
-  const route=read('../src/app/api/trade-crm/route.ts');assert.match(route,/fromMessages && !identity.access.isOwner/);assert.match(route,/!email && !fromMessages/);assert.match(route,/email && !EMAIL_PATTERN.test\(email\)/);assert.match(route,/ON CONFLICT\(id\) DO NOTHING/);assert.match(route,/fromMessages \? `\$\{id\}-site-contact`/);
+  const route=read('../src/app/api/trade-crm/route.ts');assert.match(route,/fromMessages && !identity.access.isOwner/);assert.match(route,/!email && !fromMessages/);assert.match(route,/email && !EMAIL_PATTERN.test\(email\)/);assert.match(route,/ON CONFLICT\(id\) DO NOTHING/);assert.match(route,/fromMessages \|\| creationId \? `\$\{id\}-site-contact`/);
 });

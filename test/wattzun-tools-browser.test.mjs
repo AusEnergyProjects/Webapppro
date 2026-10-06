@@ -12,7 +12,11 @@ const hats = [{ id: 'none', label: 'None' }, { id: 'hard-hat', label: 'Hard hat'
 const fixtures = {
   auth: `export function onAuthStateChanged(_auth, callback) { window.fixtureAuthListeners.add(callback); callback(window.fixtureUser); return ()=>window.fixtureAuthListeners.delete(callback); }`,
   firebase: 'export const firebaseAuth = {};',
-  business: `export const readTradeBusinessSelection = () => 'synthetic-trade-one';`,
+  business: `export const readTradeBusinessSelection = () => 'synthetic-trade-one';export const TRADE_BUSINESS_SELECTION_CHANGED_EVENT='tlink:business-selection-changed';`,
+  link: `import React from 'react'; export default function Link({href,onNavigate,prefetch,...props}) { return <a {...props} href={href} onClick={event=>{if(event.button||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey) return; event.preventDefault();let prevented=false;onNavigate?.({preventDefault(){prevented=true;}});if(!prevented)history.pushState(history.state,'',href);}}/>; }`,
+  navigation: `export const usePathname=()=>location.pathname;export const useRouter=()=>({push:href=>history.pushState(history.state,'',href)});`,
+  picker: `export const WattzunRecordPicker=()=>null;`,
+  review: `export const WattzunActionReview=()=>null;`,
   // Real presentation, opening, UI and request code runs. Only microphone/audio/provider boundaries are synthetic.
   voice: `
     export const createWattzunBrowserVoiceEnvironment = () => ({});
@@ -81,7 +85,7 @@ const bundle = await build({
   ` },
   bundle: true, write: false, outfile: 'wattzun-tools.js', format: 'iife', jsx: 'automatic', external: ['/surge-mascot.webp'],
   plugins: [{ name: 'bounded-wattzun-tools-fixtures', setup(builder) {
-    for (const [filter, fixture] of [[/^firebase\/auth$/, 'auth'], [/^@\/lib\/firebase-client$/, 'firebase'], [/^@\/lib\/trade-business-client$/, 'business'], [/^@\/lib\/wattzun-voice-client$/, 'voice']]) builder.onResolve({ filter }, () => ({ path: fixture, namespace: 'fixture' }));
+    for (const [filter, fixture] of [[/^firebase\/auth$/, 'auth'], [/^@\/lib\/firebase-client$/, 'firebase'], [/^@\/lib\/trade-business-client$/, 'business'], [/^@\/lib\/wattzun-voice-client$/, 'voice'], [/^next\/link$/, 'link'], [/^next\/navigation$/, 'navigation'], [/WattzunRecordPicker$/, 'picker'], [/WattzunActionReview$/, 'review']]) builder.onResolve({ filter }, () => ({ path: fixture, namespace: 'fixture' }));
     builder.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents: fixtures[args.path], loader: 'tsx', resolveDir: root }));
     builder.onResolve({ filter: /^@\/lib\// }, args => ({ path: path.join(root, 'src/lib', `${args.path.slice('@/lib/'.length)}.ts`) }));
   } }],
@@ -163,7 +167,7 @@ test('actual Tools, floating launcher and assistant share all six hats and speed
         const dialog = page.getByRole('dialog', { name: 'Wattzun', exact: true });
         await dialog.waitFor(); await currentHat(tools, launcher, dialog, hat.id);
         assert.equal(await dialog.locator(':focus').count(), 1, 'Opening moves keyboard focus into the modal');
-        await dialog.getByRole('button', { name: 'Close Wattzun', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Minimise Wattzun', exact: true }).click();
         await dialog.waitFor({ state: 'detached' });
       }
       assert.deepEqual(await page.evaluate(() => window.fixtureCounters), { started: 0, hungUp: 0, disposed: 0, microphone: 0 }, 'Hats and ordinary Message never request a call or microphone');
@@ -178,7 +182,7 @@ test('actual Tools, floating launcher and assistant share all six hats and speed
       assert.equal(await tools.getByRole('combobox', { name: 'Speaking speed', exact: true }).inputValue(), '0.85', 'Dialog and Tools update the same scoped speed');
       assert.equal(await dialog.evaluate(element => getComputedStyle(element).backgroundColor), scenario.mode === 'night' ? 'rgb(16, 38, 37)' : 'rgb(255, 255, 255)');
       await touchControls(dialog, `${scenario.name} assistant`);
-      await dialog.getByRole('button', { name: 'Close Wattzun', exact: true }).focus();
+      await dialog.getByRole('button', { name: 'Minimise Wattzun', exact: true }).focus();
       for (let step = 0; step < 12; step++) { await page.keyboard.press('Tab'); assert.equal(await dialog.locator(':focus').count(), 1, 'Keyboard focus remains in the open modal'); }
       await screen(page, `${scenario.name}-assistant-pirate`);
       await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
@@ -187,9 +191,11 @@ test('actual Tools, floating launcher and assistant share all six hats and speed
       await dialog.getByText('Listening', { exact: true }).waitFor();
       await touchControls(dialog, `${scenario.name} active call`);
       assert.equal(await page.evaluate(() => window.fixtureCounters.started), 1, 'A deliberate keyboard Call starts once');
-      await dialog.getByRole('button', { name: 'Close Wattzun', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
-      assert.equal(await page.evaluate(() => window.fixtureCounters.disposed), 1, 'Modal close disposes the call');
-      assert.equal(await tools.getByRole('button', { name: 'Call Wattzun', exact: true }).evaluate(element => document.activeElement === element), true, 'Modal close restores the originating control focus');
+      await dialog.getByRole('button', { name: 'Minimise Wattzun', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
+      assert.equal(await page.evaluate(() => window.fixtureCounters.disposed), 0, 'Minimising retains the active call');
+      assert.equal(await tools.getByRole('button', { name: 'Call Wattzun', exact: true }).evaluate(element => document.activeElement === element), true, 'Minimising restores the originating control focus');
+      await page.getByRole('region', { name: 'Wattzun call', exact: true }).getByRole('button', { name: 'Hang up', exact: true }).click();
+      assert.equal(await page.evaluate(() => window.fixtureCounters.hungUp), 1, 'Hang up is separate from minimising');
       assert.equal(await page.evaluate(() => window.fixtureRequests.filter(request => request.method === 'POST').length), 0, 'Presentation and call fixtures never submit an AI request');
       assert.deepEqual(errors, []);
       assert.equal(await page.evaluate(() => localStorage.getItem('wattzun-appearance:v1:user-one:trade:synthetic-trade-one')), '{"hat":"pirate"}');
@@ -356,7 +362,7 @@ test('blocked device storage preserves live Tools choices for late Message and f
     assert.equal(await dialog.getByRole('combobox', { name: 'Workspace', exact: true }).inputValue(), 'synthetic-trade-two');
     assert.equal(await page.evaluate(() => window.fixtureRequests.filter(request => request.method === 'POST').length), 0, 'Message does not send automatically');
     assert.equal(await page.evaluate(() => window.fixtureCounters.started), 0, 'Message never starts the call');
-    await dialog.getByRole('button', { name: 'Close Wattzun', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
+    await dialog.getByRole('button', { name: 'Minimise Wattzun', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
     await tools.getByRole('button', { name: 'Call Wattzun', exact: true }).click();
     await dialog.getByText('Listening', { exact: true }).waitFor();
     await page.waitForFunction(() => window.fixtureRequests.some(request => request.url === '/api/wattzun/voice'));
@@ -366,7 +372,7 @@ test('blocked device storage preserves live Tools choices for late Message and f
     assert.equal(await page.evaluate(() => window.fixtureCounters.started), 1);
     await currentHat(tools, launcher, dialog, 'pirate');
     await screen(page, 'blocked-storage-first-call');
-    await dialog.getByRole('button', { name: 'Close Wattzun', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
+    await dialog.getByRole('button', { name: 'Minimise Wattzun', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
     await tools.getByRole('combobox', { name: 'Wattzun workspace', exact: true }).selectOption('synthetic-trade-one');
     await numbers(tools, [7, 3]); await rendered(page);
     assert.equal(await tools.getByRole('button', { name: 'None', exact: true }).getAttribute('aria-pressed'), 'true');
@@ -390,7 +396,8 @@ test('blocked device storage preserves live Tools choices for late Message and f
     assert.deepEqual(secondCall.body.preferences, { speed: 1 }, 'The new actor voice request does not inherit the old actor preference');
     await currentHat(tools, launcher, dialog, 'none');
     await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
-    assert.equal(await page.evaluate(() => window.fixtureCounters.disposed), 2);
+    assert.equal(await page.evaluate(() => window.fixtureCounters.disposed), 1, 'Only leaving the prior actor and workspace disposes its call');
+    await page.getByRole('region', { name: 'Wattzun call', exact: true }).getByRole('button', { name: 'Hang up', exact: true }).click();
     assert.equal(await page.evaluate(() => window.fixtureCounters.microphone), 0, 'The audio boundary remains synthetic');
     assert.deepEqual(errors, []); await page.close();
   } finally { await browser.close(); }
@@ -406,4 +413,39 @@ test('portal navigation renders the actual Tools workspace and excludes the Coun
   assert.match(council, /<WattzunToolsWorkspace[^>]*scopeId=\{profile\.councilId\}/);
   const staff = fs.readFileSync(path.join(root, 'src/components/TradeTeamPortal.tsx'), 'utf8');
   assert.match(staff, /workspace === "wattzun"/);
+});
+
+test('business selection and sign-out stop a minimised call without trusting another actor or leaking its transcript', { skip: !browserPath && 'No installed browser for tenant boundary checks' }, async () => {
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  try {
+    const {page,tools,errors}=await fixturePage(browser,{multiple:true,blockedStorage:true});
+    await tools.getByRole('button',{name:'Message Wattzun',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+    await dialog.getByRole('textbox',{name:'Message Wattzun',exact:true}).fill('Private first business question');
+    await dialog.getByRole('button',{name:'Send',exact:true}).click();
+    await dialog.getByRole('log',{name:'Conversation with Wattzun',exact:true}).getByText('Private first business question',{exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();
+    await dialog.getByText('Listening',{exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'Minimise Wattzun',exact:true}).click();
+    const dock=page.getByRole('region',{name:'Wattzun call',exact:true});
+    await dock.waitFor();
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('tlink:business-selection-changed',{detail:{uid:'foreign-actor',ownerUid:'synthetic-trade-two'}})));
+    assert.equal(await page.evaluate(()=>window.fixtureCounters.disposed),0,'A foreign actor cannot retarget or dismiss this call');
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('tlink:business-selection-changed',{detail:{uid:'user-one',ownerUid:'synthetic-trade-two'}})));
+    await dock.waitFor({state:'detached'});
+    assert.equal(await page.evaluate(()=>window.fixtureCounters.disposed),1,'The actual business switch disposes the old call even when storage is blocked');
+    await page.getByRole('button',{name:'Open Wattzun AI chat',exact:true}).click();
+    await dialog.waitFor();
+    assert.equal(await dialog.getByRole('combobox',{name:'Workspace',exact:true}).inputValue(),'synthetic-trade-two');
+    assert.equal(await dialog.getByText('Private first business question',{exact:true}).count(),0,'The new business never inherits old conversation content');
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();
+    await dialog.getByText('Listening',{exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'Minimise Wattzun',exact:true}).click();
+    await dock.waitFor();
+    await page.evaluate(()=>window.fixtureAuthListeners.forEach(callback=>callback(null)));
+    await dock.waitFor({state:'detached'});
+    assert.equal(await page.evaluate(()=>window.fixtureCounters.disposed),2,'Sign-out disposes the active minimised call');
+    assert.equal(await page.getByRole('button',{name:'Open Wattzun AI chat',exact:true}).count(),0);
+    assert.deepEqual(errors,[]); await page.close();
+  } finally { await browser.close(); }
 });

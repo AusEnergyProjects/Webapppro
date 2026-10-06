@@ -188,6 +188,46 @@ test('legacy work and saved job links open the canonical workspace and preserve 
   assert.equal(context.workspaceLocation('').target.id, 'today');
 });
 
+test('saved customer deep links select the exact existing customer through the work workspace',()=>{
+  const customer=context.workspaceLocation('?workspace=work&customerId=customer-saved:123');
+  assert.equal(customer.view,'business');assert.equal(customer.target.kind,'customer');assert.equal(customer.target.id,'customer-saved:123');
+  assert.equal(context.workspaceLocation('?workspace=work&customerId=%3Cscript%3E').target.kind,'crm-view');
+  assert.equal(context.workspaceLocation('?workspace=sales&customerId=customer-saved').target,null);
+  assert.equal(context.workspaceLocation('?workspace=work&jobId=job-saved&customerId=customer-saved').target.kind,'job');
+});
+
+test('staff customer links remain in sync and remove stale record targets after navigation',()=>{
+  const effects=[];
+  const findEffects=node=>{if(ts.isCallExpression(node)&&node.expression.getText(source)==='useEffect')effects.push(node.arguments[0]);ts.forEachChild(node,findEffects);};findEffects(source);
+  const effect=effects.find(node=>node.getText(source).includes('!nextUrl.searchParams.has("customerId")'));
+  const compiled=ts.transpileModule(`const effect=${effect.getText(source)};globalThis.effect=effect;`,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+  for(const [portalView,crmTarget,expected] of [['business',{kind:'customer',id:'saved-new-customer'},{workspace:'work',customerId:'saved-new-customer'}],['business',{kind:'job',id:'saved-new-job',jobTab:'quote'},{workspace:'work',jobId:'saved-new-job',jobTab:'quote'}],['business',{kind:'crm-view',id:'customers'},{workspace:'customers'}],['forms',{kind:'customer',id:'old-customer'},{workspace:'forms'}]]) {
+    const changes=[];
+    const environment={URL,portalView,crmTarget,workspaceLocation:{current:''},teamWorkspaceLocation:context.workspaceLocation,
+      window:{location:{href:'https://fixture.invalid/direct-trade/team?workspace=work&customerId=old-customer&jobId=stale-job&jobTab=invoice'},history:{state:{},replaceState:(_state,_title,href)=>changes.push(href)}}};
+    runInNewContext(compiled,environment);environment.effect();assert.equal(changes.length,1);
+    const parameters=new URL(changes[0],'https://fixture.invalid').searchParams;
+    for(const key of ['workspace','customerId','jobId','jobTab'])assert.equal(parameters.get(key),expected[key]||null,`${portalView}/${crmTarget.kind} serialises ${key}`);
+  }
+});
+
+test('staff record deep links respect an unsaved-work guard and restore the prior URL on rejection',async()=>{
+  const effects=[];
+  const findEffects=node=>{if(ts.isCallExpression(node)&&node.expression.getText(source)==='useEffect')effects.push(node.arguments[0]);ts.forEachChild(node,findEffects);};findEffects(source);
+  const effect=effects.find(node=>node.getText(source).includes('const applyWorkspaceLink'));
+  const compiled=ts.transpileModule(`const effect=${effect.getText(source)};globalThis.effect=effect;`,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+  for(const rejected of [false,true]) {
+    const changes=[],mapNavigation=createMapNavigationGuard(),listeners=new Map();
+    if(rejected)mapNavigation.register(async()=>{throw new Error('Preserve unsaved work');});
+    const environment={mapNavigation,teamWorkspaceLocation:context.workspaceLocation,workspaceLocation:{current:'/direct-trade/team?workspace=map'},setPortalViewState:value=>changes.push(['view',value]),setCrmTarget:value=>changes.push(['target',value]),setCrmView:value=>changes.push(['crm',value]),
+      window:{location:{pathname:'/direct-trade/team',search:'?workspace=work&customerId=saved-customer',hash:''},history:{state:{},replaceState:(_state,_title,href)=>changes.push(['restore',href])},addEventListener:(type,callback)=>listeners.set(type,callback),removeEventListener:type=>listeners.delete(type)}};
+    runInNewContext(compiled,environment);const cleanup=environment.effect();await new Promise(resolve=>setImmediate(resolve));
+    if(rejected)assert.deepEqual(changes,[['restore','/direct-trade/team?workspace=map']]);
+    else {assert.equal(changes[1][1].kind,'customer');assert.equal(changes[1][1].id,'saved-customer');assert.deepEqual(changes[2],['crm','customers']);}
+    cleanup();assert.equal(listeners.size,0);
+  }
+});
+
 test('Sales, tasks, training, communication and time deep links keep their destinations', () => {
   for (const view of ['sales', 'tasks', 'training', 'messages', 'time']) {
     const result = context.workspaceLocation('?workspace=' + view);

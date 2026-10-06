@@ -1,5 +1,10 @@
 .backdrop { position: fixed; inset: 0; z-index: 9000; display: flex; justify-content: flex-end; align-items: flex-end; padding: 24px; background: #06232845; backdrop-filter: blur(3px); }
 .dialog { --w-bg: #fff; --w-panel: #f3f8f7; --w-ink: #15332e; --w-muted: #58736c; --w-line: #d9e7e2; --w-accent: #086958; --w-highlight: #e2f6ee; background: var(--w-bg); border: 1px solid var(--w-line); border-radius: 24px; box-shadow: 0 20px 90px #062b2c40; color: var(--w-ink); display: flex; flex-direction: column; font: 400 14px/1.5 Arial, sans-serif; max-height: min(850px, calc(100dvh - 48px)); min-height: 500px; width: min(520px, 100%); overflow: hidden; }
+.docked [hidden], .dialog [hidden] { display: none !important; }
+.dialog.dockedCall { position: fixed; right: 24px; bottom: 24px; z-index: 9000; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; border-radius: 16px; min-height: 0; max-height: none; width: min(520px, calc(100% - 48px)); padding: 12px; }
+.dockedCall > span { display: inline-flex; align-items: center; flex: 1 1 140px; gap: 8px; font-weight: 700; }
+.dockedCall button { border: 1px solid var(--w-line); background: var(--w-panel); color: var(--w-ink); border-radius: 10px; padding: 8px 12px; }
+.dockedCall .hangUp { background: #b83733; border-color: #b83733; color: #fff; }
 :global(html[data-tlink-colour-mode="night"]) .dialog { --w-bg: #102625; --w-panel: #193230; --w-ink: #ecfff8; --w-muted: #b0c9c1; --w-line: #35504a; --w-accent: #a0edce; --w-highlight: #24483b; }
 .dialog :is(button, input, textarea, select, summary, a):focus-visible { outline: 3px solid #e9b848; outline-offset: 3px; }
 .dialog button { cursor: pointer; font: inherit; min-height:44px; min-width:44px; }
@@ -58,4 +63,4 @@
 @keyframes pulse { 50% { box-shadow: 0 0 0 5px #49ad8b25; } }
 @media (prefers-reduced-motion: reduce) { .listening { animation: none; } }
 @media (max-width: 600px) { .backdrop { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }.dialog { border-radius: 18px; max-height: calc(100dvh - 24px); min-height: min(580px, calc(100dvh - 24px)); width: 100%; }.header { padding: 16px; }.tools { padding: 12px 16px 8px; }.messages { padding: 16px; }.composer { padding: 12px 16px 8px; }.disclosure, .callControls, .callHint { padding-left: 16px; padding-right: 16px; }.footer { padding-left: 16px; padding-right: 16px; }.settingsPanel { grid-template-columns: minmax(0,1fr); }.idleConfirmation { margin-left:16px; margin-right:16px; }.error { margin-left: 16px; margin-right: 16px; } }
-@media print { .backdrop { display: none !important; } }
+@media print { .backdrop, .dockedCall { display: none !important; } }

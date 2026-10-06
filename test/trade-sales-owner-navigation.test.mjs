@@ -38,6 +38,33 @@ test('Sales restores its bookmark without treating a sales URL as a job authoris
   assert.equal(helpers.jobNavigationFromSearch('?workspace=work&jobId=existing').id, 'existing');
 });
 
+test('saved customer links select only a valid work record and preserve job precedence', () => {
+  const names=['dashboardWorkspaceFromSearch','jobNavigationFromSearch','dashboardCommandTargetFromSearch'];
+  const declarations=source.statements.filter(node=>ts.isFunctionDeclaration(node)&&names.includes(node.name?.text)
+    ||ts.isVariableStatement(node)&&node.declarationList.declarations.some(value=>['dashboardWorkspaces','workOrderIdPattern'].includes(value.name.getText(source))));
+  const helpers=Function(`${compile(declarations.map(node=>node.getText(source)).join('\n'))}\nreturn {${names.join(',')}};`)();
+  const customer=helpers.dashboardCommandTargetFromSearch('?workspace=work&customerId=customer-saved:123');
+  assert.equal(customer.kind,'customer');assert.equal(customer.id,'customer-saved:123');assert.equal(customer.workspace,'work');
+  for(const search of ['?workspace=sales&customerId=customer-saved','?workspace=work&customerId=%3Cscript%3E','?workspace=work&customerId=']) assert.equal(helpers.dashboardCommandTargetFromSearch(search),null);
+  assert.equal(helpers.dashboardCommandTargetFromSearch('?workspace=work&jobId=job-saved&customerId=customer-saved').kind,'job');
+});
+
+test('record URL synchronisation keeps the selected customer and removes stale job or customer identifiers', () => {
+  const effect=find(source,node=>ts.isCallExpression(node)&&node.expression.getText(source)==='useEffect'&&node.arguments[0]?.getText(source).includes('const openCustomerId'));
+  const names=['dashboardWorkspaceFromSearch','jobNavigationFromSearch','dashboardCommandTargetFromSearch'];
+  const declarations=source.statements.filter(node=>ts.isFunctionDeclaration(node)&&names.includes(node.name?.text)
+    ||ts.isVariableStatement(node)&&node.declarationList.declarations.some(value=>['dashboardWorkspaces','workOrderIdPattern'].includes(value.name.getText(source))));
+  const helpers=Function(`${compile(declarations.map(node=>node.getText(source)).join('\n'))}\nreturn {${names.join(',')}};`)();
+  for(const [workspace,target,expected] of [['work',{kind:'customer',id:'new-customer'},{customerId:'new-customer'}],['work',{kind:'job',id:'new-job',jobTab:'quote'},{jobId:'new-job',jobTab:'quote'}],['forms',null,{}]]) {
+    const changes=[];
+    const callback=evaluate(effect.arguments[0],{...helpers,URL,window:{location:{href:'https://fixture.invalid/direct-trade/dashboard?workspace=work&customerId=old-customer&jobId=old-job&jobTab=summary'},history:{state:{},pushState:(_state,_title,href)=>changes.push(href),replaceState:(_state,_title,href)=>changes.push(href)}},
+      commandTarget:target,workspace,activeWorkView:'today',financeView:'quotes',networkPostId:'',selectedOpportunityMatchId:'',workspaceRouteInitialised:{current:true},workspacePopstateSync:{current:false},workspaceLocation:{current:''}});
+    callback();assert.equal(changes.length,1);
+    const parameters=new URL(changes[0],'https://fixture.invalid').searchParams;
+    for(const key of ['customerId','jobId','jobTab'])assert.equal(parameters.get(key),expected[key]||null,`${workspace}/${target?.kind||'none'} clears stale ${key}`);
+  }
+});
+
 test('Sales opens the same job or quote through the existing guarded work destination', async () => {
   for (const tab of ['summary', 'quote']) {
     const flow = navigation();

@@ -183,7 +183,7 @@ test("calendar job links open the exact authorised TLink job schedule", () => {
   assert.equal(navigate("?workspace=work&jobId=exact-job-123&jobTab=unknown").jobTab, "schedule");
   for (const query of ["?workspace=work", "?workspace=work&jobId=bad%20id", "?workspace=finance&jobId=exact-job-123"]) assert.equal(navigate(query), null);
   assert.match(dashboardSource,
-    /const initialJobTarget = dashboardCommandTargetFromSearch\(window\.location\.search\);[\s\S]{0,260}!commandTarget[\s\S]{0,160}initialJobTarget\?\.kind === "job"[\s\S]{0,160}setCommandTarget\(initialJobTarget\);[\s\S]{0,80}return;/,
+    /const initialRecordTarget = dashboardCommandTargetFromSearch\(window\.location\.search\);[\s\S]{0,260}!commandTarget[\s\S]{0,160}initialRecordTarget\?\.kind === "job"[\s\S]{0,160}setCommandTarget\(initialRecordTarget\);[\s\S]{0,80}return;/,
     "hydration must consume the incoming jobId before route synchronisation can remove it");
 });
 

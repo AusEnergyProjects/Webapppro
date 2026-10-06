@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createTradeBusinessFetch, readTradeBusinessSelection, resolveTradeBusinessSelection, saveTradeBusinessSelection } from "../src/lib/trade-business-client.ts";
+import { createTradeBusinessFetch, readTradeBusinessSelection, resolveTradeBusinessSelection, saveTradeBusinessSelection, TRADE_BUSINESS_SELECTION_CHANGED_EVENT } from "../src/lib/trade-business-client.ts";
 
 const business = (ownerUid, role = "member") => ({ ownerUid, role, businessName: `Business ${ownerUid}`, memberId: `member-${ownerUid}`, displayName: "Installer" });
 const store = () => { const values = new Map(); return { getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }; };
@@ -34,6 +34,23 @@ test("blocked session storage does not prevent choosing a business", () => {
   assert.equal(readTradeBusinessSelection("person", blocked), "");
   assert.doesNotThrow(() => saveTradeBusinessSelection("person", "owner", blocked));
   assert.doesNotThrow(() => saveTradeBusinessSelection("person", "", blocked));
+});
+
+test("selecting or clearing a business broadcasts the actor boundary even when storage is blocked", () => {
+  const original = globalThis.window;
+  const target = new EventTarget();
+  const changes = [];
+  target.addEventListener(TRADE_BUSINESS_SELECTION_CHANGED_EVENT, event => changes.push(event.detail));
+  globalThis.window = target;
+  try {
+    const blocked = { setItem() { throw new Error("blocked"); }, removeItem() { throw new Error("blocked"); } };
+    saveTradeBusinessSelection("actor-a", "owner-b", blocked);
+    saveTradeBusinessSelection("actor-a", "", blocked);
+    assert.deepEqual(changes, [{ uid: "actor-a", ownerUid: "owner-b" }, { uid: "actor-a", ownerUid: "" }]);
+  } finally {
+    if (original === undefined) delete globalThis.window;
+    else globalThis.window = original;
+  }
 });
 
 test("captured tenant fetch sets the explicit business without changing bearer identity or caller headers", async () => {
