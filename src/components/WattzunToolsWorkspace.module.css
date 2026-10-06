@@ -35,7 +35,7 @@
 .hats { border: 0; padding: 0; min-width: 0; margin: 22px 0 10px; }
 .hats legend { padding: 0; margin-bottom: 12px; font-size: 13px; font-weight: 700; }
 .hats > div { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
-.hats button { display: grid; gap: 7px; justify-items: center; padding: 12px 4px 9px; min-width: 0; font-size: 11px; }
+.hats button { display: grid; gap: 7px; justify-items: center; padding: 28px 4px 9px; min-width: 0; font-size: 11px; }
 .hats button[aria-pressed="true"] { border-color: var(--w-brand); background: var(--w-soft); box-shadow: inset 0 0 0 1px var(--w-brand); }
 .hatPreview { width: 58px; height: 78px; }
 .suggestions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin-top: 20px; }

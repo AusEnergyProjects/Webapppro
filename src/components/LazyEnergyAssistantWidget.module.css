@@ -53,6 +53,10 @@
   position: absolute;
 }
 
+.portal .dismiss {
+  top: -28px;
+}
+
 .launcher:focus-visible,
 .peek:focus-visible,
 .dismiss:focus-visible {

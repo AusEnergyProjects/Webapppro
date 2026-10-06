@@ -40,7 +40,7 @@ export function EnergyAssistantLauncher({ onPreload, onOpen, hat }: { onPreload:
   }, []);
 
   return <div
-    className={`${styles.root}${tucked ? ` ${styles.rootTucked}` : ""}`}
+    className={`${styles.root}${hat !== undefined ? ` ${styles.portal}` : ""}${tucked ? ` ${styles.rootTucked}` : ""}`}
     data-surge-loader
     onPointerEnter={onPreload}
     onFocusCapture={onPreload}

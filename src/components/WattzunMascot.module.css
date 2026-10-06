@@ -1,1 +1,14 @@
-:where(.mascot) { position:relative; display:block; background:url("/surge-mascot.webp") center / contain no-repeat; width:44px; height:54px; flex-shrink:0; }
+:where(.mascot) { position:relative; display:block; width:44px; height:54px; flex-shrink:0; container-type:size; overflow:visible; }
+.art {
+  --frame-width: min(100cqw, calc(100cqh * 848 / 1072));
+  --frame-height: min(100cqh, calc(100cqw * 1072 / 848));
+  position:absolute;
+  left:calc(50% - var(--frame-width) / 2 + var(--frame-width) * var(--wattzun-x));
+  top:calc(50% - var(--frame-height) / 2 + var(--frame-height) * var(--wattzun-y));
+  width:calc(var(--frame-width) * var(--wattzun-width));
+  height:calc(var(--frame-height) * var(--wattzun-height));
+  background-position:center;
+  background-size:100% 100%;
+  background-repeat:no-repeat;
+  pointer-events:none;
+}

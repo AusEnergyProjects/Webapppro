@@ -12,7 +12,6 @@ import {
   parseWattzunPreferences, wattzunSpokenReply, type WattzunReply,
 } from "./wattzun-portal";
 
-const MODEL = "gpt-realtime-2.1-mini";
 const TOOL = "wattzun_portal_reply";
 const TIMEOUT_MS = 55_000;
 const PROPOSAL_TOKENS = 2_500;
@@ -179,7 +178,7 @@ export async function prepareWattzunRealtimeTurn(
 
 async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDiagnostic): Promise<PreparedWattzunRealtimeTurn> {
   const contract = createWattzunPortalReplyContract(options);
-  const instructions = `${contract.instructions}\nThe function result wraps the requested reply in reply and includes requestSummary. requestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output.`;
+  const instructions = `${contract.instructions}\nThis is a live voice conversation. Give ordinary answers in one or two short sentences, usually under 35 words. For navigation, name the supplied button and what it opens. Add a permissions explanation only when the user is asking about missing access. Put necessary clarification questions in questions instead of repeating them in message. Preserve all required structured facts and review boundaries.\nThe function result wraps the requested reply in reply and includes requestSummary. requestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output.`;
   const schema = { type: "object", additionalProperties: false, required: ["reply", "requestSummary"],
     properties: { reply: contract.schema, requestSummary: { type: "string", minLength: 1, maxLength: 1_800 } } };
   const preferences = parseWattzunPreferences(options.input.preferences);
@@ -189,14 +188,21 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   const context = JSON.stringify(contract.input);
   const promptBytes = new TextEncoder().encode(instructions + JSON.stringify(schema) + context).byteLength;
   if (promptBytes > 64_000) incomplete();
-  // Current model rates: text input/output $0.60/$2.40 and audio $10/$20 per
+  // A UTF-8 byte upper-bounds one text token. Keep the full accepted history:
+  // the 32k low-latency model handles only contexts that provably fit, while
+  // the 128k model retains longer conversations without automatic truncation.
+  const audioInputCeiling = Math.ceil(pcm.byteLength / 48_000 * 10) + 128;
+  const fastNative = promptBytes + audioInputCeiling + PROPOSAL_TOKENS + 2_048 <= 32_000;
+  const model = fastNative ? "gpt-realtime-1.5" : "gpt-realtime-2.1-mini";
+  const rates = fastNative ? { textInput: 4, textOutput: 16, audioInput: 32, audioOutput: 64 }
+    : { textInput: 0.6, textOutput: 2.4, audioInput: 10, audioOutput: 20 };
+  // Current fast model rates: text input/output $4/$16 and audio $32/$64 per
   // million tokens. Text bytes bound input tokens; input audio is 10 tokens/sec.
   // Reserve both responses, framing overhead and the maximum speech output at
   // the higher audio rate, plus 25%. This is a ceiling, not a customer price.
-  const textInputTokens = promptBytes + new TextEncoder().encode(WATTZUN_SPEECH_INSTRUCTIONS).byteLength + 2_100 + 2_048;
-  const inputAudioTokens = Math.ceil(pcm.byteLength / 48_000 * 10) + 128;
-  const estimatedMicroUsd = Math.ceil((textInputTokens * 0.6 + inputAudioTokens * 10
-    + PROPOSAL_TOKENS * 2.4 + SPEECH_TOKENS * 20) * 1.25);
+  const textInputTokens = promptBytes + new TextEncoder().encode(WATTZUN_SPEECH_INSTRUCTIONS).byteLength + 2_100 * 3 + 2_048;
+  const estimatedMicroUsd = Math.ceil((textInputTokens * rates.textInput + audioInputCeiling * rates.audioInput
+    + PROPOSAL_TOKENS * rates.textOutput + SPEECH_TOKENS * rates.audioOutput) * 1.25);
   const guard = createSharedSurgeUsageGuard({ env: guardEnv, getDatabase: () => options.db });
   diagnostic.phase = "guard"; diagnostic.substage = "budget";
   const guardStarted = performance.now();
@@ -314,7 +320,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     signal.throwIfAborted();
     diagnostic.phase = "connect"; diagnostic.substage = "upgrade";
     const connectStarted = performance.now();
-    const connecting = fetch(`https://api.openai.com/v1/realtime?model=${MODEL}`, {
+    const connecting = fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
       headers: { Upgrade: "websocket", Authorization: `Bearer ${key}` }, signal,
     }).then(response => {
       // Own the candidate before the promise handoff. Cancellation in the next
@@ -344,10 +350,11 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     const configured = waitForPhase();
     const configStarted = performance.now();
     send({ type: "session.update", session: {
-      type: "realtime", model: MODEL, instructions, output_modalities: ["text"],
+      type: "realtime", model, instructions, output_modalities: ["text"], truncation: "disabled",
       audio: { input: { format: { type: "audio/pcm", rate: 24_000 }, transcription: null, turn_detection: null },
         output: { format: { type: "audio/pcm", rate: 24_000 }, voice: WATTZUN_BRAND_VOICE, speed: preferences.speed } },
-      max_output_tokens: PROPOSAL_TOKENS, reasoning: { effort: "minimal" }, parallel_tool_calls: false,
+      max_output_tokens: PROPOSAL_TOKENS,
+      ...(!fastNative ? { reasoning: { effort: "minimal" }, parallel_tool_calls: false } : {}),
       tools: [{ type: "function", name: TOOL, description: "Return a reply proposal and unconfirmed request memory for validation. This tool cannot save or send anything.", parameters: schema }],
       tool_choice: { type: "function", name: TOOL },
     } });
@@ -411,7 +418,8 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     send({ type: "response.create", response: {
       conversation: "none", output_modalities: ["audio"], instructions: WATTZUN_SPEECH_INSTRUCTIONS,
       input: [{ type: "message", role: "user", content: [{ type: "input_text", text: wattzunSpokenReply(reply) }] }],
-      tools: [], tool_choice: "none", max_output_tokens: SPEECH_TOKENS, reasoning: { effort: "minimal" }, metadata: { phase: "speech" },
+      tools: [], tool_choice: "none", max_output_tokens: SPEECH_TOKENS, metadata: { phase: "speech" },
+      ...(!fastNative ? { reasoning: { effort: "minimal" } } : {}),
     } });
     const timings = { ...diagnostic.timings };
     console.info("WATTZUN_REALTIME_TURN_READY", { phase: "speech", timings });
