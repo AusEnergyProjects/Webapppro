@@ -148,7 +148,7 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.deepEqual(session.tools[0].parameters.properties.requestSummary, { type: "string", minLength: 1, maxLength: 1800 });
   assert.ok(session.instructions.startsWith(contract.instructions));
   assert.match(session.instructions, /unconfirmed interpretation.*not a verbatim transcript or verified record/);
-  assert.deepEqual(session.tool_choice, { type: "function", name: "wattzun_portal_reply" });
+  assert.equal(session.tool_choice, "required");
   assert.deepEqual(session.audio.input, { format: { type: "audio/pcm", rate: 24000 }, transcription: null, turn_detection: null });
   assert.deepEqual(session.audio.output, { format: { type: "audio/pcm", rate: 24000 }, voice: "cedar", speed: 1.15 });
   assert.equal(Object.hasOwn(session, "reasoning"), false); assert.equal(Object.hasOwn(session, "parallel_tool_calls"), false);
@@ -478,6 +478,27 @@ test("provider errors and incomplete envelopes log only allowlisted error, statu
     }
     assert.doesNotMatch(JSON.stringify(f.errors), /fixture-key|provider-private-details|private-/);
   });
+});
+
+test("JSON text messages remain rejected before approval and diagnostics expose structure without content", async () => {
+  const text = JSON.stringify({ reply: { ...answer, message: `${KEY} private-customer-details` },
+    requestSummary: "private-address", "private-unexpected-key": "private-value" });
+  let approvals = 0;
+  const f = fixture({ receive: (event, socket) => {
+    if (event.type === "session.update") socket.emit({ type: "session.updated", session: event.session });
+    if (event.type !== "response.create") return;
+    socket.emit({ type: "response.created", response: { id: "proposal-id" } });
+    socket.emit({ type: "response.done", response: { id: "proposal-id", status: "completed",
+      output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }] } });
+  } });
+  await assert.rejects(f.prepareWattzunRealtimeTurn(request({ beforeSpeech: async () => { approvals++; } })), safeError);
+  assert.equal(approvals, 0); assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1);
+  assert.equal(f.errors.length, 1); assert.equal(f.released(), 1);
+  const diagnostic = f.errors[0][1];
+  assert.deepEqual(diagnostic.messageContentKinds, ["output_text"]); assert.equal(diagnostic.messagePartCount, 1);
+  assert.equal(diagnostic.outputTextLength, text.length); assert.equal(diagnostic.outputTextJsonType, "object");
+  assert.equal(diagnostic.outerFieldCount, 3); assert.equal(diagnostic.replyType, "object");
+  assert.doesNotMatch(JSON.stringify(f.errors), /fixture-key|private-customer|private-address|private-unexpected|private-value/);
 });
 
 test("explicit client aborts suppress diagnostic errors while deadlines and streaming failures remain visible once", async (t) => {

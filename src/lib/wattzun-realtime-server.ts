@@ -45,6 +45,10 @@ type DiagnosticStructure = {
   requestSummaryLength?: number;
   responseStatus?: string;
   responseReason?: string;
+  messagePartCount?: number;
+  messageContentKinds?: string[];
+  outputTextLength?: number;
+  outputTextJsonType?: DiagnosticValueType;
 };
 type TurnDiagnostic = {
   phase: DiagnosticPhase;
@@ -84,6 +88,23 @@ function captureResponseStructure(diagnostic: TurnDiagnostic, raw: unknown) {
     diagnostic.structure.outputItemCount = Math.min(raw.output.length, 4_096);
     diagnostic.structure.outputKinds = raw.output.slice(0, 4).map(item => allowedValue(record(item) ? item.type : undefined,
       ["function_call", "message", "function_call_output"]));
+    const message: unknown = raw.output.length === 1 ? raw.output[0] : undefined;
+    if (record(message) && message.type === "message" && Array.isArray(message.content)) {
+      diagnostic.structure.messagePartCount = Math.min(message.content.length, 4_096);
+      diagnostic.structure.messageContentKinds = message.content.slice(0, 4).map(part => allowedValue(record(part) ? part.type : undefined,
+        ["output_text", "output_audio"]));
+      const part: unknown = message.content.length === 1 ? message.content[0] : undefined;
+      if (record(part) && part.type === "output_text" && typeof part.text === "string") {
+        diagnostic.structure.outputTextLength = Math.min(part.text.length, MAX_FRAME_CHARACTERS);
+        if (part.text.length <= 18_000) {
+          try {
+            const value: unknown = JSON.parse(part.text);
+            diagnostic.structure.outputTextJsonType = valueType(value);
+            captureArgumentStructure(diagnostic, value);
+          } catch { /* Structural diagnostics never accept text or expose parse errors. */ }
+        }
+      }
+    }
   }
 }
 function captureArgumentStructure(diagnostic: TurnDiagnostic, raw: unknown) {
@@ -356,13 +377,12 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
       max_output_tokens: PROPOSAL_TOKENS,
       ...(!fastNative ? { reasoning: { effort: "minimal" }, parallel_tool_calls: false } : {}),
       tools: [{ type: "function", name: TOOL, description: "Required for every answer, clarification and scope reminder. Submit exactly one reply proposal and unconfirmed request memory for validation. This read-only reply-submission function cannot save or send anything. Do not respond with a text message.", parameters: schema }],
-      tool_choice: { type: "function", name: TOOL },
+      tool_choice: "required",
     } });
     const configuration = await configured;
     diagnostic.duration("rt_config", configStarted);
     const session = configuration.session;
-    if (!record(session) || session.type !== "realtime" || !record(session.tool_choice)
-      || session.tool_choice.type !== "function" || session.tool_choice.name !== TOOL
+    if (!record(session) || session.type !== "realtime" || session.tool_choice !== "required"
       || !Array.isArray(session.tools) || session.tools.length !== 1 || !record(session.tools[0])
       || session.tools[0].type !== "function" || session.tools[0].name !== TOOL
       || !Array.isArray(session.output_modalities)
@@ -382,7 +402,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     const proposed = waitForPhase();
     diagnostic.substage = "output";
     proposalStarted = performance.now();
-    send({ type: "response.create", response: { output_modalities: ["text"], tool_choice: { type: "function", name: TOOL },
+    send({ type: "response.create", response: { output_modalities: ["text"], tool_choice: "required",
       max_output_tokens: PROPOSAL_TOKENS, metadata: { phase: "proposal" } } });
     const event = await proposed;
     diagnostic.duration("rt_proposal", proposalStarted);
