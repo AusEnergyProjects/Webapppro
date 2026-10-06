@@ -44,3 +44,49 @@ test('guidance points to existing owner/staff workflows and keeps automated reco
     for(const item of WATTZUN_PORTAL_GUIDE[portal]) assert.ok(item.href.startsWith('/')&&!item.href.includes('jobId='));
   }
 });
+
+test('Wattzun settings guidance uses verified owner/staff destinations and sidebar-only council/auditor panels',()=>{
+  const trade=WATTZUN_PORTAL_GUIDE.trade.find(item=>item.id==='trade_wattzun');
+  assert.equal(trade.href,'/direct-trade/dashboard?workspace=wattzun');
+  assert.match(trade.description,/Specialist tools for owners.*staff workspace for team members/);
+  assert.match(trade.description,/current authorised business workspace/);
+  for(const [portal,path] of [['council','/council'],['creditex','/creditex/compliance']]){
+    const entry=WATTZUN_PORTAL_GUIDE[portal].find(item=>item.id===`${portal}_wattzun`);
+    assert.equal(entry.href,path);
+    assert.match(entry.description,portal==='council'?/sidebar select Wattzun under Tools/:/left sidebar select Wattzun\./);
+    assert.match(entry.description,/no verified direct link to this panel/);
+    assert.doesNotMatch(entry.href,/\?/);
+    assert.match(entry.description,/Current (?:council|Creditex) access is required/);
+  }
+  assert.match(WATTZUN_PORTAL_GUIDE.council.find(item=>item.id==='council_wattzun').description,/demonstration does not offer this tool/);
+});
+
+test('every portal guide teaches the released in-app speed control instead of unsupported browser-TTS advice',()=>{
+  const question="Where can I adjust Wattzun's speech speed in TLink?";
+  for(const portal of ['trade','council','creditex']){
+    assert.equal(wattzunOffTopicReply(question,[],portal),null);
+    const entry=WATTZUN_PORTAL_GUIDE[portal].find(item=>item.id===`${portal}_wattzun`);
+    assert.match(entry.description,/Speaking speed.*Slower, Normal or Quicker.*next reply/);
+    const guidance=WATTZUN_TASK_GUIDANCE[portal].join(' ');
+    assert.match(guidance,/Speaking speed is an existing in-app control: choose Slower, Normal or Quicker for the next spoken reply/);
+    assert.match(guidance,/Do not say speech speed is unavailable or send users to browser, device or operating-system text-to-speech settings/);
+    assert.match(guidance,/Call Wattzun opens voice conversation; Message Wattzun opens chat/);
+    assert.match(guidance,/Starter prompts open an editable chat draft.*reviews before sending/);
+    assert.match(guidance,/warm, conversational voice and personality.*little humour.*fixed by the brand/);
+    assert.match(guidance,/six personal choices: None, Hard hat, Cap, Cowboy, Viking hat and Pirate hat/);
+    assert.match(guidance,/hats do not change personality or access/);
+  }
+});
+
+test('Wattzun usage guidance states personal UTC exchange counts and preserves the private-record and free-core boundaries',()=>{
+  for(const portal of ['trade','council','creditex']){
+    const guidance=WATTZUN_TASK_GUIDANCE[portal].join(' ');
+    assert.match(guidance,/privately shows the signed-in user's completed Messages answered and Voice replies in the selected workspace for the current UTC month/);
+    assert.match(guidance,/recorded since usage tracking began/);
+    assert.match(guidance,/Each voice reply is one exchange; these are not call minutes, billed minutes or business totals/);
+    assert.match(guidance,/Form drafts and record-specific assistants are separate/);
+    assert.match(guidance,/This conversation has not loaded those counts/);
+    assert.match(guidance,/No paid activation is required.*core TLink remains free/);
+    assert.match(guidance,/do not infer a subscription, allowance or charge/);
+  }
+});

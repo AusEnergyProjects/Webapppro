@@ -77,7 +77,7 @@ test('portal text reuses the guarded workflow provider with a strict small schem
   assert.equal(call.schema.additionalProperties, false); assert.deepEqual(call.schema.required, ['kind', 'message', 'questions', 'linkIds']);
   assert.equal(call.schema.properties.message.maxLength, 1800); assert.equal(call.schema.properties.questions.maxItems, 3);
   assert.equal(call.schema.properties.questions.items.maxLength, 300);
-  assert.deepEqual(call.schema.properties.linkIds.items.enum, ['trade_work', 'trade_leads', 'trade_sales', 'trade_schedule', 'trade_finance', 'trade_quotes', 'trade_forms', 'trade_onsite', 'trade_staff', 'trade_team']);
+  assert.deepEqual(call.schema.properties.linkIds.items.enum, ['trade_work', 'trade_leads', 'trade_sales', 'trade_schedule', 'trade_finance', 'trade_quotes', 'trade_forms', 'trade_onsite', 'trade_staff', 'trade_team', 'trade_wattzun']);
   assert.equal(call.input.message, options.input.message); assert.deepEqual(call.input.workspace, { portal: 'trade', label: 'Fixture Trade' });
   assert.doesNotMatch(JSON.stringify(call.input), /private-actor|private-business|test-only-wattzun-key/);
   assert.deepEqual(f.logs, []);
@@ -146,7 +146,26 @@ test('Council and Creditex links use only verified portal routes and describe th
     assert.equal(f.workflows[0].scopeUid, `${portal}:fixture-workspace`);
     assert.match(JSON.stringify(f.workflows[0].input.navigationGuide), expected);
     assert.doesNotMatch(JSON.stringify(f.workflows[0].input.navigationGuide), /\?tab=|\?view=/);
-    assert.deepEqual(f.workflows[0].schema.properties.linkIds.items.enum, linkIds);
+    assert.deepEqual(f.workflows[0].schema.properties.linkIds.items.enum, [...linkIds, `${portal}_wattzun`]);
+  }
+});
+
+test('real speech-speed question reaches the guarded model with released controls and resolves only the current portal destination',async()=>{
+  for(const [portal,path,label] of [['trade','/direct-trade/dashboard?workspace=wattzun','Wattzun tools'],['council','/council','Council workspace'],['creditex','/creditex/compliance','Creditex workspace']]){
+    const f=fixture({result:{kind:'answer',message:'Open Wattzun in your sidebar. Under Speaking speed, choose Slower, Normal or Quicker for the next spoken reply.',questions:[],linkIds:[`${portal}_wattzun`]}});
+    const options=request();
+    options.scope={portal,scopeId:'fixture-workspace',label:`Fixture ${portal}`};
+    options.input={...options.input,portal,scopeId:'fixture-workspace',message:"Where can I adjust Wattzun's speech speed in TLink?"};
+    const result=await f.prepareWattzunPortalReply(options);
+    assert.equal(f.workflows.length,1);assert.deepEqual(f.calls,[]);
+    assert.deepEqual(result.links,[{label,href:path}]);
+    const call=f.workflows[0],entry=call.input.navigationGuide.find(item=>item.id===`${portal}_wattzun`);
+    assert.equal(call.input.message,options.input.message);assert.equal(entry.href,path);
+    assert.match(entry.description,/Speaking speed.*Slower, Normal or Quicker.*next reply/);
+    assert.match(call.input.taskGuidance.join(' '),/Do not say speech speed is unavailable or send users to browser, device or operating-system text-to-speech settings/);
+    assert.match(call.input.taskGuidance.join(' '),/This conversation has not loaded those counts/);
+    assert.ok(call.schema.properties.linkIds.items.enum.includes(`${portal}_wattzun`));
+    assert.ok(!call.schema.properties.linkIds.items.enum.includes(`${portal==='trade'?'council':'trade'}_wattzun`));
   }
 });
 
