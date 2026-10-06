@@ -41,11 +41,11 @@ const jsonResponse = value => new Response(JSON.stringify(value), { headers: { '
 const audioResponse = (value = mp3, headers = {}) => new Response(value, { headers: { 'Content-Type': 'audio/mpeg', ...headers } });
 
 function fixture(options = {}) {
-  const calls = [], workflows = [], guards = [], reservations = [], timeouts = [], logs = [];
+  const calls = [], workflows = [], guards = [], reservations = [], timeouts = [], logs = [], background = [];
   let released = 0;
   const environment = { OPENAI_API_KEY: KEY, SURGE_MODEL: 'gpt-5.6-sol', SURGE_USAGE_GUARD_SECRET: SECRET, ...options.env };
   const dependencies = {
-    'cloudflare:workers': { env: environment },
+    'cloudflare:workers': { env: environment, waitUntil: promise => background.push(promise) },
     'node:buffer': { Buffer },
     './wattzun-portal': contract,
     './wattzun-actions': actions,
@@ -62,7 +62,7 @@ function fixture(options = {}) {
       return { reserve: async value => {
         reservations.push(value);
         if (options.deny) return { allowed: false, reason: options.deny };
-        return { allowed: true, reservedMicroUsd: value.estimatedMicroUsd, release: async () => { released++; } };
+        return { allowed: true, reservedMicroUsd: value.estimatedMicroUsd, release: async () => { released++; await options.releaseWait; } };
       } };
     } },
   };
@@ -72,10 +72,10 @@ function fixture(options = {}) {
     { env: { NODE_ENV: 'test', ...options.processEnv } }, async (url, init) => {
       calls.push({ url, init });
       return options.fetch ? options.fetch(url, init) : url.endsWith('/transcriptions') ? jsonResponse({ text: 'Please draft an invitation.' }) : audioResponse();
-    }, { timeout: value => { timeouts.push(value); return undefined; } },
+    }, { timeout: value => { timeouts.push(value); return options.realSignals ? AbortSignal.timeout(value) : undefined; }, any: AbortSignal.any.bind(AbortSignal) },
     { log: (...args) => logs.push(args), warn: (...args) => logs.push(args), error: (...args) => logs.push(args) },
   );
-  return { ...exports, calls, workflows, guards, reservations, timeouts, logs, released: () => released };
+  return { ...exports, calls, workflows, guards, reservations, timeouts, logs, background, released: () => released };
 }
 function safeError(error) {
   assert.match(error.message, /^(WORKFLOW_AI_(INCOMPLETE|UNAVAILABLE|LIMIT)|WATTZUN_SPEECH_UNCLEAR)$/);
@@ -118,7 +118,7 @@ test('forty bounded turns plus the verified guide fit the actual workflow provid
   let providerBytes=0,providerConversation;
   const gateway={};
   Function('require','exports','process','fetch','crypto','AbortSignal',workflowExecutable)(id=>{
-    if(id==='cloudflare:workers') return {env:{OPENAI_API_KEY:KEY,SURGE_MODEL:'gpt-5.6-sol'}};
+    if(id==='cloudflare:workers') return {env:{OPENAI_API_KEY:KEY,SURGE_MODEL:'gpt-5.6-sol'},waitUntil:()=>{}};
     if(id==='./energy-assistant-usage-guard') return {SURGE_USAGE_GUARD_ENV,createSharedSurgeUsageGuard:()=>({reserve:async()=>({allowed:true,release:async()=>{}})})};
     throw new Error(id);
   },gateway,{env:{NODE_ENV:'test'}},async(_url,init)=>{
@@ -239,7 +239,7 @@ test('job and file lookups carry only the supplied search into a scoped picker w
     const f = fixture({ result: { ...answer, message: 'Choose the matching job to open its files.', linkIds: [], lookup } });
     const reply = await f.prepareWattzunPortalReply(request());
     assert.deepEqual(reply.lookup, lookup); assert.equal(reply.action, undefined);
-    assert.deepEqual(Object.keys(f.workflows[0].input), ['workspace', 'navigationGuide', 'conversation', 'message', 'taskGuidance']);
+    assert.deepEqual(Object.keys(f.workflows[0].input), ['navigationGuide', 'taskGuidance', 'workspace', 'conversation', 'message']);
     assert.match(f.workflows[0].instructions, /scoped picker of actual authorised jobs, not a record or file read/);
     assert.match(f.workflows[0].instructions, /Never invent IDs, matches, file names, links or file contents/);
   }
@@ -315,7 +315,7 @@ test('speech transcription sends the supported official model and multipart blob
   const { url, init } = f.calls[0];
   assert.equal(url, 'https://api.openai.com/v1/audio/transcriptions'); assert.equal(init.method, 'POST');
   assert.deepEqual(init.headers, { Authorization: `Bearer ${KEY}` });
-  assert.equal(init.body.get('model'), 'gpt-4o-mini-transcribe'); assert.equal(init.body.get('response_format'), 'json'); assert.equal(init.body.get('temperature'), '0');
+  assert.equal(init.body.get('model'), 'gpt-4o-mini-transcribe'); assert.equal(init.body.get('response_format'), 'json'); assert.equal(init.body.get('temperature'), '0'); assert.equal(init.body.get('language'), 'en');
   assert.equal(init.body.get('file').name, 'wattzun-turn.webm'); assert.equal(init.body.get('file').size, options.audio.size);
   assert.doesNotMatch(init.body.get('prompt'), /private-actor|private-business|send|approve/i);
   assert.deepEqual(f.timeouts, [55000]); assert.deepEqual(f.logs, []);
@@ -478,6 +478,62 @@ test('binary MP3 frame bytes are encoded safely as base64', async () => {
   const bytes = Uint8Array.from([0xff, 0xfb, 0x00, 0x80, 0x00, 0xfd]), f = fixture({ fetch: async () => audioResponse(bytes) });
   const result = await f.speakWattzunPortalReply(speechRequest());
   assert.deepEqual(Buffer.from(result.base64, 'base64'), Buffer.from(bytes)); assert.equal(result.mimeType, 'audio/mpeg');
+});
+
+test('PCM speech returns first bytes before provider EOF and keeps its lease until completion', async () => {
+  let provider, cancelled = 0;
+  const pending = new ReadableStream({ start(controller) { provider = controller; controller.enqueue(Uint8Array.from([0, 0, 255, 127])); }, cancel() { cancelled++; } });
+  const f = fixture({ realSignals: true, fetch: async () => new Response(pending, { headers: { 'Content-Type': 'audio/pcm' } }) });
+  const audio = await f.streamWattzunPortalReply(speechRequest()), reader = audio.getReader();
+  assert.deepEqual((await reader.read()).value, Uint8Array.from([0, 0, 255, 127]));
+  assert.equal(f.released(), 0);
+  const body = JSON.parse(f.calls[0].init.body);
+  assert.equal(body.response_format, 'pcm'); assert.equal(body.voice, 'cedar'); assert.equal(body.speed, 1);
+  assert.match(body.instructions, /natural Australian accent/);
+  provider.enqueue(Uint8Array.from([0, 128])); provider.close();
+  assert.deepEqual((await reader.read()).value, Uint8Array.from([0, 128])); assert.equal((await reader.read()).done, true);
+  await Promise.all(f.background); assert.equal(f.released(), 1); assert.equal(cancelled, 0);
+});
+
+test('cancelling progressive speech aborts its provider request and releases the lease once', async () => {
+  let cancelled = 0;
+  const f = fixture({ realSignals: true, fetch: async () => new Response(new ReadableStream({ cancel() { cancelled++; } }), { headers: { 'Content-Type': 'application/octet-stream' } }) });
+  const audio = await f.streamWattzunPortalReply(speechRequest()); await audio.cancel(); await Promise.all(f.background);
+  assert.equal(cancelled, 1); assert.equal(f.calls[0].init.signal.aborted, true); assert.equal(f.released(), 1);
+});
+
+test('invalid PCM framing, bytes, MIME and bounds fail closed and release the lease', async () => {
+  for (const [bytes, mime] of [[new Uint8Array(), 'audio/pcm'], [new Uint8Array(3), 'audio/pcm'], [new Uint8Array(2000001), 'audio/pcm'], [new Uint8Array(4), 'audio/mpeg']]) {
+    const f = fixture({ realSignals: true, fetch: async () => new Response(bytes, { headers: { 'Content-Type': mime } }) });
+    await assert.rejects(async () => {
+      const reader = (await f.streamWattzunPortalReply(speechRequest())).getReader();
+      while (!(await reader.read()).done) { /* Read the bounded fixture to completion. */ }
+    }, safeError);
+    await Promise.all(f.background); assert.equal(f.released(), 1);
+  }
+});
+
+test('spoken completion claims stop streaming speech before reservation or provider calls', async () => {
+  const f = fixture(); await assert.rejects(f.streamWattzunPortalReply(speechRequest({ reply: { kind: 'answer', message: 'I sent your quote.', questions: [], links: [] } })), /WORKFLOW_AI_INCOMPLETE/);
+  assert.equal(f.calls.length, 0); assert.equal(f.reservations.length, 0);
+});
+
+test('transcription registers lease cleanup without waiting for database release', async () => {
+  let finish;
+  const releaseWait = new Promise(resolve => { finish = resolve; });
+  const f = fixture({ releaseWait });
+  assert.equal(await f.transcribeWattzunPortalAudio(audioRequest()), 'Please draft an invitation.');
+  assert.equal(f.background.length, 1); assert.equal(f.released(), 1);
+  finish(); await Promise.all(f.background);
+});
+
+test('hang-up during quota admission stops before transcription or speech fetch', async () => {
+  for (const method of ['transcribeWattzunPortalAudio', 'streamWattzunPortalReply']) {
+    const controller = new AbortController(); controller.abort();
+    const f = fixture({ realSignals: true });
+    await assert.rejects(f[method]({ ...audioRequest(), ...speechRequest(), signal: controller.signal }), safeError);
+    await Promise.all(f.background); assert.equal(f.calls.length, 0); assert.equal(f.released(), 1);
+  }
 });
 
 test('stream bounds cancel unread oversized response data without accumulating it', async () => {

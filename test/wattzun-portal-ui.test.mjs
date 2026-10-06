@@ -33,6 +33,7 @@ function load({ values = [null, [], "", false, null], storage, events, fetchRequ
       useWattzunPresentation:()=>({hat:'none',speed:1,setSpeed:speed=>updates.push({index:'speed',value:speed})}),
     },
     "@/lib/wattzun-voice-client": {},
+    "@/lib/wattzun-voice-stream": {},
     "./EnergyAssistantLauncher": { EnergyAssistantLauncher: "Launcher" },
     "./WattzunMascot": { WattzunMascot: "Mascot" },
     "./WattzunRecordPicker": { WattzunRecordPicker: "Picker" },

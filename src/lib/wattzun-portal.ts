@@ -19,9 +19,12 @@ export type WattzunReply = {
   action?: WattzunActionProposal | null;
   lookup?: WattzunRecordLookup | null;
 };
+export type WattzunVoiceAudio = { base64: string; mimeType: "audio/mpeg" }
+  | { mimeType: "audio/pcm"; stream: ReadableStream<Uint8Array> };
 export type WattzunVoiceResult = {
-  ok: true; transcript: string; reply: WattzunReply; audio: { base64: string; mimeType: "audio/mpeg" };
+  ok: true; transcript: string; reply: WattzunReply; audio: WattzunVoiceAudio;
 };
+export const WATTZUN_VOICE_STREAM_TYPE = "application/x-wattzun-voice+ndjson";
 export const WATTZUN_MAX_AUDIO_BYTES = 2_000_000;
 export const WATTZUN_MAX_TURN_SECONDS = 45;
 export const WATTZUN_MAX_HISTORY_TURNS = 40;

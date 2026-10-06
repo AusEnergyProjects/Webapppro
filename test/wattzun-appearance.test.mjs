@@ -35,6 +35,7 @@ test('appearance and speed storage isolate actors, portals and workspaces, and m
   assert.deepEqual(h.readWattzunPresentation(scope),{hat:'none',speed:1});
   assert.deepEqual(harness({blocked:true}).readWattzunPresentation(scope),{hat:'none',speed:1});
   assert.deepEqual(h.WATTZUN_HATS.map(choice=>choice.id),['none','hard-hat','cap','cowboy','viking','pirate','sausage','tinfoil','safety-plug','party','pumpkin','ghost']);
+  assert.equal(h.WATTZUN_HATS.find(choice=>choice.id==='ghost').label,'Ghost');
   for (const { id } of h.WATTZUN_HATS) {
     h.writeWattzunPresentation(scope, { hat: id });
     assert.equal(h.readWattzunPresentation(scope).hat, id, `${id} survives storage readback`);

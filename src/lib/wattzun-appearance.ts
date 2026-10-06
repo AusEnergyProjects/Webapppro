@@ -15,7 +15,7 @@ export const WATTZUN_HATS = [
   { id: "safety-plug", label: "Safety plug" },
   { id: "party", label: "Party hat" },
   { id: "pumpkin", label: "Pumpkin" },
-  { id: "ghost", label: "Ghost sheet" },
+  { id: "ghost", label: "Ghost" },
 ] as const;
 export type WattzunHat = typeof WATTZUN_HATS[number]["id"];
 export type WattzunPresentationScope = { userUid: string; portal: WattzunPortal; scopeId: string };

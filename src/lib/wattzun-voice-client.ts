@@ -1,5 +1,6 @@
 import { WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_TURN_SECONDS } from "./wattzun-portal.ts";
 import type { WattzunVoiceResult } from "./wattzun-portal.ts";
+import { createWattzunPcmPlayback } from "./wattzun-voice-playback.ts";
 
 export type WattzunCallState = "idle" | "permission" | "connecting" | "listening" | "thinking" | "speaking" | "muted" | "confirming" | "ended" | "error";
 export type WattzunCallStatus = { state: WattzunCallState; message: string };
@@ -49,7 +50,7 @@ export class WattzunSpeechWindow {
     }
     else if (!this.heardSpeech && now - this.lastSpeech > 200) this.speechMilliseconds = 0;
     if (now - this.started >= WATTZUN_MAX_TURN_SECONDS * 1000) return this.heardSpeech ? "send" : "silent";
-    if (this.heardSpeech && now - this.lastSpeech >= 1200) return "send";
+    if (this.heardSpeech && now - this.lastSpeech >= 700) return "send";
     return "wait";
   }
 }
@@ -209,16 +210,20 @@ export class WattzunVoiceCall {
     if (!this.active || this.muted || this.pending) return;
     const generation = this.generation;
     const pending = new AbortController();
+    let unplayedAudio: WattzunVoiceResult["audio"] | null = null;
     this.pending = pending;
     this.microphone?.mute(true);
     this.update("thinking");
     try {
       const result = await this.callbacks.submit(audio, pending.signal);
+      unplayedAudio = result.audio;
       if (!this.active || generation !== this.generation || pending.signal.aborted) return;
       this.pending = null;
       this.callbacks.reply(result);
+      if (!this.active || generation !== this.generation || pending.signal.aborted) return;
       if (this.muted) { this.lastInteraction = this.environment.now(); this.update("muted"); return; }
       const playback = this.environment.playback(result.audio);
+      unplayedAudio = null;
       this.playback = playback;
       const finish = () => {
         if (this.playback !== playback || !this.active || generation !== this.generation) return;
@@ -227,14 +232,17 @@ export class WattzunVoiceCall {
         if (this.muted) { this.lastInteraction = this.environment.now(); this.update("muted"); } else this.listen();
       };
       playback.onEnd = finish;
-      playback.onError = () => { if (this.playback === playback) this.fail("Wattzun replied in chat, but the audio could not play. Start the call again."); };
-      this.update("speaking");
+      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.fail("Wattzun replied in chat, but the audio could not play. Start the call again."); };
       await playback.play().catch(error => { if (this.playback === playback) throw error; });
+      if (this.playback === playback && this.active && generation === this.generation) this.update("speaking");
     } catch (error) {
       if (!this.active || generation !== this.generation || pending.signal.aborted) return;
       const message = error instanceof Error ? error.message : "The voice reply could not be completed. Try again.";
       this.fail(message);
-    } finally { if (this.pending === pending) this.pending = null; }
+    } finally {
+      if (unplayedAudio?.mimeType === "audio/pcm") void unplayedAudio.stream.cancel().catch(() => {});
+      if (this.pending === pending) this.pending = null;
+    }
   }
   toggleMute() {
     if (!this.active || !this.microphone) return;
@@ -274,6 +282,8 @@ export class WattzunVoiceCall {
 }
 
 export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment {
+  let playbackContext: AudioContext | null = null;
+  let microphoneGeneration = 0;
   return {
     now: () => performance.now(),
     repeat(callback, milliseconds) { const timer = window.setInterval(callback, milliseconds); return () => window.clearInterval(timer); },
@@ -294,10 +304,12 @@ export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment 
         throw new Error("Voice calls need a browser with microphone recording support on a secure connection.");
       }
       const audioContext = new AudioContext();
+      const generation = ++microphoneGeneration;
       let stream: MediaStream | null = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
         await audioContext.resume();
+        if (generation === microphoneGeneration) playbackContext = audioContext;
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
         analyser.fftSize = 2048;
@@ -320,9 +332,13 @@ export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment 
           },
           level() { analyser.getFloatTimeDomainData(samples); return Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length); },
           mute(muted) { for (const track of media.getTracks()) track.enabled = !muted; },
-          close() { for (const track of media.getTracks()) track.stop(); source.disconnect(); analyser.disconnect(); void audioContext.close().catch(() => {}); },
+          close() {
+            if (playbackContext === audioContext) playbackContext = null;
+            for (const track of media.getTracks()) track.stop(); source.disconnect(); analyser.disconnect(); void audioContext.close().catch(() => {});
+          },
         };
       } catch (error) {
+        if (playbackContext === audioContext) playbackContext = null;
         stream?.getTracks().forEach(track => track.stop());
         void audioContext.close().catch(() => {});
         if (error instanceof Error && error.name === "NotAllowedError") throw new Error("Microphone permission was denied. Allow microphone access in your browser, then call again.");
@@ -331,15 +347,20 @@ export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment 
       }
     },
     playback(result) {
+      if (result.mimeType === "audio/pcm") {
+        if (!playbackContext) throw new Error("The call's audio device is unavailable. Start the call again.");
+        return createWattzunPcmPlayback(playbackContext, result.stream);
+      }
       const bytes = Uint8Array.from(atob(result.base64), character => character.charCodeAt(0));
       const url = URL.createObjectURL(new Blob([bytes], { type: result.mimeType }));
       const audio = new Audio(url);
+      let closed = false;
       const playback: WattzunPlayback = {
-        onEnd: () => {}, onError: () => {}, play: () => audio.play(),
-        close() { audio.onended = null; audio.onerror = null; audio.pause(); audio.removeAttribute("src"); audio.load(); URL.revokeObjectURL(url); },
+        onEnd: () => {}, onError: () => {}, play: () => closed ? Promise.reject(new DOMException("Audio playback was cancelled.", "AbortError")) : audio.play(),
+        close() { if (closed) return; closed = true; audio.onended = null; audio.onerror = null; audio.pause(); audio.removeAttribute("src"); audio.load(); URL.revokeObjectURL(url); },
       };
-      audio.onended = () => playback.onEnd();
-      audio.onerror = () => playback.onError();
+      audio.onended = () => { if (!closed) playback.onEnd(); };
+      audio.onerror = () => { if (!closed) playback.onError(); };
       return playback;
     },
   };

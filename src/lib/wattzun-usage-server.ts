@@ -10,7 +10,8 @@ function validAccess(access: WattzunAccess) {
   if (!access.actorUid || access.actorUid.length > 180 || !isWattzunPortal(access.scope.portal)
     || !/^[A-Za-z0-9:_-]{1,128}$/.test(access.scope.scopeId)) throw new WattzunUsageError('unavailable');
 }
-/** Counts a completed exchange only. No conversation content or provider estimates are retained. */
+/** Counts a prepared assistant reply, not listening time or successful speaker playback.
+ * No conversation content or provider estimates are retained. */
 export async function recordWattzunUsage({ access, requestId, kind }: WattzunUsageRecord, now = new Date()): Promise<void> {
   validAccess(access);
   if (!/^[A-Za-z0-9:_-]{16,72}$/.test(requestId) || (kind !== 'text' && kind !== 'voice') || !Number.isFinite(now.getTime())) {

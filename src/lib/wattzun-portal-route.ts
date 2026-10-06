@@ -1,12 +1,12 @@
-import { WattzunInputError, WATTZUN_MAX_AUDIO_BYTES, isWattzunPortal, parseWattzunTurn,
+import { WattzunInputError, WATTZUN_MAX_AUDIO_BYTES, WATTZUN_VOICE_STREAM_TYPE, isWattzunPortal, parseWattzunTurn,
   type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurnInput } from "./wattzun-portal";
 import { authenticateWattzun, listWattzunScopes, requireWattzunAccess, wattzunAccessFailure,
   WattzunAccessError, type WattzunAccess } from "./wattzun-portal-access-server";
-import { prepareWattzunPortalReply, transcribeWattzunPortalAudio, speakWattzunPortalReply } from "./wattzun-portal-ai-server";
+import { prepareWattzunPortalReply, transcribeWattzunPortalAudio, speakWattzunPortalReply, streamWattzunPortalReply } from "./wattzun-portal-ai-server";
 import { parseWattzunUsageScope, type WattzunUsage } from "./wattzun-usage";
 import { readWattzunUsage, recordWattzunUsage, WattzunUsageError, type WattzunUsageRecord } from "./wattzun-usage-server";
 
-type Context = WattzunAccess & { input: WattzunTurnInput };
+type Context = WattzunAccess & { input: WattzunTurnInput; signal?: AbortSignal };
 export type WattzunRouteDependencies = {
   authenticate: (request: Request) => Promise<void>;
   scopes: (request: Request, portal: WattzunPortal) => Promise<WattzunScope[]>;
@@ -14,12 +14,13 @@ export type WattzunRouteDependencies = {
   reply: (options: Context) => Promise<WattzunReply>;
   transcribe: (options: Context & { audio: Blob }) => Promise<string>;
   speak: (options: Context & { reply: WattzunReply }) => Promise<{ base64: string; mimeType: "audio/mpeg" }>;
+  streamSpeak: (options: Context & { reply: WattzunReply }) => Promise<ReadableStream<Uint8Array>>;
   recordUsage: (options: WattzunUsageRecord) => Promise<void>;
   usage: (access: WattzunAccess) => Promise<WattzunUsage>;
 };
 const defaults: WattzunRouteDependencies = {
   authenticate: authenticateWattzun, scopes: listWattzunScopes, access: requireWattzunAccess,
-  reply: prepareWattzunPortalReply, transcribe: transcribeWattzunPortalAudio, speak: speakWattzunPortalReply,
+  reply: prepareWattzunPortalReply, transcribe: transcribeWattzunPortalAudio, speak: speakWattzunPortalReply, streamSpeak: streamWattzunPortalReply,
   recordUsage: recordWattzunUsage, usage: readWattzunUsage,
 };
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
@@ -128,7 +129,7 @@ export async function postWattzunPortal(request: Request, deps = defaults): Prom
     const input = parseWattzunTurn(JSON.parse(new TextDecoder().decode(bytes)));
     const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
-    const reply = await timing.run("llm", () => deps.reply({ ...access, input }));
+    const reply = await timing.run("llm", () => deps.reply({ ...access, input, signal: request.signal }));
     const latest = await timing.run("access", () => recheck(request, access, deps));
     await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "text" }));
     return timing.response(json({ ok: true, reply }));
@@ -139,6 +140,8 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
   const contentType = request.headers.get("content-type") || "";
   if (!/^multipart\/form-data\s*;/i.test(contentType)) return json({ ok: false, error: "Send a recorded voice turn." }, 415);
   const timing = turnTimer();
+  let speechStream: ReadableStream<Uint8Array> | undefined;
+  let handedOff = false;
   try {
     await timing.run("auth", () => deps.authenticate(request));
     requireOpenConversation(request);
@@ -155,14 +158,49 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
     const input = parseWattzunTurn(JSON.parse(raw), true);
     const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
-    const transcript = await timing.run("stt", () => deps.transcribe({ ...access, input, audio }));
+    const transcript = await timing.run("stt", () => deps.transcribe({ ...access, input, audio, signal: request.signal }));
     await timing.run("access", () => recheck(request, access, deps));
     const spokenInput = { ...input, message: transcript };
-    const reply = await timing.run("llm", () => deps.reply({ ...access, input: spokenInput }));
+    const reply = await timing.run("llm", () => deps.reply({ ...access, input: spokenInput, signal: request.signal }));
     await timing.run("access", () => recheck(request, access, deps));
-    const speech = await timing.run("tts", () => deps.speak({ ...access, input: spokenInput, reply }));
+    // Existing open calls retain JSON/MP3 until they reload. New clients negotiate PCM frames.
+    if (request.headers.get("accept") === WATTZUN_VOICE_STREAM_TYPE) {
+      speechStream = await timing.run("tts", () => deps.streamSpeak({ ...access, input: spokenInput, reply, signal: request.signal }));
+      const latest = await timing.run("access", () => recheck(request, access, deps));
+      await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
+      requireOpenConversation(request);
+      const response = timing.response(new Response(voiceFrames(transcript, reply, speechStream, request.signal),
+        { headers: { ...headers, "Content-Type": WATTZUN_VOICE_STREAM_TYPE } }));
+      handedOff = true;
+      return response;
+    }
+    const speech = await timing.run("tts", () => deps.speak({ ...access, input: spokenInput, reply, signal: request.signal }));
     const latest = await timing.run("access", () => recheck(request, access, deps));
     await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
     return timing.response(json({ ok: true, transcript, reply, audio: speech }));
   } catch (error) { return timing.response(failure(error)); }
+  finally { if (speechStream && !handedOff) await speechStream.cancel().catch(() => {}); }
+}
+
+function voiceFrames(transcript: string, reply: WattzunReply, audio: ReadableStream<Uint8Array>, signal: AbortSignal) {
+  const reader = audio.getReader(), encoder = new TextEncoder();
+  let header = true, offset = 0;
+  let buffered: Uint8Array = new Uint8Array(0);
+  const encode = (value: object) => encoder.encode(JSON.stringify(value) + "\n");
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        signal.throwIfAborted();
+        if (header) { header = false; controller.enqueue(encode({ type: "reply", transcript, reply })); return; }
+        while (offset >= buffered.byteLength) {
+          const next = await reader.read(); signal.throwIfAborted();
+          if (next.done) { controller.enqueue(encode({ type: "done" })); controller.close(); reader.releaseLock(); return; }
+          buffered = next.value; offset = 0;
+        }
+        const chunk = buffered.subarray(offset, offset + 32_000); offset += chunk.byteLength;
+        controller.enqueue(encode({ type: "audio", data: btoa(String.fromCharCode(...chunk)) }));
+      } catch { await reader.cancel().catch(() => {}); controller.error(new Error("Wattzun audio stopped before the reply finished.")); }
+    },
+    async cancel() { await reader.cancel().catch(() => {}); },
+  }, { highWaterMark: 0 });
 }

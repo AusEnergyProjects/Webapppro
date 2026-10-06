@@ -10,11 +10,12 @@ import { wattzunPortalForPath } from "@/lib/wattzun-portal-path";
 import { parseWattzunRecordLookup } from "@/lib/wattzun-records";
 import { parseWattzunActionProposal, type WattzunActionReceipt } from "@/lib/wattzun-actions";
 import {
-  WATTZUN_MAX_HISTORY_TURNS, WATTZUN_MAX_HISTORY_CHARACTERS, wattzunSpokenReply,
+  WATTZUN_MAX_HISTORY_TURNS, WATTZUN_MAX_HISTORY_CHARACTERS, WATTZUN_VOICE_STREAM_TYPE, wattzunSpokenReply,
   type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput,
 } from "@/lib/wattzun-portal";
 import { WATTZUN_OPEN_EVENT, WATTZUN_READY_EVENT, WATTZUN_USAGE_CHANGED_EVENT, readWattzunOpenRequest, useWattzunPresentation, type WattzunOpenRequest } from "@/lib/wattzun-appearance";
 import { createWattzunBrowserVoiceEnvironment, WattzunVoiceCall, type WattzunCallStatus } from "@/lib/wattzun-voice-client";
+import { readWattzunVoiceStream } from "@/lib/wattzun-voice-stream";
 import { EnergyAssistantLauncher } from "./EnergyAssistantLauncher";
 import { WattzunMascot } from "./WattzunMascot";
 import { WattzunRecordPicker } from "./WattzunRecordPicker";
@@ -257,11 +258,8 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         const form = new FormData();
         form.append("request", JSON.stringify(input));
         form.append("audio", audio, audio.type.includes("mp4") ? "question.m4a" : "question.webm");
-        const payload = await responsePayload(await fetch("/api/wattzun/voice", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, signal }));
-        if (typeof payload.transcript !== "string" || !isReply(payload.reply) || !record(payload.audio) || typeof payload.audio.base64 !== "string" || payload.audio.mimeType !== "audio/mpeg") {
-          throw new Error("Wattzun returned an unreadable voice reply. Try again.");
-        }
-        return { ok: true, transcript: payload.transcript, reply: payload.reply, audio: { base64: payload.audio.base64, mimeType: "audio/mpeg" } };
+        return readWattzunVoiceStream(await fetch("/api/wattzun/voice", { method: "POST",
+          headers: { Authorization: `Bearer ${token}`, Accept: WATTZUN_VOICE_STREAM_TYPE }, body: form, signal }), signal, isReply);
       },
       reply: result => {
         if (!active.current || voiceCall.current !== call) return;
@@ -301,7 +299,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         <summary>Speech speed</summary>
         <div className={styles.settingsPanel}>
           <label>Speaking speed<select aria-label="Speaking speed" value={presentation.speed} onChange={event => { const speed = Number(event.target.value); if (speed === 0.85 || speed === 1 || speed === 1.15) presentation.setSpeed(speed); }}><option value={0.85}>Slower</option><option value={1}>Normal</option><option value={1.15}>Quicker</option></select></label>
-          <p>Warm and conversational, with a little humour. Speed changes apply from your next question.</p>
+          <p>Speed changes apply from your next question.</p>
         </div>
       </details>
     </div>

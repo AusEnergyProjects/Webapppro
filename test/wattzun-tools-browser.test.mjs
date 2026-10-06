@@ -8,7 +8,7 @@ import { chromium } from 'playwright-core';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const browserPath = [process.env.TEST_BROWSER_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/chromium'].find(value => value && fs.existsSync(value));
-const hats = [{ id: 'none', label: 'None' }, { id: 'hard-hat', label: 'Hard hat' }, { id: 'cap', label: 'Cap' }, { id: 'cowboy', label: 'Cowboy' }, { id: 'viking', label: 'Viking hat' }, { id: 'pirate', label: 'Pirate hat' }, { id: 'sausage', label: 'Sausage' }, { id: 'tinfoil', label: 'Tinfoil hat' }, { id: 'safety-plug', label: 'Safety plug' }, { id: 'party', label: 'Party hat' }, { id: 'pumpkin', label: 'Pumpkin' }, { id: 'ghost', label: 'Ghost sheet' }];
+const hats = [{ id: 'none', label: 'None' }, { id: 'hard-hat', label: 'Hard hat' }, { id: 'cap', label: 'Cap' }, { id: 'cowboy', label: 'Cowboy' }, { id: 'viking', label: 'Viking hat' }, { id: 'pirate', label: 'Pirate hat' }, { id: 'sausage', label: 'Sausage' }, { id: 'tinfoil', label: 'Tinfoil hat' }, { id: 'safety-plug', label: 'Safety plug' }, { id: 'party', label: 'Party hat' }, { id: 'pumpkin', label: 'Pumpkin' }, { id: 'ghost', label: 'Ghost' }];
 const fixtures = {
   auth: `export function onAuthStateChanged(_auth, callback) { window.fixtureAuthListeners.add(callback); callback(window.fixtureUser); return ()=>window.fixtureAuthListeners.delete(callback); }`,
   firebase: 'export const firebaseAuth = {};',
@@ -72,7 +72,10 @@ const bundle = await build({
         return Response.json({ok:true,usage});
       }
       if(parsed.pathname==='/api/wattzun/portal'&&request.method==='POST') return Response.json({ok:true,reply:{kind:'clarification',message:'Tell me the job and the outcome you need.',questions:['Which job are you working on?'],links:[]}});
-      if(parsed.pathname==='/api/wattzun/voice'&&request.method==='POST') return Response.json({ok:true,transcript:'Help me with this synthetic job',reply:{kind:'answer',message:'Synthetic reply',questions:[],links:[]},audio:{base64:'AQID',mimeType:'audio/mpeg'}});
+      if(parsed.pathname==='/api/wattzun/voice'&&request.method==='POST') return new Response([
+        {type:'reply',transcript:'Help me with this synthetic job',reply:{kind:'answer',message:'Synthetic reply',questions:[],links:[]}},
+        {type:'audio',data:'AAA='},{type:'done'}
+      ].map(frame=>JSON.stringify(frame)).join(String.fromCharCode(10))+String.fromCharCode(10),{headers:{'Content-Type':'application/x-wattzun-voice+ndjson'}});
       throw new Error('Unexpected fixture request: '+url);
     };
     function Fixture() {
@@ -175,6 +178,8 @@ test('actual Tools, floating launcher and assistant share all 12 appearance choi
     for (const scenario of [{ name: 'desktop-day', width: 1366, mode: 'day' }, { name: 'desktop-night', width: 1366, mode: 'night' }, { name: 'mobile-day', width: 390, mode: 'day' }, { name: 'mobile-night', width: 390, mode: 'night' }]) await t.test(scenario.name, async () => {
       const { page, tools, errors } = await fixturePage(browser, scenario);
       await numbers(tools, [7, 3]);
+      await tools.getByText('Speed changes apply to his next reply.', { exact: true }).waitFor();
+      assert.equal(await tools.getByText('Warm and conversational, with a little humour.', { exact: false }).count(), 0);
       const launcher = page.getByRole('button', { name: 'Open Wattzun AI chat', exact: true });
       await launcher.waitFor();
       const heroSize = await tools.locator('header span[aria-hidden="true"]').evaluate(element => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
