@@ -5,11 +5,13 @@ import { onAuthStateChanged, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { readTradeBusinessSelection } from "@/lib/trade-business-client";
 import {
-  WATTZUN_DEFAULT_PREFERENCES, WATTZUN_MAX_HISTORY_TURNS, WATTZUN_MAX_HISTORY_CHARACTERS, parseWattzunPreferences, wattzunSpokenReply,
-  type WattzunPortal, type WattzunPreferences, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput,
+  WATTZUN_MAX_HISTORY_TURNS, WATTZUN_MAX_HISTORY_CHARACTERS, wattzunSpokenReply,
+  type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput,
 } from "@/lib/wattzun-portal";
+import { WATTZUN_OPEN_EVENT, WATTZUN_READY_EVENT, WATTZUN_USAGE_CHANGED_EVENT, readWattzunOpenRequest, useWattzunPresentation, type WattzunOpenRequest } from "@/lib/wattzun-appearance";
 import { createWattzunBrowserVoiceEnvironment, WattzunVoiceCall, type WattzunCallStatus } from "@/lib/wattzun-voice-client";
 import { EnergyAssistantLauncher } from "./EnergyAssistantLauncher";
+import { WattzunMascot } from "./WattzunMascot";
 import styles from "./WattzunPortalAssistant.module.css";
 
 type Message = WattzunTurn & { id: string; reply?: WattzunReply };
@@ -30,13 +32,6 @@ async function responsePayload(response: Response): Promise<Record<string, unkno
   }
   return payload;
 }
-function preferencesKey(userUid: string, scope: WattzunScope) { return `wattzun-preferences:v2:${userUid}:${scope.portal}:${scope.scopeId}`; }
-function loadPreferences(key: string): WattzunPreferences {
-  const legacyKey = key.replace('wattzun-preferences:v2:', 'wattzun-preferences:v1:');
-  try { const saved = window.localStorage.getItem(key) || window.localStorage.getItem(legacyKey); return saved ? parseWattzunPreferences(JSON.parse(saved)) : { ...WATTZUN_DEFAULT_PREFERENCES }; }
-  catch { return { ...WATTZUN_DEFAULT_PREFERENCES }; }
-  finally { try { window.localStorage.removeItem(legacyKey); } catch { /* Storage may be unavailable. */ } }
-}
 function conversationHistory(messages: Message[]): WattzunTurn[] {
   const history = messages.slice(-WATTZUN_MAX_HISTORY_TURNS).map(({ role, content }) => ({ role, content: content.slice(0, 4000) }));
   while (JSON.stringify(history).length > WATTZUN_MAX_HISTORY_CHARACTERS) history.shift();
@@ -45,16 +40,21 @@ function conversationHistory(messages: Message[]): WattzunTurn[] {
 
 export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
   const [user, setUser] = useState<User | null>(null);
+  const currentActor = useRef<User | null>(null);
   const [scopes, setScopes] = useState<WattzunScope[]>([]);
   const [scopeId, setScopeId] = useState("");
   const [open, setOpen] = useState(false);
+  const [openRequest, setOpenRequest] = useState<(WattzunOpenRequest & { id: string }) | null>(null);
+  const scope = scopes.find(candidate => candidate.scopeId === scopeId);
+  const appearance = useWattzunPresentation(user && scope ? { userUid: user.uid, portal, scopeId: scope.scopeId } : null);
   const dialog = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
-  const dismiss = useCallback(() => setOpen(false), []);
+  const dismiss = useCallback(() => { setOpen(false); setOpenRequest(null); }, []);
 
   useEffect(() => onAuthStateChanged(firebaseAuth, authenticated => {
-    setUser(authenticated?.emailVerified ? authenticated : null);
-    setScopes([]); setScopeId(""); setOpen(false);
+    currentActor.current = authenticated?.emailVerified ? authenticated : null;
+    setUser(currentActor.current);
+    setScopes([]); setScopeId(""); setOpen(false); setOpenRequest(null);
   }), []);
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
         const token = await user.getIdToken();
         if (controller.signal.aborted) return;
         const payload = await responsePayload(await fetch(`/api/wattzun/portal?portal=${portal}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }));
-        if (controller.signal.aborted || !Array.isArray(payload.scopes)) return;
+        if (controller.signal.aborted || currentActor.current?.uid !== user.uid || !Array.isArray(payload.scopes)) return;
         const authorizedScopes = payload.scopes.filter((scope): scope is WattzunScope => record(scope) && scope.portal === portal && typeof scope.scopeId === "string" && typeof scope.label === "string");
         setScopes(authorizedScopes);
         const saved = portal === "trade" ? readTradeBusinessSelection(user.uid) : "";
@@ -74,6 +74,21 @@ export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
     })();
     return () => controller.abort();
   }, [user, portal]);
+
+  useEffect(() => {
+    if (!user || !scopes.length) return;
+    const openAssistant = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const request = readWattzunOpenRequest(event.detail);
+      if (!request || currentActor.current?.uid !== user.uid || request.userUid !== user.uid || request.portal !== portal || (request.scopeId && !scopes.some(candidate => candidate.scopeId === request.scopeId))) return;
+      if (request.scopeId) setScopeId(request.scopeId);
+      setOpenRequest({ ...request, id: crypto.randomUUID() }); setOpen(true);
+      if (typeof event.detail.acknowledge === "function") event.detail.acknowledge();
+    };
+    window.addEventListener(WATTZUN_OPEN_EVENT, openAssistant);
+    window.dispatchEvent(new CustomEvent(WATTZUN_READY_EVENT, { detail: { portal } }));
+    return () => window.removeEventListener(WATTZUN_OPEN_EVENT, openAssistant);
+  }, [user, scopes, portal]);
 
   useEffect(() => {
     if (!open) return;
@@ -93,44 +108,42 @@ export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
   }, [open, dismiss]);
 
   if (!user || !scopes.length) return null;
-  const scope = scopes.find(candidate => candidate.scopeId === scopeId);
   return <>
-    <EnergyAssistantLauncher onPreload={() => {}} onOpen={() => setOpen(true)} />
+    <EnergyAssistantLauncher hat={appearance.hat} onPreload={() => {}} onOpen={() => { setOpenRequest(null); setOpen(true); }} />
     {open && <div className={styles.backdrop} onClick={event => { if (event.target === event.currentTarget) dismiss(); }}>
       <div className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="wattzun-portal-title" ref={dialog}>
         <header className={styles.header}>
-          <span className={styles.mascot} aria-hidden="true" />
+          <WattzunMascot hat={appearance.hat} />
           <div><h2 id="wattzun-portal-title">Wattzun</h2><p>Your {portalNames[portal]} assistant</p></div>
           <button className={styles.close} type="button" aria-label="Close Wattzun" ref={closeButton} onClick={dismiss}>×</button>
         </header>
-        {scopes.length > 1 && <label className={styles.workspace}>Workspace<select aria-label="Workspace" value={scopeId} onChange={event => setScopeId(event.target.value)}><option value="">Choose a workspace</option>{scopes.map(choice => <option key={choice.scopeId} value={choice.scopeId}>{choice.label}</option>)}</select></label>}
-        {scope ? <WattzunConversation key={`${user.uid}:${portal}:${scope.scopeId}`} user={user} scope={scope} /> : <p className={styles.empty}>Choose the workspace you want Wattzun to help with.</p>}
+        {scopes.length > 1 && <label className={styles.workspace}>Workspace<select aria-label="Workspace" value={scopeId} onChange={event => { setScopeId(event.target.value); if (scope) setOpenRequest(null); }}><option value="">Choose a workspace</option>{scopes.map(choice => <option key={choice.scopeId} value={choice.scopeId}>{choice.label}</option>)}</select></label>}
+        {scope ? <WattzunConversation key={`${user.uid}:${portal}:${scope.scopeId}`} user={user} scope={scope} openRequest={openRequest} /> : <p className={styles.empty}>Choose the workspace you want Wattzun to help with.</p>}
       </div>
     </div>}
   </>;
 }
 
-function WattzunConversation({ user, scope }: { user: User; scope: WattzunScope }) {
+function WattzunConversation({ user, scope, openRequest }: { user: User; scope: WattzunScope; openRequest?: (WattzunOpenRequest & { id: string }) | null }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesRef = useRef(messages);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [preferences, setPreferences] = useState<WattzunPreferences>(() => loadPreferences(preferencesKey(user.uid, scope)));
-  const preferencesRef = useRef(preferences);
+  const presentation = useWattzunPresentation({ userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId });
+  const preferencesRef = useRef({ speed: presentation.speed });
   const [callStatus, setCallStatus] = useState<WattzunCallStatus>({ state: "idle", message: "" });
   const [muted, setMuted] = useState(false);
   const voiceCall = useRef<WattzunVoiceCall | null>(null);
   const textRequest = useRef<AbortController | null>(null);
   const active = useRef(true);
   const scrollEnd = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const handledRequest = useRef("");
   const callActive = !["idle", "ended", "error"].includes(callStatus.state);
 
   useEffect(() => { messagesRef.current = messages; scrollEnd.current?.scrollIntoView({ block: "nearest" }); }, [messages]);
-  useEffect(() => {
-    preferencesRef.current = preferences;
-    try { window.localStorage.setItem(preferencesKey(user.uid, scope), JSON.stringify(preferences)); } catch { /* Preferences remain usable when storage is unavailable. */ }
-  }, [preferences, user.uid, scope]);
+  useEffect(() => { preferencesRef.current = { speed: presentation.speed }; }, [presentation.speed]);
   useEffect(() => {
     active.current = true;
     const background = () => { if (document.hidden) { voiceCall.current?.hangUp(); setMuted(false); } };
@@ -170,12 +183,13 @@ function WattzunConversation({ user, scope }: { user: User; scope: WattzunScope 
       if (!active.current || controller.signal.aborted) return;
       if (!isReply(payload.reply)) throw new Error("Wattzun returned an unreadable answer. Try again.");
       append([{ id: input.requestId, role: "user", content: message }, { id: `${input.requestId}:reply`, role: "assistant", content: wattzunSpokenReply(payload.reply), reply: payload.reply }]);
+      window.dispatchEvent(new CustomEvent(WATTZUN_USAGE_CHANGED_EVENT, { detail: { userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId } }));
       setDraft("");
     } catch (requestError) {
       if (active.current && !controller.signal.aborted) setError(requestError instanceof Error ? requestError.message : "That question could not be sent. Try again.");
     } finally { if (textRequest.current === controller) { textRequest.current = null; if (active.current) setBusy(false); } }
   }
-  function startCall() {
+  const startCall = useCallback(() => {
     if (busy || callActive) return;
     voiceCall.current?.dispose();
     setMuted(false); setError("");
@@ -198,11 +212,23 @@ function WattzunConversation({ user, scope }: { user: User; scope: WattzunScope 
         if (!active.current || voiceCall.current !== call) return;
         const id = crypto.randomUUID();
         append([{ id, role: "user", content: result.transcript }, { id: `${id}:reply`, role: "assistant", content: wattzunSpokenReply(result.reply), reply: result.reply }]);
+        window.dispatchEvent(new CustomEvent(WATTZUN_USAGE_CHANGED_EVENT, { detail: { userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId } }));
       },
     });
     voiceCall.current = call;
     void call.start();
-  }
+  }, [busy, callActive, requestInput, user, scope, append]);
+
+  useEffect(() => {
+    if (!openRequest || !presentation.ready || handledRequest.current === openRequest.id) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (!active.current || handledRequest.current === openRequest.id) return;
+      handledRequest.current = openRequest.id;
+      if (openRequest.mode === "call") startCall();
+      else { if (openRequest.initialMessage !== undefined) setDraft(openRequest.initialMessage); composer.current?.focus(); }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [openRequest, presentation.ready, startCall]);
 
   return <div className={styles.conversation}>
     <div className={styles.tools}>
@@ -210,7 +236,7 @@ function WattzunConversation({ user, scope }: { user: User; scope: WattzunScope 
       <details className={styles.settings}>
         <summary>Speech speed</summary>
         <div className={styles.settingsPanel}>
-          <label>Speaking speed<select aria-label="Speaking speed" value={preferences.speed} onChange={event => { const speed = Number(event.target.value); if (speed === 0.85 || speed === 1 || speed === 1.15) setPreferences({ speed }); }}><option value={0.85}>Slower</option><option value={1}>Normal</option><option value={1.15}>Quicker</option></select></label>
+          <label>Speaking speed<select aria-label="Speaking speed" value={presentation.speed} onChange={event => { const speed = Number(event.target.value); if (speed === 0.85 || speed === 1 || speed === 1.15) presentation.setSpeed(speed); }}><option value={0.85}>Slower</option><option value={1}>Normal</option><option value={1.15}>Quicker</option></select></label>
           <p>Warm and conversational, with a little humour. Speed changes apply from your next question.</p>
         </div>
       </details>
@@ -232,7 +258,7 @@ function WattzunConversation({ user, scope }: { user: User; scope: WattzunScope 
     {error && <p className={styles.error} role="alert">{error}</p>}
     <form className={styles.composer} onSubmit={event => { event.preventDefault(); void sendText(); }}>
       <label className={styles.srOnly} htmlFor="wattzun-portal-message">Message Wattzun</label>
-      <textarea id="wattzun-portal-message" rows={2} maxLength={4000} value={draft} disabled={busy || callActive} placeholder={callActive ? "Hang up to continue in chat" : "Ask a question or describe your task..."} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void sendText(); } }} />
+      <textarea ref={composer} id="wattzun-portal-message" rows={2} maxLength={4000} value={draft} disabled={busy || callActive} placeholder={callActive ? "Hang up to continue in chat" : "Ask a question or describe your task..."} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void sendText(); } }} />
       <button type="submit" disabled={busy || callActive || !draft.trim()}>{busy ? "Sending..." : "Send"}</button>
     </form>
     <p className={styles.footer}>Workspace: {scope.label}. Check important details before acting.</p>

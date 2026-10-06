@@ -2,25 +2,25 @@
 .dialog { --w-bg: #fff; --w-panel: #f3f8f7; --w-ink: #15332e; --w-muted: #58736c; --w-line: #d9e7e2; --w-accent: #086958; --w-highlight: #e2f6ee; background: var(--w-bg); border: 1px solid var(--w-line); border-radius: 24px; box-shadow: 0 20px 90px #062b2c40; color: var(--w-ink); display: flex; flex-direction: column; font: 400 14px/1.5 Arial, sans-serif; max-height: min(850px, calc(100dvh - 48px)); min-height: 500px; width: min(520px, 100%); overflow: hidden; }
 :global(html[data-tlink-colour-mode="night"]) .dialog { --w-bg: #102625; --w-panel: #193230; --w-ink: #ecfff8; --w-muted: #b0c9c1; --w-line: #35504a; --w-accent: #a0edce; --w-highlight: #24483b; }
 .dialog :is(button, input, textarea, select, summary, a):focus-visible { outline: 3px solid #e9b848; outline-offset: 3px; }
-.dialog button { cursor: pointer; font: inherit; }
+.dialog button { cursor: pointer; font: inherit; min-height:44px; min-width:44px; }
+.dialog select { min-height:44px; }
 .dialog button:disabled { cursor: default; opacity: .55; }
 .header { align-items: center; border-bottom: 1px solid var(--w-line); display: flex; flex-shrink: 0; gap: 12px; padding: 20px 22px 16px; }
-.mascot { background: url("/surge-mascot.webp") center / contain no-repeat; display: block; height: 54px; width: 44px; }
 .header h2 { color: var(--w-ink); font-size: 22px; line-height: 1.2; margin: 0; }
 .header p { color: var(--w-muted); font-size: 13px; margin: 4px 0 0; }
-.close { align-self: flex-start; background: var(--w-panel); border: 1px solid var(--w-line); border-radius: 50%; color: var(--w-ink); font-size: 24px !important; height: 36px; margin-left: auto; width: 36px; }
+.close { align-self: flex-start; background: var(--w-panel); border: 1px solid var(--w-line); border-radius: 50%; color: var(--w-ink); font-size: 24px !important; height: 44px; margin-left: auto; width: 44px; }
 .workspace { display: flex; flex-shrink: 0; font-weight: 700; align-items: center; gap: 12px; padding: 12px 22px; }
 .dialog :is(select, textarea) { background: var(--w-bg); border: 1px solid var(--w-line); border-radius: 10px; color: var(--w-ink); font: inherit; padding: 9px 10px; min-width: 0; }
 .workspace select { flex: 1; }
 .empty { padding: 20px; }
 .conversation { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .tools { align-items: center; display: flex; flex-wrap: wrap; flex-shrink: 0; gap: 12px; padding: 16px 22px 8px; }
-.callButton { align-items: center; background: var(--w-accent); border: 0; border-radius: 12px; color: var(--w-bg); display: inline-flex; gap: 8px; font-weight: 700 !important; min-height: 42px; padding: 10px 14px; }
+.callButton { align-items: center; background: var(--w-accent); border: 0; border-radius: 12px; color: var(--w-bg); display: inline-flex; gap: 8px; font-weight: 700 !important; min-height: 44px; padding: 10px 14px; }
 .callBadge { align-items: center; color: var(--w-accent); display: inline-flex; font-weight: 700; gap: 9px; min-height: 42px; }
 .activity { width: 10px; height: 10px; border-radius: 50%; background: var(--w-accent); }
 .listening { animation: pulse 1.5s ease-in-out infinite; }
 .settings { flex: 1; min-width: 160px; }
-.settings summary { color: var(--w-accent); cursor: pointer; font-size: 12px; font-weight: 700; padding: 10px 0; text-align: right; }
+.settings summary { color: var(--w-accent); cursor: pointer; font-size: 12px; font-weight: 700; min-height:44px; padding: 10px 0; text-align: right; }
 .settings[open] { flex-basis: 100%; }
 .settingsPanel { border: 1px solid var(--w-line); border-radius: 12px; background: var(--w-panel); display: grid; grid-template-columns: minmax(110px, 1fr) minmax(0, 2fr); gap: 12px; align-items:center; padding: 12px; }
 .settingsPanel label { display: flex; flex-direction: column; font-size: 12px; font-weight: 700; gap: 4px; }
@@ -29,10 +29,10 @@
 .idleConfirmation { border:1px solid var(--w-line); border-radius:12px; background:var(--w-highlight); margin:0 22px 12px; padding:12px; flex-shrink:0; }
 .idleConfirmation p { margin:0 0 9px; font-size:12px; }
 .idleConfirmation>div { display:flex; flex-wrap:wrap; gap:8px; }
-.idleConfirmation button { min-height:42px; border:1px solid var(--w-line); border-radius:9px; color:var(--w-ink); background:var(--w-bg); padding:8px 12px; }
+.idleConfirmation button { min-height:44px; border:1px solid var(--w-line); border-radius:9px; color:var(--w-ink); background:var(--w-bg); padding:8px 12px; }
 .disclosure { color: var(--w-muted); flex-shrink: 0; font-size: 11px; line-height: 1.45; margin: 0; padding: 0 22px 10px; }
 .callControls { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: 8px; padding: 0 22px 10px; }
-.callControls button { background: var(--w-panel); border: 1px solid var(--w-line); border-radius: 9px; color: var(--w-ink); min-height: 36px; padding: 7px 10px; font-size: 12px; }
+.callControls button { background: var(--w-panel); border: 1px solid var(--w-line); border-radius: 9px; color: var(--w-ink); min-height: 44px; padding: 7px 10px; font-size: 12px; }
 .callControls .hangUp { background: #b83733; border-color: #b83733; color: #fff; margin-left: auto; }
 .callHint { color: var(--w-muted); flex-shrink: 0; font-size: 12px; margin: 0; padding: 5px 22px 10px; }
 .messages { background: var(--w-panel); border-block: 1px solid var(--w-line); display: flex; flex: 1; flex-direction: column; gap: 14px; min-height: 120px; overscroll-behavior: contain; overflow-y: auto; padding: 22px; }
@@ -48,10 +48,10 @@
 .messages article ol { margin: 8px 0 0; padding-left: 20px; }
 .messages article li + li { margin-top: 5px; }
 .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.links a { border: 1px solid var(--w-line); border-radius: 8px; color: var(--w-accent); font-size: 12px; padding: 6px 8px; text-decoration: none; }
+.links a { align-items:center; display:inline-flex; gap:4px; min-height:44px; border: 1px solid var(--w-line); border-radius: 8px; color: var(--w-accent); font-size: 12px; padding: 6px 8px; text-decoration: none; }
 .composer { display: flex; align-items: flex-end; flex-shrink: 0; gap: 8px; padding: 14px 22px 8px; }
 .composer textarea { background: var(--w-panel); flex: 1; max-height: 120px; resize: vertical; width: 100%; }
-.composer button { background: var(--w-accent); border: 0; border-radius: 10px; color: var(--w-bg); font-weight: 700; min-height: 42px; padding: 9px 14px; }
+.composer button { background: var(--w-accent); border: 0; border-radius: 10px; color: var(--w-bg); font-weight: 700; min-height: 44px; padding: 9px 14px; }
 .footer { color: var(--w-muted); flex-shrink: 0; font-size: 10px; margin: 0; padding: 0 22px 14px; }
 .error { background: #fff0ed; border: 1px solid #e7aaa0; border-radius: 9px; color: #812b1f; font-size: 12px; margin: 5px 22px 10px; padding: 9px 10px; flex-shrink: 0; }
 .srOnly { position: absolute; height: 1px; width: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

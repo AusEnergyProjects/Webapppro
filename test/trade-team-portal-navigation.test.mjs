@@ -34,7 +34,7 @@ function render(permissions = {}, view = 'business', crmView = 'jobs', crewId) {
 
 test('field staff use one Home and Jobs workflow with Connect and their schedule', () => {
   const ui = render();
-  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'Forms', 'Tasks & training']);
+  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'Forms', 'Wattzun', 'Tasks & training']);
   assert.equal(ui.tree.props['aria-label'], 'Staff workspace');
   assert.equal(ui.button('Jobs').props['aria-current'], 'page');
   assert.equal(ui.button('My work'), undefined);
@@ -53,6 +53,15 @@ test('Home selects the scoped dashboard and Connect keeps its communication dest
   assert.equal(flatten(ui.button('Connect ')).find(node => node.type === 'Icon').props.name, 'connect');
   assert.equal(render({ canViewInvoices: true, canRunReports: true }).button('Invoices'), undefined,
     'staff use scoped job invoices, not the owner-only invoice register');
+});
+
+test('Wattzun has its own active staff destination without changing work permissions', () => {
+  const ui = render({}, 'wattzun', 'today');
+  assert.equal(ui.button('Wattzun').props['aria-current'], 'page');
+  assert.equal(ui.button('Home dashboard').props['aria-current'], undefined);
+  assert.equal(ui.button('Customers'), undefined);
+  ui.button('Wattzun').props.onClick();
+  assert.deepEqual(ui.destinations, [['portal', 'wattzun']]);
 });
 
 test('customer directory requires both existing view and search permissions', () => {

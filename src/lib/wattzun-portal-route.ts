@@ -3,6 +3,8 @@ import { WattzunInputError, WATTZUN_MAX_AUDIO_BYTES, isWattzunPortal, parseWattz
 import { authenticateWattzun, listWattzunScopes, requireWattzunAccess, wattzunAccessFailure,
   WattzunAccessError, type WattzunAccess } from "./wattzun-portal-access-server";
 import { prepareWattzunPortalReply, transcribeWattzunPortalAudio, speakWattzunPortalReply } from "./wattzun-portal-ai-server";
+import { parseWattzunUsageScope, type WattzunUsage } from "./wattzun-usage";
+import { readWattzunUsage, recordWattzunUsage, WattzunUsageError, type WattzunUsageRecord } from "./wattzun-usage-server";
 
 type Context = WattzunAccess & { input: WattzunTurnInput };
 export type WattzunRouteDependencies = {
@@ -12,14 +14,20 @@ export type WattzunRouteDependencies = {
   reply: (options: Context) => Promise<WattzunReply>;
   transcribe: (options: Context & { audio: Blob }) => Promise<string>;
   speak: (options: Context & { reply: WattzunReply }) => Promise<{ base64: string; mimeType: "audio/mpeg" }>;
+  recordUsage: (options: WattzunUsageRecord) => Promise<void>;
+  usage: (access: WattzunAccess) => Promise<WattzunUsage>;
 };
 const defaults: WattzunRouteDependencies = {
   authenticate: authenticateWattzun, scopes: listWattzunScopes, access: requireWattzunAccess,
   reply: prepareWattzunPortalReply, transcribe: transcribeWattzunPortalAudio, speak: speakWattzunPortalReply,
+  recordUsage: recordWattzunUsage, usage: readWattzunUsage,
 };
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 function json(body: object, status = 200) { return Response.json(body, { status, headers }); }
 function failure(error: unknown) {
+  if (error instanceof WattzunUsageError) return json({ ok: false, error: error.code === "conflict"
+    ? "This request was already used for a different Wattzun exchange. Start a new turn."
+    : "Wattzun usage could not be saved or loaded. Please try again." }, error.code === "conflict" ? 409 : 503);
   const access = wattzunAccessFailure(error);
   if (access) return json({ ok: false, error: access.message }, access.status);
   if (error instanceof WattzunInputError || error instanceof SyntaxError) return json({ ok: false,
@@ -62,6 +70,7 @@ async function recheck(request: Request, previous: WattzunAccess, deps: WattzunR
     || latest.scope.portal !== previous.scope.portal || latest.scope.label !== previous.scope.label) {
     throw new WattzunAccessError(403, "Your workspace changed. Refresh before continuing with Wattzun.");
   }
+  return latest;
 }
 function requireOpenConversation(request: Request) {
   if (request.signal.aborted) throw new WattzunAccessError(409, "The conversation was closed. Start again to continue.");
@@ -72,6 +81,20 @@ export async function getWattzunPortal(request: Request, deps = defaults): Promi
     const portal = new URL(request.url).searchParams.get("portal");
     if (!isWattzunPortal(portal)) throw new WattzunInputError("Choose Council, Creditex or TLink.");
     return json({ ok: true, scopes: await deps.scopes(request, portal) });
+  } catch (error) { return failure(error); }
+}
+export async function getWattzunUsage(request: Request, deps = defaults): Promise<Response> {
+  try {
+    await deps.authenticate(request);
+    const scope = parseWattzunUsageScope(new URL(request.url));
+    const access = await deps.access(request, scope.portal, scope.scopeId);
+    if (access.scope.portal !== scope.portal || access.scope.scopeId !== scope.scopeId) {
+      throw new WattzunAccessError(403, "Choose a workspace you have current access to.");
+    }
+    requireOpenConversation(request);
+    const usage = await deps.usage(access);
+    await recheck(request, access, deps);
+    return json({ ok: true, usage });
   } catch (error) { return failure(error); }
 }
 export async function postWattzunPortal(request: Request, deps = defaults): Promise<Response> {
@@ -88,7 +111,8 @@ export async function postWattzunPortal(request: Request, deps = defaults): Prom
     const access = await deps.access(request, input.portal, input.scopeId);
     requireOpenConversation(request);
     const reply = await deps.reply({ ...access, input });
-    await recheck(request, access, deps);
+    const latest = await recheck(request, access, deps);
+    await deps.recordUsage({ access: latest, requestId: input.requestId, kind: "text" });
     return json({ ok: true, reply });
   } catch (error) { return failure(error); }
 }
@@ -118,7 +142,8 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
     const reply = await deps.reply({ ...access, input: spokenInput });
     await recheck(request, access, deps);
     const speech = await deps.speak({ ...access, input: spokenInput, reply });
-    await recheck(request, access, deps);
+    const latest = await recheck(request, access, deps);
+    await deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" });
     return json({ ok: true, transcript, reply, audio: speech });
   } catch (error) { return failure(error); }
 }

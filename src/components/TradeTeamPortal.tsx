@@ -1,6 +1,7 @@
 "use client";
 
 import TradeTeamPresence from "./TradeTeamPresence";
+import { WattzunToolsWorkspace } from "./WattzunToolsWorkspace";
 import { TradeTeamTimeWorkspace } from "./TradeTeamTimeWorkspace";
 import { TradeCrewWorkspace } from "./TradeCrewWorkspace";
 import { TradePersonalNameSettings } from "./TradePersonalNameSettings";
@@ -35,13 +36,13 @@ import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlert
 type Result = { ownerUid?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; crewId?: string; crewLead?: boolean; permissions: TradeTeamPermissions }; error?: string };
 type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
-type PortalView = "business" | "sales" | "map" | "team" | "forms" | "tasks" | "training" | "messages" | "time" | "crew";
+type PortalView = "business" | "sales" | "wattzun" | "map" | "team" | "forms" | "tasks" | "training" | "messages" | "time" | "crew";
 type CrmShortcut = "today" | "jobs" | "customers" | "schedule" | "pricebook" | "reports";
 
 function teamWorkspaceLocation(search: string): { view: PortalView; target: TLinkCommandTarget | null } {
   const parameters = new URLSearchParams(search);
   const workspace = parameters.get("workspace");
-  if (workspace === "sales" || workspace === "forms" || workspace === "tasks" || workspace === "training" || workspace === "messages" || workspace === "time") return { view: workspace, target: null };
+  if (workspace === "wattzun" || workspace === "sales" || workspace === "forms" || workspace === "tasks" || workspace === "training" || workspace === "messages" || workspace === "time") return { view: workspace, target: null };
   const jobId = parameters.get("jobId") || "";
   if (workspace === "work" && /^[A-Za-z0-9:_-]{1,180}$/.test(jobId)) {
     const requestedTab = parameters.get("jobTab");
@@ -79,6 +80,7 @@ function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm, cr
     <button type="button" aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
     {permissions.canViewQuotes && permissions.canManageQuotes && <button type="button" aria-current={view === "map" ? "page" : undefined} onClick={() => onView("map")}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span></button>}
     <button type="button" aria-current={view === 'forms' ? 'page' : undefined} onClick={() => onView('forms')}><TLinkNavigationIcon name="forms" /><span>Forms</span></button>
+    <button type="button" aria-current={view === "wattzun" ? "page" : undefined} onClick={() => onView("wattzun")}><TLinkNavigationIcon name="wattzun" /><span>Wattzun</span></button>
     <button type="button" aria-current={view === "tasks" || view === "training" ? "page" : undefined} onClick={() => onView("tasks")}><TLinkNavigationIcon name="training" /><span>Tasks &amp; training</span></button>
     {permissions.canManageTeam && <button type="button" aria-current={view === "team" ? "page" : undefined} onClick={() => onView("team")}><TLinkNavigationIcon name="team" /><span>Team</span></button>}
   </nav>;
@@ -427,6 +429,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       {portalView === "messages" && <TradeMessagesWorkspace user={user} initialThreadId={messageTarget.id} initialThreadRevision={messageTarget.revision} onOpenQuote={workOrderId => { setCrmTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() }); setPortalView("business"); }} />}
       {(portalView === "business" || (portalView === "map" && permissions?.canViewQuotes && permissions.canManageQuotes)) && <InstallerCrmWorkspace key={portalView} user={user} teamAccess={Boolean(permissions?.canManageTeam)} staffPermissions={permissions} hideNavigation={portalView !== "map"} navigationTarget={portalView === "map" ? null : crmTarget} mapWorkspace={portalView === "map"} onRegisterMapSave={registerMapSave} onViewChange={setCrmView} />}
       {portalView === 'forms' && <TradeFormsWorkspace user={user} onRegisterLeave={registerMapSave} />}
+      {portalView === "wattzun" && <WattzunToolsWorkspace user={user} portal="trade" scopeId={business?.ownerUid} />}
       {(portalView === "tasks" || portalView === "training") && <TradeTasksAndTraining key={user.uid} user={user} tab={portalView} onTab={setPortalView} />}
       {portalView === "team" && permissions?.canManageTeam && <section className="team-field-tools" aria-label="Team management"><TradeTeamSettings user={user} onOpenOwnTraining={() => setPortalView("training")} onOpenSchedule={() => openCrm("schedule")} /></section>}
       {status && <p className="crm-status" role="status">{status}</p>}

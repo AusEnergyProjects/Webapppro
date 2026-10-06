@@ -57,12 +57,14 @@ const CreditexCustomerMap = dynamic(() => import('./CreditexCustomerMap').then(m
 const CreditexAllProgramCalculator = dynamic(() => import('./CreditexAllProgramCalculator').then(module => module.CreditexAllProgramCalculator), { loading: () => <p role="status">Loading calculator...</p> });
 const CreditexJobAuditDesk = dynamic(() => import('./CreditexJobAuditDesk').then(module => module.CreditexJobAuditDesk));
 import styles from "./CreditexCompliancePortal.module.css";
+import { WattzunToolsWorkspace } from "./WattzunToolsWorkspace";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
-type WorkspaceTab = "home" | "connect" | "tasks" | "settings" | "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance" | "team" | 'customers' | 'map' | 'calculator' | 'profile';
+type WorkspaceTab = "home" | "connect" | "wattzun" | "tasks" | "settings" | "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance" | "team" | 'customers' | 'map' | 'calculator' | 'profile';
 
 function WorkspaceIcon({ tab }: { tab: WorkspaceTab }) {
   const paths: Record<WorkspaceTab, string> = {
+    wattzun: "M7 5h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H9l-5 3v-7M3 9a4 4 0 0 1 4-4M12 2v3M8 10h.01M16 10h.01M8 14h8",
     home: "m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8",
     customers: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 8h5M17 12h5',
     map: 'm3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15',
@@ -326,7 +328,7 @@ export function CreditexCompliancePortal() {
   const reportFieldFormDirty = useCallback((dirty: boolean) => { fieldFormDirty.current = dirty; }, []);
   function permitted(permission: CreditexPermission) { return Boolean(session && hasCreditexPermission(session, permission)); }
   function canAccessTab(next: WorkspaceTab) {
-    if (['home', 'profile', 'settings'].includes(next)) return true;
+    if (['home', 'profile', 'settings', 'wattzun'].includes(next)) return true;
     if (next === 'connect') return permitted('customers') || permitted('messages');
     if (next === 'map') return permitted('customers') || permitted('jobs');
     if (next === 'calculator') return true;
@@ -971,6 +973,7 @@ export function CreditexCompliancePortal() {
     { id: "tasks", label: "Tasks" },
   ];
   const toolsTabs: { id: WorkspaceTab; label: string }[] = [
+    { id: "wattzun", label: "Wattzun" },
     { id: "operations", label: "Cases" },
     { id: "submissions", label: "Submissions" },
     ...(canOpenQuestionnaires ? [{ id: "compliance-questions" as const, label: "Training" }] : []),
@@ -1232,6 +1235,7 @@ export function CreditexCompliancePortal() {
         )}
 
         {tab === "home" && <section id="creditex-panel-home" role="tabpanel" aria-labelledby="creditex-tab-home"><CreditexHomeDashboard user={user} canManageTeam={permitted('team_access') || permitted('team_details')} onNavigate={selectTab} canAccess={canAccessTab} /></section>}
+        {tab === "wattzun" && <section id="creditex-panel-wattzun" role="tabpanel" aria-labelledby="creditex-tab-wattzun"><WattzunToolsWorkspace user={user} portal="creditex" /></section>}
         {tab === "connect" && <section id="creditex-panel-connect" role="tabpanel" aria-labelledby="creditex-tab-connect"><PortalConnectWorkspace key={`${user.uid}:${connectTarget.nonce}`} workspace="creditex" user={user} initialIntentId={connectTarget.intentId} initialPeerId={connectTarget.peerId} canViewCustomers={permitted('customers')} canMessageTeam={permitted('messages')} onActiveChange={reportCallActive}/></section>}
         {tab === "tasks" && <section id="creditex-panel-tasks" role="tabpanel" aria-labelledby="creditex-tab-tasks"><PortalTeamWorkspace key={`${user.uid}:${taskTarget}`} workspace="creditex" user={user} view="tasks" initialTaskId={taskTarget}/></section>}
         {tab === 'profile' && <section id="creditex-panel-profile" role="tabpanel" aria-labelledby="creditex-tab-profile"><PortalWorkspacePreferences controller={preferences}/></section>}

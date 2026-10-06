@@ -6,7 +6,7 @@ import * as portalContract from "../src/lib/wattzun-portal.ts";
 
 const source = readFileSync(new URL("../src/components/WattzunPortalAssistant.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-function load({ values = [null, [], "", false], storage, fetchRequest = () => { throw new Error("Unexpected fetch"); } } = {}) {
+function load({ values = [null, [], "", false, null], storage, events, fetchRequest = () => { throw new Error("Unexpected fetch"); } } = {}) {
   let stateIndex = 0;
   const effects = [], updates = [], auth = { callback: null, unsubscribed: false };
   const dependencies = {
@@ -20,14 +20,20 @@ function load({ values = [null, [], "", false], storage, fetchRequest = () => { 
     "@/lib/firebase-client": { firebaseAuth: {} },
     "@/lib/trade-business-client": { readTradeBusinessSelection: () => "business-b" },
     "@/lib/wattzun-portal": portalContract,
+    "@/lib/wattzun-appearance": {
+      WATTZUN_OPEN_EVENT:'wattzun:open',WATTZUN_READY_EVENT:'wattzun:ready',WATTZUN_USAGE_CHANGED_EVENT:'wattzun:usage-changed',
+      readWattzunOpenRequest:value=>value,
+      useWattzunPresentation:()=>({hat:'none',speed:1,setSpeed:speed=>updates.push({index:'speed',value:speed})}),
+    },
     "@/lib/wattzun-voice-client": {},
     "./EnergyAssistantLauncher": { EnergyAssistantLauncher: "Launcher" },
+    "./WattzunMascot": { WattzunMascot: "Mascot" },
     "./WattzunPortalAssistant.module.css": { default: {} },
   };
   const exported = {};
-  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {preferencesKey, loadPreferences, conversationHistory, responsePayload, isReply, WattzunConversation};`)(name => {
+  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {conversationHistory, responsePayload, isReply, WattzunConversation};`)(name => {
     assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
-  }, exported, { localStorage: storage }, fetchRequest);
+  }, exported, { localStorage: storage, ...events }, fetchRequest);
   return { exported, effects, updates, auth };
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
@@ -46,13 +52,13 @@ test("the launcher is absent before authentication and until server-authorised s
 test("auth changes immediately clear scopes, workspace and the open modal", () => {
   const h = load(); h.exported.WattzunPortalAssistant({ portal: "trade" }); const unsubscribe = h.effects[0]();
   h.auth.callback({ ...user, emailVerified: false });
-  assert.deepEqual(h.updates, [{ index: 0, value: null }, { index: 1, value: [] }, { index: 2, value: "" }, { index: 3, value: false }]);
+  assert.deepEqual(h.updates, [{ index: 0, value: null }, { index: 1, value: [] }, { index: 2, value: "" }, { index: 3, value: false }, { index:4,value:null }]);
   unsubscribe(); assert.equal(h.auth.unsubscribed, true);
 });
 test("scope discovery sends a fresh auth token and restores an authorised trade selection", async () => {
   const requests = [];
   const h = load({ values: [user, [], "", false], fetchRequest: async (url, init) => { requests.push({ url, init }); return Response.json({ ok: true, scopes }); } });
-  h.exported.WattzunPortalAssistant({ portal: "trade" }); const cleanup = h.effects[1](); await flush();
+  h.exported.WattzunPortalAssistant({ portal: "trade" }); h.effects[0](); h.auth.callback(user); h.updates.length=0; const cleanup = h.effects[1](); await flush();
   assert.equal(requests.length, 1); assert.equal(requests[0].url, "/api/wattzun/portal?portal=trade"); assert.equal(requests[0].init.headers.Authorization, "Bearer test-token");
   assert.deepEqual(h.updates.find(update => update.index === 1).value, scopes); assert.equal(h.updates.find(update => update.index === 2).value, "business-b");
   cleanup(); assert.equal(requests[0].init.signal.aborted, true);
@@ -69,37 +75,25 @@ test("unauthorised server discovery cannot reveal a launcher", async () => {
   h.exported.WattzunPortalAssistant({ portal: "council" }); const cleanup = h.effects[1](); await flush();
   assert.deepEqual(h.updates, [{ index: 1, value: [] }]); cleanup();
 });
-test("preferences isolate users and workspaces, and unavailable or malformed storage returns defaults", () => {
-  const defaults = portalContract.WATTZUN_DEFAULT_PREFERENCES;
-  const first = load({ storage: { getItem: () => { throw new Error("blocked"); } } }).exported.testHelpers;
-  assert.deepEqual(first.loadPreferences("a"), defaults);
-  const malformed = load({ storage: { getItem: () => '{"voice":"unrecognised"}' } }).exported.testHelpers;
-  assert.deepEqual(malformed.loadPreferences("a"), defaults);
-  const saved = { speed: .85 };
-  const restored = load({ storage: { getItem: () => JSON.stringify(saved) } }).exported.testHelpers;
-  assert.deepEqual(restored.loadPreferences("a"), saved);
-  assert.notEqual(first.preferencesKey("user-a", scopes[0]), first.preferencesKey("user-b", scopes[0]));
-  assert.notEqual(first.preferencesKey("user-a", scopes[0]), first.preferencesKey("user-a", scopes[1]));
-});
-test('legacy preferences migrate only speed and remove old voice, tone and personality storage', () => {
-  const key = 'wattzun-preferences:v2:user-a:trade:business-a';
-  const legacyKey = 'wattzun-preferences:v1:user-a:trade:business-a';
-  const values = new Map([[legacyKey, JSON.stringify({ voice:'marin', tone:'formal', speed:.85, personality:'Private obsolete note' })]]), removed=[];
-  const helpers = load({ storage:{ getItem:key=>values.get(key)||null, removeItem:key=>{ removed.push(key);values.delete(key); } } }).exported.testHelpers;
-  assert.equal(helpers.preferencesKey('user-a',scopes[0]),key); assert.deepEqual(helpers.loadPreferences(key),{speed:.85});
-  assert.deepEqual(removed,[legacyKey]); assert.equal(values.has(legacyKey),false);
-  values.set(key,JSON.stringify({speed:1.15,voice:'marin',tone:'formal',personality:'Forged'})); values.set(legacyKey,'malformed');
-  assert.deepEqual(helpers.loadPreferences(key),{speed:1.15}); assert.equal(values.has(legacyKey),false);
+test('workspace open events reject another actor, portal or unauthorised scope before acknowledging',()=>{
+  const target=new EventTarget();let acknowledgements=0;
+  const h=load({values:[user,scopes,'business-b',false,null],events:{addEventListener:target.addEventListener.bind(target),removeEventListener:target.removeEventListener.bind(target),dispatchEvent:target.dispatchEvent.bind(target)}});
+  h.exported.WattzunPortalAssistant({portal:'trade'});h.effects[0]();h.auth.callback(user);h.updates.length=0;const cleanup=h.effects[2]();
+  const send=change=>target.dispatchEvent(new CustomEvent('wattzun:open',{detail:{userUid:'user-a',portal:'trade',scopeId:'business-a',mode:'message',acknowledge:()=>acknowledgements++,...change}}));
+  send({userUid:'old-actor'});send({portal:'council'});send({scopeId:'private-business'});assert.equal(h.updates.length,0);assert.equal(acknowledgements,0);
+  send({});assert.equal(acknowledgements,1);assert.deepEqual(h.updates.find(update=>update.index===2),{index:2,value:'business-a'});assert.deepEqual(h.updates.find(update=>update.index===3),{index:3,value:true});
+  h.auth.callback(null);h.updates.length=0;send({});assert.equal(h.updates.length,0,'Sign-out invalidates actor access before an old listener can clean up');assert.equal(acknowledgements,1);
+  cleanup();send({});assert.equal(acknowledgements,1);
 });
 const text = node=>node==null||typeof node==='boolean'?'':typeof node==='string'||typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):text(node.props?.children);
 const nodes = (node,predicate)=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(item=>nodes(item,predicate)):[...(predicate(node)?[node]:[]),...nodes(node.props?.children,predicate)];
 test('conversation settings expose speed only and active check-ins provide accessible Continue and End controls', () => {
-  const h=load({values:[[],'',false,'',{speed:1},{state:'confirming',message:'Would you like to continue this call?'},false]});
+  const h=load({values:[[],'',false,'',{state:'confirming',message:'Would you like to continue this call?'},false]});
   const tree=h.exported.testHelpers.WattzunConversation({user,scope:scopes[0]});
   const settings=nodes(tree,node=>node.type==='details')[0]; assert.match(text(settings),/Speech speed/);
   assert.deepEqual(nodes(settings,node=>node.type==='select').map(node=>node.props['aria-label']),['Speaking speed']);
   assert.equal(nodes(settings,node=>node.type==='textarea').length,0); assert.doesNotMatch(text(settings),/Voice and personality|Tone|Personality note/);
-  const speed=nodes(settings,node=>node.type==='select')[0]; speed.props.onChange({target:{value:'1.15'}}); assert.deepEqual(h.updates.at(-1),{index:4,value:{speed:1.15}});
+  const speed=nodes(settings,node=>node.type==='select')[0]; speed.props.onChange({target:{value:'1.15'}}); assert.deepEqual(h.updates.at(-1),{index:'speed',value:1.15});
   const checkin=nodes(tree,node=>node.props?.['aria-label']==='Call check-in')[0]; assert.equal(checkin.props.role,'group');
   assert.ok(nodes(checkin,node=>node.type==='button'&&text(node)==='Continue call')[0]); assert.ok(nodes(checkin,node=>node.type==='button'&&text(node)==='End call')[0]);
 });
@@ -118,8 +112,7 @@ test("follow-up history stays in memory, retains questions, and stays within the
   const bounded = helpers.conversationHistory(Array.from({ length: 40 }, (_, index) => ({ id: String(index), role: index % 2 ? "assistant" : "user", content: String(index).padEnd(4000, "x") })));
   assert.ok(bounded.length < 40); assert.ok(JSON.stringify(bounded).length <= portalContract.WATTZUN_MAX_HISTORY_CHARACTERS); assert.ok(bounded.at(-1).content.startsWith("39"));
   assert.doesNotThrow(()=>portalContract.parseWattzunTurn({portal:'trade',scopeId:'business-a',requestId:'history-budget-fixture',message:'Continue',history:bounded}));
-  assert.equal((source.match(/localStorage\.setItem\(/g) || []).length, 1);
-  assert.match(source, /localStorage\.setItem\(preferencesKey\(user\.uid, scope\), JSON\.stringify\(preferences\)\)/);
+  assert.doesNotMatch(source,/localStorage|appearance\.hat.*preferences/);
 });
 test("reply links reject off-site and malformed destinations before rendering", () => {
   const { isReply } = load().exported.testHelpers;

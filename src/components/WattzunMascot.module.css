@@ -1,0 +1,2 @@
+.mascot { position:relative; display:block; background:url("/surge-mascot.webp") center / contain no-repeat; width:44px; height:54px; flex-shrink:0; }
+.hat { position:absolute; left:-8%; top:-15%; width:116%; height:auto; pointer-events:none; overflow:visible; }

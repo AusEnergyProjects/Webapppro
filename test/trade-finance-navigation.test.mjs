@@ -248,7 +248,8 @@ test("installer Map navigation is explicit, independently active and clears the 
   assert.equal(nodes(navigation, node => node.type === "button" && text(node).includes("Customer & job map")).length, 1);
   assert.equal(nodes(navigation, node => node.type === "button" && text(node).trim() === "Forms").length, 1);
   assert.equal(nodes(navigation, node => node.type === "button" && text(node).trim() === "Sales").length, 1);
-  assert.equal(nodes(navigation, node => node.type === "button").length, 18, "Every existing destination and the new Sales workspace remain available once");
+  assert.equal(nodes(navigation, node => node.type === "button" && text(node).trim() === "Wattzun").length, 1);
+  assert.equal(nodes(navigation, node => node.type === "button").length, 19, "Every existing destination and the new Sales and Wattzun workspaces remain available once");
 });
 
 test("Map button retains its current record when saving fails and waits for a successful retry", async () => {

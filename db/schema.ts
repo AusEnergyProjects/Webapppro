@@ -7526,3 +7526,15 @@ export const customerHubEmailDeliveries=sqliteTable("customer_hub_email_deliveri
   attempts:integer("attempts").notNull().default(0),nextAttemptAt:text("next_attempt_at").notNull().default(""),firstAttemptAt:text("first_attempt_at").notNull().default(""),
   encryptedPayload:text("encrypted_payload").notNull().default(""),updatedAt:text("updated_at").notNull(),providerId:text("provider_id").notNull().default(""),
 },t=>[index("customer_hub_email_pending").on(t.status,t.nextAttemptAt),check("customer_hub_email_status",sql`${t.status} IN ('pending','sending','accepted','failed','unknown','stopped')`)]);
+
+export const wattzunUsageEvents = sqliteTable("wattzun_usage_events", {
+  actorUid: text("actor_uid").notNull(), portal: text("portal").notNull(), scopeId: text("scope_id").notNull(),
+  requestId: text("request_id").notNull(), kind: text("kind").notNull(), completedAt: text("completed_at").notNull(),
+}, table => [primaryKey({ columns: [table.actorUid, table.portal, table.scopeId, table.requestId] }),
+  index("wattzun_usage_events_actor_month_idx").on(table.actorUid, table.portal, table.scopeId, table.completedAt, table.kind),
+  check("wattzun_usage_events_actor", sql`length(${table.actorUid}) BETWEEN 1 AND 180`),
+  check("wattzun_usage_events_portal", sql`${table.portal} IN ('trade', 'creditex', 'council')`),
+  check("wattzun_usage_events_scope", sql`length(${table.scopeId}) BETWEEN 1 AND 128`),
+  check("wattzun_usage_events_request", sql`length(${table.requestId}) BETWEEN 16 AND 72`),
+  check("wattzun_usage_events_kind", sql`${table.kind} IN ('text', 'voice')`),
+  check("wattzun_usage_events_completed", sql`length(${table.completedAt}) = 24 AND ${table.completedAt} GLOB '????-??-??T??:??:??.???Z' AND julianday(${table.completedAt}) IS NOT NULL`)]);

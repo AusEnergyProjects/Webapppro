@@ -2,7 +2,7 @@
 
 import TradeTeamPresence from "./TradeTeamPresence";
 
-import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { TradeBusinessGate, useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import {
   useCallback,
@@ -20,6 +20,7 @@ import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
 import type { FinanceView } from "./TradeFinanceWorkspace";
 import { TLinkNavigationIcon } from "./TLinkNavigationIcon";
+import { WattzunToolsWorkspace } from "./WattzunToolsWorkspace";
 import { SiteFooter } from "./SiteFooter";
 import { TradeBusinessHub } from "./TradeBusinessHub";
 import {
@@ -242,10 +243,11 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "sales" | "map" | "design" | "network" | "messages" | "email-templates" | "team" | "forms" | "tasks" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "sales" | "wattzun" | "map" | "design" | "network" | "messages" | "email-templates" | "team" | "forms" | "tasks" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "sales",
+  "wattzun",
   "map",
   "design",
   "network",
@@ -814,6 +816,7 @@ export function DirectTradeDashboard() {
 
 function DirectTradeDashboardContent() {
   const fetch = useTradeBusinessFetch();
+  const selectedBusiness = useTradeBusiness();
   const [user, setUser] = useState<User | null>(null);
   const [messageTarget, setMessageTarget] = useState({ id: "", revision: 0 });
   const [authReady, setAuthReady] = useState(false);
@@ -2535,6 +2538,7 @@ function DirectTradeDashboardContent() {
                 </div>
                 <div className="tlink-nav-group" role="group" aria-labelledby="tlink-nav-specialist">
                   <h2 id="tlink-nav-specialist" className="tlink-nav-heading">Specialist tools</h2>
+                  <button type="button" title="Your AI companion, usage and preferences" aria-current={workspace === "wattzun" ? "page" : undefined} className={workspace === "wattzun" ? "active" : ""} onClick={() => setWorkspace("wattzun")}><TLinkNavigationIcon name="wattzun" /><span>Wattzun</span></button>
                   <button type="button" title="Map locations and find nearby work" aria-current={workspace === "map" ? "page" : undefined} className={workspace === "map" ? "active" : ""} onClick={() => {
                     setWorkspace("map", () => { setCommandTarget(null); setMapNavigationNonce((current) => current + 1); });
                   }}><TLinkNavigationIcon name="map" /><span>Customer &amp; job map</span></button>
@@ -2548,6 +2552,7 @@ function DirectTradeDashboardContent() {
               </nav>
 
               {workspace === "email-templates" && <TradeEmailTemplatesWorkspace user={user} />}
+              {workspace === "wattzun" && <WattzunToolsWorkspace user={user} portal="trade" scopeId={selectedBusiness?.ownerUid} />}
               {workspace === "sales" && (hasBusinessOperations ? <TradeSalesWorkspace
                 key={user.uid}
                 user={user}

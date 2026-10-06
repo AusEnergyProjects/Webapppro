@@ -1,7 +1,13 @@
 # Next task handover
 
-Status: Sales workspace and Wattzun integration; GitHub/Sites publication authorised.
+Status: Sales workspace and Wattzun integration; Wattzun Tools follow-up with GitHub/Sites publication authorised.
 Prepared: 6 October 2026
+
+## Active follow-up: Wattzun Tools and personal appearance
+
+Outcome: authenticated TLink, Council and Creditex users can open Wattzun from their left Tools navigation, message or call, inspect their recorded monthly usage, adjust speech speed and choose a cosmetic hat for the floating mascot. The shared Wattzun Tools component and existing portal navigation own the workflow; assistant presentation owns scoped settings and open actions; the current authorised routes and migration 0254 own successful text-message and voice-exchange counts. One writer owns each subsystem.
+
+Acceptance: real personal counts in the selected authorised workspace, honest loading/error states and UTC month basis; no invented historical usage, billed minutes, costs or paid allowances. Hats and speed stay personal to the actor/workspace and update the launcher, with fixed brand voice/personality. Call capture starts only after a deliberate Call action and ends on dialog close/scope change. Public AEA and council demonstrations receive no authenticated tools or hats. Mobile/day/night and keyboard controls remain usable. Validate focused server, route, usage, navigation and responsive assistant tests, TypeScript, migration integrity and the publication build; the full suite is required for the added persistence/privacy boundary. Stop if provider billing, paid activation or wider private-record access becomes necessary. Publish only this follow-up's exact committed source.
 
 ## Active delivery: integrated Sales and Wattzun
 

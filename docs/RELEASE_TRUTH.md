@@ -1,5 +1,11 @@
 # TLink and Australian Energy Assessments release truth
 
+## Wattzun Tools follow-up
+
+Prepared 6 October 2026 from source `a728a1ba86a4c2eab7841b469d3c4d1a71765c05` (Sites 771) in C:/Webproject/aea-energy-tlink-sales-workspace, branch `codex/tlink-sales-wattzun`, under the continuing GitHub/Sites publication authority. TLink owner and staff navigation, Council Tools and Creditex Tools now open one shared Wattzun page with Message, deliberate Call, speech speed, useful editable prompts and personal mascot hats: none, hard hat, cap, cowboy, Viking and pirate. Appearance is device-local and actor/workspace scoped; brand voice and personality stay fixed. Public AEA and Council demonstrations receive no authenticated Tools page or customised hats.
+
+Migration 0254 records successful server-completed text and voice exchanges using current authorised actor/workspace context and deduplicated request IDs. The usage page shows personal counts for the current UTC month, beginning with this release; failures remain visible. The usage table contains metadata only, with no conversation content, audio, provider costs, billed minutes or paid allowances. Form drafts and separate record assistants are outside these counters. Core TLink remains free and no billing is activated. Focused tests, broader validation and exact GitHub/Sites identity belong in C:/Webproject/outputs/wattzun-tools-20261006/release-report.md; this source statement does not establish publication.
+
 ## Authorised integrated delivery: Sales and useful Wattzun assistance
 
 Prepared 6 October 2026 in C:/Webproject/aea-energy-tlink-sales-workspace, branch `codex/tlink-sales-wattzun`, source base `8a2abdc5bf13189013505f92c3f485addb9b0074` (Council release, Sites 770). The user explicitly authorised integrating the changes and publishing the matching GitHub and Sites source. Exact validation, publication identity and live observations are recorded in C:/Webproject/outputs/tlink-wattzun-release-20261006/release-report.md; this source statement itself does not establish publication.

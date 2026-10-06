@@ -277,7 +277,7 @@ test('auditors retain form preview and authorised source access inside Settings 
   const h=portal('auditor');let tree=h.render();assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexVoiceSetupPanel').length,0);
   assert.equal(button(tree,'Official sources'),undefined);assert.ok(button(tree,'Forms'));
   for(const label of ['Government rules','Training','Trade onboarding','Team'])assert.equal(button(tree,label),undefined);
-  const selector=nodes(tree,n=>n.type==='select'&&n.props.value==='home')[0];assert.deepEqual(nodes(selector,n=>n.type==='option').map(n=>n.props.value),['home','cases','customers','connect','tasks','operations','submissions','forms','calculator','map','profile','settings']);
+  const selector=nodes(tree,n=>n.type==='select'&&n.props.value==='home')[0];assert.deepEqual(nodes(selector,n=>n.type==='option').map(n=>n.props.value),['home','cases','customers','connect','tasks','wattzun','operations','submissions','forms','calculator','map','profile','settings']);
   button(tree,'Settings').props.onClick();tree=h.render();assert.ok(button(tree,'Official sources'));assert.equal(button(tree,'Government rules'),undefined);assert.equal(nodes(tree,n=>n.type?.displayName==='CreditexVoiceSetupPanel').length,0);h.cleanup();
 });
 
@@ -287,6 +287,25 @@ test('vertical keyboard navigation cycles through the visible authorised tabs',(
   button(tree,'Settings').props.onKeyDown({key:'ArrowDown',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Home dashboard').props['aria-selected'],true);
   button(tree,'Home dashboard').props.onKeyDown({key:'ArrowUp',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Settings').props['aria-selected'],true);
   button(tree,'Settings').props.onKeyDown({key:'Home',preventDefault(){}});tree=h.render();assert.equal(button(tree,'Home dashboard').props['aria-selected'],true);h.cleanup();
+});
+
+test('current Creditex roles can open Wattzun from Tools without gaining other permissions',()=>{
+  for(const role of ['admin','reviewer','auditor']) {
+    const h=portal(role);let tree=h.render();button(tree,'Wattzun').props.onClick();tree=h.render();
+    assert.equal(button(tree,'Wattzun').props['aria-selected'],true);
+    const panel=nodes(tree,n=>n.props?.id==='creditex-panel-wattzun')[0];assert.ok(panel);
+    assert.equal(panel.props['aria-labelledby'],'creditex-tab-wattzun');
+    const tools=nodes(panel,n=>n.type?.displayName==='WattzunToolsWorkspace')[0];assert.equal(tools.props.portal,'creditex');assert.equal(tools.props.user.uid,user.uid);
+    if(role==='auditor')assert.equal(button(tree,'Team'),undefined);
+    h.cleanup();
+  }
+});
+
+test('opening Wattzun respects the existing unsaved form guard',()=>{
+  const h=portal('admin',{confirm:false});let tree=h.render();button(tree,'Forms').props.onClick();tree=h.render();
+  nodes(tree,n=>typeof n.props?.onFieldFormDirtyChange==='function')[0].props.onFieldFormDirtyChange(true);
+  button(tree,'Wattzun').props.onClick();tree=h.render();assert.equal(button(tree,'Forms').props['aria-selected'],true);
+  assert.equal(nodes(tree,n=>n.props?.id==='creditex-panel-wattzun').length,0);h.cleanup();
 });
 
 test('mobile section selector opens the same panels and ignores unavailable destinations',()=>{
