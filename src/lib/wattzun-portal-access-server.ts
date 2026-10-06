@@ -2,7 +2,9 @@ import { getD1 } from "../../db";
 import { requireFirebaseIdentity } from "./firebase-server";
 import { listTradeBusinesses, TradeBusinessContextError } from "./trade-business-context-server";
 import { requireInstallerTeamAccess } from "./trade-team-server";
-import { TradeAccessError } from "./trade-access-server";
+import { requireVerifiedTradeIdentity, TradeAccessError } from "./trade-access-server";
+import { isFieldSessionRequest } from "./trade-field-session-server";
+import { ensureTlinkSchemaGuards } from "./tlink-schema-guards";
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE } from "./firebase-mfa";
 import { councilMemberships, requireCouncilAccess } from "./council-access-server";
 import { ComplianceAccessError, requireComplianceAccess } from "./compliance-access-server";
@@ -20,6 +22,18 @@ export async function authenticateWattzun(request: Request): Promise<void> {
 }
 export async function requireWattzunAccess(request: Request, portal: WattzunPortal, scopeId: string): Promise<WattzunAccess> {
   if (portal === "trade") {
+    if (!isFieldSessionRequest(request)) {
+      const identity = await requireFirebaseIdentity(request);
+      if (scopeId === identity.uid) {
+        const db = getD1();
+        // Guidance needs current owner authority, not a roster member or operational grants.
+        // Saves continue through their separate team and capability checks.
+        await ensureTlinkSchemaGuards(db);
+        const access = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"], requireSelectableBusiness: true });
+        return { db, actorUid: identity.uid, scope: { portal, scopeId: identity.uid,
+          label: access.businessName || "Installer business" } };
+      }
+    }
     const headers = new Headers(request.headers);
     headers.set("X-TLink-Business", scopeId);
     // Access checks need identity and the selected business, never the request's consumed body.

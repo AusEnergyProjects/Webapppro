@@ -8,21 +8,22 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { readTradeBusinessSelection, TRADE_BUSINESS_SELECTION_CHANGED_EVENT } from "@/lib/trade-business-client";
 import { wattzunPortalForPath } from "@/lib/wattzun-portal-path";
 import { parseWattzunRecordLookup } from "@/lib/wattzun-records";
-import { parseWattzunActionProposal, type WattzunActionReceipt } from "@/lib/wattzun-actions";
+import { parseWattzunActionProposal, type WattzunActionReceipt, type WattzunActionProposal } from "@/lib/wattzun-actions";
 import {
-  WATTZUN_MAX_HISTORY_TURNS, WATTZUN_MAX_HISTORY_CHARACTERS, WATTZUN_VOICE_STREAM_TYPE, wattzunSpokenReply,
+  WATTZUN_REALTIME_VOICE_STREAM_TYPE, wattzunSpokenReply,
   type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput,
 } from "@/lib/wattzun-portal";
 import { WATTZUN_OPEN_EVENT, WATTZUN_READY_EVENT, WATTZUN_USAGE_CHANGED_EVENT, readWattzunOpenRequest, useWattzunPresentation, type WattzunOpenRequest } from "@/lib/wattzun-appearance";
 import { createWattzunBrowserVoiceEnvironment, WattzunVoiceCall, type WattzunCallStatus } from "@/lib/wattzun-voice-client";
 import { readWattzunVoiceStream } from "@/lib/wattzun-voice-stream";
+import { wattzunConversationHistory } from "@/lib/wattzun-conversation";
 import { EnergyAssistantLauncher } from "./EnergyAssistantLauncher";
 import { WattzunMascot } from "./WattzunMascot";
 import { WattzunRecordPicker } from "./WattzunRecordPicker";
 import { WattzunActionReview } from "./WattzunActionReview";
 import styles from "./WattzunPortalAssistant.module.css";
 
-type Message = WattzunTurn & { id: string; reply?: WattzunReply };
+type Message = WattzunTurn & { id: string; reply?: WattzunReply; reviewDraft?: WattzunActionProposal; requestSummary?: string };
 const portalNames: Record<WattzunPortal, string> = { trade: "TLink", council: "Council", creditex: "Creditex" };
 const callLabels: Record<WattzunCallStatus["state"], string> = {
   idle: "Ready to call", permission: "Microphone permission", connecting: "Connecting", listening: "Listening", thinking: "Thinking", speaking: "Wattzun is speaking", muted: "Microphone muted", confirming: "Continue this call?", ended: "Call ended", error: "Call could not continue",
@@ -51,12 +52,6 @@ async function responsePayload(response: Response): Promise<Record<string, unkno
   }
   return payload;
 }
-function conversationHistory(messages: Message[]): WattzunTurn[] {
-  const history = messages.slice(-WATTZUN_MAX_HISTORY_TURNS).map(({ role, content }) => ({ role, content: content.slice(0, 4000) }));
-  while (JSON.stringify(history).length > WATTZUN_MAX_HISTORY_CHARACTERS) history.shift();
-  return history;
-}
-
 export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
   const [user, setUser] = useState<User | null>(null);
   const currentActor = useRef<User | null>(null);
@@ -221,7 +216,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
   }, [append, dismissAction]);
   const requestInput = useCallback((message: string): WattzunTurnInput => ({
     portal: scope.portal, scopeId: scope.scopeId, requestId: crypto.randomUUID(), message,
-    history: conversationHistory(messagesRef.current), preferences: { ...preferencesRef.current },
+    history: wattzunConversationHistory(messagesRef.current), preferences: { ...preferencesRef.current },
   }), [scope]);
   async function sendText() {
     const message = draft.trim();
@@ -257,14 +252,18 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         if (signal.aborted) throw new Error("Call ended.");
         const form = new FormData();
         form.append("request", JSON.stringify(input));
-        form.append("audio", audio, audio.type.includes("mp4") ? "question.m4a" : "question.webm");
+        form.append("audio", audio, "question.wav");
         return readWattzunVoiceStream(await fetch("/api/wattzun/voice", { method: "POST",
-          headers: { Authorization: `Bearer ${token}`, Accept: WATTZUN_VOICE_STREAM_TYPE }, body: form, signal }), signal, isReply);
+          headers: { Authorization: `Bearer ${token}`, Accept: WATTZUN_REALTIME_VOICE_STREAM_TYPE }, body: form, signal }), signal, isReply);
       },
       reply: result => {
         if (!active.current || voiceCall.current !== call) return;
         const id = crypto.randomUUID();
-        append([{ id, role: "user", content: result.transcript }, { id: `${id}:reply`, role: "assistant", content: wattzunSpokenReply(result.reply), reply: result.reply }]);
+        const turns: Message[] = [{ id: `${id}:reply`, role: "assistant", content: wattzunSpokenReply(result.reply), reply: result.reply,
+          ...(result.reply.action ? { reviewDraft: result.reply.action } : {}),
+          ...(result.requestSummary ? { requestSummary: result.requestSummary } : {}) }];
+        if (result.transcript.trim()) turns.unshift({ id, role: "user", content: result.transcript });
+        append(turns);
         if (result.reply.action || result.reply.lookup) onExpand?.();
         window.dispatchEvent(new CustomEvent(WATTZUN_USAGE_CHANGED_EVENT, { detail: { userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId } }));
       },

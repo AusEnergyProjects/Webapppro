@@ -12,7 +12,7 @@ function harness(options = {}) {
     recorder() {
       state.recorderCount++;
       let stopped = false;
-      const recorder = { onData() {}, onStop() {}, onError() {}, start() { if (options.recordingError) throw new Error("recorder failed"); }, stop() { if (stopped) return; stopped = true; recorder.onData(new Blob(options.emptyAudio ? [] : ["synthetic speech"], { type: "audio/webm" })); recorder.onStop(); } };
+      const recorder = { onData() {}, onStop() {}, onError() {}, start() { if (options.recordingError) throw new Error("recorder failed"); }, stop() { if (stopped) return; stopped = true; recorder.onData(options.audio || new Blob(options.emptyAudio ? [] : ["synthetic speech"], { type: "audio/webm" })); recorder.onStop(); } };
       state.recorders.push(recorder);
       return recorder;
     },
@@ -98,6 +98,15 @@ test("recorder errors close the microphone and cancel sampling", async () => {
 test("oversized media stops the call without sending it", async () => {
   const h = harness(); await h.call.start(); h.state.recorders[0].onData(new Blob([new Uint8Array(2_000_001)]));
   assert.equal(h.status(), "error"); assert.equal(h.state.microphoneClosed, 1); assert.equal(h.state.submits.length, 0);
+});
+test("native WAV permits a complete 45-second PCM turn while retaining the old non-WAV bound", async () => {
+  const audio = new Blob([new Uint8Array(45 * 24_000 * 2 + 44)], { type: "audio/wav" });
+  const h = harness({ audio }); await h.call.start(); h.speak(); await tick();
+  assert.equal(h.state.submits.length, 1); assert.equal(h.state.submits[0].audio.size, audio.size);
+  assert.equal(h.state.submits[0].audio.type, "audio/wav"); h.call.dispose();
+  const tooLarge = harness({ audio: new Blob([new Uint8Array(audio.size + 2)], { type: "audio/wav" }) });
+  await tooLarge.call.start(); tooLarge.speak(); await tick(); assert.equal(tooLarge.status(), "error");
+  assert.equal(tooLarge.state.submits.length, 0); assert.equal(tooLarge.state.microphoneClosed, 1);
 });
 test("a speech turn submits once and hang-up prevents a late answer from appearing", async () => {
   const request = deferred(); const h = harness({ request }); await h.call.start(); h.speak(); h.sample(5000);

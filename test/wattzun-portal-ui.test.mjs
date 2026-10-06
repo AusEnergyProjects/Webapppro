@@ -5,6 +5,7 @@ import ts from "typescript";
 import * as portalContract from "../src/lib/wattzun-portal.ts";
 import * as recordContract from "../src/lib/wattzun-records.ts";
 import * as actionContract from "../src/lib/wattzun-actions.ts";
+import * as conversationContract from "../src/lib/wattzun-conversation.ts";
 
 const source = readFileSync(new URL("../src/components/WattzunPortalAssistant.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -27,6 +28,7 @@ function load({ values = [null, [], "", false, null], storage, events, fetchRequ
     "@/lib/wattzun-records": recordContract,
     "@/lib/wattzun-actions": actionContract,
     "@/lib/wattzun-portal": portalContract,
+    "@/lib/wattzun-conversation": conversationContract,
     "@/lib/wattzun-appearance": {
       WATTZUN_OPEN_EVENT:'wattzun:open',WATTZUN_READY_EVENT:'wattzun:ready',WATTZUN_USAGE_CHANGED_EVENT:'wattzun:usage-changed',
       readWattzunOpenRequest:value=>value,
@@ -41,7 +43,7 @@ function load({ values = [null, [], "", false, null], storage, events, fetchRequ
     "./WattzunPortalAssistant.module.css": { default: {} },
   };
   const exported = {};
-  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {conversationHistory, responsePayload, isReply, WattzunConversation, workspaceHref};`)(name => {
+  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {conversationHistory:require('@/lib/wattzun-conversation').wattzunConversationHistory, responsePayload, isReply, WattzunConversation, workspaceHref};`)(name => {
     assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
   }, exported, { localStorage: storage, ...events }, fetchRequest);
   return { exported, effects, updates, auth };

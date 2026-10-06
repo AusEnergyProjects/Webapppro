@@ -7,7 +7,7 @@ import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
 import { isValidAbn, normalizeAbn } from "./trade-abn";
 import { requireTradeMyobSecondFactor } from "./trade-mfa-server";
 
-import { approvedTradeReviewPredicate } from "./trade-account-predicates";
+import { approvedTradeReviewPredicate, verifiedTradeAccountPredicate } from "./trade-account-predicates";
 export { approvedTradeReviewPredicate, verifiedTradeAccountPredicate } from "./trade-account-predicates";
 
 export type TradePartnerType = "installer" | "supplier";
@@ -34,6 +34,7 @@ export type VerifiedTradeAccess = TradeAccountProjection & {
 
 type AccessOptions = {
   partnerTypes?: readonly TradePartnerType[];
+  requireSelectableBusiness?: boolean;
 };
 
 export class TradeAccessError extends Error {
@@ -78,13 +79,14 @@ export function approvedAbnAccess(
   );
 }
 
-export async function tradeAccountProjection(firebaseUid: string) {
+export async function tradeAccountProjection(firebaseUid: string, options: Pick<AccessOptions, "requireSelectableBusiness"> = {}) {
   const row = await getD1().prepare(`SELECT account.firebase_uid, account.email,
       account.business_name, account.abn, account.partner_type, account.account_status,
       account.verification_status, account.verified_abn, account.verification_review_id,
       account.verification_reviewed_at, account.verification_reviewed_by_uid,
       CASE WHEN ${approvedTradeReviewPredicate("account")} THEN 1 ELSE 0 END approval_review_exists
-    FROM trade_accounts account WHERE account.firebase_uid = ?`)
+    FROM trade_accounts account WHERE account.firebase_uid = ?${options.requireSelectableBusiness
+      ? ` AND (${verifiedTradeAccountPredicate("account")})` : ""}`)
     .bind(firebaseUid)
     .first<Record<string, unknown>>();
   if (!row) return null;
@@ -126,7 +128,7 @@ export async function requireVerifiedTradeIdentity(
     );
   }
   await ensureCreditexSchemaGuards(getD1());
-  const account = await tradeAccountProjection(identity.uid);
+  const account = await tradeAccountProjection(identity.uid, options);
   if (!account) {
     throw new TradeAccessError(
       "PROFILE_REQUIRED",

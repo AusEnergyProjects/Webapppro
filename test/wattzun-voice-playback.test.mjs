@@ -150,17 +150,22 @@ function globals(values) {
 }
 function microphoneContext() {
   const device = context(); device.state = "suspended";
+  device.audioWorklet = { async addModule(url) { assert.equal(url, '/wattzun-voice-worklet.js'); } };
   device.createMediaStreamSource = () => ({ connect() {}, disconnect() {} });
   device.createAnalyser = () => ({ fftSize: 0, getFloatTimeDomainData(samples) { samples.fill(0); }, disconnect() {} });
   return device;
 }
 const media = () => ({ getTracks: () => [{ enabled: true, stop() {} }] });
+class CaptureNode {
+  constructor() { this.port = { onmessage: null, postMessage() {}, close() {} }; }
+  connect() {} disconnect() {}
+}
 
 test("browser PCM playback reuses the microphone context resumed during Call and leaves ownership with the microphone", async () => {
   const devices = [];
   const restore = globals({
     AudioContext: class { constructor() { const device = microphoneContext(); devices.push(device); return device; } },
-    MediaRecorder: class { static isTypeSupported() { return true; } },
+    AudioWorkletNode: CaptureNode,
     navigator: { mediaDevices: { getUserMedia: async () => media() } },
   });
   try {
@@ -177,7 +182,7 @@ test("a late microphone permission grant cannot replace the newer call's playbac
   const devices = [], permissions = [deferred(), deferred()]; let requested = 0;
   const restore = globals({
     AudioContext: class { constructor() { const device = microphoneContext(); devices.push(device); return device; } },
-    MediaRecorder: class { static isTypeSupported() { return true; } },
+    AudioWorkletNode: CaptureNode,
     navigator: { mediaDevices: { getUserMedia: () => permissions[requested++].promise } },
   });
   try {

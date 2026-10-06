@@ -26,7 +26,7 @@ Function("require", "exports", source)(name => {
     wattzunAccessFailure: error => error instanceof AccessError ? { status: error.status, message: error.message }
       : error?.message === "AUTH_REQUIRED" ? { status: 401, message: "Sign in." } : null,
   };
-  if (name === "./wattzun-portal-ai-server") return {};
+  if (name === "./wattzun-portal-ai-server" || name === "./wattzun-realtime-server") return {};
   if (name === "./wattzun-usage") return usageContract;
   if (name === "./wattzun-usage-server") return { WattzunUsageError: UsageError };
   throw new Error(name);

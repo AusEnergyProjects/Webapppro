@@ -1,4 +1,4 @@
-import { WATTZUN_MAX_AUDIO_BYTES, WATTZUN_VOICE_STREAM_TYPE, type WattzunReply, type WattzunVoiceResult } from "./wattzun-portal.ts";
+import { WATTZUN_MAX_AUDIO_BYTES, WATTZUN_VOICE_STREAM_TYPE, WATTZUN_REALTIME_VOICE_STREAM_TYPE, type WattzunReply, type WattzunVoiceResult } from "./wattzun-portal.ts";
 
 const MAX_FRAME = 64_000;
 const unreadable = () => new Error("Wattzun returned an unreadable voice reply. Try again.");
@@ -11,7 +11,9 @@ export async function readWattzunVoiceStream(response: Response, signal: AbortSi
     throw new Error(payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string"
       ? payload.error : "Wattzun could not complete that request. Try again.");
   }
-  if (response.headers.get("content-type")?.split(";")[0] !== WATTZUN_VOICE_STREAM_TYPE || !response.body) throw unreadable();
+  const contentType = response.headers.get("content-type")?.split(";")[0];
+  const realtime = contentType === WATTZUN_REALTIME_VOICE_STREAM_TYPE;
+  if ((!realtime && contentType !== WATTZUN_VOICE_STREAM_TYPE) || !response.body) throw unreadable();
   const reader = response.body.getReader(), decoder = new TextDecoder("utf-8", { fatal: true });
   let buffer = "", bytes = 0, wireBytes = 0, finished = false;
   const cancel = () => { void reader.cancel().catch(() => {}); };
@@ -37,8 +39,10 @@ export async function readWattzunVoiceStream(response: Response, signal: AbortSi
   try {
     const header = await frame();
     if (!header || typeof header !== "object" || !("type" in header) || header.type !== "reply"
-      || !("transcript" in header) || typeof header.transcript !== "string" || !header.transcript.trim() || header.transcript.length > 4_000
+      || !("transcript" in header) || typeof header.transcript !== "string" || (!realtime && !header.transcript.trim()) || header.transcript.length > 4_000
       || !("reply" in header) || !isReply(header.reply)) throw unreadable();
+    const requestSummary = "requestSummary" in header ? header.requestSummary : undefined;
+    if (requestSummary !== undefined && (!realtime || typeof requestSummary !== "string" || !requestSummary.trim() || requestSummary.length > 1800)) throw unreadable();
     const stream = new ReadableStream<Uint8Array>({
       async pull(controller) {
         try {
@@ -58,6 +62,6 @@ export async function readWattzunVoiceStream(response: Response, signal: AbortSi
       },
       async cancel() { if (!finished) { finished = true; await reader.cancel().catch(() => {}); dispose(); } },
     }, { highWaterMark: 0 });
-    return { ok: true, transcript: header.transcript, reply: header.reply, audio: { mimeType: "audio/pcm", stream } };
+    return { ok: true, transcript: header.transcript, ...(typeof requestSummary === "string" ? { requestSummary } : {}), reply: header.reply, audio: { mimeType: "audio/pcm", stream } };
   } catch { await reader.cancel().catch(() => {}); dispose(); throw signal.aborted ? new Error("Call ended.") : unreadable(); }
 }

@@ -21,7 +21,7 @@ Function('require', 'exports', executable)(name => {
     WattzunAccessError: AccessError,
     wattzunAccessFailure: error => error instanceof AccessError ? { status: error.status, message: error.message } : null,
   };
-  if (name === './wattzun-portal-ai-server' || name === './wattzun-usage') return {};
+  if (name === './wattzun-portal-ai-server' || name === './wattzun-realtime-server' || name === './wattzun-usage') return {};
   if (name === './wattzun-usage-server') return { WattzunUsageError: UsageError };
   throw new Error(`Unexpected route dependency: ${name}`);
 }, route);
@@ -86,6 +86,14 @@ function fixture(options = {}) {
       events.push('speak'); providerSignals.push(context.signal);
       return { base64: 'AAA=', mimeType: 'audio/mpeg' };
     },
+    realtime: async context => {
+      events.push('realtime'); providerSignals.push(context.signal);
+      assert.equal(context.audio.type,'audio/wav'); assert.deepEqual(context.input,input);
+      if(options.providerError) throw options.providerError;
+      await context.beforeSpeech(); events.push('nativeSpeech');
+      if(options.abortAt==='realtime') controller.abort();
+      return {reply:options.reply||reply,audio:audio.stream,requestSummary:'Prepare a new quote. Customer details are still needed.'};
+    },
     recordUsage: async value => {
       events.push('recordUsage');
       assert.deepEqual(value, { access, requestId: input.requestId, kind: 'voice' });
@@ -98,7 +106,8 @@ function fixture(options = {}) {
   async function post(accept = contract.WATTZUN_VOICE_STREAM_TYPE) {
     const form = new FormData();
     form.set('request', JSON.stringify(input));
-    form.set('audio', new Blob([new Uint8Array(300)], { type: 'audio/webm;codecs=opus' }), 'synthetic.webm');
+    const native = accept === contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE;
+    form.set('audio', new Blob([new Uint8Array(options.audioBytes||300)], { type: options.audioType || (native ? 'audio/wav' : 'audio/webm;codecs=opus') }), native?'synthetic.wav':'synthetic.webm');
     const request = new Request('https://example.test/api/wattzun/voice', {
       method: 'POST', headers: { origin: 'https://example.test', accept }, body: form, signal: controller.signal,
     });
@@ -132,6 +141,37 @@ test('the authorised streaming response and first audio arrive before provider E
   reader.releaseLock();
   assert.equal(f.audio.stream.locked, false);
   assert.doesNotMatch(response.headers.get('server-timing'), /synthetic-owner|synthetic-business|Please|provider|Bearer/);
+});
+
+test('native audio bypasses transcription and legacy LLM/TTS while retaining access checks and usage',async()=>{
+  const f=fixture();const {response,request}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.deepEqual(f.events,['authenticate','access','realtime','access','nativeSpeech','access','recordUsage']);
+  assert.equal(f.recorded.length,1);assert.equal(f.providerSignals[0],request.signal);
+  const result=await readWattzunVoiceStream(response,f.controller.signal,matchesReply);
+  assert.equal(result.transcript,'');assert.deepEqual(result.reply,reply);
+  assert.equal(result.requestSummary,'Prepare a new quote. Customer details are still needed.');
+  const reader=result.audio.stream.getReader(),pending=reader.read(); f.audio.push(Uint8Array.from([0,1]));
+  assert.deepEqual((await pending).value,Uint8Array.from([0,1]));assert.equal(f.audio.state.ended,false);
+  f.audio.finish();assert.equal((await reader.read()).done,true);reader.releaseLock();
+  assert.match(response.headers.get('server-timing'),/realtime;dur=/);assert.doesNotMatch(response.headers.get('server-timing'),/stt;|llm;|tts;/);
+});
+
+test('native audio cannot release speech when access is revoked or its usage write fails',async()=>{
+  for(const options of [{revokeAt:1},{revokeAt:2},{revokeAt:3},{usageError:new UsageError('unavailable')},{abortAt:'realtime'}]){
+    const f=fixture(options);const {response}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+    assert.ok(response.status>=400);assert.match(response.headers.get('content-type'),/json/);assert.equal(f.recorded.length,0);
+    if(options.revokeAt===3||options.usageError||options.abortAt) assert.equal(f.audio.state.cancelled,1);
+  }
+});
+
+test('native WAV admits the exact 45 second PCM bound and rejects overflow or other encodings',async()=>{
+  const exact=fixture({audioBytes:contract.WATTZUN_MAX_WAV_AUDIO_BYTES});
+  const {response}=await exact.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);assert.equal(response.status,200);await response.body.cancel();
+  for(const options of [{audioBytes:contract.WATTZUN_MAX_WAV_AUDIO_BYTES+1},{audioType:'audio/webm'}]){
+    const f=fixture(options);const {response}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+    assert.equal(response.status,400);assert.equal(f.events.includes('realtime'),false);
+  }
 });
 
 test('route splits large provider chunks into bounded frames while preserving exact binary PCM order', async () => {

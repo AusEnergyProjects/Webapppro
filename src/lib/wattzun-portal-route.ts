@@ -1,8 +1,9 @@
-import { WattzunInputError, WATTZUN_MAX_AUDIO_BYTES, WATTZUN_VOICE_STREAM_TYPE, isWattzunPortal, parseWattzunTurn,
+import { WattzunInputError, WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_WAV_AUDIO_BYTES, WATTZUN_VOICE_STREAM_TYPE, WATTZUN_REALTIME_VOICE_STREAM_TYPE, isWattzunPortal, parseWattzunTurn,
   type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurnInput } from "./wattzun-portal";
 import { authenticateWattzun, listWattzunScopes, requireWattzunAccess, wattzunAccessFailure,
   WattzunAccessError, type WattzunAccess } from "./wattzun-portal-access-server";
 import { prepareWattzunPortalReply, transcribeWattzunPortalAudio, speakWattzunPortalReply, streamWattzunPortalReply } from "./wattzun-portal-ai-server";
+import { prepareWattzunRealtimeTurn } from "./wattzun-realtime-server";
 import { parseWattzunUsageScope, type WattzunUsage } from "./wattzun-usage";
 import { readWattzunUsage, recordWattzunUsage, WattzunUsageError, type WattzunUsageRecord } from "./wattzun-usage-server";
 
@@ -15,21 +16,23 @@ export type WattzunRouteDependencies = {
   transcribe: (options: Context & { audio: Blob }) => Promise<string>;
   speak: (options: Context & { reply: WattzunReply }) => Promise<{ base64: string; mimeType: "audio/mpeg" }>;
   streamSpeak: (options: Context & { reply: WattzunReply }) => Promise<ReadableStream<Uint8Array>>;
+  realtime: (options: Context & { audio: Blob; beforeSpeech: () => Promise<void> }) => Promise<{ reply: WattzunReply; audio: ReadableStream<Uint8Array>; transcript?: string; requestSummary?: string }>;
   recordUsage: (options: WattzunUsageRecord) => Promise<void>;
   usage: (access: WattzunAccess) => Promise<WattzunUsage>;
 };
 const defaults: WattzunRouteDependencies = {
   authenticate: authenticateWattzun, scopes: listWattzunScopes, access: requireWattzunAccess,
   reply: prepareWattzunPortalReply, transcribe: transcribeWattzunPortalAudio, speak: speakWattzunPortalReply, streamSpeak: streamWattzunPortalReply,
+  realtime: prepareWattzunRealtimeTurn,
   recordUsage: recordWattzunUsage, usage: readWattzunUsage,
 };
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 function json(body: object, status = 200) { return Response.json(body, { status, headers }); }
 function turnTimer() {
   const started = performance.now();
-  const durations = new Map<"auth" | "access" | "stt" | "llm" | "tts" | "usage", number>();
+  const durations = new Map<"auth" | "access" | "stt" | "llm" | "tts" | "realtime" | "usage", number>();
   return {
-    async run<T>(stage: "auth" | "access" | "stt" | "llm" | "tts" | "usage", operation: () => Promise<T>): Promise<T> {
+    async run<T>(stage: "auth" | "access" | "stt" | "llm" | "tts" | "realtime" | "usage", operation: () => Promise<T>): Promise<T> {
       const before = performance.now();
       try { return await operation(); }
       finally { durations.set(stage, (durations.get(stage) || 0) + Math.max(0, performance.now() - before)); }
@@ -140,24 +143,39 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
   const contentType = request.headers.get("content-type") || "";
   if (!/^multipart\/form-data\s*;/i.test(contentType)) return json({ ok: false, error: "Send a recorded voice turn." }, 415);
   const timing = turnTimer();
+  const realtime = request.headers.get("accept") === WATTZUN_REALTIME_VOICE_STREAM_TYPE;
+  const maximumAudio = realtime ? WATTZUN_MAX_WAV_AUDIO_BYTES : WATTZUN_MAX_AUDIO_BYTES;
   let speechStream: ReadableStream<Uint8Array> | undefined;
   let handedOff = false;
   try {
     await timing.run("auth", () => deps.authenticate(request));
     requireOpenConversation(request);
-    const bytes = await boundedBody(request, WATTZUN_MAX_AUDIO_BYTES + 50_000);
+    const bytes = await boundedBody(request, maximumAudio + 50_000);
     if (!bytes) return json({ ok: false, error: "That voice turn is too large. Keep it under 45 seconds." }, 413);
     const form = await new Response(bytes, { headers: { "Content-Type": contentType } }).formData();
     const raw = form.get("request");
     const audio = form.get("audio");
     if (typeof raw !== "string" || new TextEncoder().encode(raw).byteLength > 40_000 || !(audio instanceof Blob)
-      || audio.size < 100 || audio.size > WATTZUN_MAX_AUDIO_BYTES
+      || audio.size < 100 || audio.size > maximumAudio
       || !/^audio\/(webm|mp4|mpeg|wav|ogg)(;codecs=[a-zA-Z0-9., -]+)?$/.test(audio.type)) {
-      throw new WattzunInputError("Use a supported microphone recording smaller than 2 MB.");
+      throw new WattzunInputError(realtime ? "Use a supported native microphone recording under 45 seconds." : "Use a supported microphone recording smaller than 2 MB.");
     }
+    if (realtime && audio.type !== "audio/wav") throw new WattzunInputError("Use a native microphone recording for this voice call.");
     const input = parseWattzunTurn(JSON.parse(raw), true);
     const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
+    if (realtime) {
+      const prepared = await timing.run("realtime", () => deps.realtime({ ...access, input, audio, signal: request.signal,
+        beforeSpeech: async () => { await timing.run("access", () => recheck(request, access, deps)); } }));
+      speechStream = prepared.audio;
+      const latest = await timing.run("access", () => recheck(request, access, deps));
+      await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
+      requireOpenConversation(request);
+      const response = timing.response(new Response(voiceFrames(prepared.transcript || "", prepared.reply, speechStream, request.signal, prepared.requestSummary),
+        { headers: { ...headers, "Content-Type": WATTZUN_REALTIME_VOICE_STREAM_TYPE } }));
+      handedOff = true;
+      return response;
+    }
     const transcript = await timing.run("stt", () => deps.transcribe({ ...access, input, audio, signal: request.signal }));
     await timing.run("access", () => recheck(request, access, deps));
     const spokenInput = { ...input, message: transcript };
@@ -182,7 +200,7 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
   finally { if (speechStream && !handedOff) await speechStream.cancel().catch(() => {}); }
 }
 
-function voiceFrames(transcript: string, reply: WattzunReply, audio: ReadableStream<Uint8Array>, signal: AbortSignal) {
+function voiceFrames(transcript: string, reply: WattzunReply, audio: ReadableStream<Uint8Array>, signal: AbortSignal, requestSummary?: string) {
   const reader = audio.getReader(), encoder = new TextEncoder();
   let header = true, offset = 0;
   let buffered: Uint8Array = new Uint8Array(0);
@@ -191,7 +209,7 @@ function voiceFrames(transcript: string, reply: WattzunReply, audio: ReadableStr
     async pull(controller) {
       try {
         signal.throwIfAborted();
-        if (header) { header = false; controller.enqueue(encode({ type: "reply", transcript, reply })); return; }
+        if (header) { header = false; controller.enqueue(encode({ type: "reply", transcript, reply, ...(requestSummary ? { requestSummary } : {}) })); return; }
         while (offset >= buffered.byteLength) {
           const next = await reader.read(); signal.throwIfAborted();
           if (next.done) { controller.enqueue(encode({ type: "done" })); controller.close(); reader.releaseLock(); return; }

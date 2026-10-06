@@ -1,6 +1,7 @@
-import { WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_TURN_SECONDS } from "./wattzun-portal.ts";
+import { WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_WAV_AUDIO_BYTES, WATTZUN_MAX_TURN_SECONDS } from "./wattzun-portal.ts";
 import type { WattzunVoiceResult } from "./wattzun-portal.ts";
 import { createWattzunPcmPlayback } from "./wattzun-voice-playback.ts";
+import { createWattzunPcmCapture } from "./wattzun-pcm-capture.ts";
 
 export type WattzunCallState = "idle" | "permission" | "connecting" | "listening" | "thinking" | "speaking" | "muted" | "confirming" | "ended" | "error";
 export type WattzunCallStatus = { state: WattzunCallState; message: string };
@@ -170,7 +171,8 @@ export class WattzunVoiceCall {
       recorder.onData = (chunk) => {
         if (this.capture !== capture || capture.settled || !chunk.size) return;
         capture.bytes += chunk.size;
-        if (capture.bytes > WATTZUN_MAX_AUDIO_BYTES) { this.fail("That voice turn was too large. Start a new call and use shorter questions."); return; }
+        const limit = chunk.type === "audio/wav" ? WATTZUN_MAX_WAV_AUDIO_BYTES : WATTZUN_MAX_AUDIO_BYTES;
+        if (capture.bytes > limit) { this.fail("That voice turn was too large. Start a new call and use shorter questions."); return; }
         capture.chunks.push(chunk);
       };
       recorder.onError = () => { if (this.capture === capture) this.fail("Recording stopped unexpectedly. Check your microphone and call again."); };
@@ -300,8 +302,8 @@ export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment 
       return prompt;
     },
     async microphone() {
-      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined" || typeof AudioContext === "undefined") {
-        throw new Error("Voice calls need a browser with microphone recording support on a secure connection.");
+      if (!navigator.mediaDevices?.getUserMedia || typeof AudioWorkletNode === "undefined" || typeof AudioContext === "undefined") {
+        throw new Error("Voice calls need a modern browser with microphone and AudioWorklet support on a secure connection.");
       }
       const audioContext = new AudioContext();
       const generation = ++microphoneGeneration;
@@ -309,31 +311,24 @@ export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment 
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
         await audioContext.resume();
-        if (generation === microphoneGeneration) playbackContext = audioContext;
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
         analyser.fftSize = 2048;
         source.connect(analyser);
         const samples = new Float32Array(analyser.fftSize);
-        const mime = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find(type => MediaRecorder.isTypeSupported(type));
+        const capture = await createWattzunPcmCapture(audioContext, source);
+        if (generation === microphoneGeneration) playbackContext = audioContext;
         const media = stream;
+        let closed = false;
         return {
-          recorder() {
-            const recorder = new MediaRecorder(media, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : undefined);
-            const port: WattzunRecorder = {
-              onData: () => {}, onStop: () => {}, onError: () => {},
-              start: () => recorder.start(1000),
-              stop: () => { if (recorder.state !== "inactive") recorder.stop(); },
-            };
-            recorder.ondataavailable = event => port.onData(event.data);
-            recorder.onstop = () => port.onStop();
-            recorder.onerror = () => port.onError();
-            return port;
-          },
+          recorder: () => capture.recorder(),
           level() { analyser.getFloatTimeDomainData(samples); return Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length); },
           mute(muted) { for (const track of media.getTracks()) track.enabled = !muted; },
           close() {
+            if (closed) return;
+            closed = true;
             if (playbackContext === audioContext) playbackContext = null;
+            capture.close();
             for (const track of media.getTracks()) track.stop(); source.disconnect(); analyser.disconnect(); void audioContext.close().catch(() => {});
           },
         };
@@ -343,6 +338,7 @@ export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment 
         void audioContext.close().catch(() => {});
         if (error instanceof Error && error.name === "NotAllowedError") throw new Error("Microphone permission was denied. Allow microphone access in your browser, then call again.");
         if (error instanceof Error && error.name === "NotFoundError") throw new Error("No microphone was found. Connect one, then call again.");
+        if (error instanceof Error && error.name === "NotSupportedError") throw new Error("Native voice capture requires a modern browser with AudioWorklet support.");
         throw new Error("Your microphone could not be opened. Check that it is available and call again.");
       }
     },

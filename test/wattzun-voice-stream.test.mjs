@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readWattzunVoiceStream } from '../src/lib/wattzun-voice-stream.ts';
-import { WATTZUN_MAX_AUDIO_BYTES, WATTZUN_VOICE_STREAM_TYPE } from '../src/lib/wattzun-portal.ts';
+import { WATTZUN_MAX_AUDIO_BYTES, WATTZUN_VOICE_STREAM_TYPE, WATTZUN_REALTIME_VOICE_STREAM_TYPE } from '../src/lib/wattzun-portal.ts';
 
 const encoder = new TextEncoder();
 const reply = { kind: 'clarification', message: 'I can help with that quote.', questions: ['Which job is this for?'], links: [] };
@@ -25,7 +25,7 @@ function network() {
     push(bytes) { controller.enqueue(bytes); },
     finish() { state.ended = true; controller.close(); },
     fail(error) { controller.error(error); },
-    response() { return new Response(stream, { headers: { 'Content-Type': WATTZUN_VOICE_STREAM_TYPE } }); },
+    response(contentType = WATTZUN_VOICE_STREAM_TYPE) { return new Response(stream, { headers: { 'Content-Type': contentType } }); },
   };
 }
 
@@ -71,6 +71,24 @@ test('validated metadata returns before audio and playback consumes the first PC
   assert.equal(wire.state.cancelled, 1);
   reader.releaseLock();
   assert.equal(wire.stream.locked, false);
+});
+
+test('native audio metadata starts playback without requiring a transcript', async () => {
+  const requestSummary='Prepare a new quote for Zoë. The job is not yet identified.';
+  const wire = network(); wire.push(frame({ ...metadata, transcript: '', requestSummary }));
+  const result = await readWattzunVoiceStream(wire.response(WATTZUN_REALTIME_VOICE_STREAM_TYPE),new AbortController().signal,matchesReply);
+  assert.equal(result.transcript,''); assert.deepEqual(result.reply,reply); assert.equal(result.requestSummary,requestSummary);
+  const pending=collect(result.audio.stream); wire.push(audioFrame([1,2])); wire.push(frame({type:'done'}));
+  assert.deepEqual(await pending,Buffer.from([1,2])); assert.equal(wire.state.cancelled,1);
+});
+
+test('native request summaries are bounded strings and cannot arrive on the legacy wire',async()=>{
+  for(const [contentType,requestSummary] of [[WATTZUN_REALTIME_VOICE_STREAM_TYPE,''],[WATTZUN_REALTIME_VOICE_STREAM_TYPE,'x'.repeat(1801)],
+    [WATTZUN_REALTIME_VOICE_STREAM_TYPE,{text:'unvalidated'}],[WATTZUN_VOICE_STREAM_TYPE,'Unnegotiated context']]){
+    const wire=network();wire.push(frame({...metadata,requestSummary}));
+    await assert.rejects(readWattzunVoiceStream(wire.response(contentType),new AbortController().signal,matchesReply),unreadable);
+    assert.equal(wire.state.cancelled,1);
+  }
 });
 
 test('invalid metadata or audio before the reply is rejected before the audio stream is exposed', async () => {

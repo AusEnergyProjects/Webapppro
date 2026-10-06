@@ -22,11 +22,13 @@ export type WattzunReply = {
 export type WattzunVoiceAudio = { base64: string; mimeType: "audio/mpeg" }
   | { mimeType: "audio/pcm"; stream: ReadableStream<Uint8Array> };
 export type WattzunVoiceResult = {
-  ok: true; transcript: string; reply: WattzunReply; audio: WattzunVoiceAudio;
+  ok: true; transcript: string; requestSummary?: string; reply: WattzunReply; audio: WattzunVoiceAudio;
 };
 export const WATTZUN_VOICE_STREAM_TYPE = "application/x-wattzun-voice+ndjson";
+export const WATTZUN_REALTIME_VOICE_STREAM_TYPE = "application/x-wattzun-realtime-voice+ndjson";
 export const WATTZUN_MAX_AUDIO_BYTES = 2_000_000;
 export const WATTZUN_MAX_TURN_SECONDS = 45;
+export const WATTZUN_MAX_WAV_AUDIO_BYTES = WATTZUN_MAX_TURN_SECONDS * 24_000 * 2 + 44;
 export const WATTZUN_MAX_HISTORY_TURNS = 40;
 export const WATTZUN_MAX_HISTORY_CHARACTERS = 24_000;
 
