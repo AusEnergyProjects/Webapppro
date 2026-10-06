@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import test from "node:test";
+import { readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import test, { after } from "node:test";
+import { Miniflare } from "miniflare";
 import {
   createSharedSurgeUsageGuard,
   SURGE_USAGE_GUARD_DEFAULTS,
@@ -8,6 +11,9 @@ import {
 } from "../src/lib/energy-assistant-usage-guard.ts";
 
 const START = Date.parse("2026-08-21T10:15:00.000Z");
+const migration = readFileSync(new URL("../drizzle/0153_surge_model_usage_guard.sql", import.meta.url), "utf8");
+const fixtureDatabases = new Set();
+after(() => { for (const database of fixtureDatabases) database.close(); });
 
 function opaqueKey(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -32,53 +38,50 @@ function productionEnvironment(overrides = {}) {
   };
 }
 
-class FakeD1Database {
+class SqliteD1Database {
   constructor({ fail = false, conflict = false, yieldReads = true } = {}) {
-    this.rows = new Map();
+    this.sqlite = new DatabaseSync(":memory:");
+    this.sqlite.exec(migration);
+    fixtureDatabases.add(this.sqlite);
     this.fail = fail;
     this.conflict = conflict;
     this.yieldReads = yieldReads;
+    this.calls = [];
+    this.writeChanges = [];
+    this.beforeRun = null;
+    this.afterRun = null;
+  }
+
+  get rows() {
+    return new Map(this.sqlite.prepare("SELECT * FROM surge_model_usage_state").all()
+      .map((row) => [row.scope_hash, row]));
   }
 
   prepare(sql) {
-    const normalized = sql.replace(/\s+/g, " ").trim().toUpperCase();
     return {
       bind: (...values) => ({
         first: async () => {
-          if (this.fail) throw new Error("fake D1 unavailable");
-          if (!normalized.startsWith("SELECT STATE_JSON, VERSION")) {
-            throw new Error(`unsupported fake D1 read: ${normalized}`);
-          }
+          this.calls.push("first");
+          if (this.fail) throw new Error("fixture D1 unavailable");
           if (this.yieldReads) await new Promise((resolve) => setImmediate(resolve));
-          const row = this.rows.get(values[0]);
-          return row ? { state_json: row.state_json, version: row.version } : null;
+          return this.sqlite.prepare(sql).get(...values) || null;
+        },
+        all: async () => {
+          this.calls.push("all");
+          if (this.fail) throw new Error("fixture D1 unavailable");
+          if (this.yieldReads) await new Promise((resolve) => setImmediate(resolve));
+          return { success: true, results: this.sqlite.prepare(sql).all(...values), meta: { changes: 0 } };
         },
         run: async () => {
-          if (this.fail) throw new Error("fake D1 unavailable");
-          if (this.conflict) return { meta: { changes: 0 } };
+          this.calls.push("run");
+          if (this.fail) throw new Error("fixture D1 unavailable");
+          if (this.conflict) return { success: true, meta: { changes: 0 } };
           await Promise.resolve();
-          if (normalized.startsWith("INSERT OR IGNORE")) {
-            const [scopeHash, stateJson, updatedAt] = values;
-            if (this.rows.has(scopeHash)) return { meta: { changes: 0 } };
-            this.rows.set(scopeHash, {
-              state_json: stateJson,
-              version: 0,
-              updated_at: updatedAt,
-            });
-            return { meta: { changes: 1 } };
-          }
-          if (normalized.startsWith("UPDATE SURGE_MODEL_USAGE_STATE")) {
-            const [stateJson, updatedAt, scopeHash, version] = values;
-            const row = this.rows.get(scopeHash);
-            if (!row || row.version !== version) return { meta: { changes: 0 } };
-            this.rows.set(scopeHash, {
-              state_json: stateJson,
-              version: row.version + 1,
-              updated_at: updatedAt,
-            });
-            return { meta: { changes: 1 } };
-          }
-          throw new Error(`unsupported fake D1 write: ${normalized}`);
+          if (this.beforeRun) await this.beforeRun(sql, values);
+          const result = this.sqlite.prepare(sql).run(...values);
+          this.writeChanges.push(Number(result.changes));
+          if (this.afterRun) await this.afterRun(result);
+          return { success: true, meta: { changes: Number(result.changes) } };
         },
       }),
     };
@@ -99,7 +102,7 @@ class FakeD1Database {
 }
 
 function fixture(options = {}) {
-  const database = options.database || new FakeD1Database();
+  const database = options.database || new SqliteD1Database();
   const clock = options.clock || { value: START };
   let sequence = 0;
   const guard = createSharedSurgeUsageGuard({
@@ -144,6 +147,253 @@ test("production configuration exposes the exact fixed default ceilings", () => 
   });
   assert.equal(SURGE_USAGE_GUARD_ENV.globalInFlightLimit, "SURGE_GLOBAL_INFLIGHT_LIMIT");
   assert.equal(SURGE_USAGE_GUARD_ENV.globalDailyMicroUsdLimit, "SURGE_GLOBAL_DAILY_MICRO_USD");
+});
+
+test("admission uses one shared snapshot read and one atomic write, including mixed existing rows", async () => {
+  const { database, guard } = fixture();
+  const first = await guard.reserve(reservation(1));
+  assert.equal(first.allowed, true);
+  assert.deepEqual(database.calls, ["all", "run"]);
+  assert.deepEqual(database.writeChanges, [3]);
+  database.calls.length = 0;
+  const next = await guard.reserve(reservation(2));
+  assert.equal(next.allowed, true);
+  assert.deepEqual(database.calls, ["all", "run"]);
+  assert.deepEqual(database.writeChanges, [3, 3]);
+  assert.equal(database.rows.size, 5);
+  assert.equal(database.globalState().minuteCount, 2);
+  assert.equal(database.globalState().dailyReservedMicroUsd, 2);
+  await first.release();
+  await next.release();
+});
+
+test("all quota denials and duplicates leave every stored state unchanged", async (t) => {
+  const cases = [
+    ["client_minute", "SURGE_CLIENT_MINUTE_LIMIT", "clientKey"],
+    ["client_day", "SURGE_CLIENT_DAILY_LIMIT", "clientKey"],
+    ["network_minute", "SURGE_NETWORK_MINUTE_LIMIT", "networkKey"],
+    ["network_day", "SURGE_NETWORK_DAILY_LIMIT", "networkKey"],
+    ["global_minute", "SURGE_GLOBAL_MINUTE_LIMIT"],
+    ["global_in_flight", "SURGE_GLOBAL_INFLIGHT_LIMIT"],
+    ["global_daily_budget", "SURGE_GLOBAL_DAILY_MICRO_USD"],
+    ["duplicate_request"],
+  ];
+  for (const [reason, limit, sharedKey] of cases) {
+    await t.test(reason, async () => {
+      const { database, guard } = fixture({ env: limit ? { [limit]: "1" } : {} });
+      const input = reservation(1);
+      assert.equal((await guard.reserve(input)).allowed, true);
+      const before = database.parsedStates();
+      const callsBefore = database.calls.length;
+      const denied = await guard.reserve(reason === "duplicate_request" ? input : reservation(2,
+        sharedKey ? { [sharedKey]: input[sharedKey] } : {}));
+      assert.equal(denied.allowed, false);
+      assert.equal(denied.reason, reason);
+      assert.ok(denied.retryAfterSeconds >= 1);
+      assert.deepEqual(database.parsedStates(), before);
+      assert.deepEqual(database.calls.slice(callsBefore), ["all"]);
+    });
+  }
+});
+
+test("a changed or newly inserted row blocks all three writes before a fresh CAS retry", async (t) => {
+  for (const [scope, offset] of [["client", 0], ["network", 5], ["global", 10]]) {
+    for (const absent of [false, true]) {
+      await t.test(`${scope} ${absent ? "absent-row insertion" : "version collision"}`, async () => {
+        const { database, guard } = fixture();
+        const input = reservation(1);
+        assert.equal((await guard.reserve(input)).allowed, true);
+        const originalRows = database.parsedStates();
+        const targetHash = scope === "global"
+          ? originalRows.find((row) => row.state.kind === "global").scopeHash
+          : null;
+        // The next write supplies authoritative ordered scope hashes. To make a
+        // mixed snapshot, first capture them from the initial atomic statement.
+        const scopeHashes = [];
+        database.beforeRun = (_sql, values) => {
+          scopeHashes.push(values[0], values[5], values[10]);
+          database.beforeRun = null;
+        };
+        assert.equal((await guard.reserve(reservation(2, {
+          clientKey: input.clientKey, networkKey: input.networkKey,
+        }))).allowed, true);
+        const scopeHash = targetHash || scopeHashes[offset / 5];
+        if (absent) database.sqlite.prepare("DELETE FROM surge_model_usage_state WHERE scope_hash = ?").run(scopeHash);
+        const beforeRace = database.parsedStates();
+        const writesBefore = database.writeChanges.length;
+        let racedSnapshot;
+        database.beforeRun = (_sql, values) => {
+          database.beforeRun = null;
+          assert.equal(values[offset], scopeHash);
+          if (absent) {
+            assert.equal(values[offset + 2], null);
+            const inserted = JSON.parse(values[offset + 1]);
+            inserted.minuteCount = 0;
+            if (inserted.kind === "counter") inserted.dayCount = 0;
+            else { inserted.dailyReservedMicroUsd = 0; inserted.leases = []; inserted.requests = []; }
+            database.sqlite.prepare("INSERT INTO surge_model_usage_state VALUES (?, ?, 0, ?)")
+              .run(scopeHash, JSON.stringify(inserted), START);
+          } else {
+            database.sqlite.prepare("UPDATE surge_model_usage_state SET version = version + 1 WHERE scope_hash = ?")
+              .run(scopeHash);
+          }
+          racedSnapshot = database.parsedStates();
+          for (const row of beforeRace.filter((row) => row.scopeHash !== scopeHash)) {
+            assert.deepEqual(racedSnapshot.find((value) => value.scopeHash === row.scopeHash), row);
+          }
+        };
+        database.afterRun = (result) => {
+          database.afterRun = null;
+          assert.equal(Number(result.changes), 0);
+          assert.deepEqual(database.parsedStates(), racedSnapshot);
+        };
+        const result = await guard.reserve(reservation(3, { clientKey: input.clientKey, networkKey: input.networkKey }));
+        assert.equal(result.allowed, true);
+        assert.deepEqual(database.writeChanges.slice(writesBefore), [0, 3]);
+        for (const row of database.parsedStates()) {
+          const raced = racedSnapshot.find((value) => value.scopeHash === row.scopeHash);
+          assert.equal(row.state.minuteCount, raced.state.minuteCount + 1);
+          assert.equal(row.version, raced.version + 1);
+          if (row.state.kind === "counter") assert.equal(row.state.dayCount, raced.state.dayCount + 1);
+          else assert.equal(row.state.dailyReservedMicroUsd, raced.state.dailyReservedMicroUsd + 1);
+        }
+      });
+    }
+  }
+});
+
+test("collision retries recheck newly exhausted quotas without partial debits", async () => {
+  const { database, guard } = fixture({ env: { SURGE_NETWORK_MINUTE_LIMIT: "2" } });
+  const input = reservation(1);
+  assert.equal((await guard.reserve(input)).allowed, true);
+  let afterCompetitor;
+  database.beforeRun = (_sql, values) => {
+    database.beforeRun = null;
+    const networkHash = values[5];
+    const network = database.rows.get(networkHash);
+    const state = JSON.parse(network.state_json);
+    state.minuteCount = 2;
+    state.dayCount = 2;
+    database.sqlite.prepare("UPDATE surge_model_usage_state SET state_json = ?, version = version + 1 WHERE scope_hash = ?")
+      .run(JSON.stringify(state), networkHash);
+    afterCompetitor = database.parsedStates();
+  };
+  const denied = await guard.reserve(reservation(2, { clientKey: input.clientKey, networkKey: input.networkKey }));
+  assert.equal(denied.reason, "network_minute");
+  assert.deepEqual(database.writeChanges, [3, 0]);
+  assert.deepEqual(database.parsedStates(), afterCompetitor);
+});
+
+test("write failure rolls back the SQLite statement and corrupt snapshots fail closed", async (t) => {
+  await t.test("a last-row trigger failure leaves both earlier counter writes uncommitted", async () => {
+    const { database, guard } = fixture();
+    database.sqlite.exec(`CREATE TRIGGER reject_global BEFORE INSERT ON surge_model_usage_state
+      WHEN json_extract(NEW.state_json, '$.kind') = 'global'
+      BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;`);
+    assert.deepEqual(await guard.reserve(reservation(1)), { allowed: false, reason: "unavailable" });
+    assert.equal(database.rows.size, 0);
+    assert.deepEqual(database.calls, ["all", "run"]);
+  });
+  await t.test("invalid counter JSON does not permit either other quota to advance", async () => {
+    const { database, guard } = fixture();
+    const input = reservation(1);
+    assert.equal((await guard.reserve(input)).allowed, true);
+    const counter = database.parsedStates().find((row) => row.state.kind === "counter");
+    database.sqlite.prepare("UPDATE surge_model_usage_state SET state_json = ? WHERE scope_hash = ?")
+      .run('{"kind":"counter"}', counter.scopeHash);
+    const before = database.rows;
+    assert.deepEqual(await guard.reserve(reservation(2, { clientKey: input.clientKey, networkKey: input.networkKey })),
+      { allowed: false, reason: "unavailable" });
+    assert.deepEqual(database.rows, before);
+  });
+  await t.test("D1 write acknowledgement must represent all three updates", async () => {
+    for (const acknowledgement of [{ success: false, meta: { changes: 3 } }, { success: true, meta: { changes: 1 } }]) {
+      const { database, guard } = fixture();
+      const prepare = database.prepare.bind(database);
+      database.prepare = (sql) => sql.trim().startsWith("WITH proposed")
+        ? { bind: () => ({ run: async () => acknowledgement }) } : prepare(sql);
+      assert.deepEqual(await guard.reserve(reservation(1)), { allowed: false, reason: "unavailable" });
+      assert.equal(database.rows.size, 0);
+    }
+  });
+});
+
+test("local Workers D1 preserves atomic mixed-state admission, stale versions and duplicate races", async (t) => {
+  const runtime = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("test"); } };',
+    compatibilityDate: "2026-05-01", d1Databases: ["DB"] });
+  t.after(() => runtime.dispose());
+  const db = await runtime.getD1Database("DB");
+  await db.batch(migration.split("--> statement-breakpoint").map((sql) => db.prepare(sql.trim())));
+  let collision = null;
+  const writeChanges = [];
+  const proxy = {
+    prepare: (sql) => {
+      const statement = db.prepare(sql);
+      return { bind: (...values) => {
+        const bound = statement.bind(...values);
+        return {
+          first: () => bound.first(), all: () => bound.all(),
+          run: async () => {
+            if (collision !== null && sql.trim().startsWith("WITH proposed")) {
+              const offset = collision;
+              collision = null;
+              const before = (await db.prepare("SELECT * FROM surge_model_usage_state ORDER BY scope_hash").all()).results;
+              await db.prepare("UPDATE surge_model_usage_state SET version = version + 1 WHERE scope_hash = ?").bind(values[offset]).run();
+              const raced = (await db.prepare("SELECT * FROM surge_model_usage_state ORDER BY scope_hash").all()).results;
+              const result = await bound.run();
+              assert.equal(result.meta.changes, 0);
+              assert.equal(raced.length, before.length);
+              assert.deepEqual((await db.prepare("SELECT * FROM surge_model_usage_state ORDER BY scope_hash").all()).results, raced);
+              writeChanges.push(result.meta.changes);
+              return result;
+            }
+            const result = await bound.run();
+            if (sql.trim().startsWith("WITH proposed")) writeChanges.push(result.meta.changes);
+            return result;
+          },
+        };
+      } };
+    },
+  };
+  const { guard } = fixture({ database: proxy });
+  const initial = await guard.reserve(reservation(1));
+  assert.equal(initial.allowed, true);
+  collision = 10;
+  const input = reservation(2);
+  const raced = await guard.reserve(input);
+  assert.equal(raced.allowed, true);
+  assert.deepEqual(writeChanges, [3, 0, 3]);
+  // Each later collision mixes an existing counter with one absent counter.
+  // The failed statement must neither create the absent one nor debit global.
+  const clientInput = reservation(4, { clientKey: reservation(1).clientKey });
+  collision = 0;
+  const clientRace = await guard.reserve(clientInput);
+  assert.equal(clientRace.allowed, true);
+  const networkInput = reservation(5, { networkKey: reservation(1).networkKey });
+  collision = 5;
+  const networkRace = await guard.reserve(networkInput);
+  assert.equal(networkRace.allowed, true);
+  assert.deepEqual(writeChanges, [3, 0, 3, 0, 3, 0, 3]);
+  await initial.release();
+  await raced.release();
+  await clientRace.release();
+  await networkRace.release();
+  const duplicates = await concurrentBurst(guard, 12, () => reservation(3));
+  assert.equal(admitted(duplicates).length, 1);
+  assert.ok(duplicates.filter((result) => !result.allowed).every((result) => result.reason === "duplicate_request"));
+  const rows = (await db.prepare("SELECT state_json FROM surge_model_usage_state").all()).results.map((row) => JSON.parse(row.state_json));
+  assert.equal(rows.filter((row) => row.kind === "counter").length, 8);
+  const global = rows.find((row) => row.kind === "global");
+  assert.equal(global.minuteCount, 5);
+  assert.equal(global.dailyReservedMicroUsd, 5);
+  assert.equal(global.leases.length, 1);
+  assert.equal(global.requests.length, 5);
+  const beforeFailure = (await db.prepare("SELECT * FROM surge_model_usage_state ORDER BY scope_hash").all()).results;
+  await db.prepare(`CREATE TRIGGER reject_global BEFORE INSERT ON surge_model_usage_state
+    WHEN json_extract(NEW.state_json, '$.kind') = 'global'
+    BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;`).run();
+  assert.deepEqual(await guard.reserve(reservation(6)), { allowed: false, reason: "unavailable" });
+  assert.deepEqual((await db.prepare("SELECT * FROM surge_model_usage_state ORDER BY scope_hash").all()).results, beforeFailure);
 });
 
 test("concurrent reservations cannot cross any configured client, network or global ceiling", async (t) => {
@@ -294,6 +544,7 @@ test("global in-flight denial does not consume client or network quota", async (
   } });
   const blocking = await guard.reserve(reservation(1));
   assert.equal(blocking.allowed, true);
+  const statesBeforeDenial = database.parsedStates();
 
   const deniedInput = reservation(2);
   const denied = await guard.reserve(deniedInput);
@@ -303,8 +554,9 @@ test("global in-flight denial does not consume client or network quota", async (
   const counterStates = database.parsedStates()
     .filter((row) => row.state.kind === "counter")
     .map((row) => row.state);
-  assert.equal(counterStates.length, 4);
-  assert.equal(counterStates.filter((state) => state.minuteCount === 0 && state.dayCount === 0).length, 2);
+  assert.equal(counterStates.length, 2);
+  assert.ok(counterStates.every((state) => state.minuteCount === 1 && state.dayCount === 1));
+  assert.deepEqual(database.parsedStates(), statesBeforeDenial);
 
   await blocking.release();
   const retry = await guard.reserve(reservation(3, {
@@ -444,7 +696,7 @@ test("D1 contains only second-stage HMAC identifiers and bounded JSON state", as
 
 test("configuration, D1 and exhausted CAS failures all deny model admission", async (t) => {
   await t.test("short or missing secret", async () => {
-    const database = new FakeD1Database();
+    const database = new SqliteD1Database();
     for (const secret of [undefined, "too-short"]) {
       const env = productionEnvironment({ SURGE_USAGE_GUARD_SECRET: secret });
       const guard = createSharedSurgeUsageGuard({ env, getDatabase: () => database });
@@ -457,7 +709,7 @@ test("configuration, D1 and exhausted CAS failures all deny model admission", as
   await t.test("missing or invalid production limit", async () => {
     for (const value of [undefined, "0", "1.5", "-1"]) {
       const env = productionEnvironment({ SURGE_GLOBAL_MINUTE_LIMIT: value });
-      const guard = createSharedSurgeUsageGuard({ env, getDatabase: () => new FakeD1Database() });
+      const guard = createSharedSurgeUsageGuard({ env, getDatabase: () => new SqliteD1Database() });
       assert.deepEqual(await guard.reserve(reservation(1)), {
         allowed: false,
         reason: "configuration",
@@ -470,7 +722,7 @@ test("configuration, D1 and exhausted CAS failures all deny model admission", as
       env: {
         SURGE_USAGE_GUARD_SECRET: "test-secret-that-is-at-least-thirty-two-characters-long",
       },
-      getDatabase: () => new FakeD1Database(),
+      getDatabase: () => new SqliteD1Database(),
     });
     assert.deepEqual(await guard.reserve(reservation(1)), {
       allowed: false,
@@ -484,7 +736,7 @@ test("configuration, D1 and exhausted CAS failures all deny model admission", as
       allowed: false,
       reason: "unavailable",
     });
-    const failing = fixture({ database: new FakeD1Database({ fail: true }) }).guard;
+    const failing = fixture({ database: new SqliteD1Database({ fail: true }) }).guard;
     assert.deepEqual(await failing.reserve(reservation(2)), {
       allowed: false,
       reason: "unavailable",
@@ -492,11 +744,14 @@ test("configuration, D1 and exhausted CAS failures all deny model admission", as
   });
 
   await t.test("CAS contention exhaustion", async () => {
-    const conflicted = fixture({ database: new FakeD1Database({ conflict: true }) }).guard;
-    assert.deepEqual(await conflicted.reserve(reservation(3)), {
+    const { database, guard } = fixture({ database: new SqliteD1Database({ conflict: true }) });
+    assert.deepEqual(await guard.reserve(reservation(3)), {
       allowed: false,
       reason: "unavailable",
     });
+    assert.equal(database.calls.filter((call) => call === "all").length, 16);
+    assert.equal(database.calls.filter((call) => call === "run").length, 16);
+    assert.equal(database.rows.size, 0);
   });
 
   await t.test("invalid opaque keys or cost estimate", async () => {

@@ -53,14 +53,10 @@ export type TeamAccess = {
   crewMemberIds?: string[];
 };
 
-export async function ensureOwnerTeamMember(ownerUid: string, email: string, displayName: string) {
+export async function ensureOwnerTeamMember(ownerUid: string, email: string, displayName: string, selectedMemberId = "") {
   const db = getD1();
-  const existing = await db.prepare(`SELECT id FROM trade_team_members
-    WHERE owner_uid = ? AND (member_uid = ? OR email = ?) ORDER BY member_uid = ? DESC LIMIT 1`)
-    .bind(ownerUid, ownerUid, email, ownerUid).first<{ id: string }>();
   const now = new Date().toISOString();
-  if (existing) {
-    await db.prepare(`UPDATE trade_team_members SET member_uid = ?, email = ?, display_name = ?, role = 'manager',
+  const repairMember = (memberId: string, requireOwnerMember: boolean) => db.prepare(`UPDATE trade_team_members SET member_uid = ?, email = ?, display_name = ?, role = 'manager',
       can_create_jobs = 1, can_manage_jobs = 1, can_assign_jobs = 1, job_scope = 'team',
       can_view_customers = 1, can_manage_customers = 1,
       can_view_quotes = 1, can_manage_quotes = 1, can_send_quotes = 1,
@@ -72,7 +68,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
       can_view_field_evidence = 1, can_manage_field_evidence = 1, can_manage_forms = 1,
       can_run_reports = 1, can_search_customers = 1, status = 'active',
       accepted_at = CASE WHEN accepted_at = '' THEN ? ELSE accepted_at END, updated_at = ?
-      WHERE id = ? AND owner_uid = ?
+      WHERE id = ? AND owner_uid = ? AND (? = 0 OR member_uid = ?)
         AND (member_uid <> ? OR email <> ? OR display_name <> ? OR role <> 'manager'
           OR can_create_jobs <> 1 OR can_manage_jobs <> 1 OR can_assign_jobs <> 1 OR job_scope <> 'team'
           OR can_view_customers <> 1 OR can_manage_customers <> 1
@@ -84,8 +80,23 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
           OR can_edit_team_permissions <> 1
           OR can_view_field_evidence <> 1 OR can_manage_field_evidence <> 1 OR can_manage_forms <> 1
           OR can_run_reports <> 1 OR can_search_customers <> 1 OR status <> 'active'
-          OR accepted_at = '')`).bind(ownerUid, email, displayName, now, now, existing.id, ownerUid,
-        ownerUid, email, displayName).run();
+          OR accepted_at = '')`).bind(ownerUid, email, displayName, now, now, memberId, ownerUid,
+        Number(requireOwnerMember), ownerUid, ownerUid, email, displayName);
+  if (selectedMemberId) {
+    // Reuse the freshly selected owner row while validating and repairing it atomically.
+    // A deleted or relinked projection must never become a nonexistent member actor.
+    const [current] = await db.batch<{ id: string }>([
+      db.prepare(`SELECT id FROM trade_team_members WHERE id = ? AND owner_uid = ? AND member_uid = ?`)
+        .bind(selectedMemberId, ownerUid, ownerUid),
+      repairMember(selectedMemberId, true),
+    ]);
+    if (current.results.some(member => member.id === selectedMemberId)) return selectedMemberId;
+  }
+  const existing = await db.prepare(`SELECT id FROM trade_team_members
+    WHERE owner_uid = ? AND (member_uid = ? OR email = ?) ORDER BY member_uid = ? DESC LIMIT 1`)
+    .bind(ownerUid, ownerUid, email, ownerUid).first<{ id: string }>();
+  if (existing) {
+    await repairMember(existing.id, false).run();
     return existing.id;
   }
   const id = crypto.randomUUID();
@@ -119,7 +130,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
   if (selected.role === "owner") {
     const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"] });
     const displayName = selected.managerName?.trim() || verified.businessName || "Business owner";
-    const memberId = await ensureOwnerTeamMember(identity.uid, identity.email, displayName);
+    const memberId = await ensureOwnerTeamMember(identity.uid, identity.email, displayName, selected.memberId);
     return { identity, ownerUid: identity.uid, actorUid: identity.uid, actorEmail: identity.email, memberId,
       displayName, isOwner: true,
       businessName: verified.businessName || "Installer business",

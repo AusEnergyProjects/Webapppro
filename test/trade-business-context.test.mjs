@@ -14,11 +14,11 @@ const permissions = ["can_create_jobs", "can_manage_jobs", "can_assign_jobs", "c
   "can_view_field_evidence", "can_manage_field_evidence", "can_run_reports", "can_search_customers"];
 
 class Statement {
-  constructor(database, sql, values = []) { this.database = database; this.sql = sql; this.values = values; }
-  bind(...values) { return new Statement(this.database, this.sql, values); }
-  async first() { return this.database.prepare(this.sql).get(...this.values) || null; }
-  async all() { return { results: this.database.prepare(this.sql).all(...this.values) }; }
-  async run() { return { success: true, meta: { changes: Number(this.database.prepare(this.sql).run(...this.values).changes) } }; }
+  constructor(database, sql, values = [], calls = []) { this.database = database; this.sql = sql; this.values = values; this.calls = calls; }
+  bind(...values) { return new Statement(this.database, this.sql, values, this.calls); }
+  async first() { this.calls.push({ kind: "first", sql: this.sql }); return this.database.prepare(this.sql).get(...this.values) || null; }
+  async all() { this.calls.push({ kind: "all", sql: this.sql }); return { results: this.database.prepare(this.sql).all(...this.values) }; }
+  async run() { this.calls.push({ kind: "run", sql: this.sql }); return { success: true, meta: { changes: Number(this.database.prepare(this.sql).run(...this.values).changes) } }; }
 }
 
 function fixture(t, options = {}) {
@@ -43,8 +43,22 @@ function fixture(t, options = {}) {
   database.exec(fs.readFileSync(new URL("../drizzle/0246_trade_team_customer_qa_permission.sql", import.meta.url), "utf8"));
   const identity = { uid: "person-1", email: "person@example.invalid", emailVerified: true,
     authTime: 1, signInProvider: "password", ...options.identity };
-  const calls = { mfa: [], schema: [] };
-  const db = { prepare: sql => new Statement(database, sql) };
+  const calls = { identity: [], mfa: [], schema: [], d1: [] };
+  const db = {
+    prepare: sql => new Statement(database, sql, [], calls.d1),
+    async batch(statements) {
+      calls.d1.push({ kind: "batch", sql: statements.map(statement => statement.sql) });
+      options.beforeBatch?.();
+      database.exec("BEGIN");
+      try {
+        const results = statements.map(statement => /^\s*SELECT/i.test(statement.sql)
+          ? { success: true, results: database.prepare(statement.sql).all(...statement.values), meta: { changes: 0 } }
+          : { success: true, results: [], meta: { changes: Number(database.prepare(statement.sql).run(...statement.values).changes) } });
+        database.exec("COMMIT");
+        return results;
+      } catch (error) { database.exec("ROLLBACK"); throw error; }
+    },
+  };
   const cache = new Map();
   function load(relative) {
     const resolved = path.resolve(root, relative);
@@ -55,6 +69,7 @@ function fixture(t, options = {}) {
     const dependencies = {
       "../../db": { getD1: () => db },
       "./firebase-server": { requireFirebaseIdentity: async () => {
+        calls.identity.push(identity.uid);
         if (options.authError) throw new Error("AUTH_REQUIRED"); return identity;
       } },
       "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => calls.schema.push("creditex") },
@@ -238,4 +253,101 @@ test("business list reports selection required and allows empty onboarding accou
 test("duplicate active memberships within one business fail instead of picking arbitrary permissions", async t => {
   const f = fixture(t); f.owner("business-a"); f.member("staff-a", "business-a"); f.member("staff-duplicate", "business-a", f.identity.uid, { can_manage_jobs: 0 });
   await assert.rejects(f.teams.requireInstallerTeamAccess(f.request("business-a")), { code: "BUSINESS_ACCESS_REQUIRED" });
+});
+
+test("existing owner access combines current member validation and conditional repair in one D1 call", async t => {
+  const f = fixture(t); f.owner(f.identity.uid, "Own company"); f.member("owner-member", f.identity.uid);
+  const initial = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+  const revision = f.database.prepare("SELECT updated_at FROM trade_team_members WHERE id=?").get(initial.memberId).updated_at;
+  f.calls.d1.length = 0; f.calls.mfa.length = 0; f.calls.identity.length = 0;
+  for (let check = 0; check < 4; check++) {
+    const access = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+    assert.equal(access.isOwner, true); assert.equal(access.actorUid, f.identity.uid);
+    assert.equal(access.ownerUid, f.identity.uid); assert.equal(access.memberId, "owner-member");
+    assert.equal(access.canManageQuotes, true); assert.equal(access.canManageForms, true);
+  }
+  assert.equal(f.calls.d1.length, 12);
+  assert.equal(f.calls.d1.filter(call => call.kind === "batch").length, 4);
+  assert.equal(f.calls.d1.filter(call => call.kind === "first" && /SELECT id FROM trade_team_members/.test(call.sql)).length, 0);
+  assert.equal(f.calls.identity.length, 4); assert.equal(f.calls.mfa.length, 4);
+  assert.ok(f.calls.mfa.every(call => call.actor.uid === f.identity.uid && call.ownerUid === f.identity.uid));
+  assert.equal(f.database.prepare("SELECT updated_at FROM trade_team_members WHERE id=?").get(initial.memberId).updated_at, revision);
+});
+
+test("a deleted projected owner member falls back to a real bootstrap row rather than returning the stale actor", async t => {
+  const options = {}, f = fixture(t, options); f.owner(f.identity.uid, "Own company"); f.member("deleted-owner-member", f.identity.uid);
+  options.beforeBatch = () => { f.database.exec("DELETE FROM trade_team_members WHERE id='deleted-owner-member'"); options.beforeBatch = null; };
+  const access = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+  assert.notEqual(access.memberId, "deleted-owner-member");
+  const row = f.database.prepare("SELECT owner_uid,member_uid,status FROM trade_team_members WHERE id=?").get(access.memberId);
+  assert.deepEqual({ ...row }, { owner_uid: f.identity.uid, member_uid: f.identity.uid, status: "active" });
+  assert.equal(f.calls.d1.filter(call => call.kind === "batch").length, 1);
+  assert.equal(f.calls.d1.filter(call => call.kind === "first" && /SELECT id FROM trade_team_members/.test(call.sql)).length, 1);
+});
+
+test("a projected owner row relinked to another actor is left unchanged while fallback creates the correct actor", async t => {
+  const options = {}, f = fixture(t, options); f.owner(f.identity.uid, "Own company"); f.member("relinked-owner-member", f.identity.uid);
+  options.beforeBatch = () => {
+    f.database.prepare("UPDATE trade_team_members SET member_uid=?,email=?,can_manage_team=0 WHERE id=?")
+      .run("other-person", "other@example.invalid", "relinked-owner-member");
+    options.beforeBatch = null;
+  };
+  const access = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+  assert.notEqual(access.memberId, "relinked-owner-member");
+  const stale = f.database.prepare("SELECT member_uid,email,can_manage_team FROM trade_team_members WHERE id=?").get("relinked-owner-member");
+  assert.deepEqual({ ...stale }, { member_uid: "other-person", email: "other@example.invalid", can_manage_team: 0 });
+  assert.equal(f.database.prepare("SELECT member_uid FROM trade_team_members WHERE id=?").get(access.memberId).member_uid, f.identity.uid);
+});
+
+test("a projected member moved to another tenant is never repaired or returned as the owner actor", async t => {
+  const options = {}, f = fixture(t, options); f.owner(f.identity.uid, "Own company"); f.owner("other-business"); f.member("moved-owner-member", f.identity.uid);
+  options.beforeBatch = () => {
+    f.database.prepare("UPDATE trade_team_members SET owner_uid=?,can_manage_team=0 WHERE id=?").run("other-business", "moved-owner-member");
+    options.beforeBatch = null;
+  };
+  const access = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+  assert.notEqual(access.memberId, "moved-owner-member"); assert.equal(access.ownerUid, f.identity.uid);
+  const moved = f.database.prepare("SELECT owner_uid,can_manage_team FROM trade_team_members WHERE id=?").get("moved-owner-member");
+  assert.deepEqual({ ...moved }, { owner_uid: "other-business", can_manage_team: 0 });
+  assert.equal(f.database.prepare("SELECT owner_uid FROM trade_team_members WHERE id=?").get(access.memberId).owner_uid, f.identity.uid);
+});
+
+test("unlinked owner-email roster rows retain the authoritative fallback repair instead of creating duplicate actors", async t => {
+  const f = fixture(t); f.owner(f.identity.uid, "Own company"); f.member("owner-roster", f.identity.uid, "");
+  f.database.prepare("UPDATE trade_team_members SET email=?,status='invited' WHERE id=?").run(f.identity.email, "owner-roster");
+  const access = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+  assert.equal(access.memberId, "owner-roster");
+  assert.equal(f.calls.d1.some(call => call.kind === "batch"), false);
+  const roster = f.database.prepare("SELECT member_uid,status,can_manage_team FROM trade_team_members WHERE id=?").get(access.memberId);
+  assert.deepEqual({ ...roster }, { member_uid: f.identity.uid, status: "active", can_manage_team: 1 });
+  assert.equal(f.database.prepare("SELECT COUNT(*) AS count FROM trade_team_members WHERE owner_uid=?").get(f.identity.uid).count, 1);
+});
+
+test("owner email, current approval and second factor remain required before the batched member repair", async t => {
+  for (const restriction of ["email", "approval", "account", "abn", "mfa"]) {
+    const options = {}, f = fixture(t, options); f.owner(f.identity.uid, "Own company"); f.member("owner-member", f.identity.uid);
+    await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+    f.calls.d1.length = 0;
+    if (restriction === "email") f.identity.emailVerified = false;
+    if (restriction === "approval") f.database.exec("DELETE FROM trade_account_verification_reviews");
+    if (restriction === "account") f.database.exec("UPDATE trade_accounts SET account_status='suspended'");
+    if (restriction === "abn") f.database.exec("UPDATE trade_accounts SET abn='11111111111',verified_abn='11111111111'; UPDATE trade_account_verification_reviews SET abn='11111111111'");
+    if (restriction === "mfa") options.mfaOwner = f.identity.uid;
+    await assert.rejects(f.teams.requireInstallerTeamAccess(f.request(f.identity.uid)));
+    assert.equal(f.calls.d1.some(call => call.kind === "batch"), false, restriction);
+  }
+});
+
+test("staff access keeps fresh tenant membership, capability and MFA checks without owner batching", async t => {
+  const f = fixture(t); f.owner(f.identity.uid, "Own company"); f.owner("employer"); f.member("staff-member", "employer");
+  for (const permission of [0, 1, 0]) {
+    f.database.prepare("UPDATE trade_team_members SET can_manage_quotes=? WHERE id=?").run(permission, "staff-member");
+    const access = await f.teams.requireInstallerTeamAccess(f.request("employer"));
+    assert.equal(access.isOwner, false); assert.equal(access.ownerUid, "employer"); assert.equal(access.memberId, "staff-member");
+    assert.equal(access.canManageQuotes, Boolean(permission)); assert.equal(access.canManageTeam, false);
+  }
+  assert.equal(f.calls.d1.some(call => call.kind === "batch"), false);
+  assert.ok(f.calls.mfa.every(call => call.ownerUid === "employer"));
+  f.database.prepare("UPDATE trade_team_members SET status='suspended' WHERE id=?").run("staff-member");
+  await assert.rejects(f.teams.requireInstallerTeamAccess(f.request("employer")), { code: "BUSINESS_ACCESS_REQUIRED" });
 });

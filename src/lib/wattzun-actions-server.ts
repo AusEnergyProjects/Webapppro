@@ -258,7 +258,8 @@ export async function postWattzunAction(request: Request, deps: WattzunActionDep
     if (access) return json({ ok: false, error: access.message }, access.status);
     if (error instanceof ActionError) return json({ ok: false, error: error.message, ...(error.partial ? { partial: error.partial } : {}) }, error.status);
     if (error instanceof WattzunInputError || error instanceof SyntaxError || error instanceof TradeAddressVerificationError) {
-      return json({ ok: false, error: error instanceof SyntaxError ? "This reviewed action could not be read." : error.message }, error instanceof TradeAddressVerificationError && error.code === "ADDRESS_PROOF_KEY_INVALID" ? 503 : 400);
+      const message = error.message;
+      return json({ ok: false, error: error instanceof SyntaxError ? "This reviewed action could not be read." : message }, error instanceof TradeAddressVerificationError && error.code === "ADDRESS_PROOF_KEY_INVALID" ? 503 : 400);
     }
     return json({ ok: false, error: "TLink could not confirm this action. Retry the same review safely." }, 503);
   }

@@ -119,15 +119,13 @@ type CounterLimits = {
   dayReason: SurgeUsageDenialReason;
 };
 
-type CounterAdmission = {
-  allowed: true;
-  rollback: () => Promise<void>;
-};
-
 type StateWrite = {
   state: CounterState | GlobalState;
   version: number | null;
 };
+
+type ScopedStateWrite = StateWrite & { scopeHash: string };
+type ReservationRows = [UsageRow | null, UsageRow | null, UsageRow | null];
 
 function positiveInteger(
   env: SurgeUsageEnvironment,
@@ -387,66 +385,81 @@ async function writeState(database: D1Database, scopeHash: string, write: StateW
   return result.meta?.changes === 1;
 }
 
-async function incrementCounter(
+async function readReservationStates(
   database: D1Database,
-  scopeHash: string,
-  limits: CounterLimits,
-  now: number,
-): Promise<CounterAdmission | SurgeUsageDenial> {
-  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt += 1) {
-    const row = await readState(database, scopeHash);
-    const parsed = row ? parseCounterState(row.state_json) : initialCounterState(now);
-    if (!parsed) throw new Error("SURGE_USAGE_STATE_INVALID");
-    const state = normalizedCounterState(parsed, now);
-    if (state.minuteCount >= limits.minute) {
-      return {
-        allowed: false,
-        reason: limits.minuteReason,
-        retryAfterSeconds: retryAfter(state.minuteStart, MINUTE_MS, now),
-      };
-    }
-    if (state.dayCount >= limits.day) {
-      return {
-        allowed: false,
-        reason: limits.dayReason,
-        retryAfterSeconds: retryAfter(state.dayStart, DAY_MS, now),
-      };
-    }
-    const next: CounterState = {
-      ...state,
-      minuteCount: state.minuteCount + 1,
-      dayCount: state.dayCount + 1,
-    };
-    if (await writeState(database, scopeHash, { state: next, version: row?.version ?? null }, now)) {
-      let rolledBack = false;
-      return {
-        allowed: true,
-        async rollback() {
-          if (rolledBack) return;
-          rolledBack = true;
-          for (let rollbackAttempt = 0; rollbackAttempt < MAX_CAS_ATTEMPTS; rollbackAttempt += 1) {
-            const rollbackRow = await readState(database, scopeHash);
-            if (!rollbackRow) return;
-            const rollbackState = parseCounterState(rollbackRow.state_json);
-            if (!rollbackState) return;
-            if (rollbackState.minuteStart !== next.minuteStart || rollbackState.dayStart !== next.dayStart) return;
-            const restored: CounterState = {
-              ...rollbackState,
-              minuteCount: Math.max(0, rollbackState.minuteCount - 1),
-              dayCount: Math.max(0, rollbackState.dayCount - 1),
-            };
-            if (await writeState(
-              database,
-              scopeHash,
-              { state: restored, version: rollbackRow.version },
-              now,
-            )) return;
-          }
-        },
-      };
-    }
+  scopeHashes: [string, string, string],
+): Promise<ReservationRows> {
+  const result = await database.prepare(`
+    SELECT scope_hash, state_json, version FROM ${STATE_TABLE}
+    WHERE scope_hash IN (?, ?, ?)
+  `).bind(...scopeHashes).all<UsageRow & { scope_hash: string }>();
+  if (!result.success || !Array.isArray(result.results)) throw new Error("SURGE_USAGE_STATE_INVALID");
+  const rows = new Map<string, UsageRow>();
+  for (const row of result.results) {
+    if (
+      !scopeHashes.includes(row.scope_hash)
+      || rows.has(row.scope_hash)
+      || typeof row.state_json !== "string"
+      || !Number.isSafeInteger(row.version)
+      || row.version < 0
+    ) throw new Error("SURGE_USAGE_STATE_INVALID");
+    rows.set(row.scope_hash, row);
   }
-  throw new Error("SURGE_USAGE_CAS_EXHAUSTED");
+  return [rows.get(scopeHashes[0]) ?? null, rows.get(scopeHashes[1]) ?? null, rows.get(scopeHashes[2]) ?? null];
+}
+
+async function writeReservationStates(
+  database: D1Database,
+  writes: [ScopedStateWrite, ScopedStateWrite, ScopedStateWrite],
+  now: number,
+) {
+  const values = writes.flatMap((write) => {
+    const nextVersion = write.version === null ? 0 : write.version + 1;
+    if (!Number.isSafeInteger(nextVersion)) throw new Error("SURGE_USAGE_STATE_INVALID");
+    return [write.scopeHash, serializedState(write.state), write.version, nextVersion, now];
+  });
+  // Materialize all eligible rows before writing any: one stale version must
+  // prevent the whole reservation, including counters that were absent.
+  const result = await database.prepare(`
+    WITH proposed(scope_hash, state_json, expected_version, version, updated_at) AS (
+      VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)
+    ), admitted AS MATERIALIZED (
+      SELECT proposed.* FROM proposed
+      WHERE NOT EXISTS (
+        SELECT 1 FROM proposed AS expected
+        LEFT JOIN ${STATE_TABLE} AS current ON current.scope_hash = expected.scope_hash
+        WHERE (expected.expected_version IS NULL AND current.scope_hash IS NOT NULL)
+          OR (expected.expected_version IS NOT NULL
+            AND (current.scope_hash IS NULL OR current.version != expected.expected_version))
+      )
+    )
+    INSERT INTO ${STATE_TABLE} (scope_hash, state_json, version, updated_at)
+    SELECT scope_hash, state_json, version, updated_at FROM admitted WHERE 1
+    ON CONFLICT(scope_hash) DO UPDATE SET
+      state_json = excluded.state_json, version = excluded.version, updated_at = excluded.updated_at
+  `).bind(...values).run();
+  if (!result.success || (result.meta.changes !== 0 && result.meta.changes !== writes.length)) {
+    throw new Error("SURGE_USAGE_STATE_INVALID");
+  }
+  return result.meta.changes === writes.length;
+}
+
+function counterDenial(state: CounterState, limits: CounterLimits, now: number): SurgeUsageDenial | null {
+  if (state.minuteCount >= limits.minute) {
+    return {
+      allowed: false,
+      reason: limits.minuteReason,
+      retryAfterSeconds: retryAfter(state.minuteStart, MINUTE_MS, now),
+    };
+  }
+  if (state.dayCount >= limits.day) {
+    return {
+      allowed: false,
+      reason: limits.dayReason,
+      retryAfterSeconds: retryAfter(state.dayStart, DAY_MS, now),
+    };
+  }
+  return null;
 }
 
 function bytesToHex(bytes: Uint8Array) {
@@ -496,8 +509,10 @@ export function createSharedSurgeUsageGuard({
     }
   }
 
-  async function reserveGlobal(
+  async function reserveAll(
     database: D1Database,
+    clientScopeHash: string,
+    networkScopeHash: string,
     globalScopeHash: string,
     requestHash: string,
     leaseHash: string,
@@ -506,7 +521,28 @@ export function createSharedSurgeUsageGuard({
   ): Promise<SurgeUsageReservation> {
     if (!configuration) return { allowed: false, reason: "configuration" };
     for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt += 1) {
-      const row = await readState(database, globalScopeHash);
+      const [clientRow, networkRow, row] = await readReservationStates(database, [
+        clientScopeHash, networkScopeHash, globalScopeHash,
+      ]);
+      const clientParsed = clientRow ? parseCounterState(clientRow.state_json) : initialCounterState(currentTime);
+      const networkParsed = networkRow ? parseCounterState(networkRow.state_json) : initialCounterState(currentTime);
+      if (!clientParsed || !networkParsed) throw new Error("SURGE_USAGE_STATE_INVALID");
+      const clientState = normalizedCounterState(clientParsed, currentTime);
+      const networkState = normalizedCounterState(networkParsed, currentTime);
+      const clientDenial = counterDenial(clientState, {
+        minute: configuration.clientMinuteLimit,
+        day: configuration.clientDailyLimit,
+        minuteReason: "client_minute",
+        dayReason: "client_day",
+      }, currentTime);
+      if (clientDenial) return clientDenial;
+      const networkDenial = counterDenial(networkState, {
+        minute: configuration.networkMinuteLimit,
+        day: configuration.networkDailyLimit,
+        minuteReason: "network_minute",
+        dayReason: "network_day",
+      }, currentTime);
+      if (networkDenial) return networkDenial;
       const parsed = row ? parseGlobalState(row.state_json) : initialGlobalState(currentTime);
       if (!parsed) throw new Error("SURGE_USAGE_STATE_INVALID");
       const state = normalizedGlobalState(parsed, currentTime);
@@ -556,7 +592,19 @@ export function createSharedSurgeUsageGuard({
           expiresAt: currentTime + REQUEST_IDEMPOTENCY_MS,
         }],
       };
-      if (await writeState(database, globalScopeHash, { state: next, version: row?.version ?? null }, currentTime)) {
+      if (await writeReservationStates(database, [
+        {
+          scopeHash: clientScopeHash,
+          state: { ...clientState, minuteCount: clientState.minuteCount + 1, dayCount: clientState.dayCount + 1 },
+          version: clientRow?.version ?? null,
+        },
+        {
+          scopeHash: networkScopeHash,
+          state: { ...networkState, minuteCount: networkState.minuteCount + 1, dayCount: networkState.dayCount + 1 },
+          version: networkRow?.version ?? null,
+        },
+        { scopeHash: globalScopeHash, state: next, version: row?.version ?? null },
+      ], currentTime)) {
         let released = false;
         return {
           allowed: true,
@@ -614,51 +662,10 @@ export function createSharedSurgeUsageGuard({
           hashIdentifier("request", requestKey),
           hashIdentifier("lease", `${randomUUID()}\u0000${currentTime}`),
         ]);
-        const clientAdmission = await incrementCounter(database, clientScopeHash, {
-          minute: configuration.clientMinuteLimit,
-          day: configuration.clientDailyLimit,
-          minuteReason: "client_minute",
-          dayReason: "client_day",
-        }, currentTime);
-        if (!clientAdmission.allowed) return clientAdmission;
-        try {
-          const networkAdmission = await incrementCounter(database, networkScopeHash, {
-            minute: configuration.networkMinuteLimit,
-            day: configuration.networkDailyLimit,
-            minuteReason: "network_minute",
-            dayReason: "network_day",
-          }, currentTime);
-          if (!networkAdmission.allowed) {
-            await clientAdmission.rollback();
-            return networkAdmission;
-          }
-          try {
-            const globalReservation = await reserveGlobal(
-              database,
-              globalScopeHash,
-              requestHash,
-              leaseHash,
-              currentTime,
-              estimatedMicroUsd,
-            );
-            if (!globalReservation.allowed) {
-              await Promise.all([
-                clientAdmission.rollback(),
-                networkAdmission.rollback(),
-              ]);
-            }
-            return globalReservation;
-          } catch (error) {
-            await Promise.all([
-              clientAdmission.rollback(),
-              networkAdmission.rollback(),
-            ]);
-            throw error;
-          }
-        } catch (error) {
-          await clientAdmission.rollback();
-          throw error;
-        }
+        return await reserveAll(
+          database, clientScopeHash, networkScopeHash, globalScopeHash,
+          requestHash, leaseHash, currentTime, estimatedMicroUsd,
+        );
       } catch {
         return { allowed: false, reason: "unavailable" };
       }
