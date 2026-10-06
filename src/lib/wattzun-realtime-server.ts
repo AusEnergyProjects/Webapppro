@@ -5,6 +5,7 @@ import { createSharedSurgeUsageGuard } from "./energy-assistant-usage-guard";
 import { workflowAiSourceHash } from "./workflow-ai-server";
 import {
   createWattzunPortalReplyContract, wattzunPortalProviderConfiguration, WATTZUN_SPEECH_INSTRUCTIONS,
+  WattzunReplyValidationError,
   type PortalRequest,
 } from "./wattzun-portal-ai-server";
 import {
@@ -41,6 +42,10 @@ type DiagnosticStructure = {
   replyFieldCount?: number;
   replyType?: DiagnosticValueType;
   replyFieldTypes?: Partial<Record<"kind" | "message" | "questions" | "linkIds" | "action" | "lookup", DiagnosticValueType>>;
+  actionFieldCount?: number;
+  actionFieldTypes?: Partial<Record<"kind" | "firstName" | "lastName" | "email" | "phone" | "addressQuery" | "serviceCategory" | "description" | "lines", DiagnosticValueType>>;
+  lineCount?: number;
+  lineFieldTypes?: Partial<Record<"lineType" | "description" | "quantity" | "unitPrice" | "taxCode", DiagnosticValueType>>[];
   requestSummaryType?: DiagnosticValueType;
   requestSummaryLength?: number;
   responseStatus?: string;
@@ -119,6 +124,23 @@ function captureArgumentStructure(diagnostic: TurnDiagnostic, raw: unknown) {
     for (const field of ["kind", "message", "questions", "linkIds", "action", "lookup"] as const) {
       diagnostic.structure.replyFieldTypes[field] = valueType(raw.reply[field]);
     }
+    if (record(raw.reply.action)) {
+      diagnostic.structure.actionFieldCount = Object.keys(raw.reply.action).length;
+      diagnostic.structure.actionFieldTypes = {};
+      for (const field of ["kind", "firstName", "lastName", "email", "phone", "addressQuery", "serviceCategory", "description", "lines"] as const) {
+        diagnostic.structure.actionFieldTypes[field] = valueType(raw.reply.action[field]);
+      }
+      if (Array.isArray(raw.reply.action.lines)) {
+        diagnostic.structure.lineCount = raw.reply.action.lines.length;
+        diagnostic.structure.lineFieldTypes = raw.reply.action.lines.slice(0, 3).map(line => {
+          const types: Partial<Record<"lineType" | "description" | "quantity" | "unitPrice" | "taxCode", DiagnosticValueType>> = {};
+          for (const field of ["lineType", "description", "quantity", "unitPrice", "taxCode"] as const) {
+            types[field] = valueType(record(line) ? line[field] : undefined);
+          }
+          return types;
+        });
+      }
+    }
   }
 }
 
@@ -135,6 +157,7 @@ function turnDiagnostic(signal?: AbortSignal): TurnDiagnostic {
       logged = true;
       console.error("WATTZUN_REALTIME_TURN_FAILED", {
         phase: diagnostic.phase, substage: diagnostic.substage, error: safeError(error).message,
+        ...(error instanceof WattzunReplyValidationError ? { validationReason: error.reason } : {}),
         ...(diagnostic.providerError ? { providerError: diagnostic.providerError } : {}),
         ...diagnostic.structure, timings: { ...diagnostic.timings },
       });

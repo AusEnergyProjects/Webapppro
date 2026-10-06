@@ -224,6 +224,22 @@ test("preambles cannot replace a reply call or hide duplicate, audio or wrong-ro
   });
 });
 
+test("rejected quote diagnostics identify static validation reasons and field types without customer values", async () => {
+  const reply = { ...answer, action: { kind: "prepare_quote", firstName: "private-customer", lastName: "private-name",
+    email: "private@example.test", phone: "private-phone", addressQuery: "private-street", serviceCategory: "", description: "private-scope",
+    lines: [{ lineType: "labour", description: "private-work", quantity: 1, unitPrice: 120, taxCode: "gst" }] } };
+  const f = fixture({ reply });
+  await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);
+  const diagnostic = f.errors[0][1];
+  assert.equal(diagnostic.validationReason, "action_shape");
+  assert.equal(diagnostic.actionFieldCount, 9); assert.equal(diagnostic.actionFieldTypes.email, "string");
+  assert.equal(diagnostic.lineCount, 1); assert.deepEqual(diagnostic.lineFieldTypes[0], {
+    lineType: "string", description: "string", quantity: "number", unitPrice: "number", taxCode: "string",
+  });
+  assert.doesNotMatch(JSON.stringify(f.errors), /private-|private@|example\.test|"unitPrice":120|"quantity":1/);
+  assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1);
+});
+
 test("strict shared validation rejects malformed, wrong-scope and invented provider replies before speech", async (t) => {
   const invalid = [
     { ...answer, linkIds: ["invented"] }, { ...answer, message: "I've sent your quote." },

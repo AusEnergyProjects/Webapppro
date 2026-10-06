@@ -25,7 +25,11 @@ const proposalSchema = {
     lines: { ...WATTZUN_ACTION_PROPOSAL_SCHEMA.properties.lines, maxItems: PROPOSAL_LIMITS.lines,
       items: { ...WATTZUN_ACTION_PROPOSAL_SCHEMA.properties.lines.items,
         properties: { ...WATTZUN_ACTION_PROPOSAL_SCHEMA.properties.lines.items.properties,
-          description: { type: "string", maxLength: PROPOSAL_LIMITS.lineDescription } } } },
+          description: { type: "string", maxLength: PROPOSAL_LIMITS.lineDescription },
+          quantity: { ...WATTZUN_ACTION_PROPOSAL_SCHEMA.properties.lines.items.properties.quantity,
+            description: "Known quantity as a decimal string; unknown is null. Never a JSON number." },
+          unitPrice: { ...WATTZUN_ACTION_PROPOSAL_SCHEMA.properties.lines.items.properties.unitPrice,
+            description: "Known unit price before GST as a decimal string; unknown is null. Never a JSON number or a quoted total." } } } },
   },
 };
 const PROVIDER_TIMEOUT_MS = 55_000;
@@ -62,6 +66,17 @@ function boundedText(value: unknown, maximum: number): value is string {
     && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value);
 }
 
+export type WattzunReplyValidationReason = "shape" | "questions" | "links" | "action_shape" | "action_bounds"
+  | "lookup_shape" | "spoken_bound" | "completed_claim" | "unloaded_access_claim";
+
+/** Static rejection category only; never retain provider content or parser errors. */
+export class WattzunReplyValidationError extends Error {
+  constructor(readonly reason: WattzunReplyValidationReason) {
+    super("WORKFLOW_AI_INCOMPLETE");
+    this.name = "WattzunReplyValidationError";
+  }
+}
+
 function replySchema(guide: GuideLink[]): Record<string, unknown> {
   return {
     type: "object", additionalProperties: false, required: ["kind", "message", "questions", "linkIds", "action", "lookup"],
@@ -92,39 +107,47 @@ function claimsUnloadedAccess(text: string): boolean {
 function validateReply(raw: unknown, guide: GuideLink[], portal: WattzunScope["portal"]): WattzunReply {
   if (!record(raw) || Object.keys(raw).length !== 6 || !Object.hasOwn(raw, "action") || !Object.hasOwn(raw, "lookup")
     || (raw.kind !== "answer" && raw.kind !== "clarification")
-    || !boundedText(raw.message, 1_800) || !Array.isArray(raw.questions) || raw.questions.length > 3
+    || !boundedText(raw.message, 1_800)) throw new WattzunReplyValidationError("shape");
+  if (!Array.isArray(raw.questions) || raw.questions.length > 3
     || !raw.questions.every(value => boundedText(value, 300))
-    || (raw.kind === "clarification" ? raw.questions.length === 0 : raw.questions.length !== 0)
-    || !Array.isArray(raw.linkIds) || raw.linkIds.length > 3) throw new Error("WORKFLOW_AI_INCOMPLETE");
+    || (raw.kind === "clarification" ? raw.questions.length === 0 : raw.questions.length !== 0)) {
+    throw new WattzunReplyValidationError("questions");
+  }
+  if (!Array.isArray(raw.linkIds) || raw.linkIds.length > 3) throw new WattzunReplyValidationError("links");
   const questions: string[] = [];
   for (const question of raw.questions) {
-    if (!boundedText(question, 300)) throw new Error("WORKFLOW_AI_INCOMPLETE");
+    if (!boundedText(question, 300)) throw new WattzunReplyValidationError("questions");
     questions.push(question.trim());
   }
   const links: WattzunReply["links"] = [];
   for (const id of raw.linkIds) {
     const link = guide.find(candidate => candidate.id === id);
-    if (!link) throw new Error("WORKFLOW_AI_INCOMPLETE");
+    if (!link) throw new WattzunReplyValidationError("links");
     if (!links.some(existing => existing.href === link.href)) links.push({ label: link.label, href: link.href });
   }
   const reply: WattzunReply = { kind: raw.kind, message: raw.message.trim(), questions, links };
   if (raw.action !== null || raw.lookup !== null) {
-    if (portal !== "trade" || (raw.action !== null && raw.lookup !== null)) throw new Error("WORKFLOW_AI_INCOMPLETE");
-    try {
-      if (raw.action !== null) {
-        const action = parseWattzunActionProposal(raw.action);
-        if (action.description.length > PROPOSAL_LIMITS.description || action.lines.length > PROPOSAL_LIMITS.lines
-          || action.lines.some(line => line.description.length > PROPOSAL_LIMITS.lineDescription)
-          || (action.kind === "create_customer" && (action.serviceCategory || action.description || action.lines.length))) {
-          throw new Error("WORKFLOW_AI_INCOMPLETE");
-        }
-        reply.action = action;
+    if (portal !== "trade" || (raw.action !== null && raw.lookup !== null)) throw new WattzunReplyValidationError("shape");
+    if (raw.action !== null) {
+      let action: ReturnType<typeof parseWattzunActionProposal>;
+      try { action = parseWattzunActionProposal(raw.action); }
+      catch { throw new WattzunReplyValidationError("action_shape"); }
+      if (action.description.length > PROPOSAL_LIMITS.description || action.lines.length > PROPOSAL_LIMITS.lines
+        || action.lines.some(line => line.description.length > PROPOSAL_LIMITS.lineDescription)
+        || (action.kind === "create_customer" && (action.serviceCategory || action.description || action.lines.length))) {
+        throw new WattzunReplyValidationError("action_bounds");
       }
-      if (raw.lookup !== null) reply.lookup = parseWattzunRecordLookup(raw.lookup);
-    } catch { throw new Error("WORKFLOW_AI_INCOMPLETE"); }
+      reply.action = action;
+    }
+    if (raw.lookup !== null) {
+      try { reply.lookup = parseWattzunRecordLookup(raw.lookup); }
+      catch { throw new WattzunReplyValidationError("lookup_shape"); }
+    }
   }
   const spoken = wattzunSpokenReply(reply);
-  if (spoken.length > MAX_SPOKEN_CHARACTERS || claimsCompletedAction(spoken) || claimsUnloadedAccess(spoken)) throw new Error("WORKFLOW_AI_INCOMPLETE");
+  if (spoken.length > MAX_SPOKEN_CHARACTERS) throw new WattzunReplyValidationError("spoken_bound");
+  if (claimsCompletedAction(spoken)) throw new WattzunReplyValidationError("completed_claim");
+  if (claimsUnloadedAccess(spoken)) throw new WattzunReplyValidationError("unloaded_access_claim");
   return reply;
 }
 
@@ -146,6 +169,7 @@ export function createWattzunPortalReplyContract(options: PortalRequest) {
     "This gateway has not loaded private records, customer histories, jobs, audit evidence, live reports, current regulatory sources or repository/source code. Authentication is not evidence of private-record or source-code access. Never imply those records were read or any message, call, booking, record change, charge, order, approval or regulatory verification was performed.",
     "Use only the supplied navigation guide for product instructions. Links must be relevant IDs from that guide; never invent URLs, deep links or features. For record-grounded help point to the relevant workspace. Availability still depends on permissions.",
     "In a trade workspace, when the user asks to prepare a quote or create a customer, return the matching action proposal using only their supplied facts. Missing text is an empty string; unknown quantity, unitPrice or taxCode is null. Never invent customer details, prices, quantities or GST treatment. Unit prices are before GST: if the stated amount is inclusive of GST or its basis is unclear, leave unitPrice null and ask for the unit price before GST. Never copy a quoted total into a unit price. Unspecified quote lines are an empty array. For create_customer leave serviceCategory and description empty and lines empty. The user must confirm exact name spelling, select a real Google address and review the details before a separate authorised save. Never say a customer or quote was saved, issued or sent. Outside trade, action is null.",
+    "Every action proposal must include exactly these nine keys: kind, firstName, lastName, email, phone, addressQuery, serviceCategory, description, lines. Never omit missing text fields; use empty strings. Each line must include lineType, description, quantity, unitPrice, taxCode. Known quantity and unitPrice values must be decimal strings, never JSON numbers. Unknown quantity, unitPrice or taxCode values are null. unitPrice is the unit price before GST, never a quoted total.",
     "A conversational quote proposal supports at most 10 lines, 160 characters per line description and 1000 characters of scope. Never silently omit requested lines, conditions or material detail to fit. When those bounds would lose content, return action null, explain the limit briefly and ask to group the lines or open the actual quote builder for full entry. Do not hard-truncate facts.",
     "The prepare_quote action creates a new quote job and draft. If the request is to prepare or change a quote on an existing job, set action null and use a job lookup to open that job, then guide the user to its Quote tab. If it is unclear whether they mean a new quote or an existing one, ask which they want. Never create a second job for an existing quote request or claim an existing quote was edited.",
     "In a trade workspace, when the user asks to open or find a job or its files, return lookup with kind job or file and query containing only the supplied job reference or customer search text, at most 100 characters. A file name is not a job search term: use an empty query and ask which job if its reference or customer is unknown. This opens a scoped picker of actual authorised jobs, not a record or file read. A file lookup first selects the associated job and opens its Files tab. Never invent IDs, matches, file names, links or file contents. Otherwise lookup is null. Outside trade, lookup is null. Return at most one of action or lookup; set the other to null. For all ordinary explanations both are null.",

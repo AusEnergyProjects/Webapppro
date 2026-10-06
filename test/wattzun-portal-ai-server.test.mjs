@@ -96,6 +96,11 @@ test('portal text reuses the guarded workflow provider with a strict small schem
   assert.equal(call.schema.properties.action.anyOf[0].type, 'null');
   assert.equal(call.schema.properties.action.anyOf[1].properties.lines.maxItems, 10);
   assert.equal(call.schema.properties.action.anyOf[1].properties.lines.items.properties.description.maxLength, 160);
+  const lineProperties = call.schema.properties.action.anyOf[1].properties.lines.items.properties;
+  assert.deepEqual(lineProperties.quantity.type, ['string', 'null']);
+  assert.deepEqual(lineProperties.unitPrice.type, ['string', 'null']);
+  assert.match(lineProperties.quantity.description, /decimal string.*unknown is null.*Never a JSON number/);
+  assert.match(lineProperties.unitPrice.description, /unit price before GST.*decimal string.*unknown is null.*Never a JSON number or a quoted total/);
   assert.equal(call.schema.properties.action.anyOf[1].properties.description.maxLength, 1000);
   assert.deepEqual(call.schema.properties.lookup.anyOf, [{ type: 'null' }, records.WATTZUN_RECORD_LOOKUP_SCHEMA]);
   assert.deepEqual(call.schema.properties.linkIds.items.enum, ['trade_work', 'trade_leads', 'trade_sales', 'trade_schedule', 'trade_finance', 'trade_quotes', 'trade_forms', 'trade_onsite', 'trade_staff', 'trade_team', 'trade_wattzun']);
@@ -117,6 +122,9 @@ test('portal text reuses the guarded workflow provider with a strict small schem
   assert.match(call.instructions, /When action contains a proposal, lookup must be null/);
   assert.match(call.instructions, /When lookup contains a record search, action must be null/);
   assert.match(call.instructions, /action and lookup must both be null/);
+  assert.match(call.instructions, /exactly these nine keys: kind, firstName, lastName, email, phone, addressQuery, serviceCategory, description, lines/);
+  assert.match(call.instructions, /Never omit missing text fields; use empty strings/);
+  assert.match(call.instructions, /Known quantity and unitPrice values must be decimal strings, never JSON numbers/);
 });
 
 test('forty bounded turns plus the verified guide fit the actual workflow provider request budget',async()=>{
@@ -239,6 +247,24 @@ test('provider proposal bounds accept ten concise lines but reject excess rather
   }
 });
 
+test('quote decimal strings preserve supplied precision while numeric quantity and price are rejected', async () => {
+  const action = { ...proposal, lines: [{ lineType: 'labour', description: 'Supplied labour scope',
+    quantity: '1.5', unitPrice: '120.50', taxCode: 'gst' }] };
+  const valid = fixture({ result: { ...answer, action } });
+  assert.deepEqual((await valid.prepareWattzunPortalReply(request())).action, action);
+  for (const [field, number] of [['quantity', 1.5], ['unitPrice', 120.5]]) {
+    const rejected = fixture({ result: { ...answer, action: { ...action,
+      lines: [{ ...action.lines[0], [field]: number }] } } });
+    await assert.rejects(rejected.prepareWattzunPortalReply(request()), error => {
+      assert.ok(error instanceof rejected.WattzunReplyValidationError);
+      assert.equal(error.message, 'WORKFLOW_AI_INCOMPLETE');
+      assert.equal(error.reason, 'action_shape');
+      return true;
+    });
+    assert.deepEqual(rejected.calls, []);
+  }
+});
+
 test('complete quote and lookup replies require their explicit unused capability key', async () => {
   const quoteReply = { ...answer, action: proposal, lookup: null };
   const lookupReply = { ...answer, action: null, lookup: { kind: 'job', query: 'TL-123' } };
@@ -257,6 +283,34 @@ test('complete quote and lookup replies require their explicit unused capability
     });
     assert.equal(rejected.workflows.length, 1);
     assert.deepEqual(rejected.calls, []);
+  }
+});
+
+test('canonical reply rejection reasons are static and retain no private provider content', async () => {
+  const privateContent = 'private-customer-voice-fact@example.invalid';
+  const base = { ...answer, message: privateContent };
+  for (const [reason, invalid] of [
+    ['shape', { ...base, [privateContent]: privateContent }],
+    ['questions', { ...base, kind: 'clarification', questions: [privateContent.repeat(8)] }],
+    ['links', { ...base, linkIds: [privateContent] }],
+    ['action_shape', { ...base, action: { ...proposal, firstName: privateContent, kind: privateContent } }],
+    ['action_bounds', { ...base, action: { ...proposal, firstName: privateContent, description: 's'.repeat(1001) } }],
+    ['lookup_shape', { ...base, lookup: { kind: 'job', query: privateContent.repeat(3) } }],
+    ['spoken_bound', { ...base, kind: 'clarification', message: privateContent.padEnd(1800, 'm'), questions: ['a'.repeat(200), 'b'.repeat(200), 'c'.repeat(200)] }],
+    ['completed_claim', { ...base, message: `I saved the quote for ${privateContent}.` }],
+    ['unloaded_access_claim', { ...base, message: `I read the database for ${privateContent}.` }],
+  ]) {
+    const f = fixture({ result: invalid });
+    await assert.rejects(f.prepareWattzunPortalReply(request()), error => {
+      assert.ok(error instanceof f.WattzunReplyValidationError);
+      assert.equal(error.message, 'WORKFLOW_AI_INCOMPLETE');
+      assert.equal(error.reason, reason);
+      assert.equal(error.cause, undefined);
+      assert.ok(!(String(error) + error.stack + JSON.stringify(error)).includes(privateContent));
+      return true;
+    });
+    assert.deepEqual(f.logs, []);
+    assert.deepEqual(f.calls, []);
   }
 });
 
