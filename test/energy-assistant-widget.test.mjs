@@ -95,7 +95,7 @@ test("deferred floating launcher preserves preloading, storage and accessible op
       react: { useEffect: effect => effects.push(effect), useState: () => [tucked, value => calls.push(["tucked", value])] },
       "react/jsx-runtime": { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: "Fragment" },
       "./LazyEnergyAssistantWidget.module.css": { default: {} },
-      "./WattzunMascot": { WattzunHat: "Hat" },
+      "./WattzunMascot": { WattzunMascot: "Mascot" },
     };
     const fakeWindow = {
       localStorage: { getItem: () => tucked ? "tucked" : null,
@@ -112,8 +112,8 @@ test("deferred floating launcher preserves preloading, storage and accessible op
     }, exported, fakeWindow);
     const onOpen = () => calls.push(["open"]), onPreload = () => calls.push(["preload"]);
     const rendered = exported.EnergyAssistantLauncher({ onOpen, onPreload });
-    const hats = node => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(hats) : [...(node.type === "Hat" ? [node] : []), ...hats(node.props?.children)];
-    assert.equal(hats(rendered).length, 0, "Public launchers have no appearance preference without an explicit portal prop");
+    const mascots = node => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(mascots) : [...(node.type === "Mascot" ? [node] : []), ...mascots(node.props?.children)];
+    assert.deepEqual(mascots(rendered).map(node=>node.props.hat), [undefined], "Public launchers use the default mascot without a portal appearance preference");
     const cleanups = effects.map(effect => effect());
     assert.equal(rendered.props["data-surge-loader"], true);
     assert.equal(rendered.props.onPointerEnter, onPreload);
@@ -136,7 +136,7 @@ test("deferred floating launcher preserves preloading, storage and accessible op
     }
     cleanups.forEach(cleanup => cleanup());
     assert.equal(listeners.size, 0);
-    assert.deepEqual(hats(exported.EnergyAssistantLauncher({onOpen,onPreload,hat:"pirate"})).map(node=>node.props.hat),["pirate"]);
+    assert.deepEqual(mascots(exported.EnergyAssistantLauncher({onOpen,onPreload,hat:"pirate"})).map(node=>node.props.hat),["pirate"]);
   }
 });
 const profileSource = read("../src/lib/surge-assessor-profile.ts");

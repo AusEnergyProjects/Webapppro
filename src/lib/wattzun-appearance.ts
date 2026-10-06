@@ -3,7 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import { WATTZUN_DEFAULT_PREFERENCES, parseWattzunPreferences, type WattzunPortal, type WattzunPreferences } from "./wattzun-portal";
 
-export const WATTZUN_HATS = [{ id: "none", label: "None" }, { id: "hard-hat", label: "Hard hat" }, { id: "cap", label: "Cap" }, { id: "cowboy", label: "Cowboy" }, { id: "viking", label: "Viking hat" }, { id: "pirate", label: "Pirate hat" }] as const;
+export const WATTZUN_HATS = [
+  { id: "none", label: "None" },
+  { id: "hard-hat", label: "Hard hat" },
+  { id: "cap", label: "Cap" },
+  { id: "cowboy", label: "Cowboy" },
+  { id: "viking", label: "Viking hat" },
+  { id: "pirate", label: "Pirate hat" },
+  { id: "sausage", label: "Sausage" },
+  { id: "tinfoil", label: "Tinfoil hat" },
+  { id: "safety-plug", label: "Safety plug" },
+  { id: "party", label: "Party hat" },
+  { id: "pumpkin", label: "Pumpkin" },
+  { id: "ghost", label: "Ghost sheet" },
+] as const;
 export type WattzunHat = typeof WATTZUN_HATS[number]["id"];
 export type WattzunPresentationScope = { userUid: string; portal: WattzunPortal; scopeId: string };
 export type WattzunPresentation = { hat: WattzunHat; speed: WattzunPreferences["speed"] };

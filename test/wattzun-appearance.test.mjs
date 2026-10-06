@@ -34,7 +34,12 @@ test('appearance and speed storage isolate actors, portals and workspaces, and m
   h.values.set(h.wattzunAppearanceKey(scope),'{"hat":"unknown"}');h.values.set(h.wattzunSpeedKey(scope),'malformed');
   assert.deepEqual(h.readWattzunPresentation(scope),{hat:'none',speed:1});
   assert.deepEqual(harness({blocked:true}).readWattzunPresentation(scope),{hat:'none',speed:1});
-  assert.deepEqual(h.WATTZUN_HATS.map(choice=>choice.id),['none','hard-hat','cap','cowboy','viking','pirate']);
+  assert.deepEqual(h.WATTZUN_HATS.map(choice=>choice.id),['none','hard-hat','cap','cowboy','viking','pirate','sausage','tinfoil','safety-plug','party','pumpkin','ghost']);
+  for (const { id } of h.WATTZUN_HATS) {
+    h.writeWattzunPresentation(scope, { hat: id });
+    assert.equal(h.readWattzunPresentation(scope).hat, id, `${id} survives storage readback`);
+    assert.deepEqual(JSON.parse(h.values.get(h.wattzunSpeedKey(scope))), { speed: 1 }, 'Cosmetic choices never change voice preferences');
+  }
 });
 test('legacy speed migrates without retaining voice, tone or personality, and hats stay outside API preferences',()=>{
   const h=harness(),key=h.wattzunSpeedKey(scope),legacy=key.replace(':v2:',':v1:');

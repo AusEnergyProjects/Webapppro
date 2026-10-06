@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { WattzunHat as Hat } from "@/lib/wattzun-appearance";
-import { WattzunHat } from "./WattzunMascot";
+import { WattzunMascot } from "./WattzunMascot";
 import styles from "./LazyEnergyAssistantWidget.module.css";
 
 const DISPLAY_PREFERENCE_KEY = "aea-surge-display-v1";
@@ -52,10 +52,10 @@ export function EnergyAssistantLauncher({ onPreload, onOpen, hat }: { onPreload:
       aria-label="Bring Wattzun AI back and open chat"
       onClick={() => { setTucked(false); storeTucked(false); onOpen(); }}
     >
-      <span className={`${styles.mascot} ${styles.mascotPeeking}${hat && hat !== "none" ? ` ${styles.mascotWithHat}` : ""}`} aria-hidden="true">{hat && <WattzunHat hat={hat} />}</span>
+      <WattzunMascot hat={hat} className={`${styles.mascot} ${styles.mascotPeeking}`} />
     </button> : <>
       <button className={styles.launcher} type="button" aria-label="Open Wattzun AI chat" onClick={onOpen}>
-        <span className={`${styles.mascot}${hat && hat !== "none" ? ` ${styles.mascotWithHat}` : ""}`} aria-hidden="true">{hat && <WattzunHat hat={hat} />}</span>
+        <WattzunMascot hat={hat} className={styles.mascot} />
       </button>
       <button
         className={styles.dismiss}

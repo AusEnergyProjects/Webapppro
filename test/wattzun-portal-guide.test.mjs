@@ -73,7 +73,7 @@ test('every portal guide teaches the released in-app speed control instead of un
     assert.match(guidance,/Call Wattzun opens voice conversation; Message Wattzun opens chat/);
     assert.match(guidance,/Starter prompts open an editable chat draft.*reviews before sending/);
     assert.match(guidance,/warm, conversational voice and personality.*little humour.*fixed by the brand/);
-    assert.match(guidance,/six personal choices: None, Hard hat, Cap, Cowboy, Viking hat and Pirate hat/);
+    assert.match(guidance,/12 personal choices: None, Hard hat, Cap, Cowboy, Viking hat, Pirate hat, Sausage, Tinfoil hat, Safety plug, Party hat, Pumpkin and Ghost sheet/);
     assert.match(guidance,/hats do not change personality or access/);
   }
 });

@@ -8,7 +8,7 @@ import { chromium } from 'playwright-core';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const browserPath = [process.env.TEST_BROWSER_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/chromium'].find(value => value && fs.existsSync(value));
-const hats = [{ id: 'none', label: 'None' }, { id: 'hard-hat', label: 'Hard hat' }, { id: 'cap', label: 'Cap' }, { id: 'cowboy', label: 'Cowboy' }, { id: 'viking', label: 'Viking hat' }, { id: 'pirate', label: 'Pirate hat' }];
+const hats = [{ id: 'none', label: 'None' }, { id: 'hard-hat', label: 'Hard hat' }, { id: 'cap', label: 'Cap' }, { id: 'cowboy', label: 'Cowboy' }, { id: 'viking', label: 'Viking hat' }, { id: 'pirate', label: 'Pirate hat' }, { id: 'sausage', label: 'Sausage' }, { id: 'tinfoil', label: 'Tinfoil hat' }, { id: 'safety-plug', label: 'Safety plug' }, { id: 'party', label: 'Party hat' }, { id: 'pumpkin', label: 'Pumpkin' }, { id: 'ghost', label: 'Ghost sheet' }];
 const fixtures = {
   auth: `export function onAuthStateChanged(_auth, callback) { window.fixtureAuthListeners.add(callback); callback(window.fixtureUser); return ()=>window.fixtureAuthListeners.delete(callback); }`,
   firebase: 'export const firebaseAuth = {};',
@@ -98,9 +98,13 @@ async function fixturePage(browser, config = {}) {
   const { portal = 'trade', width = 1366, mode = 'day', multiple = false, usageModes = {}, storage = {}, scopeFailure = false, blockedStorage = false, submitOnCall = false } = config;
   const page = await browser.newPage({ viewport: { width, height: width < 500 ? 844 : 900 }, hasTouch: width < 500 });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  await page.route('https://fixture.invalid/**', route => route.fulfill(route.request().url().endsWith('/surge-mascot.webp')
-    ? { status: 200, contentType: 'image/webp', body: fs.readFileSync(path.join(root, 'public/surge-mascot.webp')) }
-    : { status: 200, contentType: 'text/html', body: '<!doctype html><html></html>' }));
+  await page.route('https://fixture.invalid/**', route => {
+    const pathname = new URL(route.request().url()).pathname;
+    const image = pathname === '/surge-mascot.webp' || hats.some(hat => hat.id !== 'none' && pathname === `/wattzun/${hat.id}.webp`);
+    return route.fulfill(image
+      ? { status: 200, contentType: 'image/webp', body: fs.readFileSync(path.join(root, 'public', pathname)) }
+      : { status: 200, contentType: 'text/html', body: '<!doctype html><html></html>' });
+  });
   await page.goto('https://fixture.invalid/');
   await page.setContent(`<html data-tlink-colour-mode="${mode}"><head><style>html,body{margin:0;font-family:Arial,sans-serif}body{padding:16px;background:${mode === 'night' ? '#0c1c1b' : '#e9f0ee'}}*{box-sizing:border-box}${modes}${css}</style></head><body><main class="trade-portal-shell" style="max-width:1180px;margin:auto"><div id="root"></div></main></body></html>`);
   await page.evaluate(({ portal, multiple, usageModes, storage, scopeFailure, blockedStorage, submitOnCall }) => {
@@ -144,11 +148,21 @@ async function screen(page, name) {
 async function currentHat(tools, launcher, dialog, id) {
   for (const location of [tools.locator('header'), launcher, ...(dialog ? [dialog.locator('header')] : [])]) {
     if (id === 'none') assert.equal(await location.locator('[data-wattzun-hat]').count(), 0);
-    else await location.locator(`[data-wattzun-hat="${id}"]`).waitFor();
+    else {
+      const mascot = location.locator(`[data-wattzun-hat="${id}"]`);
+      await mascot.waitFor();
+      const image = await mascot.evaluate(async element => {
+        const source = getComputedStyle(element).backgroundImage.match(/^url\(["']?(.*?)["']?\)$/)?.[1];
+        const image = new Image(); image.src = source; await image.decode();
+        return { source, width: image.naturalWidth, height: image.naturalHeight };
+      });
+      assert.ok(image.source.endsWith(`/wattzun/${id}.webp`), `${id} has its actual rendered costume`);
+      assert.ok(image.width >= 384 && image.height >= 512, `${id} has a high resolution decoded image`);
+    }
   }
 }
 
-test('actual Tools, floating launcher and assistant share all six hats and speed in desktop/mobile day/night layouts', { skip: !browserPath && 'No installed browser for layout checks' }, async t => {
+test('actual Tools, floating launcher and assistant share all 12 appearance choices and speed in desktop/mobile day/night layouts', { skip: !browserPath && 'No installed browser for layout checks' }, async t => {
   const browser = await chromium.launch({ executablePath: browserPath, headless: true });
   try {
     for (const scenario of [{ name: 'desktop-day', width: 1366, mode: 'day' }, { name: 'desktop-night', width: 1366, mode: 'night' }, { name: 'mobile-day', width: 390, mode: 'day' }, { name: 'mobile-night', width: 390, mode: 'night' }]) await t.test(scenario.name, async () => {
@@ -170,6 +184,8 @@ test('actual Tools, floating launcher and assistant share all six hats and speed
         await dialog.getByRole('button', { name: 'Minimise Wattzun', exact: true }).click();
         await dialog.waitFor({ state: 'detached' });
       }
+      await tools.getByRole('button', { name: 'Pirate hat', exact: true }).click();
+      await currentHat(tools, launcher, null, 'pirate');
       assert.deepEqual(await page.evaluate(() => window.fixtureCounters), { started: 0, hungUp: 0, disposed: 0, microphone: 0 }, 'Hats and ordinary Message never request a call or microphone');
       await touchControls(tools, scenario.name);
       await tools.getByRole('combobox', { name: 'Speaking speed', exact: true }).selectOption('1.15');
