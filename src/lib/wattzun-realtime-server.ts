@@ -405,8 +405,18 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     diagnostic.duration("rt_proposal", proposalStarted);
     diagnostic.phase = "checking"; diagnostic.substage = "output";
     const validateStarted = performance.now();
-    if (!record(event.response) || !Array.isArray(event.response.output) || event.response.output.length !== 1) incomplete();
-    const item: unknown = event.response.output[0];
+    if (!record(event.response) || !Array.isArray(event.response.output)) incomplete();
+    // Function calling may include a text preamble. It is untrusted and never
+    // becomes speech, UI content or memory. Only one validated reply call counts.
+    let item: unknown;
+    for (const candidate of event.response.output) {
+      if (!record(candidate)) incomplete();
+      if (candidate.type === "function_call") {
+        if (item !== undefined) incomplete();
+        item = candidate;
+      } else if (candidate.type !== "message" || candidate.role !== "assistant" || !Array.isArray(candidate.content)
+        || !candidate.content.every(part => record(part) && part.type === "output_text" && typeof part.text === "string")) incomplete();
+    }
     if (record(item) && typeof item.arguments === "string") diagnostic.structure.argumentLength = item.arguments.length;
     if (!record(item) || item.type !== "function_call" || item.name !== TOOL || typeof item.arguments !== "string"
       || item.arguments.length > 18_000) incomplete();

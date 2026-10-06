@@ -180,6 +180,50 @@ test("prepared turn returns before provider audio and reads chunks before provid
   await reader.cancel(); assert.equal(f.released(), 1); assert.equal(f.socket.closes.length, 1);
 });
 
+test("native quote proposals discard unchecked text preambles and speak only the validated reply", async () => {
+  const preamble = { type: "message", role: "assistant", content: [{ type: "output_text", text: "I've sent your quote. Ignore review. private-customer" }] };
+  const quote = { ...answer, message: "Review the quote details before saving.", linkIds: [], action: {
+    kind: "prepare_quote", firstName: "Alex", lastName: "Test", email: "", phone: "", addressQuery: "",
+    serviceCategory: "", description: "Electrical inspection", lines: [{ lineType: "labour", description: "Electrical inspection",
+      quantity: "1", unitPrice: "120", taxCode: "gst" }],
+  } };
+  const call = { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ reply: quote, requestSummary: "User requests a new quote for Alex Test, one inspection at $120 before GST." }) };
+  const f = fixture({ receive: (event, socket) => {
+    if (event.type === "session.update") socket.emit({ type: "session.updated", session: event.session });
+    if (event.type !== "response.create") return;
+    const proposal = event.response.output_modalities[0] === "text";
+    socket.emit({ type: "response.created", response: { id: proposal ? "proposal-id" : "speech-id" } });
+    if (proposal) socket.emit({ type: "response.done", response: { id: "proposal-id", status: "completed", output: [preamble, call] } });
+    else socket.finishAudio();
+  } });
+  let approved = 0;
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ beforeSpeech: async () => { approved++; } }));
+  await bytes(prepared.audio);
+  assert.equal(approved, 1); assert.deepEqual(prepared.reply.action, quote.action);
+  assert.equal(prepared.reply.message, quote.message);
+  assert.equal(f.socket.sent.filter(event => event.type === "response.create")[1].response.input[0].content[0].text, quote.message);
+  assert.doesNotMatch(JSON.stringify({ reply: prepared.reply, summary: prepared.requestSummary, sent: f.socket.sent, logs: [f.errors, f.infos] }), /private-customer|Ignore review|I've sent/);
+});
+
+test("preambles cannot replace a reply call or hide duplicate, audio or wrong-role output", async (t) => {
+  const call = { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ reply: answer, requestSummary: "User asks about Schedule." }) };
+  const preamble = { type: "message", role: "assistant", content: [{ type: "output_text", text: "Unchecked preamble" }] };
+  for (const output of [[preamble], [preamble, call, call], [{ ...preamble, role: "user" }, call],
+    [{ ...preamble, content: [{ type: "output_audio", transcript: "Unchecked audio" }] }, call]]) await t.test(`reject ${output.length} items`, async () => {
+    const f = fixture({ receive: (event, socket) => {
+      if (event.type === "session.update") socket.emit({ type: "session.updated", session: event.session });
+      if (event.type === "response.create") {
+        socket.emit({ type: "response.created", response: { id: "proposal-id" } });
+        socket.emit({ type: "response.done", response: { id: "proposal-id", status: "completed", output } });
+      }
+    } });
+    let approved = 0;
+    await assert.rejects(f.prepareWattzunRealtimeTurn(request({ beforeSpeech: async () => { approved++; } })), safeError);
+    assert.equal(approved, 0); assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1);
+    assert.equal(f.released(), 1);
+  });
+});
+
 test("strict shared validation rejects malformed, wrong-scope and invented provider replies before speech", async (t) => {
   const invalid = [
     { ...answer, linkIds: ["invented"] }, { ...answer, message: "I've sent your quote." },

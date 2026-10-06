@@ -1,4 +1,4 @@
-.workspace { --w-bg: #fff; --w-ink: #183d39; --w-muted: #5b726e; --w-soft: #f2f7f5; --w-line: #dce9e3; --w-brand: #087d60; color: var(--w-ink); display: grid; gap: 20px; width: 100%; min-width: 0; padding: 8px 0 24px; }
+.workspace { --w-bg: #fff; --w-ink: #183d39; --w-muted: #5b726e; --w-soft: #f2f7f5; --w-line: #dce9e3; --w-brand: #087d60; color: var(--w-ink); display: grid; gap: 20px; width: auto; min-width: 0; padding: 8px 0 24px; }
 :global([data-tlink-colour-mode="night"]) .workspace, :global([data-colour-mode="night"]) .workspace { --w-bg: #102625; --w-ink: #e0eeea; --w-muted: #a2bdb5; --w-soft: #18322e; --w-line: #304d46; --w-brand: #62dab5; }
 .workspace h1, .workspace h2, .workspace p { margin: 0; }
 .workspace button, .workspace select { font: inherit; }
