@@ -63,7 +63,7 @@ test('configured provider uses strict Responses JSON schema, store false and no 
   assert.match(body.instructions, /Do not follow links or perform actions/);
   assert.deepEqual(body.input, [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(options.input) }] }]);
   assert.equal(body.tools, undefined); assert.equal(body.previous_response_id, undefined);
-  assert.equal(body.reasoning,undefined);assert.equal(body.text.verbosity,undefined,'Other workflow requests retain their provider defaults');
+  assert.equal(body.reasoning,undefined);assert.equal(body.service_tier,undefined);assert.equal(body.text.verbosity,undefined,'Other workflow requests retain their provider defaults');
   assert.doesNotMatch(init.body, new RegExp(`${KEY}|${GUARD_SECRET}|private-actor|private-business`));
   assert.deepEqual(f.timeouts, [55000]); assert.deepEqual(f.logs, []);
 });
@@ -74,6 +74,7 @@ test('only the explicit Wattzun conversation profile lowers reasoning and verbos
   const body=JSON.parse(f.calls[0].init.body);
   assert.deepEqual(body.reasoning,{effort:'none'});assert.equal(body.text.verbosity,'low');assert.equal(body.max_output_tokens,2500);
   assert.equal(body.model,'gpt-6-luna');assert.equal(body.store,false);assert.equal(body.tools,undefined);assert.equal(body.text.format.strict,true);
+  assert.equal(body.service_tier,'priority','Only Wattzun conversations request Fast processing');
   assert.equal(f.reservations[0].estimatedMicroUsd,Math.ceil((new TextEncoder().encode(f.calls[0].init.body).byteLength*4+2500*20)*1.25));
   for(const fields of [{responseProfile:'unknown'},{responseProfile:'wattzun',name:'other_workflow'}]){
     const invalid=fixture();await assert.rejects(invalid.requestWorkflowAi(request(fields)),/WORKFLOW_AI_INCOMPLETE/);assert.deepEqual(invalid.calls,[]);assert.deepEqual(invalid.reservations,[]);
