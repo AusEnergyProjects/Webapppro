@@ -140,6 +140,8 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.equal(f.calls[0].init.headers.Authorization, `Bearer ${KEY}`);
   const session = f.socket.sent.find(event => event.type === "session.update").session;
   const contract = f.shared.createWattzunPortalReplyContract(options);
+  assert.match(session.instructions, /Call wattzun_portal_reply exactly once for every answer, clarification or scope reminder/);
+  assert.match(session.instructions, /Do not output an assistant message, text, audio or preamble/);
   assert.deepEqual(session.tools[0].parameters.properties.reply, contract.schema);
   assert.deepEqual(session.tools[0].parameters.required, ["reply", "requestSummary"]);
   assert.equal(session.tools[0].parameters.additionalProperties, false);
@@ -284,6 +286,19 @@ test("missing Upgrade, wrong negotiated PCM and server-only disabled configurati
     } });
     await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);
     assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 0); assert.equal(f.released(), 1);
+  });
+  for (const change of [session => { session.tool_choice = "auto"; }, session => { session.tools = []; },
+    session => { session.tools[0].name = "other_tool"; }]) await t.test("unacknowledged reply submission tool", async () => {
+    const f = fixture({ receive: (event, socket) => {
+      if (event.type === "session.update") {
+        const session = structuredClone(event.session); change(session);
+        socket.emit({ type: "session.updated", session });
+      }
+    } });
+    await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);
+    assert.equal(f.socket.sent.filter(event => event.type === "input_audio_buffer.append").length, 0);
+    assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 0);
+    assert.equal(f.released(), 1);
   });
   for (const env of [{ OPENAI_API_KEY: "" }, { SURGE_AI_ENABLED: "false" }, { SURGE_MODEL: "user-model" }]) {
     const f = fixture({ env }); await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);

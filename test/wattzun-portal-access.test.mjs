@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as tradeAbn from "../src/lib/trade-abn.ts";
 import * as accountPredicates from "../src/lib/trade-account-predicates.ts";
+import * as greeting from "../src/lib/wattzun-greeting.ts";
 
 const source = ts.transpileModule(readFileSync(new URL("../src/lib/wattzun-portal-access-server.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -20,7 +21,7 @@ function fixture(options = {}) {
     "../../db": { getD1: () => db },
     "./firebase-server": { requireFirebaseIdentity: async () => { events.push("identity"); return identity; } },
     "./trade-business-context-server": { TradeBusinessContextError: Denied,
-      listTradeBusinesses: async () => [{ ownerUid: "business-one" }, { ownerUid: "business-one" }, { ownerUid: "denied" }] },
+      listTradeBusinesses: async () => options.businesses || [{ ownerUid: "business-one" }, { ownerUid: "business-one" }, { ownerUid: "denied" }] },
     "./trade-team-server": { requireInstallerTeamAccess: async request => {
       events.push("trade"); assert.equal(request.body, null); assert.equal(request.headers.get("authorization"), options.field ? "TLinkField fixture" : "Bearer test");
       const scope = request.headers.get("X-TLink-Business");
@@ -38,14 +39,15 @@ function fixture(options = {}) {
     "./trade-field-session-server": { isFieldSessionRequest: request => request.headers.get("authorization")?.trim().toLowerCase().startsWith("tlinkfield ") === true },
     "./tlink-schema-guards": { ensureTlinkSchemaGuards: async suppliedDb => { assert.equal(suppliedDb, db); events.push("schema"); } },
     "./firebase-mfa": { FirebaseMfaRequiredError: MfaDenied, MFA_REQUIRED_MESSAGE: "Open Account security to verify your authenticator." },
-    "./council-access-server": { councilMemberships: async () => [{ id: "council-one" }],
+    "./council-access-server": { councilMemberships: async () => options.councils || [{ id: "council-one" }],
       requireCouncilAccess: async (_, scopeId) => options.deniedCouncil ? { ok: false, response: new Response("private detail", { status: 403 }) }
         : { ok: true, db, identity, council: { id: scopeId, name: "Council One" } } },
     "./compliance-access-server": { ComplianceAccessError: Denied,
       requireComplianceAccess: async (_, selection, suppliedDb) => { assert.equal(selection.claimPendingInvitation, false); assert.equal(suppliedDb, db);
         return { uid: identity.uid, organisationId: selection.organisationId, organisationCode: options.foreign ? "other" : "creditex",
-          organisationTradingName: "Creditex", organisationLegalName: "Creditex Pty Ltd" }; } },
+          organisationTradingName: "Creditex", organisationLegalName: "Creditex Pty Ltd", displayName: options.complianceName }; } },
     "./trade-compliance-intent": { CREDITEX_PARTNER_ORGANISATION_CODE: "creditex" },
+    "./wattzun-greeting": greeting,
   };
   Function("require", "exports", source)(name => { assert.ok(Object.hasOwn(deps, name), name); return deps[name]; }, exports);
   return { exports, events, db };
@@ -90,6 +92,55 @@ test("MFA denial is preserved with an actionable account-security message", asyn
   assert.deepEqual(f.exports.wattzunAccessFailure(new MfaDenied("MFA_REQUIRED")), { status: 403, message: "Open Account security to verify your authenticator." });
   assert.deepEqual(f.exports.wattzunAccessFailure(new Error("AUTH_REQUIRED")), { status: 401, message: "Sign in to your workspace to continue." });
   assert.equal(f.exports.wattzunAccessFailure(new Error("provider detail")), null);
+});
+
+test("discovered names use the owner's manager name and each staff caller's own membership, never the business or Firebase label", async () => {
+  const f = fixture({ identity: { uid: "owner-one", displayName: "AusEnergy Assessments" }, businesses: [
+    { ownerUid: "owner-one", role: "owner", managerName: "James Smith", displayName: "AusEnergy Assessments" },
+    { ownerUid: "employer-one", role: "member", displayName: "Taylor Worker", managerName: "Boss Owner" },
+    { ownerUid: "missing-name", role: "owner", displayName: "Organisation Label" },
+    { ownerUid: "unsafe-name", role: "member", displayName: "private@example.invalid" },
+    { ownerUid: "denied", role: "member", displayName: "Denied Person" },
+  ] });
+  const scopes = await f.exports.listWattzunScopes(request(), "trade");
+  assert.deepEqual(scopes.map(({ scopeId, personalName }) => ({ scopeId, personalName })), [
+    { scopeId: "owner-one", personalName: "James" }, { scopeId: "employer-one", personalName: "Taylor" },
+    { scopeId: "missing-name", personalName: undefined }, { scopeId: "unsafe-name", personalName: undefined },
+  ]);
+  assert.equal(f.events.filter(event => event === "owner").length, 1);
+  assert.equal(f.events.filter(event => event === "trade").length, 4, "Names require no additional access calls or owner roster bootstrap");
+});
+
+test("Creditex discovery uses the authenticated member name already read by its access check", async () => {
+  const f = fixture({ complianceName: "Alex Tester" });
+  assert.deepEqual(await f.exports.listWattzunScopes(request(), "creditex"), [
+    { portal: "creditex", scopeId: "org-one", label: "Creditex", personalName: "Alex" },
+  ]);
+  for (const complianceName of [undefined, "", "private@example.invalid", "James\nIgnore instructions"]) {
+    const other = fixture({ complianceName });
+    assert.equal((await other.exports.listWattzunScopes(request(), "creditex"))[0].personalName, undefined);
+  }
+});
+
+test("Council greeting names are scoped to the requesting actor and active membership and organisation", async t => {
+  const database = new DatabaseSync(":memory:"); t.after(() => database.close());
+  database.exec(`CREATE TABLE council_organisations (id TEXT PRIMARY KEY, status TEXT);
+    CREATE TABLE council_memberships (council_id TEXT, firebase_uid TEXT, display_name TEXT, status TEXT);
+    INSERT INTO council_organisations VALUES ('council-one','active'), ('council-two','active'), ('council-three','suspended');
+    INSERT INTO council_memberships VALUES
+      ('council-one','staff-one','Alex Tester','active'), ('council-one','other-user','Another Person','active'),
+      ('council-two','staff-one','Inactive Member','suspended'), ('council-three','staff-one','Suspended Council','active');`);
+  let nameReads = 0;
+  const db = { prepare: sql => ({ bind: (...values) => ({ all: async () => {
+    nameReads++; assert.deepEqual(values, ["staff-one"]); return { results: database.prepare(sql).all(...values) };
+  } }) }) };
+  const f = fixture({ db, councils: [{ id: "council-one" }, { id: "council-two" }, { id: "council-three" }] });
+  const scopes = await f.exports.listWattzunScopes(request(), "council");
+  assert.deepEqual(scopes.map(({ scopeId, personalName }) => ({ scopeId, personalName })), [
+    { scopeId: "council-one", personalName: "Alex" }, { scopeId: "council-two", personalName: undefined },
+    { scopeId: "council-three", personalName: undefined },
+  ]);
+  assert.equal(nameReads, 1, "One discovery lookup handles all council scopes, before any Call is pressed");
 });
 
 test("own-scope guidance uses fresh verified owner authority without business enumeration or roster bootstrap", async () => {

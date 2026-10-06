@@ -1,6 +1,6 @@
 import { getD1 } from "../../db";
 import { requireFirebaseIdentity } from "./firebase-server";
-import { listTradeBusinesses, TradeBusinessContextError } from "./trade-business-context-server";
+import { listTradeBusinesses, TradeBusinessContextError, type TradeBusinessChoice } from "./trade-business-context-server";
 import { requireInstallerTeamAccess } from "./trade-team-server";
 import { requireVerifiedTradeIdentity, TradeAccessError } from "./trade-access-server";
 import { isFieldSessionRequest } from "./trade-field-session-server";
@@ -10,6 +10,7 @@ import { councilMemberships, requireCouncilAccess } from "./council-access-serve
 import { ComplianceAccessError, requireComplianceAccess } from "./compliance-access-server";
 import { CREDITEX_PARTNER_ORGANISATION_CODE } from "./trade-compliance-intent";
 import type { WattzunPortal, WattzunScope } from "./wattzun-portal";
+import { wattzunPersonalGreetingName } from "./wattzun-greeting";
 
 export class WattzunAccessError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -47,8 +48,9 @@ export async function requireWattzunAccess(request: Request, portal: WattzunPort
     if (access.organisationCode !== CREDITEX_PARTNER_ORGANISATION_CODE || access.organisationId !== scopeId) {
       throw new WattzunAccessError(403, "Current Creditex workspace access is required.");
     }
+    const personalName = wattzunPersonalGreetingName(access.displayName);
     return { db, actorUid: access.uid, scope: { portal, scopeId: access.organisationId,
-      label: access.organisationTradingName || access.organisationLegalName } };
+      label: access.organisationTradingName || access.organisationLegalName, ...(personalName ? { personalName } : {}) } };
   }
   const access = await requireCouncilAccess(request, scopeId);
   if (!access.ok) throw new WattzunAccessError(access.response.status, access.response.status === 401
@@ -67,8 +69,21 @@ export async function listWattzunScopes(request: Request, portal: WattzunPortal)
   if (!identity.emailVerified) throw new WattzunAccessError(403, "Verify your email before opening Wattzun.");
   const db = getD1();
   let ids: string[];
-  if (portal === "trade") ids = (await listTradeBusinesses(identity)).map(business => business.ownerUid);
-  else if (portal === "council") ids = (await councilMemberships(db, identity)).map(council => council.id);
+  let businesses: TradeBusinessChoice[] = [];
+  const councilNames = new Map<string, string>();
+  if (portal === "trade") {
+    businesses = await listTradeBusinesses(identity);
+    ids = businesses.map(business => business.ownerUid);
+  } else if (portal === "council") {
+    ids = (await councilMemberships(db, identity)).map(council => council.id);
+    if (ids.length) {
+      const rows = await db.prepare(`SELECT member.council_id, member.display_name FROM council_memberships member
+        JOIN council_organisations organisation ON organisation.id=member.council_id
+        WHERE member.firebase_uid=? AND member.status='active' AND organisation.status='active'`)
+        .bind(identity.uid).all<{ council_id: string; display_name: string }>();
+      for (const row of rows.results) councilNames.set(row.council_id, row.display_name);
+    }
+  }
   else {
     const rows = await db.prepare(`SELECT organisation.id FROM compliance_users member
       JOIN compliance_organisations organisation ON organisation.id=member.organisation_id
@@ -79,7 +94,16 @@ export async function listWattzunScopes(request: Request, portal: WattzunPortal)
   }
   const scopes: WattzunScope[] = [];
   for (const id of new Set(ids)) {
-    try { scopes.push((await requireWattzunAccess(request, portal, id)).scope); }
+    try {
+      const access = await requireWattzunAccess(request, portal, id);
+      if (access.actorUid !== identity.uid) throw new WattzunAccessError(403, "Your account changed. Refresh before continuing with Wattzun.");
+      const business = businesses.find(candidate => candidate.ownerUid === id);
+      // Owners' displayName is the business label. Staff receive their own membership name.
+      const name = portal === "trade" ? business?.role === "owner" ? business.managerName : business?.role === "member" ? business.displayName : undefined
+        : portal === "council" ? councilNames.get(id) : access.scope.personalName;
+      const personalName = wattzunPersonalGreetingName(name);
+      scopes.push({ ...access.scope, ...(personalName ? { personalName } : {}) });
+    }
     catch (error) { if (!unavailableMembership(error)) throw error; }
   }
   return scopes;

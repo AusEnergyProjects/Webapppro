@@ -83,7 +83,8 @@ export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
         if (controller.signal.aborted) return;
         const payload = await responsePayload(await fetch(`/api/wattzun/portal?portal=${portal}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }));
         if (controller.signal.aborted || currentActor.current?.uid !== user.uid || !Array.isArray(payload.scopes)) return;
-        const authorizedScopes = payload.scopes.filter((scope): scope is WattzunScope => record(scope) && scope.portal === portal && typeof scope.scopeId === "string" && typeof scope.label === "string");
+        const authorizedScopes = payload.scopes.filter((scope): scope is WattzunScope => record(scope) && scope.portal === portal && typeof scope.scopeId === "string" && typeof scope.label === "string"
+          && (scope.personalName === undefined || typeof scope.personalName === "string"));
         setScopes(authorizedScopes);
         const saved = portal === "trade" ? selectedBusiness.current ?? readTradeBusinessSelection(user.uid) : "";
         setScopeId(authorizedScopes.find(scope => scope.scopeId === saved)?.scopeId || (selectedBusiness.current === null && authorizedScopes.length === 1 ? authorizedScopes[0].scopeId : ""));
@@ -252,7 +253,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         const result = await readWattzunVoiceStream(await fetch("/api/wattzun/greeting", { method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({ portal: scope.portal, scopeId: scope.scopeId, requestId: crypto.randomUUID(),
-            name: user.displayName || "", preferences: { ...preferencesRef.current } }), signal }), signal, isReply);
+            name: scope.personalName || "", preferences: { ...preferencesRef.current } }), signal }), signal, isReply);
         return result.audio;
       },
       async submit(audio, signal) {

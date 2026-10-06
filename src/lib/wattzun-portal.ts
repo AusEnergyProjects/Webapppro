@@ -7,7 +7,7 @@ export const WATTZUN_BRAND_VOICE = "cedar";
 export const WATTZUN_BRAND_PERSONALITY = "Warm and conversational, with a little humour";
 export type WattzunPreferences = { speed: 0.85 | 1 | 1.15 };
 export const WATTZUN_DEFAULT_PREFERENCES: WattzunPreferences = { speed: 1 };
-export type WattzunScope = { portal: WattzunPortal; scopeId: string; label: string };
+export type WattzunScope = { portal: WattzunPortal; scopeId: string; label: string; personalName?: string };
 export type WattzunTurn = { role: "user" | "assistant"; content: string };
 export type WattzunTurnInput = {
   portal: WattzunPortal; scopeId: string; requestId: string; message: string;

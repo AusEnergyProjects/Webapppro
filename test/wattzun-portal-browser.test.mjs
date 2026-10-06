@@ -9,7 +9,7 @@ import { chromium } from 'playwright-core';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const browserPath = [process.env.TEST_BROWSER_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/chromium'].find(value => value && fs.existsSync(value));
 const fixtures = {
-  auth: `export function onAuthStateChanged(_auth, callback) { window.wattzunFixtureAuth=callback; callback({uid:'synthetic-user',displayName:'Alex Tester',emailVerified:true,getIdToken:async()=>'synthetic-token'}); return ()=>{}; }`,
+  auth: `export function onAuthStateChanged(_auth, callback) { window.wattzunFixtureAuth=callback; callback({uid:'synthetic-user',displayName:'Synthetic Organisation',emailVerified:true,getIdToken:async()=>'synthetic-token'}); return ()=>{}; }`,
   firebase: 'export const firebaseAuth = {};',
   business: `export const readTradeBusinessSelection = () => 'synthetic-business'; export const TRADE_BUSINESS_SELECTION_CHANGED_EVENT='tlink:business-selection-changed';`,
   link: `import React from 'react'; export default function Link({href,onNavigate,prefetch,...props}) { return <a {...props} href={href} onClick={event=>{ if(event.button||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey) return; event.preventDefault(); let prevented=false; onNavigate?.({preventDefault(){prevented=true;}}); if(!prevented){history.pushState(history.state,'',href);window.dispatchEvent(new Event('fixture:navigate'));}}}/>; }`,
@@ -65,7 +65,7 @@ const bundle = await build({
     window.wattzunFixtureGreetingPcm=[];
     window.fetch=async (url,options={})=>{
       window.wattzunFixtureRequests.push({url,headers:options.headers,body:options.body?JSON.parse(options.body):null});
-      if(url.startsWith('/api/wattzun/portal?portal=')) { const portal=new URL(url,location.origin).searchParams.get('portal');return Response.json({ok:true,scopes:window.wattzunFixtureScopes||[{portal,scopeId:portal==='trade'?'synthetic-business':'synthetic-'+portal,label:'Synthetic '+portal+' business'}]}); }
+      if(url.startsWith('/api/wattzun/portal?portal=')) { const portal=new URL(url,location.origin).searchParams.get('portal');return Response.json({ok:true,scopes:window.wattzunFixtureScopes||[{portal,scopeId:portal==='trade'?'synthetic-business':'synthetic-'+portal,label:'Synthetic '+portal+' business',personalName:'Alex'}]}); }
       if(url==='/api/wattzun/greeting'&&options.method==='POST') {
         const frames=[{type:'reply',transcript:'',reply:{kind:'answer',message:"Hi Alex, I'm here. What can I help you with?",questions:[],links:[]}},
           {type:'audio',data:'EIAgAQ=='},{type:'done'}];
@@ -209,17 +209,18 @@ test('starting a call wires the literal greeting to the current authenticated po
   const browser=await chromium.launch({executablePath:browserPath,headless:true});
   try {
     for(const layout of [{name:'desktop',width:1366,height:900,speed:0.85},{name:'mobile',width:390,height:844,speed:1.15}]) {
-      for(const [portal,pathname] of [['trade','/direct-trade/dashboard'],['council','/council'],['creditex','/creditex/compliance']]) await t.test(`${layout.name}-${portal}`,async()=>{
+      for(const named of [true,false]) for(const [portal,pathname] of [['trade','/direct-trade/dashboard'],['council','/council'],['creditex','/creditex/compliance']]) await t.test(`${layout.name}-${portal}-${named?'named':'unnamed'}`,async()=>{
         const page=await browser.newPage({viewport:{width:layout.width,height:layout.height}});
         const errors=[];page.on('pageerror',error=>errors.push(error.message));
         await page.route('https://fixture.invalid/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html></html>'}));
         await page.goto('https://fixture.invalid'+pathname);
         await page.setContent(`<html><head><style>*{box-sizing:border-box}body{margin:0;font-family:Arial}${css}</style></head><body><div id="root"></div></body></html>`);
         const scopeId=portal==='trade'?'synthetic-business':'synthetic-'+portal;
-        await page.evaluate(({portal,scopeId,speed})=>{
+        await page.evaluate(({portal,scopeId,speed,named})=>{
           window.wattzunFixtureGreetingEnabled=true;
+          window.wattzunFixtureScopes=[{portal,scopeId,label:'Synthetic organisation',...(named?{personalName:'Alex'}:{})}];
           localStorage.setItem(`wattzun-preferences:v2:synthetic-user:${portal}:${scopeId}`,JSON.stringify({speed}));
-        },{portal,scopeId,speed:layout.speed});
+        },{portal,scopeId,speed:layout.speed,named});
         await page.addScriptTag({content:script});
         await page.getByRole('button',{name:'Open Wattzun AI chat',exact:true}).click();
         const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -232,8 +233,8 @@ test('starting a call wires the literal greeting to the current authenticated po
         assert.equal(greeting.headers.Authorization,'Bearer synthetic-token');
         assert.equal(greeting.headers['Content-Type'],'application/json');
         assert.match(greeting.body.requestId,/^[A-Za-z0-9:_-]{16,72}$/);
-        assert.deepEqual(greeting.body,{portal,scopeId,requestId:greeting.body.requestId,name:'Alex Tester',preferences:{speed:layout.speed}},
-          'Greeting sends only the current scope, display name, unique request ID and speed');
+        assert.deepEqual(greeting.body,{portal,scopeId,requestId:greeting.body.requestId,name:named?'Alex':'',preferences:{speed:layout.speed}},
+          'Greeting uses the portal member first name or stays unnamed, never the organisational Firebase display name');
         assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureGreetingPcm),[0x10,0x80,0x20,0x01],
           'The fixture consumes the PCM returned through the real native frame parser');
         const conversation=dialog.getByRole('log',{name:'Conversation with Wattzun',exact:true});

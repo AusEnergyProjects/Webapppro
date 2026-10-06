@@ -9,12 +9,18 @@ function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function greetingMessage(name: string | undefined): string {
-  if (!name || name.length > 120 || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) return UNNAMED_GREETING;
+/** Return only the bounded first name from an explicitly personal name source. */
+export function wattzunPersonalGreetingName(name: unknown): string | undefined {
+  if (typeof name !== "string" || !name || name.length > 120 || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) return undefined;
   const displayName = name.trim();
-  if (!DISPLAY_NAME.test(displayName)) return UNNAMED_GREETING;
+  if (!DISPLAY_NAME.test(displayName)) return undefined;
   const firstName = displayName.split(/ +/, 1)[0];
-  return firstName.length <= 40 ? `Hi ${firstName}, I'm here. What can I help you with?` : UNNAMED_GREETING;
+  return firstName.length <= 40 ? firstName : undefined;
+}
+
+function greetingMessage(name: string | undefined): string {
+  const firstName = wattzunPersonalGreetingName(name);
+  return firstName ? `Hi ${firstName}, I'm here. What can I help you with?` : UNNAMED_GREETING;
 }
 
 /** Only a bounded name token can enter this fixed greeting; caller text is never instructions. */

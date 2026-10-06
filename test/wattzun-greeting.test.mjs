@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseWattzunGreeting } from "../src/lib/wattzun-greeting.ts";
+import { parseWattzunGreeting, wattzunPersonalGreetingName } from "../src/lib/wattzun-greeting.ts";
 import { WattzunInputError } from "../src/lib/wattzun-portal.ts";
 
 const input = { portal: "trade", scopeId: "owner-one", requestId: "greeting-request-0001" };
@@ -10,6 +10,13 @@ test("a named greeting is a fixed literal turn with no caller history or instruc
   assert.deepEqual(parseWattzunGreeting({ ...input, name: "  James Smith  " }), {
     ...input, message: "Hi James, I'm here. What can I help you with?", history: [], preferences: { speed: 1 },
   });
+});
+
+test("scope names disclose only the validated first name and missing or unsafe sources remain unnamed", () => {
+  assert.equal(wattzunPersonalGreetingName("James Smith"), "James");
+  for (const name of [undefined, null, 42, {}, "", "private@example.invalid", "James\nSmith", "A".repeat(41)]) {
+    assert.equal(wattzunPersonalGreetingName(name), undefined);
+  }
 });
 
 test("Unicode, hyphenated and apostrophe names preserve the bounded first name", () => {

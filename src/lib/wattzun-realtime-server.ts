@@ -178,7 +178,7 @@ export async function prepareWattzunRealtimeTurn(
 
 async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDiagnostic): Promise<PreparedWattzunRealtimeTurn> {
   const contract = createWattzunPortalReplyContract(options);
-  const instructions = `${contract.instructions}\nThis is a live voice conversation. Give ordinary answers in one or two short sentences, usually under 35 words. For navigation, name the supplied button and what it opens. Add a permissions explanation only when the user is asking about missing access. Put necessary clarification questions in questions instead of repeating them in message. Preserve all required structured facts and review boundaries.\nThe function result wraps the requested reply in reply and includes requestSummary. requestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output.`;
+  const instructions = `${contract.instructions}\nThis is a live voice conversation. Give ordinary answers in one or two short sentences, usually under 35 words. For navigation, name the supplied button and what it opens. Add a permissions explanation only when the user is asking about missing access. Put necessary clarification questions in questions instead of repeating them in message. Preserve all required structured facts and review boundaries.\nrequestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output.\nREQUIRED RESPONSE TRANSPORT: Call ${TOOL} exactly once for every answer, clarification or scope reminder. This is a read-only reply-submission function, not an action tool. Its arguments must be exactly {reply, requestSummary}, with reply following the requested reply schema. Do not output an assistant message, text, audio or preamble in this response. The function submits a proposal for validation; it cannot save or send anything.`;
   const schema = { type: "object", additionalProperties: false, required: ["reply", "requestSummary"],
     properties: { reply: contract.schema, requestSummary: { type: "string", minLength: 1, maxLength: 1_800 } } };
   const preferences = parseWattzunPreferences(options.input.preferences);
@@ -355,13 +355,17 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
         output: { format: { type: "audio/pcm", rate: 24_000 }, voice: WATTZUN_BRAND_VOICE, speed: preferences.speed } },
       max_output_tokens: PROPOSAL_TOKENS,
       ...(!fastNative ? { reasoning: { effort: "minimal" }, parallel_tool_calls: false } : {}),
-      tools: [{ type: "function", name: TOOL, description: "Return a reply proposal and unconfirmed request memory for validation. This tool cannot save or send anything.", parameters: schema }],
+      tools: [{ type: "function", name: TOOL, description: "Required for every answer, clarification and scope reminder. Submit exactly one reply proposal and unconfirmed request memory for validation. This read-only reply-submission function cannot save or send anything. Do not respond with a text message.", parameters: schema }],
       tool_choice: { type: "function", name: TOOL },
     } });
     const configuration = await configured;
     diagnostic.duration("rt_config", configStarted);
     const session = configuration.session;
-    if (!record(session) || session.type !== "realtime" || !Array.isArray(session.output_modalities)
+    if (!record(session) || session.type !== "realtime" || !record(session.tool_choice)
+      || session.tool_choice.type !== "function" || session.tool_choice.name !== TOOL
+      || !Array.isArray(session.tools) || session.tools.length !== 1 || !record(session.tools[0])
+      || session.tools[0].type !== "function" || session.tools[0].name !== TOOL
+      || !Array.isArray(session.output_modalities)
       || session.output_modalities.length !== 1 || session.output_modalities[0] !== "text"
       || !record(session.audio) || !record(session.audio.input) || !record(session.audio.input.format)
       || session.audio.input.format.type !== "audio/pcm" || (session.audio.input.format.rate ?? 24_000) !== 24_000
