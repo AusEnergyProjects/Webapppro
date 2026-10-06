@@ -116,6 +116,13 @@ async function fixturePage(browser, config = {}) {
   await page.addScriptTag({ content: script });
   const tools = page.getByRole('region', { name: 'Wattzun tools', exact: true });
   await tools.waitFor();
+  // Reproduce the assistant's late stylesheet arriving after the Tools stylesheet.
+  // Component defaults must not override a consumer's deliberate preview sizing.
+  if (!scopeFailure) {
+    const mascotClass = (await tools.locator('header span[aria-hidden="true"]').getAttribute('class')).split(' ')[0];
+    const mascotCss = fs.readFileSync(path.join(root, 'src/components/WattzunMascot.module.css'), 'utf8');
+    await page.addStyleTag({ content: mascotCss.replaceAll('.mascot', `.${mascotClass}`) });
+  }
   return { page, tools, errors };
 }
 async function numbers(tools, expected) {
@@ -170,6 +177,10 @@ test('actual Tools, floating launcher and assistant share all 12 appearance choi
       await numbers(tools, [7, 3]);
       const launcher = page.getByRole('button', { name: 'Open Wattzun AI chat', exact: true });
       await launcher.waitFor();
+      const heroSize = await tools.locator('header span[aria-hidden="true"]').evaluate(element => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
+      assert.deepEqual(heroSize, scenario.width < 500 ? {width:75,height:90} : {width:150,height:176}, 'Late mascot defaults preserve hero size');
+      const previewSize = await tools.getByRole('button', { name: 'None', exact: true }).locator('span[aria-hidden="true"]').evaluate(element => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
+      assert.deepEqual(previewSize, {width:58,height:78}, 'Late mascot defaults preserve high-resolution gallery size');
       assert.equal(await tools.getByRole('button', { name: 'None', exact: true }).getAttribute('aria-pressed'), 'true');
       for (const hat of hats) {
         const button = tools.getByRole('button', { name: hat.label, exact: true });
