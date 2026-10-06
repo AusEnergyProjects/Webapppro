@@ -209,15 +209,12 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   const context = JSON.stringify(contract.input);
   const promptBytes = new TextEncoder().encode(instructions + JSON.stringify(schema) + context).byteLength;
   if (promptBytes > 64_000) incomplete();
-  // A UTF-8 byte upper-bounds one text token. Keep the full accepted history:
-  // the 32k low-latency model handles only contexts that provably fit, while
-  // the 128k model retains longer conversations without automatic truncation.
+  // Keep reasoning for workflow decisions and retain the full accepted history.
+  // Speech delivery reads only validated text and needs no further task reasoning.
   const audioInputCeiling = Math.ceil(pcm.byteLength / 48_000 * 10) + 128;
-  const fastNative = promptBytes + audioInputCeiling + PROPOSAL_TOKENS + 2_048 <= 32_000;
-  const model = fastNative ? "gpt-realtime-1.5" : "gpt-realtime-2.1-mini";
-  const rates = fastNative ? { textInput: 4, textOutput: 16, audioInput: 32, audioOutput: 64 }
-    : { textInput: 0.6, textOutput: 2.4, audioInput: 10, audioOutput: 20 };
-  // Current fast model rates: text input/output $4/$16 and audio $32/$64 per
+  const model = "gpt-realtime-2.1-mini";
+  const rates = { textInput: 0.6, textOutput: 2.4, audioInput: 10, audioOutput: 20 };
+  // Current model rates: text input/output $0.60/$2.40 and audio $10/$20 per
   // million tokens. Text bytes bound input tokens; input audio is 10 tokens/sec.
   // Reserve both responses, framing overhead and the maximum speech output at
   // the higher audio rate, plus 25%. This is a ceiling, not a customer price.
@@ -375,7 +372,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
       audio: { input: { format: { type: "audio/pcm", rate: 24_000 }, transcription: null, turn_detection: null },
         output: { format: { type: "audio/pcm", rate: 24_000 }, voice: WATTZUN_BRAND_VOICE, speed: preferences.speed } },
       max_output_tokens: PROPOSAL_TOKENS,
-      ...(!fastNative ? { reasoning: { effort: "minimal" }, parallel_tool_calls: false } : {}),
+      reasoning: { effort: "low" }, parallel_tool_calls: false,
       tools: [{ type: "function", name: TOOL, description: "Required for every answer, clarification and scope reminder. Submit exactly one reply proposal and unconfirmed request memory for validation. This read-only reply-submission function cannot save or send anything. Do not respond with a text message.", parameters: schema }],
       tool_choice: "required",
     } });
@@ -403,7 +400,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     diagnostic.substage = "output";
     proposalStarted = performance.now();
     send({ type: "response.create", response: { output_modalities: ["text"], tool_choice: "required",
-      max_output_tokens: PROPOSAL_TOKENS, metadata: { phase: "proposal" } } });
+      reasoning: { effort: "low" }, max_output_tokens: PROPOSAL_TOKENS, metadata: { phase: "proposal" } } });
     const event = await proposed;
     diagnostic.duration("rt_proposal", proposalStarted);
     diagnostic.phase = "checking"; diagnostic.substage = "output";
@@ -443,7 +440,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
       conversation: "none", output_modalities: ["audio"], instructions: WATTZUN_SPEECH_INSTRUCTIONS,
       input: [{ type: "message", role: "user", content: [{ type: "input_text", text: wattzunSpokenReply(reply) }] }],
       tools: [], tool_choice: "none", max_output_tokens: SPEECH_TOKENS, metadata: { phase: "speech" },
-      ...(!fastNative ? { reasoning: { effort: "minimal" } } : {}),
+      reasoning: { effort: "minimal" },
     } });
     const timings = { ...diagnostic.timings };
     console.info("WATTZUN_REALTIME_TURN_READY", { phase: "speech", timings });

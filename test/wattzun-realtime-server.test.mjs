@@ -135,7 +135,7 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.equal(result.reply.message, answer.message);
   assert.deepEqual(await bytes(result.audio), [0x10, 0x80, 0x20, 0x01]);
   assert.equal(f.reservations.length, 1); assert.equal(f.released(), 1); assert.equal(f.calls.length, 1);
-  assert.equal(f.calls[0].url, "https://api.openai.com/v1/realtime?model=gpt-realtime-1.5");
+  assert.equal(f.calls[0].url, "https://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini");
   assert.equal(f.calls[0].init.headers.Upgrade, "websocket");
   assert.equal(f.calls[0].init.headers.Authorization, `Bearer ${KEY}`);
   const session = f.socket.sent.find(event => event.type === "session.update").session;
@@ -151,7 +151,7 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.equal(session.tool_choice, "required");
   assert.deepEqual(session.audio.input, { format: { type: "audio/pcm", rate: 24000 }, transcription: null, turn_detection: null });
   assert.deepEqual(session.audio.output, { format: { type: "audio/pcm", rate: 24000 }, voice: "cedar", speed: 1.15 });
-  assert.equal(Object.hasOwn(session, "reasoning"), false); assert.equal(Object.hasOwn(session, "parallel_tool_calls"), false);
+  assert.deepEqual(session.reasoning, { effort: "low" }); assert.equal(session.parallel_tool_calls, false);
   assert.equal(session.truncation, "disabled");
   assert.match(session.instructions, /live voice conversation.*one or two short sentences/);
   const responses = f.socket.sent.filter(event => event.type === "response.create").map(event => event.response);
@@ -161,9 +161,11 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.equal(responses[1].instructions, f.shared.WATTZUN_SPEECH_INSTRUCTIONS); assert.equal(responses[1].max_output_tokens, 2048);
   assert.doesNotMatch(JSON.stringify(responses[1]), /Jane|Ignore platform rules|private-actor|private-business/);
   // Both complete output ceilings at the current published rates, before input costs.
-  assert.ok(f.reservations[0].estimatedMicroUsd >= Math.ceil((2500 * 16 + 2048 * 64) * 1.25));
-  assert.ok(f.reservations[0].estimatedMicroUsd < 600000);
-  assert.ok(responses.every(response => !Object.hasOwn(response, "reasoning") && !Object.hasOwn(response, "parallel_tool_calls")));
+  assert.ok(f.reservations[0].estimatedMicroUsd >= Math.ceil((2500 * 2.4 + 2048 * 20) * 1.25));
+  assert.ok(f.reservations[0].estimatedMicroUsd < 150000);
+  assert.deepEqual(responses[0].reasoning, { effort: "low" });
+  assert.deepEqual(responses[1].reasoning, { effort: "minimal" });
+  assert.ok(responses.every(response => !Object.hasOwn(response, "parallel_tool_calls")));
   assert.deepEqual(f.socket.closes, [{ code: 1000, reason: "Turn finished" }]);
 });
 
@@ -378,14 +380,14 @@ test("the longest native turn retains bounded history and reserves both output-t
   assert.equal(f.calls[0].url, "https://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini");
   assert.ok(f.reservations[0].estimatedMicroUsd > 80000 && f.reservations[0].estimatedMicroUsd < 150000);
   const session = f.socket.sent.find(event => event.type === "session.update").session;
-  assert.equal(session.truncation, "disabled"); assert.deepEqual(session.reasoning, { effort: "minimal" });
+  assert.equal(session.truncation, "disabled"); assert.deepEqual(session.reasoning, { effort: "low" });
   assert.equal(session.parallel_tool_calls, false);
   const chunks = f.socket.sent.filter(event => event.type === "input_audio_buffer.append");
   assert.equal(chunks.length, 45); assert.ok(chunks.every(chunk => Buffer.from(chunk.audio, "base64").length === 48000));
   assert.equal(f.socket.sent.filter(event => event.type === "input_audio_buffer.commit").length, 1);
 });
 
-test("dense Unicode conversation facts select the larger context before connecting without dropping history", async () => {
+test("dense Unicode conversation facts retain the reasoning model and full history", async () => {
   const f = fixture(), options = request();
   options.input.history = Array.from({length: 20}, (_, index) => ({role: index % 2 ? "assistant" : "user", content: "漢".repeat(500)}));
   const prepared = await f.prepareWattzunRealtimeTurn(options); await bytes(prepared.audio);

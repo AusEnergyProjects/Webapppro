@@ -112,6 +112,11 @@ test('portal text reuses the guarded workflow provider with a strict small schem
   assert.match(call.instructions, /Discuss housing improvements only when they support the user's requested work/);
   assert.match(call.instructions, /Do not start household energy-planner intake/);
   assert.match(call.instructions, /Never create a second job for an existing quote request/);
+  assert.match(call.instructions, /exactly these six keys: kind, message, questions, linkIds, action, lookup/);
+  assert.match(call.instructions, /Never omit unused keys/);
+  assert.match(call.instructions, /When action contains a proposal, lookup must be null/);
+  assert.match(call.instructions, /When lookup contains a record search, action must be null/);
+  assert.match(call.instructions, /action and lookup must both be null/);
 });
 
 test('forty bounded turns plus the verified guide fit the actual workflow provider request budget',async()=>{
@@ -231,6 +236,27 @@ test('provider proposal bounds accept ten concise lines but reject excess rather
     const f = fixture({ result: { ...answer, action: invalid } });
     await assert.rejects(f.prepareWattzunPortalReply(request()), safeError);
     assert.deepEqual(f.calls, []); assert.equal(f.workflows.length, 1);
+  }
+});
+
+test('complete quote and lookup replies require their explicit unused capability key', async () => {
+  const quoteReply = { ...answer, action: proposal, lookup: null };
+  const lookupReply = { ...answer, action: null, lookup: { kind: 'job', query: 'TL-123' } };
+  for (const [complete, unusedKey, expectedCapability] of [
+    [quoteReply, 'lookup', 'action'], [lookupReply, 'action', 'lookup'],
+  ]) {
+    const valid = fixture({ result: complete });
+    const accepted = await valid.prepareWattzunPortalReply(request());
+    assert.deepEqual(accepted[expectedCapability], complete[expectedCapability]);
+    assert.equal(accepted[unusedKey], undefined);
+    const incomplete = { ...complete };
+    delete incomplete[unusedKey];
+    const rejected = fixture({ result: incomplete });
+    await assert.rejects(rejected.prepareWattzunPortalReply(request()), {
+      message: 'WORKFLOW_AI_INCOMPLETE',
+    });
+    assert.equal(rejected.workflows.length, 1);
+    assert.deepEqual(rejected.calls, []);
   }
 });
 
