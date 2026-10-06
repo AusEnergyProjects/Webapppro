@@ -59,13 +59,16 @@ test("the local scale benchmark models review-ledger-bound trade access", () => 
   assert.match(benchmark, /new DatabaseSync\(":memory:"\)/);
 });
 
-test("the refined CRM uses progressive navigation and a focused visual board", () => {
+test("Jobs retains progressive navigation and Sales owns the focused opportunity board", () => {
   assert.match(crm, /crm-quick-create/);
   assert.doesNotMatch(crm, /crm-more-nav/);
   assert.match(crm, /"templates", "reports", "import", "integrations"/);
-  assert.match(crm, /crm-pipeline-board/);
+  const sales = read("../src/components/TradeSalesWorkspace.tsx");
+  assert.match(sales, /aria-label="Sales stages"/);
+  assert.match(sales, /onClick=\{\(\) => setMode\('board'\)\}/);
+  assert.doesNotMatch(crm, /crm-pipeline-board|setPipelineFocus/);
   assert.match(crm, /crm-layout-toggle/);
-  assert.match(crm, /setPipelineFocus\(""\); setJobLayout\("board"\)/);
+  assert.match(crm, /setJobLayout\("list"\)/);
   assert.match(crm, /AccessibleMenu/);
   assert.doesNotMatch(crm, /`More: \$\{/);
 });

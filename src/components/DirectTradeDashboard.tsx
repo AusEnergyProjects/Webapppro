@@ -73,6 +73,7 @@ const TradeRebateCalculatorWorkspace = dynamic(() => import("./TradeRebateCalcul
 const TradeTeamSettings = dynamic(() => import("./TradeTeamSettings").then((module) => module.TradeTeamSettings));
 const TradeFormsWorkspace = dynamic(() => import('./TradeFormsWorkspace').then(module => module.TradeFormsWorkspace), { loading: () => <p role="status">Opening forms...</p> });
 const TradeTasksAndTraining = dynamic(() => import("./TradeTasksAndTraining").then(module => module.TradeTasksAndTraining), { loading: () => <p role="status">Loading tasks and training...</p> });
+const TradeSalesWorkspace = dynamic(() => import("./TradeSalesWorkspace").then(module => module.TradeSalesWorkspace), { loading: () => <p role="status">Opening sales...</p> });
 
 type DashboardProfile = TradeBusinessSettingsProfile & {
   entitlements: {
@@ -241,9 +242,10 @@ const publicLeadHandoffStages = [
     detail: "The quote will open automatically as soon as the handoff is confirmed.",
   },
 ] as const;
-type DashboardWorkspace = "work" | "map" | "design" | "network" | "messages" | "email-templates" | "team" | "forms" | "tasks" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "sales" | "map" | "design" | "network" | "messages" | "email-templates" | "team" | "forms" | "tasks" | "training" | "finance" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
+  "sales",
   "map",
   "design",
   "network",
@@ -1434,7 +1436,7 @@ function DirectTradeDashboardContent() {
     };
   }, [refreshOpportunities]);
 
-  const leadsViewActive = workspace === "work" && activeWorkView === "leads";
+  const leadsViewActive = workspace === "sales" || (workspace === "work" && activeWorkView === "leads");
   useEffect(() => {
     if (!leadsViewActive) return;
     void refreshOpportunities();
@@ -2513,6 +2515,7 @@ function DirectTradeDashboardContent() {
                   {([['today', 'Home dashboard', 'home'], ['jobs', 'Jobs', 'jobs'], ['schedule', 'Schedule', 'schedule'], ['customers', 'Customers', 'customers']] as const).map(([view, label, icon]) => <button type="button" key={view} aria-current={workspace === "work" && activeWorkView === view ? "page" : undefined} className={workspace === "work" && activeWorkView === view ? "active" : ""} onClick={() => {
                     setWorkspace("work", () => { setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() }); setActiveWorkView(view); });
                   }}><TLinkNavigationIcon name={icon} /><span>{label}</span></button>)}
+                  <button type="button" title="Prospects, quotes and next actions" aria-current={workspace === "sales" ? "page" : undefined} className={workspace === "sales" ? "active" : ""} onClick={() => setWorkspace("sales")}><TLinkNavigationIcon name="leads" /><span>Sales</span></button>
                   <button type="button" title="Calls, customers and team chats" aria-current={workspace === "messages" ? "page" : undefined} className={workspace === "messages" ? "active" : ""} onClick={() => setWorkspace("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
                   <button type="button" title="Quotes, invoices, pricing and reports" aria-current={workspace === "finance" ? "page" : undefined} className={workspace === "finance" ? "active" : ""} onClick={() => setWorkspace("finance")}><TLinkNavigationIcon name="finance" /><span>Finance</span></button>
                 </div>
@@ -2545,6 +2548,26 @@ function DirectTradeDashboardContent() {
               </nav>
 
               {workspace === "email-templates" && <TradeEmailTemplatesWorkspace user={user} />}
+              {workspace === "sales" && (hasBusinessOperations ? <TradeSalesWorkspace
+                key={user.uid}
+                user={user}
+                onRegisterLeave={registerMapSave}
+                onOpenJob={(workOrderId, jobTab = "summary") => { void setWorkspace("work", () => {
+                  setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab, nonce: Date.now() });
+                  setActiveWorkView("jobs");
+                }); }}
+                onNewQuote={() => { void setWorkspace("work", () => {
+                  setCommandTarget({ workspace: "work", kind: "new-job", id: "", query: "", jobTab: "quote", nonce: Date.now() });
+                  setActiveWorkView("jobs");
+                }); }}
+                suppliedLeads={hasLeadAccess ? opportunities.filter(item => item.matchStatus === "offered" || item.matchStatus === "viewed").map(item => ({ id: item.matchId, title: item.title, detail: [item.suburb, item.state].filter(Boolean).join(", ") })) : undefined}
+                suppliedLeadsLoading={opportunitiesLoading}
+                suppliedLeadsError={opportunityLoadError}
+                onReviewSuppliedLeads={hasLeadAccess ? () => { void setWorkspace("work", () => {
+                  setActiveWorkView("leads");
+                  setCommandTarget({ workspace: "work", kind: "crm-view", id: "leads", query: "", nonce: Date.now() });
+                }); } : undefined}
+              /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to use Sales.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
               {workspace === "messages" && <TradeMessagesWorkspace user={user} initialThreadId={messageTarget.id} initialThreadRevision={messageTarget.revision} onOpenAutomations={() => setWorkspace("email-templates")} onOpenQuote={workOrderId => { void setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() })); }} onOpenIntegrations={() => setWorkspace("work", () => setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() }))} />}
 
               {(workspace === "work" || workspace === "map" || workspace === "design") && <TradeBusinessHub

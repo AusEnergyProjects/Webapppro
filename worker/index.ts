@@ -101,7 +101,7 @@ function secureResponse(response: Response, request: Request, environment?: unkn
     headers.set("Cache-Control", PRIVATE_HTML_CACHE_CONTROL);
   }
   const teamMediaPage = /^\/direct-trade\/(dashboard|team|messages)\/?$/.test(pathname);
-  const microphonePolicy = teamMediaPage || pathname === "/creditex/compliance"
+  const microphonePolicy = teamMediaPage || pathname === "/council" || pathname === "/council/" || pathname === "/creditex/compliance"
     || pathname === "/creditex/compliance/" ? "(self)" : "()";
   headers.set("Permissions-Policy", `camera=${teamMediaPage ? "(self)" : "()"}, geolocation=(), microphone=${microphonePolicy}`);
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");

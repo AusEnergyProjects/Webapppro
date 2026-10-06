@@ -1,48 +1,19 @@
 "use client";
 
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense } from "react";
 import { usePathname } from "next/navigation";
-import styles from "./LazyEnergyAssistantWidget.module.css";
-
-function loadEnergyAssistant() {
-  return import("./EnergyAssistantWidget").then((module) => ({
-    default: module.EnergyAssistantWidget,
-  }));
-}
-
-const DeferredEnergyAssistantWidget = lazy(loadEnergyAssistant);
-const DeferredEnergyAssistantLauncher = lazy(() => import("./EnergyAssistantLauncher").then((module) => ({ default: module.EnergyAssistantLauncher })));
+import { wattzunPortalForPath } from "@/lib/wattzun-portal-path";
+const DeferredWattzunPortalAssistant = lazy(() => import("./WattzunPortalAssistant").then((module) => ({ default: module.WattzunPortalAssistant })));
+const DeferredPublicEnergyAssistantWidget = lazy(() => import("./LazyPublicEnergyAssistantWidget").then((module) => ({ default: module.LazyPublicEnergyAssistantWidget })));
 
 const hiddenRoute = (pathname: string) => /\/(print|pdf|reset-password|customer-hub|council)(\/|$)/.test(pathname);
 
-function QuickChatLoader() {
-  return (
-    <div className={styles.root} data-surge-loader role="status" aria-label="Opening Wattzun AI chat">
-      <span className={styles.launcher}>
-        <span className={styles.mascot} aria-hidden="true" />
-      </span>
-    </div>
-  );
-}
-
 export function LazyEnergyAssistantWidget() {
   const pathname = usePathname() || "/";
-  const dedicated = pathname === "/wattzun";
-  const [quickChatMounted, setQuickChatMounted] = useState(false);
+  const portal = wattzunPortalForPath(pathname);
+  if (portal) return <Suspense fallback={null}><DeferredWattzunPortalAssistant key={portal} portal={portal} /></Suspense>;
 
   if (hiddenRoute(pathname)) return null;
 
-  if (dedicated || quickChatMounted) {
-    return (
-      <Suspense fallback={dedicated ? <div className={styles.dedicatedLoading} role="status">Loading Wattzun AI...</div> : <QuickChatLoader />}>
-        <DeferredEnergyAssistantWidget initialOpen={!dedicated} />
-      </Suspense>
-    );
-  }
-
-  return (
-    <Suspense fallback={<QuickChatLoader />}>
-      <DeferredEnergyAssistantLauncher onPreload={loadEnergyAssistant} onOpen={() => setQuickChatMounted(true)} />
-    </Suspense>
-  );
+  return <Suspense fallback={null}><DeferredPublicEnergyAssistantWidget /></Suspense>;
 }

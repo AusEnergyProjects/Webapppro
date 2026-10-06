@@ -1,39 +1,72 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
-import { useTradeBusinessFetch } from './TradeBusinessProvider';
+import { useTradeBusiness, useTradeBusinessFetch } from './TradeBusinessProvider';
 import { TlinkFormMindMap } from './TlinkFormMindMap';
 import { CreditexFormPhonePreview } from './CreditexFormPhonePreview';
 import { businessFormDesign, businessFormPreview, applyBusinessFormDesign, type BusinessFormTemplate, type BusinessFormField } from '@/lib/trade-business-form-design';
 import type { ActivityForm, ActivityCondition } from '@/lib/trade-activity-form-types';
 import { editorFormPages, moveEditorQuestion, dropEditorQuestion, renameEditorPage, editorQuestionDeleteReason, deleteEditorPage } from '@/lib/creditex-form-pages';
+import { parseBusinessFormAiResult } from '@/lib/trade-business-form-ai';
 import styles from './TradeFormsWorkspace.module.css';
 type Library = { canManage: boolean; templates: BusinessFormTemplate[] };
 const newField = (section = 'Questions', phase: 'before' | 'after' = 'before'): BusinessFormField => ({ key: `question_${crypto.randomUUID().replaceAll('-', '_')}`, label: 'New question', type: 'select', required: false, options: ['Yes', 'No'], section, phase });
 export type RegisterFormLeave = (check: (() => Promise<unknown>) | null) => void;
 export function TradeBusinessFormEditor({ user, onRegisterLeave }: { user: User; onRegisterLeave?: RegisterFormLeave }) {
+  const business = useTradeBusiness();
+  const scopeKey = `${user.uid}:${business?.ownerUid || user.uid}:${business?.memberId || ''}`;
+  return <BusinessFormEditor key={scopeKey} user={user} onRegisterLeave={onRegisterLeave} />;
+}
+function BusinessFormEditor({ user, onRegisterLeave }: { user: User; onRegisterLeave?: RegisterFormLeave }) {
   const fetch = useTradeBusinessFetch();
+  const aiPending = useRef<AbortController | null>(null);
+  const [aiPurpose, setAiPurpose] = useState(''), [aiCategory, setAiCategory] = useState('*');
+  const [aiQuestions, setAiQuestions] = useState<string[]>([]), [aiBusy, setAiBusy] = useState(false), [aiDraft, setAiDraft] = useState(false);
   const [library, setLibrary] = useState<Library>({ canManage: false, templates: [] });
   const [draft, setDraft] = useState<BusinessFormTemplate | null>(null);
   const [savedDraft, setSavedDraft] = useState('');
   const [history, setHistory] = useState<BusinessFormTemplate[]>([]);
   const [selected, setSelected] = useState(''); const [mode, setMode] = useState<'design' | 'map' | 'preview'>('design');
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(''), [query, setQuery] = useState('');
-  const dirty = Boolean(draft && JSON.stringify(draft) !== savedDraft);
+  const dirty = Boolean(draft ? JSON.stringify(draft) !== savedDraft : aiPurpose.trim());
   const request = useCallback(async (body?: object, signal?: AbortSignal): Promise<Library> => {
     const response = await fetch('/api/trade-form-templates', { method: body ? 'POST' : 'GET', signal, cache: 'no-store', headers: { Authorization: `Bearer ${await user.getIdToken()}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
     const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Could not open your forms.'); return result;
   }, [fetch, user]);
   useEffect(() => { const controller = new AbortController(); void request(undefined, controller.signal).then(value => { if (!controller.signal.aborted) setLibrary(value); }).catch(caught => { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Forms could not load.'); }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [request]);
-  const canLeave = useCallback(async () => { if (busy) throw new Error('Wait for the form to save.'); if (dirty && !window.confirm('Discard unsaved form changes?')) throw new Error('Keep editing'); }, [busy, dirty]);
+  useEffect(() => () => { aiPending.current?.abort(); aiPending.current = null; }, []);
+  const canLeave = useCallback(async () => { if (busy || aiBusy) throw new Error('Wait for the form operation to finish.'); if (dirty && !window.confirm('Discard unsaved form changes?')) throw new Error('Keep editing'); }, [busy, aiBusy, dirty]);
   useEffect(() => { onRegisterLeave?.(canLeave); return () => onRegisterLeave?.(null); }, [canLeave, onRegisterLeave]);
-  useEffect(() => { if (!dirty && !busy) return; const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty, busy]);
+  useEffect(() => { if (!dirty && !busy && !aiBusy) return; const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty, busy, aiBusy]);
   const design = useMemo(() => draft ? businessFormDesign(draft) : null, [draft]);
   function change(next: BusinessFormTemplate) { if (!draft || busy || !library.canManage) return; setHistory(items => [...items.slice(-19), draft]); setDraft(next); setError(''); }
   function changeDesign(next: ActivityForm) { if (draft) change(applyBusinessFormDesign(draft, next)); }
   function attempt(action: () => void) { try { action(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'This change could not be made.'); } }
   function updateField(key: string, patch: Partial<BusinessFormField>) { if (draft) change({ ...draft, fields: draft.fields.map(field => field.key === key ? { ...field, ...patch } : field) }); }
-  function edit(template: BusinessFormTemplate) { setDraft(structuredClone(template)); setSavedDraft(JSON.stringify(template)); setHistory([]); setSelected(template.fields[0]?.key || ''); setMode('design'); setError(''); }
+  function edit(template: BusinessFormTemplate, fromAi = false) { setDraft(structuredClone(template)); setSavedDraft(JSON.stringify(template)); setHistory([]); setSelected(template.fields[0]?.key || ''); setMode('design'); setError(''); setAiDraft(fromAi); setAiQuestions([]); if (!fromAi) setAiPurpose(''); }
+  async function generateForm() {
+    if (!library.canManage || draft || busy || aiPending.current || !aiPurpose.trim()) return;
+    const controller = new AbortController(); aiPending.current = controller;
+    const category = aiCategory, purpose = aiPurpose.trim();
+    const current = () => !controller.signal.aborted;
+    setAiBusy(true); setAiQuestions([]); setError('');
+    try {
+      const token = await user.getIdToken(); if (!current()) return;
+      const response = await fetch('/api/trade-form-templates/assist', { method: 'POST', signal: controller.signal, cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purpose, category, requestId: crypto.randomUUID() }) });
+      const body: unknown = await response.json(); if (!current()) return;
+      if (!body || typeof body !== 'object' || !('ok' in body) || body.ok !== true || !response.ok) {
+        throw new Error(body && typeof body === 'object' && 'error' in body && typeof body.error === 'string' ? body.error : 'Wattzun could not prepare a draft. Your forms are unchanged.');
+      }
+      if (!('result' in body) || !('sourceHash' in body) || typeof body.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(body.sourceHash)) throw new Error('Wattzun returned an incomplete draft. Your forms are unchanged.');
+      const result = parseBusinessFormAiResult(body.result);
+      if (result.kind === 'clarify') { setAiQuestions(result.questions); return; }
+      edit({ ...result.form, id: '', version: 1, updatedAt: '', jurisdiction: 'AU', categories: category === '*' ? allCategories : [category] }, true);
+      setSavedDraft(''); setAiPurpose('');
+    } catch (caught) { if (current()) setError(caught instanceof Error && !caught.message.startsWith('WORKFLOW_AI_') ? caught.message : 'Wattzun returned an incomplete draft. Your forms are unchanged.'); }
+    finally { if (aiPending.current === controller) aiPending.current = null; if (current()) setAiBusy(false); }
+  }
   function addPage() { if (!draft || draft.fields.length >= 30) return; let number = 1; while (draft.fields.some(field => field.section === `Page ${number}`)) number++; const field = newField(`Page ${number}`); change({ ...draft, fields: [...draft.fields, field] }); setSelected(field.key); }
   function addQuestion(pageKey?: string) { if (!draft || draft.fields.length >= 30) return; const page = design && editorFormPages(design).find(item => item.key === pageKey); if (page && page.fields.length >= 8) { setError('This page has 8 questions. Add another page.'); return; } const field = newField(page?.section || draft.fields.at(-1)?.section, page?.phase || draft.fields.at(-1)?.phase); const fields = [...draft.fields]; const index = page ? Math.max(...fields.map((item, i) => page.fieldKeys.includes(item.key) ? i : -1)) + 1 : fields.length; fields.splice(index, 0, field); change({ ...draft, fields }); setSelected(field.key); }
   function condition(key: string, next?: ActivityCondition) { if (!draft) return false; const index = draft.fields.findIndex(field => field.key === key); const source = draft.fields.slice(0, index).find(field => field.key === next?.fieldKey); if (next && (!source || !['select', 'checkbox'].includes(source.type) || next.all || next.any || next.lessThanOrEqual !== undefined)) { setError('Choose a previous Yes/No or select question for this connection.'); return false; } updateField(key, { condition: next }); return true; }
@@ -44,9 +77,12 @@ export function TradeBusinessFormEditor({ user, onRegisterLeave }: { user: User;
   if (loading) return <p role="status">Loading forms...</p>;
   return <section className={styles.library}>
     {error && <p role="alert" className={styles.error}>{error}</p>}
-    {!draft ? <><div className={styles.toolbar}><label>Find a form<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your business forms" /></label>{library.canManage && <button className="btn" type="button" onClick={() => { const field = newField(); edit({ id: '', version: 1, updatedAt: '', name: '', description: '', guidance: '', categories: allCategories, jurisdiction: 'AU', fields: [field] }); setSavedDraft(''); }}>Create form</button>}</div><p>{library.canManage ? 'Create reusable forms for your jobs and team. Only this business can see them.' : 'Your business forms. Ask your business owner for Create and edit forms access to change them.'}</p><div className={styles.cards}>{library.templates.filter(item => `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase())).map(template => <article key={template.id}><span>Version {template.version} · {template.fields.length} questions</span><h3>{template.name}</h3><p>{template.description}</p><button type="button" onClick={() => edit(template)}>{library.canManage ? 'Open designer' : 'Preview form'}</button></article>)}</div>{!library.templates.length && <div className={styles.empty}><h3>Your forms, in one place</h3><p>Create a checklist, work process or team training form. Add it to a job from Files when needed.</p></div>}</> : <>
+    {!draft ? <><div className={styles.toolbar}><label>Find a form<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your business forms" /></label>{library.canManage && <button className="btn" type="button" disabled={aiBusy} onClick={() => void canLeave().then(() => { const field = newField(); edit({ id: '', version: 1, updatedAt: '', name: '', description: '', guidance: '', categories: allCategories, jurisdiction: 'AU', fields: [field] }); setSavedDraft(''); }).catch(() => {})}>Create form</button>}</div><p>{library.canManage ? 'Create reusable forms for your jobs and team. Only this business can see them.' : 'Your business forms. Ask your business owner for Create and edit forms access to change them.'}</p>
+      {library.canManage && <details><summary>Draft with Wattzun</summary><p>Describe a new supporting form, who will complete it and what they need to record. Wattzun drafts questions for your review. Review the designer and Try the form, then choose Save form to publish it. No job answers are created.</p><fieldset disabled={aiBusy} className={styles.inspector}><label>Form purpose<textarea aria-label="Form purpose" maxLength={2000} value={aiPurpose} onChange={event => { setAiPurpose(event.target.value); setError(''); }} placeholder="For example: a before-work electrical inspection checklist for our technicians, with a place to describe follow-up work." /></label><label>Available on<select aria-label="Available on" value={aiCategory} onChange={event => setAiCategory(event.target.value)}><option value="*">All job types</option>{allCategories.map(id => <option key={id} value={id}>{categoryLabels[id] || id}</option>)}</select></label>{aiQuestions.length > 0 && <div role="status"><p>Wattzun needs a little more detail. Add these answers to the form purpose, then generate again.</p><ul>{aiQuestions.map(question => <li key={question}>{question}</li>)}</ul></div>}<button className="btn" type="button" disabled={aiBusy || !aiPurpose.trim()} onClick={() => void generateForm()}>{aiBusy ? 'Preparing draft...' : aiQuestions.length ? 'Generate again' : 'Generate draft'}</button></fieldset>{aiBusy && <p role="status">Wattzun is preparing a draft. Your saved forms are unchanged.</p>}</details>}
+      <div className={styles.cards}>{library.templates.filter(item => `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase())).map(template => <article key={template.id}><span>Version {template.version} · {template.fields.length} questions</span><h3>{template.name}</h3><p>{template.description}</p><button type="button" disabled={aiBusy} onClick={() => void canLeave().then(() => edit(template)).catch(() => {})}>{library.canManage ? 'Open designer' : 'Preview form'}</button></article>)}</div>{!library.templates.length && <div className={styles.empty}><h3>Your forms, in one place</h3><p>Create a checklist, work process or team training form. Add it to a job from Files when needed.</p></div>}</> : <>
       <div className={styles.toolbar}><button type="button" disabled={busy} onClick={() => void canLeave().then(() => setDraft(null)).catch(() => {})}>Back to forms</button><strong>{draft.name || 'New form'}</strong>{library.canManage && <button className="btn" disabled={busy} type="button" onClick={() => void save()}>{busy ? 'Saving...' : 'Save form'}</button>}</div>
       <p>Existing job records keep their saved version. New jobs use the latest saved form.</p>
+      {aiDraft && <p role="status">Wattzun draft for review. Check every question and Try the form before choosing Save form. It has not been saved or published and does not replace mandatory activity requirements.</p>}
       {library.canManage && <fieldset disabled={busy} className={styles.settings}><label>Form name<input required maxLength={140} value={draft.name} onChange={event => change({ ...draft, name: event.target.value })} /></label><label>Instructions<textarea maxLength={1200} value={draft.guidance} onChange={event => change({ ...draft, guidance: event.target.value })} /></label><label>Available on<select value={draft.categories.length === 1 ? draft.categories[0] : '*'} onChange={event => change({ ...draft, categories: event.target.value === '*' ? allCategories : [event.target.value] })}><option value="*">All job types</option>{categoryChoices.map(id => <option key={id} value={id}>{categoryLabels[id] || id}</option>)}</select></label></fieldset>}
       <div className={styles.tabs} role="tablist" aria-label="Form views">{(['design', 'map', 'preview'] as const).map(value => <button type="button" role="tab" aria-selected={mode === value} key={value} onClick={() => setMode(value)}>{value === 'design' ? 'Form design' : value === 'map' ? 'TLink mind map' : 'Try the form'}</button>)}{library.canManage && <button type="button" disabled={busy || !history.length} onClick={() => { const previous = history.at(-1); if (previous) { setDraft(previous); setHistory(items => items.slice(0, -1)); } }}>Undo</button>}</div>
       {mode === 'design' && design && <div className={styles.design}><div>{editorFormPages(design).map(page => <article key={page.key}><h3>{page.section}</h3><small>{page.phase === 'after' ? 'After work' : 'Start / before work'}</small>{page.fields.map(item => <button type="button" key={item.key} aria-pressed={selected === item.key} onClick={() => setSelected(item.key)}>{item.label}{item.required ? ' *' : ''}</button>)}{library.canManage && <button type="button" disabled={busy || draft.fields.length >= 30} onClick={() => addQuestion(page.key)}>Add question</button>}</article>)}{library.canManage && <button type="button" disabled={busy || draft.fields.length >= 30} onClick={addPage}>Add page</button>}</div><fieldset disabled={busy || !library.canManage}>{inspector}</fieldset></div>}

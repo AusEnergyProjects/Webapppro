@@ -3,12 +3,13 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
+import { createMapNavigationGuard } from '../src/lib/trade-map-navigation.ts';
 
 const portal = readFileSync(new URL('../src/components/TradeTeamPortal.tsx', import.meta.url), 'utf8');
 const source = ts.createSourceFile('TradeTeamPortal.tsx', portal, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const functions = source.statements.filter(node => ts.isFunctionDeclaration(node)
-  && ['teamWorkspaceLocation', 'teamCrmShortcuts', 'TeamWorkspaceNavigation'].includes(node.name?.text));
-assert.equal(functions.length, 3);
+  && ['teamWorkspaceLocation', 'teamCrmShortcuts', 'canUseTeamSales', 'TeamWorkspaceNavigation'].includes(node.name?.text));
+assert.equal(functions.length, 4);
 const executable = ts.transpileModule(functions.map(node => node.getText(source)).join('\n'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText;
@@ -79,6 +80,66 @@ test('map design and team management retain their distinct permission gates', ()
   assert.equal(ui.button('Quotes'), undefined, 'a quotes-list destination is not supported by the existing staff CRM');
 });
 
+test('Sales requires current customer and quote visibility and never grants crew access', () => {
+  for (const permissions of [{}, { canViewCustomers: true }, { canViewQuotes: true },
+    { canManageJobs: true, canManageQuotes: true },
+    { canViewCustomers: true, canViewQuotes: true, jobScope: 'invalid' }]) {
+    assert.equal(render(permissions).button('Sales'), undefined);
+  }
+  assert.equal(render({ canViewCustomers: true, canViewQuotes: true }, 'sales', 'jobs', 'crew-1').button('Sales'), undefined);
+  for (const jobScope of ['own', 'team']) {
+    const ui = render({ canViewCustomers: true, canViewQuotes: true, jobScope }, 'sales');
+    assert.equal(ui.button('Sales').props['aria-current'], 'page');
+    ui.button('Sales').props.onClick();
+    assert.deepEqual(ui.destinations, [['portal', 'sales']]);
+  }
+  assert.match(portal, /portalView === "sales" && salesAllowed && <TradeSalesWorkspace/);
+  assert.match(portal, /portalView === "sales" && !salesAllowed/);
+});
+
+const content = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'TradeTeamPortalContent');
+const salesHandlers = content.body.statements.filter(node => ts.isFunctionDeclaration(node)
+  && ['openSalesJob', 'openSalesQuote'].includes(node.name?.text));
+assert.equal(salesHandlers.length, 2);
+const handlersExecutable = ts.transpileModule(salesHandlers.map(node => node.getText(source)).join('\n'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
+function salesNavigation(leave) {
+  const guard = createMapNavigationGuard(), pending = [], changes = [];
+  guard.register(leave);
+  const handlerContext = { mapNavigation: { run: transition => { const operation = guard.run(transition); pending.push(operation); return operation; } },
+    setCrmView: view => changes.push(['view', view]), setCrmTarget: target => changes.push(['target', target]),
+    setPortalViewState: view => changes.push(['portal', view]) };
+  runInNewContext(`${handlersExecutable}\nglobalThis.openJob=openSalesJob;globalThis.newQuote=openSalesQuote;`, handlerContext);
+  return { changes, openJob: async (id, tab) => { handlerContext.openJob(id, tab); await Promise.all(pending); },
+    newQuote: async () => { handlerContext.newQuote(); await Promise.all(pending); } };
+}
+
+test('Sales opens the same job and permitted quote tab through the existing leave guard', async () => {
+  for (const tab of ['summary', 'quote']) {
+    const navigation = salesNavigation(async () => {});
+    await navigation.openJob('job-123', tab);
+    assert.deepEqual(navigation.changes.filter(change => change[0] !== 'target'), [['view', 'jobs'], ['portal', 'business']]);
+    const target = navigation.changes.find(change => change[0] === 'target')[1];
+    assert.equal(target.workspace, 'work'); assert.equal(target.kind, 'job'); assert.equal(target.id, 'job-123'); assert.equal(target.jobTab, tab);
+  }
+  const blocked = salesNavigation(async () => { throw new Error('Keep the unsaved draft'); });
+  await blocked.openJob('job-123', 'quote');
+  assert.deepEqual(blocked.changes, []);
+  assert.match(portal, /onRegisterLeave=\{registerMapSave\}/);
+});
+
+test('Sales quote creation uses the existing job quote path and requires create plus team quote authority', async () => {
+  const navigation = salesNavigation(async () => {});
+  await navigation.newQuote();
+  const target = navigation.changes.find(change => change[0] === 'target')[1];
+  assert.equal(target.workspace, 'work'); assert.equal(target.kind, 'new-job'); assert.equal(target.jobTab, 'quote');
+  assert.match(portal, /canCreateSalesQuote = salesAllowed && permissions\?\.canCreateJobs && permissions\.jobScope === "team" && permissions\.canManageQuotes/);
+  assert.match(portal, /onNewQuote=\{canCreateSalesQuote \? openSalesQuote : undefined\}/);
+  const blocked = salesNavigation(async () => { throw new Error('Keep the unsaved draft'); });
+  await blocked.newQuote(); assert.deepEqual(blocked.changes, []);
+});
+
 test('authenticated team shell exposes installation and theme while public invitation chrome stays conditional', () => {
   assert.match(portal, /!teamReady && <TLinkHeader active="team"/);
   assert.match(portal, /!teamReady && <SiteFooter>/);
@@ -118,13 +179,32 @@ test('legacy work and saved job links open the canonical workspace and preserve 
   assert.equal(context.workspaceLocation('').target.id, 'today');
 });
 
-test('tasks, training, communication and time deep links keep their destinations', () => {
-  for (const view of ['tasks', 'training', 'messages', 'time']) {
+test('Sales, tasks, training, communication and time deep links keep their destinations', () => {
+  for (const view of ['sales', 'tasks', 'training', 'messages', 'time']) {
     const result = context.workspaceLocation('?workspace=' + view);
     assert.equal(result.view, view); assert.equal(result.target, null);
   }
   assert.match(portal, /window\.addEventListener\("popstate", applyWorkspaceLink\)/);
   assert.match(portal, /<TradePersonalNameSettings/);
+});
+
+test('Sales state remounts when the reader, business, membership or permission scope changes', () => {
+  const statement = content.body.statements.find(node => ts.isVariableStatement(node)
+    && node.declarationList.declarations.some(declaration => declaration.name.getText(source) === 'salesScopeKey'));
+  const scopeExecutable = ts.transpileModule(statement.getText(source), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const keyFor = (overrides = {}) => {
+    const values = { user: { uid: 'person-1' }, business: { ownerUid: 'business-1' },
+      data: { ownerUid: 'business-1', access: { memberId: 'member-1', crewId: '' } }, permissions: { ...base, canViewCustomers: true, canViewQuotes: true }, ...overrides };
+    runInNewContext(`${scopeExecutable}\nglobalThis.key=salesScopeKey;`, values);
+    return values.key;
+  };
+  const initial = keyFor();
+  for (const changed of [{ user: { uid: 'person-2' } }, { business: { ownerUid: 'business-2' } },
+    { data: { ownerUid: 'business-1', access: { memberId: 'member-2', crewId: '' } } },
+    { permissions: { ...base, canViewCustomers: true, canViewQuotes: true, jobScope: 'team' } }]) assert.notEqual(keyFor(changed), initial);
+  assert.match(portal, /TradeSalesWorkspace key=\{salesScopeKey\}/);
 });
 
 test('tasks and training share one visible navigation entry', () => {

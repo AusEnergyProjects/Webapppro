@@ -250,8 +250,6 @@ test("customer-facing document previews remain explicitly light in night mode", 
 
 test("night mode covers detailed job, task, and commercial handoff surfaces", () => {
   for (const selector of [
-    ".crm-pipeline-board > section",
-    ".crm-pipeline-board > section > div > button",
     ".crm-task-list li",
     ".crm-commercial-handoff",
     ".crm-deposit-choice",
@@ -262,6 +260,13 @@ test("night mode covers detailed job, task, and commercial handoff surfaces", ()
       `Missing night surface coverage for ${selector}`,
     );
   }
+
+  const salesStyles = read("../src/components/TradeSalesWorkspace.module.css");
+  const salesColumn = extractBalancedBlock(salesStyles, ".column {");
+  const salesCard = extractBalancedBlock(salesStyles, ".card {");
+  assert.match(salesColumn, /background:\s*var\(--trade-surface-soft,/);
+  assert.match(salesCard, /background:\s*var\(--trade-surface,/);
+  assert.doesNotMatch(colourModeStyles, /crm-pipeline-board/);
 
   const depositRule = extractBalancedBlock(
     colourModeStyles,

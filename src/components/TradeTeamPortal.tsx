@@ -5,7 +5,7 @@ import { TradeTeamTimeWorkspace } from "./TradeTeamTimeWorkspace";
 import { TradeCrewWorkspace } from "./TradeCrewWorkspace";
 import { TradePersonalNameSettings } from "./TradePersonalNameSettings";
 
-import { TradeBusinessGate, useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { TradeBusinessGate, useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { browserPopupRedirectResolver, createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
@@ -27,6 +27,7 @@ import { saveTradeBusinessSelection } from "@/lib/trade-business-client";
 
 const TradeFormsWorkspace = dynamic(() => import('./TradeFormsWorkspace').then(module => module.TradeFormsWorkspace), { loading: () => <p role="status">Opening forms...</p> });
 const TradeTasksAndTraining = dynamic(() => import("./TradeTasksAndTraining").then(module => module.TradeTasksAndTraining), { loading: () => <p role="status">Loading tasks and training...</p> });
+const TradeSalesWorkspace = dynamic(() => import("./TradeSalesWorkspace").then(module => module.TradeSalesWorkspace), { loading: () => <p role="status">Opening sales...</p> });
 const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then(module => module.TradeMessagesWorkspace));
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
 import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlerts";
@@ -34,13 +35,13 @@ import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlert
 type Result = { ownerUid?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; crewId?: string; crewLead?: boolean; permissions: TradeTeamPermissions }; error?: string };
 type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
-type PortalView = "business" | "map" | "team" | "forms" | "tasks" | "training" | "messages" | "time" | "crew";
+type PortalView = "business" | "sales" | "map" | "team" | "forms" | "tasks" | "training" | "messages" | "time" | "crew";
 type CrmShortcut = "today" | "jobs" | "customers" | "schedule" | "pricebook" | "reports";
 
 function teamWorkspaceLocation(search: string): { view: PortalView; target: TLinkCommandTarget | null } {
   const parameters = new URLSearchParams(search);
   const workspace = parameters.get("workspace");
-  if (workspace === "forms" || workspace === "tasks" || workspace === "training" || workspace === "messages" || workspace === "time") return { view: workspace, target: null };
+  if (workspace === "sales" || workspace === "forms" || workspace === "tasks" || workspace === "training" || workspace === "messages" || workspace === "time") return { view: workspace, target: null };
   const jobId = parameters.get("jobId") || "";
   if (workspace === "work" && /^[A-Za-z0-9:_-]{1,180}$/.test(jobId)) {
     const requestedTab = parameters.get("jobTab");
@@ -60,6 +61,11 @@ function teamCrmShortcuts(permissions: TradeTeamPermissions) {
   return shortcuts;
 }
 
+function canUseTeamSales(permissions: TradeTeamPermissions | undefined, crewId?: string) {
+  return Boolean(permissions && !crewId && permissions.canViewCustomers && permissions.canViewQuotes
+    && (permissions.jobScope === "own" || permissions.jobScope === "team"));
+}
+
 function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm, crewId }: {
   permissions: TradeTeamPermissions; view: PortalView; crmView: string; crewId?: string;
   onView: (view: PortalView) => void; onCrm: (view: CrmShortcut) => void;
@@ -67,6 +73,7 @@ function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm, cr
   return <nav className="tlink-team-navigation" aria-label="Staff workspace">
     <button type="button" aria-current={view === "business" && crmView === "today" ? "page" : undefined} onClick={() => onCrm("today")}><TLinkNavigationIcon name="home" /><span>Home dashboard</span></button>
     {teamCrmShortcuts(permissions).map(item => <button type="button" key={item.id} aria-current={view === "business" && crmView === item.id ? "page" : undefined} onClick={() => onCrm(item.id)}><TLinkNavigationIcon name={item.icon} /><span>{item.label}</span></button>)}
+    {canUseTeamSales(permissions, crewId) && <button type="button" aria-current={view === "sales" ? "page" : undefined} onClick={() => onView("sales")}><TLinkNavigationIcon name="leads" /><span>Sales</span></button>}
     <button type="button" aria-current={view === "time" ? "page" : undefined} onClick={() => onView("time")}><TLinkNavigationIcon name="schedule" /><span>My time</span></button>
     {crewId && <button type="button" aria-current={view === "crew" ? "page" : undefined} onClick={() => onView("crew")}><TLinkNavigationIcon name="team" /><span>My crew</span></button>}
     <button type="button" aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
@@ -94,6 +101,7 @@ export function TradeTeamPortal() {
 
 function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted?: () => void }) {
   const fetch = useTradeBusinessFetch();
+  const business = useTradeBusiness();
   const { resolver, captureMfaError, clearMfaChallenge } = useFirebaseMfaChallenge();
   const [mfaRequired, setMfaRequired] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -162,6 +170,22 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       setPortalViewState("business");
     });
   };
+
+  function openSalesJob(workOrderId: string, tab: "summary" | "quote" = "summary") {
+    void mapNavigation.run(() => {
+      setCrmView("jobs");
+      setCrmTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: tab, query: "", nonce: Date.now() });
+      setPortalViewState("business");
+    });
+  }
+
+  function openSalesQuote() {
+    void mapNavigation.run(() => {
+      setCrmView("jobs");
+      setCrmTarget({ workspace: "work", kind: "new-job", id: "", jobTab: "quote", query: "", nonce: Date.now() });
+      setPortalViewState("business");
+    });
+  }
 
   useEffect(() => {
     let active = true;
@@ -341,6 +365,9 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   }
 
   const permissions = data.access?.permissions;
+  const salesAllowed = canUseTeamSales(permissions, data.access?.crewId);
+  const salesScopeKey = JSON.stringify([user?.uid, business?.ownerUid || data.ownerUid, data.access?.memberId, data.access?.crewId, permissions]);
+  const canCreateSalesQuote = salesAllowed && permissions?.canCreateJobs && permissions.jobScope === "team" && permissions.canManageQuotes;
 
   if (resolver) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
   if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setAuthRevision(current => current + 1); }} /><button type="button" onClick={() => void leaveAccount()}>Sign out</button></main>;
@@ -393,6 +420,8 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       </header>
       <TeamWorkspaceNavigation permissions={data.access.permissions} crewId={data.access.crewId} view={portalView} crmView={crmView} onView={setPortalView} onCrm={openCrm} />
       <div className="tlink-team-content">
+      {portalView === "sales" && salesAllowed && <TradeSalesWorkspace key={salesScopeKey} user={user} onOpenJob={openSalesJob} onNewQuote={canCreateSalesQuote ? openSalesQuote : undefined} onRegisterLeave={registerMapSave} />}
+      {portalView === "sales" && !salesAllowed && <section className="dashboard-state-card"><p role="alert">Customer and quote access is required to open Sales.</p><button type="button" onClick={() => openCrm("jobs")}>Open jobs</button></section>}
       {portalView === "time" && <TradeTeamTimeWorkspace user={user} />}
       {portalView === "crew" && data.access.crewId && <TradeCrewWorkspace user={user} />}
       {portalView === "messages" && <TradeMessagesWorkspace user={user} initialThreadId={messageTarget.id} initialThreadRevision={messageTarget.revision} onOpenQuote={workOrderId => { setCrmTarget({ workspace: "work", kind: "job", id: workOrderId, jobTab: "quote", query: "", nonce: Date.now() }); setPortalView("business"); }} />}

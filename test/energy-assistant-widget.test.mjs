@@ -12,11 +12,13 @@ import {
   ENERGY_ASSISTANT_MAX_BODY_BYTES,
 } from "../src/lib/energy-assistant-request-budget.ts";
 import { normalizeEnergyAssistantBrandText } from "../src/lib/energy-assistant-brand.ts";
+import { wattzunPortalForPath } from "../src/lib/wattzun-portal.ts";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const widget = read("../src/components/EnergyAssistantWidget.tsx");
 const styles = read("../src/components/EnergyAssistantWidget.module.css");
 const lazyWidget = read("../src/components/LazyEnergyAssistantWidget.tsx");
+const publicLazyWidget = read("../src/components/LazyPublicEnergyAssistantWidget.tsx");
 const launcher = read("../src/components/EnergyAssistantLauncher.tsx");
 const lazyStyles = read("../src/components/LazyEnergyAssistantWidget.module.css");
 
@@ -24,13 +26,17 @@ test("shared assistant loader preserves dedicated, popup and hidden route behavi
   const compiled = ts.transpileModule(lazyWidget, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
-  const render = (pathname, quickChatMounted = false) => {
+  const publicCompiled = ts.transpileModule(publicLazyWidget, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
+  } }).outputText;
+  const render = (pathname, quickChatMounted = false, boundaryOnly = false) => {
     let lazyIndex = 0;
     const dependencies = {
-      react: { lazy: () => lazyIndex++ === 0 ? "Assistant" : "Launcher", Suspense: "Suspense",
+      react: { lazy: () => ["PortalAssistant", "PublicAssistantEntry", "Assistant", "Launcher"][lazyIndex++], Suspense: "Suspense",
         useState: () => [quickChatMounted, () => {}] },
       "react/jsx-runtime": { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
       "next/navigation": { usePathname: () => pathname },
+      "@/lib/wattzun-portal-path": { wattzunPortalForPath },
       "./LazyEnergyAssistantWidget.module.css": { default: { dedicatedLoading: "dedicated" } },
     };
     const exported = {};
@@ -38,23 +44,42 @@ test("shared assistant loader preserves dedicated, popup and hidden route behavi
       assert.ok(Object.hasOwn(dependencies, name), name);
       return dependencies[name];
     }, exported);
-    return exported.LazyEnergyAssistantWidget();
+    const boundary = exported.LazyEnergyAssistantWidget();
+    if (boundaryOnly || boundary?.props.children.type !== "PublicAssistantEntry") return boundary;
+    new Function("require", "exports", publicCompiled)(name => {
+      assert.ok(Object.hasOwn(dependencies, name), name);
+      return dependencies[name];
+    }, exported);
+    return exported.LazyPublicEnergyAssistantWidget();
   };
+  const publicBoundary = render("/wattzun", false, true);
+  assert.equal(publicBoundary.props.children.type, "PublicAssistantEntry");
+  assert.equal(publicBoundary.props.fallback, null);
+  assert.doesNotMatch(lazyWidget, /LazyEnergyAssistantWidget\.module\.css|useState|loadEnergyAssistant/);
   const dedicated = render("/wattzun");
   assert.equal(dedicated.type, "Suspense");
   assert.equal(dedicated.props.children.type, "Assistant");
   assert.equal(dedicated.props.children.props.initialOpen, false);
   assert.equal(dedicated.props.fallback.props.className, "dedicated");
-  const popup = render("/direct-trade/dashboard", true);
+  const popup = render("/guides/solar", true);
   assert.equal(popup.type, "Suspense");
   assert.equal(popup.props.children.props.initialOpen, true);
   assert.equal(popup.props.fallback.type.name, "QuickChatLoader");
-  const floating = render("/direct-trade/dashboard");
+  const floating = render("/");
   assert.equal(floating.props.children.type, "Launcher");
   assert.equal(floating.props.fallback.type.name, "QuickChatLoader");
   assert.equal(typeof floating.props.children.props.onPreload, "function");
   assert.equal(typeof floating.props.children.props.onOpen, "function");
-  for (const pathname of ["/job/print", "/job/pdf", "/reset-password", "/customer-hub/a", "/council", "/council/demo"]) {
+  for (const [pathname, portal] of [["/direct-trade/dashboard", "trade"], ["/direct-trade/team", "trade"], ["/direct-trade/messages/", "trade"], ["/creditex/compliance", "creditex"], ["/council", "council"], ["/council/", "council"]]) {
+    for (const mounted of [true, false]) {
+      const rendered = render(pathname, mounted);
+      assert.equal(rendered.type, "Suspense");
+      assert.equal(rendered.props.children.type, "PortalAssistant");
+      assert.equal(rendered.props.children.props.portal, portal);
+      assert.equal(rendered.props.fallback, null);
+    }
+  }
+  for (const pathname of ["/job/print", "/job/pdf", "/reset-password", "/customer-hub/a", "/council/demo"]) {
     assert.equal(render(pathname, true), null);
     assert.equal(render(pathname), null);
   }
@@ -192,8 +217,9 @@ test("the energy guide is deferred at the root and excluded from print or PDF ou
   assert.match(layout, /import \{ LazyEnergyAssistantWidget \}/);
   assert.equal((layout.match(/<LazyEnergyAssistantWidget\s*\/>/g) || []).length, 1);
   assert.doesNotMatch(layout, /import \{ EnergyAssistantWidget \}/);
-  assert.match(lazyWidget, /lazy\(loadEnergyAssistant\)/);
-  assert.match(lazyWidget, /return import\("\.\/EnergyAssistantWidget"\)/);
+  assert.match(publicLazyWidget, /lazy\(loadEnergyAssistant\)/);
+  assert.match(publicLazyWidget, /return import\("\.\/EnergyAssistantWidget"\)/);
+  assert.match(lazyWidget, /lazy\(\(\) => import\("\.\/LazyPublicEnergyAssistantWidget"\)/);
   assert.match(lazyWidget, /if \(hiddenRoute\(pathname\)\) return null/);
   const hiddenRouteSource = lazyWidget.match(/const hiddenRoute = [^;]+;/)?.[0];
   assert.ok(hiddenRouteSource);
@@ -368,18 +394,18 @@ test("page Surge actions open the full guide while the floating mascot retains q
   assert.match(surgeOpenButton, /storePendingSurgeDraft\(draft\)/);
   assert.doesNotMatch(surgeOpenButton, /EnergyAssistantWidget/);
   assert.doesNotMatch(surgeOpenButton, /\bfetch\(/);
-  assert.match(lazyWidget, /if \(dedicated \|\| quickChatMounted\)/);
-  assert.doesNotMatch(lazyWidget, /href="\/wattzun"|router\.prefetch|storePendingSurgeDraft/);
-  assert.match(lazyWidget, /const \[quickChatMounted, setQuickChatMounted\] = useState\(false\)/);
-  assert.match(lazyWidget, /<DeferredEnergyAssistantWidget initialOpen=\{!dedicated\} \/>/);
-  assert.match(lazyWidget, /onPreload=\{loadEnergyAssistant\}/);
+  assert.match(publicLazyWidget, /if \(dedicated \|\| quickChatMounted\)/);
+  assert.doesNotMatch(`${lazyWidget}\n${publicLazyWidget}`, /href="\/wattzun"|router\.prefetch|storePendingSurgeDraft/);
+  assert.match(publicLazyWidget, /const \[quickChatMounted, setQuickChatMounted\] = useState\(false\)/);
+  assert.match(publicLazyWidget, /<DeferredEnergyAssistantWidget initialOpen=\{!dedicated\} \/>/);
+  assert.match(publicLazyWidget, /onPreload=\{loadEnergyAssistant\}/);
   assert.match(launcher, /onPointerEnter=\{onPreload\}/);
   assert.match(launcher, /onFocusCapture=\{onPreload\}/);
   assert.match(launcher, /onTouchStart=\{onPreload\}/);
   assert.match(launcher, /aria-label="Open Wattzun AI chat"/);
   assert.match(launcher, /aria-label="Bring Wattzun AI back and open chat"/);
-  assert.equal((lazyWidget.match(/setQuickChatMounted\(true\)/g) || []).length, 1);
-  assert.doesNotMatch(lazyWidget, /setRequested|OPEN_SURGE_EVENT/);
+  assert.equal((publicLazyWidget.match(/setQuickChatMounted\(true\)/g) || []).length, 1);
+  assert.doesNotMatch(`${lazyWidget}\n${publicLazyWidget}`, /setRequested|OPEN_SURGE_EVENT/);
   assert.doesNotMatch(widget, /OPEN_SURGE_EVENT|openFromCustomerPage/);
   assert.match(widget, /const pendingDraft = takePendingSurgeDraft\(\)/);
   assert.match(widget, /if \(pendingDraft\) setDraft\(pendingDraft\)/);

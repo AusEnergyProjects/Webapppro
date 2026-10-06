@@ -19,6 +19,10 @@ test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /Privacy notice/);
   assert.match(privacy, /Protected leads and direct customers/);
   assert.match(privacy, /Wattzun AI conversations/);
+  assert.match(privacy, /Calling Wattzun in protected workspaces/);
+  assert.match(privacy, /sent to OpenAI for transcription/);
+  assert.match(privacy, /does not save recordings or conversations to our server/);
+  assert.match(privacy, /preferences are saved in that browser for the signed-in user and selected workspace/);
   assert.match(privacy, /Up to 40 recent messages, a small conversation summary and the home profile/);
   assert.match(privacy, /kept in that browser for up to 30 days/);
   assert.match(privacy, /stateless guide endpoint/);

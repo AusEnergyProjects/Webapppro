@@ -107,6 +107,8 @@ const RECALL_PATTERN = /\b(?:remind me|what (?:did|have) (?:i|we) (?:say|tell yo
 const OPEN_ENDED_SUBJECT_PATTERN = /^(?:(?:and|also)\s+)?(?:what|how)\s+about\b/i;
 const QUESTION_OPENING_PATTERN = /^(?:is|are|am|can|could|should|would|will|do|does|did|what|which|why|how|where|when|who)\b|\?\s*$/i;
 const CLEAR_NEW_REQUEST_PATTERN = /^(?:please\s+)?(?:tell|show|explain|help|give|compare|check|review|calculate|work out|find)\b|^(?:let['’]?s|lets)\s+(?:talk|switch)|^(?:i['’]?d|i would)\s+like\s+to\s+(?:ask|talk|know)\b/i;
+const NON_REFERENTIAL_REPLY_PATTERN = /^(?:(?:hi|hello|hey)(?:\s+(?:there|wattzun(?:\s+ai)?))?|thanks(?:\s+wattzun)?|thank you|okay|ok|right|yes|yeah|yep|no|nope|maybe|unsure|not sure)(?:\s+please)?[.!?\s]*$/i;
+export const SURGE_REFERENCE_CLARIFICATION_QUESTION_PATTERN = /^What question or decision are you referring to\b|^Which (?:options or quotes are you comparing|(?:property, job or earlier decision|battery|inverter|solar panels?|panels?|blinds?|curtains?|system|unit|model|plan|tariff|charger|heater|installer|product) do you mean)\b/i;
 
 function explicitlySuppliesPostcode(message: string) {
   const clean = message.trim();
@@ -118,6 +120,16 @@ function explicitlySuppliesPostcode(message: string) {
 }
 
 export function surgeMessageAnswersPendingQuestion(message: string, pendingQuestion: string) {
+  if (/^What question or decision are you referring to\b/i.test(pendingQuestion)) {
+    return Boolean(surgeConversationTopicFor(message)) || suppliesConcreteDecisionDetails(message);
+  }
+  if (/^Which options or quotes are you comparing\b/i.test(pendingQuestion)) {
+    return suppliesConcreteDecisionDetails(message)
+      || /\b(?:option|quote)\s+[A-Z0-9]\b/i.test(message);
+  }
+  if (/^Which (?:property, job or earlier decision|battery|inverter|solar panels?|panels?|blinds?|curtains?|system|unit|model|plan|tariff|charger|heater|installer|product) do you mean\b/i.test(pendingQuestion)) {
+    return Boolean(surgeConversationTopicFor(message)) || suppliesConcreteDecisionDetails(message);
+  }
   if (/\bwhich rooms?\b|\broom\b[^?]{0,45}\b(?:hardest|coldest|hottest|comfortable|comfort)\b/i.test(pendingQuestion)) {
     return /\b(?:bedrooms?|lounge|living room|kitchen|bathrooms?|dining room|study|home office|all rooms?|whole house|everywhere|none)\b/i.test(message);
   }
@@ -317,6 +329,12 @@ export function resolveSurgeConversationReference(
   if (hasAmbiguousRepeatedSubjectReference(message, continuation)) {
     return { contextDependent: true, status: "needs_clarification", basis: "none", anchorUserMessages: [] };
   }
+  if (continuation?.pendingQuestion
+    && SURGE_REFERENCE_CLARIFICATION_QUESTION_PATTERN.test(continuation.pendingQuestion)
+    && !surgeMessageAnswersPendingQuestion(message, continuation.pendingQuestion)
+    && (NAMED_TOPIC_ANAPHORA_PATTERN.test(message) || NON_REFERENTIAL_REPLY_PATTERN.test(message))) {
+    return { contextDependent: true, status: "needs_clarification", basis: "none", anchorUserMessages: [] };
+  }
   if (!isSurgeContextDependentMessage(message)) {
     return { contextDependent: false, status: "self_contained", basis: "none", anchorUserMessages: [] };
   }
@@ -328,7 +346,11 @@ export function resolveSurgeConversationReference(
   for (let index = 0; index < userMessages.length; index += 1) {
     if (TOPIC_CHANGE_PATTERN.test(userMessages[index])) topicStart = index;
   }
-  const anchorUserMessages = userMessages.slice(topicStart).slice(-3);
+  // A greeting or acknowledgement cannot identify what "it" refers to.
+  // Keep substantive turns intact, including short answers with actual facts.
+  const anchorUserMessages = userMessages.slice(topicStart)
+    .filter((value) => !NON_REFERENTIAL_REPLY_PATTERN.test(value))
+    .slice(-3);
   if (continuation?.pendingQuestion) {
     return {
       contextDependent: true,
@@ -345,7 +367,7 @@ export function resolveSurgeConversationReference(
       anchorUserMessages,
     };
   }
-  if (continuation && (
+  if (continuation && !NON_REFERENTIAL_REPLY_PATTERN.test(continuation.goal) && (
     continuation.goal
     || continuation.lastAnswerSummary
     || continuation.activeTopic !== "general"
@@ -398,6 +420,10 @@ export function classifySurgeConversationTurn(
     && clean.split(/\s+/).filter(Boolean).length <= 60
   ) {
     const answersPendingQuestion = surgeMessageAnswersPendingQuestion(clean, continuation.pendingQuestion);
+    const identifiesRequestedSubject = SURGE_REFERENCE_CLARIFICATION_QUESTION_PATTERN.test(continuation.pendingQuestion);
+    if (identifiesRequestedSubject && answersPendingQuestion && !asksQuestion && !startsNewRequest) {
+      return "answer_to_follow_up";
+    }
     const pendingExpectsPostcode = /\bpostcode\b/i.test(continuation.pendingQuestion);
     const decisionTechnologyTopic = surgeConversationTechnologyTopicFor(
       `${continuation.goal}\n${continuation.pendingQuestion}\n${continuation.lastAnswerSummary}`,

@@ -81,7 +81,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(agents, /immutable dated evidence baseline; never rewrite it as current status/);
   assert.match(readme, /immutable evidence baseline/);
   assert.match(releaseTruth, /only current implementation and release-status document/);
-  assert.match(roadmap, /Last reconciled: 5 October 2026/);
+  assert.match(roadmap, /Last reconciled: 6 October 2026/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-69/);
@@ -90,7 +90,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-71/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-70/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 5 October 2026/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 6 October 2026/);
   assert.match(
     handover,
     /Status: system audit and polish[^\n]*Customer self-service accounts[^\n]*\r?\nPrepared: 9 September 2026/,
@@ -1097,7 +1097,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Council workspace and shared TLink dashboard access/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Sales workspace and Wattzun integration/);
+  assert.match(currentHandover, /## Previous handover: Council workspace\r?\n\r?\nStatus:[^\n]*Council workspace and shared TLink dashboard access/);
   assert.match(currentHandover, /## Previous delivery: customer control of shared uploads/);
   assert.match(currentHandover, /Direct regulator transmission remains dependent on approved interfaces and delegated access/);
   assert.match(currentHandover, /external provider registration and live OAuth acceptance remain in progress/);

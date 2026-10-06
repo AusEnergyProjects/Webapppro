@@ -46,6 +46,7 @@ import {
   surgeConversationTopicFor,
   surgeConversationTopicsAreCompatible,
   SURGE_EXPLICIT_SEPARATE_PROPERTY_CONTEXT_PATTERN,
+  SURGE_REFERENCE_CLARIFICATION_QUESTION_PATTERN,
   updateSurgeConversationLedger,
   type SurgePlanContextCorrection,
   type SurgeConversationState,
@@ -103,6 +104,7 @@ import {
 import { sanitizeSurgeCustomerOfficialCitation } from "./surge-official-citation.ts";
 import { ENERGY_ASSISTANT_MAX_BODY_BYTES } from "./energy-assistant-request-budget.ts";
 import { normalizeEnergyAssistantBrandText } from "./energy-assistant-brand.ts";
+import { composeSurgeReferenceClarification } from "./energy-assistant-clarification.ts";
 
 export { ENERGY_ASSISTANT_MAX_BODY_BYTES } from "./energy-assistant-request-budget.ts";
 
@@ -1922,6 +1924,7 @@ function surgeFollowUpWasAlreadyAnswered(
 }
 
 function pendingQuestionIsRequiredDecisionInput(question: string) {
+  if (SURGE_REFERENCE_CLARIFICATION_QUESTION_PATTERN.test(question)) return true;
   return /\bpostcode\b|\b(?:state|territory)\b|\b(?:own|owner|rent|renter|tenant)\b|\b(?:how many people|household size)\b|\bwhat\b[^?]{0,55}\b(?:heating system|heater|hot water|water heater)\b[^?]{0,35}\breplac(?:e|ing)\b|\b(?:exact )?(?:brand|model|capacity|equipment details?)\b/i.test(question);
 }
 
@@ -2188,6 +2191,12 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     || requiresDeterministicServiceAnswer || protectedAnswer
     ? null
     : composeSavedHomeWholePlanPriorityAnswer(message, planContext, decisionRecentTurns);
+  const referenceClarification = compose !== composeEnergyAssistantAnswer
+    || requiresDeterministicSafety || requiresDeterministicDocumentAnswer
+    || requiresDeterministicScopeBoundary || requiresDeterministicServiceAnswer
+    || protectedAnswer || planPriorityAnswer || nonCurrentHazardAnswer
+    ? null
+    : composeSurgeReferenceClarification(message, modelRecentTurns, framedContinuation);
   const planPriorityParts = planPriorityAnswer ? surgeMaterialQuestionParts(message) : [];
   const correctionAcknowledgement = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
     || requiresDeterministicScopeBoundary || requiresDeterministicHeatingDefault
@@ -2210,6 +2219,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     : composeSurgeSimpleAnswer(message, composedAnswer, planContext, decisionRecentTurns);
   let deterministicAnswer = safetyAnswer
     || protectedAnswer
+    || referenceClarification
     || planPriorityAnswer
     || nonCurrentHazardAnswer
     || pendingAnswer
@@ -2220,7 +2230,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     || conversationIntent === "contextual_follow_up"
     || conversationIntent === "clarification"
     || conversationIntent === "correction";
-  if (inheritedDecision && !requiresDeterministicSafety && !protectedAnswer) {
+  if (inheritedDecision && !requiresDeterministicSafety && !protectedAnswer && !referenceClarification) {
     const selectedText = policyText(deterministicAnswer);
     const composedText = policyText(composedAnswer);
     const selectedFailedDecision = isGenericNonAnswer(deterministicAnswer)
@@ -2238,7 +2248,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     && (!requiresDeterministicDocumentAnswer
       || (dependencies.requireValidatedModelForOrdinaryAdvice && !requiresGovernedFinanceCalculation))
     && !requiresDeterministicScopeBoundary
-    && !requiresDeterministicServiceAnswer && !protectedAnswer) {
+    && !requiresDeterministicServiceAnswer && !protectedAnswer && !referenceClarification) {
     const modelRequest: SurgeModelRequest = {
       message,
       audience,

@@ -1,5 +1,20 @@
 # Next task handover
 
+Status: Sales workspace and Wattzun integration; GitHub/Sites publication authorised.
+Prepared: 6 October 2026
+
+## Active delivery: integrated Sales and Wattzun
+
+Worktree C:/Webproject/aea-energy-tlink-sales-workspace, branch `codex/tlink-sales-wattzun`, base `8a2abdc5bf13189013505f92c3f485addb9b0074`, migration 0253. The user explicitly authorised integration and matching GitHub/Sites publication. Exact release identity belongs in C:/Webproject/outputs/tlink-wattzun-release-20261006/release-report.md.
+
+Acceptance: existing enquiry/quote jobs appear in one paginated Sales board/list, including more than 25 per stage; owner, estimate excluding GST, expected close, recorded contact and next action/date remain honest; configurable open stages stay separate from operational/compliance progress; same-job navigation preserves permissions and unsaved work. Protected customer details remain protected. Current team/crew/job scope and selected office owner are checked at write time. Metadata, canonical CRM values, revision, audit and sync commit atomically. Existing stages can be renamed/reordered and new stages added; stage removal is deliberately unsupported in this slice.
+
+The Wattzun fork is chat `01a10f96-1c0c-7563-a927-d53b0a7d3303`, "Make Wattzun useful and add portal voice calls", now integrated in the coordinating worktree. Acceptance: relevant clarification; Council/Creditex/TLink-only calls; fixed warm conversational brand style with a little humour; speed-only per-user preferences; useful source-verified industry/workflow guidance; no invented private-record access or completed actions. Idle calls ask to continue and then end without an answer; actual speech, processing and playback keep active calls alive. New business-form generation produces only a reviewed unsaved editor draft, never a published template or invented site answer. Existing quote/audit assistance stays in its record-scoped workflows. No new migration is required for the AI slice.
+
+Record exact combined validation and screenshots in C:/Webproject/outputs/tlink-wattzun-release-20261006/. Publish the exact scoped GitHub/Sites artifact with migration 0253 and verify affected owner/staff desktop/mobile flows. A physical phone microphone and an actual provider voice exchange remain distinct from mocked browser evidence. Existing expired-source approval, Council lint and Creditex source-format failures must be reported separately. A paid AI package requires measured provider usage, a customer-visible allowance and explicit commercial activation; it is not enabled by this implementation.
+
+## Previous handover: Council workspace
+
 Status: Council workspace and shared TLink dashboard access; authorised publication and live account verification.
 Prepared: 5 October 2026
 

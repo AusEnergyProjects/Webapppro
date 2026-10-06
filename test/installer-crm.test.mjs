@@ -395,7 +395,7 @@ test("every trusted register sort has a server mapping and saved-view allowlist"
 test("job and customer directories open focused records without automatic or inline detail", () => {
   assert.doesNotMatch(crm, /items\[0\]\?\.id/);
   assert.doesNotMatch(crm, /\bsetSelectedJobId\(/);
-  assert.match(crm, /onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
+  assert.match(crm, /jobIndexCell\(job, key, \(tab\) => openFocusedJob\(job\.id, tab\)/);
   assert.match(crm, /crm-view crm-job-workspace/);
   assert.match(crm, /crm-view crm-customer-focus/);
   assert.match(crm, /mapWorkspace \? "Back to map" : jobFilter === "lost" \? "Back to Lost archive" : "Back to all jobs"/);

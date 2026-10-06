@@ -409,7 +409,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [jobReturnTarget, setJobReturnTarget] = useState<JobReturnTarget>({ kind: "jobs" });
   const [selectedCustomerId, setSelectedCustomerIdState] = useState("");
   const [jobFilter, setJobFilter] = useState("all");
-  const [jobLayout, setJobLayoutState] = useState<"list" | "board" | "map">(mapWorkspace ? "map" : "list");
+  const [jobLayout, setJobLayoutState] = useState<"list" | "map">(mapWorkspace ? "map" : "list");
   const [customerLayout, setCustomerLayoutState] = useState<"list" | "map">(mapWorkspace ? "map" : "list");
   const [mapNavigation] = useState(createMapNavigationGuard);
   const registerMapSave = useCallback((save: (() => Promise<unknown>) | null) => {
@@ -418,9 +418,8 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const setView = useCallback((next: SetStateAction<View>) => { void mapNavigation.run(() => setViewState(next)); }, [mapNavigation]);
   const setCreating = useCallback((next: SetStateAction<"" | "job" | "quote" | "customer">) => { void mapNavigation.run(() => setCreatingState(next)); }, [mapNavigation]);
   const setSelectedCustomerId = useCallback((next: SetStateAction<string>) => { void mapNavigation.run(() => setSelectedCustomerIdState(next)); }, [mapNavigation]);
-  const setJobLayout = useCallback((next: SetStateAction<"list" | "board" | "map">) => { void mapNavigation.run(() => setJobLayoutState(next)); }, [mapNavigation]);
+  const setJobLayout = useCallback((next: SetStateAction<"list" | "map">) => { void mapNavigation.run(() => setJobLayoutState(next)); }, [mapNavigation]);
   const setCustomerLayout = useCallback((next: SetStateAction<"list" | "map">) => { void mapNavigation.run(() => setCustomerLayoutState(next)); }, [mapNavigation]);
-  const [pipelineFocus, setPipelineFocus] = useState("");
   const [search, setSearch] = useState("");
   const [jobCustomer, setJobCustomer] = useState("");
   const [jobService, setJobService] = useState("");
@@ -475,8 +474,6 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [customerPagination, setCustomerPagination] = useState<IndexPagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
   const jobCursors = useRef<string[]>([""]); const jobTotalReady = useRef(false);
   const customerCursors = useRef<string[]>([""]); const customerTotalReady = useRef(false);
-  const [boardJobs, setBoardJobs] = useState<Record<string, Job[]>>({});
-  const [boardCounts, setBoardCounts] = useState<Record<string, number>>({});
   const [selectedJobDetail, setSelectedJobDetail] = useState<Job | null>(null);
   const [focusedJobRefreshing, setFocusedJobRefreshing] = useState(false);
   const [selectedJobCustomer, setSelectedJobCustomer] = useState<Customer | null>(null);
@@ -681,7 +678,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
 
   const jobIndexParams = useCallback((page: number, pageSize: number, cursor = "", includeTotal = true) => {
     const params = new URLSearchParams({ mode: "index", resource: "jobs", service: jobService,
-      pipeline: pipelineFocus || jobPipeline, stage: jobStage, assignee: jobAssignee, filter: ["active", "lost", "awaiting_schedule"].includes(jobFilter) ? jobFilter : "all", sort: jobSort,
+      pipeline: jobPipeline, stage: jobStage, assignee: jobAssignee, filter: ["active", "lost", "awaiting_schedule"].includes(jobFilter) ? jobFilter : "all", sort: jobSort,
       appointmentId: jobAppointmentId, jobId, scheduledFrom: jobScheduledFrom, scheduledTo: jobScheduledTo,
       page: String(page), pageSize: String(pageSize) });
     params.set("search", search); params.set("customer", jobCustomer); params.set("location", jobLocation);
@@ -698,7 +695,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     if (cursor) params.set("cursor", cursor);
     if (!includeTotal) params.set("total", "0");
     return params;
-  }, [jobAppointmentId, jobAssignee, jobCreatedFrom, jobCreatedTo, jobCustomer, jobCustomerReference, jobEmail, jobFilter, jobFirstName, jobId, jobInvoiceStatus, jobLastName, jobLocation, jobOperationalStatus, jobPhone, jobPipeline, jobPostcode, jobQuoteTotalMax, jobQuoteTotalMin, jobScheduledFrom, jobScheduledTo, jobService, jobSort, jobStage, jobState, jobStreet, jobSuburb, pipelineFocus, search, staffPermissions]);
+  }, [jobAppointmentId, jobAssignee, jobCreatedFrom, jobCreatedTo, jobCustomer, jobCustomerReference, jobEmail, jobFilter, jobFirstName, jobId, jobInvoiceStatus, jobLastName, jobLocation, jobOperationalStatus, jobPhone, jobPipeline, jobPostcode, jobQuoteTotalMax, jobQuoteTotalMin, jobScheduledFrom, jobScheduledTo, jobService, jobSort, jobStage, jobState, jobStreet, jobSuburb, search, staffPermissions]);
 
   const jobIndexKey = `${user.uid}:${refreshNonce}:${jobIndexParams(jobPage, jobPageSize)}`;
   const loadJobIndex = useCallback(async (signal: AbortSignal) => {
@@ -838,7 +835,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
 
   useEffect(() => {
     jobCursors.current = [""]; jobTotalReady.current = false;
-  }, [jobAppointmentId, jobAssignee, jobCreatedFrom, jobCreatedTo, jobCustomer, jobCustomerReference, jobEmail, jobFilter, jobFirstName, jobId, jobInvoiceStatus, jobLastName, jobLocation, jobOperationalStatus, jobPageSize, jobPhone, jobPipeline, jobPostcode, jobQuoteTotalMax, jobQuoteTotalMin, jobScheduledFrom, jobScheduledTo, jobService, jobSort, jobStage, jobState, jobStreet, jobSuburb, pipelineFocus, search]);
+  }, [jobAppointmentId, jobAssignee, jobCreatedFrom, jobCreatedTo, jobCustomer, jobCustomerReference, jobEmail, jobFilter, jobFirstName, jobId, jobInvoiceStatus, jobLastName, jobLocation, jobOperationalStatus, jobPageSize, jobPhone, jobPipeline, jobPostcode, jobQuoteTotalMax, jobQuoteTotalMin, jobScheduledFrom, jobScheduledTo, jobService, jobSort, jobStage, jobState, jobStreet, jobSuburb, search]);
   useEffect(() => {
     customerCursors.current = [""];
   }, [customerBusinessName, customerCreatedFrom, customerCreatedTo, customerEmail, customerFirstName, customerJobId, customerLastName, customerPageSize, customerPhone, customerPipeline, customerPostcode, customerSearch, customerService, customerSort, customerState, customerStreet, customerSuburb]);
@@ -944,26 +941,6 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     return () => { active = false; controller.abort(); };
   }, [fetch, refreshNonce, selectedCustomerId, setStatus, user, view]);
 
-  useEffect(() => {
-    if (view !== "jobs" || jobLayout !== "board") return;
-    let active = true;
-    const stages = ["enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress"];
-    void user.getIdToken().then(async (token) => {
-      const results = await Promise.all(stages.map(async (stage) => {
-        const params = new URLSearchParams({ mode: "index", resource: "jobs", filter: "all", pipeline: stage, sort: "updated-desc", page: "1", pageSize: "25" });
-        const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
-        const result = await response.json().catch(() => ({})) as CrmIndexResult;
-        if (isMfaRequiredResponse(result)) setMfaRequired(true);
-        if (!response.ok || !result.ok) throw new Error(result.error || "The job board could not be loaded.");
-        return [stage, (result.items || []) as Job[], result.pagination?.total || 0] as const;
-      }));
-      if (active) {
-        setBoardJobs(Object.fromEntries(results.map(([stage, items]) => [stage, items])));
-        setBoardCounts(Object.fromEntries(results.map(([stage, , total]) => [stage, total])));
-      }
-    }).catch((error) => active && setStatus(error instanceof Error ? error.message : "The job board could not be loaded.", "error"));
-    return () => { active = false; };
-  }, [fetch, jobLayout, refreshNonce, setStatus, user, view]);
 
   useEffect(() => {
     if (
@@ -1250,7 +1227,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       }}>{selected ? "Deselect customer" : "Select customer"}</button>
     </div>, document.body);
   }
-  function clearJobFilters() { setJobFilter("all"); setSearch(""); setJobCustomer(""); setJobService(""); setJobPipeline(""); setJobStage(""); setJobAssignee(""); setJobLocation(""); setJobAppointmentId(""); setJobId(""); setJobScheduledFrom(""); setJobScheduledTo(""); setJobCreatedFrom(""); setJobCreatedTo(""); setJobInvoiceStatus(""); setJobCustomerReference(""); setJobEmail(""); setJobPhone(""); setJobSuburb(""); setJobPostcode(""); setJobFirstName(""); setJobLastName(""); setJobStreet(""); setJobState(""); setJobOperationalStatus(""); setJobQuoteTotalMin(""); setJobQuoteTotalMax(""); setPipelineFocus(""); setJobPage(1); }
+  function clearJobFilters() { setJobFilter("all"); setSearch(""); setJobCustomer(""); setJobService(""); setJobPipeline(""); setJobStage(""); setJobAssignee(""); setJobLocation(""); setJobAppointmentId(""); setJobId(""); setJobScheduledFrom(""); setJobScheduledTo(""); setJobCreatedFrom(""); setJobCreatedTo(""); setJobInvoiceStatus(""); setJobCustomerReference(""); setJobEmail(""); setJobPhone(""); setJobSuburb(""); setJobPostcode(""); setJobFirstName(""); setJobLastName(""); setJobStreet(""); setJobState(""); setJobOperationalStatus(""); setJobQuoteTotalMin(""); setJobQuoteTotalMax(""); setJobPage(1); }
   function openJobsForStage(stage: string, filter = "active") {
     homeJobStage.current = jobPreferencesLoaded.current || staffPermissions ? null : { stage, filter };
     clearJobFilters(); setCreating(""); setFocusedJobId(""); setJobReturnTarget({ kind: "jobs" }); setJobFilter(filter); setJobStage(stage); setJobLayout("list"); setView("jobs");
@@ -1512,9 +1489,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         {canSearchCustomerFields && <label><span>Last name</span><input value={jobLastName} onChange={(event) => { setJobLastName(event.target.value); setJobPage(1); }} placeholder="Filter surname" /></label>}
         <label><span>Status</span><select value={jobOperationalStatus} onChange={(event) => { setJobOperationalStatus(event.target.value); setJobPage(1); }}><option value="">All statuses</option>{jobStatusFilters.filter(value => !staffPermissions || value !== "deleted").map((value) => <option key={value} value={value}>{lifecycleLabel(value)}</option>)}</select></label>
         <label><span>Assigned worker</span><input value={jobAssignee} onChange={(event) => { setJobAssignee(event.target.value); setJobPage(1); }} placeholder="Any worker" /></label>
-        {jobFilter !== "lost" && jobFilter !== "awaiting_schedule" && <div className="crm-layout-toggle" role="group" aria-label="Job layout"><button type="button" className={jobLayout === "list" ? "active" : ""} aria-pressed={jobLayout === "list"} onClick={() => setJobLayout("list")}>Register</button><button type="button" className={jobLayout === "board" ? "active" : ""} aria-pressed={jobLayout === "board"} onClick={() => { setPipelineFocus(""); setJobLayout("board"); }}>Board</button><button type="button" className={jobLayout === "map" ? "active" : ""} aria-pressed={jobLayout === "map"} onClick={() => { setJobActionId(""); setJobLayout("map"); }}>Map</button></div>}
+        {jobFilter !== "lost" && jobFilter !== "awaiting_schedule" && <div className="crm-layout-toggle" role="group" aria-label="Job layout"><button type="button" className={jobLayout === "list" ? "active" : ""} aria-pressed={jobLayout === "list"} onClick={() => setJobLayout("list")}>Register</button><button type="button" className={jobLayout === "map" ? "active" : ""} aria-pressed={jobLayout === "map"} onClick={() => { setJobActionId(""); setJobLayout("map"); }}>Map</button></div>}
       </div>
-      {jobLayout !== "board" && <details className="crm-granular-filters"><summary>Detailed job filters</summary><div>
+      <details className="crm-granular-filters"><summary>Detailed job filters</summary><div>
         {canSearchCustomerFields && <label><span>First name</span><input value={jobFirstName} onChange={(event) => { setJobFirstName(event.target.value); setJobPage(1); }} /></label>}
         <label><span>Activity</span><select value={jobService} onChange={(event) => { setJobService(event.target.value); setJobPage(1); }}><option value="">All activities</option>{serviceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         {canSearchCustomerFields && <label><span>Street address</span><input value={jobStreet} onChange={(event) => { setJobStreet(event.target.value); setJobPage(1); }} /></label>}
@@ -1526,22 +1503,21 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         {canSearchCustomerFields && <><label><span>Email</span><input type="email" value={jobEmail} onChange={(event) => { setJobEmail(event.target.value); setJobPage(1); }} /></label><label><span>Contact number</span><input type="tel" inputMode="tel" value={jobPhone} onChange={(event) => { setJobPhone(event.target.value.replace(/[^\d+()\s-]/g, "")); setJobPage(1); }} /></label><label><span>Suburb</span><input value={jobSuburb} onChange={(event) => { setJobSuburb(event.target.value); setJobPage(1); }} /></label><label><span>Postcode</span><input inputMode="numeric" value={jobPostcode} onChange={(event) => { setJobPostcode(event.target.value.replace(/\D/g, "").slice(0, 4)); setJobPage(1); }} /></label><label><span>State</span><select value={jobState} onChange={(event) => { setJobState(event.target.value); setJobPage(1); }}><option value="">All states</option>{["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"].map((value) => <option key={value}>{value}</option>)}</select></label></>}
         {(!staffPermissions || staffPermissions.canViewQuotes) && <><label><span>Quote total ex GST from</span><input type="number" min="0" step="0.01" value={jobQuoteTotalMin} onChange={(event) => { setJobQuoteTotalMin(event.target.value); setJobPage(1); }} /></label><label><span>Quote total ex GST to</span><input type="number" min="0" step="0.01" value={jobQuoteTotalMax} onChange={(event) => { setJobQuoteTotalMax(event.target.value); setJobPage(1); }} /></label></>}
         <button type="button" onClick={clearJobFilters}>Clear filters</button>
-      </div></details>}
+      </div></details>
       {jobFilter === "active" && <div className="crm-filter-notice"><span>Showing open jobs</span><button type="button" onClick={() => setJobFilter("all")}>Show all jobs</button></div>}
-      {pipelineFocus && <div className="crm-filter-notice"><span>Showing {pipelineLabels[pipelineFocus] || pipelineFocus}</span><button type="button" onClick={() => setPipelineFocus("")}>Clear stage</button></div>}
-      {jobLayout !== "board" && <div className="crm-index-view-tools">{!staffPermissions && <WorkspaceSavedViews presets={jobPresets} activeId={activeJobPresetId} busy={viewBusy}
+      <div className="crm-index-view-tools">{!staffPermissions && <WorkspaceSavedViews presets={jobPresets} activeId={activeJobPresetId} busy={viewBusy}
         onApply={(preset) => { applyListPreferences("installer-jobs", preset.preferences); setActiveJobPresetId(preset.id); setStatus(`${preset.name} view applied.`, "success"); }}
         onClear={() => setActiveJobPresetId("")}
         onCreate={(name) => saveNamedView("installer-jobs", name)} onRename={(id, name) => saveNamedView("installer-jobs", name, id)} onDelete={(id) => deleteNamedView("installer-jobs", id)} />}
         {jobLayout === "list" && <WorkspaceTableTools columns={jobIndexColumns} visibleKeys={[...jobColumns]} onVisibleKeys={(keys) => { setJobColumns(safeJobRegisterColumns(keys)); setActiveJobPresetId(""); }} noun="jobs"
           exportDisabled={!jobPagination.total || indexLoading} exportBusy={jobExporting}
           exportLabel="Download all filtered jobs CSV" exportBusyLabel="Downloading all filtered jobs CSV..."
-          onExport={() => void downloadAllFilteredJobs()} />}</div>}
+          onExport={() => void downloadAllFilteredJobs()} />}</div>
       {jobLayout === "list" && <WorkspaceListControls page={jobPagination.page} pageCount={jobPagination.pageCount} pageSize={jobPagination.pageSize} total={jobPagination.total} hasNext={jobPagination.hasNext} saved={jobViewSaved} busy={viewBusy || indexLoading}
         onPage={(page) => setJobPage(page)} onPageSize={(size) => { setJobPageSize(size); setJobPage(1); }} onSave={() => void updateListView("installer-jobs", "PATCH")} onReset={() => void updateListView("installer-jobs", "DELETE")} showViewActions={!staffPermissions} />}
-      {jobLayout === "map" ? <div><TradeRecordMap onRegisterMapSave={registerMapSave} key={user.uid} quoteAccess={mapQuoteAccess} user={user} query={jobMapQuery} onOpenRecord={(record) => openFocusedJob(record.id)} /></div> : jobLayout === "list" ? <div className="crm-jobs-layout">
+      {jobLayout === "map" ? <div><TradeRecordMap onRegisterMapSave={registerMapSave} key={user.uid} quoteAccess={mapQuoteAccess} user={user} query={jobMapQuery} onOpenRecord={(record) => openFocusedJob(record.id)} /></div> : <div className="crm-jobs-layout">
         <JobRegisterScroll><div className="crm-record-columns crm-dynamic-columns" style={jobGridStyle} role="row">{jobColumns.map((key) => { const column = jobIndexColumns.find((item) => item.key === key); return column ? <SortableIndexHeading key={key} column={column} current={jobSort} onSort={changeJobRegisterSort} /> : null; })}</div>{indexedJobs.length ? indexedJobs.map((job) => <article key={job.id} tabIndex={0} role="row" className={`${registerStyles.row} crm-row-open crm-record-data-row crm-index-row`} style={jobGridStyle} onContextMenu={(event) => openJobActions(event, job.id)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openJobActions(event, job.id); else if (event.key === "Enter") openFocusedJob(job.id); }} onDoubleClick={(event) => { if ((event.target as HTMLElement).closest("a, button, input, select, textarea")) return; openFocusedJob(job.id); }}>{jobColumns.map((key) => <span className="crm-index-cell" role="cell" key={key}>{jobIndexCell(job, key, (tab) => openFocusedJob(job.id, tab), () => editInvoicePayment(job), jobActionMenu(job), user, staffPermissions)}</span>)}</article>) : <div className="crm-empty"><strong>{indexLoading ? "Loading jobs..." : "No matching jobs"}</strong><span>{indexLoading ? "Fetching this page securely." : "Try another search or filter."}</span></div>}</JobRegisterScroll>
-      </div> : <div className="crm-pipeline-board">{[["enquiry", "New"], ["qualifying", "Checking"], ["quoting", "Quoting"], ["approved", "Approved"], ["scheduled", "Scheduled"], ["in_progress", "Underway"]].map(([stage, label]) => { const stageJobs = boardJobs[stage] || []; return <section key={stage}><header><button type="button" onClick={() => { setPipelineFocus(stage); setJobLayout("list"); }}>{label}</button><strong>{boardCounts[stage] || 0}</strong></header><div>{stageJobs.map((job) => <button type="button" key={job.id} onClick={() => openFocusedJob(job.id)}><span>{job.workNumber}</span><strong>{job.customerDisplayName || job.title}</strong><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}</small><em>{job.nextAction || workStageLabels[job.stage] || job.stage}</em></button>)}{!stageJobs.length && <p>No jobs</p>}</div></section>; })}</div>}
+      </div>}
     </div>}
 
     {paymentJob && <TradeInvoicePaymentDialog user={user} job={paymentJob} onClose={() => setPaymentJob(null)} onSaved={() => { setPaymentJob(null); setRefreshNonce(value => value + 1); }} />}
@@ -1831,7 +1807,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   const acceptedPreparation = !isImported && !isLost && !workComplete && job.quoteStatus === "accepted" && !permissions && job.customerSource === "trade_owned";
   const quoteDecisionPending = !isImported && !isLost && canViewQuotes && ["issued", "sent", "declined"].includes(job.quoteStatus) && !["approved", "scheduled", "in_progress", "complete", "invoiced", "paid"].includes(job.pipelineStage);
   const quotePreparation = !isImported && !isLost && canViewQuotes && job.quoteStatus === "draft" && job.stage === "backlog" && ["enquiry", "qualifying", "quoting"].includes(job.pipelineStage);
-  async function saveSummary(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!canManageJobs) return; const data = new FormData(event.currentTarget); const update: Record<string, unknown> = { action: "update_job", workOrderId: job.id, expectedRevision: job.revision, serviceSiteId: data.get("serviceSiteId"), pipelineStage: isImported ? "imported" : data.get("pipelineStage"), stage: isImported ? "imported" : data.get("stage"), priority: data.get("priority"), buildingType: data.get("buildingType") }; if (canSearchCustomerRecords) update.crmCustomerId = data.get("crmCustomerId"); await onCrm("PATCH", update, `job:${job.id}`, "Job summary saved."); }
+  async function saveSummary(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!canManageJobs) return; const data = new FormData(event.currentTarget); const update: Record<string, unknown> = { action: "update_job", workOrderId: job.id, expectedRevision: job.revision, serviceSiteId: data.get("serviceSiteId"), stage: isImported ? "imported" : data.get("stage"), priority: data.get("priority"), buildingType: data.get("buildingType") }; if (canSearchCustomerRecords) update.crmCustomerId = data.get("crmCustomerId"); await onCrm("PATCH", update, `job:${job.id}`, "Job summary saved."); }
   async function saveNotes(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!canManageJobs) return; const data = new FormData(event.currentTarget); await onCrm("PATCH", { action: "update_job", workOrderId: job.id, expectedRevision: job.revision, description: data.get("description"), nextAction: data.get("nextAction"), tags: data.get("tags") }, `job-notes:${job.id}`, "Job notes saved."); }
   async function saveFinancials(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!canManageInvoices) return; const data = new FormData(event.currentTarget); await onCrm("PATCH", { action: "update_job", workOrderId: job.id, expectedRevision: job.revision, invoiceStatus: data.get("invoiceStatus"), estimatedValueCents: cents(data.get("estimatedValue")), invoicedValueCents: cents(data.get("invoicedValue")), paidValueCents: cents(data.get("paidValue")), paymentDueAt: data.get("paymentDueAt") }, `finance:${job.id}`, "Estimate and invoice summary saved."); }
   async function addTask(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!canManageJobs) return; const form = event.currentTarget; const data = new FormData(form); if (await onWorkOrder("POST", { action: "add_task", workOrderId: job.id, title: data.get("title"), dueAt: data.get("dueAt") }, `task:${job.id}`, "Task added.")) form.reset(); }
@@ -2006,7 +1982,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
       {!isLost && requiresBookingDocuments && <TradeCustomerDocumentDeliveryPanel delivery={job.customerDocuments} jobId={job.id} onReload={onReload} user={user} />}
       {canManageJobs && <details className="crm-field-secondary"><summary>Edit job details</summary><form className="crm-form" onSubmit={saveSummary}><fieldset style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}>
         <div className="crm-form-grid">{canSearchCustomerRecords && !isProtected && !isReleasedLead && <CustomerLookupSelect user={user} initialCustomer={customer} />}{!isProtected && !isReleasedLead && customer && <label><span>Authoritative service site</span><select name="serviceSiteId" defaultValue={job.serviceSiteId}><option value="">Choose later</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel} | {[site.suburb, site.addressState, site.postcode].filter(Boolean).join(" ") || "Address not added"}</option>)}</select></label>}<label><span>Building type</span><select name="buildingType" defaultValue={job.buildingType || "not_sure"}>{[["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]].map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" defaultValue={job.priority}><option value="low">Low</option><option value="standard">Standard</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>
-        <details className={registerStyles.planningDetails}><summary>Board and work planning</summary><p>These organise your work board. Billing comes from the quote and invoice; compliance follows the completed work and review.</p><div className="crm-form-grid"><label><span>Board stage</span><select name="pipelineStage" disabled={isImported} defaultValue={job.pipelineStage}>{Object.entries(pipelineLabels).filter(([value]) => value !== "lost" && (value !== "imported" || isImported) && (!["invoiced", "paid"].includes(value) || value === job.pipelineStage)).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Work planning</span><select name="stage" disabled={isImported} defaultValue={job.stage}>{Object.entries(workStageLabels).filter(([value]) => value !== "imported" || isImported).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></div></details>
+        <details className={registerStyles.planningDetails}><summary>Work planning</summary><p>Sales stages are managed in Sales. Billing comes from the quote and invoice; compliance follows the completed work and review.</p><div className="crm-form-grid"><label><span>Work planning</span><select name="stage" disabled={isImported} defaultValue={job.stage}>{Object.entries(workStageLabels).filter(([value]) => value !== "imported" || isImported).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></div></details>
         {canManageJobs && <button className="btn" disabled={busy === `job:${job.id}`}>Save details</button>}
       </fieldset></form></details>}
       {canOpenDirectCustomerCompliance && unlinkedComplianceIntents.length > 0 && <details className="crm-field-secondary"><summary>Optional compliance case setup</summary><p>Field forms are available in the app. Use this section only to link an existing governed case.</p>{unlinkedComplianceIntents.map((intent) => <TradeComplianceIntake key={intent.id} user={user} workOrderId={job.id} initialIntent={intent} onChanged={onReload} />)}</details>}

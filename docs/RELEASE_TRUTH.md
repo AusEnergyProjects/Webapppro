@@ -1,5 +1,21 @@
 # TLink and Australian Energy Assessments release truth
 
+## Authorised integrated delivery: Sales and useful Wattzun assistance
+
+Prepared 6 October 2026 in C:/Webproject/aea-energy-tlink-sales-workspace, branch `codex/tlink-sales-wattzun`, source base `8a2abdc5bf13189013505f92c3f485addb9b0074` (Council release, Sites 770). The user explicitly authorised integrating the changes and publishing the matching GitHub and Sites source. Exact validation, publication identity and live observations are recorded in C:/Webproject/outputs/tlink-wattzun-release-20261006/release-report.md; this source statement itself does not establish publication.
+
+Owners and authorised office staff now have one Sales board/list for existing active enquiries and quotes, with accountable office owner, estimate excluding GST, expected close day, last recorded contact day and next action/date. Each column and list page loads beyond 25 with complete filtered counts. Businesses can add, rename and reorder open sales stages; saved Won/Lost outcomes remain authoritative. Existing job/quote navigation, supplied-lead review, customer protection and own-job/crew scope remain in force. Sales ownership is informational and never grants job access. The old capped Jobs board and its independent stage editor are removed; operational planning stays in Jobs.
+
+Migration 0253 adds scoped sales configuration and per-job metadata with tenant/job and teammate foreign keys. Canonical CRM estimate and next-action text are reused. Sales saves recheck actor, record/config revisions, selected office owner and actual outcome in the atomic write, then record audit and existing job-sync changes. No quote acceptance, appointment, field assignment, customer send or compliance approval is caused by a sales-stage change.
+
+The Wattzun fork is integrated into this source. Authenticated TLink, Council and Creditex users can chat or call within their authorised workspace; the public AEA assistant has no call button. The server fixes Wattzun's warm, conversational personality with a little humour and branded voice; scoped user preferences control only speech speed. Relevant clarification questions replace invented missing details. Verified product guidance covers Sales, quotes, forms, onsite evidence, audit assistance and council workflows; clearly unrelated requests receive a work-focused redirect. General portal chat does not inherit private records or the repository. Existing job-specific assistants retain their separate source and permission checks.
+
+Active calls have no overall duration cutoff. After 90 seconds of listening without speech, or 180 seconds while muted, a local check asks whether to continue; after a further 30 seconds without an answer the call releases its microphone. Active speech, AI processing and response playback do not count as idle. Backgrounding or closing the assistant ends capture. Individual audio turns remain bounded. A physical microphone/provider call is distinct from deterministic lifecycle and browser fixture checks.
+
+The business form editor adds a reviewed Draft with Wattzun path for new business forms. An unclear brief returns relevant questions; a generated template must pass the existing form cleaner and remain an unsaved editor draft until the user explicitly saves it. It does not fill site observations, signatures or governed compliance answers. The existing quote brief and Creditex pre-review remain available from their exact records. No paid gate, billing setup or monthly allowance is activated; pricing remains a commercial proposal and core TLink stays free.
+
+Earlier Sales evidence: C:/Webproject/outputs/tlink-sales-20261006/. Combined release evidence: C:/Webproject/outputs/tlink-wattzun-release-20261006/. Existing failures in the Creditex source-format assertion, Council lint and expired official-source approvals must remain separately reported; no human approval dates are fabricated.
+
 Status: current repository snapshot
 
 Truth owners: product owner and technical lead

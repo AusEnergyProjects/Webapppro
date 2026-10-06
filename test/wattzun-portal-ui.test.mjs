@@ -1,0 +1,130 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import ts from "typescript";
+import * as portalContract from "../src/lib/wattzun-portal.ts";
+
+const source = readFileSync(new URL("../src/components/WattzunPortalAssistant.tsx", import.meta.url), "utf8");
+const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+function load({ values = [null, [], "", false], storage, fetchRequest = () => { throw new Error("Unexpected fetch"); } } = {}) {
+  let stateIndex = 0;
+  const effects = [], updates = [], auth = { callback: null, unsubscribed: false };
+  const dependencies = {
+    react: {
+      useState: () => { const index = stateIndex++; return [values[index], value => updates.push({ index, value })]; },
+      useRef: initial => ({ current: initial }), useCallback: callback => callback,
+      useEffect: callback => effects.push(callback),
+    },
+    "react/jsx-runtime": { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: "Fragment" },
+    "firebase/auth": { onAuthStateChanged: (_auth, callback) => { auth.callback = callback; return () => { auth.unsubscribed = true; }; } },
+    "@/lib/firebase-client": { firebaseAuth: {} },
+    "@/lib/trade-business-client": { readTradeBusinessSelection: () => "business-b" },
+    "@/lib/wattzun-portal": portalContract,
+    "@/lib/wattzun-voice-client": {},
+    "./EnergyAssistantLauncher": { EnergyAssistantLauncher: "Launcher" },
+    "./WattzunPortalAssistant.module.css": { default: {} },
+  };
+  const exported = {};
+  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {preferencesKey, loadPreferences, conversationHistory, responsePayload, isReply, WattzunConversation};`)(name => {
+    assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
+  }, exported, { localStorage: storage }, fetchRequest);
+  return { exported, effects, updates, auth };
+}
+const flush = () => new Promise(resolve => setImmediate(resolve));
+const user = { uid: "user-a", emailVerified: true, getIdToken: () => Promise.resolve("test-token") };
+const scopes = [{ portal: "trade", scopeId: "business-a", label: "Business A" }, { portal: "trade", scopeId: "business-b", label: "Business B" }];
+
+test("the launcher is absent before authentication and until server-authorised scopes exist", () => {
+  for (const values of [[null, scopes, "business-a", false], [user, [], "", false]]) {
+    const result = load({ values }).exported.WattzunPortalAssistant({ portal: "trade" });
+    assert.equal(result, null);
+  }
+  const result = load({ values: [user, scopes, "business-b", false] }).exported.WattzunPortalAssistant({ portal: "trade" });
+  assert.equal(result.props.children[0].type, "Launcher");
+  assert.equal(typeof result.props.children[0].props.onOpen, "function");
+});
+test("auth changes immediately clear scopes, workspace and the open modal", () => {
+  const h = load(); h.exported.WattzunPortalAssistant({ portal: "trade" }); const unsubscribe = h.effects[0]();
+  h.auth.callback({ ...user, emailVerified: false });
+  assert.deepEqual(h.updates, [{ index: 0, value: null }, { index: 1, value: [] }, { index: 2, value: "" }, { index: 3, value: false }]);
+  unsubscribe(); assert.equal(h.auth.unsubscribed, true);
+});
+test("scope discovery sends a fresh auth token and restores an authorised trade selection", async () => {
+  const requests = [];
+  const h = load({ values: [user, [], "", false], fetchRequest: async (url, init) => { requests.push({ url, init }); return Response.json({ ok: true, scopes }); } });
+  h.exported.WattzunPortalAssistant({ portal: "trade" }); const cleanup = h.effects[1](); await flush();
+  assert.equal(requests.length, 1); assert.equal(requests[0].url, "/api/wattzun/portal?portal=trade"); assert.equal(requests[0].init.headers.Authorization, "Bearer test-token");
+  assert.deepEqual(h.updates.find(update => update.index === 1).value, scopes); assert.equal(h.updates.find(update => update.index === 2).value, "business-b");
+  cleanup(); assert.equal(requests[0].init.signal.aborted, true);
+});
+test("scope discovery ignores a late response after sign-out or route removal", async () => {
+  let resolve;
+  const response = new Promise(yes => { resolve = yes; });
+  const h = load({ values: [user, [], "", false], fetchRequest: () => response });
+  h.exported.WattzunPortalAssistant({ portal: "trade" }); const cleanup = h.effects[1](); await flush(); cleanup(); resolve(Response.json({ ok: true, scopes })); await flush();
+  assert.equal(h.updates.length, 0);
+});
+test("unauthorised server discovery cannot reveal a launcher", async () => {
+  const h = load({ values: [user, [], "", false], fetchRequest: () => Promise.resolve(Response.json({ ok: false, error: "Access denied" }, { status: 403 })) });
+  h.exported.WattzunPortalAssistant({ portal: "council" }); const cleanup = h.effects[1](); await flush();
+  assert.deepEqual(h.updates, [{ index: 1, value: [] }]); cleanup();
+});
+test("preferences isolate users and workspaces, and unavailable or malformed storage returns defaults", () => {
+  const defaults = portalContract.WATTZUN_DEFAULT_PREFERENCES;
+  const first = load({ storage: { getItem: () => { throw new Error("blocked"); } } }).exported.testHelpers;
+  assert.deepEqual(first.loadPreferences("a"), defaults);
+  const malformed = load({ storage: { getItem: () => '{"voice":"unrecognised"}' } }).exported.testHelpers;
+  assert.deepEqual(malformed.loadPreferences("a"), defaults);
+  const saved = { speed: .85 };
+  const restored = load({ storage: { getItem: () => JSON.stringify(saved) } }).exported.testHelpers;
+  assert.deepEqual(restored.loadPreferences("a"), saved);
+  assert.notEqual(first.preferencesKey("user-a", scopes[0]), first.preferencesKey("user-b", scopes[0]));
+  assert.notEqual(first.preferencesKey("user-a", scopes[0]), first.preferencesKey("user-a", scopes[1]));
+});
+test('legacy preferences migrate only speed and remove old voice, tone and personality storage', () => {
+  const key = 'wattzun-preferences:v2:user-a:trade:business-a';
+  const legacyKey = 'wattzun-preferences:v1:user-a:trade:business-a';
+  const values = new Map([[legacyKey, JSON.stringify({ voice:'marin', tone:'formal', speed:.85, personality:'Private obsolete note' })]]), removed=[];
+  const helpers = load({ storage:{ getItem:key=>values.get(key)||null, removeItem:key=>{ removed.push(key);values.delete(key); } } }).exported.testHelpers;
+  assert.equal(helpers.preferencesKey('user-a',scopes[0]),key); assert.deepEqual(helpers.loadPreferences(key),{speed:.85});
+  assert.deepEqual(removed,[legacyKey]); assert.equal(values.has(legacyKey),false);
+  values.set(key,JSON.stringify({speed:1.15,voice:'marin',tone:'formal',personality:'Forged'})); values.set(legacyKey,'malformed');
+  assert.deepEqual(helpers.loadPreferences(key),{speed:1.15}); assert.equal(values.has(legacyKey),false);
+});
+const text = node=>node==null||typeof node==='boolean'?'':typeof node==='string'||typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):text(node.props?.children);
+const nodes = (node,predicate)=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(item=>nodes(item,predicate)):[...(predicate(node)?[node]:[]),...nodes(node.props?.children,predicate)];
+test('conversation settings expose speed only and active check-ins provide accessible Continue and End controls', () => {
+  const h=load({values:[[],'',false,'',{speed:1},{state:'confirming',message:'Would you like to continue this call?'},false]});
+  const tree=h.exported.testHelpers.WattzunConversation({user,scope:scopes[0]});
+  const settings=nodes(tree,node=>node.type==='details')[0]; assert.match(text(settings),/Speech speed/);
+  assert.deepEqual(nodes(settings,node=>node.type==='select').map(node=>node.props['aria-label']),['Speaking speed']);
+  assert.equal(nodes(settings,node=>node.type==='textarea').length,0); assert.doesNotMatch(text(settings),/Voice and personality|Tone|Personality note/);
+  const speed=nodes(settings,node=>node.type==='select')[0]; speed.props.onChange({target:{value:'1.15'}}); assert.deepEqual(h.updates.at(-1),{index:4,value:{speed:1.15}});
+  const checkin=nodes(tree,node=>node.props?.['aria-label']==='Call check-in')[0]; assert.equal(checkin.props.role,'group');
+  assert.ok(nodes(checkin,node=>node.type==='button'&&text(node)==='Continue call')[0]); assert.ok(nodes(checkin,node=>node.type==='button'&&text(node)==='End call')[0]);
+});
+test("follow-up history stays in memory, retains questions, and stays within the API budget", () => {
+  const helpers = load().exported.testHelpers;
+  const messages = [
+    { role: "user", content: "Help me with the job", id: "1" },
+    { role: "assistant", content: "Which job?\nWhat would you like to achieve?", id: "2" },
+  ];
+  assert.deepEqual(helpers.conversationHistory(messages), messages.map(({ role, content }) => ({ role, content })));
+  const shortTurns = Array.from({ length: 44 }, (_, index) => ({ id: String(index), role: index % 2 ? "assistant" : "user", content: `Turn ${index}` }));
+  const retained = helpers.conversationHistory(shortTurns);
+  assert.equal(retained.length, portalContract.WATTZUN_MAX_HISTORY_TURNS);
+  assert.deepEqual(retained, shortTurns.slice(-40).map(({role,content})=>({role,content})));
+  assert.equal(portalContract.parseWattzunTurn({portal:'trade',scopeId:'business-a',requestId:'history-forty-fixture',message:'Continue',history:retained}).history.length,40);
+  const bounded = helpers.conversationHistory(Array.from({ length: 40 }, (_, index) => ({ id: String(index), role: index % 2 ? "assistant" : "user", content: String(index).padEnd(4000, "x") })));
+  assert.ok(bounded.length < 40); assert.ok(JSON.stringify(bounded).length <= portalContract.WATTZUN_MAX_HISTORY_CHARACTERS); assert.ok(bounded.at(-1).content.startsWith("39"));
+  assert.doesNotThrow(()=>portalContract.parseWattzunTurn({portal:'trade',scopeId:'business-a',requestId:'history-budget-fixture',message:'Continue',history:bounded}));
+  assert.equal((source.match(/localStorage\.setItem\(/g) || []).length, 1);
+  assert.match(source, /localStorage\.setItem\(preferencesKey\(user\.uid, scope\), JSON\.stringify\(preferences\)\)/);
+});
+test("reply links reject off-site and malformed destinations before rendering", () => {
+  const { isReply } = load().exported.testHelpers;
+  const reply = { kind: "clarification", message: "Tell me more", questions: ["Which job?"], links: [{ label: "Jobs", href: "/direct-trade/dashboard?tab=jobs" }] };
+  assert.equal(isReply(reply), true);
+  for (const href of ["//evil.example", "javascript:alert(1)", "https://evil.example"]) assert.equal(isReply({ ...reply, links: [{ label: "Go", href }] }), false);
+  assert.equal(isReply({ ...reply, questions: [17] }), false);
+});

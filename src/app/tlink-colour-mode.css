@@ -387,7 +387,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
   .crm-filter-notice,
   .crm-job-list,
   .crm-customer-list,
-  .crm-pipeline-board > section,
   .crm-bulk-actions,
   .crm-property-address,
   .crm-property-placeholder,
@@ -422,17 +421,11 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-create-guidance p 
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .crm-pipeline-board > section > div > button,
-  .crm-pipeline-board > section > header strong,
   .crm-task-list li
 ) {
   background: var(--trade-surface-raised);
   border-color: var(--trade-line);
   color: var(--trade-ink);
-}
-
-html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-pipeline-board > section > div > button:hover {
-  border-color: var(--trade-accent);
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
@@ -547,8 +540,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell .crm-job-more > div but
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .crm-pipeline-board > section > header button,
-  .crm-pipeline-board button span,
   .crm-commercial-handoff > header span,
   .crm-commercial-handoff.empty > span,
   .crm-commercial-handoff > header > strong,
@@ -561,7 +552,6 @@ html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
 }
 
 html[data-tlink-colour-mode="night"] .trade-portal-shell :is(
-  .crm-pipeline-board button em,
   .crm-task-list li.done span
 ) {
   color: var(--trade-muted);

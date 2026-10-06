@@ -19,6 +19,17 @@ test("Creditex audit page permits only same-origin microphone use and keeps othe
   }
 });
 
+test("Council portal permits its microphone while public Council pages retain the prohibition", () => {
+  for (const path of ["/council", "/council/"]) {
+    const response = secureResponse(new Response("page"), new Request(`https://example.test${path}`));
+    assert.equal(response.headers.get("Permissions-Policy"), "camera=(), geolocation=(), microphone=(self)");
+  }
+  for (const path of ["/council/demo", "/council-other", "/wattzun", "/api/wattzun/voice", "/api/wattzun/portal"]) {
+    const response = secureResponse(new Response("page"), new Request(`https://example.test${path}`));
+    assert.equal(response.headers.get("Permissions-Policy"), "camera=(), geolocation=(), microphone=()");
+  }
+});
+
 test("public pages, neighbouring routes and call APIs retain the microphone prohibition", () => {
   for (const path of ["/", "/account", "/direct-trade/dashboard-elsewhere", "/direct-trade/team/invite", "/direct-trade/messages/elsewhere", "/creditex/compliance-elsewhere", "/api/creditex/audit-calls", "/api/trade-team-calls"]) {
     const response = secureResponse(new Response("page"), new Request(`https://example.test${path}`));

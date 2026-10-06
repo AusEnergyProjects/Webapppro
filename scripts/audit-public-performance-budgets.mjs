@@ -220,10 +220,12 @@ for (const definition of Object.values(routeDefinitions)) {
   for (const [file, token] of definition.boundaries) assertSourceBoundary(file, token);
 }
 
-if (!lazy.dynamicImports?.includes(assistantKey)) {
+const publicAssistantEntryKey = "src/components/LazyPublicEnergyAssistantWidget.tsx";
+const publicAssistantEntry = requireEntry(manifest, publicAssistantEntryKey);
+if (!lazy.dynamicImports?.includes(publicAssistantEntryKey) || !publicAssistantEntry.dynamicImports?.includes(assistantKey)) {
   fail("the root launcher no longer defers the full Surge assistant");
 }
-if (lazy.imports?.includes(assistantKey)) {
+if (collectStaticGraph(manifest, lazyKey).has(assistantKey)) {
   fail("the full Surge assistant returned to the initial root dependency graph");
 }
 if (!assistant.dynamicImports?.includes(adapterKey) || assistant.imports?.includes(adapterKey)) {

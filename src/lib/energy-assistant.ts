@@ -1968,6 +1968,9 @@ function assistantDomainIntent(query: string) {
   if (/\b(?:ignore (?:all |the |your )?(?:(?:previous|system|developer) instructions|energy scope)|system prompt|developer message|jailbreak|prompt injection)\b/i.test(query)) {
     return "blocked" as const;
   }
+  if (/^(?:please\s+)?(?:help(?:\s+me)?(?:\s+please)?|(?:can|could|would) you help(?:\s+me)?|i need (?:some )?help)[.!?\s]*$/i.test(query.trim())) {
+    return "ambiguous" as const;
+  }
   if (/\b(?:recipe|beef stew|bake a cake|cook (?:chicken|pasta|dinner)|ingredients?)\b/i.test(query)) return "blocked" as const;
   if (/\b(?:install(?:ing|ed|ation)?|build(?:ing|built)?|repair(?:ing|ed)?|paint(?:ing|ed)?)\b[^.!?]{0,45}\b(?:fence|letterbox|garden shed)\b|\b(?:fence|letterbox)\b[^.!?]{0,45}\b(?:install(?:ing|ed|ation)?|build(?:ing|built)?|repair(?:ing|ed)?|paint(?:ing|ed)?)\b/i.test(query)) return "blocked" as const;
   if (/\b(?:write|debug|compile|typescript|javascript|python|react|database|algorithm)\b/i.test(query)
@@ -5477,17 +5480,13 @@ export function composeEnergyAssistantAnswer(
   if (domainIntent === "ambiguous" && !namedCertificateIntent) {
     return structured("comfort_fabric", {
       directAnswer:
-        "Which home-energy decision do you mean: comfort, bills, equipment, solar, a rebate, or an authorised trade-platform task? Tell me the outcome you want and I will narrow it down one step at a time.",
+        "Tell me the outcome you need, or share the item you want me to check. I will ask for the details that matter to that task.",
       status: "needs_context",
       citations: [],
       confidence: "low",
-      practicalSteps: ["Name the home, equipment, bill, programme or trade task you are trying to decide."],
+      practicalSteps: [],
       toolActions: [],
-      suggestedQuestions: [
-        "How can I make my home more comfortable?",
-        "Which appliance or tariff is driving my bill?",
-        "What do I need before requesting an upgrade quote?",
-      ],
+      suggestedQuestions: ["What home-energy question or trade task would you like help with?"],
     });
   }
 
@@ -8830,15 +8829,13 @@ export function composeEnergyAssistantAnswer(
     }
     return structured(fallbackTopic, {
       directAnswer:
-        "Tell me the home or trade decision you are trying to make. Useful details are the postcode, property type, owner or renter status, current equipment and the problem you want to solve. I will narrow the answer to current cited sources.",
+        "Tell me the outcome you need, or share the item you want me to check. I will ask for the details that matter to that task.",
       status: "needs_context",
       citations: [],
       confidence: "low",
-      practicalSteps: [
-        "Provide the postcode and property type.",
-        "State whether you own, rent or manage strata property.",
-        "Describe the current equipment and the problem to solve.",
-      ],
+      practicalSteps: [],
+      suggestedQuestions: ["What question or task would you like help with?"],
+      toolActions: [],
     });
   }
 

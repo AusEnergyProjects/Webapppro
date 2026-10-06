@@ -437,6 +437,7 @@ export const tradeWorkOrders = sqliteTable("trade_work_orders", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
+  uniqueIndex("trade_work_orders_sales_owner_id_idx").on(table.firebaseUid, table.id),
   uniqueIndex("trade_work_orders_owner_number_idx").on(table.firebaseUid, table.workNumber),
   uniqueIndex("trade_work_orders_tlink_job_number_idx").on(table.workNumber).where(sql`${table.workNumber} GLOB 'TLJ-*'`),
   index("trade_work_orders_owner_stage_idx").on(table.firebaseUid, table.recordStatus, table.stage, table.updatedAt),
@@ -599,6 +600,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
+  uniqueIndex("trade_team_members_owner_id_idx").on(table.ownerUid, table.id),
   uniqueIndex("trade_team_members_owner_email_idx").on(table.ownerUid, table.email).where(sql`${table.email} <> ''`),
   uniqueIndex("trade_team_members_owner_field_username_idx").on(table.ownerUid, table.fieldUsernameNormalized).where(sql`${table.fieldUsernameNormalized} <> ''`),
   index("trade_team_members_owner_member_idx").on(table.ownerUid, table.memberUid),
@@ -611,6 +613,28 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   check("trade_team_members_permission_editor_check", sql`${table.canEditTeamPermissions} = 0 OR ${table.canManageTeam} = 1`),
   check("trade_team_members_manage_forms_check", sql`${table.canManageForms} IN (0, 1)`),
   check("trade_team_members_customer_qa_notifications_check", sql`${table.canReceiveCustomerQaNotifications} IN (0, 1)`),
+]);
+
+export const tradeSalesSettings = sqliteTable("trade_sales_settings", {
+  ownerUid: text("owner_uid").primaryKey().notNull(), stagesJson: text("stages_json").notNull(),
+  revision: integer("revision").notNull().default(1), updatedAt: text("updated_at").notNull(),
+}, table => [
+  check("trade_sales_settings_stages_check", sql`json_valid(${table.stagesJson}) AND json_type(${table.stagesJson})='array' AND json_array_length(${table.stagesJson}) BETWEEN 1 AND 12`),
+  check("trade_sales_settings_revision_check", sql`${table.revision} >= 1`),
+]);
+
+export const tradeSalesJobMetadata = sqliteTable("trade_sales_job_metadata", {
+  ownerUid: text("owner_uid").notNull(), workOrderId: text("work_order_id").notNull(), stageId: text("stage_id").notNull().default(""),
+  ownerMemberId: text("owner_member_id"), expectedCloseOn: text("expected_close_on").notNull().default(""),
+  lastContactOn: text("last_contact_on").notNull().default(""), nextActionOn: text("next_action_on").notNull().default(""),
+  revision: integer("revision").notNull().default(1), updatedAt: text("updated_at").notNull(),
+}, table => [
+  primaryKey({ columns: [table.ownerUid, table.workOrderId] }),
+  foreignKey({ columns: [table.ownerUid, table.workOrderId], foreignColumns: [tradeWorkOrders.firebaseUid, tradeWorkOrders.id] }).onDelete("restrict"),
+  foreignKey({ columns: [table.ownerUid, table.ownerMemberId], foreignColumns: [tradeTeamMembers.ownerUid, tradeTeamMembers.id] }).onDelete("restrict"),
+  index("trade_sales_job_metadata_stage_idx").on(table.ownerUid, table.stageId, table.workOrderId),
+  index("trade_sales_job_metadata_owner_idx").on(table.ownerUid, table.ownerMemberId, table.nextActionOn, table.workOrderId),
+  check("trade_sales_job_metadata_revision_check", sql`${table.revision} >= 1`),
 ]);
 
 export const tradeTeamMemberFiles = sqliteTable("trade_team_member_files", {
