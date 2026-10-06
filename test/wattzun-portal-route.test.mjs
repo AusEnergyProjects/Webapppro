@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import * as contract from "../src/lib/wattzun-portal.ts";
+import * as greeting from "../src/lib/wattzun-greeting.ts";
 
 class UsageError extends Error {
   constructor(code) { super(`WATTZUN_USAGE_${code.toUpperCase()}`); this.code = code; }
@@ -21,6 +22,7 @@ const source = ts.transpileModule(readFileSync(new URL("../src/lib/wattzun-porta
 const route = {};
 Function("require", "exports", source)(name => {
   if (name === "./wattzun-portal") return contract;
+  if (name === "./wattzun-greeting") return greeting;
   if (name === "./wattzun-portal-access-server") return {
     WattzunAccessError: AccessError,
     wattzunAccessFailure: error => error instanceof AccessError ? { status: error.status, message: error.message }

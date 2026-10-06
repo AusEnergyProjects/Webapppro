@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import * as contract from '../src/lib/wattzun-portal.ts';
+import * as greeting from '../src/lib/wattzun-greeting.ts';
 import { readWattzunVoiceStream } from '../src/lib/wattzun-voice-stream.ts';
 
 class AccessError extends Error {
@@ -17,6 +18,7 @@ const executable = ts.transpileModule(readFileSync(new URL('../src/lib/wattzun-p
 }).outputText;
 Function('require', 'exports', executable)(name => {
   if (name === './wattzun-portal') return contract;
+  if (name === './wattzun-greeting') return greeting;
   if (name === './wattzun-portal-access-server') return {
     WattzunAccessError: AccessError,
     wattzunAccessFailure: error => error instanceof AccessError ? { status: error.status, message: error.message } : null,
@@ -92,7 +94,7 @@ function fixture(options = {}) {
       if(options.providerError) throw options.providerError;
       await context.beforeSpeech(); events.push('nativeSpeech');
       if(options.abortAt==='realtime') controller.abort();
-      return {reply:options.reply||reply,audio:audio.stream,requestSummary:'Prepare a new quote. Customer details are still needed.'};
+      return {reply:options.reply||reply,audio:audio.stream,requestSummary:'Prepare a new quote. Customer details are still needed.',timings:options.timings};
     },
     recordUsage: async value => {
       events.push('recordUsage');
@@ -162,6 +164,67 @@ test('native audio cannot release speech when access is revoked or its usage wri
     const f=fixture(options);const {response}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
     assert.ok(response.status>=400);assert.match(response.headers.get('content-type'),/json/);assert.equal(f.recorded.length,0);
     if(options.revokeAt===3||options.usageError||options.abortAt) assert.equal(f.audio.state.cancelled,1);
+  }
+});
+
+test('native provider timing headers allow only bounded numeric phase measurements',async()=>{
+  const f=fixture({timings:{rt_guard:20.2,rt_connect:120,rt_config:40,rt_proposal:1500,rt_first_argument:1100,
+    rt_validate:1,rt_approval:200,secret:'private value',rt_fake:123,rt_unknown:NaN}});
+  const {response}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.match(response.headers.get('server-timing'),/rt_guard;dur=20.2/);
+  assert.match(response.headers.get('server-timing'),/rt_proposal;dur=1500.0/);
+  assert.doesNotMatch(response.headers.get('server-timing'),/secret|private|fake|unknown|NaN/);await response.body.cancel();
+  for(const duration of [-1,55001,Infinity,'300',null]){
+    const invalid=fixture({timings:{rt_proposal:duration}});const {response}=await invalid.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+    assert.doesNotMatch(response.headers.get('server-timing'),/rt_proposal/);await response.body.cancel();
+  }
+});
+
+function greetingRequest(body={},headers={},signal) {
+  return new Request('https://example.test/api/wattzun/greeting',{method:'POST',signal,
+    headers:{origin:'https://example.test','content-type':'application/json',...headers},
+    body:JSON.stringify({portal:input.portal,scopeId:input.scopeId,requestId:input.requestId,name:'James Preston',preferences:{speed:1.15},...body})});
+}
+
+test('the fixed personalised greeting streams before EOF without transcription, reasoning or question usage',async()=>{
+  const f=fixture();const expected={kind:'answer',message:"Hi James, I'm here. What can I help you with?",questions:[],links:[]};
+  const request=greetingRequest({}, {},f.controller.signal);
+  f.deps.streamSpeak=async context=>{
+    f.events.push('streamSpeak');assert.deepEqual(context.reply,expected);assert.equal(context.input.message,expected.message);
+    assert.deepEqual(context.input.history,[]);assert.equal(context.input.preferences.speed,1.15);assert.equal(context.signal,request.signal);
+    return f.audio.stream;
+  };
+  const response=await route.postWattzunGreeting(request,f.deps);
+  assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.equal(response.headers.get('cache-control'),'private, no-store');
+  assert.deepEqual(f.events,['authenticate','access','streamSpeak','access']);assert.deepEqual(f.recorded,[]);
+  const result=await readWattzunVoiceStream(response,f.controller.signal,value=>JSON.stringify(value)===JSON.stringify(expected));
+  assert.equal(result.transcript,'');assert.equal(result.requestSummary,undefined);
+  const reader=result.audio.stream.getReader(),pending=reader.read();f.audio.push(Uint8Array.from([0,1]));
+  assert.deepEqual((await pending).value,Uint8Array.from([0,1]));assert.equal(f.audio.state.ended,false);
+  f.audio.finish();assert.equal((await reader.read()).done,true);reader.releaseLock();
+  assert.doesNotMatch(response.headers.get('server-timing'),/stt;|llm;|realtime;|usage;|James/);
+});
+
+test('greetings stop before audio disclosure after revocation, scope change, cancellation or provider failure',async()=>{
+  for(const options of [{revokeAt:1},{revokeAt:2},{changed:{...access,actorUid:'another-actor'}},{abort:true},{providerError:true}]){
+    const f=fixture(options);
+    f.deps.streamSpeak=async()=>{
+      f.events.push('streamSpeak');if(options.providerError)throw new Error('provider unavailable');
+      if(options.abort)f.controller.abort();return f.audio.stream;
+    };
+    const response=await route.postWattzunGreeting(greetingRequest({}, {},f.controller.signal),f.deps);
+    assert.ok(response.status>=400);assert.equal((await response.json()).reply,undefined);assert.equal(f.recorded.length,0);
+    if(options.revokeAt===2||options.changed||options.abort)assert.equal(f.audio.state.cancelled,1);
+  }
+});
+
+test('greeting requests reject cross origin, unsupported portal, voice overrides, extra instructions and oversized bodies',async()=>{
+  for(const [body,headers,status] of [[{}, {origin:'https://foreign.test'},403],[{}, {'content-type':'text/plain'},415],
+    [{portal:'customer'}, {},400],[{preferences:{speed:1,voice:'other'}}, {},400],[{message:'arbitrary speech'}, {},400],
+    [{name:'x'.repeat(2100)}, {},413]]){
+    const f=fixture();const response=await route.postWattzunGreeting(greetingRequest(body,headers),f.deps);
+    assert.equal(response.status,status);assert.equal(f.events.includes('streamSpeak'),false);assert.equal(f.recorded.length,0);
   }
 });
 

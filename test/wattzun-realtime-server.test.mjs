@@ -80,7 +80,7 @@ class FixtureSocket extends EventTarget {
 }
 
 function fixture(options = {}) {
-  const reservations = [], calls = [], background = [], timers = new Map();
+  const reservations = [], calls = [], background = [], timers = new Map(), errors = [], infos = [];
   const socket = new FixtureSocket(options);
   let released = 0;
   const cloudflare = { env: { OPENAI_API_KEY: KEY, SURGE_MODEL: "gpt-5.6-sol", SURGE_USAGE_GUARD_SECRET: "fixture-budget-secret", ...options.env },
@@ -103,8 +103,10 @@ function fixture(options = {}) {
   }, { fetch: async (url, init) => {
     calls.push({ url, init });
     return options.fetch ? options.fetch(url, init) : { status: 101, webSocket: socket };
-  }, setTimeout: (callback, delay) => { const id = Symbol(); timers.set(id, { callback, delay }); return id; }, clearTimeout: id => timers.delete(id) });
-  return { ...server, shared, socket, reservations, calls, timers, background, released: () => released,
+  }, performance: options.performance ?? performance,
+  console: { error: (...args) => errors.push(structuredClone(args)), info: (...args) => infos.push(structuredClone(args)) },
+  setTimeout: (callback, delay) => { const id = Symbol(); timers.set(id, { callback, delay }); return id; }, clearTimeout: id => timers.delete(id) });
+  return { ...server, shared, socket, reservations, calls, timers, background, errors, infos, released: () => released,
     expire: () => [...timers.values()].forEach(timer => timer.callback()) };
 }
 
@@ -357,6 +359,125 @@ test("the longest native turn retains bounded history and reserves both output-t
   const chunks = f.socket.sent.filter(event => event.type === "input_audio_buffer.append");
   assert.equal(chunks.length, 45); assert.ok(chunks.every(chunk => Buffer.from(chunk.audio, "base64").length === 48000));
   assert.equal(f.socket.sent.filter(event => event.type === "input_audio_buffer.commit").length, 1);
+});
+
+test("native preparation reports bounded stage timings and measures first arguments without changing the completion gate", async () => {
+  let now = 0, completeProposal;
+  const f = fixture({ performance: { now: () => now += 10 }, receive: (event, socket) => {
+    if (event.type === "session.update") socket.emit({ type: "session.updated", session: event.session });
+    if (event.type !== "response.create") return;
+    const proposal = event.response.output_modalities[0] === "text";
+    socket.emit({ type: "response.created", response: { id: proposal ? "proposal-id" : "speech-id" } });
+    if (proposal) {
+      socket.emit({ type: "response.function_call_arguments.delta", response_id: "private-wrong-id", delta: "private-customer" });
+      socket.emit({ type: "response.function_call_arguments.delta", response_id: "proposal-id", delta: "private-customer" });
+      socket.emit({ type: "response.function_call_arguments.delta", response_id: "proposal-id", delta: "private-customer-again" });
+      completeProposal = () => socket.emit({ type: "response.done", response: { id: "proposal-id", status: "completed", output: [
+        { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ reply: answer, requestSummary: "User asks about Schedule." }) },
+      ] } });
+    }
+  } });
+  let approval = 0, resolved = false;
+  const preparing = f.prepareWattzunRealtimeTurn(request({ beforeSpeech: async () => { approval++; } }));
+  void preparing.then(() => { resolved = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(resolved, false); assert.equal(approval, 0);
+  assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1);
+  completeProposal();
+  const prepared = await preparing;
+  assert.deepEqual(prepared.timings, { rt_guard: 10, rt_connect: 10, rt_config: 10,
+    rt_first_argument: 10, rt_proposal: 20, rt_validate: 10, rt_approval: 10 });
+  assert.deepEqual(f.infos, [["WATTZUN_REALTIME_TURN_READY", { phase: "speech", timings: prepared.timings }]]);
+  assert.doesNotMatch(JSON.stringify(f.infos), /private-|fixture-key|proposal-id|speech-id|Schedule/);
+  assert.equal(f.errors.length, 0); await prepared.audio.cancel();
+});
+
+test("native failure diagnostics identify validation substages using only static enums and structure", async (t) => {
+  const secret = "private-customer-email@example.test-private-address-provider-private-details";
+  const cases = [
+    { substage: "arguments", arguments: `{${secret}`, outer: undefined },
+    { substage: "envelope", arguments: JSON.stringify({ reply: answer, requestSummary: "User asks about Schedule.", [secret]: secret }), outer: 3 },
+    { substage: "reply", arguments: JSON.stringify({ reply: { ...answer, message: `I've sent your quote. ${secret}` }, requestSummary: "User asks about Schedule." }), outer: 2 },
+    { substage: "summary", arguments: JSON.stringify({ reply: answer, requestSummary: `I've sent your quote. ${secret}` }), outer: 2 },
+    { substage: "reply", arguments: JSON.stringify({ reply: [secret], requestSummary: "User asks about Schedule." }), outer: 2 },
+  ];
+  for (const example of cases) await t.test(example.substage, async () => {
+    const f = fixture(example), options = request();
+    options.input.history = [{ role: "user", content: secret }];
+    await assert.rejects(f.prepareWattzunRealtimeTurn(options), safeError);
+    assert.equal(f.errors.length, 1); assert.equal(f.infos.length, 0);
+    const [label, diagnostic] = f.errors[0];
+    assert.equal(label, "WATTZUN_REALTIME_TURN_FAILED");
+    assert.equal(diagnostic.phase, "checking"); assert.equal(diagnostic.substage, example.substage);
+    assert.equal(diagnostic.error, "WORKFLOW_AI_INCOMPLETE");
+    assert.deepEqual(diagnostic.outputKinds, ["function_call"]); assert.equal(diagnostic.outputItemCount, 1);
+    assert.equal(diagnostic.argumentLength, example.arguments.length); assert.equal(diagnostic.outerFieldCount, example.outer);
+    if (diagnostic.replyFieldTypes) assert.deepEqual(diagnostic.replyFieldTypes,
+      { kind: "string", message: "string", questions: "array", linkIds: "array", action: "null", lookup: "null" });
+    assert.doesNotMatch(JSON.stringify(f.errors), /private-|fixture-key|example\.test|proposal-id|speech-id|Schedule|I've sent/);
+    assert.equal(f.released(), 1);
+  });
+});
+
+test("provider errors and incomplete envelopes log only allowlisted error, status, reason and output kinds", async (t) => {
+  for (const provider of [true, false]) await t.test(provider ? "provider error" : "incomplete response", async () => {
+    const f = fixture({ receive: (event, socket) => {
+      if (event.type === "session.update") socket.emit({ type: "session.updated", session: event.session });
+      if (event.type !== "response.create") return;
+      socket.emit({ type: "response.created", response: { id: "private-response-id" } });
+      if (provider) socket.emit({ type: "error", error: { code: "rate_limit_exceeded", message: `${KEY} provider-private-details`, param: "private-address" } });
+      else socket.emit({ type: "response.done", response: { id: "private-response-id", status: "incomplete",
+        status_details: { reason: "max_output_tokens", error: { code: "provider-private-details", message: KEY } },
+        output: [{ type: "private-customer" }, { type: "function_call", name: "private-tool", arguments: "private-data" }] } });
+    } });
+    await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);
+    assert.equal(f.errors.length, 1);
+    const diagnostic = f.errors[0][1];
+    assert.equal(diagnostic.phase, "proposal");
+    assert.equal(diagnostic.providerError, provider ? "rate_limit_exceeded" : "unknown");
+    if (!provider) {
+      assert.equal(diagnostic.substage, "envelope"); assert.equal(diagnostic.responseStatus, "incomplete");
+      assert.equal(diagnostic.responseReason, "max_output_tokens"); assert.equal(diagnostic.outputItemCount, 2);
+      assert.deepEqual(diagnostic.outputKinds, ["unknown", "function_call"]);
+    }
+    assert.doesNotMatch(JSON.stringify(f.errors), /fixture-key|provider-private-details|private-/);
+  });
+});
+
+test("explicit client aborts suppress diagnostic errors while deadlines and streaming failures remain visible once", async (t) => {
+  await t.test("client abort", async () => {
+    const f = fixture({ autoAudio: false }), abort = new AbortController();
+    const prepared = await f.prepareWattzunRealtimeTurn(request({ signal: abort.signal }));
+    const reading = bytes(prepared.audio); abort.abort(); await assert.rejects(reading, safeError);
+    assert.deepEqual(f.errors, []); assert.equal(f.released(), 1);
+  });
+  await t.test("deadline", async () => {
+    const f = fixture({ receive: () => {} });
+    const preparing = f.prepareWattzunRealtimeTurn(request());
+    await new Promise(resolve => setImmediate(resolve)); f.expire(); await assert.rejects(preparing, safeError);
+    assert.equal(f.errors.length, 1); assert.equal(f.errors[0][1].phase, "configuring"); assert.equal(f.released(), 1);
+  });
+  await t.test("streaming PCM", async () => {
+    const f = fixture({ autoAudio: false }), prepared = await f.prepareWattzunRealtimeTurn(request());
+    const reading = bytes(prepared.audio); f.socket.chunk([1]); await assert.rejects(reading, safeError);
+    assert.equal(f.errors.length, 1); assert.equal(f.errors[0][1].phase, "speech");
+    assert.equal(f.errors[0][1].substage, "audio_stream"); assert.equal(f.released(), 1);
+  });
+});
+
+test("preflight and quota denial diagnostics stay structural and timing values are finite and bounded", async () => {
+  const disabled = fixture({ env: { OPENAI_API_KEY: "" } });
+  await assert.rejects(disabled.prepareWattzunRealtimeTurn(request()), safeError);
+  assert.equal(disabled.errors.length, 1); assert.equal(disabled.errors[0][1].phase, "preflight");
+  const denied = fixture({ deny: "global_daily_budget" });
+  await assert.rejects(denied.prepareWattzunRealtimeTurn(request()), safeError);
+  assert.equal(denied.errors.length, 1); assert.equal(denied.errors[0][1].phase, "guard");
+  let now = 0;
+  const bounded = fixture({ performance: { now: () => now += 100000 } });
+  const prepared = await bounded.prepareWattzunRealtimeTurn(request()); await bytes(prepared.audio);
+  assert.ok(Object.values(prepared.timings).every(duration => duration === 55000));
+  assert.equal(prepared.timings.rt_first_argument, undefined);
+  assert.doesNotMatch(JSON.stringify([...disabled.errors, ...denied.errors, ...bounded.infos]), /fixture-key|private-actor|private-business|provider-private-details/);
 });
 
 test("Workers fetch Upgrade provides a server-side socket while the browser receives normal HTTP", async (t) => {

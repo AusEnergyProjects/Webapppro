@@ -7,7 +7,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 // Synthetic port results exercise media ownership only. They do not test a provider call.
 const voiceResult = { ok: true, transcript: "Help with my next step", reply: { kind: "clarification", message: "Which task are you working on?", questions: [], links: [] }, audio: { base64: "AA==", mimeType: "audio/mpeg" } };
 function harness(options = {}) {
-  const state = { now: 0, level: 0, microphoneClosed: 0, microphoneMuted: false, recorderCount: 0, playbackClosed: 0, promptClosed: 0, statuses: [], submits: [], replies: [], timers: new Set(), recorders: [], players: [], prompts: [] };
+  const state = { now: 0, level: 0, microphoneRequested: 0, microphoneClosed: 0, microphoneMuted: false, recorderCount: 0, playbackClosed: 0, promptClosed: 0, statuses: [], submits: [], replies: [], greetings: [], timers: new Set(), recorders: [], players: [], prompts: [] };
   const microphone = {
     recorder() {
       state.recorderCount++;
@@ -23,28 +23,142 @@ function harness(options = {}) {
   const environment = {
     now: () => state.now,
     repeat(callback) { state.timers.add(callback); return () => state.timers.delete(callback); },
-    microphone: () => options.permission ? options.permission.promise : Promise.resolve(microphone),
+    microphone: () => { state.microphoneRequested++; return options.permission ? options.permission.promise : Promise.resolve(microphone); },
     prompt(message) {
       if (!options.localPrompt) return null;
       const prompt = { message, onEnd() {}, onError() {}, play: () => options.promptError ? Promise.reject(new Error('device speech unavailable')) : Promise.resolve(), close: () => state.promptClosed++ };
       state.prompts.push(prompt); return prompt;
     },
     playback(audio) {
+      if (options.playbackFactoryError) throw new Error("audio device unavailable");
       const player = { audio, onEnd() {}, onError() {}, play: () => options.playbackError ? Promise.reject(new Error("playback blocked")) : options.playbackWait?.promise || Promise.resolve(), close: () => { state.playbackClosed++; } };
       state.players.push(player); return player;
     },
   };
-  const call = new WattzunVoiceCall(environment, {
-    status: value => state.statuses.push(value),
+  const callbacks = {
+    status: value => { state.statuses.push(value); options.onStatus?.(value); },
     submit(audio, signal) { state.submits.push({ audio, signal }); return options.request ? options.request.promise : Promise.resolve(voiceResult); },
     reply: result => { state.replies.push(result); options.onReply?.(result); },
-  });
+  };
+  if (options.greeting) callbacks.greeting = signal => { state.greetings.push({ signal }); return typeof options.greeting === "function" ? options.greeting(signal) : options.greeting.promise; };
+  const call = new WattzunVoiceCall(environment, callbacks);
   return { call, state, microphone,
     sample(milliseconds, level = 0) { state.now += milliseconds; state.level = level; for (const callback of [...state.timers]) callback(); },
     speak() { for (let index = 0; index < 4; index++) this.sample(100, .1); this.sample(700, 0); },
     status: () => state.statuses.at(-1)?.state,
   };
 }
+
+function greetingPcm() {
+  const state = { cancelled: 0 }, audio = { mimeType: "audio/pcm", stream: new ReadableStream({ cancel() { state.cancelled++; } }) };
+  return { state, audio };
+}
+test("greeting and microphone opening run concurrently, play without a chat turn, then begin listening", async () => {
+  const permission = deferred(), greeting = deferred(), pcm = greetingPcm(), h = harness({ permission, greeting, localPrompt: true });
+  const started = h.call.start(); assert.equal(h.state.greetings.length, 1); assert.equal(h.state.microphoneRequested, 1);
+  greeting.resolve(pcm.audio); await tick(); assert.equal(h.status(), "permission"); assert.equal(h.state.players.length, 0);
+  permission.resolve(h.microphone); await started; assert.equal(h.status(), "speaking"); assert.equal(h.state.microphoneMuted, true);
+  assert.equal(h.state.recorderCount, 0); assert.equal(h.state.players[0].audio, pcm.audio); assert.equal(h.state.timers.size, 1);
+  assert.equal(h.state.submits.length, 0); assert.equal(h.state.replies.length, 0); assert.equal(h.state.prompts.length, 0);
+  h.sample(180000, .2); assert.equal(h.status(), "speaking"); assert.equal(h.state.submits.length, 0);
+  h.state.players[0].onEnd(); assert.equal(h.status(), "listening"); assert.equal(h.state.recorderCount, 1); assert.equal(h.state.microphoneMuted, false);
+  await h.call.start(); assert.equal(h.state.greetings.length, 1); h.sample(89999); assert.equal(h.status(), "listening"); h.call.dispose();
+});
+test("a ready microphone stays connecting and never records while greeting audio is pending", async () => {
+  const greeting = deferred(), h = harness({ greeting }), started = h.call.start(); await tick();
+  assert.equal(h.status(), "connecting"); assert.equal(h.state.microphoneMuted, true); assert.equal(h.state.recorderCount, 0);
+  h.speak(); h.sample(180000); assert.equal(h.status(), "connecting"); assert.equal(h.state.submits.length, 0);
+  greeting.resolve(voiceResult.audio); await started; assert.equal(h.status(), "speaking"); h.call.dispose();
+});
+test("hang-up aborts a pending greeting and releases a late microphone and unused PCM audio", async () => {
+  const permission = deferred(), greeting = deferred(), pcm = greetingPcm(), h = harness({ permission, greeting }), started = h.call.start();
+  h.call.hangUp(); assert.equal(h.state.greetings[0].signal.aborted, true);
+  greeting.resolve(pcm.audio); await tick(); assert.equal(pcm.state.cancelled, 1);
+  permission.resolve(h.microphone); await started; assert.equal(h.status(), "ended"); assert.equal(h.state.microphoneClosed, 1);
+  assert.equal(h.state.players.length, 0); assert.equal(h.state.recorderCount, 0); assert.equal(h.state.timers.size, 0);
+});
+test("hang-up cancels greeting PCM already received while microphone permission is still pending", async () => {
+  const permission = deferred(), greeting = deferred(), pcm = greetingPcm(), h = harness({ permission, greeting }), started = h.call.start();
+  greeting.resolve(pcm.audio); await tick(); h.call.hangUp(); await tick(); assert.equal(pcm.state.cancelled, 1);
+  permission.resolve(h.microphone); await started; assert.equal(pcm.state.cancelled, 1); assert.equal(h.state.microphoneClosed, 1); assert.equal(h.status(), "ended");
+});
+test("microphone denial aborts the greeting and discards audio received before permission failed", async () => {
+  const permission = deferred(), greeting = deferred(), pcm = greetingPcm(), h = harness({ permission, greeting }), started = h.call.start();
+  greeting.resolve(pcm.audio); await tick(); permission.reject(new Error("Microphone permission was denied.")); await started; await tick();
+  assert.equal(h.status(), "error"); assert.match(h.state.statuses.at(-1).message, /permission/); assert.equal(h.state.greetings[0].signal.aborted, true);
+  assert.equal(pcm.state.cancelled, 1); assert.equal(h.state.players.length, 0); assert.equal(h.state.submits.length, 0);
+});
+test("a greeting request rejection fails immediately even while microphone permission is unresolved", async () => {
+  const permission = deferred(), greeting = deferred(), h = harness({ permission, greeting }), started = h.call.start();
+  greeting.reject(new Error("unavailable")); await tick(); assert.equal(h.status(), "error"); assert.match(h.state.statuses.at(-1).message, /greeting could not be completed/);
+  assert.equal(h.state.greetings[0].signal.aborted, true); permission.resolve(h.microphone); await started;
+  assert.equal(h.state.microphoneClosed, 1); assert.equal(h.state.players.length, 0); assert.equal(h.state.recorderCount, 0);
+});
+test("a synchronously throwing greeting callback is handled without an unhandled request rejection", async () => {
+  const h = harness({ greeting: () => { throw new Error("unavailable"); } }); await h.call.start();
+  assert.equal(h.status(), "error"); assert.equal(h.state.microphoneClosed, 1); assert.equal(h.state.players.length, 0); assert.equal(h.state.timers.size, 0);
+});
+test("greeting playback failure ends the call with a clear error and no capture, submit or chat reply", async () => {
+  const greeting = deferred(), h = harness({ greeting, playbackError: true }), started = h.call.start(); greeting.resolve(voiceResult.audio); await started;
+  assert.equal(h.status(), "error"); assert.match(h.state.statuses.at(-1).message, /greeting could not play/);
+  assert.equal(h.state.microphoneClosed, 1); assert.equal(h.state.playbackClosed, 1); assert.equal(h.state.recorderCount, 0);
+  assert.equal(h.state.submits.length, 0); assert.equal(h.state.replies.length, 0); assert.equal(h.state.timers.size, 0);
+});
+test("an unavailable playback device releases unused PCM for both greeting and answer audio", async () => {
+  for (const isGreeting of [true, false]) {
+    const pcm = greetingPcm(), request = deferred(), options = { playbackFactoryError: true, ...(isGreeting ? { greeting: request } : { request }) }, h = harness(options);
+    const started = h.call.start();
+    if (isGreeting) { request.resolve(pcm.audio); await started; }
+    else { await started; h.speak(); request.resolve({ ...voiceResult, audio: pcm.audio }); await tick(); }
+    await tick(); assert.equal(h.status(), "error"); assert.equal(pcm.state.cancelled, 1); assert.equal(h.state.players.length, 0);
+    assert.equal(h.state.microphoneClosed, 1); assert.match(h.state.statuses.at(-1).message, /audio could not play|greeting could not play/);
+  }
+});
+test("a later greeting stream error cannot revive listening through a stale playback end", async () => {
+  const greeting = deferred(), h = harness({ greeting }), started = h.call.start(); greeting.resolve(voiceResult.audio); await started;
+  const player = h.state.players[0]; player.onError(); player.onEnd();
+  assert.equal(h.status(), "error"); assert.equal(h.state.microphoneClosed, 1); assert.equal(h.state.playbackClosed, 1); assert.equal(h.state.recorderCount, 0);
+});
+test("interrupting greeting startup starts listening and ignores a late playback resolve or rejection", async () => {
+  for (const reject of [false, true]) {
+    const greeting = deferred(), playbackWait = deferred(), h = harness({ greeting, playbackWait }), started = h.call.start(); greeting.resolve(voiceResult.audio); await tick();
+    assert.equal(h.status(), "connecting"); h.call.interrupt(); assert.equal(h.status(), "listening"); assert.equal(h.state.recorderCount, 1);
+    if (reject) playbackWait.reject(new Error("interrupted")); else playbackWait.resolve();
+    await started; assert.equal(h.status(), "listening"); h.state.players[0].onEnd(); h.state.players[0].onError();
+    assert.equal(h.state.recorderCount, 1); assert.equal(h.state.playbackClosed, 1); h.call.dispose();
+  }
+});
+test("greeting ending before startup settles begins capture once and cannot return to speaking", async () => {
+  const greeting = deferred(), playbackWait = deferred(), h = harness({ greeting, playbackWait }), started = h.call.start(); greeting.resolve(voiceResult.audio); await tick();
+  h.state.players[0].onEnd(); assert.equal(h.status(), "listening"); playbackWait.resolve(); await started;
+  assert.equal(h.status(), "listening"); assert.equal(h.state.recorderCount, 1); assert.equal(h.state.playbackClosed, 1); h.call.dispose();
+});
+test("muting while greeting is pending discards audio and waits for explicit unmute before capturing", async () => {
+  const greeting = deferred(), pcm = greetingPcm(), h = harness({ greeting }), started = h.call.start(); await tick(); h.call.toggleMute();
+  greeting.resolve(pcm.audio); await started; await tick(); assert.equal(h.status(), "muted"); assert.equal(pcm.state.cancelled, 1);
+  assert.equal(h.state.players.length, 0); assert.equal(h.state.recorderCount, 0); assert.equal(h.state.microphoneMuted, true);
+  h.call.toggleMute(); assert.equal(h.status(), "listening"); assert.equal(h.state.recorderCount, 1); h.call.dispose();
+});
+test("muting during the greeting preserves the choice at greeting end and Stop speaking", async () => {
+  for (const interrupt of [false, true]) {
+    const greeting = deferred(), h = harness({ greeting }), started = h.call.start(); greeting.resolve(voiceResult.audio); await started; h.call.toggleMute();
+    if (interrupt) h.call.interrupt(); else h.state.players[0].onEnd();
+    assert.equal(h.status(), "muted"); assert.equal(h.state.recorderCount, 0); assert.equal(h.state.microphoneMuted, true);
+    h.call.toggleMute(); assert.equal(h.status(), "listening"); assert.equal(h.state.recorderCount, 1); h.call.dispose();
+  }
+});
+test("hang-up during greeting startup prevents all late events from changing the ended call", async () => {
+  const greeting = deferred(), playbackWait = deferred(), h = harness({ greeting, playbackWait }), started = h.call.start(); greeting.resolve(voiceResult.audio); await tick();
+  h.call.hangUp(); playbackWait.resolve(); await started; h.state.players[0].onEnd(); h.state.players[0].onError();
+  assert.equal(h.status(), "ended"); assert.equal(h.state.playbackClosed, 1); assert.equal(h.state.microphoneClosed, 1);
+  assert.equal(h.state.recorderCount, 0); assert.equal(h.state.timers.size, 0);
+});
+test("a workspace cancellation from connection status releases the microphone and leaves no idle timer", async () => {
+  const greeting = deferred(), options = { greeting }, h = harness(options); options.onStatus = value => { if (value.state === "connecting") h.call.dispose(); };
+  const started = h.call.start(); await started; const pcm = greetingPcm(); greeting.resolve(pcm.audio); await tick();
+  assert.equal(h.state.greetings[0].signal.aborted, true); assert.equal(pcm.state.cancelled, 1); assert.equal(h.state.microphoneClosed, 1);
+  assert.equal(h.state.timers.size, 0); assert.equal(h.state.players.length, 0); assert.equal(h.state.recorderCount, 0);
+});
 
 test("speech detection ignores a short click and sends sustained speech after silence", () => {
   const detector = new WattzunSpeechWindow(0);

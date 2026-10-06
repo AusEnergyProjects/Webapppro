@@ -20,12 +20,108 @@ const SPEECH_TOKENS = 2_048;
 const MAX_FRAME_CHARACTERS = 256_000;
 type RealtimeSocket = Pick<WorkersWebSocket, "accept" | "send" | "close" | "addEventListener" | "removeEventListener">;
 type RealtimeEvent = Record<string, unknown> & { type: string };
+export type WattzunRealtimeTimings = Partial<Record<
+  "rt_guard" | "rt_connect" | "rt_config" | "rt_proposal" | "rt_validate" | "rt_approval" | "rt_first_argument", number
+>>;
 export type PreparedWattzunRealtimeTurn = {
   reply: WattzunReply;
   requestSummary: string;
   audio: ReadableStream<Uint8Array>;
   transcript?: string;
+  timings?: WattzunRealtimeTimings;
 };
+type NativeTurnOptions = PortalRequest & { audio: Blob; beforeSpeech: () => Promise<void> };
+type DiagnosticPhase = "preflight" | "guard" | "connect" | "configuring" | "proposal" | "checking" | "approval" | "speech";
+type DiagnosticSubstage = "configuration" | "audio" | "budget" | "upgrade" | "session" | "input" | "envelope" | "output" | "arguments" | "reply" | "summary" | "approval" | "audio_stream";
+type DiagnosticValueType = "missing" | "null" | "array" | "object" | "string" | "number" | "boolean" | "unknown";
+type DiagnosticStructure = {
+  outputItemCount?: number;
+  outputKinds?: string[];
+  argumentLength?: number;
+  outerFieldCount?: number;
+  replyFieldCount?: number;
+  replyType?: DiagnosticValueType;
+  replyFieldTypes?: Partial<Record<"kind" | "message" | "questions" | "linkIds" | "action" | "lookup", DiagnosticValueType>>;
+  requestSummaryType?: DiagnosticValueType;
+  requestSummaryLength?: number;
+  responseStatus?: string;
+  responseReason?: string;
+};
+type TurnDiagnostic = {
+  phase: DiagnosticPhase;
+  substage: DiagnosticSubstage;
+  providerError?: string;
+  structure: DiagnosticStructure;
+  timings: WattzunRealtimeTimings;
+  duration: (key: keyof WattzunRealtimeTimings, started: number) => void;
+  failure: (error: unknown) => void;
+};
+
+function valueType(value: unknown): DiagnosticValueType {
+  if (value === undefined) return "missing";
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  const type = typeof value;
+  return type === "object" || type === "string" || type === "number" || type === "boolean" ? type : "unknown";
+}
+function allowedValue(value: unknown, allowed: readonly string[]): string {
+  return typeof value === "string" && allowed.includes(value) ? value : "unknown";
+}
+function providerErrorEnum(raw: unknown): string {
+  return allowedValue(record(raw) ? raw.code ?? raw.type : undefined, [
+    "invalid_request_error", "server_error", "rate_limit_exceeded", "insufficient_quota", "invalid_api_key",
+    "authentication_error", "permission_denied", "session_expired", "invalid_value", "invalid_parameter",
+    "missing_required_parameter", "unknown_parameter", "response_in_progress",
+  ]);
+}
+function captureResponseStructure(diagnostic: TurnDiagnostic, raw: unknown) {
+  if (!record(raw)) return;
+  diagnostic.structure.responseStatus = allowedValue(raw.status, ["completed", "cancelled", "incomplete", "failed", "in_progress"]);
+  if (record(raw.status_details)) {
+    diagnostic.structure.responseReason = allowedValue(raw.status_details.reason, ["turn_detected", "client_cancelled", "max_output_tokens", "content_filter"]);
+    if (raw.status_details.error) diagnostic.providerError = providerErrorEnum(raw.status_details.error);
+  }
+  if (Array.isArray(raw.output)) {
+    diagnostic.structure.outputItemCount = Math.min(raw.output.length, 4_096);
+    diagnostic.structure.outputKinds = raw.output.slice(0, 4).map(item => allowedValue(record(item) ? item.type : undefined,
+      ["function_call", "message", "function_call_output"]));
+  }
+}
+function captureArgumentStructure(diagnostic: TurnDiagnostic, raw: unknown) {
+  if (!record(raw)) return;
+  diagnostic.structure.outerFieldCount = Object.keys(raw).length;
+  diagnostic.structure.replyType = valueType(raw.reply);
+  diagnostic.structure.requestSummaryType = valueType(raw.requestSummary);
+  if (typeof raw.requestSummary === "string") diagnostic.structure.requestSummaryLength = raw.requestSummary.length;
+  if (record(raw.reply)) {
+    diagnostic.structure.replyFieldCount = Object.keys(raw.reply).length;
+    diagnostic.structure.replyFieldTypes = {};
+    for (const field of ["kind", "message", "questions", "linkIds", "action", "lookup"] as const) {
+      diagnostic.structure.replyFieldTypes[field] = valueType(raw.reply[field]);
+    }
+  }
+}
+
+function turnDiagnostic(signal?: AbortSignal): TurnDiagnostic {
+  let logged = false;
+  const diagnostic: TurnDiagnostic = {
+    phase: "preflight", substage: "configuration", structure: {}, timings: {},
+    duration(key, started) {
+      const duration = performance.now() - started;
+      if (Number.isFinite(duration)) diagnostic.timings[key] = Math.min(TIMEOUT_MS, Math.max(0, duration));
+    },
+    failure(error) {
+      if (logged || signal?.aborted) return;
+      logged = true;
+      console.error("WATTZUN_REALTIME_TURN_FAILED", {
+        phase: diagnostic.phase, substage: diagnostic.substage, error: safeError(error).message,
+        ...(diagnostic.providerError ? { providerError: diagnostic.providerError } : {}),
+        ...diagnostic.structure, timings: { ...diagnostic.timings },
+      });
+    },
+  };
+  return diagnostic;
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -74,14 +170,21 @@ async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T
 
 /** Resolves after validation/access approval and the speech request without awaiting audio. */
 export async function prepareWattzunRealtimeTurn(
-  options: PortalRequest & { audio: Blob; beforeSpeech: () => Promise<void> },
+  options: NativeTurnOptions,
 ): Promise<PreparedWattzunRealtimeTurn> {
+  const diagnostic = turnDiagnostic(options.signal);
+  try { return await prepareNativeTurn(options, diagnostic); }
+  catch (error) { diagnostic.failure(error); throw error; }
+}
+
+async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDiagnostic): Promise<PreparedWattzunRealtimeTurn> {
   const contract = createWattzunPortalReplyContract(options);
   const instructions = `${contract.instructions}\nThe function result wraps the requested reply in reply and includes requestSummary. requestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output.`;
   const schema = { type: "object", additionalProperties: false, required: ["reply", "requestSummary"],
     properties: { reply: contract.schema, requestSummary: { type: "string", minLength: 1, maxLength: 1_800 } } };
   const preferences = parseWattzunPreferences(options.input.preferences);
   const { key, guardEnv } = wattzunPortalProviderConfiguration(options);
+  diagnostic.substage = "audio";
   const pcm = await readPcm(options.audio, options.signal);
   const context = JSON.stringify(contract.input);
   const promptBytes = new TextEncoder().encode(instructions + JSON.stringify(schema) + context).byteLength;
@@ -95,11 +198,14 @@ export async function prepareWattzunRealtimeTurn(
   const estimatedMicroUsd = Math.ceil((textInputTokens * 0.6 + inputAudioTokens * 10
     + PROPOSAL_TOKENS * 2.4 + SPEECH_TOKENS * 20) * 1.25);
   const guard = createSharedSurgeUsageGuard({ env: guardEnv, getDatabase: () => options.db });
+  diagnostic.phase = "guard"; diagnostic.substage = "budget";
+  const guardStarted = performance.now();
   const reservation = await guard.reserve({
     clientKey: await workflowAiSourceHash(["workflow-actor", options.actorUid]),
     networkKey: await workflowAiSourceHash(["workflow-business", `${options.scope.portal}:${options.scope.scopeId}`]),
     requestKey: `${options.input.requestId}:rt`, estimatedMicroUsd,
   });
+  diagnostic.duration("rt_guard", guardStarted);
   if (!reservation.allowed) throw new Error(["configuration", "unavailable"].includes(reservation.reason)
     ? "WORKFLOW_AI_UNAVAILABLE" : "WORKFLOW_AI_LIMIT");
 
@@ -109,6 +215,7 @@ export async function prepareWattzunRealtimeTurn(
   let socket: RealtimeSocket | undefined, socketAccepted = false, socketClosed = false, closed = false;
   let phase: "configuring" | "proposal" | "checking" | "speech" = "configuring";
   let responseId: string | undefined, totalCharacters = 0, events = 0, audioBytes = 0, audioDone = false;
+  let proposalStarted: number | undefined;
   let resolvePhase: ((event: RealtimeEvent) => void) | undefined;
   let rejectPhase: ((error: Error) => void) | undefined;
   let approvalFailure: { error: unknown } | undefined;
@@ -132,6 +239,7 @@ export async function prepareWattzunRealtimeTurn(
     closeSocket();
     if (error !== undefined) {
       const safe = safeError(error);
+      diagnostic.failure(safe);
       rejectPhase?.(safe);
       output?.error(safe);
       cancelled.abort();
@@ -165,12 +273,19 @@ export async function prepareWattzunRealtimeTurn(
       const raw: unknown = JSON.parse(message.data);
       if (!record(raw) || typeof raw.type !== "string") incomplete();
       const event: RealtimeEvent = { ...raw, type: raw.type };
-      if (event.type === "error") throw new Error("WORKFLOW_AI_UNAVAILABLE");
+      if (event.type === "error") {
+        diagnostic.providerError = providerErrorEnum(event.error);
+        throw new Error("WORKFLOW_AI_UNAVAILABLE");
+      }
       if (event.type === "session.updated" && phase === "configuring") { completePhase(event); return; }
       if (event.type === "response.created") {
         if ((phase !== "proposal" && phase !== "speech") || responseId || !record(event.response)
           || typeof event.response.id !== "string" || !event.response.id) incomplete();
         responseId = event.response.id;
+      }
+      if (event.type === "response.function_call_arguments.delta" && phase === "proposal"
+        && responseId && event.response_id === responseId && proposalStarted !== undefined && diagnostic.timings.rt_first_argument === undefined) {
+        diagnostic.duration("rt_first_argument", proposalStarted);
       }
       if (event.type === "response.output_audio.delta" || event.type === "response.output_audio.done") {
         if (phase !== "speech" || !responseId || event.response_id !== responseId || !output || audioDone) incomplete();
@@ -181,6 +296,8 @@ export async function prepareWattzunRealtimeTurn(
         output.enqueue(bytes);
       }
       if (event.type === "response.done") {
+        diagnostic.substage = "envelope";
+        captureResponseStructure(diagnostic, event.response);
         if (!record(event.response) || !responseId || event.response.id !== responseId || event.response.status !== "completed") incomplete();
         if (phase === "proposal") { phase = "checking"; completePhase(event); return; }
         if (phase !== "speech" || !audioBytes || !audioDone || !output || !Array.isArray(event.response.output)
@@ -195,6 +312,8 @@ export async function prepareWattzunRealtimeTurn(
   signal.addEventListener("abort", onAbort, { once: true });
   try {
     signal.throwIfAborted();
+    diagnostic.phase = "connect"; diagnostic.substage = "upgrade";
+    const connectStarted = performance.now();
     const connecting = fetch(`https://api.openai.com/v1/realtime?model=${MODEL}`, {
       headers: { Upgrade: "websocket", Authorization: `Bearer ${key}` }, signal,
     }).then(response => {
@@ -220,7 +339,10 @@ export async function prepareWattzunRealtimeTurn(
     socket.addEventListener("error", onError);
     socket.addEventListener("close", onClose);
     socket.accept(); socketAccepted = true;
+    diagnostic.duration("rt_connect", connectStarted);
+    diagnostic.phase = "configuring"; diagnostic.substage = "session";
     const configured = waitForPhase();
+    const configStarted = performance.now();
     send({ type: "session.update", session: {
       type: "realtime", model: MODEL, instructions, output_modalities: ["text"],
       audio: { input: { format: { type: "audio/pcm", rate: 24_000 }, transcription: null, turn_detection: null },
@@ -230,6 +352,7 @@ export async function prepareWattzunRealtimeTurn(
       tool_choice: { type: "function", name: TOOL },
     } });
     const configuration = await configured;
+    diagnostic.duration("rt_config", configStarted);
     const session = configuration.session;
     if (!record(session) || session.type !== "realtime" || !Array.isArray(session.output_modalities)
       || session.output_modalities.length !== 1 || session.output_modalities[0] !== "text"
@@ -239,43 +362,62 @@ export async function prepareWattzunRealtimeTurn(
       || (session.audio.output.format.rate ?? 24_000) !== 24_000 || session.audio.output.voice !== WATTZUN_BRAND_VOICE
       || (session.audio.output.speed ?? 1) !== preferences.speed || session.audio.input.turn_detection !== null) incomplete();
     phase = "proposal";
+    diagnostic.phase = "proposal"; diagnostic.substage = "input";
     send({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text: context }] } });
     for (let offset = 0; offset < pcm.byteLength; offset += 48_000) {
       send({ type: "input_audio_buffer.append", audio: Buffer.from(pcm.subarray(offset, offset + 48_000)).toString("base64") });
     }
     send({ type: "input_audio_buffer.commit" });
     const proposed = waitForPhase();
+    diagnostic.substage = "output";
+    proposalStarted = performance.now();
     send({ type: "response.create", response: { output_modalities: ["text"], tool_choice: { type: "function", name: TOOL },
       max_output_tokens: PROPOSAL_TOKENS, metadata: { phase: "proposal" } } });
     const event = await proposed;
+    diagnostic.duration("rt_proposal", proposalStarted);
+    diagnostic.phase = "checking"; diagnostic.substage = "output";
+    const validateStarted = performance.now();
     if (!record(event.response) || !Array.isArray(event.response.output) || event.response.output.length !== 1) incomplete();
     const item: unknown = event.response.output[0];
+    if (record(item) && typeof item.arguments === "string") diagnostic.structure.argumentLength = item.arguments.length;
     if (!record(item) || item.type !== "function_call" || item.name !== TOOL || typeof item.arguments !== "string"
       || item.arguments.length > 18_000) incomplete();
+    diagnostic.substage = "arguments";
     const raw: unknown = JSON.parse(item.arguments);
+    captureArgumentStructure(diagnostic, raw);
+    diagnostic.substage = "envelope";
     if (!record(raw) || Object.keys(raw).length !== 2 || !Object.hasOwn(raw, "reply") || !Object.hasOwn(raw, "requestSummary")) incomplete();
+    diagnostic.substage = "reply";
     const reply = contract.validate(raw.reply);
     // Apply the same bounded text and false-completion/source-access checks to
     // memory. It remains an explicitly unconfirmed interpretation of the input.
+    diagnostic.substage = "summary";
     const requestSummary = contract.validate({ kind: "answer", message: raw.requestSummary,
       questions: [], linkIds: [], action: null, lookup: null }).message;
+    diagnostic.duration("rt_validate", validateStarted);
     signal.throwIfAborted();
+    diagnostic.phase = "approval"; diagnostic.substage = "approval";
+    const approvalStarted = performance.now();
     try { await abortable(options.beforeSpeech(), signal); }
     catch (error) { approvalFailure = { error }; throw error; }
+    finally { diagnostic.duration("rt_approval", approvalStarted); }
     signal.throwIfAborted();
     const audio = new ReadableStream<Uint8Array>({
       start(controller) { output = controller; },
       cancel() { close(); },
     }, { highWaterMark: 0 });
     phase = "speech"; responseId = undefined;
+    diagnostic.phase = "speech"; diagnostic.substage = "audio_stream";
     send({ type: "response.create", response: {
       conversation: "none", output_modalities: ["audio"], instructions: WATTZUN_SPEECH_INSTRUCTIONS,
       input: [{ type: "message", role: "user", content: [{ type: "input_text", text: wattzunSpokenReply(reply) }] }],
       tools: [], tool_choice: "none", max_output_tokens: SPEECH_TOKENS, reasoning: { effort: "minimal" }, metadata: { phase: "speech" },
     } });
-    return { reply, requestSummary, audio };
+    const timings = { ...diagnostic.timings };
+    console.info("WATTZUN_REALTIME_TURN_READY", { phase: "speech", timings });
+    return { reply, requestSummary, audio, timings };
   } catch (error) {
-    close(error);
+    close(error instanceof SyntaxError ? new Error("WORKFLOW_AI_INCOMPLETE") : error);
     // The trusted route hook owns access errors and their HTTP status. Provider
     // failures stay sanitized; hook errors retain their authoritative identity.
     if (approvalFailure && approvalFailure.error === error) throw error;

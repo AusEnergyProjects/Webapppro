@@ -246,6 +246,15 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     setMuted(false); setError("");
     const call = new WattzunVoiceCall(createWattzunBrowserVoiceEnvironment(), {
       status: status => { if (active.current && voiceCall.current === call) setCallStatus(status); },
+      async greeting(signal) {
+        const token = await user.getIdToken();
+        if (signal.aborted) throw new Error("Call ended.");
+        const result = await readWattzunVoiceStream(await fetch("/api/wattzun/greeting", { method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ portal: scope.portal, scopeId: scope.scopeId, requestId: crypto.randomUUID(),
+            name: user.displayName || "", preferences: { ...preferencesRef.current } }), signal }), signal, isReply);
+        return result.audio;
+      },
       async submit(audio, signal) {
         const input = requestInput("");
         const token = await user.getIdToken();

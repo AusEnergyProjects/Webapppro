@@ -61,6 +61,7 @@ type VoiceCallbacks = {
   status: (status: WattzunCallStatus) => void;
   submit: (audio: Blob, signal: AbortSignal) => Promise<WattzunVoiceResult>;
   reply: (result: WattzunVoiceResult) => void;
+  greeting?: (signal: AbortSignal) => Promise<WattzunVoiceResult["audio"]>;
 };
 
 /** Owns one call's media and cancellation. The UI supplies the authorised request. */
@@ -92,19 +93,56 @@ export class WattzunVoiceCall {
     this.muted = false;
     const generation = ++this.generation;
     this.update("permission", "Allow your microphone to speak to Wattzun.");
+    if (!this.active || generation !== this.generation) return;
+    const greetingCallback = this.callbacks.greeting;
+    const pending = greetingCallback ? new AbortController() : null;
+    let greetingAudio: WattzunVoiceResult["audio"] | null = null;
+    const discardGreeting = () => {
+      const audio = greetingAudio;
+      greetingAudio = null;
+      if (audio?.mimeType === "audio/pcm") void audio.stream.cancel().catch(() => {});
+    };
+    if (pending) {
+      this.pending = pending;
+      pending.signal.addEventListener("abort", discardGreeting, { once: true });
+    }
+    const greeting = greetingCallback && pending ? (async () => greetingCallback(pending.signal))().then(audio => {
+      if (!this.active || generation !== this.generation || pending.signal.aborted) {
+        if (audio.mimeType === "audio/pcm") void audio.stream.cancel().catch(() => {});
+        return null;
+      }
+      greetingAudio = audio;
+      return audio;
+    }, () => {
+      if (this.active && generation === this.generation && !pending.signal.aborted) this.fail("Wattzun's greeting could not be completed. Start the call again.");
+      return null;
+    }) : null;
     try {
       const microphone = await this.environment.microphone();
       // Permission dialogs may resolve after the user closed or changed workspaces.
       if (!this.active || generation !== this.generation) { microphone.close(); return; }
       this.microphone = microphone;
       this.update("connecting");
+      if (!this.active || generation !== this.generation) return;
       this.lastInteraction = this.environment.now();
       this.stopIdleWatch = this.environment.repeat(() => this.checkIdle(), 1000);
-      this.listen();
+      if (!greeting) { this.listen(); return; }
+      microphone.mute(true);
+      const audio = await greeting;
+      if (!this.active || generation !== this.generation || pending?.signal.aborted) return;
+      if (this.pending === pending) this.pending = null;
+      if (this.muted) { this.update("muted"); return; }
+      greetingAudio = null;
+      if (!audio) { this.fail("Wattzun's greeting could not be completed. Start the call again."); return; }
+      await this.playAudio(audio, generation, "Wattzun's greeting could not play. Start the call again.");
     } catch (error) {
       if (!this.active || generation !== this.generation) return;
       const message = error instanceof Error ? error.message : "Your microphone could not be opened.";
       this.fail(message);
+    } finally {
+      pending?.signal.removeEventListener("abort", discardGreeting);
+      discardGreeting();
+      if (this.pending === pending) this.pending = null;
     }
   }
   private checkIdle() {
@@ -224,19 +262,8 @@ export class WattzunVoiceCall {
       this.callbacks.reply(result);
       if (!this.active || generation !== this.generation || pending.signal.aborted) return;
       if (this.muted) { this.lastInteraction = this.environment.now(); this.update("muted"); return; }
-      const playback = this.environment.playback(result.audio);
       unplayedAudio = null;
-      this.playback = playback;
-      const finish = () => {
-        if (this.playback !== playback || !this.active || generation !== this.generation) return;
-        playback.close();
-        this.playback = null;
-        if (this.muted) { this.lastInteraction = this.environment.now(); this.update("muted"); } else this.listen();
-      };
-      playback.onEnd = finish;
-      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.fail("Wattzun replied in chat, but the audio could not play. Start the call again."); };
-      await playback.play().catch(error => { if (this.playback === playback) throw error; });
-      if (this.playback === playback && this.active && generation === this.generation) this.update("speaking");
+      await this.playAudio(result.audio, generation, "Wattzun replied in chat, but the audio could not play. Start the call again.");
     } catch (error) {
       if (!this.active || generation !== this.generation || pending.signal.aborted) return;
       const message = error instanceof Error ? error.message : "The voice reply could not be completed. Try again.";
@@ -244,6 +271,25 @@ export class WattzunVoiceCall {
     } finally {
       if (unplayedAudio?.mimeType === "audio/pcm") void unplayedAudio.stream.cancel().catch(() => {});
       if (this.pending === pending) this.pending = null;
+    }
+  }
+  private async playAudio(audio: WattzunVoiceResult["audio"], generation: number, errorMessage: string) {
+    let unplayed = true;
+    try {
+      const playback = this.environment.playback(audio);
+      unplayed = false;
+      this.playback = playback;
+      playback.onEnd = () => {
+        if (this.playback !== playback || !this.active || generation !== this.generation) return;
+        playback.close();
+        this.playback = null;
+        if (this.muted) { this.lastInteraction = this.environment.now(); this.update("muted"); } else this.listen();
+      };
+      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.fail(errorMessage); };
+      await playback.play().catch(error => { if (this.playback === playback) throw error; });
+      if (this.playback === playback && this.active && generation === this.generation) this.update("speaking");
+    } catch { throw new Error(errorMessage); } finally {
+      if (unplayed && audio.mimeType === "audio/pcm") void audio.stream.cancel().catch(() => {});
     }
   }
   toggleMute() {

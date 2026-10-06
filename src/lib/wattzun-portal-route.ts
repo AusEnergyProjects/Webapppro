@@ -3,7 +3,8 @@ import { WattzunInputError, WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_WAV_AUDIO_BYTES
 import { authenticateWattzun, listWattzunScopes, requireWattzunAccess, wattzunAccessFailure,
   WattzunAccessError, type WattzunAccess } from "./wattzun-portal-access-server";
 import { prepareWattzunPortalReply, transcribeWattzunPortalAudio, speakWattzunPortalReply, streamWattzunPortalReply } from "./wattzun-portal-ai-server";
-import { prepareWattzunRealtimeTurn } from "./wattzun-realtime-server";
+import { prepareWattzunRealtimeTurn, type WattzunRealtimeTimings } from "./wattzun-realtime-server";
+import { parseWattzunGreeting } from "./wattzun-greeting";
 import { parseWattzunUsageScope, type WattzunUsage } from "./wattzun-usage";
 import { readWattzunUsage, recordWattzunUsage, WattzunUsageError, type WattzunUsageRecord } from "./wattzun-usage-server";
 
@@ -16,7 +17,7 @@ export type WattzunRouteDependencies = {
   transcribe: (options: Context & { audio: Blob }) => Promise<string>;
   speak: (options: Context & { reply: WattzunReply }) => Promise<{ base64: string; mimeType: "audio/mpeg" }>;
   streamSpeak: (options: Context & { reply: WattzunReply }) => Promise<ReadableStream<Uint8Array>>;
-  realtime: (options: Context & { audio: Blob; beforeSpeech: () => Promise<void> }) => Promise<{ reply: WattzunReply; audio: ReadableStream<Uint8Array>; transcript?: string; requestSummary?: string }>;
+  realtime: (options: Context & { audio: Blob; beforeSpeech: () => Promise<void> }) => Promise<{ reply: WattzunReply; audio: ReadableStream<Uint8Array>; transcript?: string; requestSummary?: string; timings?: WattzunRealtimeTimings }>;
   recordUsage: (options: WattzunUsageRecord) => Promise<void>;
   usage: (access: WattzunAccess) => Promise<WattzunUsage>;
 };
@@ -30,8 +31,15 @@ const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options"
 function json(body: object, status = 200) { return Response.json(body, { status, headers }); }
 function turnTimer() {
   const started = performance.now();
-  const durations = new Map<"auth" | "access" | "stt" | "llm" | "tts" | "realtime" | "usage", number>();
+  const durations = new Map<"auth" | "access" | "stt" | "llm" | "tts" | "realtime" | "usage" | keyof WattzunRealtimeTimings, number>();
   return {
+    provider(stage: string, duration: unknown) {
+      if (typeof duration !== "number" || !Number.isFinite(duration) || duration < 0 || duration > 55_000) return;
+      switch (stage) {
+        case "rt_guard": case "rt_connect": case "rt_config": case "rt_proposal":
+        case "rt_validate": case "rt_approval": case "rt_first_argument": durations.set(stage, duration);
+      }
+    },
     async run<T>(stage: "auth" | "access" | "stt" | "llm" | "tts" | "realtime" | "usage", operation: () => Promise<T>): Promise<T> {
       const before = performance.now();
       try { return await operation(); }
@@ -168,6 +176,7 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
       const prepared = await timing.run("realtime", () => deps.realtime({ ...access, input, audio, signal: request.signal,
         beforeSpeech: async () => { await timing.run("access", () => recheck(request, access, deps)); } }));
       speechStream = prepared.audio;
+      for (const [stage, duration] of Object.entries(prepared.timings || {})) timing.provider(stage, duration);
       const latest = await timing.run("access", () => recheck(request, access, deps));
       await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
       requireOpenConversation(request);
@@ -198,6 +207,36 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
     return timing.response(json({ ok: true, transcript, reply, audio: speech }));
   } catch (error) { return timing.response(failure(error)); }
   finally { if (speechStream && !handedOff) await speechStream.cancel().catch(() => {}); }
+}
+
+/** A fixed connection greeting uses the brand voice without a conversation/model turn. */
+export async function postWattzunGreeting(request: Request, deps = defaults): Promise<Response> {
+  if (!acceptedOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
+  if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
+    return json({ ok: false, error: "Send the call greeting as JSON." }, 415);
+  }
+  const timing = turnTimer();
+  let audio: ReadableStream<Uint8Array> | undefined;
+  let handedOff = false;
+  try {
+    await timing.run("auth", () => deps.authenticate(request));
+    requireOpenConversation(request);
+    const bytes = await boundedBody(request, 2_000);
+    if (!bytes) return json({ ok: false, error: "The call greeting is too large." }, 413);
+    const input = parseWattzunGreeting(JSON.parse(new TextDecoder().decode(bytes)));
+    const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
+    requireOpenConversation(request);
+    const reply: WattzunReply = { kind: "answer", message: input.message, questions: [], links: [] };
+    audio = await timing.run("tts", () => deps.streamSpeak({ ...access, input, reply, signal: request.signal }));
+    await timing.run("access", () => recheck(request, access, deps));
+    requireOpenConversation(request);
+    // The provider cost guard meters speech. Connection greetings are not answered user questions.
+    const response = timing.response(new Response(voiceFrames("", reply, audio, request.signal),
+      { headers: { ...headers, "Content-Type": WATTZUN_REALTIME_VOICE_STREAM_TYPE } }));
+    handedOff = true;
+    return response;
+  } catch (error) { return timing.response(failure(error)); }
+  finally { if (audio && !handedOff) await audio.cancel().catch(() => {}); }
 }
 
 function voiceFrames(transcript: string, reply: WattzunReply, audio: ReadableStream<Uint8Array>, signal: AbortSignal, requestSummary?: string) {

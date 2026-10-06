@@ -9,7 +9,7 @@ import { chromium } from 'playwright-core';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const browserPath = [process.env.TEST_BROWSER_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/chromium'].find(value => value && fs.existsSync(value));
 const fixtures = {
-  auth: `export function onAuthStateChanged(_auth, callback) { window.wattzunFixtureAuth=callback; callback({uid:'synthetic-user',emailVerified:true,getIdToken:async()=>'synthetic-token'}); return ()=>{}; }`,
+  auth: `export function onAuthStateChanged(_auth, callback) { window.wattzunFixtureAuth=callback; callback({uid:'synthetic-user',displayName:'Alex Tester',emailVerified:true,getIdToken:async()=>'synthetic-token'}); return ()=>{}; }`,
   firebase: 'export const firebaseAuth = {};',
   business: `export const readTradeBusinessSelection = () => 'synthetic-business'; export const TRADE_BUSINESS_SELECTION_CHANGED_EVENT='tlink:business-selection-changed';`,
   link: `import React from 'react'; export default function Link({href,onNavigate,prefetch,...props}) { return <a {...props} href={href} onClick={event=>{ if(event.button||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey) return; event.preventDefault(); let prevented=false; onNavigate?.({preventDefault(){prevented=true;}}); if(!prevented){history.pushState(history.state,'',href);window.dispatchEvent(new Event('fixture:navigate'));}}}/>; }`,
@@ -23,7 +23,22 @@ const fixtures = {
     export const createWattzunBrowserVoiceEnvironment = () => ({});
     export class WattzunVoiceCall {
       constructor(_environment,callbacks) { this.callbacks=callbacks; this.muted=false; window.wattzunFixtureCall=this; }
-      async start() { window.wattzunFixtureCounters.started++; this.callbacks.status({state:'listening',message:'Listening for your question.'}); }
+      async start() {
+        window.wattzunFixtureCounters.started++;
+        if(window.wattzunFixtureGreetingEnabled) {
+          this.callbacks.status({state:'connecting',message:'Connecting to Wattzun.'});
+          const audio=await this.callbacks.greeting(new AbortController().signal);
+          if(audio.mimeType!=='audio/pcm') throw new Error('Greeting must provide native PCM.');
+          const reader=audio.stream.getReader();
+          try {
+            while(true) {
+              const chunk=await reader.read();if(chunk.done) break;
+              window.wattzunFixtureGreetingPcm.push(...chunk.value);
+            }
+          } finally { await reader.cancel();reader.releaseLock(); }
+        }
+        this.callbacks.status({state:'listening',message:'Listening for your question.'});
+      }
       checkIn() { this.callbacks.status({state:'confirming',message:'Would you like to continue this call?'}); }
       continueCall() { window.wattzunFixtureCounters.continued++; this.callbacks.status({state:this.muted?'muted':'listening',message:'Call continued.'}); }
       toggleMute() { this.muted=!this.muted; this.callbacks.status({state:this.muted?'muted':'listening',message:this.muted?'Microphone muted.':'Listening for your question.'}); }
@@ -46,9 +61,17 @@ const bundle = await build({
     window.addEventListener(WATTZUN_USAGE_CHANGED_EVENT,event=>window.wattzunFixtureUsage.push(event.detail));
     window.wattzunFixtureRequests=[];
     window.wattzunFixtureCounters={started:0,continued:0,hungUp:0,disposed:0};
+    window.wattzunFixtureGreetingEnabled=window.wattzunFixtureGreetingEnabled??false;
+    window.wattzunFixtureGreetingPcm=[];
     window.fetch=async (url,options={})=>{
       window.wattzunFixtureRequests.push({url,headers:options.headers,body:options.body?JSON.parse(options.body):null});
       if(url.startsWith('/api/wattzun/portal?portal=')) { const portal=new URL(url,location.origin).searchParams.get('portal');return Response.json({ok:true,scopes:window.wattzunFixtureScopes||[{portal,scopeId:portal==='trade'?'synthetic-business':'synthetic-'+portal,label:'Synthetic '+portal+' business'}]}); }
+      if(url==='/api/wattzun/greeting'&&options.method==='POST') {
+        const frames=[{type:'reply',transcript:'',reply:{kind:'answer',message:"Hi Alex, I'm here. What can I help you with?",questions:[],links:[]}},
+          {type:'audio',data:'EIAgAQ=='},{type:'done'}];
+        return new Response(frames.map(frame=>JSON.stringify(frame)).join('\\n')+'\\n',
+          {headers:{'Content-Type':'application/x-wattzun-realtime-voice+ndjson'}});
+      }
       if(url==='/api/wattzun/portal'&&options.method==='POST') return Response.json({ok:true,reply:{kind:'clarification',message:'I can help you follow up the sale. Tell me a little more so I can point you to the right next step.',questions:['Which job are you following up?','Do you want to call the customer or review the quote?'],links:window.wattzunFixtureLinks||[{label:'Open Sales',href:'/direct-trade/dashboard?workspace=sales'}],...(window.wattzunFixtureAction?{action:window.wattzunFixtureAction}:{})}});
       throw new Error('Unexpected fixture request: '+url);
     };
@@ -180,6 +203,55 @@ test('Wattzun speed settings, clarifications and call check-ins remain usable in
       await page.close();
     });
   } finally { await browser.close(); }
+});
+
+test('starting a call wires the literal greeting to the current authenticated portal without adding a question or conversation turn', { skip: !browserPath && 'No installed browser for greeting wiring checks' }, async t => {
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    for(const layout of [{name:'desktop',width:1366,height:900,speed:0.85},{name:'mobile',width:390,height:844,speed:1.15}]) {
+      for(const [portal,pathname] of [['trade','/direct-trade/dashboard'],['council','/council'],['creditex','/creditex/compliance']]) await t.test(`${layout.name}-${portal}`,async()=>{
+        const page=await browser.newPage({viewport:{width:layout.width,height:layout.height}});
+        const errors=[];page.on('pageerror',error=>errors.push(error.message));
+        await page.route('https://fixture.invalid/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html></html>'}));
+        await page.goto('https://fixture.invalid'+pathname);
+        await page.setContent(`<html><head><style>*{box-sizing:border-box}body{margin:0;font-family:Arial}${css}</style></head><body><div id="root"></div></body></html>`);
+        const scopeId=portal==='trade'?'synthetic-business':'synthetic-'+portal;
+        await page.evaluate(({portal,scopeId,speed})=>{
+          window.wattzunFixtureGreetingEnabled=true;
+          localStorage.setItem(`wattzun-preferences:v2:synthetic-user:${portal}:${scopeId}`,JSON.stringify({speed}));
+        },{portal,scopeId,speed:layout.speed});
+        await page.addScriptTag({content:script});
+        await page.getByRole('button',{name:'Open Wattzun AI chat',exact:true}).click();
+        const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+        await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();
+        await dialog.getByText('Listening',{exact:true}).waitFor();
+        const requests=await page.evaluate(()=>window.wattzunFixtureRequests);
+        assert.equal(requests.length,2,'Only scope discovery and the greeting run when starting a call');
+        const greeting=requests.find(request=>request.url==='/api/wattzun/greeting');
+        assert.ok(greeting,'The actual React greeting callback submits its dedicated request');
+        assert.equal(greeting.headers.Authorization,'Bearer synthetic-token');
+        assert.equal(greeting.headers['Content-Type'],'application/json');
+        assert.match(greeting.body.requestId,/^[A-Za-z0-9:_-]{16,72}$/);
+        assert.deepEqual(greeting.body,{portal,scopeId,requestId:greeting.body.requestId,name:'Alex Tester',preferences:{speed:layout.speed}},
+          'Greeting sends only the current scope, display name, unique request ID and speed');
+        assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureGreetingPcm),[0x10,0x80,0x20,0x01],
+          'The fixture consumes the PCM returned through the real native frame parser');
+        const conversation=dialog.getByRole('log',{name:'Conversation with Wattzun',exact:true});
+        assert.equal(await conversation.locator('article').count(),0,'Greeting never appends a conversation turn');
+        assert.equal(await dialog.getByText("Hi Alex, I'm here. What can I help you with?",{exact:true}).count(),0);
+        assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureUsage),[],'Greeting never dispatches question usage');
+        await dialog.getByRole('button',{name:'Hang up',exact:true}).click();
+        await dialog.getByRole('textbox',{name:'Message Wattzun',exact:true}).fill('Help me find the next step');
+        await dialog.getByRole('button',{name:'Send',exact:true}).click();
+        await conversation.getByText('Which job are you following up?',{exact:true}).waitFor();
+        const question=await page.evaluate(()=>window.wattzunFixtureRequests.find(request=>request.url==='/api/wattzun/portal'&&request.body));
+        assert.deepEqual(question.body.history,[],'The first real question has no greeting in provider history');
+        assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureUsage),[{userUid:'synthetic-user',portal,scopeId}],
+          'Only the real question updates usage');
+        assert.deepEqual(errors,[]);await page.close();
+      });
+    }
+  } finally {await browser.close();}
 });
 
 async function screenshot(page, scenario, state) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWattzunPcmPlayback } from "../src/lib/wattzun-voice-playback.ts";
-import { createWattzunBrowserVoiceEnvironment } from "../src/lib/wattzun-voice-client.ts";
+import { createWattzunBrowserVoiceEnvironment, WattzunVoiceCall } from "../src/lib/wattzun-voice-client.ts";
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred() { let resolve; const promise = new Promise(yes => { resolve = yes; }); return { promise, resolve }; }
@@ -160,6 +160,31 @@ class CaptureNode {
   constructor() { this.port = { onmessage: null, postMessage() {}, close() {} }; }
   connect() {} disconnect() {}
 }
+
+test("the call greeting streams through its resumed microphone context before EOF and starts capture only after audio ends", async () => {
+  const device = microphoneContext(), audio = stream(), commands = [], timers = new Set(), statuses = [];
+  const restore = globals({
+    AudioContext: class { constructor() { return device; } },
+    AudioWorkletNode: class extends CaptureNode { constructor() { super(); this.port.postMessage = command => commands.push(command); } },
+    navigator: { mediaDevices: { getUserMedia: async () => media() } },
+    window: { setInterval(callback) { timers.add(callback); return callback; }, clearInterval(callback) { timers.delete(callback); } },
+  });
+  const call = new WattzunVoiceCall(createWattzunBrowserVoiceEnvironment(), {
+    greeting: async () => ({ mimeType: "audio/pcm", stream: audio.input }),
+    status: value => statuses.push(value.state),
+    submit: async () => { throw new Error("Greeting must never submit a user turn"); },
+    reply: () => { throw new Error("Greeting must never create a chat reply"); },
+  });
+  try {
+    const started = call.start(); await tick(); assert.equal(statuses.at(-1), "connecting"); assert.equal(device.resumed, 1);
+    assert.equal(commands.length, 0); audio.controller.enqueue(pcm(Array(960).fill(1000))); await started;
+    assert.equal(statuses.at(-1), "speaking"); assert.equal(audio.input.locked, true); assert.equal(device.sources.length, 1);
+    assert.equal(commands.length, 0, "No worklet recording overlaps the greeting");
+    audio.controller.close(); await tick(); assert.equal(statuses.at(-1), "speaking"); device.sources[0].end();
+    assert.equal(statuses.at(-1), "listening"); assert.deepEqual(commands, [{ type: "start", id: 1 }]); assert.equal(device.closed, 0);
+    call.hangUp(); assert.equal(device.closed, 1); assert.equal(timers.size, 0);
+  } finally { call.dispose(); restore(); }
+});
 
 test("browser PCM playback reuses the microphone context resumed during Call and leaves ownership with the microphone", async () => {
   const devices = [];
