@@ -1,4 +1,5 @@
 import type { ActivityAnswers, ActivityEvidence, ActivityForm, ActivitySignature } from "./trade-activity-form-types";
+import type { VEU_ELECTRICAL_SIGNER_FIELDS } from "./veu-electrical-safety-form";
 
 /** A job safety assessment, never a certificate claim or compliance intent. */
 export type PiesaRecord = {
@@ -34,6 +35,7 @@ export type PiesaPresentation = Omit<PiesaRecord, "ownerUid" | "evidence"> & {
   missing: PiesaMissing[];
   ready: boolean;
   signingScopes: { before: string; after: string };
+  signerFields: typeof VEU_ELECTRICAL_SIGNER_FIELDS;
   reportUrl: string;
   delivery: PiesaDelivery[];
 };

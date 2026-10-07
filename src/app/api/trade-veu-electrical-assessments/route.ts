@@ -2,7 +2,7 @@ import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { PiesaError, type PiesaRecord } from "@/lib/veu-electrical-assessment";
-import { createVeuElectricalForm, VEU_ELECTRICAL_SOURCE_URL, VEU_ELECTRICAL_SOURCE_PATH, VEU_ELECTRICAL_SOURCE_SHA256 } from "@/lib/veu-electrical-safety-form";
+import { createVeuElectricalForm, VEU_ELECTRICAL_SIGNER_FIELDS, VEU_ELECTRICAL_SOURCE_URL, VEU_ELECTRICAL_SOURCE_PATH, VEU_ELECTRICAL_SOURCE_SHA256 } from "@/lib/veu-electrical-safety-form";
 import { attestPiesaInitial, completePiesaRecord, listPiesaRecords, piesaPresentation, readPiesaEvidence, readPiesaPdf,
   readPiesaRecord, retryPiesaDelivery, savePiesaAnswers, signPiesaDeclaration, startPiesaRecord, uploadPiesaEvidence } from "@/lib/trade-veu-electrical-assessment-server";
 
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     const access = await requireInstallerTeamAccess(request);
     if (!access.canViewFieldEvidence) throw new PiesaError(403, "PIESA_ACCESS_REQUIRED", "Your access does not include job assessments.");
     const query = new URL(request.url).searchParams;
-    if (query.get("catalogue") === "1") return adminJson({ ok: true, form: createVeuElectricalForm(), canManage: access.canManageFieldEvidence,
+    if (query.get("catalogue") === "1") return adminJson({ ok: true, form: createVeuElectricalForm(), signerFields: VEU_ELECTRICAL_SIGNER_FIELDS, canManage: access.canManageFieldEvidence,
       source: { url: VEU_ELECTRICAL_SOURCE_URL, path: VEU_ELECTRICAL_SOURCE_PATH, sha256: VEU_ELECTRICAL_SOURCE_SHA256, label: "Official Victorian electrical safety assessment, March 2026" } });
     const id = query.get("recordId");
     if (id) {

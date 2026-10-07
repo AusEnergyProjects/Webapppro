@@ -110,11 +110,15 @@ export type SharedSurgeUsageGuardOptions = {
   getDatabase?: () => D1Database;
   now?: () => number;
   randomUUID?: () => string;
+  /** Static application-owned ledger scope. Never accept this from a request. */
+  usageNamespace?: string;
+  /** An explicit product policy; the public assistant retains configured ceilings. */
+  dailyLimits?: "configured" | "unlimited";
 };
 
 type CounterLimits = {
   minute: number;
-  day: number;
+  day: number | null;
   minuteReason: SurgeUsageDenialReason;
   dayReason: SurgeUsageDenialReason;
 };
@@ -231,6 +235,11 @@ function retryAfter(periodStart: number, periodMs: number, now: number) {
 
 function safeCount(value: unknown) {
   return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+/** Unlimited admission still records bounded integer counters and cost estimates. */
+function boundedTotal(current: number, increment: number) {
+  return current > Number.MAX_SAFE_INTEGER - increment ? Number.MAX_SAFE_INTEGER : current + increment;
 }
 
 function safeTimestamp(value: unknown) {
@@ -452,7 +461,7 @@ function counterDenial(state: CounterState, limits: CounterLimits, now: number):
       retryAfterSeconds: retryAfter(state.minuteStart, MINUTE_MS, now),
     };
   }
-  if (state.dayCount >= limits.day) {
+  if (limits.day !== null && state.dayCount >= limits.day) {
     return {
       allowed: false,
       reason: limits.dayReason,
@@ -471,8 +480,13 @@ export function createSharedSurgeUsageGuard({
   getDatabase,
   now = Date.now,
   randomUUID = () => crypto.randomUUID(),
+  usageNamespace,
+  dailyLimits = "configured",
 }: SharedSurgeUsageGuardOptions = {}) {
-  const configuration = usageConfiguration(env);
+  const policyValid = (usageNamespace === undefined || typeof usageNamespace === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(usageNamespace))
+    && (dailyLimits === "configured" || dailyLimits === "unlimited")
+    && (dailyLimits !== "unlimited" || usageNamespace !== undefined);
+  const configuration = policyValid ? usageConfiguration(env) : null;
   let signingKey: Promise<CryptoKey> | null = null;
 
   async function hashIdentifier(kind: string, value: string) {
@@ -487,7 +501,7 @@ export function createSharedSurgeUsageGuard({
     const signature = await crypto.subtle.sign(
       "HMAC",
       await signingKey,
-      new TextEncoder().encode(`${kind}\u0000${value}`),
+      new TextEncoder().encode(`${usageNamespace ? `${kind}:${usageNamespace}` : kind}\u0000${value}`),
     );
     return bytesToHex(new Uint8Array(signature));
   }
@@ -531,14 +545,14 @@ export function createSharedSurgeUsageGuard({
       const networkState = normalizedCounterState(networkParsed, currentTime);
       const clientDenial = counterDenial(clientState, {
         minute: configuration.clientMinuteLimit,
-        day: configuration.clientDailyLimit,
+        day: dailyLimits === "unlimited" ? null : configuration.clientDailyLimit,
         minuteReason: "client_minute",
         dayReason: "client_day",
       }, currentTime);
       if (clientDenial) return clientDenial;
       const networkDenial = counterDenial(networkState, {
         minute: configuration.networkMinuteLimit,
-        day: configuration.networkDailyLimit,
+        day: dailyLimits === "unlimited" ? null : configuration.networkDailyLimit,
         minuteReason: "network_minute",
         dayReason: "network_day",
       }, currentTime);
@@ -569,7 +583,7 @@ export function createSharedSurgeUsageGuard({
           retryAfterSeconds: Math.max(1, Math.ceil((earliestExpiry - currentTime) / 1_000)),
         };
       }
-      if (
+      if (dailyLimits !== "unlimited" &&
         state.dailyReservedMicroUsd > configuration.globalDailyMicroUsdLimit
           - estimatedMicroUsd
       ) {
@@ -582,7 +596,7 @@ export function createSharedSurgeUsageGuard({
       const next: GlobalState = {
         ...state,
         minuteCount: state.minuteCount + 1,
-        dailyReservedMicroUsd: state.dailyReservedMicroUsd + estimatedMicroUsd,
+        dailyReservedMicroUsd: boundedTotal(state.dailyReservedMicroUsd, estimatedMicroUsd),
         leases: [...state.leases, {
           hash: leaseHash,
           expiresAt: currentTime + configuration.inFlightLeaseMs,
@@ -595,12 +609,12 @@ export function createSharedSurgeUsageGuard({
       if (await writeReservationStates(database, [
         {
           scopeHash: clientScopeHash,
-          state: { ...clientState, minuteCount: clientState.minuteCount + 1, dayCount: clientState.dayCount + 1 },
+          state: { ...clientState, minuteCount: clientState.minuteCount + 1, dayCount: boundedTotal(clientState.dayCount, 1) },
           version: clientRow?.version ?? null,
         },
         {
           scopeHash: networkScopeHash,
-          state: { ...networkState, minuteCount: networkState.minuteCount + 1, dayCount: networkState.dayCount + 1 },
+          state: { ...networkState, minuteCount: networkState.minuteCount + 1, dayCount: boundedTotal(networkState.dayCount, 1) },
           version: networkRow?.version ?? null,
         },
         { scopeHash: globalScopeHash, state: next, version: row?.version ?? null },
@@ -646,7 +660,7 @@ export function createSharedSurgeUsageGuard({
       if (
         !Number.isSafeInteger(estimatedMicroUsd)
         || estimatedMicroUsd <= 0
-        || estimatedMicroUsd > configuration.globalDailyMicroUsdLimit
+        || (dailyLimits !== "unlimited" && estimatedMicroUsd > configuration.globalDailyMicroUsdLimit)
       ) return { allowed: false, reason: "invalid_estimate" };
       const currentTime = now();
       if (!Number.isSafeInteger(currentTime) || currentTime < 0) {

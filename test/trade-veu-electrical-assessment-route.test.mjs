@@ -31,6 +31,7 @@ const json=(body,method='POST')=>new Request('https://test.example/api/trade-veu
 test('catalogue and job list require current evidence access and expose exact official source',async()=>{
   const h=fixture(),response=await h.route.GET(new Request('https://test.example/api?catalogue=1')),data=await response.json();
   assert.equal(response.status,200);assert.equal(data.source.sha256,form.VEU_ELECTRICAL_SOURCE_SHA256);assert.equal(data.form.id,form.createVeuElectricalForm().id);assert.equal(h.calls.length,0);
+  assert.deepEqual(data.signerFields,form.VEU_ELECTRICAL_SIGNER_FIELDS);
   const list=await(await h.route.GET(new Request('https://test.example/api?workOrderId=job'))).json();assert.equal(list.records.length,1);assert.equal(list.canManage,true);
   h.access({canViewFieldEvidence:false});assert.equal((await h.route.GET(new Request('https://test.example/api?catalogue=1'))).status,403);
 });

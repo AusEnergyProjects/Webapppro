@@ -586,7 +586,8 @@ export function wattzunPortalProviderConfiguration(options: PortalRequest) {
 
 async function reserveAudio(options: PortalRequest, stage: "stt" | "tts", estimatedMicroUsd: number) {
   const { guardEnv } = wattzunPortalProviderConfiguration(options);
-  const guard = createSharedSurgeUsageGuard({ env: guardEnv, getDatabase: () => options.db });
+  const guard = createSharedSurgeUsageGuard({ env: guardEnv, getDatabase: () => options.db,
+    usageNamespace: "wattzun", dailyLimits: "unlimited" });
   const reservation = await guard.reserve({
     clientKey: await workflowAiSourceHash(["workflow-actor", options.actorUid]),
     networkKey: await workflowAiSourceHash(["workflow-business", `${options.scope.portal}:${options.scope.scopeId}`]),

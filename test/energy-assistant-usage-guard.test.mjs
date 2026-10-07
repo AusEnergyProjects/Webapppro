@@ -110,6 +110,8 @@ function fixture(options = {}) {
     getDatabase: options.noDatabase ? undefined : () => database,
     now: () => clock.value,
     randomUUID: () => `lease-${String(sequence += 1).padStart(12, "0")}`,
+    usageNamespace: options.usageNamespace,
+    dailyLimits: options.dailyLimits,
   });
   return { database, clock, guard };
 }
@@ -147,6 +149,114 @@ test("production configuration exposes the exact fixed default ceilings", () => 
   });
   assert.equal(SURGE_USAGE_GUARD_ENV.globalInFlightLimit, "SURGE_GLOBAL_INFLIGHT_LIMIT");
   assert.equal(SURGE_USAGE_GUARD_ENV.globalDailyMicroUsdLimit, "SURGE_GLOBAL_DAILY_MICRO_USD");
+});
+
+test("explicit unlimited product policy passes daily ceilings while keeping finite usage accounting", async () => {
+  const { guard, clock, database } = fixture({ usageNamespace: "wattzun", dailyLimits: "unlimited",
+    database: new SqliteD1Database({ yieldReads: false }) });
+  const identity = { clientKey: opaqueKey("authenticated-actor"), networkKey: opaqueKey("authenticated-business") };
+  for (let index = 0; index < 2_001; index++) {
+    if (index && index % 20 === 0) clock.value += 60_000;
+    const admitted = await guard.reserve(reservation(index, { ...identity,
+      estimatedMicroUsd: index === 0 ? 100_000_001 : 1_000_000 }));
+    assert.equal(admitted.allowed, true, `Paid turn ${index + 1} remains eligible after daily ceilings`);
+    await admitted.release();
+  }
+  const states = database.parsedStates();
+  assert.equal(states.length, 3);
+  assert.ok(states.filter(row => row.state.kind === "counter").every(row => row.state.dayCount === 2_001));
+  assert.equal(database.globalState().dailyReservedMicroUsd, 2_100_000_001);
+  assert.equal(database.globalState().leases.length, 0);
+  assert.ok(states.every(row => Object.values(row.state).filter(value => typeof value === "number").every(Number.isSafeInteger)));
+});
+
+test("unlimited product ledger cannot consume or relax the public assistant's configured daily limits", async () => {
+  const env = { SURGE_CLIENT_DAILY_LIMIT: "1", SURGE_NETWORK_DAILY_LIMIT: "1", SURGE_GLOBAL_DAILY_MICRO_USD: "10" };
+  const ordinary = fixture({ env });
+  const product = fixture({ env, database: ordinary.database, clock: ordinary.clock, usageNamespace: "wattzun", dailyLimits: "unlimited" });
+  const input = reservation(1, { estimatedMicroUsd: 10 });
+  const original = await ordinary.guard.reserve(input); assert.equal(original.allowed, true); await original.release();
+  const before = ordinary.database.parsedStates();
+  const own = await product.guard.reserve({ ...input, estimatedMicroUsd: 20 });
+  assert.equal(own.allowed, true, "The same caller/request identifier belongs to a separately scoped ledger");
+  await own.release();
+  const second = await product.guard.reserve(reservation(2, { clientKey: input.clientKey, networkKey: input.networkKey, estimatedMicroUsd: 20 }));
+  assert.equal(second.allowed, true); await second.release();
+  assert.deepEqual(ordinary.database.parsedStates().filter(row => before.some(prior => prior.scopeHash === row.scopeHash)), before);
+  assert.equal(ordinary.database.rows.size, 6);
+  assert.equal((await ordinary.guard.reserve(reservation(3, { clientKey: input.clientKey }))).reason, "client_day");
+  assert.equal((await ordinary.guard.reserve(reservation(4, { networkKey: input.networkKey }))).reason, "network_day");
+  assert.equal((await ordinary.guard.reserve(reservation(5))).reason, "global_daily_budget");
+  assert.equal((await ordinary.guard.reserve(reservation(6, { estimatedMicroUsd: 11 }))).reason, "invalid_estimate");
+});
+
+test("unlimited daily policy still rejects bursts, concurrency and duplicate requests without consuming state", async t => {
+  for (const [reason, limit, sharedKey] of [
+    ["client_minute", "SURGE_CLIENT_MINUTE_LIMIT", "clientKey"],
+    ["network_minute", "SURGE_NETWORK_MINUTE_LIMIT", "networkKey"],
+    ["global_minute", "SURGE_GLOBAL_MINUTE_LIMIT"],
+    ["global_in_flight", "SURGE_GLOBAL_INFLIGHT_LIMIT"],
+    ["duplicate_request"],
+  ]) await t.test(reason, async () => {
+    const { guard, database } = fixture({ usageNamespace: "wattzun", dailyLimits: "unlimited", env: {
+      SURGE_CLIENT_DAILY_LIMIT: "1", SURGE_NETWORK_DAILY_LIMIT: "1", SURGE_GLOBAL_DAILY_MICRO_USD: "1", ...(limit ? { [limit]: "1" } : {}),
+    } });
+    const input = reservation(1, { estimatedMicroUsd: 100 });
+    const first = await guard.reserve(input); assert.equal(first.allowed, true);
+    const before = database.parsedStates();
+    const next = reason === "duplicate_request" ? input : reservation(2, { estimatedMicroUsd: 100, ...(sharedKey ? { [sharedKey]: input[sharedKey] } : {}) });
+    assert.equal((await guard.reserve(next)).reason, reason);
+    assert.deepEqual(database.parsedStates(), before);
+    await first.release();
+  });
+});
+
+test("unlimited daily policy preserves lease expiry, release and ten-minute idempotency", async () => {
+  const { guard, clock, database } = fixture({ usageNamespace: "wattzun", dailyLimits: "unlimited", env: { SURGE_GLOBAL_INFLIGHT_LIMIT: "1" } });
+  const input = reservation(1);
+  const first = await guard.reserve(input); assert.equal(first.allowed, true);
+  assert.equal((await guard.reserve(reservation(2))).reason, "global_in_flight");
+  clock.value += SURGE_USAGE_GUARD_DEFAULTS.inFlightLeaseMs + 1;
+  const next = await guard.reserve(reservation(3)); assert.equal(next.allowed, true);
+  assert.equal(database.globalState().leases.length, 1); await first.release();
+  assert.equal(database.globalState().leases.length, 1, "Releasing an expired lease cannot remove a newer request");
+  await next.release(); await next.release(); assert.equal(database.globalState().leases.length, 0);
+  assert.equal((await guard.reserve(input)).reason, "duplicate_request");
+  clock.value = START + SURGE_USAGE_GUARD_DEFAULTS.requestIdempotencyMs;
+  const expired = await guard.reserve(input); assert.equal(expired.allowed, true); await expired.release();
+});
+
+test("unlimited accounting saturates safely without becoming an admission ceiling", async () => {
+  const { guard, database } = fixture({ usageNamespace: "wattzun", dailyLimits: "unlimited" });
+  const input = reservation(1, { estimatedMicroUsd: Number.MAX_SAFE_INTEGER });
+  const first = await guard.reserve(input); assert.equal(first.allowed, true); await first.release();
+  for (const row of database.parsedStates().filter(row => row.state.kind === "counter")) {
+    database.sqlite.prepare("UPDATE surge_model_usage_state SET state_json = ? WHERE scope_hash = ?")
+      .run(JSON.stringify({ ...row.state, dayCount: Number.MAX_SAFE_INTEGER }), row.scopeHash);
+  }
+  const next = await guard.reserve(reservation(2, { clientKey: input.clientKey, networkKey: input.networkKey, estimatedMicroUsd: 1 }));
+  assert.equal(next.allowed, true); await next.release();
+  assert.equal(database.globalState().dailyReservedMicroUsd, Number.MAX_SAFE_INTEGER);
+  assert.ok(database.parsedStates().filter(row => row.state.kind === "counter").every(row => row.state.dayCount === Number.MAX_SAFE_INTEGER));
+  for (const estimatedMicroUsd of [0, -1, 1.2, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal((await guard.reserve(reservation(3, { estimatedMicroUsd }))).reason, "invalid_estimate");
+  }
+});
+
+test("an unlimited daily policy requires a valid explicit static namespace and configured operational protection", async () => {
+  for (const options of [
+    { dailyLimits: "unlimited" }, { usageNamespace: "", dailyLimits: "unlimited" }, { usageNamespace: null, dailyLimits: "unlimited" },
+    { usageNamespace: "user supplied", dailyLimits: "unlimited" }, { usageNamespace: "x".repeat(33), dailyLimits: "unlimited" },
+    { usageNamespace: "wattzun", dailyLimits: "other" }, { usageNamespace: "wattzun", dailyLimits: "unlimited", env: { SURGE_GLOBAL_MINUTE_LIMIT: undefined } },
+  ]) {
+    const { guard, database } = fixture(options);
+    assert.deepEqual(await guard.reserve(reservation(1)), { allowed: false, reason: "configuration" });
+    assert.equal(database.rows.size, 0);
+  }
+  const configured = fixture({ usageNamespace: "wattzun", env: { SURGE_CLIENT_DAILY_LIMIT: "1" } });
+  const input = reservation(1), first = await configured.guard.reserve(input);
+  assert.equal(first.allowed, true); await first.release();
+  assert.equal((await configured.guard.reserve(reservation(2, { clientKey: input.clientKey }))).reason, "client_day");
 });
 
 test("admission uses one shared snapshot read and one atomic write, including mixed existing rows", async () => {

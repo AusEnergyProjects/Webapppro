@@ -304,7 +304,7 @@ export async function piesaPresentation(access:TeamAccess,record:PiesaRecord):Pr
   await scope(access,record.workOrderId);const {ownerUid,evidence,...publicRecord}=record;void ownerUid;
   const completion=veuElectricalCompletion(record);
   return {...publicRecord,evidence:evidence.map(({objectKey,previewObjectKey,...item})=>{void objectKey;void previewObjectKey;return item;}),missing:completion.missing,ready:completion.ready,
-    signingScopes:{before:activitySigningScope(record,"before"),after:activitySigningScope(record,"after")},reportUrl:record.status==="complete"?`${API}?recordId=${encodeURIComponent(record.id)}&view=pdf`:"",
+    signingScopes:{before:activitySigningScope(record,"before"),after:activitySigningScope(record,"after")},signerFields:VEU_ELECTRICAL_SIGNER_FIELDS,reportUrl:record.status==="complete"?`${API}?recordId=${encodeURIComponent(record.id)}&view=pdf`:"",
     delivery:(await deliveryRows(access,record.id)).map(row=>({role:row.recipient_role,status:row.status,message:deliveryMessage(row),acceptedAt:row.accepted_at}))};
 }
 export async function retryPiesaDelivery(access:TeamAccess,id:string) {

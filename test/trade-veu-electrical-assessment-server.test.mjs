@@ -71,7 +71,7 @@ function fixture(t,realPdf=false) {
       catch (error) { sql.exec('ROLLBACK'); throw error; } finally { inBatch = false; }
       if (lostBatch) { lostBatch = false; throw new Error('SYNTHETIC_LOST_COMMIT_ACK'); } return result; } };
   const objects = new Map(), renders = [], sends = [], progressCalls = [];
-  let progressPending = false;
+  let progressPending = false, completesJob = false;
   const bucket = { async put(key, bytes) { objects.set(key, new Uint8Array(bytes)); }, async get(key) { const bytes = objects.get(key); return bytes ? { async arrayBuffer() { return bytes.slice().buffer; } } : null; }, async delete(key) { objects.delete(key); } };
   const journal = (key, status, id = '') => sql.prepare('INSERT OR REPLACE INTO trade_email_submissions VALUES(?,?,?,?,?)').run('owner', key, status, 'synthetic', id);
   const service = compile('../src/lib/trade-veu-electrical-assessment-server.ts', {
@@ -83,6 +83,7 @@ function fixture(t,realPdf=false) {
       const record = sql.prepare('SELECT status,pdf_object_key,pdf_sha256,pdf_size_bytes FROM trade_veu_electrical_assessments WHERE work_order_id=? AND owner_uid=?').get(workOrderId, access.ownerUid);
       assert.equal(record.status, 'complete'); assert.ok(record.pdf_object_key); assert.equal(record.pdf_sha256.length, 64); assert.ok(record.pdf_size_bytes > 4);
       progressCalls.push({ access, workOrderId, options });
+      if (completesJob) sql.prepare("UPDATE trade_work_orders SET stage='completed',revision=revision+1 WHERE id=? AND firebase_uid=?").run(workOrderId,access.ownerUid);
       return progressPending ? { changed: false, stage: '', pending: true, blockers: [{ key: 'job_progress_pending' }] }
         : { changed: false, stage: 'in_progress', blockers: [] };
     } },
@@ -113,6 +114,7 @@ function fixture(t,realPdf=false) {
   }
   return { sql, db, service, objects, renders, sends, progressCalls, roundTrips, journal, start, answered, attested, signed,
     pendingProgress(value) { progressPending = value; },
+    completesJob(value) { completesJob = value; },
     hook(value) { hook = value; }, loseBatch() { lostBatch = true; }, mail(value) { mailFailure = value; } };
 }
 
@@ -273,12 +275,28 @@ test('completion persists the exact frozen PDF and sends both role envelopes onc
   const pdf = await h.service.readPiesaPdf(owner, completed.id);
   for (const message of h.sends) assert.deepEqual(Buffer.from(message.attachments[0].content, 'base64'), Buffer.from(pdf.bytes));
   const publicRecord = await h.service.piesaPresentation(owner, completed);
+  assert.deepEqual(publicRecord.signerFields, form.VEU_ELECTRICAL_SIGNER_FIELDS);
   assert.equal('ownerUid' in publicRecord, false); assert.match(publicRecord.reportUrl, /view=pdf/); assert.ok(publicRecord.delivery.every(item => item.status === 'accepted'));
   await h.service.completePiesaRecord(owner, signed.id, signed.revision, 'complete'); await h.service.retryPiesaDelivery(owner, signed.id);
   assert.equal(h.renders.length, 1); assert.equal(h.sends.length, 2);
   assert.throws(() => h.sql.exec("UPDATE trade_veu_electrical_assessments SET actor_uid='other'"), /PIESA_IMMUTABLE/);
   assert.throws(() => h.sql.exec('DELETE FROM trade_veu_electrical_versions'), /PIESA_RETAINED/);
   assert.throws(() => h.sql.exec("UPDATE trade_veu_electrical_mutations SET request_sha256=printf('%064d',0)"), /PIESA_RETAINED/);
+});
+
+test('automatic job closure after assessment completion preserves its Files report and both email copies', async t => {
+  const h = fixture(t), signed = await h.signed(); h.completesJob(true);
+  const completed = await h.service.completePiesaRecord(owner, signed.id, signed.revision, 'complete-and-close-job');
+  assert.equal(h.sql.prepare("SELECT stage FROM trade_work_orders WHERE id='job'").get().stage, 'completed');
+  assert.equal(completed.status, 'complete');
+  assert.deepEqual(h.sends.map(message => message.recipient).sort(), ['customer@example.com', 'office@example.com']);
+  const listed = await h.service.listPiesaRecords(owner, 'job');
+  assert.equal(listed.length, 1); assert.equal(listed[0].id, completed.id);
+  assert.match(listed[0].reportUrl, /view=pdf/); assert.ok(listed[0].delivery.every(row => row.status === 'accepted'));
+  const pdf = await h.service.readPiesaPdf(owner, completed.id);
+  for (const message of h.sends) assert.deepEqual(Buffer.from(message.attachments[0].content, 'base64'), Buffer.from(pdf.bytes));
+  await h.service.completePiesaRecord(owner, signed.id, signed.revision, 'complete-and-close-job');
+  assert.equal(h.renders.length, 1); assert.equal(h.sends.length, 2, 'Closed-job recovery must not send duplicate PDFs');
 });
 
 test('missing customer address keeps completed PDF and business receipt, then retries only customer', async t => {

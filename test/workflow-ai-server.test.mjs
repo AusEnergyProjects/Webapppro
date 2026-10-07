@@ -80,6 +80,8 @@ test('only the explicit Wattzun conversation profile lowers reasoning and verbos
   assert.deepEqual(body.reasoning,{effort:'none'});assert.equal(body.text.verbosity,'low');assert.equal(body.max_output_tokens,2500);
   assert.equal(body.model,'gpt-6-luna');assert.equal(body.store,false);assert.equal(body.tools,undefined);assert.equal(body.text.format.strict,true);
   assert.equal(body.service_tier,'priority','Only Wattzun conversations request Fast processing');
+  assert.equal(f.guards[0].usageNamespace,'wattzun');
+  assert.equal(f.guards[0].dailyLimits,'unlimited');
   assert.equal(f.reservations[0].estimatedMicroUsd,Math.ceil((new TextEncoder().encode(f.calls[0].init.body).byteLength*4+2500*20)*1.25));
   for(const fields of [{responseProfile:'unknown'},{responseProfile:'wattzun',name:'other_workflow'}]){
     const invalid=fixture();await assert.rejects(invalid.requestWorkflowAi(request(fields)),/WORKFLOW_AI_INCOMPLETE/);assert.deepEqual(invalid.calls,[]);assert.deepEqual(invalid.reservations,[]);
@@ -133,6 +135,8 @@ test('budget reservation uses hashed actor and business keys, the same database,
   const env = Object.fromEntries(Object.values(SURGE_USAGE_GUARD_ENV).map((key, index) => [key, key === SURGE_USAGE_GUARD_ENV.secret ? GUARD_SECRET : String(index + 1)]));
   const f = fixture({ env }), options = request(); await f.requestWorkflowAi(options);
   assert.equal(f.guards[0].getDatabase(), options.db); assert.deepEqual(f.guards[0].env, { NODE_ENV: 'test', ...env });
+  assert.equal(f.guards[0].usageNamespace,undefined);
+  assert.equal(f.guards[0].dailyLimits,undefined,'Other workflow quotas remain configured');
   const expectedHash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   assert.deepEqual(f.reservations[0], { clientKey: expectedHash(['workflow-actor', options.actorUid]), networkKey: expectedHash(['workflow-business', options.scopeUid]),
     requestKey: options.requestId, estimatedMicroUsd: Math.ceil((new TextEncoder().encode(f.calls[0].init.body).byteLength * 4 + 2500 * 20) * 1.25) });

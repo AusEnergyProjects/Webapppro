@@ -118,18 +118,18 @@ class FixtureSocket extends EventTarget {
 }
 
 function fixture(options = {}) {
-  const reservations = [], calls = [], background = [], timers = new Map(), errors = [], infos = [];
+  const reservations = [], guards = [], calls = [], background = [], timers = new Map(), errors = [], infos = [];
   const socket = new FixtureSocket(options);
   let released = 0;
   const cloudflare = { env: { OPENAI_API_KEY: KEY, SURGE_MODEL: "gpt-5.6-sol", SURGE_USAGE_GUARD_SECRET: "fixture-budget-secret", ...options.env },
     waitUntil: promise => background.push(promise) };
   const workflow = { workflowAiSourceHash: async value => createHash("sha256").update(JSON.stringify(value)).digest("hex"),
     requestWorkflowAi: async () => { throw new Error("Legacy provider must not be called"); } };
-  const guard = { SURGE_USAGE_GUARD_ENV, createSharedSurgeUsageGuard: () => ({ reserve: async value => {
+  const guard = { SURGE_USAGE_GUARD_ENV, createSharedSurgeUsageGuard: settings => { guards.push(settings); return { reserve: async value => {
     reservations.push(value);
     if (options.deny) return { allowed: false, reason: options.deny };
     return { allowed: true, reservedMicroUsd: value.estimatedMicroUsd, release: async () => { released++; } };
-  } }) };
+  } }; } };
   const shared = compile("wattzun-portal-ai-server", {
     "cloudflare:workers": cloudflare, "node:buffer": { Buffer }, "./energy-assistant-usage-guard": guard,
     "./workflow-ai-server": workflow, "./wattzun-actions": actions, "./wattzun-records": records,
@@ -149,7 +149,7 @@ function fixture(options = {}) {
   }, performance: options.performance ?? performance,
   console: { error: (...args) => errors.push(structuredClone(args)), info: (...args) => infos.push(structuredClone(args)) },
   setTimeout: (callback, delay) => { const id = Symbol(); timers.set(id, { callback, delay }); return id; }, clearTimeout: id => timers.delete(id) });
-  return { ...server, shared, socket, reservations, calls, timers, background, errors, infos, released: () => released,
+  return { ...server, shared, socket, reservations, guards, calls, timers, background, errors, infos, released: () => released,
     expire: () => [...timers.values()].forEach(timer => timer.callback()) };
 }
 
@@ -175,6 +175,8 @@ test("rejected customer-shaped quote is corrected on the same audio conversation
   assert.equal(prepared.reply.questions.length, 1);
   assert.equal(transformed, 1); assert.equal(approved, 1);
   assert.equal(f.calls.length, 1, "Correction reuses the provider connection");
+  assert.equal(f.guards[0].usageNamespace, "wattzun");
+  assert.equal(f.guards[0].dailyLimits, "unlimited");
   assert.equal(f.socket.sent.filter(event => event.type === "input_audio_buffer.commit").length, 1, "Original audio is not replayed");
   const correction = f.socket.sent.find(event => event.item?.type === "function_call_output");
   const feedback = JSON.parse(correction.item.output);

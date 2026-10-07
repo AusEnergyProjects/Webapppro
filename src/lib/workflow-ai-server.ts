@@ -53,7 +53,8 @@ export async function requestWorkflowAi(options:WorkflowAiRequest):Promise<unkno
   if(bytes>64000)throw new Error('WORKFLOW_AI_INPUT_LIMIT');
   const guardEnv:Record<string,string|undefined>={NODE_ENV:process.env.NODE_ENV};
   for(const key of Object.values(SURGE_USAGE_GUARD_ENV))guardEnv[key]=setting(key)||undefined;
-  const guard=createSharedSurgeUsageGuard({env:guardEnv,getDatabase:()=>options.db});
+  const guard=createSharedSurgeUsageGuard({env:guardEnv,getDatabase:()=>options.db,
+    ...(conversational?{usageNamespace:'wattzun',dailyLimits:'unlimited' as const}:{})});
   // Conservative byte-based reservation follows the existing Surge model budget policy.
   const reservation=await guard.reserve({clientKey:await workflowAiSourceHash(['workflow-actor',options.actorUid]),networkKey:await workflowAiSourceHash(['workflow-business',options.scopeUid]),
     requestKey:options.requestId,estimatedMicroUsd:Math.ceil((bytes*4+2500*20)*1.25)});

@@ -297,7 +297,8 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   const transcriptionCeilingMicroUsd = 16_000 * 1.25 + 2_000 * 5;
   const estimatedMicroUsd = Math.ceil((textInputTokens * rates.textInput + audioInputCeiling * 2 * rates.audioInput
     + PROPOSAL_TOKENS * 2 * rates.textOutput + SPEECH_TOKENS * rates.audioOutput + transcriptionCeilingMicroUsd) * 1.25);
-  const guard = createSharedSurgeUsageGuard({ env: guardEnv, getDatabase: () => options.db });
+  const guard = createSharedSurgeUsageGuard({ env: guardEnv, getDatabase: () => options.db,
+    usageNamespace: "wattzun", dailyLimits: "unlimited" });
   diagnostic.phase = "guard"; diagnostic.substage = "budget";
   const guardStarted = performance.now();
   const reservation = await guard.reserve({

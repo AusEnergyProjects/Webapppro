@@ -1242,7 +1242,11 @@ test('STT and TTS use isolated stage request IDs, shared limits and hashed actor
   const env = Object.fromEntries(Object.values(SURGE_USAGE_GUARD_ENV).map((key, index) => [key, key === SURGE_USAGE_GUARD_ENV.secret ? SECRET : String(index + 1)]));
   const f = fixture({ env }); await f.transcribeWattzunPortalAudio(audioRequest()); await f.speakWattzunPortalReply(speechRequest());
   assert.equal(f.released(), 2); assert.deepEqual(f.reservations.map(item => item.requestKey), [`${REQUEST_ID}:stt`, `${REQUEST_ID}:tts`]);
-  for (const guard of f.guards) assert.deepEqual(guard.env, { NODE_ENV: 'test', ...env });
+  for (const guard of f.guards) {
+    assert.deepEqual(guard.env, { NODE_ENV: 'test', ...env });
+    assert.equal(guard.usageNamespace, 'wattzun');
+    assert.equal(guard.dailyLimits, 'unlimited');
+  }
   for (const reservation of f.reservations) {
     assert.match(reservation.clientKey, /^[a-f0-9]{64}$/); assert.match(reservation.networkKey, /^[a-f0-9]{64}$/); assert.ok(reservation.estimatedMicroUsd > 0);
   }
