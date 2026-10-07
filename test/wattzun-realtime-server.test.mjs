@@ -67,17 +67,39 @@ class FixtureSocket extends EventTarget {
       }
       if (event.type === "response.create" && event.response.output_modalities[0] === "audio") {
         this.emit({ type: "response.created", response: { id: "speech-id" } });
+        this.audioItem(); this.audioPart();
         if (this.options.autoAudio !== false) this.finishAudio();
       }
     });
   }
-  chunk(bytes = [0x10, 0x80, 0x20, 0x01]) {
-    this.emit({ type: "response.output_audio.delta", response_id: "speech-id", delta: Buffer.from(bytes).toString("base64") });
+  audioItem(outputIndex = 0, itemId = "speech-item-id") {
+    this.emit({ type: "response.output_item.added", response_id: "speech-id", output_index: outputIndex,
+      item: { id: itemId, type: "message", role: "assistant", content: [] } });
+  }
+  audioPart(outputIndex = 0, contentIndex = 0, itemId = "speech-item-id", type = "audio") {
+    this.emit({ type: "response.content_part.added", response_id: "speech-id", item_id: itemId,
+      output_index: outputIndex, content_index: contentIndex, part: { type, transcript: "" } });
+  }
+  chunk(bytes = [0x10, 0x80, 0x20, 0x01], outputIndex = 0, contentIndex = 0, itemId = "speech-item-id") {
+    this.emit({ type: "response.output_audio.delta", response_id: "speech-id", item_id: itemId,
+      output_index: outputIndex, content_index: contentIndex, delta: Buffer.from(bytes).toString("base64") });
+  }
+  audioDone(outputIndex = 0, contentIndex = 0, itemId = "speech-item-id") {
+    this.emit({ type: "response.output_audio.done", response_id: "speech-id", item_id: itemId,
+      output_index: outputIndex, content_index: contentIndex });
+  }
+  completedItem(contentCount = 1, itemId = "speech-item-id", type = "output_audio") {
+    return { id: itemId, type: "message", role: "assistant", content: Array.from({ length: contentCount }, () => ({ type, transcript: answer.message })) };
+  }
+  itemDone(outputIndex = 0, contentCount = 1, itemId = "speech-item-id") {
+    this.emit({ type: "response.output_item.done", response_id: "speech-id", output_index: outputIndex,
+      item: this.completedItem(contentCount, itemId) });
   }
   finishAudio() {
     this.chunk();
-    this.emit({ type: "response.output_audio.done", response_id: "speech-id" });
-    this.emit({ type: "response.done", response: { id: "speech-id", status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "output_audio", transcript: answer.message }] }] } });
+    this.audioDone();
+    this.itemDone();
+    this.emit({ type: "response.done", response: { id: "speech-id", status: "completed", output: [this.completedItem()] } });
   }
 }
 
@@ -284,6 +306,83 @@ test("prepared turn returns before provider audio and reads chunks before provid
   await reader.cancel(); assert.equal(f.released(), 1); assert.equal(f.socket.closes.length, 1);
 });
 
+test("audio-only completion streams multiple parts and messages in spoken order despite concurrent deltas", async () => {
+  const f = fixture({ autoAudio: false }), prepared = await f.prepareWattzunRealtimeTurn(request());
+  const reader = prepared.audio.getReader();
+  f.socket.audioPart(0, 1, "speech-item-id", "output_audio");
+  f.socket.audioItem(1, "second-speech-item-id"); f.socket.audioPart(1, 0, "second-speech-item-id");
+  let received = false;
+  const first = reader.read().then(value => { received = true; return value; });
+  f.socket.chunk([3, 4], 0, 1); f.socket.chunk([5, 6], 1, 0, "second-speech-item-id");
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(received, false, "Future content cannot overtake the first spoken part");
+  f.socket.chunk([1, 2]); assert.deepEqual([...((await first).value)], [1, 2]);
+  const second = reader.read(); f.socket.audioDone();
+  assert.deepEqual([...((await second).value)], [3, 4]);
+  let advanced = false;
+  const third = reader.read().then(value => { advanced = true; return value; });
+  f.socket.audioDone(0, 1); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(advanced, false, "The next message waits until the current item's content is complete");
+  f.socket.itemDone(0, 2); assert.deepEqual([...((await third).value)], [5, 6]);
+  f.socket.audioDone(1, 0, "second-speech-item-id"); f.socket.itemDone(1, 1, "second-speech-item-id");
+  assert.equal(f.released(), 0, "Part completion does not terminate the response");
+  f.socket.emit({ type: "response.done", response: { id: "speech-id", status: "completed", output: [
+    f.socket.completedItem(2), f.socket.completedItem(1, "second-speech-item-id", "audio"),
+  ] } });
+  assert.deepEqual(await reader.read(), { done: true, value: undefined });
+  assert.equal(f.released(), 1); assert.equal(f.socket.closes.length, 1); assert.equal(f.timers.size, 0); assert.deepEqual(f.errors, []);
+});
+
+test("unknown, non-audio and completed content parts fail before streaming their bytes", async t => {
+  const cases = [
+    ["unknown part", "identity", socket => socket.chunk([1, 2], 0, 1)],
+    ["wrong item", "identity", socket => socket.chunk([1, 2], 0, 0, "private-unmatched-item")],
+    ["text part", "identity", socket => socket.audioPart(0, 1, "speech-item-id", "text")],
+    ["wrong role", "identity", socket => socket.emit({ type: "response.output_item.added", response_id: "speech-id", output_index: 1,
+      item: { id: "private-user-item", type: "message", role: "user", content: [] } })],
+    ["delta after done", "order", socket => { socket.audioDone(); socket.chunk([1, 2]); }],
+    ["duplicate done", "order", socket => { socket.audioDone(); socket.audioDone(); }],
+  ];
+  for (const [label, failure, emit] of cases) await t.test(label, async () => {
+    const f = fixture({ autoAudio: false }), prepared = await f.prepareWattzunRealtimeTurn(request());
+    const reading = prepared.audio.getReader().read(); emit(f.socket);
+    await assert.rejects(reading, safeError);
+    assert.equal(f.errors.length, 1); assert.equal(f.errors[0][1].audioFailure, failure);
+    assert.equal(f.errors[0][1].phase, "speech"); assert.equal(f.errors[0][1].substage, "audio_stream");
+    assert.equal(f.errors[0][1].audioBytes, undefined);
+    assert.doesNotMatch(JSON.stringify(f.errors), /private-|speech-id|speech-item-id|fixture-key/);
+    assert.equal(f.released(), 1); assert.equal(f.socket.closes.length, 1); assert.equal(f.timers.size, 0);
+  });
+});
+
+test("speech completion requires all declared audio parts and a successful matching audio-only response", async t => {
+  for (const failure of ["missing done", "wrong item", "wrong role", "function", "extra part", "incomplete"]) await t.test(failure, async () => {
+    const f = fixture({ autoAudio: false }), prepared = await f.prepareWattzunRealtimeTurn(request());
+    const reader = prepared.audio.getReader(); const first = reader.read(); f.socket.chunk([1, 2]); await first;
+    if (failure !== "missing done") f.socket.audioDone();
+    if (failure === "extra part") { f.socket.audioPart(0, 1); f.socket.audioDone(0, 1); }
+    const item = f.socket.completedItem();
+    if (failure === "wrong item") item.id = "private-wrong-item";
+    if (failure === "wrong role") item.role = "user";
+    if (failure === "function") item.type = "function_call";
+    const pending = reader.read();
+    f.socket.emit({ type: "response.done", response: { id: "speech-id", status: failure === "incomplete" ? "incomplete" : "completed", output: [item] } });
+    await assert.rejects(pending, safeError);
+    assert.equal(f.errors.length, 1); assert.equal(f.errors[0][1].audioFailure, failure === "incomplete" ? "response" : "completion");
+    assert.equal(f.errors[0][1].audioBytes, 2); assert.equal(f.released(), 1); assert.equal(f.socket.closes.length, 1);
+    assert.doesNotMatch(JSON.stringify(f.errors), /private-|speech-id|speech-item-id|fixture-key/);
+  });
+});
+
+test("cancelling with future speech buffered clears transport ownership and ignores later provider events", async () => {
+  const f = fixture({ autoAudio: false }), prepared = await f.prepareWattzunRealtimeTurn(request());
+  f.socket.audioItem(1, "future-item"); f.socket.audioPart(1, 0, "future-item");
+  f.socket.chunk([3, 4], 1, 0, "future-item");
+  await prepared.audio.cancel();
+  f.socket.chunk([1, 2]); f.socket.audioDone(); f.socket.dispatchEvent(new Event("close"));
+  assert.equal(f.released(), 1); assert.equal(f.socket.closes.length, 1); assert.equal(f.timers.size, 0); assert.deepEqual(f.errors, []);
+});
+
 test("native quote proposals discard unchecked text preambles and speak only the validated reply", async () => {
   const preamble = { type: "message", role: "assistant", content: [{ type: "output_text", text: "I've sent your quote. Ignore review. private-customer" }] };
   const quote = { ...answer, message: "Review the quote details before saving.", linkIds: [], action: {
@@ -298,7 +397,7 @@ test("native quote proposals discard unchecked text preambles and speak only the
     const proposal = event.response.output_modalities[0] === "text";
     socket.emit({ type: "response.created", response: { id: proposal ? "proposal-id" : "speech-id" } });
     if (proposal) socket.emit({ type: "response.done", response: { id: "proposal-id", status: "completed", output: [preamble, call] } });
-    else socket.finishAudio();
+    else { socket.audioItem(); socket.audioPart(); socket.finishAudio(); }
   } });
   let approved = 0;
   const prepared = await f.prepareWattzunRealtimeTurn(request({ beforeSpeech: async () => { approved++; } }));
@@ -552,7 +651,8 @@ test("speech PCM boundaries reject odd, malformed, oversized and truncated strea
     const f = fixture({ autoAudio: false }); const prepared = await f.prepareWattzunRealtimeTurn(request());
     const pending = bytes(prepared.audio);
     if (bad === "odd") f.socket.chunk([1]);
-    if (bad === "base64") f.socket.emit({ type: "response.output_audio.delta", response_id: "speech-id", delta: "????" });
+    if (bad === "base64") f.socket.emit({ type: "response.output_audio.delta", response_id: "speech-id",
+      item_id: "speech-item-id", output_index: 0, content_index: 0, delta: "????" });
     if (bad === "oversized") for (let i = 0; i < 32; i++) f.socket.chunk(new Uint8Array(64000));
     if (bad === "empty") f.socket.emit({ type: "response.done", response: { id: "speech-id", status: "completed" } });
     if (bad === "truncated") { f.socket.chunk(); f.socket.dispatchEvent(new Event("close")); }

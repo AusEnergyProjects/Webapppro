@@ -34,6 +34,7 @@ type NativeTurnOptions = PortalRequest & { audio: Blob; beforeSpeech: () => Prom
 type DiagnosticPhase = "preflight" | "guard" | "connect" | "configuring" | "proposal" | "checking" | "approval" | "speech";
 type DiagnosticSubstage = "configuration" | "audio" | "budget" | "upgrade" | "session" | "input" | "envelope" | "output" | "arguments" | "reply" | "summary" | "approval" | "audio_stream";
 type DiagnosticValueType = "missing" | "null" | "array" | "object" | "string" | "number" | "boolean" | "unknown";
+type AudioFailure = "frame" | "event" | "response" | "identity" | "order" | "encoding" | "limit" | "completion" | "closed" | "transport";
 type DiagnosticStructure = {
   outputItemCount?: number;
   outputKinds?: string[];
@@ -56,6 +57,10 @@ type DiagnosticStructure = {
   messageContentKinds?: string[];
   outputTextLength?: number;
   outputTextJsonType?: DiagnosticValueType;
+  audioEvent?: string;
+  audioBytes?: number;
+  audioPartCount?: number;
+  audioFailure?: AudioFailure;
 };
 type TurnDiagnostic = {
   phase: DiagnosticPhase;
@@ -173,6 +178,9 @@ function turnDiagnostic(signal?: AbortSignal): TurnDiagnostic {
 function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
+function audioIndex(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value < 4_096;
+}
 function isSocket(value: unknown): value is RealtimeSocket {
   return record(value) && ["accept", "send", "close", "addEventListener", "removeEventListener"]
     .every(method => typeof Reflect.get(value, method) === "function");
@@ -265,7 +273,10 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   const timer = setTimeout(() => cancelled.abort(), TIMEOUT_MS);
   let socket: RealtimeSocket | undefined, socketAccepted = false, socketClosed = false, closed = false;
   let phase: "configuring" | "proposal" | "checking" | "speech" = "configuring";
-  let responseId: string | undefined, totalCharacters = 0, events = 0, audioBytes = 0, audioDone = false;
+  let responseId: string | undefined, totalCharacters = 0, events = 0, audioBytes = 0;
+  const audioItems = new Map<number, { id: string; done: boolean }>();
+  const audioParts = new Map<string, { itemId: string; done: boolean; chunks: Uint8Array[] }>();
+  let playingOutputIndex = 0, playingContentIndex = 0;
   let proposalStarted: number | undefined;
   let resolvePhase: ((event: RealtimeEvent) => void) | undefined;
   let rejectPhase: ((error: Error) => void) | undefined;
@@ -295,11 +306,18 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
       output?.error(safe);
       cancelled.abort();
     }
+    audioItems.clear(); audioParts.clear();
     waitUntil(reservation.release());
   };
   const onAbort = () => close(new Error("WORKFLOW_AI_UNAVAILABLE"));
-  const onError = () => close(new Error("WORKFLOW_AI_UNAVAILABLE"));
-  const onClose = () => close(new Error("WORKFLOW_AI_INCOMPLETE"));
+  const onError = () => {
+    if (phase === "speech") { diagnostic.structure.audioEvent = "socket.error"; diagnostic.structure.audioFailure = "transport"; }
+    close(new Error("WORKFLOW_AI_UNAVAILABLE"));
+  };
+  const onClose = () => {
+    if (phase === "speech") { diagnostic.structure.audioEvent = "socket.close"; diagnostic.structure.audioFailure = "closed"; }
+    close(new Error("WORKFLOW_AI_INCOMPLETE"));
+  };
   const waitForPhase = () => {
     const pending = new Promise<RealtimeEvent>((resolve, reject) => { resolvePhase = resolve; rejectPhase = reject; });
     // A synchronous send failure can reject this before its await is reached.
@@ -316,14 +334,53 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     if (!socket || closed) throw new Error("WORKFLOW_AI_UNAVAILABLE");
     socket.send(JSON.stringify(event));
   };
+  function rejectAudio(reason: AudioFailure): never {
+    diagnostic.structure.audioFailure = reason;
+    incomplete();
+  }
+  function completedAudioItem(outputIndex: number, spoken: unknown): number {
+    const item = audioItems.get(outputIndex);
+    if (!item || !record(spoken) || spoken.type !== "message" || spoken.role !== "assistant"
+      || spoken.id !== item.id || !Array.isArray(spoken.content) || !spoken.content.length) rejectAudio("completion");
+    for (const [contentIndex, content] of spoken.content.entries()) {
+      const part = audioParts.get(`${outputIndex}:${contentIndex}`);
+      if (!record(content) || (content.type !== "audio" && content.type !== "output_audio")
+        || !part || !part.done || part.itemId !== item.id) rejectAudio("completion");
+    }
+    return spoken.content.length;
+  }
+  function drainAudio() {
+    if (!output) return;
+    // Deltas for separate parts can arrive concurrently. Preserve their spoken
+    // order while the current part continues streaming without waiting for EOF.
+    while (true) {
+      const item = audioItems.get(playingOutputIndex);
+      const part = audioParts.get(`${playingOutputIndex}:${playingContentIndex}`);
+      if (!item || !part) return;
+      for (const chunk of part.chunks) output.enqueue(chunk);
+      part.chunks.length = 0;
+      if (!part.done) return;
+      if (audioParts.has(`${playingOutputIndex}:${playingContentIndex + 1}`)) playingContentIndex++;
+      else if (item.done) { playingOutputIndex++; playingContentIndex = 0; }
+      else return;
+    }
+  }
   const onMessage: (event: { data: unknown }) => void = (message) => {
     if (closed) return;
     try {
       if (typeof message.data !== "string" || message.data.length > MAX_FRAME_CHARACTERS
-        || (totalCharacters += message.data.length) > WATTZUN_MAX_AUDIO_BYTES * 2 + 500_000 || ++events > 4_096) incomplete();
+        || (totalCharacters += message.data.length) > WATTZUN_MAX_AUDIO_BYTES * 2 + 500_000 || ++events > 4_096) {
+        if (phase === "speech") rejectAudio("frame");
+        incomplete();
+      }
       const raw: unknown = JSON.parse(message.data);
       if (!record(raw) || typeof raw.type !== "string") incomplete();
       const event: RealtimeEvent = { ...raw, type: raw.type };
+      if (phase === "speech") diagnostic.structure.audioEvent = allowedValue(event.type, [
+        "response.created", "response.output_item.added", "response.content_part.added", "response.output_audio.delta",
+        "response.output_audio.done", "response.output_audio_transcript.delta", "response.output_audio_transcript.done",
+        "response.content_part.done", "response.output_item.done", "response.done", "error", "rate_limits.updated",
+      ]);
       if (event.type === "error") {
         diagnostic.providerError = providerErrorEnum(event.error);
         throw new Error("WORKFLOW_AI_UNAVAILABLE");
@@ -338,27 +395,70 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
         && responseId && event.response_id === responseId && proposalStarted !== undefined && diagnostic.timings.rt_first_argument === undefined) {
         diagnostic.duration("rt_first_argument", proposalStarted);
       }
+      if (event.type === "response.output_item.added" && phase === "speech") {
+        if (!responseId || event.response_id !== responseId || !audioIndex(event.output_index)
+          || audioItems.has(event.output_index) || !record(event.item) || event.item.type !== "message"
+          || event.item.role !== "assistant" || typeof event.item.id !== "string" || !event.item.id
+          || !Array.isArray(event.item.content)) rejectAudio("identity");
+        audioItems.set(event.output_index, { id: event.item.id, done: false });
+      }
+      if (event.type === "response.content_part.added" && phase === "speech") {
+        if (!responseId || event.response_id !== responseId || !audioIndex(event.output_index) || !audioIndex(event.content_index)
+          || typeof event.item_id !== "string" || audioItems.get(event.output_index)?.id !== event.item_id
+          || !record(event.part) || (event.part.type !== "audio" && event.part.type !== "output_audio")) rejectAudio("identity");
+        if (audioItems.get(event.output_index)?.done) rejectAudio("order");
+        const partKey = `${event.output_index}:${event.content_index}`;
+        if (audioParts.has(partKey)) rejectAudio("order");
+        audioParts.set(partKey, { itemId: event.item_id, done: false, chunks: [] });
+        diagnostic.structure.audioPartCount = audioParts.size;
+      }
+      if (event.type === "response.output_item.done" && phase === "speech") {
+        if (!responseId || event.response_id !== responseId || !audioIndex(event.output_index)) rejectAudio("identity");
+        const item = audioItems.get(event.output_index);
+        if (!item || item.done) rejectAudio("order");
+        completedAudioItem(event.output_index, event.item);
+        item.done = true;
+        drainAudio();
+      }
       if (event.type === "response.output_audio.delta" || event.type === "response.output_audio.done") {
-        if (phase !== "speech" || !responseId || event.response_id !== responseId || !output || audioDone) incomplete();
-        if (event.type === "response.output_audio.done") { audioDone = true; return; }
-        const bytes = pcmChunk(event.delta);
+        if (phase !== "speech" || !responseId || event.response_id !== responseId || !output) incomplete();
+        if (!audioIndex(event.output_index) || !audioIndex(event.content_index) || typeof event.item_id !== "string") rejectAudio("identity");
+        const part = audioParts.get(`${event.output_index}:${event.content_index}`);
+        if (!part || part.itemId !== event.item_id) rejectAudio("identity");
+        if (part.done) rejectAudio("order");
+        if (event.type === "response.output_audio.done") { part.done = true; drainAudio(); return; }
+        let bytes: Uint8Array;
+        try { bytes = pcmChunk(event.delta); } catch { rejectAudio("encoding"); }
         audioBytes += bytes.byteLength;
-        if (audioBytes > WATTZUN_MAX_AUDIO_BYTES) incomplete();
-        output.enqueue(bytes);
+        diagnostic.structure.audioBytes = audioBytes;
+        if (audioBytes > WATTZUN_MAX_AUDIO_BYTES) rejectAudio("limit");
+        part.chunks.push(bytes);
+        drainAudio();
       }
       if (event.type === "response.done") {
         diagnostic.substage = "envelope";
         captureResponseStructure(diagnostic, event.response);
-        if (!record(event.response) || !responseId || event.response.id !== responseId || event.response.status !== "completed") incomplete();
+        if (!record(event.response) || !responseId || event.response.id !== responseId || event.response.status !== "completed") {
+          if (phase === "speech") rejectAudio("response");
+          incomplete();
+        }
         if (phase === "proposal") { phase = "checking"; completePhase(event); return; }
-        if (phase !== "speech" || !audioBytes || !audioDone || !output || !Array.isArray(event.response.output)
-          || event.response.output.length !== 1) incomplete();
-        const spoken: unknown = event.response.output[0];
-        if (!record(spoken) || spoken.type !== "message" || spoken.role !== "assistant" || !Array.isArray(spoken.content)
-          || spoken.content.length !== 1 || !record(spoken.content[0]) || spoken.content[0].type !== "output_audio") incomplete();
+        if (phase !== "speech" || !audioBytes || !output || !Array.isArray(event.response.output)
+          || !event.response.output.length || event.response.output.length !== audioItems.size) rejectAudio("completion");
+        let completedParts = 0;
+        for (const [outputIndex, spoken] of event.response.output.entries()) {
+          completedParts += completedAudioItem(outputIndex, spoken);
+          const item = audioItems.get(outputIndex);
+          if (item) item.done = true;
+        }
+        if (completedParts !== audioParts.size) rejectAudio("completion");
+        drainAudio();
         output.close(); close();
       }
-    } catch (error) { close(error instanceof SyntaxError ? new Error("WORKFLOW_AI_INCOMPLETE") : error); }
+    } catch (error) {
+      if (phase === "speech" && !diagnostic.structure.audioFailure) diagnostic.structure.audioFailure = "event";
+      close(error instanceof SyntaxError ? new Error("WORKFLOW_AI_INCOMPLETE") : error);
+    }
   };
   signal.addEventListener("abort", onAbort, { once: true });
   try {
