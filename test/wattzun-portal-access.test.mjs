@@ -200,9 +200,14 @@ function verifiedOwnerFixture(t) {
       'approved','51824753556','review-one','2026-10-07T00:00:00Z','reviewer-one');
     INSERT INTO trade_account_verification_reviews VALUES ('review-one','owner-one','51824753556','Owner business','installer',
       'approved','official_abr_lookup','reviewer-one','2026-10-07T00:00:00Z');`);
-  const calls = [], db = { prepare: sql => ({ bind: (...values) => ({ first: async () => {
+  const calls = [];
+  const statement = (sql, values = []) => ({ sql, values, bind: (...next) => statement(sql, next), first: async () => {
     calls.push(sql); return database.prepare(sql).get(...values) || null;
-  } }) }) };
+  } });
+  const db = { prepare: statement, batch: async statements => {
+    calls.push(statements[0].sql);
+    return statements.map(item => ({ success: true, results: database.prepare(item.sql).all(...item.values) }));
+  } };
   const authority = {}, mfa = [];
   const authoritySource = ts.transpileModule(readFileSync(new URL("../src/lib/trade-access-server.ts", import.meta.url), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -212,7 +217,9 @@ function verifiedOwnerFixture(t) {
     "./firebase-server": { requireFirebaseIdentity: async () => { throw new Error("Not used by verified identity authority."); } },
     "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => {} },
     "./trade-abn": tradeAbn, "./trade-account-predicates": accountPredicates,
-    "./trade-mfa-server": { requireTradeMyobSecondFactor: async (identity, ownerUid) => { mfa.push({ identity, ownerUid }); } },
+    "./trade-mfa-server": { hasTradeSecondFactor: identity => identity?.secondFactor === "totp" || identity?.secondFactor === "phone",
+      MYOB_MFA_REQUIRED_SQL: "SELECT 1 AS required WHERE ? = ?",
+      enforceTradeMyobSecondFactor: async (identity, ownerUid) => { mfa.push({ identity, ownerUid }); } },
   };
   Function("require", "exports", authoritySource)(name => { assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name]; }, authority);
   return { database, calls, mfa, authority, ...fixture({ identity: { uid: "owner-one" }, db, tradeAuthority: authority }) };

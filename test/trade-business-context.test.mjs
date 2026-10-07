@@ -48,7 +48,7 @@ function fixture(t, options = {}) {
     prepare: sql => new Statement(database, sql, [], calls.d1),
     async batch(statements) {
       calls.d1.push({ kind: "batch", sql: statements.map(statement => statement.sql) });
-      options.beforeBatch?.();
+      if (statements.some(statement => /^SELECT id FROM trade_team_members/.test(statement.sql))) options.beforeBatch?.();
       database.exec("BEGIN");
       try {
         const results = statements.map(statement => /^\s*SELECT/i.test(statement.sql)
@@ -74,7 +74,13 @@ function fixture(t, options = {}) {
       } },
       "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => calls.schema.push("creditex") },
       "./tlink-schema-guards": { ensureTlinkSchemaGuards: async () => calls.schema.push("tlink") },
-      "./trade-mfa-server": { requireTradeMyobSecondFactor: async (actor, ownerUid, actorUid) => {
+      "./trade-mfa-server": { hasTradeSecondFactor: actor => actor?.secondFactor === "totp" || actor?.secondFactor === "phone",
+        // Keep this fixture's MFA boundary mocked; real policy reads are covered by trade-owner-access-batch.
+        MYOB_MFA_REQUIRED_SQL: "SELECT 1 AS required WHERE ? = ?",
+        enforceTradeMyobSecondFactor: async (actor, ownerUid, actorUid) => {
+          calls.mfa.push({ actor, ownerUid, actorUid });
+          if (options.mfaOwner === ownerUid && !actor?.secondFactor) throw Object.assign(new Error("MFA_REQUIRED"), { code: "MFA_REQUIRED" });
+        }, requireTradeMyobSecondFactor: async (actor, ownerUid, actorUid) => {
         calls.mfa.push({ actor, ownerUid, actorUid });
         if (options.mfaOwner === ownerUid && !actor?.secondFactor) throw Object.assign(new Error("MFA_REQUIRED"), { code: "MFA_REQUIRED" });
       } },
@@ -267,7 +273,8 @@ test("existing owner access combines current member validation and conditional r
     assert.equal(access.canManageQuotes, true); assert.equal(access.canManageForms, true);
   }
   assert.equal(f.calls.d1.length, 12);
-  assert.equal(f.calls.d1.filter(call => call.kind === "batch").length, 4);
+  assert.equal(f.calls.d1.filter(call => call.kind === "batch").length, 8);
+  assert.equal(f.calls.d1.filter(call => call.kind === "batch" && call.sql.some(sql => /^SELECT id FROM trade_team_members/.test(sql))).length, 4);
   assert.equal(f.calls.d1.filter(call => call.kind === "first" && /SELECT id FROM trade_team_members/.test(call.sql)).length, 0);
   assert.equal(f.calls.identity.length, 4); assert.equal(f.calls.mfa.length, 4);
   assert.ok(f.calls.mfa.every(call => call.actor.uid === f.identity.uid && call.ownerUid === f.identity.uid));
@@ -281,7 +288,7 @@ test("a deleted projected owner member falls back to a real bootstrap row rather
   assert.notEqual(access.memberId, "deleted-owner-member");
   const row = f.database.prepare("SELECT owner_uid,member_uid,status FROM trade_team_members WHERE id=?").get(access.memberId);
   assert.deepEqual({ ...row }, { owner_uid: f.identity.uid, member_uid: f.identity.uid, status: "active" });
-  assert.equal(f.calls.d1.filter(call => call.kind === "batch").length, 1);
+  assert.equal(f.calls.d1.filter(call => call.kind === "batch" && call.sql.some(sql => /^SELECT id FROM trade_team_members/.test(sql))).length, 1);
   assert.equal(f.calls.d1.filter(call => call.kind === "first" && /SELECT id FROM trade_team_members/.test(call.sql)).length, 1);
 });
 
@@ -317,7 +324,7 @@ test("unlinked owner-email roster rows retain the authoritative fallback repair 
   f.database.prepare("UPDATE trade_team_members SET email=?,status='invited' WHERE id=?").run(f.identity.email, "owner-roster");
   const access = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
   assert.equal(access.memberId, "owner-roster");
-  assert.equal(f.calls.d1.some(call => call.kind === "batch"), false);
+  assert.equal(f.calls.d1.some(call => call.kind === "batch" && call.sql.some(sql => /^SELECT id FROM trade_team_members/.test(sql))), false);
   const roster = f.database.prepare("SELECT member_uid,status,can_manage_team FROM trade_team_members WHERE id=?").get(access.memberId);
   assert.deepEqual({ ...roster }, { member_uid: f.identity.uid, status: "active", can_manage_team: 1 });
   assert.equal(f.database.prepare("SELECT COUNT(*) AS count FROM trade_team_members WHERE owner_uid=?").get(f.identity.uid).count, 1);
@@ -334,7 +341,7 @@ test("owner email, current approval and second factor remain required before the
     if (restriction === "abn") f.database.exec("UPDATE trade_accounts SET abn='11111111111',verified_abn='11111111111'; UPDATE trade_account_verification_reviews SET abn='11111111111'");
     if (restriction === "mfa") options.mfaOwner = f.identity.uid;
     await assert.rejects(f.teams.requireInstallerTeamAccess(f.request(f.identity.uid)));
-    assert.equal(f.calls.d1.some(call => call.kind === "batch"), false, restriction);
+    assert.equal(f.calls.d1.some(call => call.kind === "batch" && call.sql.some(sql => /^SELECT id FROM trade_team_members/.test(sql))), false, restriction);
   }
 });
 

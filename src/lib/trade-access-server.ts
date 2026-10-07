@@ -5,7 +5,7 @@ import {
 } from "./firebase-server";
 import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
 import { isValidAbn, normalizeAbn } from "./trade-abn";
-import { requireTradeMyobSecondFactor } from "./trade-mfa-server";
+import { enforceTradeMyobSecondFactor, hasTradeSecondFactor, MYOB_MFA_REQUIRED_SQL } from "./trade-mfa-server";
 
 import { approvedTradeReviewPredicate, verifiedTradeAccountPredicate } from "./trade-account-predicates";
 export { approvedTradeReviewPredicate, verifiedTradeAccountPredicate } from "./trade-account-predicates";
@@ -79,16 +79,18 @@ export function approvedAbnAccess(
   );
 }
 
-export async function tradeAccountProjection(firebaseUid: string, options: Pick<AccessOptions, "requireSelectableBusiness"> = {}) {
-  const row = await getD1().prepare(`SELECT account.firebase_uid, account.email,
+function tradeAccountStatement(firebaseUid: string, options: Pick<AccessOptions, "requireSelectableBusiness"> = {}) {
+  return getD1().prepare(`SELECT account.firebase_uid, account.email,
       account.business_name, account.abn, account.partner_type, account.account_status,
       account.verification_status, account.verified_abn, account.verification_review_id,
       account.verification_reviewed_at, account.verification_reviewed_by_uid,
       CASE WHEN ${approvedTradeReviewPredicate("account")} THEN 1 ELSE 0 END approval_review_exists
     FROM trade_accounts account WHERE account.firebase_uid = ?${options.requireSelectableBusiness
       ? ` AND (${verifiedTradeAccountPredicate("account")})` : ""}`)
-    .bind(firebaseUid)
-    .first<Record<string, unknown>>();
+    .bind(firebaseUid);
+}
+
+function projectTradeAccount(row: Record<string, unknown> | null) {
   if (!row) return null;
   if (row.partner_type !== "installer" && row.partner_type !== "supplier") {
     throw new TradeAccessError(
@@ -116,6 +118,10 @@ export async function tradeAccountProjection(firebaseUid: string, options: Pick<
   return projection;
 }
 
+export async function tradeAccountProjection(firebaseUid: string, options: Pick<AccessOptions, "requireSelectableBusiness"> = {}) {
+  return projectTradeAccount(await tradeAccountStatement(firebaseUid, options).first<Record<string, unknown>>());
+}
+
 export async function requireVerifiedTradeIdentity(
   identity: FirebaseIdentity,
   options: AccessOptions = {},
@@ -128,7 +134,26 @@ export async function requireVerifiedTradeIdentity(
     );
   }
   await ensureCreditexSchemaGuards(getD1());
-  const account = await tradeAccountProjection(identity.uid, options);
+  const hasSecondFactor = hasTradeSecondFactor(identity);
+  let account: TradeAccountProjection | null;
+  let policy: D1Result<Record<string, unknown>> | undefined;
+  if (hasSecondFactor) {
+    account = await tradeAccountProjection(identity.uid, options);
+  } else {
+    // Both reads use the same verified owner UID and one fresh D1 transaction.
+    // Validate account eligibility before enforcing or auditing its MFA policy.
+    const results = await getD1().batch<Record<string, unknown>>([
+      tradeAccountStatement(identity.uid, options),
+      getD1().prepare(MYOB_MFA_REQUIRED_SQL).bind(identity.uid, identity.uid),
+    ]);
+    if (!Array.isArray(results) || results.length !== 2) throw new Error("TRADE_ACCESS_UNAVAILABLE");
+    const rows = results[0];
+    if (!rows?.success || !Array.isArray(rows.results) || rows.results.length > 1) {
+      throw new Error("TRADE_ACCESS_UNAVAILABLE");
+    }
+    account = projectTradeAccount(rows.results[0] || null);
+    policy = results[1];
+  }
   if (!account) {
     throw new TradeAccessError(
       "PROFILE_REQUIRED",
@@ -157,7 +182,12 @@ export async function requireVerifiedTradeIdentity(
       "ABN review and trade approval are required before using TLink operations.",
     );
   }
-  await requireTradeMyobSecondFactor(identity, identity.uid);
+  if (!hasSecondFactor) {
+    if (!policy?.success || !Array.isArray(policy.results) || policy.results.length > 1
+      || policy.results.some(row => !row || typeof row !== "object" || Array.isArray(row)
+        || Object.keys(row).length !== 1 || row.required !== 1)) throw new Error("TRADE_ACCESS_UNAVAILABLE");
+    if (policy.results.length) await enforceTradeMyobSecondFactor(identity, identity.uid);
+  }
   return { ...account, identity };
 }
 

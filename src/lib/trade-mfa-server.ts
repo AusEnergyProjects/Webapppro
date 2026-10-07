@@ -8,12 +8,22 @@ export const MYOB_MFA_REQUIRED_SQL = `SELECT 1 AS required WHERE
   EXISTS (SELECT 1 FROM trade_crm_integrations WHERE firebase_uid = ? AND provider = 'myob')
   OR EXISTS (SELECT 1 FROM trade_crm_accounting_documents WHERE firebase_uid = ? AND provider = 'myob')`;
 
+export function hasTradeSecondFactor(identity: FirebaseIdentity | undefined) {
+  return identity?.secondFactor === "totp" || identity?.secondFactor === "phone";
+}
+
+/** Enforce a policy already determined to require MFA; this never bypasses it. */
+export async function enforceTradeMyobSecondFactor(identity: FirebaseIdentity | undefined, ownerUid: string, actorUid = identity?.uid || "field-session") {
+  if (hasTradeSecondFactor(identity)) return;
+  await writeMyobSecurityEvent(getD1(), { actorUid, ownerUid, action: "access.denied", resourceId: "trade-workspace", outcome: "denied" });
+  requireSecondFactor(identity);
+}
+
 export async function requireTradeMyobSecondFactor(identity: FirebaseIdentity | undefined, ownerUid: string, actorUid = identity?.uid || "field-session") {
-  if (identity?.secondFactor === "totp" || identity?.secondFactor === "phone") return;
+  if (hasTradeSecondFactor(identity)) return;
   const db = getD1();
   const required = await db.prepare(MYOB_MFA_REQUIRED_SQL).bind(ownerUid, ownerUid).first();
   if (required) {
-    await writeMyobSecurityEvent(db, { actorUid, ownerUid, action: "access.denied", resourceId: "trade-workspace", outcome: "denied" });
-    requireSecondFactor(identity);
+    await enforceTradeMyobSecondFactor(identity, ownerUid, actorUid);
   }
 }
