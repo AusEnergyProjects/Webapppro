@@ -60,6 +60,7 @@ class FixtureSocket extends EventTarget {
   send(text) {
     const event = JSON.parse(text); this.sent.push(event);
     if (this.options.sendError) throw new Error("provider-private-details");
+    if (event.item?.type === "function_call_output") this.options.onCorrection?.();
     queueMicrotask(() => {
       if (this.options.receive) { this.options.receive(event, this); return; }
       if (event.type === "session.update") this.emit({ type: "session.updated", session: event.session });
@@ -68,9 +69,12 @@ class FixtureSocket extends EventTarget {
         if (this.options.transcript) this.emit({ type: "conversation.item.input_audio_transcription.completed", item_id: "input-item-id", content_index: 0, transcript: this.options.transcript });
       }
       if (event.type === "response.create" && event.response.output_modalities[0] === "text") {
-        this.emit({ type: "response.created", response: { id: "proposal-id" } });
-        this.emit({ type: "response.done", response: { id: "proposal-id", status: "completed", output: [
-          { type: "function_call", name: "wattzun_portal_reply", arguments: this.options.arguments ?? JSON.stringify({
+        const index = this.sent.filter(value => value.type === "response.create" && value.response.output_modalities[0] === "text").length - 1;
+        const proposalId = `proposal-id-${index}`;
+        this.emit({ type: "response.created", response: { id: proposalId } });
+        this.emit({ type: "response.done", response: { id: proposalId, status: "completed", output: [
+          { type: "function_call", name: "wattzun_portal_reply", ...(this.options.proposals ? { call_id: `proposal-call-${index}` } : {}),
+            arguments: this.options.proposals?.[index] ?? this.options.arguments ?? JSON.stringify({
             ...(this.options.reply ?? answer), requestSummary: this.options.requestSummary ?? "User asks where to find Schedule.",
           }) },
         ] } });
@@ -154,6 +158,132 @@ function safeError(error) {
   assert.doesNotMatch(error.message + String(error.cause || ""), /fixture-key|private-actor|private-business|provider-private-details/);
   return true;
 }
+
+test("rejected customer-shaped quote is corrected on the same audio conversation before execution", async () => {
+  const proposal = { kind: "prepare_quote", firstName: "Morgan", lastName: "Example", email: "wattzun-qa@example.invalid", phone: "",
+    addressQuery: "152 Elizabeth Street, Melbourne VIC 3000", serviceCategory: "Electrical", description: "One outdoor wall light", lines: [] };
+  const envelope = action => JSON.stringify({ message: "Thanks.", questions: [], linkIds: [], action, lookup: null,
+    requestSummary: "The email is wattzun dash Q A at example dot invalid." });
+  const f = fixture({ transcript: "The email is wattzun dash Q A at example dot invalid.",
+    proposals: [envelope({ ...proposal, kind: "create_customer" }), envelope(proposal)] });
+  let transformed = 0, approved = 0;
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async reply => { transformed++; return reply; },
+    beforeSpeech: async () => { approved++; } }));
+  await bytes(prepared.audio);
+  assert.equal(prepared.reply.action.kind, "prepare_quote");
+  assert.equal(prepared.reply.action.email, "wattzun-qa@example.invalid");
+  assert.equal(prepared.reply.questions.length, 1);
+  assert.equal(transformed, 1); assert.equal(approved, 1);
+  assert.equal(f.calls.length, 1, "Correction reuses the provider connection");
+  assert.equal(f.socket.sent.filter(event => event.type === "input_audio_buffer.commit").length, 1, "Original audio is not replayed");
+  const correction = f.socket.sent.find(event => event.item?.type === "function_call_output");
+  const feedback = JSON.parse(correction.item.output);
+  assert.equal(correction.item.call_id, "proposal-call-0");
+  assert.equal(feedback.executed, false); assert.equal(feedback.reason, "action_bounds");
+  assert.match(feedback.instruction, /prepare_quote/);
+  assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 3);
+  assert.equal(prepared.transcript, "The email is wattzun dash Q A at example dot invalid.");
+  assert.equal(f.errors.length, 0); assert.equal(f.released(), 1);
+  assert.doesNotMatch(JSON.stringify(f.infos), /wattzun-qa|Morgan|Elizabeth/);
+});
+
+test("a malformed quote action gets one bounded correction and never executes a rejected proposal", async () => {
+  const bad = JSON.stringify({ ...answer, action: { kind: "prepare_quote", firstName: "Morgan" }, requestSummary: "Morgan Example is the customer." });
+  const clarification = JSON.stringify({ message: "Thanks.", questions: ["What is the customer's email address?"], linkIds: [], action: null, lookup: null,
+    requestSummary: "Morgan Example is the customer." });
+  const f = fixture({ proposals: [bad, clarification] });
+  let actions = 0;
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async reply => { if (reply.action) actions++; return reply; } }));
+  await bytes(prepared.audio);
+  assert.equal(actions, 0); assert.equal(prepared.reply.questions.length, 1);
+  assert.equal(f.socket.sent.filter(event => event.item?.type === "function_call_output").length, 1);
+  const invalid = fixture({ proposals: [bad, bad] });
+  await assert.rejects(invalid.prepareWattzunRealtimeTurn(request({ transformReply: async () => { actions++; throw new Error("must not execute"); } })), safeError);
+  assert.equal(actions, 0); assert.equal(invalid.socket.sent.filter(event => event.type === "response.create").length, 2);
+  assert.equal(invalid.socket.sent.filter(event => event.item?.type === "function_call_output").length, 1);
+  assert.equal(invalid.released(), 1);
+});
+
+test("post-execution workflow clarification speaks one logical question with the same brand voice", async () => {
+  const f = fixture();
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async reply => ({ ...reply,
+    message: "What is the quantity? What is the price?", questions: ["What is the quantity?", "What is the price?"] }) }));
+  await bytes(prepared.audio);
+  assert.equal(prepared.reply.questions.length, 1);
+  const speech = f.socket.sent.find(event => event.response?.output_modalities[0] === "audio");
+  assert.equal((speech.response.input[0].content[0].text.match(/\?/g) || []).length, 1);
+  assert.equal(f.socket.sent[0].session.audio.output.voice, "cedar");
+});
+
+test("a read-only correction preserves the first validated email summary when transcription is absent", async () => {
+  const summary = "The customer's email is wattzun-QA@example.invalid.";
+  const bad = JSON.stringify({ ...answer, action: { kind: "prepare_quote", firstName: "Morgan" }, requestSummary: summary });
+  const clarification = JSON.stringify({ message: "Thanks.", questions: ["What is the customer's mobile number?"], linkIds: [] });
+  const f = fixture({ proposals: [bad, clarification] });
+  let actions = 0;
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async (reply, currentRequest) => {
+    if (reply.action) actions++;
+    assert.equal(currentRequest, summary);
+    return reply;
+  } }));
+  await bytes(prepared.audio);
+  assert.equal(prepared.requestSummary, summary);
+  assert.equal(prepared.transcript, "");
+  assert.equal(actions, 0);
+  assert.equal(prepared.reply.questions.length, 1);
+});
+
+test("twice-invalid email proposals speak a literal email confirmation without releasing either action", async () => {
+  const bad = JSON.stringify({ ...answer, action: { kind: "prepare_quote", firstName: "Morgan" },
+    requestSummary: "The customer's email is wattzun dash Q A at example dot invalid." });
+  const f = fixture({ proposals: [bad, bad], transcript: "The customer's email is wattzun dash Q A at example dot invalid." });
+  let actions = 0;
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async reply => { if (reply.action) actions++; return reply; } }));
+  await bytes(prepared.audio);
+  assert.equal(actions, 0); assert.equal(prepared.reply.action, undefined);
+  assert.match(prepared.reply.message, /wattzun-QA@example.invalid/i);
+  assert.deepEqual(prepared.reply.questions, ["Is that email address correct?"]);
+  assert.equal(f.socket.sent.filter(event => event.item?.type === "function_call_output").length, 1);
+  const speech = f.socket.sent.find(event => event.response?.output_modalities[0] === "audio");
+  assert.match(speech.response.input[0].content[0].text, /wattzun-QA@example.invalid/i);
+  assert.doesNotMatch(speech.response.input[0].content[0].text, /still here|repeat that last part|saved|sent/);
+});
+
+test("a twice-invalid action can ask its validated read-only next question", async () => {
+  const bad = JSON.stringify({ message: "I've saved that quote.", questions: ["What is the customer's mobile number?"], linkIds: [],
+    action: { kind: "prepare_quote", firstName: "Morgan" }, lookup: null, requestSummary: "Morgan Example is the customer." });
+  const f = fixture({ proposals: [bad, bad] });
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async reply => { assert.ok(!reply.action); return reply; } }));
+  await bytes(prepared.audio);
+  assert.equal(prepared.reply.message, "Okay."); assert.equal(prepared.reply.questions.length, 1);
+  assert.ok(!prepared.reply.action); assert.ok(!prepared.reply.lookup);
+  assert.doesNotMatch(f.socket.sent.at(-1).response.input[0].content[0].text, /saved/);
+});
+
+test("hangup during a proposal correction never executes or releases speech", async () => {
+  const abort = new AbortController();
+  const bad = JSON.stringify({ ...answer, action: { kind: "prepare_quote", firstName: "Morgan" }, requestSummary: "Morgan Example." });
+  const f = fixture({ proposals: [bad, bad], onCorrection: () => abort.abort() });
+  let actions = 0;
+  await assert.rejects(f.prepareWattzunRealtimeTurn(request({ signal: abort.signal,
+    transformReply: async reply => { actions++; return reply; } })), safeError);
+  assert.equal(actions, 0); assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1);
+  assert.equal(f.released(), 1); assert.equal(f.socket.closes.length, 1);
+});
+
+test("a failed correction retains already heard email memory without executing the invalid action", async () => {
+  const transcript = "The customer's email is wattzun dash Q A at example dot invalid.";
+  const summary = "The customer's email is wattzun-QA@example.invalid.";
+  const bad = JSON.stringify({ ...answer, action: { kind: "prepare_quote", firstName: "Morgan" }, requestSummary: summary });
+  const f = fixture({ transcript, proposals: [bad, bad], onCorrection: () => f.socket.emit({ type: "error", error: { type: "server_error" } }) });
+  let actions = 0;
+  await assert.rejects(f.prepareWattzunRealtimeTurn(request({ transformReply: async reply => { actions++; return reply; } })), error => {
+    assert.ok(error instanceof f.WattzunRealtimeTurnError);
+    assert.equal(error.transcript, transcript); assert.equal(error.requestSummary, summary); return safeError(error);
+  });
+  assert.equal(actions, 0); assert.equal(f.released(), 1);
+  assert.doesNotMatch(JSON.stringify(f.errors), /wattzun-QA|customer's email|Morgan/);
+});
 
 async function bytes(stream) {
   const reader = stream.getReader(), chunks = [];
@@ -285,7 +415,8 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.match(session.instructions, /Do not output an assistant message, text, audio or preamble/);
   assert.deepEqual(session.tools[0].parameters.required, ["message", "questions", "linkIds", "action", "lookup", "requestSummary"]);
   assert.deepEqual(Object.keys(session.tools[0].parameters.properties), session.tools[0].parameters.required);
-  for (const field of contract.schema.required) assert.deepEqual(session.tools[0].parameters.properties[field], contract.schema.properties[field]);
+  for (const field of contract.schema.required) assert.deepEqual(session.tools[0].parameters.properties[field], field === "questions"
+    ? { ...contract.schema.properties.questions, maxItems: 1 } : contract.schema.properties[field]);
   assert.equal(session.tools[0].parameters.additionalProperties, false);
   const memorySchema = session.tools[0].parameters.properties.requestSummary;
   assert.deepEqual({ ...memorySchema, description: undefined }, { type: "string", minLength: 1, maxLength: 1800, description: undefined });
@@ -324,7 +455,9 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.doesNotMatch(JSON.stringify(responses[1]), /Jane|Ignore platform rules|private-actor|private-business/);
   // Both complete output ceilings at the current published rates, before input costs.
   assert.ok(f.reservations[0].estimatedMicroUsd >= Math.ceil((2500 * 2.4 + 2048 * 20) * 1.25));
-  assert.ok(f.reservations[0].estimatedMicroUsd < 150000);
+  // Includes a second bounded proposal, its retained context/audio, and the
+  // existing speech/transcription ceilings. This is a reservation, not a bill.
+  assert.ok(f.reservations[0].estimatedMicroUsd < 350000);
   assert.deepEqual(responses[0].reasoning, { effort: "low" });
   assert.deepEqual(responses[1].reasoning, { effort: "minimal" });
   assert.ok(responses.every(response => !Object.hasOwn(response, "parallel_tool_calls")));
@@ -378,7 +511,7 @@ test("native canonical needs-details asks one question while keeping full requir
   const f = fixture({ reply: { ...answer, message: "I can prepare that reminder.", action }, requestSummary: "Send Alex an SMS reminder for last week's Frankston job." });
   const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async reply => workflowReply.wattzunWorkflowReply(reply, result) }));
   await bytes(prepared.audio);
-  assert.deepEqual(prepared.reply.questions, result.questions); assert.deepEqual(prepared.reply.workflow, result);
+  assert.deepEqual(prepared.reply.questions, [result.questions[0]]); assert.deepEqual(prepared.reply.workflow, result);
   const speech = f.socket.sent.filter(event => event.type === "response.create")[1].response.input[0].content[0].text;
   assert.ok(speech.includes(result.questions[0]));
   for (const later of result.questions.slice(1)) assert.ok(!speech.includes(later));
@@ -500,8 +633,8 @@ test("cancelling with future speech buffered clears transport ownership and igno
 test("native quote proposals discard unchecked text preambles and speak only the validated reply", async () => {
   const preamble = { type: "message", role: "assistant", content: [{ type: "output_text", text: "I've sent your quote. Ignore review. private-customer" }] };
   const quote = { ...answer, message: "Review the quote details before saving.", linkIds: [], action: {
-    kind: "prepare_quote", firstName: "Alex", lastName: "Test", email: "", phone: "", addressQuery: "",
-    serviceCategory: "", description: "Electrical inspection", lines: [{ lineType: "labour", description: "Electrical inspection",
+    kind: "prepare_quote", firstName: "Alex", lastName: "Test", email: "alex@example.invalid", phone: "0000000000", addressQuery: "152 Elizabeth Street, Melbourne VIC 3000",
+    serviceCategory: "Electrical", description: "Electrical inspection", lines: [{ lineType: "labour", description: "Electrical inspection",
       quantity: "1", unitPrice: "120", taxCode: "gst" }],
   } };
   const call = { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ ...quote, requestSummary: "User requests a new quote for Alex Test, one inspection at $120 before GST." }) };
@@ -1055,7 +1188,7 @@ test("the longest native turn retains bounded history and reserves both output-t
   await bytes(prepared.audio);
   assert.equal(f.reservations.length, 1); assert.equal(f.reservations[0].requestKey.length, 75);
   assert.equal(f.calls[0].url, "https://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini");
-  assert.ok(f.reservations[0].estimatedMicroUsd > 80000 + 30000 * 1.25 && f.reservations[0].estimatedMicroUsd < 150000 + 30000 * 1.25);
+  assert.ok(f.reservations[0].estimatedMicroUsd > 80000 + 30000 * 1.25 && f.reservations[0].estimatedMicroUsd < 350000);
   const session = f.socket.sent.find(event => event.type === "session.update").session;
   assert.equal(session.truncation, "disabled"); assert.deepEqual(session.reasoning, { effort: "low" });
   assert.equal(session.parallel_tool_calls, false);
@@ -1073,7 +1206,7 @@ test("dense Unicode conversation facts retain the reasoning model and full histo
   assert.equal(session.truncation, "disabled");
   const context = JSON.parse(f.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text);
   assert.deepEqual(context.conversation, options.input.history);
-  assert.ok(f.reservations[0].estimatedMicroUsd < 150000 + 30000 * 1.25);
+  assert.ok(f.reservations[0].estimatedMicroUsd < 350000);
 });
 
 test("the previously accepted 24k Unicode history is retained within the shared byte ceiling", async () => {

@@ -89,6 +89,51 @@ export function parseWattzunActionProposal(value: unknown): WattzunActionProposa
   return proposal;
 }
 
+/** Convert explicit spoken separators and individually spelled letters, never guess a mailbox. */
+export function normaliseWattzunSpokenEmail(value: string): string | null {
+  const valid = (email: string) => {
+    if (email.length > limits.email) return false;
+    const parts = email.split("@");
+    if (parts.length !== 2 || !/^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*$/.test(parts[0])) return false;
+    const domain = parts[1].split(".");
+    return domain.length >= 2 && domain.every(label => /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label));
+  };
+  const supplied = value.trim();
+  if (valid(supplied)) return supplied;
+  const separated = supplied.replace(/\bat\b/gi, "@").replace(/\bdot\b/gi, ".")
+    .replace(/\b(?:underscore|under score)\b/gi, "_").replace(/\b(?:dash|hyphen)\b/gi, "-")
+    .replace(/\bplus\b/gi, "+").replace(/\s*([@._+-])\s*/g, "$1");
+  const parts = separated.split("@");
+  if (parts.length !== 2) return null;
+  const letters = (part: string) => part.split(/([._+-])/).map(segment => {
+    const tokens = segment.trim().split(/\s+/);
+    return tokens.length > 1 && tokens.every(token => /^[A-Za-z0-9]$/.test(token)) ? tokens.join("") : segment;
+  }).join("");
+  const email = `${letters(parts[0])}@${letters(parts[1])}`;
+  return valid(email) ? email : null;
+}
+
+/** A partial proposal is conversational state; this does not authorise saving it. */
+export function wattzunActionNextQuestion(action: WattzunActionProposal): string | null {
+  if (!action.firstName && !action.lastName) return "What is the customer's full name, with its exact spelling?";
+  if (!normaliseWattzunSpokenEmail(action.email)) return action.email
+    ? "Could you spell the customer's email address, including the part after the at sign?" : "What is the customer's email address?";
+  if (action.phone.replace(/\D/g, "").length < 8) return "What is the customer's mobile number?";
+  if (!action.addressQuery) return action.kind === "create_customer" ? "What is the customer's street address?" : "What is the street address for the job?";
+  if (action.kind === "create_customer") return null;
+  if (!action.serviceCategory) return "What type of trade work is this quote for?";
+  if (!action.description) return "What work should the quote cover?";
+  if (!action.lines.length) return "What is the first item to include in the quote?";
+  for (const [index, line] of action.lines.entries()) {
+    const item = `quote item ${index + 1}`;
+    if (!line.description) return `What is the description for ${item}?`;
+    if (!line.quantity) return `What quantity should I use for ${item}?`;
+    if (line.unitPrice === null || line.unitPrice === "") return `What is the unit price before GST for ${item}?`;
+    if (line.taxCode === null) return `Does GST apply to ${item}?`;
+  }
+  return null;
+}
+
 function required(value: unknown, maximum: number, message: string) {
   const result = text(value, maximum);
   if (result === null || !result) throw new WattzunInputError(message);

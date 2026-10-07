@@ -15,12 +15,12 @@ import * as formClient from "../src/lib/wattzun-form-client.ts";
 import * as formGuideContract from "../src/lib/wattzun-form-guide.ts";
 import * as formStepContract from "../src/lib/wattzun-form-step.ts";
 import * as quoteClient from "../src/lib/trade-quote-client.ts";
-import { WattzunVoiceCallError } from "../src/lib/wattzun-voice-client.ts";
+import { WattzunVoiceCall, WattzunVoiceCallError } from "../src/lib/wattzun-voice-client.ts";
 import { readWattzunVoiceStream } from "../src/lib/wattzun-voice-stream.ts";
 
 const source = readFileSync(new URL("../src/components/WattzunPortalAssistant.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-function load({ values = [null, [], "", false, null], refValues = {}, storage, events, fetchRequest = () => { throw new Error("Unexpected fetch"); } } = {}) {
+function load({ values = [null, [], "", false, null], refValues = {}, storage, events, voiceEnvironment, voiceCalls = [], fetchRequest = () => { throw new Error("Unexpected fetch"); } } = {}) {
   let stateIndex = 0, refIndex = 0;
   const effects = [], updates = [], auth = { callback: null, unsubscribed: false };
   const dependencies = {
@@ -54,7 +54,12 @@ function load({ values = [null, [], "", false, null], refValues = {}, storage, e
       readWattzunOpenRequest:value=>value,
       useWattzunPresentation:()=>({hat:'none',speed:1,setSpeed:speed=>updates.push({index:'speed',value:speed})}),
     },
-    "@/lib/wattzun-voice-client": { WattzunVoiceCallError },
+    "@/lib/wattzun-voice-client": { WattzunVoiceCallError, ...(voiceEnvironment ? {
+      createWattzunBrowserVoiceEnvironment: () => voiceEnvironment,
+      WattzunVoiceCall: class extends WattzunVoiceCall {
+        constructor(environment, callbacks) { super(environment, callbacks); voiceCalls.push({ call: this, callbacks }); }
+      },
+    } : {}) },
     "@/lib/wattzun-voice-stream": { readWattzunVoiceStream },
     "./EnergyAssistantLauncher": { EnergyAssistantLauncher: "Launcher" },
     "./WattzunMascot": { WattzunMascot: "Mascot" },
@@ -148,6 +153,124 @@ test('only authentication and access HTTP failures become terminal call errors w
   for(const status of [429,503]) await assert.rejects(readCallResponse(Response.json({ok:false,error:'Specific provider failure'},{status}),signal),error=>{
     assert.equal(error instanceof WattzunVoiceCallError,false);assert.equal(error.message,'Specific provider failure');return true;
   });
+});
+
+function voiceConversation(fetchRequest, messages = []) {
+  const media = { requests: 0, closed: 0, now: 0, level: 0, timers: new Set(), players: [] };
+  const microphone = {
+    recorder() {
+      let stopped = false;
+      const recorder = { onData() {}, onStop() {}, onError() {}, start() {}, confirmSpeech() {}, stop() {
+        if (stopped) return;
+        stopped = true;
+        recorder.onData(new Blob(['Synthetic input for media lifecycle only'], { type: 'audio/wav' }));
+        recorder.onStop();
+      } };
+      return recorder;
+    },
+    level: () => media.level, mute() {}, close() { media.closed++; },
+  };
+  const voiceEnvironment = {
+    microphone: async () => { media.requests++; return microphone; },
+    now: () => media.now,
+    repeat(callback) { media.timers.add(callback); return () => media.timers.delete(callback); },
+    playback(audio) {
+      const player = { audio, onEnd() {}, onError() {}, close() {}, async play() {
+        // Consume the real NDJSON reader so its independently arriving literal
+        // input reaches the component's private conversation memory.
+        if (audio.mimeType === 'audio/pcm') {
+          const reader = audio.stream.getReader();
+          try { while (!(await reader.read()).done) { /* Synthetic PCM only. */ } }
+          finally { reader.releaseLock(); }
+        }
+      } };
+      media.players.push(player);
+      return player;
+    },
+  };
+  const voiceCalls = [], target = new EventTarget();
+  const h = load({ values: [messages, '', false, '', { state: 'idle', message: '' }, false], voiceEnvironment, voiceCalls,
+    events: { location: { origin: 'https://tlink.test', pathname: '/direct-trade/dashboard' }, dispatchEvent: target.dispatchEvent.bind(target) },
+    fetchRequest: (url, init) => url === '/api/wattzun/greeting'
+      ? Promise.resolve(Response.json({ ok: false, error: 'Synthetic unavailable greeting' }, { status: 503 }))
+      : fetchRequest(url, init),
+  });
+  const tree = h.exported.testHelpers.WattzunConversation({ user, scope: scopes[0] });
+  nodes(tree, node => node.type === 'button' && text(node).trim() === 'Call Wattzun')[0].props.onClick();
+  return { ...h, media, voiceCalls,
+    async turn() { const { call, callbacks } = voiceCalls[0]; return call.requestReply(signal => callbacks.submit(new Blob(['Synthetic utterance'], { type: 'audio/wav' }), signal)); },
+    speak() {
+      for (const [elapsed, level] of [[100, .1], [100, .1], [100, .1], [100, .1], [1300, 0]]) {
+        media.now += elapsed; media.level = level;
+        for (const callback of [...media.timers]) callback();
+      }
+    },
+    memory: () => h.updates.filter(update => update.index === 0).at(-1)?.value || messages,
+    status: () => h.updates.filter(update => update.index === 4).at(-1)?.value.state,
+  };
+}
+
+function syntheticVoiceReply({ transcript = '', requestSummary = 'Synthetic spoken request.', message = '', questions = [] } = {}) {
+  const frames = [{ type: 'reply', transcript, requestSummary, reply: { kind: questions.length ? 'clarification' : 'answer', message, questions, links: [] } },
+    { type: 'audio', data: 'AAA=' }, { type: 'done', ...(transcript ? { transcript } : {}) }];
+  return new Response(frames.map(frame => JSON.stringify(frame) + '\n').join(''), { headers: { 'Content-Type': portalContract.WATTZUN_REALTIME_VOICE_STREAM_TYPE } });
+}
+
+test('a failed email turn retains its literal input privately and the next spoken turn continues the same intake and microphone', async () => {
+  const email = 'wattzun.qa@example.invalid', requests = [];
+  const initial = [{ id: 'name', role: 'user', content: 'The customer is Wattzun Release QA.' },
+    { id: 'email-question', role: 'assistant', content: 'What is the customer email address?' }];
+  const h = voiceConversation(async (url, init) => {
+    assert.equal(url, '/api/wattzun/voice');
+    const input = JSON.parse(init.body.get('request')); requests.push(input);
+    if (requests.length === 1) return Response.json({ ok: false, error: 'Synthetic rejected proposal',
+      voiceTurnRecovery: { requestId: input.requestId, requestSummary: 'The customer email was provided.', transcript: email } }, { status: 503 });
+    return syntheticVoiceReply({ transcript: 'Are you still there?', message: 'Yes, I am here.', questions: [`Is ${email} the correct email address?`] });
+  }, initial);
+  try {
+    await flush(); assert.equal(h.status(), 'listening');
+    await h.turn(); await flush();
+    assert.equal(h.status(), 'recovering'); assert.equal(requests.length, 1);
+    const saved = h.memory().filter(turn => turn.role === 'user' && turn.content === email);
+    assert.equal(saved.length, 1); assert.equal(saved[0].memoryOnly, true);
+    assert.deepEqual(h.memory().filter(turn => !turn.memoryOnly), initial);
+    assert.equal(h.media.players.length, 0); assert.equal(h.media.closed, 0);
+    await h.turn(); await flush();
+    assert.equal(requests.length, 2); assert.equal(h.status(), 'speaking');
+    assert.ok(requests[1].history.some(turn => turn.role === 'user' && turn.content === email));
+    assert.ok(requests[1].history.some(turn => turn.content === initial[0].content));
+    assert.equal(requests[1].history.filter(turn => turn.role === 'user' && turn.content === email).length, 1);
+    assert.deepEqual(h.memory().at(-1).reply.questions, [`Is ${email} the correct email address?`]);
+    assert.equal(h.memory().at(-1).awaitingSpeech, true); assert.equal(h.memory().at(-1).content, '');
+    assert.equal(h.media.players.length, 1); assert.equal(h.media.requests, 1);
+    h.media.players[0].onEnd(); assert.equal(h.status(), 'listening');
+    assert.equal(h.media.closed, 0);
+  } finally { h.voiceCalls[0].call.dispose(); }
+  assert.equal(h.media.closed, 1); assert.equal(h.media.timers.size, 0);
+});
+
+test('a same-voice email clarification retains a thinking follow-on once and supplies the accepted email in its next request history', async () => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; }), requests = [];
+  const email = 'wattzun.qa@example.invalid';
+  const h = voiceConversation(async (_url, init) => {
+    const input = JSON.parse(init.body.get('request')); requests.push(input);
+    if (requests.length === 1) { await held; return syntheticVoiceReply({ transcript: email, questions: [`Is ${email} correct?`] }); }
+    return syntheticVoiceReply({ transcript: 'Yes, that email is correct.', message: 'Got it.', questions: ['What is the job address?'] });
+  }, [{ id: 'intake-email', role: 'assistant', content: 'What is the customer email address?' }]);
+  try {
+    await flush(); const first = h.turn(); await flush(); assert.equal(h.status(), 'thinking');
+    h.speak(); assert.equal(requests.length, 1, 'The follow-on cannot race its preceding email clarification');
+    release(); await first; await flush();
+    assert.equal(requests.length, 2); assert.equal(h.media.requests, 1); assert.equal(h.media.closed, 0);
+    assert.equal(h.media.players.length, 1, 'Only the current next question is played');
+    assert.deepEqual(h.memory().at(-1).reply.questions, ['What is the job address?']);
+    assert.equal(requests[1].history.filter(turn => turn.role === 'user' && turn.content === email).length, 1);
+    assert.equal(h.memory().filter(turn => turn.role === 'user' && turn.content === email).length, 1);
+    assert.equal(h.status(), 'speaking'); h.media.players[0].onEnd(); assert.equal(h.status(), 'listening');
+    await flush(); assert.equal(requests.length, 2, 'A queued input is submitted exactly once');
+  } finally { release(); h.voiceCalls[0].call.dispose(); }
+  assert.equal(h.media.closed, 1); assert.equal(h.media.timers.size, 0);
 });
 test("follow-up history stays in memory, retains questions, and stays within the API budget", () => {
   const helpers = load().exported.testHelpers;

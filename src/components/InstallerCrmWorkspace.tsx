@@ -58,6 +58,7 @@ const TradeCommercialHandoffPanel = dynamic(() => import("./TradeCommercialHando
 const TradeActivityFieldRecords = dynamic(() => import("./TradeActivityFieldRecords").then((module) => module.TradeActivityFieldRecords));
 const TradeComplianceIntake = dynamic(() => import("./TradeComplianceIntake").then((module) => module.TradeComplianceIntake));
 const TradeFieldWorkPanel = dynamic(() => import("./TradeFieldWorkPanel").then((module) => module.TradeFieldWorkPanel));
+const TradeVeuElectricalAssessmentPanel = dynamic(() => import("./TradeVeuElectricalAssessmentPanel").then((module) => module.TradeVeuElectricalAssessmentPanel));
 const TradeJobAnswersPanel = dynamic(() => import("./TradeJobAnswersPanel").then((module) => module.TradeJobAnswersPanel));
 const TradeJobFilesPanel = dynamic(() => import("./TradeJobFilesPanel").then((module) => module.TradeJobFilesPanel));
 const TradeJobReviewPanel = dynamic(() => import("./TradeJobReviewPanel").then((module) => module.TradeJobReviewPanel));
@@ -1992,7 +1993,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
       {complianceCases.length > 0 && <section className="crm-job-compliance"><header><div><span>Compliance intake</span><h4>{complianceCases.length} linked case{complianceCases.length === 1 ? "" : "s"}</h4></div><strong>Compliance review required</strong></header><div>{complianceCases.map((item) => <article key={item.id}><div><span>{item.caseNumber} | activity date {item.activityDate}</span><strong>{item.programCode} | {item.registryActivityCode || item.activityKey} | {item.title} | v{item.version}</strong><p>{[item.productCategory, item.scenarioCode ? `scenario ${item.scenarioCode}` : "", item.scenario].filter(Boolean).join(" | ")}</p></div><dl><div><dt>Case</dt><dd>{item.status.replaceAll("_", " ")}</dd></div><div><dt>Evidence</dt><dd>{item.evidenceStatus.replaceAll("_", " ")}</dd></div></dl>{item.officialSourceUrl && <a href={item.officialSourceUrl} target="_blank" rel="noreferrer">Open official {item.officialSourceVersion || item.officialSourceTitle || "activity"} source</a>}</article>)}</div><p>TLink has preserved the selected rule version for intake. This is not an eligibility decision, certificate calculation, evidence acceptance or rebate promise.</p></section>}
     </section>}
     {canViewFieldEvidence && <section className="crm-job-section" hidden={activeTab !== "files"} aria-label="Job files and forms">
-      {activeTab === "files" && <TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} showProgress={false} embedded canOpenInvoice={canViewInvoices} refreshKey={job.revision + filesRevision} onNavigate={(next) => {
+      {activeTab === "files" && <><section id="job-files-electrical-assessments"><TradeVeuElectricalAssessmentPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} /></section><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} showProgress={false} showElectricalAssessment={false} embedded canOpenInvoice={canViewInvoices} refreshKey={job.revision + filesRevision} onNavigate={(next) => {
         if (next === "forms" || next === "rental-assessment" || next === "activity-forms") {
           setFormsOpen(true);
           if (next === "activity-forms") setActivityRecordsRequested(true);
@@ -2003,7 +2004,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
             section?.focus({ preventScroll: true });
           });
         } else if (allowedTabs.includes(next)) setTab(next);
-      }} onChanged={refreshJobFiles} />}
+      }} onChanged={refreshJobFiles} /></>}
       <details className="crm-field-secondary" id="job-files-forms" tabIndex={-1} open={formsOpen} onToggle={(event) => setFormsOpen(event.currentTarget.open)}>
         <summary>Forms and assessments</summary>
         <div id="job-files-rental" tabIndex={-1}><TradeRentalActivityPicker key={job.id} user={user} workOrderId={job.id} refreshKey={job.revision} active={activeTab === "files"} readOnly={!canManageFieldEvidence} initiallyAttached={job.serviceCategory === "rental-inspection"} onChanged={refreshJobFiles} onAttachmentChanged={setRentalAttached} /></div>

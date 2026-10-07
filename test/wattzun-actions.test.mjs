@@ -31,6 +31,48 @@ Function('require', 'exports', source)(name => {
 const secret = Buffer.alloc(32, 19).toString('base64url');
 const selection = { addressLine1: '12 Main Street', addressLine2: '', suburb: 'Richmond', addressState: 'VIC', postcode: '3121', provider: 'google-places', providerReference: 'synthetic-google-place', formattedAddress: '12 Main Street, Richmond VIC 3121, Australia' };
 const proposal = { kind: 'prepare_quote', firstName: 'Alex', lastName: 'Customer', email: 'alex@example.test', phone: '0412345678', addressQuery: '12 Main Street', serviceCategory: 'hot-water', description: 'Replace the supplied hot water system', lines: [{ lineType: 'product', description: 'Supply and install agreed system', quantity: '1', unitPrice: '1000.00', taxCode: 'gst' }] };
+
+test('spoken email normalisation uses only explicit separators and individual spelled characters', () => {
+  for (const [input, expected] of [
+    ['Alex.Smith@example.com.au', 'Alex.Smith@example.com.au'],
+    ['alex dot smith at example dot com dot au', 'alex.smith@example.com.au'],
+    ['a l e x dot s m i t h at g m a i l dot c o m', 'alex.smith@gmail.com'],
+    ['alex underscore smith plus work at example dot com', 'alex_smith+work@example.com'],
+    ['alex dash smith at example dot com', 'alex-smith@example.com'],
+  ]) assert.equal(actions.normaliseWattzunSpokenEmail(input), expected);
+  for (const input of ['alex', 'alex at gmail', 'alex smith at example dot com', 'alex at gee mail dot com',
+    'alex at example dot com or gmail dot com', 'my email is alex at example dot com', 'alex@@example.com', 'alex@example.com.',
+    'alex dot at example dot com', 'alex at example dot dot com', 'alex at example dash dot com',
+    '.alex@example.com', 'alex.@example.com', 'alex..smith@example.com', 'alex@example..com', 'alex@example-.com', 'alex@-example.com']) {
+    assert.equal(actions.normaliseWattzunSpokenEmail(input), null, input);
+  }
+  assert.equal(actions.normaliseWattzunSpokenEmail('a'.repeat(169) + '@example.com'), null, 'Mailbox exceeds the proposal email bound');
+  assert.equal(actions.normaliseWattzunSpokenEmail('a'.repeat(168) + '@example.com'), 'a'.repeat(168) + '@example.com');
+});
+
+test('partial customer and quote intake selects one missing field without losing supplied details', () => {
+  const empty = { ...proposal, firstName: '', lastName: '', email: '', phone: '', addressQuery: '', serviceCategory: '', description: '', lines: [] };
+  let current = empty;
+  for (const [field, supplied, question] of [
+    ['firstName', 'Alex', /full name/], ['email', 'alex dot smith at example dot com', /email address/],
+    ['phone', '0412345678', /mobile number/], ['addressQuery', '12 Main Street', /street address/],
+    ['serviceCategory', 'electrical', /type of trade work/], ['description', 'Replace lights', /work should the quote cover/],
+    ['lines', [{ lineType: 'labour', description: 'Replace lights', quantity: null, unitPrice: null, taxCode: null }], /first item/],
+  ]) {
+    const before = structuredClone(current);
+    assert.match(actions.wattzunActionNextQuestion(current), question);
+    assert.deepEqual(current, before);
+    current = { ...current, [field]: supplied };
+  }
+  assert.match(actions.wattzunActionNextQuestion(current), /quantity.*item 1/);
+  current.lines[0].quantity = '2'; assert.match(actions.wattzunActionNextQuestion(current), /unit price before GST.*item 1/);
+  current.lines[0].unitPrice = '0'; assert.match(actions.wattzunActionNextQuestion(current), /GST apply.*item 1/);
+  current.lines[0].taxCode = 'none'; assert.equal(actions.wattzunActionNextQuestion(current), null);
+  const customer = { ...proposal, kind: 'create_customer', serviceCategory: '', description: '', lines: [] };
+  assert.equal(actions.wattzunActionNextQuestion(customer), null);
+  assert.throws(() => actions.parseWattzunActionProposal({ kind: 'prepare_quote', firstName: 'Alex' }), portal.WattzunInputError);
+  assert.throws(() => actions.parseWattzunActionProposal({ ...proposal, lines: [{ ...proposal.lines[0], quantity: 1 }] }), portal.WattzunInputError);
+});
 async function reviewed(overrides = {}) {
   const chosen = { ...selection, ...overrides.selection };
   const proof = await address.issueTradeAddressSelectionProof(chosen, { ownerUid: overrides.proofOwner || 'business-one', secret });

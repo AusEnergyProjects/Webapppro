@@ -6,7 +6,7 @@ import { createSharedSurgeUsageGuard } from "./energy-assistant-usage-guard";
 import { workflowAiSourceHash } from "./workflow-ai-server";
 import {
   createWattzunPortalReplyContract, wattzunPortalProviderConfiguration, WATTZUN_SPEECH_INSTRUCTIONS,
-  WattzunReplyValidationError,
+  WattzunReplyValidationError, enforceWattzunVoiceNextQuestion, wattzunReplyValidationFeedback, wattzunRejectedIntakeClarification, wattzunHeardEmailClarification,
   type WattzunReplyValidationReason,
   type PortalRequest,
 } from "./wattzun-portal-ai-server";
@@ -27,7 +27,7 @@ const MAX_FRAME_CHARACTERS = 256_000;
 type RealtimeSocket = Pick<WorkersWebSocket, "accept" | "send" | "close" | "addEventListener" | "removeEventListener">;
 type RealtimeEvent = Record<string, unknown> & { type: string };
 export type WattzunRealtimeTimings = Partial<Record<
-  "rt_guard" | "rt_connect" | "rt_config" | "rt_proposal" | "rt_validate" | "rt_approval" | "rt_first_argument", number
+  "rt_guard" | "rt_connect" | "rt_config" | "rt_proposal" | "rt_repair" | "rt_validate" | "rt_approval" | "rt_first_argument", number
 >>;
 export type PreparedWattzunRealtimeTurn = {
   reply: WattzunReply;
@@ -59,6 +59,8 @@ type DiagnosticStructure = {
   questionCount?: number;
   questionLengths?: (number | null)[];
   actionFieldCount?: number;
+  actionKind?: "prepare_quote" | "create_customer" | "other";
+  repairedReason?: WattzunReplyValidationReason;
   actionFieldTypes?: Partial<Record<"kind" | "firstName" | "lastName" | "email" | "phone" | "addressQuery" | "serviceCategory" | "description" | "lines", DiagnosticValueType>>;
   lineCount?: number;
   lineFieldTypes?: Partial<Record<"lineType" | "description" | "quantity" | "unitPrice" | "taxCode", DiagnosticValueType>>[];
@@ -149,6 +151,7 @@ function captureArgumentStructure(diagnostic: TurnDiagnostic, raw: unknown) {
   }
   if (record(raw.action)) {
     diagnostic.structure.actionFieldCount = Object.keys(raw.action).length;
+    diagnostic.structure.actionKind = raw.action.kind === "prepare_quote" || raw.action.kind === "create_customer" ? raw.action.kind : "other";
     diagnostic.structure.actionFieldTypes = {};
     for (const field of ["kind", "firstName", "lastName", "email", "phone", "addressQuery", "serviceCategory", "description", "lines"] as const) {
       diagnostic.structure.actionFieldTypes[field] = valueType(raw.action[field]);
@@ -260,7 +263,8 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     ]),
   ].join("\n");
   const schema = { ...contract.schema, required: [...contract.schema.required, "requestSummary"],
-    properties: { ...contract.schema.properties, requestSummary: { type: "string", minLength: 1, maxLength: 1_800,
+    properties: { ...contract.schema.properties, questions: { ...contract.schema.properties.questions, maxItems: 1 },
+      requestSummary: { type: "string", minLength: 1, maxLength: 1_800,
       description: "The current speaker's actual words and literal answers. Preserve all supplied values, never just say that a value was provided. This is unconfirmed input, not assistant reasoning or a task checklist." } } };
   const preferences = parseWattzunPreferences(options.input.preferences);
   const { key, guardEnv } = wattzunPortalProviderConfiguration(options);
@@ -281,14 +285,17 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   // million tokens. Text bytes bound input tokens; input audio is 10 tokens/sec.
   // Reserve both responses, framing overhead and the maximum speech output at
   // the higher audio rate, plus 25%. This is a ceiling, not a customer price.
-  const textInputTokens = promptBytes + new TextEncoder().encode(WATTZUN_SPEECH_INSTRUCTIONS).byteLength + 2_100 * 3 + 2_048;
+  // One rejected proposal may be corrected on this same audio conversation,
+  // before any application action runs. Reserve that bounded additional turn.
+  const textInputTokens = promptBytes * 2 + 18_000 + 2_000
+    + new TextEncoder().encode(WATTZUN_SPEECH_INSTRUCTIONS).byteLength + 2_100 * 3 + 2_048;
   // Parallel input transcription is memory only. Reserve its full bounded input
   // and output too; it never adds a sequential wait before the native response.
   // gpt-4o-mini-transcribe: 16k context and 2k maximum output, at
   // $1.25/M audio input and $5/M output. Reserve the entire model ceiling.
   const transcriptionCeilingMicroUsd = 16_000 * 1.25 + 2_000 * 5;
-  const estimatedMicroUsd = Math.ceil((textInputTokens * rates.textInput + audioInputCeiling * rates.audioInput
-    + PROPOSAL_TOKENS * rates.textOutput + SPEECH_TOKENS * rates.audioOutput + transcriptionCeilingMicroUsd) * 1.25);
+  const estimatedMicroUsd = Math.ceil((textInputTokens * rates.textInput + audioInputCeiling * 2 * rates.audioInput
+    + PROPOSAL_TOKENS * 2 * rates.textOutput + SPEECH_TOKENS * rates.audioOutput + transcriptionCeilingMicroUsd) * 1.25);
   const guard = createSharedSurgeUsageGuard({ env: guardEnv, getDatabase: () => options.db });
   diagnostic.phase = "guard"; diagnostic.substage = "budget";
   const guardStarted = performance.now();
@@ -314,7 +321,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   let resolvePhase: ((event: RealtimeEvent) => void) | undefined;
   let rejectPhase: ((error: Error) => void) | undefined;
   let approvalFailure: { error: unknown } | undefined;
-  let inputItemId = "", heardTranscript = "", approvedSpeech = "";
+  let inputItemId = "", heardTranscript = "", approvedSpeech = "", validatedRequestSummary = "";
   let output: ReadableStreamDefaultController<Uint8Array> | undefined;
   const closeSocket = () => {
     if (!socket || socketClosed) return;
@@ -586,64 +593,118 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     proposalStarted = performance.now();
     send({ type: "response.create", response: { output_modalities: ["text"], tool_choice: REPLY_TOOL_CHOICE,
       reasoning: { effort: "low" }, max_output_tokens: PROPOSAL_TOKENS, metadata: { phase: "proposal" } } });
-    const event = await proposed;
+    let event = await proposed;
     diagnostic.duration("rt_proposal", proposalStarted);
     diagnostic.phase = "checking"; diagnostic.substage = "output";
     const validateStarted = performance.now();
-    if (!record(event.response) || !Array.isArray(event.response.output)) incomplete();
-    // Function calling may include a text preamble. It is untrusted and never
-    // becomes speech, UI content or memory. Only one validated reply call counts.
-    let item: unknown;
-    for (const candidate of event.response.output) {
-      if (!record(candidate)) incomplete();
-      if (candidate.type === "function_call") {
-        if (item !== undefined) incomplete();
-        item = candidate;
-      } else if (candidate.type !== "message" || candidate.role !== "assistant" || !Array.isArray(candidate.content)
-        || !candidate.content.every(part => record(part) && part.type === "output_text" && typeof part.text === "string")) incomplete();
+    let reply: WattzunReply | undefined;
+    let requestSummary = "", currentRequest = "";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!record(event.response) || !Array.isArray(event.response.output)) incomplete();
+      // Function calling may include a text preamble. It is untrusted and never
+      // becomes speech, UI content or memory. Only one validated reply call counts.
+      let item: unknown;
+      for (const candidate of event.response.output) {
+        if (!record(candidate)) incomplete();
+        if (candidate.type === "function_call") {
+          if (item !== undefined) incomplete();
+          item = candidate;
+        } else if (candidate.type !== "message" || candidate.role !== "assistant" || !Array.isArray(candidate.content)
+          || !candidate.content.every(part => record(part) && part.type === "output_text" && typeof part.text === "string")) incomplete();
+      }
+      if (record(item) && typeof item.arguments === "string") diagnostic.structure.argumentLength = item.arguments.length;
+      if (!record(item) || item.type !== "function_call" || item.name !== TOOL || typeof item.arguments !== "string"
+        || item.arguments.length > 18_000) incomplete();
+      diagnostic.substage = "arguments";
+      const raw: unknown = JSON.parse(item.arguments);
+      captureArgumentStructure(diagnostic, raw);
+      diagnostic.substage = "envelope";
+      if (!record(raw)) incomplete();
+      // One exact read-only clarification shape is safe without a memory field.
+      // Never infer heard input from its prose or rescue a partial action object.
+      const clarificationOnly = Object.keys(raw).length === 3
+        && ["message", "questions", "linkIds"].every(field => Object.hasOwn(raw, field))
+        && Array.isArray(raw.questions) && raw.questions.length > 0;
+      // Read-only native content is projected onto the complete known contract.
+      // Extra provider metadata cannot cause silence or grant action authority.
+      // Proposals that can read records or mutate work retain exact envelopes.
+      const completeReadOnly = raw.action === null && raw.lookup === null && schema.required.every(field => Object.hasOwn(raw, field));
+      if (!clarificationOnly && !completeReadOnly && (Object.keys(raw).length !== schema.required.length || schema.required.some(field => !Object.hasOwn(raw, field)))) incomplete();
+      // Apply the same bounded text and false-completion/source-access checks to
+      // memory. It remains an explicitly unconfirmed interpretation of the input.
+      diagnostic.substage = "summary";
+      // A read-only correction without a summary cannot erase the already
+      // validated interpretation of this same committed utterance.
+      requestSummary = clarificationOnly ? validatedRequestSummary : contract.validate({ message: raw.requestSummary,
+        questions: [], linkIds: [], action: null, lookup: null }).message;
+      validatedRequestSummary = requestSummary;
+      // The parallel transcript is the current utterance when already available.
+      // A model's paraphrase ("user approved completion") must not replace the
+      // literal consent or correction that both validation and execution inspect.
+      currentRequest = heardTranscript || requestSummary;
+      diagnostic.substage = "reply";
+      try {
+        reply = contract.validateVoice({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds,
+          action: clarificationOnly ? null : raw.action, lookup: clarificationOnly ? null : raw.lookup }, currentRequest);
+        break;
+      } catch (error) {
+        // Realtime function arguments are proposals, not executed work. Supply
+        // the exact validation category as a tool result once, retaining the
+        // committed audio and original conversation. Never replay an action or
+        // retry an approval/save failure. The corrected proposal must pass the
+        // same complete contract before transformReply can execute anything.
+        const feedback = error instanceof WattzunReplyValidationError ? wattzunReplyValidationFeedback(error.reason) : "";
+        const correctionFits = promptBytes + audioInputCeiling + new TextEncoder().encode(item.arguments + feedback).byteLength
+          + PROPOSAL_TOKENS + CONTEXT_FRAMING_TOKENS <= CONTEXT_TOKENS;
+        if (attempt === 0 && error instanceof WattzunReplyValidationError && correctionFits && !signal.aborted
+          && typeof item.call_id === "string" && item.call_id.length > 0 && item.call_id.length <= 128) {
+          diagnostic.structure.repairedReason = error.reason;
+          send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: item.call_id,
+            output: JSON.stringify({ ok: false, executed: false, reason: error.reason,
+              instruction: feedback }) } });
+          phase = "proposal"; responseId = undefined;
+          diagnostic.phase = "proposal"; diagnostic.substage = "output";
+          const corrected = waitForPhase(), repairStarted = performance.now();
+          send({ type: "response.create", response: { output_modalities: ["text"], tool_choice: REPLY_TOOL_CHOICE,
+            reasoning: { effort: "low" }, max_output_tokens: PROPOSAL_TOKENS, metadata: { phase: "proposal_correction" } } });
+          event = await corrected;
+          diagnostic.duration("rt_repair", repairStarted);
+          diagnostic.phase = "checking"; diagnostic.substage = "output";
+          continue;
+        }
+        if ((attempt === 1 || !correctionFits) && error instanceof WattzunReplyValidationError && requestSummary
+          && !options.input.formGuide && !signal.aborted) {
+          let clarification = wattzunHeardEmailClarification(heardTranscript) ?? wattzunRejectedIntakeClarification(raw);
+          if (!clarification && Array.isArray(raw.questions) && raw.questions.length) {
+            try {
+              // Questions have a separate read-only contract. An invalid action
+              // cannot grant authority, and its narration is never released.
+              clarification = contract.validateVoice({ message: "Okay.", questions: raw.questions,
+                linkIds: [], action: null, lookup: null }, currentRequest);
+            } catch (invalidQuestion) {
+              if (!(invalidQuestion instanceof WattzunReplyValidationError)) throw invalidQuestion;
+            }
+          }
+          if (clarification) {
+            // A safe, strictly parsed intake can ask its next missing detail
+            // without releasing the rejected action or replaying any work.
+            reply = contract.validateVoice({ message: clarification.message, questions: clarification.questions,
+              linkIds: [], action: null, lookup: null }, currentRequest);
+            break;
+          }
+        }
+        if (error instanceof WattzunReplyValidationError && requestSummary && !signal.aborted) throw new WattzunRealtimeTurnError(error.reason, requestSummary);
+        throw error;
+      }
     }
-    if (record(item) && typeof item.arguments === "string") diagnostic.structure.argumentLength = item.arguments.length;
-    if (!record(item) || item.type !== "function_call" || item.name !== TOOL || typeof item.arguments !== "string"
-      || item.arguments.length > 18_000) incomplete();
-    diagnostic.substage = "arguments";
-    const raw: unknown = JSON.parse(item.arguments);
-    captureArgumentStructure(diagnostic, raw);
-    diagnostic.substage = "envelope";
-    if (!record(raw)) incomplete();
-    // One exact read-only clarification shape is safe without a memory field.
-    // Never infer heard input from its prose or rescue a partial action object.
-    const clarificationOnly = Object.keys(raw).length === 3
-      && ["message", "questions", "linkIds"].every(field => Object.hasOwn(raw, field))
-      && Array.isArray(raw.questions) && raw.questions.length > 0;
-    // Read-only native content is projected onto the complete known contract.
-    // Extra provider metadata cannot cause silence or grant action authority.
-    // Proposals that can read records or mutate work retain exact envelopes.
-    const completeReadOnly = raw.action === null && raw.lookup === null && schema.required.every(field => Object.hasOwn(raw, field));
-    if (!clarificationOnly && !completeReadOnly && (Object.keys(raw).length !== schema.required.length || schema.required.some(field => !Object.hasOwn(raw, field)))) incomplete();
-    // Apply the same bounded text and false-completion/source-access checks to
-    // memory. It remains an explicitly unconfirmed interpretation of the input.
-    diagnostic.substage = "summary";
-    const requestSummary = clarificationOnly ? "" : contract.validate({ message: raw.requestSummary,
-      questions: [], linkIds: [], action: null, lookup: null }).message;
-    // The parallel transcript is the current utterance when already available.
-    // A model's paraphrase ("user approved completion") must not replace the
-    // literal consent or correction that both validation and execution inspect.
-    const currentRequest = heardTranscript || requestSummary;
-    diagnostic.substage = "reply";
-    let reply: WattzunReply;
-    try {
-      reply = contract.validateVoice({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds,
-        action: clarificationOnly ? null : raw.action, lookup: clarificationOnly ? null : raw.lookup }, currentRequest);
-    } catch (error) {
-      if (error instanceof WattzunReplyValidationError && requestSummary && !signal.aborted) throw new WattzunRealtimeTurnError(error.reason, requestSummary);
-      throw error;
-    }
+    if (!reply) incomplete();
     diagnostic.duration("rt_validate", validateStarted);
     signal.throwIfAborted();
     diagnostic.phase = "approval"; diagnostic.substage = "approval";
     const approvalStarted = performance.now();
     try {
       if (options.transformReply) reply = await abortable(options.transformReply(reply, currentRequest), signal);
+      if (!options.formGuideProgress) reply = enforceWattzunVoiceNextQuestion(reply);
       await abortable(options.beforeSpeech(), signal);
     }
     catch (error) { approvalFailure = { error }; throw error; }
@@ -666,14 +727,18 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     console.info("WATTZUN_REALTIME_TURN_READY", { phase: "speech", timings });
     return { reply, requestSummary, audio, timings, get transcript() { return heardTranscript; } };
   } catch (error) {
-    const retainInput = heardTranscript && diagnostic.phase === "checking" && !signal.aborted;
+    // Internal transport/deadline cancellation must not erase an already heard
+    // answer. The route still reauthorises this private memory before release.
+    // An explicit caller abort never releases it.
+    const retainInput = (heardTranscript || validatedRequestSummary)
+      && (diagnostic.phase === "checking" || diagnostic.structure.repairedReason) && !options.signal?.aborted;
     close(error instanceof SyntaxError ? new Error("WORKFLOW_AI_INCOMPLETE") : error);
     // The trusted route hook owns access errors and their HTTP status. Provider
     // failures stay sanitized; hook errors retain their authoritative identity.
     if (approvalFailure && approvalFailure.error === error) throw error;
     if (retainInput) {
       throw new WattzunRealtimeTurnError(error instanceof WattzunReplyValidationError ? error.reason : "shape",
-        error instanceof WattzunRealtimeTurnError ? error.requestSummary : "", heardTranscript);
+        error instanceof WattzunRealtimeTurnError ? error.requestSummary : validatedRequestSummary, heardTranscript);
     }
     throw safeError(error instanceof SyntaxError ? new Error("WORKFLOW_AI_INCOMPLETE") : error);
   }

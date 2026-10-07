@@ -23,6 +23,7 @@ import { FieldDatePicker } from '@/components/field-date-picker';
 import { FieldButton } from '@/components/field-button';
 import { FieldCommercialWorkspace } from '@/components/field-commercial-workspace';
 import { FieldFormLibrary } from '@/components/field-form-library';
+import { FieldVeuElectricalAssessmentPicker, type FieldElectricalAssessmentState } from '@/components/field-veu-electrical-assessment-picker';
 import { FieldSwmsFiles, FieldSwmsForm, type SwmsPayload } from '@/components/field-swms-form';
 import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflow';
 import { subscribeRentalSaves } from '@/lib/rental-save-queue';
@@ -306,6 +307,7 @@ export default function JobScreen() {
   const [activityRecords, setActivityRecords] = useState<ActivityFieldSummary[]>([]);
   const [locallyFinishedActivityIntentIds, setLocallyFinishedActivityIntentIds] = useState<string[]>([]);
   const [activityLoadError, setActivityLoadError] = useState('');
+  const [electricalAssessmentState, setElectricalAssessmentState] = useState<FieldElectricalAssessmentState | null>(null);
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
   const pickingDocument = useRef(false);
@@ -1330,6 +1332,7 @@ export default function JobScreen() {
 
       {!activeFormId ? <View style={styles.card}>
         <Text style={styles.cardTitle}>{['completed', 'cancelled'].includes(job.stage) ? 'Job forms' : 'Forms to complete'}</Text>
+        {!creditexManual ? <FieldVeuElectricalAssessmentPicker key={job.id} workOrderId={job.id} online={sync.online} mode="attached" onStateChange={setElectricalAssessmentState} onChanged={async () => { await syncNow(); await load(); }} /> : null}
         {activityLoadError ? <Text style={styles.meta}>{activityLoadError}</Text> : null}
         {complianceIntents.map((intent) => {
           const pack = (job.activityWorkPacks || []).find((item) => item.instance.complianceIntentId === intent.id);
@@ -1348,7 +1351,7 @@ export default function JobScreen() {
         })}
         {job.rentalInspection ? <Pressable accessibilityRole="button" onPress={() => setActiveFormId('rental')} style={styles.formRow}><MaterialCommunityIcons name={job.rentalInspection.status === 'issued' ? 'check-circle-outline' : 'home-search-outline'} size={27} color={colours.green} /><View style={styles.flex}><Text style={styles.taskTitle}>Rental inspections and safety checks</Text><Text style={styles.meta}>{job.rentalInspection.progress.completeModules}/{job.rentalInspection.progress.moduleTotal} complete</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable> : null}
         {fieldForms.map((form) => <Pressable key={form.id} accessibilityRole="button" onPress={() => setActiveFormId(form.id)} style={styles.formRow}><MaterialCommunityIcons name={form.status === 'complete' ? 'check-circle-outline' : 'alert-circle-outline'} size={27} color={form.status === 'complete' ? colours.green : colours.amber} /><View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.status === 'complete' ? 'Complete' : form.missing.length ? `${form.missing.length} required fields remaining` : 'Ready to complete'}</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable>)}
-        {!complianceIntents.length && !fieldForms.length && !job.rentalInspection ? <Text style={styles.body}>No forms are attached to this job.</Text> : null}
+        {!complianceIntents.length && !fieldForms.length && !job.rentalInspection && (creditexManual || electricalAssessmentState?.workOrderId === job.id && electricalAssessmentState.state === 'empty') ? <Text style={styles.body}>No forms are attached to this job.</Text> : null}
         {!creditexManual && !['completed', 'cancelled'].includes(job.stage) ? <FieldButton variant="secondary" onPress={() => setActiveFormId('form-library')}>Add work or a form</FieldButton> : null}
       </View> : null}
 

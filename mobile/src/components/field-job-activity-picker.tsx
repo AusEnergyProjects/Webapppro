@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { colours, spacing } from '@/lib/theme';
 import { FieldButton } from './field-button';
 import { FieldSelect } from './field-select';
+import { FieldVeuElectricalAssessmentPicker } from './field-veu-electrical-assessment-picker';
 import { fieldActivityPremisesVariantId, fieldActivityRequiresPremisesVariant } from './job-work-selection';
 
 type Choice = { id: string; title: string; added: boolean; unavailableReason: string };
@@ -35,7 +36,7 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
       .then((next) => { if (!signal?.aborted) { setCatalogue(next); setError(''); } })
       .catch((caught) => { if (!signal?.aborted) setError(caught instanceof Error ? caught.message : 'The activity library could not be loaded.'); })
       .finally(() => { if (!signal?.aborted) setLoadedFor(loadKey); });
-  }, [online, workOrderId, loadKey]);
+  }, [apiRequest, online, workOrderId, loadKey]);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
   const choices = group === 'rental_visit' ? catalogue?.rentalVisits || [] : group === 'rental' ? catalogue?.rentalModules || [] : catalogue?.activities.filter((item) => item.programTemplateId === group) || [];
   const selected = choices.find((item) => item.id === selection);
@@ -61,15 +62,17 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
 
   return <View style={styles.section}>
     <Text style={styles.title}>Assessment and program forms</Text>
-    <Text style={styles.help}>Add a rental assessment or program activity to this customer&apos;s existing job.</Text>
+    <Text style={styles.help}>Add an insulation electrical safety assessment, rental assessment or program activity to this job.</Text>
     {!online ? <Text style={styles.help}>Connect to add a new activity. Already attached forms remain available on the job.</Text> : null}
     {loading ? <Text style={styles.help}>Loading available activities...</Text> : null}
     {catalogue ? <>
       <FieldSelect label="Form or program" value={group} disabled={busy || !online} options={[
+        { value: 'veu_electrical', label: 'Pre-installation electrical safety assessment (Insulation) · PIESA' },
         ...(catalogue.rentalVisits?.length ? [{ value: 'rental_visit', label: 'Safety visit bundles, one report' }] : []),
         { value: 'rental', label: 'Rental inspections and safety checks' },
         ...catalogue.programs.map((program) => ({ value: program.id, label: program.label })),
       ]} onChange={(value) => { setGroup(value); setSelection(''); setPremises(''); setMessage(''); }} />
+      {group === 'veu_electrical' ? <FieldVeuElectricalAssessmentPicker key={workOrderId} workOrderId={workOrderId} online={online} onChanged={onChanged} /> : <>
       <FieldSelect label={group === 'rental_visit' ? 'Visit bundle' : group === 'rental' ? 'Assessment' : 'Activity'} placeholder="Choose the form to add" value={selection} disabled={busy || !online}
         options={choices.map((choice) => ({ value: choice.id, label: `${choice.title}${choice.added ? ' (already added)' : choice.unavailableReason ? ' (unavailable)' : ''}` }))}
         onChange={(value) => { setSelection(value); setMessage(''); }} />
@@ -81,6 +84,7 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
       {selected && !selected.added ? <FieldButton disabled={busy || loading || !online || Boolean(selected.unavailableReason) || needsPremises} onPress={() => void add()}>
         {busy ? 'Adding form...' : 'Add to this job'}
       </FieldButton> : null}
+      </>}
     </> : null}
     {error ? <><Text style={styles.error}>{error}</Text><FieldButton variant="quiet" disabled={busy || loading || !online} onPress={() => setLoadAttempt((value) => value + 1)}>Refresh activity library</FieldButton></> : null}
     {message ? <Text accessibilityLiveRegion="polite" style={styles.success}>{message}</Text> : null}

@@ -71,7 +71,7 @@ function turnTimer() {
     provider(stage: string, duration: unknown) {
       if (typeof duration !== "number" || !Number.isFinite(duration) || duration < 0 || duration > 55_000) return;
       switch (stage) {
-        case "rt_guard": case "rt_connect": case "rt_config": case "rt_proposal":
+        case "rt_guard": case "rt_connect": case "rt_config": case "rt_proposal": case "rt_repair":
         case "rt_validate": case "rt_approval": case "rt_first_argument": durations.set(stage, duration);
       }
     },
