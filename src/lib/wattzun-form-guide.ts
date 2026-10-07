@@ -103,7 +103,7 @@ export function readWattzunFormGuideProgress(value: unknown): WattzunFormGuidePr
   const next = value.next === null ? null : question(value.next);
   if (value.next !== null && next === null || ["question", "capture", "manual"].includes(value.state) && next?.kind !== value.state
     || ["review", "paused", "ready_to_complete", "complete"].includes(value.state) && next !== null
-    || next?.kind === "capture" && (reference.formKind !== "work_pack" || next.type !== "photo")
+    || next?.kind === "capture" && (!["work_pack", "veu_electrical"].includes(reference.formKind) || next.type !== "photo")
     || value.state === "ready_to_complete" && !value.completion.ready) return null;
   let receipt: WattzunWorkflowReceipt | undefined;
   if (value.receipt !== undefined) {
@@ -114,7 +114,7 @@ export function readWattzunFormGuideProgress(value: unknown): WattzunFormGuidePr
     receipt = { kind: item.kind, id: item.id, label: item.label, href: item.href, status: item.status, message: item.message };
   }
   if (value.state === "complete" && (!receipt || receipt.kind !== "complete_form" || receipt.status !== "submitted"
-    || value.completion.status !== (reference.formKind === "job_form" ? "complete" : reference.formKind === "activity_form" ? "submitted_for_creditex_review" : "completed"))) return null;
+    || value.completion.status !== (["job_form", "veu_electrical"].includes(reference.formKind) ? "complete" : reference.formKind === "activity_form" ? "submitted_for_creditex_review" : "completed"))) return null;
   const productSearch = readWattzunFormProductSearch(value.productSearch);
   if (value.productSearch !== undefined && !productSearch) return null;
   return { sessionId: value.sessionId, reference, requestedReference, recordId: value.recordId, revision: value.revision, sourceSha256: value.sourceSha256, state: value.state, next, ...(productSearch ? { productSearch } : {}),

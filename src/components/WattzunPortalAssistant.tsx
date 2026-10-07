@@ -90,7 +90,7 @@ function replyWorkContext(reply: WattzunReply, portal: WattzunPortal, reference:
   return info;
 }
 class VoiceTurnFailure extends Error {
-  constructor(message: string, readonly recoveredRequest?: { requestId: string; requestSummary: string }) { super(message); }
+  constructor(message: string, readonly recoveredRequest?: { requestId: string; requestSummary: string; transcript?: string }) { super(message); }
 }
 async function readCallResponse(response: Response, signal: AbortSignal, portal?: WattzunPortal) {
   if (response.status === 401 || response.status === 403) {
@@ -102,10 +102,14 @@ async function readCallResponse(response: Response, signal: AbortSignal, portal?
   if (!response.ok) {
     const payload: unknown = await response.json().catch(() => null);
     const recovery = record(payload) && record(payload.voiceTurnRecovery) ? payload.voiceTurnRecovery : null;
-    const recoveredRequest = recovery && Object.keys(recovery).length === 2 && typeof recovery.requestId === "string"
+    const transcript = recovery?.transcript;
+    const validTranscript = typeof transcript === "string" && transcript.trim() && transcript.length <= 4000
+      && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(transcript);
+    const recoveredRequest = recovery && Object.keys(recovery).every(key => ["requestId", "requestSummary", "transcript"].includes(key))
+      && (transcript === undefined || validTranscript) && typeof recovery.requestId === "string"
       && /^[A-Za-z0-9_-]{16,100}$/.test(recovery.requestId) && typeof recovery.requestSummary === "string"
-      && recovery.requestSummary.trim() && recovery.requestSummary.length <= 1800 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(recovery.requestSummary)
-      ? { requestId: recovery.requestId, requestSummary: recovery.requestSummary } : undefined;
+      && (recovery.requestSummary.trim() || validTranscript) && recovery.requestSummary.length <= 1800 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(recovery.requestSummary)
+      ? { requestId: recovery.requestId, requestSummary: recovery.requestSummary, ...(validTranscript ? { transcript } : {}) } : undefined;
     throw new VoiceTurnFailure(record(payload) && typeof payload.error === "string" ? payload.error : "Wattzun could not complete that request.", recoveredRequest);
   }
   return readWattzunVoiceStream(response, signal, value => isReply(value, portal));
@@ -489,9 +493,22 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       spokenMessages.set(result.audio, { id: `${id}:reply`, generation: request.generation, content: wattzunNativeSpokenReply(result.reply) });
       const turns: Message[] = [{ id: `${id}:reply`, role: "assistant", content: "", awaitingSpeech: true, reply: result.reply,
         ...(result.reply.action && !result.reply.formGuide ? { reviewDraft: result.reply.action } : {}),
-        ...(result.requestSummary ? { requestSummary: result.requestSummary } : {}) }];
-      if (result.transcript.trim()) turns.unshift({ id, role: "user", content: result.transcript });
+        ...(!result.transcript.trim() && result.requestSummary ? { requestSummary: result.requestSummary } : {}) }];
+      if (result.transcript.trim()) turns.unshift({ id, role: "user", content: result.transcript, memoryOnly: true });
       append(turns);
+      // User input is independent of whether the assistant finishes speaking.
+      // Keep late input even when playback is interrupted, but never cross a
+      // changed call, selected record, actor or workspace generation.
+      void result.inputTranscript?.then(transcript => {
+        if (!transcript.trim() || !active.current || voiceCall.current !== call || request.generation !== contextGeneration.current) return;
+        const hasUser = messagesRef.current.some(message => message.id === id);
+        messagesRef.current = messagesRef.current.flatMap(message => {
+          if (message.id !== `${id}:reply`) return [message];
+          const answered = { ...message, requestSummary: undefined };
+          return hasUser ? [answered] : [{ id, role: "user" as const, content: transcript, memoryOnly: true }, answered];
+        });
+        setMessages(messagesRef.current);
+      });
       if (result.reply.action?.kind === "open_workspace") {
         const destination = wattzunNavigationDestination(result.reply.action, scope.portal);
         if (destination) navigate(destination.href);
@@ -535,6 +552,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
           const info = replyWorkContext(result.reply, scope.portal, input.workReference ?? null);
           if (result.reply.action?.kind === "confirm_workflow") {
             const approvalSummary = result.requestSummary;
+            const approvalTranscript = result.transcript;
             if (result.audio.mimeType === "audio/pcm") await result.audio.stream.cancel();
             const completed = await executeWorkflow(result.reply, combined, generation);
             const speechToken = await user.getIdToken();
@@ -544,10 +562,11 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
               headers: { Authorization: `Bearer ${speechToken}`, "Content-Type": "application/json", Accept: WATTZUN_REALTIME_VOICE_STREAM_TYPE }, signal: combined,
               body: JSON.stringify({ portal: "trade", scopeId: scope.scopeId, requestId: crypto.randomUUID(), workflowReviewId: completed.reviewId, preferences: { ...preferencesRef.current } }),
             }), combined, scope.portal);
-            result = { ...result, ...(approvalSummary ? { requestSummary: approvalSummary } : {}) };
+            result = { ...result, transcript: approvalTranscript, inputTranscript: Promise.resolve(approvalTranscript), ...(approvalSummary ? { requestSummary: approvalSummary } : {}) };
           }
           if (!active.current || combined.aborted || generation !== contextGeneration.current) throw new Error("The selected work changed. Ask again about the current work.");
-          const validated = { ...result, reply: { ...result.reply, ...(info ? { workContext: info } : {}) } };
+          const voiceResult = result;
+          const validated = { ...voiceResult, get transcript() { return voiceResult.transcript; }, reply: { ...voiceResult.reply, ...(info ? { workContext: info } : {}) } };
           replyGenerations.set(validated, { generation, input });
           return validated;
         } catch (failure) {
@@ -556,8 +575,9 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
           if (failure instanceof VoiceTurnFailure && failure.recoveredRequest?.requestId === input.requestId
             && active.current && voiceCall.current === call && !combined.aborted) {
             const id = `${input.requestId}:memory`;
-            if (!messagesRef.current.some(message => message.id === id)) append([{ id, role: "assistant", content: "", memoryOnly: true,
-              requestSummary: failure.recoveredRequest.requestSummary }]);
+            if (!messagesRef.current.some(message => message.id === id)) append([failure.recoveredRequest.transcript
+              ? { id, role: "user", content: failure.recoveredRequest.transcript, memoryOnly: true }
+              : { id, role: "assistant", content: "", memoryOnly: true, requestSummary: failure.recoveredRequest.requestSummary }]);
           }
           throw failure;
         }

@@ -38,7 +38,7 @@ export type PreparedWattzunRealtimeTurn = {
 };
 /** Unconfirmed heard input only; the route must reauthorise before exposing it. */
 export class WattzunRealtimeTurnError extends WattzunReplyValidationError {
-  constructor(reason: WattzunReplyValidationReason, readonly requestSummary: string) {
+  constructor(reason: WattzunReplyValidationReason, readonly requestSummary: string, readonly transcript?: string) {
     super(reason);
     this.name = "WattzunRealtimeTurnError";
   }
@@ -249,12 +249,14 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   const contract = createWattzunPortalReplyContract(options);
   const instructions = [contract.instructions,
     "This is a live voice conversation: one or two short sentences, combined message and all questions normally under 45 words. For clarification, briefly acknowledge and ask the next missing detail directly: use one concise next necessary question in questions without duplicating it in message. Do not narrate the whole workflow, repeat boilerplate or list later intake details before that question. Add questions only if essential. Name supplied navigation buttons. Explain permissions only for missing-access questions. The word target must not omit a material fact or required review detail.",
-    "requestSummary is an unconfirmed interpretation of the spoken task for the next turn, not a verbatim transcript or verified record; never speak it. Normally under 600 characters, always under 1800. Retain clearly heard task, names, spelling, addresses, scope and amounts; mark uncertainty, never invent or claim completion. For explicit approval of the current review, guided governed step or form completion, retain the actual present approval or selection phrase, e.g. 'yes send it', 'I confirm this declaration', 'use the second one', 'complete this form now'. Never substitute 'user confirms', turn an ordinary answer into completion consent, or treat questions, quotations or future intent as approval.",
+    "Ask for ONE logical detail at a time. Phone number and email are two different questions; never bundle them. A complete street address is one detail. Before asking, read the earlier user answers and corrections in history. Carry those literal values forward and ask only the next unanswered detail. Acknowledge in a few words; do not describe missing later fields or the review process during intake.",
+    "requestSummary is private conversation memory, not a saved record; never speak it. Copy the current user's actual words and literal values, including name spelling, full street address, contact details, scope, quantities and prices. Never replace an answer with 'the user provided an address/name/details' or describe missing workflow requirements here: that would lose their answer. Mark words you could not hear clearly. Always under 1800 characters. For explicit approval retain the actual present approval or selection phrase, e.g. 'yes send it', 'I confirm this declaration', 'use the second one', 'complete this form now'. Never substitute 'user confirms', turn an ordinary answer into completion consent, or treat questions, quotations or future intent as approval.",
     `Call ${TOOL} exactly once for every answer, clarification or scope reminder. Submit exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary, using their schema including unused arrays/nulls. Never nest the reply content under a reply property or flatten action fields. Do not output an assistant message, text, audio or preamble. This read-only proposal requires validation; it cannot save or send.`,
     'Clarification argument shape example: {"message":"I can prepare that.","questions":["What detail should the draft include?"],"linkIds":[],"action":null,"lookup":null,"requestSummary":"User requests a draft; a necessary detail is missing."}. This illustrates all six fields, not wording to copy.',
   ].join("\n");
   const schema = { ...contract.schema, required: [...contract.schema.required, "requestSummary"],
-    properties: { ...contract.schema.properties, requestSummary: { type: "string", minLength: 1, maxLength: 1_800 } } };
+    properties: { ...contract.schema.properties, requestSummary: { type: "string", minLength: 1, maxLength: 1_800,
+      description: "The current speaker's actual words and literal answers. Preserve all supplied values, never just say that a value was provided. This is unconfirmed input, not assistant reasoning or a task checklist." } } };
   const preferences = parseWattzunPreferences(options.input.preferences);
   const { key, guardEnv } = wattzunPortalProviderConfiguration(options);
   diagnostic.substage = "audio";
@@ -275,8 +277,13 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   // Reserve both responses, framing overhead and the maximum speech output at
   // the higher audio rate, plus 25%. This is a ceiling, not a customer price.
   const textInputTokens = promptBytes + new TextEncoder().encode(WATTZUN_SPEECH_INSTRUCTIONS).byteLength + 2_100 * 3 + 2_048;
+  // Parallel input transcription is memory only. Reserve its full bounded input
+  // and output too; it never adds a sequential wait before the native response.
+  // gpt-4o-mini-transcribe: 16k context and 2k maximum output, at
+  // $1.25/M audio input and $5/M output. Reserve the entire model ceiling.
+  const transcriptionCeilingMicroUsd = 16_000 * 1.25 + 2_000 * 5;
   const estimatedMicroUsd = Math.ceil((textInputTokens * rates.textInput + audioInputCeiling * rates.audioInput
-    + PROPOSAL_TOKENS * rates.textOutput + SPEECH_TOKENS * rates.audioOutput) * 1.25);
+    + PROPOSAL_TOKENS * rates.textOutput + SPEECH_TOKENS * rates.audioOutput + transcriptionCeilingMicroUsd) * 1.25);
   const guard = createSharedSurgeUsageGuard({ env: guardEnv, getDatabase: () => options.db });
   diagnostic.phase = "guard"; diagnostic.substage = "budget";
   const guardStarted = performance.now();
@@ -302,6 +309,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   let resolvePhase: ((event: RealtimeEvent) => void) | undefined;
   let rejectPhase: ((error: Error) => void) | undefined;
   let approvalFailure: { error: unknown } | undefined;
+  let inputItemId = "", heardTranscript = "";
   let output: ReadableStreamDefaultController<Uint8Array> | undefined;
   const closeSocket = () => {
     if (!socket || socketClosed) return;
@@ -397,6 +405,17 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
       const raw: unknown = JSON.parse(message.data);
       if (!record(raw) || typeof raw.type !== "string") incomplete();
       const event: RealtimeEvent = { ...raw, type: raw.type };
+      if (event.type === "input_audio_buffer.committed" && typeof event.item_id === "string" && !inputItemId) {
+        inputItemId = event.item_id;
+      }
+      if (event.type === "conversation.item.input_audio_transcription.completed") {
+        // Only the audio committed for this turn can contribute user memory.
+        // A failed, late or malformed ASR result must not interrupt valid speech.
+        if (inputItemId && event.item_id === inputItemId && event.content_index === 0
+          && typeof event.transcript === "string" && event.transcript.trim() && event.transcript.length <= 4_000
+          && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(event.transcript)) heardTranscript = event.transcript.trim();
+        return;
+      }
       if (phase === "speech") diagnostic.structure.audioEvent = allowedValue(event.type, [
         "response.created", "response.output_item.added", "response.content_part.added", "response.output_audio.delta",
         "response.output_audio.done", "response.output_audio_transcript.delta", "response.output_audio_transcript.done",
@@ -517,7 +536,8 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     const configStarted = performance.now();
     send({ type: "session.update", session: {
       type: "realtime", model, instructions, output_modalities: ["text"], truncation: "disabled",
-      audio: { input: { format: { type: "audio/pcm", rate: 24_000 }, transcription: null, turn_detection: null },
+      audio: { input: { format: { type: "audio/pcm", rate: 24_000 },
+        transcription: { model: "gpt-4o-mini-transcribe", language: "en" }, turn_detection: null },
         output: { format: { type: "audio/pcm", rate: 24_000 }, voice: WATTZUN_BRAND_VOICE, speed: preferences.speed } },
       max_output_tokens: PROPOSAL_TOKENS,
       reasoning: { effort: "low" }, parallel_tool_calls: false,
@@ -579,7 +599,11 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     const clarificationOnly = Object.keys(raw).length === 3
       && ["message", "questions", "linkIds"].every(field => Object.hasOwn(raw, field))
       && Array.isArray(raw.questions) && raw.questions.length > 0;
-    if (!clarificationOnly && (Object.keys(raw).length !== schema.required.length || schema.required.some(field => !Object.hasOwn(raw, field)))) incomplete();
+    // Read-only native content is projected onto the complete known contract.
+    // Extra provider metadata cannot cause silence or grant action authority.
+    // Proposals that can read records or mutate work retain exact envelopes.
+    const completeReadOnly = raw.action === null && raw.lookup === null && schema.required.every(field => Object.hasOwn(raw, field));
+    if (!clarificationOnly && !completeReadOnly && (Object.keys(raw).length !== schema.required.length || schema.required.some(field => !Object.hasOwn(raw, field)))) incomplete();
     // Apply the same bounded text and false-completion/source-access checks to
     // memory. It remains an explicitly unconfirmed interpretation of the input.
     diagnostic.substage = "summary";
@@ -619,12 +643,17 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     } });
     const timings = { ...diagnostic.timings };
     console.info("WATTZUN_REALTIME_TURN_READY", { phase: "speech", timings });
-    return { reply, requestSummary, audio, timings };
+    return { reply, requestSummary, audio, timings, get transcript() { return heardTranscript; } };
   } catch (error) {
+    const retainInput = heardTranscript && diagnostic.phase === "checking" && !signal.aborted;
     close(error instanceof SyntaxError ? new Error("WORKFLOW_AI_INCOMPLETE") : error);
     // The trusted route hook owns access errors and their HTTP status. Provider
     // failures stay sanitized; hook errors retain their authoritative identity.
     if (approvalFailure && approvalFailure.error === error) throw error;
+    if (retainInput) {
+      throw new WattzunRealtimeTurnError(error instanceof WattzunReplyValidationError ? error.reason : "shape",
+        error instanceof WattzunRealtimeTurnError ? error.requestSummary : "", heardTranscript);
+    }
     throw safeError(error instanceof SyntaxError ? new Error("WORKFLOW_AI_INCOMPLETE") : error);
   }
 }

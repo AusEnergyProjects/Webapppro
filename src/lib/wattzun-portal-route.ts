@@ -507,7 +507,7 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
       // authority validation run. Denial cancels it in finally without disclosure.
       await timing.run("usage", () => deps.recordUsage({ access, requestId: input.requestId, kind: "voice" }));
       await timing.run("access", () => releaseNativeTurn(request, initialAuthority, input, workContext, workflow, deps));
-      const response = timing.response(new Response(voiceFrames(prepared.transcript || "", withContext(prepared.reply, workflow.guide?.context || workContext), speechStream, request.signal, prepared.requestSummary),
+      const response = timing.response(new Response(voiceFrames(prepared.transcript || "", withContext(prepared.reply, workflow.guide?.context || workContext), speechStream, request.signal, prepared.requestSummary, () => prepared.transcript || ""),
         { headers: { ...headers, "Content-Type": WATTZUN_REALTIME_VOICE_STREAM_TYPE } }));
       handedOff = true;
       return response;
@@ -546,7 +546,8 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
         await timing.run("access", () => releaseNativeTurn(request, initial, input, context, workflow, deps));
       } catch (denial) { return timing.response(failure(denial)); }
       const response = failure(error);
-      return timing.response(json({ ...await response.json(), voiceTurnRecovery: { requestId: input.requestId, requestSummary: error.requestSummary },
+      return timing.response(json({ ...await response.json(), voiceTurnRecovery: { requestId: input.requestId, requestSummary: error.requestSummary,
+        ...(error.transcript ? { transcript: error.transcript } : {}) },
         ...(guideRequestId ? { formGuideRecovery: { requestId: guideRequestId, state: "not_saved" } } : {}) }, response.status));
     }
     const response = failure(error);
@@ -665,7 +666,7 @@ export async function postWattzunWorkflowSpeech(request: Request, deps = default
   finally { if (audio && !handedOff) await audio.cancel().catch(() => {}); }
 }
 
-function voiceFrames(transcript: string, reply: WattzunReply, audio: ReadableStream<Uint8Array>, signal: AbortSignal, requestSummary?: string) {
+function voiceFrames(transcript: string, reply: WattzunReply, audio: ReadableStream<Uint8Array>, signal: AbortSignal, requestSummary?: string, readTranscript?: () => string) {
   const reader = audio.getReader(), encoder = new TextEncoder();
   let header = true, offset = 0;
   let buffered: Uint8Array = new Uint8Array(0);
@@ -677,7 +678,13 @@ function voiceFrames(transcript: string, reply: WattzunReply, audio: ReadableStr
         if (header) { header = false; controller.enqueue(encode({ type: "reply", transcript, reply, ...(requestSummary ? { requestSummary } : {}) })); return; }
         while (offset >= buffered.byteLength) {
           const next = await reader.read(); signal.throwIfAborted();
-          if (next.done) { controller.enqueue(encode({ type: "done" })); controller.close(); reader.releaseLock(); return; }
+          if (next.done) {
+            // Input transcription runs beside native reasoning and speech. Take
+            // what is ready now without delaying either the reply or completion.
+            const heard = readTranscript?.();
+            controller.enqueue(encode({ type: "done", ...(heard ? { transcript: heard } : {}) }));
+            controller.close(); reader.releaseLock(); return;
+          }
           buffered = next.value; offset = 0;
         }
         const chunk = buffered.subarray(offset, offset + 32_000); offset += chunk.byteLength;

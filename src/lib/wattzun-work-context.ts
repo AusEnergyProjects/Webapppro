@@ -3,7 +3,7 @@ import { wattzunPortalForPath } from "./wattzun-portal-path.ts";
 
 export type WattzunWorkReference =
   | { kind: "trade_job"; recordId: string }
-  | { kind: "trade_form"; formKind: "job_form" | "activity_form" | "work_pack"; recordId: string; jobId: string }
+  | { kind: "trade_form"; formKind: "job_form" | "activity_form" | "work_pack" | "veu_electrical"; recordId: string; jobId: string }
   | { kind: "creditex_audit"; recordId: string }
   | { kind: "council_postcode"; postcode: string }
   | { kind: "council_report"; period: "quarter" | "year" | "all" };
@@ -14,7 +14,7 @@ export function readWattzunWorkReference(value: unknown, portal: WattzunPortal):
   const keys = Object.keys(value);
   if (!("kind" in value)) return null;
   if (value.kind === "trade_form" && portal === "trade" && keys.length === 4
-    && "formKind" in value && (value.formKind === "job_form" || value.formKind === "activity_form" || value.formKind === "work_pack")
+    && "formKind" in value && (value.formKind === "job_form" || value.formKind === "activity_form" || value.formKind === "work_pack" || value.formKind === "veu_electrical")
     && "recordId" in value && typeof value.recordId === "string" && /^[A-Za-z0-9:_-]{1,180}$/.test(value.recordId)
     && "jobId" in value && typeof value.jobId === "string" && /^[A-Za-z0-9:_-]{1,180}$/.test(value.jobId)) {
     return { kind: "trade_form", formKind: value.formKind, recordId: value.recordId, jobId: value.jobId };

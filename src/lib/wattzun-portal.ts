@@ -36,7 +36,7 @@ export type WattzunReply = {
 export type WattzunVoiceAudio = { base64: string; mimeType: "audio/mpeg" }
   | { mimeType: "audio/pcm"; stream: ReadableStream<Uint8Array> };
 export type WattzunVoiceResult = {
-  ok: true; transcript: string; requestSummary?: string; reply: WattzunReply; audio: WattzunVoiceAudio;
+  ok: true; transcript: string; inputTranscript?: Promise<string>; requestSummary?: string; reply: WattzunReply; audio: WattzunVoiceAudio;
 };
 export const WATTZUN_VOICE_STREAM_TYPE = "application/x-wattzun-voice+ndjson";
 export const WATTZUN_REALTIME_VOICE_STREAM_TYPE = "application/x-wattzun-realtime-voice+ndjson";

@@ -43,6 +43,9 @@ export async function readWattzunVoiceStream(response: Response, signal: AbortSi
       || !("reply" in header) || !isReply(header.reply)) throw unreadable();
     const requestSummary = "requestSummary" in header ? header.requestSummary : undefined;
     if (requestSummary !== undefined && (!realtime || typeof requestSummary !== "string" || !requestSummary.trim() || requestSummary.length > 1800)) throw unreadable();
+    let transcript = header.transcript;
+    let finishInput: (value: string) => void = () => {};
+    const inputTranscript = new Promise<string>(resolve => { finishInput = resolve; });
     const stream = new ReadableStream<Uint8Array>({
       async pull(controller) {
         try {
@@ -50,6 +53,12 @@ export async function readWattzunVoiceStream(response: Response, signal: AbortSi
           if (!next || typeof next !== "object" || !("type" in next)) throw unreadable();
           if (next.type === "done") {
             if (!bytes || bytes % 2) throw unreadable();
+            if ("transcript" in next) {
+              if (!realtime || typeof next.transcript !== "string" || !next.transcript.trim() || next.transcript.length > 4_000
+                || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(next.transcript)) throw unreadable();
+              transcript = next.transcript.trim();
+            }
+            finishInput(transcript);
             finished = true; await reader.cancel(); dispose(); controller.close(); return;
           }
           if (next.type !== "audio" || !("data" in next) || typeof next.data !== "string" || !next.data
@@ -58,10 +67,10 @@ export async function readWattzunVoiceStream(response: Response, signal: AbortSi
           bytes += audio.byteLength;
           if (!audio.byteLength || bytes > WATTZUN_MAX_AUDIO_BYTES) throw unreadable();
           controller.enqueue(audio);
-        } catch { finished = true; await reader.cancel().catch(() => {}); dispose(); controller.error(signal.aborted ? new Error("Call ended.") : unreadable()); }
+        } catch { finishInput(transcript); finished = true; await reader.cancel().catch(() => {}); dispose(); controller.error(signal.aborted ? new Error("Call ended.") : unreadable()); }
       },
-      async cancel() { if (!finished) { finished = true; await reader.cancel().catch(() => {}); dispose(); } },
+      async cancel() { if (!finished) { finishInput(transcript); finished = true; await reader.cancel().catch(() => {}); dispose(); } },
     }, { highWaterMark: 0 });
-    return { ok: true, transcript: header.transcript, ...(typeof requestSummary === "string" ? { requestSummary } : {}), reply: header.reply, audio: { mimeType: "audio/pcm", stream } };
+    return { ok: true, get transcript() { return transcript; }, inputTranscript, ...(typeof requestSummary === "string" ? { requestSummary } : {}), reply: header.reply, audio: { mimeType: "audio/pcm", stream } };
   } catch { await reader.cancel().catch(() => {}); dispose(); throw signal.aborted ? new Error("Call ended.") : unreadable(); }
 }

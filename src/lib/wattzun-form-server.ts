@@ -2,13 +2,16 @@ import type { WattzunAccess } from "./wattzun-portal-access-server.ts";
 import type { TeamAccess } from "./trade-team-server.ts";
 import type { TradeJobFormProjection } from "./trade-job-forms-server.ts";
 import type { ActivityRecord, ActivityAnswers } from "./trade-activity-form-types.ts";
+import type { PiesaRecord } from "./veu-electrical-assessment.ts";
+import type { PiesaMutationReceipt } from "./trade-veu-electrical-assessment-server.ts";
+import { veuElectricalCompletion } from "./veu-electrical-safety-form.ts";
 import type { CreditexAssignedActivityWorkPackProjection, CreditexWorkPackTradeScope, CreditexWorkPackSectionPatch, CreditexWorkPackMutationIdempotency, CreditexWorkPackMutationResult } from "./creditex-activity-work-pack-server.ts";
 import type { WattzunWorkContext, WattzunWorkReference } from "./wattzun-work-context.ts";
 import { isWattzunWorkflowProposal, type WattzunWorkflowOperation, type WattzunWorkflowReceipt } from "./wattzun-workflow.ts";
 import { expandedActivityFields, activityRepeatCount, activityRepeatItemLabel } from "./trade-activity-form-flow.ts";
 import { activityFieldWorkerForm } from "./trade-activity-field-policy.ts";
 import { creditexActivityWorkPackVisibilityMatches } from "./creditex-activity-work-pack.ts";
-import { assertActivitySignedScopeUnchanged, activityMissing } from "./trade-activity-forms.ts";
+import { assertActivitySignedScopeUnchanged, activityMissing, activitySigningScope, normaliseActivityAnswers, activityHash } from "./trade-activity-forms.ts";
 import { visibleTradeFormFields, normalizeTradeFormAnswers, tradeFormCompletion } from "./trade-form-library.mjs";
 import { readWattzunFormGuideInput, readWattzunFormGuideControl, type WattzunFormGuideInput, type WattzunFormGuideProgress, type WattzunFormGuideControl, type WattzunFormGuideQuestion } from "./wattzun-form-guide.ts";
 import { readWattzunFormStep, readWattzunFormProductSearchAction, type WattzunFormStep, type WattzunFormGuideStep, type WattzunFormProductSearchAction } from "./wattzun-form-step.ts";
@@ -36,9 +39,10 @@ type JobTemplate = { fields: JobTemplateField[] };
 type Snapshot = { reference: Reference; title: string; href: string; recordId: string; revision: number; editable: boolean;
   schemaSha256: string; answers: Row; fields: Field[]; sourceSha256: string;
   status: string; completion: { ready: boolean; missing: Array<{ key: string; label: string }> };
-  jobTemplate?: JobTemplate; activity?: ActivityRecord; pack?: CreditexAssignedActivityWorkPackProjection };
+  jobTemplate?: JobTemplate; activity?: ActivityRecord; assessment?: PiesaRecord; pack?: CreditexAssignedActivityWorkPackProjection };
 type Payload = { formKind: "job_form"; baseRevision: number; answers: Answers }
   | { formKind: "activity_form"; expectedRevision: number; answers: Answers }
+  | { formKind: "veu_electrical"; baseRevision: number; answers: Answers; nativeRequestId: string; requestSha256: string }
   | { formKind: "work_pack"; caseInstanceId: string; expectedResponseSha256: string; sectionPatches: CreditexWorkPackSectionPatch[] };
 export type WattzunFormPrepared = {
   version: 1; ownerUid: string; actorUid: string; reference: Reference; title: string; href: string;
@@ -50,6 +54,7 @@ export type WattzunFormCompletionPrepared = {
   version: 1; ownerUid: string; actorUid: string; reference: Reference; title: string; href: string;
   sourceSha256: string; schemaSha256: string; baselineRevision: number; baselineStatus: string;
   baselineAnswersSha256: string; expectedAnswersSha256: string;
+  nativeRequestId?: string;
   review: WattzunFormPrepared["review"];
 };
 export type WattzunFormStepPrepared = {
@@ -91,6 +96,12 @@ export type WattzunFormDependencies = {
   loadPack(db: D1Database, input: CreditexWorkPackTradeScope & { caseInstanceId: string }): Promise<CreditexAssignedActivityWorkPackProjection>;
   savePack(db: D1Database, input: CreditexWorkPackTradeScope & { caseInstanceId: string; expectedResponseSha256: string; sectionPatches: readonly CreditexWorkPackSectionPatch[]; idempotency: CreditexWorkPackMutationIdempotency }): Promise<CreditexWorkPackMutationResult>;
   submitActivity(access: TeamAccess, id: string, revision: number): Promise<ActivityRecord>;
+  assessment?: {
+    load(access: TeamAccess, id: string): Promise<PiesaRecord>;
+    save(access: TeamAccess, id: string, revision: number, answers: ActivityAnswers, requestId: string): Promise<PiesaRecord>;
+    complete(access: TeamAccess, id: string, revision: number, requestId: string): Promise<PiesaRecord>;
+    receipt(access: TeamAccess, id: string, requestId: string, expected: { operation: "save" | "complete"; baseRevision: number; requestSha256?: string }): Promise<PiesaMutationReceipt | null>;
+  };
   finalisePack(db: D1Database, input: CreditexWorkPackTradeScope & { caseInstanceId: string; expectedResponseSha256: string; idempotency: CreditexWorkPackMutationIdempotency }): Promise<CreditexWorkPackMutationResult>;
   steps?: StepServices;
 };
@@ -104,6 +115,12 @@ const defaults: WattzunFormDependencies = {
   loadPack: async (db, input) => (await import("./creditex-activity-work-pack-server.ts")).loadAssignedCreditexActivityWorkPack(db, input),
   savePack: async (db, input) => (await import("./creditex-activity-work-pack-server.ts")).commitAssignedCreditexActivityWorkPack(db, input),
   submitActivity: async (access, id, revision) => (await import("./trade-activity-forms-server.ts")).submitActivityRecord(access, id, revision),
+  assessment: {
+    load: async (team, id) => (await import("./trade-veu-electrical-assessment-server.ts")).readPiesaRecord(team, id),
+    save: async (team, id, revision, answers, requestId) => (await import("./trade-veu-electrical-assessment-server.ts")).savePiesaAnswers(team, id, revision, answers, requestId),
+    complete: async (team, id, revision, requestId) => (await import("./trade-veu-electrical-assessment-server.ts")).completePiesaRecord(team, id, revision, requestId),
+    receipt: async (team, id, requestId, expected) => (await import("./trade-veu-electrical-assessment-server.ts")).readPiesaMutationReceipt(team, id, requestId, expected),
+  },
   finalisePack: async (db, input) => (await import("./creditex-activity-work-pack-server.ts")).finaliseAssignedCreditexActivityWorkPack(db, input),
 };
 export class WattzunFormError extends Error {
@@ -120,7 +137,7 @@ function record(value: unknown): value is Row { return typeof value === "object"
 function answers(value: unknown): value is Answers { return record(value) && Object.keys(value).length <= 15_000 && Object.entries(value).every(([key, value]) => !unsafeKey(key) && answer(value)); }
 const formAnswer = (value: unknown): value is FormAnswer => answer(value) || Array.isArray(value) && value.length <= 100 && value.every(item => typeof item === "string" && answer(item)) && new Set(value).size === value.length;
 function packAnswers(value: unknown): value is Record<string, FormAnswer> { return record(value) && Object.keys(value).length <= 15_000 && Object.entries(value).every(([key, value]) => !unsafeKey(key) && formAnswer(value)); }
-function validReference(value: unknown): value is Reference { return record(value) && value.kind === "trade_form" && ["job_form", "activity_form", "work_pack"].includes(String(value.formKind)) && typeof value.recordId === "string" && ID.test(value.recordId) && typeof value.jobId === "string" && ID.test(value.jobId); }
+function validReference(value: unknown): value is Reference { return record(value) && value.kind === "trade_form" && ["job_form", "activity_form", "work_pack", "veu_electrical"].includes(String(value.formKind)) && typeof value.recordId === "string" && ID.test(value.recordId) && typeof value.jobId === "string" && ID.test(value.jobId); }
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (record(value)) return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
@@ -133,7 +150,7 @@ async function canonicalCall<T>(operation: () => Promise<T>): Promise<T> {
   try { return await operation(); }
   catch (error) {
     if (!(error instanceof Error)) throw error;
-    if (error.name === "CreditexActivityWorkPackServerError" && "status" in error && typeof error.status === "number" && error.status >= 400 && error.status <= 599) {
+    if (["CreditexActivityWorkPackServerError", "PiesaError"].includes(error.name) && "status" in error && typeof error.status === "number" && error.status >= 400 && error.status <= 599) {
       throw new WattzunFormError(error.status, error.message);
     }
     const known: Record<string, [number, string]> = {
@@ -207,7 +224,7 @@ async function load(request: Request, access: WattzunAccess, reference: Referenc
   const href = `/direct-trade/${team.isOwner ? "dashboard" : "team"}?workspace=work&jobId=${encodeURIComponent(reference.jobId)}&jobTab=files`;
   let title: string, recordId = reference.recordId, currentRevision: number, editable: boolean, schema: unknown, allAnswers: Row, fields: Field[], status: string;
   let completion: Snapshot["completion"];
-  let supporting: JobTemplate | undefined, activity: ActivityRecord | undefined, pack: CreditexAssignedActivityWorkPackProjection | undefined;
+  let supporting: JobTemplate | undefined, activity: ActivityRecord | undefined, assessment: PiesaRecord | undefined, pack: CreditexAssignedActivityWorkPackProjection | undefined;
   if (reference.formKind === "job_form") {
     const form = selected?.form;
     if (!form || form.id !== reference.recordId || !answers(form.answers)) throw new WattzunFormError(404, "This form was not found on the selected job.");
@@ -244,6 +261,30 @@ async function load(request: Request, access: WattzunAccess, reference: Referenc
     }
     const missing = activityMissing(activity).filter(item => item.kind === "signature" || workerFields.some(field => field.key === item.key && field.presentation !== "derived"));
     completion = { ready: missing.length === 0, missing: missing.map(item => ({ key: item.key, label: item.label })) };
+  } else if (reference.formKind === "veu_electrical") {
+    if (!deps.assessment) throw new WattzunFormError(503, "The electrical assessment service is unavailable.");
+    assessment = await canonicalCall(() => deps.assessment!.load(team, reference.recordId));
+    if (assessment.id !== reference.recordId || assessment.workOrderId !== reference.jobId || assessment.ownerUid !== access.scope.scopeId) throw new WattzunFormError(403, "This electrical assessment belongs to another job or business.");
+    title = requiredText(assessment.form.title, 240); currentRevision = revision(assessment.revision); editable = assessment.status === "draft"; status = assessment.status;
+    schema = { form: assessment.form, formSha256: assessment.formSha256, signatures: assessment.signatures.map(item => ({ id: item.id, phase: item.phase, scopeSha256: item.scopeSha256 })), evidence: assessment.evidence.map(item => ({ id: item.id, fieldKey: item.fieldKey, sha256: item.sha256 })) };
+    allAnswers = { ...assessment.answers };
+    const signedPhases = new Set(assessment.signatures.map(item => item.phase));
+    fields = expandedActivityFields(assessment.form, assessment.answers).map(field => {
+      const projection = primitiveField(field.key, field.label, field.type, field.required, field.options.map(value => ({ value, label: field.optionLabels?.[value] ?? value })));
+      const protectedDeclaration = field.key === "initial_correct" || field.requiredValue === true;
+      const savedEvidence = assessment?.evidence.filter(item => item.fieldKey === field.key).length ?? 0;
+      const ordinaryAnswer = projection.writable || field.key === "certification_date" && field.type === "date";
+      return { ...projection, type: protectedDeclaration || field.type === "boolean" && !ordinaryAnswer ? "declaration" : field.type,
+        writable: ordinaryAnswer && !protectedDeclaration && !signedPhases.has("after") && !(field.phase === "before" && signedPhases.has("before")), savedEvidence,
+        ...(field.type === "photo" ? { capture: { minimumCount: field.required ? 1 : 0, maximumCount: 20, savedCount: savedEvidence, allowedContentTypes: ["image/jpeg", "image/png", "image/webp"], gpsRequired: false, captureTimeRequired: false, metadataRequired: false, originalRequired: true } } : {}) };
+    });
+    for (const group of new Set(fields.flatMap(field => assessment!.form.fields.find(item => item.key === field.key)?.repeatGroup ?? []))) {
+      const current = activityRepeatCount(assessment.form, assessment.answers, group);
+      fields.unshift({ ...primitiveField(`$repeat.${group}`, `How many ${activityRepeatItemLabel(group)} items are there? Currently ${current}; choose ${current} to 20.`, "number", true, []), writable: !signedPhases.has("after"), minimumNumber: current, maximumNumber: 20, numberStep: 1 });
+    }
+    const checked = veuElectricalCompletion(assessment);
+    completion = { ready: checked.ready, missing: checked.missing.map(item => ({ key: item.key, label: item.label })) };
+    for (const missing of checked.missing.filter(item => item.kind === "signature")) fields.push({ ...primitiveField(missing.key, missing.label, "signature", true, []), writable: false });
   } else {
     pack = await canonicalCall(() => deps.loadPack(access.db, { ...packScope(team), caseInstanceId: reference.recordId }));
     if (pack.instance.workOrderId !== reference.jobId) throw new WattzunFormError(403, "This activity work pack belongs to another job.");
@@ -314,10 +355,10 @@ async function load(request: Request, access: WattzunAccess, reference: Referenc
   }
   const schemaSha256 = await hash(schema);
   const sourceSha256 = await hash({ ownerUid: access.scope.scopeId, actorUid: access.actorUid, reference: { ...reference, recordId }, revision: currentRevision, schemaSha256, answers: allAnswers, editable, status,
-    ...(pack ? { governed: { responseSha256: pack.instance.responseSha256, dependencies: pack.response.dependencyResolutions, completion: pack.completion, calculatorPendingReviews: pack.calculatorPendingReviews, referenceDocuments: pack.referenceDocuments } } : {}) });
+    ...(assessment ? { initialAttestation: assessment.initialAttestation ?? null } : {}), ...(pack ? { governed: { responseSha256: pack.instance.responseSha256, dependencies: pack.response.dependencyResolutions, completion: pack.completion, calculatorPendingReviews: pack.calculatorPendingReviews, referenceDocuments: pack.referenceDocuments } } : {}) });
   return { team, snapshot: { reference, title, href, recordId, revision: currentRevision, editable, schemaSha256, answers: allAnswers, fields, sourceSha256,
     status, completion,
-    ...(supporting ? { jobTemplate: supporting } : {}), ...(activity ? { activity } : {}), ...(pack ? { pack } : {}) } };
+    ...(supporting ? { jobTemplate: supporting } : {}), ...(activity ? { activity } : {}), ...(assessment ? { assessment } : {}), ...(pack ? { pack } : {}) } };
 }
 
 function validateValue(field: Field, value: FormAnswer): FormAnswer {
@@ -503,6 +544,15 @@ async function prepare(request: Request, access: WattzunAccess, proposal: Propos
     const previous = snapshot.activity;
     await canonicalCall(async () => assertActivitySignedScopeUnchanged(previous, { ...previous, answers: expected }));
     payload = { formKind: "activity_form", expectedRevision: snapshot.revision, answers: expected };
+  } else if (reference.formKind === "veu_electrical" && snapshot.assessment) {
+    if (!answers(expected)) throw new WattzunFormError(400, "The electrical assessment requires simple answers.");
+    const previous = snapshot.assessment, clean = normaliseActivityAnswers(previous.form, expected);
+    if (previous.answers.initial_correct === true && activitySigningScope(previous, "before") !== activitySigningScope({ ...previous, answers: clean }, "before")) clean.initial_correct = false;
+    for (const signature of previous.signatures) if (activitySigningScope(previous, signature.phase) !== activitySigningScope({ ...previous, answers: clean }, signature.phase)) throw new WattzunFormError(409, "These assessment details have already been signed. Keep their actual signed answers unchanged.");
+    for (const key of Object.keys(expected)) delete expected[key]; Object.assign(expected, clean);
+    const requestSha256 = activityHash({ operation: "save", baseRevision: snapshot.revision, answers: clean });
+    payload = { formKind: "veu_electrical", baseRevision: snapshot.revision, answers: clean, requestSha256,
+      nativeRequestId: `wattzun-piesa-${await hash({ ownerUid: access.scope.scopeId, actorUid: access.actorUid, reference, sourceSha256: snapshot.sourceSha256, requestSha256 })}` };
   } else if (snapshot.pack) {
     const sectionPatches = packPatches(snapshot, changes);
     if (sectionPatches.length > 100) throw new WattzunFormError(400, "Add fewer items in one form answer.");
@@ -550,6 +600,8 @@ export function isWattzunFormPrepared(value: unknown): value is WattzunFormPrepa
   const payload = value.payload;
   if (payload.formKind === "job_form") return payload.baseRevision === value.baselineRevision && answers(payload.answers);
   if (payload.formKind === "activity_form") return payload.expectedRevision === value.baselineRevision && answers(payload.answers);
+  if (payload.formKind === "veu_electrical") return payload.baseRevision === value.baselineRevision && answers(payload.answers)
+    && typeof payload.nativeRequestId === "string" && /^wattzun-piesa-[a-f0-9]{64}$/.test(payload.nativeRequestId) && typeof payload.requestSha256 === "string" && SHA.test(payload.requestSha256);
   return typeof payload.caseInstanceId === "string" && ID.test(payload.caseInstanceId) && typeof payload.expectedResponseSha256 === "string" && /^(?:sha256:)?[a-f0-9]{64}$/.test(payload.expectedResponseSha256)
     && Array.isArray(payload.sectionPatches) && payload.sectionPatches.length <= 100
     && payload.sectionPatches.every(patch => record(patch) && typeof patch.sectionKey === "string" && PACK_KEY.test(patch.sectionKey) && (patch.repeatInstanceKey === undefined || typeof patch.repeatInstanceKey === "string" && PACK_KEY.test(patch.repeatInstanceKey)) && patch.remove === undefined && packAnswers(patch.answers));
@@ -576,6 +628,12 @@ async function verifyFrozenPatch(snapshot: Snapshot, prepared: WattzunFormPrepar
     if (!answers(clean) || canonical(clean) !== canonical(payload.answers) || await hash(clean) !== prepared.expectedAnswersSha256) throw new WattzunFormError(409, "The saved form answers no longer match the reviewed draft.");
   } else if (payload.formKind === "activity_form") {
     if (canonical(expected) !== canonical(payload.answers) || await hash(expected) !== prepared.expectedAnswersSha256) throw new WattzunFormError(409, "The activity answers no longer match the reviewed draft.");
+  } else if (payload.formKind === "veu_electrical" && snapshot.assessment) {
+    const clean = normaliseActivityAnswers(snapshot.assessment.form, expected);
+    if (snapshot.assessment.answers.initial_correct === true && activitySigningScope(snapshot.assessment, "before") !== activitySigningScope({ ...snapshot.assessment, answers: clean }, "before")) clean.initial_correct = false;
+    const requestSha256 = activityHash({ operation: "save", baseRevision: snapshot.revision, answers: clean });
+    if (canonical(clean) !== canonical(payload.answers) || await hash(clean) !== prepared.expectedAnswersSha256 || requestSha256 !== payload.requestSha256
+      || payload.nativeRequestId !== `wattzun-piesa-${await hash({ ownerUid: prepared.ownerUid, actorUid: prepared.actorUid, reference: prepared.reference, sourceSha256: prepared.sourceSha256, requestSha256 })}`) throw new WattzunFormError(409, "The electrical assessment answers no longer match the reviewed request.");
   } else if (payload.formKind === "work_pack") {
     const patches = packPatches(snapshot, changes);
     if (canonical(patches) !== canonical(payload.sectionPatches) || await hash(expected) !== prepared.expectedAnswersSha256) throw new WattzunFormError(409, "The governed answers no longer match the reviewed draft.");
@@ -588,7 +646,19 @@ async function currentReviewedForm(request: Request, access: WattzunAccess, prep
   const currentHash = await hash(snapshot.answers);
   return { snapshot, team, currentHash };
 }
-function savedReceipt(snapshot: Snapshot, prepared: WattzunFormPrepared, currentHash: string): WattzunWorkflowReceipt | null {
+async function savedReceipt(snapshot: Snapshot, prepared: WattzunFormPrepared, currentHash: string, team: TeamAccess, deps: WattzunFormDependencies): Promise<WattzunWorkflowReceipt | null> {
+  if (prepared.payload.formKind === "veu_electrical") {
+    if (!deps.assessment) throw new WattzunFormError(503, "The electrical assessment service is unavailable.");
+    const payload = prepared.payload, service = deps.assessment;
+    if (payload.requestSha256 !== activityHash({ operation: "save", baseRevision: prepared.baselineRevision, answers: payload.answers }) || prepared.expectedAnswersSha256 !== await hash(payload.answers)
+      || payload.nativeRequestId !== `wattzun-piesa-${await hash({ ownerUid: prepared.ownerUid, actorUid: prepared.actorUid, reference: prepared.reference, sourceSha256: prepared.sourceSha256, requestSha256: payload.requestSha256 })}`) throw new WattzunFormError(409, "The assessment save request identity changed.");
+    const saved = await canonicalCall(() => service.receipt(team, snapshot.recordId, payload.nativeRequestId, {
+      operation: "save", baseRevision: prepared.baselineRevision, requestSha256: payload.requestSha256 }));
+    if (!saved) return null;
+    if (saved.recordId !== snapshot.recordId || saved.actorUid !== prepared.actorUid || saved.operation !== "save" || saved.baseRevision !== prepared.baselineRevision || saved.resultRevision !== snapshot.revision
+      || snapshot.revision !== prepared.baselineRevision + 1 || currentHash !== prepared.expectedAnswersSha256 || saved.requestSha256 !== prepared.payload.requestSha256) throw new WattzunFormError(409, "The assessment save receipt differs from this exact request.");
+    return receipt(snapshot);
+  }
   // A lost outer receipt must not repeat a canonical draft save. Only the exact expected next revision is accepted.
   if (currentHash === prepared.expectedAnswersSha256 && (snapshot.revision === prepared.baselineRevision + 1 || currentHash === prepared.baselineAnswersSha256 && snapshot.revision === prepared.baselineRevision)) return receipt(snapshot);
   return null;
@@ -599,8 +669,8 @@ async function verifyUnchangedDraft(snapshot: Snapshot, prepared: WattzunFormPre
 }
 /** Inspect an uncertain execution without writing. Null permits only a fresh explicit retry of the unchanged frozen draft. */
 export async function reconcileWattzunFormReceipt(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, deps: WattzunFormDependencies = defaults): Promise<WattzunWorkflowReceipt | null> {
-  const { snapshot, currentHash } = await currentReviewedForm(request, access, prepared, deps);
-  const saved = savedReceipt(snapshot, prepared, currentHash);
+  const { snapshot, team, currentHash } = await currentReviewedForm(request, access, prepared, deps);
+  const saved = await savedReceipt(snapshot, prepared, currentHash, team, deps);
   if (saved) return saved;
   await verifyUnchangedDraft(snapshot, prepared, currentHash);
   return null;
@@ -609,7 +679,7 @@ type SavedSnapshot = { snapshot: Snapshot; team: TeamAccess; receipt: WattzunWor
 async function executeForm(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, requestId: string, deps: WattzunFormDependencies): Promise<SavedSnapshot> {
   if (!/^[A-Za-z0-9_-]{16,180}$/.test(requestId)) throw new WattzunFormError(403, "Choose your current reviewed form answers.");
   const { snapshot, team, currentHash } = await currentReviewedForm(request, access, prepared, deps);
-  const recovered = savedReceipt(snapshot, prepared, currentHash);
+  const recovered = await savedReceipt(snapshot, prepared, currentHash, team, deps);
   if (recovered) return { snapshot, team, receipt: recovered };
   await verifyUnchangedDraft(snapshot, prepared, currentHash);
   const payload = prepared.payload;
@@ -618,6 +688,9 @@ async function executeForm(request: Request, access: WattzunAccess, prepared: Wa
     await body(await deps.saveJobForm(scoped(request, access, "/api/trade-job-forms", { workOrderId: prepared.reference.jobId, formId: prepared.reference.recordId, baseRevision: payload.baseRevision, answers: payload.answers, complete: false })));
   } else if (payload.formKind === "activity_form") {
     await canonicalCall(() => deps.saveActivity(team, prepared.reference.recordId, payload.expectedRevision, payload.answers));
+  } else if (payload.formKind === "veu_electrical") {
+    if (!deps.assessment) throw new WattzunFormError(503, "The electrical assessment service is unavailable.");
+    await canonicalCall(() => deps.assessment!.save(team, prepared.reference.recordId, payload.baseRevision, payload.answers, payload.nativeRequestId));
   } else {
     const payloadHash = `sha256:${await hash(payload)}`;
     request.signal.throwIfAborted();
@@ -626,7 +699,9 @@ async function executeForm(request: Request, access: WattzunAccess, prepared: Wa
   }
   const saved = await load(request, access, prepared.reference, true, deps);
   if (saved.snapshot.schemaSha256 !== prepared.schemaSha256 || prepared.patch.some(item => canonical(saved.snapshot.answers[item.fieldKey]) !== canonical(prepared.reference.formKind !== "job_form" && item.value === "" ? undefined : item.value))) throw new WattzunFormError(409, "The form changed while saving. Open its current answers before continuing.");
-  return { ...saved, receipt: receipt(saved.snapshot) };
+  const confirmed = await savedReceipt(saved.snapshot, prepared, await hash(saved.snapshot.answers), saved.team, deps);
+  if (!confirmed) throw new WattzunFormError(409, "This form's exact save receipt could not be confirmed.");
+  return { ...saved, receipt: confirmed };
 }
 export async function executeWattzunForm(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, requestId: string, deps: WattzunFormDependencies = defaults): Promise<WattzunWorkflowReceipt> {
   return (await executeForm(request, access, prepared, requestId, deps)).receipt;
@@ -650,6 +725,7 @@ async function prepareCompletion(request: Request, access: WattzunAccess, propos
   return { version: 1, ownerUid: access.scope.scopeId, actorUid: access.actorUid, reference, title: snapshot.title, href: snapshot.href,
     sourceSha256: snapshot.sourceSha256, schemaSha256: snapshot.schemaSha256, baselineRevision: snapshot.revision, baselineStatus: snapshot.status,
     baselineAnswersSha256: await hash(snapshot.answers), expectedAnswersSha256: await hash(completionAnswers(snapshot)),
+    ...(reference.formKind === "veu_electrical" ? { nativeRequestId: `wattzun-piesa-${await hash({ ownerUid: access.scope.scopeId, actorUid: access.actorUid, reference, sourceSha256: snapshot.sourceSha256, operation: "complete" })}` } : {}),
     review: { title: "Complete this form", summary: `Complete ${snapshot.title} with its current saved answers${reference.formKind === "job_form" ? "." : ", evidence and required signatures."} ${reference.formKind === "activity_form" ? "Submit it for Creditex review." : "The completed record will be locked."}`,
       fields: [{ label: "Form", value: snapshot.title }, { label: "Required items", value: "All current required items are satisfied." }], href: snapshot.href } };
 }
@@ -659,6 +735,7 @@ export function isWattzunFormCompletionPrepared(value: unknown): value is Wattzu
     && value.href === `/direct-trade/${value.href.startsWith("/direct-trade/dashboard?") ? "dashboard" : "team"}?workspace=work&jobId=${encodeURIComponent(value.reference.jobId)}&jobTab=files`
     && [value.sourceSha256, value.schemaSha256, value.baselineAnswersSha256, value.expectedAnswersSha256].every(item => typeof item === "string" && SHA.test(item))
     && typeof value.baselineRevision === "number" && Number.isSafeInteger(value.baselineRevision) && value.baselineRevision > 0 && ["draft", "ready_to_sign"].includes(String(value.baselineStatus))
+    && (value.reference.formKind !== "veu_electrical" || typeof value.nativeRequestId === "string" && /^wattzun-piesa-[a-f0-9]{64}$/.test(value.nativeRequestId))
     && record(value.review) && value.review.href === value.href && typeof value.review.title === "string" && value.review.title.length <= 180 && typeof value.review.summary === "string" && value.review.summary.length <= 1500
     && Array.isArray(value.review.fields) && value.review.fields.length <= 20 && value.review.fields.every(item => record(item) && typeof item.label === "string" && item.label.length <= 180 && typeof item.value === "string" && item.value.length <= 2000);
 }
@@ -688,15 +765,20 @@ export async function verifyWattzunFormCompletionAccess(request: Request, access
 export async function verifyWattzunFormCompletionAccessForTurn(request: Request, access: WattzunAccess, prepared: WattzunFormCompletionPrepared, team: TeamAccess, deps: WattzunFormDependencies = defaults): Promise<void> {
   await currentCompletion(request, access, prepared, deps, team);
 }
-async function completedReceipt(snapshot: Snapshot, prepared: WattzunFormCompletionPrepared): Promise<WattzunWorkflowReceipt | null> {
-  const finalStatus = snapshot.reference.formKind === "job_form" ? "complete" : snapshot.reference.formKind === "activity_form" ? "submitted_for_creditex_review" : "completed";
+async function completedReceipt(snapshot: Snapshot, prepared: WattzunFormCompletionPrepared, team: TeamAccess, deps: WattzunFormDependencies): Promise<WattzunWorkflowReceipt | null> {
+  const finalStatus = ["job_form", "veu_electrical"].includes(snapshot.reference.formKind) ? "complete" : snapshot.reference.formKind === "activity_form" ? "submitted_for_creditex_review" : "completed";
   if (snapshot.status !== finalStatus) return null;
   if (snapshot.revision !== prepared.baselineRevision + 1 || snapshot.schemaSha256 !== prepared.schemaSha256 || await hash(snapshot.answers) !== prepared.expectedAnswersSha256) throw new WattzunFormError(409, "The completed record differs from the form you confirmed. Open the retained record to review it.");
+  if (snapshot.reference.formKind === "veu_electrical") {
+    if (!deps.assessment || !prepared.nativeRequestId) throw new WattzunFormError(503, "The electrical assessment completion receipt is unavailable.");
+    const saved = await canonicalCall(() => deps.assessment!.receipt(team, snapshot.recordId, prepared.nativeRequestId!, { operation: "complete", baseRevision: prepared.baselineRevision, requestSha256: activityHash({ operation: "complete", baseRevision: prepared.baselineRevision }) }));
+    if (!saved || saved.recordId !== snapshot.recordId || saved.actorUid !== prepared.actorUid || saved.operation !== "complete" || saved.baseRevision !== prepared.baselineRevision || saved.resultRevision !== snapshot.revision) throw new WattzunFormError(409, "The assessment's exact completion receipt could not be verified.");
+  }
   return completionReceipt(snapshot);
 }
 export async function reconcileWattzunFormCompletionReceipt(request: Request, access: WattzunAccess, prepared: WattzunFormCompletionPrepared, deps: WattzunFormDependencies = defaults): Promise<WattzunWorkflowReceipt | null> {
-  const { snapshot } = await currentCompletion(request, access, prepared, deps);
-  const saved = await completedReceipt(snapshot, prepared);
+  const { snapshot, team } = await currentCompletion(request, access, prepared, deps);
+  const saved = await completedReceipt(snapshot, prepared, team, deps);
   if (saved) return saved;
   await verifyCompletionSource(snapshot, prepared);
   return null;
@@ -704,7 +786,7 @@ export async function reconcileWattzunFormCompletionReceipt(request: Request, ac
 async function executeCompletion(request: Request, access: WattzunAccess, prepared: WattzunFormCompletionPrepared, requestId: string, deps: WattzunFormDependencies): Promise<SavedSnapshot> {
   if (!/^[A-Za-z0-9_-]{16,180}$/.test(requestId)) throw new WattzunFormError(403, "Choose your current form completion review.");
   const { snapshot, team } = await currentCompletion(request, access, prepared, deps);
-  const recovered = await completedReceipt(snapshot, prepared);
+  const recovered = await completedReceipt(snapshot, prepared, team, deps);
   if (recovered) return { snapshot, team, receipt: recovered };
   await verifyCompletionSource(snapshot, prepared);
   request.signal.throwIfAborted();
@@ -712,6 +794,10 @@ async function executeCompletion(request: Request, access: WattzunAccess, prepar
     await body(await deps.saveJobForm(scoped(request, access, "/api/trade-job-forms", { workOrderId: snapshot.reference.jobId, formId: snapshot.recordId, baseRevision: snapshot.revision, answers: snapshot.answers, complete: true })));
   } else if (snapshot.reference.formKind === "activity_form") {
     await canonicalCall(() => deps.submitActivity(team, snapshot.recordId, snapshot.revision));
+  } else if (snapshot.reference.formKind === "veu_electrical") {
+    if (!deps.assessment || !prepared.nativeRequestId || prepared.nativeRequestId !== `wattzun-piesa-${await hash({ ownerUid: prepared.ownerUid, actorUid: prepared.actorUid, reference: prepared.reference, sourceSha256: prepared.sourceSha256, operation: "complete" })}`) throw new WattzunFormError(409, "The exact assessment completion request changed.");
+    request.signal.throwIfAborted();
+    await canonicalCall(() => deps.assessment!.complete(team, snapshot.recordId, snapshot.revision, prepared.nativeRequestId!));
   } else if (snapshot.pack) {
     const payload = { caseInstanceId: snapshot.recordId, expectedResponseSha256: snapshot.pack.instance.responseSha256 };
     const payloadHash = `sha256:${await hash(payload)}`;
@@ -719,7 +805,7 @@ async function executeCompletion(request: Request, access: WattzunAccess, prepar
     await canonicalCall(() => deps.finalisePack(access.db, { ...packScope(team), ...payload, idempotency: { clientActionId: `wattzun-complete-${requestId}`, deviceId: "wattzun-reviewed-form", payloadHash } }));
   }
   const saved = await load(request, access, prepared.reference, true, deps);
-  const result = await completedReceipt(saved.snapshot, prepared);
+  const result = await completedReceipt(saved.snapshot, prepared, saved.team, deps);
   if (!result) throw new WattzunFormError(409, "Final completion has not been confirmed. Keep this form open and check its saved status.");
   return { ...saved, receipt: result };
 }
@@ -919,11 +1005,11 @@ export async function reconcileWattzunGuidedPreparedFormForTurn(request: Request
   let saved: SavedSnapshot;
   if (mutation.kind === "fill_form") {
     const current = await currentReviewedForm(request, access, mutation.prepared, deps, team);
-    const result = savedReceipt(current.snapshot, mutation.prepared, current.currentHash);
+    const result = await savedReceipt(current.snapshot, mutation.prepared, current.currentHash, current.team, deps);
     if (!result) { await verifyUnchangedDraft(current.snapshot, mutation.prepared, current.currentHash); return null; }
     saved = { ...current, receipt: result };
   } else if (mutation.kind === "complete_form") {
-    const current = await currentCompletion(request, access, mutation.prepared, deps, team), result = await completedReceipt(current.snapshot, mutation.prepared);
+    const current = await currentCompletion(request, access, mutation.prepared, deps, team), result = await completedReceipt(current.snapshot, mutation.prepared, current.team, deps);
     if (!result) { await verifyCompletionSource(current.snapshot, mutation.prepared); return null; }
     saved = { ...current, receipt: result };
   } else {

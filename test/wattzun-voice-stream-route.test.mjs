@@ -24,7 +24,7 @@ class WorkflowError extends Error { constructor(status, message) { super(message
 class GuidedValidationError extends WorkflowError {}
 class ExistingQuoteError extends Error { constructor(status, message) { super(message); this.status = status; } }
 class FormError extends Error { constructor(status, message) { super(message); this.status = status; } }
-class RealtimeTurnError extends Error { constructor(requestSummary) { super('WORKFLOW_AI_INCOMPLETE'); this.requestSummary = requestSummary; } }
+class RealtimeTurnError extends Error { constructor(requestSummary,transcript) { super('WORKFLOW_AI_INCOMPLETE'); this.requestSummary = requestSummary; this.transcript=transcript; } }
 const route = {};
 const executable = ts.transpileModule(readFileSync(new URL('../src/lib/wattzun-portal-route.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -275,7 +275,8 @@ function fixture(options = {}) {
       const processed = context.transformReply ? await context.transformReply(options.reply || reply, options.requestSummary || 'Prepare a new quote. Customer details are still needed.') : options.reply || reply;
       await context.beforeSpeech(); events.push('nativeSpeech'); speechContexts.push({ ...context, reply: processed });
       if(options.abortAt==='realtime') controller.abort();
-      return {reply:processed,audio:audio.stream,requestSummary:options.requestSummary || 'Prepare a new quote. Customer details are still needed.',timings:options.timings};
+      return {reply:processed,audio:audio.stream,requestSummary:options.requestSummary || 'Prepare a new quote. Customer details are still needed.',timings:options.timings,
+        get transcript(){return options.transcript || '';}};
     },
     recordUsage: async value => {
       events.push('recordUsage');
@@ -642,6 +643,26 @@ test('native audio bypasses transcription and legacy LLM/TTS while retaining acc
   assert.deepEqual((await pending).value,Uint8Array.from([0,1]));assert.equal(f.audio.state.ended,false);
   f.audio.finish();assert.equal((await reader.read()).done,true);reader.releaseLock();
   assert.match(response.headers.get('server-timing'),/realtime;dur=/);assert.doesNotMatch(response.headers.get('server-timing'),/stt;|llm;|tts;/);
+});
+
+test('native late input memory reaches the completion frame without a transcription wait',async()=>{
+  const options={}; const f=fixture(options); const {response}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  const result=await readWattzunVoiceStream(response,f.controller.signal,matchesReply);
+  assert.equal(result.transcript,''); const reader=result.audio.stream.getReader();
+  f.audio.push(Uint8Array.from([0,1])); assert.deepEqual((await reader.read()).value,Uint8Array.from([0,1]));
+  options.transcript='Morgan Example at 152 Elizabeth Street, Melbourne, Victoria 3000.';
+  f.audio.finish(); assert.equal((await reader.read()).done,true); reader.releaseLock();
+  assert.equal(result.transcript,options.transcript); assert.equal(f.events.includes('transcribe'),false);
+});
+
+test('committed input survives proposal failure only inside the fresh authorised turn',async()=>{
+  const transcript='Morgan Example at 152 Elizabeth Street, Melbourne VIC 3000.';
+  const f=fixture({providerError:new RealtimeTurnError('',transcript)});
+  const {response}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.equal(response.status,503);assert.deepEqual((await response.json()).voiceTurnRecovery,{requestId:input.requestId,requestSummary:'',transcript});
+  const denied=fixture({providerError:new RealtimeTurnError('',transcript),revokeAt:2});
+  const result=await denied.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.equal(result.response.status,403);assert.equal((await result.response.json()).voiceTurnRecovery,undefined);
 });
 
 test('native audio cannot release speech when access is revoked or its usage write fails',async()=>{

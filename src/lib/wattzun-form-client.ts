@@ -2,7 +2,7 @@ export const WATTZUN_FORM_SAVED_EVENT = "wattzun:form-saved";
 export type WattzunFormSavedDetail = {
   portal: "trade";
   scopeId: string;
-  formKind: "job_form" | "activity_form" | "work_pack";
+  formKind: "job_form" | "activity_form" | "work_pack" | "veu_electrical";
   formId: string;
   jobId: string;
 };
@@ -11,7 +11,7 @@ export type WattzunFormSavedDetail = {
 export function readWattzunFormSaved(value: unknown): WattzunFormSavedDetail | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const data: Record<string, unknown> = Object.fromEntries(Object.entries(value));
-  if (Object.keys(data).length !== 5 || data.portal !== "trade" || (data.formKind !== "job_form" && data.formKind !== "activity_form" && data.formKind !== "work_pack")) return null;
+  if (Object.keys(data).length !== 5 || data.portal !== "trade" || (data.formKind !== "job_form" && data.formKind !== "activity_form" && data.formKind !== "work_pack" && data.formKind !== "veu_electrical")) return null;
   if (typeof data.scopeId !== "string" || !data.scopeId || data.scopeId.length > 180
     || typeof data.formId !== "string" || !/^[A-Za-z0-9:_-]{1,180}$/.test(data.formId)
     || typeof data.jobId !== "string" || !/^[A-Za-z0-9:_-]{1,180}$/.test(data.jobId)) return null;
@@ -56,7 +56,7 @@ export const WATTZUN_FORM_CAPTURE_EVENT = "wattzun:form-capture";
 export const WATTZUN_FORM_CAPTURE_SAVED_EVENT = "wattzun:form-capture-saved";
 
 export type WattzunFormCaptureTarget = Omit<WattzunFormSavedDetail, "formKind"> & {
-  formKind: "work_pack";
+  formKind: "work_pack" | "veu_electrical";
   fieldKey: string;
 };
 export type WattzunFormCaptureRequest = { requestId: string; target: WattzunFormCaptureTarget };
@@ -68,10 +68,10 @@ export function readWattzunFormCaptureTarget(value: unknown): WattzunFormCapture
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const data: Record<string, unknown> = Object.fromEntries(Object.entries(value));
   const saved = readWattzunFormSaved({ portal: data.portal, scopeId: data.scopeId, formKind: data.formKind, formId: data.formId, jobId: data.jobId });
-  if (Object.keys(data).length !== 6 || !saved || saved.formKind !== "work_pack"
+  if (Object.keys(data).length !== 6 || !saved || (saved.formKind !== "work_pack" && saved.formKind !== "veu_electrical")
     || typeof data.fieldKey !== "string" || !/^[A-Za-z0-9:_./\[\]-]{1,600}$/.test(data.fieldKey)
     || data.fieldKey.split(/[.:/\[\]]/).some(part => ["__proto__", "constructor", "prototype"].includes(part))) return null;
-  return { ...saved, formKind: "work_pack", fieldKey: data.fieldKey };
+  return { ...saved, formKind: saved.formKind, fieldKey: data.fieldKey };
 }
 
 export function readWattzunFormCaptureRequest(value: unknown): WattzunFormCaptureRequest | null {

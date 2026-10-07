@@ -82,6 +82,30 @@ test('native audio metadata starts playback without requiring a transcript', asy
   assert.deepEqual(await pending,Buffer.from([1,2])); assert.equal(wire.state.cancelled,1);
 });
 
+test('input memory arriving during speech is retained at completion without delaying first audio', async () => {
+  const wire = network(); wire.push(frame({ ...metadata, transcript: '', requestSummary: 'User provided an address.' }));
+  const result = await readWattzunVoiceStream(wire.response(WATTZUN_REALTIME_VOICE_STREAM_TYPE), new AbortController().signal, matchesReply);
+  const reader = result.audio.stream.getReader();
+  wire.push(audioFrame([1,2])); assert.deepEqual((await reader.read()).value, Uint8Array.from([1,2]));
+  assert.equal(result.transcript, '');
+  const transcript = '152 Elizabeth Street, Melbourne, Victoria 3000.';
+  wire.push(frame({ type: 'done', transcript })); assert.equal((await reader.read()).done, true);
+  assert.equal(result.transcript, transcript); assert.equal(await result.inputTranscript,transcript); reader.releaseLock();
+});
+
+test('late input memory rejects foreign protocol, malformed values and cancellation', async () => {
+  for (const [contentType, transcript] of [[WATTZUN_VOICE_STREAM_TYPE,'unexpected'], [WATTZUN_REALTIME_VOICE_STREAM_TYPE,''],
+    [WATTZUN_REALTIME_VOICE_STREAM_TYPE,'x'.repeat(4001)], [WATTZUN_REALTIME_VOICE_STREAM_TYPE,'bad\u0000value'], [WATTZUN_REALTIME_VOICE_STREAM_TYPE,{}]]) {
+    const wire=network(); wire.push(frame(metadata));
+    const result=await readWattzunVoiceStream(wire.response(contentType),new AbortController().signal,matchesReply);
+    const pending=collect(result.audio.stream); wire.push(audioFrame([1,2])); wire.push(frame({type:'done',transcript}));
+    await assert.rejects(pending,unreadable); assert.equal(result.transcript,metadata.transcript);
+  }
+  const wire=network(), signal=new AbortController(); wire.push(frame({...metadata,transcript:''}));
+  const result=await readWattzunVoiceStream(wire.response(WATTZUN_REALTIME_VOICE_STREAM_TYPE),signal.signal,matchesReply);
+  signal.abort(); await assert.rejects(collect(result.audio.stream),/Call ended/); assert.equal(result.transcript,'');
+});
+
 test('native request summaries are bounded strings and cannot arrive on the legacy wire',async()=>{
   for(const [contentType,requestSummary] of [[WATTZUN_REALTIME_VOICE_STREAM_TYPE,''],[WATTZUN_REALTIME_VOICE_STREAM_TYPE,'x'.repeat(1801)],
     [WATTZUN_REALTIME_VOICE_STREAM_TYPE,{text:'unvalidated'}],[WATTZUN_VOICE_STREAM_TYPE,'Unnegotiated context']]){

@@ -7,9 +7,9 @@ export type WattzunWorkflowProposal =
   | { kind: "customer_message"; jobQuery: string; jobId: string; channel: "sms" | "email" | null; subject: string; body: string }
   | { kind: "invoice_reminder"; jobQuery: string; jobId: string; invoiceId: string; channel: "sms" | "email" | null; body: string }
   | { kind: "draft_job_quote"; jobQuery: string; jobId: string; mode: "append" | "replace"; description: string; lines: WattzunActionLine[] }
-  | { kind: "fill_form"; jobQuery: string; jobId: string; formKind: "job_form" | "activity_form" | "work_pack"; formId: string; answers: Array<{ fieldKey: string; value: string | number | boolean | string[] }> }
-  | { kind: "complete_form"; jobQuery: string; jobId: string; formKind: "job_form" | "activity_form" | "work_pack"; formId: string }
-  | { kind: "form_step"; jobQuery: string; jobId: string; formKind: "job_form" | "activity_form" | "work_pack"; formId: string; step: WattzunFormStep }
+  | { kind: "fill_form"; jobQuery: string; jobId: string; formKind: "job_form" | "activity_form" | "work_pack" | "veu_electrical"; formId: string; answers: Array<{ fieldKey: string; value: string | number | boolean | string[] }> }
+  | { kind: "complete_form"; jobQuery: string; jobId: string; formKind: "job_form" | "activity_form" | "work_pack" | "veu_electrical"; formId: string }
+  | { kind: "form_step"; jobQuery: string; jobId: string; formKind: "job_form" | "activity_form" | "work_pack" | "veu_electrical"; formId: string; step: WattzunFormStep }
   | { kind: "confirm_workflow"; reviewId: string };
 export type WattzunWorkflowOperation = Exclude<WattzunWorkflowProposal, { kind: "confirm_workflow" }>;
 export type WattzunWorkflowJobChoice = { jobId: string; workNumber: string; title: string; customerName: string; address: string; scheduledAt: string; completedAt: string };
@@ -40,9 +40,9 @@ export const WATTZUN_WORKFLOW_PROPOSAL_SCHEMAS = [
   schema("invoice_reminder", { jobQuery: string(300), jobId: string(180), invoiceId: string(180), channel, body: string(1000) }),
   schema("draft_job_quote", { jobQuery: string(300), jobId: string(180), mode: { type: "string", enum: ["append", "replace"] }, description: string(1000), lines: { type: "array", maxItems: 10, items: { type: "object", additionalProperties: false, required: ["lineType", "description", "quantity", "unitPrice", "taxCode"], properties: { lineType: { type: "string", enum: ["product", "labour"] }, description: string(160), quantity: nullable(20), unitPrice: nullable(20), taxCode: tax } } } }),
   schema("confirm_workflow", { reviewId: string(180) }),
-  schema("fill_form", { jobQuery: string(300), jobId: string(180), formKind: { type: "string", enum: ["job_form", "activity_form", "work_pack"] }, formId: string(180), answers: { type: "array", minItems: 1, maxItems: 20, items: { type: "object", additionalProperties: false, required: ["fieldKey", "value"], properties: { fieldKey: string(600), value: { anyOf: [string(2000), { type: "number" }, { type: "boolean" }, { type: "array", maxItems: 100, uniqueItems: true, items: string(2000) }] } } } } }),
-  schema("complete_form", { jobQuery: string(300), jobId: string(180), formKind: { type: "string", enum: ["job_form", "activity_form", "work_pack"] }, formId: string(180) }),
-  schema("form_step", { jobQuery: string(300), jobId: string(180), formKind: { type: "string", enum: ["job_form", "activity_form", "work_pack"] }, formId: string(180), step: { anyOf: WATTZUN_FORM_STEP_SCHEMAS } }),
+  schema("fill_form", { jobQuery: string(300), jobId: string(180), formKind: { type: "string", enum: ["job_form", "activity_form", "work_pack", "veu_electrical"] }, formId: string(180), answers: { type: "array", minItems: 1, maxItems: 20, items: { type: "object", additionalProperties: false, required: ["fieldKey", "value"], properties: { fieldKey: string(600), value: { anyOf: [string(2000), { type: "number" }, { type: "boolean" }, { type: "array", maxItems: 100, uniqueItems: true, items: string(2000) }] } } } } }),
+  schema("complete_form", { jobQuery: string(300), jobId: string(180), formKind: { type: "string", enum: ["job_form", "activity_form", "work_pack", "veu_electrical"] }, formId: string(180) }),
+  schema("form_step", { jobQuery: string(300), jobId: string(180), formKind: { type: "string", enum: ["job_form", "activity_form", "work_pack", "veu_electrical"] }, formId: string(180), step: { anyOf: WATTZUN_FORM_STEP_SCHEMAS } }),
 ];
 function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === "object" && !Array.isArray(value); }
 function text(value: unknown, max: number): value is string { return typeof value === "string" && value.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value); }
@@ -55,13 +55,13 @@ export function isWattzunWorkflowProposal(value: unknown): value is WattzunWorkf
   if (value.kind === "add_price_book_item") return exact(value, ["kind", "name", "description", "itemType", "unitLabel", "unitPrice", "supplierCost", "taxCode"]) && text(value.name, 160) && text(value.description, 1000) && nullableText(value.itemType, 30) && nullableText(value.unitLabel, 30) && decimal(value.unitPrice) && decimal(value.supplierCost) && (value.taxCode === null || value.taxCode === "gst" || value.taxCode === "none");
   if (!text(value.jobQuery, 300) || !text(value.jobId, 180) || value.jobId && !/^[A-Za-z0-9:_-]{1,180}$/.test(value.jobId)) return false;
   if (value.kind === "complete_form") return exact(value, ["kind", "jobQuery", "jobId", "formKind", "formId"])
-    && Boolean(value.jobId) && (value.formKind === "job_form" || value.formKind === "activity_form" || value.formKind === "work_pack")
+    && Boolean(value.jobId) && (value.formKind === "job_form" || value.formKind === "activity_form" || value.formKind === "work_pack" || value.formKind === "veu_electrical")
     && text(value.formId, 180) && /^[A-Za-z0-9:_-]{1,180}$/.test(value.formId);
   if (value.kind === "form_step") return exact(value, ["kind", "jobQuery", "jobId", "formKind", "formId", "step"])
-    && Boolean(value.jobId) && (value.formKind === "job_form" || value.formKind === "activity_form" || value.formKind === "work_pack")
+    && Boolean(value.jobId) && (value.formKind === "job_form" || value.formKind === "activity_form" || value.formKind === "work_pack" || value.formKind === "veu_electrical")
     && text(value.formId, 180) && /^[A-Za-z0-9:_-]{1,180}$/.test(value.formId) && readWattzunFormStep(value.step) !== null;
   if (value.kind === "fill_form") return exact(value, ["kind", "jobQuery", "jobId", "formKind", "formId", "answers"])
-    && Boolean(value.jobId) && (value.formKind === "job_form" || value.formKind === "activity_form" || value.formKind === "work_pack")
+    && Boolean(value.jobId) && (value.formKind === "job_form" || value.formKind === "activity_form" || value.formKind === "work_pack" || value.formKind === "veu_electrical")
     && text(value.formId, 180) && /^[A-Za-z0-9:_-]{1,180}$/.test(value.formId)
     && Array.isArray(value.answers) && value.answers.length > 0 && value.answers.length <= 20
     && value.answers.every(answer => record(answer) && exact(answer, ["fieldKey", "value"]) && text(answer.fieldKey, 600)

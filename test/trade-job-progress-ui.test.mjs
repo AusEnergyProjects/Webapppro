@@ -62,6 +62,7 @@ function panelHarness(name, initialProps, request) {
     "@/lib/wattzun-form-client": formClient,
     "@/lib/photo-request-review": { PHOTO_RETAKE_REASONS: {} },
     "./TradeActivityWorkPackPanel": { TradeActivityWorkPackPanel: "TradeActivityWorkPackPanel" },
+    "./TradeVeuElectricalAssessmentPanel": { TradeVeuElectricalAssessmentPanel: "TradeVeuElectricalAssessmentPanel" },
     "./TradeSwmsPanel": { TradeSwmsPanel: "TradeSwmsPanel" },
     '@/lib/trade-business-form-design': businessFormDesign,
     '@/lib/trade-form-library.mjs': tradeFormLibrary,

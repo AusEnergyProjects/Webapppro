@@ -63,6 +63,10 @@ class FixtureSocket extends EventTarget {
     queueMicrotask(() => {
       if (this.options.receive) { this.options.receive(event, this); return; }
       if (event.type === "session.update") this.emit({ type: "session.updated", session: event.session });
+      if (event.type === "input_audio_buffer.commit") {
+        this.emit({ type: "input_audio_buffer.committed", item_id: "input-item-id" });
+        if (this.options.transcript) this.emit({ type: "conversation.item.input_audio_transcription.completed", item_id: "input-item-id", content_index: 0, transcript: this.options.transcript });
+      }
       if (event.type === "response.create" && event.response.output_modalities[0] === "text") {
         this.emit({ type: "response.created", response: { id: "proposal-id" } });
         this.emit({ type: "response.done", response: { id: "proposal-id", status: "completed", output: [
@@ -251,7 +255,7 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   options.beforeSpeech = async () => { approvalCalls++; assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1); };
   const result = await f.prepareWattzunRealtimeTurn(options);
   assert.equal(approvalCalls, 1);
-  assert.equal(result.transcript, undefined);
+  assert.equal(result.transcript, "");
   assert.equal(result.requestSummary, "User asks where to find Schedule.");
   assert.equal(result.reply.message, answer.message);
   assert.deepEqual(await bytes(result.audio), [0x10, 0x80, 0x20, 0x01]);
@@ -267,13 +271,16 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.deepEqual(Object.keys(session.tools[0].parameters.properties), session.tools[0].parameters.required);
   for (const field of contract.schema.required) assert.deepEqual(session.tools[0].parameters.properties[field], contract.schema.properties[field]);
   assert.equal(session.tools[0].parameters.additionalProperties, false);
-  assert.deepEqual(session.tools[0].parameters.properties.requestSummary, { type: "string", minLength: 1, maxLength: 1800 });
+  const memorySchema = session.tools[0].parameters.properties.requestSummary;
+  assert.deepEqual({ ...memorySchema, description: undefined }, { type: "string", minLength: 1, maxLength: 1800, description: undefined });
+  assert.match(memorySchema.description, /literal/);
   assert.ok(session.instructions.startsWith(contract.instructions));
   assert.match(session.instructions, /exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary/);
   assert.match(session.instructions, /Never nest the reply content under a reply property/);
-  assert.match(session.instructions, /unconfirmed interpretation.*not a verbatim transcript or verified record/);
+  assert.match(session.instructions, /private conversation memory, not a saved record/);
+  assert.match(session.instructions, /Never replace an answer with/);
   assert.deepEqual(session.tool_choice, { type: "function", name: "wattzun_portal_reply" });
-  assert.deepEqual(session.audio.input, { format: { type: "audio/pcm", rate: 24000 }, transcription: null, turn_detection: null });
+  assert.deepEqual(session.audio.input, { format: { type: "audio/pcm", rate: 24000 }, transcription: { model: "gpt-4o-mini-transcribe", language: "en" }, turn_detection: null });
   assert.deepEqual(session.audio.output, { format: { type: "audio/pcm", rate: 24000 }, voice: "cedar", speed: 1.15 });
   assert.deepEqual(session.reasoning, { effort: "low" }); assert.equal(session.parallel_tool_calls, false);
   assert.equal(session.truncation, "disabled");
@@ -534,8 +541,8 @@ test("rejected quote diagnostics identify static validation reasons and field ty
 test("strict shared validation rejects malformed, wrong-scope and invented provider replies before speech", async (t) => {
   const invalid = [
     { ...answer, linkIds: ["invented"] }, { ...answer, message: "I've sent your quote." },
-    { ...answer, message: "I have read your private records." }, { ...answer, kind: "clarification", questions: [] },
-    { ...answer, message: "a".repeat(1801) }, { ...answer, extra: "private data" },
+    { ...answer, message: "I have read your private records." }, { ...answer, kind: "clarification", questions: [], lookup: { kind: "job", query: "JOB-TEST" } },
+    { ...answer, message: "a".repeat(1801) }, { ...answer, extra: "private data", lookup: { kind: "job", query: "JOB-TEST" } },
   ];
   for (const reply of invalid) await t.test(reply.message.slice(0, 35), async () => {
     const f = fixture({ reply }); let approval = 0;
@@ -604,10 +611,56 @@ test("unconfirmed request memory preserves the task and supplied facts without b
   const f = fixture({ reply, requestSummary: summary });
   const prepared = await f.prepareWattzunRealtimeTurn(request()); await bytes(prepared.audio);
   assert.equal(prepared.reply.kind, "clarification");
-  assert.equal(prepared.requestSummary, summary); assert.equal(prepared.transcript, undefined);
+  assert.equal(prepared.requestSummary, summary); assert.equal(prepared.transcript, "");
   const speech = f.socket.sent.filter(event => event.type === "response.create")[1].response;
   assert.equal(speech.input[0].content[0].text, portal.wattzunSpokenReply(prepared.reply));
   assert.doesNotMatch(JSON.stringify(speech), /2400|Street address|name spelling unconfirmed/);
+});
+
+test("actual spoken values survive vague provider summaries without waiting for input transcription", async () => {
+  const transcript = "Morgan Example. The address is 152 Elizabeth Street, Melbourne, Victoria 3000.";
+  const early = fixture({ transcript, requestSummary: "User provided an address." });
+  const first = await early.prepareWattzunRealtimeTurn(request());
+  assert.equal(first.transcript, transcript); await bytes(first.audio);
+  const late = fixture({ autoAudio: false, requestSummary: "User provided an address." });
+  const second = await late.prepareWattzunRealtimeTurn(request());
+  assert.equal(second.transcript, "", "Native speech starts without an ASR prerequisite");
+  for (const update of [
+    { item_id: "another-turn", transcript }, { content_index: 1, transcript },
+    { transcript: "x".repeat(4001) }, { transcript: "bad\u0000memory" },
+  ]) late.socket.emit({ type: "conversation.item.input_audio_transcription.completed", item_id: "input-item-id", content_index: 0, ...update });
+  assert.equal(second.transcript, "");
+  late.socket.emit({ type: "conversation.item.input_audio_transcription.failed", item_id: "input-item-id", content_index: 0 });
+  late.socket.emit({ type: "conversation.item.input_audio_transcription.completed", item_id: "input-item-id", content_index: 0, transcript });
+  assert.equal(second.transcript, transcript); late.socket.finishAudio();
+  assert.deepEqual(await bytes(second.audio), [0x10, 0x80, 0x20, 0x01]);
+  assert.equal(late.socket.sent.filter(event => event.type === "response.create").length, 2);
+});
+
+test("complete read-only replies ignore metadata while validating every known content field", async () => {
+  const base = { ...answer, requestSummary: "What address did I give you?", kind: "answer", extra: { ignored: true } };
+  const f = fixture({ arguments: JSON.stringify(base) });
+  const result = await f.prepareWattzunRealtimeTurn(request());
+  assert.equal(result.reply.message, answer.message); assert.equal(result.reply.action, undefined);
+  await bytes(result.audio);
+  for (const change of [{ message: "I've sent your quote." }, { linkIds: ["invented"] }, { questions: [" "] },
+    { action: { kind: "prepare_quote", firstName: "Alex" } }]) {
+    const invalid = fixture({ arguments: JSON.stringify({ ...base, ...change }) });
+    await assert.rejects(invalid.prepareWattzunRealtimeTurn(request()), safeError);
+    assert.equal(invalid.socket.sent.filter(event => event.type === "response.create").length, 1);
+  }
+});
+
+test("invalid proposal preserves only the committed spoken input before any workflow execution", async () => {
+  const transcript="Morgan Example at 152 Elizabeth Street, Melbourne VIC 3000.";
+  for(const argumentsText of ['{bad json',JSON.stringify({...answer,message:"I've sent your quote.",requestSummary:"User supplied details."})]) {
+    const f=fixture({transcript,arguments:argumentsText});let transformed=0;
+    await assert.rejects(f.prepareWattzunRealtimeTurn(request({transformReply:async reply=>{transformed++;return reply;}})),error=>{
+      assert.ok(error instanceof f.WattzunRealtimeTurnError);assert.equal(error.transcript,transcript);return safeError(error);
+    });
+    assert.equal(transformed,0);assert.equal(f.socket.sent.filter(event=>event.type==='response.create').length,1);
+    assert.ok(!JSON.stringify(f.errors).includes(transcript),'Private input is never logged');
+  }
 });
 
 test("native four-question clarification validates all content then speaks only the next question", async () => {
@@ -742,7 +795,7 @@ test("flat native arguments require every content field and memory before speech
     const raw = { ...complete }; delete raw[missing]; return { name: `missing ${missing}`, raw };
   });
   invalid.push(
-    { name: "extra field", raw: { ...complete, extra: null } },
+    { name: "extra field on record lookup", raw: { ...complete, lookup: { kind: "job", query: "JOB-TEST" }, extra: null } },
     { name: "legacy nested wrapper", raw: { reply: answer, requestSummary: complete.requestSummary } },
     { name: "partial clarification envelope", raw: { reply: { message: "I need more details.", questions: ["Which job?", "Which service?", "Which lines?"] }, linkIds: [], action: null, lookup: null } },
   );
@@ -841,7 +894,7 @@ test("native governed source acknowledgement keeps present personal consent in a
     options.input = { ...options.input, message: '', workReference: context.reference,
       formGuide: { sessionId, stage: 'continue', authorization: 'ordinary_form_answers', sourceSha256: context.sourceSha256, questionKey: 'document', skippedFieldKeys: [] } };
     if (allowed) { const result = await f.prepareWattzunRealtimeTurn(options); assert.equal(result.requestSummary, requestSummary); assert.equal(result.reply.action.step.acknowledged, true); await bytes(result.audio);
-      assert.match(f.socket.sent.find(event => event.type === 'session.update').session.instructions, /guided governed step.*actual present approval or selection phrase/); }
+      assert.match(f.socket.sent.find(event => event.type === 'session.update').session.instructions, /actual.*approval.*phrase/); }
     else await assert.rejects(f.prepareWattzunRealtimeTurn(options), safeError);
     assert.equal(admissions, allowed ? 1 : 0);
   }
@@ -955,7 +1008,7 @@ test("the longest native turn retains bounded history and reserves both output-t
   await bytes(prepared.audio);
   assert.equal(f.reservations.length, 1); assert.equal(f.reservations[0].requestKey.length, 75);
   assert.equal(f.calls[0].url, "https://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini");
-  assert.ok(f.reservations[0].estimatedMicroUsd > 80000 && f.reservations[0].estimatedMicroUsd < 150000);
+  assert.ok(f.reservations[0].estimatedMicroUsd > 80000 + 30000 * 1.25 && f.reservations[0].estimatedMicroUsd < 150000 + 30000 * 1.25);
   const session = f.socket.sent.find(event => event.type === "session.update").session;
   assert.equal(session.truncation, "disabled"); assert.deepEqual(session.reasoning, { effort: "low" });
   assert.equal(session.parallel_tool_calls, false);
@@ -973,7 +1026,7 @@ test("dense Unicode conversation facts retain the reasoning model and full histo
   assert.equal(session.truncation, "disabled");
   const context = JSON.parse(f.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text);
   assert.deepEqual(context.conversation, options.input.history);
-  assert.ok(f.reservations[0].estimatedMicroUsd < 150000);
+  assert.ok(f.reservations[0].estimatedMicroUsd < 150000 + 30000 * 1.25);
 });
 
 test("maximum accepted Unicode history is retained without a smaller arbitrary byte ceiling", async () => {
@@ -1065,7 +1118,7 @@ test("native failure diagnostics identify validation substages using only static
   const secret = "private-customer-email@example.test-private-address-provider-private-details";
   const cases = [
     { substage: "arguments", arguments: `{${secret}`, outer: undefined },
-    { substage: "envelope", arguments: JSON.stringify({ ...answer, requestSummary: "User asks about Schedule.", [secret]: secret }), outer: 7 },
+    { substage: "envelope", arguments: JSON.stringify({ ...answer, lookup: { kind: "job", query: "JOB-TEST" }, requestSummary: "User asks about Schedule.", [secret]: secret }), outer: 7, lookupType: "object" },
     { substage: "reply", arguments: JSON.stringify({ ...answer, message: `I've sent your quote. ${secret}`, requestSummary: "User asks about Schedule." }), outer: 6 },
     { substage: "summary", arguments: JSON.stringify({ ...answer, requestSummary: `I've sent your quote. ${secret}` }), outer: 6 },
     { substage: "reply", arguments: JSON.stringify({ ...answer, message: [secret], requestSummary: "User asks about Schedule." }), outer: 6, messageType: "array" },
@@ -1082,7 +1135,7 @@ test("native failure diagnostics identify validation substages using only static
     assert.deepEqual(diagnostic.outputKinds, ["function_call"]); assert.equal(diagnostic.outputItemCount, 1);
     assert.equal(diagnostic.argumentLength, example.arguments.length); assert.equal(diagnostic.outerFieldCount, example.outer);
     if (diagnostic.replyFieldTypes) assert.deepEqual(diagnostic.replyFieldTypes,
-      { message: example.messageType || "string", questions: "array", linkIds: "array", action: "null", lookup: "null" });
+      { message: example.messageType || "string", questions: "array", linkIds: "array", action: "null", lookup: example.lookupType || "null" });
     assert.doesNotMatch(JSON.stringify(f.errors), /private-|fixture-key|example\.test|proposal-id|speech-id|Schedule|I've sent/);
     assert.equal(f.released(), 1);
   });

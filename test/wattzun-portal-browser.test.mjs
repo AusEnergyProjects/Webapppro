@@ -60,7 +60,10 @@ const fixtures = {
         this.callbacks.status({state:'thinking',message:''});
         try {
           const result=await this.callbacks.submit(new Blob([new Uint8Array(48)],{type:'audio/wav'}),new AbortController().signal);
-          this.callbacks.reply(result);if(result.audio.mimeType==='audio/pcm')await result.audio.stream.cancel();
+          this.callbacks.reply(result);if(result.audio.mimeType==='audio/pcm') {
+            if(window.wattzunFixtureLateTranscript){const reader=result.audio.stream.getReader();while(!(await reader.read()).done){}reader.releaseLock();}
+            else await result.audio.stream.cancel();
+          }
           if(window.wattzunFixturePlaybackIncomplete){this.recover('No spoken reply was completed. Your call is still connected and listening.');return;}
           this.callbacks.played?.(result.audio);window.wattzunFixtureDeliveredReplies.push(result.reply);this.resume();
         } catch(error) {this.requestFailed(error);}
@@ -111,7 +114,7 @@ const bundle = await build({
       if(window.wattzunFixtureDelayedEndpoint===url)await new Promise(resolve=>{window.wattzunFixtureResolveDelayed=()=>{window.wattzunFixtureDelayedEndpoint=null;resolve();};});
       const failure=window.wattzunFixtureFailures?.[url];
       if(failure?.network)throw new Error(failure.message);
-      if(failure)return Response.json({ok:false,error:failure.message,...(failure.requestSummary?{voiceTurnRecovery:{requestId:failure.requestId||body.requestId,requestSummary:failure.requestSummary}}:{})},{status:failure.status});
+      if(failure)return Response.json({ok:false,error:failure.message,...(failure.requestSummary||failure.transcript?{voiceTurnRecovery:{requestId:failure.requestId||body.requestId,requestSummary:failure.requestSummary||'',...(failure.transcript?{transcript:failure.transcript}:{})}}:{})},{status:failure.status});
       const reference=body?.workReference;
       const defaultContext=reference?{reference,title:'Work '+(reference.recordId||reference.period),sourceSha256:'a'.repeat(64),
         sources:[{label:'Saved work details',href:body.portal==='council'?'/council?workspace=reports':body.portal==='creditex'?'/creditex/compliance':'/direct-trade/dashboard?workspace=work&jobId='+reference.recordId}],limitations:['Saved answers only. Uploaded file and photo contents have not been read.']}:undefined;
@@ -147,7 +150,7 @@ const bundle = await build({
       if(url==='/api/wattzun/voice'&&options.method==='POST') {
         const reply=window.wattzunFixtureVoiceReply||{kind:'answer',message:'Open Schedule to review your visits.',questions:[],links:[]};
         const frames=[{type:'reply',transcript:'',requestSummary:window.wattzunFixtureRequestSummary||'User asks how to find Schedule.',reply:{...reply,...(workContext?{workContext}:{})}},
-          {type:'audio',data:'EIAgAQ=='},{type:'done'}];
+          {type:'audio',data:'EIAgAQ=='},{type:'done',...(window.wattzunFixtureLateTranscript?{transcript:window.wattzunFixtureLateTranscript}:{})}];
         const bytes=new TextEncoder().encode(frames.map(frame=>JSON.stringify(frame)).join('\\n')+'\\n');
         return new Response(new ReadableStream({start(controller){controller.enqueue(bytes);},cancel(){window.wattzunFixtureAudioCanceled=(window.wattzunFixtureAudioCanceled||0)+1;}}),
           {headers:{'Content-Type':'application/x-wattzun-realtime-voice+ndjson'}});
@@ -390,6 +393,40 @@ test('voice-only conversations retain heard facts through a failed reply without
     assert.equal(await dialog.getByText('Undelivered private speech must not enter the conversation as heard.',{exact:true}).isVisible(),false);
     assert.equal(await dialog.locator('#wattzun-portal-message').isVisible(),true);
     assert.deepEqual(errors,[]);await page.close();
+  } finally {await browser.close();}
+});
+
+test('late spoken name address and corrections persist once in current call history without displaying dictation',{skip:!browserPath&&'No installed browser for native input memory'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const page=await contextPage(browser,390),dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();
+    const answers=['Morgan Example, spelled M O R G A N E X A M P L E.','152 Elizabeth Street, Melbourne, Victoria 3000.',
+      'Correction: the unit number is 2. Keep the same street and customer.'];
+    for(const transcript of answers) {
+      await page.evaluate(transcript=>{
+        window.wattzunFixtureLateTranscript=transcript;window.wattzunFixtureRequestSummary='User supplied details.';
+        window.wattzunFixturePlaybackIncomplete=transcript.startsWith('Morgan');
+        window.wattzunFixtureVoiceReply={kind:'clarification',message:'What work is needed?',questions:[],links:[]};
+      },transcript);
+      await page.evaluate(()=>window.wattzunFixtureCall.question());
+    }
+    await page.evaluate(()=>{window.wattzunFixtureLateTranscript='What name and address did I give you?';});
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    const history=await page.evaluate(()=>window.wattzunFixtureRequests.filter(value=>value.url==='/api/wattzun/voice').at(-1).body.history);
+    assert.deepEqual(history.filter(value=>value.role==='user').map(value=>value.content),answers);
+    assert.ok(!history.some(value=>value.content.includes('User supplied details.')));
+    await page.evaluate(()=>{window.wattzunFixtureFailures={'/api/wattzun/voice':{status:503,message:'Incomplete proposal.',transcript:'The labour price is 150 dollars excluding GST.'}};});
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await page.evaluate(()=>{window.wattzunFixtureFailures={};});
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    const resumed=await page.evaluate(()=>window.wattzunFixtureRequests.filter(value=>value.url==='/api/wattzun/voice').at(-1).body.history);
+    assert.ok(resumed.some(value=>value.role==='user'&&value.content==='The labour price is 150 dollars excluding GST.'));
+    assert.equal(await dialog.locator('#wattzun-portal-message').isVisible(),false);
+    await dialog.getByRole('button',{name:'Hang up',exact:true}).click();
+    for(const answer of answers)assert.equal(await dialog.getByText(answer,{exact:true}).count(),0);
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:1,disposed:0});
+    await page.close();
   } finally {await browser.close();}
 });
 
