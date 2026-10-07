@@ -97,6 +97,36 @@ test("a current explicit approval returns the matching confirmation and review w
   assert.equal(result.body.reply.kind, "answer"); assert.equal(result.body.reply.message, "I will submit this reviewed task now."); assert.deepEqual(result.body.reply.questions, []);
   assert.equal(f.events.includes("prepareWorkflow"), false); assert.equal(f.recorded.length, 1);
 });
+
+test("only a new model proposal uses deferred preparation; pending input remains strict before the provider", async () => {
+  for (const pending of [false, true]) {
+    const f = fixture({ input: { ...input, ...(pending ? { workflowProposal } : {}) }, workflowResult: workflowReview,
+      reply: pending ? reply : { ...reply, action: workflowProposal } });
+    f.deps.prepareProposedWorkflow = async (...args) => {
+      f.events.push("prepareProposedWorkflow"); assert.equal(f.events.includes("reply"), true);
+      assert.equal(args[2].kind, workflowProposal.kind); return workflowReview;
+    };
+    const result = await f.post(); assert.equal(result.response.status, 200);
+    assert.deepEqual(result.body.reply.workflow, workflowReview);
+    assert.equal(f.events.filter(event => event === "prepareProposedWorkflow").length, pending ? 0 : 1);
+    assert.equal(f.events.filter(event => event === "prepareWorkflow").length, pending ? 1 : 0);
+    assert.ok(f.events.indexOf("workflowReview") > f.events.indexOf("record"), "Strict final workflow check follows usage before text handoff");
+    if (pending) assert.ok(f.events.indexOf("prepareWorkflow") < f.events.indexOf("reply"));
+  }
+});
+
+test("a newly frozen model proposal cannot expose text if its source or grants change during usage", async () => {
+  for (const changed of [false, true]) {
+    const f = fixture({ reply: { ...reply, action: workflowProposal }, workflowResult: workflowReview,
+      ...(changed ? { workflowChangedDuringUsage: { ...workflowReview, summary: "Changed quote scope" } }
+        : { workflowErrorDuringUsage: new WorkflowError(403, "Quote access revoked") }) });
+    f.deps.prepareProposedWorkflow = async () => { f.events.push("prepareProposedWorkflow"); return workflowReview; };
+    const result = await f.post(); assert.equal(result.response.status, changed ? 409 : 403);
+    assert.equal(result.body.reply, undefined); assert.equal(f.recorded.length, 1);
+    assert.equal(f.events.includes("prepareWorkflow"), false);
+    assert.ok(f.events.indexOf("workflowReview") > f.events.indexOf("record"));
+  }
+});
 test("wrong, historical, future or embedded approval cannot confirm the current review", async () => {
   for (const [message, reviewId, suppliedReview, status] of [
     ["yes save it", "wattzun-review-other-123", true, 409], ["yes save it", workflowReview.reviewId, false, 409],

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { prepareWattzunExistingQuote, executeWattzunExistingQuote, WattzunExistingQuoteError } from "../src/lib/wattzun-existing-quote-server.ts";
+import { prepareWattzunExistingQuote, executeWattzunExistingQuote, wattzunExistingQuoteAuthoritySha256, WattzunExistingQuoteError } from "../src/lib/wattzun-existing-quote-server.ts";
 import { normaliseTradeQuoteLineGroup, OVERALL_PERCENT_DISCOUNT_SECTION, OVERALL_FIXED_DISCOUNT_SECTION } from "../src/lib/trade-quote.ts";
 
 const request = () => new Request("https://tlink.test/api/wattzun/workflow", { headers: { Origin: "https://tlink.test", Authorization: "Bearer synthetic", "X-TLink-Business": "business-a" } });
@@ -62,6 +62,19 @@ function fixture(options = {}) {
 }
 async function prepare(f, value = proposal()) { return prepareWattzunExistingQuote(request(), { ...actor, proposal: value }, f.deps); }
 async function execute(f, prepared, extra = {}) { return executeWattzunExistingQuote(request(), { ...actor, prepared, expectedSourceSha256: prepared.sourceSha256, ...extra }, f.deps); }
+
+test("a freshly verified team uses the same quote authority projection without a quote read", async () => {
+  const f = fixture(); const initial = await wattzunExistingQuoteAuthoritySha256(f.team, actor);
+  assert.equal(f.gets, 0); assert.equal((await prepare(f)).authoritySha256, initial);
+  for (const patch of [{ memberId: "other-member" }, { jobScope: "team" }, { crewId: "another-crew" }, { crewLead: true },
+    { crewMemberIds: ["another-member"] }, { canViewPriceBook: false }, { canApplyDiscounts: false }]) {
+    assert.notEqual(await wattzunExistingQuoteAuthoritySha256({ ...f.team, ...patch }, actor), initial);
+  }
+  for (const patch of [{ actorUid: "another-actor" }, { ownerUid: "another-business" }, { canViewQuotes: false }, { canManageQuotes: false }]) {
+    await assert.rejects(wattzunExistingQuoteAuthoritySha256({ ...f.team, ...patch }, actor), error => error.status === 403);
+  }
+  assert.equal(f.gets, 1); assert.equal(f.saves, 0);
+});
 
 test("append prepares the same real job and conserves recipients, terms, choices, discounts, roof, design and packet references", async () => {
   const f = fixture(); const before = structuredClone(f.payload.quote.versions[0]); const prepared = await prepare(f);

@@ -110,14 +110,19 @@ async function result(response: Response): Promise<Row> {
 async function hash(value: unknown): Promise<string> {
   return [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value))))].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
+/** Reuses the quote service's authority projection with a freshly verified team. */
+export async function wattzunExistingQuoteAuthoritySha256(team: TeamAccess, input: { scopeId: string; actorUid: string }): Promise<string> {
+  const { scopeId, actorUid } = input;
+  if (team.ownerUid !== scopeId || team.actorUid !== actorUid || !(team.isOwner || team.canViewQuotes) || !(team.isOwner || team.canManageQuotes)) throw new WattzunExistingQuoteError(403, "Current permission to view and manage this job's quotes is required.");
+  return hash({ ownerUid: team.ownerUid, actorUid: team.actorUid, memberId: team.memberId, isOwner: team.isOwner,
+    jobScope: team.jobScope, crewId: team.crewId || "", crewLead: Boolean(team.crewLead), crewMemberIds: team.crewMemberIds || [],
+    canViewQuotes: team.canViewQuotes, canManageQuotes: team.canManageQuotes, canViewPriceBook: team.canViewPriceBook, canApplyDiscounts: team.canApplyDiscounts });
+}
 async function authority(request: Request, scopeId: string, actorUid: string, jobId: string, deps: WattzunExistingQuoteDependencies) {
   if (request.signal.aborted) throw new WattzunExistingQuoteError(409, "This quote review was closed. Review it again.");
   if (!/^[A-Za-z0-9:_-]{1,128}$/.test(scopeId) || !/^[A-Za-z0-9:_-]{1,180}$/.test(jobId)) throw new WattzunExistingQuoteError(400, "Choose an exact saved job before preparing its quote.");
   const team = await deps.team(scopedRequest(request, scopeId, jobId));
-  if (team.ownerUid !== scopeId || team.actorUid !== actorUid || !(team.isOwner || team.canViewQuotes) || !(team.isOwner || team.canManageQuotes)) throw new WattzunExistingQuoteError(403, "Current permission to view and manage this job's quotes is required.");
-  const fingerprint = await hash({ ownerUid: team.ownerUid, actorUid: team.actorUid, memberId: team.memberId, isOwner: team.isOwner,
-    jobScope: team.jobScope, crewId: team.crewId || "", crewLead: Boolean(team.crewLead), crewMemberIds: team.crewMemberIds || [],
-    canViewQuotes: team.canViewQuotes, canManageQuotes: team.canManageQuotes, canViewPriceBook: team.canViewPriceBook, canApplyDiscounts: team.canApplyDiscounts });
+  const fingerprint = await wattzunExistingQuoteAuthoritySha256(team, { scopeId, actorUid });
   return { team, fingerprint };
 }
 function libraryProjection(payload: Row, saved: SavedLine[]): Row[] {

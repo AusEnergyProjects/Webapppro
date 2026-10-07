@@ -10,9 +10,10 @@ import * as bounded from '../src/lib/bounded-json-request.ts';
 import * as schedule from '../src/lib/trade-schedule.ts';
 import * as equipment from '../src/lib/trade-quote-equipment.ts';
 import * as invoiceRegister from '../src/lib/trade-invoice-register.ts';
+import * as quoteHelper from '../src/lib/wattzun-existing-quote-server.ts';
 
 class AccessError extends Error { constructor(status, message) { super(message); this.status = status; } }
-class QuoteError extends Error { constructor(status, message) { super(message); this.status = status; } }
+const QuoteError = quoteHelper.WattzunExistingQuoteError;
 class ProviderError extends Error { constructor(outcome) { super(outcome); this.outcome = outcome; } }
 const workflowModule = {};
 const compiled = ts.transpileModule(fs.readFileSync(new URL('../src/lib/wattzun-workflow-server.ts', import.meta.url), 'utf8'), {
@@ -30,7 +31,7 @@ Function('require', 'exports', compiled)(name => {
   if (name === './trade-job-collaboration') return { jobMemberSql: alias => `${alias}.assignee_member_id=?` };
   if (name === './service-reminder-delivery') return { normalizeAustralianMobile: value => /^04\d{8}$/.test(value) ? '+61' + value.slice(1) : '', ReminderProviderDeliveryError: ProviderError };
   if (name === './trade-sms-billing') return { SMS_PART_PRICE_MICRO: 99000 };
-  if (name === './wattzun-existing-quote-server') return { WattzunExistingQuoteError: QuoteError };
+  if (name === './wattzun-existing-quote-server') return quoteHelper;
   if (name === './trade-team-server' || name === './trade-integration-crypto' || name === './trade-sms-server' || name === './trade-email-server'
     || name === './trade-email-recipient-server' || name === './trade-sms-wallet-server' || name.startsWith('@/app/api/')) return {};
   throw new Error(name);
@@ -75,7 +76,7 @@ function fixture(options = {}) {
   const team = { ownerUid: 'business-one', actorUid: 'actor-one', memberId: 'member-one', isOwner: true, displayName: 'Alex', businessName: 'Synthetic Trade',
     jobScope: 'team', canViewCustomers: true, canManageCustomers: true, canManageJobs: true, canSendQuotes: true, canSendSms: true,
     canViewInvoices: true, canManageInvoices: true, canManagePriceBook: true, ...options.team };
-  let currentTime = Date.parse('2026-10-07T02:00:00Z'), accessCalls = 0, teamCalls = 0;
+  let currentTime = Date.parse('2026-10-07T02:00:00Z'), accessCalls = 0, teamCalls = 0, decryptCalls = 0;
   function addJob(id = 'job-one', overrides = {}) {
     const owner = overrides.owner || 'business-one', customerId = `customer-${id}`, siteId = `site-${id}`;
     database.prepare("INSERT INTO trade_work_orders VALUES(?,?,?,?,1,'2026-10-06','installer','job','active',?,?,'2026-09-01')").run(id, owner, `JOB-${id}`, overrides.title || 'Install heat pump', overrides.source || 'internal', overrides.assignee || 'member-one');
@@ -93,7 +94,7 @@ function fixture(options = {}) {
       if (options.teamRevokeAt === teamCalls) throw new AccessError(403, 'Access revoked.');
       options.onTeam?.(database, team, teamCalls); return structuredClone(team); },
     encrypt: async payload => { const id = 'synthetic-cipher-' + crypto.randomUUID(); cipher.set(id, structuredClone(payload)); return id; },
-    decrypt: async id => structuredClone(cipher.get(id)),
+    decrypt: async id => { decryptCalls++; return structuredClone(cipher.get(id)); },
     now: () => currentTime,
     wallet: async () => ({ balanceMicro: options.balance ?? 10_000_000, reservedMicro: 0 }),
     emailSettings: async () => ({ providers: [{ id: 'google', available: true }], connection: options.disconnected ? null : { email: 'office@example.test', provider: 'google', status: 'connected' } }),
@@ -130,6 +131,7 @@ function fixture(options = {}) {
       return Response.json({ ok: true, item: { id } }, { status: 201 });
     },
     prepareQuote: async () => { throw new QuoteError(409, 'Immutable quote.'); }, executeQuote: async () => { throw new Error('not requested'); },
+    quoteAuthority: quoteHelper.wattzunExistingQuoteAuthoritySha256,
   };
   async function post(payload, extraHeaders = {}) {
     const response = await workflowModule.postWattzunWorkflow(new Request('https://example.test/api/wattzun/workflows', { method: 'POST',
@@ -137,11 +139,36 @@ function fixture(options = {}) {
     return { status: response.status, body: await response.json() };
   }
   const prepare = (proposal = customerMessage, requestId = 'synthetic-request-0001') => post({ stage: 'prepare', portal: 'trade', scopeId: 'business-one', requestId, proposal });
+  const portalPrepare = (proposal = customerMessage, requestId = 'synthetic-request-0001') => workflowModule.prepareWattzunWorkflowForPortal(
+    new Request('https://example.test/api/wattzun/portal'), access, proposal, requestId, deps);
   const execute = reviewId => post({ stage: 'execute', portal: 'trade', scopeId: 'business-one', requestId: 'synthetic-execute-0001', reviewId, reviewed: true });
   const invoice = (id = 'invoice-one', overrides = {}) => database.prepare("INSERT INTO trade_crm_quick_invoices(id,firebase_uid,work_order_id,crm_customer_id,invoice_number,total_cents,due_at,updated_at,status) VALUES(?,'business-one','job-one','customer-job-one',?,10000,'2026-10-02','2026-10-06',?)")
     .run(id, overrides.number || 'INV-001', overrides.status || 'issued');
-  return { database, db, access, team, deps, statements, calls, addJob, prepare, execute, post, invoice, cipher,
+  return { database, db, access, team, deps, statements, calls, addJob, prepare, portalPrepare, execute, post, invoice, cipher, decryptCalls: () => decryptCalls,
     authorityCalls: () => ({ access: accessCalls, team: teamCalls }), advance: milliseconds => { currentTime += milliseconds; } };
+}
+
+async function quoteWorkflowFixture(options = {}) {
+  const f = fixture({ ...options, team: { isOwner: false, jobScope: 'own', canViewQuotes: true, canManageQuotes: true,
+    canViewPriceBook: true, canApplyDiscounts: true, ...options.team } });
+  const proposal = { kind: 'draft_job_quote', jobQuery: '', jobId: 'job-one', mode: 'append', description: 'Add cable',
+    lines: [{ lineType: 'product', description: 'Cable', quantity: '1', unitPrice: '12.50', taxCode: 'gst' }] };
+  let quoteReads = 0; let revision = 1;
+  const authoritySha256 = await quoteHelper.wattzunExistingQuoteAuthoritySha256(f.team, { scopeId: 'business-one', actorUid: 'actor-one' });
+  f.deps.prepareQuote = async (_request, input) => {
+    assert.equal(input.proposal.jobId, 'job-one'); quoteReads++;
+    const job = f.database.prepare(`SELECT w.revision,c.first_name,c.last_name,s.address_line_1,s.suburb FROM trade_work_orders w
+      JOIN trade_crm_job_details d ON d.work_order_id=w.id JOIN trade_crm_customers c ON c.id=d.crm_customer_id
+      JOIN trade_crm_service_sites s ON s.id=d.service_site_id WHERE w.id='job-one'`).get();
+    return { sourceSha256: await hash({ job, revision }), authoritySha256,
+      job: { id: 'job-one', workNumber: 'JOB-job-one', customerName: `${job.first_name} ${job.last_name}`, siteSummary: `${job.address_line_1}, ${job.suburb}` },
+      original: { quoteId: 'quote-one', versionId: 'version-one', updatedAt: '2026-10-06', roofImageSha256: null },
+      savePayload: { action: 'save_draft', workOrderId: 'job-one', expectedVersionId: 'version-one', expectedUpdatedAt: '2026-10-06',
+        lines: [{ ...proposal.lines[0], sectionHeading: '', priceBookItemId: '', jobPacketId: '', jobPacketLineId: '' }], choices: [],
+        customerEmail: 'john@example.test', terms: 'Keep saved terms', customerMessage: 'Keep saved message', validUntil: '2026-10-30', equipment: { common: [], choices: [] }, designId: '' },
+      review: { title: 'Save existing quote draft', summary: 'Append supplied Cable line', fields: [{ label: 'Added line', value: 'Cable $12.50 excluding GST' }] } };
+  };
+  return { ...f, proposal, quoteReads: () => quoteReads, changeQuote: () => { revision++; } };
 }
 
 test('prepare is read-only except encrypted review receipt and displays the exact service SMS', async () => {
@@ -160,6 +187,102 @@ test('workflow boundaries read fresh canonical team authority without repeating 
   const request = new Request('https://example.test/api/wattzun/portal');
   assert.equal((await workflowModule.loadWattzunWorkflowReview(request, f.access, result.body.result.reviewId, f.deps)).state, 'review');
   assert.deepEqual(f.authorityCalls(), { access: 1, team: 6 });
+});
+
+test('new strict and portal reviews read and decrypt their frozen row once without skipping its guards', async () => {
+  for (const portal of [false, true]) {
+    const f = fixture(); const result = portal ? await f.portalPrepare() : (await f.prepare()).body.result;
+    assert.equal(result.state, 'review'); assert.equal(f.decryptCalls(), 1);
+    assert.equal(f.statements.filter(sql => sql.startsWith('SELECT id,admin_uid,entity_id,action,metadata FROM admin_audit_log')).length, 2);
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test('portal post-model quote preparation defers one rebuild to the strict final review loader', async () => {
+  const f = await quoteWorkflowFixture(); const result = await f.portalPrepare(f.proposal);
+  assert.equal(result.state, 'review'); assert.equal(f.quoteReads(), 1);
+  const final = await workflowModule.loadWattzunWorkflowReview(new Request('https://example.test/api/wattzun/portal'), f.access, result.reviewId, f.deps);
+  assert.deepEqual(final, result); assert.equal(f.quoteReads(), 2); assert.equal(f.calls.length, 0);
+  const strict = await quoteWorkflowFixture(); assert.equal((await strict.prepare(strict.proposal)).status, 200); assert.equal(strict.quoteReads(), 2);
+});
+
+test('standalone preparation still rejects a source changed while freezing the review', async () => {
+  const f = await quoteWorkflowFixture(); const encrypt = f.deps.encrypt;
+  f.deps.encrypt = async payload => { const value = await encrypt(payload); f.changeQuote(); return value; };
+  const result = await f.prepare(f.proposal); assert.equal(result.status, 409); assert.equal(result.body.ok, false);
+  assert.equal(f.quoteReads(), 2); assert.equal(f.decryptCalls(), 1); assert.equal(f.calls.length, 0);
+});
+
+test('portal reviews cannot bypass a changed quote or customer source at the final strict handoff', async () => {
+  for (const change of [f => f.changeQuote(), f => f.database.exec("UPDATE trade_crm_customers SET last_name='Changed'"),
+    f => f.database.exec("UPDATE trade_crm_service_sites SET address_line_1='14 Changed Street'")]) {
+    const f = await quoteWorkflowFixture(); const encrypt = f.deps.encrypt;
+    f.deps.encrypt = async payload => { const value = await encrypt(payload); change(f); return value; };
+    const review = await f.portalPrepare(f.proposal); assert.equal(review.state, 'review'); assert.equal(f.quoteReads(), 1);
+    await assert.rejects(workflowModule.loadWattzunWorkflowReview(new Request('https://example.test/api/wattzun/portal'), f.access, review.reviewId, f.deps), error => error.status === 409);
+    assert.equal(f.quoteReads(), 2); assert.equal(f.calls.length, 0);
+  }
+});
+
+test('portal preparation checks fresh quote grants and every shared quote authority field before returning internally', async () => {
+  for (const change of [team => { team.canManageQuotes = false; }, team => { team.canViewQuotes = false; },
+    team => { team.canApplyDiscounts = false; }, team => { team.crewId = 'changed-crew'; }]) {
+    const f = await quoteWorkflowFixture(); const encrypt = f.deps.encrypt;
+    f.deps.encrypt = async payload => { const value = await encrypt(payload); change(f.team); return value; };
+    await assert.rejects(f.portalPrepare(f.proposal), error => error.status === 403);
+    assert.equal(f.quoteReads(), 1); assert.equal(f.calls.length, 0);
+  }
+});
+
+test('portal preparation still denies archived or reassigned jobs after encryption', async () => {
+  for (const sql of ["UPDATE trade_work_orders SET record_status='archived'", "UPDATE trade_work_orders SET assignee_member_id='another-member'"]) {
+    const f = await quoteWorkflowFixture(); const encrypt = f.deps.encrypt;
+    f.deps.encrypt = async payload => { const value = await encrypt(payload); f.database.exec(sql); return value; };
+    await assert.rejects(f.portalPrepare(f.proposal), error => error.status === 403); assert.equal(f.calls.length, 0);
+  }
+});
+
+test('portal request replay is strict and rejects source changes or a reused fingerprint with different details', async () => {
+  const f = await quoteWorkflowFixture(); await f.portalPrepare(f.proposal); f.changeQuote();
+  await assert.rejects(f.portalPrepare(f.proposal), error => error.status === 409); assert.equal(f.quoteReads(), 2);
+  await assert.rejects(f.portalPrepare({ ...f.proposal, description: 'Different task' }), error => error.status === 409);
+  assert.equal(f.quoteReads(), 2); assert.equal(f.calls.length, 0);
+});
+
+test('only this call creating a row can defer, and a competing same-request row must match its fingerprint and fresh source', async () => {
+  for (const differentFingerprint of [true, false]) {
+    const f = await quoteWorkflowFixture(); const encrypt = f.deps.encrypt;
+    f.deps.encrypt = async payload => {
+      const encrypted = await encrypt(payload); const prepared = payload.prepared;
+      const saved = { fingerprint: differentFingerprint ? 'c'.repeat(64) : await hash(f.proposal), expiresAt: prepared.review.expiresAt,
+        kind: prepared.proposal.kind, sourceSha256: prepared.sourceSha256, encrypted, state: 'prepared' };
+      f.database.prepare("INSERT INTO admin_audit_log VALUES(?,'actor-one','wattzun.workflow_review','trade_business','business-one','Synthetic competing row',?,'2026-10-07')")
+        .run(prepared.review.reviewId, JSON.stringify(saved));
+      f.changeQuote(); return encrypted;
+    };
+    await assert.rejects(f.portalPrepare(f.proposal), error => error.status === 409);
+    assert.equal(f.quoteReads(), differentFingerprint ? 1 : 2); assert.equal(f.calls.length, 0);
+  }
+});
+
+test('portal expired and submitted reviews stay in strict no-resend recovery', async () => {
+  const f = await quoteWorkflowFixture(); const review = await f.portalPrepare(f.proposal); assert.equal(review.state, 'review'); f.advance(30 * 60_000);
+  await assert.rejects(f.portalPrepare(f.proposal), error => error.status === 409); assert.equal(f.quoteReads(), 1);
+  const expired = await quoteWorkflowFixture(); const savedReview = await expired.portalPrepare(expired.proposal); assert.equal(savedReview.state, 'review');
+  expired.database.exec("UPDATE admin_audit_log SET metadata=json_set(metadata,'$.state','executing')"); expired.advance(30 * 60_000);
+  let recoveryCalls = 0;
+  expired.deps.executeQuote = async (_request, input) => { assert.equal(input.allowSave, false); recoveryCalls++; throw new QuoteError(409, 'No matching saved target.'); };
+  await assert.rejects(expired.portalPrepare(expired.proposal), error => error.status === 409);
+  assert.equal(recoveryCalls, 1); assert.equal(expired.quoteReads(), 1); assert.equal(expired.calls.length, 0);
+  const message = fixture(); const first = await message.portalPrepare(); await message.execute(first.reviewId);
+  const result = await message.portalPrepare(); assert.equal(result.state, 'complete'); assert.equal(message.calls.length, 1);
+});
+
+test('portal deferral cannot hide an invalid encrypted quote payload', async () => {
+  const f = await quoteWorkflowFixture(); const encrypt = f.deps.encrypt;
+  f.deps.encrypt = async payload => { const value = await encrypt(payload); f.cipher.get(value).prepared.quote.savePayload.lines[0].quantity = 42; return value; };
+  await assert.rejects(f.portalPrepare(f.proposal), error => error.status === 503);
+  assert.equal(f.quoteReads(), 1); assert.equal(f.calls.length, 0);
 });
 test('canonical team revocation at each preparation boundary prevents disclosure and any operational send', async () => {
   for (const teamRevokeAt of [1, 2, 3, 4]) {

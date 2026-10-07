@@ -9,7 +9,7 @@ import { parseWattzunUsageScope, type WattzunUsage } from "./wattzun-usage";
 import { readWattzunUsage, recordWattzunUsage, WattzunUsageError, type WattzunUsageRecord } from "./wattzun-usage-server";
 import { loadWattzunWorkContext, validateWattzunWorkContext, wattzunWorkContextInfo } from "./wattzun-work-context-server";
 import { WattzunWorkContextError, type WattzunWorkContext, type WattzunWorkReference } from "./wattzun-work-context";
-import { prepareWattzunWorkflow, loadWattzunWorkflowReview, WattzunWorkflowError } from "./wattzun-workflow-server";
+import { prepareWattzunWorkflow, prepareWattzunWorkflowForPortal, loadWattzunWorkflowReview, WattzunWorkflowError } from "./wattzun-workflow-server";
 import { WattzunExistingQuoteError } from "./wattzun-existing-quote-server";
 import { isWattzunWorkflowProposal, isWattzunWorkflowResult, type WattzunWorkflowOperation, type WattzunWorkflowResult } from "./wattzun-workflow";
 import { wattzunWorkflowReply, isWattzunWorkflowApproval } from "./wattzun-workflow-reply";
@@ -26,6 +26,7 @@ export type WattzunRouteDependencies = {
   streamSpeak: (options: Context & { reply: WattzunReply }) => Promise<ReadableStream<Uint8Array>>;
   realtime: (options: Context & { audio: Blob; beforeSpeech: () => Promise<void>; transformReply?: (reply: WattzunReply, requestSummary: string) => Promise<WattzunReply> }) => Promise<{ reply: WattzunReply; audio: ReadableStream<Uint8Array>; transcript?: string; requestSummary?: string; timings?: WattzunRealtimeTimings }>;
   prepareWorkflow?: typeof prepareWattzunWorkflow;
+  prepareProposedWorkflow?: typeof prepareWattzunWorkflow;
   workflowReview?: typeof loadWattzunWorkflowReview;
   recordUsage: (options: WattzunUsageRecord) => Promise<void>;
   usage: (access: WattzunAccess) => Promise<WattzunUsage>;
@@ -35,7 +36,7 @@ const defaults: WattzunRouteDependencies = {
   context: loadWattzunWorkContext,
   reply: prepareWattzunPortalReply, transcribe: transcribeWattzunPortalAudio, speak: speakWattzunPortalReply, streamSpeak: streamWattzunPortalReply,
   realtime: prepareWattzunRealtimeTurn,
-  prepareWorkflow: prepareWattzunWorkflow, workflowReview: loadWattzunWorkflowReview,
+  prepareWorkflow: prepareWattzunWorkflow, prepareProposedWorkflow: prepareWattzunWorkflowForPortal, workflowReview: loadWattzunWorkflowReview,
   recordUsage: recordWattzunUsage, usage: readWattzunUsage,
 };
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
@@ -164,10 +165,11 @@ function selectedWorkflowJob(proposal: WattzunWorkflowOperation, context?: Wattz
   if (query && !/^(?:(?:for|on) )?(?:this|that|the selected|the current|selected|current) (?:job|quote)(?: here)?[.!]?$/i.test(query)) return proposal;
   return { ...proposal, jobId: context.reference.recordId };
 }
-async function preparedWorkflow(request: Request, access: WattzunAccess, input: WattzunTurnInput, proposal: WattzunWorkflowOperation, deps: WattzunRouteDependencies) {
+async function preparedWorkflow(request: Request, access: WattzunAccess, input: WattzunTurnInput, proposal: WattzunWorkflowOperation, deps: WattzunRouteDependencies,
+  prepare = deps.prepareWorkflow) {
   requireOpenConversation(request);
-  if (!deps.prepareWorkflow) throw new WattzunWorkflowError(503, "The workflow preparation service is unavailable. Try again.");
-  const result = await deps.prepareWorkflow(request, access, proposal, input.requestId);
+  if (!prepare) throw new WattzunWorkflowError(503, "The workflow preparation service is unavailable. Try again.");
+  const result = await prepare(request, access, proposal, input.requestId);
   requireOpenConversation(request);
   if (!isWattzunWorkflowResult(result)) throw new WattzunWorkflowError(503, "The prepared workflow could not be read. Prepare it again.");
   return result;
@@ -203,7 +205,9 @@ async function processWorkflowReply(request: Request, access: WattzunAccess, inp
   }
   const proposal = selectedWorkflowJob(reply.action, context);
   workflow.proposal = proposal;
-  workflow.result = await preparedWorkflow(request, currentAccess, input, proposal, deps);
+  // Only a new model proposal can defer its redundant source rebuild. Pending
+  // input stays strict before the provider; final text/audio checks stay strict.
+  workflow.result = await preparedWorkflow(request, currentAccess, input, proposal, deps, deps.prepareProposedWorkflow ?? deps.prepareWorkflow);
   return wattzunWorkflowReply({ ...reply, action: proposal }, workflow.result);
 }
 async function recheckWorkflow(request: Request, access: WattzunAccess, input: WattzunTurnInput, workflow: WorkflowTurn, deps: WattzunRouteDependencies) {

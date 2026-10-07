@@ -111,6 +111,32 @@ test('workflow and quote preparation failures retain status before any native or
   }
 });
 
+test('new model reviews are strictly revalidated before native or streaming speech and after usage', async () => {
+  for (const accept of [contract.WATTZUN_VOICE_STREAM_TYPE, contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE]) {
+    for (const boundary of ['beforeSpeech', 'afterUsage']) for (const changed of [false, true]) {
+      const f = fixture({ reply: { ...reply, action: workflowProposal }, workflowResult: workflowReview });
+      f.deps.prepareProposedWorkflow = async () => { f.events.push('prepareProposedWorkflow'); return workflowReview; };
+      const original = f.deps.workflowReview;
+      f.deps.workflowReview = async (...args) => {
+        const result = await original(...args);
+        if (boundary === 'afterUsage' && !f.recorded.length) return result;
+        if (!changed) throw new WorkflowError(403, 'Current quote access is required.');
+        return { ...workflowReview, summary: 'The source quote changed after preparation.' };
+      };
+      const { response } = await f.post(accept); assert.equal(response.status, changed ? 409 : 403);
+      assert.equal((await response.json()).reply, undefined);
+      assert.equal(f.events.includes('prepareProposedWorkflow'), true); assert.equal(f.events.includes('prepareWorkflow'), false);
+      assert.equal(f.audio.state.pulls, 0);
+      if (boundary === 'beforeSpeech') {
+        assert.equal(f.events.includes('nativeSpeech'), false); assert.equal(f.events.includes('streamSpeak'), false);
+        assert.equal(f.recorded.length, 0);
+      } else {
+        assert.equal(f.audio.state.cancelled, 1); assert.equal(f.recorded.length, 1);
+      }
+    }
+  }
+});
+
 function providerAudio() {
   let controller;
   const state = { cancelled: 0, ended: false, pulls: 0 };
