@@ -140,20 +140,40 @@ export async function startPiesaRecord(access:TeamAccess,workOrderId:string) {
   if(!saved)fail("PIESA_REVISION_CONFLICT","This job changed. Open the assessment again.");
   return parse(saved);
 }
-export async function readPiesaMutationReceipt(access:TeamAccess,id:string,key:string,expectedMutation:{operation:Mutation;baseRevision:number;requestSha256?:string}) {
-  const {record,row}=await stored(access,id);
-  await scope(access,record.workOrderId,true,true);
-  const receipt=await getD1().prepare(`SELECT actor_uid,operation,base_revision,result_revision,request_sha256,record_sha256 FROM trade_veu_electrical_mutations
-    WHERE record_id=? AND owner_uid=? AND request_key=?`).bind(id,access.ownerUid,identifier(key)).first<{actor_uid:string;operation:Mutation;base_revision:number;result_revision:number;request_sha256:string;record_sha256:string}>();
-  if(!receipt)return null;
-  if(receipt.actor_uid!==access.actorUid||receipt.operation!==expectedMutation.operation||receipt.base_revision!==expectedMutation.baseRevision
-    ||expectedMutation.requestSha256 && expectedMutation.requestSha256!==receipt.request_sha256||record.revision!==receipt.result_revision||row.payload_sha256!==receipt.record_sha256)
+type MutationSnapshotRow = Row & { current_write_access:number; mutation_key:string|null; mutation_actor_uid:string|null;
+  mutation_operation:Mutation|null; mutation_base_revision:number|null; mutation_result_revision:number|null;
+  mutation_request_sha256:string|null; mutation_record_sha256:string|null };
+async function mutationSnapshot(access:TeamAccess,id:string,key:string,expectedMutation:{operation:Mutation;baseRevision:number;requestSha256?:string}) {
+  const guard=currentAccess(access,true);
+  // The receipt, record and live write authority must describe the same database snapshot.
+  // Closed jobs may recover an exact receipt; only commit() can change an open draft.
+  const row=await getD1().prepare(`SELECT a.*,EXISTS(SELECT 1 FROM trade_work_orders w WHERE w.id=a.work_order_id AND w.firebase_uid=a.owner_uid
+      AND w.record_status='active' AND w.partner_type='installer' AND ${guard.sql}) AS current_write_access,
+      m.request_key AS mutation_key,m.actor_uid AS mutation_actor_uid,m.operation AS mutation_operation,
+      m.base_revision AS mutation_base_revision,m.result_revision AS mutation_result_revision,
+      m.request_sha256 AS mutation_request_sha256,m.record_sha256 AS mutation_record_sha256
+    FROM trade_veu_electrical_assessments a LEFT JOIN trade_veu_electrical_mutations m
+      ON m.record_id=a.id AND m.owner_uid=a.owner_uid AND m.request_key=? WHERE a.id=? AND a.owner_uid=?`)
+    .bind(...guard.values,identifier(key),identifier(id),access.ownerUid).first<MutationSnapshotRow>();
+  if(!row)fail("PIESA_NOT_FOUND","This assessment was not found in your business.",404);
+  if(!access.canViewFieldEvidence||!access.canManageFieldEvidence||!row.current_write_access)
+    fail("PIESA_ACCESS_REQUIRED","Your current business or job access does not include this assessment.",403);
+  const record=parse(row);
+  if(row.mutation_key===null)return {record,receipt:null};
+  if(row.mutation_actor_uid!==access.actorUid||row.mutation_operation!==expectedMutation.operation||row.mutation_base_revision!==expectedMutation.baseRevision
+    ||expectedMutation.requestSha256 && expectedMutation.requestSha256!==row.mutation_request_sha256||record.revision!==row.mutation_result_revision||row.payload_sha256!==row.mutation_record_sha256)
     fail("PIESA_REQUEST_CONFLICT","This request or the assessment changed. Refresh its saved result.");
-  return {recordId:id,operation:receipt.operation,baseRevision:receipt.base_revision,resultRevision:receipt.result_revision,
-    requestSha256:receipt.request_sha256,recordSha256:receipt.record_sha256,actorUid:receipt.actor_uid} satisfies PiesaMutationReceipt;
+  if(row.mutation_request_sha256===null)fail("PIESA_REQUEST_CONFLICT","This request or the assessment changed. Refresh its saved result.");
+  const receipt:PiesaMutationReceipt={recordId:id,operation:row.mutation_operation,baseRevision:row.mutation_base_revision,resultRevision:row.mutation_result_revision,
+    requestSha256:row.mutation_request_sha256,recordSha256:row.mutation_record_sha256,actorUid:row.mutation_actor_uid};
+  return {record,receipt};
+}
+export async function readPiesaMutationReceipt(access:TeamAccess,id:string,key:string,expectedMutation:{operation:Mutation;baseRevision:number;requestSha256?:string}) {
+  return (await mutationSnapshot(access,id,key,expectedMutation)).receipt;
 }
 async function replay(access:TeamAccess,id:string,key:string,operation:Mutation,base:number,hash:string) {
-  return await readPiesaMutationReceipt(access,id,key,{operation,baseRevision:base,requestSha256:hash}) ? readPiesaRecord(access,id):null;
+  const saved=await mutationSnapshot(access,id,key,{operation,baseRevision:base,requestSha256:hash});
+  return saved.receipt?saved.record:null;
 }
 async function commit(access:TeamAccess,previous:PiesaRecord,next:PiesaRecord,operation:Mutation,key:string,requestHash:string,
   pdf?:{key:string;hash:string;size:number},deliverTo?:Awaited<ReturnType<typeof recipients>>) {

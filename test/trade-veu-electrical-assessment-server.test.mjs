@@ -59,12 +59,16 @@ function fixture(t,realPdf=false) {
     INSERT INTO trade_team_members VALUES('owner-member','owner','owner','active',1,1,'team');
     INSERT INTO trade_team_members VALUES('worker','owner','worker-uid','active',1,1,'team');`);
   sql.exec(read('../drizzle/0256_trade_veu_electrical_assessments.sql').replaceAll('--> statement-breakpoint', ''));
-  let hook = () => {}, lostBatch = false, mailFailure = null;
+  let hook = () => {}, lostBatch = false, mailFailure = null, inBatch = false;
+  const roundTrips = [];
+  const trip = (kind, query) => { if (!inBatch) roundTrips.push({ kind, query }); };
   const db = { prepare(query) { let values = []; const stmt = { bind(...args) { values = args; return stmt; },
-    async first() { hook(query); return sql.prepare(query).get(...values) || null; },
-    async all() { hook(query); return { results: sql.prepare(query).all(...values), success: true }; },
-    async run() { hook(query); return { meta: { changes: Number(sql.prepare(query).run(...values).changes) }, success: true }; } }; return stmt; },
-    async batch(statements) { sql.exec('BEGIN'); let result; try { result = []; for (const statement of statements) result.push(await statement.run()); sql.exec('COMMIT'); } catch (error) { sql.exec('ROLLBACK'); throw error; }
+    async first() { trip('read', query); hook(query); return sql.prepare(query).get(...values) || null; },
+    async all() { trip('read', query); hook(query); return { results: sql.prepare(query).all(...values), success: true }; },
+    async run() { trip('write', query); hook(query); return { meta: { changes: Number(sql.prepare(query).run(...values).changes) }, success: true }; } }; return stmt; },
+    async batch(statements) { roundTrips.push({ kind: 'batch' }); inBatch = true; sql.exec('BEGIN'); let result;
+      try { result = []; for (const statement of statements) result.push(await statement.run()); sql.exec('COMMIT'); }
+      catch (error) { sql.exec('ROLLBACK'); throw error; } finally { inBatch = false; }
       if (lostBatch) { lostBatch = false; throw new Error('SYNTHETIC_LOST_COMMIT_ACK'); } return result; } };
   const objects = new Map(), renders = [], sends = [], progressCalls = [];
   let progressPending = false;
@@ -107,7 +111,7 @@ function fixture(t,realPdf=false) {
     }
     return record;
   }
-  return { sql, db, service, objects, renders, sends, progressCalls, journal, start, answered, attested, signed,
+  return { sql, db, service, objects, renders, sends, progressCalls, roundTrips, journal, start, answered, attested, signed,
     pendingProgress(value) { progressPending = value; },
     hook(value) { hook = value; }, loseBatch() { lostBatch = true; }, mail(value) { mailFailure = value; } };
 }
@@ -146,6 +150,86 @@ test('canonical save uses strict answers, CAS and exact applied request identity
   await assert.rejects(h.service.savePiesaAnswers(owner, initial.id, 2, { mains_identified: 'yes' }, 'bad'), /INVALID_ACTIVITY_ANSWER/);
   await assert.rejects(h.service.readPiesaMutationReceipt(worker, initial.id, 'stable-save', { operation: 'save', baseRevision: 1 }), /request.*changed/);
   assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_mutations').get().n, 1);
+});
+
+for (const lostAck of [false, true]) test(`answer save uses six database trips and one atomic write with lost acknowledgement ${lostAck}`, async t => {
+  const h = fixture(t), initial = await h.start(), answers = { property_address: '12 Test Street' };
+  h.roundTrips.length = 0;
+  if (lostAck) h.loseBatch();
+  const saved = await h.service.savePiesaAnswers(owner, initial.id, 1, answers, 'measured-save');
+  assert.equal(saved.revision, 2);
+  assert.deepEqual(h.roundTrips.map(item => item.kind), ['read', 'read', 'read', 'read', 'batch', 'read']);
+  assert.equal(h.progressCalls.length, 0);
+  const expected = { operation: 'save', baseRevision: 1, requestSha256: h.service.piesaMutationRequestHash(initial, 1, 'save', answers) };
+  for (const key of ['measured-save', 'missing-request']) {
+    h.roundTrips.length = 0;
+    const receipt = await h.service.readPiesaMutationReceipt(owner, initial.id, key, expected);
+    assert.equal(receipt?.resultRevision ?? null, key === 'measured-save' ? 2 : null);
+    assert.equal(h.roundTrips.length, 1);
+    assert.equal(h.roundTrips[0].kind, 'read');
+  }
+  h.roundTrips.length = 0;
+  assert.deepEqual(await h.service.savePiesaAnswers(owner, initial.id, 1, answers, 'measured-save'), saved);
+  assert.deepEqual(h.roundTrips.map(item => item.kind), ['read', 'read', 'read']);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_mutations').get().n, 1);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_versions').get().n, 2);
+});
+
+for (const [name, change] of [
+  ['business suspended', "UPDATE trade_accounts SET account_status='suspended'"],
+  ['authoritative review revoked', "UPDATE trade_account_verification_reviews SET decision='rejected'"],
+  ['worker removed', "UPDATE trade_team_members SET status='inactive' WHERE id='worker'"],
+  ['view revoked', "UPDATE trade_team_members SET can_view_field_evidence=0 WHERE id='worker'"],
+  ['write revoked', "UPDATE trade_team_members SET can_manage_field_evidence=0 WHERE id='worker'"],
+  ['job reassigned', "UPDATE trade_team_members SET job_scope='own' WHERE id='worker'; UPDATE trade_work_orders SET assignee_member_id='elsewhere'"],
+  ['crew restricted', "INSERT INTO trade_crew_members VALUES('owner','worker','other-crew'); UPDATE trade_work_orders SET assignee_member_id='elsewhere'"],
+  ['job archived', "UPDATE trade_work_orders SET record_status='archived'"],
+]) test(`exact receipt uses fresh authority in its record snapshot: ${name}`, async t => {
+  const h = fixture(t), initial = await h.start(), answers = { property_address: '12 Test Street' };
+  await h.service.savePiesaAnswers(worker, initial.id, 1, answers, 'worker-save');
+  let revoked = false;
+  h.hook(query => {
+    if (!revoked && query.includes('AS current_write_access')) { revoked = true; h.sql.exec(change); }
+  });
+  await assert.rejects(h.service.readPiesaMutationReceipt(worker, initial.id, 'worker-save', { operation: 'save', baseRevision: 1 }), error => error.status === 403 && error.code === 'PIESA_ACCESS_REQUIRED');
+  assert.equal(revoked, true);
+  await assert.rejects(h.service.savePiesaAnswers(worker, initial.id, 1, answers, 'worker-save'), error => error.status === 403);
+  assert.equal(h.sql.prepare('SELECT revision FROM trade_veu_electrical_assessments').get().revision, 2);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_mutations').get().n, 1);
+});
+
+test('field-session revocation blocks the exact receipt without trusting stale caller access', async t => {
+  const h = fixture(t), initial = await h.start();
+  const access = { ...worker, actorUid: 'field-member:worker', fieldSessionId: 'field-session' };
+  h.sql.prepare('INSERT INTO trade_field_sessions VALUES(?,?,?,?,?)').run('field-session', 'owner', 'worker', 'active', '2099-01-01');
+  await h.service.savePiesaAnswers(access, initial.id, 1, { property_address: '12 Test Street' }, 'session-save');
+  h.sql.exec("UPDATE trade_field_sessions SET status='revoked'");
+  await assert.rejects(h.service.readPiesaMutationReceipt(access, initial.id, 'session-save', { operation: 'save', baseRevision: 1 }), error => error.status === 403);
+});
+
+test('receipt snapshot detects newer source, mismatched request and actor, and preserves missing-business isolation', async t => {
+  const h = fixture(t), initial = await h.start(), answers = { property_address: '12 Test Street' };
+  const saved = await h.service.savePiesaAnswers(owner, initial.id, 1, answers, 'saved-answer');
+  const expected = { operation: 'save', baseRevision: 1, requestSha256: h.service.piesaMutationRequestHash(initial, 1, 'save', answers) };
+  for (const wrong of [{ operation: 'complete' }, { baseRevision: 2 }, { requestSha256: '0'.repeat(64) }]) {
+    await assert.rejects(h.service.readPiesaMutationReceipt(owner, initial.id, 'saved-answer', { ...expected, ...wrong }), error => error.code === 'PIESA_REQUEST_CONFLICT');
+  }
+  await assert.rejects(h.service.readPiesaMutationReceipt(worker, initial.id, 'saved-answer', expected), error => error.code === 'PIESA_REQUEST_CONFLICT');
+  await assert.rejects(h.service.readPiesaMutationReceipt({ ...owner, ownerUid: 'foreign', actorUid: 'foreign' }, initial.id, 'saved-answer', expected), error => error.status === 404);
+  await h.service.savePiesaAnswers(owner, initial.id, saved.revision, { ...answers, inspection_date: '2026-10-08' }, 'later-answer');
+  await assert.rejects(h.service.readPiesaMutationReceipt(owner, initial.id, 'saved-answer', expected), error => error.code === 'PIESA_REQUEST_CONFLICT');
+  await assert.rejects(h.service.savePiesaAnswers(owner, initial.id, 1, answers, 'saved-answer'), error => error.code === 'PIESA_REQUEST_CONFLICT');
+  assert.equal(h.sql.prepare('SELECT revision FROM trade_veu_electrical_assessments').get().revision, 3);
+});
+
+for (const stage of ['imported', 'cancelled', 'completed']) test(`closed job ${stage} permits exact receipt recovery but never another save`, async t => {
+  const h = fixture(t), initial = await h.start(), answers = { property_address: '12 Test Street' };
+  const saved = await h.service.savePiesaAnswers(owner, initial.id, 1, answers, 'before-closure');
+  h.sql.prepare('UPDATE trade_work_orders SET stage=? WHERE id=?').run(stage, 'job');
+  assert.equal((await h.service.readPiesaMutationReceipt(owner, initial.id, 'before-closure', { operation: 'save', baseRevision: 1 })).resultRevision, 2);
+  assert.deepEqual(await h.service.savePiesaAnswers(owner, initial.id, 1, answers, 'before-closure'), saved);
+  await assert.rejects(h.service.savePiesaAnswers(owner, initial.id, 2, { ...answers, inspection_date: '2026-10-08' }, 'after-closure'), error => error.code === 'PIESA_JOB_LOCKED');
+  assert.equal(h.sql.prepare('SELECT revision FROM trade_veu_electrical_assessments').get().revision, 2);
 });
 
 for (const [name, change] of [
