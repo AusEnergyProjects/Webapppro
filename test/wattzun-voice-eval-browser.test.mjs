@@ -23,6 +23,7 @@ test("native Chrome rehearses greetings, repeated tasks, quiet recovery, navigat
   skip: !browserPath, timeout: 120_000,
 }, async t => {
   const captured = [], cancelled = [], timers = new Set();
+  let releaseHeldReply;
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, "http://127.0.0.1");
     if (url.pathname === "/fixture.js") {
@@ -40,6 +41,7 @@ test("native Chrome rehearses greetings, repeated tasks, quiet recovery, navigat
         assert.equal(audio.readUInt32LE(40), audio.length - 44);
       }
       const mode = url.searchParams.get("mode");
+      if (mode === "held") await new Promise(resolve => { releaseHeldReply = resolve; });
       if (mode === "unavailable") { response.writeHead(503, { "Content-Type": "application/json" }); response.end('{"error":"Synthetic provider failure"}'); return; }
       response.writeHead(200, { "Content-Type": "application/x-wattzun-realtime-voice+ndjson" });
       response.write(frame({ type: "reply", transcript: "", requestSummary: "Synthetic spoken task.", reply }));
@@ -114,14 +116,26 @@ test("native Chrome rehearses greetings, repeated tasks, quiet recovery, navigat
     assert.equal(captured.length, beforeMute);
     await page.getByRole("button", { name: "Mute", exact: true }).click(); await status("listening");
     await speak("normal"); await status("thinking"); await status("listening");
+    const beforeQueued = captured.length;
+    await speak("held"); await status("thinking");
+    await page.waitForFunction(() => window.voiceEval.state.submissions.at(-1)?.mode === "held");
+    await speak("normal");
+    await page.waitForFunction(() => performance.now() - window.voiceEval.state.turnStartedAt > 2_200);
+    assert.equal(captured.length, beforeQueued + 1, "A follow-on utterance cannot race the preceding request");
+    releaseHeldReply(); releaseHeldReply = undefined;
+    await status("listening");
+    const queued = await page.evaluate(() => window.voiceEval.state.submissions.slice(-2));
+    assert.equal(queued[0].mode, "held"); assert.equal(queued[0].firstAudio, null, "The superseded question is not spoken");
+    assert.equal(queued[1].mode, "normal"); assert.equal(queued[1].historyLength, queued[0].historyLength + 1);
+    assert.equal(captured.length, beforeQueued + 2, "The retained follow-on WAV is submitted exactly once");
     const result = await page.evaluate(() => window.voiceEval.state);
     assert.equal(result.microphoneRequests, 1); assert.equal(result.replacementSpeech, 0); assert.equal(result.failure, null);
-    assert.equal(result.replies.length, 17); assert.equal(result.submissions.length, 18);
+    assert.equal(result.replies.length, 19); assert.equal(result.submissions.length, 20);
     assert.ok(result.statuses.filter(value => value.state === "recovering").length >= 2);
     assert.ok(result.submissions.every(value => value.size > 4_844 && value.mime === "audio/wav"));
     assert.ok(result.submissions.at(-1).historyLength > 12, "The continuing call retains previous successful replies");
     const firstPlayback = result.submissions.filter(value => value.firstAudio !== null).map(value => value.firstAudio).sort((a, b) => a - b);
-    assert.equal(firstPlayback.length, 17);
+    assert.equal(firstPlayback.length, 18);
     t.diagnostic(JSON.stringify({ evidence: result.evidence, submissions: result.submissions.length, replies: result.replies.length,
       microphoneRequests: result.microphoneRequests, replacementSpeech: result.replacementSpeech,
       firstPlaybackAfterSubmitMs: { median: Math.round(firstPlayback[Math.floor(firstPlayback.length / 2)]),
@@ -130,6 +144,7 @@ test("native Chrome rehearses greetings, repeated tasks, quiet recovery, navigat
     await page.evaluate(() => window.voiceEval.cleanup());
     assert.ok(cancelled.includes("long"));
   } finally {
+    releaseHeldReply?.();
     if (browser) await browser.close(); for (const timer of timers) clearTimeout(timer);
     await new Promise(resolve => server.close(resolve));
   }

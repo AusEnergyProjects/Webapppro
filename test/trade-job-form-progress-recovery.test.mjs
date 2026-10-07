@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import ts from "typescript";
-import { normalizeTradeFormAnswers } from "../src/lib/trade-form-library.mjs";
+import { normalizeTradeFormAnswers, tradeFormCompletion } from "../src/lib/trade-form-library.mjs";
 
 const source = fs.readFileSync(new URL("../src/app/api/trade-job-forms/route.ts", import.meta.url), "utf8");
 const ast = ts.createSourceFile("route.ts", source, ts.ScriptTarget.Latest, true);
@@ -22,14 +22,19 @@ function fixture(overrides = {}) {
   const row = { id: "form", template_key: "test", template_snapshot: JSON.stringify({ fields: [{ key: "result", type: "text", required: true }] }),
     status: "complete", revision: 3, answers: '{"result":"Passed"}', completed_by_uid: "worker",
     job_stage: "in_progress", job_revision: 7, ...overrides };
-  const calls = [];
+  const calls = [], writes = [];
   const dependencies = {
     sameOrigin: () => true,
     cleanAdminText: value => String(value || ""),
     accessAndJob: async () => ({ access: { ownerUid: "owner", actorUid: "worker", canManageFieldEvidence: true }, job: { id: "job", revision: 7 } }),
-    getD1: () => ({ prepare: () => ({ bind: () => ({ first: async () => row }) }), batch: () => assert.fail("A completed replay must never rewrite its form") }),
+    getD1: () => ({ prepare: sql => ({ bind: (...values) => ({ sql, values, first: async () => row }) }), batch: () => assert.fail("Writes require the canonical guard") }),
     parseJson: (value, fallback) => { try { return JSON.parse(value); } catch { return fallback; } },
     normalizeTradeFormAnswers,
+    tradeFormCompletion,
+    containsPrivateData: () => false,
+    nextJobRevision: revision => Number(revision) + 1,
+    jobSyncChangeStatements: () => [],
+    guardedOnlineChildMutationBatch: async (_db, statements, guard) => { writes.push({ statements, guard }); },
     reconcileTradeFormJobProgress: async (access, workOrderId, options) => {
       calls.push({ access, workOrderId, options });
       return { changed: false, stage: "", pending: true, blockers: [{ key: "job_progress_pending" }] };
@@ -41,7 +46,7 @@ function fixture(overrides = {}) {
   const saveTradeJobForm = new Function(...Object.keys(dependencies), saveCompiled + "; return saveTradeJobForm;")(...Object.values(dependencies));
   const routeDependencies = { ...dependencies, saveTradeJobForm };
   const handler = new Function(...Object.keys(routeDependencies), compiled + "; return PATCH;")(...Object.values(routeDependencies));
-  return { calls, handler };
+  return { calls, writes, handler };
 }
 
 const request = (changes = {}) => new Request("https://example.test/api/trade-job-forms", {
@@ -50,13 +55,14 @@ const request = (changes = {}) => new Request("https://example.test/api/trade-jo
 });
 
 test("exact same-actor completion replay recovers progress without rewriting immutable form data", async () => {
-  const { handler, calls } = fixture();
+  const { handler, calls, writes } = fixture();
   const response = await handler(request());
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.ok, true); assert.equal(payload.duplicate, true); assert.equal(payload.jobProgress.pending, true);
   assert.deepEqual(payload.forms, [{ id: "form", revision: 3, status: "complete" }]);
   assert.equal(calls.length, 1); assert.deepEqual(calls[0].options, { afterSave: true });
+  assert.equal(writes.length, 0, "A completion replay cannot rewrite its immutable form");
 });
 
 test("completed replay rejects other actors, changed answers, wrong revisions, cancelled and imported jobs", async () => {
@@ -64,13 +70,30 @@ test("completed replay rejects other actors, changed answers, wrong revisions, c
     [{ completed_by_uid: "another-worker" }, {}], [{}, { answers: { result: "Changed" } }],
     [{}, { baseRevision: 1 }], [{}, { complete: false }], [{ job_stage: "cancelled" }, {}], [{ job_stage: "imported" }, {}],
   ]) {
-    const { handler, calls } = fixture(row);
+    const { handler, calls, writes } = fixture(row);
     assert.equal((await handler(request(body))).status, 409);
     assert.equal(calls.length, 0);
+    assert.equal(writes.length, 0, "A rejected replay cannot mutate the form");
   }
 });
 
 test("an exact retry remains acknowledged after the job already completed", async () => {
-  const { handler, calls } = fixture({ job_stage: "completed" });
+  const { handler, calls, writes } = fixture({ job_stage: "completed" });
   assert.equal((await handler(request())).status, 200); assert.equal(calls.length, 1);
+  assert.equal(writes.length, 0, "An acknowledged completed job cannot rewrite its immutable form");
+});
+
+test("ordinary answers persist a draft and start work without evaluating completion even when all answers are supplied", async () => {
+  const { handler, calls, writes } = fixture({ status: "draft", revision: 2, completed_by_uid: "" });
+  const response = await handler(request({ complete: false }));
+  assert.equal(response.status, 200); assert.equal(writes.length, 1);
+  assert.equal(writes[0].statements[0].values[1], "draft");
+  assert.deepEqual(calls[0].options, { afterSave: true, startOnly: true });
+});
+
+test("actual form completion retains full job readiness reconciliation", async () => {
+  const { handler, calls, writes } = fixture({ status: "draft", revision: 2, completed_by_uid: "" });
+  assert.equal((await handler(request())).status, 200); assert.equal(writes.length, 1);
+  assert.equal(writes[0].statements[0].values[1], "complete");
+  assert.deepEqual(calls[0].options, { afterSave: true, startOnly: false });
 });

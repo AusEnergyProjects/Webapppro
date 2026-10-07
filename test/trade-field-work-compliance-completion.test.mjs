@@ -5,6 +5,7 @@ import { installFieldCorrectionFixture } from "./helpers/activity-field-correcti
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
+import { loadWattzunFormGuideForTurn } from "../src/lib/wattzun-form-server.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -58,7 +59,7 @@ function testD1(database) {
     async batch(statements) {
       const callback = beforeBatch;
       beforeBatch = null;
-      if (callback) callback();
+      if (callback) await callback();
       database.exec("BEGIN");
       try {
         const results = statements.map((statement) => statement.runSync());
@@ -533,6 +534,74 @@ function electricalAssessment(database, { id = "piesa", workOrderId = "job-1", o
     VALUES (?,?,?,1,?,?,?,?,?,?,'actor-1','now','now',?)`)
     .run(id, workOrderId, ownerUid, status, payload, "a".repeat(64), completedAt ? "piesa/completed.pdf" : "", completedAt ? "b".repeat(64) : "", completedAt ? 100 : 0, completedAt);
 }
+
+for (const scheduledVisit of [false, true]) test(`initial guided questions await canonical ${scheduledVisit ? "scheduled visit" : "unscheduled job"} start before delayed timing can invalidate its revision`, async () => {
+  const { database, db, progress } = progressFixture();
+  let releaseTiming;
+  try {
+    if (!scheduledVisit) database.exec("DELETE FROM trade_crm_appointments");
+    database.prepare("UPDATE trade_work_orders SET stage=?").run(scheduledVisit ? "in_progress" : "ready");
+    database.exec("UPDATE trade_crm_job_details SET pipeline_stage='quote_draft'");
+    const team = { ...progressAccess, canViewFieldEvidence: true };
+    const access = { actorUid: team.actorUid, scope: { portal: "trade", scopeId: team.ownerUid, label: "Synthetic installer" }, db };
+    const reference = { kind: "trade_form", formKind: "job_form", jobId: "job-1", recordId: "form-1" };
+    const input = { sessionId: "550e8400-e29b-41d4-a716-446655440000", stage: "start", authorization: "ordinary_form_answers", skippedFieldKeys: [] };
+    let starts = 0, reads = 0;
+    const deps = {
+      async selectedJobForm() {
+        reads++;
+        return { job: database.prepare("SELECT * FROM trade_work_orders WHERE id='job-1'").get(),
+          form: { id: "form-1", templateName: "Synthetic pre-start", revision: 1, status: "draft", answers: {},
+            template: { fields: [{ key: "work_date", label: "Work date", type: "date", required: true }] } } };
+      },
+      async startFormWork(current, jobId) { starts++; return progress.reconcileTradeFormJobProgress(current, jobId, { db, startOnly: true, now: "2026-10-08T01:00:01.000Z" }); },
+    };
+    let timingReached;
+    const reached = new Promise(resolve => { timingReached = resolve; });
+    const paused = new Promise(resolve => { releaseTiming = resolve; });
+    db.setBeforeBatch(async () => { timingReached(); await paused; });
+    const timing = progress.reconcileTradeFormJobProgress(team, "job-1", { db, startOnly: true, now: "2026-10-08T01:00:00.000Z" });
+    await reached;
+    const loaded = await loadWattzunFormGuideForTurn(new Request("https://example.test/api/wattzun/form-guide"), access, reference, input, team, deps);
+    assert.equal(loaded.guide.next.fieldKey, "work_date");
+    assert.equal(starts, 1); assert.equal(reads, 2);
+    const current = { ...database.prepare("SELECT stage,revision FROM trade_work_orders").get() };
+    assert.deepEqual(current, { stage: "in_progress", revision: 6 });
+    releaseTiming();
+    const late = await timing;
+    assert.equal(late.pending, true); assert.equal(late.changed, false);
+    assert.deepEqual({ ...database.prepare("SELECT stage,revision FROM trade_work_orders").get() }, current);
+    assert.equal(database.prepare("SELECT count(*) n FROM trade_work_order_events WHERE event_type='form_work_started'").get().n, 1);
+    await loadWattzunFormGuideForTurn(new Request("https://example.test/api/wattzun/form-guide"), access, reference, input, team, deps);
+    assert.equal(starts, 2, "Each explicit start checks canonical progress without repeating its mutation");
+    assert.equal(database.prepare("SELECT count(*) n FROM trade_work_order_events WHERE event_type='form_work_started'").get().n, 1);
+    if (scheduledVisit) assert.equal(database.prepare("SELECT status FROM trade_crm_appointments").get().status, "in_progress");
+    assert.equal(database.prepare("SELECT count(*) n FROM trade_job_forms WHERE status='draft'").get().n, 2);
+  } finally { releaseTiming?.(); database.close(); }
+});
+
+test("a scheduled-visit start conflict blocks initial guided questions even when the job was already in progress", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("UPDATE trade_work_orders SET stage='in_progress'");
+    const team = { ...progressAccess, canViewFieldEvidence: true };
+    const access = { actorUid: team.actorUid, scope: { portal: "trade", scopeId: team.ownerUid, label: "Synthetic installer" }, db };
+    const reference = { kind: "trade_form", formKind: "job_form", jobId: "job-1", recordId: "form-1" };
+    const input = { sessionId: "550e8400-e29b-41d4-a716-446655440000", stage: "start", authorization: "ordinary_form_answers", skippedFieldKeys: [] };
+    const deps = {
+      async selectedJobForm() { return { job: database.prepare("SELECT * FROM trade_work_orders WHERE id='job-1'").get(),
+        form: { id: "form-1", templateName: "Synthetic pre-start", revision: 1, status: "draft", answers: {},
+          template: { fields: [{ key: "work_date", label: "Work date", type: "date", required: true }] } } }; },
+      startFormWork: (current, jobId) => progress.reconcileTradeFormJobProgress(current, jobId, { db, startOnly: true }),
+    };
+    db.setBeforeBatch(() => database.exec("UPDATE trade_crm_appointments SET revision=revision+1"));
+    await assert.rejects(loadWattzunFormGuideForTurn(new Request("https://example.test/api/wattzun/form-guide"), access, reference, input, team, deps),
+      error => error.status === 409 && /changed/.test(error.message));
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "in_progress");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments").get().status, "scheduled");
+    assert.equal(database.prepare("SELECT count(*) n FROM trade_work_order_events WHERE event_type='form_work_started'").get().n, 0);
+  } finally { database.close(); }
+});
 
 test("saved form editing starts work without claiming travel or arrival, and timing alone cannot complete", async () => {
   const { database, db, progress } = progressFixture();

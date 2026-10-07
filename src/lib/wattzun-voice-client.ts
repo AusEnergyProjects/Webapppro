@@ -20,6 +20,65 @@ export class WattzunVoiceCallError extends Error {
     super(message); this.name = "WattzunVoiceCallError"; this.reason = reason;
   }
 }
+const REQUEST_TIMEOUT_MS = 75_000;
+const STREAM_IDLE_TIMEOUT_MS = 20_000;
+class WattzunVoiceTransportTimeout extends Error {
+  constructor() { super("The voice connection stopped responding."); }
+}
+
+function discardAudio(audio: WattzunVoiceResult["audio"]) {
+  if (audio.mimeType === "audio/pcm") void audio.stream.cancel().catch(() => {});
+}
+
+/** A call can remain open all day; an individual lost network request cannot. */
+function boundedRequest<T>(request: Promise<T>, controller: AbortController, discard: (value: T) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return false;
+      settled = true; clearTimeout(timer); controller.signal.removeEventListener("abort", aborted); return true;
+    };
+    const aborted = () => { if (finish()) reject(new DOMException("Call request cancelled.", "AbortError")); };
+    const timer = setTimeout(() => {
+      if (!finish()) return;
+      reject(new WattzunVoiceTransportTimeout()); controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+    controller.signal.addEventListener("abort", aborted, { once: true });
+    if (controller.signal.aborted) aborted();
+    request.then(value => { if (finish()) resolve(value); else discard(value); }, error => { if (finish()) reject(error); });
+  });
+}
+
+/** End a stalled PCM read so playback can drain received speech and release the microphone. */
+function boundedAudioStream(stream: ReadableStream<Uint8Array>, timedOut: () => void): ReadableStream<Uint8Array> {
+  const reader = stream.getReader();
+  let finished = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancel = () => {
+    if (finished) return;
+    finished = true; clearTimeout(timer);
+    void reader.cancel().catch(() => {}).finally(() => reader.releaseLock());
+  };
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      timer = setTimeout(() => {
+        if (finished) return;
+        timedOut(); controller.error(new WattzunVoiceTransportTimeout()); cancel();
+      }, STREAM_IDLE_TIMEOUT_MS);
+      try {
+        const chunk = await reader.read();
+        clearTimeout(timer);
+        if (finished) return;
+        if (chunk.done) { finished = true; reader.releaseLock(); controller.close(); }
+        else controller.enqueue(chunk.value);
+      } catch (error) {
+        if (finished) return;
+        controller.error(error); cancel();
+      }
+    },
+    cancel,
+  }, { highWaterMark: 0 });
+}
 export interface WattzunRecorder {
   onData: (data: Blob) => void;
   onStop: (reason?: "limit") => void;
@@ -57,6 +116,7 @@ export class WattzunSpeechWindow {
   private readonly started: number;
   constructor(started: number) { this.started = started; this.lastSample = started; this.lastSpeech = started; }
   get hasSpeech() { return this.heardSpeech; }
+  get hasCandidate() { return this.speechStarted !== null; }
   sample(level: number, now: number): "wait" | "send" | "silent" {
     const elapsed = Math.min(250, Math.max(0, now - this.lastSample));
     this.lastSample = now;
@@ -78,13 +138,15 @@ export class WattzunSpeechWindow {
   }
 }
 
-type Capture = { recorder: WattzunRecorder; chunks: Blob[]; bytes: number; submit: boolean; settled: boolean; stopSampling: () => void };
+type Capture = { recorder: WattzunRecorder; window: WattzunSpeechWindow; thinking: boolean; chunks: Blob[]; bytes: number; submit: boolean; settled: boolean; stopSampling: () => void };
 type VoiceCallbacks = {
   status: (status: WattzunCallStatus) => void;
   submit: (audio: Blob, signal: AbortSignal) => Promise<WattzunVoiceResult>;
   reply: (result: WattzunVoiceResult) => void;
   played?: (audio: WattzunVoiceResult["audio"]) => void;
   greeting?: (signal: AbortSignal) => Promise<WattzunVoiceResult["audio"]>;
+  /** Read an existing pending receipt only. Never resubmit the user's audio or action. */
+  reconcile?: (signal: AbortSignal) => Promise<WattzunVoiceResult | null>;
 };
 
 /** Owns one call's media and cancellation. The UI supplies the authorised request. */
@@ -98,6 +160,9 @@ export class WattzunVoiceCall {
   private pending: AbortController | null = null;
   private muted = false;
   private replyIncomplete = false;
+  private followOnAudio: Blob | null = null;
+  private followOnReady: (() => void) | null = null;
+  private stopMemoryDrain: (() => void) | null = null;
   private readonly environment: WattzunVoiceEnvironment;
   private readonly callbacks: VoiceCallbacks;
   constructor(environment: WattzunVoiceEnvironment, callbacks: VoiceCallbacks) { this.environment = environment; this.callbacks = callbacks; }
@@ -125,7 +190,7 @@ export class WattzunVoiceCall {
       this.pending = pending;
       pending.signal.addEventListener("abort", discardGreeting, { once: true });
     }
-    const greeting = greetingCallback && pending ? (async () => greetingCallback(pending.signal))().then(audio => {
+    const greeting = greetingCallback && pending ? boundedRequest((async () => greetingCallback(pending.signal))(), pending, discardAudio).then(audio => {
       if (!this.active || generation !== this.generation || pending.signal.aborted) {
         if (audio.mimeType === "audio/pcm") void audio.stream.cancel().catch(() => {});
         return null;
@@ -148,7 +213,7 @@ export class WattzunVoiceCall {
       if (!greeting) { this.listen(); return; }
       microphone.mute(true);
       const audio = await greeting;
-      if (!this.active || generation !== this.generation || pending?.signal.aborted) return;
+      if (!this.active || generation !== this.generation) return;
       if (this.pending === pending) this.pending = null;
       if (!audio) {
         this.recover();
@@ -172,6 +237,7 @@ export class WattzunVoiceCall {
     if (replyIncomplete) this.replyIncomplete = true;
     this.pending?.abort(); this.pending = null;
     const playback = this.playback; this.playback = null; playback?.close();
+    this.followOnAudio = null;
     this.discardCapture();
     this.microphone.mute(true);
     if (this.muted) { this.update("muted"); return; }
@@ -182,19 +248,21 @@ export class WattzunVoiceCall {
   private discardCapture() {
     const capture = this.capture;
     this.capture = null;
-    if (!capture) return;
-    capture.settled = true;
-    capture.chunks = [];
-    capture.stopSampling();
-    capture.recorder.stop();
+    if (capture) {
+      capture.settled = true;
+      capture.chunks = [];
+      capture.stopSampling();
+      capture.recorder.stop();
+    }
+    const ready = this.followOnReady; this.followOnReady = null; ready?.();
   }
-  private listen() {
+  private listen(thinking = false) {
     if (!this.active || !this.microphone || this.muted) return;
     try {
       this.microphone.mute(false);
       const recorder = this.microphone.recorder();
-      const capture: Capture = { recorder, chunks: [], bytes: 0, submit: false, settled: false, stopSampling: () => {} };
       const window = new WattzunSpeechWindow(this.environment.now());
+      const capture: Capture = { recorder, window, thinking, chunks: [], bytes: 0, submit: false, settled: false, stopSampling: () => {} };
       this.capture = capture;
       recorder.onData = (chunk) => {
         if (this.capture !== capture || capture.settled || !chunk.size) return;
@@ -215,10 +283,17 @@ export class WattzunVoiceCall {
         if ((capture.submit || reason === "limit" && window.hasSpeech) && capture.bytes) {
           const audio = new Blob(capture.chunks, { type: capture.chunks[0]?.type || "audio/webm" });
           capture.chunks = [];
-          void this.send(audio);
+          if (thinking) {
+            // Keep one complete follow-on turn, bounded by the existing 45-second
+            // recorder. Its preceding action must finish before this can submit.
+            this.followOnAudio = audio;
+            this.microphone?.mute(true);
+            const ready = this.followOnReady; this.followOnReady = null; ready?.();
+          } else void this.send(audio);
         } else {
           capture.chunks = [];
-          this.listen();
+          const ready = this.followOnReady; this.followOnReady = null;
+          if (ready) ready(); else this.listen(thinking);
         }
       };
       recorder.start();
@@ -227,11 +302,12 @@ export class WattzunVoiceCall {
         const level = this.microphone?.level() || 0;
         const decision = window.sample(level, this.environment.now());
         if (window.hasSpeech) recorder.confirmSpeech();
-        if (decision === "wait") return;
+        if (decision === "wait" && !(thinking && this.followOnReady && !window.hasCandidate)) return;
         capture.stopSampling();
         capture.submit = decision === "send";
         recorder.stop();
       }, 100);
+      if (thinking) return;
       if (this.replyIncomplete) {
         if (this.state !== "recovering") this.update("recovering", "No spoken reply was completed. Your call is still connected and listening.");
       } else this.update("listening", "Speak, then pause. Wattzun will reply.");
@@ -240,10 +316,50 @@ export class WattzunVoiceCall {
   private async send(audio: Blob) {
     await this.requestReply(signal => this.callbacks.submit(audio, signal));
   }
+  private async takeFollowOn(): Promise<Blob | null> {
+    const capture = this.capture;
+    if (!this.followOnAudio && capture?.thinking && (capture.window.hasCandidate || (this.microphone?.level() || 0) >= 0.025)) {
+      await new Promise<void>(resolve => { this.followOnReady = resolve; });
+    }
+    this.discardCapture();
+    const audio = this.followOnAudio; this.followOnAudio = null;
+    return audio;
+  }
+  private retainUnspokenInput(result: WattzunVoiceResult) {
+    this.stopMemoryDrain?.();
+    const audio = result.audio;
+    if (audio.mimeType !== "audio/pcm" || !result.inputTranscript || result.transcript.trim()) { discardAudio(audio); return; }
+    // The final transport frame may contain literal input that arrived after
+    // the reply header. Keep that memory without playing or waiting for speech.
+    const reader = audio.stream.getReader();
+    let stopped = false, bytes = 0;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true; clearTimeout(timer);
+      if (this.stopMemoryDrain === stop) this.stopMemoryDrain = null;
+      void reader.cancel().catch(() => {});
+    };
+    const timer = setTimeout(stop, STREAM_IDLE_TIMEOUT_MS);
+    this.stopMemoryDrain = stop;
+    void (async () => {
+      try {
+        while (!stopped) {
+          const chunk = await reader.read();
+          if (stopped || chunk.done) break;
+          bytes += chunk.value.byteLength;
+          if (bytes > WATTZUN_MAX_AUDIO_BYTES) break;
+        }
+      } catch { /* A missing transcript leaves the existing request summary intact. */ }
+      finally { stop(); reader.releaseLock(); }
+    })();
+  }
   /** Run a user-requested guide step through the same call, microphone and playback lifecycle. */
   async requestReply(request: (signal: AbortSignal) => Promise<WattzunVoiceResult>): Promise<boolean> {
+    return this.performReply(request, true);
+  }
+  private async performReply(request: (signal: AbortSignal) => Promise<WattzunVoiceResult | null>, allowReconciliation: boolean, preserveFollowOn = false): Promise<boolean> {
     if (!this.active || !this.microphone || this.muted || this.pending) return false;
-    this.discardCapture();
+    if (!preserveFollowOn) { this.followOnAudio = null; this.discardCapture(); }
     const previousPlayback = this.playback;
     this.playback = null;
     previousPlayback?.close();
@@ -254,30 +370,62 @@ export class WattzunVoiceCall {
     this.microphone?.mute(true);
     this.replyIncomplete = false;
     this.update("thinking");
+    if (!this.active || generation !== this.generation || pending.signal.aborted) return true;
+    if (!this.followOnAudio && !this.capture && !this.muted) this.listen(true);
+    else if (this.capture && !this.muted) this.microphone?.mute(false);
+    if (!this.active || generation !== this.generation || pending.signal.aborted) return true;
     try {
-      const result = await request(pending.signal);
+      const result = await boundedRequest(request(pending.signal), pending, value => { if (value) discardAudio(value.audio); });
+      if (!result) { this.recover(true); return true; }
       unplayedAudio = result.audio;
       if (!this.active || generation !== this.generation || pending.signal.aborted) return true;
-      this.pending = null;
       this.callbacks.reply(result);
       if (!this.active || generation !== this.generation || pending.signal.aborted) return true;
-      if (this.muted) { this.update("muted"); return true; }
-      unplayedAudio = null;
-      await this.playAudio(result.audio, generation);
-    } catch (error) {
+      const followOn = await this.takeFollowOn();
       if (!this.active || generation !== this.generation || pending.signal.aborted) return true;
+      this.pending = null;
+      if (this.muted) { this.update("muted"); return true; }
+      if (followOn) {
+        this.retainUnspokenInput(result);
+        unplayedAudio = null;
+        await this.performReply(signal => this.callbacks.submit(followOn, signal), true);
+        return true;
+      }
+      this.microphone?.mute(true);
+      unplayedAudio = null;
+      await this.playAudio(result.audio, generation, allowReconciliation);
+    } catch (error) {
+      if (!this.active || generation !== this.generation) return true;
+      if (error instanceof WattzunVoiceTransportTimeout) {
+        if (this.pending === pending) this.pending = null;
+        await this.reconcileTurn(generation, allowReconciliation);
+        return true;
+      }
+      if (pending.signal.aborted) return true;
       const message = error instanceof Error ? error.message : "The voice reply could not be completed. Try again.";
-      if (error instanceof WattzunVoiceCallError) this.fail(message); else this.recover(true);
+      if (error instanceof WattzunVoiceCallError) this.fail(message);
+      else {
+        if (this.pending === pending) this.pending = null;
+        await this.reconcileTurn(generation, allowReconciliation);
+      }
     } finally {
       if (unplayedAudio?.mimeType === "audio/pcm") void unplayedAudio.stream.cancel().catch(() => {});
       if (this.pending === pending) this.pending = null;
     }
     return true;
   }
-  private async playAudio(audio: WattzunVoiceResult["audio"], generation: number) {
+  private async reconcileTurn(generation: number, allowed: boolean) {
+    if (!this.active || generation !== this.generation) return;
+    const reconcile = this.callbacks.reconcile;
+    if (allowed && reconcile && !this.muted) await this.performReply(reconcile, false, true);
+    else this.recover(true);
+  }
+  private async playAudio(audio: WattzunVoiceResult["audio"], generation: number, allowReconciliation = false) {
     let unplayed = true;
+    let streamTimedOut = false;
+    const playable = audio.mimeType === "audio/pcm" ? { ...audio, stream: boundedAudioStream(audio.stream, () => { streamTimedOut = true; }) } : audio;
     try {
-      const playback = this.environment.playback(audio);
+      const playback = this.environment.playback(playable);
       unplayed = false;
       this.playback = playback;
       playback.onEnd = () => {
@@ -288,11 +436,18 @@ export class WattzunVoiceCall {
         if (!this.active || generation !== this.generation) return;
         if (this.muted) this.update("muted"); else this.listen();
       };
-      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.recover(true); };
+      playback.onError = () => {
+        if (this.playback !== playback || !this.active || generation !== this.generation) return;
+        if (streamTimedOut) void this.reconcileTurn(generation, allowReconciliation); else this.recover(true);
+      };
       await playback.play().catch(error => { if (this.playback === playback) throw error; });
       if (this.playback === playback && this.active && generation === this.generation) this.update("speaking");
-    } catch { if (this.active && generation === this.generation) this.recover(true); } finally {
-      if (unplayed && audio.mimeType === "audio/pcm") void audio.stream.cancel().catch(() => {});
+    } catch {
+      if (this.active && generation === this.generation) {
+        if (streamTimedOut) await this.reconcileTurn(generation, allowReconciliation); else this.recover(true);
+      }
+    } finally {
+      if (unplayed) discardAudio(playable);
     }
   }
   toggleMute() {
@@ -300,9 +455,11 @@ export class WattzunVoiceCall {
     this.muted = !this.muted;
     this.microphone.mute(true);
     if (this.muted) {
+      this.stopMemoryDrain?.();
+      this.followOnAudio = null;
       this.discardCapture();
       if (this.state === "listening" || this.state === "recovering") this.update("muted");
-    } else if (!this.pending && !this.playback) this.listen();
+    } else if (!this.playback && !this.capture && !this.followOnAudio) this.listen(Boolean(this.pending));
   }
   interrupt() {
     if (!this.active) return;
@@ -316,6 +473,8 @@ export class WattzunVoiceCall {
   private cleanup() {
     this.active = false;
     ++this.generation;
+    this.stopMemoryDrain?.();
+    this.followOnAudio = null;
     this.discardCapture();
     this.pending?.abort();
     this.pending = null;

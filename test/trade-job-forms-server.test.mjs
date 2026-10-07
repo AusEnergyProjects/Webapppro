@@ -169,9 +169,10 @@ test("Wattzun context and guided preparation use the actual selected SQLite read
     const access = { actorUid: f.team.actorUid, scope: { portal: "trade", scopeId: f.team.ownerUid, label: "Synthetic installer" }, db: f.db };
     const reference = { kind: "trade_form", formKind: "job_form", jobId: "job-one", recordId: "form-one" };
     const request = new Request("https://fixture.invalid/api/wattzun/form-guide");
-    let teamReads = 0;
+    let teamReads = 0, progressReads = 0;
     const deps = { team: async () => { teamReads++; return f.team; }, selectedJobForm: f.service.readSelectedTradeJobForm,
       job: () => assert.fail("The canonical selected reader already checks assignedJob"),
+      startFormWork: async (team, jobId) => { assert.equal(team, f.team); assert.equal(jobId, "job-one"); progressReads++; return { changed: false, stage: "in_progress", blockers: [] }; },
       saveJobForm: () => assert.fail("Context and preparation must not save") };
     const context = await loadWattzunFormContext(request, access, reference, deps);
     assert.equal(teamReads, 1); assert.equal(f.state.assignedCalls, 1); assert.equal(f.reads.length, 2);
@@ -184,7 +185,7 @@ test("Wattzun context and guided preparation use the actual selected SQLite read
     const prepared = await prepareWattzunGuidedFormForTurn(request, access, proposal,
       { ...input, stage: "continue", sourceSha256: guide.sourceSha256, questionKey: guide.next.fieldKey }, f.team, deps);
     assert.equal(prepared.sourceSha256, context.sourceSha256); assert.equal(prepared.payload.baseRevision, 2); assert.equal(prepared.payload.answers.technician, "Alex Example");
-    assert.equal(teamReads, 1); assert.equal(f.state.assignedCalls, 3); assert.equal(f.reads.length, 6);
+    assert.equal(teamReads, 1); assert.equal(progressReads, 1); assert.equal(f.state.assignedCalls, 4); assert.equal(f.reads.length, 8);
     assert.deepEqual(JSON.parse(f.database.prepare("SELECT answers FROM trade_job_forms WHERE id='form-one'").get().answers), { work_date: "2026-10-07" });
     f.database.exec("UPDATE trade_job_forms SET answers='{\"work_date\":\"2026-10-07\",\"technician\":\"Office correction\"}',revision=3 WHERE id='form-one'");
     await assert.rejects(verifyWattzunFormForTurn(request, access, prepared, f.team, deps), error => error.status === 409);

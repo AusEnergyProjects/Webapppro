@@ -364,6 +364,11 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
   if (["imported", "completed", "cancelled"].includes(job.stage) || job.pipeline_stage === "lost") return { changed: false, stage: job.stage, blockers: [] };
   const visits: ProgressVisit[] = JSON.parse(job.visit_snapshot);
   const selection = automaticFormVisit(visits, access.memberId, job.assignee_member_id);
+  // Starting already-started work cannot complete it. Preserve the current
+  // actor/job/visit check without scanning completion requirements per answer.
+  if (options.startOnly && job.stage === "in_progress" && (!selection.visit || selection.visit.status === "in_progress")) {
+    return { changed: false, stage: job.stage, blockers: [] };
+  }
   const completedFormValues = [workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid];
   const unscheduledActor = job.assignee_member_id === access.memberId || (access.isOwner && !job.assignee_member_id);
   // These existence checks share the same freshly authorised job and one database snapshot.

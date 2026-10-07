@@ -518,6 +518,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     };
     const call = new WattzunVoiceCall(createWattzunBrowserVoiceEnvironment(), {
       status: status => { if (active.current && voiceCall.current === call) setCallStatus(status); },
+      reconcile: signal => guideSession.current?.progress && !guideSession.current.input.paused ? guidedReply(signal) : Promise.resolve(null),
       async greeting(signal) {
         if (guideSession.current) {
           const result = await guidedReply(signal);

@@ -312,6 +312,10 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   const exampleContent = { ...clarificationExample }; delete exampleContent.requestSummary;
   assert.equal(f.shared.createWattzunPortalReplyContract(options).validate(exampleContent).kind, "clarification");
   assert.match(session.tools[0].description, /complete six-field reply proposal/);
+  assert.match(session.tools[0].description, /validates and executes proposed actions under the current user's authorisation/);
+  assert.match(session.tools[0].description, /ordinary answers in an authorised guided form/);
+  assert.match(session.tools[0].description, /only from its verified receipt/);
+  assert.doesNotMatch(session.tools[0].description, /read-only|cannot save or send/);
   const responses = f.socket.sent.filter(event => event.type === "response.create").map(event => event.response);
   assert.deepEqual(responses[0].tool_choice, session.tool_choice); assert.equal(responses[0].max_output_tokens, 2500);
   assert.equal(responses[1].conversation, "none"); assert.deepEqual(responses[1].tools, []); assert.equal(responses[1].tool_choice, "none");

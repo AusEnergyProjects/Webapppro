@@ -32,6 +32,7 @@ function fixture(formKind){
     async team(req){assert.equal(req.headers.get("X-TLink-Business"),"owner-one");assert.equal(req.headers.get("Authorization"),"Bearer synthetic");return team;},
     async job(current,id){assert.equal(current,team);assert.equal(id,"job-one");return job;},
     async selectedJobForm(current,id,formId){assert.equal(current,team);assert.equal(id,"job-one");assert.equal(formId,"form-one");return {job:await deps.job(current,id),form:structuredClone(supporting)};},
+    async startFormWork(current,id){assert.equal(current,team);assert.equal(id,"job-one");const changed=job.stage!=="in_progress";if(changed){job.stage="in_progress";job.revision++;}return {changed,stage:job.stage,revision:job.revision,blockers:[]};},
     async saveJobForm(current,currentJob,body){assert.equal(current,team);assert.deepEqual(currentJob,job);calls.push(body);assert.equal(body.complete,false);assert.equal(body.baseRevision,supporting.revision);supporting.answers=body.answers;supporting.revision++;if(state.failAfterSave)throw new Error("Connection lost after commit");return Response.json({ok:true,forms:[supporting]});},
     async loadActivity(current,id){assert.equal(current,team);assert.equal(id,"form-one");return structuredClone(activity);},
     async saveActivity(current,id,revision,answers){calls.push({id,revision,answers});assert.equal(revision,activity.revision);activity.answers=structuredClone(answers);activity.revision++;if(state.failAfterSave)throw new Error("Connection lost after commit");return structuredClone(activity);},
@@ -279,6 +280,76 @@ const guideStart = () => ({sessionId:"550e8400-e29b-41d4-a716-446655440000",stag
 const continueGuide = guide => ({...guideStart(),stage:"continue",sourceSha256:guide.sourceSha256,questionKey:guide.next?.fieldKey??"",skippedFieldKeys:guide.skippedFieldKeys});
 const loadGuide = (f,input=guideStart(),ref=f.ref) => loadWattzunFormGuideForTurn(request,access,ref,input,f.team,f.deps);
 const completeProposal = kind => ({kind:"complete_form",jobQuery:"",jobId:"job-one",formKind:kind,formId:reference(kind).recordId});
+
+test("a new supporting-form guide starts canonical job work before returning its first question and repeated starts are idempotent",async()=>{
+  const f=fixture("job_form"),events=[],selected=f.deps.selectedJobForm,start=f.deps.startFormWork;
+  f.deps.selectedJobForm=async(...args)=>{events.push(`read:${f.job.stage}:${f.job.revision}`);return selected(...args);};
+  f.deps.startFormWork=async(...args)=>{events.push("start");return start(...args);};
+  const before=structuredClone(f.supporting),loaded=await loadGuide(f);
+  assert.deepEqual(events,["read:scheduled:4","start","read:in_progress:5"]);
+  assert.equal(loaded.guide.next.fieldKey,"notes");assert.equal(f.job.revision,5);
+  assert.deepEqual(f.supporting,before,"Starting questions does not invent or complete any answer");
+  await loadGuide(f);assert.equal(events.filter(event=>event==="start").length,2);assert.equal(f.job.revision,5);
+  const prepared=await prepareWattzunGuidedFormForTurn(request,access,f.propose("notes","User supplied observation"),continueGuide(loaded.guide),f.team,f.deps);
+  await executeWattzunForm(request,access,prepared,requestId,f.deps);
+  assert.equal(f.calls.length,1);assert.equal(f.supporting.answers.notes,"User supplied observation");
+});
+
+test("ordinary turns, read-only recovery and other form families do not trigger a job-start mutation",async()=>{
+  for(const kind of ["job_form","activity_form","work_pack"]){
+    const f=fixture(kind);let starts=0;f.deps.startFormWork=async()=>{starts++;assert.fail("Unexpected job-start mutation");};
+    const loaded=await loadGuide(f,{...guideStart(),stage:"resume"});
+    await loadGuide(f,continueGuide(loaded.guide));
+    await loadGuide(f,{...guideStart(),paused:true});
+    if(kind!=="job_form")await loadGuide(f);
+    assert.equal(starts,0);assert.equal(f.job.stage,"scheduled");
+  }
+});
+
+test("invalid guide authority or input never starts job work",async()=>{
+  for(const change of ["permission","owner","input","reference"]){
+    const f=fixture("job_form");f.deps.startFormWork=async()=>assert.fail("Invalid guide must not mutate job progress");
+    if(change==="permission")f.team.canManageFieldEvidence=false;
+    if(change==="owner")f.team.ownerUid="another-owner";
+    await assert.rejects(loadGuide(f,change==="input"?{...guideStart(),authorization:"all_actions"}:guideStart(),
+      change==="reference"?{...f.ref,recordId:"invalid/record"}:f.ref),formError(change==="input"?400:403));
+    assert.equal(f.job.revision,4);assert.equal(f.calls.length,0);
+  }
+});
+
+test("a failed or blocked initial job transition cannot release a form question",async()=>{
+  for(const failure of ["database","training","pending","terminal","assignment","permission"]){
+    const f=fixture("job_form");
+    f.deps.startFormWork=async()=>{
+      if(failure==="database")throw new Error("Database unavailable");
+      if(failure==="terminal")f.job.stage="cancelled";
+      if(failure==="assignment")f.deps.job=async()=>{throw new Error("JOB_NOT_ASSIGNED");};
+      if(failure==="permission")f.team.canManageFieldEvidence=false;
+      return {changed:false,stage:f.job.stage,pending:failure==="pending",blockers:failure==="training"?[{key:"training",label:"Required training is missing.",target:"training"}]:[]};
+    };
+    await assert.rejects(loadGuide(f),failure==="database"?/Database unavailable/:formError(["training","permission","assignment"].includes(failure)?403:409));
+    assert.equal(f.calls.length,0);assert.equal(f.supporting.revision,1);
+  }
+});
+
+test("pending canonical job start cannot release questions even when the refreshed job says in progress",async()=>{
+  const f=fixture("job_form");let reads=0;const selected=f.deps.selectedJobForm;
+  f.deps.selectedJobForm=async(...args)=>{reads++;return selected(...args);};
+  f.deps.startFormWork=async()=>{f.job.stage="in_progress";f.job.revision++;f.supporting.answers.notes="Already saved by the office";f.supporting.revision++;
+    return {changed:false,stage:"scheduled",pending:true,blockers:[{key:"changed",label:"Job changed.",target:"forms"}]};};
+  await assert.rejects(loadGuide(f),formError(409));
+  assert.equal(reads,2);assert.equal(f.supporting.revision,2);
+  assert.equal(f.calls.length,0);assert.equal(f.supporting.answers.notes,"Already saved by the office");
+});
+
+test("access and training blockers prevent initial questions on an already in-progress job",async()=>{
+  for(const key of ["access","training"]){
+    const f=fixture("job_form");f.job.stage="in_progress";
+    f.deps.startFormWork=async()=>({changed:false,stage:"in_progress",blockers:[{key,label:`Blocked ${key}`,target:key}]});
+    await assert.rejects(loadGuide(f),error=>formError(403)(error)&&error.message===`Blocked ${key}`);
+    assert.equal(f.calls.length,0);assert.equal(f.supporting.revision,1);
+  }
+});
 
 test("guided answers advance the actual conditional schema, preserve false/zero and allow an explicit correction",async()=>{
   const f=fixture("activity_form");

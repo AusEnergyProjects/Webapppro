@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { WattzunSpeechWindow, WattzunVoiceCall, WattzunVoiceCallError } from "../src/lib/wattzun-voice-client.ts";
+import { readWattzunVoiceStream } from "../src/lib/wattzun-voice-stream.ts";
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
@@ -30,7 +31,7 @@ test('interrupted or cancelled playback never becomes delivered reasoning histor
 test('a delivered callback that closes the call cannot restart capture', async () => {
   const options = {}, h = harness(options); options.onPlayed = () => h.call.hangUp();
   await h.call.start(); h.speak(); await tick(); h.state.players[0].onEnd();
-  assert.equal(h.status(), 'ended'); assert.equal(h.state.recorderCount, 1);
+  assert.equal(h.status(), 'ended'); assert.equal(h.state.recorderCount, 2);
   assert.equal(h.state.timers.size, 0); assert.equal(h.state.microphoneClosed, 1);
 });
 
@@ -109,6 +110,7 @@ function harness(options = {}) {
     played: audio => { state.played.push(audio); options.onPlayed?.(audio); },
   };
   if (options.greeting) callbacks.greeting = signal => { state.greetings.push({ signal }); return typeof options.greeting === "function" ? options.greeting(signal) : options.greeting.promise; };
+  if (options.reconcile) callbacks.reconcile = options.reconcile;
   const call = new WattzunVoiceCall(environment, callbacks);
   return { call, state, microphone,
     sample(milliseconds, level = 0) { state.now += milliseconds; state.level = level; for (const callback of [...state.timers]) callback(); },
@@ -126,7 +128,7 @@ test("greeting and microphone opening run concurrently, play without a chat turn
   const started = h.call.start(); assert.equal(h.state.greetings.length, 1); assert.equal(h.state.microphoneRequested, 1);
   greeting.resolve(pcm.audio); await tick(); assert.equal(h.status(), "permission"); assert.equal(h.state.players.length, 0);
   permission.resolve(h.microphone); await started; assert.equal(h.status(), "speaking"); assert.equal(h.state.microphoneMuted, true);
-  assert.equal(h.state.recorderCount, 0); assert.equal(h.state.players[0].audio, pcm.audio); assert.equal(h.state.timers.size, 0);
+  assert.equal(h.state.recorderCount, 0); assert.equal(h.state.players[0].audio.mimeType, 'audio/pcm'); assert.equal(pcm.audio.stream.locked, true); assert.equal(h.state.timers.size, 0);
   assert.equal(h.state.submits.length, 0); assert.equal(h.state.replies.length, 0);
   h.sample(180000, .2); assert.equal(h.status(), "speaking"); assert.equal(h.state.submits.length, 0);
   h.state.players[0].onEnd(); assert.equal(h.status(), "listening"); assert.equal(h.state.recorderCount, 1); assert.equal(h.state.microphoneMuted, false);
@@ -338,7 +340,7 @@ test("an oversized first turn recovers quietly and the next turn succeeds with t
 });
 test("a speech turn submits once and hang-up prevents a late answer from appearing", async () => {
   const request = deferred(); const h = harness({ request }); await h.call.start(); h.speak(); h.sample(5000);
-  assert.equal(h.state.submits.length, 1); assert.equal(h.status(), "thinking"); assert.equal(h.state.microphoneMuted, true);
+  assert.equal(h.state.submits.length, 1); assert.equal(h.status(), "thinking"); assert.equal(h.state.microphoneMuted, false);
   h.call.hangUp(); assert.equal(h.state.submits[0].signal.aborted, true); request.resolve(voiceResult); await tick();
   assert.equal(h.state.replies.length, 0); assert.equal(h.state.players.length, 0); assert.equal(h.status(), "ended");
 });
@@ -377,7 +379,7 @@ test("a later streaming error retains its header and marks the spoken reply inco
   const h = harness(); await h.call.start(); h.speak(); await tick();
   h.state.players[0].onError(); assert.equal(h.status(), "recovering"); assert.equal(h.state.replies.length, 1);
   h.state.players[0].onEnd(); assert.equal(h.status(), "recovering"); assert.equal(h.state.playbackClosed, 1); assert.equal(h.state.microphoneClosed, 0);
-  assert.equal(h.state.recorderCount, 2); h.call.dispose();
+  assert.equal(h.state.recorderCount, 3); h.call.dispose();
 });
 test("an unused PCM stream is cancelled when a reply arrives after hang-up or while muted", async () => {
   for (const finish of ["hang-up", "mute"]) {
@@ -403,7 +405,7 @@ test("mute discards captured speech and cannot produce a provider request", asyn
 });
 test("muting during speaking remains muted when playback ends", async () => {
   const h = harness(); await h.call.start(); h.speak(); await tick(); h.call.toggleMute(); h.state.players[0].onEnd();
-  assert.equal(h.status(), "muted"); assert.equal(h.state.microphoneMuted, true); assert.equal(h.state.recorders.length, 1); h.call.dispose();
+  assert.equal(h.status(), "muted"); assert.equal(h.state.microphoneMuted, true); assert.equal(h.state.recorders.length, 2); h.call.dispose();
 });
 test("playback failures retain their header and microphone without claiming spoken delivery", async () => {
   const h = harness({ playbackError: true }); await h.call.start(); h.speak(); await tick();
@@ -434,6 +436,248 @@ test('long active calls, provider work and playback have no idle or total durati
   waiting.sample(9 * 60 * 60 * 1000); assert.equal(waiting.status(), 'listening'); waiting.call.dispose();
 });
 
+test('a lost request is bounded without ending the call or replaying audio, and a late reply is discarded', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = deferred(), late = greetingPcm();
+  const h = harness({ submit: (_audio, _signal, attempt) => attempt === 1 ? pending.promise : Promise.resolve(voiceResult) });
+  await h.call.start(); h.speak();
+  t.mock.timers.tick(74_999); await tick(); assert.equal(h.status(), 'thinking');
+  t.mock.timers.tick(1); await tick();
+  assert.equal(h.status(), 'recovering'); assert.equal(h.state.submits[0].signal.aborted, true);
+  assert.equal(h.state.submits.length, 1); assert.equal(h.state.microphoneRequested, 1); assert.equal(h.state.microphoneClosed, 0);
+  pending.resolve({ ...voiceResult, audio: late.audio }); await tick();
+  assert.equal(late.state.cancelled, 1); assert.equal(h.state.replies.length, 0); assert.equal(h.state.players.length, 0);
+  h.speak(); await tick(); assert.equal(h.status(), 'speaking'); assert.equal(h.state.submits.length, 2);
+  h.call.dispose();
+});
+
+test('speech while thinking waits for the verified result and submits once before its now stale question can play', async () => {
+  const first = deferred(), second = deferred(), unspoken = greetingPcm(), events = [];
+  const h = harness({ submit: (_audio, _signal, attempt) => { events.push('submit:' + attempt); return attempt === 1 ? first.promise : second.promise; },
+    onReply: reply => events.push(reply === voiceResult ? 'reply:second' : 'reply:first') });
+  try {
+    await h.call.start(); h.speak(); assert.equal(h.state.microphoneMuted, false);
+    h.speak(); assert.equal(h.state.submits.length, 1); assert.equal(h.state.microphoneMuted, true);
+    first.resolve({ ...voiceResult, audio: unspoken.audio }); await tick();
+    assert.deepEqual(events, ['submit:1', 'reply:first', 'submit:2']); assert.equal(unspoken.state.cancelled, 1);
+    assert.equal(h.state.players.length, 0); assert.equal(h.state.played.length, 0);
+    second.resolve(voiceResult); await tick(); assert.equal(h.status(), 'speaking');
+    assert.equal(h.state.players.length, 1); assert.equal(h.state.submits.length, 2); assert.equal(h.state.microphoneRequested, 1);
+    h.state.players[0].onEnd(); assert.deepEqual(h.state.played, [voiceResult.audio]);
+  } finally { h.call.dispose(); }
+});
+
+test('a reply arriving during a new utterance retains its first candidate and cannot race a manual guide request', async () => {
+  const first = deferred(), second = deferred(), h = harness({ submit: (_audio, _signal, attempt) => attempt === 1 ? first.promise : second.promise });
+  try {
+    await h.call.start(); h.speak(); h.sample(100, .1);
+    first.resolve(voiceResult); await tick();
+    assert.equal(h.state.submits.length, 1); assert.equal(h.state.players.length, 0);
+    let controls = 0;
+    assert.equal(await h.call.requestReply(async () => { controls++; return voiceResult; }), false);
+    assert.equal(controls, 0);
+    for (let index = 0; index < 4; index++) h.sample(100, .1);
+    assert.equal(h.state.submits.length, 1); h.sample(1300); await tick();
+    assert.equal(h.state.submits.length, 2); assert.equal(h.state.players.length, 0);
+    second.resolve(voiceResult); await tick(); assert.equal(h.status(), 'speaking');
+  } finally { h.call.dispose(); }
+});
+
+test('a short unconfirmed click while thinking does not add a provider turn or hold up the ready reply', async () => {
+  const first = deferred(), h = harness({ request: first });
+  try {
+    await h.call.start(); h.speak(); h.sample(100, .1); first.resolve(voiceResult); await tick();
+    assert.equal(h.state.players.length, 0); h.sample(201, 0); await tick();
+    assert.equal(h.status(), 'speaking'); assert.equal(h.state.submits.length, 1);
+  } finally { h.call.dispose(); }
+});
+
+test('discarding an unspoken stale reply cannot block queued speech on a stalled transport cancellation', async () => {
+  const first = deferred(); let canceled = 0;
+  const audio = { mimeType: 'audio/pcm', stream: new ReadableStream({ cancel() { canceled++; return new Promise(() => {}); } }) };
+  const h = harness({ submit: (_audio, _signal, attempt) => attempt === 1 ? first.promise : Promise.resolve(voiceResult) });
+  try {
+    await h.call.start(); h.speak(); h.speak(); first.resolve({ ...voiceResult, audio }); await tick();
+    assert.equal(canceled, 1); assert.equal(h.state.submits.length, 2); assert.equal(h.status(), 'speaking');
+  } finally { h.call.dispose(); }
+});
+
+test('superseded speech retains a late literal transcript without delaying the queued request or playing old audio', async () => {
+  const first = deferred(), second = deferred(), memory = [];
+  let wire;
+  const encoded = value => new TextEncoder().encode(JSON.stringify(value) + '\n');
+  const response = new Response(new ReadableStream({ start(controller) { wire = controller; controller.enqueue(encoded({ type: 'reply', transcript: '', requestSummary: 'The user supplied an address.', reply: voiceResult.reply })); } }), { headers: { 'Content-Type': 'application/x-wattzun-realtime-voice+ndjson' } });
+  const original = await readWattzunVoiceStream(response, new AbortController().signal, () => true);
+  const h = harness({ submit: (_audio, _signal, attempt) => attempt === 1 ? first.promise : second.promise,
+    onReply: result => { if (result.inputTranscript) { memory.push(result.requestSummary); void result.inputTranscript.then(value => memory.push(value)); } } });
+  try {
+    await h.call.start(); h.speak(); h.speak(); first.resolve(original); await tick();
+    assert.equal(h.state.submits.length, 2); assert.equal(h.state.players.length, 0);
+    assert.deepEqual(memory, ['The user supplied an address.'], 'The queued turn can use the existing summary immediately');
+    wire.enqueue(encoded({ type: 'audio', data: 'EIAgAQ==' }));
+    wire.enqueue(encoded({ type: 'done', transcript: 'Morgan Example at 152 Elizabeth Street, Melbourne, Victoria 3000.' }));
+    await original.inputTranscript; await tick();
+    assert.equal(memory.at(-1), 'Morgan Example at 152 Elizabeth Street, Melbourne, Victoria 3000.');
+    assert.equal(h.state.played.length, 0); second.resolve(voiceResult); await tick();
+    assert.equal(h.state.players.length, 1); assert.equal(h.state.players[0].audio, voiceResult.audio);
+  } finally { h.call.dispose(); }
+});
+
+test('late-input drainage is bounded and cancelled by mute, hang-up or workspace disposal', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const action of ['timeout', 'mute', 'hangup', 'dispose']) {
+    const first = deferred(); let canceled = 0;
+    const audio = { mimeType: 'audio/pcm', stream: new ReadableStream({ cancel() { canceled++; return new Promise(() => {}); } }) };
+    const h = harness({ submit: (_audio, _signal, attempt) => attempt === 1 ? first.promise : Promise.resolve(voiceResult) });
+    try {
+      await h.call.start(); h.speak(); h.speak(); first.resolve({ ...voiceResult, transcript: '', inputTranscript: new Promise(() => {}), audio }); await tick();
+      assert.equal(h.state.submits.length, 2); assert.equal(h.status(), 'speaking'); assert.equal(canceled, 0);
+      if (action === 'mute') h.call.toggleMute(); else if (action === 'hangup') h.call.hangUp(); else if (action === 'dispose') h.call.dispose();
+      else { t.mock.timers.tick(19_999); await tick(); assert.equal(canceled, 0); t.mock.timers.tick(1); }
+      await tick(); assert.equal(canceled, 1); assert.equal(h.state.submits.length, 2);
+      t.mock.timers.tick(120_000); await tick(); assert.equal(canceled, 1); assert.equal(h.state.players.length, 1);
+    } finally { h.call.dispose(); }
+  }
+});
+
+test('only one superseded reply can retain a background input drain', async () => {
+  const first = deferred(), second = deferred(), canceled = [0, 0];
+  const result = index => ({ ...voiceResult, transcript: '', inputTranscript: new Promise(() => {}), audio: { mimeType: 'audio/pcm', stream: new ReadableStream({ cancel() { canceled[index]++; } }) } });
+  const h = harness({ submit: (_audio, _signal, attempt) => attempt === 1 ? first.promise : attempt === 2 ? second.promise : Promise.resolve(voiceResult) });
+  try {
+    await h.call.start(); h.speak(); h.speak(); first.resolve(result(0)); await tick();
+    assert.deepEqual(canceled, [0, 0]); h.speak(); second.resolve(result(1)); await tick();
+    assert.deepEqual(canceled, [1, 0]); assert.equal(h.state.submits.length, 3); assert.equal(h.state.players.length, 1);
+    h.call.hangUp(); await tick(); assert.deepEqual(canceled, [1, 1]);
+  } finally { h.call.dispose(); }
+});
+
+test('muting, hanging up or changing scope discards pending and complete follow-on speech without another request', async () => {
+  for (const action of ['mute', 'hangup', 'dispose']) for (const ready of [false, true]) {
+    const first = deferred(), h = harness({ request: first });
+    try {
+      await h.call.start(); h.speak(); if (ready) h.speak(); else h.sample(100, .1);
+      if (action === 'mute') h.call.toggleMute(); else if (action === 'hangup') h.call.hangUp(); else h.call.dispose();
+      first.resolve(voiceResult); await tick();
+      assert.equal(h.state.submits.length, 1); assert.equal(h.state.players.length, 0);
+      assert.equal(h.state.timers.size, 0); assert.equal(h.state.microphoneRequested, 1);
+      if (action === 'mute') { assert.equal(h.status(), 'muted'); h.call.toggleMute(); assert.equal(h.status(), 'listening'); }
+      else assert.equal(h.state.microphoneClosed, 1);
+    } finally { h.call.dispose(); }
+  }
+});
+
+test('a queued follow-on survives a timed out save only after its exact receipt is reconciled', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const first = deferred(), receipt = deferred(), events = [];
+  const h = harness({ submit: (_audio, _signal, attempt) => { events.push('submit:' + attempt); return attempt === 1 ? first.promise : Promise.resolve(voiceResult); },
+    reconcile: () => { events.push('recover'); return receipt.promise; }, onReply: () => events.push('receipt') });
+  try {
+    await h.call.start(); h.speak(); h.speak(); t.mock.timers.tick(75_000); await tick();
+    assert.deepEqual(events, ['submit:1', 'recover']); assert.equal(h.state.submits.length, 1);
+    receipt.resolve(voiceResult); await tick();
+    assert.deepEqual(events, ['submit:1', 'recover', 'receipt', 'submit:2', 'receipt']);
+    assert.equal(h.state.players.length, 1); assert.equal(h.status(), 'speaking');
+  } finally { h.call.dispose(); }
+});
+
+test('a timed out guided answer checks its existing receipt once and speaks the canonical result without resubmission', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = deferred(), late = greetingPcm(), reconciliations = [];
+  const receipt = { ...voiceResult, reply: { ...voiceResult.reply, message: 'Saved. What is the serial number?' } };
+  const h = harness({ request: pending, reconcile: async signal => { reconciliations.push(signal); return receipt; } });
+  await h.call.start(); h.speak(); t.mock.timers.tick(75_000); await tick();
+  assert.equal(reconciliations.length, 1); assert.equal(reconciliations[0].aborted, false);
+  assert.equal(h.state.submits.length, 1); assert.equal(h.state.submits[0].signal.aborted, true);
+  assert.deepEqual(h.state.replies, [receipt]); assert.equal(h.state.players.length, 1); assert.equal(h.status(), 'speaking');
+  pending.resolve({ ...voiceResult, audio: late.audio }); await tick(); assert.equal(late.state.cancelled, 1);
+  assert.deepEqual(h.state.replies, [receipt]);
+  h.state.players[0].onEnd(); assert.equal(h.status(), 'listening'); assert.equal(h.state.microphoneRequested, 1);
+  t.mock.timers.tick(600_000); await tick(); assert.equal(reconciliations.length, 1); h.call.dispose();
+});
+
+test('a failed guided save reads its canonical question once without repeating the mutation or using replacement speech', async () => {
+  let reconciled = 0;
+  const question = { ...voiceResult, reply: { ...voiceResult.reply, message: 'What is the work date?' } };
+  const h = harness({ submit: () => Promise.reject(new Error('409 job changed')), reconcile: async () => { reconciled++; return question; } });
+  try {
+    await h.call.start(); h.speak(); await tick();
+    assert.equal(h.state.submits.length, 1); assert.equal(reconciled, 1); assert.deepEqual(h.state.replies, [question]);
+    assert.equal(h.state.players.length, 1); assert.equal(h.state.players[0].audio, question.audio);
+    assert.equal(h.status(), 'speaking'); assert.equal(h.state.microphoneRequested, 1);
+    h.state.players[0].onEnd(); assert.equal(h.status(), 'listening');
+  } finally { h.call.dispose(); }
+  const failed = harness({ submit: () => Promise.reject(new Error('409 job changed')), reconcile: () => { reconciled++; return Promise.reject(new Error('Recovery unavailable')); } });
+  try { await failed.call.start(); failed.speak(); await tick(); assert.equal(reconciled, 2); assert.equal(failed.status(), 'recovering'); assert.equal(failed.state.submits.length, 1); }
+  finally { failed.call.dispose(); }
+});
+
+test('receipt reconciliation is bounded, does not loop and honours hang-up or mute', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const action of ['timeout', 'hangup', 'mute']) {
+    const request = deferred(), recovery = deferred(), late = greetingPcm(), reconciliations = [];
+    const h = harness({ request, reconcile: signal => { reconciliations.push(signal); return recovery.promise; } });
+    await h.call.start(); h.speak(); t.mock.timers.tick(75_000); await tick();
+    assert.equal(reconciliations.length, 1);
+    if (action === 'hangup') h.call.hangUp();
+    else if (action === 'mute') h.call.toggleMute();
+    t.mock.timers.tick(75_000); await tick();
+    assert.equal(h.status(), action === 'hangup' ? 'ended' : action === 'mute' ? 'muted' : 'recovering');
+    recovery.resolve({ ...voiceResult, audio: late.audio }); await tick();
+    assert.equal(late.state.cancelled, 1); assert.equal(h.state.players.length, 0);
+    assert.equal(h.state.submits.length, 1); assert.equal(reconciliations.length, 1);
+    assert.equal(h.state.microphoneRequested, 1); h.call.dispose();
+  }
+});
+
+test('a timed out greeting begins listening and cannot play a late greeting over the user', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const greeting = deferred(), late = greetingPcm(), h = harness({ greeting });
+  const start = h.call.start(); await tick(); assert.equal(h.status(), 'connecting');
+  t.mock.timers.tick(75_000); await start;
+  assert.equal(h.status(), 'listening'); assert.equal(h.state.greetings[0].signal.aborted, true);
+  greeting.resolve(late.audio); await tick(); assert.equal(late.state.cancelled, 1);
+  assert.equal(h.state.players.length, 0); h.speak(); await tick(); assert.equal(h.status(), 'speaking');
+  assert.equal(h.state.microphoneRequested, 1); h.call.dispose();
+});
+
+test('a stalled PCM stream cancels its transport and performs at most one receipt reconciliation', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let canceled = 0, reconciled = 0;
+  const audio = { mimeType: 'audio/pcm', stream: new ReadableStream({ cancel() { canceled++; } }) };
+  const h = harness({ submit: async () => ({ ...voiceResult, audio }), reconcile: async () => { reconciled++; return voiceResult; } });
+  await h.call.start(); h.speak(); await tick();
+  const old = h.state.players[0], reader = old.audio.stream.getReader();
+  const stalledRead = assert.rejects(reader.read(), /connection stopped responding/);
+  await tick(); t.mock.timers.tick(19_999); await tick(); assert.equal(canceled, 0);
+  t.mock.timers.tick(1); await stalledRead; old.onError(); await tick();
+  assert.equal(canceled, 1); assert.equal(reconciled, 1); assert.equal(h.state.players.length, 2);
+  assert.equal(h.state.submits.length, 1); assert.equal(h.state.microphoneRequested, 1);
+  old.onError(); old.onEnd(); t.mock.timers.tick(120_000); await tick();
+  assert.equal(reconciled, 1); assert.equal(h.status(), 'speaking');
+  reader.releaseLock(); h.call.dispose();
+});
+
+test('ongoing PCM progress renews its inactivity window and completion or cancellation clears the watchdog', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const ending of ['complete', 'cancel']) {
+    let source, canceled = 0, reconciled = 0;
+    const audio = { mimeType: 'audio/pcm', stream: new ReadableStream({ start(controller) { source = controller; }, cancel() { canceled++; } }) };
+    const h = harness({ submit: async () => ({ ...voiceResult, audio }), reconcile: async () => { reconciled++; return voiceResult; } });
+    await h.call.start(); h.speak(); await tick();
+    const reader = h.state.players[0].audio.stream.getReader();
+    for (let index = 0; index < 5; index++) {
+      const next = reader.read(); await tick(); t.mock.timers.tick(19_000);
+      source.enqueue(new Uint8Array([index, 0])); assert.deepEqual((await next).value, new Uint8Array([index, 0]));
+    }
+    const final = reader.read(); await tick();
+    if (ending === 'complete') source.close(); else await reader.cancel();
+    assert.equal((await final).done, true); reader.releaseLock();
+    t.mock.timers.tick(120_000); await tick(); assert.equal(reconciled, 0);
+    assert.equal(canceled, ending === 'cancel' ? 1 : 0); h.call.dispose();
+  }
+});
+
 test('a failed first turn preserves the call and a new spoken turn can succeed without resending or reopening media', async () => {
   const h = harness({ submit: (_audio, _signal, attempt) => attempt === 1 ? Promise.reject(new Error('Reply temporarily unavailable.')) : Promise.resolve(voiceResult) });
   await h.call.start(); h.speak(); await tick();
@@ -452,7 +696,7 @@ test('failed replies recover without creating playback and a valid next turn suc
   assert.ok(h.state.statuses.every(status => !status.message.includes("private-failure-detail")));
   assert.ok(h.state.statuses.filter(status => status.state === "recovering").every(status => status.message === "No spoken reply was completed. Your call is still connected and listening."));
   assert.equal(h.state.players.length, 0); assert.equal(h.state.microphoneMuted, false); assert.equal(h.state.microphoneRequested, 1);
-  assert.equal(h.state.microphoneClosed, 0); assert.equal(h.state.recorderCount, 2); assert.equal(h.state.timers.size, 1);
+  assert.equal(h.state.microphoneClosed, 0); assert.equal(h.state.recorderCount, 3); assert.equal(h.state.timers.size, 1);
   h.speak(); await tick(); assert.equal(h.status(), 'speaking'); assert.equal(h.state.replies.length, 1);
   assert.equal(h.state.players.length, 1); assert.equal(h.state.players[0].audio, voiceResult.audio); h.call.dispose();
 });
@@ -470,13 +714,13 @@ test('late failure from old playback cannot restart capture or interrupt the nex
   const playbackWait = deferred(), h = harness({ playbackWait }); await h.call.start(); h.speak(); await tick();
   const oldPlayer = h.state.players[0]; oldPlayer.onError();
   assert.equal(h.status(), 'recovering'); assert.equal(h.state.players.length, 1); assert.equal(h.state.playbackClosed, 1);
-  assert.equal(h.state.recorderCount, 2); assert.equal(h.state.timers.size, 1);
+  assert.equal(h.state.recorderCount, 3); assert.equal(h.state.timers.size, 1);
   h.speak(); await tick(); assert.equal(h.state.players.length, 2); assert.equal(h.status(), 'thinking');
   playbackWait.resolve(); await tick(); assert.equal(h.status(), 'speaking');
   const statusCount = h.state.statuses.length;
   oldPlayer.onEnd(); oldPlayer.onError(); h.sample(8000, .1);
   assert.equal(h.status(), 'speaking'); assert.equal(h.state.statuses.length, statusCount);
-  assert.equal(h.state.players.length, 2); assert.equal(h.state.recorderCount, 2); assert.equal(h.state.submits.length, 2);
+  assert.equal(h.state.players.length, 2); assert.equal(h.state.recorderCount, 4); assert.equal(h.state.submits.length, 2);
   assert.equal(h.state.timers.size, 0); assert.equal(h.state.microphoneClosed, 0); h.call.dispose();
 });
 
@@ -485,7 +729,7 @@ test('a late startup rejection after a streaming error resumes capture only once
   const player = h.state.players[0]; player.onError(); assert.equal(h.status(), 'recovering');
   playbackWait.reject(new Error('Late stream failure.')); await tick(); player.onEnd(); player.onError();
   assert.equal(h.status(), 'recovering'); assert.equal(h.state.players.length, 1); assert.equal(h.state.playbackClosed, 1);
-  assert.equal(h.state.recorderCount, 2); assert.equal(h.state.replies.length, 1); assert.equal(h.state.microphoneClosed, 0); h.call.dispose();
+  assert.equal(h.state.recorderCount, 3); assert.equal(h.state.replies.length, 1); assert.equal(h.state.microphoneClosed, 0); h.call.dispose();
 });
 
 test('workspace cancellation during quiet recovery leaves no microphone, capture or timer', async () => {
@@ -493,31 +737,31 @@ test('workspace cancellation during quiet recovery leaves no microphone, capture
   options.onStatus = value => { if (value.state === 'recovering') h.call.dispose(); };
   await h.call.start(); h.speak(); await tick(); h.sample(600000);
   assert.equal(h.state.playbackClosed, 0); assert.equal(h.state.players.length, 0); assert.equal(h.state.microphoneClosed, 1);
-  assert.equal(h.state.recorderCount, 1); assert.equal(h.state.submits.length, 1); assert.equal(h.state.timers.size, 0);
+  assert.equal(h.state.recorderCount, 2); assert.equal(h.state.submits.length, 1); assert.equal(h.state.timers.size, 0);
 });
 
 test('muting while a turn fails preserves mute and requires explicit unmute before capture resumes', async () => {
   const request = deferred(), h = harness({ request }); await h.call.start(); h.speak(); h.call.toggleMute();
   request.reject(new Error('Reply unavailable.')); await tick(); assert.equal(h.status(), 'muted');
   assert.equal(h.state.players.length, 0); assert.equal(h.state.microphoneClosed, 0); assert.equal(h.state.timers.size, 0);
-  assert.equal(h.state.recorderCount, 1); assert.equal(h.state.microphoneMuted, true);
-  h.call.toggleMute(); assert.equal(h.status(), 'recovering'); assert.equal(h.state.recorderCount, 2); h.call.dispose();
+  assert.equal(h.state.recorderCount, 2); assert.equal(h.state.microphoneMuted, true);
+  h.call.toggleMute(); assert.equal(h.status(), 'recovering'); assert.equal(h.state.recorderCount, 3); h.call.dispose();
 });
 
 test('muting during recovery status never reactivates capture', async () => {
   const options = { submit: () => Promise.reject(new Error('Reply unavailable.')) }, h = harness(options);
   options.onStatus = value => { if (value.state === 'recovering') { options.onStatus = undefined; h.call.toggleMute(); } };
   await h.call.start(); h.speak(); await tick();
-  assert.equal(h.status(), 'muted'); assert.equal(h.state.microphoneMuted, true); assert.equal(h.state.recorderCount, 1);
+  assert.equal(h.status(), 'muted'); assert.equal(h.state.microphoneMuted, true); assert.equal(h.state.recorderCount, 2);
   assert.equal(h.state.players.length, 0); assert.equal(h.state.microphoneClosed, 0); assert.equal(h.state.timers.size, 0);
-  h.call.toggleMute(); assert.equal(h.status(), 'recovering'); assert.equal(h.state.recorderCount, 2); h.call.dispose();
+  h.call.toggleMute(); assert.equal(h.status(), 'recovering'); assert.equal(h.state.recorderCount, 3); h.call.dispose();
 });
 
 test('hang-up during recovery status closes media and prevents capture from restarting', async () => {
   const options = { submit: () => Promise.reject(new Error('Reply unavailable.')) }, h = harness(options);
   options.onStatus = value => { if (value.state === 'recovering') h.call.hangUp(); };
   await h.call.start(); h.speak(); await tick(); h.sample(600000);
-  assert.equal(h.status(), 'ended'); assert.equal(h.state.microphoneClosed, 1); assert.equal(h.state.recorderCount, 1);
+  assert.equal(h.status(), 'ended'); assert.equal(h.state.microphoneClosed, 1); assert.equal(h.state.recorderCount, 2);
   assert.equal(h.state.players.length, 0); assert.equal(h.state.timers.size, 0); assert.equal(h.state.submits.length, 1);
 });
 

@@ -533,9 +533,22 @@ async function freezeNewGuidedWorkflow(request: Request, authority: WattzunTurnA
   if (!/^[A-Za-z0-9_-]{16,100}$/.test(requestId)) throw new WattzunWorkflowError(400, "Start a fresh action request.");
   const access = authority.access, team = requireWattzunTurnTeam(authority); permissions(team, proposal);
   const reviewId = `wr_${(await hash([access.scope.scopeId, access.actorUid, requestId])).slice(0, 48)}`;
-  const previous = await access.db.prepare("SELECT id FROM admin_audit_log WHERE id=?").bind(reviewId).first<Row>();
-  if (previous) return null; // Existing/replayed reviews retain their strict preparation path.
-  const prepared = await buildPrepared(request, access, team, proposal, reviewId, new Date(deps.now() + 15 * 60_000).toISOString(), deps, true, input, reference);
+  const previous = access.db.prepare("SELECT id FROM admin_audit_log WHERE id=?").bind(reviewId).first<Row>();
+  const prepare = () => buildPrepared(request, access, team, proposal, reviewId, new Date(deps.now() + 15 * 60_000).toISOString(), deps, true, input, reference);
+  let prepared: Awaited<ReturnType<typeof buildPrepared>>;
+  if (reference.formKind === "job_form") {
+    // The canonical supporting-form projection is SELECT-only. Overlap these
+    // independent reads; a replay still takes precedence over a stale question.
+    const [existing, candidate] = await Promise.allSettled([previous, prepare()]);
+    if (existing.status === "rejected") throw existing.reason;
+    if (existing.value) return null;
+    if (candidate.status === "rejected") throw candidate.reason;
+    prepared = candidate.value;
+  } else {
+    // Governed loaders may install schema guards. Keep replay lookup first.
+    if (await previous) return null;
+    prepared = await prepare();
+  }
   if ("state" in prepared) throw new WattzunGuidedFormValidationError(409, "The current answer could not be prepared. Repeat the question to continue.");
   if (prepared.sourceSha256 !== input.sourceSha256) throw new WattzunGuidedFormValidationError(409, "This form changed before the answer could be saved. Use its current question.");
   request.signal.throwIfAborted();

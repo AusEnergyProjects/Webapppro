@@ -1,6 +1,7 @@
 import type { WattzunAccess } from "./wattzun-portal-access-server.ts";
 import type { TeamAccess, AssignedTradeJob } from "./trade-team-server.ts";
 import type { TradeJobFormProjection, saveTradeJobForm } from "./trade-job-forms-server.ts";
+import type { FormJobProgress } from "./trade-form-job-progress.ts";
 import type { ActivityRecord, ActivityAnswers } from "./trade-activity-form-types.ts";
 import type { PiesaRecord } from "./veu-electrical-assessment.ts";
 import type { PiesaMutationReceipt } from "./trade-veu-electrical-assessment-server.ts";
@@ -91,6 +92,7 @@ export type WattzunFormDependencies = {
   job(access: TeamAccess, jobId: string): Promise<Job>;
   selectedJobForm(access: TeamAccess, jobId: string, formId: string): Promise<{ job: Job; form: TradeJobFormProjection }>;
   saveJobForm: typeof saveTradeJobForm;
+  startFormWork(access: TeamAccess, jobId: string): Promise<FormJobProgress>;
   loadActivity(access: TeamAccess, id: string): Promise<ActivityRecord>;
   saveActivity(access: TeamAccess, id: string, revision: number, answers: ActivityAnswers): Promise<ActivityRecord>;
   loadPack(db: D1Database, input: CreditexWorkPackTradeScope & { caseInstanceId: string }): Promise<CreditexAssignedActivityWorkPackProjection>;
@@ -110,6 +112,7 @@ const defaults: WattzunFormDependencies = {
   job: async (access, id) => (await import("./trade-team-server.ts")).assignedJob(access, id),
   selectedJobForm: async (team, jobId, formId) => (await import("./trade-job-forms-server.ts")).readSelectedTradeJobForm(team, jobId, formId),
   saveJobForm: async (team, job, input, signal) => (await import("./trade-job-forms-server.ts")).saveTradeJobForm(team, job, input, signal),
+  startFormWork: async (team, jobId) => (await import("./trade-form-job-progress.ts")).reconcileTradeFormJobProgress(team, jobId, { startOnly: true }),
   loadActivity: async (access, id) => (await import("./trade-activity-forms-server.ts")).loadActivityRecord(access, id),
   saveActivity: async (access, id, revision, answers) => (await import("./trade-activity-forms-server.ts")).saveActivityAnswers(access, id, revision, answers),
   loadPack: async (db, input) => (await import("./creditex-activity-work-pack-server.ts")).loadAssignedCreditexActivityWorkPack(db, input),
@@ -499,8 +502,23 @@ function assertGuideSource(snapshot: Snapshot, raw: WattzunFormGuideInput): Watt
   return input;
 }
 export async function loadWattzunFormGuideForTurn(request: Request, access: WattzunAccess, reference: Reference, input: WattzunFormGuideInput, team: TeamAccess, deps: WattzunFormDependencies = defaults): Promise<{ context: WattzunWorkContext; guide: WattzunFormGuideProgress }> {
-  const { snapshot } = await load(request, access, reference, true, deps, team);
-  const checked = assertGuideSource(snapshot, input), guide = await hydrateGuideProducts(access, snapshot, guideProgress(snapshot, checked), checked, team, deps);
+  let { snapshot } = await load(request, access, reference, true, deps, team);
+  const checked = assertGuideSource(snapshot, input);
+  if (checked.stage === "start" && !checked.paused && reference.formKind === "job_form" && snapshot.editable) {
+    // Starting guided editing also starts its canonical job progress. Finish that
+    // transition before asking an answer so background timing cannot race its save.
+    request.signal.throwIfAborted();
+    const progress = await canonicalCall(() => deps.startFormWork(team, reference.jobId));
+    request.signal.throwIfAborted();
+    ({ snapshot } = await load(request, access, reference, true, deps, team));
+    const denied = progress.blockers.find(blocker => blocker.key === "access" || blocker.key === "training");
+    if (progress.pending || denied || !snapshot.editable || snapshot.job.stage !== "in_progress") {
+      const blocker = denied ?? progress.blockers[0];
+      throw new WattzunFormError(blocker?.key === "access" || blocker?.key === "training" ? 403 : 409,
+        blocker?.label || "This job changed before the form guide started. Open its current form before continuing.");
+    }
+  }
+  const guide = await hydrateGuideProducts(access, snapshot, guideProgress(snapshot, checked), checked, team, deps);
   return { context: contextForSnapshot(snapshot, guide), guide };
 }
 export async function controlWattzunFormGuideForTurn(request: Request, access: WattzunAccess, reference: Reference, input: WattzunFormGuideInput, control: WattzunFormGuideControl, team: TeamAccess, deps: WattzunFormDependencies = defaults): Promise<{ context: WattzunWorkContext; guide: WattzunFormGuideProgress }> {

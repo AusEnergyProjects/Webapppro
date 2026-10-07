@@ -74,6 +74,12 @@ const fixtures = {
         try {const result=await request(new AbortController().signal);this.callbacks.reply(result);if(result.audio.mimeType==='audio/pcm')await result.audio.stream.cancel();this.callbacks.played?.(result.audio);this.resume();}
         catch(error){this.requestFailed(error);}return true;
       }
+      async transportTimeout() {
+        const result=await this.callbacks.reconcile(new AbortController().signal);
+        if(!result)return false;
+        this.callbacks.reply(result);if(result.audio.mimeType==='audio/pcm')await result.audio.stream.cancel();
+        this.callbacks.played?.(result.audio);window.wattzunFixtureDeliveredReplies.push(result.reply);this.resume();return true;
+      }
       toggleMute() { this.muted=!this.muted; this.callbacks.status({state:this.muted?'muted':'listening',message:this.muted?'Microphone muted.':'Listening for your question.'}); }
       hangUp() { window.wattzunFixtureCounters.hungUp++; this.callbacks.status({state:'ended',message:'Call ended.'}); }
       dispose() { window.wattzunFixtureCounters.disposed++; }
@@ -823,6 +829,46 @@ test('a lost guided answer retains the exact pending request for read-only recov
     await page.evaluate(()=>window.wattzunFixtureCall.question());
     assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.at(-1).body.formGuide.pendingRequestId),undefined);
     assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+  } finally {await browser.close();}
+});
+
+test('transport timeout reconciliation reads the exact guided receipt without replaying the answer',{skip:!browserPath&&'No installed browser for guided recovery'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1)]});
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
+    await page.getByText('Listening',{exact:true}).waitFor();
+    await page.evaluate(()=>{window.wattzunFixtureFailures={'/api/wattzun/voice':{network:true,message:'Synthetic response lost'}};});
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    const lost=await page.evaluate(()=>window.wattzunFixtureRequests.at(-1).body.requestId);
+    await page.evaluate(reply=>{window.wattzunFixtureFailures={};window.wattzunFixtureGuideReplies=[reply];},guidedReply(2,'question',{saved:true}));
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureCall.transportTimeout()),true);
+    const requests=await page.evaluate(()=>window.wattzunFixtureRequests);
+    const recovered=requests.at(-1);
+    assert.equal(recovered.url,'/api/wattzun/form-guide');assert.equal(recovered.body.formGuide.pendingRequestId,lost);
+    assert.equal(recovered.body.formGuide.stage,'resume');
+    assert.equal(requests.filter(item=>item.url==='/api/wattzun/voice').length,1,'The audio answer is never sent twice');
+    assert.equal(requests.filter(item=>item.url==='/api/wattzun/workflows').length,0,'Recovery performs no workflow mutation');
+    await page.getByRole('region',{name:'Guided form completion'}).getByText('What is the serial number?',{exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureDeliveredReplies.at(-1).questions),['What is the serial number?']);
+    await page.evaluate(reply=>{window.wattzunFixtureGuideReplies=[reply];},guidedReply(2));
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureCall.transportTimeout()),true,'A stalled question can reread its canonical step after the receipt was acknowledged');
+    const repeated=await page.evaluate(()=>window.wattzunFixtureRequests.at(-1));
+    assert.equal(repeated.url,'/api/wattzun/form-guide');assert.equal(repeated.body.formGuide.pendingRequestId,undefined);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url==='/api/wattzun/voice').length),1);
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+  } finally {await browser.close();}
+});
+
+test('receipt reconciliation cannot retry an unestablished guide start',{skip:!browserPath&&'No installed browser for guided recovery'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureFailures:{'/api/wattzun/form-guide':{network:true,message:'Synthetic start response lost'}}});
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
+    await page.waitForFunction(()=>window.wattzunFixtureErrors.length===1);
+    const before=await page.evaluate(()=>window.wattzunFixtureRequests.length);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureCall.transportTimeout()),false);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.length),before,'An unknown guide start must not repeat its mutation');
   } finally {await browser.close();}
 });
 

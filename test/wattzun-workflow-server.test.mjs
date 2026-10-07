@@ -422,6 +422,63 @@ test('new guided insertion validates its returned persisted row and retains the 
   assert.equal(f.calls.length, 1, 'Final journal and canonical receipt verification never repeats the business save');
 });
 
+test('new guided preparation overlaps its journal lookup while still waiting for both reads before any write', async () => {
+  const f = await guidedWorkflowFixture(), input = await f.currentInput(), originalPrepare = f.db.prepare;
+  let releaseJournal, enteredJournal, prepared = false;
+  const held = new Promise(resolve => { releaseJournal = resolve; });
+  const started = new Promise(resolve => { enteredJournal = resolve; });
+  const prepareForm = f.deps.prepareGuidedForm;
+  f.deps.prepareGuidedForm = async (...args) => { prepared = true; return prepareForm(...args); };
+  f.db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    if (sql !== 'SELECT id FROM admin_audit_log WHERE id=?') return statement;
+    return { ...statement, bind(...values) {
+      const bound = statement.bind(...values);
+      return { ...bound, async first() { enteredJournal(); await held; return bound.first(); } };
+    } };
+  };
+  const saving = f.executeGuided(f.proposal, input, 'guided-concurrent-reads-0001');
+  try {
+    await started; await new Promise(resolve => setImmediate(resolve));
+    assert.equal(prepared, true, 'Source preparation starts while the independent journal read is pending');
+    assert.equal(f.calls.length, 0);
+    assert.equal(f.database.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 0);
+  } finally { releaseJournal(); }
+  assert.equal((await saving).result.receipt.status, 'saved'); assert.equal(f.calls.length, 1);
+});
+
+test('guided replay uses its original receipt when concurrent new preparation rejects the stale question', async () => {
+  const f = await guidedWorkflowFixture(), input = await f.currentInput(), requestId = 'guided-concurrent-replay-0001';
+  const first = await f.executeGuided(f.proposal, input, requestId);
+  f.deps.prepareGuidedForm = async () => { throw new formHelper.WattzunFormError(409, 'The original question is now answered.'); };
+  const replay = await f.executeGuided(f.proposal, input, requestId);
+  assert.deepEqual(replay.result, first.result); assert.equal(f.calls.length, 1);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 1);
+});
+
+test('failed guided journal lookup never creates a review or dispatches a prepared form answer', async () => {
+  const f = await guidedWorkflowFixture(), input = await f.currentInput(), originalPrepare = f.db.prepare;
+  f.db.prepare = sql => sql === 'SELECT id FROM admin_audit_log WHERE id=?'
+    ? { bind: () => ({ first: async () => { throw new Error('Journal unavailable'); } }) } : originalPrepare(sql);
+  await assert.rejects(f.executeGuided(f.proposal, input, 'guided-concurrent-read-fail-0001'), /Journal unavailable/);
+  assert.equal(f.calls.length, 0); assert.equal(f.saved.revision, 1);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 0);
+});
+
+test('governed preparation keeps journal lookup first because its canonical loaders can install schema guards', async () => {
+  const f = await governedWorkflowFixture(), { guide } = await f.progress(), originalPrepare = f.db.prepare;
+  const input = { ...f.session, productSearch: guide.productSearch, stage: 'continue', sourceSha256: guide.sourceSha256, questionKey: guide.next.fieldKey };
+  let prepared = 0;
+  const prepareStep = f.deps.prepareTurnFormStep;
+  f.deps.prepareTurnFormStep = async (...args) => { prepared++; return prepareStep(...args); };
+  f.db.prepare = sql => sql === 'SELECT id FROM admin_audit_log WHERE id=?'
+    ? { bind: () => ({ first: async () => { throw new Error('Journal unavailable'); } }) } : originalPrepare(sql);
+  await assert.rejects(workflowModule.executeWattzunGuidedFormForTurn(f.request, f.initial, f.reference,
+    f.proposal, input, 'guided-governed-serial-read-0001', 'Use X1', f.deps), /Journal unavailable/);
+  assert.equal(prepared, 0); assert.equal(f.calls.length, 0);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 0);
+});
+
 test('a malformed or differently bound INSERT RETURNING review never reaches the guided mutation', async () => {
   for (const change of [
     row => ({ ...row, id: `wr_${'f'.repeat(48)}` }),

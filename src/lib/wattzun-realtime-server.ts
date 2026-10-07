@@ -557,7 +557,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
         output: { format: { type: "audio/pcm", rate: 24_000 }, voice: WATTZUN_BRAND_VOICE, speed: preferences.speed } },
       max_output_tokens: PROPOSAL_TOKENS,
       reasoning: { effort: "low" }, parallel_tool_calls: false,
-      tools: [{ type: "function", name: TOOL, description: "Submit one complete six-field reply proposal: message, questions, linkIds, action, lookup, requestSummary. Include unused arrays/nulls. Required for every answer, clarification and scope reminder. This read-only function validates proposals; it cannot save or send. Do not respond with a text message.", parameters: schema }],
+      tools: [{ type: "function", name: TOOL, description: "Submit one complete six-field reply proposal: message, questions, linkIds, action, lookup, requestSummary. Include unused arrays/nulls. Required for every answer, clarification and scope reminder. The application validates and executes proposed actions under the current user's authorisation, including ordinary answers in an authorised guided form. Claim a saved or sent result only from its verified receipt. Do not respond with a text message.", parameters: schema }],
       tool_choice: REPLY_TOOL_CHOICE,
     } });
     const configuration = await configured;

@@ -217,6 +217,8 @@ export async function saveTradeJobForm(access: TeamAccess, job: AssignedTradeJob
     updatedAt: now,
     workOrderId,
   });
-  const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
+  // A draft remains an unfinished requirement. Only actual completion needs the
+  // full job-completion projection; ordinary answers can start work safely.
+  const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true, startOnly: !complete });
   return { jobProgress };
 }
