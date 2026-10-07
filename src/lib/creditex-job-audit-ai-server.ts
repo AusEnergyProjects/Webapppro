@@ -25,7 +25,8 @@ The source is limited to submitted answers, case requirement descriptions, exist
 Do not invent requirements or regulatory facts. A missing filename match is not proof that evidence is missing. Unknowns must remain unknown. Do not restate an existing open finding as a new one.
 Offer concise correction wording only where supported by cited facts. You cannot verify compliance, approve an audit, close findings, send messages or submit claims. Human review remains required. Return at most 12 useful items, or an empty items array when no supported concern is apparent. Do not call the job compliant or approved.`;
 
-function sourceInput(workspace: CreditexJobAuditWorkspace) {
+/** The sole model-facing audit projection: structured answers and authorised metadata only. */
+export function creditexAuditAiSources(workspace: CreditexJobAuditWorkspace) {
   const sources: Array<{ source: CreditexAuditAiSource; value: unknown }> = [
     { source: { id: 'job', kind: 'job', label: 'Activity details' }, value: { activity: workspace.target.activityTitle, activityDate: workspace.target.activityDate } },
   ];
@@ -53,7 +54,7 @@ function checkedText(value: unknown, maximum: number, required = false): string 
   if (typeof value !== 'string' || value.length > maximum || (required && !value.trim())) return invalidResponse();
   return value.trim();
 }
-function checkedReview(value: unknown, sources: ReturnType<typeof sourceInput>): Pick<CreditexAuditAiReview, 'summary' | 'items'> {
+function checkedReview(value: unknown, sources: ReturnType<typeof creditexAuditAiSources>): Pick<CreditexAuditAiReview, 'summary' | 'items'> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return invalidResponse();
   const result = Object.fromEntries(Object.entries(value));
   if (!Array.isArray(result.items) || result.items.length > 12) return invalidResponse();
@@ -81,14 +82,14 @@ export async function prepareCreditexAuditAiReview(db: D1Database, actor: Credit
   const workspace = await loadCreditexJobAudit(db, actor, input.intentId);
   if (!workspace.capabilities.canSave) throw new CreditexJobAuditError('AUDIT_PERMISSION_REQUIRED', 'Active audit permission is required for AI assistance.', 403);
   if (workspace.sourceSha256 !== input.expectedSourceSha256) throw new CreditexJobAuditError('AUDIT_SOURCE_CHANGED', 'The evidence changed. Refresh before requesting AI assistance.');
-  const sources = sourceInput(workspace), snapshot = JSON.stringify(sources);
+  const sources = creditexAuditAiSources(workspace), snapshot = JSON.stringify(sources);
   if (new TextEncoder().encode(snapshot).byteLength > 55000) throw new CreditexJobAuditError('AUDIT_AI_INPUT_LIMIT', 'This record exceeds the AI review limit. Continue with the manual audit.', 413);
   const sourceDigest = createHash('sha256').update(snapshot).digest('hex');
   const result = await requestWorkflowAi({ db, actorUid: actor.uid, scopeUid: actor.organisationId, requestId: input.requestId,
     name: 'creditex_audit_pre_review', instructions, input: { limitation: 'Structured answers and metadata only; no file contents are supplied.', sources }, schema });
   const latest = await loadCreditexJobAudit(db, actor, input.intentId);
   if (!latest.capabilities.canSave) throw new CreditexJobAuditError('AUDIT_PERMISSION_REQUIRED', 'Your audit permission changed. AI suggestions were discarded.', 403);
-  if (latest.sourceSha256 !== workspace.sourceSha256 || createHash('sha256').update(JSON.stringify(sourceInput(latest))).digest('hex') !== sourceDigest)
+  if (latest.sourceSha256 !== workspace.sourceSha256 || createHash('sha256').update(JSON.stringify(creditexAuditAiSources(latest))).digest('hex') !== sourceDigest)
     throw new CreditexJobAuditError('AUDIT_SOURCE_CHANGED', 'The evidence changed while AI was reviewing it. Suggestions were discarded. Refresh and review the current record.');
   return { ...checkedReview(result, sources), sourceSha256: workspace.sourceSha256, createdAt: new Date().toISOString() };
 }

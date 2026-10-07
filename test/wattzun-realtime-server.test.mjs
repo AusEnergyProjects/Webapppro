@@ -8,6 +8,7 @@ import { Miniflare } from "miniflare";
 import * as portal from "../src/lib/wattzun-portal.ts";
 import * as guide from "../src/lib/wattzun-portal-guide.ts";
 import { SURGE_USAGE_GUARD_ENV } from "../src/lib/energy-assistant-usage-guard.ts";
+import { syntheticWorkContext, workContextContract } from "./helpers/wattzun-work-context-fixture.mjs";
 
 const KEY = "fixture-key-never-real";
 const answer = { message: "Open Schedule to review your visits.", questions: [], linkIds: ["trade_schedule"], action: null, lookup: null };
@@ -96,6 +97,7 @@ function fixture(options = {}) {
     "cloudflare:workers": cloudflare, "node:buffer": { Buffer }, "./energy-assistant-usage-guard": guard,
     "./workflow-ai-server": workflow, "./wattzun-actions": actions, "./wattzun-records": records,
     "./wattzun-portal": portal, "./wattzun-portal-guide": guide,
+    "./wattzun-work-context": workContextContract, "./wattzun-work-context.ts": workContextContract,
   }, { process: { env: { NODE_ENV: "test" } } });
   const server = compile("wattzun-realtime-server", {
     "cloudflare:workers": cloudflare, "node:buffer": { Buffer }, "./energy-assistant-usage-guard": guard,
@@ -121,6 +123,49 @@ async function bytes(stream) {
   while (true) { const chunk = await reader.read(); if (chunk.done) break; chunks.push(...chunk.value); }
   return chunks;
 }
+
+test("native reasoning receives the same selected facts and source contract before narration", async () => {
+  const workContext = syntheticWorkContext();
+  const grounded = { ...answer, message: "Confirm the saved inspection checklist against your site observations.", linkIds: ["trade_job_overview"] };
+  const f = fixture({ reply: grounded }), options = request({ workContext });
+  options.input.workReference = workContext.reference;
+  let approvals = 0;
+  options.beforeSpeech = async () => { approvals++; };
+  const prepared = await f.prepareWattzunRealtimeTurn(options);
+  await bytes(prepared.audio);
+  const sentContext = JSON.parse(f.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text);
+  assert.deepEqual(sentContext.workContext, { title: workContext.title, facts: workContext.facts, sources: workContext.sources, limitations: workContext.limitations });
+  const session = f.socket.sent.find(event => event.type === "session.update").session;
+  assert.ok(session.tools[0].parameters.properties.linkIds.items.enum.includes("trade_job_overview"));
+  assert.deepEqual(session.reasoning, { effort: "low" });
+  assert.equal(approvals, 1);
+  assert.deepEqual(prepared.reply.links, workContext.sources.map(({ label, href }) => ({ label, href })));
+  const narration = f.socket.sent.filter(event => event.type === "response.create")[1].response;
+  assert.equal(narration.input[0].content[0].text, grounded.message);
+  assert.doesNotMatch(JSON.stringify(narration), /switchboard|operationalStage|trade_job_overview/);
+  assert.equal(f.released(), 1);
+});
+
+test("native selected-source revocation at beforeSpeech releases its reservation and never starts audio", async () => {
+  const workContext = syntheticWorkContext(), f = fixture();
+  const revoked = new workContextContract.WattzunWorkContextError(409, "Selected job changed.");
+  const options = request({ workContext, beforeSpeech: async () => { throw revoked; } });
+  options.input.workReference = workContext.reference;
+  await assert.rejects(f.prepareWattzunRealtimeTurn(options), error => error === revoked);
+  assert.equal(f.socket.sent.filter(event => event.type === "response.create" && event.response.output_modalities[0] === "audio").length, 0);
+  assert.equal(f.released(), 1); assert.equal(f.socket.closes.length, 1);
+});
+
+test("native foreign or oversized context is rejected before reservation and provider connection", async () => {
+  const workContext = syntheticWorkContext();
+  for (const invalid of [undefined, { ...workContext, reference: { kind: "creditex_audit", recordId: "foreign-case" } },
+    { ...workContext, facts: { oversized: "界".repeat(9000) } }]) {
+    const f = fixture(), options = request({ workContext: invalid });
+    options.input.workReference = workContext.reference;
+    await assert.rejects(f.prepareWattzunRealtimeTurn(options), safeError);
+    assert.equal(f.reservations.length, 0); assert.equal(f.calls.length, 0);
+  }
+});
 
 test("native speech uses one reservation, the shared forced reply tool and only validated text for audio", async () => {
   const f = fixture(), options = request();

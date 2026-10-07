@@ -12,16 +12,21 @@ import styles from "./WattzunToolsWorkspace.module.css";
 const portalNames: Record<WattzunPortal, string> = { trade: "TLink", council: "Council", creditex: "Creditex" };
 const suggestions: Record<WattzunPortal, { title: string; message: string }[]> = {
   trade: [
+    { title: "A brief from your actual job", message: "Show me how to select a job with Ask Wattzun, then summarise its saved scope, checklist and next steps." },
     { title: "Quotes and follow-ups", message: "Help me prepare a quote. What details do you need from me?" },
+    { title: "Customer follow-up", message: "Help me draft a clear customer follow-up for the job I select. Keep known facts and missing information separate." },
     { title: "Forms and onsite work", message: "Help me create a business form for a site visit. What should I tell you first?" },
     { title: "Find a feature", message: "What can you help me do in TLink, and where do I find those features?" },
   ],
   council: [
+    { title: "Explain this Council report", message: "Show me where to open Reports & insights and select Ask Wattzun to explain the figures, coverage and next steps." },
     { title: "Campaigns and events", message: "Help me plan a council campaign. What information do you need?" },
     { title: "Reports and community progress", message: "Help me understand the council reports and where to find community progress." },
     { title: "Find a feature", message: "What can you help me do in the Council workspace?" },
   ],
   creditex: [
+    { title: "Help with the selected audit", message: "Show me how to open a job audit and choose Ask Wattzun to review saved answers, evidence metadata and supported gaps." },
+    { title: "Correction wording", message: "Help me draft neutral correction wording for the audit I select. Separate recorded evidence, possible gaps and questions for the reviewer." },
     { title: "Audit preparation", message: "Help me prepare for an audit review. What details do you need?" },
     { title: "Forms and evidence", message: "Where can I find the forms and evidence tools in Creditex?" },
     { title: "Find a feature", message: "What can you help me do in the Creditex workspace?" },
@@ -140,8 +145,8 @@ function WattzunToolsControls({ user, scope }: { user: User; scope: WattzunScope
       </section>
       <section className={styles.card} aria-label="Wattzun preferences"><h2>Make yourself comfortable</h2><label className={styles.speed}>Speaking speed<select aria-label="Speaking speed" value={speed} onChange={event => { const value = Number(event.target.value); if (value === 0.85 || value === 1 || value === 1.15) setSpeed(value); }}><option value={0.85}>Slower</option><option value={1}>Normal</option><option value={1.15}>Quicker</option></select></label><p className={styles.caption}>Speed changes apply to his next reply.</p><fieldset className={styles.hats}><legend>Pick his hat or costume</legend><div>{WATTZUN_HATS.map(choice => <button type="button" key={choice.id} aria-pressed={hat === choice.id} onClick={() => setHat(choice.id)}><WattzunMascot hat={choice.id} className={styles.hatPreview} /><span>{choice.label}</span></button>)}</div></fieldset><p className={styles.caption}>Your hat or costume and speed choices are remembered on this device for this workspace when browser settings allow.</p></section>
     </div>
-    <section className={styles.card} aria-label="Ways Wattzun can help"><h2>A useful place to start</h2><p>Choose a prompt to open it in chat. You can edit it before sending.</p><div className={styles.suggestions}>{suggestions[scope.portal].map(suggestion => <button type="button" key={suggestion.title} disabled={opening} onClick={() => void open("message", suggestion.message)}><strong>{suggestion.title}</strong><span>{suggestion.message}</span><span aria-hidden="true">↗</span></button>)}</div></section>
-    <details className={styles.help}><summary>Calling and getting useful answers</summary><p>Calling uses an AI-generated voice and shares your spoken questions with our AI provider. Your microphone is used while the call is open. Minimise to keep working, or choose Hang up to end the call.</p><p>Pauses do not end your call. If a reply does not come through, you can repeat that last part in the same call. Your conversation and review details stay open while you work.</p><p>Give him the task, the details you know and what a finished result should look like. Open the relevant quote, form or audit to use its dedicated assistance. Check important details before saving, sending or acting.</p></details>
+    <section className={styles.card} aria-label="Ways Wattzun can help"><h2>A useful place to start</h2><p>Choose a prompt to open it in chat. You can edit it before sending.</p><p>{scope.portal === "trade" ? "Open a job and choose Ask Wattzun to use its recorded scope and checklist. You can also select Use with Wattzun after finding a job in chat." : scope.portal === "creditex" ? "Open the exact job audit and choose Ask Wattzun to use its saved answers, requirements, evidence metadata and open findings." : "Open Reports & insights, choose the period and select Ask Wattzun to explain the protected figures, coverage and methodology."} Sources and limits appear with the answer. He asks for missing details and drafts next steps for your review.</p><div className={styles.suggestions}>{suggestions[scope.portal].map(suggestion => <button type="button" key={suggestion.title} disabled={opening} onClick={() => void open("message", suggestion.message)}><strong>{suggestion.title}</strong><span>{suggestion.message}</span><span aria-hidden="true">↗</span></button>)}</div></section>
+    <details className={styles.help}><summary>Calling and getting useful answers</summary><p>Calling uses an AI-generated voice and shares your spoken questions with our AI provider. Your microphone is used while the call is open. Minimise to keep working, or choose Hang up to end the call.</p><p>Pauses do not end your call. If a reply does not come through, you can repeat that last part in the same call. Your conversation and review details stay open while you work.</p><p>Give him the task, the details you know and what a finished result should look like. Selecting Ask Wattzun shares the authorised details of that work item with our AI provider for your conversation. File contents and photos are not read. Messages, form answers, schedules and audit decisions still need your review in their workspace. Check important details before saving, sending or acting.</p></details>
   </>;
 }
 

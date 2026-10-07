@@ -12,7 +12,7 @@ const bundle=await build({stdin:{resolveDir:root,loader:'tsx',contents:`
   import React from 'react'; import {createRoot} from 'react-dom/client';
   import {WattzunRecordPicker} from './src/components/WattzunRecordPicker';
   const app=createRoot(document.getElementById('root'));
-  window.renderPicker=(uid='actor-one',scopeId='business-one',portal='trade',kind='job')=>app.render(<WattzunRecordPicker user={{uid,getIdToken:async()=>'synthetic-token:'+uid}} scope={{portal,scopeId,label:'Synthetic business'}} lookup={{kind,query:'TL123'}} onNavigate={href=>window.openedJob=href}/>);
+  window.renderPicker=(uid='actor-one',scopeId='business-one',portal='trade',kind='job')=>app.render(<WattzunRecordPicker user={{uid,getIdToken:async()=>'synthetic-token:'+uid}} scope={{portal,scopeId,label:'Synthetic business'}} lookup={{kind,query:'TL123'}} onNavigate={href=>window.openedJob=href} onSelectWork={reference=>window.selectedWork=reference}/>);
   window.renderPicker();
 `},bundle:true,write:false,outfile:'records.js',format:'iife',jsx:'automatic',plugins:[{name:'record-test-alias',setup(builder){builder.onResolve({filter:/^@\/lib\//},args=>({path:path.join(root,'src/lib',args.path.slice('@/lib/'.length)+'.ts')}));}}]});
 const js=bundle.outputFiles.find(file=>file.path.endsWith('.js')).text;
@@ -49,6 +49,8 @@ test('job selection uses the authorised business, projected metadata and real kn
     const query=new URL(requests[0].url,'https://fixture.invalid').searchParams;assert.equal(query.get('resource'),'jobs');assert.equal(query.get('filter'),'all');assert.equal(query.get('search'),'TL123');
     assert.equal(await page.getByText('hidden@example.invalid',{exact:true}).count(),0);
     await job.click();assert.equal(await page.evaluate(()=>window.openedJob),'/direct-trade/dashboard?workspace=work&jobId=job-one&jobTab=summary');
+    await page.getByRole('button',{name:'Use TL123 with Wattzun',exact:true}).click();
+    assert.deepEqual(await page.evaluate(()=>window.selectedWork),{kind:'trade_job',recordId:'job-one'});
   }finally{await page.close();}
 });
 test('revoked access and malformed search rows cannot open a record',{skip:!browserPath},async()=>{
@@ -85,6 +87,8 @@ test('mobile file lookup opens the existing Files tab with usable controls',{ski
     await page.getByRole('button',{name:'Find job',exact:true}).click();const file=page.getByRole('button',{name:/Open Files/});await file.waitFor();await file.click();
     assert.equal(await page.evaluate(()=>window.openedJob),'/direct-trade/dashboard?workspace=work&jobId=job-one&jobTab=field');
     assert.ok(await page.getByRole('button',{name:'Find job',exact:true}).evaluate(el=>el.getBoundingClientRect().height)>=44);
+    const use=page.getByRole('button',{name:'Use TL123 with Wattzun',exact:true});assert.ok((await use.boundingBox()).height>=44);await use.click();
+    assert.deepEqual(await page.evaluate(()=>window.selectedWork),{kind:'trade_job',recordId:'job-one'});
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=390));
   }finally{await page.close();}
 });

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
 import * as audit from '../src/lib/creditex-job-audit.ts';
+import * as auditNavigation from '../src/lib/creditex-workspace-navigation.ts';
 
 const source = fs.readFileSync(new URL('../src/components/CreditexJobAuditDesk.tsx', import.meta.url), 'utf8');
 const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -13,7 +14,7 @@ const button = (tree, name) => nodes(tree, n => n.type === 'button' && text(n) =
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const workspace = () => ({ target: { intentId:'intent-1', jobNumber:'TLJ-TEST', customerName:'Test customer', customerPhone:'+61400000000', siteAddress:'Test site', activityDate:'2026-10-02', activityTitle:'Assessment', assignee:'Technician', addressReviewRequired:true }, sourceSha256:'a'.repeat(64), records:[{kind:'field',id:'form-1',title:'Site assessment',status:'submitted',revision:3,updatedAt:'2026-10-02',answers:[{key:'result',label:'Recorded result',section:'Inspection',value:'Done'}]}], files:[1,2].map(id => ({id:String(id),kind:'field_evidence',parentId:'form-1',label:`Photo ${id}`,previewPath:`/api/creditex/job-audit/file?id=${id}`,contentType:'image/png'})), checklist:null,history:[],requirements:[],findings:[],notifications:[],auditCompleted:false,submissionReady:false,capabilities:{canSave:true,canComplete:true,canRequestCorrection:true,canResolveFindings:true,canCall:true,reason:''} });
 function harness(options={}) {
-  const slots=[], effects=[], queued=[], callbacks=[], requests=[], revocations=[], dirtyReports=[], sourceViews=[];
+  const slots=[], effects=[], queued=[], callbacks=[], requests=[], revocations=[], dirtyReports=[], sourceViews=[], wattzunRequests=[];
   let cursor=0, closed=0, changes=0, currentProps={user:{uid:'reviewer',getIdToken:async()=> 'fixture'},intentId:'intent-1',actorMode:options.actorMode || 'creditex',onClose:()=>closed++,onChanged:()=>changes++,onDirtyChange:value=>dirtyReports.push(value)};
   const hooks={
     useState(initial){const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],value=>{slots[i]=typeof value==='function'?value(slots[i]):value;}];},
@@ -22,15 +23,68 @@ function harness(options={}) {
     useEffect(fn,deps){const i=cursor++;if(!effects[i]||deps.some((dep,index)=>dep!==effects[i].deps[index])){effects[i]?.cleanup?.();effects[i]={deps};queued.push(()=>{effects[i].cleanup=fn();});}},
   };
   const stubs={CreditexAuditCallPanel:Object.assign(()=>null,{displayName:'CreditexAuditCallPanel'}),CreditexJobLifecycleActions:Object.assign(()=>null,{displayName:'CreditexJobLifecycleActions'})};
-  const require=id=>id==='next/image'?{default:'img'}:id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='@/lib/creditex-job-audit'?audit:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>key})}:stubs;
+  const require=id=>id==='@/lib/creditex-workspace-navigation'?auditNavigation:id==='@/lib/wattzun-appearance'?{requestWattzunAssistant:async request=>{wattzunRequests.push(request);return options.wattzunOpened!==false;}}:id==='next/image'?{default:'img'}:id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='@/lib/creditex-job-audit'?audit:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>key})}:stubs;
   const fetch=async(path,init={})=>{requests.push({path,init});if(options.fetch)return options.fetch(path,init);return path.includes('/file?')?new Response(new Uint8Array([1]),{headers:{'Content-Type':'image/png'}}):Response.json({ok:true,workspace:workspace()});};
-  const window={addEventListener(){},removeEventListener(){},setTimeout(){return 1;},clearTimeout(){},confirm:()=>options.confirm!==false};
+  const window={location:{search:options.search||'',hash:options.hash||''},requestAnimationFrame(callback){callback();return 1;},cancelAnimationFrame(){},addEventListener(){},removeEventListener(){},setTimeout(){return 1;},clearTimeout(){},confirm:()=>options.confirm!==false};
   const document={getElementById:id=>{sourceViews.push(id);return {scrollIntoView(){},focus(){},closest:()=>null};}};
   const exports={};Function('require','exports','window','fetch','URL','crypto','document',code)(require,exports,window,fetch,{createObjectURL:()=>`blob:fixture-${requests.length}`,revokeObjectURL:url=>revocations.push(url)},{randomUUID:()=> '00000000-0000-4000-8000-000000000001'},document);
   const render=()=>{cursor=0;const tree=exports.CreditexJobAuditDesk(currentProps);for(const effect of queued.splice(0))effect();return tree;};
   const settle=async()=>{render();await flush();render();await flush();return render();};
-  return {render,settle,requests,revocations,dirtyReports,sourceViews,get closed(){return closed;},get changes(){return changes;},props:next=>{currentProps={...currentProps,...next};},cleanup(){for(const effect of effects)effect?.cleanup?.();}};
+  return {render,settle,requests,revocations,dirtyReports,sourceViews,wattzunRequests,get closed(){return closed;},get changes(){return changes;},props:next=>{currentProps={...currentProps,...next};},cleanup(){for(const effect of effects)effect?.cleanup?.();}};
 }
+
+test('Ask Wattzun passes only the selected audit reference and exactly one current authorised scope', async () => {
+  const h = harness({ fetch: async path => path.includes('/wattzun/portal?')
+    ? Response.json({ scopes: [{ portal: 'creditex', scopeId: 'synthetic-creditex' }] })
+    : path.includes('/file?') ? new Response('photo', { headers: { 'Content-Type': 'image/png' } }) : Response.json({ ok: true, workspace: workspace() }) });
+  let tree = await h.settle(); button(tree, 'Ask Wattzun about this audit').props.onClick(); tree = await h.settle();
+  assert.deepEqual(h.wattzunRequests, [{ userUid: 'reviewer', portal: 'creditex', scopeId: 'synthetic-creditex', mode: 'message',
+    workReference: { kind: 'creditex_audit', recordId: 'intent-1' }, initialMessage: 'Summarise this audit, supported gaps and the next review steps.' }]);
+  assert.ok(h.requests.every(request => !request.init.method)); assert.equal(h.changes, 0); assert.equal(h.closed, 0);
+  assert.doesNotMatch(JSON.stringify(h.wattzunRequests), /Test customer|Test site|sourceSha256|040000/); h.cleanup();
+});
+
+test('Ask Wattzun preserves the audit and exposes a retry for ambiguous scope, denied scope or unavailable assistant', async () => {
+  for (const response of [() => Response.json({ scopes: [] }), () => Response.json({ scopes: [{ portal: 'creditex', scopeId: 'a' }, { portal: 'creditex', scopeId: 'b' }] }),
+    () => Response.json({ scopes: [{ portal: 'council', scopeId: 'a' }] }), () => Response.json({ error: 'Denied' }, { status: 403 })]) {
+    const h = harness({ fetch: async path => path.includes('/wattzun/portal?') ? response()
+      : path.includes('/file?') ? new Response('photo', { headers: { 'Content-Type': 'image/png' } }) : Response.json({ ok: true, workspace: workspace() }) });
+    let tree = await h.settle(); button(tree, 'Ask Wattzun about this audit').props.onClick(); tree = await h.settle();
+    assert.equal(h.wattzunRequests.length, 0); assert.match(text(tree), /Reopen your Creditex workspace/);
+    assert.equal(button(tree, 'Save draft').props.disabled, false); assert.equal(h.closed, 0); h.cleanup();
+  }
+  const h = harness({ wattzunOpened: false, fetch: async path => path.includes('/wattzun/portal?') ? Response.json({ scopes: [{ portal: 'creditex', scopeId: 'a' }] })
+    : path.includes('/file?') ? new Response('photo', { headers: { 'Content-Type': 'image/png' } }) : Response.json({ ok: true, workspace: workspace() }) });
+  let tree = await h.settle(); button(tree, 'Ask Wattzun about this audit').props.onClick(); tree = await h.settle();
+  assert.match(text(tree), /Wattzun could not open/); assert.equal(h.closed, 0); h.cleanup();
+});
+
+test('Ask Wattzun is unavailable to admin-mode and view-only audits', async () => {
+  const admin = harness({ actorMode: 'admin' }); assert.equal(button(await admin.settle(), 'Ask Wattzun about this audit'), undefined); admin.cleanup();
+  const denied = workspace(); denied.capabilities.canSave = false;
+  const view = harness({ fetch: async path => path.includes('/file?') ? new Response('photo', { headers: { 'Content-Type': 'image/png' } }) : Response.json({ ok: true, workspace: denied }) });
+  assert.equal(button(await view.settle(), 'Ask Wattzun about this audit'), undefined); view.cleanup();
+});
+
+test('exact audit source navigation focuses only a verified panel on the currently loaded audit', async () => {
+  const linked = harness({ search: '?workspace=cases&intentId=intent-1', hash: '#audit-records' });
+  await linked.settle(); assert.ok(linked.sourceViews.includes('audit-records')); linked.cleanup();
+  for (const options of [{ search: '?workspace=cases&intentId=other', hash: '#audit-records' },
+    { search: '?workspace=cases&intentId=intent-1', hash: '#foreign-private-element' },
+    { search: '?workspace=cases&intentId=intent-1', hash: '#audit-files', actorMode: 'admin' }]) {
+    const h = harness(options); await h.settle(); assert.equal(h.sourceViews.length, 0); h.cleanup();
+  }
+});
+
+test('a late scope response cannot open Wattzun for an audit the user has left', async () => {
+  let complete;
+  const h = harness({ fetch: async path => path.includes('/wattzun/portal?') ? new Promise(resolve => { complete = resolve; })
+    : path.includes('/file?') ? new Response('photo', { headers: { 'Content-Type': 'image/png' } }) : Response.json({ ok: true, workspace: workspace() }) });
+  let tree = await h.settle(); button(tree, 'Ask Wattzun about this audit').props.onClick(); await h.settle();
+  h.props({ intentId: 'another-audit' }); await h.settle();
+  complete(Response.json({ scopes: [{ portal: 'creditex', scopeId: 'synthetic-creditex' }] })); tree = await h.settle();
+  assert.equal(h.wattzunRequests.length, 0); assert.equal(button(tree, 'Ask Wattzun about this audit').props.disabled, false); h.cleanup();
+});
 
 test('audit opens through authenticated read only requests and previews next/previous private files', async()=>{
   const h=harness();let tree=await h.settle();

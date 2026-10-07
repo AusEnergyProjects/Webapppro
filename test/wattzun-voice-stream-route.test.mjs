@@ -5,6 +5,9 @@ import ts from 'typescript';
 import * as contract from '../src/lib/wattzun-portal.ts';
 import * as greeting from '../src/lib/wattzun-greeting.ts';
 import { readWattzunVoiceStream } from '../src/lib/wattzun-voice-stream.ts';
+import { syntheticWorkContext, workContextContract, workContextGateway } from './helpers/wattzun-work-context-fixture.mjs';
+
+const contextGateway = workContextGateway();
 
 class AccessError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -25,6 +28,8 @@ Function('require', 'exports', executable)(name => {
   };
   if (name === './wattzun-portal-ai-server' || name === './wattzun-realtime-server' || name === './wattzun-usage') return {};
   if (name === './wattzun-usage-server') return { WattzunUsageError: UsageError };
+  if (name === './wattzun-work-context' || name === './wattzun-work-context.ts') return workContextContract;
+  if (name === './wattzun-work-context-server') return contextGateway;
   throw new Error(`Unexpected route dependency: ${name}`);
 }, route);
 
@@ -51,8 +56,9 @@ function providerAudio() {
 }
 
 function fixture(options = {}) {
-  const audio = providerAudio(), events = [], recorded = [], providerSignals = [];
-  let accessChecks = 0;
+  const audio = providerAudio(), events = [], recorded = [], providerSignals = [], providerContexts = [];
+  let accessChecks = 0, contextChecks = 0;
+  const turnInput = options.input || input;
   const controller = new AbortController();
   const deps = {
     authenticate: async () => { events.push('authenticate'); },
@@ -61,7 +67,16 @@ function fixture(options = {}) {
       events.push('access'); accessChecks++;
       assert.equal(portal, input.portal); assert.equal(scopeId, input.scopeId);
       if (accessChecks === options.revokeAt) throw new AccessError(403, 'Current business access is required.');
+      if (options.revokeDuringUsage && recorded.length) throw new AccessError(403, 'Business access was revoked during usage recording.');
       return accessChecks > 1 && options.changed ? options.changed : access;
+    },
+    context: async (_, current, reference) => {
+      events.push('context'); contextChecks++;
+      assert.equal(current.actorUid, access.actorUid); assert.deepEqual(reference, turnInput.workReference);
+      if (options.contextError && contextChecks === (options.contextErrorAt || 1)) throw options.contextError;
+      if (options.contextErrorDuringUsage && recorded.length) throw options.contextErrorDuringUsage;
+      return contextChecks === options.contextChangedAt || (options.contextChangedDuringUsage && recorded.length)
+        ? { ...options.workContext, sourceSha256: 'b'.repeat(64) } : options.workContext;
     },
     transcribe: async context => {
       events.push('transcribe'); providerSignals.push(context.signal);
@@ -72,7 +87,8 @@ function fixture(options = {}) {
     reply: async context => {
       events.push('reply'); providerSignals.push(context.signal);
       assert.equal(context.actorUid, access.actorUid);
-      assert.deepEqual(context.input, { ...input, message: transcript });
+      providerContexts.push(context);
+      assert.deepEqual(context.input, { ...turnInput, message: transcript });
       if (options.abortAt === 'reply') controller.abort();
       return options.reply || reply;
     },
@@ -90,7 +106,8 @@ function fixture(options = {}) {
     },
     realtime: async context => {
       events.push('realtime'); providerSignals.push(context.signal);
-      assert.equal(context.audio.type,'audio/wav'); assert.deepEqual(context.input,input);
+      providerContexts.push(context);
+      assert.equal(context.audio.type,'audio/wav'); assert.deepEqual(context.input,turnInput);
       if(options.providerError) throw options.providerError;
       await context.beforeSpeech(); events.push('nativeSpeech');
       if(options.abortAt==='realtime') controller.abort();
@@ -107,7 +124,7 @@ function fixture(options = {}) {
   };
   async function post(accept = contract.WATTZUN_VOICE_STREAM_TYPE) {
     const form = new FormData();
-    form.set('request', JSON.stringify(input));
+    form.set('request', JSON.stringify(turnInput));
     const native = accept === contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE;
     form.set('audio', new Blob([new Uint8Array(options.audioBytes||300)], { type: options.audioType || (native ? 'audio/wav' : 'audio/webm;codecs=opus') }), native?'synthetic.wav':'synthetic.webm');
     const request = new Request('https://example.test/api/wattzun/voice', {
@@ -116,8 +133,92 @@ function fixture(options = {}) {
     const response = await route.postWattzunVoice(request, deps);
     return { request, response };
   }
-  return { audio, events, recorded, providerSignals, controller, deps, post };
+  return { audio, events, recorded, providerSignals, providerContexts, controller, deps, post };
 }
+
+test('native work context is checked before speech and only source metadata is published', async () => {
+  const workContext = syntheticWorkContext();
+  const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext });
+  const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.equal(response.status, 200); assert.equal(f.providerContexts[0].workContext, workContext);
+  assert.deepEqual(f.events, ['authenticate', 'access', 'context', 'realtime', 'access', 'context', 'nativeSpeech', 'access', 'context', 'recordUsage', 'access', 'context']);
+  const result = await readWattzunVoiceStream(response, f.controller.signal, value => Boolean(value.workContext));
+  assert.deepEqual(result.reply.workContext, contextGateway.wattzunWorkContextInfo(workContext));
+  assert.equal(result.reply.workContext.facts, undefined);
+  assert.doesNotMatch(JSON.stringify(result.reply), /switchboard|operationalStage|trade_job_overview/);
+  await result.audio.stream.cancel();
+});
+
+test('native stale or revoked sources stop narration, cancel prepared audio and never publish a reply or usage', async () => {
+  const workContext = syntheticWorkContext();
+  for (const options of [
+    { contextChangedAt: 2, status: 409, speechStarted: false },
+    { contextError: new workContextContract.WattzunWorkContextError(403, 'Job access was revoked.'), contextErrorAt: 2, status: 403, speechStarted: false },
+    { contextChangedAt: 3, status: 409, speechStarted: true },
+  ]) {
+    const f = fixture({ ...options, input: { ...input, workReference: workContext.reference }, workContext });
+    const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+    assert.equal(response.status, options.status);
+    const body = await response.json();
+    assert.equal(body.reply, undefined); assert.equal(body.audio, undefined);
+    assert.equal(f.events.includes('nativeSpeech'), options.speechStarted);
+    assert.equal(f.audio.state.cancelled, Number(options.speechStarted));
+    assert.equal(f.recorded.length, 0);
+  }
+});
+
+test('legacy streamed speech is cancelled if source changes after synthesis, before publishing audio or usage', async () => {
+  const workContext = syntheticWorkContext();
+  const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext, contextChangedAt: 4 });
+  const { response } = await f.post();
+  assert.equal(response.status, 409);
+  assert.equal(f.events.includes('streamSpeak'), true);
+  assert.equal(f.audio.state.cancelled, 1); assert.equal(f.recorded.length, 0);
+  const body = await response.json();
+  assert.equal(body.reply, undefined); assert.equal(body.audio, undefined);
+});
+
+test('source changes or record access revoked during usage recording cancel unhanded native and legacy PCM', async () => {
+  const workContext = syntheticWorkContext();
+  for (const accept of [contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE, contract.WATTZUN_VOICE_STREAM_TYPE]) {
+    for (const options of [
+      { contextChangedDuringUsage: true, status: 409 },
+      { contextErrorDuringUsage: new workContextContract.WattzunWorkContextError(403, 'Job access was revoked.'), status: 403 },
+      { revokeDuringUsage: true, status: 403 },
+    ]) {
+      const f = fixture({ ...options, input: { ...input, workReference: workContext.reference }, workContext });
+      const { response } = await f.post(accept);
+      assert.equal(response.status, options.status); assert.match(response.headers.get('content-type'), /json/);
+      const body = await response.json();
+      assert.equal(body.ok, false);
+      assert.equal(body.reply, undefined); assert.equal(body.audio, undefined); assert.equal(body.transcript, undefined);
+      assert.equal(f.recorded.length, 1);
+      assert.equal(f.audio.state.pulls, 0); assert.equal(f.audio.state.cancelled, 1);
+      assert.ok(f.events.lastIndexOf('access') > f.events.indexOf('recordUsage'));
+    }
+  }
+});
+
+test('workspace revocation during usage recording also cancels existing PCM calls without selected context', async () => {
+  for (const accept of [contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE, contract.WATTZUN_VOICE_STREAM_TYPE]) {
+    const f = fixture({ revokeDuringUsage: true });
+    const { response } = await f.post(accept);
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).reply, undefined);
+    assert.equal(f.recorded.length, 1); assert.equal(f.events.includes('context'), false);
+    assert.equal(f.audio.state.pulls, 0); assert.equal(f.audio.state.cancelled, 1);
+  }
+});
+
+test('oversized voice context blocks every provider stage and usage operation', async () => {
+  const workContext = syntheticWorkContext({ facts: { oversized: '界'.repeat(9000) } });
+  for (const accept of [contract.WATTZUN_VOICE_STREAM_TYPE, contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE]) {
+    const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext });
+    const { response } = await f.post(accept);
+    assert.equal(response.status, 413);
+    assert.deepEqual(f.providerContexts, []); assert.deepEqual(f.providerSignals, []); assert.deepEqual(f.recorded, []);
+  }
+});
 
 test('the authorised streaming response and first audio arrive before provider EOF without waiting for full synthesis', async () => {
   const f = fixture();
@@ -128,7 +229,7 @@ test('the authorised streaming response and first audio arrive before provider E
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(f.audio.state.ended, false);
   assert.equal(f.audio.state.pulls, 0);
-  assert.deepEqual(f.events, ['authenticate', 'access', 'transcribe', 'access', 'reply', 'access', 'streamSpeak', 'access', 'recordUsage']);
+  assert.deepEqual(f.events, ['authenticate', 'access', 'transcribe', 'access', 'reply', 'access', 'streamSpeak', 'access', 'recordUsage', 'access']);
   assert.equal(f.recorded.length, 1);
   for (const signal of f.providerSignals) assert.equal(signal, request.signal);
   const result = await readWattzunVoiceStream(response, f.controller.signal, matchesReply);
@@ -148,7 +249,7 @@ test('the authorised streaming response and first audio arrive before provider E
 test('native audio bypasses transcription and legacy LLM/TTS while retaining access checks and usage',async()=>{
   const f=fixture();const {response,request}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
   assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
-  assert.deepEqual(f.events,['authenticate','access','realtime','access','nativeSpeech','access','recordUsage']);
+  assert.deepEqual(f.events,['authenticate','access','realtime','access','nativeSpeech','access','recordUsage','access']);
   assert.equal(f.recorded.length,1);assert.equal(f.providerSignals[0],request.signal);
   const result=await readWattzunVoiceStream(response,f.controller.signal,matchesReply);
   assert.equal(result.transcript,'');assert.deepEqual(result.reply,reply);

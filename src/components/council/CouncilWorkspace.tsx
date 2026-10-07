@@ -17,8 +17,9 @@ import type { User } from "firebase/auth";
 import { TLinkWorkspaceBar } from "../TLinkWorkspaceBar";
 import { WattzunToolsWorkspace } from "../WattzunToolsWorkspace";
 import { TLinkNavigationIcon } from "../TLinkNavigationIcon";
+import { councilWorkspaceFromSearch, councilWorkspaceSearch, type CouncilWorkspaceView as CouncilView } from "@/lib/council-workspace-navigation";
+import { requestWattzunAssistant } from "@/lib/wattzun-appearance";
 
-type CouncilView = "overview" | "community" | "map" | "calculator" | "activities" | "economy" | "campaigns" | "sessions" | "reports" | "settings" | "team" | "wattzun";
 const navigation: Array<{ id: CouncilView; label: string; icon: CouncilIconName }> = [
   { id: "overview", label: "Overview", icon: "overview" }, { id: "community", label: "Community progress", icon: "community" }, { id: "map", label: "Community map", icon: "map" }, { id: "calculator", label: "Rebate calculator", icon: "calculator" }, { id: "activities", label: "Upgrade activity", icon: "activity" }, { id: "economy", label: "Local economy", icon: "business" }, { id: "campaigns", label: "Campaigns", icon: "campaign" }, { id: "sessions", label: "Information sessions", icon: "calendar" }, { id: "reports", label: "Reports & insights", icon: "report" }, { id: "settings", label: "Council profile", icon: "settings" }, { id: "team", label: "Council team", icon: "users" },
 ];
@@ -68,9 +69,10 @@ export function CouncilWorkspace({ report, profile, campaigns, loading = false, 
   const [colourMode, setColourMode] = useState<TLinkColourMode>("day");
   const [profileDraft, setProfileDraft] = useState<CouncilProfileInput | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const linkedCampaignOpened = useRef(false);
   const activeHeading = headings[view];
   const demo = report.mode === "demonstration";
+  const communityAvailable = Boolean(communitySlot), mapAvailable = Boolean(mapSlot), calculatorAvailable = Boolean(calculatorSlot), teamAvailable = Boolean(teamSlot);
+  const wattzunAvailable = !demo && Boolean(portalUser);
   const identity = profileDraft ?? profile;
   const savedInput: CouncilProfileInput = { name: profile.name, postcodes: profile.postcodes, logoDataUrl: profile.logoDataUrl, theme: profile.theme };
   const profileDirty = profileDraft !== null && JSON.stringify(profileDraft) !== JSON.stringify(savedInput);
@@ -78,14 +80,18 @@ export function CouncilWorkspace({ report, profile, campaigns, loading = false, 
   const themeVariables = councilThemeVariables(identity.theme, colourMode);
   async function saveProfile(input: CouncilProfileInput) { await onSaveProfile(input); setProfileDraft(null); }
   useEffect(() => {
-    if (!demo || linkedCampaignOpened.current) return;
-    const reference = new URLSearchParams(window.location.search).get("campaign");
-    if (!reference) { linkedCampaignOpened.current = true; return; }
-    const linkedCampaign = campaigns.find(campaign => campaign.id === reference);
-    if (!linkedCampaign) return;
-    const frame = requestAnimationFrame(() => { linkedCampaignOpened.current = true; setView(linkedCampaign.kind === "session" ? "sessions" : "campaigns"); });
-    return () => cancelAnimationFrame(frame);
-  }, [campaigns, demo]);
+    const sync = () => {
+      const params = new URLSearchParams(window.location.search);
+      const reference = params.getAll("campaign").length === 1 ? params.get("campaign") : null;
+      const linkedCampaign = demo && !params.has("workspace") && reference ? campaigns.find(campaign => campaign.id === reference) : null;
+      setView(linkedCampaign ? linkedCampaign.kind === "session" ? "sessions" : "campaigns" : councilWorkspaceFromSearch(window.location.search, {
+        community: communityAvailable, map: mapAvailable, calculator: calculatorAvailable, team: teamAvailable, wattzun: wattzunAvailable,
+      }));
+    };
+    const frame = requestAnimationFrame(sync);
+    window.addEventListener("popstate", sync);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("popstate", sync); };
+  }, [communityAvailable, mapAvailable, calculatorAvailable, teamAvailable, wattzunAvailable, campaigns, demo]);
   useEffect(() => {
     const syncStoredMode = () => { try { setColourMode(readTLinkColourMode(window.localStorage)); } catch { setColourMode("day"); } };
     const frame = requestAnimationFrame(syncStoredMode);
@@ -98,7 +104,17 @@ export function CouncilWorkspace({ report, profile, campaigns, loading = false, 
     setColourMode(next);
     try { writeTLinkColourMode(window.localStorage, next); } catch { /* The current tab still changes mode when browser storage is unavailable. */ }
   }
-  function navigate(next: CouncilView, create = false) { setCreateOnOpen(create); setView(next); requestAnimationFrame(() => { window.scrollTo({ top: 0, behavior: "instant" }); headingRef.current?.focus({ preventScroll: true }); }); }
+  function navigate(next: CouncilView, create = false) {
+    setCreateOnOpen(create); setView(next);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${councilWorkspaceSearch(window.location.search, next)}${window.location.hash}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    requestAnimationFrame(() => { window.scrollTo({ top: 0, behavior: "instant" }); headingRef.current?.focus({ preventScroll: true }); });
+  }
+  function askWattzun() {
+    if (!portalUser || demo || profile.councilId !== report.scope.councilId) return;
+    void requestWattzunAssistant({ userUid: portalUser.uid, portal: "council", scopeId: report.scope.councilId, mode: "message",
+      workReference: { kind: "council_report", period: report.period.key }, initialMessage: "Explain this report, its coverage and the main next steps." });
+  }
   return <div className={styles.workspace} data-colour-mode={colourMode} style={{ ...themeVariables, color: "var(--c-ink)" }}>
     <TLinkWorkspaceBar current="council" user={portalUser} organisation={identity.name || "Your council"} displayName={portalUser?.displayName?.trim().split(/\s+/)[0]} actions={workspaceActions} onBeforeSwitch={() => !profileDirty || window.confirm("Leave without saving your council profile changes?")} />
     <aside className={styles.sidebar}><div className={styles.brand}><TLinkMark className={styles.brandMark} size={42} /><div><strong>TLink</strong><small>Council workspace</small></div></div><p className={styles.navCaption}>Community impact</p><nav className={styles.nav} aria-label="Council workspace">{navigation.filter(item => (item.id !== "map" || mapSlot) && (item.id !== "calculator" || calculatorSlot) && (item.id !== "community" || communitySlot) && (item.id !== "team" || teamSlot)).map(item => <button type="button" key={item.id} onClick={() => navigate(item.id)} aria-current={view === item.id ? "page" : undefined}><CouncilIcon name={item.icon} size={18} />{item.label}</button>)}</nav>{!demo && portalUser && <><p className={styles.navCaption}>Tools</p><nav className={styles.nav} aria-label="Council tools"><button type="button" onClick={() => navigate("wattzun")} aria-current={view === "wattzun" ? "page" : undefined}><TLinkNavigationIcon name="wattzun" />Wattzun</button></nav></>}<div className={styles.sidebarBottom}><div className={styles.privacyBadge}><CouncilIcon name="shield" size={19} /><div><strong>Private by design</strong>Local insights.<br />Customer details stay private.</div></div><p className={styles.poweredBy}>TLink Council<br />Community impact workspace</p></div></aside>
@@ -124,7 +140,7 @@ export function CouncilWorkspace({ report, profile, campaigns, loading = false, 
           {view === "community" && communitySlot}
           {view === "team" && teamSlot}
           {view === "calculator" && calculatorSlot}
-          {view === "reports" && <><div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => window.print()}>Print complete report</button></div>{communitySlot}<CouncilEnquiries report={report} /><CouncilReports report={report} onExport={onExport} /></>}
+          {view === "reports" && <><div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => window.print()}>Print complete report</button></div>{communitySlot}<CouncilEnquiries report={report} /><CouncilReports report={report} onExport={onExport} onAskWattzun={wattzunAvailable && profile.councilId === report.scope.councilId ? askWattzun : undefined} /></>}
           {view === "settings" && <CouncilProfileSettings profile={profile} value={profileDraft ?? savedInput} canManage={canManage} dirty={profileDirty} demonstration={demo} onChange={setProfileDraft} onSave={saveProfile} onCancel={() => setProfileDraft(null)} onResetDemo={onResetDemo} />}
         </>}
         <footer className={styles.bottomNote}><span><CouncilIcon name="shield" size={13} />Aggregated insights. No private customer records.</span><span>{demo ? "Illustrative demonstration" : "TLink recorded activity"} · Updated {councilDateTime(report.generatedAt,report.period.timeZone)}</span></footer>

@@ -1,5 +1,13 @@
 # TLink and Australian Energy Assessments release truth
 
+## Selected-work Wattzun assistance, 7 October 2026
+
+Prepared from `fb002827332b09416dd8f263e21f834a682c19bc` (Sites 789) in C:/Webproject/aea-energy-tlink-sales-workspace, branch `codex/tlink-sales-wattzun`, with continuing user authority to publish matching GitHub/Sites source. TLink jobs, Creditex audit desks and Council Reports & insights add Ask Wattzun. Only a portal-bound reference is supplied by the browser; current server-side record grants load bounded allowlisted facts. The shared conversation supports specific briefs, missing-information checklists, supported review gaps, explanations and draft wording, with visible sources and limitations. Current scope and source identity are rechecked before text or speech. A changed source discards the response and leaves the call available for another turn. Selecting a different item isolates conversation history and cancels stale audio without recreating the call.
+
+Local TLink context contains recorded operational scope and checklist state; consented public-lead context reuses the existing Interested/quote-grant shared Q&A projection. Creditex reuses one authoritative saved-answer/evidence-metadata projection and its exact audit gates. Council reuses the existing protected report and enquiry aggregates for the full approved area and fixed period; nulls and suppression stay intact. Its report generation timestamp is informational and does not make an unchanged report stale. Verified Council panel and exact Creditex audit navigation retain current role, selected workspace and unsaved-work guards.
+
+No attachment bytes, photos, general private-record search, autonomous sends, audit decisions, claim submission, billing, migrations, dependency, credential or model changes are added. Loading an audit retains the existing audit-open access receipt; it does not change audit outcomes or evidence. Existing customer/new-quote actions remain explicit reviewed saves; selected-job assistance cannot create a duplicate quote job. Pauses and recoverable turns retain the existing call. Personal speed and fixed brand behaviour remain unchanged. A ranked capability expansion with concrete acceptance gates is in ROADMAP.md. Validation, screenshots, live limitations and exact release identity belong in C:/Webproject/outputs/wattzun-capabilities-20261007/release-report.md; this prepared statement does not itself establish publication.
+
 ## Wattzun companion follow-up
 
 The public AEA customer assistant remains a home-improvement guide. Authenticated TLink, Council and Creditex Wattzun is a platform workflow companion for daily work; housing-improvement explanations belong here only when relevant to the requested quote, form, audit or council task. Portal guidance must not start household planner intake in place of a work task.
@@ -36,7 +44,7 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 5 October 2026
+Last reconciled locally: 7 October 2026
 
 ## Current delivery: council reporting and shared TLink dashboard access
 

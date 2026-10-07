@@ -6,18 +6,19 @@ import * as portalContract from "../src/lib/wattzun-portal.ts";
 import * as recordContract from "../src/lib/wattzun-records.ts";
 import * as actionContract from "../src/lib/wattzun-actions.ts";
 import * as conversationContract from "../src/lib/wattzun-conversation.ts";
+import * as workContract from "../src/lib/wattzun-work-context.ts";
 import { WattzunVoiceCallError } from "../src/lib/wattzun-voice-client.ts";
 import { readWattzunVoiceStream } from "../src/lib/wattzun-voice-stream.ts";
 
 const source = readFileSync(new URL("../src/components/WattzunPortalAssistant.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-function load({ values = [null, [], "", false, null], storage, events, fetchRequest = () => { throw new Error("Unexpected fetch"); } } = {}) {
-  let stateIndex = 0;
+function load({ values = [null, [], "", false, null], refValues = {}, storage, events, fetchRequest = () => { throw new Error("Unexpected fetch"); } } = {}) {
+  let stateIndex = 0, refIndex = 0;
   const effects = [], updates = [], auth = { callback: null, unsubscribed: false };
   const dependencies = {
     react: {
       useState: () => { const index = stateIndex++; return [values[index], value => updates.push({ index, value })]; },
-      useRef: initial => ({ current: initial }), useCallback: callback => callback,
+      useRef: initial => { const index=refIndex++; return {current:Object.hasOwn(refValues,index)?refValues[index]:initial}; }, useCallback: callback => callback,
       useEffect: callback => effects.push(callback),
     },
     "react/jsx-runtime": { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: "Fragment" },
@@ -31,6 +32,7 @@ function load({ values = [null, [], "", false, null], storage, events, fetchRequ
     "@/lib/wattzun-actions": actionContract,
     "@/lib/wattzun-portal": portalContract,
     "@/lib/wattzun-conversation": conversationContract,
+    "@/lib/wattzun-work-context": workContract,
     "@/lib/wattzun-appearance": {
       WATTZUN_OPEN_EVENT:'wattzun:open',WATTZUN_READY_EVENT:'wattzun:ready',WATTZUN_USAGE_CHANGED_EVENT:'wattzun:usage-changed',
       readWattzunOpenRequest:value=>value,
@@ -45,7 +47,7 @@ function load({ values = [null, [], "", false, null], storage, events, fetchRequ
     "./WattzunPortalAssistant.module.css": { default: {} },
   };
   const exported = {};
-  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {conversationHistory:require('@/lib/wattzun-conversation').wattzunConversationHistory, responsePayload, readCallResponse, isReply, WattzunConversation, workspaceHref};`)(name => {
+  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {conversationHistory:require('@/lib/wattzun-conversation').wattzunConversationHistory, responsePayload, readCallResponse, isReply, replyWorkContext, sameWorkReference, WattzunConversation, workspaceHref};`)(name => {
     assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
   }, exported, { localStorage: storage, ...events }, fetchRequest);
   return { exported, effects, updates, auth };
@@ -165,4 +167,37 @@ test('workspace links retain the current owner or staff route while preserving t
   assert.equal(workspaceHref('/direct-trade/dashboard?workspace=work',scope,'staff-user','/direct-trade/messages'),'/direct-trade/team?workspace=work');
   assert.equal(workspaceHref('/direct-trade/team?workspace=work',scope,'business-owner','/direct-trade/messages'),'/direct-trade/dashboard?workspace=work');
   assert.equal(workspaceHref('/api/saved-file.pdf',scope,'staff-user','/direct-trade/team'),'/api/saved-file.pdf');
+});
+
+test('work reply metadata must be valid, match the selected reference and stay in the current portal',()=>{
+  const {isReply,replyWorkContext}=load().exported.testHelpers;
+  for(const [portal,reference,href] of [['trade',{kind:'trade_job',recordId:'job-a'},'/direct-trade/dashboard?workspace=work&jobId=job-a'],['council',{kind:'council_report',period:'year'},'/council?workspace=reports'],['creditex',{kind:'creditex_audit',recordId:'case-a'},'/creditex/compliance']]){
+    const workContext={reference,title:'Selected authorised work',sourceSha256:'a'.repeat(64),sources:[{label:'Saved facts',href}],limitations:['File contents are not read.'],facts:{private:'discarded'}};
+    const reply={kind:'answer',message:'A sourced reply.',questions:[],links:[],workContext};
+    assert.equal(isReply(reply,portal),true);assert.equal(isReply(reply),false);
+    const info=replyWorkContext(reply,portal,reference);assert.deepEqual(info.reference,reference);assert.equal(Object.hasOwn(info,'facts'),false);
+    assert.throws(()=>replyWorkContext(reply,portal,null),/unselected/);
+    assert.throws(()=>replyWorkContext({...reply,workContext:undefined},portal,reference),/different work/);
+    assert.equal(isReply({...reply,workContext:{...workContext,sources:[{label:'External',href:'https://outside.test'}]}},portal),false);
+    assert.equal(isReply({...reply,workContext:{...workContext,sourceSha256:'not-a-hash'}},portal),false);
+  }
+  const reference={kind:'trade_job',recordId:'job-a'};
+  const reply={kind:'answer',message:'Wrong job',questions:[],links:[],workContext:{reference:{kind:'trade_job',recordId:'job-b'},title:'Other job',sourceSha256:'a'.repeat(64),sources:[{label:'Other job',href:'/direct-trade/dashboard'}],limitations:[]}};
+  assert.throws(()=>replyWorkContext(reply,'trade',reference),/different work/);
+});
+
+test('selected work is visible during connected recovery with an explicit clear control, disclosure and per-reply sources',()=>{
+  const reference={kind:'trade_job',recordId:'job-a'};
+  const info={reference,title:'TL123 Heat pump',sourceSha256:'a'.repeat(64),sources:[{label:'Saved job answers',href:'/direct-trade/dashboard?jobId=job-a'}],limitations:['Photos are not read.']};
+  const message={id:'reply',role:'assistant',content:'A sourced reply',reply:{kind:'answer',message:'A sourced reply',questions:[],links:[],workContext:info}};
+  const h=load({values:[[message],'Unsent draft',false,'',{state:'recovering',message:'Temporary provider failure'},false,reference,info,'Previous conversation cleared for the new work selection.'],refValues:{2:reference}});
+  const tree=h.exported.testHelpers.WattzunConversation({user,scope:scopes[0]});
+  assert.equal(nodes(tree,node=>node.props?.['aria-label']==='Selected work').length,1);
+  assert.equal(nodes(tree,node=>node.type==='button'&&node.props?.['aria-label']==='Clear selected work').length,1);
+  assert.match(text(tree),/Helping with.*TL123 Heat pump/);assert.match(text(tree),/AI provider/);assert.match(text(tree),/File and photo contents are not read/);
+  assert.match(text(tree),/Sources and limits/);assert.match(text(tree),/Photos are not read/);
+  nodes(tree,node=>node.type==='button'&&node.props?.['aria-label']==='Clear selected work')[0].props.onClick();
+  assert.equal(h.updates.find(update=>update.index===6).value,null);
+  assert.equal(h.updates.find(update=>update.index===0).value.length,0);
+  assert.equal(h.updates.some(update=>update.index===1),false,'Clearing work keeps the unsent draft');
 });

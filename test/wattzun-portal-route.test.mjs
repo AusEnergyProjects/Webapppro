@@ -4,6 +4,9 @@ import test from "node:test";
 import ts from "typescript";
 import * as contract from "../src/lib/wattzun-portal.ts";
 import * as greeting from "../src/lib/wattzun-greeting.ts";
+import { syntheticWorkContext, workContextContract, workContextGateway } from "./helpers/wattzun-work-context-fixture.mjs";
+
+const contextGateway = workContextGateway();
 
 class UsageError extends Error {
   constructor(code) { super(`WATTZUN_USAGE_${code.toUpperCase()}`); this.code = code; }
@@ -31,6 +34,8 @@ Function("require", "exports", source)(name => {
   if (name === "./wattzun-portal-ai-server" || name === "./wattzun-realtime-server") return {};
   if (name === "./wattzun-usage") return usageContract;
   if (name === "./wattzun-usage-server") return { WattzunUsageError: UsageError };
+  if (name === "./wattzun-work-context" || name === "./wattzun-work-context.ts") return workContextContract;
+  if (name === "./wattzun-work-context-server") return contextGateway;
   throw new Error(name);
 }, route);
 const input = { portal: "trade", scopeId: "business-one", requestId: "synthetic-request-0001", message: "Draft a follow-up",
@@ -58,8 +63,9 @@ test("turn timings separate actual text and speech stages without leaking actor,
   assert.doesNotMatch(failed.response.headers.get("server-timing"), /usage;dur=/);
 });
 function fixture(options = {}) {
-  const events = [], recorded = [];
-  let count = 0;
+  const events = [], recorded = [], providerContexts = [];
+  let count = 0, contextCount = 0;
+  const turnInput = options.input || input;
   const deps = {
     authenticate: async () => { events.push("authenticate"); if (options.authError) throw options.authError; },
     scopes: async (_, portal) => { events.push("scopes"); return [{ ...access.scope, portal }]; },
@@ -67,27 +73,38 @@ function fixture(options = {}) {
       events.push("access"); count++;
       assert.equal(portal, input.portal); assert.equal(scopeId, input.scopeId);
       if (options.revokeAt === count) throw new AccessError(403, "Access revoked.");
+      if (options.revokeDuringUsage && recorded.length) throw new AccessError(403, "Access revoked during usage recording.");
       return count > 1 && options.changed ? options.changed : access;
+    },
+    context: async (_, current, reference) => {
+      events.push("context"); contextCount++;
+      assert.equal(current.actorUid, access.actorUid);
+      assert.deepEqual(reference, turnInput.workReference);
+      if (options.contextError && contextCount === (options.contextErrorAt || 1)) throw options.contextError;
+      if (options.contextErrorDuringUsage && recorded.length) throw options.contextErrorDuringUsage;
+      return contextCount === options.contextChangedAt || (options.contextChangedDuringUsage && recorded.length)
+        ? { ...options.workContext, sourceSha256: "b".repeat(64) } : options.workContext;
     },
     transcribe: async context => { events.push("transcribe"); assert.equal(context.actorUid, access.actorUid);
       assert.ok(context.audio instanceof Blob); return "Draft a follow-up"; },
-    reply: async context => { events.push("reply"); assert.deepEqual(context.input, input);
+    reply: async context => { events.push("reply"); providerContexts.push(context); assert.deepEqual(context.input, turnInput);
       if (options.providerError) throw options.providerError;
-      options.controller?.abort(); return reply; },
+      if (!options.abortDuringUsage) options.controller?.abort(); return reply; },
     speak: async context => { events.push("speak"); assert.deepEqual(context.reply, reply);
       if (options.speechError) throw options.speechError;
       return { base64: "YXVkaW8=", mimeType: "audio/mpeg" }; },
     recordUsage: async optionsToRecord => { events.push("record"); assert.deepEqual(optionsToRecord, { access, requestId: input.requestId, kind: optionsToRecord.kind });
-      assert.ok(["text", "voice"].includes(optionsToRecord.kind)); if (options.recordError) throw options.recordError; recorded.push(optionsToRecord); },
+      assert.ok(["text", "voice"].includes(optionsToRecord.kind)); if (options.recordError) throw options.recordError; recorded.push(optionsToRecord);
+      if (options.abortDuringUsage) options.controller?.abort(); },
     usage: async current => { events.push("usage"); assert.equal(current.actorUid, access.actorUid);
       if (options.usageError) throw options.usageError; return usage; },
   };
   async function post(voice = false, overrides = {}) {
     let body = overrides.body;
     if (body === undefined && voice) {
-      body = new FormData(); body.set("request", JSON.stringify(input));
+      body = new FormData(); body.set("request", JSON.stringify(turnInput));
       body.set("audio", new Blob([new Uint8Array(300)], { type: "audio/webm;codecs=opus" }), "turn.webm");
-    } else if (body === undefined) body = JSON.stringify(input);
+    } else if (body === undefined) body = JSON.stringify(turnInput);
     const request = new Request("https://example.test/api/wattzun/" + (voice ? "voice" : "portal"), {
       method: "POST", headers: { origin: "https://example.test", ...(voice ? {} : { "content-type": "application/json" }), ...overrides.headers },
       body, ...(body instanceof ReadableStream ? { duplex: "half" } : {}), signal: options.controller?.signal,
@@ -95,8 +112,90 @@ function fixture(options = {}) {
     const response = await (voice ? route.postWattzunVoice : route.postWattzunPortal)(request, deps);
     return { response, body: await response.json(), request };
   }
-  return { events, recorded, deps, post };
+  return { events, recorded, providerContexts, deps, post };
 }
+
+test("a selected authorised source reaches the text provider while only context metadata returns to the browser", async () => {
+  const workContext = syntheticWorkContext();
+  const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext });
+  const result = await f.post();
+  assert.equal(result.response.status, 200);
+  assert.equal(f.providerContexts[0].workContext, workContext);
+  assert.deepEqual(result.body.reply.workContext, contextGateway.wattzunWorkContextInfo(workContext));
+  assert.equal(result.body.reply.workContext.facts, undefined);
+  assert.doesNotMatch(JSON.stringify(result.body), /switchboard|operationalStage|trade_job_overview/);
+  assert.deepEqual(f.events, ["authenticate", "access", "context", "reply", "access", "context", "record", "access", "context"]);
+  assert.equal(f.recorded.length, 1);
+});
+
+test("changed or revoked text sources suppress the whole reply before recording usage", async () => {
+  const workContext = syntheticWorkContext();
+  for (const options of [
+    { contextChangedAt: 2, status: 409 },
+    { contextError: new workContextContract.WattzunWorkContextError(403, "Current job access is required."), contextErrorAt: 2, status: 403 },
+  ]) {
+    const f = fixture({ ...options, input: { ...input, workReference: workContext.reference }, workContext });
+    const result = await f.post();
+    assert.equal(result.response.status, options.status);
+    assert.equal(result.body.reply, undefined);
+    assert.equal(f.providerContexts.length, 1);
+    assert.equal(f.recorded.length, 0);
+  }
+});
+
+test("oversized sources and forged cross-portal references never reach the provider or usage writes", async () => {
+  const workContext = syntheticWorkContext({ facts: { oversized: "界".repeat(9000) } });
+  const oversized = fixture({ input: { ...input, workReference: workContext.reference }, workContext });
+  assert.equal((await oversized.post()).response.status, 413);
+  assert.equal(oversized.providerContexts.length, 0); assert.equal(oversized.recorded.length, 0);
+  const foreign = fixture({ input: { ...input, workReference: { kind: "creditex_audit", recordId: "foreign-case" } } });
+  assert.equal((await foreign.post()).response.status, 400);
+  assert.equal(foreign.events.includes("access"), false);
+  assert.equal(foreign.events.includes("context"), false);
+  assert.equal(foreign.providerContexts.length, 0); assert.equal(foreign.recorded.length, 0);
+});
+
+test("closing a text or legacy JSON voice turn during usage recording suppresses the generated content", async () => {
+  for (const voice of [false, true]) {
+    const f = fixture({ controller: new AbortController(), abortDuringUsage: true });
+    const result = await f.post(voice);
+    assert.equal(result.response.status, 409);
+    assert.equal(result.body.reply, undefined); assert.equal(result.body.audio, undefined); assert.equal(result.body.transcript, undefined);
+    assert.equal(f.recorded.length, 1);
+    assert.equal(f.events.includes("speak"), voice);
+  }
+});
+
+test("source changes or record access revoked during usage recording suppress text and legacy JSON voice output", async () => {
+  const workContext = syntheticWorkContext();
+  for (const voice of [false, true]) {
+    for (const options of [
+      { contextChangedDuringUsage: true, status: 409 },
+      { contextErrorDuringUsage: new workContextContract.WattzunWorkContextError(403, "Current job access is required."), status: 403 },
+      { revokeDuringUsage: true, status: 403 },
+    ]) {
+      const f = fixture({ ...options, input: { ...input, workReference: workContext.reference }, workContext });
+      const result = await f.post(voice);
+      assert.equal(result.response.status, options.status);
+      assert.equal(result.body.ok, false);
+      assert.equal(result.body.reply, undefined); assert.equal(result.body.audio, undefined); assert.equal(result.body.transcript, undefined);
+      assert.equal(f.recorded.length, 1);
+      assert.equal(f.events.includes("speak"), voice);
+      assert.ok(f.events.lastIndexOf("access") > f.events.indexOf("record"));
+    }
+  }
+});
+
+test("workspace access revoked during usage recording suppresses existing text and JSON voice turns without a selected source", async () => {
+  for (const voice of [false, true]) {
+    const f = fixture({ revokeDuringUsage: true });
+    const result = await f.post(voice);
+    assert.equal(result.response.status, 403);
+    assert.equal(result.body.reply, undefined); assert.equal(result.body.audio, undefined); assert.equal(result.body.transcript, undefined);
+    assert.equal(f.recorded.length, 1);
+    assert.equal(f.events.includes("context"), false);
+  }
+});
 
 test("portal routing includes only the authorised portal pages", () => {
   for (const path of ["/direct-trade/dashboard", "/direct-trade/dashboard/", "/direct-trade/team", "/direct-trade/messages/"]) {
@@ -134,12 +233,12 @@ test("eligibility discovery authenticates and bounds the portal enum", async () 
 test("text and voice reuse the same scoped conversation and recheck access before output", async () => {
   const text = fixture(), textResult = await text.post();
   assert.deepEqual(textResult.body, { ok: true, reply });
-  assert.deepEqual(text.events, ["authenticate", "access", "reply", "access", "record"]);
+  assert.deepEqual(text.events, ["authenticate", "access", "reply", "access", "record", "access"]);
   assert.equal(text.recorded[0].kind, "text");
   const voice = fixture(), voiceResult = await voice.post(true);
   assert.equal(voiceResult.response.status, 200);
   assert.deepEqual(voiceResult.body, { ok: true, transcript: input.message, reply, audio: { base64: "YXVkaW8=", mimeType: "audio/mpeg" } });
-  assert.deepEqual(voice.events, ["authenticate", "access", "transcribe", "access", "reply", "access", "speak", "access", "record"]);
+  assert.deepEqual(voice.events, ["authenticate", "access", "transcribe", "access", "reply", "access", "speak", "access", "record", "access"]);
   assert.equal(voice.recorded[0].kind, "voice");
 });
 

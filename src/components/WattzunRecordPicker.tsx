@@ -5,17 +5,20 @@ import type { User } from "firebase/auth";
 import type { WattzunScope } from "@/lib/wattzun-portal";
 import { createTradeBusinessFetch } from "@/lib/trade-business-client";
 import { readWattzunJobMatches, wattzunJobHref, type WattzunJobMatch, type WattzunRecordLookup } from "@/lib/wattzun-records";
+import type { WattzunWorkReference } from "@/lib/wattzun-work-context";
 import styles from "./WattzunRecordPicker.module.css";
 
-/** Record metadata stays in the authorised UI; it is not sent to the model. */
-export function WattzunRecordPicker({ user, scope, lookup, onNavigate }: {
+/** Search metadata stays in the UI. Selecting an exact job sends only its reference. */
+export function WattzunRecordPicker({ user, scope, lookup, onNavigate, onSelectWork }: {
   user: User; scope: WattzunScope; lookup: WattzunRecordLookup; onNavigate: (href: string) => void;
+  onSelectWork?: (reference: WattzunWorkReference) => void;
 }) {
-  return scope.portal === "trade" ? <RecordSearch key={`${user.uid}:${scope.scopeId}`} user={user} scope={scope} lookup={lookup} onNavigate={onNavigate} /> : null;
+  return scope.portal === "trade" ? <RecordSearch key={`${user.uid}:${scope.scopeId}`} user={user} scope={scope} lookup={lookup} onNavigate={onNavigate} onSelectWork={onSelectWork} /> : null;
 }
 
-function RecordSearch({ user, scope, lookup, onNavigate }: {
+function RecordSearch({ user, scope, lookup, onNavigate, onSelectWork }: {
   user: User; scope: WattzunScope; lookup: WattzunRecordLookup; onNavigate: (href: string) => void;
+  onSelectWork?: (reference: WattzunWorkReference) => void;
 }) {
   const id = useId();
   const [query, setQuery] = useState(lookup.query);
@@ -62,7 +65,7 @@ function RecordSearch({ user, scope, lookup, onNavigate }: {
     </form>
     {error && <p role="alert">{error}</p>}
     {searched && matches.length === 0 && <p role="status">No matching accessible jobs. Check the job number or customer spelling.</p>}
-    <ul>{matches.map(job => <li key={job.id}><button type="button" onClick={() => onNavigate(wattzunJobHref(job.id, lookup.kind))}><strong>{job.workNumber}</strong><span>{job.title}</span><span>Open {lookup.kind === "file" ? "Files" : "job"} ↗</span></button></li>)}</ul>
+    <ul>{matches.map(job => <li key={job.id}><button type="button" onClick={() => onNavigate(wattzunJobHref(job.id, lookup.kind))}><strong>{job.workNumber}</strong><span>{job.title}</span><span>Open {lookup.kind === "file" ? "Files" : "job"} ↗</span></button>{onSelectWork && <button className={styles.useWork} type="button" aria-label={`Use ${job.workNumber} with Wattzun`} onClick={() => onSelectWork({ kind: "trade_job", recordId: job.id })}>Use with Wattzun</button>}</li>)}</ul>
     {matches.length === 20 && <p>Showing up to 20 matches. Add more of the job number or name to narrow the search.</p>}
   </section>;
 }

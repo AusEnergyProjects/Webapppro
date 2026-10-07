@@ -12,6 +12,8 @@ import { CreditexAuditCallPanel } from "./CreditexAuditCallPanel";
 import { CreditexJobLifecycleActions } from "./CreditexJobLifecycleActions";
 import styles from "./CreditexJobAuditDesk.module.css";
 import type { CreditexAuditAiReview, CreditexAuditAiSource } from "@/lib/creditex-job-audit-ai";
+import { requestWattzunAssistant } from "@/lib/wattzun-appearance";
+import { creditexAuditFromSearch, creditexAuditPanelFromHash } from "@/lib/creditex-workspace-navigation";
 
 function displayDate(value: string) {
   if (!value) return "Not recorded";
@@ -57,6 +59,8 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
   const [aiReview, setAiReview] = useState<CreditexAuditAiReview | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [wattzunLoading, setWattzunLoading] = useState(false);
+  const [wattzunError, setWattzunError] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
   const callRef = useRef<HTMLDivElement>(null);
   const sequence = useRef(0);
@@ -90,6 +94,7 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
       if (current !== sequence.current || signal?.aborted) return;
       apply(result.workspace);
       setAiReview(null); setAiError(""); setAiLoading(false);
+      setWattzunError(""); setWattzunLoading(false);
       setRecordIndex(0); setFileIndex(0);
       requestId.current = null;
     } catch (failure) {
@@ -119,6 +124,19 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
     return () => window.clearTimeout(timer);
   }, [success]);
   useEffect(() => { if (showCall && !loading) callRef.current?.focus(); }, [showCall, loading]);
+  useEffect(() => {
+    if (!workspace || actorMode !== "creditex") return;
+    const revealSource = () => {
+      if (creditexAuditFromSearch(window.location.search) !== workspace.target.intentId) return;
+      const panel = creditexAuditPanelFromHash(window.location.hash);
+      const target = panel ? document.getElementById(panel) : null;
+      target?.closest("details")?.setAttribute("open", "");
+      target?.scrollIntoView({ block: "center", behavior: "smooth" }); target?.focus();
+    };
+    const frame = window.requestAnimationFrame(revealSource);
+    window.addEventListener("popstate", revealSource);
+    return () => { window.cancelAnimationFrame(frame); window.removeEventListener("popstate", revealSource); };
+  }, [workspace, actorMode]);
 
   const file = workspace?.files[fileIndex];
   const fileKey = file ? `${workspace?.sourceSha256}:${file.kind}:${file.parentId}:${file.id}` : "";
@@ -226,6 +244,25 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
     target?.scrollIntoView({ block: "center", behavior: "smooth" }); target?.focus();
   }
 
+  async function askWattzun() {
+    if (!workspace?.capabilities.canSave || actorMode !== "creditex" || saving || wattzunLoading) return;
+    const current = sequence.current;
+    setWattzunLoading(true); setWattzunError("");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/wattzun/portal?portal=creditex", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const result: { scopes?: { portal: string; scopeId: string }[] } = await response.json();
+      if (!response.ok || !Array.isArray(result.scopes) || result.scopes.length !== 1 || result.scopes[0].portal !== "creditex"
+        || typeof result.scopes[0].scopeId !== "string" || !result.scopes[0].scopeId) throw new Error("Reopen your Creditex workspace before asking Wattzun about this audit.");
+      if (current !== sequence.current) return;
+      const opened = await requestWattzunAssistant({ userUid: user.uid, portal: "creditex", scopeId: result.scopes[0].scopeId,
+        mode: "message", workReference: { kind: "creditex_audit", recordId: intentId },
+        initialMessage: "Summarise this audit, supported gaps and the next review steps." });
+      if (!opened && current === sequence.current) setWattzunError("Wattzun could not open. Try again from the current Creditex workspace.");
+    } catch (failure) { if (current === sequence.current) setWattzunError(failure instanceof Error ? failure.message : "Wattzun is unavailable. Continue with the audit desk."); }
+    finally { if (current === sequence.current) setWattzunLoading(false); }
+  }
+
   function close() { if (!saving && (!hasUnsaved || window.confirm("Discard the unsaved audit changes?"))) onClose(); }
   const record = workspace?.records[recordIndex];
   const currentPreview = preview?.key === fileKey ? preview : null;
@@ -236,6 +273,7 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
     {error && <div className={styles.error} role="alert"><p>{error}</p><button type="button" disabled={saving} onClick={() => { if (!hasUnsaved || window.confirm("Reload this job and discard the unsaved audit changes?")) void load(); }}>Reload job</button></div>}
     {success && <p role="status" className={styles.success}>{success}</p>}
     {!loading && workspace && <>
+      {actorMode === "creditex" && workspace.capabilities.canSave && <div><button type="button" onClick={() => void askWattzun()} disabled={saving || wattzunLoading}>{wattzunLoading ? "Opening Wattzun..." : "Ask Wattzun about this audit"}</button>{wattzunError && <p role="alert">{wattzunError}</p>}</div>}
       <div className={styles.summary}><div><span>Customer &amp; site</span><strong>{workspace.target.customerName}</strong><p>{workspace.target.siteAddress || "Address not recorded"}</p>{workspace.target.addressReviewRequired && <p className={styles.warning}>Manual address: compare it with the job evidence.</p>}<p>{workspace.target.customerPhone || "Phone not recorded"}</p></div><div><span>Activity</span><strong>{displayDate(workspace.target.activityDate)}</strong><p>{workspace.target.assignee || "Assignee not recorded"}</p></div><div><span>Review status</span><strong>{workspace.auditCompleted ? "Audit completed" : workspace.checklist?.outcome === "correction_required" ? "Correction required" : "Awaiting audit"}</strong><p>{workspace.submissionReady ? "Submission approval recorded" : "Submission approval remains separate"}</p>{workspace.checklist && workspace.checklist.sourceSha256 !== workspace.sourceSha256 && <p className={styles.warning}>The job has changed since this audit. Review the current evidence before completing it again.</p>}</div></div>
       <div className={styles.layout}>
         <div className={styles.review}>
@@ -265,7 +303,7 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
               {workspace.capabilities.canRequestCorrection && !file.unavailableReason && <button type="button" disabled={saving} onClick={() => { setCorrectionTarget(JSON.stringify([file.kind, file.id, file.parentId])); setDirty(true); }}>Use this file in correction</button>}
             </> : <p>No files have been submitted for this job.</p>}
           </section>
-          {workspace.findings.length > 0 && <section className={styles.card} aria-label="Corrections and closeout">
+          {workspace.findings.length > 0 && <section id="audit-findings" tabIndex={-1} className={styles.card} aria-label="Corrections and closeout">
             <header><h3>Corrections and closeout</h3><span>{workspace.findings.filter(finding => finding.status === "open").length} open</span></header>
             <p className={styles.muted}>The assigned technician corrects the job. Creditex reviews the current evidence and closes each finding.</p>
             <ol className={styles.findings}>{workspace.findings.map(finding => <li key={finding.id} id={`audit-finding-${finding.id}`} tabIndex={-1}>
@@ -286,7 +324,7 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
               </>}
             </li>)}</ol>
           </section>}
-          {workspace.requirements.length > 0 && <details className={styles.card}><summary>Case evidence requirements ({workspace.requirements.length})</summary><dl className={styles.answers}>{workspace.requirements.map(requirement => <div key={requirement.id} id={`audit-requirement-${requirement.id}`} tabIndex={-1}><dt>{requirement.title}</dt><dd>{requirement.description || "Review the governed requirement and its linked evidence."}</dd></div>)}</dl></details>}
+          {workspace.requirements.length > 0 && <details id="audit-requirements" tabIndex={-1} className={styles.card}><summary>Case evidence requirements ({workspace.requirements.length})</summary><dl className={styles.answers}>{workspace.requirements.map(requirement => <div key={requirement.id} id={`audit-requirement-${requirement.id}`} tabIndex={-1}><dt>{requirement.title}</dt><dd>{requirement.description || "Review the governed requirement and its linked evidence."}</dd></div>)}</dl></details>}
           <section className={styles.card} aria-label="AI pre-review">
             <header><h3>AI pre-review</h3><button type="button" disabled={aiLoading || saving || !workspace.capabilities.canSave} onClick={() => void reviewWithAi()}>{aiLoading ? "Reviewing recorded information..." : "Review with AI"}</button></header>
             <p className={styles.muted}>Optional assistance with saved answers, case requirements and file metadata. AI does not inspect photos, PDFs, signatures or call recordings. A Creditex reviewer makes every decision.</p>

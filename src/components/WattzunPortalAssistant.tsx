@@ -11,8 +11,9 @@ import { parseWattzunRecordLookup } from "@/lib/wattzun-records";
 import { parseWattzunActionProposal, type WattzunActionReceipt, type WattzunActionProposal } from "@/lib/wattzun-actions";
 import {
   WATTZUN_REALTIME_VOICE_STREAM_TYPE, wattzunSpokenReply,
-  type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput,
+  type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput, type WattzunVoiceResult,
 } from "@/lib/wattzun-portal";
+import { readWattzunWorkReference, readWattzunWorkContextInfo, wattzunWorkLabel, type WattzunWorkReference, type WattzunWorkContextInfo } from "@/lib/wattzun-work-context";
 import { WATTZUN_OPEN_EVENT, WATTZUN_READY_EVENT, WATTZUN_USAGE_CHANGED_EVENT, readWattzunOpenRequest, useWattzunPresentation, type WattzunOpenRequest } from "@/lib/wattzun-appearance";
 import { createWattzunBrowserVoiceEnvironment, WattzunVoiceCall, WattzunVoiceCallError, type WattzunCallStatus } from "@/lib/wattzun-voice-client";
 import { readWattzunVoiceStream } from "@/lib/wattzun-voice-stream";
@@ -29,7 +30,8 @@ const callLabels: Record<WattzunCallStatus["state"], string> = {
   idle: "Ready to call", permission: "Microphone permission", connecting: "Connecting", listening: "Listening", thinking: "Thinking", speaking: "Wattzun is speaking", muted: "Microphone muted", recovering: "Still connected", ended: "Call ended", error: "Call could not continue",
 };
 function record(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
-function isReply(value: unknown): value is WattzunReply {
+function isReply(value: unknown, portal?: WattzunPortal): value is WattzunReply {
+  if (record(value) && value.workContext !== undefined && (!portal || !readWattzunWorkContextInfo(value.workContext, portal))) return false;
   if (record(value) && value.action !== undefined && value.action !== null) {
     try { parseWattzunActionProposal(value.action); } catch { return false; }
   }
@@ -52,14 +54,26 @@ async function responsePayload(response: Response): Promise<Record<string, unkno
   }
   return payload;
 }
-async function readCallResponse(response: Response, signal: AbortSignal) {
+function sameWorkReference(first: WattzunWorkReference | null, second: WattzunWorkReference | null) {
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+function replyWorkContext(reply: WattzunReply, portal: WattzunPortal, reference: WattzunWorkReference | null): WattzunWorkContextInfo | null {
+  if (!reference) {
+    if (reply.workContext !== undefined) throw new Error("Wattzun returned information for an unselected work item. Select the work and ask again.");
+    return null;
+  }
+  const info = readWattzunWorkContextInfo(reply.workContext, portal);
+  if (!info || !sameWorkReference(info.reference, reference)) throw new Error("Wattzun returned information for different work. Ask again about your selected work.");
+  return info;
+}
+async function readCallResponse(response: Response, signal: AbortSignal, portal?: WattzunPortal) {
   if (response.status === 401 || response.status === 403) {
     const payload: unknown = await response.json().catch(() => null);
     const message = record(payload) && typeof payload.error === "string" ? payload.error
       : response.status === 401 ? "Sign in again to call Wattzun." : "Your workspace access has changed. Reopen your workspace before calling.";
     throw new WattzunVoiceCallError(message, response.status === 401 ? "authentication" : "access");
   }
-  return readWattzunVoiceStream(response, signal, isReply);
+  return readWattzunVoiceStream(response, signal, value => isReply(value, portal));
 }
 export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
   const [user, setUser] = useState<User | null>(null);
@@ -176,6 +190,12 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
   const preferencesRef = useRef({ speed: presentation.speed });
   const [callStatus, setCallStatus] = useState<WattzunCallStatus>({ state: "idle", message: "" });
   const [muted, setMuted] = useState(false);
+  const [workReference, setWorkReference] = useState<WattzunWorkReference | null>(null);
+  const [workContext, setWorkContext] = useState<WattzunWorkContextInfo | null>(null);
+  const [selectionNotice, setSelectionNotice] = useState("");
+  const workReferenceRef = useRef<WattzunWorkReference | null>(null);
+  const contextGeneration = useRef(0);
+  const voiceContextRequest = useRef<AbortController | null>(null);
   const voiceCall = useRef<WattzunVoiceCall | null>(null);
   const textRequest = useRef<AbortController | null>(null);
   const active = useRef(true);
@@ -193,6 +213,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     return () => {
       active.current = false;
       textRequest.current?.abort();
+      voiceContextRequest.current?.abort();
       voiceCall.current?.dispose();
       window.removeEventListener("pagehide", leave);
     };
@@ -202,6 +223,19 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     messagesRef.current = [...messagesRef.current, ...turns];
     setMessages(messagesRef.current);
   }, []);
+  const selectWork = useCallback((value: WattzunWorkReference | null) => {
+    const next = value ? readWattzunWorkReference(value, scope.portal) : null;
+    if (value && !next) { setError("Choose a work item from your current workspace."); return; }
+    if (sameWorkReference(workReferenceRef.current, next)) return;
+    contextGeneration.current++;
+    workReferenceRef.current = next;
+    textRequest.current?.abort(); textRequest.current = null;
+    voiceContextRequest.current?.abort(); voiceContextRequest.current = null;
+    voiceCall.current?.interrupt();
+    messagesRef.current = [];
+    setMessages([]); setBusy(false); setError(""); setWorkReference(next); setWorkContext(null);
+    setSelectionNotice("Previous conversation cleared for the new work selection.");
+  }, [scope.portal]);
   const navigate = useCallback((href: string) => {
     const destination = workspaceHref(href, scope, user.uid, pathname);
     if (!/^\/(?!\/)/.test(destination)) return;
@@ -214,12 +248,12 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     onMinimise?.();
   }, [scope, user.uid, pathname, router, onMinimise]);
   const dismissAction = useCallback((messageId: string) => {
-    if (!active.current) return;
+    if (!active.current || !messagesRef.current.some(message => message.id === messageId)) return;
     messagesRef.current = messagesRef.current.map(message => message.id === messageId && message.reply ? { ...message, reply: { ...message.reply, action: null } } : message);
     setMessages(messagesRef.current);
   }, []);
   const actionCreated = useCallback((messageId: string, receipt: WattzunActionReceipt) => {
-    if (!active.current) return;
+    if (!active.current || !messagesRef.current.some(message => message.id === messageId)) return;
     dismissAction(messageId);
     const message = receipt.kind === "quote_draft" ? "Your quote draft has been saved in TLink. Open it to review the details." : "The customer has been created in TLink. Open the saved record to review the details.";
     append([{ id: crypto.randomUUID(), role: "assistant", content: message, reply: { kind: "answer", message, questions: [], links: [{ label: receipt.label, href: receipt.href }] } }]);
@@ -227,11 +261,13 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
   const requestInput = useCallback((message: string): WattzunTurnInput => ({
     portal: scope.portal, scopeId: scope.scopeId, requestId: crypto.randomUUID(), message,
     history: wattzunConversationHistory(messagesRef.current), preferences: { ...preferencesRef.current },
+    ...(workReferenceRef.current ? { workReference: { ...workReferenceRef.current } } : {}),
   }), [scope]);
   async function sendText() {
     const message = draft.trim();
     if (!message || busy || textRequest.current || callActive) return;
     const controller = new AbortController();
+    const generation = contextGeneration.current;
     textRequest.current = controller;
     setBusy(true); setError("");
     try {
@@ -241,19 +277,23 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       const payload = await responsePayload(await fetch("/api/wattzun/portal", {
         method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(input), signal: controller.signal,
       }));
-      if (!active.current || controller.signal.aborted) return;
-      if (!isReply(payload.reply)) throw new Error("Wattzun returned an unreadable answer. Try again.");
-      append([{ id: input.requestId, role: "user", content: message }, { id: `${input.requestId}:reply`, role: "assistant", content: wattzunSpokenReply(payload.reply), reply: payload.reply }]);
+      if (!active.current || controller.signal.aborted || generation !== contextGeneration.current) return;
+      if (!isReply(payload.reply, scope.portal)) throw new Error("Wattzun returned an unreadable answer. Try again.");
+      const info = replyWorkContext(payload.reply, scope.portal, input.workReference ?? null);
+      const reply = { ...payload.reply, ...(info ? { workContext: info } : {}) };
+      if (info) setWorkContext(info);
+      append([{ id: input.requestId, role: "user", content: message }, { id: `${input.requestId}:reply`, role: "assistant", content: wattzunSpokenReply(reply), reply }]);
       window.dispatchEvent(new CustomEvent(WATTZUN_USAGE_CHANGED_EVENT, { detail: { userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId } }));
       setDraft("");
     } catch (requestError) {
-      if (active.current && !controller.signal.aborted) setError(requestError instanceof Error ? requestError.message : "That question could not be sent. Try again.");
+      if (active.current && !controller.signal.aborted && generation === contextGeneration.current) setError(requestError instanceof Error ? requestError.message : "That question could not be sent. Try again.");
     } finally { if (textRequest.current === controller) { textRequest.current = null; if (active.current) setBusy(false); } }
   }
   const startCall = useCallback(() => {
     if (busy || callActive) return;
     voiceCall.current?.dispose();
     setMuted(false); setError("");
+    const replyGenerations = new WeakMap<WattzunVoiceResult, number>();
     const call = new WattzunVoiceCall(createWattzunBrowserVoiceEnvironment(), {
       status: status => { if (active.current && voiceCall.current === call) setCallStatus(status); },
       async greeting(signal) {
@@ -266,17 +306,37 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         return result.audio;
       },
       async submit(audio, signal) {
+        const generation = contextGeneration.current;
         const input = requestInput("");
-        const token = await user.getIdToken();
-        if (signal.aborted) throw new Error("Call ended.");
-        const form = new FormData();
-        form.append("request", JSON.stringify(input));
-        form.append("audio", audio, "question.wav");
-        return readCallResponse(await fetch("/api/wattzun/voice", { method: "POST",
-          headers: { Authorization: `Bearer ${token}`, Accept: WATTZUN_REALTIME_VOICE_STREAM_TYPE }, body: form, signal }), signal);
+        const controller = new AbortController();
+        voiceContextRequest.current?.abort(); voiceContextRequest.current = controller;
+        const combined = AbortSignal.any([signal, controller.signal]);
+        let result: WattzunVoiceResult | null = null;
+        try {
+          const token = await user.getIdToken();
+          if (combined.aborted) throw new Error("Call ended.");
+          const form = new FormData();
+          form.append("request", JSON.stringify(input));
+          form.append("audio", audio, "question.wav");
+          result = await readCallResponse(await fetch("/api/wattzun/voice", { method: "POST",
+            headers: { Authorization: `Bearer ${token}`, Accept: WATTZUN_REALTIME_VOICE_STREAM_TYPE }, body: form, signal: combined }), combined, scope.portal);
+          if (!active.current || combined.aborted || generation !== contextGeneration.current) throw new Error("The selected work changed. Ask again about the current work.");
+          const info = replyWorkContext(result.reply, scope.portal, input.workReference ?? null);
+          const validated = { ...result, reply: { ...result.reply, ...(info ? { workContext: info } : {}) } };
+          replyGenerations.set(validated, generation);
+          return validated;
+        } catch (failure) {
+          if (result?.audio.mimeType === "audio/pcm") await result.audio.stream.cancel().catch(() => {});
+          if (generation !== contextGeneration.current) throw new Error("The selected work changed. Ask again about the current work.");
+          throw failure;
+        }
       },
       reply: result => {
-        if (!active.current || voiceCall.current !== call) return;
+        if (!active.current || voiceCall.current !== call || replyGenerations.get(result) !== contextGeneration.current) {
+          if (result.audio.mimeType === "audio/pcm") void result.audio.stream.cancel().catch(() => {});
+          return;
+        }
+        if (result.reply.workContext) setWorkContext(result.reply.workContext);
         const id = crypto.randomUUID();
         const turns: Message[] = [{ id: `${id}:reply`, role: "assistant", content: wattzunSpokenReply(result.reply), reply: result.reply,
           ...(result.reply.action ? { reviewDraft: result.reply.action } : {}),
@@ -296,11 +356,12 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     const frame = window.requestAnimationFrame(() => {
       if (!active.current || handledRequest.current === openRequest.id) return;
       handledRequest.current = openRequest.id;
+      if (openRequest.workReference) selectWork(openRequest.workReference);
       if (openRequest.mode === "call") startCall();
       else { if (openRequest.initialMessage !== undefined) setDraft(openRequest.initialMessage); composer.current?.focus(); }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [openRequest, presentation.ready, startCall]);
+  }, [openRequest, presentation.ready, startCall, selectWork]);
 
   const hangUp = () => { voiceCall.current?.hangUp(); setMuted(false); };
   const toggleMute = () => { voiceCall.current?.toggleMute(); setMuted(current => !current); };
@@ -310,9 +371,12 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       <button type="button" onClick={onExpand}>Open Wattzun</button>
       <button type="button" disabled={callStatus.state === "permission" || callStatus.state === "connecting"} aria-pressed={muted} onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>
       <button className={styles.hangUp} type="button" onClick={hangUp}>Hang up</button>
+      {workReference && <p className={styles.dockedContext}>Helping with: {workContext?.title || wattzunWorkLabel(workReference)}</p>}
       {callStatus.state === "recovering" && callStatus.message && <p className={styles.callHint} role="status">{callStatus.message}</p>}
     </div>}
     <div className={styles.conversation} hidden={!expanded}>
+    {workReference && <section className={styles.workContext} aria-label="Selected work"><div><span>Helping with</span><strong>{workContext?.title || wattzunWorkLabel(workReference)}</strong></div><button type="button" onClick={() => selectWork(null)} aria-label="Clear selected work">Clear</button><p>Selecting work shares its current authorised details with our AI provider. File and photo contents are not read.</p></section>}
+    {selectionNotice && <p className={styles.callHint} role="status">{selectionNotice}</p>}
     <div className={styles.tools}>
       {!callActive ? <button className={styles.callButton} type="button" disabled={busy} onClick={startCall}><PhoneIcon />Call Wattzun</button> : <span className={styles.callBadge} role="status"><span className={`${styles.activity} ${callStatus.state === "listening" ? styles.listening : ""}`} />{callLabels[callStatus.state]}</span>}
       <details className={styles.settings}>
@@ -335,7 +399,8 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       {messages.map(message => <article key={message.id} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}><strong>{message.role === "user" ? "You" : "Wattzun"}</strong><p>{message.reply ? message.reply.message : message.content}</p>{message.reply && message.reply.questions.length > 0 && <ol>{message.reply.questions.map((question, index) => <li key={index}>{question}</li>)}</ol>}{message.reply && message.reply.links.length > 0 && <div className={styles.links}>{message.reply.links.map(link => wattzunPortalForPath(link.href.split(/[?#]/)[0]) === scope.portal
         ? <Link key={link.href} href={workspaceHref(link.href, scope, user.uid, pathname)} prefetch={false} onNavigate={event => { event.preventDefault(); navigate(link.href); }}>{link.label} <span aria-hidden="true">↗</span></Link>
         : <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer">{link.label} <span aria-hidden="true">↗</span></a>)}</div>}
-        {scope.portal === "trade" && message.reply?.lookup && <WattzunRecordPicker user={user} scope={scope} lookup={message.reply.lookup} onNavigate={navigate} />}
+        {message.reply?.workContext && <details className={styles.contextSources}><summary>Sources and limits</summary><strong>{message.reply.workContext.title}</strong><div className={styles.links}>{message.reply.workContext.sources.map(source => <Link key={`${source.href}:${source.label}`} href={workspaceHref(source.href, scope, user.uid, pathname)} prefetch={false} onNavigate={event => { event.preventDefault(); navigate(source.href); }}>{source.label} <span aria-hidden="true">↗</span></Link>)}</div>{message.reply.workContext.limitations.length > 0 && <ul>{message.reply.workContext.limitations.map((limitation, index) => <li key={index}>{limitation}</li>)}</ul>}</details>}
+        {scope.portal === "trade" && message.reply?.lookup && <WattzunRecordPicker user={user} scope={scope} lookup={message.reply.lookup} onNavigate={navigate} onSelectWork={selectWork} />}
         {scope.portal === "trade" && message.reply?.action && <WattzunActionReview proposal={message.reply.action} user={user} scopeId={scope.scopeId} onCreated={receipt => actionCreated(message.id, receipt)} onCancel={() => dismissAction(message.id)} onNavigate={navigate} />}
       </article>)}
       {busy && <p className={styles.callHint} role="status">Wattzun is thinking...</p>}

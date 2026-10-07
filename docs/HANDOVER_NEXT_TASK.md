@@ -1,9 +1,21 @@
 # Next task handover
 
-Status: Sales workspace and Wattzun integration; persistent calls and reviewed customer/quote actions with GitHub/Sites publication authorised.
-Prepared: 6 October 2026
+Status: Selected job, audit and Council report assistance; matching GitHub/Sites publication authorised.
+Prepared: 7 October 2026
 
-## Active follow-up: useful Wattzun calls and real reviewed actions
+## Active follow-up: Wattzun works from the selected job, audit or Council report
+
+Outcome: users can ask Wattzun about the exact work they have selected, receive source-linked summaries, next steps and useful drafts, and continue the same message or voice conversation while using TLink, Council or Creditex.
+
+The shared Wattzun workflow owns reference parsing, authorised context loading/rechecking, model context, source links, conversation controls and capability discovery. Separate writers own the existing trade, Creditex and Council context projections and their local entry controls. Reuse current record/report services, permissions, human review and provider configuration. Expected change budget: the shared assistant/route/guide and narrow per-portal context adapters, entry components and focused tests, without a new persistence layer or general command framework.
+
+Acceptance: only explicit portal-bound references reach the server; no client-supplied facts are treated as records. Current record grants, organisation/council scope and source identity are rechecked before returning text or speech. Sources and limitations remain visible. Council small-cohort suppression remains intact. Audit assistance uses permitted structured answers and metadata and cannot approve or submit. TLink drafts use existing reviewed actions. Navigation and context changes preserve the call, discard stale results and never mix users or businesses. Desktop/mobile, denied/revoked/stale/aborted requests and voice continuity have focused regression coverage.
+
+In scope: selected job assistance, selected audit assistance, Council reporting explanations, exact verified navigation, role-specific task discovery and a clearly prioritised capability roadmap distinguishing implemented features from proposed integrations. Out of scope: autonomous sends, audit decisions, claim submission, billing, new credentials/vendors, attachment-byte interpretation and broad private-record search. The user explicitly authorised implementation and matching GitHub/Sites publication; the existing hosted OpenAI configuration is retained.
+
+Validation: focused context/projection/route/provider/UI tests, typecheck, scoped lint, the existing validate command and full suite for the changed privacy/shared contracts, migration integrity and the committed publication build. Record existing failures separately. Stop if a migration, paid service, wider unscoped data disclosure or external authority is required. Release evidence belongs in C:/Webproject/outputs/wattzun-capabilities-20261007/.
+
+## Previous follow-up: useful Wattzun calls and real reviewed actions
 
 Outcome: Wattzun keeps an active call and conversation alive while the user works across authorised pages in the same portal and business, produces a real reviewed customer or quote draft through existing TLink services, and responds more promptly with a subtle Australian accent. The existing root assistant/navigation own call persistence; the narrow actions contract/review/route reuse customer, quick-quote and address-proof services; the provider gateway owns a Wattzun-only latency profile and fixed speech instructions. One writer owns each subsystem.
 

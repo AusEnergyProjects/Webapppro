@@ -73,9 +73,10 @@ const byId = (tree, id) => nodes(tree, node => node.props?.id === id)[0];
 const jobTabs = tree => nodes(tree, node => node.type === "nav" && node.props["aria-label"] === "Job card sections")[0];
 const tabButton = (tree, label) => nodes(jobTabs(tree), node => node.type === "button" && text(node) === label)[0];
 
-function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides = {} } = {}) {
+function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides = {}, userUid = "owner",
+  business = { ownerUid: "owner", businessName: "Synthetic trade", role: "owner", memberId: "", displayName: "Synthetic owner" } } = {}) {
   const hooks = hookState();
-  const frames = [], scrolled = [], focused = [], reloads = [], outcomes = [];
+  const frames = [], scrolled = [], focused = [], reloads = [], outcomes = [], assistantRequests = [];
   const job = {
     id: "job-1", workNumber: "TLJ-1", revision: 4, title: "Test job", serviceCategory: "rental-inspection",
     customerSource: "trade_owned", sourceType: "internal", stage: "backlog", pipelineStage: "enquiry",
@@ -85,6 +86,8 @@ function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides
   const dependencies = {
     ...componentStubs(workspace, "JobDetail"), ...hooks, canReviewCustomerDeliveries,
     useTradeBusinessFetch: () => async () => { throw new Error("Unexpected request"); },
+    useTradeBusiness: () => business,
+    requestWattzunAssistant: async request => { assistantRequests.push(request); return true; },
     useJobTimeTracking: () => {},
     nextAppointmentSlot: () => "2026-10-01T09:00", lifecycleLabel: value => value,
     scheduleProposalKey: (...parts) => parts.join(":"), registerStyles: {},
@@ -96,16 +99,50 @@ function workspaceHarness({ initialTab = "field", permissions, job: jobOverrides
   };
   const renderJob = loadFunction(workspace, "JobDetail", dependencies);
   const props = {
-    job, initialTab, permissions, sites: [], teamMembers: [], busy: "", user: { uid: "owner", getIdToken: async () => "test-token" },
+    job, initialTab, permissions, sites: [], teamMembers: [], busy: "", user: { uid: userUid, getIdToken: async () => "test-token" },
     onReload: async () => { reloads.push(job.id); },
     onSalesOutcome: job => outcomes.push(job.id),
   };
   return {
     render() { hooks.reset(); return renderJob(props); },
     runFrames() { frames.splice(0).forEach(callback => callback()); },
-    scrolled, focused, reloads, outcomes,
+    scrolled, focused, reloads, outcomes, assistantRequests,
   };
 }
+
+test("Ask Wattzun selects this job for the authenticated actor in the current business", () => {
+  const h = workspaceHarness({ initialTab: "summary", userUid: "synthetic-staff",
+    business: { ownerUid: "selected-business-owner", businessName: "Selected trade", role: "member", memberId: "synthetic-member", displayName: "Synthetic staff" },
+    job: { id: "selected-job-42" },
+  });
+  const tree = h.render();
+  const ask = nodes(tree, node => node.type === "button" && text(node) === "Ask Wattzun")[0];
+  assert.ok(ask);
+  assert.equal(h.assistantRequests.length, 0);
+  ask.props.onClick();
+  assert.deepEqual(h.assistantRequests, [{ userUid: "synthetic-staff", portal: "trade", scopeId: "selected-business-owner",
+    mode: "message", workReference: { kind: "trade_job", recordId: "selected-job-42" },
+    initialMessage: "Summarise this job, what is missing and the next steps.",
+  }]);
+  assert.deepEqual(h.reloads, []); assert.deepEqual(h.outcomes, []);
+});
+
+test("Ask Wattzun is absent without a selected business or for protected, opportunity and restricted released jobs", () => {
+  for (const options of [
+    { business: null },
+    { job: { customerSource: "platform_private" } },
+    { job: { sourceType: "opportunity" } },
+    ...[{ canViewQuotes: false, canManageQuotes: true }, { canViewQuotes: true, canManageQuotes: false }]
+      .map(permissions => ({ permissions, job: { customerSource: "public_lead_released" } })),
+  ]) {
+    const h = workspaceHarness({ initialTab: "summary", ...options });
+    assert.equal(nodes(h.render(), node => node.type === "button" && text(node) === "Ask Wattzun").length, 0);
+    assert.deepEqual(h.assistantRequests, []);
+  }
+  const permitted = workspaceHarness({ initialTab: "summary", permissions: { canViewQuotes: true, canManageQuotes: true },
+    job: { customerSource: "public_lead_released" } });
+  assert.equal(nodes(permitted.render(), node => node.type === "button" && text(node) === "Ask Wattzun").length, 1);
+});
 
 test("unanswered quotes show the customer decision and an authorised lost action without field-work nags", () => {
   const h = workspaceHarness({ initialTab: "summary", job: { quoteStatus: "sent", pipelineStage: "quoting", salesOutcome: { canMarkLost: true, canReopen: false } } });

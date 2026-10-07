@@ -10,6 +10,7 @@ import * as catalogue from '../src/lib/australian-government-program-catalogue.t
 import * as dateHelpers from '../src/lib/job-register-dates.ts';
 import * as certificateTypes from '../src/lib/creditex-certificate-types.ts';
 import * as permissions from '../src/lib/creditex-permissions.ts';
+import * as auditNavigation from '../src/lib/creditex-workspace-navigation.ts';
 const compile = name => ts.transpileModule(fs.readFileSync(new URL(`../src/components/${name}.tsx`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const text = node => node == null || typeof node === 'boolean' ? '' : typeof node === 'string' || typeof node === 'number' ? String(node) : Array.isArray(node) ? node.map(text).join(' ') : text(node.props?.children);
 const nodes = (node, predicate) => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child,predicate)) : [...(predicate(node) ? [node] : []),...nodes(node.props?.children,predicate)];
@@ -27,29 +28,30 @@ const job = (id,name) => ({ id, jobId:id, jobNumber:id.toUpperCase(),jobTitle:'H
 const jobs=[job('job-1','Alex Example'),job('job-2','Sam Sample')];
 const audit = item => ({ ok:true,customer:{ phone:item.customerPhone },groups:[], serviceSiteAddressProvenance:{entryMode:'manual',provider:'',providerReference:'',formattedAddress:'Test site',verifiedAt:'',status:'manual_review_required',reviewRequired:true} });
 function runtime(name, props={}, options={}) {
-  const slots=[], effects=[], callbacks=[], queued=[], timers=new Map(), requests=[], requestOptions=[], focusEvents=[];
+  const slots=[], effects=[], callbacks=[], queued=[], timers=new Map(), requests=[], requestOptions=[], focusEvents=[], effectEvents=[];
   let cursor=0,stateOrdinal=0,timerId=0,mounted=true,lateStateWrites=0;
   const hooks={
     useState(initial) { const i=cursor++, ordinal=stateOrdinal++; if(!(i in slots))slots[i]=ordinal in (options.seed||{}) ? options.seed[ordinal] : typeof initial==='function'?initial():initial; return [slots[i],value=>{if(!mounted)lateStateWrites++;slots[i]=typeof value==='function'?value(slots[i]):value;}]; },
     useRef(initial){ const i=cursor++; if(!(i in slots))slots[i]={current:initial};return slots[i];},
     useCallback(callback,deps){const i=cursor++;if(!callbacks[i]||deps.some((x,j)=>x!==callbacks[i].deps[j]))callbacks[i]={callback,deps};return callbacks[i].callback;},
     useMemo(callback){cursor++;return callback();},
+    useEffectEvent(callback){const i=cursor++;if(!(i in slots)){slots[i]={callback,event:(...args)=>slots[i].callback(...args)};effectEvents.push(slots[i].event);}slots[i].callback=callback;return slots[i].event;},
     useEffect(callback,deps){const i=cursor++; if(options.noEffects)return; if(!effects[i]||deps.some((x,j)=>x!==effects[i].deps[j])){effects[i]?.cleanup?.();effects[i]={deps};queued.push(()=>{effects[i].cleanup=callback();});}},
   };
   const stubs=new Map();
   const dynamicPanel=loader=>{const name=String(loader).match(/["']\.\/([^"']+)["']/)?.[1]||'DynamicPanel';if(!stubs.has(name))stubs.set(name,Object.assign(()=>null,{displayName:name}));return stubs.get(name);};
   const rowActions={};
   const mfa={};
-  const require=id=>id==='@/lib/creditex-permissions'?permissions:id==='./PortalWorkspacePreferences'?{usePortalWorkspacePreferences:()=>({rootProps:{},profile:{displayName:'Test Reviewer'}}),PortalWorkspacePreferences:Object.assign(()=>null,{displayName:'PortalWorkspacePreferences'})}:id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./FirebaseMfa'?mfa:id==='firebase/app'?firebaseApp:id==='firebase/auth'?firebaseAuth:id==='@/lib/firebase-mfa'?firebaseMfa:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/creditex-certificate-types'?certificateTypes:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:dynamicPanel}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
+  const require=id=>id==='@/lib/creditex-workspace-navigation'?auditNavigation:id==='@/lib/creditex-permissions'?permissions:id==='./PortalWorkspacePreferences'?{usePortalWorkspacePreferences:()=>({rootProps:{},profile:{displayName:'Test Reviewer'}}),PortalWorkspacePreferences:Object.assign(()=>null,{displayName:'PortalWorkspacePreferences'})}:id==='react'?hooks:id==='react/jsx-runtime'?jsx:id==='./FirebaseMfa'?mfa:id==='firebase/app'?firebaseApp:id==='firebase/auth'?firebaseAuth:id==='@/lib/firebase-mfa'?firebaseMfa:id==='./JobRowActions'?rowActions:id==='@/lib/job-register-dates'?dateHelpers:id==='@/lib/creditex-certificate-types'?certificateTypes:id==='@/lib/australian-government-program-catalogue'?catalogue:id==='@/lib/firebase-client'?{firebaseAuth:{currentUser:user}}:id==='next/dynamic'?{default:dynamicPanel}:id.endsWith('.module.css')?{default:new Proxy({},{get:(_,key)=>String(key)})}:new Proxy({},{get:(_,key)=>{const name=key==='default'?id.split('/').pop():String(key);if(!stubs.has(name))stubs.set(name,Object.defineProperty(()=>null,'displayName',{value:name}));return stubs.get(name);}});
   Function('require','exports',compile('FirebaseMfa'))(require,mfa);
   Function('require','exports',compile('JobRowActions'))(require,rowActions);
   const api=async(path,init)=>{requests.push(path);requestOptions.push(init);if(options.api)return options.api(path,init);return path.includes('?')?{ok:true,items:jobs,total:150,totalPages:3,page:Number(new URL(path,'https://test.invalid').searchParams.get('page'))}:audit(jobs.find(item=>path.endsWith(item.id)));};
   const filterLauncher={isConnected:true,focus(){focusEvents.push('Filters');}};
-  const window={setTimeout(callback){const id=++timerId;timers.set(id,callback);return id;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(callback){callback();},confirm:()=>options.confirm!==false};
+  const window={location:{search:options.search||''},setTimeout(callback){const id=++timerId;timers.set(id,callback);return id;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(callback){callback();},confirm:()=>options.confirm!==false};
   const exports={}; Function('require','exports','window','document',compile(name))(require,exports,window,{getElementById:()=>({focus(){}})});
   const render=()=>{cursor=0;stateOrdinal=0;const tree=exports[name]({...props,...(name==='CreditexPlannedIntakeQueue'?{api}:{})});for(const node of nodes(tree,n=>n.props?.ref))if(!node.props.ref.current)node.props.ref.current=node.props.className==='filterToggle'?filterLauncher:{focus(){focusEvents.push(node.props['aria-label']||normalize(text(node)));},scrollIntoView(){},scrollTop:0,scrollLeft:0};for(const effect of queued.splice(0))effect();return tree;};
   const settle=async()=>{render();for(const [id,callback] of [...timers]){timers.delete(id);callback();}await flush();return render();};
-  return {render,settle,requests,requestOptions,stubs,filterLauncher,focusEvents,get lateStateWrites(){return lateStateWrites;},async mount(){return settle();},cleanup(){mounted=false;for(const effect of effects)effect?.cleanup?.();}};
+  return {render,settle,requests,requestOptions,stubs,filterLauncher,focusEvents,effectEvents,search(value){window.location.search=value;},get lateStateWrites(){return lateStateWrites;},async mount(){return settle();},cleanup(){mounted=false;for(const effect of effects)effect?.cleanup?.();}};
 }
 
 test('advanced filters batch changes until Search, request the full dataset and reset pagination',async()=>{
@@ -244,6 +246,20 @@ test('a current checklist cannot hide later lifecycle outcomes or claim they awa
 // Keep the real MFA hook's resolver and the portal's mfaRequired state at their
 // initial values; the session fixture follows those two state slots.
 function portal(role='admin', options={}) {return runtime('CreditexCompliancePortal',{}, {noEffects:true,...options,seed:{2:user,3:true,4:{role,email:'reviewer@example.invalid',displayName:'Test Reviewer',governanceIdentityVerified:true,canEditFieldMasters:role==='admin',organisation:{code:'creditex',legalName:'Creditex',tradingName:'Creditex'},...options.session},5:false}});}
+
+test('linked audit navigation selects the exact audit through existing job access and dirty-review guards', () => {
+  const h = portal('reviewer', { search: '?workspace=cases&intentId=synthetic-first', confirm: false });
+  h.render(); h.effectEvents[0](); let tree = h.render();
+  let desk = nodes(tree, node => node.type?.displayName === 'CreditexJobAuditDesk')[0];
+  assert.equal(desk.props.intentId, 'synthetic-first'); assert.equal(desk.props.user.uid, user.uid);
+  desk.props.onDirtyChange(true); h.search('?workspace=cases&intentId=synthetic-second'); h.effectEvents[0](); tree = h.render();
+  desk = nodes(tree, node => node.type?.displayName === 'CreditexJobAuditDesk')[0]; assert.equal(desk.props.intentId, 'synthetic-first');
+  desk.props.onDirtyChange(false); h.effectEvents[0](); tree = h.render();
+  assert.equal(nodes(tree, node => node.type?.displayName === 'CreditexJobAuditDesk')[0].props.intentId, 'synthetic-second'); h.cleanup();
+  const denied = portal('reviewer', { search: '?workspace=cases&intentId=synthetic-first', session: { permissions: [] } });
+  denied.render(); denied.effectEvents[0](); tree = denied.render();
+  assert.equal(nodes(tree, node => node.type?.displayName === 'CreditexJobAuditDesk').length, 0); denied.cleanup();
+});
 
 test('Home defaults and daily work plus compliance tools stay directly visible in the left rail',()=>{
   const h=portal();let tree=h.render();assert.equal(button(tree,'Home dashboard').props['aria-selected'],true);

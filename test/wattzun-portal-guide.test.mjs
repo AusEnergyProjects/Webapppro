@@ -38,24 +38,24 @@ test('guidance points to existing owner/staff workflows and keeps automated reco
   assert.match(WATTZUN_TASK_GUIDANCE.trade.join(' '),/This conversation does not invoke it/);
   assert.match(WATTZUN_TASK_GUIDANCE.trade.join(' '),/30-question limit and 8 questions per page/);
   assert.match(WATTZUN_PORTAL_GUIDE.creditex[1].description,/does not inspect photo\/PDF contents/);
-  assert.match(WATTZUN_PORTAL_GUIDE.creditex[1].description,/has not loaded that job or run its pre-review/);
+  assert.match(WATTZUN_PORTAL_GUIDE.creditex[1].description,/Ask Wattzun.*authorised saved-source projection.*does not run its separate pre-review/);
   for(const portal of Object.keys(WATTZUN_PORTAL_GUIDE)){
     const ids=WATTZUN_PORTAL_GUIDE[portal].map(item=>item.id);assert.equal(new Set(ids).size,ids.length);
     for(const item of WATTZUN_PORTAL_GUIDE[portal]) assert.ok(item.href.startsWith('/')&&!item.href.includes('jobId='));
   }
 });
 
-test('Wattzun settings guidance uses verified owner/staff destinations and sidebar-only council/auditor panels',()=>{
+test('Wattzun settings guidance uses verified destinations and preserves current Council and auditor access',()=>{
   const trade=WATTZUN_PORTAL_GUIDE.trade.find(item=>item.id==='trade_wattzun');
   assert.equal(trade.href,'/direct-trade/dashboard?workspace=wattzun');
   assert.match(trade.description,/Specialist tools for owners.*staff workspace for team members/);
   assert.match(trade.description,/current authorised business workspace/);
-  for(const [portal,path] of [['council','/council'],['creditex','/creditex/compliance']]){
+  for(const [portal,path] of [['council','/council?workspace=wattzun'],['creditex','/creditex/compliance']]){
     const entry=WATTZUN_PORTAL_GUIDE[portal].find(item=>item.id===`${portal}_wattzun`);
     assert.equal(entry.href,path);
     assert.match(entry.description,portal==='council'?/sidebar select Wattzun under Tools/:/left sidebar select Wattzun\./);
-    assert.match(entry.description,/no verified direct link to this panel/);
-    assert.doesNotMatch(entry.href,/\?/);
+    if(portal==='council') assert.match(entry.description,/verified panel link retains the selected council and current role/);
+    else { assert.match(entry.description,/no verified direct link to this panel/); assert.doesNotMatch(entry.href,/\?/); }
     assert.match(entry.description,/Current (?:council|Creditex) access is required/);
   }
   assert.match(WATTZUN_PORTAL_GUIDE.council.find(item=>item.id==='council_wattzun').description,/demonstration does not offer this tool/);

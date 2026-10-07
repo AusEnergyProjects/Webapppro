@@ -7,12 +7,15 @@ import { prepareWattzunRealtimeTurn, type WattzunRealtimeTimings } from "./wattz
 import { parseWattzunGreeting } from "./wattzun-greeting";
 import { parseWattzunUsageScope, type WattzunUsage } from "./wattzun-usage";
 import { readWattzunUsage, recordWattzunUsage, WattzunUsageError, type WattzunUsageRecord } from "./wattzun-usage-server";
+import { loadWattzunWorkContext, validateWattzunWorkContext, wattzunWorkContextInfo } from "./wattzun-work-context-server";
+import { WattzunWorkContextError, type WattzunWorkContext, type WattzunWorkReference } from "./wattzun-work-context";
 
-type Context = WattzunAccess & { input: WattzunTurnInput; signal?: AbortSignal };
+type Context = WattzunAccess & { input: WattzunTurnInput; signal?: AbortSignal; workContext?: WattzunWorkContext };
 export type WattzunRouteDependencies = {
   authenticate: (request: Request) => Promise<void>;
   scopes: (request: Request, portal: WattzunPortal) => Promise<WattzunScope[]>;
   access: (request: Request, portal: WattzunPortal, scopeId: string) => Promise<WattzunAccess>;
+  context: (request: Request, access: WattzunAccess, reference: WattzunWorkReference) => Promise<WattzunWorkContext>;
   reply: (options: Context) => Promise<WattzunReply>;
   transcribe: (options: Context & { audio: Blob }) => Promise<string>;
   speak: (options: Context & { reply: WattzunReply }) => Promise<{ base64: string; mimeType: "audio/mpeg" }>;
@@ -23,6 +26,7 @@ export type WattzunRouteDependencies = {
 };
 const defaults: WattzunRouteDependencies = {
   authenticate: authenticateWattzun, scopes: listWattzunScopes, access: requireWattzunAccess,
+  context: loadWattzunWorkContext,
   reply: prepareWattzunPortalReply, transcribe: transcribeWattzunPortalAudio, speak: speakWattzunPortalReply, streamSpeak: streamWattzunPortalReply,
   realtime: prepareWattzunRealtimeTurn,
   recordUsage: recordWattzunUsage, usage: readWattzunUsage,
@@ -54,6 +58,7 @@ function turnTimer() {
   };
 }
 function failure(error: unknown) {
+  if (error instanceof WattzunWorkContextError) return json({ ok: false, error: error.message }, error.status);
   if (error instanceof WattzunUsageError) return json({ ok: false, error: error.code === "conflict"
     ? "This request was already used for a different Wattzun exchange. Start a new turn."
     : "Wattzun usage could not be saved or loaded. Please try again." }, error.code === "conflict" ? 409 : 503);
@@ -104,6 +109,27 @@ async function recheck(request: Request, previous: WattzunAccess, deps: WattzunR
 function requireOpenConversation(request: Request) {
   if (request.signal.aborted) throw new WattzunAccessError(409, "The conversation was closed. Start again to continue.");
 }
+async function selectedContext(request: Request, access: WattzunAccess, input: WattzunTurnInput, deps: WattzunRouteDependencies) {
+  if (!input.workReference) return undefined;
+  requireOpenConversation(request);
+  const context = await deps.context(request, access, input.workReference);
+  requireOpenConversation(request);
+  validateWattzunWorkContext(context, access, input.workReference);
+  return context;
+}
+async function recheckTurn(request: Request, access: WattzunAccess, input: WattzunTurnInput, context: WattzunWorkContext | undefined, deps: WattzunRouteDependencies) {
+  const latest = await recheck(request, access, deps);
+  if (context) {
+    const refreshed = await selectedContext(request, latest, input, deps);
+    if (!refreshed || refreshed.sourceSha256 !== context.sourceSha256) {
+      throw new WattzunWorkContextError(409, "This work item changed while Wattzun was answering. Ask again to use its current details. Your call can continue.");
+    }
+  }
+  return latest;
+}
+function withContext(reply: WattzunReply, context?: WattzunWorkContext): WattzunReply {
+  return context ? { ...reply, workContext: wattzunWorkContextInfo(context) } : reply;
+}
 export async function getWattzunPortal(request: Request, deps = defaults): Promise<Response> {
   try {
     await deps.authenticate(request);
@@ -140,10 +166,12 @@ export async function postWattzunPortal(request: Request, deps = defaults): Prom
     const input = parseWattzunTurn(JSON.parse(new TextDecoder().decode(bytes)));
     const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
-    const reply = await timing.run("llm", () => deps.reply({ ...access, input, signal: request.signal }));
-    const latest = await timing.run("access", () => recheck(request, access, deps));
+    const workContext = await timing.run("access", () => selectedContext(request, access, input, deps));
+    const reply = await timing.run("llm", () => deps.reply({ ...access, input, workContext, signal: request.signal }));
+    const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
     await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "text" }));
-    return timing.response(json({ ok: true, reply }));
+    await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+    return timing.response(json({ ok: true, reply: withContext(reply, workContext) }));
   } catch (error) { return timing.response(failure(error)); }
 }
 export async function postWattzunVoice(request: Request, deps = defaults): Promise<Response> {
@@ -172,39 +200,41 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
     const input = parseWattzunTurn(JSON.parse(raw), true);
     const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
+    const workContext = await timing.run("access", () => selectedContext(request, access, input, deps));
     if (realtime) {
-      const prepared = await timing.run("realtime", () => deps.realtime({ ...access, input, audio, signal: request.signal,
-        beforeSpeech: async () => { await timing.run("access", () => recheck(request, access, deps)); } }));
+      const prepared = await timing.run("realtime", () => deps.realtime({ ...access, input, workContext, audio, signal: request.signal,
+        beforeSpeech: async () => { await timing.run("access", () => recheckTurn(request, access, input, workContext, deps)); } }));
       speechStream = prepared.audio;
       for (const [stage, duration] of Object.entries(prepared.timings || {})) timing.provider(stage, duration);
-      const latest = await timing.run("access", () => recheck(request, access, deps));
+      const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
       await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
-      requireOpenConversation(request);
-      const response = timing.response(new Response(voiceFrames(prepared.transcript || "", prepared.reply, speechStream, request.signal, prepared.requestSummary),
+      await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+      const response = timing.response(new Response(voiceFrames(prepared.transcript || "", withContext(prepared.reply, workContext), speechStream, request.signal, prepared.requestSummary),
         { headers: { ...headers, "Content-Type": WATTZUN_REALTIME_VOICE_STREAM_TYPE } }));
       handedOff = true;
       return response;
     }
     const transcript = await timing.run("stt", () => deps.transcribe({ ...access, input, audio, signal: request.signal }));
-    await timing.run("access", () => recheck(request, access, deps));
+    await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
     const spokenInput = { ...input, message: transcript };
-    const reply = await timing.run("llm", () => deps.reply({ ...access, input: spokenInput, signal: request.signal }));
-    await timing.run("access", () => recheck(request, access, deps));
+    const reply = await timing.run("llm", () => deps.reply({ ...access, input: spokenInput, workContext, signal: request.signal }));
+    await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
     // Existing open calls retain JSON/MP3 until they reload. New clients negotiate PCM frames.
     if (request.headers.get("accept") === WATTZUN_VOICE_STREAM_TYPE) {
-      speechStream = await timing.run("tts", () => deps.streamSpeak({ ...access, input: spokenInput, reply, signal: request.signal }));
-      const latest = await timing.run("access", () => recheck(request, access, deps));
+      speechStream = await timing.run("tts", () => deps.streamSpeak({ ...access, input: spokenInput, workContext, reply, signal: request.signal }));
+      const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
       await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
-      requireOpenConversation(request);
-      const response = timing.response(new Response(voiceFrames(transcript, reply, speechStream, request.signal),
+      await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+      const response = timing.response(new Response(voiceFrames(transcript, withContext(reply, workContext), speechStream, request.signal),
         { headers: { ...headers, "Content-Type": WATTZUN_VOICE_STREAM_TYPE } }));
       handedOff = true;
       return response;
     }
-    const speech = await timing.run("tts", () => deps.speak({ ...access, input: spokenInput, reply, signal: request.signal }));
-    const latest = await timing.run("access", () => recheck(request, access, deps));
+    const speech = await timing.run("tts", () => deps.speak({ ...access, input: spokenInput, workContext, reply, signal: request.signal }));
+    const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
     await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
-    return timing.response(json({ ok: true, transcript, reply, audio: speech }));
+    await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+    return timing.response(json({ ok: true, transcript, reply: withContext(reply, workContext), audio: speech }));
   } catch (error) { return timing.response(failure(error)); }
   finally { if (speechStream && !handedOff) await speechStream.cancel().catch(() => {}); }
 }

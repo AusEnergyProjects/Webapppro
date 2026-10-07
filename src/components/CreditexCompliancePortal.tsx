@@ -17,6 +17,7 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -58,6 +59,7 @@ const CreditexAllProgramCalculator = dynamic(() => import('./CreditexAllProgramC
 const CreditexJobAuditDesk = dynamic(() => import('./CreditexJobAuditDesk').then(module => module.CreditexJobAuditDesk));
 import styles from "./CreditexCompliancePortal.module.css";
 import { WattzunToolsWorkspace } from "./WattzunToolsWorkspace";
+import { creditexAuditFromSearch } from "@/lib/creditex-workspace-navigation";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
 type WorkspaceTab = "home" | "connect" | "wattzun" | "tasks" | "settings" | "cases" | "operations" | "submissions" | "sources" | "forms" | "onboarding" | "compliance-questions" | "governance" | "team" | 'customers' | 'map' | 'calculator' | 'profile';
@@ -368,6 +370,19 @@ export function CreditexCompliancePortal() {
     if (!selectTab('connect')) return false;
     setConnectTarget(current => ({ peerId: target.peerId, intentId: '', nonce: current.nonce + 1 })); return true;
   }
+  const openLinkedAudit = useEffectEvent(() => {
+    if (!user || !session) return;
+    const linked = creditexAuditFromSearch(window.location.search);
+    if (linked && (tab !== 'cases' || jobTarget !== linked)) openJob(linked);
+  });
+  const auditNavigationReady = Boolean(user && session);
+  useEffect(() => {
+    if (!auditNavigationReady) return;
+    const sync = () => openLinkedAudit();
+    const frame = window.requestAnimationFrame(sync);
+    window.addEventListener('popstate', sync);
+    return () => { window.cancelAnimationFrame(frame); window.removeEventListener('popstate', sync); };
+  }, [auditNavigationReady, user?.uid]);
   useEffect(() => {
     if (!notice || noticeKind !== "success") return;
     const timer = window.setTimeout(() => setNotice(""), 3000);
