@@ -2,7 +2,7 @@ import { waitUntil } from "cloudflare:workers";
 import { Buffer } from "node:buffer";
 import { wattzunNativeSpokenReply } from "./wattzun-voice-narration";
 import type { WebSocket as WorkersWebSocket } from "@cloudflare/workers-types";
-import { createSharedSurgeUsageGuard } from "./energy-assistant-usage-guard";
+import { createSharedSurgeUsageGuard, type SurgeUsageDenialReason } from "./energy-assistant-usage-guard";
 import { workflowAiSourceHash } from "./workflow-ai-server";
 import {
   createWattzunPortalReplyContract, wattzunPortalProviderConfiguration, WATTZUN_SPEECH_INSTRUCTIONS,
@@ -49,6 +49,7 @@ type DiagnosticSubstage = "configuration" | "audio" | "budget" | "upgrade" | "se
 type DiagnosticValueType = "missing" | "null" | "array" | "object" | "string" | "number" | "boolean" | "unknown";
 type AudioFailure = "frame" | "event" | "response" | "identity" | "order" | "encoding" | "limit" | "completion" | "closed" | "transport";
 type DiagnosticStructure = {
+  usageDenial?: SurgeUsageDenialReason;
   outputItemCount?: number;
   outputKinds?: string[];
   argumentLength?: number;
@@ -305,8 +306,11 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     requestKey: `${options.input.requestId}:rt`, estimatedMicroUsd,
   });
   diagnostic.duration("rt_guard", guardStarted);
-  if (!reservation.allowed) throw new Error(["configuration", "unavailable"].includes(reservation.reason)
-    ? "WORKFLOW_AI_UNAVAILABLE" : "WORKFLOW_AI_LIMIT");
+  if (!reservation.allowed) {
+    diagnostic.structure.usageDenial = reservation.reason;
+    throw new Error(["configuration", "unavailable"].includes(reservation.reason)
+      ? "WORKFLOW_AI_UNAVAILABLE" : "WORKFLOW_AI_LIMIT");
+  }
 
   const cancelled = new AbortController();
   const signal = options.signal ? AbortSignal.any([options.signal, cancelled.signal]) : cancelled.signal;

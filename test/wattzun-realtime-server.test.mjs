@@ -1174,9 +1174,12 @@ test("native WAV validation and budget denial happen before connecting", async (
     const f = fixture(); await assert.rejects(f.prepareWattzunRealtimeTurn(request({ audio })), safeError);
     assert.equal(f.calls.length, 0); assert.equal(f.reservations.length, 0);
   });
-  for (const deny of ["configuration", "unavailable", "global_daily_budget", "duplicate_request"]) {
+  for (const deny of ["configuration", "unavailable", "client_minute", "client_day", "network_minute", "network_day",
+    "global_minute", "global_in_flight", "global_daily_budget", "duplicate_request"]) {
     const f = fixture({ deny }); await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);
     assert.equal(f.calls.length, 0); assert.equal(f.released(), 0);
+    assert.equal(f.errors[0][1].usageDenial, deny);
+    assert.doesNotMatch(JSON.stringify(f.errors), /private-|fixture-key/);
   }
 });
 
