@@ -169,8 +169,9 @@ const malformed = [
   ['incomplete message', { status: 'completed', output: [{ type: 'message', status: 'incomplete', content: complete().output[0].content }] }, 'message_status'],
   ['unfinished message in completed envelope', { status: 'completed', output: [{ type: 'message', status: 'in_progress', content: complete().output[0].content }] }, 'message_status'],
   ['missing message content', { status: 'completed', output: [{ type: 'message', status: 'completed' }] }, 'message_content'],
-  ['empty output', { status: 'completed', output: [] }, 'text_count'],
-  ['ambiguous multiple texts', { status: 'completed', output: [{ type: 'message', status: 'completed', content: [...complete().output[0].content, ...complete().output[0].content] }] }, 'text_count'],
+  ['empty output', { status: 'completed', output: [] }, 'text_zero'],
+  ['two separate JSON documents', { status: 'completed', output: [{ type: 'message', status: 'completed', content: [...complete().output[0].content, ...complete().output[0].content] }] }, 'structured_json'],
+  ['blank text output', complete(' \n\t'), 'text_empty'],
   ['malformed structured output', complete(`{invalid provider-private-details ${KEY}`), 'structured_json'],
   ['excessive structured output', complete('x'.repeat(18001)), 'text_size'],
 ];
@@ -181,6 +182,63 @@ for (const [name, value, stage] of malformed) {
     diagnostic(f, stage === 'structured_json' ? 'provider_transport_failure' : 'provider_incomplete', { stage });
   });
 }
+
+test('one structured JSON document split across text parts is assembled in order without logging output or retrying', async () => {
+  const expected = { summary: `provider-private-details ${KEY}`, quote: { price: '1.00', quantity: '1', tax: 'none' } };
+  const text = JSON.stringify(expected), parts = [text.slice(0, 4), text.slice(4, 19), text.slice(19, 51), text.slice(51)];
+  const f = fixture({ fetch: async () => response({ status: 'completed', output: [{ type: 'message', status: 'completed',
+    content: parts.map(text => ({ type: 'output_text', text })) }] }) });
+  assert.deepEqual(await f.requestWorkflowAi(request()), expected);
+  assert.equal(f.calls.length, 1); assert.equal(f.released(), 1); assert.deepEqual(f.logs, []);
+});
+
+test('ordered text from several completed messages is assembled while non-message metadata remains ignored', async () => {
+  const text = JSON.stringify(document), parts = [text.slice(0, 8), text.slice(8, 25), text.slice(25)];
+  const f = fixture({ fetch: async () => response({ status: 'completed', output: [
+    { type: 'reasoning', summary: [{ text: `provider-private-details ${KEY}` }] },
+    ...parts.map(text => ({ type: 'message', status: 'completed', content: [{ type: 'output_text', text }] })),
+  ] }) });
+  assert.deepEqual(await f.requestWorkflowAi(request()), document);
+  assert.equal(f.calls.length, 1); assert.equal(f.released(), 1); assert.deepEqual(f.logs, []);
+});
+
+test('assembly never extracts a usable JSON document from multiple separate documents or trailing commentary', async () => {
+  for (const suffix of [JSON.stringify(document), ` provider-private-details ${KEY}`, '\n```']) {
+    const f = fixture({ fetch: async () => response({ status: 'completed', output: [
+      { type: 'message', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify(document) }] },
+      { type: 'message', status: 'completed', content: [{ type: 'output_text', text: suffix }] },
+    ] }) });
+    await assert.rejects(f.requestWorkflowAi(request()), /^Error: WORKFLOW_AI_UNAVAILABLE$/);
+    diagnostic(f, 'provider_transport_failure', { stage: 'structured_json' });
+    assert.equal(f.calls.length, 1); assert.equal(f.released(), 1);
+  }
+});
+
+test('the structured response limit applies to combined text parts including whitespace', async () => {
+  const text = JSON.stringify(document);
+  for (const length of [18000, 18001]) {
+    const f = fixture({ fetch: async () => response({ status: 'completed', output: [{ type: 'message', status: 'completed',
+      content: [{ type: 'output_text', text }, { type: 'output_text', text: ' '.repeat(length - text.length) }] }] }) });
+    if (length === 18000) { assert.deepEqual(await f.requestWorkflowAi(request()), document); assert.deepEqual(f.logs, []); }
+    else { await assert.rejects(f.requestWorkflowAi(request()), /^Error: WORKFLOW_AI_INCOMPLETE$/); diagnostic(f, 'provider_incomplete', { stage: 'text_size' }); }
+    assert.equal(f.calls.length, 1); assert.equal(f.released(), 1);
+  }
+});
+
+test('missing usable text has a static zero-text category, and text fragments never bypass refusal or unfinished messages', async () => {
+  for (const [output, stage] of [
+    [[{ type: 'message', status: 'completed', content: [{ type: 'output_audio', text: `provider-private-details ${KEY}` }] }], 'text_zero'],
+    [[{ type: 'message', status: 'completed', content: [{ type: 'output_text', text: null }] }], 'text_zero'],
+    [[{ type: 'message', status: 'completed', content: [{ type: 'output_text', text: '' }, { type: 'output_text', text: '\t ' }] }], 'text_empty'],
+    [[...complete().output, { type: 'message', status: 'completed', content: [{ type: 'refusal', refusal: `provider-private-details ${KEY}` }] }], 'refusal'],
+    [[...complete().output, { type: 'message', status: 'incomplete', content: [{ type: 'output_text', text: ' ' }] }], 'message_status'],
+  ]) {
+    const f = fixture({ fetch: async () => response({ status: 'completed', output }) });
+    await assert.rejects(f.requestWorkflowAi(request()), /^Error: WORKFLOW_AI_INCOMPLETE$/);
+    diagnostic(f, 'provider_incomplete', { stage });
+    assert.equal(f.calls.length, 1); assert.equal(f.released(), 1);
+  }
+});
 
 test('HTTP failures, fetch aborts, response read failures and malformed JSON release once and sanitize errors', async () => {
   const failedResponse = { ok: false, text: async () => { throw new Error('Provider error body must not be read'); } };

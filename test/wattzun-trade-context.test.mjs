@@ -111,6 +111,8 @@ test("local context contains only assigned job operations and checklist, with sc
   for (const source of context.sources) assert.equal(source.href, "/direct-trade/team?workspace=work&jobId=job-one&jobTab=summary");
   assert.doesNotMatch(JSON.stringify(context), /PRIVATE_|999999|email|phone|object_key|recipient|token/);
   assert.match(context.limitations.join(" "), /read-only|have not been inspected/);
+  assert.match(context.limitations[0], /quote and communication tasks can load their own current details for your review and approval/);
+  assert.doesNotMatch(context.limitations.join(" "), /cannot save, send, schedule, change a quote/);
   assert.deepEqual(f.writes, []);
   assert.equal(f.authRequests.length, 2);
   for (const request of f.authRequests) {

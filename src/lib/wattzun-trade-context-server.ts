@@ -63,7 +63,7 @@ export async function loadWattzunTradeContext(request: Request, access: WattzunA
     let title: string;
     let projectionHash: string;
     const limitations = [
-      "This is read-only context for the selected job. It cannot save, send, schedule, change a quote or mark work complete.",
+      "These job facts are a read-only snapshot. Available quote and communication tasks can load their own current details for your review and approval. This snapshot does not prove that any task was saved, sent, scheduled or marked complete.",
       "Customer contacts, street addresses, private notes, imported source records and financial figures have not been loaded.",
       "Uploaded file contents, photos, signatures, form answers and compliance evidence have not been inspected. Missing information is unknown, not evidence that work is complete.",
     ];

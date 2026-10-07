@@ -30,7 +30,7 @@ async function logProviderHttpFailure(response:Response){
   }
   console.warn('[workflow-ai] provider_http_failure',{status:Number.isInteger(response.status)&&response.status>=400&&response.status<=599?response.status:null,code,type});
 }
-function incomplete(stage:'response_size'|'response_status'|'response_output'|'message_status'|'message_content'|'refusal'|'text_count'|'text_size'):never{
+function incomplete(stage:'response_size'|'response_status'|'response_output'|'message_status'|'message_content'|'refusal'|'text_zero'|'text_empty'|'text_size'):never{
   console.warn('[workflow-ai] provider_incomplete',{stage});
   throw new Error('WORKFLOW_AI_INCOMPLETE');
 }
@@ -69,16 +69,18 @@ export async function requestWorkflowAi(options:WorkflowAiRequest):Promise<unkno
     const raw:unknown=JSON.parse(text);
     if(!raw||typeof raw!=='object'||!('status' in raw)||raw.status!=='completed')incomplete('response_status');
     if(!('output' in raw)||!Array.isArray(raw.output))incomplete('response_output');
-    const texts:string[]=[];
+    const texts:string[]=[];let characters=0;
     for(const item of raw.output){if(!item||typeof item!=='object'||item.type!=='message')continue;
       if(item.status!=='completed')incomplete('message_status');
       if(!Array.isArray(item.content))incomplete('message_content');
-      for(const part of item.content){if(part?.type==='refusal')incomplete('refusal');if(part?.type==='output_text'&&typeof part.text==='string')texts.push(part.text);}
+      for(const part of item.content){if(part?.type==='refusal')incomplete('refusal');if(part?.type==='output_text'&&typeof part.text==='string'){
+        characters+=part.text.length;if(characters>18000)incomplete('text_size');texts.push(part.text);}}
     }
-    if(texts.length!==1)incomplete('text_count');
-    if(texts[0].length>18000)incomplete('text_size');
+    if(texts.length===0)incomplete('text_zero');
+    // Responses may split a single document across ordered output text parts.
+    const outputText=texts.join('');if(!outputText.trim())incomplete('text_empty');
     stage='structured_json';
-    return JSON.parse(texts[0]) as unknown;
+    return JSON.parse(outputText) as unknown;
   }catch(error){if(error instanceof Error&&error.message.startsWith('WORKFLOW_AI_'))throw error;
     console.warn('[workflow-ai] provider_transport_failure',{stage});throw new Error('WORKFLOW_AI_UNAVAILABLE');}
   finally{if(conversational)waitUntil(reservation.release());else await reservation.release();}
