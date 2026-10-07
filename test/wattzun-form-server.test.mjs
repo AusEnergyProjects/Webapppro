@@ -85,7 +85,9 @@ for(const kind of ["job_form","activity_form","work_pack"]){
     assert.ok(!context.facts.questions.some(field=>field.fieldKey==="hidden"||field.fieldKey==="boiler_question"));
     const prepared=await prepareWattzunForm(request,access,proposal(kind),f.deps);assert.equal(isWattzunFormPrepared(prepared),true);
     assert.equal(prepared.review.fields[0].value,"Observed seal needs replacement");assert.equal(f.calls.length,0);
+    const team=f.deps.team;let authorities=0;f.deps.team=async(...args)=>{authorities++;return team(...args);};
     const saved=await executeWattzunForm(request,access,prepared,requestId,f.deps);
+    assert.equal(authorities,2,"Standalone saving still refreshes authority both before and after writing");
     assert.equal(saved.kind,"fill_form");assert.equal(saved.status,"saved");assert.match(saved.message,/draft answers are saved.*Next question: next_question/);
     assert.equal(saved.id,kind==="work_pack"?"pack-two":"form-one");assert.equal(f.calls.length,1);
     assert.equal((kind==="job_form"?f.supporting.answers:kind==="activity_form"?f.activity.answers:f.workPack.response.answers).retained,"Keep this");
@@ -153,12 +155,12 @@ for(const kind of ["job_form","activity_form","work_pack"]){
     const team=f.deps.team;f.deps.team=async(...args)=>{authorities++;return team(...args);};
     const mutation={kind:"fill_form",prepared};
     const saved=await executeWattzunGuidedPreparedForm(request,access,mutation,f.ref,resumedGuide,requestId,f.deps);
-    assert.equal(snapshots,2);assert.equal(authorities,2);assert.equal(f.calls.length,1);
+    assert.equal(snapshots,2);assert.equal(authorities,1,"Private guided saving reuses its completed pre-write authority for the post-save snapshot");assert.equal(f.calls.length,1);
     assert.equal(saved.guide.recordId,saved.receipt.id);assert.equal(saved.guide.revision,2);
     assert.equal(saved.context.sourceSha256,saved.guide.sourceSha256);assert.equal(saved.guide.next.fieldKey,"next_question");
     assert.deepEqual(saved.guide.requestedReference,f.ref);
     const final=await reconcileWattzunGuidedPreparedFormForTurn(request,access,mutation,f.ref,resumedGuide,f.team,f.deps);
-    assert.equal(snapshots,3);assert.equal(authorities,2,"The exact freshly supplied final team must not be loaded twice");
+    assert.equal(snapshots,3);assert.equal(authorities,1,"The exact freshly supplied final team must not be loaded twice");
     assert.deepEqual(final,saved);assert.equal(f.calls.length,1);
     f.team.canManageFieldEvidence=false;
     await assert.rejects(reconcileWattzunGuidedPreparedFormForTurn(request,access,mutation,f.ref,resumedGuide,f.team,f.deps),formError(403));
@@ -429,6 +431,21 @@ function completedFixture(kind){
   return f;
 }
 for(const kind of ["job_form","activity_form","work_pack"]){
+  test(`${kind}: only private guided completion reuses its pre-write authority for the verified post-save snapshot`,async()=>{
+    for(const guided of [false,true]){
+      const f=completedFixture(kind),prepared=await prepareWattzunFormCompletion(request,access,completeProposal(kind),f.deps);
+      const team=f.deps.team;let authorities=0;f.deps.team=async(...args)=>{authorities++;return team(...args);};
+      const result=guided?await executeWattzunGuidedPreparedForm(request,access,{kind:"complete_form",prepared},f.ref,resumedGuide,requestId,f.deps)
+        :await executeWattzunFormCompletion(request,access,prepared,requestId,f.deps);
+      assert.equal(authorities,guided?1:2);assert.equal(f.calls.length,1);
+      assert.equal((guided?result.receipt:result).status,"submitted");
+      if(guided){
+        assert.equal(result.guide.state,"complete");
+        assert.deepEqual((await reconcileWattzunGuidedPreparedFormForTurn(request,access,{kind:"complete_form",prepared},f.ref,resumedGuide,f.team,f.deps)).receipt,result.receipt);
+        assert.equal(f.calls.length,1);
+      }
+    }
+  });
   test(`${kind}: actual canonical completion needs frozen confirmation and recovers a lost receipt without a second submission`,async()=>{
     const f=completedFixture(kind),{guide}=await loadGuide(f);assert.equal(guide.state,"ready_to_complete");assert.match(wattzunFormGuideNarration(guide),/complete this form now/);
     const prepared=await prepareWattzunFormCompletionForTurn(request,access,completeProposal(kind),f.team,f.deps);assert.equal(isWattzunFormCompletionPrepared(prepared),true);assert.equal(f.calls.length,0);
@@ -607,6 +624,22 @@ test("approved scenario, governed calculation and prepare-signing each use their
     assert.equal(recovered.status,"saved");assert.equal(f.calls.length,1);assert.equal((await executeWattzunFormStep(request,access,prepared,requestId,f.deps)).id,recovered.id);assert.equal(f.calls.length,1);
     if(kind==="calculator"){assert.match(recovered.message,/awaiting independent Creditex review/);assert.match(recovered.message,/not been approved/);const next=await loadGuide(f,{...guideStart(),stage:"resume"});assert.equal(next.guide.state,"manual");assert.notEqual(next.guide.next.step?.kind,"calculator");}
     if(kind==="prepare_signing"){assert.equal(f.workPack.instance.status,"ready_to_sign");assert.equal(f.workPack.instance.revision,3);const next=await loadGuide(f,{...guideStart(),stage:"resume"});assert.equal(next.guide.state,"manual");assert.equal(next.guide.next.type,"signature");assert.equal(next.guide.completion.ready,false);assert.equal(f.workPack.response.answers.signature,undefined);}
+  }
+});
+test("only private guided steps reuse pre-write authority while retaining native post-save receipt checks",async()=>{
+  for(const guided of [false,true]){
+    const f=governedStepsFixture();f.workPack.definition.schema.dependencies=[{kind:"scenario",dependencyKey:"scenario",label:"Scenario",required:true,scenarioCodes:["approved"]}];
+    const prepared=await prepareWattzunFormStep(request,access,stepProposal("work_pack",{kind:"scenario",dependencyKey:"scenario",scenarioCode:"approved"}),f.deps);
+    const team=f.deps.team;let authorities=0;f.deps.team=async(...args)=>{authorities++;return team(...args);};
+    const result=guided?await executeWattzunGuidedPreparedForm(request,access,{kind:"form_step",prepared},f.ref,resumedGuide,requestId,f.deps)
+      :await executeWattzunFormStep(request,access,prepared,requestId,f.deps);
+    assert.equal(authorities,guided?1:2);assert.equal(f.calls.length,1);assert.equal((guided?result.receipt:result).status,"saved");
+    if(guided){
+      assert.deepEqual((await reconcileWattzunGuidedPreparedFormForTurn(request,access,{kind:"form_step",prepared},f.ref,resumedGuide,f.team,f.deps)).receipt,result.receipt);
+      f.workPack.instance.revision++;
+      await assert.rejects(reconcileWattzunGuidedPreparedFormForTurn(request,access,{kind:"form_step",prepared},f.ref,resumedGuide,f.team,f.deps),formError(409));
+      assert.equal(f.calls.length,1);
+    }
   }
 });
 test("resolved governed dependencies unlock their ordinary questions without bypassing required source resolution",async()=>{

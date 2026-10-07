@@ -488,11 +488,30 @@ export function canonicalTradeStockSchemaSql(sql: string) {
     .replace(/('(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`)|\s+/g, (match, quoted: string | undefined) => quoted ?? " ");
 }
 
+type TriggerRow = { name: string; sql: string | null };
+const triggerRow = (row: unknown): row is TriggerRow => typeof row === "object" && row !== null
+  && "name" in row && typeof row.name === "string" && "sql" in row && (typeof row.sql === "string" || row.sql === null);
+const schemaObjectRow = (row: unknown): row is TriggerRow & { type: string } => triggerRow(row)
+  && "type" in row && typeof row.type === "string";
+const rolloutRow = (row: unknown): row is { id: number } => typeof row === "object" && row !== null
+  && "id" in row && row.id === 1;
+function stockReadRows<T>(result: D1Result<unknown> | undefined, valid: (row: unknown) => row is T): T[] {
+  if (!result || result.success !== true || !Array.isArray(result.results) || !result.results.every(valid)) {
+    throw new Error("TRADE_STOCK_SCHEMA_VERIFICATION_UNAVAILABLE");
+  }
+  return result.results;
+}
+
 export async function ensureTradeStockSchemaGuards(database: D1Database) {
   if (ready.has(database)) return;
-  const objects = await database.prepare(`SELECT type,name,sql FROM sqlite_schema WHERE name IN (${TRADE_STOCK_SCHEMA_OBJECTS.map(() => "?").join(",")})`)
-    .bind(...TRADE_STOCK_SCHEMA_OBJECTS.map(object => object.name)).all<{ type: string; name: string; sql: string | null }>();
-  const installedObjects = new Map(objects.results.map(object => [object.name, object]));
+  // Independent metadata reads share a round trip; migrations still validate before rollout access.
+  const initial = await database.batch<unknown>([
+    database.prepare(`SELECT type,name,sql FROM sqlite_schema WHERE name IN (${TRADE_STOCK_SCHEMA_OBJECTS.map(() => "?").join(",")})`)
+      .bind(...TRADE_STOCK_SCHEMA_OBJECTS.map(object => object.name)),
+    database.prepare("SELECT name,sql FROM sqlite_schema WHERE type='trigger'"),
+  ]);
+  if (!Array.isArray(initial) || initial.length !== 2) throw new Error("TRADE_STOCK_SCHEMA_VERIFICATION_UNAVAILABLE");
+  const installedObjects = new Map(stockReadRows(initial[0], schemaObjectRow).map(object => [object.name, object]));
   for (const expected of TRADE_STOCK_SCHEMA_OBJECTS) {
     const current = installedObjects.get(expected.name);
     if (!current) throw new Error(`TRADE_STOCK_MIGRATIONS_REQUIRED:${expected.name}`);
@@ -500,8 +519,7 @@ export async function ensureTradeStockSchemaGuards(database: D1Database) {
       throw new Error(`TRADE_STOCK_SCHEMA_MISMATCH:${expected.name}`);
     }
   }
-  const rows = await database.prepare("SELECT name,sql FROM sqlite_schema WHERE type='trigger'").all<{ name: string; sql: string | null }>();
-  const installed = new Map(rows.results.map(row => [row.name, row.sql || ""]));
+  const installed = new Map(stockReadRows(initial[1], triggerRow).map(row => [row.name, row.sql || ""]));
   const upgrades: D1PreparedStatement[] = [];
   for (const definition of TRADE_STOCK_SCHEMA_GUARD_DEFINITIONS) {
     const current = installed.get(definition.name);
@@ -513,13 +531,16 @@ export async function ensureTradeStockSchemaGuards(database: D1Database) {
   const rollout = await database.prepare("SELECT id FROM trade_stock_location_rollout WHERE id=1").all<{id:number}>();
   if (!rollout.results.length) upgrades.push(...LOCATION_ROLLOUT_STATEMENTS.map(sql=>database.prepare(sql)));
   if (upgrades.length) await database.batch(upgrades);
-  const verified = await database.prepare("SELECT name,sql FROM sqlite_schema WHERE type='trigger'").all<{ name: string; sql: string | null }>();
-  const verifiedMap = new Map(verified.results.map(row => [row.name, row.sql || ""]));
+  const verified = await database.batch<unknown>([
+    database.prepare("SELECT name,sql FROM sqlite_schema WHERE type='trigger'"),
+    database.prepare("SELECT id FROM trade_stock_location_rollout WHERE id=1"),
+  ]);
+  if (!Array.isArray(verified) || verified.length !== 2) throw new Error("TRADE_STOCK_SCHEMA_VERIFICATION_UNAVAILABLE");
+  const verifiedMap = new Map(stockReadRows(verified[0], triggerRow).map(row => [row.name, row.sql || ""]));
   for (const definition of TRADE_STOCK_SCHEMA_GUARD_DEFINITIONS) {
     if (canonicalTradeStockSchemaSql(verifiedMap.get(definition.name) || "") !== canonicalTradeStockSchemaSql(definition.sql)) throw new Error(`TRADE_STOCK_GUARD_UNAVAILABLE:${definition.name}`);
   }
-  const rolloutVerified = await database.prepare("SELECT id FROM trade_stock_location_rollout WHERE id=1").all<{id:number}>();
-  if (!rolloutVerified.results.length) throw new Error("TRADE_STOCK_GUARD_UNAVAILABLE:location_rollout");
+  if (!stockReadRows(verified[1], rolloutRow).length) throw new Error("TRADE_STOCK_GUARD_UNAVAILABLE:location_rollout");
   // Cache only completed verification. A disconnected request must not block another request's installation.
   ready.add(database);
 }

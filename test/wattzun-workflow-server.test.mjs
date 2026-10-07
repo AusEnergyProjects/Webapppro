@@ -396,14 +396,14 @@ test('a new guided answer retains canonical prewrite and postwrite checks with f
   f.formDeps.team = async () => { canonicalAuthorities++; return structuredClone(f.team); };
   f.deps.team = async () => { throw new Error('New private guided execution must use the canonical executor authority, not a duplicate review authority.'); };
   const input = await f.currentInput(), requestId = 'guided-snapshot-request-0001';
-  const saved = await f.executeGuided(f.proposal, input, requestId); assert.equal(snapshots, 4); assert.equal(canonicalAuthorities, 2);
+  const saved = await f.executeGuided(f.proposal, input, requestId); assert.equal(snapshots, 4); assert.equal(canonicalAuthorities, 1);
   const next = saved.currentGuide; assert.equal(next.guide.next.fieldKey, 'next_question'); assert.equal(snapshots, 4);
   let refreshed = 0; const decrypts = f.decryptCalls();
   const checked = await workflowModule.verifyWattzunGuidedReceiptForTurn(f.request, f.initial, f.reference, f.session, requestId, saved.reviewId, async () => {
     refreshed++; assert.ok(f.decryptCalls() > decrypts, 'The exact journal is decrypted before final authority refresh');
     return f.initial;
   }, f.deps);
-  assert.deepEqual(checked.result, saved.result); assert.equal(refreshed, 1); assert.equal(snapshots, 5); assert.equal(canonicalAuthorities, 2);
+  assert.deepEqual(checked.result, saved.result); assert.equal(refreshed, 1); assert.equal(snapshots, 5); assert.equal(canonicalAuthorities, 1);
   const finalGuide = checked.currentGuide; assert.equal(finalGuide.context.sourceSha256, next.context.sourceSha256); assert.equal(snapshots, 5);
   assert.equal(f.calls.length, 1); assert.equal(f.saved.revision, 2); assert.equal(f.saved.status, 'draft');
 });
@@ -508,6 +508,24 @@ test('guided final receipt verification binds original actor request and session
   await assert.rejects(check(f.reference, f.session, requestId, async () => {
     f.saved.answers.site_notes = 'Changed after journal read'; f.saved.revision++; return f.initial;
   }), error => error.status === 409); assert.equal(f.calls.length, 1);
+});
+
+test('permission revoked during a guided canonical write prevents final release without repeating the saved mutation', async () => {
+  const f = await guidedWorkflowFixture(), input = await f.currentInput(), requestId = 'guided-revoked-during-write-0001';
+  const nativeSave = f.formDeps.saveJobForm, nativeTeam = f.formDeps.team;
+  let authorities = 0;
+  f.formDeps.team = async (...args) => { authorities++; return nativeTeam(...args); };
+  f.formDeps.saveJobForm = async (...args) => {
+    const result = await nativeSave(...args); f.team.canManageFieldEvidence = false; return result;
+  };
+  const saved = await f.executeGuided(f.proposal, input, requestId);
+  assert.equal(authorities, 1); assert.equal(f.calls.length, 1); assert.equal(f.saved.revision, 2);
+  let finalAuthorities = 0;
+  await assert.rejects(workflowModule.verifyWattzunGuidedReceiptForTurn(f.request, f.initial, f.reference, f.session, requestId, saved.reviewId, async () => {
+    finalAuthorities++; return { ...f.initial, tradeTeam: structuredClone(f.team) };
+  }, f.deps), error => error.status === 403);
+  assert.equal(finalAuthorities, 1); assert.equal(f.calls.length, 1); assert.equal(f.saved.revision, 2);
+  assert.equal(JSON.parse(f.database.prepare('SELECT metadata FROM admin_audit_log WHERE id=?').get(saved.reviewId).metadata).state, 'complete');
 });
 
 test('guided final receipt verification never writes while reconciling prepared or executing journal states', async () => {

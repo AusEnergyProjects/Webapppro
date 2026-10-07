@@ -66,7 +66,8 @@ function fixture(t,realPdf=false) {
     async run() { hook(query); return { meta: { changes: Number(sql.prepare(query).run(...values).changes) }, success: true }; } }; return stmt; },
     async batch(statements) { sql.exec('BEGIN'); let result; try { result = []; for (const statement of statements) result.push(await statement.run()); sql.exec('COMMIT'); } catch (error) { sql.exec('ROLLBACK'); throw error; }
       if (lostBatch) { lostBatch = false; throw new Error('SYNTHETIC_LOST_COMMIT_ACK'); } return result; } };
-  const objects = new Map(), renders = [], sends = [];
+  const objects = new Map(), renders = [], sends = [], progressCalls = [];
+  let progressPending = false;
   const bucket = { async put(key, bytes) { objects.set(key, new Uint8Array(bytes)); }, async get(key) { const bytes = objects.get(key); return bytes ? { async arrayBuffer() { return bytes.slice().buffer; } } : null; }, async delete(key) { objects.delete(key); } };
   const journal = (key, status, id = '') => sql.prepare('INSERT OR REPLACE INTO trade_email_submissions VALUES(?,?,?,?,?)').run('owner', key, status, 'synthetic', id);
   const service = compile('../src/lib/trade-veu-electrical-assessment-server.ts', {
@@ -74,6 +75,13 @@ function fixture(t,realPdf=false) {
     './trade-account-predicates': predicates, './trade-activity-forms': activity, './trade-activity-form-flow': flow,
     './veu-electrical-safety-form': form, './veu-electrical-assessment': types, './trade-veu-electrical-schema-guards': guards,
     './service-reminder-delivery': reminder,
+    './trade-form-job-progress': { async reconcileTradeFormJobProgress(access, workOrderId, options) {
+      const record = sql.prepare('SELECT status,pdf_object_key,pdf_sha256,pdf_size_bytes FROM trade_veu_electrical_assessments WHERE work_order_id=? AND owner_uid=?').get(workOrderId, access.ownerUid);
+      assert.equal(record.status, 'complete'); assert.ok(record.pdf_object_key); assert.equal(record.pdf_sha256.length, 64); assert.ok(record.pdf_size_bytes > 4);
+      progressCalls.push({ access, workOrderId, options });
+      return progressPending ? { changed: false, stage: '', pending: true, blockers: [{ key: 'job_progress_pending' }] }
+        : { changed: false, stage: 'in_progress', blockers: [] };
+    } },
     './trade-email-server': { async sendTradeCustomerEmail(uid, actor, message, options) {
       assert.equal(uid, 'owner'); assert.ok(actor); await options.beforeSend();
       if (mailFailure) return mailFailure(message, journal);
@@ -99,7 +107,8 @@ function fixture(t,realPdf=false) {
     }
     return record;
   }
-  return { sql, db, service, objects, renders, sends, journal, start, answered, attested, signed,
+  return { sql, db, service, objects, renders, sends, progressCalls, journal, start, answered, attested, signed,
+    pendingProgress(value) { progressPending = value; },
     hook(value) { hook = value; }, loseBatch() { lostBatch = true; }, mail(value) { mailFailure = value; } };
 }
 
@@ -109,6 +118,20 @@ test('standalone start is job scoped, idempotent and has no compliance intent', 
   assert.equal('intentId' in first, false); assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_versions').get().n, 1);
   await assert.rejects(h.service.startPiesaRecord(owner, 'foreign-job'), /access/);
   await assert.rejects(h.service.readPiesaRecord({ ...owner, ownerUid: 'foreign', actorUid: 'foreign' }, first.id), /not found/);
+});
+
+test('PIESA completion reconciles saved job progress and exact completion retries repair a pending projection', async t => {
+  const h = fixture(t), signed = await h.signed();
+  assert.equal(h.progressCalls.length, 0, 'Answering and signing must not trigger job completion');
+  h.pendingProgress(true); h.loseBatch();
+  const complete = await h.service.completePiesaRecord(owner, signed.id, signed.revision, 'complete-progress');
+  assert.equal(complete.status, 'complete'); assert.equal(h.progressCalls.length, 1);
+  assert.deepEqual(h.progressCalls[0], { access: owner, workOrderId: 'job', options: { afterSave: true } });
+  h.pendingProgress(false);
+  const retried = await h.service.completePiesaRecord(owner, signed.id, signed.revision, 'complete-progress');
+  assert.equal(retried.revision, complete.revision); assert.equal(h.progressCalls.length, 2);
+  assert.deepEqual(h.progressCalls[1], h.progressCalls[0]);
+  assert.equal(h.renders.length, 1); assert.equal(h.sends.length, 2);
 });
 
 test('canonical save uses strict answers, CAS and exact applied request identity', async t => {

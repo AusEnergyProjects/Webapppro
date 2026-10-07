@@ -672,7 +672,10 @@ export async function reconcileWattzunFormReceipt(request: Request, access: Watt
   return null;
 }
 type SavedSnapshot = { snapshot: Snapshot; team: TeamAccess; receipt: WattzunWorkflowReceipt };
-async function executeForm(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, requestId: string, deps: WattzunFormDependencies): Promise<SavedSnapshot> {
+// Guided results stay private until the gateway refreshes authority and verifies
+// the journal and current source. Standalone executors retain both authority reads.
+type FormExecutionMode = "standalone" | "private_guided_turn";
+async function executeForm(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, requestId: string, deps: WattzunFormDependencies, mode: FormExecutionMode = "standalone"): Promise<SavedSnapshot> {
   if (!/^[A-Za-z0-9_-]{16,180}$/.test(requestId)) throw new WattzunFormError(403, "Choose your current reviewed form answers.");
   const { snapshot, team, currentHash } = await currentReviewedForm(request, access, prepared, deps);
   const recovered = await savedReceipt(snapshot, prepared, currentHash, team, deps);
@@ -693,7 +696,7 @@ async function executeForm(request: Request, access: WattzunAccess, prepared: Wa
     await canonicalCall(() => deps.savePack(access.db, { ...packScope(team), caseInstanceId: payload.caseInstanceId, expectedResponseSha256: payload.expectedResponseSha256, sectionPatches: payload.sectionPatches,
       idempotency: { clientActionId: `wattzun-form-${requestId}`, deviceId: "wattzun-reviewed-form", payloadHash } }));
   }
-  const saved = await load(request, access, prepared.reference, true, deps);
+  const saved = await load(request, access, prepared.reference, true, deps, mode === "private_guided_turn" ? team : undefined);
   if (saved.snapshot.schemaSha256 !== prepared.schemaSha256 || prepared.patch.some(item => canonical(saved.snapshot.answers[item.fieldKey]) !== canonical(prepared.reference.formKind !== "job_form" && item.value === "" ? undefined : item.value))) throw new WattzunFormError(409, "The form changed while saving. Open its current answers before continuing.");
   const confirmed = await savedReceipt(saved.snapshot, prepared, await hash(saved.snapshot.answers), saved.team, deps);
   if (!confirmed) throw new WattzunFormError(409, "This form's exact save receipt could not be confirmed.");
@@ -779,7 +782,7 @@ export async function reconcileWattzunFormCompletionReceipt(request: Request, ac
   await verifyCompletionSource(snapshot, prepared);
   return null;
 }
-async function executeCompletion(request: Request, access: WattzunAccess, prepared: WattzunFormCompletionPrepared, requestId: string, deps: WattzunFormDependencies): Promise<SavedSnapshot> {
+async function executeCompletion(request: Request, access: WattzunAccess, prepared: WattzunFormCompletionPrepared, requestId: string, deps: WattzunFormDependencies, mode: FormExecutionMode = "standalone"): Promise<SavedSnapshot> {
   if (!/^[A-Za-z0-9_-]{16,180}$/.test(requestId)) throw new WattzunFormError(403, "Choose your current form completion review.");
   const { snapshot, team } = await currentCompletion(request, access, prepared, deps);
   const recovered = await completedReceipt(snapshot, prepared, team, deps);
@@ -800,7 +803,7 @@ async function executeCompletion(request: Request, access: WattzunAccess, prepar
     request.signal.throwIfAborted();
     await canonicalCall(() => deps.finalisePack(access.db, { ...packScope(team), ...payload, idempotency: { clientActionId: `wattzun-complete-${requestId}`, deviceId: "wattzun-reviewed-form", payloadHash } }));
   }
-  const saved = await load(request, access, prepared.reference, true, deps);
+  const saved = await load(request, access, prepared.reference, true, deps, mode === "private_guided_turn" ? team : undefined);
   const result = await completedReceipt(saved.snapshot, prepared, saved.team, deps);
   if (!result) throw new WattzunFormError(409, "Final completion has not been confirmed. Keep this form open and check its saved status.");
   return { ...saved, receipt: result };
@@ -954,7 +957,7 @@ export async function reconcileWattzunFormStepReceipt(request: Request, access: 
   if (saved) return saved;
   await verifyStepSource(access, snapshot, team, prepared, deps); return null;
 }
-async function executeStep(request: Request, access: WattzunAccess, prepared: WattzunFormStepPrepared, requestId: string, deps: WattzunFormDependencies): Promise<SavedSnapshot> {
+async function executeStep(request: Request, access: WattzunAccess, prepared: WattzunFormStepPrepared, requestId: string, deps: WattzunFormDependencies, mode: FormExecutionMode = "standalone"): Promise<SavedSnapshot> {
   if (!/^[A-Za-z0-9_-]{16,180}$/.test(requestId)) throw new WattzunFormError(403, "Choose the current governed form review.");
   const { snapshot, team } = await currentStep(request, access, prepared, deps), recovered = await recoveredStep(access, snapshot, team, prepared, deps);
   if (recovered) return { snapshot, team, receipt: recovered };
@@ -969,7 +972,7 @@ async function executeStep(request: Request, access: WattzunAccess, prepared: Wa
     else if (step.kind === "prepare_signing") await canonicalCall(() => services.prepareSigning(access.db, input));
     else await canonicalCall(() => services.commit(access.db, { ...input, referenceAcknowledgements: plan.referenceAcknowledgements }));
   } else throw new WattzunFormError(409, "The form's native save engine changed.");
-  const saved = await currentStep(request, access, prepared, deps), receipt = await recoveredStep(access, saved.snapshot, saved.team, prepared, deps);
+  const saved = await currentStep(request, access, prepared, deps, mode === "private_guided_turn" ? team : undefined), receipt = await recoveredStep(access, saved.snapshot, saved.team, prepared, deps);
   if (!receipt) throw new WattzunFormError(409, "The form step's saved receipt has not been confirmed. Keep this request while its result is checked.");
   return { ...saved, receipt };
 }
@@ -984,15 +987,15 @@ async function guidedSaved(access: WattzunAccess, saved: SavedSnapshot, referenc
   const guide = await hydrateGuideProducts(access, snapshot, guideProgress(snapshot, checked), checked, saved.team, deps);
   return { receipt: saved.receipt, context: contextForSnapshot(snapshot, guide), guide };
 }
-/** The canonical executor's own verified post-save snapshot supplies both receipt and next question. */
+/** Private candidate: the gateway must refresh authority and verify the journal/source before release. */
 export async function executeWattzunGuidedPreparedForm(request: Request, access: WattzunAccess, mutation: WattzunPreparedFormMutation,
   reference: Reference, input: WattzunFormGuideInput, requestId: string, deps: WattzunFormDependencies = defaults): Promise<WattzunGuidedFormSaved> {
   if (!readWattzunFormGuideInput(input) || input.stage !== "resume" || !validReference(reference)
     || reference.jobId !== mutation.prepared.reference.jobId || reference.formKind !== mutation.prepared.reference.formKind
     || reference.formKind !== "work_pack" && reference.recordId !== mutation.prepared.reference.recordId) throw new WattzunFormError(403, "Resume the original guided form session.");
-  const saved = mutation.kind === "fill_form" ? await executeForm(request, access, mutation.prepared, requestId, deps)
-    : mutation.kind === "complete_form" ? await executeCompletion(request, access, mutation.prepared, requestId, deps)
-      : await executeStep(request, access, mutation.prepared, requestId, deps);
+  const saved = mutation.kind === "fill_form" ? await executeForm(request, access, mutation.prepared, requestId, deps, "private_guided_turn")
+    : mutation.kind === "complete_form" ? await executeCompletion(request, access, mutation.prepared, requestId, deps, "private_guided_turn")
+      : await executeStep(request, access, mutation.prepared, requestId, deps, "private_guided_turn");
   return guidedSaved(access, saved, reference, input, deps);
 }
 /** The supplied team is the completed fresh authority read after the exact journal was read. */

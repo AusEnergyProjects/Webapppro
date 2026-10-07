@@ -50,7 +50,8 @@ function fixture(equipment = { common: [panel, inverter], choices: [] }) {
   db.exec("INSERT INTO trade_crm_quote_items(id,quote_version_id,firebase_uid,position,quantity_milli,description,section_heading) VALUES('system','v1','owner',0,1000,'Installed solar system','Solar system')");
   const prepare = (sql, values = []) => ({ sql, values, bind: (...args) => prepare(sql, args),
     first: async () => db.prepare(sql).get(...values) || null, all: async () => ({ results: db.prepare(sql).all(...values) }), run: async () => db.prepare(sql).run(...values) });
-  const d1 = { prepare, async batch(statements) { db.exec("BEGIN"); try { const results = statements.map(s => db.prepare(s.sql).run(...s.values)); db.exec("COMMIT"); return results; } catch (error) { db.exec("ROLLBACK"); throw error; } } };
+  const d1 = { prepare, async batch(statements) { db.exec("BEGIN"); try { const results = statements.map(s => /^\s*SELECT\b/i.test(s.sql)
+    ? { success: true, results: db.prepare(s.sql).all(...s.values) } : db.prepare(s.sql).run(...s.values)); db.exec("COMMIT"); return results; } catch (error) { db.exec("ROLLBACK"); throw error; } } };
   const stock = {};
   Function("require", "exports", compile("src/lib/trade-stock-server.ts"))(id => {
     if (id.endsWith("/db")) return { getD1: () => d1 };

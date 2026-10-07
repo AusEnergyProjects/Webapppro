@@ -756,6 +756,7 @@ test('guided call saves successive spoken answers and completes the actual selec
     await page.evaluate(()=>window.wattzunFixtureCall.question());
     assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureErrors),[],'Completion response accepted');
     await guide.getByText('Form completed',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('log',{name:'Conversation with Wattzun'}).locator('article:visible').count(),0,'The active guided call shows current progress without repeated chat or source cards');
     const requests=await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.body?.formGuide));
     assert.equal(requests.length,4);
     assert.deepEqual(requests.map(item=>item.body.workReference.recordId),['pack-guide-1','pack-guide-1','pack-guide-2','pack-guide-3']);
@@ -765,6 +766,8 @@ test('guided call saves successive spoken answers and completes the actual selec
     assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
     assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url==='/api/wattzun/workflows').length),0,'No second client-side write or review call');
     assert.deepEqual((await page.evaluate(()=>window.wattzunFixtureFormNotifications)).map(item=>item.formId),['pack-guide-1','pack-guide-1','pack-guide-2','pack-guide-1','pack-guide-3']);
+    await page.getByRole('button',{name:'Hang up',exact:true}).click();
+    assert.ok(await page.getByRole('log',{name:'Conversation with Wattzun'}).locator('article:visible').count()>0,'Saved conversation and sources remain available after hanging up');
     assert.deepEqual(errors,[]);await page.close();
   }); } finally {await browser.close();}
 });

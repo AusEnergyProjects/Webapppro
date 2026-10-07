@@ -171,6 +171,10 @@ export async function photoFinishState(
   }
 }
 
+const COMPLETED_ELECTRICAL_ASSESSMENT_SQL = `assessment.status = 'complete'
+  AND assessment.pdf_object_key <> '' AND length(assessment.pdf_sha256) = 64
+  AND assessment.pdf_size_bytes > 4 AND assessment.completed_at <> ''`;
+
 /** One SQL completion contract for compatibility actions and automatic form progress. */
 export function fieldCompletionGuard(ownerUid: string, workOrderId: string, photoFinish: { guard: PhotoFinishGuard }, action = "finish") {
   const finishGuard = `(
@@ -185,6 +189,11 @@ export function fieldCompletionGuard(ownerUid: string, workOrderId: string, phot
         SELECT 1 FROM trade_job_forms blocker
         WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
           AND blocker.status <> 'complete'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM trade_veu_electrical_assessments assessment
+        WHERE assessment.work_order_id = ? AND assessment.owner_uid = ?
+          AND NOT (${COMPLETED_ELECTRICAL_ASSESSMENT_SQL})
       )
       AND NOT EXISTS (
         SELECT 1 FROM trade_crm_job_notes blocker
@@ -257,6 +266,8 @@ export function fieldCompletionGuard(ownerUid: string, workOrderId: string, phot
     ownerUid,
     workOrderId,
     ownerUid,
+    workOrderId,
+    ownerUid,
     ownerUid,
     workOrderId,
     workOrderId,
@@ -304,6 +315,8 @@ const VISIT_SNAPSHOT_SQL = `COALESCE((SELECT json_group_array(json(visit_snapsho
 
 const COMPLETED_FORM_SQL = `(EXISTS (SELECT 1 FROM trade_job_forms
     WHERE work_order_id = ? AND firebase_uid = ? AND status = 'complete')
+  OR EXISTS (SELECT 1 FROM trade_veu_electrical_assessments assessment
+    WHERE assessment.work_order_id = ? AND assessment.owner_uid = ? AND ${COMPLETED_ELECTRICAL_ASSESSMENT_SQL})
   OR EXISTS (SELECT 1 FROM trade_activity_field_records WHERE work_order_id = ? AND owner_uid = ?
     AND status = 'submitted_for_creditex_review' AND pdf_object_key <> '' AND length(pdf_sha256) = 64
     AND NOT EXISTS (SELECT 1 FROM trade_activity_field_records successor WHERE successor.supersedes_record_id = trade_activity_field_records.id))
@@ -351,7 +364,7 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
   if (["imported", "completed", "cancelled"].includes(job.stage) || job.pipeline_stage === "lost") return { changed: false, stage: job.stage, blockers: [] };
   const visits: ProgressVisit[] = JSON.parse(job.visit_snapshot);
   const selection = automaticFormVisit(visits, access.memberId, job.assignee_member_id);
-  const completedFormValues = [workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid];
+  const completedFormValues = [workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid];
   const unscheduledActor = job.assignee_member_id === access.memberId || (access.isOwner && !job.assignee_member_id);
   // These existence checks share the same freshly authorised job and one database snapshot.
   // Completion still rechecks every requirement in the atomic mutation guard below.
@@ -361,6 +374,7 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
       CASE WHEN ? = 1 THEN ${COMPLETED_FORM_SQL} ELSE 0 END completed_form
     WHERE
       EXISTS (SELECT 1 FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ?)
+      OR EXISTS (SELECT 1 FROM trade_veu_electrical_assessments WHERE work_order_id = ? AND owner_uid = ?)
       OR EXISTS (SELECT 1 FROM trade_activity_field_records WHERE work_order_id = ? AND owner_uid = ?)
       OR EXISTS (SELECT 1 FROM trade_rental_inspections WHERE work_order_id = ? AND firebase_uid = ?)
       OR EXISTS (SELECT 1 FROM compliance_activity_work_pack_instances pack JOIN compliance_cases c
@@ -368,7 +382,7 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
         WHERE pack.work_order_id = ? AND c.work_order_id = pack.work_order_id AND c.installer_uid = ?)`)
     .bind(selection.activeCount === 0 ? 1 : 0, workOrderId, access.ownerUid,
       selection.activeCount === 0 && unscheduledActor ? 1 : 0, ...completedFormValues,
-      workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid)
+      workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid)
     .first<{ issued_rental: number; completed_form: number }>();
   if (!form) return { changed: false, stage: job.stage, blockers: [] };
   const issuedRental = selection.activeCount === 0 && form.issued_rental === 1;

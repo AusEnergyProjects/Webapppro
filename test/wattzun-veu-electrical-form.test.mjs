@@ -47,7 +47,9 @@ test("actual official questions guide one typed answer at a time without an Acti
   assert.equal(readWattzunFormGuideProgress(loaded.guide)?.reference.formKind,"veu_electrical");assert.equal(loaded.guide.next.fieldKey,"job_reference");
   const input={...guideInput,stage:"continue",sourceSha256:loaded.guide.sourceSha256,questionKey:loaded.guide.next.fieldKey};
   const prepared=await prepareWattzunGuidedFormForTurn(request,access,proposal("job_reference","SYNTHETIC-PIESA"),input,f.team,f.deps);
+  const team=f.deps.team;let authorities=0;f.deps.team=async()=>{authorities++;return team();};
   const saved=await executeWattzunGuidedPreparedForm(request,access,{kind:"fill_form",prepared},reference,guideInput,"synthetic-request-one",f.deps);
+  assert.equal(authorities,1);
   assert.equal(saved.receipt.status,"saved");assert.equal(saved.guide.next.fieldKey,"property_address");assert.equal(f.calls.length,1);
   assert.equal(readWattzunFormGuideProgress(saved.guide)?.revision,2);assert.equal(f.record.answers.job_reference,"SYNTHETIC-PIESA");
   const recovered=await reconcileWattzunGuidedPreparedFormForTurn(request,access,{kind:"fill_form",prepared},reference,guideInput,f.team,f.deps);
@@ -88,4 +90,20 @@ test("complete PIESA requires native readiness and locks a standalone PDF record
   assert.equal(recovered.kind,"complete_form");assert.equal(recovered.message,`${f.record.form.title} is complete.`);assert.doesNotMatch(recovered.message,/Creditex|claim/);assert.equal(f.calls.length,1);
   assert.equal((await executeWattzunFormCompletion(request,access,prepared,"synthetic-request-one",f.deps)).status,"submitted");assert.equal(f.calls.length,1);
   const loaded=await loadWattzunFormGuideForTurn(request,access,reference,guideInput,f.team,f.deps);assert.equal(loaded.guide.state,"complete");assert.equal(readWattzunFormGuideProgress(loaded.guide)?.completion.status,"complete");
+});
+test("guided PIESA completion reuses only its pre-write authority and retains the exact native completion receipt",async()=>{
+  for(const guided of [false,true]){
+    const f=fixture(true),prepared=await prepareWattzunFormCompletion(request,access,completionProposal,f.deps);
+    const team=f.deps.team;let authorities=0;f.deps.team=async()=>{authorities++;return team();};
+    const result=guided?await executeWattzunGuidedPreparedForm(request,access,{kind:"complete_form",prepared},reference,guideInput,"synthetic-request-one",f.deps)
+      :await executeWattzunFormCompletion(request,access,prepared,"synthetic-request-one",f.deps);
+    assert.equal(authorities,guided?1:2);assert.equal(f.calls.length,1);assert.equal((guided?result.receipt:result).status,"submitted");
+    if(guided){
+      assert.equal(result.guide.state,"complete");
+      assert.deepEqual((await reconcileWattzunGuidedPreparedFormForTurn(request,access,{kind:"complete_form",prepared},reference,guideInput,f.team,f.deps)).receipt,result.receipt);
+      f.team.canManageFieldEvidence=false;
+      await assert.rejects(reconcileWattzunGuidedPreparedFormForTurn(request,access,{kind:"complete_form",prepared},reference,guideInput,f.team,f.deps),status(403));
+      assert.equal(f.calls.length,1);
+    }
+  }
 });

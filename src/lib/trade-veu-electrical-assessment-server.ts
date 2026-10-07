@@ -12,6 +12,7 @@ import { PiesaError, type PiesaRecord, type PiesaPresentation, type PiesaDeliver
 import { ensurePiesaSchemaGuards } from "./trade-veu-electrical-schema-guards";
 import { sendTradeCustomerEmail } from "./trade-email-server";
 import { reminderProviderFailureOutcome } from "./service-reminder-delivery";
+import { reconcileTradeFormJobProgress } from "./trade-form-job-progress";
 
 type Row = { id:string;work_order_id:string;owner_uid:string;revision:number;status:string;payload:string;payload_sha256:string;
   pdf_object_key:string;pdf_sha256:string;pdf_size_bytes:number;actor_uid:string;created_at:string;updated_at:string;completed_at:string };
@@ -246,7 +247,7 @@ export async function uploadPiesaEvidence(access:TeamAccess,id:string,baseRevisi
 }
 export async function completePiesaRecord(access:TeamAccess,id:string,baseRevision:number,keyInput?:string):Promise<PiesaRecord> {
   const key=requestKey(keyInput),hash=activityHash({operation:"complete",baseRevision}),duplicate=await replay(access,id,key,"complete",baseRevision,hash);
-  if(duplicate){await retryPiesaDelivery(access,id);return duplicate;}
+  if(duplicate){await reconcileTradeFormJobProgress(access,duplicate.workOrderId,{afterSave:true});await retryPiesaDelivery(access,id);return duplicate;}
   const previous=await readPiesaRecord(access,id);expected(previous,baseRevision);
   const completion=veuElectricalCompletion(previous);if(!completion.ready)fail("PIESA_INCOMPLETE",`Complete the required assessment items: ${completion.missing.map(item=>item.label).join("; ")}`);
   await scope(access,previous.workOrderId,true);
@@ -259,6 +260,7 @@ export async function completePiesaRecord(access:TeamAccess,id:string,baseRevisi
   await bucket().put(pdfKey,bytes,{httpMetadata:{contentType:"application/pdf"},customMetadata:{sha256:pdfHash,assessmentId:id,revision:String(next.revision),retention:"immutable-completed-assessment"}});
   const contacts=await recipients(access.ownerUid,previous.workOrderId);
   const saved=await commit(access,previous,next,"complete",key,hash,{key:pdfKey,hash:pdfHash,size:bytes.length},contacts);
+  await reconcileTradeFormJobProgress(access,saved.workOrderId,{afterSave:true});
   await retryPiesaDelivery(access,id);return saved;
 }
 export async function readPiesaPdf(access:TeamAccess,id:string) {

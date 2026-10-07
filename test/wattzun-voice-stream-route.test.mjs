@@ -524,10 +524,10 @@ test('official product search is read-only and returns canonical choices before 
   const selected = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(selected.response.status, 200); assert.equal(f.state.writes, 1); await selected.response.body.cancel();
 });
 
-test('guided source or permission change during usage cancels prepared PCM and retains uncertain original request recovery', async () => {
-  for (const reason of ['source', 'permission']) {
-    const f = guidedRouteFixture(), original = f.deps.recordUsage;
-    f.deps.recordUsage = async value => { await original(value); if (reason === 'source') f.state.revision++; else f.deps.turnAuthority = async () => { throw new AccessError(403, 'Permission revoked.'); }; };
+test('guided source or permission change during writing or usage cancels prepared PCM and retains uncertain original request recovery', async () => {
+  for (const phase of ['executeGuidedForm', 'recordUsage']) for (const reason of ['source', 'permission']) {
+    const f = guidedRouteFixture(), original = f.deps[phase];
+    f.deps[phase] = async (...args) => { const result = await original(...args); if (reason === 'source') f.state.revision++; else f.deps.turnAuthority = async () => { throw new AccessError(403, 'Permission revoked.'); }; return result; };
     const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, reason === 'source' ? 409 : 403);
     const body = await response.json(); assert.equal(body.reply, undefined); assert.equal(body.audio, undefined); assert.equal(body.formGuideRecovery.state, 'uncertain');
     assert.equal(f.state.writes, 1); assert.equal(f.audios[0].state.cancelled, 1); assert.equal(f.audios[0].state.pulls, 0);

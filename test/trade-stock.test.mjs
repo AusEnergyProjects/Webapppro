@@ -33,7 +33,8 @@ function fixture({ installGuards = true } = {}) {
   db.exec("INSERT INTO trade_price_book_items(id,firebase_uid,item_code,name,item_type,unit_label,record_status) VALUES ('panel','owner','P1','Solar panel','material','each','active'),('foreign','other','P2','Other business','material','each','active'),('labour','owner','L1','Labour','labour','hour','active'),('untracked','owner','M1','Fittings','material','each','active'),('equipment','owner','E1','Heat pump','equipment','each','active')");
   const prepare = (sql, values = []) => ({ sql, values, bind: (...args) => prepare(sql, args), first: async () => db.prepare(sql).get(...values) || null,
     all: async () => ({ results: db.prepare(sql).all(...values) }), run: async () => db.prepare(sql).run(...values) });
-  const d1 = { prepare, async batch(statements) { db.exec("BEGIN"); try { const result = statements.map(s => db.prepare(s.sql).run(...s.values)); db.exec("COMMIT"); return result; } catch (error) { db.exec("ROLLBACK"); throw error; } } };
+  const d1 = { prepare, async batch(statements) { db.exec("BEGIN"); try { const result = statements.map(s => /^\s*SELECT\b/i.test(s.sql)
+    ? { success: true, results: db.prepare(s.sql).all(...s.values) } : db.prepare(s.sql).run(...s.values)); db.exec("COMMIT"); return result; } catch (error) { db.exec("ROLLBACK"); throw error; } } };
   const server = {}; Function("require", "exports", serverCode)(id => id.endsWith("/db") ? { getD1: () => d1 } : id === "./trade-stock" ? contract : id === "./trade-stock-schema-guards" ? stockGuards : {}, server);
   let access = { ownerUid: "owner", actorUid: "owner", isOwner: true, canViewPriceBook: true, canManagePriceBook: true }, authError = "";
   const route = {}, dependencies = {
@@ -324,6 +325,112 @@ test("runtime guards fail closed on missing or incompatible existing schema and 
   assert.equal(weakened.db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='trigger'").get().n, 1);
 });
 
+test("installed stock schema verifies in three cold round trips and warm checks do no I/O", async () => {
+  const f = fixture();
+  try {
+    await stockGuards.ensureTradeStockSchemaGuards(f.d1);
+    let roundTrips = 0, batches = 0;
+    const database = {
+      prepare(sql) {
+        const statement = f.d1.prepare(sql);
+        return { ...statement, async all() { roundTrips++; return statement.all(); } };
+      },
+      async batch(statements) {
+        roundTrips++; batches++;
+        assert.equal(statements.length, 2);
+        assert.ok(statements.every(statement => /^SELECT\b/.test(statement.sql)), "An installed schema needs no writes");
+        return f.d1.batch(statements);
+      },
+    };
+    await stockGuards.ensureTradeStockSchemaGuards(database);
+    assert.equal(roundTrips, 3); assert.equal(batches, 2);
+    await stockGuards.ensureTradeStockSchemaGuards(database);
+    assert.equal(roundTrips, 3);
+  } finally { f.db.close(); }
+});
+
+test("a missing rollout table retains the migration diagnostic before accessing the marker", async () => {
+  const f = fixture({ installGuards: false });
+  try {
+    f.db.exec("DROP TABLE trade_stock_location_rollout");
+    await assert.rejects(stockGuards.ensureTradeStockSchemaGuards(f.d1), /TRADE_STOCK_MIGRATIONS_REQUIRED:trade_stock_location_rollout/);
+    assert.equal(f.db.prepare("SELECT COUNT(*) total FROM sqlite_schema WHERE type='trigger'").get().total, 0);
+  } finally { f.db.close(); }
+});
+
+test("malformed stock metadata and final verification batches fail closed and remain retryable", async () => {
+  for (const phase of [1, 2]) for (const corrupt of [
+    results => results.slice(1),
+    results => [...results, results[0]],
+    results => results.map((result, index) => index === 1 ? { ...result, success: false } : result),
+    results => results.map((result, index) => index === 0 ? { success: true } : result),
+    results => results.map((result, index) => index === 1 ? { ...result, results: [null] } : result),
+    results => results.map((result, index) => index === 0 ? { ...result, results: [{ name: 1, sql: false }] } : result),
+  ]) {
+    const f = fixture();
+    try {
+      await stockGuards.ensureTradeStockSchemaGuards(f.d1);
+      let batches = 0, broken = true;
+      const database = { ...f.d1, async batch(statements) {
+        batches++;
+        const results = await f.d1.batch(statements);
+        return broken && batches === phase ? corrupt(results) : results;
+      } };
+      await assert.rejects(stockGuards.ensureTradeStockSchemaGuards(database), /TRADE_STOCK_SCHEMA_VERIFICATION_UNAVAILABLE/);
+      broken = false;
+      const failedBatches = batches;
+      await stockGuards.ensureTradeStockSchemaGuards(database);
+      assert.equal(batches, failedBatches + 2, "Failed verification must not mark readiness");
+      await stockGuards.ensureTradeStockSchemaGuards(database);
+      assert.equal(batches, failedBatches + 2);
+    } finally { f.db.close(); }
+  }
+});
+
+test("final stock verification requires the exact rollout marker", async () => {
+  for (const results of [[], [{ id: "1" }], [{ id: 2 }]]) {
+    const f = fixture();
+    try {
+      await stockGuards.ensureTradeStockSchemaGuards(f.d1);
+      let batches = 0, broken = true;
+      const database = { ...f.d1, async batch(statements) {
+        const actual = await f.d1.batch(statements);
+        return broken && ++batches === 2 ? [actual[0], { success: true, results }] : actual;
+      } };
+      await assert.rejects(stockGuards.ensureTradeStockSchemaGuards(database), results.length
+        ? /TRADE_STOCK_SCHEMA_VERIFICATION_UNAVAILABLE/ : /TRADE_STOCK_GUARD_UNAVAILABLE:location_rollout/);
+      broken = false;
+      await stockGuards.ensureTradeStockSchemaGuards(database);
+    } finally { f.db.close(); }
+  }
+});
+
+test("stock guard verification cannot inherit another request's abandoned read batch", async () => {
+  const f = fixture(), parked = Promise.withResolvers();
+  let interrupted, timer;
+  try {
+    await stockGuards.ensureTradeStockSchemaGuards(f.d1);
+    let batches = 0;
+    const database = { ...f.d1, async batch(statements) {
+      if (++batches === 1) await parked.promise;
+      return f.d1.batch(statements);
+    } };
+    interrupted = stockGuards.ensureTradeStockSchemaGuards(database).catch(error => error);
+    await Promise.race([
+      stockGuards.ensureTradeStockSchemaGuards(database),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Inherited abandoned stock schema I/O")), 1000); }),
+    ]);
+    const completedBatches = batches;
+    parked.reject(new Error("Original request disconnected"));
+    assert.match((await interrupted).message, /Original request disconnected/);
+    await stockGuards.ensureTradeStockSchemaGuards(database);
+    assert.equal(batches, completedBatches);
+  } finally {
+    clearTimeout(timer); parked.reject(new Error("Fixture cleanup"));
+    await interrupted; f.db.close();
+  }
+});
+
 test("incomplete guard installation cannot enable stock and failed verification is not cached", async () => {
   const f = fixture({ installGuards: false }); let incomplete = true;
   const db = { ...f.d1, async batch(statements) { return f.d1.batch(incomplete ? statements.filter(statement=>!statement.sql.includes("CREATE TRIGGER IF NOT EXISTS trade_stock_actual_update_scope")) : statements); } };
@@ -335,7 +442,7 @@ test("incomplete guard installation cannot enable stock and failed verification 
   await assert.rejects(stockGuards.ensureTradeStockSchemaGuards(retry), /D1 unavailable/);
   assert.equal(other.db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='trigger'").get().n, 0);
   failed = false; await stockGuards.ensureTradeStockSchemaGuards(retry); await stockGuards.ensureTradeStockSchemaGuards(retry);
-  assert.equal(batches, 2);
+  assert.equal(batches, 4); // Failed metadata read, then metadata, installation and verification batches.
 });
 
 test("guard installation boundaries precede activation and accepted plan statements", () => {
@@ -472,7 +579,8 @@ test("a failed recognized guard upgrade rolls back guards, rollout marker and st
   const f=fixture({installGuards:false});for(const guard of JSON.parse(read('test/fixtures/trade-stock-guards-v1.json')))f.db.exec(guard.sql);
   f.db.exec("INSERT INTO trade_stock_items VALUES('panel','owner',1,3000,1000,1,'2026-09-28')");replayStockMigration(f.db);
   const before=f.db.prepare("SELECT sql FROM sqlite_schema WHERE name='trade_stock_operation_revision_guard'").get().sql;
-  const broken={...f.d1,batch:statements=>f.d1.batch([...statements,f.d1.prepare('INSERT INTO definitely_missing_table VALUES(1)')])};
+  const broken={...f.d1,batch:statements=>f.d1.batch(statements.every(statement => /^\s*SELECT\b/i.test(statement.sql))
+    ? statements : [...statements,f.d1.prepare('INSERT INTO definitely_missing_table VALUES(1)')])};
   await assert.rejects(stockGuards.ensureTradeStockSchemaGuards(broken),/no such table/);
   assert.equal(f.db.prepare("SELECT sql FROM sqlite_schema WHERE name='trade_stock_operation_revision_guard'").get().sql,before);
   assert.equal(f.count('trade_stock_location_rollout'),0);

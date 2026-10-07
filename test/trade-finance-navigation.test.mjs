@@ -375,6 +375,7 @@ test("job links retain quote, invoice and cost tabs on refresh and reject invali
     assert.equal(result.kind, "job"); assert.equal(result.id, "job-123"); assert.equal(result.jobTab, jobTab);
   }
   assert.equal(helpers.jobNavigationFromSearch("?workspace=work&jobId=job-123").jobTab, "schedule");
+  assert.equal(helpers.dashboardCommandTargetFromSearch("?workspace=work&jobId=job-123&jobTab=files").jobTab, "field");
   assert.equal(helpers.jobNavigationFromSearch("?workspace=finance&jobId=job-123&jobTab=invoice"), null);
   assert.equal(helpers.jobNavigationFromSearch("?workspace=work&jobId=bad%20id&jobTab=quote"), null);
 });

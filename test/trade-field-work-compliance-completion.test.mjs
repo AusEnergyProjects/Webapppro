@@ -483,6 +483,7 @@ CREATE TABLE compliance_activity_work_pack_final_records (
       case_instance_id text NOT NULL,
       work_pack_version_id text NOT NULL
     );`);
+  database.exec(fs.readFileSync(new URL("../drizzle/0256_trade_veu_electrical_assessments.sql", import.meta.url), "utf8"));
   installCreditexTrainingFixture(database);
   installEmptyTradeCrews(database);
   const db = testD1(database);
@@ -524,6 +525,15 @@ function progressFixture() {
   return value;
 }
 
+function electricalAssessment(database, { id = "piesa", workOrderId = "job-1", ownerUid = "owner-1", status = "draft" } = {}) {
+  const completedAt = status === "complete" ? "2026-10-08T02:00:00.000Z" : "";
+  const payload = JSON.stringify({ id, workOrderId, ownerUid, revision: 1, status, completedAt });
+  database.prepare(`INSERT INTO trade_veu_electrical_assessments
+    (id,work_order_id,owner_uid,revision,status,payload,payload_sha256,pdf_object_key,pdf_sha256,pdf_size_bytes,actor_uid,created_at,updated_at,completed_at)
+    VALUES (?,?,?,1,?,?,?,?,?,?,'actor-1','now','now',?)`)
+    .run(id, workOrderId, ownerUid, status, payload, "a".repeat(64), completedAt ? "piesa/completed.pdf" : "", completedAt ? "b".repeat(64) : "", completedAt ? 100 : 0, completedAt);
+}
+
 test("saved form editing starts work without claiming travel or arrival, and timing alone cannot complete", async () => {
   const { database, db, progress } = progressFixture();
   try {
@@ -549,6 +559,88 @@ test("every form on a job must complete before authoritative reconciliation clos
     assert.equal(database.prepare("SELECT pipeline_stage FROM trade_crm_job_details").get().pipeline_stage, "complete");
     assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).changed, false);
     assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events WHERE event_type='job_completed'").get().total, 1);
+  } finally { database.close(); }
+});
+
+test("finishing general forms keeps a job open until its attached electrical assessment is complete", async () => {
+  for (const unscheduled of [false, true]) {
+    const { database, db, progress } = progressFixture();
+    try {
+      if (unscheduled) database.exec("DELETE FROM trade_crm_appointments");
+      database.exec("UPDATE trade_job_forms SET status='complete'");
+      electricalAssessment(database);
+      const pending = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+      assert.equal(pending.stage, "in_progress"); assert.equal(pending.blockers[0].key, "requirements");
+      assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "in_progress");
+      assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events WHERE event_type='job_completed'").get().total, 0);
+      database.exec(`UPDATE trade_veu_electrical_assessments SET status='complete', completed_at='now',
+        payload=json_set(payload,'$.status','complete','$.completedAt','now'), pdf_object_key='piesa/completed.pdf',
+        pdf_sha256='${"b".repeat(64)}',pdf_size_bytes=100`);
+      const complete = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+      assert.equal(complete.stage, "completed");
+      assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).changed, false);
+      assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events WHERE event_type='job_completed'").get().total, 1);
+    } finally { database.close(); }
+  }
+});
+
+test("a PIESA-only unscheduled job uses its saved assessment for work presence and completion", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("DELETE FROM trade_crm_appointments; DELETE FROM trade_job_forms");
+    electricalAssessment(database);
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "in_progress");
+    database.exec(`UPDATE trade_veu_electrical_assessments SET status='complete', completed_at='now',
+      payload=json_set(payload,'$.status','complete','$.completedAt','now'), pdf_object_key='piesa/completed.pdf',
+      pdf_sha256='${"b".repeat(64)}',pdf_size_bytes=100`);
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "completed");
+  } finally { database.close(); }
+});
+
+test("electrical assessment blockers and completion eligibility stay scoped to the exact business and job", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec(`UPDATE trade_job_forms SET status='complete';
+      INSERT INTO trade_work_orders (id,firebase_uid,work_number,title,stage,site_area,scheduled_start,scheduled_end,source_type,record_status,revision,assignee_member_id,updated_at,partner_type)
+        SELECT 'job-2',firebase_uid,work_number,title,stage,site_area,scheduled_start,scheduled_end,source_type,record_status,revision,assignee_member_id,updated_at,partner_type
+        FROM trade_work_orders WHERE id='job-1'`);
+    electricalAssessment(database, { id: "foreign-owner", ownerUid: "owner-2" });
+    electricalAssessment(database, { id: "foreign-job", workOrderId: "job-2" });
+    assert.equal((await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db })).stage, "completed");
+    database.exec("UPDATE trade_work_orders SET stage='in_progress'; UPDATE trade_crm_job_details SET pipeline_stage='in_progress'; DELETE FROM trade_job_forms; DELETE FROM trade_crm_appointments; DELETE FROM trade_veu_electrical_assessments");
+    electricalAssessment(database, { id: "foreign-owner-complete", ownerUid: "owner-2", status: "complete" });
+    electricalAssessment(database, { id: "foreign-job-complete", workOrderId: "job-2", status: "complete" });
+    const empty = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+    assert.equal(empty.stage, "in_progress"); assert.equal(empty.changed, false); assert.deepEqual(empty.blockers, []);
+  } finally { database.close(); }
+});
+
+test("completed electrical assessments cannot advance cancelled jobs or another business's job", async () => {
+  for (const foreignScope of [false, true]) {
+    const { database, db, progress } = progressFixture();
+    try {
+      database.exec("DELETE FROM trade_crm_appointments; DELETE FROM trade_job_forms");
+      electricalAssessment(database, { status: "complete" });
+      if (!foreignScope) database.exec("UPDATE trade_work_orders SET stage='cancelled'");
+      const access = foreignScope ? { ...progressAccess, ownerUid: "owner-2" } : progressAccess;
+      const result = await progress.reconcileTradeFormJobProgress(access, "job-1", { db });
+      assert.equal(result.changed, false);
+      assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, foreignScope ? "scheduled" : "cancelled");
+      assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events").get().total, 0);
+    } finally { database.close(); }
+  }
+});
+
+test("an electrical assessment attached during final reconciliation blocks the atomic job completion", async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("UPDATE trade_job_forms SET status='complete'");
+    db.setBeforeBatch(() => electricalAssessment(database));
+    const result = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+    assert.equal(result.changed, false); assert.equal(result.pending, true); assert.equal(result.blockers[0].key, "changed");
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "scheduled");
+    assert.equal(database.prepare("SELECT status FROM trade_crm_appointments").get().status, "scheduled");
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events").get().total, 0);
   } finally { database.close(); }
 });
 

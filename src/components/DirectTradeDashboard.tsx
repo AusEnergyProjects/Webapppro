@@ -294,7 +294,7 @@ function jobNavigationFromSearch(search: string): TLinkCommandTarget | null {
   const jobId = parameters.get("jobId") || "";
   if (dashboardWorkspaceFromSearch(search) !== "work" || !workOrderIdPattern.test(jobId)) return null;
   const requestedTab = parameters.get("jobTab");
-  const jobTab = requestedTab === "quote" || requestedTab === "invoice" || requestedTab === "field" || requestedTab === "summary" ? requestedTab : "schedule";
+  const jobTab = requestedTab === "quote" || requestedTab === "invoice" || requestedTab === "field" || requestedTab === "summary" ? requestedTab : requestedTab === "files" ? "field" : "schedule";
   return { workspace: "work", kind: "job", id: jobId, query: "", jobTab, nonce: Date.now() };
 }
 

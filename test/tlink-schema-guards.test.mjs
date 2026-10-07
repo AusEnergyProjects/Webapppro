@@ -327,7 +327,7 @@ test("cold TLink schema checks use one read batch and completed warm checks do n
     async batch(statements) {
       operations += 1;
       batches.push(statements.map(statement => statement.sql));
-      return base.batch(statements.map(statement => base.prepare(statement.sql)));
+      return base.batch(statements.map(statement => base.prepare(statement.sql).bind(...(statement.values || []))));
     },
   };
   try {

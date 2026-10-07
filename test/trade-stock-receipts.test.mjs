@@ -29,7 +29,8 @@ function fixture() {
   const prepare = (sql, values = []) => ({ sql, values, bind: (...next) => prepare(sql, next), first: async () => sqlite.prepare(sql).get(...values) || null, all: async () => ({ results: sqlite.prepare(sql).all(...values) }), run: async () => sqlite.prepare(sql).run(...values) });
   const db = { prepare, beforeBatch: null, afterBatch: null, failAt: -1, async batch(statements) {
     db.beforeBatch?.(); sqlite.exec("BEGIN"); let committed = false;
-    try { const result = statements.map((statement, index) => { if (index === db.failAt) throw new Error("STORAGE_FAILED"); return sqlite.prepare(statement.sql).all(...statement.values); }); sqlite.exec("COMMIT"); committed = true; db.afterBatch?.(); return result; }
+    try { const result = statements.map((statement, index) => { if (index === db.failAt) throw new Error("STORAGE_FAILED"); const rows = sqlite.prepare(statement.sql).all(...statement.values);
+      return /^\s*SELECT\b/i.test(statement.sql) ? { success: true, results: rows } : rows; }); sqlite.exec("COMMIT"); committed = true; db.afterBatch?.(); return result; }
     catch (error) { if (!committed) sqlite.exec("ROLLBACK"); throw error; }
   } };
   const seed = (id = "receipt-1", owner = "owner", sha = id) => sqlite.prepare("INSERT INTO trade_stock_receipts(id,firebase_uid,sha256,file_name,object_key,created_at,created_by_uid,extraction_json) VALUES(?,?,?,'delivery.pdf',?,'now','staff',?)").run(id, owner, sha, `files/${id}`, JSON.stringify(extracted));
