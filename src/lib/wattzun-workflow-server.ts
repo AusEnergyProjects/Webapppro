@@ -485,7 +485,11 @@ function metadata(row: Row): ReviewMetadata {
 async function readReview(access: WattzunAccess, reviewId: string, deps: WattzunWorkflowDependencies) {
   if (!/^wr_[a-f0-9]{48}$/.test(reviewId)) throw new WattzunWorkflowError(400, "Choose a current Wattzun review.");
   const row = await access.db.prepare("SELECT id,admin_uid,entity_id,action,metadata FROM admin_audit_log WHERE id=?").bind(reviewId).first<Row>();
-  if (!row || row.admin_uid !== access.actorUid || row.entity_id !== access.scope.scopeId || row.action !== "wattzun.workflow_review") throw new WattzunWorkflowError(404, "This review is not available in your current business.");
+  return decodeReview(access, reviewId, row, deps);
+}
+/** Validate persisted rows identically whether selected or returned by INSERT. */
+async function decodeReview(access: WattzunAccess, reviewId: string, row: Row | null, deps: WattzunWorkflowDependencies) {
+  if (!row || row.id !== reviewId || row.admin_uid !== access.actorUid || row.entity_id !== access.scope.scopeId || row.action !== "wattzun.workflow_review") throw new WattzunWorkflowError(404, "This review is not available in your current business.");
   const saved = metadata(row);
   if (saved.state === "prepared" && Date.parse(saved.expiresAt) <= deps.now()) throw new WattzunWorkflowError(409, "This review expired. Ask Wattzun to prepare a fresh review.");
   const raw = await deps.decrypt(saved.encrypted);
@@ -536,8 +540,9 @@ async function freezeNewGuidedWorkflow(request: Request, authority: WattzunTurnA
   if (prepared.sourceSha256 !== input.sourceSha256) throw new WattzunGuidedFormValidationError(409, "This form changed before the answer could be saved. Use its current question.");
   request.signal.throwIfAborted();
   const fingerprint = await hash(proposal);
-  if (!await insertPreparedReview(access, prepared, fingerprint, deps)) return null;
-  const frozen = await readReview(access, reviewId, deps);
+  const inserted = await insertPreparedReview(access, prepared, fingerprint, deps);
+  if (!inserted) return null;
+  const frozen = await decodeReview(access, reviewId, inserted, deps);
   if (frozen.saved.fingerprint !== fingerprint || await hash(frozen.prepared.proposal) !== fingerprint || frozen.saved.state !== "prepared") throw new WattzunWorkflowError(409, "This answer's original review changed before execution.");
   assertGuidedReview(frozen.prepared, reference, input);
   if (frozen.prepared.guide?.sourceSha256 !== input.sourceSha256 || frozen.prepared.guide.questionKey !== input.questionKey) throw new WattzunWorkflowError(409, "This answer belongs to a different form question.");
@@ -735,7 +740,7 @@ async function prepareWorkflow(request: Request, access: WattzunAccess, proposal
     return prepared;
   }
   const inserted = await insertPreparedReview(access, prepared, fingerprint, deps);
-  const newPortalReview = deferNewReview && inserted;
+  const newPortalReview = deferNewReview && Boolean(inserted);
   return loadWorkflowReview(request, access, reviewId, deps, { expectedFingerprint: fingerprint,
     deferSourceRecheck: newPortalReview, preparedTeam: newPortalReview ? after : undefined, turnTeam, refreshTurnTeam });
 }
@@ -908,16 +913,16 @@ async function sendPrepared(request: Request, access: WattzunAccess, team: TeamA
     idempotencyKey: requestKey, callbackUrl: "", messageType: "trade_customer_email" }, { db: access.db, requireConnection: true, beforeSend });
   return messageReceipt(team, prepared, sent.providerMessageId, "submitted");
 }
-async function insertPreparedReview(access: WattzunAccess, prepared: Prepared, fingerprint: string, deps: WattzunWorkflowDependencies): Promise<boolean> {
+async function insertPreparedReview(access: WattzunAccess, prepared: Prepared, fingerprint: string, deps: WattzunWorkflowDependencies): Promise<Row | null> {
   const encrypted = await deps.encrypt({ prepared });
   const saved: ReviewMetadata = { fingerprint, expiresAt: prepared.review.expiresAt, kind: prepared.proposal.kind, sourceSha256: prepared.sourceSha256, encrypted, state: "prepared" };
-  const insertion = await access.db.prepare(`INSERT INTO admin_audit_log(id,admin_uid,action,entity_type,entity_id,summary,metadata,created_at)
-    VALUES (?,?,'wattzun.workflow_review','trade_business',?,'Prepared a user-reviewed Wattzun workflow.',?,?) ON CONFLICT(id) DO NOTHING`)
-    .bind(prepared.review.reviewId, access.actorUid, access.scope.scopeId, JSON.stringify(saved), new Date(deps.now()).toISOString()).run();
-  return insertion.meta.changes === 1;
+  return access.db.prepare(`INSERT INTO admin_audit_log(id,admin_uid,action,entity_type,entity_id,summary,metadata,created_at)
+    VALUES (?,?,'wattzun.workflow_review','trade_business',?,'Prepared a user-reviewed Wattzun workflow.',?,?) ON CONFLICT(id) DO NOTHING
+    RETURNING id,admin_uid,entity_id,action,metadata`)
+    .bind(prepared.review.reviewId, access.actorUid, access.scope.scopeId, JSON.stringify(saved), new Date(deps.now()).toISOString()).first<Row>();
 }
 async function markReviewExecuting(access: WattzunAccess, reviewId: string, frozen: Awaited<ReturnType<typeof readReview>>) {
-  const changed = await access.db.prepare("UPDATE admin_audit_log SET metadata=? WHERE id=? AND admin_uid=? AND entity_id=? AND metadata=?")
+  const changed = await access.db.prepare("UPDATE admin_audit_log SET metadata=? WHERE id=? AND admin_uid=? AND entity_id=? AND metadata=? AND action='wattzun.workflow_review'")
     .bind(JSON.stringify({ ...frozen.saved, state: "executing" }), reviewId, access.actorUid, access.scope.scopeId, String(frozen.row.metadata)).run();
   if (changed.meta.changes !== 1) throw new WattzunWorkflowError(409, "This review is already being processed. Check the same review again.");
 }

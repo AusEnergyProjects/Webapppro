@@ -720,6 +720,96 @@ test("an owner can close an unassigned unscheduled job with completed forms", as
   } finally { database.close(); }
 });
 
+test("ordinary unscheduled answers reconcile with three reads and exclude foreign job and owner forms", async (t) => {
+  for (const isOwner of [true, false]) {
+    const { database, db, progress } = progressFixture();
+    try {
+      database.exec(`DELETE FROM trade_crm_appointments;
+        UPDATE trade_work_orders SET stage='in_progress';
+        INSERT INTO trade_job_forms VALUES ('foreign-owner','job-1','owner-2','complete'),('foreign-job','job-2','owner-1','complete');
+        INSERT INTO trade_rental_inspections VALUES ('foreign-rental-owner','job-1','owner-2','issued'),('foreign-rental-job','job-2','owner-1','issued')`);
+      if (isOwner) database.exec("UPDATE trade_work_orders SET assignee_member_id=''");
+      const statements = [], prepare = db.prepare.bind(db);
+      t.mock.method(db, "prepare", sql => { statements.push(sql); return prepare(sql); });
+      const result = await progress.reconcileTradeFormJobProgress({ ...progressAccess, isOwner }, "job-1", { db });
+      assert.equal(result.stage, "in_progress"); assert.equal(result.changed, false);
+      assert.equal(result.blockers[0].key, "visit");
+      // Fresh job/visit authority, one form-state snapshot, then photo evidence.
+      assert.equal(statements.length, 3);
+      assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events").get().total, 0);
+
+      database.exec("DELETE FROM trade_job_forms WHERE firebase_uid='owner-1' AND work_order_id='job-1'");
+      statements.length = 0;
+      const empty = await progress.reconcileTradeFormJobProgress({ ...progressAccess, isOwner }, "job-1", { db });
+      assert.equal(empty.changed, false); assert.deepEqual(empty.blockers, []);
+      assert.equal(statements.length, 2, "foreign forms cannot turn an empty job into work to reconcile");
+    } finally { database.close(); }
+  }
+});
+
+test("unscheduled combined form-state reads retain fresh authority and terminal boundaries", async (t) => {
+  for (const { mutation, patch, expectedReads } of [
+    { mutation: "", patch: { canManageFieldEvidence: false }, expectedReads: 0 },
+    { mutation: "UPDATE trade_team_members SET status='inactive' WHERE id='member-1'", expectedReads: 1 },
+    ...["imported", "completed", "cancelled"].map(stage => ({ mutation: `UPDATE trade_work_orders SET stage='${stage}'`, expectedReads: 1 })),
+    { mutation: "UPDATE trade_crm_job_details SET pipeline_stage='lost'", expectedReads: 1 },
+  ]) {
+    const { database, db, progress } = progressFixture();
+    try {
+      database.exec("DELETE FROM trade_crm_appointments; UPDATE trade_job_forms SET status='complete';" + mutation);
+      const before = { ...database.prepare("SELECT stage,revision FROM trade_work_orders").get() };
+      let reads = 0;
+      const prepare = db.prepare.bind(db);
+      t.mock.method(db, "prepare", sql => { reads++; return prepare(sql); });
+      const result = await progress.reconcileTradeFormJobProgress({ ...progressAccess, ...patch }, "job-1", { db });
+      assert.equal(result.changed, false); assert.equal(reads, expectedReads);
+      assert.deepEqual({ ...database.prepare("SELECT stage,revision FROM trade_work_orders").get() }, before);
+      assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events").get().total, 0);
+    } finally { database.close(); }
+  }
+});
+
+test("unscheduled completion rechecks combined snapshot facts and authority in its atomic write", async () => {
+  for (const mutation of [
+    "UPDATE trade_team_members SET status='inactive' WHERE id='member-1'",
+    "UPDATE trade_team_members SET can_manage_field_evidence=0 WHERE id='member-1'",
+    "UPDATE trade_work_orders SET assignee_member_id='member-2'",
+    "UPDATE trade_work_orders SET revision=revision+1",
+    "UPDATE trade_job_forms SET status='draft' WHERE id='form-1'",
+    "DELETE FROM trade_job_forms",
+  ]) {
+    const { database, db, progress } = progressFixture();
+    try {
+      database.exec("DELETE FROM trade_crm_appointments; UPDATE trade_job_forms SET status='complete'");
+      db.setBeforeBatch(() => database.exec(mutation));
+      const result = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db });
+      assert.equal(result.changed, false); assert.equal(result.pending, true);
+      assert.equal(result.blockers[0].key, "changed");
+      assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "scheduled");
+      assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events").get().total, 0);
+    } finally { database.close(); }
+  }
+});
+
+test("combined form-state query failure cannot acknowledge successful job reconciliation", async (t) => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("DELETE FROM trade_crm_appointments; UPDATE trade_job_forms SET status='complete'");
+    const prepare = db.prepare.bind(db);
+    t.mock.method(db, "prepare", sql => {
+      if (sql.includes("issued_rental")) throw new Error("Form-state snapshot unavailable");
+      return prepare(sql);
+    });
+    t.mock.method(console, "error", () => {});
+    await assert.rejects(progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db }), /snapshot unavailable/);
+    const result = await progress.reconcileTradeFormJobProgress(progressAccess, "job-1", { db, afterSave: true });
+    assert.equal(result.changed, false); assert.equal(result.pending, true);
+    assert.equal(result.blockers[0].key, "job_progress_pending");
+    assert.equal(database.prepare("SELECT stage FROM trade_work_orders").get().stage, "scheduled");
+    assert.equal(database.prepare("SELECT COUNT(*) total FROM trade_work_order_events").get().total, 0);
+  } finally { database.close(); }
+});
+
 test("waived work-plan requirements use the persisted not_needed state", async () => {
   const { database, db, progress } = progressFixture();
   try {

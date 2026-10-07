@@ -351,21 +351,28 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
   if (["imported", "completed", "cancelled"].includes(job.stage) || job.pipeline_stage === "lost") return { changed: false, stage: job.stage, blockers: [] };
   const visits: ProgressVisit[] = JSON.parse(job.visit_snapshot);
   const selection = automaticFormVisit(visits, access.memberId, job.assignee_member_id);
-  const form = await db.prepare(`SELECT 1 present WHERE
+  const completedFormValues = [workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid];
+  const unscheduledActor = job.assignee_member_id === access.memberId || (access.isOwner && !job.assignee_member_id);
+  // These existence checks share the same freshly authorised job and one database snapshot.
+  // Completion still rechecks every requirement in the atomic mutation guard below.
+  const form = await db.prepare(`SELECT
+      CASE WHEN ? = 1 THEN EXISTS (SELECT 1 FROM trade_rental_inspections
+        WHERE work_order_id = ? AND firebase_uid = ? AND status = 'issued') ELSE 0 END issued_rental,
+      CASE WHEN ? = 1 THEN ${COMPLETED_FORM_SQL} ELSE 0 END completed_form
+    WHERE
       EXISTS (SELECT 1 FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ?)
       OR EXISTS (SELECT 1 FROM trade_activity_field_records WHERE work_order_id = ? AND owner_uid = ?)
       OR EXISTS (SELECT 1 FROM trade_rental_inspections WHERE work_order_id = ? AND firebase_uid = ?)
       OR EXISTS (SELECT 1 FROM compliance_activity_work_pack_instances pack JOIN compliance_cases c
         ON c.id = pack.compliance_case_id AND c.organisation_id = pack.organisation_id
         WHERE pack.work_order_id = ? AND c.work_order_id = pack.work_order_id AND c.installer_uid = ?)`)
-    .bind(workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid).first();
+    .bind(selection.activeCount === 0 ? 1 : 0, workOrderId, access.ownerUid,
+      selection.activeCount === 0 && unscheduledActor ? 1 : 0, ...completedFormValues,
+      workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid)
+    .first<{ issued_rental: number; completed_form: number }>();
   if (!form) return { changed: false, stage: job.stage, blockers: [] };
-  const issuedRental = selection.activeCount === 0 && await db.prepare(`SELECT 1 issued FROM trade_rental_inspections
-    WHERE work_order_id = ? AND firebase_uid = ? AND status = 'issued' LIMIT 1`).bind(workOrderId, access.ownerUid).first();
-  const completedFormValues = [workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid];
-  const unscheduledActor = job.assignee_member_id === access.memberId || (access.isOwner && !job.assignee_member_id);
-  const unscheduledCompletion = selection.activeCount === 0 && unscheduledActor
-    && Boolean(await db.prepare(`SELECT 1 ready WHERE ${COMPLETED_FORM_SQL}`).bind(...completedFormValues).first());
+  const issuedRental = selection.activeCount === 0 && form.issued_rental === 1;
+  const unscheduledCompletion = selection.activeCount === 0 && unscheduledActor && form.completed_form === 1;
   const safeCompletionVisit = selection.visit && selection.activeCount === 1;
   const hasCompletionVisit = Boolean(selection.visit || issuedRental || unscheduledCompletion);
   const photo = options.startOnly ? { ready: false, guard: { kind: "none" } as PhotoFinishGuard }

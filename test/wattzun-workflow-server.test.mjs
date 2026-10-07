@@ -408,6 +408,76 @@ test('a new guided answer retains canonical prewrite and postwrite checks with f
   assert.equal(f.calls.length, 1); assert.equal(f.saved.revision, 2); assert.equal(f.saved.status, 'draft');
 });
 
+test('new guided insertion validates its returned persisted row and retains the final journal reread', async () => {
+  const f = await guidedWorkflowFixture(), input = await f.currentInput(), requestId = 'guided-returning-roundtrip-0001';
+  const result = await f.executeGuided(f.proposal, input, requestId);
+  const journalReads = () => f.statements.filter(sql => sql.startsWith('SELECT id,admin_uid,entity_id,action,metadata FROM admin_audit_log'));
+  assert.equal(journalReads().length, 0, 'The INSERT returns the persisted review without another database round trip');
+  assert.equal(f.statements.filter(sql => /^INSERT INTO admin_audit_log/.test(sql) && /RETURNING id,admin_uid,entity_id,action,metadata$/.test(sql)).length, 1);
+  assert.equal(f.decryptCalls(), 1, 'Returned ciphertext is still decrypted and validated before execution');
+  assert.equal(f.calls.length, 1);
+  assert.equal(JSON.parse(f.database.prepare('SELECT metadata FROM admin_audit_log WHERE id=?').get(result.reviewId).metadata).state, 'complete');
+  const verified = await workflowModule.verifyWattzunGuidedReceiptForTurn(f.request, f.initial, f.reference, input, requestId, result.reviewId, async () => f.initial, f.deps);
+  assert.deepEqual(verified.result, result.result); assert.equal(journalReads().length, 1); assert.equal(f.decryptCalls(), 2);
+  assert.equal(f.calls.length, 1, 'Final journal and canonical receipt verification never repeats the business save');
+});
+
+test('a malformed or differently bound INSERT RETURNING review never reaches the guided mutation', async () => {
+  for (const change of [
+    row => ({ ...row, id: `wr_${'f'.repeat(48)}` }),
+    row => ({ ...row, admin_uid: 'different-actor' }),
+    row => ({ ...row, entity_id: 'different-business' }),
+    row => ({ ...row, action: 'different.action' }),
+    row => ({ ...row, metadata: 'invalid-json' }),
+    row => ({ ...row, metadata: JSON.stringify({ ...JSON.parse(row.metadata), fingerprint: 'f'.repeat(64) }) }),
+    row => ({ ...row, metadata: JSON.stringify({ ...JSON.parse(row.metadata), expiresAt: '2026-10-06T00:00:00Z' }) }),
+    row => ({ ...row, metadata: JSON.stringify({ ...JSON.parse(row.metadata), state: 'complete' }) }),
+  ]) {
+    const f = await guidedWorkflowFixture(), input = await f.currentInput(), prepare = f.db.prepare;
+    f.db.prepare = sql => {
+      const statement = prepare(sql);
+      if (!/^INSERT INTO admin_audit_log/.test(sql)) return statement;
+      return { ...statement, bind(...values) {
+        const bound = statement.bind(...values);
+        return { ...bound, async first() { return change(await bound.first()); } };
+      } };
+    };
+    await assert.rejects(f.executeGuided(f.proposal, input, 'guided-returning-invalid-0001'), error => error.status >= 400);
+    assert.equal(f.calls.length, 0); assert.equal(f.saved.revision, 1);
+  }
+});
+
+test('a concurrent same-request INSERT collision uses the strict original fingerprint path', async () => {
+  for (const differentFingerprint of [false, true]) {
+    const f = await guidedWorkflowFixture(), input = await f.currentInput(), encrypt = f.deps.encrypt;
+    f.deps.encrypt = async payload => {
+      const encrypted = await encrypt(payload), prepared = payload.prepared;
+      const saved = { fingerprint: differentFingerprint ? 'f'.repeat(64) : await hash(f.proposal), expiresAt: prepared.review.expiresAt,
+        kind: prepared.proposal.kind, sourceSha256: prepared.sourceSha256, encrypted, state: 'prepared' };
+      f.database.prepare("INSERT INTO admin_audit_log VALUES(?,'actor-one','wattzun.workflow_review','trade_business','business-one','Synthetic competing review',?,'2026-10-07')")
+        .run(prepared.review.reviewId, JSON.stringify(saved));
+      return encrypted;
+    };
+    const executing = f.executeGuided(f.proposal, input, 'guided-returning-collision-0001');
+    if (differentFingerprint) {
+      await assert.rejects(executing, error => error.status === 409); assert.equal(f.calls.length, 0);
+    } else {
+      assert.equal((await executing).result.receipt.status, 'saved'); assert.equal(f.calls.length, 1);
+    }
+    assert.equal(f.database.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 1);
+    assert.ok(f.statements.some(sql => sql.startsWith('SELECT id,admin_uid,entity_id,action,metadata FROM admin_audit_log')), 'Collision retains strict persisted journal reading');
+  }
+});
+
+test('the executing compare-and-swap rejects a returned review changed before the business save', async () => {
+  for (const change of ["metadata=json_set(metadata,'$.state','executing')", "admin_uid='different-actor'", "entity_id='different-business'", "action='different.action'"]) {
+    const f = await guidedWorkflowFixture(), input = await f.currentInput(), decrypt = f.deps.decrypt;
+    f.deps.decrypt = async value => { const decoded = await decrypt(value); f.database.exec(`UPDATE admin_audit_log SET ${change}`); return decoded; };
+    await assert.rejects(f.executeGuided(f.proposal, input, 'guided-returning-cas-00001'), error => error.status === 409);
+    assert.equal(f.calls.length, 0); assert.equal(f.saved.revision, 1);
+  }
+});
+
 test('new private guided execution still denies current source changes or revoked canonical authority before its write', async () => {
   for (const reason of ['source', 'permission', 'cipher']) {
     const f = await guidedWorkflowFixture(), input = await f.currentInput(), encrypt = f.deps.encrypt;
