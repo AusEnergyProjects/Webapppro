@@ -25,6 +25,7 @@ import { prepareWattzunForm, prepareWattzunFormForTurn, prepareWattzunGuidedForm
   verifyWattzunFormCompletionAccess, verifyWattzunFormCompletionAccessForTurn, isWattzunFormCompletionPrepared,
   prepareWattzunFormStep, prepareWattzunFormStepForTurn, executeWattzunFormStep, reconcileWattzunFormStepReceipt,
   verifyWattzunFormStepAccess, verifyWattzunFormStepAccessForTurn, verifyWattzunFormStepForTurn, isWattzunFormStepPrepared, loadWattzunFormGuideForTurn,
+  executeWattzunGuidedPreparedForm, reconcileWattzunGuidedPreparedFormForTurn, type WattzunPreparedFormMutation, type WattzunGuidedFormSaved,
   WattzunFormError, type WattzunFormPrepared, type WattzunFormCompletionPrepared, type WattzunFormStepPrepared } from "./wattzun-form-server";
 import { readWattzunFormGuideInput, type WattzunFormGuideInput } from "./wattzun-form-guide";
 import { readWattzunWorkReference, type WattzunWorkReference } from "./wattzun-work-context";
@@ -64,6 +65,8 @@ export type WattzunWorkflowDependencies = {
   formStepAccess?: typeof verifyWattzunFormStepAccess; formStepTurnAccess?: typeof verifyWattzunFormStepAccessForTurn;
   verifyTurnFormStep?: typeof verifyWattzunFormStepForTurn;
   guide?: typeof loadWattzunFormGuideForTurn;
+  executeGuidedPreparedForm?: typeof executeWattzunGuidedPreparedForm;
+  reconcileGuidedPreparedForm?: typeof reconcileWattzunGuidedPreparedFormForTurn;
 };
 const defaults: WattzunWorkflowDependencies = { authenticate: authenticateWattzun, access: requireWattzunAccess, team: requireInstallerTeamAccess,
   encrypt: encryptProtectedPayload, decrypt: decryptProtectedPayload, sms: sendTradeSms, email: sendTradeCustomerEmail,
@@ -540,8 +543,21 @@ async function freezeNewGuidedWorkflow(request: Request, authority: WattzunTurnA
   if (frozen.prepared.guide?.sourceSha256 !== input.sourceSha256 || frozen.prepared.guide.questionKey !== input.questionKey) throw new WattzunWorkflowError(409, "This answer belongs to a different form question.");
   return { reviewId, frozen };
 }
+function guidedMutation(prepared: Prepared): WattzunPreparedFormMutation {
+  if (prepared.form && prepared.proposal.kind === "fill_form") return { kind: "fill_form", prepared: prepared.form };
+  if (prepared.completion && prepared.proposal.kind === "complete_form") return { kind: "complete_form", prepared: prepared.completion };
+  if (prepared.formStep && prepared.proposal.kind === "form_step") return { kind: "form_step", prepared: prepared.formStep };
+  throw new WattzunWorkflowError(409, "Choose the original guided form answer.");
+}
+function afterGuidedSave(input: WattzunFormGuideInput, deferredFieldKeys: string[]): WattzunFormGuideInput {
+  return { sessionId: input.sessionId, authorization: input.authorization, stage: "resume",
+    skippedFieldKeys: [...new Set([...input.skippedFieldKeys, ...deferredFieldKeys])],
+    ...(input.paused ? { paused: true } : {}), ...(input.productSearch ? { productSearch: input.productSearch } : {}) };
+}
 async function executeNewGuidedWorkflow(request: Request, authority: WattzunTurnAuthority, journal: NewGuidedJournal,
-  deps: WattzunWorkflowDependencies): Promise<Extract<WattzunWorkflowResult, { state: "complete" }>> {
+  reference: FormReference, guideInput: WattzunFormGuideInput, deps: WattzunWorkflowDependencies): Promise<{
+    result: Extract<WattzunWorkflowResult, { state: "complete" }>; currentGuide: WattzunGuidedFormSaved;
+  }> {
   const { frozen, reviewId } = journal, prepared = frozen.prepared, access = authority.access;
   if (!prepared.guide || !prepared.form && !prepared.completion && !prepared.formStep || frozen.saved.state !== "prepared") throw new WattzunWorkflowError(409, "Choose the original guided form answer.");
   request.signal.throwIfAborted();
@@ -549,17 +565,19 @@ async function executeNewGuidedWorkflow(request: Request, authority: WattzunTurn
   await markReviewExecuting(access, reviewId, frozen);
   // Each canonical form executor independently checks fresh team/target/source
   // immediately before writing, then verifies the saved source afterwards.
-  const receipt = await sendPrepared(request, access, team, prepared, reviewId, deps);
+  const currentGuide = await (deps.executeGuidedPreparedForm ?? executeWattzunGuidedPreparedForm)(
+    scopedRequest(request, access.scope.scopeId), access, guidedMutation(prepared), reference, guideInput, `wattzun-${reviewId}`);
+  const receipt = currentGuide.receipt;
   const result = { state: "complete" as const, receipt };
   if (!isWattzunWorkflowResult(result) || receipt.kind !== prepared.proposal.kind || receipt.status !== (prepared.proposal.kind === "complete_form" ? "submitted" : "saved")) throw new WattzunWorkflowError(503, "The answer's saved receipt could not be verified. Resume this same request.");
   await recordWorkflowReceipt(access, reviewId, frozen.saved, receipt);
   request.signal.throwIfAborted();
-  return result;
+  return { result, currentGuide };
 }
 /** Only an authorised ordinary answer, or distinct current completion consent, enters the existing journal. */
 export async function executeWattzunGuidedFormForTurn(request: Request, authority: WattzunTurnAuthority,
   reference: FormReference, proposal: GuidedProposal, input: WattzunFormGuideInput, requestId: string,
-  completionConsent = "", deps: WattzunWorkflowDependencies = defaults): Promise<{ reviewId: string; deferredFieldKeys: string[]; result: Extract<WattzunWorkflowResult, { state: "complete" }> }> {
+  completionConsent = "", deps: WattzunWorkflowDependencies = defaults): Promise<{ reviewId: string; deferredFieldKeys: string[]; result: Extract<WattzunWorkflowResult, { state: "complete" }>; currentGuide?: WattzunGuidedFormSaved }> {
   const checked = readWattzunFormGuideInput(input);
   if (!checked || checked.stage !== "continue" || checked.paused || checked.pendingRequestId || proposal.jobId !== reference.jobId
     || reference.formKind !== "work_pack" && proposal.formId !== reference.recordId || proposal.formKind !== reference.formKind) throw new WattzunWorkflowError(409, "Resume the current form question before saving an answer.");
@@ -577,7 +595,7 @@ export async function executeWattzunGuidedFormForTurn(request: Request, authorit
   }
   const newJournal = await freezeNewGuidedWorkflow(request, authority, reference, proposal, checked, requestId, deps);
   const deferredFieldKeys = proposal.kind === "fill_form" ? proposal.answers.filter(item => item.value === false && item.fieldKey === checked.questionKey).map(item => item.fieldKey) : [];
-  if (newJournal) return { reviewId: newJournal.reviewId, deferredFieldKeys, result: await executeNewGuidedWorkflow(request, authority, newJournal, deps) };
+  if (newJournal) return { reviewId: newJournal.reviewId, deferredFieldKeys, ...await executeNewGuidedWorkflow(request, authority, newJournal, reference, afterGuidedSave(checked, deferredFieldKeys), deps) };
   const candidate = await prepareWorkflow(request, authority.access, proposal, requestId, false, deps, team, undefined, checked, reference);
   const reviewId = `wr_${(await hash([authority.access.scope.scopeId, authority.access.actorUid, requestId])).slice(0, 48)}`;
   const frozen = await readReview(authority.access, reviewId, deps);
@@ -596,7 +614,7 @@ export async function executeWattzunGuidedFormForTurn(request: Request, authorit
 export async function verifyWattzunGuidedReceiptForTurn(request: Request, authority: WattzunTurnAuthority,
   reference: FormReference, input: WattzunFormGuideInput, originalRequestId: string, reviewId: string,
   refreshAuthority: () => Promise<WattzunTurnAuthority>, deps: WattzunWorkflowDependencies = defaults): Promise<{
-    result: Extract<WattzunWorkflowResult, { state: "complete" }>; authority: WattzunTurnAuthority;
+    result: Extract<WattzunWorkflowResult, { state: "complete" }>; authority: WattzunTurnAuthority; currentGuide: WattzunGuidedFormSaved;
   }> {
   if (!/^[A-Za-z0-9_-]{16,100}$/.test(originalRequestId) || !readWattzunFormGuideInput(input)
     || reviewId !== `wr_${(await hash([authority.access.scope.scopeId, authority.access.actorUid, originalRequestId])).slice(0, 48)}`) throw new WattzunWorkflowError(403, "Choose the original guided answer request.");
@@ -608,13 +626,14 @@ export async function verifyWattzunGuidedReceiptForTurn(request: Request, author
   request.signal.throwIfAborted();
   const prepared = frozen.prepared; permissions(requireWattzunTurnTeam(latest), prepared.proposal);
   const scoped = scopedRequest(request, latest.access.scope.scopeId);
-  const receipt = prepared.form ? await (deps.formReceipt ?? reconcileWattzunFormReceipt)(scoped, latest.access, prepared.form)
-    : prepared.completion ? await (deps.completionReceipt ?? reconcileWattzunFormCompletionReceipt)(scoped, latest.access, prepared.completion)
-      : prepared.formStep ? await (deps.formStepReceipt ?? reconcileWattzunFormStepReceipt)(scoped, latest.access, prepared.formStep) : null;
+  const currentGuide = await (deps.reconcileGuidedPreparedForm ?? reconcileWattzunGuidedPreparedFormForTurn)(
+    scoped, latest.access, guidedMutation(prepared), reference, afterGuidedSave(input, []), requireWattzunTurnTeam(latest));
+  const receipt = currentGuide?.receipt;
   if (!receipt || receipt.kind !== prepared.proposal.kind || receipt.status !== (prepared.proposal.kind === "complete_form" ? "submitted" : "saved") || !isWattzunWorkflowResult({ state: "complete", receipt })
     || frozen.saved.receipt && JSON.stringify(receipt) !== JSON.stringify(frozen.saved.receipt)) throw new WattzunWorkflowError(409, "The original answer's saved receipt changed. Check this same request before continuing.");
   request.signal.throwIfAborted();
-  return { result: { state: "complete", receipt }, authority: latest };
+  if (!currentGuide) throw new WattzunWorkflowError(409, "The original answer's saved receipt is not confirmed.");
+  return { result: { state: "complete", receipt }, authority: latest, currentGuide };
 }
 /** Recovery never writes or retries; only the original actor/scope/request journal can prove a save. */
 export async function recoverWattzunGuidedFormForTurn(request: Request, authority: WattzunTurnAuthority,

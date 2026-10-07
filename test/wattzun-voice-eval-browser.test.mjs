@@ -94,10 +94,18 @@ test("native Chrome rehearses greetings, repeated tasks, quiet recovery, navigat
       await speak("normal"); await status("thinking"); await status("listening");
     }
     assert.equal(await page.evaluate(() => window.voiceEval.state.replies.length), 13);
-    await speak("unavailable"); await status("thinking"); await status("listening");
+    await speak("unavailable"); await status("thinking"); await status("recovering");
+    const recovering = await page.evaluate(() => window.voiceEval.state);
+    assert.equal(recovering.statuses.at(-1).message, "No spoken reply was completed. Your call is still connected and listening.");
+    assert.equal(recovering.microphoneRequests, 1); assert.equal(recovering.replies.length, 13);
+    assert.equal(recovering.submissions.length, 14); assert.equal(recovering.replacementSpeech, 0);
+    await speak("normal"); await status("thinking"); await status("listening");
+    const resumed = await page.evaluate(() => window.voiceEval.state);
+    assert.equal(resumed.microphoneRequests, 1); assert.equal(resumed.replies.length, 14);
+    assert.equal(resumed.submissions.length, 15); assert.equal(resumed.replacementSpeech, 0);
     await speak("late-error"); await status("speaking");
     await page.getByRole("button", { name: "Navigate", exact: true }).click();
-    assert.match(new URL(page.url()).pathname, /^\/workspace\//); await status("listening");
+    assert.match(new URL(page.url()).pathname, /^\/workspace\//); await status("recovering");
     await speak("long"); await status("speaking");
     await page.getByRole("button", { name: "Interrupt", exact: true }).click(); await status("listening");
     await page.getByRole("button", { name: "Mute", exact: true }).click(); await status("muted");
@@ -108,12 +116,12 @@ test("native Chrome rehearses greetings, repeated tasks, quiet recovery, navigat
     await speak("normal"); await status("thinking"); await status("listening");
     const result = await page.evaluate(() => window.voiceEval.state);
     assert.equal(result.microphoneRequests, 1); assert.equal(result.replacementSpeech, 0); assert.equal(result.failure, null);
-    assert.equal(result.replies.length, 16); assert.equal(result.submissions.length, 17);
+    assert.equal(result.replies.length, 17); assert.equal(result.submissions.length, 18);
     assert.ok(result.statuses.filter(value => value.state === "recovering").length >= 2);
     assert.ok(result.submissions.every(value => value.size > 4_844 && value.mime === "audio/wav"));
     assert.ok(result.submissions.at(-1).historyLength > 12, "The continuing call retains previous successful replies");
     const firstPlayback = result.submissions.filter(value => value.firstAudio !== null).map(value => value.firstAudio).sort((a, b) => a - b);
-    assert.equal(firstPlayback.length, 16);
+    assert.equal(firstPlayback.length, 17);
     t.diagnostic(JSON.stringify({ evidence: result.evidence, submissions: result.submissions.length, replies: result.replies.length,
       microphoneRequests: result.microphoneRequests, replacementSpeech: result.replacementSpeech,
       firstPlaybackAfterSubmitMs: { median: Math.round(firstPlayback[Math.floor(firstPlayback.length / 2)]),

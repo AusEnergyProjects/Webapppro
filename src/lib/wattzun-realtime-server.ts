@@ -1,16 +1,18 @@
 import { waitUntil } from "cloudflare:workers";
 import { Buffer } from "node:buffer";
+import { wattzunNativeSpokenReply } from "./wattzun-voice-narration";
 import type { WebSocket as WorkersWebSocket } from "@cloudflare/workers-types";
 import { createSharedSurgeUsageGuard } from "./energy-assistant-usage-guard";
 import { workflowAiSourceHash } from "./workflow-ai-server";
 import {
   createWattzunPortalReplyContract, wattzunPortalProviderConfiguration, WATTZUN_SPEECH_INSTRUCTIONS,
   WattzunReplyValidationError,
+  type WattzunReplyValidationReason,
   type PortalRequest,
 } from "./wattzun-portal-ai-server";
 import {
   WATTZUN_BRAND_VOICE, WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_WAV_AUDIO_BYTES,
-  parseWattzunPreferences, wattzunSpokenReply, type WattzunReply,
+  parseWattzunPreferences, type WattzunReply,
 } from "./wattzun-portal";
 
 const TOOL = "wattzun_portal_reply";
@@ -34,6 +36,13 @@ export type PreparedWattzunRealtimeTurn = {
   transcript?: string;
   timings?: WattzunRealtimeTimings;
 };
+/** Unconfirmed heard input only; the route must reauthorise before exposing it. */
+export class WattzunRealtimeTurnError extends WattzunReplyValidationError {
+  constructor(reason: WattzunReplyValidationReason, readonly requestSummary: string) {
+    super(reason);
+    this.name = "WattzunRealtimeTurnError";
+  }
+}
 type NativeTurnOptions = PortalRequest & { audio: Blob; beforeSpeech: () => Promise<void>; transformReply?: (reply: WattzunReply, requestSummary: string) => Promise<WattzunReply> };
 type DiagnosticPhase = "preflight" | "guard" | "connect" | "configuring" | "proposal" | "checking" | "approval" | "speech";
 type DiagnosticSubstage = "configuration" | "audio" | "budget" | "upgrade" | "session" | "input" | "envelope" | "output" | "arguments" | "reply" | "summary" | "approval" | "audio_stream";
@@ -564,15 +573,27 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     const raw: unknown = JSON.parse(item.arguments);
     captureArgumentStructure(diagnostic, raw);
     diagnostic.substage = "envelope";
-    if (!record(raw) || Object.keys(raw).length !== schema.required.length || schema.required.some(field => !Object.hasOwn(raw, field))) incomplete();
-    diagnostic.substage = "reply";
+    if (!record(raw)) incomplete();
+    // One exact read-only clarification shape is safe without a memory field.
+    // Never infer heard input from its prose or rescue a partial action object.
+    const clarificationOnly = Object.keys(raw).length === 3
+      && ["message", "questions", "linkIds"].every(field => Object.hasOwn(raw, field))
+      && Array.isArray(raw.questions) && raw.questions.length > 0;
+    if (!clarificationOnly && (Object.keys(raw).length !== schema.required.length || schema.required.some(field => !Object.hasOwn(raw, field)))) incomplete();
     // Apply the same bounded text and false-completion/source-access checks to
     // memory. It remains an explicitly unconfirmed interpretation of the input.
     diagnostic.substage = "summary";
-    const requestSummary = contract.validate({ message: raw.requestSummary,
+    const requestSummary = clarificationOnly ? "" : contract.validate({ message: raw.requestSummary,
       questions: [], linkIds: [], action: null, lookup: null }).message;
     diagnostic.substage = "reply";
-    let reply = contract.validate({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds, action: raw.action, lookup: raw.lookup }, requestSummary);
+    let reply: WattzunReply;
+    try {
+      reply = contract.validateVoice({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds,
+        action: clarificationOnly ? null : raw.action, lookup: clarificationOnly ? null : raw.lookup }, requestSummary);
+    } catch (error) {
+      if (error instanceof WattzunReplyValidationError && requestSummary && !signal.aborted) throw new WattzunRealtimeTurnError(error.reason, requestSummary);
+      throw error;
+    }
     diagnostic.duration("rt_validate", validateStarted);
     signal.throwIfAborted();
     diagnostic.phase = "approval"; diagnostic.substage = "approval";
@@ -592,7 +613,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     diagnostic.phase = "speech"; diagnostic.substage = "audio_stream";
     send({ type: "response.create", response: {
       conversation: "none", output_modalities: ["audio"], instructions: WATTZUN_SPEECH_INSTRUCTIONS,
-      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: wattzunSpokenReply(reply) }] }],
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: wattzunNativeSpokenReply(reply) }] }],
       tools: [], tool_choice: "none", max_output_tokens: SPEECH_TOKENS, metadata: { phase: "speech" },
       reasoning: { effort: "minimal" },
     } });

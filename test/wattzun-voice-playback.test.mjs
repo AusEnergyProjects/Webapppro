@@ -237,7 +237,7 @@ test("a call keeps speaking through a late audio stream failure then quietly res
     assert.equal(commands.length, 0); assert.equal(browserSpeech.length, 0);
     device.sources[0].end(); assert.equal(statuses.at(-1).state, "speaking");
     device.sources[1].end();
-    assert.equal(statuses.at(-1).state, "listening"); assert.equal(statuses.at(-1).message, "Speak, then pause. Wattzun will reply.");
+    assert.equal(statuses.at(-1).state, "recovering"); assert.equal(statuses.at(-1).message, "No spoken reply was completed. Your call is still connected and listening.");
     assert.deepEqual(commands, [{ type: "start", id: 1, preRoll: true }]); assert.equal(browserSpeech.length, 0); assert.equal(device.closed, 0);
     call.hangUp(); assert.equal(device.closed, 1); assert.equal(timers.size, 0);
   } finally { call.dispose(); restore(); }

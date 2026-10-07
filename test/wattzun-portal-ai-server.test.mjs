@@ -11,6 +11,7 @@ import * as navigation from '../src/lib/wattzun-navigation.ts';
 import * as formGuideContract from '../src/lib/wattzun-form-guide.ts';
 import * as formStepContract from '../src/lib/wattzun-form-step.ts';
 import * as workflowReply from '../src/lib/wattzun-workflow-reply.ts';
+import { tradeFormTemplate } from '../src/lib/trade-form-library.mjs';
 import { SURGE_USAGE_GUARD_ENV } from '../src/lib/energy-assistant-usage-guard.ts';
 import { syntheticWorkContext, workContextContract } from './helpers/wattzun-work-context-fixture.mjs';
 
@@ -200,6 +201,71 @@ test('authoritative guide state reaches the model once with current-question con
   assert.match(model.instructions, /Photos, metadata and signatures retain their actual native evidence and signing controls/);
 });
 
+test('guided ordinary checkboxes use compact typed answers bound only to the current server-selected form', () => {
+  const options = guidedRequest({ message: 'Yes, safe access and work boundaries are confirmed for this test.' });
+  const native = tradeFormTemplate('pre-start-risk-readiness', 1, 'solar').fields.find(field => field.key === 'access_confirmed');
+  const next = { kind: 'question', fieldKey: native.key, label: native.label, type: native.type, options: [] };
+  options.formGuideProgress.next = next; options.input.formGuide.questionKey = next.fieldKey;
+  options.workContext.facts.questions = [{ ...next, canDraft: true, hasSavedAnswer: false, value: false }];
+  const model = fixture().createWattzunPortalReplyContract(options);
+  const schema = model.schema.properties.action.anyOf.find(item => item.properties?.kind?.enum?.[0] === 'fill_form');
+  assert.deepEqual(schema.required, ['kind', 'answers']); assert.deepEqual(Object.keys(schema.properties), schema.required);
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(schema.properties.answers.items.anyOf[0].properties, { fieldKey: { type: 'string', enum: [next.fieldKey] }, value: { type: 'boolean' } });
+  for (const value of [true, false]) {
+    const compact = { kind: 'fill_form', answers: [{ fieldKey: next.fieldKey, value }] };
+    const reply = model.validate({ ...formReply(compact), message: 'I recorded the answer.', questions: ['Is isolation confirmed?'] });
+    assert.deepEqual(reply.action, guidedFill(next.fieldKey, value));
+    assert.equal(reply.message, 'Checking the current form step.'); assert.deepEqual(reply.questions, []);
+  }
+  assert.match(model.instructions, /value is JSON true or false/);
+  assert.match(model.instructions, /A yes to the current checkbox answers that question only/);
+  assert.throws(() => model.validate(formReply({ kind: 'complete_form' })), /WORKFLOW_AI_INCOMPLETE/);
+});
+
+test('compact guided binding rejects partial full actions, extra keys, protected questions and stale guide authority', () => {
+  const model = fixture().createWattzunPortalReplyContract(guidedRequest());
+  const compact = { kind: 'fill_form', answers: guidedFill().answers };
+  for (const action of [{ kind: 'fill_form' }, { ...compact, jobId: 'job-one' }, { ...compact, formId: 'form-current' },
+    { ...compact, jobQuery: '' }, { ...compact, command: 'save' }, { ...compact, answers: [{ fieldKey: 'site_notes', value: { checked: true } }] },
+    { ...compact, answers: [{ fieldKey: 'declaration', value: true }] }, { ...compact, answers: [{ fieldKey: 'future_question', value: 'invented' }] }]) {
+    assert.throws(() => model.validate(formReply(action)), /WORKFLOW_AI_INCOMPLETE/);
+  }
+  for (const missing of ['jobQuery', 'jobId', 'formKind', 'formId', 'answers']) {
+    const partial = guidedFill(); delete partial[missing];
+    assert.throws(() => model.validate(formReply(partial)), /WORKFLOW_AI_INCOMPLETE/);
+  }
+  for (const change of [options => { options.input.formGuide.sourceSha256 = 'b'.repeat(64); }, options => { options.input.formGuide.questionKey = 'other'; },
+    options => { options.input.formGuide.pendingRequestId = REQUEST_ID; }, options => { options.input.formGuide.paused = true; }]) {
+    const options = guidedRequest(); change(options);
+    assert.throws(() => fixture().createWattzunPortalReplyContract(options).validate(formReply(compact)), /WORKFLOW_AI_INCOMPLETE/);
+  }
+  const ordinary = guidedRequest(); delete ordinary.formGuideProgress; delete ordinary.input.formGuide;
+  const reviewed = fixture().createWattzunPortalReplyContract(ordinary);
+  assert.throws(() => reviewed.validate(formReply(compact)), /WORKFLOW_AI_INCOMPLETE/);
+  assert.deepEqual(reviewed.validate(formReply(guidedFill())).action, guidedFill());
+  assert.deepEqual(reviewed.schema.properties.action.anyOf.find(item => item.properties?.kind?.enum?.[0] === 'fill_form').required,
+    ['kind', 'jobQuery', 'jobId', 'formKind', 'formId', 'answers']);
+});
+
+test('compact guided corrections retain visible saved-field restrictions and completion needs distinct present consent', () => {
+  const model = fixture().createWattzunPortalReplyContract(guidedRequest());
+  const schema = model.schema.properties.action.anyOf.find(item => item.properties?.kind?.enum?.[0] === 'fill_form');
+  assert.deepEqual(schema.properties.answers.items.anyOf.map(item => item.properties.fieldKey.enum[0]), ['site_notes', 'serial_number']);
+  const correction = { kind: 'fill_form', answers: [{ fieldKey: 'site_notes', value: 'Side gate' }, { fieldKey: 'serial_number', value: 'NEW' }] };
+  assert.throws(() => model.validate(formReply(correction)), /WORKFLOW_AI_INCOMPLETE/);
+  assert.deepEqual(model.validate(formReply(correction), 'Actually the serial number is NEW and access is via the side gate.').action,
+    { ...guidedFill(), answers: correction.answers });
+  const ready = fixture().createWattzunPortalReplyContract(guidedRequest({ state: 'ready_to_complete', message: 'Native voice input' }));
+  const completionSchema = ready.schema.properties.action.anyOf.find(item => item.properties?.kind?.enum?.[0] === 'complete_form');
+  assert.deepEqual(completionSchema.required, ['kind']); assert.deepEqual(Object.keys(completionSchema.properties), ['kind']);
+  for (const current of ['Yes, safe access is confirmed.', 'Save these answers.', 'I will complete it tomorrow.', 'Should I complete it?']) {
+    assert.throws(() => ready.validate(formReply({ kind: 'complete_form' }), current), /WORKFLOW_AI_INCOMPLETE/);
+  }
+  assert.deepEqual(ready.validate(formReply({ kind: 'complete_form' }), 'Yes complete this form now.').action, completeForm);
+  assert.throws(() => ready.validate(formReply({ kind: 'complete_form', formId: 'form-current' }), 'Yes complete this form now.'), /WORKFLOW_AI_INCOMPLETE/);
+});
+
 test('guide authority requires selected form, matching source, session and server-owned progress', () => {
   for (const change of [options => { delete options.formGuideProgress; }, options => { delete options.input.formGuide; },
     options => { options.formGuideProgress = { ...options.formGuideProgress, sessionId: '00000000-0000-4000-8000-000000000002' }; },
@@ -220,6 +286,7 @@ test('an original selected work-pack revision can load current guide authority b
   const model = fixture().createWattzunPortalReplyContract(options);
   const action = { ...guidedFill(), formKind: 'work_pack' };
   assert.deepEqual(model.validate(formReply(action)).action, action);
+  assert.deepEqual(model.validate(formReply({ kind: 'fill_form', answers: action.answers })).action, action);
   assert.throws(() => model.validate(formReply({ ...action, formId: 'form-original' })), /WORKFLOW_AI_INCOMPLETE/);
 });
 

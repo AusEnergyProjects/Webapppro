@@ -83,6 +83,7 @@ type VoiceCallbacks = {
   status: (status: WattzunCallStatus) => void;
   submit: (audio: Blob, signal: AbortSignal) => Promise<WattzunVoiceResult>;
   reply: (result: WattzunVoiceResult) => void;
+  played?: (audio: WattzunVoiceResult["audio"]) => void;
   greeting?: (signal: AbortSignal) => Promise<WattzunVoiceResult["audio"]>;
 };
 
@@ -96,6 +97,7 @@ export class WattzunVoiceCall {
   private playback: WattzunPlayback | null = null;
   private pending: AbortController | null = null;
   private muted = false;
+  private replyIncomplete = false;
   private readonly environment: WattzunVoiceEnvironment;
   private readonly callbacks: VoiceCallbacks;
   constructor(environment: WattzunVoiceEnvironment, callbacks: VoiceCallbacks) { this.environment = environment; this.callbacks = callbacks; }
@@ -107,6 +109,7 @@ export class WattzunVoiceCall {
     if (this.active) return;
     this.active = true;
     this.muted = false;
+    this.replyIncomplete = false;
     const generation = ++this.generation;
     this.update("permission", "Allow your microphone to speak to Wattzun.");
     if (!this.active || generation !== this.generation) return;
@@ -164,15 +167,16 @@ export class WattzunVoiceCall {
       if (this.pending === pending) this.pending = null;
     }
   }
-  private recover() {
+  private recover(replyIncomplete = false) {
     if (!this.active || !this.microphone) return;
+    if (replyIncomplete) this.replyIncomplete = true;
     this.pending?.abort(); this.pending = null;
     const playback = this.playback; this.playback = null; playback?.close();
     this.discardCapture();
     this.microphone.mute(true);
     if (this.muted) { this.update("muted"); return; }
     const generation = this.generation;
-    this.update("recovering");
+    this.update("recovering", this.replyIncomplete ? "No spoken reply was completed. Your call is still connected and listening." : "");
     if (this.active && generation === this.generation) this.listen();
   }
   private discardCapture() {
@@ -228,7 +232,9 @@ export class WattzunVoiceCall {
         capture.submit = decision === "send";
         recorder.stop();
       }, 100);
-      this.update("listening", "Speak, then pause. Wattzun will reply.");
+      if (this.replyIncomplete) {
+        if (this.state !== "recovering") this.update("recovering", "No spoken reply was completed. Your call is still connected and listening.");
+      } else this.update("listening", "Speak, then pause. Wattzun will reply.");
     } catch { this.fail("This browser could not record audio. Try an updated browser with microphone access."); }
   }
   private async send(audio: Blob) {
@@ -246,6 +252,7 @@ export class WattzunVoiceCall {
     let unplayedAudio: WattzunVoiceResult["audio"] | null = null;
     this.pending = pending;
     this.microphone?.mute(true);
+    this.replyIncomplete = false;
     this.update("thinking");
     try {
       const result = await request(pending.signal);
@@ -260,7 +267,7 @@ export class WattzunVoiceCall {
     } catch (error) {
       if (!this.active || generation !== this.generation || pending.signal.aborted) return true;
       const message = error instanceof Error ? error.message : "The voice reply could not be completed. Try again.";
-      if (error instanceof WattzunVoiceCallError) this.fail(message); else this.recover();
+      if (error instanceof WattzunVoiceCallError) this.fail(message); else this.recover(true);
     } finally {
       if (unplayedAudio?.mimeType === "audio/pcm") void unplayedAudio.stream.cancel().catch(() => {});
       if (this.pending === pending) this.pending = null;
@@ -277,12 +284,14 @@ export class WattzunVoiceCall {
         if (this.playback !== playback || !this.active || generation !== this.generation) return;
         playback.close();
         this.playback = null;
+        this.callbacks.played?.(audio);
+        if (!this.active || generation !== this.generation) return;
         if (this.muted) this.update("muted"); else this.listen();
       };
-      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.recover(); };
+      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.recover(true); };
       await playback.play().catch(error => { if (this.playback === playback) throw error; });
       if (this.playback === playback && this.active && generation === this.generation) this.update("speaking");
-    } catch { if (this.active && generation === this.generation) this.recover(); } finally {
+    } catch { if (this.active && generation === this.generation) this.recover(true); } finally {
       if (unplayed && audio.mimeType === "audio/pcm") void audio.stream.cancel().catch(() => {});
     }
   }

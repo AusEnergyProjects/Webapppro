@@ -4,13 +4,16 @@ import { prepareWattzunForm, executeWattzunForm, reconcileWattzunFormReceipt, lo
   prepareWattzunFormForTurn, prepareWattzunGuidedFormForTurn, verifyWattzunFormForTurn, verifyWattzunFormAccessForTurn,
   loadWattzunFormGuideForTurn, controlWattzunFormGuideForTurn, prepareWattzunFormCompletion, prepareWattzunFormCompletionForTurn,
   verifyWattzunFormCompletionForTurn, verifyWattzunFormCompletionAccessForTurn, executeWattzunFormCompletion, reconcileWattzunFormCompletionReceipt, isWattzunFormCompletionPrepared,
-  prepareWattzunFormStep, prepareWattzunFormStepForTurn, verifyWattzunFormStepForTurn, verifyWattzunFormStepAccessForTurn, executeWattzunFormStep, reconcileWattzunFormStepReceipt, isWattzunFormStepPrepared, searchWattzunFormProductsForTurn } from "../src/lib/wattzun-form-server.ts";
+  prepareWattzunFormStep, prepareWattzunFormStepForTurn, verifyWattzunFormStepForTurn, verifyWattzunFormStepAccessForTurn, executeWattzunFormStep, reconcileWattzunFormStepReceipt, isWattzunFormStepPrepared, searchWattzunFormProductsForTurn,
+  executeWattzunGuidedPreparedForm, reconcileWattzunGuidedPreparedFormForTurn } from "../src/lib/wattzun-form-server.ts";
 import { readWattzunFormGuideProgress, wattzunFormGuideNarration } from "../src/lib/wattzun-form-guide.ts";
 import { workContextGateway } from "./helpers/wattzun-work-context-fixture.mjs";
+import { tradeFormTemplate } from "../src/lib/trade-form-library.mjs";
 
 const request=new Request("https://fixture.invalid/api/wattzun/workflow",{headers:{Authorization:"Bearer synthetic",Origin:"https://fixture.invalid"}});
 const access={actorUid:"actor-one",scope:{portal:"trade",scopeId:"owner-one",label:"Synthetic business"},db:{prepare(){throw new Error("Assistant must not mutate storage directly");}}};
 const requestId="synthetic-request-one";
+const resumedGuide={sessionId:"923ed4f9-c46b-4c0e-8a66-996c44671918",stage:"resume",authorization:"ordinary_form_answers",skippedFieldKeys:[]};
 const reference=formKind=>({kind:"trade_form",formKind,recordId:formKind==="work_pack"?"pack-one":"form-one",jobId:"job-one"});
 const proposal=(formKind,fieldKey="notes",value="Observed seal needs replacement")=>({kind:"fill_form",jobQuery:"",jobId:"job-one",formKind,formId:reference(formKind).recordId,answers:[{fieldKey,value}]});
 const formError=status=>error=>error instanceof WattzunFormError&&error.status===status;
@@ -28,7 +31,7 @@ function fixture(formKind){
   const deps={
     async team(req){assert.equal(req.headers.get("X-TLink-Business"),"owner-one");assert.equal(req.headers.get("Authorization"),"Bearer synthetic");return team;},
     async job(current,id){assert.equal(current,team);assert.equal(id,"job-one");return job;},
-    async getJobForms(req){assert.equal(new URL(req.url).searchParams.get("workOrderId"),"job-one");return Response.json({ok:true,forms:[structuredClone(supporting)]});},
+    async selectedJobForm(current,id,formId){assert.equal(current,team);assert.equal(id,"job-one");assert.equal(formId,"form-one");return {job:await deps.job(current,id),form:structuredClone(supporting)};},
     async saveJobForm(req){const body=await req.json();calls.push(body);assert.equal(body.complete,false);assert.equal(body.baseRevision,supporting.revision);supporting.answers=body.answers;supporting.revision++;if(state.failAfterSave)throw new Error("Connection lost after commit");return Response.json({ok:true,forms:[supporting]});},
     async loadActivity(current,id){assert.equal(current,team);assert.equal(id,"form-one");return structuredClone(activity);},
     async saveActivity(current,id,revision,answers){calls.push({id,revision,answers});assert.equal(revision,activity.revision);activity.answers=structuredClone(answers);activity.revision++;if(state.failAfterSave)throw new Error("Connection lost after commit");return structuredClone(activity);},
@@ -138,6 +141,35 @@ for(const kind of ["job_form","activity_form","work_pack"]){
     assert.equal(context.facts.editable,false);assert.ok(context.facts.questions.every(question=>!question.canDraft));
     assert.notEqual(context.sourceSha256,before.sourceSha256);
     await assert.rejects(prepareWattzunForm(request,access,proposal(kind),f.deps),formError(403));
+  });
+}
+
+for(const kind of ["job_form","activity_form","work_pack"]){
+  test(`${kind}: a guided canonical save and final receipt project their question from the same verified source`,async()=>{
+    const f=fixture(kind),prepared=await prepareWattzunForm(request,access,proposal(kind),f.deps);
+    const native=kind==="job_form"?"selectedJobForm":kind==="activity_form"?"loadActivity":"loadPack",load=f.deps[native];
+    let snapshots=0,authorities=0;
+    f.deps[native]=async(...args)=>{snapshots++;return load(...args);};
+    const team=f.deps.team;f.deps.team=async(...args)=>{authorities++;return team(...args);};
+    const mutation={kind:"fill_form",prepared};
+    const saved=await executeWattzunGuidedPreparedForm(request,access,mutation,f.ref,resumedGuide,requestId,f.deps);
+    assert.equal(snapshots,2);assert.equal(authorities,2);assert.equal(f.calls.length,1);
+    assert.equal(saved.guide.recordId,saved.receipt.id);assert.equal(saved.guide.revision,2);
+    assert.equal(saved.context.sourceSha256,saved.guide.sourceSha256);assert.equal(saved.guide.next.fieldKey,"next_question");
+    assert.deepEqual(saved.guide.requestedReference,f.ref);
+    const final=await reconcileWattzunGuidedPreparedFormForTurn(request,access,mutation,f.ref,resumedGuide,f.team,f.deps);
+    assert.equal(snapshots,3);assert.equal(authorities,2,"The exact freshly supplied final team must not be loaded twice");
+    assert.deepEqual(final,saved);assert.equal(f.calls.length,1);
+    f.team.canManageFieldEvidence=false;
+    await assert.rejects(reconcileWattzunGuidedPreparedFormForTurn(request,access,mutation,f.ref,resumedGuide,f.team,f.deps),formError(403));
+    assert.equal(snapshots,3);assert.equal(f.calls.length,1);
+  });
+  test(`${kind}: invalid guided projection binding cannot reach a canonical write`,async()=>{
+    const f=fixture(kind),prepared=await prepareWattzunForm(request,access,proposal(kind),f.deps),mutation={kind:"fill_form",prepared};
+    for(const [ref,input] of [[{...f.ref,jobId:"another-job"},resumedGuide],[f.ref,{...resumedGuide,stage:"continue"}],[f.ref,{...resumedGuide,sessionId:"invalid"}]]){
+      await assert.rejects(executeWattzunGuidedPreparedForm(request,access,mutation,ref,input,requestId,f.deps),formError(403));
+    }
+    assert.equal(f.calls.length,0);
   });
 }
 
@@ -302,7 +334,7 @@ test("full snapshot progress goes beyond the twenty-question model window and de
   for(let i=0;i<30;i++)f.supporting.answers[`q_${i}`]="Observed";
   assert.equal((await loadGuide(f)).guide.next.fieldKey,"checked");
   const {context,guide}=await loadGuide(f,{...guideStart(),skippedFieldKeys:["checked"]});
-  assert.equal(guide.counts.visible,36);assert.equal(guide.counts.answered,31);assert.equal(guide.next.fieldKey,"q_30");assert.equal(guide.counts.manualMissing,0);
+  assert.equal(guide.counts.visible,36);assert.equal(guide.counts.answered,30);assert.equal(guide.counts.unanswered,6);assert.equal(guide.next.fieldKey,"q_30");assert.equal(guide.counts.manualMissing,0);
   assert.ok(context.facts.questions.length<=20);assert.equal(context.facts.questions[0].fieldKey,"q_30");
   assert.equal(guide.completion.ready,false);assert.ok(guide.completion.missing.includes("checked"));assert.equal(f.supporting.answers.checked,false);
 });
@@ -313,15 +345,42 @@ test("canonical checkbox defaulting after a date save still asks each untouched 
   const date=await prepareWattzunGuidedFormForTurn(request,access,f.propose("work_date","2026-10-07"),continueGuide(guide),f.team,f.deps);
   assert.deepEqual(date.payload.answers,{work_date:"2026-10-07",site_safe:false,scope_checked:false});
   await executeWattzunForm(request,access,date,requestId,f.deps);
-  ({guide}=await loadGuide(f,{...guideStart(),stage:"resume"}));assert.equal(guide.state,"question");assert.equal(guide.next.fieldKey,"site_safe");assert.equal(guide.counts.manualMissing,0);
+  ({guide}=await loadGuide(f,{...guideStart(),stage:"resume"}));assert.equal(guide.state,"question");assert.equal(guide.next.fieldKey,"site_safe");assert.equal(guide.counts.manualMissing,0);assert.equal(guide.counts.answered,1);assert.equal(guide.counts.unanswered,2);
   const yes=await prepareWattzunGuidedFormForTurn(request,access,f.propose("site_safe",true),continueGuide(guide),f.team,f.deps);
   await executeWattzunForm(request,access,yes,requestId+"-safe",f.deps);
-  ({guide}=await loadGuide(f,{...guideStart(),stage:"resume"}));assert.equal(guide.next.fieldKey,"scope_checked");
+  ({guide}=await loadGuide(f,{...guideStart(),stage:"resume"}));assert.equal(guide.next.fieldKey,"scope_checked");assert.equal(guide.counts.answered,2);assert.equal(guide.counts.unanswered,1);
   const no=await prepareWattzunGuidedFormForTurn(request,access,f.propose("scope_checked",false),continueGuide(guide),f.team,f.deps);
   await executeWattzunForm(request,access,no,requestId+"-scope",f.deps);
-  ({guide}=await loadGuide(f,{...guideStart(),stage:"resume",skippedFieldKeys:["scope_checked"]}));assert.equal(guide.state,"review");assert.equal(guide.completion.ready,false);assert.equal(guide.counts.manualMissing,0);
+  ({guide}=await loadGuide(f,{...guideStart(),stage:"resume",skippedFieldKeys:["scope_checked"]}));assert.equal(guide.state,"review");assert.equal(guide.completion.ready,false);assert.equal(guide.counts.manualMissing,0);assert.equal(guide.counts.answered,2);assert.equal(guide.counts.unanswered,1);
   assert.equal(f.supporting.answers.scope_checked,false);assert.ok(guide.completion.missing.includes("scope_checked"));
   await assert.rejects(prepareWattzunFormCompletion(request,access,completeProposal("job_form"),f.deps),formError(409));
+});
+
+test("canonical six-field pre-start guided progress advances one confirmed answer at a time",async()=>{
+  const f=fixture("job_form");f.supporting.template=tradeFormTemplate("pre-start-risk-readiness",1,"other");f.supporting.answers={};
+  const supplied={work_date:"2026-10-07",technician:"Alex Example",access_confirmed:true,isolation_confirmed:true,hazards:"Work area isolated and clear",changes:"No scope changes"};
+  let {guide}=await loadGuide(f),count=0;
+  assert.equal(guide.counts.visible,6);assert.equal(guide.counts.answered,0);assert.equal(guide.counts.unanswered,6);
+  for(const [key,value] of Object.entries(supplied)){
+    assert.equal(guide.state,"question");assert.equal(guide.next.fieldKey,key);
+    const prepared=await prepareWattzunGuidedFormForTurn(request,access,f.propose(key,value),continueGuide(guide),f.team,f.deps);
+    await executeWattzunForm(request,access,prepared,`${requestId}-${key}`,f.deps);
+    ({guide}=await loadGuide(f,{...guideStart(),stage:"resume"}));count++;
+    assert.equal(guide.counts.answered,count);assert.equal(guide.counts.unanswered,6-count);assert.ok(readWattzunFormGuideProgress(guide));
+    if(count===1){assert.equal(f.supporting.answers.access_confirmed,false);assert.equal(f.supporting.answers.isolation_confirmed,false);}
+  }
+  assert.equal(guide.state,"ready_to_complete");assert.equal(guide.completion.ready,true);assert.deepEqual(f.supporting.answers,supplied);
+});
+
+test("supporting optional checkbox and declaration defaults do not inflate progress, while explicit activity and governed false and zero remain answered",async()=>{
+  const supporting=fixture("job_form");supporting.supporting.template.fields=[field("optional","checkbox",{required:false}),field("declaration","checkbox")];supporting.supporting.answers={optional:false,declaration:false};
+  const defaults=await loadGuide(supporting);assert.equal(defaults.guide.counts.answered,0);assert.equal(defaults.guide.counts.unanswered,2);assert.equal(defaults.guide.state,"manual");
+  for(const kind of ["activity_form","work_pack"]){
+    const f=fixture(kind);
+    if(kind==="activity_form"){f.activity.form.fields=[field("checked","boolean"),field("measurement","number")];f.activity.answers={checked:false,measurement:0};}
+    else{f.workPack.definition.schema.sections=[{sectionKey:"general",repeatability:null,prompts:[prompt("checked","checkbox"),prompt("measurement","number")]}];f.workPack.response={answers:{checked:false,measurement:0},repeatableSections:{}};f.workPack.completion={visiblePromptKeys:["checked","measurement"],ready:false,blockers:[]};}
+    const {guide}=await loadGuide(f);assert.equal(guide.counts.visible,2);assert.equal(guide.counts.answered,2);assert.equal(guide.counts.unanswered,0);
+  }
 });
 
 test("governed answer to photo to required signing preserves latest immutable identity and never invents evidence",async()=>{
@@ -560,7 +619,7 @@ test("hangup during final canonical reads prevents ordinary, completion and gove
     const f=kind==="completion"?completedFixture("job_form"):kind==="step"?governedStepsFixture():fixture("job_form"),controller=new AbortController();
     if(kind==="step")f.workPack.definition.schema.dependencies=[{kind:"scenario",dependencyKey:"scenario",label:"Scenario",required:true,scenarioCodes:["approved"]}];
     const prepared=kind==="ordinary"?await prepareWattzunForm(request,access,proposal("job_form"),f.deps):kind==="completion"?await prepareWattzunFormCompletion(request,access,{kind:"complete_form",jobQuery:"",jobId:"job-one",formKind:"job_form",formId:"form-one"},f.deps):await prepareWattzunFormStep(request,access,stepProposal("work_pack",{kind:"scenario",dependencyKey:"scenario",scenarioCode:"approved"}),f.deps);
-    const method=kind==="step"?"loadPack":"getJobForms",original=f.deps[method];f.deps[method]=async(...args)=>{const result=await original(...args);controller.abort();return result;};
+    const method=kind==="step"?"loadPack":"selectedJobForm",original=f.deps[method];f.deps[method]=async(...args)=>{const result=await original(...args);controller.abort();return result;};
     const callRequest=new Request(request,{signal:controller.signal});const execute=kind==="ordinary"?executeWattzunForm:kind==="completion"?executeWattzunFormCompletion:executeWattzunFormStep;
     await assert.rejects(execute(callRequest,access,prepared,requestId,f.deps),error=>error.name==="AbortError");assert.equal(f.calls.length,0);
   }

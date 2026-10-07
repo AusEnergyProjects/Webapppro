@@ -207,6 +207,7 @@ test("Council Connect works in a real browser with synthetic API boundaries", { 
         await page.getByRole("button",{name:"Send message",exact:true}).click();
         await page.waitForFunction(()=>typeof window.fixtureResolveSend==='function');
         await page.getByRole("button",{name:/Alex Community/}).click();
+        await page.getByRole("log").getByText("Ready to plan the council information session?",{exact:true}).waitFor();
         await page.getByRole("textbox",{name:"Message Alex Community"}).fill("Draft for second colleague");
         assert.equal(await page.getByRole("button",{name:"Send message",exact:true}).isEnabled(),true);
         await page.evaluate(()=>window.fixtureResolveSend());

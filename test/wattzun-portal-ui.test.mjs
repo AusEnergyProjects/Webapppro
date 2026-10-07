@@ -6,6 +6,7 @@ import * as portalContract from "../src/lib/wattzun-portal.ts";
 import * as recordContract from "../src/lib/wattzun-records.ts";
 import * as actionContract from "../src/lib/wattzun-actions.ts";
 import * as conversationContract from "../src/lib/wattzun-conversation.ts";
+import * as narrationContract from "../src/lib/wattzun-voice-narration.ts";
 import * as workContract from "../src/lib/wattzun-work-context.ts";
 import * as workflowContract from "../src/lib/wattzun-workflow.ts";
 import * as workflowReply from "../src/lib/wattzun-workflow-reply.ts";
@@ -39,6 +40,7 @@ function load({ values = [null, [], "", false, null], refValues = {}, storage, e
     "@/lib/wattzun-actions": actionContract,
     "@/lib/wattzun-portal": portalContract,
     "@/lib/wattzun-conversation": conversationContract,
+    "@/lib/wattzun-voice-narration": narrationContract,
     "@/lib/wattzun-work-context": workContract,
     "@/lib/wattzun-workflow": workflowContract,
     "@/lib/wattzun-workflow-reply": workflowReply,

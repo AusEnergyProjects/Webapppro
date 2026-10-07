@@ -24,6 +24,7 @@ class WorkflowError extends Error { constructor(status, message) { super(message
 class GuidedValidationError extends WorkflowError {}
 class ExistingQuoteError extends Error { constructor(status, message) { super(message); this.status = status; } }
 class FormError extends Error { constructor(status, message) { super(message); this.status = status; } }
+class RealtimeTurnError extends Error { constructor(requestSummary) { super('WORKFLOW_AI_INCOMPLETE'); this.requestSummary = requestSummary; } }
 const route = {};
 const executable = ts.transpileModule(readFileSync(new URL('../src/lib/wattzun-portal-route.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -35,7 +36,8 @@ Function('require', 'exports', executable)(name => {
     WattzunAccessError: AccessError,
     wattzunAccessFailure: error => error instanceof AccessError ? { status: error.status, message: error.message } : null,
   };
-  if (name === './wattzun-portal-ai-server' || name === './wattzun-realtime-server' || name === './wattzun-usage') return {};
+  if (name === './wattzun-realtime-server') return { WattzunRealtimeTurnError: RealtimeTurnError };
+  if (name === './wattzun-portal-ai-server' || name === './wattzun-usage') return {};
   if (name === './wattzun-turn-authority-server') return turnAuthorityContract;
   if (name === './wattzun-form-guide') return formGuideContract;
   if (name === './wattzun-form-step') return formStepContract;
@@ -58,6 +60,36 @@ const reply = { kind: 'clarification', message: 'I can help prepare your quote.'
 const matchesReply = value => JSON.stringify(value) === JSON.stringify(reply);
 const workflowProposal = { kind: 'invoice_reminder', jobQuery: 'that job last week in Frankston', jobId: '', invoiceId: '', channel: 'sms', body: '' };
 const workflowReview = { state: 'review', reviewId: 'wattzun-review-current-123', expiresAt: '2026-10-07T12:15:00Z', kind: 'invoice_reminder', heading: 'Review invoice reminder', summary: 'An unpaid invoice reminder is ready for John Smith.', confirmationLabel: 'Send reminder', lines: [{ label: 'Invoice', value: 'INV-123' }], preview: { subject: '', body: 'Please check your unpaid invoice INV-123.' }, href: '/direct-trade/dashboard?workspace=connect' };
+
+test('a validated heard request survives an invalid native reply only after fresh source and authority gates', async () => {
+  const workContext = syntheticWorkContext(), requestSummary = 'Customer is Morgan Ellis, spelled M O R G A N E L L I S.';
+  const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext, providerError: new RealtimeTurnError(requestSummary) });
+  const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.equal(response.status, 503);
+  const payload = await response.json();
+  assert.deepEqual(payload.voiceTurnRecovery, { requestId: input.requestId, requestSummary });
+  assert.equal(payload.reply, undefined); assert.equal(payload.audio, undefined);
+  assert.deepEqual(f.events, ['authenticate', 'access', 'context', 'realtime', 'context', 'access']);
+  assert.equal(f.workflowCalls.length, 0); assert.equal(f.recorded.length, 0); assert.equal(f.audio.state.pulls, 0);
+});
+test('stale selected work or revoked authority blocks failure-summary disclosure', async () => {
+  for (const changed of [{ contextChangedAt: 2, status: 409 }, { revokeAt: 2, status: 403 }, { changed: { ...access, actorUid: 'different-owner' }, status: 403 }]) {
+    const workContext = syntheticWorkContext();
+    const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext, providerError: new RealtimeTurnError('Customer is Morgan Ellis.'), ...changed });
+    const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+    assert.equal(response.status, changed.status); assert.equal((await response.json()).voiceTurnRecovery, undefined);
+    assert.equal(f.workflowCalls.length, 0); assert.equal(f.recorded.length, 0); assert.equal(f.audio.state.pulls, 0);
+  }
+});
+test('untyped transport errors and cancellation never retain interpreted request details', async () => {
+  const forged = Object.assign(new Error('WORKFLOW_AI_INCOMPLETE'), { requestSummary: 'Unvalidated name.' });
+  const plain = fixture({ providerError: forged });
+  assert.equal((await (await plain.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE)).response.json()).voiceTurnRecovery, undefined);
+  const cancelled = fixture();
+  cancelled.deps.realtime = async () => { cancelled.controller.abort(); throw new RealtimeTurnError('Customer is Morgan Ellis.'); };
+  const { response } = await cancelled.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.equal((await response.json()).voiceTurnRecovery, undefined); assert.equal(cancelled.recorded.length, 0);
+});
 
 test('native and streaming voice prepare actual workflow reviews before narration', async () => {
   for (const accept of [contract.WATTZUN_VOICE_STREAM_TYPE, contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE]) {
@@ -333,6 +365,7 @@ function guidedRouteFixture() {
     state.revision++; state.writes++;
     const result = { state: 'complete', receipt: { kind: proposal.kind, id: reference.recordId, status: proposal.kind === 'complete_form' ? 'submitted' : 'saved', label: 'Open form', href: '/direct-trade/dashboard?workspace=work&jobId=job-one&jobTab=files', message: proposal.kind === 'fill_form' ? 'The answers are saved.' : proposal.kind === 'form_step' ? 'The calculator result is saved and remains pending independent Creditex review.' : 'The form is complete.' } };
     const executed = { result, reviewId: 'guided-review-1234567890', deferredFieldKeys: [] }; journal.set(requestId, executed);
+    executed.currentGuide = {...progress({...raw,stage:'resume'}),receipt:result.receipt};
     if (state.failAfterSave) throw new FormError(503, 'The save acknowledgement was lost.');
     return executed;
   };
@@ -346,7 +379,8 @@ function guidedRouteFixture() {
   f.deps.verifyGuidedReceipt = async (_request, _authority, selected, raw, originalRequestId, reviewId, refresh) => {
     f.events.push('verifyGuidedReceipt'); assert.deepEqual(selected, reference); assert.equal(raw.sessionId, guideInput.sessionId);
     assert.equal(reviewId, 'guided-review-1234567890'); const original = journal.get(originalRequestId); assert.ok(original);
-    return { result: original.result, authority: await refresh() };
+    const latest = await refresh();
+    return { result: original.result, authority: latest, currentGuide: {...progress({...raw,stage:'resume'}),receipt:original.result.receipt} };
   };
   const freshAudio = () => { const audio = providerAudio(); audios.push(audio); audio.push(Uint8Array.from([0, 1, 2, 3])); audio.finish(); return audio.stream; };
   f.deps.realtime = async context => { f.events.push('realtime'); assert.ok(context.formGuideProgress); const reply = await context.transformReply(options.reply, options.requestSummary); await context.beforeSpeech(); return { reply, audio: freshAudio(), requestSummary: options.requestSummary }; };

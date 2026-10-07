@@ -1,5 +1,6 @@
 import type { WattzunAccess } from "./wattzun-portal-access-server.ts";
 import type { TeamAccess } from "./trade-team-server.ts";
+import type { TradeJobFormProjection } from "./trade-job-forms-server.ts";
 import type { ActivityRecord, ActivityAnswers } from "./trade-activity-form-types.ts";
 import type { CreditexAssignedActivityWorkPackProjection, CreditexWorkPackTradeScope, CreditexWorkPackSectionPatch, CreditexWorkPackMutationIdempotency, CreditexWorkPackMutationResult } from "./creditex-activity-work-pack-server.ts";
 import type { WattzunWorkContext, WattzunWorkReference } from "./wattzun-work-context.ts";
@@ -58,6 +59,10 @@ export type WattzunFormStepPrepared = {
   idempotency: CreditexWorkPackMutationIdempotency;
   review: WattzunFormPrepared["review"];
 };
+export type WattzunPreparedFormMutation = { kind: "fill_form"; prepared: WattzunFormPrepared }
+  | { kind: "complete_form"; prepared: WattzunFormCompletionPrepared }
+  | { kind: "form_step"; prepared: WattzunFormStepPrepared };
+export type WattzunGuidedFormSaved = { receipt: WattzunWorkflowReceipt; context: WattzunWorkContext; guide: WattzunFormGuideProgress };
 type StepServices = {
   products: typeof import("./creditex-activity-work-pack-server.ts").listAssignedCreditexActivityWorkPackOfficialProducts;
   selectProducts: typeof import("./creditex-activity-work-pack-server.ts").selectAssignedCreditexActivityWorkPackOfficialProducts;
@@ -79,7 +84,7 @@ const stepServices: StepServices = {
 export type WattzunFormDependencies = {
   team(request: Request): Promise<TeamAccess>;
   job(access: TeamAccess, jobId: string): Promise<Job>;
-  getJobForms(request: Request): Promise<Response>;
+  selectedJobForm(access: TeamAccess, jobId: string, formId: string): Promise<{ job: Job; form: TradeJobFormProjection }>;
   saveJobForm(request: Request): Promise<Response>;
   loadActivity(access: TeamAccess, id: string): Promise<ActivityRecord>;
   saveActivity(access: TeamAccess, id: string, revision: number, answers: ActivityAnswers): Promise<ActivityRecord>;
@@ -92,7 +97,7 @@ export type WattzunFormDependencies = {
 const defaults: WattzunFormDependencies = {
   team: async request => (await import("./trade-team-server.ts")).requireInstallerTeamAccess(request),
   job: async (access, id) => (await import("./trade-team-server.ts")).assignedJob(access, id),
-  getJobForms: async request => (await import("@/app/api/trade-job-forms/route")).GET(request),
+  selectedJobForm: async (team, jobId, formId) => (await import("./trade-job-forms-server.ts")).readSelectedTradeJobForm(team, jobId, formId),
   saveJobForm: async request => (await import("@/app/api/trade-job-forms/route")).PATCH(request),
   loadActivity: async (access, id) => (await import("./trade-activity-forms-server.ts")).loadActivityRecord(access, id),
   saveActivity: async (access, id, revision, answers) => (await import("./trade-activity-forms-server.ts")).saveActivityAnswers(access, id, revision, answers),
@@ -142,6 +147,9 @@ async function canonicalCall<T>(operation: () => Promise<T>): Promise<T> {
       JOB_NOT_ASSIGNED: [403, "This job is assigned to another worker. Choose a job you can access."],
       ACTIVITY_RECORD_NOT_FOUND: [404, "This activity form was not found on your job."],
       JOB_NOT_FOUND: [404, "This job was not found in your business."],
+      JOB_FORM_NOT_FOUND: [404, "This form was not found on the selected job."],
+      FIELD_EVIDENCE_VIEW_REQUIRED: [403, "Your current team access does not allow these form answers."],
+      FORM_PAYLOAD_UNAVAILABLE: [503, "The selected form could not be read. Keep this question open and try again."],
     };
     const mapped = known[error.message];
     if (mapped) throw new WattzunFormError(mapped[0], mapped[1]);
@@ -153,13 +161,11 @@ function scoped(request: Request, access: WattzunAccess, pathname?: string, body
   if (body) headers.set("Content-Type", "application/json");
   return new Request(pathname ? new URL(pathname, request.url) : request.url, { method: body ? "PATCH" : "GET", headers, ...(body ? { body: JSON.stringify(body) } : {}) });
 }
-async function authority(request: Request, access: WattzunAccess, reference: Reference, mutate: boolean, deps: WattzunFormDependencies, verifiedTeam?: TeamAccess) {
+async function teamAuthority(request: Request, access: WattzunAccess, reference: Reference, mutate: boolean, deps: WattzunFormDependencies, verifiedTeam?: TeamAccess) {
   if (access.scope.portal !== "trade" || !validReference(reference)) throw new WattzunFormError(403, "Choose a form in your current TLink business.");
   const team = verifiedTeam ?? await canonicalCall(() => deps.team(scoped(request, access)));
   if (team.ownerUid !== access.scope.scopeId || team.actorUid !== access.actorUid || !team.canViewFieldEvidence || mutate && !team.canManageFieldEvidence) throw new WattzunFormError(403, "Your current team access does not allow these form answers.");
-  const job = await canonicalCall(() => deps.job(team, reference.jobId));
-  if (job.id !== reference.jobId) throw new WattzunFormError(403, "This form does not belong to the selected job.");
-  return { team, job };
+  return team;
 }
 const packScope = (team: TeamAccess): CreditexWorkPackTradeScope => ({ ownerUid: team.ownerUid, actorUid: team.actorUid, actorMemberId: team.memberId, scope: team.jobScope });
 const forbidden = (key: string, label: string) => unsafeKey(key) || /signature|signer|declaration|attestation|\b(?:consent|certify|certification|authorisation|authorization|evidence|photo)\b/i.test(`${key.replace(/[_.:-]/g, " ")} ${label}`);
@@ -193,18 +199,21 @@ async function body(response: Response): Promise<Row> {
 }
 
 async function load(request: Request, access: WattzunAccess, reference: Reference, mutate: boolean, deps: WattzunFormDependencies, verifiedTeam?: TeamAccess): Promise<{ snapshot: Snapshot; team: TeamAccess }> {
-  const { team, job } = await authority(request, access, reference, mutate, deps, verifiedTeam);
+  const team = await teamAuthority(request, access, reference, mutate, deps, verifiedTeam);
+  const selected = reference.formKind === "job_form"
+    ? await canonicalCall(() => deps.selectedJobForm(team, reference.jobId, reference.recordId)) : undefined;
+  const job = selected?.job ?? await canonicalCall(() => deps.job(team, reference.jobId));
+  if (job.id !== reference.jobId) throw new WattzunFormError(403, "This form does not belong to the selected job.");
   const href = `/direct-trade/${team.isOwner ? "dashboard" : "team"}?workspace=work&jobId=${encodeURIComponent(reference.jobId)}&jobTab=files`;
   let title: string, recordId = reference.recordId, currentRevision: number, editable: boolean, schema: unknown, allAnswers: Row, fields: Field[], status: string;
   let completion: Snapshot["completion"];
   let supporting: JobTemplate | undefined, activity: ActivityRecord | undefined, pack: CreditexAssignedActivityWorkPackProjection | undefined;
   if (reference.formKind === "job_form") {
-    const raw = await body(await deps.getJobForms(scoped(request, access, `/api/trade-job-forms?workOrderId=${encodeURIComponent(reference.jobId)}`)));
-    const selected = Array.isArray(raw.forms) ? raw.forms.find(row => record(row) && row.id === reference.recordId) : undefined;
-    if (!record(selected) || !answers(selected.answers)) throw new WattzunFormError(404, "This form was not found on the selected job.");
-    title = requiredText(selected.templateName, 240); currentRevision = revision(selected.revision); editable = selected.status === "draft";
-    status = requiredText(selected.status);
-    supporting = jobTemplate(selected.template); schema = selected.template; allAnswers = { ...selected.answers };
+    const form = selected?.form;
+    if (!form || form.id !== reference.recordId || !answers(form.answers)) throw new WattzunFormError(404, "This form was not found on the selected job.");
+    title = requiredText(form.templateName, 240); currentRevision = revision(form.revision); editable = form.status === "draft";
+    status = requiredText(form.status);
+    supporting = jobTemplate(form.template); schema = form.template; allAnswers = { ...form.answers };
     const visible: JobTemplateField[] = visibleTradeFormFields(supporting, allAnswers);
     fields = visible.map(field => {
       const projection = primitiveField(field.key, field.label, field.type, field.required, field.options.map(value => ({ value, label: value })));
@@ -404,7 +413,10 @@ function guideProgress(snapshot: Snapshot, input: WattzunFormGuideInput): Wattzu
   let answered = 0, evidenceMissing = 0;
   for (const field of snapshot.fields) {
     const saved = hasAnswer(snapshot.answers[field.key]) || field.type === "multiselect" && Array.isArray(snapshot.answers[field.key]) || (field.savedEvidence ?? 0) > 0;
-    if (saved) answered++;
+    // A supporting-form false can be an untouched normalization default. It is
+    // not proof of an answered question, even when the user skips that field.
+    const ambiguousCheckboxDefault = snapshot.reference.formKind === "job_form" && ["checkbox", "declaration"].includes(field.type) && snapshot.answers[field.key] === false;
+    if (saved && !ambiguousCheckboxDefault) answered++;
     const question = { fieldKey: field.key, label: field.label.slice(0, 500), type: field.type,
       options: field.options.slice(0, 100).map(item => ({ value: item.value, label: item.label.slice(0, 240) })) };
     // Supporting-form normalization materialises untouched checkboxes as false.
@@ -569,9 +581,9 @@ async function verifyFrozenPatch(snapshot: Snapshot, prepared: WattzunFormPrepar
     if (canonical(patches) !== canonical(payload.sectionPatches) || await hash(expected) !== prepared.expectedAnswersSha256) throw new WattzunFormError(409, "The governed answers no longer match the reviewed draft.");
   } else throw new WattzunFormError(409, "The reviewed form engine changed.");
 }
-async function currentReviewedForm(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, deps: WattzunFormDependencies) {
+async function currentReviewedForm(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, deps: WattzunFormDependencies, verifiedTeam?: TeamAccess) {
   if (!isWattzunFormPrepared(prepared) || prepared.ownerUid !== access.scope.scopeId || prepared.actorUid !== access.actorUid) throw new WattzunFormError(403, "Choose your current reviewed form answers.");
-  const { snapshot, team } = await load(request, access, prepared.reference, true, deps);
+  const { snapshot, team } = await load(request, access, prepared.reference, true, deps, verifiedTeam);
   if (snapshot.schemaSha256 !== prepared.schemaSha256) throw new WattzunFormError(409, "This form or its prefilled details changed. Review the current questions again.");
   const currentHash = await hash(snapshot.answers);
   return { snapshot, team, currentHash };
@@ -593,11 +605,12 @@ export async function reconcileWattzunFormReceipt(request: Request, access: Watt
   await verifyUnchangedDraft(snapshot, prepared, currentHash);
   return null;
 }
-export async function executeWattzunForm(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, requestId: string, deps: WattzunFormDependencies = defaults): Promise<WattzunWorkflowReceipt> {
+type SavedSnapshot = { snapshot: Snapshot; team: TeamAccess; receipt: WattzunWorkflowReceipt };
+async function executeForm(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, requestId: string, deps: WattzunFormDependencies): Promise<SavedSnapshot> {
   if (!/^[A-Za-z0-9_-]{16,180}$/.test(requestId)) throw new WattzunFormError(403, "Choose your current reviewed form answers.");
   const { snapshot, team, currentHash } = await currentReviewedForm(request, access, prepared, deps);
   const recovered = savedReceipt(snapshot, prepared, currentHash);
-  if (recovered) return recovered;
+  if (recovered) return { snapshot, team, receipt: recovered };
   await verifyUnchangedDraft(snapshot, prepared, currentHash);
   const payload = prepared.payload;
   request.signal.throwIfAborted();
@@ -611,9 +624,12 @@ export async function executeWattzunForm(request: Request, access: WattzunAccess
     await canonicalCall(() => deps.savePack(access.db, { ...packScope(team), caseInstanceId: payload.caseInstanceId, expectedResponseSha256: payload.expectedResponseSha256, sectionPatches: payload.sectionPatches,
       idempotency: { clientActionId: `wattzun-form-${requestId}`, deviceId: "wattzun-reviewed-form", payloadHash } }));
   }
-  const saved = (await load(request, access, prepared.reference, true, deps)).snapshot;
-  if (saved.schemaSha256 !== prepared.schemaSha256 || prepared.patch.some(item => canonical(saved.answers[item.fieldKey]) !== canonical(prepared.reference.formKind !== "job_form" && item.value === "" ? undefined : item.value))) throw new WattzunFormError(409, "The form changed while saving. Open its current answers before continuing.");
-  return receipt(saved);
+  const saved = await load(request, access, prepared.reference, true, deps);
+  if (saved.snapshot.schemaSha256 !== prepared.schemaSha256 || prepared.patch.some(item => canonical(saved.snapshot.answers[item.fieldKey]) !== canonical(prepared.reference.formKind !== "job_form" && item.value === "" ? undefined : item.value))) throw new WattzunFormError(409, "The form changed while saving. Open its current answers before continuing.");
+  return { ...saved, receipt: receipt(saved.snapshot) };
+}
+export async function executeWattzunForm(request: Request, access: WattzunAccess, prepared: WattzunFormPrepared, requestId: string, deps: WattzunFormDependencies = defaults): Promise<WattzunWorkflowReceipt> {
+  return (await executeForm(request, access, prepared, requestId, deps)).receipt;
 }
 
 function completionReceipt(snapshot: Snapshot): WattzunWorkflowReceipt {
@@ -685,11 +701,11 @@ export async function reconcileWattzunFormCompletionReceipt(request: Request, ac
   await verifyCompletionSource(snapshot, prepared);
   return null;
 }
-export async function executeWattzunFormCompletion(request: Request, access: WattzunAccess, prepared: WattzunFormCompletionPrepared, requestId: string, deps: WattzunFormDependencies = defaults): Promise<WattzunWorkflowReceipt> {
+async function executeCompletion(request: Request, access: WattzunAccess, prepared: WattzunFormCompletionPrepared, requestId: string, deps: WattzunFormDependencies): Promise<SavedSnapshot> {
   if (!/^[A-Za-z0-9_-]{16,180}$/.test(requestId)) throw new WattzunFormError(403, "Choose your current form completion review.");
   const { snapshot, team } = await currentCompletion(request, access, prepared, deps);
   const recovered = await completedReceipt(snapshot, prepared);
-  if (recovered) return recovered;
+  if (recovered) return { snapshot, team, receipt: recovered };
   await verifyCompletionSource(snapshot, prepared);
   request.signal.throwIfAborted();
   if (snapshot.reference.formKind === "job_form") {
@@ -702,10 +718,13 @@ export async function executeWattzunFormCompletion(request: Request, access: Wat
     request.signal.throwIfAborted();
     await canonicalCall(() => deps.finalisePack(access.db, { ...packScope(team), ...payload, idempotency: { clientActionId: `wattzun-complete-${requestId}`, deviceId: "wattzun-reviewed-form", payloadHash } }));
   }
-  const saved = (await load(request, access, prepared.reference, true, deps)).snapshot;
-  const result = await completedReceipt(saved, prepared);
+  const saved = await load(request, access, prepared.reference, true, deps);
+  const result = await completedReceipt(saved.snapshot, prepared);
   if (!result) throw new WattzunFormError(409, "Final completion has not been confirmed. Keep this form open and check its saved status.");
-  return result;
+  return { ...saved, receipt: result };
+}
+export async function executeWattzunFormCompletion(request: Request, access: WattzunAccess, prepared: WattzunFormCompletionPrepared, requestId: string, deps: WattzunFormDependencies = defaults): Promise<WattzunWorkflowReceipt> {
+  return (await executeCompletion(request, access, prepared, requestId, deps)).receipt;
 }
 
 async function productChoices(access: WattzunAccess, snapshot: Snapshot, team: TeamAccess, dependencyKey: string, search: string, deps: WattzunFormDependencies) {
@@ -853,10 +872,10 @@ export async function reconcileWattzunFormStepReceipt(request: Request, access: 
   if (saved) return saved;
   await verifyStepSource(access, snapshot, team, prepared, deps); return null;
 }
-export async function executeWattzunFormStep(request: Request, access: WattzunAccess, prepared: WattzunFormStepPrepared, requestId: string, deps: WattzunFormDependencies = defaults): Promise<WattzunWorkflowReceipt> {
+async function executeStep(request: Request, access: WattzunAccess, prepared: WattzunFormStepPrepared, requestId: string, deps: WattzunFormDependencies): Promise<SavedSnapshot> {
   if (!/^[A-Za-z0-9_-]{16,180}$/.test(requestId)) throw new WattzunFormError(403, "Choose the current governed form review.");
   const { snapshot, team } = await currentStep(request, access, prepared, deps), recovered = await recoveredStep(access, snapshot, team, prepared, deps);
-  if (recovered) return recovered;
+  if (recovered) return { snapshot, team, receipt: recovered };
   const plan = await verifyStepSource(access, snapshot, team, prepared, deps);
   request.signal.throwIfAborted();
   if (snapshot.pack) {
@@ -870,5 +889,48 @@ export async function executeWattzunFormStep(request: Request, access: WattzunAc
   } else throw new WattzunFormError(409, "The form's native save engine changed.");
   const saved = await currentStep(request, access, prepared, deps), receipt = await recoveredStep(access, saved.snapshot, saved.team, prepared, deps);
   if (!receipt) throw new WattzunFormError(409, "The form step's saved receipt has not been confirmed. Keep this request while its result is checked.");
-  return receipt;
+  return { ...saved, receipt };
+}
+export async function executeWattzunFormStep(request: Request, access: WattzunAccess, prepared: WattzunFormStepPrepared, requestId: string, deps: WattzunFormDependencies = defaults): Promise<WattzunWorkflowReceipt> {
+  return (await executeStep(request, access, prepared, requestId, deps)).receipt;
+}
+async function guidedSaved(access: WattzunAccess, saved: SavedSnapshot, reference: Reference, input: WattzunFormGuideInput, deps: WattzunFormDependencies): Promise<WattzunGuidedFormSaved> {
+  const checked = readWattzunFormGuideInput(input);
+  if (!checked || checked.stage !== "resume" || !validReference(reference) || reference.jobId !== saved.snapshot.reference.jobId
+    || reference.formKind !== saved.snapshot.reference.formKind || reference.formKind !== "work_pack" && reference.recordId !== saved.snapshot.reference.recordId) throw new WattzunFormError(403, "Resume the original guided form session.");
+  const snapshot = { ...saved.snapshot, reference };
+  const guide = await hydrateGuideProducts(access, snapshot, guideProgress(snapshot, checked), checked, saved.team, deps);
+  return { receipt: saved.receipt, context: contextForSnapshot(snapshot, guide), guide };
+}
+/** The canonical executor's own verified post-save snapshot supplies both receipt and next question. */
+export async function executeWattzunGuidedPreparedForm(request: Request, access: WattzunAccess, mutation: WattzunPreparedFormMutation,
+  reference: Reference, input: WattzunFormGuideInput, requestId: string, deps: WattzunFormDependencies = defaults): Promise<WattzunGuidedFormSaved> {
+  if (!readWattzunFormGuideInput(input) || input.stage !== "resume" || !validReference(reference)
+    || reference.jobId !== mutation.prepared.reference.jobId || reference.formKind !== mutation.prepared.reference.formKind
+    || reference.formKind !== "work_pack" && reference.recordId !== mutation.prepared.reference.recordId) throw new WattzunFormError(403, "Resume the original guided form session.");
+  const saved = mutation.kind === "fill_form" ? await executeForm(request, access, mutation.prepared, requestId, deps)
+    : mutation.kind === "complete_form" ? await executeCompletion(request, access, mutation.prepared, requestId, deps)
+      : await executeStep(request, access, mutation.prepared, requestId, deps);
+  return guidedSaved(access, saved, reference, input, deps);
+}
+/** The supplied team is the completed fresh authority read after the exact journal was read. */
+export async function reconcileWattzunGuidedPreparedFormForTurn(request: Request, access: WattzunAccess, mutation: WattzunPreparedFormMutation,
+  reference: Reference, input: WattzunFormGuideInput, team: TeamAccess, deps: WattzunFormDependencies = defaults): Promise<WattzunGuidedFormSaved | null> {
+  let saved: SavedSnapshot;
+  if (mutation.kind === "fill_form") {
+    const current = await currentReviewedForm(request, access, mutation.prepared, deps, team);
+    const result = savedReceipt(current.snapshot, mutation.prepared, current.currentHash);
+    if (!result) { await verifyUnchangedDraft(current.snapshot, mutation.prepared, current.currentHash); return null; }
+    saved = { ...current, receipt: result };
+  } else if (mutation.kind === "complete_form") {
+    const current = await currentCompletion(request, access, mutation.prepared, deps, team), result = await completedReceipt(current.snapshot, mutation.prepared);
+    if (!result) { await verifyCompletionSource(current.snapshot, mutation.prepared); return null; }
+    saved = { ...current, receipt: result };
+  } else {
+    const current = await currentStep(request, access, mutation.prepared, deps, team), result = await recoveredStep(access, current.snapshot, current.team, mutation.prepared, deps);
+    if (!result) { await verifyStepSource(access, current.snapshot, current.team, mutation.prepared, deps); return null; }
+    saved = { ...current, receipt: result };
+  }
+  request.signal.throwIfAborted();
+  return guidedSaved(access, saved, reference, input, deps);
 }

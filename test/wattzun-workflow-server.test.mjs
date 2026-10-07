@@ -164,7 +164,7 @@ function formWorkflowFixture() {
   const saved = { id: 'form-one', templateName: 'Synthetic installation form', status: 'draft', revision: 1,
     template: { fields: [{ key: 'site_notes', label: 'Site notes', type: 'text', required: true, maxLength: 240 }, { key: 'next_question', label: 'How many units?', type: 'text', required: true, maxLength: 240 }] }, answers: {} };
   const formDeps = { team: async () => structuredClone(f.team), job: async () => ({ id: 'job-one', stage: 'ready', revision: 1 }),
-    getJobForms: async () => Response.json({ ok: true, forms: [structuredClone(saved)] }),
+    selectedJobForm: async (team,id) => ({job:await formDeps.job(team,id),form:structuredClone(saved)}),
     saveJobForm: async request => { const payload = await request.json(); assert.equal(typeof payload.complete, 'boolean'); assert.equal(payload.baseRevision, saved.revision);
       if (state.failBeforeSave) throw new Error('Connection lost before canonical save');
       saved.answers = payload.answers; saved.revision++; if (payload.complete) saved.status = 'complete'; f.calls.push({ kind: 'form', payload });
@@ -191,6 +191,8 @@ function formWorkflowFixture() {
   f.deps.formStepTurnAccess = (request, access, prepared, team) => formHelper.verifyWattzunFormStepAccessForTurn(request, access, prepared, team, formDeps);
   f.deps.verifyTurnFormStep = (request, access, prepared, team) => formHelper.verifyWattzunFormStepForTurn(request, access, prepared, team, formDeps);
   f.deps.formStepReceipt = (request, access, prepared) => formHelper.reconcileWattzunFormStepReceipt(request, access, prepared, formDeps);
+  f.deps.executeGuidedPreparedForm = (request, access, mutation, reference, input, id) => formHelper.executeWattzunGuidedPreparedForm(request, access, mutation, reference, input, id, formDeps);
+  f.deps.reconcileGuidedPreparedForm = (request, access, mutation, reference, input, team) => formHelper.reconcileWattzunGuidedPreparedFormForTurn(request, access, mutation, reference, input, team, formDeps);
   const review = id => workflowModule.loadWattzunWorkflowReview(new Request('https://example.test/api/wattzun/voice'), f.access, id, f.deps);
   return { ...f, saved, state, formDeps, review, proposal: { kind: 'fill_form', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', answers: [{ fieldKey: 'site_notes', value: '  Access via side gate.  ' }] } };
 }
@@ -281,12 +283,12 @@ for (const kind of ['fill_form', 'complete_form', 'form_step']) {
     const executed = await workflowModule.executeWattzunGuidedFormForTurn(f.request, f.initial, f.reference, proposal, input,
       `authority-reuse-${kind}-0001`, kind === 'complete_form' ? 'Complete this form now' : kind === 'form_step' ? 'Use X1' : '', f.deps);
     const savedWrites = f.calls.length, events = [], originalTeam = f.deps.team, originalDecrypt = f.deps.decrypt, originalJob = f.formDeps.job;
-    const nativeMethod = kind === 'form_step' ? 'loadPack' : 'getJobForms', originalLoad = f.formDeps[nativeMethod];
+    const nativeMethod = kind === 'form_step' ? 'loadPack' : 'selectedJobForm', originalLoad = f.formDeps[nativeMethod];
     f.deps.team = async request => { events.push('authority'); return originalTeam(request); };
     f.deps.decrypt = async value => { events.push('journal'); return originalDecrypt(value); };
     f.formDeps.team = async () => { throw new Error('The target must reuse the immediately fresh server team.'); };
     f.formDeps.job = async (...args) => { events.push('assigned-job'); return originalJob(...args); };
-    f.formDeps[nativeMethod] = async (...args) => { events.push('snapshot'); return originalLoad(...args); };
+    f.formDeps[nativeMethod] = async (...args) => { const loaded = await originalLoad(...args); events.push('snapshot'); return loaded; };
     const refreshed = await workflowModule.loadWattzunWorkflowReviewForTurn(f.request, f.initial, executed.reviewId, async () => {
       events.push('final-refresh');
       return { access: f.initial.access, tradeTeam: await f.deps.team(new Request(f.request, { headers: { 'X-TLink-Business': 'business-one' } })) };
@@ -314,9 +316,9 @@ test('fresh completed-receipt authority still precedes current assignment and fu
   for (const changed of ['assignment', 'form']) {
     const f = await guidedWorkflowFixture(), executed = await f.executeGuided(f.proposal, await f.currentInput(), `receipt-target-${changed}-0001`);
     let targetChanged = false, lastTargetChecked = false;
-    const originalJob = f.formDeps.job, originalForms = f.formDeps.getJobForms;
+    const originalJob = f.formDeps.job, originalForms = f.formDeps.selectedJobForm;
     f.formDeps.job = async (...args) => { if (targetChanged && changed === 'assignment') { lastTargetChecked = true; throw new AccessError(403, 'Job assignment revoked.'); } return originalJob(...args); };
-    f.formDeps.getJobForms = async (...args) => { if (targetChanged && changed === 'form') { lastTargetChecked = true; return Response.json({ ok: true, forms: [] }); } return originalForms(...args); };
+    f.formDeps.selectedJobForm = async (...args) => { if (targetChanged && changed === 'form') { lastTargetChecked = true; throw new formHelper.WattzunFormError(404,'The selected form is no longer available.'); } return originalForms(...args); };
     f.formDeps.team = async () => { throw new Error('No duplicate target authority lookup is permitted.'); };
     await assert.rejects(workflowModule.loadWattzunWorkflowReviewForTurn(f.request, f.initial, executed.reviewId, async () => {
       targetChanged = true; return { access: f.initial.access, tradeTeam: structuredClone(f.team) };
@@ -351,6 +353,25 @@ test('guided final completion is a separate canonical action and lost completion
   assert.equal(f.calls.length, 1); assert.equal((await f.progress()).guide.state, 'complete');
 });
 
+for (const kind of ['fill_form','complete_form']) {
+  test(`${kind}: private first attempt and strict explicit retry retain the same canonical request key`, async () => {
+    const f = await guidedWorkflowFixture(), ids = [];
+    if (kind === 'complete_form') f.saved.answers = {site_notes:'Side gate',next_question:'2'};
+    const native = f.deps.executeGuidedPreparedForm;
+    f.deps.executeGuidedPreparedForm = async (...args) => {ids.push(args[5]);return native(...args);};
+    const method = kind === 'complete_form' ? 'executeCompletion' : 'executeForm', strict = f.deps[method];
+    f.deps[method] = async (...args) => {ids.push(args[3]);return strict(...args);};
+    const proposal = kind === 'complete_form' ? {kind,jobQuery:'',jobId:'job-one',formKind:'job_form',formId:'form-one'} : f.proposal;
+    f.state.failBeforeSave = true;
+    await assert.rejects(f.executeGuided(proposal,await f.currentInput(),`guided-native-key-${kind}-0001`,kind === 'complete_form' ? 'Complete this form now' : ''));
+    assert.equal(f.calls.length,0);
+    const reviewId = f.database.prepare('SELECT id FROM admin_audit_log').get().id;
+    f.state.failBeforeSave = false;
+    const retry = await f.execute(reviewId);assert.equal(retry.status,200);assert.equal(retry.body.result.state,'complete');
+    assert.deepEqual(ids,[`wattzun-${reviewId}`,`wattzun-${reviewId}`]);assert.equal(f.calls.length,1);
+  });
+}
+
 test('guided recovery is session scoped, never retries an unchanged unsaved draft and rejects changed request values', async () => {
   const f = await guidedWorkflowFixture(), input = await f.currentInput(), requestId = 'guided-answer-request-0001';
   f.state.failBeforeSave = true; await assert.rejects(f.executeGuided(f.proposal, input, requestId));
@@ -369,21 +390,21 @@ test('guided validation rejects a value before journal creation and dispatch, th
   const saved = await f.executeGuided(f.proposal, input, 'guided-valid-answer-00002'); assert.equal(saved.result.receipt.status, 'saved'); assert.equal(f.calls.length, 1);
 });
 
-test('a new guided answer retains canonical prewrite and postwrite checks with seven snapshots through its final handoff', async () => {
-  const f = await guidedWorkflowFixture(), getForms = f.formDeps.getJobForms; let snapshots = 0, canonicalAuthorities = 0;
-  f.formDeps.getJobForms = async (...args) => { snapshots++; return getForms(...args); };
+test('a new guided answer retains canonical prewrite and postwrite checks with five snapshots through its final handoff', async () => {
+  const f = await guidedWorkflowFixture(), getForms = f.formDeps.selectedJobForm; let snapshots = 0, canonicalAuthorities = 0;
+  f.formDeps.selectedJobForm = async (...args) => { snapshots++; return getForms(...args); };
   f.formDeps.team = async () => { canonicalAuthorities++; return structuredClone(f.team); };
   f.deps.team = async () => { throw new Error('New private guided execution must use the canonical executor authority, not a duplicate review authority.'); };
   const input = await f.currentInput(), requestId = 'guided-snapshot-request-0001';
   const saved = await f.executeGuided(f.proposal, input, requestId); assert.equal(snapshots, 4); assert.equal(canonicalAuthorities, 2);
-  const next = await f.progress(); assert.equal(next.guide.next.fieldKey, 'next_question'); assert.equal(snapshots, 5);
+  const next = saved.currentGuide; assert.equal(next.guide.next.fieldKey, 'next_question'); assert.equal(snapshots, 4);
   let refreshed = 0; const decrypts = f.decryptCalls();
   const checked = await workflowModule.verifyWattzunGuidedReceiptForTurn(f.request, f.initial, f.reference, f.session, requestId, saved.reviewId, async () => {
     refreshed++; assert.ok(f.decryptCalls() > decrypts, 'The exact journal is decrypted before final authority refresh');
     return f.initial;
   }, f.deps);
-  assert.deepEqual(checked.result, saved.result); assert.equal(refreshed, 1); assert.equal(snapshots, 6); assert.equal(canonicalAuthorities, 3);
-  const finalGuide = await f.progress(); assert.equal(finalGuide.context.sourceSha256, next.context.sourceSha256); assert.equal(snapshots, 7);
+  assert.deepEqual(checked.result, saved.result); assert.equal(refreshed, 1); assert.equal(snapshots, 5); assert.equal(canonicalAuthorities, 2);
+  const finalGuide = checked.currentGuide; assert.equal(finalGuide.context.sourceSha256, next.context.sourceSha256); assert.equal(snapshots, 5);
   assert.equal(f.calls.length, 1); assert.equal(f.saved.revision, 2); assert.equal(f.saved.status, 'draft');
 });
 

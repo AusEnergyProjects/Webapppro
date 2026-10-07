@@ -423,6 +423,15 @@ function workOrdersRoute(db, staffAccess = null) {
 }
 
 function formsRoute(db, actualLibrary = false) {
+  const formLibrary = actualLibrary ? tradeFormLibrary : {
+    normalizeTradeFormAnswers: (_template, answers) => answers || {},
+    tradeFormCompletion: () => ({ ready: true, missing: [] }),
+  };
+  const formReader = loadTypescriptModule("../src/lib/trade-job-forms-server.ts", {
+    "../../db": { getD1: () => db },
+    "./trade-team-server": { assignedJob: assignedJobFor(db) },
+    "./trade-form-library.mjs": formLibrary,
+  });
   return loadTypescriptModule("../src/app/api/trade-job-forms/route.ts", {
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": adminServer,
@@ -431,10 +440,8 @@ function formsRoute(db, actualLibrary = false) {
       requireInstallerTeamAccess: async () => access,
     },
     "@/lib/trade-team-sync-server": syncHelpers,
-    "@/lib/trade-form-library.mjs": actualLibrary ? tradeFormLibrary : {
-      normalizeTradeFormAnswers: (_template, answers) => answers || {},
-      tradeFormCompletion: () => ({ ready: true, missing: [] }),
-    },
+    "@/lib/trade-form-library.mjs": formLibrary,
+    "@/lib/trade-job-forms-server": formReader,
     "@/lib/trade-form-templates-server": {
       publishedTradeFormTemplate: async (key, version) => ({
         key,

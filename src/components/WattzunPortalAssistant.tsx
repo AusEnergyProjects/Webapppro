@@ -26,6 +26,7 @@ import { WATTZUN_OPEN_EVENT, WATTZUN_READY_EVENT, WATTZUN_USAGE_CHANGED_EVENT, r
 import { createWattzunBrowserVoiceEnvironment, WattzunVoiceCall, WattzunVoiceCallError, type WattzunCallStatus } from "@/lib/wattzun-voice-client";
 import { readWattzunVoiceStream } from "@/lib/wattzun-voice-stream";
 import { wattzunConversationHistory } from "@/lib/wattzun-conversation";
+import { wattzunNativeSpokenReply } from "@/lib/wattzun-voice-narration";
 import { EnergyAssistantLauncher } from "./EnergyAssistantLauncher";
 import { WattzunMascot } from "./WattzunMascot";
 import { WattzunRecordPicker } from "./WattzunRecordPicker";
@@ -33,7 +34,7 @@ import { WattzunActionReview } from "./WattzunActionReview";
 import { WattzunWorkflowReview } from "./WattzunWorkflowReview";
 import styles from "./WattzunPortalAssistant.module.css";
 
-type Message = WattzunTurn & { id: string; reply?: WattzunReply; reviewDraft?: WattzunReply["action"]; requestSummary?: string };
+type Message = WattzunTurn & { id: string; reply?: WattzunReply; reviewDraft?: WattzunReply["action"]; requestSummary?: string; memoryOnly?: boolean; awaitingSpeech?: boolean };
 type PendingWorkflow = { messageId: string; proposal: WattzunWorkflowOperation; result: WattzunWorkflowResult; reviewId?: string; executionRequestId?: string };
 type FormGuideSession = { input: WattzunFormGuideInput; progress: WattzunFormGuideProgress | null; editorReference: Extract<WattzunWorkReference, { kind: "trade_form" }> };
 const portalNames: Record<WattzunPortal, string> = { trade: "TLink", council: "Council", creditex: "Creditex" };
@@ -88,12 +89,24 @@ function replyWorkContext(reply: WattzunReply, portal: WattzunPortal, reference:
   if (!info || !sameWorkReference(info.reference, expected)) throw new Error("Wattzun returned information for different work. Ask again about your selected work.");
   return info;
 }
+class VoiceTurnFailure extends Error {
+  constructor(message: string, readonly recoveredRequest?: { requestId: string; requestSummary: string }) { super(message); }
+}
 async function readCallResponse(response: Response, signal: AbortSignal, portal?: WattzunPortal) {
   if (response.status === 401 || response.status === 403) {
     const payload: unknown = await response.json().catch(() => null);
     const message = record(payload) && typeof payload.error === "string" ? payload.error
       : response.status === 401 ? "Sign in again to call Wattzun." : "Your workspace access has changed. Reopen your workspace before calling.";
     throw new WattzunVoiceCallError(message, response.status === 401 ? "authentication" : "access");
+  }
+  if (!response.ok) {
+    const payload: unknown = await response.json().catch(() => null);
+    const recovery = record(payload) && record(payload.voiceTurnRecovery) ? payload.voiceTurnRecovery : null;
+    const recoveredRequest = recovery && Object.keys(recovery).length === 2 && typeof recovery.requestId === "string"
+      && /^[A-Za-z0-9_-]{16,100}$/.test(recovery.requestId) && typeof recovery.requestSummary === "string"
+      && recovery.requestSummary.trim() && recovery.requestSummary.length <= 1800 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(recovery.requestSummary)
+      ? { requestId: recovery.requestId, requestSummary: recovery.requestSummary } : undefined;
+    throw new VoiceTurnFailure(record(payload) && typeof payload.error === "string" ? payload.error : "Wattzun could not complete that request.", recoveredRequest);
   }
   return readWattzunVoiceStream(response, signal, value => isReply(value, portal));
 }
@@ -438,6 +451,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     voiceCall.current?.dispose();
     setMuted(false); setError("");
     const replyGenerations = new WeakMap<WattzunVoiceResult, { generation: number; input: WattzunTurnInput }>();
+    const spokenMessages = new WeakMap<WattzunVoiceResult["audio"], { id: string; generation: number; content: string }>();
     const guidedReply = async (signal: AbortSignal, control?: WattzunFormGuideControl) => {
       const generation = contextGeneration.current;
       const input = requestInput("Continue guided form completion.");
@@ -472,7 +486,8 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       if (result.reply.workContext) setWorkContext(result.reply.workContext);
       const id = crypto.randomUUID();
       rememberWorkflow(`${id}:reply`, result.reply, request.input.workflowReviewId);
-      const turns: Message[] = [{ id: `${id}:reply`, role: "assistant", content: wattzunSpokenReply(result.reply), reply: result.reply,
+      spokenMessages.set(result.audio, { id: `${id}:reply`, generation: request.generation, content: wattzunNativeSpokenReply(result.reply) });
+      const turns: Message[] = [{ id: `${id}:reply`, role: "assistant", content: "", awaitingSpeech: true, reply: result.reply,
         ...(result.reply.action && !result.reply.formGuide ? { reviewDraft: result.reply.action } : {}),
         ...(result.requestSummary ? { requestSummary: result.requestSummary } : {}) }];
       if (result.transcript.trim()) turns.unshift({ id, role: "user", content: result.transcript });
@@ -538,10 +553,23 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         } catch (failure) {
           if (result?.audio.mimeType === "audio/pcm") await result.audio.stream.cancel().catch(() => {});
           if (generation !== contextGeneration.current) throw new Error("The selected work changed. Ask again about the current work.");
+          if (failure instanceof VoiceTurnFailure && failure.recoveredRequest?.requestId === input.requestId
+            && active.current && voiceCall.current === call && !combined.aborted) {
+            const id = `${input.requestId}:memory`;
+            if (!messagesRef.current.some(message => message.id === id)) append([{ id, role: "assistant", content: "", memoryOnly: true,
+              requestSummary: failure.recoveredRequest.requestSummary }]);
+          }
           throw failure;
         }
       },
       reply: consumeReply,
+      played: audio => {
+        const spoken = spokenMessages.get(audio);
+        if (!spoken || !active.current || voiceCall.current !== call || spoken.generation !== contextGeneration.current) return;
+        spokenMessages.delete(audio);
+        messagesRef.current = messagesRef.current.map(message => message.id === spoken.id ? { ...message, content: spoken.content, awaitingSpeech: false } : message);
+        setMessages(messagesRef.current);
+      },
     });
     voiceCall.current = call;
     guideRequest.current = control => call.requestReply(signal => guidedReply(signal, control));
@@ -558,7 +586,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
   }, [scope.portal, callActive, startCall]);
 
   useEffect(() => {
-    if (!guideQueued || callStatus.state !== "listening" || !guideRequest.current || !guideSession.current) return;
+    if (!guideQueued || !["listening", "recovering"].includes(callStatus.state) || !guideRequest.current || !guideSession.current) return;
     const frame = window.requestAnimationFrame(() => {
       setGuideQueued(false);
       void guideRequest.current?.();
@@ -716,13 +744,13 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       {formGuide.state === "paused" && <p>Paused. Say “continue the form” when you are ready.</p>}
       {formGuide.state === "capture" && <><p>{formGuide.next?.reason || "Take the requested evidence photo. Wattzun will continue after it saves."}</p><button type="button" disabled={!callActive || callStatus.state === "thinking"} onClick={captureTarget ? takePhoto : prepareCamera}>{captureTarget ? "Take photo" : "Prepare camera"}</button>{captureNotice && <p role="status">{captureNotice}</p>}</>}
       {formGuide.state !== "complete" && callActive && <div className={styles.guideControls}>
-        {formGuide.next && <><button type="button" disabled={callStatus.state !== "listening" && callStatus.state !== "speaking"} onClick={() => void guideRequest.current?.({ kind: "form_guide_control", command: "repeat", fieldKey: formGuide.next?.fieldKey || "" })}>Repeat question</button><button type="button" disabled={callStatus.state !== "listening"} onClick={() => void guideRequest.current?.({ kind: "form_guide_control", command: "skip", fieldKey: formGuide.next?.fieldKey || "" })}>Skip for now</button></>}
-        <button type="button" disabled={callStatus.state !== "listening"} onClick={() => void guideRequest.current?.({ kind: "form_guide_control", command: formGuide.state === "paused" ? "resume" : "pause", fieldKey: formGuide.next?.fieldKey || "" })}>{formGuide.state === "paused" ? "Resume form" : "Pause form"}</button>
+        {formGuide.next && <><button type="button" disabled={!["listening", "speaking", "recovering"].includes(callStatus.state)} onClick={() => void guideRequest.current?.({ kind: "form_guide_control", command: "repeat", fieldKey: formGuide.next?.fieldKey || "" })}>Repeat question</button><button type="button" disabled={!["listening", "recovering"].includes(callStatus.state)} onClick={() => void guideRequest.current?.({ kind: "form_guide_control", command: "skip", fieldKey: formGuide.next?.fieldKey || "" })}>Skip for now</button></>}
+        <button type="button" disabled={!["listening", "recovering"].includes(callStatus.state)} onClick={() => void guideRequest.current?.({ kind: "form_guide_control", command: formGuide.state === "paused" ? "resume" : "pause", fieldKey: formGuide.next?.fieldKey || "" })}>{formGuide.state === "paused" ? "Resume form" : "Pause form"}</button>
       </div>}
     </section>}
-    <div className={styles.messages} role="log" aria-live="polite" aria-label="Conversation with Wattzun">
-      {!messages.length && <div className={styles.welcome}><h3>What can I help you with?</h3><p>Tell me what you want to get done. If I need more detail, I will ask.</p><div>{["What can you help me with?", "Help me find the next step"].map(example => <button key={example} type="button" disabled={callActive || busy} onClick={() => setDraft(example)}>{example}</button>)}</div></div>}
-      {messages.map(message => <article key={message.id} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}><strong>{message.role === "user" ? "You" : "Wattzun"}</strong><p>{message.reply ? message.reply.message : message.content}</p>{message.reply && message.reply.questions.length > 0 && <ol>{message.reply.questions.map((question, index) => <li key={index}>{question}</li>)}</ol>}{message.reply && message.reply.links.length > 0 && <div className={styles.links}>{message.reply.links.map(link => wattzunPortalForPath(link.href.split(/[?#]/)[0]) === scope.portal
+    <div className={styles.messages} role="log" aria-live={callActive ? "off" : "polite"} aria-label="Conversation with Wattzun">
+      {!callActive && !messages.some(message => !message.memoryOnly) && <div className={styles.welcome}><h3>What can I help you with?</h3><p>Tell me what you want to get done. If I need more detail, I will ask.</p><div>{["What can you help me with?", "Help me find the next step"].map(example => <button key={example} type="button" disabled={callActive || busy} onClick={() => setDraft(example)}>{example}</button>)}</div></div>}
+      {messages.filter(message => !message.memoryOnly).map(message => <article key={message.id} hidden={(callActive || message.awaitingSpeech) && !message.reply?.links.length && !message.reply?.workContext && !message.reply?.workflow && !message.reply?.action && !message.reply?.lookup} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}><strong hidden={callActive || message.awaitingSpeech}>{message.role === "user" ? "You" : "Wattzun"}</strong><p hidden={callActive || message.awaitingSpeech}>{message.reply ? message.reply.message : message.content}</p>{message.reply && message.reply.questions.length > 0 && <ol hidden={callActive || message.awaitingSpeech}>{message.reply.questions.map((question, index) => <li key={index}>{question}</li>)}</ol>}{message.reply && message.reply.links.length > 0 && <div className={styles.links}>{message.reply.links.map(link => wattzunPortalForPath(link.href.split(/[?#]/)[0]) === scope.portal
         ? <Link key={link.href} href={workspaceHref(link.href, scope, user.uid, pathname)} prefetch={false} onNavigate={event => { event.preventDefault(); navigate(link.href); }}>{link.label} <span aria-hidden="true">↗</span></Link>
         : <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer">{link.label} <span aria-hidden="true">↗</span></a>)}</div>}
         {message.reply?.workContext && <details className={styles.contextSources}><summary>Sources and limits</summary><strong>{message.reply.workContext.title}</strong><div className={styles.links}>{message.reply.workContext.sources.map(source => <Link key={`${source.href}:${source.label}`} href={workspaceHref(source.href, scope, user.uid, pathname)} prefetch={false} onNavigate={event => { event.preventDefault(); navigate(source.href); }}>{source.label} <span aria-hidden="true">↗</span></Link>)}</div>{message.reply.workContext.limitations.length > 0 && <ul>{message.reply.workContext.limitations.map((limitation, index) => <li key={index}>{limitation}</li>)}</ul>}</details>}
@@ -735,7 +763,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       <div ref={scrollEnd} />
     </div>
     {error && <p className={styles.error} role="alert">{error}</p>}
-    <form className={styles.composer} onSubmit={event => { event.preventDefault(); void sendText(); }}>
+    <form hidden={callActive} className={styles.composer} onSubmit={event => { event.preventDefault(); void sendText(); }}>
       <label className={styles.srOnly} htmlFor="wattzun-portal-message">Message Wattzun</label>
       <textarea ref={composer} id="wattzun-portal-message" rows={2} maxLength={4000} value={draft} disabled={busy || callActive} placeholder={callActive ? "Hang up to continue in chat" : "Ask a question or describe your task..."} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void sendText(); } }} />
       <button type="submit" disabled={busy || callActive || !draft.trim()}>{busy ? "Sending..." : "Send"}</button>

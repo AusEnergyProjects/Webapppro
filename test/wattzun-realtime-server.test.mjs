@@ -12,6 +12,8 @@ import * as navigation from "../src/lib/wattzun-navigation.ts";
 import * as workflowReply from "../src/lib/wattzun-workflow-reply.ts";
 import * as formGuide from "../src/lib/wattzun-form-guide.ts";
 import * as formStep from "../src/lib/wattzun-form-step.ts";
+import { wattzunConversationHistory } from "../src/lib/wattzun-conversation.ts";
+import * as narration from "../src/lib/wattzun-voice-narration.ts";
 import { SURGE_USAGE_GUARD_ENV } from "../src/lib/energy-assistant-usage-guard.ts";
 import { syntheticWorkContext, workContextContract } from "./helpers/wattzun-work-context-fixture.mjs";
 
@@ -132,6 +134,7 @@ function fixture(options = {}) {
   const server = compile("wattzun-realtime-server", {
     "cloudflare:workers": cloudflare, "node:buffer": { Buffer }, "./energy-assistant-usage-guard": guard,
     "./workflow-ai-server": workflow, "./wattzun-portal-ai-server": shared, "./wattzun-portal": portal,
+    "./wattzun-voice-narration": narration,
   }, { fetch: async (url, init) => {
     calls.push({ url, init });
     return options.fetch ? options.fetch(url, init) : { status: 101, webSocket: socket };
@@ -341,6 +344,29 @@ test("native trusted workflow save receipt is narrated exactly after successful 
   const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async () => transformed }));
   assert.deepEqual(prepared.reply, transformed); assert.equal(f.socket.sent.filter(event => event.type === "response.create")[1].response.input[0].content[0].text, receipt.message);
   await bytes(prepared.audio); assert.equal(f.released(), 1);
+});
+test("native canonical needs-details asks one question while keeping full requirements and pending fields for the next turn", async () => {
+  const action = { kind: "invoice_reminder", jobQuery: "last week in Frankston", jobId: "", invoiceId: "", channel: "sms", body: "Hi Alex, please check your unpaid invoice." };
+  const result = { state: "needs_details", questions: ["Which job is this for?", "Which invoice should the reminder use?", "When should payment be requested?"] };
+  const f = fixture({ reply: { ...answer, message: "I can prepare that reminder.", action }, requestSummary: "Send Alex an SMS reminder for last week's Frankston job." });
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async reply => workflowReply.wattzunWorkflowReply(reply, result) }));
+  await bytes(prepared.audio);
+  assert.deepEqual(prepared.reply.questions, result.questions); assert.deepEqual(prepared.reply.workflow, result);
+  const speech = f.socket.sent.filter(event => event.type === "response.create")[1].response.input[0].content[0].text;
+  assert.ok(speech.includes(result.questions[0]));
+  for (const later of result.questions.slice(1)) assert.ok(!speech.includes(later));
+  assert.equal(speech, narration.wattzunNativeSpokenReply(prepared.reply));
+  const history = wattzunConversationHistory([{ role: "assistant", content: narration.wattzunNativeSpokenReply(prepared.reply), reply: prepared.reply, requestSummary: prepared.requestSummary }]);
+  const next = fixture({ reply: { ...answer, action }, requestSummary: "I mean the job for Alex Test." });
+  const options = request({ workflowContext: result });
+  options.input.history = history; options.input.workflowProposal = action;
+  const continued = await next.prepareWattzunRealtimeTurn(options); await bytes(continued.audio);
+  const context = JSON.parse(next.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text);
+  assert.deepEqual(context.pendingWorkflowProposal, action); assert.deepEqual(context.workflowContext, result);
+  assert.deepEqual(context.conversation, history);
+  assert.ok(context.conversation.some(item => item.content.includes(result.questions[0])));
+  for (const later of result.questions.slice(1)) assert.ok(!context.conversation.some(item => item.content.includes(later)), 'Unspoken requirements stay in workflowContext rather than delivered history');
+  assert.equal(continued.reply.action.body, action.body); assert.equal(continued.reply.action.channel, "sms");
 });
 test("native trusted workflow access or stale-review failures retain identity and never request provider audio", async t => {
   for (const status of [403, 409]) await t.test(String(status), async () => {
@@ -584,6 +610,117 @@ test("unconfirmed request memory preserves the task and supplied facts without b
   assert.doesNotMatch(JSON.stringify(speech), /2400|Street address|name spelling unconfirmed/);
 });
 
+test("native four-question clarification validates all content then speaks only the next question", async () => {
+  const questions = ["What is the customer's name?", "What street address is the job at?", "What work is needed?", "What price should I use?"];
+  for (const message of ["I can help prepare that quote.", `I can help. ${questions[0]}`]) {
+    const reply = { ...answer, message, questions, linkIds: [] }, f = fixture({ reply });
+    assert.throws(() => f.shared.createWattzunPortalReplyContract(request()).validate(reply), /WORKFLOW_AI_INCOMPLETE/);
+    let checked = 0;
+    const prepared = await f.prepareWattzunRealtimeTurn(request({ beforeSpeech: async () => { checked++; } }));
+    await bytes(prepared.audio);
+    assert.equal(checked, 1); assert.equal(f.calls.length, 1);
+    const speech = f.socket.sent.filter(event => event.type === "response.create")[1].response.input[0].content[0].text;
+    assert.equal(speech.split(questions[0]).length - 1, 1);
+    for (const later of questions.slice(1)) assert.ok(!speech.includes(later));
+    assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 2);
+  }
+  for (const changes of [
+    { questions: [...questions.slice(0, 3), "I've sent your quote."] },
+    { questions: [...questions.slice(0, 3), "I have read your private records."] },
+    { questions: [...questions.slice(0, 3), " "] },
+    { questions: [...questions.slice(0, 3), "x".repeat(301)] },
+    { questions: Array(9).fill("Which job?") },
+    { message: "x".repeat(1800), questions: Array(4).fill("Q".repeat(100)) },
+    { action: { kind: "prepare_quote", firstName: "Alex" } },
+  ]) {
+    const f = fixture({ reply: { ...answer, message: "I can help.", questions, linkIds: [], ...changes } });
+    await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);
+    assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1);
+  }
+});
+
+test("exact read-only clarification envelope speaks without fabricating heard memory or rescuing actions", async () => {
+  const clarification = { message: "I can help with that quote.", questions: ["What work is needed?", "How many items are needed?", "What price should I use?"], linkIds: [] };
+  const f = fixture({ arguments: JSON.stringify(clarification) });
+  let transformed = 0, authorised = 0;
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async (reply, summary) => {
+    transformed++; assert.equal(summary, ""); assert.equal(reply.action, undefined); assert.equal(reply.lookup, undefined); return reply;
+  }, beforeSpeech: async () => { authorised++; } }));
+  await bytes(prepared.audio);
+  assert.equal(transformed, 1); assert.equal(authorised, 1); assert.equal(prepared.requestSummary, "");
+  assert.deepEqual(prepared.reply.questions, [clarification.questions[0]]);
+  assert.deepEqual(wattzunConversationHistory([{ role: "assistant", content: prepared.reply.message, reply: prepared.reply, requestSummary: prepared.requestSummary }]),
+    [{ role: "assistant", content: clarification.message }]);
+  assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 2);
+  for (const raw of [{ ...clarification, action: null }, { ...clarification, lookup: null },
+    { ...clarification, action: { kind: "prepare_quote", firstName: "Alex" } },
+    { ...clarification, requestSummary: "Unaccepted partial envelope" }, { ...clarification, questions: [] },
+    { ...clarification, message: "I've sent your quote." }, { ...clarification, linkIds: ["invented"] }]) {
+    const invalid = fixture({ arguments: JSON.stringify(raw) });
+    await assert.rejects(invalid.prepareWattzunRealtimeTurn(request()), error => {
+      assert.equal(error.requestSummary, undefined); return safeError(error);
+    });
+    assert.equal(invalid.socket.sent.filter(event => event.type === "response.create").length, 1);
+  }
+});
+
+test("failed reply exposes only independently validated heard input before any action or audio", async () => {
+  const summary = "The new customer is Alex Test, spelt A L E X, T E S T. The address is still missing.";
+  const reply = { ...answer, action: { kind: "prepare_quote", firstName: "Alex" } };
+  const f = fixture({ reply, requestSummary: summary }); let transforms = 0;
+  await assert.rejects(f.prepareWattzunRealtimeTurn(request({ transformReply: async value => { transforms++; return value; } })), error => {
+    assert.ok(error instanceof f.WattzunRealtimeTurnError);
+    assert.equal(error.reason, "action_shape"); assert.equal(error.requestSummary, summary);
+    assert.equal(error.cause, undefined); return safeError(error);
+  });
+  assert.equal(transforms, 0); assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1);
+  assert.doesNotMatch(JSON.stringify(f.errors), /Alex|T E S T|address is still/);
+  for (const requestSummary of ["", "I've saved your quote.", "x".repeat(1801)]) {
+    const invalid = fixture({ reply, requestSummary });
+    await assert.rejects(invalid.prepareWattzunRealtimeTurn(request()), error => { assert.equal(error.requestSummary, undefined); return safeError(error); });
+  }
+  const after = fixture({ requestSummary: summary });
+  await assert.rejects(after.prepareWattzunRealtimeTurn(request({ transformReply: async () => { throw new Error("WORKFLOW_AI_INCOMPLETE"); } })), error => {
+    assert.equal(error.requestSummary, undefined); return safeError(error);
+  });
+});
+
+test("native multi-turn quote context retains heard name spelling, address, scope and draft fields", async () => {
+  const empty = { kind: "prepare_quote", firstName: "", lastName: "", email: "", phone: "", addressQuery: "", serviceCategory: "", description: "", lines: [] };
+  const name = { ...empty, firstName: "Alex", lastName: "Test" };
+  const address = { ...name, addressQuery: "12 Example Road, Frankston VIC 3199" };
+  const scope = { ...address, serviceCategory: "Electrical", description: "Replace two outdoor lights", lines: [{ lineType: "labour", description: "Replace outdoor lights", quantity: "2", unitPrice: null, taxCode: null }] };
+  const turns = [
+    { summary: "Prepare a new quote.", question: "What is the customer's name?", action: empty },
+    { summary: "Alex Test, spelt A L E X, T E S T.", question: "What is the street address?", action: name },
+    { summary: "12 Example Road, Frankston VIC 3199, still to be matched to Google.", question: "What work is needed?", action: address },
+    { summary: "Replace two outdoor lights. I have not supplied a price or GST treatment.", question: "What is the unit price before GST?", action: scope },
+  ];
+  const messages = [];
+  for (const [index, turn] of turns.entries()) {
+    const history = wattzunConversationHistory(messages), f = fixture({ requestSummary: turn.summary,
+      reply: { message: "I can prepare that.", questions: [turn.question], linkIds: [], action: turn.action, lookup: null } });
+    const options = request(); options.input.history = history;
+    const prepared = await f.prepareWattzunRealtimeTurn(options); await bytes(prepared.audio);
+    const sent = JSON.parse(f.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text);
+    assert.deepEqual(sent.conversation, history);
+    for (const prior of turns.slice(0, index)) assert.ok(sent.conversation.some(item => item.content.includes(prior.summary)));
+    if (index >= 2) {
+      const earlier = sent.conversation.filter(item => item.content.startsWith("Earlier proposed draft,"));
+      assert.ok(earlier.some(item => item.content.includes('"firstName":"Alex"') && item.content.includes('"lastName":"Test"')));
+      assert.ok(sent.conversation.some(item => item.content.includes("A L E X, T E S T")));
+      assert.doesNotMatch(portal.wattzunSpokenReply(prepared.reply), /customer.s name|spell.*name/i);
+    }
+    if (index === 3) assert.ok(sent.conversation.some(item => item.content.includes(address.addressQuery)));
+    assert.deepEqual(prepared.reply.action, turn.action);
+    messages.push({ role: "assistant", content: portal.wattzunSpokenReply(prepared.reply), reply: prepared.reply, requestSummary: prepared.requestSummary });
+  }
+  const final = messages.at(-1).reply.action;
+  assert.equal(final.firstName, "Alex"); assert.equal(final.addressQuery, address.addressQuery);
+  assert.equal(final.description, scope.description); assert.equal(final.lines[0].unitPrice, null);
+  assert.equal(final.lines[0].taxCode, null);
+});
+
 test("request memory has strict shape, bounds and the existing false-completion checks", async (t) => {
   for (const requestSummary of ["", "a".repeat(1801), "I have sent your quote.", "I have accessed your private records.", "User asks\u0000bad", null]) {
     await t.test(String(requestSummary).slice(0, 40), async () => {
@@ -650,6 +787,44 @@ test("native guided completion validates the actual present audio request before
     if (allowed) { const result = await f.prepareWattzunRealtimeTurn(options); assert.equal(result.requestSummary, requestSummary); assert.equal(result.reply.action.command, 'complete'); await bytes(result.audio); }
     else await assert.rejects(f.prepareWattzunRealtimeTurn(options), safeError);
     assert.equal(admissions, allowed ? 1 : 0); assert.equal(f.socket.sent.filter(event => event.type === 'response.create').length, allowed ? 2 : 1);
+  }
+});
+
+test("native compact checkbox proposals bind the current form and speak only the canonical transformed result", async () => {
+  const field = { fieldKey: 'access_confirmed', label: 'Safe access and work boundaries confirmed', type: 'checkbox', options: [], canDraft: true, hasSavedAnswer: false, value: false };
+  const context = syntheticWorkContext({ reference: { kind: 'trade_form', formKind: 'job_form', recordId: 'form-one', jobId: 'job-one' },
+    sourceSha256: '1'.repeat(64), facts: { questions: [field] } });
+  const sessionId = '00000000-0000-4000-8000-000000000001';
+  const progress = { sessionId, reference: context.reference, requestedReference: context.reference, recordId: 'form-one', revision: 3, sourceSha256: context.sourceSha256,
+    state: 'question', next: { kind: 'question', fieldKey: field.fieldKey, label: field.label, type: field.type, options: [] },
+    counts: { visible: 6, answered: 2, unanswered: 4, evidenceMissing: 0, manualMissing: 0, skipped: 0 }, skippedFieldKeys: [], completion: { ready: false, missing: [field.label], status: 'draft' } };
+  const currentRequest = 'Yes, safe access and work boundaries are confirmed for this test.';
+  for (const succeeds of [true, false]) {
+    const f = fixture({ requestSummary: currentRequest, reply: { ...answer, message: 'I saved it.', linkIds: [],
+      questions: ['This is an unexecuted future question.'], action: { kind: 'fill_form', answers: [{ fieldKey: field.fieldKey, value: true }] } } });
+    let transformed = 0, approvals = 0;
+    const finalMessage = 'Saved. Are the required isolation or shutdown controls confirmed?';
+    const options = request({ workContext: context, formGuideProgress: progress,
+      transformReply: async (reply, summary) => {
+        transformed++; assert.equal(summary, currentRequest);
+        assert.deepEqual(reply.action, { kind: 'fill_form', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', answers: [{ fieldKey: field.fieldKey, value: true }] });
+        assert.equal(reply.message, 'Checking the current form step.'); assert.deepEqual(reply.questions, []);
+        assert.equal(f.socket.sent.filter(event => event.type === 'response.create').length, 1);
+        if (!succeeds) throw new Error('WORKFLOW_AI_UNAVAILABLE');
+        return { ...reply, action: null, message: finalMessage };
+      }, beforeSpeech: async () => { approvals++; assert.equal(transformed, 1); } });
+    options.input = { ...options.input, message: '', workReference: context.reference,
+      formGuide: { sessionId, stage: 'continue', authorization: 'ordinary_form_answers', sourceSha256: context.sourceSha256, questionKey: field.fieldKey, skippedFieldKeys: [] } };
+    if (succeeds) {
+      const result = await f.prepareWattzunRealtimeTurn(options); await bytes(result.audio);
+      assert.equal(result.reply.message, finalMessage); assert.equal(result.reply.action, null);
+      const speech = f.socket.sent.filter(event => event.type === 'response.create')[1].response;
+      assert.equal(speech.input[0].content[0].text, finalMessage);
+      assert.doesNotMatch(JSON.stringify(speech), /unexecuted future|I saved it/);
+    } else await assert.rejects(f.prepareWattzunRealtimeTurn(options), safeError);
+    assert.equal(transformed, 1); assert.equal(approvals, succeeds ? 1 : 0);
+    assert.equal(f.socket.sent.filter(event => event.type === 'response.create').length, succeeds ? 2 : 1);
+    assert.equal(f.released(), 1);
   }
 });
 

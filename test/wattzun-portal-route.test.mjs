@@ -38,7 +38,8 @@ Function("require", "exports", "console", source)(name => {
     wattzunAccessFailure: error => error instanceof AccessError ? { status: error.status, message: error.message }
       : error?.message === "AUTH_REQUIRED" ? { status: 401, message: "Sign in." } : null,
   };
-  if (name === "./wattzun-portal-ai-server" || name === "./wattzun-realtime-server") return {};
+  if (name === "./wattzun-realtime-server") return { WattzunRealtimeTurnError: class RealtimeTurnError extends Error {} };
+  if (name === "./wattzun-portal-ai-server") return {};
   if (name === "./wattzun-turn-authority-server") return {};
   if (name === "./wattzun-form-guide") return formGuideContract;
   if (name === "./wattzun-form-step") return formStepContract;

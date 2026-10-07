@@ -10,6 +10,7 @@ import {
 import { normalizeTradeFormAnswers, tradeFormCompletion } from "@/lib/trade-form-library.mjs";
 import { publishedTradeFormTemplate, publishedTradeFormTemplatesFor } from "@/lib/trade-form-templates-server";
 import { addMonthsToIsoDate } from "@/lib/asset-lifecycle.mjs";
+import { TRADE_JOB_FORM_COLUMNS, tradeJobFormProjection } from "@/lib/trade-job-forms-server";
 
 export const runtime = "edge";
 
@@ -56,8 +57,7 @@ async function formPayload(ownerUid: string, workOrderId: string) {
     LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
     .bind(workOrderId, ownerUid),
-    db.prepare(`SELECT id, template_key, template_version, template_name, jurisdiction,
-      template_snapshot, answers, status, revision, completed_by_uid, completed_at, created_at, updated_at
+    db.prepare(`SELECT ${TRADE_JOB_FORM_COLUMNS}
     FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at`)
     .bind(workOrderId, ownerUid),
   ]);
@@ -73,17 +73,7 @@ async function formPayload(ownerUid: string, workOrderId: string) {
       key: template.key, version: template.version, name: template.name, jurisdiction: template.jurisdiction,
       description: template.description, guidance: template.guidance, fieldCount: template.fields.length,
     })),
-    forms: rows.results.map((row) => {
-      const snapshot = parseJson(row.template_snapshot, { fields: [] }) as Record<string, unknown>;
-      const answers = parseJson(row.answers, {}) as Record<string, unknown>;
-      const completion = tradeFormCompletion(snapshot, answers);
-      return {
-        id: row.id, templateKey: row.template_key, templateVersion: Number(row.template_version),
-        templateName: row.template_name, jurisdiction: row.jurisdiction, template: snapshot, answers,
-        status: row.status, revision: Number(row.revision || 1), ready: completion.ready, missing: completion.missing,
-        completedAt: row.completed_at, createdAt: row.created_at, updatedAt: row.updated_at,
-      };
-    }),
+    forms: rows.results.map(tradeJobFormProjection),
   };
 }
 

@@ -3,7 +3,7 @@ import { WattzunInputError, WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_WAV_AUDIO_BYTES
 import { authenticateWattzun, listWattzunScopes, requireWattzunAccess, wattzunAccessFailure,
   WattzunAccessError, type WattzunAccess } from "./wattzun-portal-access-server";
 import { prepareWattzunPortalReply, transcribeWattzunPortalAudio, speakWattzunPortalReply, streamWattzunPortalReply } from "./wattzun-portal-ai-server";
-import { prepareWattzunRealtimeTurn, type WattzunRealtimeTimings } from "./wattzun-realtime-server";
+import { prepareWattzunRealtimeTurn, WattzunRealtimeTurnError, type WattzunRealtimeTimings } from "./wattzun-realtime-server";
 import { parseWattzunGreeting } from "./wattzun-greeting";
 import { parseWattzunUsageScope, type WattzunUsage } from "./wattzun-usage";
 import { readWattzunUsage, recordWattzunUsage, WattzunUsageError, type WattzunUsageRecord } from "./wattzun-usage-server";
@@ -196,6 +196,10 @@ async function loadTurnGuide(request: Request, authority: WattzunTurnAuthority, 
   if (input.workReference?.kind !== "trade_form") throw new WattzunInputError("Open the current form before starting its questions.");
   requireOpenConversation(request);
   const loaded = await deps.guide(request, authority.access, input.workReference, guideInput, requireWattzunTurnTeam(authority));
+  return verifiedTurnGuide(request, authority, input, guideInput, loaded);
+}
+function verifiedTurnGuide(request: Request, authority: WattzunTurnAuthority, input: WattzunTurnInput,
+  guideInput: WattzunFormGuideInput, loaded: { context: WattzunWorkContext; guide: WattzunFormGuideProgress }): GuideTurn {
   const guide = readWattzunFormGuideProgress(loaded.guide);
   if (!guide || guide.sessionId !== guideInput.sessionId || JSON.stringify(guide.requestedReference) !== JSON.stringify(input.workReference)
     || JSON.stringify(guide.reference) !== JSON.stringify(loaded.context.reference) || guide.sourceSha256 !== loaded.context.sourceSha256) throw new WattzunFormError(503, "The current form question could not be verified. Resume the form to continue.");
@@ -254,7 +258,9 @@ async function processGuidedReply(request: Request, authority: WattzunTurnAuthor
   }
   if (!isWattzunWorkflowResult(executed.result) || executed.result.state !== "complete" || executed.result.receipt.kind !== proposal.kind) throw new WattzunFormError(503, "The answer's saved result is not confirmed. Resume this same request before continuing.");
   workflow.result = executed.result; workflow.guidedReviewId = executed.reviewId; workflow.guidedRequestId = input.requestId;
-  workflow.guide = await loadTurnGuide(request, authority, input, afterSavedGuideInput(state.input, executed.deferredFieldKeys), deps);
+  const nextInput = afterSavedGuideInput(state.input, executed.deferredFieldKeys);
+  workflow.guide = executed.currentGuide ? verifiedTurnGuide(request, authority, input, nextInput, executed.currentGuide)
+    : await loadTurnGuide(request, authority, input, nextInput, deps);
   const acknowledgement = proposal.kind === "fill_form" ? "Saved. " : proposal.kind === "form_step" ? `${executed.result.receipt.message} ` : "";
   return guideReply({ ...reply, kind: "answer", message: `${acknowledgement}${wattzunFormGuideNarration(workflow.guide.guide)}`, questions: [] }, workflow.guide, input.requestId, executed.result);
 }
@@ -341,7 +347,7 @@ async function releaseNativeTurn(request: Request, initial: WattzunTurnAuthority
     const checked = await deps.verifyGuidedReceipt(request, initial, input.workReference, workflow.guide.input,
       workflow.guidedRequestId, workflow.guidedReviewId, () => deps.turnAuthority(request, input.portal, input.scopeId, initial));
     if (JSON.stringify(checked.result) !== JSON.stringify(workflow.result)) throw new WattzunWorkflowError(409, "The original saved answer changed while Wattzun was replying.");
-    const fresh = await loadTurnGuide(request, checked.authority, input, resumeGuideInput(workflow.guide.input), deps);
+    const fresh = verifiedTurnGuide(request, checked.authority, input, resumeGuideInput(workflow.guide.input), checked.currentGuide);
     if (fresh.context.sourceSha256 !== workflow.guide.context.sourceSha256) throw new WattzunFormError(409, "This form changed while Wattzun was answering. Resume its current question before continuing.");
     requireOpenConversation(request); return;
   }
@@ -452,6 +458,7 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
   let speechStream: ReadableStream<Uint8Array> | undefined;
   let handedOff = false;
   let guideRequestId: string | undefined;
+  let nativeFailureContext: { initial: WattzunTurnAuthority; input: WattzunTurnInput; context: WattzunWorkContext | undefined; workflow: WorkflowTurn } | undefined;
   try {
     await timing.run("auth", () => deps.authenticate(request));
     requireOpenConversation(request);
@@ -478,6 +485,7 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
     const workContext = guide?.context ?? await timing.run("access", () => selectedContext(request, access, input, deps));
     const workflow = guide ? { guide } : await timing.run("access", () => initialWorkflow(request, access, input, workContext, deps));
     if (realtime) {
+      if (initialAuthority) nativeFailureContext = { initial: initialAuthority, input, context: workContext, workflow };
       let prepared: Awaited<ReturnType<WattzunRouteDependencies["realtime"]>>;
       if (initialAuthority && guide && guideInput?.pendingRequestId) {
         const reference = input.workReference;
@@ -530,6 +538,17 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
     await timing.run("access", () => recheckWorkflow(request, finalAccess, input, workflow, deps));
     return timing.response(json({ ok: true, transcript, reply: withContext(reply, workContext), audio: speech }));
   } catch (error) {
+    if (error instanceof WattzunRealtimeTurnError && nativeFailureContext) {
+      const { initial, input, context, workflow } = nativeFailureContext;
+      try {
+        // A validated interpreted request is continuity evidence only. It must
+        // pass the same fresh source/authority boundary as a successful reply.
+        await timing.run("access", () => releaseNativeTurn(request, initial, input, context, workflow, deps));
+      } catch (denial) { return timing.response(failure(denial)); }
+      const response = failure(error);
+      return timing.response(json({ ...await response.json(), voiceTurnRecovery: { requestId: input.requestId, requestSummary: error.requestSummary },
+        ...(guideRequestId ? { formGuideRecovery: { requestId: guideRequestId, state: "not_saved" } } : {}) }, response.status));
+    }
     const response = failure(error);
     return timing.response(guideRequestId ? json({ ...await response.json(), formGuideRecovery: { requestId: guideRequestId, state: "uncertain" } }, response.status) : response);
   }
