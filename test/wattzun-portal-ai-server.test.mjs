@@ -118,9 +118,9 @@ test('portal text reuses the guarded workflow provider with a strict small schem
   assert.match(call.instructions, /Discuss housing improvements only when they support the user's requested work/);
   assert.match(call.instructions, /Do not start household energy-planner intake/);
   assert.match(call.instructions, /Never create a second job for an existing quote request/);
-  assert.match(call.instructions, /exactly these five keys: message, questions, linkIds, action, lookup/);
-  assert.match(call.instructions, /Never omit unused keys or add a top-level kind field/);
-  assert.match(call.instructions, /Never omit unused keys/);
+  assert.match(call.instructions, /Always include the reply content fields message, questions, linkIds, action and lookup/);
+  assert.match(call.instructions, /Never omit unused reply fields or add a top-level kind field/);
+  assert.match(call.instructions, /Never omit unused reply fields/);
   assert.match(call.instructions, /When action contains a proposal, lookup must be null/);
   assert.match(call.instructions, /When lookup contains a record search, action must be null/);
   assert.match(call.instructions, /action and lookup must both be null/);

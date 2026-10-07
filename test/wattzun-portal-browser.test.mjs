@@ -21,13 +21,18 @@ const fixtures = {
   // with no microphone, audio playback or provider access.
   voice: `
     export const createWattzunBrowserVoiceEnvironment = () => ({});
+    export class WattzunVoiceCallError extends Error {
+      constructor(message,reason) { super(message);this.name='WattzunVoiceCallError';this.reason=reason; }
+    }
     export class WattzunVoiceCall {
       constructor(_environment,callbacks) { this.callbacks=callbacks; this.muted=false; window.wattzunFixtureCall=this; }
       async start() {
         window.wattzunFixtureCounters.started++;
         if(window.wattzunFixtureGreetingEnabled) {
           this.callbacks.status({state:'connecting',message:'Connecting to Wattzun.'});
-          const audio=await this.callbacks.greeting(new AbortController().signal);
+          let audio;
+          try { audio=await this.callbacks.greeting(new AbortController().signal); }
+          catch(error) {this.requestFailed(error);return;}
           if(audio.mimeType!=='audio/pcm') throw new Error('Greeting must provide native PCM.');
           const reader=audio.stream.getReader();
           try {
@@ -39,11 +44,21 @@ const fixtures = {
         }
         this.callbacks.status({state:'listening',message:'Listening for your question.'});
       }
-      checkIn() { this.callbacks.status({state:'confirming',message:'Would you like to continue this call?'}); }
-      continueCall() { window.wattzunFixtureCounters.continued++; this.callbacks.status({state:this.muted?'muted':'listening',message:'Call continued.'}); }
+      recover(message='That reply did not come through. Please say that last part again.') { this.callbacks.status({state:'recovering',message}); }
+      resume() { this.callbacks.status({state:this.muted?'muted':'listening',message:'Listening for your question.'}); }
+      requestFailed(error) {
+        window.wattzunFixtureErrors.push({name:error.name,message:error.message,reason:error.reason});
+        this.callbacks.status({state:error instanceof WattzunVoiceCallError?'error':'recovering',message:error.message});
+      }
+      async question() {
+        this.callbacks.status({state:'thinking',message:''});
+        try {
+          const result=await this.callbacks.submit(new Blob([new Uint8Array(48)],{type:'audio/wav'}),new AbortController().signal);
+          this.callbacks.reply(result);if(result.audio.mimeType==='audio/pcm')await result.audio.stream.cancel();this.resume();
+        } catch(error) {this.requestFailed(error);}
+      }
       toggleMute() { this.muted=!this.muted; this.callbacks.status({state:this.muted?'muted':'listening',message:this.muted?'Microphone muted.':'Listening for your question.'}); }
       hangUp() { window.wattzunFixtureCounters.hungUp++; this.callbacks.status({state:'ended',message:'Call ended.'}); }
-      noResponse() { this.callbacks.status({state:'ended',message:'Call ended after no response.'}); }
       dispose() { window.wattzunFixtureCounters.disposed++; }
       interrupt() {}
     }
@@ -60,14 +75,25 @@ const bundle = await build({
     window.wattzunFixtureUsage=[];
     window.addEventListener(WATTZUN_USAGE_CHANGED_EVENT,event=>window.wattzunFixtureUsage.push(event.detail));
     window.wattzunFixtureRequests=[];
-    window.wattzunFixtureCounters={started:0,continued:0,hungUp:0,disposed:0};
+    window.wattzunFixtureCounters={started:0,hungUp:0,disposed:0};
+    window.wattzunFixtureErrors=[];
     window.wattzunFixtureGreetingEnabled=window.wattzunFixtureGreetingEnabled??false;
     window.wattzunFixtureGreetingPcm=[];
     window.fetch=async (url,options={})=>{
-      window.wattzunFixtureRequests.push({url,headers:options.headers,body:options.body?JSON.parse(options.body):null});
+      const body=options.body instanceof FormData?JSON.parse(options.body.get('request')):options.body?JSON.parse(options.body):null;
+      window.wattzunFixtureRequests.push({url,headers:options.headers,body});
+      const failure=window.wattzunFixtureFailures?.[url];
+      if(failure?.network)throw new Error(failure.message);
+      if(failure)return Response.json({ok:false,error:failure.message},{status:failure.status});
       if(url.startsWith('/api/wattzun/portal?portal=')) { const portal=new URL(url,location.origin).searchParams.get('portal');return Response.json({ok:true,scopes:window.wattzunFixtureScopes||[{portal,scopeId:portal==='trade'?'synthetic-business':'synthetic-'+portal,label:'Synthetic '+portal+' business',personalName:'Alex'}]}); }
       if(url==='/api/wattzun/greeting'&&options.method==='POST') {
         const frames=[{type:'reply',transcript:'',reply:{kind:'answer',message:"Hi Alex, I'm here. What can I help you with?",questions:[],links:[]}},
+          {type:'audio',data:'EIAgAQ=='},{type:'done'}];
+        return new Response(frames.map(frame=>JSON.stringify(frame)).join('\\n')+'\\n',
+          {headers:{'Content-Type':'application/x-wattzun-realtime-voice+ndjson'}});
+      }
+      if(url==='/api/wattzun/voice'&&options.method==='POST') {
+        const frames=[{type:'reply',transcript:'',requestSummary:'User asks how to find Schedule.',reply:{kind:'answer',message:'Open Schedule to review your visits.',questions:[],links:[]}},
           {type:'audio',data:'EIAgAQ=='},{type:'done'}];
         return new Response(frames.map(frame=>JSON.stringify(frame)).join('\\n')+'\\n',
           {headers:{'Content-Type':'application/x-wattzun-realtime-voice+ndjson'}});
@@ -105,7 +131,7 @@ const script = bundle.outputFiles.find(file => file.path.endsWith('.js')).text;
 const css = bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
 const modes = fs.readFileSync(path.join(root, 'src/app/tlink-colour-mode.css'), 'utf8');
 
-test('Wattzun speed settings, clarifications and call check-ins remain usable in desktop and mobile day/night layouts', { skip: !browserPath && 'No installed browser for layout checks' }, async t => {
+test('Wattzun speed settings, clarifications and connected recovery remain usable in desktop and mobile day/night layouts', { skip: !browserPath && 'No installed browser for layout checks' }, async t => {
   const browser = await chromium.launch({ executablePath: browserPath, headless: true });
   try {
     for (const scenario of [{name:'desktop-day',width:1366,height:900,mode:'day'}, {name:'desktop-night',width:1366,height:900,mode:'night'}, {name:'mobile-day',width:390,height:844,mode:'day'}, {name:'mobile-night',width:390,height:844,mode:'night'}]) await t.test(scenario.name, async () => {
@@ -156,28 +182,22 @@ test('Wattzun speed settings, clarifications and call check-ins remain usable in
       await dialog.getByRole('button', {name:'Call Wattzun',exact:true}).click();
       await dialog.getByText('Listening', {exact:true}).waitFor();
       assert.equal(await dialog.getByLabel('Message Wattzun', {exact:true}).isDisabled(), true);
-      await page.evaluate(()=>window.wattzunFixtureCall.checkIn());
-      const checkIn = dialog.getByRole('group', {name:'Call check-in',exact:true});
-      await checkIn.waitFor();
-      await dialog.getByText('Would you like to continue this call?', {exact:true}).waitFor();
-      const continueButton = checkIn.getByRole('button', {name:'Continue call',exact:true});
-      const endButton = checkIn.getByRole('button', {name:'End call',exact:true});
-      assert.ok((await continueButton.boundingBox()).height >= 42);
-      assert.ok((await endButton.boundingBox()).height >= 42);
-      await screenshot(page, scenario.name, 'call-check-in');
-      await continueButton.focus();
-      await page.keyboard.press('Enter');
-      await checkIn.waitFor({state:'detached'});
-      assert.equal((await page.evaluate(()=>window.wattzunFixtureCounters)).continued, 1);
-      await page.evaluate(()=>window.wattzunFixtureCall.checkIn());
-      await checkIn.getByRole('button', {name:'End call',exact:true}).click();
-      await checkIn.waitFor({state:'detached'});
+      await page.evaluate(()=>window.wattzunFixtureCall.recover());
+      await dialog.getByText('Still connected', {exact:true}).waitFor();
+      await dialog.getByText('That reply did not come through. Please say that last part again.', {exact:true}).waitFor();
+      for(const name of ['Mute microphone','Hang up']) assert.ok((await dialog.getByRole('button',{name,exact:true}).boundingBox()).height>=42);
+      assert.equal(await dialog.getByRole('group',{name:'Call check-in',exact:true}).count(),0);
+      assert.equal(await dialog.getByRole('button',{name:'Continue call',exact:true}).count(),0);
+      await screenshot(page, scenario.name, 'call-recovery');
+      await dialog.getByRole('button',{name:'Mute microphone',exact:true}).click();
+      await dialog.getByRole('button',{name:'Unmute microphone',exact:true}).click();
+      await dialog.getByRole('button', {name:'Hang up',exact:true}).click();
       await dialog.getByRole('button', {name:'Call Wattzun',exact:true}).waitFor();
       assert.equal((await page.evaluate(()=>window.wattzunFixtureCounters)).hungUp, 1);
       assert.equal(await dialog.getByLabel('Message Wattzun', {exact:true}).isDisabled(), false);
       await dialog.getByRole('button', {name:'Call Wattzun',exact:true}).click();
-      await page.evaluate(()=>window.wattzunFixtureCall.noResponse());
-      await dialog.getByText('Call ended after no response.', {exact:true}).waitFor();
+      await dialog.getByRole('button',{name:'Hang up',exact:true}).click();
+      await dialog.getByText('Call ended.', {exact:true}).waitFor();
       assert.equal((await page.evaluate(()=>window.wattzunFixtureRequests)).length, 2, 'UI call fixtures never use a provider or microphone');
       await page.keyboard.press('Escape');
       await dialog.waitFor({state:'detached'});
@@ -264,6 +284,109 @@ async function screenshot(page, scenario, state) {
   await page.screenshot({path:path.join(process.env.WATTZUN_QA_OUTPUT,`${scenario}-${state}.png`)});
 }
 
+test('actual greeting and voice callbacks distinguish terminal auth failures from recoverable provider failures', {skip:!browserPath&&'No installed browser for call error wiring'},async t=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    for(const layout of [{name:'desktop',width:1366,height:900},{name:'mobile',width:390,height:844}]) {
+      for(const failure of [
+        {stage:'greeting',status:401,reason:'authentication'}, {stage:'greeting',status:403,reason:'access'},
+        {stage:'voice',status:401,reason:'authentication'}, {stage:'voice',status:403,reason:'access'},
+        {stage:'greeting',status:503}, {stage:'voice',status:503}, {stage:'voice',status:429}, {stage:'voice',network:true},
+      ]) await t.test(`${layout.name}-${failure.stage}-${failure.status||'network'}`,async()=>{
+        const page=await browser.newPage({viewport:{width:layout.width,height:layout.height}});
+        const errors=[];page.on('pageerror',error=>errors.push(error.message));
+        await page.route('https://fixture.invalid/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html></html>'}));
+        await page.goto('https://fixture.invalid/direct-trade/dashboard');
+        await page.setContent(`<html><head><style>*{box-sizing:border-box}body{margin:0;font-family:Arial}${css}</style></head><body><div id="root"></div></body></html>`);
+        const endpoint='/api/wattzun/'+failure.stage;
+        const message=`Specific ${failure.stage} ${failure.status||'network'} failure`;
+        await page.evaluate(({endpoint,failure,message})=>{
+          window.wattzunFixtureGreetingEnabled=failure.stage==='greeting';
+          window.wattzunFixtureFailures={[endpoint]:{...failure,message}};
+        },{endpoint,failure,message});
+        await page.addScriptTag({content:script});
+        await page.getByRole('button',{name:'Open Wattzun AI chat',exact:true}).click();
+        const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+        await dialog.getByRole('textbox',{name:'Message Wattzun',exact:true}).fill('Help me follow up the sale');
+        await dialog.getByRole('button',{name:'Send',exact:true}).click();
+        await dialog.getByRole('link',{name:'Open Sales'}).waitFor();
+        await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();
+        if(failure.stage==='voice') {
+          await dialog.getByText('Listening',{exact:true}).waitFor();
+          await page.evaluate(()=>window.wattzunFixtureCall.question());
+        }
+        await dialog.getByText(message,{exact:true}).waitFor();
+        const callError=await page.evaluate(()=>window.wattzunFixtureErrors.at(-1));
+        assert.equal(callError.message,message,'The actual callback preserves the request error');
+        assert.equal(callError.name,failure.reason?'WattzunVoiceCallError':'Error');
+        assert.equal(callError.reason,failure.reason);
+        assert.equal(await dialog.getByRole('log',{name:'Conversation with Wattzun'}).locator('article').count(),2,'A failed voice request does not append a fake reply or lose the conversation');
+        const attempts=await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>['/api/wattzun/greeting','/api/wattzun/voice'].includes(request.url)).length);
+        if(failure.reason) {
+          assert.equal(await dialog.getByRole('button',{name:'Hang up',exact:true}).count(),0);
+          assert.equal(await dialog.getByRole('textbox',{name:'Message Wattzun',exact:true}).isDisabled(),false);
+          await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).waitFor();
+          assert.equal(await dialog.getByRole('alert').textContent(),message);
+        } else {
+          await dialog.getByText('Still connected',{exact:true}).waitFor();
+          assert.equal(await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).count(),0);
+          assert.equal(await dialog.getByRole('textbox',{name:'Message Wattzun',exact:true}).isDisabled(),true);
+          assert.equal(await dialog.getByRole('button',{name:'Mute microphone',exact:true}).isEnabled(),true);
+          await dialog.getByRole('link',{name:'Open Sales'}).click();
+          const dock=page.getByRole('region',{name:'Wattzun call',exact:true});
+          await dock.getByText('Still connected',{exact:true}).waitFor();
+          await dock.getByText(message,{exact:true}).waitFor();
+          assert.equal(new URL(page.url()).search,'?workspace=sales','Workflow navigation remains available during recovery');
+          await dock.getByRole('button',{name:'Mute microphone',exact:true}).click();
+          await dock.getByRole('button',{name:'Unmute microphone',exact:true}).click();
+          assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>['/api/wattzun/greeting','/api/wattzun/voice'].includes(request.url)).length),attempts,'Navigation and mute never retry a failed request');
+          await dock.getByRole('button',{name:'Open Wattzun',exact:true}).click();
+          await page.evaluate(endpoint=>{delete window.wattzunFixtureFailures[endpoint];window.wattzunFixtureCall.resume();},endpoint);
+          await dialog.getByText('Listening',{exact:true}).waitFor();
+          await page.evaluate(()=>window.wattzunFixtureCall.question());
+          await dialog.getByRole('log',{name:'Conversation with Wattzun'}).getByText('Open Schedule to review your visits.',{exact:true}).waitFor();
+          assert.equal(await page.evaluate(()=>window.wattzunFixtureCounters.started),1,'A deliberate new question reuses the connected call');
+          await dialog.getByRole('button',{name:'Hang up',exact:true}).click();
+        }
+        assert.equal(await dialog.getByRole('group',{name:'Call check-in',exact:true}).count(),0);
+        assert.equal(await dialog.getByRole('button',{name:'Continue call',exact:true}).count(),0);
+        assert.deepEqual(errors,[]);await page.close();
+      });
+    }
+  } finally {await browser.close();}
+});
+
+test('authentication, scope selection and pagehide still dispose a recovering call', {skip:!browserPath&&'No installed browser for call boundary wiring'},async t=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    for(const boundary of ['authentication','scope','pagehide']) await t.test(boundary,async()=>{
+      const page=await browser.newPage({viewport:{width:390,height:844}});
+      const errors=[];page.on('pageerror',error=>errors.push(error.message));
+      await page.route('https://fixture.invalid/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html></html>'}));
+      await page.goto('https://fixture.invalid/direct-trade/dashboard');
+      await page.setContent(`<html><head><style>*{box-sizing:border-box}body{margin:0;font-family:Arial}${css}</style></head><body><div id="root"></div></body></html>`);
+      await page.addScriptTag({content:script});
+      await page.getByRole('button',{name:'Open Wattzun AI chat',exact:true}).click();
+      const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+      await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();
+      await dialog.getByText('Listening',{exact:true}).waitFor();
+      await page.evaluate(()=>window.wattzunFixtureCall.recover());
+      await dialog.getByText('Still connected',{exact:true}).waitFor();
+      await page.evaluate(boundary=>{
+        if(boundary==='authentication')window.wattzunFixtureAuth(null);
+        else if(boundary==='scope')window.dispatchEvent(new CustomEvent('tlink:business-selection-changed',{detail:{uid:'synthetic-user',ownerUid:'unauthorised-business'}}));
+        else window.dispatchEvent(new Event('pagehide'));
+      },boundary);
+      await page.waitForFunction(()=>window.wattzunFixtureCounters.disposed===1);
+      if(boundary!=='pagehide') {
+        assert.equal(await page.getByRole('region',{name:'Wattzun call',exact:true}).count(),0);
+        assert.equal(await page.getByRole('button',{name:'Hang up',exact:true}).count(),0);
+      }
+      assert.deepEqual(errors,[]);await page.close();
+    });
+  } finally {await browser.close();}
+});
+
 test('a call and its conversation survive guarded workspace links, client route changes and minimising until an explicit boundary', { skip: !browserPath && 'No installed browser for call navigation checks' }, async t => {
   const browser = await chromium.launch({ executablePath: browserPath, headless: true });
   try {
@@ -321,11 +444,14 @@ test('a call and its conversation survive guarded workspace links, client route 
       await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
       await dialog.getByRole('button',{name:'Minimise Wattzun',exact:true}).click();
       await dock.waitFor();
-      assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,continued:0,hungUp:0,disposed:0},'Navigation, background file previews and dismissal keep the same call instance');
+      assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0},'Navigation, background file previews and dismissal keep the same call instance');
       assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>request.url.startsWith('/api/wattzun/portal?')).length),1,'Client navigation retains the authorised portal assistant');
-      await page.evaluate(()=>window.wattzunFixtureCall.checkIn());
-      await dock.getByRole('button',{name:'Continue call',exact:true}).click();
-      assert.equal(await page.evaluate(()=>window.wattzunFixtureCounters.continued),1,'Idle check-in remains actionable while minimised');
+      await page.evaluate(()=>window.wattzunFixtureCall.recover());
+      await dock.getByText('Still connected',{exact:true}).waitFor();
+      await dock.getByText('That reply did not come through. Please say that last part again.',{exact:true}).waitFor();
+      assert.equal(await dock.getByRole('button',{name:'Continue call',exact:true}).count(),0);
+      await dock.getByRole('button',{name:'Mute microphone',exact:true}).click();
+      await dock.getByRole('button',{name:'Unmute microphone',exact:true}).click();
       await dock.getByRole('button',{name:'Hang up',exact:true}).click();
       await dock.waitFor({state:'detached'});
       assert.equal(await page.evaluate(()=>window.wattzunFixtureCounters.hungUp),1,'Only explicit Hang up stops this call');
@@ -378,7 +504,7 @@ test('a voice action opens its review, preserves the call through receipt confir
     assert.equal(new URL(page.url()).pathname,'/direct-trade/team');
     assert.equal(new URL(page.url()).searchParams.get('jobId'),'saved-job-23');
     assert.equal(new URL(page.url()).searchParams.get('jobTab'),'quote');
-    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,continued:0,hungUp:0,disposed:0},'Review, confirmation and opening the saved quote retain the original call');
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0},'Review, confirmation and opening the saved quote retain the original call');
     await dock.getByRole('button',{name:'Hang up',exact:true}).click();
     await launcher.click();await dialog.getByRole('textbox',{name:'Message Wattzun',exact:true}).fill('What is my next step?');
     await dialog.getByRole('button',{name:'Send',exact:true}).click();

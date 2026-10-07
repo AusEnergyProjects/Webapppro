@@ -14,7 +14,7 @@ import {
   type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput,
 } from "@/lib/wattzun-portal";
 import { WATTZUN_OPEN_EVENT, WATTZUN_READY_EVENT, WATTZUN_USAGE_CHANGED_EVENT, readWattzunOpenRequest, useWattzunPresentation, type WattzunOpenRequest } from "@/lib/wattzun-appearance";
-import { createWattzunBrowserVoiceEnvironment, WattzunVoiceCall, type WattzunCallStatus } from "@/lib/wattzun-voice-client";
+import { createWattzunBrowserVoiceEnvironment, WattzunVoiceCall, WattzunVoiceCallError, type WattzunCallStatus } from "@/lib/wattzun-voice-client";
 import { readWattzunVoiceStream } from "@/lib/wattzun-voice-stream";
 import { wattzunConversationHistory } from "@/lib/wattzun-conversation";
 import { EnergyAssistantLauncher } from "./EnergyAssistantLauncher";
@@ -26,7 +26,7 @@ import styles from "./WattzunPortalAssistant.module.css";
 type Message = WattzunTurn & { id: string; reply?: WattzunReply; reviewDraft?: WattzunActionProposal; requestSummary?: string };
 const portalNames: Record<WattzunPortal, string> = { trade: "TLink", council: "Council", creditex: "Creditex" };
 const callLabels: Record<WattzunCallStatus["state"], string> = {
-  idle: "Ready to call", permission: "Microphone permission", connecting: "Connecting", listening: "Listening", thinking: "Thinking", speaking: "Wattzun is speaking", muted: "Microphone muted", confirming: "Continue this call?", ended: "Call ended", error: "Call could not continue",
+  idle: "Ready to call", permission: "Microphone permission", connecting: "Connecting", listening: "Listening", thinking: "Thinking", speaking: "Wattzun is speaking", muted: "Microphone muted", recovering: "Still connected", ended: "Call ended", error: "Call could not continue",
 };
 function record(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function isReply(value: unknown): value is WattzunReply {
@@ -51,6 +51,15 @@ async function responsePayload(response: Response): Promise<Record<string, unkno
     throw new Error(record(payload) && typeof payload.error === "string" ? payload.error : "Wattzun could not complete that request. Try again.");
   }
   return payload;
+}
+async function readCallResponse(response: Response, signal: AbortSignal) {
+  if (response.status === 401 || response.status === 403) {
+    const payload: unknown = await response.json().catch(() => null);
+    const message = record(payload) && typeof payload.error === "string" ? payload.error
+      : response.status === 401 ? "Sign in again to call Wattzun." : "Your workspace access has changed. Reopen your workspace before calling.";
+    throw new WattzunVoiceCallError(message, response.status === 401 ? "authentication" : "access");
+  }
+  return readWattzunVoiceStream(response, signal, isReply);
 }
 export function WattzunPortalAssistant({ portal }: { portal: WattzunPortal }) {
   const [user, setUser] = useState<User | null>(null);
@@ -250,10 +259,10 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       async greeting(signal) {
         const token = await user.getIdToken();
         if (signal.aborted) throw new Error("Call ended.");
-        const result = await readWattzunVoiceStream(await fetch("/api/wattzun/greeting", { method: "POST",
+        const result = await readCallResponse(await fetch("/api/wattzun/greeting", { method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({ portal: scope.portal, scopeId: scope.scopeId, requestId: crypto.randomUUID(),
-            name: scope.personalName || "", preferences: { ...preferencesRef.current } }), signal }), signal, isReply);
+            name: scope.personalName || "", preferences: { ...preferencesRef.current } }), signal }), signal);
         return result.audio;
       },
       async submit(audio, signal) {
@@ -263,8 +272,8 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         const form = new FormData();
         form.append("request", JSON.stringify(input));
         form.append("audio", audio, "question.wav");
-        return readWattzunVoiceStream(await fetch("/api/wattzun/voice", { method: "POST",
-          headers: { Authorization: `Bearer ${token}`, Accept: WATTZUN_REALTIME_VOICE_STREAM_TYPE }, body: form, signal }), signal, isReply);
+        return readCallResponse(await fetch("/api/wattzun/voice", { method: "POST",
+          headers: { Authorization: `Bearer ${token}`, Accept: WATTZUN_REALTIME_VOICE_STREAM_TYPE }, body: form, signal }), signal);
       },
       reply: result => {
         if (!active.current || voiceCall.current !== call) return;
@@ -294,12 +303,14 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
   }, [openRequest, presentation.ready, startCall]);
 
   const hangUp = () => { voiceCall.current?.hangUp(); setMuted(false); };
+  const toggleMute = () => { voiceCall.current?.toggleMute(); setMuted(current => !current); };
   return <>
     {!expanded && callActive && <div className={`${styles.dockedCall} ${styles.dialog}`} role="region" aria-label="Wattzun call">
       <span role="status"><span className={`${styles.activity} ${callStatus.state === "listening" ? styles.listening : ""}`} />{callLabels[callStatus.state]}</span>
       <button type="button" onClick={onExpand}>Open Wattzun</button>
-      {callStatus.state === "confirming" && <button type="button" onClick={() => voiceCall.current?.continueCall()}>Continue call</button>}
+      <button type="button" disabled={callStatus.state === "permission" || callStatus.state === "connecting"} aria-pressed={muted} onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>
       <button className={styles.hangUp} type="button" onClick={hangUp}>Hang up</button>
+      {callStatus.state === "recovering" && callStatus.message && <p className={styles.callHint} role="status">{callStatus.message}</p>}
     </div>}
     <div className={styles.conversation} hidden={!expanded}>
     <div className={styles.tools}>
@@ -314,12 +325,11 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     </div>
     <p className={styles.disclosure}>Wattzun uses an AI-generated voice. Calling shares your spoken questions with our AI provider. Minimise to keep working while your call stays connected. Hang up to stop your microphone.</p>
     {callActive && <div className={styles.callControls}>
-      <button type="button" disabled={callStatus.state === "permission" || callStatus.state === "connecting"} aria-pressed={muted} onClick={() => { voiceCall.current?.toggleMute(); setMuted(current => !current); }}>{muted ? "Unmute microphone" : "Mute microphone"}</button>
+      <button type="button" disabled={callStatus.state === "permission" || callStatus.state === "connecting"} aria-pressed={muted} onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>
       {callStatus.state === "speaking" && <button type="button" onClick={() => voiceCall.current?.interrupt()}>Stop speaking</button>}
       <button className={styles.hangUp} type="button" onClick={hangUp}>Hang up</button>
     </div>}
     {callStatus.message && <p className={callStatus.state === "error" ? styles.error : styles.callHint} role={callStatus.state === "error" ? "alert" : "status"}>{callStatus.message}</p>}
-    {callStatus.state === "confirming" && <div className={styles.idleConfirmation} role="group" aria-label="Call check-in"><p>{muted ? 'Unmute to respond, or choose Continue call.' : 'Speak to continue, or choose Continue call.'} This brief check-in uses your device voice when available.</p><div><button type="button" onClick={() => voiceCall.current?.continueCall()}>Continue call</button><button type="button" onClick={() => { voiceCall.current?.hangUp(); setMuted(false); }}>End call</button></div></div>}
     <div className={styles.messages} role="log" aria-live="polite" aria-label="Conversation with Wattzun">
       {!messages.length && <div className={styles.welcome}><h3>What can I help you with?</h3><p>Tell me what you want to get done. If I need more detail, I will ask.</p><div>{["What can you help me with?", "Help me find the next step"].map(example => <button key={example} type="button" disabled={callActive || busy} onClick={() => setDraft(example)}>{example}</button>)}</div></div>}
       {messages.map(message => <article key={message.id} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}><strong>{message.role === "user" ? "You" : "Wattzun"}</strong><p>{message.reply ? message.reply.message : message.content}</p>{message.reply && message.reply.questions.length > 0 && <ol>{message.reply.questions.map((question, index) => <li key={index}>{question}</li>)}</ol>}{message.reply && message.reply.links.length > 0 && <div className={styles.links}>{message.reply.links.map(link => wattzunPortalForPath(link.href.split(/[?#]/)[0]) === scope.portal

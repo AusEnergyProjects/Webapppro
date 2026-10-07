@@ -6,6 +6,8 @@ import * as portalContract from "../src/lib/wattzun-portal.ts";
 import * as recordContract from "../src/lib/wattzun-records.ts";
 import * as actionContract from "../src/lib/wattzun-actions.ts";
 import * as conversationContract from "../src/lib/wattzun-conversation.ts";
+import { WattzunVoiceCallError } from "../src/lib/wattzun-voice-client.ts";
+import { readWattzunVoiceStream } from "../src/lib/wattzun-voice-stream.ts";
 
 const source = readFileSync(new URL("../src/components/WattzunPortalAssistant.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -34,8 +36,8 @@ function load({ values = [null, [], "", false, null], storage, events, fetchRequ
       readWattzunOpenRequest:value=>value,
       useWattzunPresentation:()=>({hat:'none',speed:1,setSpeed:speed=>updates.push({index:'speed',value:speed})}),
     },
-    "@/lib/wattzun-voice-client": {},
-    "@/lib/wattzun-voice-stream": {},
+    "@/lib/wattzun-voice-client": { WattzunVoiceCallError },
+    "@/lib/wattzun-voice-stream": { readWattzunVoiceStream },
     "./EnergyAssistantLauncher": { EnergyAssistantLauncher: "Launcher" },
     "./WattzunMascot": { WattzunMascot: "Mascot" },
     "./WattzunRecordPicker": { WattzunRecordPicker: "Picker" },
@@ -43,7 +45,7 @@ function load({ values = [null, [], "", false, null], storage, events, fetchRequ
     "./WattzunPortalAssistant.module.css": { default: {} },
   };
   const exported = {};
-  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {conversationHistory:require('@/lib/wattzun-conversation').wattzunConversationHistory, responsePayload, isReply, WattzunConversation, workspaceHref};`)(name => {
+  new Function("require", "exports", "window", "fetch", `${compiled}\nexports.testHelpers = {conversationHistory:require('@/lib/wattzun-conversation').wattzunConversationHistory, responsePayload, readCallResponse, isReply, WattzunConversation, workspaceHref};`)(name => {
     assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
   }, exported, { localStorage: storage, ...events }, fetchRequest);
   return { exported, effects, updates, auth };
@@ -99,15 +101,34 @@ test('workspace open events reject another actor, portal or unauthorised scope b
 });
 const text = node=>node==null||typeof node==='boolean'?'':typeof node==='string'||typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):text(node.props?.children);
 const nodes = (node,predicate)=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(item=>nodes(item,predicate)):[...(predicate(node)?[node]:[]),...nodes(node.props?.children,predicate)];
-test('conversation settings expose speed only and active check-ins provide accessible Continue and End controls', () => {
-  const h=load({values:[[],'',false,'',{state:'confirming',message:'Would you like to continue this call?'},false]});
+test('conversation settings expose speed only and recovery keeps call controls without idle check-ins', () => {
+  const h=load({values:[[],'',false,'',{state:'recovering',message:'That reply could not be completed. Please try again.'},false]});
   const tree=h.exported.testHelpers.WattzunConversation({user,scope:scopes[0]});
   const settings=nodes(tree,node=>node.type==='details')[0]; assert.match(text(settings),/Speech speed/);
   assert.deepEqual(nodes(settings,node=>node.type==='select').map(node=>node.props['aria-label']),['Speaking speed']);
   assert.equal(nodes(settings,node=>node.type==='textarea').length,0); assert.doesNotMatch(text(settings),/Voice and personality|Tone|Personality note/);
   const speed=nodes(settings,node=>node.type==='select')[0]; speed.props.onChange({target:{value:'1.15'}}); assert.deepEqual(h.updates.at(-1),{index:'speed',value:1.15});
-  const checkin=nodes(tree,node=>node.props?.['aria-label']==='Call check-in')[0]; assert.equal(checkin.props.role,'group');
-  assert.ok(nodes(checkin,node=>node.type==='button'&&text(node)==='Continue call')[0]); assert.ok(nodes(checkin,node=>node.type==='button'&&text(node)==='End call')[0]);
+  assert.ok(nodes(tree,node=>node.props?.role==='status'&&text(node).includes('Still connected'))[0]);
+  assert.ok(nodes(tree,node=>node.type==='p'&&text(node)==='That reply could not be completed. Please try again.')[0]);
+  for(const label of ['Hang up','Mute microphone']) assert.equal(nodes(tree,node=>node.type==='button'&&text(node)===label).length,1);
+  assert.equal(nodes(tree,node=>node.props?.['aria-label']==='Call check-in').length,0);
+  assert.equal(nodes(tree,node=>node.type==='button'&&['Continue call','End call','Call Wattzun'].includes(text(node))).length,0);
+  assert.equal(nodes(tree,node=>node.type==='textarea')[0].props.disabled,true);
+  assert.doesNotMatch(source,/confirming|continueCall|idleConfirmation/);
+});
+
+test('only authentication and access HTTP failures become terminal call errors while provider failures retain their messages',async()=>{
+  const {readCallResponse}=load().exported.testHelpers;
+  const signal=new AbortController().signal;
+  for(const [status,reason] of [[401,'authentication'],[403,'access']]) {
+    await assert.rejects(readCallResponse(Response.json({ok:false,error:'Specific workspace failure'},{status}),signal),error=>{
+      assert.ok(error instanceof WattzunVoiceCallError);assert.equal(error.reason,reason);assert.equal(error.message,'Specific workspace failure');return true;
+    });
+    await assert.rejects(readCallResponse(new Response('unreadable',{status}),signal),error=>error instanceof WattzunVoiceCallError&&error.reason===reason);
+  }
+  for(const status of [429,503]) await assert.rejects(readCallResponse(Response.json({ok:false,error:'Specific provider failure'},{status}),signal),error=>{
+    assert.equal(error instanceof WattzunVoiceCallError,false);assert.equal(error.message,'Specific provider failure');return true;
+  });
 });
 test("follow-up history stays in memory, retains questions, and stays within the API budget", () => {
   const helpers = load().exported.testHelpers;

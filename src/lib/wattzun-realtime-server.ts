@@ -117,35 +117,33 @@ function captureResponseStructure(diagnostic: TurnDiagnostic, raw: unknown) {
 function captureArgumentStructure(diagnostic: TurnDiagnostic, raw: unknown) {
   if (!record(raw)) return;
   diagnostic.structure.outerFieldCount = Object.keys(raw).length;
-  diagnostic.structure.replyType = valueType(raw.reply);
+  diagnostic.structure.replyType = valueType(raw);
   diagnostic.structure.requestSummaryType = valueType(raw.requestSummary);
   if (typeof raw.requestSummary === "string") diagnostic.structure.requestSummaryLength = raw.requestSummary.length;
-  if (record(raw.reply)) {
-    diagnostic.structure.replyFieldCount = Object.keys(raw.reply).length;
-    diagnostic.structure.replyFieldTypes = {};
-    for (const field of ["message", "questions", "linkIds", "action", "lookup"] as const) {
-      diagnostic.structure.replyFieldTypes[field] = valueType(raw.reply[field]);
+  diagnostic.structure.replyFieldCount = Object.keys(raw).filter(field => field !== "requestSummary").length;
+  diagnostic.structure.replyFieldTypes = {};
+  for (const field of ["message", "questions", "linkIds", "action", "lookup"] as const) {
+    diagnostic.structure.replyFieldTypes[field] = valueType(raw[field]);
+  }
+  if (Array.isArray(raw.questions)) {
+    diagnostic.structure.questionCount = raw.questions.length;
+    diagnostic.structure.questionLengths = raw.questions.slice(0, 4).map(value => typeof value === "string" ? value.length : null);
+  }
+  if (record(raw.action)) {
+    diagnostic.structure.actionFieldCount = Object.keys(raw.action).length;
+    diagnostic.structure.actionFieldTypes = {};
+    for (const field of ["kind", "firstName", "lastName", "email", "phone", "addressQuery", "serviceCategory", "description", "lines"] as const) {
+      diagnostic.structure.actionFieldTypes[field] = valueType(raw.action[field]);
     }
-    if (Array.isArray(raw.reply.questions)) {
-      diagnostic.structure.questionCount = raw.reply.questions.length;
-      diagnostic.structure.questionLengths = raw.reply.questions.slice(0, 4).map(value => typeof value === "string" ? value.length : null);
-    }
-    if (record(raw.reply.action)) {
-      diagnostic.structure.actionFieldCount = Object.keys(raw.reply.action).length;
-      diagnostic.structure.actionFieldTypes = {};
-      for (const field of ["kind", "firstName", "lastName", "email", "phone", "addressQuery", "serviceCategory", "description", "lines"] as const) {
-        diagnostic.structure.actionFieldTypes[field] = valueType(raw.reply.action[field]);
-      }
-      if (Array.isArray(raw.reply.action.lines)) {
-        diagnostic.structure.lineCount = raw.reply.action.lines.length;
-        diagnostic.structure.lineFieldTypes = raw.reply.action.lines.slice(0, 3).map(line => {
-          const types: Partial<Record<"lineType" | "description" | "quantity" | "unitPrice" | "taxCode", DiagnosticValueType>> = {};
-          for (const field of ["lineType", "description", "quantity", "unitPrice", "taxCode"] as const) {
-            types[field] = valueType(record(line) ? line[field] : undefined);
-          }
-          return types;
-        });
-      }
+    if (Array.isArray(raw.action.lines)) {
+      diagnostic.structure.lineCount = raw.action.lines.length;
+      diagnostic.structure.lineFieldTypes = raw.action.lines.slice(0, 3).map(line => {
+        const types: Partial<Record<"lineType" | "description" | "quantity" | "unitPrice" | "taxCode", DiagnosticValueType>> = {};
+        for (const field of ["lineType", "description", "quantity", "unitPrice", "taxCode"] as const) {
+          types[field] = valueType(record(line) ? line[field] : undefined);
+        }
+        return types;
+      });
     }
   }
 }
@@ -228,9 +226,9 @@ export async function prepareWattzunRealtimeTurn(
 
 async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDiagnostic): Promise<PreparedWattzunRealtimeTurn> {
   const contract = createWattzunPortalReplyContract(options);
-  const instructions = `${contract.instructions}\nThis is a live voice conversation. Give ordinary answers in one or two short sentences, usually under 35 words. For navigation, name the supplied button and what it opens. Add a permissions explanation only when the user is asking about missing access. Put necessary clarification questions in questions instead of repeating them in message. Preserve all required structured facts and review boundaries.\nrequestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output.\nREQUIRED RESPONSE TRANSPORT: Call ${TOOL} exactly once for every answer, clarification or scope reminder. This is a read-only reply-submission function, not an action tool. Its arguments must be exactly {reply, requestSummary}, with reply following the requested reply schema. Do not output an assistant message, text, audio or preamble in this response. The function submits a proposal for validation; it cannot save or send anything.`;
-  const schema = { type: "object", additionalProperties: false, required: ["reply", "requestSummary"],
-    properties: { reply: contract.schema, requestSummary: { type: "string", minLength: 1, maxLength: 1_800 } } };
+  const instructions = `${contract.instructions}\nThis is a live voice conversation. Give ordinary answers in one or two short sentences, usually under 35 words. For navigation, name the supplied button and what it opens. Add a permissions explanation only when the user is asking about missing access. Put necessary clarification questions in questions instead of repeating them in message. Preserve all required structured facts and review boundaries.\nrequestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output.\nREQUIRED RESPONSE TRANSPORT: Call ${TOOL} exactly once for every answer, clarification or scope reminder. This is a read-only reply-submission function, not an action tool. Its arguments must contain exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary. Use the supplied schema for every field. Never nest the reply content under a reply property, flatten action fields, or omit unused arrays/nulls. Do not output an assistant message, text, audio or preamble in this response. The function submits a proposal for validation; it cannot save or send anything.`;
+  const schema = { ...contract.schema, required: [...contract.schema.required, "requestSummary"],
+    properties: { ...contract.schema.properties, requestSummary: { type: "string", minLength: 1, maxLength: 1_800 } } };
   const preferences = parseWattzunPreferences(options.input.preferences);
   const { key, guardEnv } = wattzunPortalProviderConfiguration(options);
   diagnostic.substage = "audio";
@@ -453,9 +451,9 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     const raw: unknown = JSON.parse(item.arguments);
     captureArgumentStructure(diagnostic, raw);
     diagnostic.substage = "envelope";
-    if (!record(raw) || Object.keys(raw).length !== 2 || !Object.hasOwn(raw, "reply") || !Object.hasOwn(raw, "requestSummary")) incomplete();
+    if (!record(raw) || Object.keys(raw).length !== schema.required.length || schema.required.some(field => !Object.hasOwn(raw, field))) incomplete();
     diagnostic.substage = "reply";
-    const reply = contract.validate(raw.reply);
+    const reply = contract.validate({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds, action: raw.action, lookup: raw.lookup });
     // Apply the same bounded text and false-completion/source-access checks to
     // memory. It remains an explicitly unconfirmed interpretation of the input.
     diagnostic.substage = "summary";

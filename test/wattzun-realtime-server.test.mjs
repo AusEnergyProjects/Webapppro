@@ -59,7 +59,7 @@ class FixtureSocket extends EventTarget {
         this.emit({ type: "response.created", response: { id: "proposal-id" } });
         this.emit({ type: "response.done", response: { id: "proposal-id", status: "completed", output: [
           { type: "function_call", name: "wattzun_portal_reply", arguments: this.options.arguments ?? JSON.stringify({
-            reply: this.options.reply ?? answer, requestSummary: this.options.requestSummary ?? "User asks where to find Schedule.",
+            ...(this.options.reply ?? answer), requestSummary: this.options.requestSummary ?? "User asks where to find Schedule.",
           }) },
         ] } });
       }
@@ -142,11 +142,14 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   const contract = f.shared.createWattzunPortalReplyContract(options);
   assert.match(session.instructions, /Call wattzun_portal_reply exactly once for every answer, clarification or scope reminder/);
   assert.match(session.instructions, /Do not output an assistant message, text, audio or preamble/);
-  assert.deepEqual(session.tools[0].parameters.properties.reply, contract.schema);
-  assert.deepEqual(session.tools[0].parameters.required, ["reply", "requestSummary"]);
+  assert.deepEqual(session.tools[0].parameters.required, ["message", "questions", "linkIds", "action", "lookup", "requestSummary"]);
+  assert.deepEqual(Object.keys(session.tools[0].parameters.properties), session.tools[0].parameters.required);
+  for (const field of contract.schema.required) assert.deepEqual(session.tools[0].parameters.properties[field], contract.schema.properties[field]);
   assert.equal(session.tools[0].parameters.additionalProperties, false);
   assert.deepEqual(session.tools[0].parameters.properties.requestSummary, { type: "string", minLength: 1, maxLength: 1800 });
   assert.ok(session.instructions.startsWith(contract.instructions));
+  assert.match(session.instructions, /exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary/);
+  assert.match(session.instructions, /Never nest the reply content under a reply property/);
   assert.match(session.instructions, /unconfirmed interpretation.*not a verbatim transcript or verified record/);
   assert.equal(session.tool_choice, "required");
   assert.deepEqual(session.audio.input, { format: { type: "audio/pcm", rate: 24000 }, transcription: null, turn_detection: null });
@@ -187,7 +190,7 @@ test("native quote proposals discard unchecked text preambles and speak only the
     serviceCategory: "", description: "Electrical inspection", lines: [{ lineType: "labour", description: "Electrical inspection",
       quantity: "1", unitPrice: "120", taxCode: "gst" }],
   } };
-  const call = { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ reply: quote, requestSummary: "User requests a new quote for Alex Test, one inspection at $120 before GST." }) };
+  const call = { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ ...quote, requestSummary: "User requests a new quote for Alex Test, one inspection at $120 before GST." }) };
   const f = fixture({ receive: (event, socket) => {
     if (event.type === "session.update") socket.emit({ type: "session.updated", session: event.session });
     if (event.type !== "response.create") return;
@@ -207,7 +210,7 @@ test("native quote proposals discard unchecked text preambles and speak only the
 });
 
 test("preambles cannot replace a reply call or hide duplicate, audio or wrong-role output", async (t) => {
-  const call = { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ reply: answer, requestSummary: "User asks about Schedule." }) };
+  const call = { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ ...answer, requestSummary: "User asks about Schedule." }) };
   const preamble = { type: "message", role: "assistant", content: [{ type: "output_text", text: "Unchecked preamble" }] };
   for (const output of [[preamble], [preamble, call, call], [{ ...preamble, role: "user" }, call],
     [{ ...preamble, content: [{ type: "output_audio", transcript: "Unchecked audio" }] }, call]]) await t.test(`reject ${output.length} items`, async () => {
@@ -323,7 +326,7 @@ test("unconfirmed request memory preserves the task and supplied facts without b
 test("request memory has strict shape, bounds and the existing false-completion checks", async (t) => {
   for (const requestSummary of ["", "a".repeat(1801), "I have sent your quote.", "I have accessed your private records.", "User asks\u0000bad", null]) {
     await t.test(String(requestSummary).slice(0, 40), async () => {
-      const f = fixture({ arguments: JSON.stringify({ reply: answer, requestSummary }) });
+      const f = fixture({ arguments: JSON.stringify({ ...answer, requestSummary }) });
       await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);
       assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1); assert.equal(f.released(), 1);
     });
@@ -333,6 +336,43 @@ test("request memory has strict shape, bounds and the existing false-completion 
     await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);
     assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1);
   }
+});
+
+test("flat native arguments require every content field and memory before speech approval", async (t) => {
+  const complete = { ...answer, requestSummary: "User asks about Schedule." };
+  const invalid = Object.keys(complete).map(missing => {
+    const raw = { ...complete }; delete raw[missing]; return { name: `missing ${missing}`, raw };
+  });
+  invalid.push(
+    { name: "extra field", raw: { ...complete, extra: null } },
+    { name: "legacy nested wrapper", raw: { reply: answer, requestSummary: complete.requestSummary } },
+    { name: "partial clarification envelope", raw: { reply: { message: "I need more details.", questions: ["Which job?", "Which service?", "Which lines?"] }, linkIds: [], action: null, lookup: null } },
+  );
+  for (const example of invalid) await t.test(example.name, async () => {
+    let approvals = 0;
+    const f = fixture({ arguments: JSON.stringify(example.raw) });
+    await assert.rejects(f.prepareWattzunRealtimeTurn(request({ beforeSpeech: async () => { approvals++; } })), safeError);
+    assert.equal(approvals, 0);
+    assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1);
+    assert.equal(f.released(), 1);
+  });
+});
+
+test("flat record lookup retains canonical permissions, reply kind and unspoken request memory", async () => {
+  const lookup = { kind: "job", query: "JOB-TEST" };
+  const f = fixture({ reply: { ...answer, message: "Choose the matching job below.", questions: [], linkIds: [], lookup },
+    requestSummary: "User wants to open JOB-TEST." });
+  const prepared = await f.prepareWattzunRealtimeTurn(request()); await bytes(prepared.audio);
+  assert.deepEqual(prepared.reply.lookup, lookup); assert.equal(prepared.reply.kind, "answer");
+  assert.equal(prepared.requestSummary, "User wants to open JOB-TEST.");
+  const speech = f.socket.sent.filter(event => event.type === "response.create")[1].response;
+  assert.equal(speech.input[0].content[0].text, "Choose the matching job below.");
+  assert.doesNotMatch(JSON.stringify(speech), /JOB-TEST|requestSummary/);
+  const denied = fixture({ reply: { ...answer, lookup } });
+  const deniedRequest = request({ scope: { portal: "council", scopeId: "council-test", label: "Council" } });
+  deniedRequest.input = { ...deniedRequest.input, portal: "council", scopeId: "council-test" };
+  await assert.rejects(denied.prepareWattzunRealtimeTurn(deniedRequest), safeError);
+  assert.equal(denied.socket.sent.filter(event => event.type === "response.create").length, 1);
 });
 
 test("missing Upgrade, wrong negotiated PCM and server-only disabled configuration reject safely", async (t) => {
@@ -473,7 +513,7 @@ test("native preparation reports bounded stage timings and measures first argume
       socket.emit({ type: "response.function_call_arguments.delta", response_id: "proposal-id", delta: "private-customer" });
       socket.emit({ type: "response.function_call_arguments.delta", response_id: "proposal-id", delta: "private-customer-again" });
       completeProposal = () => socket.emit({ type: "response.done", response: { id: "proposal-id", status: "completed", output: [
-        { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ reply: answer, requestSummary: "User asks about Schedule." }) },
+        { type: "function_call", name: "wattzun_portal_reply", arguments: JSON.stringify({ ...answer, requestSummary: "User asks about Schedule." }) },
       ] } });
     }
   } });
@@ -496,10 +536,10 @@ test("native failure diagnostics identify validation substages using only static
   const secret = "private-customer-email@example.test-private-address-provider-private-details";
   const cases = [
     { substage: "arguments", arguments: `{${secret}`, outer: undefined },
-    { substage: "envelope", arguments: JSON.stringify({ reply: answer, requestSummary: "User asks about Schedule.", [secret]: secret }), outer: 3 },
-    { substage: "reply", arguments: JSON.stringify({ reply: { ...answer, message: `I've sent your quote. ${secret}` }, requestSummary: "User asks about Schedule." }), outer: 2 },
-    { substage: "summary", arguments: JSON.stringify({ reply: answer, requestSummary: `I've sent your quote. ${secret}` }), outer: 2 },
-    { substage: "reply", arguments: JSON.stringify({ reply: [secret], requestSummary: "User asks about Schedule." }), outer: 2 },
+    { substage: "envelope", arguments: JSON.stringify({ ...answer, requestSummary: "User asks about Schedule.", [secret]: secret }), outer: 7 },
+    { substage: "reply", arguments: JSON.stringify({ ...answer, message: `I've sent your quote. ${secret}`, requestSummary: "User asks about Schedule." }), outer: 6 },
+    { substage: "summary", arguments: JSON.stringify({ ...answer, requestSummary: `I've sent your quote. ${secret}` }), outer: 6 },
+    { substage: "reply", arguments: JSON.stringify({ ...answer, message: [secret], requestSummary: "User asks about Schedule." }), outer: 6, messageType: "array" },
   ];
   for (const example of cases) await t.test(example.substage, async () => {
     const f = fixture(example), options = request();
@@ -513,7 +553,7 @@ test("native failure diagnostics identify validation substages using only static
     assert.deepEqual(diagnostic.outputKinds, ["function_call"]); assert.equal(diagnostic.outputItemCount, 1);
     assert.equal(diagnostic.argumentLength, example.arguments.length); assert.equal(diagnostic.outerFieldCount, example.outer);
     if (diagnostic.replyFieldTypes) assert.deepEqual(diagnostic.replyFieldTypes,
-      { message: "string", questions: "array", linkIds: "array", action: "null", lookup: "null" });
+      { message: example.messageType || "string", questions: "array", linkIds: "array", action: "null", lookup: "null" });
     assert.doesNotMatch(JSON.stringify(f.errors), /private-|fixture-key|example\.test|proposal-id|speech-id|Schedule|I've sent/);
     assert.equal(f.released(), 1);
   });

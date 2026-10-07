@@ -3,8 +3,17 @@ import type { WattzunVoiceResult } from "./wattzun-portal.ts";
 import { createWattzunPcmPlayback } from "./wattzun-voice-playback.ts";
 import { createWattzunPcmCapture } from "./wattzun-pcm-capture.ts";
 
-export type WattzunCallState = "idle" | "permission" | "connecting" | "listening" | "thinking" | "speaking" | "muted" | "confirming" | "ended" | "error";
+export type WattzunCallState = "idle" | "permission" | "connecting" | "listening" | "thinking" | "speaking" | "muted" | "recovering" | "ended" | "error";
 export type WattzunCallStatus = { state: WattzunCallState; message: string };
+/** Only current identity/access failures end an otherwise usable call. */
+export class WattzunVoiceCallError extends Error {
+  readonly reason: "authentication" | "access";
+  constructor(message: string, reason: "authentication" | "access") {
+    super(message); this.name = "WattzunVoiceCallError"; this.reason = reason;
+  }
+}
+const RECOVERY_NOTICE = "I'm still here. That reply didn't come through. Please say that last part again.";
+const SHORT_QUESTION_NOTICE = "I'm still here. Please repeat that question in a shorter part.";
 export interface WattzunRecorder {
   onData: (data: Blob) => void;
   onStop: () => void;
@@ -74,12 +83,10 @@ export class WattzunVoiceCall {
   private playback: WattzunPlayback | null = null;
   private pending: AbortController | null = null;
   private muted = false;
-  private lastInteraction = 0;
-  private lastSound = -Infinity;
-  private confirmationStarted: number | null = null;
   private promptStarted = 0;
   private promptPlayback: WattzunPlayback | null = null;
-  private stopIdleWatch: (() => void) | null = null;
+  private recoveryMessage = "";
+  private stopRecoveryWatch: (() => void) | null = null;
   private readonly environment: WattzunVoiceEnvironment;
   private readonly callbacks: VoiceCallbacks;
   constructor(environment: WattzunVoiceEnvironment, callbacks: VoiceCallbacks) { this.environment = environment; this.callbacks = callbacks; }
@@ -97,6 +104,7 @@ export class WattzunVoiceCall {
     const greetingCallback = this.callbacks.greeting;
     const pending = greetingCallback ? new AbortController() : null;
     let greetingAudio: WattzunVoiceResult["audio"] | null = null;
+    let greetingFailureMessage = "Wattzun's greeting did not come through. You can still speak in this call.";
     const discardGreeting = () => {
       const audio = greetingAudio;
       greetingAudio = null;
@@ -113,8 +121,11 @@ export class WattzunVoiceCall {
       }
       greetingAudio = audio;
       return audio;
-    }, () => {
-      if (this.active && generation === this.generation && !pending.signal.aborted) this.fail("Wattzun's greeting could not be completed. Start the call again.");
+    }, error => {
+      if (this.active && generation === this.generation && !pending.signal.aborted) {
+        if (error instanceof Error) greetingFailureMessage = error.message;
+        if (error instanceof WattzunVoiceCallError) this.fail(error.message);
+      }
       return null;
     }) : null;
     try {
@@ -124,17 +135,18 @@ export class WattzunVoiceCall {
       this.microphone = microphone;
       this.update("connecting");
       if (!this.active || generation !== this.generation) return;
-      this.lastInteraction = this.environment.now();
-      this.stopIdleWatch = this.environment.repeat(() => this.checkIdle(), 1000);
       if (!greeting) { this.listen(); return; }
       microphone.mute(true);
       const audio = await greeting;
       if (!this.active || generation !== this.generation || pending?.signal.aborted) return;
       if (this.pending === pending) this.pending = null;
+      if (!audio) {
+        this.recover(greetingFailureMessage);
+        return;
+      }
       if (this.muted) { this.update("muted"); return; }
       greetingAudio = null;
-      if (!audio) { this.fail("Wattzun's greeting could not be completed. Start the call again."); return; }
-      await this.playAudio(audio, generation, "Wattzun's greeting could not play. Start the call again.");
+      await this.playAudio(audio, generation, "Wattzun's greeting could not play. You can still speak in this call.");
     } catch (error) {
       if (!this.active || generation !== this.generation) return;
       const message = error instanceof Error ? error.message : "Your microphone could not be opened.";
@@ -145,48 +157,40 @@ export class WattzunVoiceCall {
       if (this.pending === pending) this.pending = null;
     }
   }
-  private checkIdle() {
-    if (!this.active || this.pending || this.playback) return;
-    const now = this.environment.now();
-    if (this.promptPlayback) {
-      if (now - this.promptStarted >= 8000) this.finishPrompt();
-      return;
-    }
-    // Give a newly started utterance time to pass sustained-speech detection.
-    if (!this.muted && this.capture && (this.microphone?.level() || 0) >= .025) this.lastSound = now;
-    if (!this.muted && now - this.lastSound < 1000) return;
-    if (this.confirmationStarted !== null) {
-      if (now - this.confirmationStarted >= 30000) { this.cleanup(); this.update("ended", "Call ended after no response."); }
-      return;
-    }
-    if ((this.state === "listening" || this.state === "muted") && now - this.lastInteraction >= (this.muted ? 180000 : 90000)) this.askToContinue();
-  }
-  private askToContinue() {
+  private recover(message: string, notice: typeof RECOVERY_NOTICE | typeof SHORT_QUESTION_NOTICE = RECOVERY_NOTICE) {
+    if (!this.active || !this.microphone) return;
+    this.pending?.abort(); this.pending = null;
+    const playback = this.playback; this.playback = null; playback?.close();
+    this.clearRecoveryPrompt();
     this.discardCapture();
-    this.microphone?.mute(true);
-    this.update("confirming", "Would you like to continue this call?");
-    const prompt = this.environment.prompt?.("Would you like to continue this call?") || null;
-    if (!prompt) { this.finishPrompt(); return; }
+    this.microphone.mute(true);
+    if (this.muted) { this.update("muted", message); return; }
+    let prompt: WattzunPlayback | null;
+    try { prompt = this.environment.prompt?.(notice) || null; }
+    catch { prompt = null; }
+    if (!prompt) { this.listen(message); return; }
+    const generation = this.generation;
+    const finish = () => {
+      if (this.active && generation === this.generation && this.promptPlayback === prompt) this.finishRecovery();
+    };
     this.promptPlayback = prompt;
+    this.recoveryMessage = message;
     this.promptStarted = this.environment.now();
-    prompt.onEnd = () => { if (this.promptPlayback === prompt) this.finishPrompt(); };
-    prompt.onError = () => { if (this.promptPlayback === prompt) this.finishPrompt(); };
-    void prompt.play().catch(() => { if (this.promptPlayback === prompt) this.finishPrompt(); });
+    prompt.onEnd = finish; prompt.onError = finish;
+    this.stopRecoveryWatch = this.environment.repeat(() => { if (this.environment.now() - this.promptStarted >= 8000) finish(); }, 1000);
+    this.update("recovering", message);
+    if (!this.active || generation !== this.generation || this.promptPlayback !== prompt) return;
+    try { void prompt.play().catch(finish); } catch { finish(); }
   }
-  private finishPrompt() {
-    this.promptPlayback?.close(); this.promptPlayback = null;
+  private clearRecoveryPrompt() {
+    this.stopRecoveryWatch?.(); this.stopRecoveryWatch = null;
+    const prompt = this.promptPlayback; this.promptPlayback = null; prompt?.close();
+  }
+  private finishRecovery() {
+    const message = this.recoveryMessage;
+    this.clearRecoveryPrompt();
     if (!this.active) return;
-    this.confirmationStarted = this.environment.now();
-    if (this.muted) this.update("confirming", "Would you like to continue this call? Your microphone is muted. Unmute or choose Continue call.");
-    else this.listen("Would you like to continue this call? Speak or choose Continue call.", false);
-  }
-  continueCall() {
-    if (!this.active || this.state !== "confirming") return;
-    this.promptPlayback?.close(); this.promptPlayback = null;
-    this.confirmationStarted = null; this.lastInteraction = this.environment.now();
-    this.discardCapture();
-    if (this.muted) this.update("muted", "Call continued. Your microphone is still muted.");
-    else this.listen();
+    if (this.muted) this.update("muted", message); else this.listen(message);
   }
   private discardCapture() {
     const capture = this.capture;
@@ -197,9 +201,8 @@ export class WattzunVoiceCall {
     capture.stopSampling();
     capture.recorder.stop();
   }
-  private listen(message = "", resetIdle = true) {
+  private listen(message = "") {
     if (!this.active || !this.microphone || this.muted) return;
-    if (resetIdle) { this.lastInteraction = this.environment.now(); this.confirmationStarted = null; }
     try {
       this.microphone.mute(false);
       const recorder = this.microphone.recorder();
@@ -210,7 +213,10 @@ export class WattzunVoiceCall {
         if (this.capture !== capture || capture.settled || !chunk.size) return;
         capture.bytes += chunk.size;
         const limit = chunk.type === "audio/wav" ? WATTZUN_MAX_WAV_AUDIO_BYTES : WATTZUN_MAX_AUDIO_BYTES;
-        if (capture.bytes > limit) { this.fail("That voice turn was too large. Start a new call and use shorter questions."); return; }
+        if (capture.bytes > limit) {
+          this.recover("That voice turn was too large. You're still connected. Please use a shorter question.", SHORT_QUESTION_NOTICE);
+          return;
+        }
         capture.chunks.push(chunk);
       };
       recorder.onError = () => { if (this.capture === capture) this.fail("Recording stopped unexpectedly. Check your microphone and call again."); };
@@ -225,25 +231,20 @@ export class WattzunVoiceCall {
           void this.send(audio);
         } else {
           capture.chunks = [];
-          this.listen("I did not hear a question. Speak when you are ready.", false);
+          this.listen("I did not hear a question. Speak when you are ready.");
         }
       };
       recorder.start();
       capture.stopSampling = this.environment.repeat(() => {
         if (this.capture !== capture || capture.settled) return;
         const level = this.microphone?.level() || 0;
-        if (level >= .025) this.lastSound = this.environment.now();
         const decision = window.sample(level, this.environment.now());
-        if (window.hasSpeech && level >= .025) {
-          this.lastInteraction = this.environment.now();
-          if (this.confirmationStarted !== null) { this.confirmationStarted = null; this.update("listening", "Speak, then pause. Wattzun will reply."); }
-        }
         if (decision === "wait") return;
         capture.stopSampling();
         capture.submit = decision === "send";
         recorder.stop();
       }, 100);
-      this.update(this.confirmationStarted !== null ? "confirming" : "listening", message || "Speak, then pause. Wattzun will reply.");
+      this.update("listening", message || "Speak, then pause. Wattzun will reply.");
     } catch { this.fail("This browser could not record audio. Try an updated browser with microphone access."); }
   }
   private async send(audio: Blob) {
@@ -261,13 +262,13 @@ export class WattzunVoiceCall {
       this.pending = null;
       this.callbacks.reply(result);
       if (!this.active || generation !== this.generation || pending.signal.aborted) return;
-      if (this.muted) { this.lastInteraction = this.environment.now(); this.update("muted"); return; }
+      if (this.muted) { this.update("muted"); return; }
       unplayedAudio = null;
-      await this.playAudio(result.audio, generation, "Wattzun replied in chat, but the audio could not play. Start the call again.");
+      await this.playAudio(result.audio, generation, "Wattzun replied in chat, but the audio could not play. You can still speak in this call.");
     } catch (error) {
       if (!this.active || generation !== this.generation || pending.signal.aborted) return;
       const message = error instanceof Error ? error.message : "The voice reply could not be completed. Try again.";
-      this.fail(message);
+      if (error instanceof WattzunVoiceCallError) this.fail(message); else this.recover(message);
     } finally {
       if (unplayedAudio?.mimeType === "audio/pcm") void unplayedAudio.stream.cancel().catch(() => {});
       if (this.pending === pending) this.pending = null;
@@ -283,40 +284,40 @@ export class WattzunVoiceCall {
         if (this.playback !== playback || !this.active || generation !== this.generation) return;
         playback.close();
         this.playback = null;
-        if (this.muted) { this.lastInteraction = this.environment.now(); this.update("muted"); } else this.listen();
+        if (this.muted) this.update("muted"); else this.listen();
       };
-      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.fail(errorMessage); };
+      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.recover(errorMessage); };
       await playback.play().catch(error => { if (this.playback === playback) throw error; });
       if (this.playback === playback && this.active && generation === this.generation) this.update("speaking");
-    } catch { throw new Error(errorMessage); } finally {
+    } catch { if (this.active && generation === this.generation) this.recover(errorMessage); } finally {
       if (unplayed && audio.mimeType === "audio/pcm") void audio.stream.cancel().catch(() => {});
     }
   }
   toggleMute() {
     if (!this.active || !this.microphone) return;
-    this.promptPlayback?.close(); this.promptPlayback = null;
-    this.confirmationStarted = null; this.lastInteraction = this.environment.now();
+    this.clearRecoveryPrompt();
     this.muted = !this.muted;
     this.microphone.mute(true);
     if (this.muted) {
       this.discardCapture();
-      if (this.state === "listening" || this.state === "confirming") this.update("muted");
+      if (this.state === "listening" || this.state === "recovering") this.update("muted");
     } else if (!this.pending && !this.playback) this.listen();
   }
   interrupt() {
-    if (!this.active || !this.playback) return;
+    if (!this.active) return;
+    if (this.promptPlayback) { this.finishRecovery(); return; }
+    if (!this.playback) return;
     this.playback.close();
     this.playback = null;
-    if (this.muted) { this.lastInteraction = this.environment.now(); this.update("muted"); } else this.listen();
+    if (this.muted) this.update("muted"); else this.listen();
   }
   hangUp() { if (!this.active) return; this.cleanup(); this.update("ended", "Call ended. You can continue in chat."); }
   private fail(message: string) { this.cleanup(); this.update("error", message); }
   private cleanup() {
     this.active = false;
     ++this.generation;
-    this.stopIdleWatch?.(); this.stopIdleWatch = null;
-    this.promptPlayback?.close(); this.promptPlayback = null;
-    this.confirmationStarted = null;
+    this.clearRecoveryPrompt();
+    this.recoveryMessage = "";
     this.discardCapture();
     this.pending?.abort();
     this.pending = null;

@@ -20,6 +20,9 @@ const fixtures = {
   // Real presentation, opening, UI and request code runs. Only microphone/audio/provider boundaries are synthetic.
   voice: `
     export const createWattzunBrowserVoiceEnvironment = () => ({});
+    export class WattzunVoiceCallError extends Error {
+      constructor(message,reason) { super(message);this.name='WattzunVoiceCallError';this.reason=reason; }
+    }
     export class WattzunVoiceCall {
       constructor(_environment,callbacks) { this.callbacks=callbacks; this.muted=false; window.fixtureCall=this; }
       async start() {
@@ -29,7 +32,6 @@ const fixtures = {
       hangUp() { window.fixtureCounters.hungUp++; this.callbacks.status({state:'ended',message:'Call ended.'}); }
       dispose() { window.fixtureCounters.disposed++; }
       toggleMute() { this.muted=!this.muted; this.callbacks.status({state:this.muted?'muted':'listening',message:this.muted?'Microphone muted.':'Listening for your question.'}); }
-      continueCall() { this.callbacks.status({state:'listening',message:'Call continued.'}); }
       interrupt() {}
     }
   `,
