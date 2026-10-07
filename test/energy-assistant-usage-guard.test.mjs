@@ -190,6 +190,38 @@ test("unlimited product ledger cannot consume or relax the public assistant's co
   assert.equal((await ordinary.guard.reserve(reservation(6, { estimatedMicroUsd: 11 }))).reason, "invalid_estimate");
 });
 
+test("the 201st public customer stage is capped while the same caller's business conversation continues", async () => {
+  const database = new SqliteD1Database({ yieldReads: false });
+  const ordinary = fixture({ database });
+  const product = fixture({ database, clock: ordinary.clock, usageNamespace: "wattzun", dailyLimits: "unlimited" });
+  const identity = { clientKey: opaqueKey("same-browser-and-business-actor"), networkKey: opaqueKey("same-network-and-business") };
+  let publicScopes;
+  for (let index = 0; index < 200; index++) {
+    if (index && index % 20 === 0) ordinary.clock.value += 60_000;
+    const input = reservation(index, identity);
+    const customer = await ordinary.guard.reserve(input);
+    assert.equal(customer.allowed, true, `Public customer stage ${index + 1} remains within the configured 200/day`);
+    await customer.release();
+    if (index === 0) publicScopes = new Set(database.rows.keys());
+    const business = await product.guard.reserve({ ...input, estimatedMicroUsd: 100_000_001 });
+    assert.equal(business.allowed, true, `Business stage ${index + 1} uses its own ledger despite exceeding the public spend ceiling`);
+    await business.release();
+  }
+  ordinary.clock.value += 60_000;
+  const publicBefore = database.parsedStates().filter(row => publicScopes.has(row.scopeHash));
+  assert.ok(publicBefore.filter(row => row.state.kind === "counter").every(row => row.state.dayCount === 200));
+  assert.equal(publicBefore.find(row => row.state.kind === "global").state.dailyReservedMicroUsd, 200);
+  const next = reservation(200, identity);
+  assert.equal((await ordinary.guard.reserve(next)).reason, "client_day");
+  const businessNext = await product.guard.reserve({ ...next, estimatedMicroUsd: 100_000_001 });
+  assert.equal(businessNext.allowed, true, "A capped customer request does not stop the authenticated business conversation");
+  await businessNext.release();
+  assert.deepEqual(database.parsedStates().filter(row => publicScopes.has(row.scopeHash)), publicBefore);
+  assert.equal(database.rows.size, 6);
+  assert.ok(database.parsedStates().filter(row => !publicScopes.has(row.scopeHash) && row.state.kind === "counter")
+    .every(row => row.state.dayCount === 201));
+});
+
 test("unlimited daily policy still rejects bursts, concurrency and duplicate requests without consuming state", async t => {
   for (const [reason, limit, sharedKey] of [
     ["client_minute", "SURGE_CLIENT_MINUTE_LIMIT", "clientKey"],

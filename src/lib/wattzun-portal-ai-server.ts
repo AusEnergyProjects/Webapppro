@@ -118,13 +118,19 @@ function firstLogicalQuestion(value: string): string {
   const first = value.split("?")[0].trim().replace(/\s+and\s+(?=(?:what|who|where|which|how|when|can|could|would|do|does|is|are)\b)[\s\S]*$/i, "");
   // Customer intake fields are distinct answers even when the model packs them
   // into one grammatical question. Date and time, or alternative jobs, are one selection.
+  const address = /(?<!email )(?<!e-mail )\b(?:street |property )?address\b/i;
+  const addressMatch = address.exec(first);
+  const components = addressMatch && /^\s*\(([^()]{1,160})\)/.exec(first.slice(addressMatch.index + addressMatch[0].length));
+  const addressComponents = new Set(["unit", "number", "street", "name", "suburb", "postcode", "postal", "code", "state", "territory", "city", "town", "house", "building", "floor", "level", "lot", "and", "or"]);
+  const addressEnd = addressMatch ? addressMatch.index + addressMatch[0].length
+    + (components && components[1].split(/[\s,/]+/).filter(Boolean).every(word => addressComponents.has(word.toLowerCase())) ? components[0].length : 0) : -1;
   const fields = [
-    /\b(?:full name|name)\b/i, /\b(?:email|e-mail)\b/i, /\b(?:phone|mobile|telephone)\b/i,
-    /(?<!email )(?<!e-mail )\b(?:street |property )?address\b/i, /\b(?:service category|trade category)\b/i,
+    /\b(?:full name|(?<!street )(?<!road )name)\b/i, /\b(?:email|e-mail)\b/i, /\b(?:phone|mobile|telephone)\b/i,
+    address, /\b(?:service category|trade category)\b/i,
     /\b(?:scope|work description)\b/i, /\bquantity\b/i, /\b(?:unit )?price\b/i,
-    /(?<!before )(?<!ex-)\b(?:GST|tax treatment|tax code)\b/i, /\b(?:postcode|postal code)\b/i,
+    /(?<!before )(?<!ex-)\b(?:GST|tax treatment|tax code)\b/i, ...(!addressMatch ? [/\b(?:postcode|postal code)\b/i] : []),
     /\b(?:household )?income\b/i, /\bage\b/i, /\bgender\b/i,
-  ].flatMap(pattern => { const match = pattern.exec(first); return match ? [{ index: match.index, end: match.index + match[0].length }] : []; })
+  ].flatMap(pattern => { const match = pattern.exec(first); return match ? [{ index: match.index, end: pattern === address ? addressEnd : match.index + match[0].length }] : []; })
     .sort((a, b) => a.index - b.index);
   if (fields.length > 1 && !/\b(?:relationship|relate|compare|impact|affect|influence|difference|correlate)\b/i.test(first)) {
     const separator = /,|\band\b/i.exec(first.slice(fields[0].end, fields[1].index));
@@ -134,16 +140,17 @@ function firstLogicalQuestion(value: string): string {
 }
 
 function intakeRequestSentence(message: string): { index: number; question: string } | null {
-  const requests = message.matchAll(/(?:^|[.!?]\s+|\n+)((?:(?:please\s+)?(?:provide|tell\s+me|confirm)|I\s+need|I(?:'|’)ll\s+need|I\s+will\s+need)\b[^\n]*?)(?=[.!?](?:\s|$)|\n|$)/gi);
+  const requests = message.matchAll(/(?:^|[.!?]\s+|\n+)((?:(?:next|first up)[,:]?\s+)?(?:(?:please\s+)?(?:provide|tell\s+me|confirm)|I\s+(?:just\s+)?need|I(?:'|’)ll\s+need|I\s+will\s+need)\b[^\n]*?)(?=[.!?](?:\s|$)|\n|$)/gi);
   for (const request of requests) {
     const content = request[1];
+    const core = content.replace(/^(?:next|first up)[,:]?\s+/i, "");
     // Planning and negated needs describe the assistant's work, not a request
     // for the user to supply one of these fields.
-    if (/^(?:I\s+need|I(?:'|’)ll\s+need|I\s+will\s+need)\s+(?:to|no|nothing)\b/i.test(content)) continue;
-    if (!/\b(?:name|email|e-mail|phone|mobile|telephone|address|category|scope|quantity|price|GST|postcode|income)\b/i.test(content)) continue;
+    if (/^(?:I\s+(?:just\s+)?need|I(?:'|’)ll\s+need|I\s+will\s+need)\s+(?:to|no|nothing)\b/i.test(core)) continue;
+    if (!/\b(?:name|email|e-mail|phone|mobile|telephone|address|category|scope|quantity|price|GST|postcode|income)\b/i.test(core)) continue;
     const index = request.index + request[0].indexOf(content);
-    const wording = content.replace(/^(?:please\s+)?confirm\s+/i, "Could you confirm ")
-      .replace(/^(?:(?:please\s+)?(?:provide|tell\s+me)|I\s+need|I(?:'|’)ll\s+need|I\s+will\s+need)\s+/i, "What is ");
+    const wording = core.replace(/^(?:please\s+)?confirm\s+/i, "Could you confirm ")
+      .replace(/^(?:(?:please\s+)?(?:provide|tell\s+me)|I\s+(?:just\s+)?need|I(?:'|’)ll\s+need|I\s+will\s+need)\s+/i, "What is ");
     return { index, question: firstLogicalQuestion(wording) };
   }
   return null;

@@ -159,6 +159,64 @@ function safeError(error) {
   return true;
 }
 
+test("a valid read-only email turn confirms the exact heard mailbox before advancing quote intake", async () => {
+  for (const [transcript, email] of [
+    ["The test customer's email is wajun-qa@example.invalid.", "wajun-qa@example.invalid"],
+    ["The email is field dot test at example dot invalid.", "field.test@example.invalid"],
+  ]) {
+    const f = fixture({ transcript, requestSummary: "The customer's email is wa-john.qa@example.invalid.",
+      reply: { ...answer, message: "The email is wa-john.qa@example.invalid. Next, I need the site address.",
+        questions: ["What is the full street address (unit/number, street name, suburb and postcode)?"], linkIds: [] } });
+    const previous = { kind: "prepare_quote", firstName: "Morgan", lastName: "Example", email: "", phone: "0412345678", addressQuery: "",
+      serviceCategory: "Electrical", description: "One outdoor wall light", lines: [{ lineType: "product", description: "Wall light", quantity: "1", unitPrice: "150", taxCode: "gst" }] };
+    const history = wattzunConversationHistory([{ role: "user", content: "Prepare Morgan Example a quote for an outdoor light." },
+      { role: "assistant", content: "What is the customer's email address?", reply: { kind: "clarification", message: "Okay.",
+        questions: ["What is the customer's email address?"], links: [], action: previous } }]);
+    let current = "", admitted = 0;
+    const options = request({ transformReply: async (reply, heard) => { current = heard; return reply; }, beforeSpeech: async () => { admitted++; } });
+    options.input.history = history;
+    const prepared = await f.prepareWattzunRealtimeTurn(options); await bytes(prepared.audio);
+    assert.equal(prepared.reply.message, `Email: ${email}.`);
+    assert.deepEqual(prepared.reply.questions, ["Is that email address correct?"]);
+    assert.equal(prepared.reply.action, undefined); assert.equal(prepared.reply.lookup, undefined);
+    assert.equal(prepared.requestSummary, transcript); assert.equal(prepared.transcript, transcript); assert.equal(current, transcript);
+    assert.equal(admitted, 1); assert.equal(f.calls.length, 1); assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 2,
+      "Confirmation changes only the validated speech, without another provider proposal");
+    const context = JSON.parse(f.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text);
+    assert.deepEqual(context.conversation, history); assert.ok(JSON.stringify(context.conversation).includes('Wall light'));
+    const speech = f.socket.sent.find(event => event.type === "response.create" && event.response.output_modalities[0] === "audio").response.input[0].content[0].text;
+    assert.equal(speech, narration.wattzunNativeSpokenReply(prepared.reply));
+    assert.doesNotMatch(speech, /wa-john|site address|street address/);
+    assert.doesNotMatch(JSON.stringify(f.infos), /wajun-qa|field.test|Morgan/);
+  }
+});
+
+test("heard-email readback cannot replace action authority, lookups, canonical form narration or saved receipts", async () => {
+  const transcript = "The customer's email is field.test@example.invalid.";
+  const action = { kind: "prepare_quote", firstName: "Morgan", lastName: "Example", email: "field.test@example.invalid", phone: "",
+    addressQuery: "", serviceCategory: "Electrical", description: "One wall light", lines: [] };
+  const capability = fixture({ transcript, reply: { ...answer, action } });
+  const proposed = await capability.prepareWattzunRealtimeTurn(request()); await bytes(proposed.audio);
+  assert.deepEqual(proposed.reply.action, action); assert.deepEqual(proposed.reply.questions, ["What is the customer's mobile number?"]);
+  const lookup = fixture({ transcript, reply: { ...answer, lookup: { kind: "job", query: "TL-TEST" } } });
+  const located = await lookup.prepareWattzunRealtimeTurn(request()); await bytes(located.audio);
+  assert.deepEqual(located.reply.lookup, { kind: "job", query: "TL-TEST" });
+  for (const transformed of [
+    { kind: "answer", message: "Saved. Is the site supply isolated?", questions: [], links: [], formGuide: { state: "question" } },
+    { kind: "answer", message: "I saved the reviewed item.", questions: [], links: [], workflow: { state: "complete", receipt: { message: "I saved the reviewed item." } } },
+  ]) {
+    const f = fixture({ transcript });
+    const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async () => transformed })); await bytes(prepared.audio);
+    assert.deepEqual(prepared.reply, transformed);
+  }
+  for (const heard of ["Send field.test@example.invalid a quote.", "The email is field.test@example.invalid and the mobile is 0412345678."]) {
+    const f = fixture({ transcript: heard, reply: { ...answer, message: "What is the site address?", questions: ["What is the site address?"], linkIds: [] } });
+    const prepared = await f.prepareWattzunRealtimeTurn(request()); await bytes(prepared.audio);
+    assert.deepEqual(prepared.reply.questions, ["What is the site address?"]);
+    assert.doesNotMatch(prepared.reply.message, /^Email:/);
+  }
+});
+
 test("rejected customer-shaped quote is corrected on the same audio conversation before execution", async () => {
   const proposal = { kind: "prepare_quote", firstName: "Morgan", lastName: "Example", email: "wattzun-qa@example.invalid", phone: "",
     addressQuery: "152 Elizabeth Street, Melbourne VIC 3000", serviceCategory: "Electrical", description: "One outdoor wall light", lines: [] };

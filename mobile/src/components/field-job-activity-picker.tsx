@@ -15,8 +15,8 @@ type Catalogue = {
   programs: { id: string; code: string; label: string }[]; activities: Activity[]; rentalModules: Choice[]; rentalVisits?: Choice[];
 };
 
-export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
-  workOrderId: string; online: boolean; onChanged: () => Promise<void>;
+export function FieldJobActivityPicker({ workOrderId, online, onChanged, onOpenElectricalAssessment }: {
+  workOrderId: string; online: boolean; onChanged: () => Promise<void>; onOpenElectricalAssessment: (recordId: string) => void;
 }) {
   const apiRequest = useBusinessApi();
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
@@ -72,7 +72,7 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged }: {
         { value: 'rental', label: 'Rental inspections and safety checks' },
         ...catalogue.programs.map((program) => ({ value: program.id, label: program.label })),
       ]} onChange={(value) => { setGroup(value); setSelection(''); setPremises(''); setMessage(''); }} />
-      {group === 'veu_electrical' ? <FieldVeuElectricalAssessmentPicker key={workOrderId} workOrderId={workOrderId} online={online} onChanged={onChanged} /> : <>
+      {group === 'veu_electrical' ? <FieldVeuElectricalAssessmentPicker key={workOrderId} workOrderId={workOrderId} online={online} onChanged={onChanged} onOpen={onOpenElectricalAssessment} /> : <>
       <FieldSelect label={group === 'rental_visit' ? 'Visit bundle' : group === 'rental' ? 'Assessment' : 'Activity'} placeholder="Choose the form to add" value={selection} disabled={busy || !online}
         options={choices.map((choice) => ({ value: choice.id, label: `${choice.title}${choice.added ? ' (already added)' : choice.unavailableReason ? ' (unavailable)' : ''}` }))}
         onChange={(value) => { setSelection(value); setMessage(''); }} />

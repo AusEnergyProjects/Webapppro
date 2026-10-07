@@ -708,7 +708,20 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     diagnostic.phase = "approval"; diagnostic.substage = "approval";
     const approvalStarted = performance.now();
     try {
+      const hadCapability = Boolean(reply.action || reply.lookup);
       if (options.transformReply) reply = await abortable(options.transformReply(reply, currentRequest), signal);
+      // A single heard mailbox answer is more authoritative than the model's
+      // paraphrased readback. Confirm it before advancing intake, without
+      // intercepting an action, lookup, canonical form step or saved receipt.
+      if (options.scope.portal === "trade" && !hadCapability && !reply.action && !reply.lookup
+        && !options.input.formGuide && !options.formGuideProgress && !reply.formGuide && reply.workflow?.state !== "complete") {
+        const email = wattzunHeardEmailClarification(heardTranscript);
+        if (email) {
+          reply = { ...reply, kind: email.kind, message: email.message, questions: email.questions, links: email.links };
+          requestSummary = heardTranscript;
+          validatedRequestSummary = requestSummary;
+        }
+      }
       if (!options.formGuideProgress) reply = enforceWattzunVoiceNextQuestion(reply);
       await abortable(options.beforeSpeech(), signal);
     }

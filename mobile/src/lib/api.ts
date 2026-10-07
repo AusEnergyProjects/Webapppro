@@ -153,6 +153,71 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
   return body as T;
 }
 
+/** Private assessment files use the same device and selected-business authority as their form. */
+export async function downloadElectricalAssessmentFile(
+  recordId: string, view: 'pdf' | 'evidence', expectedBusinessKey: string, evidenceId = '',
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(recordId) || !expectedBusinessKey || (view !== 'pdf' && view !== 'evidence')
+    || (view === 'evidence' && !/^[A-Za-z0-9_-]{1,160}$/.test(evidenceId))) {
+    throw new ApiError('This assessment file request is invalid.', 400, 'PIESA_FILE_REQUEST_INVALID');
+  }
+  const revision = businessSessionRevision();
+  const assertBusiness = () => {
+    if (revision !== businessSessionRevision()) throw new ApiError('Your business changed. Reopen this assessment.', 409, 'BUSINESS_CHANGED');
+  };
+  const headers = await authenticatedHeaders({}, undefined, false, expectedBusinessKey);
+  assertBusiness();
+  const path = `/api/trade-veu-electrical-assessments?recordId=${encodeURIComponent(recordId)}&view=${view}${view === 'evidence' ? `&evidenceId=${encodeURIComponent(evidenceId)}` : ''}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REPORT_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await expoFetch(`${API_BASE_URL}${path}`, { method: 'GET', headers, redirect: 'error', signal: controller.signal });
+    assertBusiness();
+    if (!response.ok) {
+      const body = await responseBody(response);
+      throw new ApiError(String(body.error || 'The assessment file could not be saved.'), response.status, String(body.code || 'PIESA_FILE_UNAVAILABLE'));
+    }
+    const contentType = (response.headers.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
+    const maximum = 12 * 1024 * 1024;
+    const advertised = response.headers.get('content-length');
+    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(contentType) || (view === 'pdf' && contentType !== 'application/pdf')
+      || (advertised !== null && (!/^\d+$/.test(advertised) || Number(advertised) > maximum))) {
+      throw new ApiError('The assessment file was not a supported document.', 409, 'PIESA_FILE_INVALID');
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new ApiError('The assessment document is empty.', 409, 'PIESA_FILE_INVALID');
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const chunk = await reader.read();
+        assertBusiness();
+        if (chunk.done) break;
+        size += chunk.value.byteLength;
+        if (size > maximum) throw new ApiError('The assessment file is too large.', 413, 'PIESA_FILE_INVALID');
+        chunks.push(chunk.value);
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    } finally { reader.releaseLock(); }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    assertBusiness();
+    const actualType = new TextDecoder().decode(bytes.subarray(0, 5)) === '%PDF-' ? 'application/pdf'
+      : bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
+        : bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png' : '';
+    if (bytes.length < 5 || actualType !== contentType || (advertised !== null && Number(advertised) !== bytes.length)) {
+      throw new ApiError('The assessment document could not be verified.', 409, 'PIESA_FILE_INVALID');
+    }
+    return { bytes, contentType };
+  } catch (error) {
+    if (controller.signal.aborted) throw new ApiError('The assessment file download took too long. Try saving the file again.', 408, 'NETWORK_TIMEOUT');
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+
 /** In-memory authorization for one mounted calling session, never field-data storage. */
 export type TeamCallAnswerAccess = { answerToken: string; callId: string; threadId: string };
 

@@ -15,7 +15,8 @@ const record = { id: 'assessment-one', workOrderId: 'job / one', recordNumber: '
 function harness({ code = picker, entry = 'FieldVeuElectricalAssessmentPicker', response = { records: [], canManage: true }, online = true } = {}) {
   const slots = [], effects = [], pending = []; let cursor = 0, tree, unmounted = false;
   const listeners = new Set();
-  const state = { response, requests: [], links: [], changes: 0, states: [], props: { workOrderId: record.workOrderId, online,
+  const state = { response, requests: [], links: [], opened: [], changes: 0, states: [], props: { workOrderId: record.workOrderId, online,
+    onOpen: value => state.opened.push(value), onOpenElectricalAssessment: value => state.opened.push(value),
     onStateChange: value => state.states.push(value),
     onChanged: async () => { state.changes++; if (state.changeError) throw state.changeError; } } };
   const same = (a, b) => a && b && a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
@@ -82,12 +83,11 @@ test('attaching uses the real assessment start API once and retains the verified
   h.cleanup();
 });
 
-test('an existing form opens the exact job editor without another attachment', async () => {
+test('an existing form selects the exact native assessment without a browser or another attachment', async () => {
   const h = harness({ response: { records: [record], canManage: true } }); h.render(); await flush(); h.render();
   h.button('Open assessment').props.onPress(); await flush();
-  assert.deepEqual(h.state.links, ['https://fixture.invalid/direct-trade/dashboard?workspace=work&jobId=job%20%2F%20one&jobTab=field#job-files-electrical-assessments']);
+  assert.deepEqual(h.state.opened, [record.id]); assert.deepEqual(h.state.links, []);
   assert.equal(h.state.requests.filter(request => request.init.method === 'POST').length, 0);
-  h.state.linkError = new Error('No handler'); h.button('Open assessment').props.onPress(); await flush(); h.render(); assert.match(h.texts(), /browser could not open/);
   h.cleanup();
 });
 
@@ -137,12 +137,20 @@ test('the attached-only job summary reveals an existing PIESA and never offers a
   assert.equal(empty.render(), null); assert.deepEqual(empty.state.states.at(-1), { workOrderId: record.workOrderId, state: 'empty' }); empty.cleanup();
 });
 
-test('returning from the browser refreshes canonical completion status for the same job', async () => {
+test('returning to the foreground refreshes canonical completion status for the same job', async () => {
   const h = harness({ response: { records: [record], canManage: true } }); h.state.props.mode = 'attached'; h.render(); await flush(); h.render();
   h.appState('background'); h.state.response = { records: [{ ...record, status: 'complete' }], canManage: true };
   h.appState('active'); h.render(); await flush(); h.render();
   assert.equal(h.state.requests.length, 2); assert.match(h.texts(), /Completed/); assert.equal(h.button('Add to this job'), undefined);
   h.appState('active'); h.render(); await flush(); assert.equal(h.state.requests.length, 2, 'Repeated active events do not reload'); h.cleanup();
+});
+
+test('Files lists completed assessment records and opens their native PDF summary only', async () => {
+  const h = harness({ response: { records: [record, { ...record, id: 'completed-assessment', status: 'complete' }], canManage: true } });
+  h.state.props.mode = 'files'; h.render(); await flush(); h.render();
+  assert.equal(h.button('Open assessment'), undefined); assert.equal(h.button('Add to this job'), undefined);
+  h.button('View completed assessment').props.onPress(); assert.deepEqual(h.state.opened, ['completed-assessment']);
+  assert.deepEqual(h.state.links, []); h.cleanup();
 });
 
 test('job overview mounts the shared attached-only assessment before the empty state', () => {

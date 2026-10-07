@@ -81,7 +81,8 @@ function renderJobCard(title, overrides = {}) {
   const destinations = [];
   const jsx = (type, props, ...children) => ({ type, props: { ...props, children } });
   const dependencies = { React: { createElement: jsx, Fragment: 'Fragment' }, View: 'View', Text: 'Text', TextInput: 'TextInput', FieldButton: 'FieldButton', Pressable: 'Pressable',
-    FieldSwmsFiles: 'FieldSwmsFiles', styles: {}, job: { id: 'job', media: [] }, busy: '', syntheticManual: false, complianceCases: [], creditexManual: false,
+    FieldSwmsFiles: 'FieldSwmsFiles', FieldVeuElectricalAssessmentPicker: 'FieldVeuElectricalAssessmentPicker', setElectricalAssessmentId() {},
+    syncNow: async () => {}, load: async () => {}, styles: {}, job: { id: 'job', media: [] }, busy: '', syntheticManual: false, complianceCases: [], creditexManual: false,
     sync: { online: true }, duration: '', notes: '', setDuration() {}, setNotes() {}, setActiveFormId: value => destinations.push(value), ...overrides };
   const code = ts.transpileModule('const tree = (' + card.getText(ast) + ');', { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
   const tree = Function(...Object.keys(dependencies), code + ';return tree;')(...Object.values(dependencies));

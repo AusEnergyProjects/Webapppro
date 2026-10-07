@@ -1,7 +1,6 @@
 import { useBusinessApi } from '@/lib/use-business-api';
-import { API_BASE_URL } from '@/lib/config';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Linking, StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 
 import { colours, spacing } from '@/lib/theme';
 import { FieldButton } from './field-button';
@@ -11,8 +10,8 @@ type Result = { records: Assessment[]; canManage: boolean };
 export type FieldElectricalAssessmentState = { workOrderId: string; state: 'loading' | 'attached' | 'empty' | 'unavailable' };
 const endpoint = '/api/trade-veu-electrical-assessments';
 
-export function FieldVeuElectricalAssessmentPicker({ workOrderId, online, onChanged, mode = 'library', onStateChange }: {
-  workOrderId: string; online: boolean; onChanged: () => Promise<void>; mode?: 'library' | 'attached';
+export function FieldVeuElectricalAssessmentPicker({ workOrderId, online, onChanged, onOpen, mode = 'library', onStateChange }: {
+  workOrderId: string; online: boolean; onChanged: () => Promise<void>; onOpen: (recordId: string) => void; mode?: 'library' | 'attached' | 'files';
   onStateChange?: (state: FieldElectricalAssessmentState) => void;
 }) {
   const apiRequest = useBusinessApi();
@@ -63,22 +62,14 @@ export function FieldVeuElectricalAssessmentPicker({ workOrderId, online, onChan
     } catch (caught) { if (current.current.alive) setError(caught instanceof Error ? caught.message : 'The assessment could not be added.'); }
     finally { current.current.busy = false; if (current.current.alive) setBusy(false); }
   }
-  async function open() {
-    try {
-      await Linking.openURL(`${API_BASE_URL}/direct-trade/dashboard?workspace=work&jobId=${encodeURIComponent(workOrderId)}&jobTab=field#job-files-electrical-assessments`);
-    } catch { if (current.current.alive) setError('Your browser could not open the assessment. Try again.'); }
-  }
-
-  if (mode === 'attached' && !records.length && !loading && !error && online) return null;
+  const visibleRecords = mode === 'files' ? records.filter(record => record.status === 'complete') : records;
+  if (mode !== 'library' && !visibleRecords.length && !loading && !error && online) return null;
   return <View style={styles.section}>
     <Text style={styles.title}>Pre-installation electrical safety assessment (Insulation)</Text>
     <Text style={styles.help}>PIESA: the official Victorian form for insulation electrical safety checks, evidence and signatures.</Text>
     {loading ? <Text style={styles.help}>Loading this job&apos;s assessment...</Text> : null}
-    {records.map(record => <Text key={record.id} style={styles.help}>{record.recordNumber} · {record.status === 'complete' ? 'Completed' : 'Added to this job'}</Text>)}
-    {records.length ? <>
-      <Text style={styles.help}>Open the assessment to answer its questions, take evidence photos and sign. Your browser may ask you to sign in.</Text>
-      <FieldButton variant="secondary" disabled={!online || busy} onPress={() => void open()}>Open assessment</FieldButton>
-    </> : mode === 'library' && !loading && canManage ? <FieldButton disabled={!online || busy} onPress={() => void add()}>{busy ? 'Adding assessment...' : 'Add to this job'}</FieldButton> : mode === 'library' && !loading && online && !error ? <Text style={styles.help}>Your access does not include adding job assessments.</Text> : null}
+    {visibleRecords.map(record => <View key={record.id} style={styles.section}><Text style={styles.help}>{record.recordNumber} · {record.status === 'complete' ? 'Completed assessment PDF' : 'Added to this job'}</Text><FieldButton variant="secondary" disabled={!online || busy} onPress={() => onOpen(record.id)}>{record.status === 'complete' ? 'View completed assessment' : 'Open assessment'}</FieldButton></View>)}
+    {visibleRecords.length ? <Text style={styles.help}>Answer the questions, attach evidence, sign and finish the assessment here in TLink.</Text> : mode === 'library' && !loading && canManage ? <FieldButton disabled={!online || busy} onPress={() => void add()}>{busy ? 'Adding assessment...' : 'Add to this job'}</FieldButton> : mode === 'library' && !loading && online && !error ? <Text style={styles.help}>Your access does not include adding job assessments.</Text> : null}
     {!online ? <Text style={styles.help}>{mode === 'attached' ? 'Connect to check this job’s electrical safety assessment.' : 'Connect to add or open this assessment.'}</Text> : null}
     {error ? <><Text style={styles.error}>{error}</Text><FieldButton variant="quiet" disabled={!online || busy || loading} onPress={() => setLoadAttempt(value => value + 1)}>Refresh assessment</FieldButton></> : null}
     {message ? <Text accessibilityLiveRegion="polite" style={styles.success}>{message}</Text> : null}

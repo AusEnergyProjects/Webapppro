@@ -24,6 +24,7 @@ import { FieldButton } from '@/components/field-button';
 import { FieldCommercialWorkspace } from '@/components/field-commercial-workspace';
 import { FieldFormLibrary } from '@/components/field-form-library';
 import { FieldVeuElectricalAssessmentPicker, type FieldElectricalAssessmentState } from '@/components/field-veu-electrical-assessment-picker';
+import { FieldVeuElectricalAssessmentWizard } from '@/components/FieldVeuElectricalAssessmentWizard';
 import { FieldSwmsFiles, FieldSwmsForm, type SwmsPayload } from '@/components/field-swms-form';
 import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflow';
 import { subscribeRentalSaves } from '@/lib/rental-save-queue';
@@ -308,6 +309,7 @@ export default function JobScreen() {
   const [locallyFinishedActivityIntentIds, setLocallyFinishedActivityIntentIds] = useState<string[]>([]);
   const [activityLoadError, setActivityLoadError] = useState('');
   const [electricalAssessmentState, setElectricalAssessmentState] = useState<FieldElectricalAssessmentState | null>(null);
+  const [electricalAssessmentId, setElectricalAssessmentId] = useState<string | null>(null);
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
   const pickingDocument = useRef(false);
@@ -1299,6 +1301,7 @@ export default function JobScreen() {
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   const creditexManual = job.fieldLane === 'creditex_manual';
   const syntheticManual = job.recordMode === 'synthetic_test' && creditexManual;
+  if (!creditexManual && electricalAssessmentId) return <Screen scroll={false} style={{ padding: 0 }}><FieldVeuElectricalAssessmentWizard key={`${job.id}:${electricalAssessmentId}`} workOrderId={job.id} recordId={electricalAssessmentId} online={sync.online} onReturnToJob={() => { setElectricalAssessmentId(null); void load(); }} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
   if (!creditexManual && complianceIntents.some((intent) => intent.id === activeFormId)) return <Screen scroll={false} style={{ padding: 0 }}><ActivityFieldFormWizard key={activeFormId} workOrderId={job.id} intentId={activeFormId!} variantId={complianceIntents.find((intent) => intent.id === activeFormId)?.variantId || ''} online={sync.online} onReturnToJob={() => { setActiveFormId(null); void load(); }} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
   const selectedBusinessForm = fieldForms.find((form) => form.id === activeFormId);
   if (selectedBusinessForm) return <Screen><JobFieldForm key={selectedBusinessForm.id} form={selectedBusinessForm} workOrderId={job.id} busy={busy === 'form:' + selectedBusinessForm.id} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></Screen>;
@@ -1332,7 +1335,7 @@ export default function JobScreen() {
 
       {!activeFormId ? <View style={styles.card}>
         <Text style={styles.cardTitle}>{['completed', 'cancelled'].includes(job.stage) ? 'Job forms' : 'Forms to complete'}</Text>
-        {!creditexManual ? <FieldVeuElectricalAssessmentPicker key={job.id} workOrderId={job.id} online={sync.online} mode="attached" onStateChange={setElectricalAssessmentState} onChanged={async () => { await syncNow(); await load(); }} /> : null}
+        {!creditexManual ? <FieldVeuElectricalAssessmentPicker key={job.id} workOrderId={job.id} online={sync.online} mode="attached" onStateChange={setElectricalAssessmentState} onOpen={setElectricalAssessmentId} onChanged={async () => { await syncNow(); await load(); }} /> : null}
         {activityLoadError ? <Text style={styles.meta}>{activityLoadError}</Text> : null}
         {complianceIntents.map((intent) => {
           const pack = (job.activityWorkPacks || []).find((item) => item.instance.complianceIntentId === intent.id);
@@ -1405,11 +1408,12 @@ export default function JobScreen() {
       </View> : null}
 
 
-      {!creditexManual && activeFormId === 'form-library' ? <FieldFormLibrary workOrderId={job.id} serviceCategory={job.serviceCategory} online={sync.online} onBack={() => setActiveFormId(null)} onChanged={async () => { await syncNow(); await load(); }} /> : null}
+      {!creditexManual && activeFormId === 'form-library' ? <FieldFormLibrary workOrderId={job.id} serviceCategory={job.serviceCategory} online={sync.online} onBack={() => setActiveFormId(null)} onOpenElectricalAssessment={setElectricalAssessmentId} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
       {!creditexManual && activeFormId === 'swms' && swmsDraft?.record?.workOrderId === job.id ? <FieldSwmsForm key={swmsDraft.record.id} initial={{ ...swmsDraft, record: swmsDraft.record }} online={sync.online} onBack={() => { setSwmsDraft(null); setActiveFormId('files'); }} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
       {activeFormId === 'files' ? <View style={styles.card}>
+        {!creditexManual ? <FieldVeuElectricalAssessmentPicker key={job.id} workOrderId={job.id} online={sync.online} mode="files" onOpen={setElectricalAssessmentId} onChanged={async () => { await syncNow(); await load(); }} /> : null}
         <FieldButton variant="secondary" onPress={() => setActiveFormId(null)}>Job</FieldButton>
         <Text style={styles.label}>FIELD EVIDENCE</Text><Text style={styles.cardTitle}>Photos and documents</Text>
         <Text style={styles.body}>Photos and documents save securely on this device and upload when connected. Use the matching requirement below for program evidence.</Text>

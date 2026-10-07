@@ -1002,6 +1002,11 @@ test('native voice asks one logical question including embedded prose and multip
     ['I can help.', ['What is the council program name and email address for the responsible officer?'], 'I can help.', 'What is the council program name?'],
     ['I can help.', ['What is the supplier name and email address?'], 'I can help.', 'What is the supplier name?'],
     ['I can help.', ['What is the postcode and household income?'], 'I can help.', 'What is the postcode?'],
+    ['I can help.', ['Please provide the full street address (unit/number, street name, suburb and postcode)?'], 'I can help.', 'Please provide the full street address (unit/number, street name, suburb and postcode)?'],
+    ['I can help.', ['What is the site address and postcode?'], 'I can help.', 'What is the site address and postcode?'],
+    ['I can help.', ['What is the full street address (unit/number, street name, suburb and postcode) and mobile number?'], 'I can help.', 'What is the full street address (unit/number, street name, suburb and postcode)?'],
+    ['I can help.', ['What is the email address and postcode?'], 'I can help.', 'What is the email address?'],
+    ['I can help.', ['What is the street address and customer name?'], 'I can help.', 'What is the street address?'],
     ['I can help.', ['How does the relationship between postcode and household income affect upgrades?'], 'I can help.', 'How does the relationship between postcode and household income affect upgrades?'],
     ['I found two matching jobs.', ['Did you mean Alex at 12 Main Street or Jane at 20 Example Road?'], 'I found two matching jobs.', 'Did you mean Alex at 12 Main Street or Jane at 20 Example Road?'],
   ]) {
@@ -1025,6 +1030,9 @@ test('imperative intake prose cannot ask extra fields beside the one spoken ques
     ['I can help. I need the customer email, phone and street address to continue.', [], 'I can help.', 'What is the customer email?'],
     ['Please provide the customer’s email address and mobile number.', ["What is the customer's email address?"], 'Okay.', "What is the customer's email address?"],
     ['I can help. Please confirm the supplier name and email address.', [], 'I can help.', 'Could you confirm the supplier name?'],
+    ['Next, I need the site address.', ['What is the full street address?'], 'Okay.', 'What is the full street address?'],
+    ['Thanks. Next, I need the site address.', [], 'Thanks.', 'What is the site address?'],
+    ['First up, I just need the name and mobile number.', [], 'Okay.', 'What is the name?'],
   ]) {
     const reply = f.enforceWattzunVoiceNextQuestion({ kind: 'answer', message, questions, links: [] });
     assert.equal(reply.message, expectedMessage); assert.deepEqual(reply.questions, [expectedQuestion]);
@@ -1036,6 +1044,8 @@ test('imperative intake prose cannot ask extra fields beside the one spoken ques
     ['I need to check the email address on the selected job. What is the scope?', 'I need to check the email address on the selected job.', ['What is the scope?']],
     ['I need to compare postcode and household income before choosing the programme.', 'I need to compare postcode and household income before choosing the programme.', []],
     ['I need no further email details. What is the mobile number?', 'I need no further email details.', ['What is the mobile number?']],
+    ['Next, I just need to check the email address on the selected job. What is the scope?', 'Next, I just need to check the email address on the selected job.', ['What is the scope?']],
+    ['First up, I need no further email details. What is the mobile number?', 'First up, I need no further email details.', ['What is the mobile number?']],
   ]) {
     const reply = f.enforceWattzunVoiceNextQuestion({ kind: 'answer', message, questions: [], links: [] });
     assert.equal(reply.message, expectedMessage); assert.deepEqual(reply.questions, expectedQuestions);

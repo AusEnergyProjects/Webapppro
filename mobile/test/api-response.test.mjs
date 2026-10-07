@@ -98,6 +98,6 @@ test('a malformed 200 response is never accepted as a successful record', async 
       && error.code === 'INVALID_SERVER_RESPONSE'
       && /work is retained/i.test(error.message),
   );
-  assert.equal([...apiSource.matchAll(/const body = await responseBody\(response\);/g)].length, 4,
-    'authenticated, calling, public and media-error responses must share the rejecting parser');
+  assert.equal([...apiSource.matchAll(/const body = await responseBody\(response\);/g)].length, 5,
+    'authenticated, calling, public, private assessment file errors and media errors must share the rejecting parser');
 });
