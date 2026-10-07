@@ -176,10 +176,11 @@ const workflowProposals = [
   { kind: 'invoice_reminder', jobQuery: 'that job last week in Frankston', jobId: '', invoiceId: '', channel: 'email', body: '' },
   { kind: 'draft_job_quote', jobQuery: 'John Smith in Frankston', jobId: '', mode: 'append', description: 'Add confirmed work', lines: [{ lineType: 'labour', description: 'Installation', quantity: '2', unitPrice: '50', taxCode: 'gst' }] },
 ];
-test('concrete trade workflow proposals retain their exact supplied fields and unknowns with the original five reply keys', async t => {
+test('concrete trade workflow proposals retain supplied facts and unknowns with canonical charging units and the original five reply keys', async t => {
   for (const action of workflowProposals) await t.test(action.kind, async () => {
     const f = fixture({ result: { ...answer, message: 'No worries, I can prepare that for your review.', linkIds: [], action } });
-    const reply = await f.prepareWattzunPortalReply(request()); assert.deepEqual(reply.action, action);
+    const reply = await f.prepareWattzunPortalReply(request());
+    assert.deepEqual(reply.action, action.kind === 'add_price_book_item' ? {...action,unitLabel:'each'} : action);
     assert.deepEqual(f.workflows[0].schema.required, ['message', 'questions', 'linkIds', 'action', 'lookup']);
     assert.equal(f.workflows[0].schema.properties.action.anyOf.filter(value => value.properties?.kind.enum[0] === action.kind).length, 1);
     assert.equal(f.calls.length, 0); assert.equal(reply.lookup, undefined);
@@ -408,6 +409,25 @@ test('shared text and voice reply contract gives each portal its own grounded ro
     await f.prepareWattzunPortalReply(options);
     assert.equal(f.workflows[0].instructions,replyContract.instructions,'Text requests use the same authoritative reply contract as native voice');
     assert.deepEqual(f.calls,[],'No provider audio or external request is needed for contract validation');
+  }
+});
+
+test('provider price-book proposals canonicalise explicit per-installation units before review without rewriting pending input or guessing unknown units', () => {
+  const f=fixture(),options=request();
+  const pending={kind:'add_price_book_item',name:'Example Ceiling Fan Installation',description:'Install the supplied fan',itemType:'labour',unitLabel:'per installation',unitPrice:'150',supplierCost:null,taxCode:'gst'};
+  options.input.workflowProposal=pending;
+  const contract=f.createWattzunPortalReplyContract(options);
+  for(const unitLabel of ['per installation','installation',' Per Installation ','per item','item','per system','system']){
+    const raw={...pending,unitLabel,unitPrice:'175'};
+    const reply=contract.validate({...answer,linkIds:[],action:raw});
+    assert.deepEqual(reply.action,{...raw,unitLabel:'each'});
+    assert.equal(raw.unitLabel,unitLabel,'Provider object is not mutated');
+    assert.deepEqual(contract.input.pendingWorkflowProposal,pending,'Earlier pending facts are not changed before the current proposal is prepared');
+    assert.equal(pending.unitPrice,'150');assert.equal(pending.unitLabel,'per installation');
+  }
+  for(const unitLabel of [null,'metre','per room','unknown','per installation or hour']){
+    const raw={...pending,unitLabel};
+    assert.deepEqual(contract.validate({...answer,linkIds:[],action:raw}).action,raw,'Unknown, ambiguous and canonical units keep their existing validation path');
   }
 });
 

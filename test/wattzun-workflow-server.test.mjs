@@ -509,6 +509,48 @@ test('price-book review preserves supplied ex GST and visibly accepts optional c
   assert.match(body.result.lines.find(line => line.label === 'Unit').value, /default is each/);
   assert.equal(f.calls.length, 0);
 });
+test('raw pending price details do not reserve the same-request review before the canonical corrected proposal', async () => {
+  const f = fixture(), requestId = 'synthetic-price-correction-0001';
+  const pending = { ...price, name: 'Example Ceiling Fan Installation', description: 'Standard ceiling fan installation',
+    itemType: 'labour', unitLabel: 'per installation', unitPrice: '165', supplierCost: null };
+  const originalPending = structuredClone(pending);
+  try {
+    const initial = await f.prepare(pending, requestId);
+    assert.equal(initial.status, 200);
+    assert.equal(initial.body.result.state, 'needs_details');
+    assert.deepEqual(initial.body.result.questions, ['How is it charged: each, hour, metre or another unit?']);
+    assert.equal(f.database.prepare('SELECT COUNT(*) count FROM admin_audit_log').get().count, 0);
+    assert.equal(f.cipher.size, 0); assert.equal(f.calls.length, 0);
+
+    // The shared provider boundary supplies this canonical corrected action;
+    // the workflow service must keep both preparations on the same request ID.
+    const current = { ...pending, unitLabel: 'each', unitPrice: '175' };
+    const prepared = await f.prepare(current, requestId);
+    assert.equal(prepared.status, 200); assert.equal(prepared.body.result.state, 'review');
+    const review = prepared.body.result;
+    assert.equal(review.lines.find(line => line.label === 'Sell price excluding GST').value, '$175.00');
+    assert.equal(review.lines.find(line => line.label === 'Type / unit').value, 'labour / each');
+    const rows = f.database.prepare('SELECT id,metadata FROM admin_audit_log').all();
+    assert.equal(rows.length, 1); assert.equal(rows[0].id, review.reviewId);
+    const saved = JSON.parse(rows[0].metadata), frozen = f.cipher.get(saved.encrypted).prepared;
+    assert.equal(saved.fingerprint, await hash(current));
+    assert.deepEqual(frozen.proposal, current);
+    assert.equal(frozen.price.payload.unitLabel, 'each'); assert.equal(frozen.price.payload.sellPrice, '175');
+    assert.deepEqual(pending, originalPending); assert.equal(f.calls.length, 0);
+
+    assert.equal((await f.prepare({ ...current, unitPrice: '185' }, requestId)).status, 409);
+    assert.equal(f.database.prepare('SELECT metadata FROM admin_audit_log WHERE id=?').get(review.reviewId).metadata, rows[0].metadata);
+    assert.equal(f.calls.length, 0);
+    const executed = await f.execute(review.reviewId);
+    assert.equal(executed.status, 200); assert.equal(executed.body.result.receipt.status, 'saved');
+    assert.equal(f.calls.length, 1); assert.equal(f.calls[0].kind, 'price');
+    assert.equal(f.calls[0].body.unitLabel, 'each'); assert.equal(f.calls[0].body.sellPrice, '175');
+    const items = f.database.prepare('SELECT unit_label,sell_price_cents_ex_gst FROM trade_price_book_items').all();
+    assert.equal(items.length, 1); assert.equal(items[0].unit_label, 'each'); assert.equal(items[0].sell_price_cents_ex_gst, 17500);
+    assert.equal((await f.execute(review.reviewId)).status, 200); assert.equal(f.calls.length, 1);
+    assert.deepEqual(pending, originalPending);
+  } finally { f.database.close(); }
+});
 test('unknown price type and GST are bundled and no hidden price save occurs', async () => {
   const f = fixture(); const { body } = await f.prepare({ ...price, itemType: null, taxCode: null, unitPrice: null });
   assert.equal(body.result.state, 'needs_details'); assert.equal(body.result.questions.length, 3); assert.equal(f.calls.length, 0);

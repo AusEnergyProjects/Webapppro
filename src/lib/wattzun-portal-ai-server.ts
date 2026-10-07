@@ -190,7 +190,12 @@ function validateReply(raw: unknown, guide: GuideLink[], portal: WattzunScope["p
             : workflowContext?.state === "review" ? workflowContext.lines.filter(line => line.label === "Invoice").map(line => line.value) : [];
           if (!supplied.some(text => text.split(/[^A-Za-z0-9:_-]+/).includes(invoiceId))) throw new WattzunReplyValidationError("action_shape");
         }
-        reply.action = raw.action;
+        // Provider speech wording can preserve an explicit charging basis even
+        // when it misses the schema enum. Canonicalise only these exact aliases
+        // before preparing a new review; never change a pending or saved review.
+        reply.action = raw.action.kind === "add_price_book_item" && raw.action.unitLabel !== null
+          && /^(?:per\s+)?(?:installation|item|system)$/i.test(raw.action.unitLabel.trim())
+          ? { ...raw.action, unitLabel: "each" } : raw.action;
       } else {
       let action: ReturnType<typeof parseWattzunActionProposal>;
       try { action = parseWattzunActionProposal(raw.action); }

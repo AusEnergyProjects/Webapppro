@@ -305,7 +305,8 @@ test("native workflow proposals use the same exact parsers while preserving six 
     { kind: "draft_job_quote", jobQuery: "John Smith", jobId: "", mode: "append", description: "Additional work", lines: [{ lineType: "labour", description: "Installation", quantity: "2", unitPrice: "50", taxCode: "gst" }] },
   ]) await t.test(action.kind, async () => {
     const f = fixture({ reply: { ...answer, message: "No worries, I can prepare that for review.", linkIds: [], action } });
-    const prepared = await f.prepareWattzunRealtimeTurn(request()); assert.deepEqual(prepared.reply.action, action); await bytes(prepared.audio);
+    const prepared = await f.prepareWattzunRealtimeTurn(request());
+    assert.deepEqual(prepared.reply.action, action.kind === "add_price_book_item" ? { ...action, unitLabel: "each" } : action); await bytes(prepared.audio);
     const schema = f.socket.sent.find(event => event.type === "session.update").session.tools[0].parameters;
     assert.deepEqual(schema.required, ["message", "questions", "linkIds", "action", "lookup", "requestSummary"]);
     assert.deepEqual(Object.keys(schema.properties), schema.required); assert.equal(f.released(), 1);
