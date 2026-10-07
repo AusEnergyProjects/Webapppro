@@ -62,6 +62,24 @@ test('native and streaming voice prepare actual workflow reviews before narratio
     assert.deepEqual(result.reply.workflow, workflowReview); await result.audio.stream.cancel();
   }
 });
+test('native workflow skips a duplicate pre-preparation snapshot while retaining speech, pre-usage and final selected-source gates', async () => {
+  const workContext = syntheticWorkContext();
+  const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext,
+    reply: { ...reply, action: workflowProposal }, workflowResult: workflowReview });
+  const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, 200);
+  assert.equal(f.events.filter(value => value === 'context').length, 4);
+  assert.deepEqual(f.events.slice(f.events.indexOf('realtime') + 1, f.events.indexOf('prepareWorkflow') + 1), ['access', 'prepareWorkflow']);
+  assert.deepEqual(f.events.slice(f.events.indexOf('prepareWorkflow') + 1, f.events.indexOf('nativeSpeech')), ['access', 'context', 'workflowReview']);
+  assert.equal(f.recorded.length, 1); await response.body.cancel();
+});
+test('a selected source changed after native workflow preparation still stops speech and usage', async () => {
+  const workContext = syntheticWorkContext();
+  const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext, contextChangedAt: 2,
+    reply: { ...reply, action: workflowProposal }, workflowResult: workflowReview });
+  const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, 409);
+  assert.equal(f.events.includes('prepareWorkflow'), true); assert.equal(f.events.includes('nativeSpeech'), false);
+  assert.equal(f.recorded.length, 0); assert.equal(f.audio.state.pulls, 0); assert.equal((await response.json()).reply, undefined);
+});
 test('native current-review approval produces only a matching confirmation for the separately confirmed execution route', async () => {
   const action = { kind: 'confirm_workflow', reviewId: workflowReview.reviewId };
   const f = fixture({ input: { ...input, workflowReviewId: workflowReview.reviewId }, reply: { ...reply, action }, workflowResult: workflowReview, requestSummary: 'yes send it' });

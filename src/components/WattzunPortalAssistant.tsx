@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { createTradeBusinessFetch, readTradeBusinessSelection, TRADE_BUSINESS_SELECTION_CHANGED_EVENT } from "@/lib/trade-business-client";
+import { notifyTradeQuoteDraftSaved } from "@/lib/trade-quote-client";
 import { wattzunPortalForPath } from "@/lib/wattzun-portal-path";
 import { parseWattzunRecordLookup } from "@/lib/wattzun-records";
 import { parseWattzunActionProposal, type WattzunActionReceipt } from "@/lib/wattzun-actions";
@@ -271,13 +272,19 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
   const workflowResult = useCallback((messageId: string, result: WattzunWorkflowResult) => {
     const pending = pendingWorkflowRef.current;
     if (!active.current || !pending || pending.messageId !== messageId) return;
+    const workOrderId = pending.result.state === "review" ? pending.result.target?.jobId : null;
+    const firstCompletion = pending.result.state !== "complete";
     pending.result = result;
     if (result.state === "review") pending.reviewId = result.reviewId;
     if (result.state === "review" && result.target && "jobId" in pending.proposal) pending.proposal = { ...pending.proposal, jobId: result.target.jobId };
     messagesRef.current = messagesRef.current.map(message => message.id === messageId && message.reply
       ? { ...message, reply: { ...message.reply, workflow: result }, ...(result.state === "complete" ? { reviewDraft: null } : {}) } : message);
     setMessages(messagesRef.current);
-  }, []);
+    if (scope.portal === "trade" && firstCompletion && workOrderId && result.state === "complete"
+      && result.receipt.kind === "draft_job_quote" && result.receipt.status === "saved") {
+      notifyTradeQuoteDraftSaved({ actorUid: user.uid, ownerUid: scope.scopeId, workOrderId });
+    }
+  }, [scope.portal, scope.scopeId, user.uid]);
   const workflowReviewResult = useCallback((messageId: string, result: WattzunWorkflowResult) => {
     const previous = pendingWorkflowRef.current;
     const completed = previous?.messageId === messageId && previous.result.state !== "complete" && result.state === "complete";

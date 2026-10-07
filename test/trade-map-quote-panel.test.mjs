@@ -9,6 +9,7 @@ import { createElement } from "react";
 import * as quoteMath from "../src/lib/trade-quote.ts";
 import * as mapQuote from "../src/lib/trade-map-quote.ts";
 import * as documentTotals from "../src/lib/trade-quote-document-totals.mjs";
+import * as quoteClient from "../src/lib/trade-quote-client.ts";
 
 const read = (name) => fs.readFileSync(new URL(`../src/components/${name}.tsx`, import.meta.url), "utf8");
 const compile = (source) => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
@@ -56,6 +57,7 @@ function harness(t, initial = result(), options = {}) {
   const LivePreview = () => null;
   const require = (id) => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/trade-quote" ? quoteMath
     : id === "@/lib/trade-quote-equipment" ? quoteEquipment : id === "@/lib/trade-solar-quote-packages" ? solarPackages : id === "./TradeSolarEquipmentPicker" ? { TradeSolarEquipmentList: () => null } : id === "@/lib/trade-map-quote" ? mapQuote : id === "@/lib/trade-quote-document-totals.mjs" ? documentTotals
+      : id === "@/lib/trade-quote-client" ? quoteClient
       : id === "./TradeQuoteLivePreview" ? { TradeQuoteLivePreview: LivePreview }
         : id === "@/lib/trade-rebate-draft" ? { loadTradeRebateEstimateDraft: () => null, clearTradeRebateEstimateDraft() {} } : { default: {} };
   const window = { requestAnimationFrame(callback) { const id = setImmediate(() => { frames.delete(id); callback(); }); frames.add(id); return id; }, cancelAnimationFrame(id) { clearImmediate(id); frames.delete(id); }, sessionStorage: {}, location: { origin: "https://tlink.test" }, addEventListener() {}, removeEventListener() {} };

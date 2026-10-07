@@ -20,6 +20,8 @@ const fixtures = {
   public: `export const LazyPublicEnergyAssistantWidget=()=>null;`,
   picker: `export const WattzunRecordPicker=()=>null;`,
   review: `import React from 'react';export function WattzunActionReview({onCreated,onCancel}) {return <section aria-label="Synthetic reviewed action"><button onClick={()=>onCreated({kind:'quote_draft',id:'saved-quote-23',workOrderId:'saved-job-23',versionId:'saved-version-23',href:'/direct-trade/dashboard?workspace=work&jobId=saved-job-23&jobTab=quote',label:'Open saved quote draft'})}>Confirm synthetic quote</button><button onClick={onCancel}>Cancel synthetic quote</button></section>;}`,
+  quoteBusiness: `import {useMemo} from 'react';import {createTradeBusinessFetch} from './src/lib/trade-business-client';export const useTradeBusiness=()=>({ownerUid:'synthetic-business'});export const useTradeBusinessFetch=()=>useMemo(()=>createTradeBusinessFetch('synthetic-business',location.origin,window.fetch),[]);`,
+  quoteLeaf: `export const TradeCustomerHubPanel=()=>null;export const TradeQuoteStockNotice=()=>null;export const TradeSolarEquipmentList=()=>null;export const TradeQuoteLivePreview=()=>null;`,
   // The real call lifecycle has deterministic clock tests. This fixture checks only the real UI wiring,
   // with no microphone, audio playback or provider access.
   voice: `
@@ -69,13 +71,18 @@ const fixtures = {
 };
 const bundle = await build({
   stdin: { resolveDir: root, loader: 'tsx', contents: `
-    import React from 'react';
+    import React,{useMemo,useState} from 'react';
     import { createRoot } from 'react-dom/client';
     import { LazyEnergyAssistantWidget } from './src/components/LazyEnergyAssistantWidget';
     import { WattzunMascot } from './src/components/WattzunMascot';
+    import { TradeQuotePanel } from './src/components/TradeQuotePanel';
+    import { TRADE_QUOTE_DRAFT_SAVED_EVENT,notifyTradeQuoteDraftSaved } from './src/lib/trade-quote-client';
     import { WATTZUN_HATS, WATTZUN_USAGE_CHANGED_EVENT, useWattzunPresentation, requestWattzunAssistant } from './src/lib/wattzun-appearance';
     window.wattzunFixtureOpen=requestWattzunAssistant;
     window.wattzunFixtureUsage=[];
+    window.wattzunFixtureQuoteNotifications=[];
+    window.wattzunFixtureNotifyQuote=notifyTradeQuoteDraftSaved;
+    window.addEventListener(TRADE_QUOTE_DRAFT_SAVED_EVENT,event=>window.wattzunFixtureQuoteNotifications.push(event.detail));
     window.addEventListener(WATTZUN_USAGE_CHANGED_EVENT,event=>window.wattzunFixtureUsage.push(event.detail));
     window.wattzunFixtureRequests=[];
     window.wattzunFixtureSignals=[];
@@ -85,6 +92,7 @@ const bundle = await build({
     window.wattzunFixtureGreetingPcm=[];
     window.fetch=async (url,options={})=>{
       const body=options.body instanceof FormData?JSON.parse(options.body.get('request')):options.body?JSON.parse(options.body):null;
+      const quoteRead=url.startsWith('/api/trade-quotes?workOrderId=')?structuredClone(window.wattzunFixtureQuoteServer):null;
       window.wattzunFixtureRequests.push({url,headers:options.headers,body,scope:new Headers(options.headers).get('X-TLink-Business')});
       window.wattzunFixtureSignals.push({url,signal:options.signal});
       if(window.wattzunFixtureDelayedEndpoint===url)await new Promise(resolve=>{window.wattzunFixtureResolveDelayed=()=>{window.wattzunFixtureDelayedEndpoint=null;resolve();};});
@@ -96,7 +104,13 @@ const bundle = await build({
         sources:[{label:'Saved work details',href:body.portal==='council'?'/council?workspace=reports':body.portal==='creditex'?'/creditex/compliance':'/direct-trade/dashboard?workspace=work&jobId='+reference.recordId}],limitations:['Saved answers only. Uploaded file and photo contents have not been read.']}:undefined;
       const workContext=window.wattzunFixtureWorkContext===undefined?defaultContext:window.wattzunFixtureWorkContext;
       if(url.startsWith('/api/wattzun/portal?portal=')) { const portal=new URL(url,location.origin).searchParams.get('portal');return Response.json({ok:true,scopes:window.wattzunFixtureScopes||[{portal,scopeId:portal==='trade'?'synthetic-business':'synthetic-'+portal,label:'Synthetic '+portal+' business',personalName:'Alex'}]}); }
-      if(url==='/api/wattzun/workflows'&&options.method==='POST')return Response.json({ok:true,result:body.stage==='prepare'?window.wattzunFixturePreparedWorkflow:window.wattzunFixtureExecutedWorkflow});
+      if(url==='/api/wattzun/workflows'&&options.method==='POST'){
+        if(body.stage==='execute'&&window.wattzunFixtureQuoteSaved)window.wattzunFixtureQuoteServer=window.wattzunFixtureQuoteSaved;
+        return Response.json({ok:true,result:body.stage==='prepare'?window.wattzunFixturePreparedWorkflow:window.wattzunFixtureExecutedWorkflow});
+      }
+      if(url.startsWith('/api/trade-quotes?workOrderId='))return Response.json(quoteRead);
+      if(url==='/api/trade-quotes'&&body?.action==='save_draft')return Response.json({...window.wattzunFixtureQuoteServer,draftVersionId:'version-john'});
+      if(url.startsWith('/api/trade-job-quote-photos?'))return Response.json({ok:false},{status:404});
       if(url==='/api/wattzun/workflows/speech'&&options.method==='POST'){
         const workflow=window.wattzunFixtureExecutedWorkflow,receipt=workflow.receipt;
         const frames=[{type:'reply',transcript:'',reply:{kind:'answer',message:receipt.message,questions:[],links:[{label:receipt.label,href:receipt.href}],workflow}},
@@ -126,7 +140,12 @@ const bundle = await build({
       const open=mode=>void requestWattzunAssistant({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode,initialMessage:mode==='message'?'Help me follow up the sale':undefined});
       return <section aria-label="Synthetic Tools"><WattzunMascot hat={presentation.hat}/><label>Wattzun hat<select aria-label="Wattzun hat" value={presentation.hat} onChange={event=>presentation.setHat(event.target.value)}>{WATTZUN_HATS.map(choice=><option key={choice.id} value={choice.id}>{choice.label}</option>)}</select></label><button onClick={()=>open('message')}>Message from Tools</button><button onClick={()=>open('call')}>Call from Tools</button></section>;
     }
-    createRoot(document.getElementById('root')).render(<><FixtureTools/><LazyEnergyAssistantWidget /></>);
+    function FixtureQuoteEditor(){
+      const [props,setProps]=useState({});window.wattzunFixtureQuoteProps=setProps;
+      const user=useMemo(()=>({uid:'synthetic-user',getIdToken:async()=>'synthetic-token'}),[props.tokenRevision]);
+      return <TradeQuotePanel user={user} workOrderId="job-john" available={props.available!==false} readOnly={props.readOnly===true}/>;
+    }
+    createRoot(document.getElementById('root')).render(<>{window.wattzunFixtureQuoteEditor&&<FixtureQuoteEditor/>}<FixtureTools/><LazyEnergyAssistantWidget /></>);
   ` },
   bundle: true, write: false, outfile: 'wattzun.js', format: 'iife', jsx: 'automatic', external:['/surge-mascot.webp'],
   plugins: [{ name: 'synthetic-wattzun-scope', setup(builder) {
@@ -137,6 +156,7 @@ const bundle = await build({
       [/^next\/link$/, 'link'], [/^next\/navigation$/, 'navigation'], [/LazyPublicEnergyAssistantWidget$/, 'public'],
       [/WattzunRecordPicker$/, 'picker'],
       [/WattzunActionReview$/, 'review'],
+      [/TradeBusinessProvider$/, 'quoteBusiness'], [/TradeCustomerHubPanel$|TradeQuoteStockNotice$|TradeSolarEquipmentPicker$|TradeQuoteLivePreview$/, 'quoteLeaf'],
     ]) builder.onResolve({ filter }, () => ({ path: fixture, namespace: 'fixture' }));
     builder.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents: fixtures[args.path], loader: 'tsx', resolveDir: root }));
     builder.onResolve({ filter: /^@\/lib\/wattzun-portal$/ }, () => ({ path: path.join(root, 'src/lib/wattzun-portal.ts') }));
@@ -537,11 +557,12 @@ test('a voice action opens its review, preserves the call through receipt confir
   } finally {await browser.close();}
 });
 
-async function contextPage(browser,width=1366,portal='trade') {
+async function contextPage(browser,width=1366,portal='trade',configuration={}) {
   const page=await browser.newPage({viewport:{width,height:900}});
   await page.route('https://fixture.invalid/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html></html>'}));
   await page.goto('https://fixture.invalid'+(portal==='council'?'/council':portal==='creditex'?'/creditex/compliance':'/direct-trade/team'));
   await page.setContent(`<html><head><style>*{box-sizing:border-box}body{margin:0;font-family:Arial}${css}</style></head><body><div id="root"></div></body></html>`);
+  await page.evaluate(configuration=>Object.assign(window,configuration),configuration);
   await page.addScriptTag({content:script});
   await page.getByRole('button',{name:'Open Wattzun AI chat',exact:true}).click();
   return page;
@@ -551,6 +572,130 @@ async function selectFixtureWork(page,recordId,initialMessage) {
     workReference:{kind:'trade_job',recordId},...(initialMessage===undefined?{}:{initialMessage})}),{recordId,initialMessage});
   await page.getByRole('region',{name:'Selected work',exact:true}).waitFor();
 }
+
+function quoteEditorResult(descriptions) {
+  const items=descriptions.map((description,index)=>({id:'line-'+index,lineType:'product',description,quantityMilli:1000,unitPriceCents:100,taxCode:'none',sectionHeading:'Included work',priceBookItemId:'',jobPacketId:'',jobPacketLineId:'',totalCents:100}));
+  return {ok:true,authorisedEmails:[],priceBookItems:[],jobPackets:[],access:{canManageQuotes:true,canSendQuotes:true,canManageCustomers:true,canApplyDiscounts:true},
+    job:{customerId:'customer-john',customerName:'John Smith',workNumber:'TL-112',title:'Replacement',siteSummary:'12 Example Street',publicLead:false},
+    business:{businessName:'Synthetic Trade',quoteDefaultTerms:'',quoteEmailIntro:'',brandThemeKey:'cobalt_aqua',brandBorderStyle:'soft',hasLogo:false},
+    quote:{id:'quote-john',quoteNumber:'Q-112',status:'draft',currentVersionNumber:1,editableDraft:{id:'version-john',versionNumber:1,updatedAt:'revision-'+descriptions.length},
+      versions:[{id:'version-john',versionNumber:1,status:'draft',customerEmail:'',terms:'',customerMessage:'',validUntil:'',equipment:{common:[],choices:[]},designId:'',roofImage:null,items,choices:[],subtotalCents:items.length*100,taxCents:0,totalCents:items.length*100,acceptance:null}],link:null,timeline:[],questions:[],deliveries:[]}};
+}
+
+test('saved Wattzun quotes refresh the mounted canonical editor and same-URL receipts preserve the active call',{skip:!browserPath&&'No installed browser for canonical quote refresh'},async t=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    for(const confirmation of ['button','voice'])await t.test(confirmation,async()=>{
+      const page=await contextPage(browser,1366,'trade',{wattzunFixtureQuoteEditor:true,wattzunFixtureQuoteServer:quoteEditorResult(['Existing line','Second existing line']),wattzunFixtureQuoteSaved:quoteEditorResult(['Existing line','Second existing line','Wattzun supplied line'])});
+      const errors=[];page.on('pageerror',error=>errors.push(error.message));
+      await page.getByLabel('Line 1 description',{exact:true}).waitFor();
+      assert.equal(await page.getByLabel('Line 3 description',{exact:true}).count(),0);
+      await page.evaluate(()=>history.replaceState(history.state,'','/direct-trade/team?workspace=work&jobId=job-john&jobTab=quote'));
+      const operation={kind:'draft_job_quote',jobQuery:'John',jobId:'job-john',mode:'append',description:'Add supplied work',lines:[{lineType:'product',description:'Wattzun supplied line',quantity:'1',unitPrice:'1',taxCode:'none'}]};
+      const review={...workflowReview,kind:'draft_job_quote',heading:'Save quote draft',summary:'Add one supplied line.',confirmationLabel:'Save quote draft',preview:undefined};
+      const receipt={...workflowReceipt,kind:'draft_job_quote',id:'quote-john',label:'Open saved quote draft',href:'/direct-trade/dashboard?workspace=work&jobId=job-john&jobTab=quote',status:'saved',message:'The draft is saved in the real quote editor. It has not been issued or sent.'};
+      await page.evaluate(({operation,review,receipt})=>{window.wattzunFixtureVoiceReply={kind:'clarification',message:'Review this quote draft.',questions:[],links:[],action:operation,workflow:review};window.wattzunFixtureExecutedWorkflow={state:'complete',receipt};},{operation,review,receipt});
+      const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+      await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();await page.evaluate(()=>window.wattzunFixtureCall.question());
+      if(confirmation==='button')await dialog.getByRole('button',{name:'Save quote draft',exact:true}).click();
+      else{await page.evaluate(id=>{window.wattzunFixtureRequestSummary='yes save it';window.wattzunFixtureVoiceReply={kind:'answer',message:'Save it.',questions:[],links:[],action:{kind:'confirm_workflow',reviewId:id}};},review.reviewId);await page.evaluate(()=>window.wattzunFixtureCall.question());}
+      await page.getByLabel('Line 3 description',{exact:true}).waitFor();
+      assert.equal(await page.getByLabel('Line 3 description',{exact:true}).inputValue(),'Wattzun supplied line');
+      assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureQuoteNotifications),[{actorUid:'synthetic-user',ownerUid:'synthetic-business',workOrderId:'job-john'}]);
+      await dialog.getByRole('button',{name:'Open saved quote draft',exact:true}).click();
+      await page.getByRole('region',{name:'Wattzun call',exact:true}).waitFor();
+      await page.getByLabel('Line 3 description',{exact:true}).waitFor();
+      assert.equal(await page.getByLabel('Line 3 description',{exact:true}).inputValue(),'Wattzun supplied line');
+      assert.equal(new URL(page.url()).pathname,'/direct-trade/team');
+      const reads=await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url.startsWith('/api/trade-quotes?')));
+      assert.equal(reads.length,2,'Opening the same receipt uses the refreshed editor without another roundtrip');assert.ok(reads.every(item=>item.scope==='synthetic-business'));
+      assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+      assert.deepEqual(errors,[]);await page.close();
+    });
+  }finally{await browser.close();}
+});
+
+test('canonical quote refresh ignores other actors businesses and jobs and retains manual edits until explicit load',{skip:!browserPath&&'No installed browser for manual quote refresh'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureQuoteEditor:true,wattzunFixtureQuoteServer:quoteEditorResult(['Existing line'])}),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));await page.getByLabel('Line 1 description',{exact:true}).waitFor();await page.keyboard.press('Escape');
+    await page.getByLabel('Line 1 description',{exact:true}).fill('My unsaved manual scope');
+    await page.evaluate(result=>{window.wattzunFixtureQuoteServer=result;for(const detail of [{actorUid:'other',ownerUid:'synthetic-business',workOrderId:'job-john'},{actorUid:'synthetic-user',ownerUid:'other',workOrderId:'job-john'},{actorUid:'synthetic-user',ownerUid:'synthetic-business',workOrderId:'other-job'}])window.wattzunFixtureNotifyQuote(detail);},quoteEditorResult(['Existing line','Saved addition']));
+    assert.equal(await page.getByRole('button',{name:'Load saved quote',exact:true}).count(),0);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url.startsWith('/api/trade-quotes?')).length),1);
+    await page.evaluate(()=>window.wattzunFixtureNotifyQuote({actorUid:'synthetic-user',ownerUid:'synthetic-business',workOrderId:'job-john'}));
+    await page.getByRole('button',{name:'Load saved quote',exact:true}).waitFor();
+    assert.equal(await page.getByLabel('Line 1 description',{exact:true}).inputValue(),'My unsaved manual scope');
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url.startsWith('/api/trade-quotes?')).length),1);
+    await page.getByRole('button',{name:'Load saved quote',exact:true}).click();await page.getByLabel('Line 2 description',{exact:true}).waitFor();
+    assert.equal(await page.getByLabel('Line 1 description',{exact:true}).inputValue(),'Existing line');assert.equal(await page.getByLabel('Line 2 description',{exact:true}).inputValue(),'Saved addition');
+    assert.equal(await page.getByRole('button',{name:'Load saved quote',exact:true}).count(),0);assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('a newer quote save during canonical refresh cannot be lost behind an older response',{skip:!browserPath&&'No installed browser for quote refresh races'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,1366,'trade',{wattzunFixtureQuoteEditor:true,wattzunFixtureQuoteServer:quoteEditorResult(['Existing line'])}),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));await page.getByLabel('Line 1 description',{exact:true}).waitFor();await page.keyboard.press('Escape');
+    await page.evaluate(result=>{window.wattzunFixtureQuoteServer=result;window.wattzunFixtureDelayedEndpoint='/api/trade-quotes?workOrderId=job-john';window.wattzunFixtureNotifyQuote({actorUid:'synthetic-user',ownerUid:'synthetic-business',workOrderId:'job-john'});},quoteEditorResult(['Existing line','First addition']));
+    await page.waitForFunction(()=>Boolean(window.wattzunFixtureResolveDelayed));
+    await page.evaluate(result=>{window.wattzunFixtureQuoteServer=result;window.wattzunFixtureNotifyQuote({actorUid:'synthetic-user',ownerUid:'synthetic-business',workOrderId:'job-john'});window.wattzunFixtureResolveDelayed();},quoteEditorResult(['Existing line','First addition','Second addition']));
+    await page.getByLabel('Line 3 description',{exact:true}).waitFor();assert.equal(await page.getByLabel('Line 3 description',{exact:true}).inputValue(),'Second addition');
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url.startsWith('/api/trade-quotes?')).length),3);
+    assert.equal(await page.getByRole('button',{name:'Load saved quote',exact:true}).count(),0);assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('quote refresh callback changes keep its request alive and availability cancellation releases only refresh-owned busy state',{skip:!browserPath&&'No installed browser for quote refresh lifecycle'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,1366,'trade',{wattzunFixtureQuoteEditor:true,wattzunFixtureQuoteServer:quoteEditorResult(['Existing line'])}),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));await page.getByLabel('Line 1 description',{exact:true}).waitFor();await page.keyboard.press('Escape');
+    await page.evaluate(result=>{window.wattzunFixtureQuoteServer=result;window.wattzunFixtureDelayedEndpoint='/api/trade-quotes?workOrderId=job-john';window.wattzunFixtureNotifyQuote({actorUid:'synthetic-user',ownerUid:'synthetic-business',workOrderId:'job-john'});},quoteEditorResult(['Existing line','Saved addition']));
+    await page.waitForFunction(()=>Boolean(window.wattzunFixtureResolveDelayed));
+    await page.evaluate(()=>window.wattzunFixtureQuoteProps({readOnly:true,tokenRevision:1}));
+    await page.waitForFunction(()=>document.querySelector('.trade-quote-panel fieldset')?.disabled);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureSignals.filter(item=>item.url.startsWith('/api/trade-quotes?')).at(-1).signal.aborted),false);
+    await page.evaluate(()=>window.wattzunFixtureResolveDelayed());await page.getByLabel('Line 2 description',{exact:true}).waitFor();
+    await page.evaluate(()=>window.wattzunFixtureQuoteProps({readOnly:false,tokenRevision:1}));
+    await page.waitForFunction(()=>!document.querySelector('.trade-quote-panel fieldset')?.disabled);
+    await page.evaluate(result=>{window.wattzunFixtureQuoteServer=result;window.wattzunFixtureResolveDelayed=null;window.wattzunFixtureDelayedEndpoint='/api/trade-quotes?workOrderId=job-john';window.wattzunFixtureNotifyQuote({actorUid:'synthetic-user',ownerUid:'synthetic-business',workOrderId:'job-john'});},quoteEditorResult(['Existing line','Saved addition','Newest addition']));
+    await page.waitForFunction(()=>Boolean(window.wattzunFixtureResolveDelayed));
+    await page.evaluate(()=>window.wattzunFixtureQuoteProps({available:false,tokenRevision:1}));await page.getByText('Direct quote unavailable',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureSignals.filter(item=>item.url.startsWith('/api/trade-quotes?')).at(-1).signal.aborted),true);
+    await page.evaluate(()=>{window.wattzunFixtureQuoteProps({available:true,tokenRevision:1});window.wattzunFixtureResolveDelayed();});
+    await page.getByRole('button',{name:'Load saved quote',exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Load saved quote',exact:true}).isEnabled(),true);
+    assert.equal(await page.getByLabel('Line 3 description',{exact:true}).count(),0,'Aborted older context does not apply its response');
+    await page.getByRole('button',{name:'Load saved quote',exact:true}).click();await page.getByLabel('Line 3 description',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Save draft',exact:true}).isEnabled(),true);assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('an open quote send review retains its reviewed lines and consent until the saved draft is explicitly loaded',{skip:!browserPath&&'No installed browser for protected quote send review'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const before=quoteEditorResult(['Existing line']),after=quoteEditorResult(['Existing line','Saved addition']);
+    for(const result of [before,after]){result.authorisedEmails=['john@example.test'];result.quote.versions[0].customerEmail='john@example.test';result.quote.versions[0].terms='Agreed supplied scope and completion terms.';}
+    const page=await contextPage(browser,1366,'trade',{wattzunFixtureQuoteEditor:true,wattzunFixtureQuoteServer:before}),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));await page.getByLabel('Line 1 description',{exact:true}).waitFor();await page.keyboard.press('Escape');
+    await page.getByRole('button',{name:'Preview and send',exact:true}).click();
+    const review=page.getByRole('dialog',{name:'Review your quote',exact:true});await review.waitFor();
+    await review.getByRole('checkbox',{name:'The customer asked to receive this quote by email.',exact:true}).check();
+    await page.evaluate(result=>{window.wattzunFixtureQuoteServer=result;window.wattzunFixtureNotifyQuote({actorUid:'synthetic-user',ownerUid:'synthetic-business',workOrderId:'job-john'});},after);
+    assert.equal(await review.isVisible(),true);assert.equal(await review.getByRole('checkbox').isChecked(),true);
+    assert.equal(await page.getByLabel('Line 2 description',{exact:true}).count(),0);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url.startsWith('/api/trade-quotes?')).length),1,'Open reviewed preview blocks automatic draft replacement');
+    await review.getByRole('button',{name:'Back to editing',exact:true}).click();await page.getByRole('button',{name:'Load saved quote',exact:true}).click();
+    await page.getByLabel('Line 2 description',{exact:true}).waitFor();assert.equal(await review.count(),0);
+    await page.getByRole('button',{name:'Preview and send',exact:true}).click();await review.waitFor();
+    assert.equal(await review.getByRole('checkbox').isChecked(),false,'Old send consent is not reused for the new draft');
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.some(item=>item.body?.action==='issue_quote')),false);
+    assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
 
 test('work selection discards stale text, isolates history and keeps drafts and sources usable on desktop/mobile',{skip:!browserPath&&'No installed browser for selected work checks'},async t=>{
   const browser=await chromium.launch({executablePath:browserPath,headless:true});

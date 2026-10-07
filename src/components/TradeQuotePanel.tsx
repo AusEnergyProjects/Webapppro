@@ -29,6 +29,7 @@ import {
   type TradeQuoteLineValidationIssue,
 } from "@/lib/trade-quote";
 import { tradeQuoteDocumentDisplayTotals } from "@/lib/trade-quote-document-totals.mjs";
+import { readTradeQuoteDraftSaved, TRADE_QUOTE_DRAFT_SAVED_EVENT } from "@/lib/trade-quote-client";
 import { canApplyMapQuoteIntent, mapQuoteKind, mapQuoteLine, mapQuoteMeasuredContext, mapQuoteSetItemPricing, mapQuoteApplyCoverage, mapQuoteSystemPanels, mapQuoteUnitMatches, MAP_QUOTE_UNITS, type MapQuoteIntent } from "@/lib/trade-map-quote";
 import { TradeQuoteLivePreview } from "./TradeQuoteLivePreview";
 import { TradeSolarEquipmentList } from "./TradeSolarEquipmentPicker";
@@ -321,6 +322,12 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   const [acceptedPhotoMessage, setAcceptedPhotoMessage] = useState("");
   const [acceptedPhotoPreview, setAcceptedPhotoPreview] = useState<null | { photo: AcceptedQuotePhoto; url: string; status: "loading" | "ready" | "error" }>(null);
   const [draftBaseline, setDraftBaseline] = useState<string | null>(null);
+  const [pendingSavedQuote, setPendingSavedQuote] = useState("");
+  const savedQuoteRequest = useRef<AbortController | null>(null);
+  const savedQuoteRevision = useRef(0);
+  const loadSavedQuoteRef = useRef<((replaceEdits?: boolean) => Promise<void>) | null>(null);
+  const onChangedRef = useRef(onChanged);
+  useEffect(() => { onChangedRef.current = onChanged; }, [onChanged]);
   const initialMapIntent = useRef(mapQuoteIntent);
   const consumedMapIntent = useRef("");
   const loadedIdentity = useRef("");
@@ -336,6 +343,9 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   const acceptedPhotoOpenerRef = useRef<HTMLElement | null>(null);
   const fingerprint = draftFingerprint({ lines, choices, customerEmail, terms, customerMessage, validUntil, roofImage, equipment, designId }, saveAsBusinessDefault);
   const draftDirty = draftBaseline !== null && fingerprint !== draftBaseline || Boolean(recipientFirstName || recipientLastName || recipientEmail || answer);
+  const editorState = useRef({ busy, draftDirty, fingerprint, reviewing: Boolean(sendPreview) });
+  useEffect(() => { editorState.current = { busy, draftDirty, fingerprint, reviewing: Boolean(sendPreview) }; }, [busy, draftDirty, fingerprint, sendPreview]);
+  const quoteIdentity = `${businessOwnerUid}:${user.uid}:${workOrderId}`;
   useEffect(() => { onDraftDirtyChange?.(draftDirty); }, [draftDirty, onDraftDirtyChange]);
   useEffect(() => { onBusyChange?.(Boolean(busy)); }, [busy, onBusyChange]);
 
@@ -398,6 +408,63 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     setLines(draft.lines); setChoices(draft.choices); setCustomerEmail(draft.customerEmail);
     setTerms(draft.terms); setCustomerMessage(draft.customerMessage); setValidUntil(draft.validUntil);
   }, [businessOwnerUid, readOnly, workOrderId]);
+
+  const loadSavedQuote = useCallback(async (replaceEdits = false) => {
+    if (savedQuoteRequest.current) return;
+    if (editorState.current.busy || (!replaceEdits && (editorState.current.draftDirty || editorState.current.reviewing))) {
+      setPendingSavedQuote(quoteIdentity);
+      return;
+    }
+    const controller = new AbortController();
+    const startedFingerprint = editorState.current.fingerprint;
+    const startedRevision = savedQuoteRevision.current;
+    savedQuoteRequest.current = controller;
+    setPendingSavedQuote(quoteIdentity);
+    setBusy("load-saved-quote");
+    try {
+      const result = await request({ signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (editorState.current.fingerprint !== startedFingerprint || savedQuoteRevision.current !== startedRevision) return;
+      applyResult(result, "load");
+      setSendPreview(null); setSendConsent(false); setPendingIssueVersionId("");
+      setSendOutcome({ kind: "idle", message: "" });
+      setPendingSavedQuote("");
+      setMessage("The saved quote draft is loaded.");
+      await onChangedRef.current?.();
+    } catch (failure) {
+      if (!controller.signal.aborted) setMessage(failure instanceof Error ? failure.message : "The saved quote could not be loaded. Try again.");
+    } finally {
+      if (savedQuoteRequest.current === controller) {
+        savedQuoteRequest.current = null;
+        if (!controller.signal.aborted) {
+          setBusy("");
+          editorState.current = { ...editorState.current, busy: "" };
+          if (savedQuoteRevision.current !== startedRevision) void loadSavedQuoteRef.current?.();
+        }
+      }
+    }
+  }, [applyResult, quoteIdentity, request]);
+  useEffect(() => { loadSavedQuoteRef.current = loadSavedQuote; }, [loadSavedQuote]);
+
+  useEffect(() => {
+    if (!available) return;
+    const refreshSavedQuote = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail = readTradeQuoteDraftSaved(event.detail);
+      if (!detail || detail.actorUid !== user.uid || detail.ownerUid !== businessOwnerUid || detail.workOrderId !== workOrderId) return;
+      savedQuoteRevision.current += 1;
+      void loadSavedQuoteRef.current?.();
+    };
+    window.addEventListener(TRADE_QUOTE_DRAFT_SAVED_EVENT, refreshSavedQuote);
+    return () => {
+      window.removeEventListener(TRADE_QUOTE_DRAFT_SAVED_EVENT, refreshSavedQuote);
+      if (savedQuoteRequest.current) {
+        savedQuoteRequest.current.abort();
+        savedQuoteRequest.current = null;
+        setBusy(current => current === "load-saved-quote" ? "" : current);
+      }
+    };
+  }, [available, businessOwnerUid, user.uid, workOrderId]);
 
   useEffect(() => {
     const identity = `${user.uid}:${workOrderId}`;
@@ -940,6 +1007,10 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     <TradeCustomerHubPanel workOrderId={workOrderId}/>
     <header><div><span>Prepare quote</span><h4>{quote?.quoteNumber || "New quote"}{current ? ` | Version ${current.versionNumber}` : ""}</h4><p>Add your items and prices, then check the customer preview.</p></div>{current && <strong className={`quote-status ${current.status}`}>{current.status.replaceAll("_", " ")}</strong>}</header>
     {busy === "load" && <p role="status">Loading the authorised quote...</p>}
+    {pendingSavedQuote === quoteIdentity && <div className="trade-quote-enquiry-brief" role="status">
+      <p>{busy === "load-saved-quote" ? "Loading the saved quote draft..." : "A saved quote draft is available. Your current edits are kept until you load it."}</p>
+      <button type="button" disabled={Boolean(busy)} onClick={() => void loadSavedQuote(true)}>Load saved quote</button>
+    </div>}
     <div className={showLivePreview ? previewStyles.composer : undefined} style={showLivePreview ? undefined : { display: "contents" }}><div className={showLivePreview ? previewStyles.editor : undefined} style={showLivePreview ? undefined : { display: "contents" }}>
     {jobSummary?.enquiryReference && <section className="trade-quote-enquiry-brief" aria-label="Customer enquiry brief">
       <header><div><span>Customer enquiry</span><h5>{jobSummary.title}</h5></div><strong>{jobSummary.enquiryReference}</strong></header>

@@ -75,10 +75,10 @@ function authority(team: TeamAccess) {
 async function currentTeam(request: Request, access: WattzunAccess, deps: WattzunWorkflowDependencies) {
   if (access.scope.portal !== "trade") throw new WattzunWorkflowError(403, "Operational trade actions require your TLink business workspace.");
   if (request.signal.aborted) throw new WattzunWorkflowError(409, "This action was closed. Prepare it again before continuing.");
-  const current = await deps.access(request, "trade", access.scope.scopeId);
+  // The canonical team service verifies identity, business, approval, MFA and
+  // current grants together; a separate portal check repeats that same authority.
   const team = await deps.team(scopedRequest(request, access.scope.scopeId));
-  if (current.actorUid !== access.actorUid || current.scope.portal !== "trade" || current.scope.scopeId !== access.scope.scopeId
-    || team.ownerUid !== access.scope.scopeId || team.actorUid !== access.actorUid) throw new WattzunWorkflowError(403, "Your business or access changed. Prepare this action again.");
+  if (team.ownerUid !== access.scope.scopeId || team.actorUid !== access.actorUid) throw new WattzunWorkflowError(403, "Your business or access changed. Prepare this action again.");
   return team;
 }
 function permissions(team: TeamAccess, proposal: WattzunWorkflowOperation) {

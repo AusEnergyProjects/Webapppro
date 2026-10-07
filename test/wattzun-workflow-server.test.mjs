@@ -89,7 +89,9 @@ function fixture(options = {}) {
   database.exec("INSERT INTO trade_sms_recipients VALUES('sms-connection','business-one','+61412345678','customer-job-one','2026-10-01','')");
   const deps = { authenticate: async () => { if (options.authError) throw new AccessError(401, 'Sign in.'); },
     access: async () => { accessCalls++; if (options.revokeAt === accessCalls) throw new AccessError(403, 'Access revoked.'); return access; },
-    team: async request => { teamCalls++; assert.equal(request.headers.get('X-TLink-Business'), 'business-one'); options.onTeam?.(database, team, teamCalls); return structuredClone(team); },
+    team: async request => { teamCalls++; assert.equal(request.headers.get('X-TLink-Business'), 'business-one');
+      if (options.teamRevokeAt === teamCalls) throw new AccessError(403, 'Access revoked.');
+      options.onTeam?.(database, team, teamCalls); return structuredClone(team); },
     encrypt: async payload => { const id = 'synthetic-cipher-' + crypto.randomUUID(); cipher.set(id, structuredClone(payload)); return id; },
     decrypt: async id => structuredClone(cipher.get(id)),
     now: () => currentTime,
@@ -138,7 +140,8 @@ function fixture(options = {}) {
   const execute = reviewId => post({ stage: 'execute', portal: 'trade', scopeId: 'business-one', requestId: 'synthetic-execute-0001', reviewId, reviewed: true });
   const invoice = (id = 'invoice-one', overrides = {}) => database.prepare("INSERT INTO trade_crm_quick_invoices(id,firebase_uid,work_order_id,crm_customer_id,invoice_number,total_cents,due_at,updated_at,status) VALUES(?,'business-one','job-one','customer-job-one',?,10000,'2026-10-02','2026-10-06',?)")
     .run(id, overrides.number || 'INV-001', overrides.status || 'issued');
-  return { database, db, access, team, deps, statements, calls, addJob, prepare, execute, post, invoice, cipher, advance: milliseconds => { currentTime += milliseconds; } };
+  return { database, db, access, team, deps, statements, calls, addJob, prepare, execute, post, invoice, cipher,
+    authorityCalls: () => ({ access: accessCalls, team: teamCalls }), advance: milliseconds => { currentTime += milliseconds; } };
 }
 
 test('prepare is read-only except encrypted review receipt and displays the exact service SMS', async () => {
@@ -150,6 +153,29 @@ test('prepare is read-only except encrypted review receipt and displays the exac
   const audit = f.database.prepare('SELECT metadata FROM admin_audit_log').get().metadata;
   assert.doesNotMatch(audit, /John|Fake Street|We will arrive|john@example/);
   assert.equal(f.database.prepare('SELECT COUNT(*) count FROM trade_sms_messages').get().count, 0);
+});
+test('workflow boundaries read fresh canonical team authority without repeating the portal authority lookup', async () => {
+  const f = fixture(); const result = await f.prepare(); assert.equal(result.status, 200);
+  assert.deepEqual(f.authorityCalls(), { access: 1, team: 4 });
+  const request = new Request('https://example.test/api/wattzun/portal');
+  assert.equal((await workflowModule.loadWattzunWorkflowReview(request, f.access, result.body.result.reviewId, f.deps)).state, 'review');
+  assert.deepEqual(f.authorityCalls(), { access: 1, team: 6 });
+});
+test('canonical team revocation at each preparation boundary prevents disclosure and any operational send', async () => {
+  for (const teamRevokeAt of [1, 2, 3, 4]) {
+    const f = fixture({ teamRevokeAt }); const result = await f.prepare(); assert.equal(result.status, 403);
+    assert.equal(result.body.result, undefined); assert.equal(f.calls.length, 0);
+    assert.doesNotMatch(JSON.stringify(result.body), /John Smith|Fake Street|john@example/);
+    assert.deepEqual(f.authorityCalls(), { access: 1, team: teamRevokeAt });
+  }
+});
+test('fresh canonical team actor and business must continue matching authenticated portal scope', async () => {
+  for (const mutation of [{ actorUid: 'other-actor' }, { ownerUid: 'other-business' }]) {
+    const f = fixture({ onTeam: (_database, team, count) => { if (count === 2) Object.assign(team, mutation); } });
+    const result = await f.prepare(); assert.equal(result.status, 403);
+    assert.equal(result.body.result, undefined); assert.equal(f.calls.length, 0);
+    assert.doesNotMatch(JSON.stringify(result.body), /John Smith|Fake Street/);
+  }
 });
 test('ambiguous matching jobs ask with actual names and addresses and disclose at most five', async () => {
   const f = fixture(); for (let index = 2; index <= 7; index++) f.addJob('job-' + index, { name: 'Smith-' + index, address: index + ' Fake Street' });

@@ -64,7 +64,17 @@ test("text prepares a concrete scoped workflow review and binds blank or current
     assert.equal(f.workflowCalls[0].proposal.jobId, workContext.reference.recordId); assert.equal(f.workflowCalls[0].current.actorUid, access.actorUid);
     assert.equal(f.workflowCalls[0].requestId, input.requestId); assert.equal(result.body.reply.action.jobId, workContext.reference.recordId);
     assert.equal(f.events.filter(value => value === "prepareWorkflow").length, 1); assert.equal(f.recorded.length, 1);
+    assert.equal(f.events.filter(value => value === "context").length, 3, "Initial, pre-usage and final source checks remain without another full snapshot before target preparation");
+    assert.deepEqual(f.events.slice(f.events.indexOf("reply") + 1, f.events.indexOf("prepareWorkflow") + 1), ["access", "prepareWorkflow"]);
   }
+});
+test("workflow preparation still requires fresh scope after reasoning without reloading the selected snapshot", async () => {
+  const workContext = syntheticWorkContext();
+  const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext,
+    reply: { ...reply, action: workflowProposal }, workflowResult: workflowReview, revokeAt: 2 });
+  const result = await f.post(); assert.equal(result.response.status, 403);
+  assert.equal(f.events.filter(value => value === "context").length, 1); assert.equal(f.workflowCalls.length, 0);
+  assert.equal(f.providerContexts.length, 1); assert.equal(f.recorded.length, 0); assert.equal(result.body.reply, undefined);
 });
 test("another job's customer, suburb or time clues remain searchable instead of being replaced by the selected job", async () => {
   const workContext = syntheticWorkContext(); const action = { ...workflowProposal, jobQuery: "that job last week in Frankston" };

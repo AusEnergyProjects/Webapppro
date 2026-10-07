@@ -172,7 +172,9 @@ async function initialWorkflow(request: Request, access: WattzunAccess, input: W
 async function processWorkflowReply(request: Request, access: WattzunAccess, input: WattzunTurnInput, context: WattzunWorkContext | undefined,
   reply: WattzunReply, workflow: WorkflowTurn, deps: WattzunRouteDependencies, requestSummary?: string): Promise<WattzunReply> {
   if (!isWattzunWorkflowProposal(reply.action)) return workflow.result ? { ...reply, workflow: workflow.result } : reply;
-  const currentAccess = await recheckTurn(request, access, input, context, deps);
+  // Preparation checks its exact current target. Keep the selected-source checks
+  // at the existing speech, usage and response handoff boundaries.
+  const currentAccess = await recheck(request, access, deps);
   if (reply.action.kind === "confirm_workflow") {
     if (workflow.result?.state !== "review" || reply.action.reviewId !== workflow.result.reviewId) throw new WattzunWorkflowError(409, "Approve only the current workflow review. Prepare it again if the details changed.");
     if (!isWattzunWorkflowApproval(input.message || requestSummary || "")) throw new WattzunWorkflowError(400, "Please explicitly confirm this current review before it can be saved or sent.");

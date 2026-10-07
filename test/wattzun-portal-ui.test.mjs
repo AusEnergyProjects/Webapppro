@@ -9,6 +9,7 @@ import * as conversationContract from "../src/lib/wattzun-conversation.ts";
 import * as workContract from "../src/lib/wattzun-work-context.ts";
 import * as workflowContract from "../src/lib/wattzun-workflow.ts";
 import * as workflowReply from "../src/lib/wattzun-workflow-reply.ts";
+import * as quoteClient from "../src/lib/trade-quote-client.ts";
 import { WattzunVoiceCallError } from "../src/lib/wattzun-voice-client.ts";
 import { readWattzunVoiceStream } from "../src/lib/wattzun-voice-stream.ts";
 
@@ -37,6 +38,7 @@ function load({ values = [null, [], "", false, null], refValues = {}, storage, e
     "@/lib/wattzun-work-context": workContract,
     "@/lib/wattzun-workflow": workflowContract,
     "@/lib/wattzun-workflow-reply": workflowReply,
+    "@/lib/trade-quote-client": quoteClient,
     "@/lib/wattzun-appearance": {
       WATTZUN_OPEN_EVENT:'wattzun:open',WATTZUN_READY_EVENT:'wattzun:ready',WATTZUN_USAGE_CHANGED_EVENT:'wattzun:usage-changed',
       readWattzunOpenRequest:value=>value,
