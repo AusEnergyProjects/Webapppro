@@ -22,9 +22,10 @@ export class WattzunVoiceCallError extends Error {
 }
 export interface WattzunRecorder {
   onData: (data: Blob) => void;
-  onStop: () => void;
+  onStop: (reason?: "limit") => void;
   onError: () => void;
   start(): void;
+  confirmSpeech(): void;
   stop(): void;
 }
 export interface WattzunMicrophone {
@@ -52,6 +53,7 @@ export class WattzunSpeechWindow {
   private lastSample: number;
   private lastSpeech: number;
   private heardSpeech = false;
+  private speechStarted: number | null = null;
   private readonly started: number;
   constructor(started: number) { this.started = started; this.lastSample = started; this.lastSpeech = started; }
   get hasSpeech() { return this.heardSpeech; }
@@ -59,12 +61,16 @@ export class WattzunSpeechWindow {
     const elapsed = Math.min(250, Math.max(0, now - this.lastSample));
     this.lastSample = now;
     if (level >= 0.025) {
+      if (this.speechStarted === null) this.speechStarted = now - elapsed;
       this.speechMilliseconds += elapsed;
       this.lastSpeech = now;
       if (this.speechMilliseconds >= 250) this.heardSpeech = true;
     }
-    else if (!this.heardSpeech && now - this.lastSpeech > 200) this.speechMilliseconds = 0;
-    if (now - this.started >= WATTZUN_MAX_TURN_SECONDS * 1000) return this.heardSpeech ? "send" : "silent";
+    else if (!this.heardSpeech && now - this.lastSpeech > 200) { this.speechMilliseconds = 0; this.speechStarted = null; }
+    // Waiting does not consume a sentence's recording budget. A candidate at
+    // the old idle boundary must be allowed to confirm before quiet rollover.
+    if (this.heardSpeech && this.speechStarted !== null && now - this.speechStarted >= WATTZUN_MAX_TURN_SECONDS * 1000) return "send";
+    if (this.speechStarted === null && now - this.started >= WATTZUN_MAX_TURN_SECONDS * 1000) return "silent";
     // Preserve a natural pause between sentences; the next clause may contain
     // the name, price or instruction that makes the task safe to complete.
     if (this.heardSpeech && now - this.lastSpeech >= 1300) return "send";
@@ -197,12 +203,12 @@ export class WattzunVoiceCall {
         capture.chunks.push(chunk);
       };
       recorder.onError = () => { if (this.capture === capture) this.fail("Recording stopped unexpectedly. Check your microphone and call again."); };
-      recorder.onStop = () => {
+      recorder.onStop = (reason) => {
         if (this.capture !== capture || capture.settled) return;
         capture.settled = true;
         capture.stopSampling();
         this.capture = null;
-        if (capture.submit && capture.bytes) {
+        if ((capture.submit || reason === "limit" && window.hasSpeech) && capture.bytes) {
           const audio = new Blob(capture.chunks, { type: capture.chunks[0]?.type || "audio/webm" });
           capture.chunks = [];
           void this.send(audio);
@@ -216,6 +222,7 @@ export class WattzunVoiceCall {
         if (this.capture !== capture || capture.settled) return;
         const level = this.microphone?.level() || 0;
         const decision = window.sample(level, this.environment.now());
+        if (window.hasSpeech) recorder.confirmSpeech();
         if (decision === "wait") return;
         capture.stopSampling();
         capture.submit = decision === "send";

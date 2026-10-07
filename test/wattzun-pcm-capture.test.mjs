@@ -57,7 +57,7 @@ test("capture waits for FIFO stop acknowledgement, emits one WAV and starts anot
   const h = await fixture();
   try {
     const recorder = h.capture.recorder(), events = observer(recorder); recorder.start(); recorder.start();
-    assert.deepEqual(h.state.modules, ["/wattzun-voice-worklet.js"]); assert.deepEqual(h.state.messages, [{ type: "start", id: 1 }]);
+    assert.deepEqual(h.state.modules, ["/wattzun-voice-worklet.js?capture=2"]); assert.deepEqual(h.state.messages, [{ type: "start", id: 1, preRoll: true }]);
     h.message({ type: "data", id: 1, samples: pcm([100, -100]) }); recorder.stop(); recorder.stop();
     assert.equal(events.data.length, 0); assert.equal(events.stopped, 0);
     h.message({ type: "data", id: 1, samples: pcm([200]) }); h.message({ type: "stop", id: 1 });
@@ -77,7 +77,7 @@ test("replacing a stopped turn discards its late data and does not stop the new 
     h.message({ type: "data", id: 2, samples: pcm([22]) }); next.stop(); h.message({ type: "stop", id: 2 });
     assert.deepEqual(priorEvents, { data: [], stopped: 0, errors: 0 }); assert.equal(events.stopped, 1); assert.equal(events.errors, 0);
     assert.equal(new DataView(await events.data[0].arrayBuffer()).getInt16(44, true), 22);
-    assert.deepEqual(h.state.messages, [{ type: "start", id: 1 }, { type: "stop", id: 1 }, { type: "start", id: 2 }, { type: "stop", id: 2 }]);
+    assert.deepEqual(h.state.messages, [{ type: "start", id: 1, preRoll: true }, { type: "stop", id: 1 }, { type: "start", id: 2, preRoll: true }, { type: "stop", id: 2 }]);
   } finally { h.capture.close(); h.restore(); }
 });
 test("only one active turn can record and a closed capture cannot start another", async () => {
@@ -204,7 +204,7 @@ test("the actual worklet mixes mono, clips signed PCM and silences output before
   try {
     const output = new Float32Array([1, 1, 1, 1, 1]); h.processor.process([[new Float32Array(5)]], [[output]]);
     assert.deepEqual([...output], [0, 0, 0, 0, 0]); assert.equal(h.processor.messages.length, 0);
-    h.command({ type: "start", id: 1 }); h.processor.process([[new Float32Array([-2, -1, 0, .5, 2]), new Float32Array([-2, 1, 0, .5, 2])]], [[output]]);
+    h.command({ type: "start", id: 1 }); h.command({ type: "speech", id: 1 }); h.processor.process([[new Float32Array([-2, -1, 0, .5, 2]), new Float32Array([-2, 1, 0, .5, 2])]], [[output]]);
     h.command({ type: "stop", id: 999 }); assert.equal(h.processor.messages.length, 0); h.command({ type: "stop", id: 1 });
     assert.deepEqual(samplesFrom(h.processor.messages), [-32768, 0, 0, 16384, 32767]);
     assert.deepEqual(h.processor.messages.map(message => [message.type, message.id]), [["data", 1], ["stop", 1]]);
@@ -214,23 +214,90 @@ test("the actual worklet mixes mono, clips signed PCM and silences output before
 test("the worklet flushes bounded 100ms blocks and a partial tail with a fresh phase per turn", async () => {
   const h = await workletFixture(48000);
   try {
-    const input = sine(48000, 440, .25); h.command({ type: "start", id: 1 });
+    const input = sine(48000, 440, .25); h.command({ type: "start", id: 1 }); h.command({ type: "speech", id: 1 });
     for (let index = 0; index < input.length; index += 128) h.processor.process([[input.subarray(index, index + 128)]], [[new Float32Array(128)]]);
     assert.deepEqual(h.processor.messages.map(message => message.samples.byteLength), [4800, 4800]); h.command({ type: "stop", id: 1 });
     const first = samplesFrom(h.processor.messages); assert.equal(first.length, 6000);
     assert.deepEqual(h.processor.messages.filter(message => message.type === "data").map(message => message.samples.byteLength), [4800, 4800, 2400]);
-    h.processor.messages = []; h.command({ type: "start", id: 2 }); h.processor.process([[input]], [[new Float32Array(input.length)]]); h.command({ type: "stop", id: 2 });
+    h.processor.messages = []; h.command({ type: "start", id: 2 }); h.command({ type: "speech", id: 2 }); h.processor.process([[input]], [[new Float32Array(input.length)]]); h.command({ type: "stop", id: 2 });
     assert.deepEqual(samplesFrom(h.processor.messages), first); assert.ok(h.processor.messages.every(message => message.id === 2));
   } finally { h.restore(); }
 });
 test("worklet caps a long turn at exactly 45 seconds and close discards an unfinished tail", async () => {
   const h = await workletFixture();
   try {
-    h.command({ type: "start", id: 1 }); const block = new Float32Array(24000).fill(.25);
+    h.command({ type: "start", id: 1, preRoll: true }); h.command({ type: "speech", id: 1 }); const block = new Float32Array(24000).fill(.25);
     for (let second = 0; second < 46; second++) h.processor.process([[block]], [[new Float32Array(24000)]]);
     h.command({ type: "stop", id: 1 }); assert.equal(samplesFrom(h.processor.messages).length, 45 * 24000);
     assert.equal(h.processor.messages.filter(message => message.type === "data").length, 450);
+    assert.deepEqual(h.processor.messages.at(-1),{type:"stop",id:1,reason:"limit"});assert.equal(h.processor.messages.filter(message=>message.type==="stop").length,1);
     h.processor.messages = []; h.command({ type: "start", id: 2 }); h.processor.process([[new Float32Array(128)]], [[new Float32Array(128)]]);
     h.command({ type: "close" }); assert.equal(h.processor.messages.length, 0); assert.equal(h.processor.port.onmessage, null);
   } finally { h.restore(); }
+});
+
+test("speech confirmation is exactly once and stopped or replaced recorders cannot confirm a new turn",async()=>{
+  const h=await fixture();
+  try {
+    const first=h.capture.recorder();first.confirmSpeech();assert.equal(h.state.messages.length,0);
+    first.start();first.confirmSpeech();first.confirmSpeech();first.stop();first.confirmSpeech();
+    const second=h.capture.recorder();second.start();first.confirmSpeech();first.stop();second.stop();second.confirmSpeech();
+    assert.deepEqual(h.state.messages,[{type:"start",id:1,preRoll:true},{type:"speech",id:1},{type:"stop",id:1},{type:"start",id:2,preRoll:true},{type:"stop",id:2}]);
+  } finally {h.capture.close();h.restore();}
+});
+
+test("authoritative limit emits the complete bounded WAV before exactly one limit-stop",async()=>{
+  const h=await fixture();
+  try {
+    const events=[],recorder=h.capture.recorder();recorder.onData=audio=>events.push({type:"audio",bytes:audio.size});recorder.onStop=reason=>events.push({type:"stop",reason});recorder.onError=()=>events.push({type:"error"});
+    recorder.start();recorder.confirmSpeech();for(let i=0;i<450;i++)h.message({type:"data",id:1,samples:new ArrayBuffer(4800)});
+    h.message({type:"stop",id:1,reason:"limit"});h.message({type:"stop",id:1,reason:"limit"});recorder.stop();
+    assert.deepEqual(events,[{type:"audio",bytes:2160044},{type:"stop",reason:"limit"}]);
+  } finally {h.capture.close();h.restore();}
+});
+
+test("unconfirmed or incomplete unsolicited limit stops cannot produce a WAV",async()=>{
+  for(const confirmed of [false,true]){
+    const h=await fixture();try {const recorder=h.capture.recorder(),events=observer(recorder);recorder.start();if(confirmed)recorder.confirmSpeech();h.message({type:"data",id:1,samples:pcm([1])});h.message({type:"stop",id:1,reason:"limit"});assert.deepEqual(events,{data:[],stopped:0,errors:1});} finally {h.capture.close();h.restore();}
+  }
+});
+
+test("six minutes of quiet or unconfirmed noise retain only one second and stop without audio",async()=>{
+  const h=await workletFixture();
+  try {
+    h.command({type:"start",id:1,preRoll:true});const block=new Float32Array(24000);
+    for(let second=0;second<360;second++){block.fill(second%40===0?.01:0);h.processor.process([[block]],[[new Float32Array(24000)]]);}
+    assert.equal(h.processor.messages.length,0);assert.equal(h.processor.samples,0);assert.equal(h.processor.preRollCount,24000);assert.equal(h.processor.preRoll.length,24000);
+    h.command({type:"speech",id:999});h.command({type:"stop",id:999});assert.equal(h.processor.messages.length,0);
+    h.command({type:"stop",id:1});h.command({type:"speech",id:1});assert.deepEqual(h.processor.messages,[{type:"stop",id:1}]);
+    h.command({type:"start",id:2,preRoll:true});h.command({type:"speech",id:1});assert.equal(h.processor.speechConfirmed,false);
+  } finally {h.restore();}
+});
+
+test("42 seconds of idle then a ten-second sentence preserve opening phonemes through the real 48kHz resampler",async()=>{
+  const h=await workletFixture(48000);
+  try {
+    h.command({type:"start",id:1,preRoll:true});const quiet=new Float32Array(48000),output=new Float32Array(128);
+    const feed=input=>{for(let i=0;i<input.length;i+=128)h.processor.process([[input.subarray(i,i+128)]],[[output]]);};
+    for(let second=0;second<43;second++)feed(quiet);
+    assert.equal(h.processor.messages.length,0);
+    const spoken=sine(48000,440,10);spoken.set(new Float32Array(4800).fill(.8));
+    feed(spoken.subarray(0,14400));h.command({type:"speech",id:1});h.command({type:"speech",id:1});
+    feed(spoken.subarray(14400));feed(new Float32Array(4800));h.command({type:"stop",id:1});
+    const recorded=samplesFrom(h.processor.messages);
+    const expectedInput=new Float32Array(33600+spoken.length+4800);expectedInput.set(spoken,33600);
+    const expected=resample(expectedInput,48000,128).map(value=>Math.max(-32768,Math.min(32767,Math.round(Math.max(-1,Math.min(1,value))*32768)))||0);
+    assert.deepEqual(recorded,expected,"Pre-confirmation phonemes and every subsequent sample are retained in order");
+    assert.equal(recorded.length,259200);assert.equal(h.processor.messages.filter(message=>message.type==="stop").length,1);
+  } finally {h.restore();}
+});
+
+test("already-loaded clients keep their existing bounded manual-stop protocol after deployment",async()=>{
+  const h=await workletFixture();
+  try {
+    h.command({type:"start",id:1});const block=new Float32Array(24000).fill(.25);
+    for(let second=0;second<46;second++)h.processor.process([[block]],[[new Float32Array(24000)]]);
+    assert.equal(samplesFrom(h.processor.messages).length,45*24000);assert.equal(h.processor.messages.filter(message=>message.type==="stop").length,0);
+    h.command({type:"stop",id:1});assert.deepEqual(h.processor.messages.at(-1),{type:"stop",id:1});
+  } finally {h.restore();}
 });

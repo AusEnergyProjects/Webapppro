@@ -265,7 +265,7 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.match(session.instructions, /exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary/);
   assert.match(session.instructions, /Never nest the reply content under a reply property/);
   assert.match(session.instructions, /unconfirmed interpretation.*not a verbatim transcript or verified record/);
-  assert.equal(session.tool_choice, "required");
+  assert.deepEqual(session.tool_choice, { type: "function", name: "wattzun_portal_reply" });
   assert.deepEqual(session.audio.input, { format: { type: "audio/pcm", rate: 24000 }, transcription: null, turn_detection: null });
   assert.deepEqual(session.audio.output, { format: { type: "audio/pcm", rate: 24000 }, voice: "cedar", speed: 1.15 });
   assert.deepEqual(session.reasoning, { effort: "low" }); assert.equal(session.parallel_tool_calls, false);
@@ -274,6 +274,14 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.match(session.instructions, /combined message and all questions normally under 45 words/);
   assert.match(session.instructions, /one concise next necessary question/);
   assert.match(session.instructions, /word target must not omit a material fact or required review detail/);
+  assert.match(session.instructions, /ask the next missing detail directly/);
+  assert.match(session.instructions, /Do not narrate the whole workflow, repeat boilerplate or list later intake details/);
+  const clarificationExample = JSON.parse(session.instructions.match(/Clarification argument shape example: (\{[^\n]+\})\./)[1]);
+  assert.deepEqual(Object.keys(clarificationExample), session.tools[0].parameters.required);
+  assert.equal(typeof clarificationExample.requestSummary, "string");
+  const exampleContent = { ...clarificationExample }; delete exampleContent.requestSummary;
+  assert.equal(f.shared.createWattzunPortalReplyContract(options).validate(exampleContent).kind, "clarification");
+  assert.match(session.tools[0].description, /complete six-field reply proposal/);
   const responses = f.socket.sent.filter(event => event.type === "response.create").map(event => event.response);
   assert.deepEqual(responses[0].tool_choice, session.tool_choice); assert.equal(responses[0].max_output_tokens, 2500);
   assert.equal(responses[1].conversation, "none"); assert.deepEqual(responses[1].tools, []); assert.equal(responses[1].tool_choice, "none");
@@ -639,7 +647,9 @@ test("missing Upgrade, wrong negotiated PCM and server-only disabled configurati
     await assert.rejects(f.prepareWattzunRealtimeTurn(request()), safeError);
     assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 0); assert.equal(f.released(), 1);
   });
-  for (const change of [session => { session.tool_choice = "auto"; }, session => { session.tools = []; },
+  for (const change of [session => { session.tool_choice = "auto"; }, session => { session.tool_choice = "required"; },
+    session => { session.tool_choice.name = "other_tool"; }, session => { session.tool_choice.type = "mcp"; },
+    session => { session.tool_choice.extra = "unverified"; }, session => { session.tools = []; },
     session => { session.tools[0].name = "other_tool"; }]) await t.test("unacknowledged reply submission tool", async () => {
     const f = fixture({ receive: (event, socket) => {
       if (event.type === "session.update") {

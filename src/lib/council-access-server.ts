@@ -18,6 +18,7 @@ type MembershipRow = {
   state: string;
   role: string;
 };
+type PostcodeRow = { council_id: string; postcode: string };
 
 export function councilJson(body: object, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
@@ -39,27 +40,30 @@ export function isCouncilRole(value: unknown): value is CouncilRole {
 export async function councilMemberships(db: D1Database, identity: FirebaseIdentity): Promise<CouncilAccessScope[]> {
   if (!identity.emailVerified) throw new Error("EMAIL_VERIFICATION_REQUIRED");
   const now = new Date().toISOString();
-  await db.prepare(`UPDATE council_memberships
+  // D1 executes these in order in one transaction: claim, then re-read the
+  // authoritative membership and postcode scope without separate round trips.
+  const [claim, rows, scopes] = await db.batch<MembershipRow | PostcodeRow>([
+    db.prepare(`UPDATE council_memberships
     SET firebase_uid = ?, accepted_at = ?, updated_at = ?
     WHERE email = ? AND firebase_uid IS NULL AND status = 'active'
       AND EXISTS (SELECT 1 FROM council_organisations c WHERE c.id = council_memberships.council_id AND c.status = 'active')
       AND NOT EXISTS (SELECT 1 FROM council_memberships bound
         WHERE bound.council_id = council_memberships.council_id AND bound.firebase_uid = ?)`)
-    .bind(identity.uid, now, now, identity.email, identity.uid).run();
-
-  // Re-read the authoritative membership after the conditional claim. A competing claim never grants access.
-  const rows = await db.prepare(`SELECT c.id, c.name, c.slug, c.state, m.role
+      .bind(identity.uid, now, now, identity.email, identity.uid),
+    db.prepare(`SELECT c.id, c.name, c.slug, c.state, m.role
     FROM council_memberships m JOIN council_organisations c ON c.id = m.council_id
     WHERE m.firebase_uid = ? AND m.status = 'active' AND c.status = 'active'
-    ORDER BY c.name, c.id`).bind(identity.uid).all<MembershipRow>();
-  const scopes = await db.prepare(`SELECT p.council_id, p.postcode
+    ORDER BY c.name, c.id`).bind(identity.uid),
+    db.prepare(`SELECT p.council_id, p.postcode
     FROM council_postcodes p JOIN council_organisations c ON c.id = p.council_id AND c.state = p.state
     JOIN council_memberships m ON m.council_id = c.id
     WHERE m.firebase_uid = ? AND m.status = 'active' AND c.status = 'active'
-    ORDER BY p.postcode`).bind(identity.uid).all<{ council_id: string; postcode: string }>();
-  return rows.results.flatMap((row) => isCouncilRole(row.role) ? [{
+    ORDER BY p.postcode`).bind(identity.uid),
+  ]);
+  if (!claim?.success || !rows?.success || !scopes?.success) throw new Error("COUNCIL_ACCESS_UNAVAILABLE");
+  return rows.results.flatMap((row) => "id" in row && isCouncilRole(row.role) ? [{
     id: row.id, name: row.name, slug: row.slug, state: row.state, role: row.role,
-    postcodes: scopes.results.filter((scope) => scope.council_id === row.id).map((scope) => scope.postcode),
+    postcodes: scopes.results.filter((scope): scope is PostcodeRow => "council_id" in scope && scope.council_id === row.id).map((scope) => scope.postcode),
   }] : []);
 }
 

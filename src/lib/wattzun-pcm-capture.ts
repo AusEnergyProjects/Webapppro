@@ -20,12 +20,12 @@ export function encodeWattzunPcmWav(chunks: readonly ArrayBuffer[]): Blob {
   return new Blob([header, ...chunks], { type: "audio/wav" });
 }
 
-type Recording = { id: number; port: WattzunRecorder; chunks: ArrayBuffer[]; bytes: number; stopping: boolean };
+type Recording = { id: number; port: WattzunRecorder; chunks: ArrayBuffer[]; bytes: number; stopping: boolean; speechConfirmed: boolean };
 
 /** A single same-origin worklet owns bounded turn capture on the microphone context. */
 export async function createWattzunPcmCapture(context: AudioContext, source: AudioNode) {
   if (!context.audioWorklet || typeof AudioWorkletNode === "undefined") throw new DOMException("Native voice capture requires AudioWorklet support.", "NotSupportedError");
-  await context.audioWorklet.addModule("/wattzun-voice-worklet.js");
+  await context.audioWorklet.addModule("/wattzun-voice-worklet.js?capture=2");
   const node = new AudioWorkletNode(context, "wattzun-voice-capture", {
     numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: "explicit",
   });
@@ -62,13 +62,14 @@ export async function createWattzunPcmCapture(context: AudioContext, source: Aud
         || active.bytes + chunk.byteLength + WAV_HEADER_BYTES > WATTZUN_MAX_WAV_AUDIO_BYTES) { fail(); return; }
       active.chunks.push(chunk);
       active.bytes += chunk.byteLength;
-    } else if (event.data.type === "stop" && active.stopping) {
+    } else if (event.data.type === "stop" && (event.data.reason === undefined && active.stopping
+      || event.data.reason === "limit" && active.speechConfirmed && active.bytes + WAV_HEADER_BYTES === WATTZUN_MAX_WAV_AUDIO_BYTES)) {
       recording = null;
       const chunks = active.chunks;
       active.chunks = [];
       active.bytes = 0;
       if (chunks.length) active.port.onData(encodeWattzunPcmWav(chunks));
-      if (!closed && !broken) active.port.onStop();
+      if (!closed && !broken) active.port.onStop(event.data.reason === "limit" ? "limit" : undefined);
     } else fail();
   };
   try {
@@ -88,8 +89,13 @@ export async function createWattzunPcmCapture(context: AudioContext, source: Aud
           if (recording && !recording.stopping) throw new Error("A microphone recording is already active.");
           started = true;
           if (recording) { recording.chunks = []; recording.bytes = 0; }
-          recording = { id, port, chunks: [], bytes: 0, stopping: false };
-          node.port.postMessage({ type: "start", id });
+          recording = { id, port, chunks: [], bytes: 0, stopping: false, speechConfirmed: false };
+          node.port.postMessage({ type: "start", id, preRoll: true });
+        },
+        confirmSpeech() {
+          if (!started || stopped || closed || broken || recording?.id !== id || recording.speechConfirmed) return;
+          recording.speechConfirmed = true;
+          node.port.postMessage({ type: "speech", id });
         },
         stop() {
           if (!started || stopped || closed || broken) return;

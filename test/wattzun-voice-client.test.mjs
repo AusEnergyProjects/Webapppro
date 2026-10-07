@@ -12,7 +12,7 @@ function harness(options = {}) {
     recorder() {
       state.recorderCount++;
       let stopped = false;
-      const recorder = { onData() {}, onStop() {}, onError() {}, start() { if (options.recordingError) throw new Error("recorder failed"); }, stop() { if (stopped) return; stopped = true; recorder.onData(options.audio || new Blob(options.emptyAudio ? [] : ["synthetic speech"], { type: "audio/webm" })); recorder.onStop(); } };
+      const recorder = { confirmations: 0, onData() {}, onStop() {}, onError() {}, start() { if (options.recordingError) throw new Error("recorder failed"); }, confirmSpeech() { this.confirmations++; }, stop() { if (stopped) return; stopped = true; recorder.onData(options.audio || new Blob(options.emptyAudio ? [] : ["synthetic speech"], { type: "audio/webm" })); recorder.onStop(); } };
       state.recorders.push(recorder);
       return recorder;
     },
@@ -174,6 +174,29 @@ test("a natural 1100ms sentence pause preserves the next clause and resets the e
   assert.equal(speech.sample(.06, 1450), "wait");
   assert.equal(speech.sample(0, 2749), "wait");
   assert.equal(speech.sample(0, 2750), "send");
+});
+
+test("idle time never cuts a ten-second sentence and a candidate can cross the old idle deadline", () => {
+  for (const onset of [42400, 44900]) {
+    const speech = new WattzunSpeechWindow(0);
+    for (let time=100;time<onset;time+=100) assert.equal(speech.sample(0,time),"wait");
+    for (let time=onset;time<=onset+10000;time+=100) assert.equal(speech.sample(.1,time),"wait",`${onset}: ${time}`);
+    assert.equal(speech.sample(0,onset+11299),"wait");assert.equal(speech.sample(0,onset+11300),"send");
+  }
+});
+
+test("a brief sound near idle rollover stays unconfirmed and does not submit",async()=>{
+  const h=harness();await h.call.start();h.sample(44800,0);h.sample(100,.1);h.sample(100,0);
+  assert.equal(h.state.submits.length,0);assert.equal(h.state.recorderCount,1);
+  h.sample(200,0);assert.equal(h.state.submits.length,0);assert.equal(h.state.recorders[0].confirmations,0);assert.equal(h.state.recorderCount,2);h.call.dispose();
+});
+
+test("the recorder's bounded limit submits confirmed speech once and stale limits cannot submit after mute or hangup",async()=>{
+  const h=harness();await h.call.start();for(let i=0;i<3;i++)h.sample(100,.1);
+  const recorder=h.state.recorders[0];assert.ok(recorder.confirmations>0);
+  recorder.onData(new Blob(["bounded audio"]));recorder.onStop("limit");recorder.onStop("limit");await tick();
+  assert.equal(h.state.submits.length,1);h.call.dispose();
+  for(const action of ["toggleMute","hangUp"]){const f=harness();await f.call.start();for(let i=0;i<3;i++)f.sample(100,.1);const old=f.state.recorders[0];f.call[action]();old.onData(new Blob(["late bounded audio"]));old.onStop("limit");assert.equal(f.state.submits.length,0);f.call.dispose();}
 });
 test("separated short clicks never accumulate into a spoken question", () => {
   const detector = new WattzunSpeechWindow(0);

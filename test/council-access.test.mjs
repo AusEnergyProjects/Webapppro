@@ -18,15 +18,23 @@ function load(path, dependencies) {
 }
 
 function wrap(sqlite) {
+  const calls = { batches: [], individual: [] };
   const statement = (sql, bindings = []) => ({
+    sql, bindings,
     bind: (...values) => statement(sql, values),
-    first: async () => sqlite.prepare(sql).get(...bindings) || null,
-    all: async () => ({ results: sqlite.prepare(sql).all(...bindings) }),
-    run: async () => ({ success: true, meta: { changes: Number(sqlite.prepare(sql).run(...bindings).changes) } }),
+    first: async () => { calls.individual.push(sql); return sqlite.prepare(sql).get(...bindings) || null; },
+    all: async () => { calls.individual.push(sql); return { results: sqlite.prepare(sql).all(...bindings) }; },
+    run: async () => { calls.individual.push(sql); return { success: true, meta: { changes: Number(sqlite.prepare(sql).run(...bindings).changes) } }; },
+    execute: () => {
+      const query = sqlite.prepare(sql);
+      return /^\s*SELECT\b/i.test(sql) ? { success: true, results: query.all(...bindings), meta: { changes: 0 } }
+        : { success: true, results: [], meta: { changes: Number(query.run(...bindings).changes) } };
+    },
   });
-  return { prepare: statement, batch: async (statements) => {
+  return { prepare: statement, calls, batch: async (statements) => {
+    calls.batches.push(statements.map(({ sql, bindings }) => ({ sql, bindings })));
     sqlite.exec("BEGIN");
-    try { const results = []; for (const item of statements) results.push(await item.run()); sqlite.exec("COMMIT"); return results; }
+    try { const results = statements.map(item => item.execute()); sqlite.exec("COMMIT"); return results; }
     catch (error) { sqlite.exec("ROLLBACK"); throw error; }
   } };
 }
@@ -110,6 +118,73 @@ test("verified invitation is claimed once, reread and cannot be rebound to anoth
     f.setIdentity({ ...f.identity(), uid: "different-uid" });
     assert.equal((await f.server.requireCouncilAccess(get())).response.status, 403);
     assert.equal(f.sqlite.prepare("SELECT firebase_uid FROM council_memberships").get().firebase_uid, "staff-1");
+  } finally { f.close(); }
+});
+
+test("membership claims and scoped reads use one ordered batch with verified identity parameters", async () => {
+  const f = fixture();
+  try {
+    f.council("council-z"); f.council("council-a"); f.council("foreign", "other@council.example");
+    f.sqlite.exec("INSERT INTO council_postcodes VALUES ('council-a','VIC','3805','admin','now'),('council-a','VIC','3000','admin','now'),('foreign','VIC','3999','admin','now')");
+    const scopes = await f.server.councilMemberships(f.db, f.identity());
+    assert.deepEqual(scopes.map(({ id, postcodes }) => ({ id, postcodes })), [
+      { id: "council-a", postcodes: ["3000", "3175", "3805"] }, { id: "council-z", postcodes: ["3175"] },
+    ]);
+    assert.equal(f.db.calls.batches.length, 1);
+    assert.deepEqual(f.db.calls.individual, []);
+    const [claim, memberships, postcodes] = f.db.calls.batches[0];
+    assert.equal(f.db.calls.batches[0].length, 3);
+    assert.match(claim.sql, /^UPDATE council_memberships\b/);
+    assert.match(memberships.sql, /^SELECT c\.id, c\.name, c\.slug, c\.state, m\.role/);
+    assert.match(postcodes.sql, /^SELECT p\.council_id, p\.postcode/);
+    assert.deepEqual(claim.bindings, ["staff-1", claim.bindings[1], claim.bindings[1], "staff@council.example", "staff-1"]);
+    assert.equal(new Date(claim.bindings[1]).toISOString(), claim.bindings[1]);
+    assert.deepEqual(memberships.bindings, ["staff-1"]); assert.deepEqual(postcodes.bindings, ["staff-1"]);
+    assert.equal(f.sqlite.prepare("SELECT firebase_uid FROM council_memberships WHERE council_id='foreign'").get().firebase_uid, null);
+    // Every fresh call still observes current authorisation rather than caching the first result.
+    f.sqlite.exec("UPDATE council_memberships SET status='suspended' WHERE council_id='council-a'");
+    assert.deepEqual((await f.server.councilMemberships(f.db, f.identity())).map(scope => scope.id), ["council-z"]);
+    assert.equal(f.db.calls.batches.length, 2);
+  } finally { f.close(); }
+});
+
+for (const [name, breakRead] of [
+  ["membership", "ALTER TABLE council_organisations RENAME COLUMN name TO unavailable_name"],
+  ["postcode", "DROP TABLE council_postcodes"],
+]) test(`failed ${name} read rolls back the invitation claim and releases no access`, async () => {
+  const f = fixture();
+  try {
+    f.council(); f.sqlite.exec(breakRead);
+    const access = await f.server.requireCouncilAccess(get());
+    assert.equal(access.ok, false); assert.equal(access.response.status, 503);
+    assert.equal((await access.response.json()).code, "COUNCIL_UNAVAILABLE");
+    const member = f.sqlite.prepare("SELECT firebase_uid, accepted_at FROM council_memberships").get();
+    assert.equal(member.firebase_uid, null); assert.equal(member.accepted_at, null);
+    assert.equal(f.db.calls.batches.length, 1);
+  } finally { f.close(); }
+});
+
+for (const index of [0, 1, 2]) test(`unsuccessful batch result ${index} fails closed even when rows are present`, async () => {
+  const f = fixture();
+  try {
+    f.council();
+    const batch = f.db.batch;
+    f.db.batch = async statements => {
+      const results = await batch(statements); results[index].success = false; return results;
+    };
+    const access = await f.server.requireCouncilAccess(get());
+    assert.equal(access.ok, false); assert.equal(access.response.status, 503);
+    assert.equal((await access.response.json()).code, "COUNCIL_UNAVAILABLE");
+  } finally { f.close(); }
+});
+
+test("an incomplete batch response fails closed", async () => {
+  const f = fixture();
+  try {
+    f.council(); const batch = f.db.batch;
+    f.db.batch = async statements => (await batch(statements)).slice(0, 2);
+    const access = await f.server.requireCouncilAccess(get());
+    assert.equal(access.ok, false); assert.equal(access.response.status, 503);
   } finally { f.close(); }
 });
 

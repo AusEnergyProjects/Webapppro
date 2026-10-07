@@ -48,11 +48,12 @@ test("Council Connect route and tenant permissions execute against Cloudflare D1
     for (const path of ["../drizzle/0250_council_workspace.sql", "../drizzle/0255_council_team_messages.sql"]) for (const sql of read(path).split("--> statement-breakpoint")) if (sql.trim()) await db.prepare(sql).run();
     let identity; let beforeStatement;
     const wrapStatement = (statement, sql) => ({
+      native: statement,
       bind: (...values) => wrapStatement(statement.bind(...values), sql),
       run: async () => { if (beforeStatement?.matches(sql)) { const effect = beforeStatement.effect; beforeStatement = null; await effect(); } return statement.run(); },
       all: (...args) => statement.all(...args), first: (...args) => statement.first(...args),
     });
-    const wrapped = { prepare: sql => wrapStatement(db.prepare(sql), sql) };
+    const wrapped = { prepare: sql => wrapStatement(db.prepare(sql), sql), batch: statements => db.batch(statements.map(item => item.native)) };
     const access = load("../src/lib/council-access-server.ts", { "../../db": { getD1: () => wrapped }, "./firebase-server": { requireFirebaseIdentity: async () => { if (!identity) throw new Error("AUTH_REQUIRED"); return identity; } } });
     const route = load("../src/app/api/council/connect/route.ts", { "@/lib/council-access-server": access, "@/lib/council-connect-server": server, "@/lib/council-connect": contract, "@/lib/portal-team-workspace": portal, "@/lib/bounded-request-body.mjs": boundedBody });
     const as = (member = "owner") => { identity = { uid: `${member}-uid`, email: `${member}@council.example`, emailVerified: true }; };

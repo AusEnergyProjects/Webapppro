@@ -66,8 +66,17 @@ function harness(responder, latest = revision(2, { model: 'Saved' })) {
 
 test('choosing a conflicting web answer saves against the reviewed revision', async () => {
   const h = harness((_payload, attempt) => attempt === 1 ? conflictReply(2) : reply(revision(3, { model: 'Mine' })));
-  h.change('model', 'Mine'); h.advance(); await h.settle();
-  h.click('Use my answer'); h.advance(); await h.settle();
+  const waitForRequests = async (count) => {
+    const deadline = performance.now() + 5000;
+    // Web Crypto completes before fetch, independently of the harness's render ticks.
+    while (h.requests.length < count) {
+      assert.ok(performance.now() < deadline, `Timed out waiting for work-pack request ${count}`);
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    await h.settle();
+  };
+  h.change('model', 'Mine'); h.advance(); await waitForRequests(1);
+  h.click('Use my answer'); h.advance(); await waitForRequests(2);
   assert.equal(h.requests.length, 2);
   assert.equal(h.requests[1].caseInstanceId, 'revision-2');
   assert.deepEqual(h.requests[1].sectionPatches[0].answers, { model: 'Mine' });

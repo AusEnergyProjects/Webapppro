@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { isWattzunWorkflowProposal, isWattzunWorkflowResult, WATTZUN_WORKFLOW_PROPOSAL_SCHEMAS } from '../src/lib/wattzun-workflow.ts';
 import { parseWattzunTurn } from '../src/lib/wattzun-portal.ts';
+import { PRICE_BOOK_ITEM_TYPES, PRICE_BOOK_UNITS } from '../src/lib/trade-price-book.ts';
 
 const exports = {};
 const code = ts.transpileModule(readFileSync(new URL('../src/lib/wattzun-workflow-reply.ts', import.meta.url), 'utf8'),
@@ -40,6 +41,15 @@ test('each workflow has an exact strict schema and bounded decimal strings retai
   assert.equal(isWattzunWorkflowProposal({ ...proposal, unitPrice: null }), true);
   for (const change of [{ extra: 'command' }, { kind: 'send_anything' }, { name: '\u0000' }]) assert.equal(isWattzunWorkflowProposal({ ...proposal, ...change }), false);
   assert.equal(isWattzunWorkflowProposal({ ...quote, mode: 'overwrite' }), false);
+});
+
+test('price-book proposals expose the native type and unit choices to the provider while preserving unknowns', () => {
+  const schema = WATTZUN_WORKFLOW_PROPOSAL_SCHEMAS.find(item => item.properties.kind.enum[0] === 'add_price_book_item');
+  assert.deepEqual(schema.properties.itemType.enum, [...PRICE_BOOK_ITEM_TYPES, null]);
+  assert.deepEqual(schema.properties.unitLabel.enum, [...PRICE_BOOK_UNITS.map(([value]) => value), null]);
+  assert.ok(!schema.properties.unitLabel.enum.includes('installation'));
+  assert.ok(schema.properties.unitLabel.enum.includes('each'));
+  assert.ok(schema.properties.unitLabel.enum.includes(null));
 });
 
 test('current review and pending proposal are mutually exclusive and trade-only', () => {

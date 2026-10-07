@@ -174,7 +174,7 @@ function globals(values) {
 }
 function microphoneContext() {
   const device = context(); device.state = "suspended";
-  device.audioWorklet = { async addModule(url) { assert.equal(url, '/wattzun-voice-worklet.js'); } };
+  device.audioWorklet = { async addModule(url) { assert.equal(url, '/wattzun-voice-worklet.js?capture=2'); } };
   device.createMediaStreamSource = () => ({ connect() {}, disconnect() {} });
   device.createAnalyser = () => ({ fftSize: 0, getFloatTimeDomainData(samples) { samples.fill(0); }, disconnect() {} });
   return device;
@@ -205,7 +205,7 @@ test("the call greeting streams through its resumed microphone context before EO
     assert.equal(statuses.at(-1), "speaking"); assert.equal(audio.input.locked, true); assert.equal(device.sources.length, 1);
     assert.equal(commands.length, 0, "No worklet recording overlaps the greeting");
     audio.controller.close(); await tick(); assert.equal(statuses.at(-1), "speaking"); device.sources[0].end();
-    assert.equal(statuses.at(-1), "listening"); assert.deepEqual(commands, [{ type: "start", id: 1 }]); assert.equal(device.closed, 0);
+    assert.equal(statuses.at(-1), "listening"); assert.deepEqual(commands, [{ type: "start", id: 1, preRoll: true }]); assert.equal(device.closed, 0);
     call.hangUp(); assert.equal(device.closed, 1); assert.equal(timers.size, 0);
   } finally { call.dispose(); restore(); }
 });
@@ -238,7 +238,7 @@ test("a call keeps speaking through a late audio stream failure then quietly res
     device.sources[0].end(); assert.equal(statuses.at(-1).state, "speaking");
     device.sources[1].end();
     assert.equal(statuses.at(-1).state, "listening"); assert.equal(statuses.at(-1).message, "Speak, then pause. Wattzun will reply.");
-    assert.deepEqual(commands, [{ type: "start", id: 1 }]); assert.equal(browserSpeech.length, 0); assert.equal(device.closed, 0);
+    assert.deepEqual(commands, [{ type: "start", id: 1, preRoll: true }]); assert.equal(browserSpeech.length, 0); assert.equal(device.closed, 0);
     call.hangUp(); assert.equal(device.closed, 1); assert.equal(timers.size, 0);
   } finally { call.dispose(); restore(); }
 });

@@ -1,4 +1,5 @@
 import type { WattzunActionLine } from "./wattzun-actions";
+import { PRICE_BOOK_ITEM_TYPES, PRICE_BOOK_UNITS } from "./trade-price-book.ts";
 
 export type WattzunWorkflowProposal =
   | { kind: "add_price_book_item"; name: string; description: string; itemType: string | null; unitLabel: string | null; unitPrice: string | null; supplierCost: string | null; taxCode: "gst" | "none" | null }
@@ -31,7 +32,7 @@ function schema(kind: WattzunWorkflowProposal["kind"], fields: Record<string, ob
   return { type: "object", additionalProperties: false, required: ["kind", ...Object.keys(fields)], properties: { kind: { type: "string", enum: [kind] }, ...fields } };
 }
 export const WATTZUN_WORKFLOW_PROPOSAL_SCHEMAS = [
-  schema("add_price_book_item", { name: string(160), description: string(1000), itemType: nullable(30), unitLabel: nullable(30), unitPrice: nullable(20), supplierCost: nullable(20), taxCode: tax }),
+  schema("add_price_book_item", { name: string(160), description: string(1000), itemType: { type: ["string", "null"], enum: [...PRICE_BOOK_ITEM_TYPES, null] }, unitLabel: { type: ["string", "null"], enum: [...PRICE_BOOK_UNITS.map(([value]) => value), null] }, unitPrice: nullable(20), supplierCost: nullable(20), taxCode: tax }),
   schema("customer_message", { jobQuery: string(300), jobId: string(180), channel, subject: string(180), body: string(2000) }),
   schema("invoice_reminder", { jobQuery: string(300), jobId: string(180), invoiceId: string(180), channel, body: string(1000) }),
   schema("draft_job_quote", { jobQuery: string(300), jobId: string(180), mode: { type: "string", enum: ["append", "replace"] }, description: string(1000), lines: { type: "array", maxItems: 10, items: { type: "object", additionalProperties: false, required: ["lineType", "description", "quantity", "unitPrice", "taxCode"], properties: { lineType: { type: "string", enum: ["product", "labour"] }, description: string(160), quantity: nullable(20), unitPrice: nullable(20), taxCode: tax } } } }),

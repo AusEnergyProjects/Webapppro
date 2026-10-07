@@ -37,6 +37,19 @@ test('off-topic reminders describe only the current portal role',()=>{
   }
 });
 
+test('Council drafting preserves supplied logistics without inventing free entry or promised benefits',()=>{
+  const guidance=WATTZUN_TASK_GUIDANCE.council.join(' ');
+  assert.match(guidance,/Never add a price, free entry, refreshments, speakers, booking link, eligibility, council endorsement or promised savings unless supplied by the user or present in the selected source/);
+  assert.match(guidance,/Earlier assistant drafts are not evidence for these facts; remove unsupported wording when revising a draft/);
+  assert.match(guidance,/If cost is unknown, omit cost wording rather than calling an event free or delaying an otherwise useful draft/);
+  assert.match(guidance,/Carry supplied logistics forward and apply corrections to the same draft without re-asking answered questions/);
+});
+
+test('price-book guidance maps a supplied installation unit without asking for it again',()=>{
+  assert.match(WATTZUN_TASK_GUIDANCE.trade.join(' '),/Use the canonical itemType and unitLabel values in the action schema/);
+  assert.match(WATTZUN_TASK_GUIDANCE.trade.join(' '),/price per installation, per item or per system means each; retain that supplied charging description/);
+});
+
 test('guidance points to existing owner/staff workflows and keeps automated record access separate',()=>{
   const trade=WATTZUN_PORTAL_GUIDE.trade;
   assert.equal(trade.find(item=>item.id==='trade_sales').href,'/direct-trade/dashboard?workspace=sales');

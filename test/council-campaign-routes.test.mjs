@@ -33,6 +33,7 @@ function fixture() {
   let afterBody = null;
   let beforeBatch = null;
   const statement = (sql, bindings = []) => ({
+    sql,
     bind: (...values) => statement(sql, values),
     first: async () => sqlite.prepare(sql).get(...bindings) || null,
     all: async () => ({ results: sqlite.prepare(sql).all(...bindings) }),
@@ -44,7 +45,10 @@ function fixture() {
     },
   });
   const db = { prepare: statement, batch: async (statements) => {
-    const hook = beforeBatch; beforeBatch = null; hook?.();
+    // Revoke immediately before the guarded mutation, after access has resolved.
+    if (statements.some(item => /^\s*INSERT INTO admin_audit_log\b/i.test(item.sql))) {
+      const hook = beforeBatch; beforeBatch = null; hook?.();
+    }
     sqlite.exec("BEGIN");
     try { const result = statements.map(item => item.execute()); sqlite.exec("COMMIT"); return result; }
     catch (error) { sqlite.exec("ROLLBACK"); throw error; }

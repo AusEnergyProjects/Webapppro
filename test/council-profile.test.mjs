@@ -67,9 +67,16 @@ test("profile auth, atomic writes and branding execute against actual Cloudflare
     }
     let identity;
     let beforeBatch;
-    const wrapped = { prepare: sql => db.prepare(sql), batch: async statements => {
-      if (beforeBatch) { const effect = beforeBatch; beforeBatch = undefined; await effect(); }
-      return db.batch(statements);
+    const wrapStatement = (statement, sql) => ({
+      native: statement, sql, bind: (...values) => wrapStatement(statement.bind(...values), sql),
+      run: (...args) => statement.run(...args), all: (...args) => statement.all(...args), first: (...args) => statement.first(...args),
+    });
+    const wrapped = { prepare: sql => wrapStatement(db.prepare(sql), sql), batch: async statements => {
+      // Keep this revocation between access and the guarded profile mutation.
+      if (beforeBatch && statements.some(item => /^\s*INSERT INTO admin_audit_log\b/i.test(item.sql))) {
+        const effect = beforeBatch; beforeBatch = undefined; await effect();
+      }
+      return db.batch(statements.map(item => item.native));
     } };
     const access = load("../src/lib/council-access-server.ts", {
       "../../db": { getD1: () => wrapped }, "./firebase-server": { requireFirebaseIdentity: async () => { if (!identity) throw new Error("AUTH_REQUIRED"); return identity; } },

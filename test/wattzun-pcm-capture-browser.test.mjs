@@ -27,7 +27,7 @@ const bundle = await build({
           capture.close(); capture.close(); source.stop();
           window.fixture.contextStillOpen=context.state!=='closed'; await context.close();window.fixture.done=true;
         };
-        recorder.start();source.start();window.fixture.startedAt=context.currentTime;window.fixture.started=true;
+        recorder.start();recorder.confirmSpeech();source.start();window.fixture.startedAt=context.currentTime;window.fixture.started=true;
         window.fixture.ready=()=>context.currentTime-window.fixture.startedAt>=.25;
       } catch(error) {window.fixture.error=error.message;}
     };

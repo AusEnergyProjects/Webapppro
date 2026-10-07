@@ -35,7 +35,7 @@ function browser(options = {}) {
       this.destination = {};
       this.audioWorklet = { addModule: async url => {
         state.events.push("worklet");
-        assert.equal(url, "/wattzun-voice-worklet.js");
+        assert.equal(url, "/wattzun-voice-worklet.js?capture=2");
         if (options.workletError) throw options.workletError;
       } };
       state.contexts.push(this);

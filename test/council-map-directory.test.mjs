@@ -65,8 +65,17 @@ function fixture() {
       return { results };
     },
     run: async () => ({ meta: { changes: Number(sqlite.prepare(sql).run(...bindings).changes) } }),
+    execute: () => {
+      const query = sqlite.prepare(sql);
+      return /^\s*SELECT\b/i.test(sql) ? { success: true, results: query.all(...bindings), meta: { changes: 0 } }
+        : { success: true, results: [], meta: { changes: Number(query.run(...bindings).changes) } };
+    },
   });
-  const db = { prepare: statement };
+  const db = { prepare: statement, batch: async statements => {
+    sqlite.exec("BEGIN");
+    try { const results = statements.map(item => item.execute()); sqlite.exec("COMMIT"); return results; }
+    catch (error) { sqlite.exec("ROLLBACK"); throw error; }
+  } };
   let identity = { uid: "member-uid", email: "member@example.test", emailVerified: true };
   const access = load("../src/lib/council-access-server.ts", {
     "../../db": { getD1: () => db }, "./firebase-server": { requireFirebaseIdentity: async () => { if (!identity) throw new Error("AUTH_REQUIRED"); return identity; } },

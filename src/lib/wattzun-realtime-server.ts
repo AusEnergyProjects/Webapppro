@@ -14,6 +14,7 @@ import {
 } from "./wattzun-portal";
 
 const TOOL = "wattzun_portal_reply";
+const REPLY_TOOL_CHOICE = { type: "function", name: TOOL };
 const TIMEOUT_MS = 55_000;
 const PROPOSAL_TOKENS = 2_500;
 const SPEECH_TOKENS = 2_048;
@@ -238,9 +239,10 @@ export async function prepareWattzunRealtimeTurn(
 async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDiagnostic): Promise<PreparedWattzunRealtimeTurn> {
   const contract = createWattzunPortalReplyContract(options);
   const instructions = [contract.instructions,
-    "This is a live voice conversation: one or two short sentences, combined message and all questions normally under 45 words. Use one concise next necessary question in questions, without duplicating it in message; add questions only if essential. Name supplied navigation buttons. Explain permissions only for missing-access questions. The word target must not omit a material fact or required review detail.",
+    "This is a live voice conversation: one or two short sentences, combined message and all questions normally under 45 words. For clarification, briefly acknowledge and ask the next missing detail directly: use one concise next necessary question in questions without duplicating it in message. Do not narrate the whole workflow, repeat boilerplate or list later intake details before that question. Add questions only if essential. Name supplied navigation buttons. Explain permissions only for missing-access questions. The word target must not omit a material fact or required review detail.",
     "requestSummary is an unconfirmed interpretation of the spoken task for the next turn, not a verbatim transcript or verified record; never speak it. Normally under 600 characters, always under 1800. Retain clearly heard task, names, spelling, addresses, scope and amounts; mark uncertainty, never invent or claim completion. Only for confirm_workflow with explicit approval of the current review, retain the actual approval phrase, e.g. 'yes send it', 'save it', 'add it'. Never substitute 'user confirms' or treat questions, quotations or future intent as approval.",
     `Call ${TOOL} exactly once for every answer, clarification or scope reminder. Submit exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary, using their schema including unused arrays/nulls. Never nest the reply content under a reply property or flatten action fields. Do not output an assistant message, text, audio or preamble. This read-only proposal requires validation; it cannot save or send.`,
+    'Clarification argument shape example: {"message":"I can prepare that.","questions":["What detail should the draft include?"],"linkIds":[],"action":null,"lookup":null,"requestSummary":"User requests a draft; a necessary detail is missing."}. This illustrates all six fields, not wording to copy.',
   ].join("\n");
   const schema = { ...contract.schema, required: [...contract.schema.required, "requestSummary"],
     properties: { ...contract.schema.properties, requestSummary: { type: "string", minLength: 1, maxLength: 1_800 } } };
@@ -510,13 +512,14 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
         output: { format: { type: "audio/pcm", rate: 24_000 }, voice: WATTZUN_BRAND_VOICE, speed: preferences.speed } },
       max_output_tokens: PROPOSAL_TOKENS,
       reasoning: { effort: "low" }, parallel_tool_calls: false,
-      tools: [{ type: "function", name: TOOL, description: "Required for every answer, clarification and scope reminder. Submit exactly one reply proposal and unconfirmed request memory for validation. This read-only reply-submission function cannot save or send anything. Do not respond with a text message.", parameters: schema }],
-      tool_choice: "required",
+      tools: [{ type: "function", name: TOOL, description: "Submit one complete six-field reply proposal: message, questions, linkIds, action, lookup, requestSummary. Include unused arrays/nulls. Required for every answer, clarification and scope reminder. This read-only function validates proposals; it cannot save or send. Do not respond with a text message.", parameters: schema }],
+      tool_choice: REPLY_TOOL_CHOICE,
     } });
     const configuration = await configured;
     diagnostic.duration("rt_config", configStarted);
     const session = configuration.session;
-    if (!record(session) || session.type !== "realtime" || session.tool_choice !== "required"
+    if (!record(session) || session.type !== "realtime" || !record(session.tool_choice)
+      || Object.keys(session.tool_choice).length !== 2 || session.tool_choice.type !== "function" || session.tool_choice.name !== TOOL
       || !Array.isArray(session.tools) || session.tools.length !== 1 || !record(session.tools[0])
       || session.tools[0].type !== "function" || session.tools[0].name !== TOOL
       || !Array.isArray(session.output_modalities)
@@ -536,7 +539,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     const proposed = waitForPhase();
     diagnostic.substage = "output";
     proposalStarted = performance.now();
-    send({ type: "response.create", response: { output_modalities: ["text"], tool_choice: "required",
+    send({ type: "response.create", response: { output_modalities: ["text"], tool_choice: REPLY_TOOL_CHOICE,
       reasoning: { effort: "low" }, max_output_tokens: PROPOSAL_TOKENS, metadata: { phase: "proposal" } } });
     const event = await proposed;
     diagnostic.duration("rt_proposal", proposalStarted);
