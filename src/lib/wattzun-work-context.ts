@@ -3,14 +3,25 @@ import { wattzunPortalForPath } from "./wattzun-portal-path.ts";
 
 export type WattzunWorkReference =
   | { kind: "trade_job"; recordId: string }
+  | { kind: "trade_form"; formKind: "job_form" | "activity_form" | "work_pack"; recordId: string; jobId: string }
   | { kind: "creditex_audit"; recordId: string }
+  | { kind: "council_postcode"; postcode: string }
   | { kind: "council_report"; period: "quarter" | "year" | "all" };
 
 /** References are supplied by the UI; record contents are loaded by the authorised server. */
 export function readWattzunWorkReference(value: unknown, portal: WattzunPortal): WattzunWorkReference | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const keys = Object.keys(value);
-  if (keys.length !== 2 || !("kind" in value)) return null;
+  if (!("kind" in value)) return null;
+  if (value.kind === "trade_form" && portal === "trade" && keys.length === 4
+    && "formKind" in value && (value.formKind === "job_form" || value.formKind === "activity_form" || value.formKind === "work_pack")
+    && "recordId" in value && typeof value.recordId === "string" && /^[A-Za-z0-9:_-]{1,180}$/.test(value.recordId)
+    && "jobId" in value && typeof value.jobId === "string" && /^[A-Za-z0-9:_-]{1,180}$/.test(value.jobId)) {
+    return { kind: "trade_form", formKind: value.formKind, recordId: value.recordId, jobId: value.jobId };
+  }
+  if (keys.length !== 2) return null;
+  if (value.kind === "council_postcode" && portal === "council" && "postcode" in value
+    && typeof value.postcode === "string" && /^\d{4}$/.test(value.postcode)) return { kind: "council_postcode", postcode: value.postcode };
   if (value.kind === "council_report" && portal === "council" && "period" in value
     && (value.period === "quarter" || value.period === "year" || value.period === "all")) {
     return { kind: "council_report", period: value.period };
@@ -62,6 +73,8 @@ export class WattzunWorkContextError extends Error {
 }
 
 export function wattzunWorkLabel(reference: WattzunWorkReference): string {
+  if (reference.kind === "trade_form") return "Selected job form";
+  if (reference.kind === "council_postcode") return `Postcode ${reference.postcode} demographics`;
   if (reference.kind === "council_report") return `Council report: ${reference.period === "quarter" ? "this quarter" : reference.period === "year" ? "this year" : "all time"}`;
   return reference.kind === "trade_job" ? "Selected TLink job" : "Selected Creditex audit";
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -47,6 +47,8 @@ import {
 import { TradeWorkPackSignaturePad } from "./TradeWorkPackSignaturePad";
 import styles from "./TradeActivityWorkPackPanel.module.css";
 import { useFormTimeTracking, WorkTimeStatus } from "./TradeWorkTimeTracking";
+import { WattzunFormAssistButton } from "./WattzunFormAssistButton";
+import { WATTZUN_FORM_SAVED_EVENT, readWattzunFormSaved } from "@/lib/wattzun-form-client";
 
 const ENDPOINT = "/api/trade-team/work-packs";
 const WEB_DEVICE_STORAGE_KEY = "aea-creditex-work-pack-web-device-v1";
@@ -454,6 +456,8 @@ function WorkPack({
 }) {
   const fetch = useTradeBusinessFetch();
   const [pack, setPack] = useState(initialPack);
+  const business = useTradeBusiness();
+  const scopeId = business?.ownerUid;
   const [open, setOpen] = useState(initiallyOpen);
   const [page, setPage] = useState(() => firstIncompleteWorkPackPage(initialPack));
   const [response, setResponse] = useState(initialPack.response);
@@ -487,7 +491,43 @@ function WorkPack({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirtyRef = useRef(dirty);
   const packRef = useRef(pack);
+  const displayedPackVersions = useRef({ instanceKey: initialPack.instance.instanceKey, ids: new Set([initialPack.instance.id]) });
   const flushDirtyRef = useRef<() => Promise<void>>(async () => {});
+  const assistantRefreshPending = useRef(false);
+  const assistantRefreshing = useRef(false);
+  const editorBusy = useRef(false);
+  const signatureInProgress = useRef(false);
+  useEffect(() => { editorBusy.current = Boolean(busy); signatureInProgress.current = Object.values(signatureDrafts).some(draft => draft.strokes.length > 0); }, [busy, signatureDrafts]);
+  const reloadAssistantAnswers = useCallback(async () => {
+    assistantRefreshPending.current = true;
+    if (assistantRefreshing.current || editorBusy.current || savingRef.current || conflictRef.current || Object.keys(dirtyRef.current).length || signatureInProgress.current) return;
+    assistantRefreshing.current = true;
+    const before = packRef.current;
+    try {
+      const latest = await onReload();
+      const next = latest.find(item => item.instance.instanceKey === before.instance.instanceKey);
+      if (!next) throw new Error("The saved activity form could not be found.");
+      if (packRef.current !== before || editorBusy.current || Object.keys(dirtyRef.current).length || signatureInProgress.current) return;
+      packRef.current = next; setPack(next); setResponse(next.response); onReplace(next);
+      assistantRefreshPending.current = false; setMessage("Wattzun's answers are saved in this form.");
+    } catch (error) { assistantRefreshPending.current = false; setMessage(error instanceof Error ? error.message : "The saved activity answers could not be refreshed."); }
+    finally { assistantRefreshing.current = false; }
+  }, [onReload, onReplace]);
+  useEffect(() => {
+    if (displayedPackVersions.current.instanceKey !== pack.instance.instanceKey) {
+      displayedPackVersions.current = { instanceKey: pack.instance.instanceKey, ids: new Set() };
+    }
+    displayedPackVersions.current.ids.add(pack.instance.id);
+    const refresh = (event: Event) => {
+      const detail = event instanceof CustomEvent ? readWattzunFormSaved(event.detail) : null;
+      if (detail && detail.scopeId === scopeId && detail.formKind === "work_pack"
+        && displayedPackVersions.current.instanceKey === pack.instance.instanceKey && displayedPackVersions.current.ids.has(detail.formId)
+        && detail.jobId === pack.instance.workOrderId) void reloadAssistantAnswers();
+    };
+    window.addEventListener(WATTZUN_FORM_SAVED_EVENT, refresh);
+    return () => window.removeEventListener(WATTZUN_FORM_SAVED_EVENT, refresh);
+  }, [scopeId, pack.instance.id, pack.instance.instanceKey, pack.instance.workOrderId, reloadAssistantAnswers]);
+  useEffect(() => { if (assistantRefreshPending.current && !busy && !Object.keys(dirty).length && !conflict) void reloadAssistantAnswers(); }, [busy, dirty, conflict, reloadAssistantAnswers]);
 
   useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
   useEffect(() => { packRef.current = pack; }, [pack]);
@@ -1278,6 +1318,11 @@ function WorkPack({
     </button>
     {open && <div className={styles.packBody}>
       <WorkTimeStatus />
+      {!readOnly && ["not_started", "in_progress"].includes(pack.instance.status) && <WattzunFormAssistButton userUid={user.uid} formKind="work_pack" jobId={pack.instance.workOrderId} disabled={Boolean(busy)} beforeOpen={async () => {
+        if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+        await flushDirtyRef.current();
+        return !conflictRef.current && !savingRef.current && !Object.keys(dirtyRef.current).length ? packRef.current.instance.id : null;
+      }} />}
       <IdentityBoundary pack={pack} />
       {conflict && <div className={styles.conflict} role="alert"><strong>This form was updated elsewhere</strong><span>{conflict}</span>
         {answerConflicts.map((item) => <div key={`${item.sectionKey}:${item.repeatInstanceKey || ""}:${item.promptKey}`}>

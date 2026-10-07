@@ -10,6 +10,7 @@ import { readWattzunUsage, recordWattzunUsage, WattzunUsageError, type WattzunUs
 import { loadWattzunWorkContext, validateWattzunWorkContext, wattzunWorkContextInfo } from "./wattzun-work-context-server";
 import { WattzunWorkContextError, type WattzunWorkContext, type WattzunWorkReference } from "./wattzun-work-context";
 import { prepareWattzunWorkflow, prepareWattzunWorkflowForPortal, loadWattzunWorkflowReview, WattzunWorkflowError } from "./wattzun-workflow-server";
+import { WattzunFormError } from "./wattzun-form-server";
 import { WattzunExistingQuoteError } from "./wattzun-existing-quote-server";
 import { isWattzunWorkflowProposal, isWattzunWorkflowResult, type WattzunWorkflowOperation, type WattzunWorkflowResult } from "./wattzun-workflow";
 import { wattzunWorkflowReply, isWattzunWorkflowApproval } from "./wattzun-workflow-reply";
@@ -66,7 +67,7 @@ function turnTimer() {
   };
 }
 function failure(error: unknown) {
-  if (error instanceof WattzunWorkflowError || error instanceof WattzunExistingQuoteError) return json({ ok: false, error: error.message }, error.status);
+  if (error instanceof WattzunWorkflowError || error instanceof WattzunExistingQuoteError || error instanceof WattzunFormError) return json({ ok: false, error: error.message }, error.status);
   if (error instanceof WattzunWorkContextError) return json({ ok: false, error: error.message }, error.status);
   if (error instanceof WattzunUsageError) return json({ ok: false, error: error.code === "conflict"
     ? "This request was already used for a different Wattzun exchange. Start a new turn."
@@ -191,6 +192,9 @@ async function initialWorkflow(request: Request, access: WattzunAccess, input: W
 }
 async function processWorkflowReply(request: Request, access: WattzunAccess, input: WattzunTurnInput, context: WattzunWorkContext | undefined,
   reply: WattzunReply, workflow: WorkflowTurn, deps: WattzunRouteDependencies, requestSummary?: string): Promise<WattzunReply> {
+  if (input.workflowReviewId && workflow.result?.state === "complete") {
+    return wattzunWorkflowReply({ ...reply, action: null, lookup: null }, workflow.result);
+  }
   if (!isWattzunWorkflowProposal(reply.action)) return workflow.result ? { ...reply, workflow: workflow.result } : reply;
   // Preparation checks its exact current target. Keep the selected-source checks
   // at the existing speech, usage and response handoff boundaries.

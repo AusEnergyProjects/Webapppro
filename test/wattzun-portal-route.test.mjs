@@ -45,6 +45,7 @@ Function("require", "exports", "console", source)(name => {
   if (name === "./wattzun-workflow-reply") return workflowReply;
   if (name === "./wattzun-workflow-server") return { WattzunWorkflowError: WorkflowError };
   if (name === "./wattzun-existing-quote-server") return { WattzunExistingQuoteError: ExistingQuoteError };
+  if (name === "./wattzun-form-server") return { WattzunFormError: class FormError extends Error {} };
   throw new Error(name);
 }, route, { warn: (...args) => routeLogs.push(args) });
 const input = { portal: "trade", scopeId: "business-one", requestId: "synthetic-request-0001", message: "Draft a follow-up",

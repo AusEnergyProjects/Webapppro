@@ -1,9 +1,19 @@
 # Next task handover
 
-Status: Reviewed operational Wattzun workflows; matching GitHub/Sites publication authorised.
+Status: Wattzun form companion, call quality and Council community tools; matching GitHub/Sites publication authorised.
 Prepared: 7 October 2026
 
-## Active follow-up: Wattzun completes reviewed trade workflows
+## Active follow-up: demonstrate useful, continuous work assistance
+
+Outcome: complete consecutive spoken form-answer reviews in the real TLink editors, navigate the current portal while the call stays connected, explain selected Council demographic figures and provide scoped Council team messaging. The Council demonstration is planned for 8 October. Existing customer/quote/message/price-book workflows remain part of the assistant and must retain their current permissions and receipts.
+
+Implementation: selected `trade_form` and `council_postcode` references, canonical form adapters, reviewed `fill_form`, exact current-portal `open_workspace`, editor handoff/refresh, source-dated ABS 2021 Census layers and Council Connect. Migration 0255 adds only Council team message/read records. One writer per subsystem; coordinator owns integration, release and evidence. Reuse the hosted provider and existing voice; no new key, vendor, pricing gate or audit-decision authority.
+
+Acceptance: save the user's manual draft before form handoff; ask only relevant unanswered questions; validate field type/options and explicit current approval; preserve concurrent work; recover a lost save receipt without another mutation; refresh both editable form families across immutable work-pack revisions. Keep one call through supported navigation, interruption and recoverable errors. Use current actor/business/Council membership and selected-record scope throughout. Council history and retry behaviour must survive changing conversations. Distinguish Census geography/year, missing values and planning hypotheses from measured energy outcomes.
+
+Validation: focused server and real React/browser tests, native audio lifecycle checks, generated-speech live turns in all three authenticated portals, typecheck, lint, full tests, migration check and committed publication build. No ambient microphone capture or production customer/Council messages as QA. Report physical Android, acoustic and network conditions not tested. Record all failures honestly, including the existing source-approval expiry gate. Exact release evidence belongs in C:/Webproject/outputs/wattzun-industry-ready-20261007/release-report.md.
+
+## Previous follow-up: Wattzun completes reviewed trade workflows
 
 Outcome: resolve the right existing trade job from customer, street, suburb or visit-date clues; ask a short clarifying question for ambiguous matches; prepare and send a customer SMS or email or unpaid-invoice reminder; add a price-book item; and save an existing-job quote draft into the real quote editor. Missing facts stay explicit and the current user approves the frozen task by its single review button or a clear spoken/text confirmation.
 

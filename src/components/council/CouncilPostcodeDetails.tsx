@@ -1,6 +1,7 @@
 import type { CouncilReport } from "@/lib/council-reporting";
 import { CER_COMMUNITY_URL, COMMUNITY_METRICS, type CouncilCommunityReport } from "@/lib/council-community";
 import type { CouncilVeuActivity, CouncilVeuReport } from "@/lib/council-veu";
+import { COUNCIL_DEMOGRAPHICS_SOURCE, COUNCIL_DEMOGRAPHIC_METRICS, councilDemographicValue, councilDemographicComparison, type CouncilDemographicsStatus } from "@/lib/council-demographics";
 import { councilDate, councilMonth, councilMoney, councilNumber } from "./CouncilPrimitives";
 import styles from "./CouncilPostcodeDetails.module.css";
 
@@ -21,8 +22,8 @@ function ActivityRows({ rows }: { rows: CouncilVeuActivity[] }) {
   </li>)}</ul>;
 }
 
-export function CouncilPostcodeDetails({ postcode, report, sources }: {
-  postcode: string; report: CouncilReport; sources?: CouncilPostcodeDetailsSources;
+export function CouncilPostcodeDetails({ postcode, report, sources, demographics }: {
+  postcode: string; report: CouncilReport; sources?: CouncilPostcodeDetailsSources; demographics?: CouncilDemographicsStatus;
 }) {
   if (!report.scope.postcodes.includes(postcode)) return null;
   const veu = sameScope(sources?.veu.report, report, postcode) ? sources?.veu.report : null;
@@ -38,7 +39,33 @@ export function CouncilPostcodeDetails({ postcode, report, sources }: {
   const protectedImpact = protectedWork || report.dataQuality.suppressedBreakdowns.includes("certificate evidence");
   const workValue = (value: number | null | undefined, protectedValue = protectedWork) => value === null || value === undefined
     ? protectedValue ? "Protected" : "Not available" : councilNumber(value);
+  const demographic = demographics?.data?.rows.find(row => row.code === postcode);
+  const benchmark = demographics?.data?.states.find(row => row.code === report.scope.state);
   return <div className={styles.details} aria-label={`Postcode ${postcode} data breakdown`}>
+    <section className={styles.source} aria-labelledby={`postcode-${postcode}-demographics`}>
+      <h3 id={`postcode-${postcode}-demographics`}>Community demographics</h3>
+      <p className={styles.period}>Census 2021 · 10 August 2021 · Whole ABS Postal Area {postcode}</p>
+      {demographic ? <>
+        <dl className={styles.metrics}>
+          <div><dt>Population</dt><dd>{councilDemographicValue(demographic.population)}</dd></div>
+          <div><dt>Occupied private dwellings</dt><dd>{councilDemographicValue(demographic.occupiedPrivateDwellings)}</dd></div>
+        </dl>
+        <table className={styles.demographicTable}><caption>Postcode and {report.scope.state} comparison · Census 2021</caption><thead><tr><th scope="col">Measure</th><th scope="col">{postcode}</th><th scope="col">{report.scope.state}</th></tr></thead><tbody>{COUNCIL_DEMOGRAPHIC_METRICS.filter(metric=>metric.key!=="population").map(metric=>{
+          const stateValue=benchmark?.[metric.key]??null;
+          const comparison=councilDemographicComparison(demographic[metric.key],stateValue,metric.format);
+          return <tr key={metric.key}><th scope="row">{metric.label}{comparison&&<small>{comparison}</small>}</th><td>{councilDemographicValue(demographic[metric.key],metric.format)}</td><td>{councilDemographicValue(stateValue,metric.format)}</td></tr>;
+        })}</tbody></table>
+        <p className={styles.note}>Average household size: {councilDemographicValue(demographic.averageHouseholdSize)}{demographic.averageHouseholdSize!==null?" people":""}. Housing percentages use occupied private dwellings, excluding visitor-only and other non-classifiable households. Owner occupation includes outright ownership and mortgages.</p>
+        <details className={styles.impact}><summary>Use this in upgrade planning</summary><ul className={styles.planning}>
+          <li>Compare rental share when planning information for tenants, landlords and property managers.</li>
+          <li>Consider household income and age when planning accessible events and explaining upfront costs.</li>
+          <li>Compare houses and apartments when preparing information about shared roofs and owners corporation approvals.</li>
+        </ul><p className={styles.note}>Compare with the upgrade data below as area-level context. These figures do not show individual eligibility, intent or the cause of uptake. Different reporting dates and repeat activities prevent treating upgrades per dwelling as household adoption.</p></details>
+      </> : <p className={styles.note} role={demographics?.loading?"status":undefined}>{demographics?.loading?"Loading Census demographics...":demographics?.error?"Census demographics are temporarily unavailable.":"No ABS 2021 demographic profile is available for this postcode. Missing data is not zero."}</p>}
+      <p className={styles.sourceDate}><a href={`https://www.abs.gov.au/census/find-census-data/quickstats/2021/POA${postcode}`} target="_blank" rel="noreferrer">ABS 2021 Census profile for {postcode}</a><a href={COUNCIL_DEMOGRAPHICS_SOURCE.url} target="_blank" rel="noreferrer">Census DataPacks and source tables</a></p>
+      <p className={styles.note}>Historical Census figures, not current population estimates. Postal Areas approximate postcodes and may cross council or state boundaries. They do not describe only the council portion. ABS makes small random adjustments for privacy, so totals can differ.</p>
+      <p className={styles.note}>{COUNCIL_DEMOGRAPHICS_SOURCE.attribution} <a href={COUNCIL_DEMOGRAPHICS_SOURCE.licence} target="_blank" rel="noreferrer">CC BY 4.0</a>.</p>
+    </section>
     <section className={styles.source} aria-labelledby={`postcode-${postcode}-veu`}>
       <h3 id={`postcode-${postcode}-veu`}>Victorian Energy Upgrades</h3>
       {veu && upgrades ? <>

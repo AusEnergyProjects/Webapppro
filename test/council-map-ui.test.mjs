@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import * as mapView from "../src/lib/council-map-view.ts";
 import * as mapHeat from "../src/lib/council-map-heat.ts";
 import * as mapBoundaries from "../src/lib/council-postcode-boundaries.ts";
+import * as demographics from "../src/lib/council-demographics.ts";
 
 const css = { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
 function load(relative, dependencies) {
@@ -32,12 +33,13 @@ function layer(id, values = {}) {
   return { id,label:id === "public-upgrades" ? "Approved community upgrades" : "Public solar installations",unit:"activities",sourceLabel:"Public test source · 2026",
     postcodes:postcodes.map(postcode=>({postcode,value:Object.hasOwn(values,postcode)?values[postcode]:12})) };
 }
-function renderer(boundaries=[]) {
+function renderer(boundaries=[], census={rows:[],states:[],missingPostcodes:postcodes}) {
   const states=[],effects=[],refs=[];let cursor=0,refCursor=0,tree;
   const hooks={...React,useEffect(effect){effects.push(effect);},useRef(value){const index=refCursor++;return refs[index]??(refs[index]={current:value});},useMemo:factory=>factory(),useState(initial){const index=cursor++;if(!(index in states))states[index]=typeof initial==="function"?initial():initial;return [states[index],value=>{states[index]=typeof value==="function"?value(states[index]):value;}];}};
   const {CouncilMap}=load("../src/components/council/CouncilMap.tsx",{
     react:hooks,"react/jsx-runtime":jsx,"@/lib/energy-service-catalogue.mjs":{ENERGY_SERVICE_LABELS:{}},
     "@/lib/google-maps-client":{},"@/lib/council-map-view":mapView,"@/lib/council-map-heat":mapHeat,"@/lib/council-postcode-boundaries":{...mapBoundaries,loadCouncilPostcodeBoundaries:async()=>({features:boundaries,missingPostcodes:[]})},"./CouncilPostcodeDetails":{CouncilPostcodeDetails:()=>null},"./CouncilPrimitives":primitives,"./CouncilMap.module.css":css,
+    "@/lib/council-demographics":{...demographics,loadCouncilDemographics:async()=>{if(census instanceof Error)throw census;return census;}},
   });
   function elements(element=tree,result=[]) {if(React.isValidElement(element)){result.push(element);React.Children.forEach(element.props.children,child=>elements(child,result));}return result;}
   return {render(publicLayers=[]){cursor=0;refCursor=0;effects.length=0;tree=CouncilMap({report,publicLayers});return renderToStaticMarkup(tree);},async load(){for(const effect of effects)effect();await Promise.resolve();},find(predicate){const found=elements().find(predicate);assert.ok(found,"Expected control not found");return found;},all(predicate){return elements().filter(predicate);}};
@@ -59,6 +61,40 @@ test("all 73 map postcodes retain complete numeric labels and operable marker bu
   }
   assert.match(plain(html),/73 of 73 postcodes in view/);
   assert.doesNotMatch(renderToStaticMarkup(labels[0]),/12\.3K|12k|No data/);
+});
+
+test("Census overlays preserve complete postcode labels, source year, units and missing values",async()=>{
+  const census={rows:[{code:"3805",renterPercent:22.6},{code:"3920",renterPercent:0}],states:[],missingPostcodes:postcodes.filter(code=>!["3805","3920"].includes(code))};
+  const ui=renderer([],census),layers=[layer("public-upgrades")];
+  ui.render(layers);
+  ui.find(node=>node.type==="select").props.onChange({target:{value:"census-renterPercent"}});
+  assert.match(plain(ui.render(layers)),/Loading Census demographics/);
+  await ui.load(); const html=ui.render(layers);
+  assert.equal(ui.find(node=>node.type==="select").props.value,"census-renterPercent");
+  assert.match(plain(html),/Based on ABS 2021 Census · 10 August 2021/);
+  assert.match(plain(html),/2 of 73 reporting postcodes have an ABS 2021 profile/);
+  assert.match(plain(html),/does not describe individual residents or prove why energy upgrades occurred/);
+  const marker=postcode=>ui.find(node=>node.type==="button"&&node.props["aria-label"]?.startsWith(`${postcode}:`));
+  assert.match(marker("3805").props["aria-label"],/22.6 % of occupied private dwellings/);
+  assert.match(plain(renderToStaticMarkup(marker("3920"))),/^3920 0$/);
+  assert.match(plain(renderToStaticMarkup(marker("3000"))),/^3000 Not available$/);
+  assert.equal(ui.all(node=>hasClass(node,"postcode")).length,73);
+  assert.match(plain(renderToStaticMarkup(ui.all(node=>node.type==="tbody")[0])),/3805 Area 3805 22.6 0 0/);
+  marker("3805").props.onClick();ui.render(layers);
+  const details=ui.find(node=>node.props.demographics);
+  assert.equal(details.props.demographics.data,census);
+  assert.equal(details.props.postcode,"3805");
+});
+
+test("unavailable Census source leaves public energy data and TLink controls usable",async()=>{
+  const ui=renderer([],new Error("unavailable")),layers=[layer("public-upgrades")];
+  ui.render(layers);await ui.load();await Promise.resolve();ui.render(layers);
+  ui.find(node=>node.type==="select").props.onChange({target:{value:"census-population"}});
+  assert.match(plain(ui.render(layers)),/Census demographics are temporarily unavailable/);
+  ui.find(node=>node.type==="select").props.onChange({target:{value:"public-upgrades"}});
+  assert.match(plain(ui.render(layers)),/Public test source · 2026/);
+  const marker=ui.find(node=>node.type==="button"&&node.props["aria-label"]?.startsWith("3805:"));
+  assert.match(marker.props["aria-label"],/12 activities/);
 });
 
 test("map colours match the distribution bands and numeric legend while zero and unknown stay distinct",()=>{

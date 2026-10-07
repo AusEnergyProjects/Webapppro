@@ -1,5 +1,6 @@
 import type { WattzunActionProposal } from "./wattzun-actions";
 import type { WattzunRecordLookup } from "./wattzun-records";
+import type { WattzunNavigationAction } from "./wattzun-navigation";
 import { isWattzunWorkflowProposal, type WattzunWorkflowProposal, type WattzunWorkflowOperation, type WattzunWorkflowResult } from "./wattzun-workflow.ts";
 import { readWattzunWorkReference, type WattzunWorkReference, type WattzunWorkContextInfo } from "./wattzun-work-context.ts";
 
@@ -21,7 +22,7 @@ export type WattzunTurnInput = {
 export type WattzunReply = {
   kind: "answer" | "clarification"; message: string; questions: string[];
   links: Array<{ label: string; href: string }>;
-  action?: WattzunActionProposal | WattzunWorkflowProposal | null;
+  action?: WattzunActionProposal | WattzunWorkflowProposal | WattzunNavigationAction | null;
   lookup?: WattzunRecordLookup | null;
   workContext?: WattzunWorkContextInfo;
   workflow?: WattzunWorkflowResult;

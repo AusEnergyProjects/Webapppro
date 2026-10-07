@@ -59,6 +59,7 @@ const fixtures = {
         this.callbacks.status({state:'thinking',message:''});
         try {
           const result=await this.callbacks.submit(new Blob([new Uint8Array(48)],{type:'audio/wav'}),new AbortController().signal);
+          window.wattzunFixtureDeliveredReplies.push(result.reply);
           this.callbacks.reply(result);if(result.audio.mimeType==='audio/pcm')await result.audio.stream.cancel();this.resume();
         } catch(error) {this.requestFailed(error);}
       }
@@ -77,12 +78,16 @@ const bundle = await build({
     import { WattzunMascot } from './src/components/WattzunMascot';
     import { TradeQuotePanel } from './src/components/TradeQuotePanel';
     import { TRADE_QUOTE_DRAFT_SAVED_EVENT,notifyTradeQuoteDraftSaved } from './src/lib/trade-quote-client';
+    import { WATTZUN_FORM_SAVED_EVENT } from './src/lib/wattzun-form-client';
     import { WATTZUN_HATS, WATTZUN_USAGE_CHANGED_EVENT, useWattzunPresentation, requestWattzunAssistant } from './src/lib/wattzun-appearance';
     window.wattzunFixtureOpen=requestWattzunAssistant;
     window.wattzunFixtureUsage=[];
     window.wattzunFixtureQuoteNotifications=[];
+    window.wattzunFixtureFormNotifications=[];
+    window.wattzunFixtureDeliveredReplies=[];
     window.wattzunFixtureNotifyQuote=notifyTradeQuoteDraftSaved;
     window.addEventListener(TRADE_QUOTE_DRAFT_SAVED_EVENT,event=>window.wattzunFixtureQuoteNotifications.push(event.detail));
+    window.addEventListener(WATTZUN_FORM_SAVED_EVENT,event=>window.wattzunFixtureFormNotifications.push(event.detail));
     window.addEventListener(WATTZUN_USAGE_CHANGED_EVENT,event=>window.wattzunFixtureUsage.push(event.detail));
     window.wattzunFixtureRequests=[];
     window.wattzunFixtureSignals=[];
@@ -963,5 +968,146 @@ test('a failed receipt narration retains the actual saved outcome in follow-up h
     assert.equal(Object.hasOwn(followup.body,'workflowReviewId'),false);assert.equal(Object.hasOwn(followup.body,'workflowProposal'),false);
     assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
     assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('form voice UI wiring preserves selected context through two reviewed saves and emits exact editor refresh receipts',{skip:!browserPath&&'No installed browser for form voice UI wiring'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+    const reference={kind:'trade_form',formKind:'work_pack',recordId:'pack-original-revision',jobId:'job-john'};
+    const savedDetail={portal:'trade',scopeId:'synthetic-business',formKind:'work_pack',formId:reference.recordId,jobId:reference.jobId};
+    const href='/direct-trade/dashboard?workspace=work&jobId=job-john&jobTab=files';
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'message',workReference:reference}),reference);
+    await dialog.getByRole('region',{name:'Selected work',exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();await dialog.getByText('Listening',{exact:true}).waitFor();
+    await page.evaluate(()=>{
+      window.wattzunFixtureRequestSummary='Help me fill this selected form, one question at a time.';
+      window.wattzunFixtureVoiceReply={kind:'clarification',message:'Let’s work through this form.',questions:['What is the installed model?'],links:[]};
+    });
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await dialog.getByText('What is the installed model?',{exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureFormNotifications),[]);
+    const reviewIds=[];
+    for(const [index,answer,nextQuestion] of [
+      [1,{fieldKey:'installed_model',value:'Synthetic model 42'},'What is the serial number?'],
+      [2,{fieldKey:'serial_number',value:'SYNTHETIC-0088'},'What is the installation date?'],
+    ]){
+      const reviewId=`form-review-number-${index}-123456`;reviewIds.push(reviewId);
+      const operation={kind:'fill_form',jobQuery:'',jobId:reference.jobId,formKind:reference.formKind,formId:reference.recordId,answers:[answer]};
+      const review={state:'review',reviewId,expiresAt:'2026-10-07T23:59:00Z',kind:'fill_form',heading:'Save draft form answers',
+        summary:'Save one supplied answer in the synthetic activity form. The form stays a draft.',confirmationLabel:'Save form answers',
+        lines:[{label:index===1?'Installed model':'Serial number',value:answer.value}],href};
+      const receipt={kind:'fill_form',id:`pack-saved-revision-${index+1}`,label:'Draft form answers saved',href,status:'saved',
+        message:`Your draft answers are saved in the synthetic activity form. Next question: ${nextQuestion}`};
+      await page.evaluate(({operation,review,receipt,answer})=>{
+        window.wattzunFixtureRequestSummary='The user supplied '+answer.value;
+        window.wattzunFixtureVoiceReply={kind:'clarification',message:'Review the answer before I save it.',questions:['Shall I save this answer?'],links:[],action:operation,workflow:review};
+        window.wattzunFixtureExecutedWorkflow={state:'complete',receipt};
+      },{operation,review,receipt,answer});
+      await page.evaluate(()=>window.wattzunFixtureCall.question());
+      const currentReview=dialog.getByRole('region',{name:'Review Wattzun workflow',exact:true});
+      await currentReview.getByText(answer.value,{exact:true}).waitFor();
+      assert.equal(await page.evaluate(()=>window.wattzunFixtureFormNotifications.length),index-1,'Preparing an answer never refreshes or claims a saved record');
+      const prepareTurn=await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url==='/api/wattzun/voice').at(-1));
+      assert.deepEqual(prepareTurn.body.workReference,reference);
+      assert.equal(Object.hasOwn(prepareTurn.body,'workflowReviewId'),false,'A previous completed form save is not reused as an active review');
+      await page.evaluate(reviewId=>{
+        window.wattzunFixtureRequestSummary='yes save these answers';
+        window.wattzunFixtureVoiceReply={kind:'answer',message:'I will submit the reviewed answers now.',questions:[],links:[],action:{kind:'confirm_workflow',reviewId}};
+      },reviewId);
+      await page.evaluate(()=>window.wattzunFixtureCall.question());
+      await dialog.getByRole('log',{name:'Conversation with Wattzun'}).getByText(receipt.message,{exact:true}).last().waitFor();
+      assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureFormNotifications),Array.from({length:index},()=>savedDetail),
+        'Each completion refreshes the original selected form, even when canonical save returns a new work-pack revision ID');
+      const delivered=await page.evaluate(()=>window.wattzunFixtureDeliveredReplies.at(-1));
+      assert.equal(delivered.message,receipt.message,'The real voice callback receives the verified completion and its next question');
+      assert.deepEqual(delivered.workContext.reference,reference);
+      assert.equal(delivered.workflow.receipt.id,receipt.id);
+      assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    }
+    const requests=await page.evaluate(()=>window.wattzunFixtureRequests);
+    const executions=requests.filter(item=>item.url==='/api/wattzun/workflows');
+    assert.equal(executions.length,2);assert.deepEqual(executions.map(item=>item.body.reviewId),reviewIds);
+    assert.ok(executions.every(item=>item.body.stage==='execute'&&item.body.reviewed===true&&item.scope==='synthetic-business'));
+    assert.notEqual(executions[0].body.requestId,executions[1].body.requestId);
+    const speech=requests.filter(item=>item.url==='/api/wattzun/workflows/speech');
+    assert.deepEqual(speech.map(item=>item.body.workflowReviewId),reviewIds);
+    assert.ok(speech.every(item=>!Object.hasOwn(item.body,'message')));
+    const voice=requests.filter(item=>item.url==='/api/wattzun/voice');assert.equal(voice.length,5);
+    assert.ok(voice.every(item=>JSON.stringify(item.body.workReference)===JSON.stringify(reference)));
+    assert.match(JSON.stringify(voice[3].body.history),/Next question: What is the serial number/);
+    assert.deepEqual(voice.filter(item=>item.body.workflowReviewId).map(item=>item.body.workflowReviewId),reviewIds);
+    await dialog.getByRole('button',{name:'Hang up',exact:true}).click();
+    assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('a lost form-save acknowledgement recovers through the next voice reply and clears the old review',{skip:!browserPath&&'No installed browser for form receipt recovery'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+    const operation={kind:'fill_form',jobQuery:'',jobId:'job-john',formKind:'job_form',formId:'form-123',answers:[{fieldKey:'notes',value:'Side gate'}]};
+    const review={...workflowReview,kind:'fill_form',heading:'Save draft form answers',confirmationLabel:'Save form answers',preview:undefined};
+    const receipt={kind:'fill_form',id:'form-123',status:'saved',label:'Draft form answers saved',href:'/direct-trade/dashboard?workspace=work&jobId=job-john&jobTab=files',message:'Your draft answers are saved. Next question: What is the installation date?'};
+    await page.evaluate(({operation,review})=>{
+      window.wattzunFixtureVoiceReply={kind:'clarification',message:'Review this answer.',questions:[],links:[],action:operation,workflow:review};
+    },{operation,review});
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await dialog.getByRole('button',{name:'Save form answers',exact:true}).waitFor();
+    await page.evaluate(reviewId=>{
+      window.wattzunFixtureRequestSummary='yes save these answers';
+      window.wattzunFixtureVoiceReply={kind:'answer',message:'Saving.',questions:[],links:[],action:{kind:'confirm_workflow',reviewId}};
+      window.wattzunFixtureFailures={'/api/wattzun/workflows':{status:503,message:'The save acknowledgement was lost.'}};
+    },review.reviewId);
+    await page.evaluate(()=>window.wattzunFixtureCall.question());await dialog.getByText('Still connected',{exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureFormNotifications),[]);
+    await page.evaluate(receipt=>{
+      window.wattzunFixtureFailures={};window.wattzunFixtureRequestSummary='Did that save?';
+      window.wattzunFixtureVoiceReply={kind:'answer',message:receipt.message,questions:[],links:[],action:null,workflow:{state:'complete',receipt}};
+      window.wattzunFixtureCall.resume();
+    },receipt);
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await dialog.getByRole('log',{name:'Conversation with Wattzun'}).getByText(receipt.message,{exact:true}).last().waitFor();
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureFormNotifications),[{portal:'trade',scopeId:'synthetic-business',formKind:'job_form',formId:'form-123',jobId:'job-john'}]);
+    await page.evaluate(()=>{window.wattzunFixtureVoiceReply={kind:'answer',message:'Let’s continue.',questions:[],links:[]};});
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    const requests=await page.evaluate(()=>window.wattzunFixtureRequests);
+    assert.equal(requests.filter(item=>item.url==='/api/wattzun/workflows').length,1);
+    assert.equal(Object.hasOwn(requests.filter(item=>item.url==='/api/wattzun/voice').at(-1).body,'workflowReviewId'),false);
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('structured spoken workspace navigation opens the destination and docks the same call in each portal',{skip:!browserPath&&'No installed browser for voice navigation UI wiring'},async t=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    for(const [portal,destinationId,expectedPath,expectedWorkspace] of [
+      ['trade','trade_schedule','/direct-trade/team','schedule'],
+      ['council','council_connect','/council','connect'],
+      ['creditex','creditex_audits','/creditex/compliance',null],
+    ])await t.test(portal,async()=>{
+      const page=await contextPage(browser,390,portal),errors=[];page.on('pageerror',error=>errors.push(error.message));
+      const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+      await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();await dialog.getByText('Listening',{exact:true}).waitFor();
+      await page.evaluate(destinationId=>{
+        window.wattzunFixtureRequestSummary='Open the requested workspace.';
+        window.wattzunFixtureVoiceReply={kind:'answer',message:'Opening that workspace.',questions:[],links:[],action:{kind:'open_workspace',destinationId}};
+      },destinationId);
+      await page.evaluate(()=>window.wattzunFixtureCall.question());
+      await page.getByRole('region',{name:'Wattzun call',exact:true}).waitFor();
+      assert.equal(new URL(page.url()).pathname,expectedPath);assert.equal(new URL(page.url()).searchParams.get('workspace'),expectedWorkspace);
+      assert.equal(await dialog.count(),0,'Navigation leaves the destination visible without an assistant modal covering it');
+      assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+      assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.some(item=>item.url==='/api/wattzun/workflows')),false);
+      await page.getByRole('button',{name:'Open Wattzun',exact:true}).click();await dialog.waitFor();
+      await page.evaluate(()=>{window.wattzunFixtureVoiceReply={kind:'answer',message:'I am ready to continue in this workspace.',questions:[],links:[]};});
+      await page.evaluate(()=>window.wattzunFixtureCall.question());await dialog.getByText('I am ready to continue in this workspace.',{exact:true}).waitFor();
+      assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+      await dialog.getByRole('button',{name:'Hang up',exact:true}).click();assert.deepEqual(errors,[]);await page.close();
+    });
   }finally{await browser.close();}
 });

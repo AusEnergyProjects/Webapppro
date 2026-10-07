@@ -49,7 +49,7 @@ test('guidance points to existing owner/staff workflows and keeps automated reco
   assert.match(trade.find(item=>item.id==='trade_quotes').description,/Generate brief.*Copy draft scope/);
   assert.match(trade.find(item=>item.id==='trade_quotes').description,/uploaded files are not read/);
   assert.match(WATTZUN_TASK_GUIDANCE.trade.join(' '),/This conversation does not invoke it/);
-  assert.match(WATTZUN_TASK_GUIDANCE.trade.join(' '),/30-question limit and 8 questions per page/);
+  assert.match(WATTZUN_TASK_GUIDANCE.trade.join(' '),/30 questions and 8 per page/);
   assert.match(WATTZUN_PORTAL_GUIDE.creditex[1].description,/does not inspect photo\/PDF contents/);
   assert.match(WATTZUN_PORTAL_GUIDE.creditex[1].description,/Ask Wattzun.*authorised saved-source projection.*does not run its separate pre-review/);
   for(const portal of Object.keys(WATTZUN_PORTAL_GUIDE)){

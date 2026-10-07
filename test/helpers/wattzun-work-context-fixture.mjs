@@ -30,6 +30,8 @@ export function workContextGateway(projectors = {}) {
     "./wattzun-trade-context-server": { loadWattzunTradeContext: projectors.trade || unavailable },
     "./wattzun-creditex-context-server": { loadWattzunCreditexContext: projectors.creditex || unavailable },
     "./wattzun-council-context-server": { loadWattzunCouncilContext: projectors.council || unavailable },
+    "./wattzun-form-server": { loadWattzunFormContext: projectors.form || unavailable },
+    "./wattzun-council-demographics-server": { loadWattzunCouncilDemographics: projectors.demographics || unavailable },
   };
   Function("require", "exports", code)(id => {
     assert.ok(Object.hasOwn(dependencies, id), `Unexpected work-context dependency: ${id}`);

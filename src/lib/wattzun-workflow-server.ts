@@ -18,6 +18,7 @@ import { readBoundedJsonRequest, BoundedJsonRequestError } from "./bounded-json-
 import { parseWattzunWorkflowProposal, isWattzunWorkflowResult, type WattzunWorkflowOperation, type WattzunWorkflowProposal,
   type WattzunWorkflowResult, type WattzunWorkflowReview, type WattzunWorkflowReceipt, type WattzunWorkflowJobChoice } from "./wattzun-workflow";
 import { prepareWattzunExistingQuote, executeWattzunExistingQuote, wattzunExistingQuoteAuthoritySha256, WattzunExistingQuoteError, type WattzunExistingQuotePrepared } from "./wattzun-existing-quote-server";
+import { prepareWattzunForm, executeWattzunForm, reconcileWattzunFormReceipt, verifyWattzunFormAccess, isWattzunFormPrepared, WattzunFormError, type WattzunFormPrepared } from "./wattzun-form-server";
 
 type Row = Record<string, unknown>;
 type Job = { id: string; work_number: string; title: string; revision: number; updated_at: string; detail_updated_at: string;
@@ -29,7 +30,7 @@ type MessagePrepared = { job: Job; channel: "sms" | "email"; recipient: string; 
   sms?: SmsReadiness; email?: { from: string; provider: string }; invoice?: Invoice };
 type PricePrepared = { input: ReturnType<typeof normalisePriceBookInput>; payload: Row };
 type Prepared = { proposal: WattzunWorkflowOperation; sourceSha256: string; review: WattzunWorkflowReview;
-  message?: MessagePrepared; price?: PricePrepared; quote?: WattzunExistingQuotePrepared };
+  message?: MessagePrepared; price?: PricePrepared; quote?: WattzunExistingQuotePrepared; form?: WattzunFormPrepared };
 type ReviewMetadata = { fingerprint: string; expiresAt: string; kind: WattzunWorkflowOperation["kind"]; sourceSha256: string;
   encrypted: string; state: "prepared" | "executing" | "complete"; receipt?: WattzunWorkflowReceipt };
 export type WattzunWorkflowDependencies = {
@@ -39,6 +40,8 @@ export type WattzunWorkflowDependencies = {
   emailRecipient: typeof resolveTradeEmailRecipient; wallet: typeof smsWallet; priceBook: typeof postPriceBook;
   prepareQuote: typeof prepareWattzunExistingQuote; executeQuote: typeof executeWattzunExistingQuote;
   quoteAuthority: typeof wattzunExistingQuoteAuthoritySha256; now: () => number;
+  prepareForm?: typeof prepareWattzunForm; executeForm?: typeof executeWattzunForm; formAccess?: typeof verifyWattzunFormAccess;
+  formReceipt?: typeof reconcileWattzunFormReceipt;
 };
 const defaults: WattzunWorkflowDependencies = { authenticate: authenticateWattzun, access: requireWattzunAccess, team: requireInstallerTeamAccess,
   encrypt: encryptProtectedPayload, decrypt: decryptProtectedPayload, sms: sendTradeSms, email: sendTradeCustomerEmail,
@@ -71,7 +74,8 @@ function authority(team: TeamAccess) {
   return { ownerUid: team.ownerUid, actorUid: team.actorUid, memberId: team.memberId, businessName: team.businessName, isOwner: team.isOwner, jobScope: team.jobScope,
     canViewCustomers: team.canViewCustomers, canSendSms: !!team.canSendSms, canManageCustomers: team.canManageCustomers,
     canManageJobs: team.canManageJobs, canSendQuotes: team.canSendQuotes, canViewInvoices: team.canViewInvoices,
-    canManageInvoices: team.canManageInvoices, canManagePriceBook: team.canManagePriceBook };
+    canManageInvoices: team.canManageInvoices, canManagePriceBook: team.canManagePriceBook,
+    canViewFieldEvidence: team.canViewFieldEvidence, canManageFieldEvidence: team.canManageFieldEvidence };
 }
 async function currentTeam(request: Request, access: WattzunAccess, deps: WattzunWorkflowDependencies) {
   if (access.scope.portal !== "trade") throw new WattzunWorkflowError(403, "Operational trade actions require your TLink business workspace.");
@@ -83,6 +87,10 @@ async function currentTeam(request: Request, access: WattzunAccess, deps: Wattzu
   return team;
 }
 function permissions(team: TeamAccess, proposal: WattzunWorkflowOperation) {
+  if (proposal.kind === "fill_form") {
+    if (!team.canViewFieldEvidence || !team.canManageFieldEvidence) throw new WattzunWorkflowError(403, "Form viewing and editing permission is required for this job.");
+    return;
+  }
   if (proposal.kind === "add_price_book_item") {
     if (!team.isOwner && !team.canManagePriceBook) throw new WattzunWorkflowError(403, "Price-book management permission is required.");
     return;
@@ -264,6 +272,11 @@ async function buildPrepared(request: Request, access: WattzunAccess, team: Team
   reviewId: string, expiresAt: string, deps: WattzunWorkflowDependencies): Promise<Prepared | WattzunWorkflowResult> {
   permissions(team, proposal);
   const base = { state: "review" as const, reviewId, expiresAt, kind: proposal.kind };
+  if (proposal.kind === "fill_form") {
+    const form = await (deps.prepareForm ?? prepareWattzunForm)(scopedRequest(request, access.scope.scopeId), access, proposal);
+    return { proposal, form, sourceSha256: form.sourceSha256,
+      review: { ...base, heading: form.review.title, summary: form.review.summary, confirmationLabel: "Save form answers", lines: form.review.fields, href: form.review.href } };
+  }
   if (proposal.kind === "add_price_book_item") {
     const questions: string[] = [];
     if (!proposal.name.trim()) questions.push("What is the item name?");
@@ -319,6 +332,12 @@ function isFrozenPrepared(value: unknown): value is Prepared {
   let proposal: WattzunWorkflowProposal;
   try { proposal = parseWattzunWorkflowProposal(value.proposal); } catch { return false; }
   if (proposal.kind === "confirm_workflow" || proposal.kind !== value.review.kind || value.review.expiresAt.length !== 24 || !Number.isFinite(Date.parse(value.review.expiresAt))) return false;
+  if (proposal.kind === "fill_form") return isWattzunFormPrepared(value.form) && value.form.sourceSha256 === value.sourceSha256
+    && value.form.reference.jobId === proposal.jobId && value.form.reference.recordId === proposal.formId && value.form.reference.formKind === proposal.formKind
+    && value.form.patch.length === proposal.answers.length && value.form.patch.every((answer, index) => answer.fieldKey === proposal.answers[index].fieldKey
+      && answer.value === (typeof proposal.answers[index].value === "string" ? proposal.answers[index].value.trim() : proposal.answers[index].value))
+    && value.message === undefined && value.quote === undefined && value.price === undefined;
+  if (value.form !== undefined) return false;
   const text = (raw: unknown, max = 4000): raw is string => typeof raw === "string" && raw.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(raw);
   const strings = (raw: Row, keys: string[], max = 4000) => keys.every(key => text(raw[key], max));
   const id = (raw: unknown): raw is string => typeof raw === "string" && /^[A-Za-z0-9:_-]{1,180}$/.test(raw);
@@ -374,7 +393,7 @@ function isReviewMetadata(value: unknown): value is ReviewMetadata {
   return record(value) && typeof value.fingerprint === "string" && /^[a-f0-9]{64}$/.test(value.fingerprint)
     && typeof value.expiresAt === "string" && Number.isFinite(Date.parse(value.expiresAt)) && typeof value.encrypted === "string"
     && typeof value.sourceSha256 === "string" && /^[a-f0-9]{64}$/.test(value.sourceSha256)
-    && ["add_price_book_item", "customer_message", "invoice_reminder", "draft_job_quote"].includes(String(value.kind))
+    && ["add_price_book_item", "customer_message", "invoice_reminder", "draft_job_quote", "fill_form"].includes(String(value.kind))
     && ["prepared", "executing", "complete"].includes(String(value.state))
     && (value.receipt === undefined || isWattzunWorkflowResult({ state: "complete", receipt: value.receipt }));
 }
@@ -457,7 +476,7 @@ async function loadWorkflowReview(request: Request, access: WattzunAccess, revie
   const team = await currentTeam(request, access, deps); const frozen = await readReview(access, reviewId, deps);
   if (options.expectedFingerprint && frozen.saved.fingerprint !== options.expectedFingerprint) throw new WattzunWorkflowError(409, "This review was prepared with different details. Start another review.");
   permissions(team, frozen.prepared.proposal);
-  await verifyTarget(access, team, frozen.prepared, deps);
+  await verifyTarget(request, access, team, frozen.prepared, deps);
   const existingMessage = await journalledMessage(access, team, frozen.prepared, reviewId);
   if (existingMessage) return checkedComplete(request, access, frozen.prepared, existingMessage, deps);
   if (frozen.saved.state === "complete" && frozen.saved.receipt && Date.parse(frozen.saved.expiresAt) > deps.now()) return checkedComplete(request, access, frozen.prepared, frozen.saved.receipt, deps);
@@ -466,7 +485,12 @@ async function loadWorkflowReview(request: Request, access: WattzunAccess, revie
     if (recovered) return checkedComplete(request, access, frozen.prepared, recovered, deps);
     throw new WattzunWorkflowError(409, "This expired review has no confirmed saved or sent result. Nothing new will be sent from it. Prepare a fresh review.");
   }
-  if (frozen.saved.state !== "prepared") throw new WattzunWorkflowError(409, "This review has already been submitted. Check its result before preparing another action.");
+  if (frozen.saved.state === "executing" && frozen.prepared.form) {
+    const recovered = await (deps.formReceipt ?? reconcileWattzunFormReceipt)(scopedRequest(request, access.scope.scopeId), access, frozen.prepared.form);
+    if (recovered) return checkedComplete(request, access, frozen.prepared, recovered, deps);
+    // The canonical draft is unchanged. Keep the same frozen review available
+    // for explicit approval; merely loading it never retries a write.
+  } else if (frozen.saved.state !== "prepared") throw new WattzunWorkflowError(409, "This review has already been submitted. Check its result before preparing another action.");
   if (!options.deferSourceRecheck) {
     const fresh = await buildPrepared(request, access, team, frozen.prepared.proposal, reviewId, frozen.saved.expiresAt, deps);
     if ("state" in fresh || fresh.sourceSha256 !== frozen.saved.sourceSha256) throw new WattzunWorkflowError(409, "The job, invoice, recipient or connection changed. Prepare a fresh review.");
@@ -477,14 +501,18 @@ async function loadWorkflowReview(request: Request, access: WattzunAccess, revie
     const quoteAuthority = await deps.quoteAuthority(finalTeam, { scopeId: access.scope.scopeId, actorUid: access.actorUid });
     if (quoteAuthority !== frozen.prepared.quote.authoritySha256) throw new WattzunExistingQuoteError(403, "Your quote permissions changed. Review the quote again.");
   }
-  await verifyTarget(access, finalTeam, frozen.prepared, deps);
+  await verifyTarget(request, access, finalTeam, frozen.prepared, deps);
   return frozen.prepared.review;
 }
 async function checkedComplete(request: Request, access: WattzunAccess, prepared: Prepared, receipt: WattzunWorkflowReceipt, deps: WattzunWorkflowDependencies): Promise<WattzunWorkflowResult> {
-  const team = await currentTeam(request, access, deps); permissions(team, prepared.proposal); await verifyTarget(access, team, prepared, deps);
+  const team = await currentTeam(request, access, deps); permissions(team, prepared.proposal); await verifyTarget(request, access, team, prepared, deps);
   return { state: "complete", receipt };
 }
-async function verifyTarget(access: WattzunAccess, team: TeamAccess, prepared: Prepared, deps: WattzunWorkflowDependencies) {
+async function verifyTarget(request: Request, access: WattzunAccess, team: TeamAccess, prepared: Prepared, deps: WattzunWorkflowDependencies) {
+  if (prepared.form) {
+    await (deps.formAccess ?? verifyWattzunFormAccess)(scopedRequest(request, access.scope.scopeId), access, prepared.form);
+    return;
+  }
   if (prepared.proposal.kind !== "add_price_book_item") {
     const jobs = await findJobs(access, team, prepared.proposal, deps);
     if (jobs.length !== 1 || jobs[0].id !== prepared.proposal.jobId) throw new WattzunWorkflowError(403, "This job is no longer available within your current permissions.");
@@ -523,6 +551,7 @@ function priceReceipt(team: TeamAccess, prepared: Prepared, id: string): Wattzun
   return { kind: prepared.proposal.kind, id, label: "Open price book", href: priceBookHref(team), status: "saved", message: "The item is saved in your business price book." };
 }
 async function recoverExpired(request: Request, access: WattzunAccess, team: TeamAccess, prepared: Prepared, reviewId: string, deps: WattzunWorkflowDependencies) {
+  if (prepared.form) return (deps.formReceipt ?? reconcileWattzunFormReceipt)(scopedRequest(request, access.scope.scopeId), access, prepared.form);
   if (prepared.quote) {
     const found = await deps.executeQuote(scopedRequest(request, access.scope.scopeId), { scopeId: access.scope.scopeId, actorUid: access.actorUid,
       prepared: prepared.quote, expectedSourceSha256: prepared.sourceSha256, allowSave: false });
@@ -544,6 +573,7 @@ async function recoverExpired(request: Request, access: WattzunAccess, team: Tea
 }
 async function sendPrepared(request: Request, access: WattzunAccess, team: TeamAccess, prepared: Prepared, reviewId: string, deps: WattzunWorkflowDependencies) {
   const requestKey = `wattzun-${reviewId}`;
+  if (prepared.form) return (deps.executeForm ?? executeWattzunForm)(scopedRequest(request, access.scope.scopeId), access, prepared.form, requestKey);
   if (prepared.quote) {
     const result = await deps.executeQuote(scopedRequest(request, access.scope.scopeId), { scopeId: access.scope.scopeId, actorUid: access.actorUid,
       prepared: prepared.quote, expectedSourceSha256: prepared.sourceSha256 });
@@ -576,7 +606,7 @@ async function sendPrepared(request: Request, access: WattzunAccess, team: TeamA
 async function execute(request: Request, access: WattzunAccess, reviewId: string, deps: WattzunWorkflowDependencies): Promise<WattzunWorkflowResult> {
   const team = await currentTeam(request, access, deps); const frozen = await readReview(access, reviewId, deps);
   permissions(team, frozen.prepared.proposal);
-  await verifyTarget(access, team, frozen.prepared, deps);
+  await verifyTarget(request, access, team, frozen.prepared, deps);
   const existingMessage = await journalledMessage(access, team, frozen.prepared, reviewId);
   if (existingMessage) return { state: "complete", receipt: existingMessage };
   if (frozen.saved.state === "complete" && frozen.saved.receipt && Date.parse(frozen.saved.expiresAt) > deps.now()) return { state: "complete", receipt: frozen.saved.receipt };
@@ -588,7 +618,7 @@ async function execute(request: Request, access: WattzunAccess, reviewId: string
   // Message services journal their own request IDs; quote saves reconcile their
   // exact frozen target; price-book creation uses the same deterministic key.
   // On retry they never manufacture a new send or append the same quote twice.
-  if (!frozen.prepared.quote) {
+  if (!frozen.prepared.quote && !frozen.prepared.form) {
     const fresh = await buildPrepared(request, access, team, frozen.prepared.proposal, reviewId, frozen.saved.expiresAt, deps);
     if ("state" in fresh || fresh.sourceSha256 !== frozen.saved.sourceSha256) throw new WattzunWorkflowError(409, "The job, invoice, recipient or connection changed. Prepare a fresh review.");
   }
@@ -626,14 +656,14 @@ export async function postWattzunWorkflow(request: Request, deps: WattzunWorkflo
     } else if (raw.stage === "execute" && Object.keys(raw).length === 6 && raw.reviewed === true && typeof raw.reviewId === "string") {
       result = await execute(request, access, raw.reviewId, deps);
       const finalTeam = await currentTeam(request, access, deps); const currentReview = await readReview(access, raw.reviewId, deps);
-      permissions(finalTeam, currentReview.prepared.proposal); await verifyTarget(access, finalTeam, currentReview.prepared, deps);
+      permissions(finalTeam, currentReview.prepared.proposal); await verifyTarget(request, access, finalTeam, currentReview.prepared, deps);
     } else throw new WattzunWorkflowError(400, "Prepare the action, then confirm its current review before executing.");
     if (!isWattzunWorkflowResult(result)) throw new WattzunWorkflowError(503, "The action result could not be verified. Check the same review before starting another action.");
     return json({ ok: true, result });
   } catch (error) {
     const failure = wattzunAccessFailure(error);
     if (failure) return json({ ok: false, error: failure.message }, failure.status);
-    if (error instanceof WattzunWorkflowError || error instanceof BoundedJsonRequestError || error instanceof WattzunExistingQuoteError) return json({ ok: false, error: error.message }, error.status);
+    if (error instanceof WattzunWorkflowError || error instanceof BoundedJsonRequestError || error instanceof WattzunExistingQuoteError || error instanceof WattzunFormError) return json({ ok: false, error: error.message }, error.status);
     const code = error instanceof Error ? error.message : "";
     if (code.startsWith("INVALID_PRICE_BOOK") || code === "INVALID_MONEY" || code === "INVALID_DECIMAL") return json({ ok: false, error: "Check the item type, unit, cost, selling price and GST treatment." }, 400);
     if (code === "SMS_BODY_INVALID") return json({ ok: false, error: "Keep the text and invoice reminder together within 480 characters." }, 400);

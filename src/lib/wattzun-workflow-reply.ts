@@ -12,11 +12,11 @@ export function wattzunWorkflowReply(reply: WattzunReply, result: WattzunWorkflo
   if (result.state === "review") {
     const target = result.target ? `${result.target.customerName || result.target.title}${result.target.address ? ` at ${result.target.address}` : ""}.` : "";
     const details = result.preview ? [result.preview.subject && `Subject: ${result.preview.subject}.`, `Message: ${result.preview.body}`].filter(Boolean).join(" ")
-      : result.lines.filter(line => result.kind === "add_price_book_item" || line.label.startsWith("New line") || line.label === "Included quote total").map(line => `${line.label}: ${line.value}`).join(". ");
+      : result.lines.filter(line => result.kind === "fill_form" || result.kind === "add_price_book_item" || line.label.startsWith("New line") || line.label === "Included quote total").map(line => `${line.label}: ${line.value}`).join(". ");
     const full = [result.summary, target, details].filter(Boolean).join(" ");
     const message = full.length <= 1_850 ? full : [result.summary, target, "The full proposed details are in the review on screen. Please check them before confirming."].filter(Boolean).join(" ");
     return { ...reply, kind: "clarification", message,
-      questions: [result.kind === "customer_message" || result.kind === "invoice_reminder" ? "Shall I send this reviewed message?" : result.kind === "draft_job_quote" ? "Shall I save these changes to this job's quote draft?" : "Shall I add this item to your price book?"], workflow: result };
+      questions: [result.kind === "customer_message" || result.kind === "invoice_reminder" ? "Shall I send this reviewed message?" : result.kind === "draft_job_quote" ? "Shall I save these changes to this job's quote draft?" : result.kind === "fill_form" ? "Shall I save these answers to this form's draft?" : "Shall I add this item to your price book?"], workflow: result };
   }
   return { ...reply, kind: "answer", message: result.receipt.message, questions: [], action: null, workflow: result,
     links: [{ label: result.receipt.label, href: result.receipt.href }] };
@@ -25,5 +25,6 @@ export function wattzunWorkflowReply(reply: WattzunReply, result: WattzunWorkflo
 /** Approval concerns the current displayed/spoken review, never an embedded or future instruction. */
 export function isWattzunWorkflowApproval(value: string): boolean {
   const approval = value.trim().replace(/’/g, "'").replace(/\s+/g, " ");
+  if (/^(?:(?:yes|yep|yeah|okay|ok|sure)[, ]+)?(?:please )?save (?:these|those|the) (?:form )?answers(?: please)?[.!]?$/i.test(approval)) return true;
   return /^(?:(?:yes|yep|yeah|okay|ok|sure|absolutely)(?:[, ]+(?:please|go ahead|send it|save it|add it|do it|let's do it|that(?:'s| is) (?:right|fine)))?|(?:please )?(?:send|save|add|confirm|approve) (?:it|that|this|the (?:message|reminder|item|quote|draft|review))(?: please)?|go ahead(?: and (?:send|save|add) it)?|go for it|sounds good|looks good|no worries(?:[, ]+(?:send it|save it|add it|do it))?)[.!]?$/i.test(approval);
 }

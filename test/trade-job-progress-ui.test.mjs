@@ -4,6 +4,7 @@ import test from "node:test";
 import * as businessFormDesign from '../src/lib/trade-business-form-design.ts';
 import * as tradeFormLibrary from '../src/lib/trade-form-library.mjs';
 import ts from "typescript";
+import * as formClient from "../src/lib/wattzun-form-client.ts";
 import * as jsx from "react/jsx-runtime";
 
 const nodes = (tree, predicate) => !tree || typeof tree !== "object" ? [] : Array.isArray(tree)
@@ -56,7 +57,9 @@ function panelHarness(name, initialProps, request) {
     getElementById: id => elements.get(id) || null };
   const mocks = {
     react: hooks, "react/jsx-runtime": jsx,
-    "./TradeBusinessProvider": { useTradeBusinessFetch: () => fetch },
+    "./TradeBusinessProvider": { useTradeBusinessFetch: () => fetch, useTradeBusiness: () => ({ ownerUid: "business" }) },
+    "./WattzunFormAssistButton": { WattzunFormAssistButton: "WattzunFormAssistButton" },
+    "@/lib/wattzun-form-client": formClient,
     "@/lib/photo-request-review": { PHOTO_RETAKE_REASONS: {} },
     "./TradeActivityWorkPackPanel": { TradeActivityWorkPackPanel: "TradeActivityWorkPackPanel" },
     "./TradeSwmsPanel": { TradeSwmsPanel: "TradeSwmsPanel" },
@@ -183,7 +186,7 @@ test("successful completion refreshes the job and preserves its acknowledgement 
   for (const pending of [false, true]) {
     const h = formsHarness({ pending, refreshFails: true });
     const tree = await h.ready(); const editor = child(tree, "JobForm");
-    assert.equal(await editor.props.onSave("form-1", 2, { result: "Done" }, true), true);
+    assert.deepEqual(await editor.props.onSave("form-1", 2, { result: "Done" }, true), { ...form, status: "complete", revision: 3 });
     const after = h.render();
     assert.deepEqual(h.changes, ["refresh"]); assert.equal(child(after, "JobForm").props.form.status, "complete");
     assert.equal(child(after, "JobForm").key, editor.key);
@@ -194,14 +197,14 @@ test("successful completion refreshes the job and preserves its acknowledgement 
 
 test("draft save and add-form success notify the parent, while failed writes and read-only access do not", async () => {
   const h = formsHarness(); let tree = await h.ready();
-  assert.equal(await child(tree, "JobForm").props.onSave("form-1", 2, {}, false), true);
+  assert.deepEqual(await child(tree, "JobForm").props.onSave("form-1", 2, {}, false), { ...form, status: "draft", revision: 3 });
   assert.match(text(h.render()), /Field form saved\./);
   tree = h.render(); button(tree, "Add to job").props.onClick(); await idle();
   assert.deepEqual(h.changes, ["refresh", "refresh"]);
   assert.match(text(h.render()), /Field form added to this job/);
   for (const options of [{ writeFails: true }, { readOnly: true }]) {
     const blocked = formsHarness(options); const blockedTree = await blocked.ready();
-    assert.equal(await child(blockedTree, "JobForm").props.onSave("form-1", 2, {}, true), false);
+    assert.equal(await child(blockedTree, "JobForm").props.onSave("form-1", 2, {}, true), null);
     assert.deepEqual(blocked.changes, []);
     if (options.readOnly) { assert.equal(button(blockedTree, "Add to job"), undefined); assert.equal(blocked.calls.length, 1); }
     else assert.match(text(blocked.render()), /Required answer missing/);

@@ -39,7 +39,7 @@ function harness(options = {}) {
   const call = new WattzunVoiceCall(environment, callbacks);
   return { call, state, microphone,
     sample(milliseconds, level = 0) { state.now += milliseconds; state.level = level; for (const callback of [...state.timers]) callback(); },
-    speak() { for (let index = 0; index < 4; index++) this.sample(100, .1); this.sample(700, 0); },
+    speak() { for (let index = 0; index < 4; index++) this.sample(100, .1); this.sample(1300, 0); },
     status: () => state.statuses.at(-1)?.state,
   };
 }
@@ -163,16 +163,17 @@ test("speech detection ignores a short click and sends sustained speech after si
   assert.equal(detector.sample(0, 45000), "silent");
   const speech = new WattzunSpeechWindow(0);
   for (let time = 100; time <= 300; time += 100) assert.equal(speech.sample(.06, time), "wait");
-  assert.equal(speech.sample(0, 999), "wait");
-  assert.equal(speech.sample(0, 1000), "send");
+  assert.equal(speech.sample(0, 1599), "wait");
+  assert.equal(speech.sample(0, 1600), "send");
 });
-test("speech continuing inside the 700ms pause window resets the end boundary", () => {
+test("a natural 1100ms sentence pause preserves the next clause and resets the end boundary", () => {
   const speech = new WattzunSpeechWindow(0);
   for (let time = 100; time <= 300; time += 100) speech.sample(.06, time);
-  assert.equal(speech.sample(0, 900), "wait");
-  assert.equal(speech.sample(.06, 950), "wait");
-  assert.equal(speech.sample(0, 1649), "wait");
-  assert.equal(speech.sample(0, 1650), "send");
+  assert.equal(speech.sample(0, 1000), "wait");
+  assert.equal(speech.sample(0, 1400), "wait");
+  assert.equal(speech.sample(.06, 1450), "wait");
+  assert.equal(speech.sample(0, 2749), "wait");
+  assert.equal(speech.sample(0, 2750), "send");
 });
 test("separated short clicks never accumulate into a spoken question", () => {
   const detector = new WattzunSpeechWindow(0);

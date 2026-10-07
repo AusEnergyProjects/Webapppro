@@ -7,6 +7,7 @@ import ts from 'typescript';
 import * as contract from '../src/lib/wattzun-portal.ts';
 import * as guide from '../src/lib/wattzun-portal-guide.ts';
 import * as workflowContract from '../src/lib/wattzun-workflow.ts';
+import * as navigation from '../src/lib/wattzun-navigation.ts';
 import { SURGE_USAGE_GUARD_ENV } from '../src/lib/energy-assistant-usage-guard.ts';
 import { syntheticWorkContext, workContextContract } from './helpers/wattzun-work-context-fixture.mjs';
 
@@ -52,6 +53,7 @@ function fixture(options = {}) {
     './wattzun-portal': contract,
     './wattzun-actions': actions,
     './wattzun-workflow': workflowContract,
+    './wattzun-navigation': navigation,
     './wattzun-records': records,
     './wattzun-portal-guide': guide,
     './wattzun-work-context': workContextContract,
@@ -124,6 +126,36 @@ test('absent, foreign, mismatched and oversized selected context fails before an
     await assert.rejects(f.prepareWattzunPortalReply(options), safeError);
     assert.equal(f.workflows.length, 0); assert.equal(f.calls.length, 0); assert.equal(f.reservations.length, 0);
   }
+});
+
+test('explicit navigation resolves only a destination in the current portal', () => {
+  const f = fixture();
+  for (const portal of ['trade', 'council', 'creditex']) {
+    const options = request(); options.scope.portal = portal; options.input.portal = portal;
+    const contract = f.createWattzunPortalReplyContract(options);
+    const destinationId = guide.WATTZUN_PORTAL_GUIDE[portal][0].id;
+    const action = { kind: 'open_workspace', destinationId };
+    assert.deepEqual(contract.validate({ ...answer, message: 'Opening that workspace.', linkIds: [], action }).action, action);
+    for (const invalid of [{ ...action, destinationId: '/admin' }, { ...action, href: 'https://foreign.test' }, { ...action, destinationId: portal === 'trade' ? 'council_reports' : 'trade_schedule' }]) {
+      assert.throws(() => contract.validate({ ...answer, linkIds: [], action: invalid }));
+    }
+    if (portal !== 'trade') assert.deepEqual(contract.schema.properties.action.anyOf.filter(item => item.properties).map(item => item.properties.kind.enum[0]), ['open_workspace']);
+  }
+});
+
+test('form answer proposals are tied to the exact selected form and available questions', () => {
+  const f = fixture();
+  const workContext = syntheticWorkContext({ reference: { kind: 'trade_form', formKind: 'job_form', recordId: 'form-one', jobId: 'job-one' },
+    facts: { questions: [{ fieldKey: 'site_notes', label: 'Site notes', type: 'text', answer: null }] } });
+  const options = request({ workContext }); options.input.workReference = workContext.reference;
+  const contract = f.createWattzunPortalReplyContract(options);
+  const action = { kind: 'fill_form', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', answers: [{ fieldKey: 'site_notes', value: 'Access via side gate.' }] };
+  assert.deepEqual(contract.validate({ ...answer, message: 'I can put that into your form draft.', linkIds: [], action }).action, action);
+  assert.match(contract.instructions, /Ask the next relevant unanswered question one at a time/);
+  for (const changed of [{ formId: 'form-other' }, { jobId: 'job-other' }, { formKind: 'work_pack' }]) assert.throws(() => contract.validate({ ...answer, linkIds: [], action: { ...action, ...changed } }));
+  const unselected = f.createWattzunPortalReplyContract(request());
+  assert.equal(unselected.schema.properties.action.anyOf.some(item => item.properties?.kind?.enum?.includes('fill_form')), false);
+  assert.throws(() => unselected.validate({ ...answer, linkIds: [], action }));
 });
 
 test('selected existing jobs cannot produce a duplicate new quote action or invented source citation', async () => {
@@ -242,14 +274,15 @@ test('portal text reuses the guarded workflow provider with a strict small schem
   assert.equal(call.schema.properties.message.maxLength, 1800); assert.equal(call.schema.properties.questions.maxItems, 3);
   assert.equal(call.schema.properties.questions.items.maxLength, 300);
   assert.equal(call.schema.properties.action.anyOf[0].type, 'null');
-  assert.equal(call.schema.properties.action.anyOf[1].properties.lines.maxItems, 10);
-  assert.equal(call.schema.properties.action.anyOf[1].properties.lines.items.properties.description.maxLength, 160);
-  const lineProperties = call.schema.properties.action.anyOf[1].properties.lines.items.properties;
+  const quoteProposal = call.schema.properties.action.anyOf.find(item => item.properties?.kind?.enum?.includes('prepare_quote'));
+  assert.equal(quoteProposal.properties.lines.maxItems, 10);
+  assert.equal(quoteProposal.properties.lines.items.properties.description.maxLength, 160);
+  const lineProperties = quoteProposal.properties.lines.items.properties;
   assert.deepEqual(lineProperties.quantity.type, ['string', 'null']);
   assert.deepEqual(lineProperties.unitPrice.type, ['string', 'null']);
   assert.match(lineProperties.quantity.description, /decimal string.*unknown is null.*Never a JSON number/);
   assert.match(lineProperties.unitPrice.description, /unit price before GST.*decimal string.*unknown is null.*Never a JSON number or a quoted total/);
-  assert.equal(call.schema.properties.action.anyOf[1].properties.description.maxLength, 1000);
+  assert.equal(quoteProposal.properties.description.maxLength, 1000);
   assert.deepEqual(call.schema.properties.lookup.anyOf, [{ type: 'null' }, records.WATTZUN_RECORD_LOOKUP_SCHEMA]);
   assert.deepEqual(call.schema.properties.linkIds.items.enum, ['trade_work', 'trade_leads', 'trade_sales', 'trade_schedule', 'trade_finance', 'trade_quotes', 'trade_forms', 'trade_onsite', 'trade_staff', 'trade_team', 'trade_wattzun']);
   assert.equal(call.input.message, options.input.message); assert.deepEqual(call.input.workspace, { portal: 'trade', label: 'Fixture Trade' });
@@ -368,7 +401,7 @@ test('shared text and voice reply contract gives each portal its own grounded ro
     assert.deepEqual(replyContract.input.taskGuidance,guide.WATTZUN_TASK_GUIDANCE[portal]);
     if(portal==='trade') assert.match(replyContract.instructions,/Use draft_job_quote when.*Use customer_message for.*Use add_price_book_item for/s);
     else {
-      assert.match(replyContract.instructions,/Return action and lookup as null/);
+      assert.match(replyContract.instructions,/Use open_workspace only for an explicit navigation request; otherwise action and lookup are null/);
       assert.doesNotMatch(replyContract.instructions,/Use draft_job_quote when|Use customer_message for|Use add_price_book_item for|emit confirm_workflow/);
     }
     await f.prepareWattzunPortalReply(options);
@@ -393,7 +426,7 @@ test('Council and Creditex links use only verified portal routes and describe th
     assert.equal(f.workflows[0].scopeUid, `${portal}:fixture-workspace`);
     assert.match(JSON.stringify(f.workflows[0].input.navigationGuide), expected);
     assert.doesNotMatch(JSON.stringify(f.workflows[0].input.navigationGuide), /\?tab=|\?view=/);
-    assert.deepEqual(f.workflows[0].schema.properties.linkIds.items.enum, [...linkIds, `${portal}_wattzun`]);
+    assert.deepEqual(f.workflows[0].schema.properties.linkIds.items.enum, [...linkIds, ...(portal === 'council' ? ['council_map', 'council_connect'] : []), `${portal}_wattzun`]);
   }
 });
 

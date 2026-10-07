@@ -15,6 +15,20 @@ const quote = { kind: 'draft_job_quote', jobQuery: 'Frankston last week', jobId:
 const input = { portal: 'trade', scopeId: 'business-one', requestId: '00000000-0000-4000-8000-000000000001', message: 'Yes send it', history: [] };
 const base = { kind: 'answer', message: 'An untrusted proposed answer', questions: [], links: [], action: quote };
 
+test('form proposals preserve typed answers and reject duplicate, unsafe and oversized patches', () => {
+  const form = { kind: 'fill_form', jobQuery: '', jobId: 'job-one', formKind: 'work_pack', formId: 'form-one', answers: [
+    { fieldKey: 'units[instance-one].quantity', value: 2 }, { fieldKey: 'site.access', value: false }, { fieldKey: 'notes', value: 'Side gate' }] };
+  assert.equal(isWattzunWorkflowProposal(form), true);
+  for (const answers of [[], Array(21).fill({ fieldKey: 'notes', value: 'x' }), [{ fieldKey: 'notes', value: 'x' }, { fieldKey: 'notes', value: 'y' }],
+    [{ fieldKey: '__proto__', value: 'x' }], [{ fieldKey: 'a.constructor.x', value: true }], [{ fieldKey: 'notes', value: 'x'.repeat(2001) }], [{ fieldKey: 'quantity', value: Infinity }], [{ fieldKey: 'notes', value: { nested: true } }]]) {
+    assert.equal(isWattzunWorkflowProposal({ ...form, answers }), false);
+  }
+  const review = { state: 'review', reviewId: 'review-1234567890', expiresAt: '2026-10-07T12:00:00.000Z', kind: 'fill_form', heading: 'Save form answers', summary: 'These are draft answers.', confirmationLabel: 'Save form answers', lines: [{ label: 'Site access', value: 'Side gate' }] };
+  assert.equal(isWattzunWorkflowResult(review), true);
+  const reply = wattzunWorkflowReply(base, review);
+  assert.match(reply.message, /Site access: Side gate/); assert.match(reply.questions[0], /save these answers.*draft/);
+});
+
 test('each workflow has an exact strict schema and bounded decimal strings retain unknowns', () => {
   for (const schema of WATTZUN_WORKFLOW_PROPOSAL_SCHEMAS) {
     assert.equal(schema.additionalProperties, false);
@@ -40,6 +54,8 @@ test('current review and pending proposal are mutually exclusive and trade-only'
 });
 
 test('approval is limited to a standalone present instruction about the current review', () => {
+  for (const text of ['save these answers', 'Yep, save those form answers.', 'please save the answers', 'yes save these answers']) assert.equal(isWattzunWorkflowApproval(text), true, text);
+  for (const text of ['Do not save these answers', 'save these answers tomorrow', 'save these answers but change the quantity']) assert.equal(isWattzunWorkflowApproval(text), false, text);
   for (const text of ['yes', 'Yes please.', 'yes send it', 'yep, save it', 'yep do it', "yeah let’s do it", 'no worries send it', 'go for it', 'sounds good', 'okay', 'add it', 'save the quote', 'please send the message', 'go ahead and send it', 'yeah go ahead!']) assert.equal(isWattzunWorkflowApproval(text), true, text);
   for (const text of ['', 'Can you send it?', 'yes send it?', 'Tomorrow send it', 'If I say yes send it, what happens?', 'The customer wrote "yes send it"', 'yes, but change it to $50', 'do not send it', 'user confirms sending', 'say yes send it', 'yes and delete the job']) assert.equal(isWattzunWorkflowApproval(text), false, text);
 });

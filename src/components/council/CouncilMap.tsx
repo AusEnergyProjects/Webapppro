@@ -12,6 +12,7 @@ import { councilPreviewTiles, fitCouncilMap, layoutCouncilMapMarkers, moveCounci
 import { councilMapHeat, createCouncilMapHeatScale, COUNCIL_MAP_HEAT_GRADIENT } from "@/lib/council-map-heat";
 import { loadCouncilPostcodeBoundaries, councilPostcodeBoundaryPath, councilPostcodeBoundaryContains, councilPostcodeBoundaryLabelPosition, COUNCIL_POSTCODE_BOUNDARY_SOURCE, type CouncilPostcodeBoundary } from "@/lib/council-postcode-boundaries";
 import { CouncilPostcodeDetails, type CouncilPostcodeDetailsSources } from "./CouncilPostcodeDetails";
+import { COUNCIL_DEMOGRAPHIC_METRICS, loadCouncilDemographics, type CouncilDemographicsStatus } from "@/lib/council-demographics";
 import { CouncilIcon } from "./CouncilPrimitives";
 import styles from "./CouncilMap.module.css";
 
@@ -43,7 +44,7 @@ function demoTrades(report: CouncilReport): CouncilMapTrade[] {
   }));
 }
 
-export function CouncilMap({ report, api, publicLayers = [], postcodeDetails }: { report: CouncilReport; api?: CouncilApi; publicLayers?: CouncilMapPublicLayer[]; postcodeDetails?: CouncilPostcodeDetailsSources }) {
+export function CouncilMap({ report, api, publicLayers = [], postcodeDetails, onAskPostcode }: { report: CouncilReport; api?: CouncilApi; publicLayers?: CouncilMapPublicLayer[]; postcodeDetails?: CouncilPostcodeDetailsSources; onAskPostcode?: (postcode: string) => void }) {
   const demonstration = report.mode === "demonstration";
   const container = useRef<HTMLDivElement>(null);
   const googleCanvas = useRef<HTMLDivElement>(null);
@@ -65,7 +66,14 @@ export function CouncilMap({ report, api, publicLayers = [], postcodeDetails }: 
   const [showArea,setShowArea] = useState(true);
   // null means automatic; an explicit empty string keeps the user's TLink choice.
   const [layerId,setLayerId] = useState<string | null>(null);
-  const publicLayer = publicLayers.find(layer => layer.id === (layerId ?? preferredCouncilMapLayer(publicLayers,report.scope.postcodes)));
+  const [demographics,setDemographics] = useState<CouncilDemographicsStatus>({data:null,loading:true,error:false});
+  const demographicLayers: CouncilMapPublicLayer[] = COUNCIL_DEMOGRAPHIC_METRICS.map(metric => ({
+    id:`census-${metric.key}`,label:`Census: ${metric.label}`,unit:metric.unit,sourceLabel:"Based on ABS 2021 Census · 10 August 2021",
+    postcodes:report.scope.postcodes.map(postcode=>({postcode,value:demographics.data?.rows.find(row=>row.code===postcode)?.[metric.key]??null})),
+  }));
+  const allPublicLayers = [...publicLayers,...demographicLayers];
+  const publicLayer = allPublicLayers.find(layer => layer.id === (layerId ?? preferredCouncilMapLayer(publicLayers,report.scope.postcodes)));
+  const demographicLayer = publicLayer?.id.startsWith("census-");
   const publicValues = useMemo(() => new Map(publicLayer?.postcodes.map(row => [row.postcode, publicValue(row.value)])),[publicLayer]);
   const [postcodeQuery,setPostcodeQuery] = useState("");
   const [postcodePage,setPostcodePage] = useState(0);
@@ -91,11 +99,18 @@ export function CouncilMap({ report, api, publicLayers = [], postcodeDetails }: 
   useEffect(() => { positionsRef.current=positions; changeView(fitCouncilMap(positions,size.width,size.height)); },[positions,size.width,size.height]);
   useEffect(() => {
     const controller = new AbortController();
-    setBoundaryState("loading");
+    // CouncilPortal keys this map by postcode scope, so loading state starts with the new map.
     void loadCouncilPostcodeBoundaries(report.scope.postcodes, controller.signal).then(result => {
       if (controller.signal.aborted) return;
       setBoundaries(result.features); setBoundaryState("ready");
     }).catch(() => { if (!controller.signal.aborted) { setBoundaries([]); setBoundaryState("unavailable"); } });
+    return () => controller.abort();
+  },[report.scope.postcodes]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadCouncilDemographics(report.scope.postcodes, controller.signal).then(data => {
+      if (!controller.signal.aborted) setDemographics({data,loading:false,error:false});
+    }).catch(() => { if (!controller.signal.aborted) setDemographics({data:null,loading:false,error:true}); });
     return () => controller.abort();
   },[report.scope.postcodes]);
   useEffect(() => {
@@ -268,12 +283,13 @@ export function CouncilMap({ report, api, publicLayers = [], postcodeDetails }: 
   const ready = state === "ready";
 
   return <section className={styles.root} aria-label="Council community map">
-    {publicLayers.length > 0 && <div className={styles.sourcePanel}>
+    {allPublicLayers.length > 0 && <div className={styles.sourcePanel}>
       <label className={styles.layerSelect}>Map intensity<select value={publicLayer?.id ?? ""} onChange={event=>{setLayerId(event.target.value);setHeat(true);}}>
         <option value="">TLink completed upgrades</option>
         {publicLayers.map(layer=><option key={layer.id} value={layer.id}>{layer.label}</option>)}
+        <optgroup label="Community demographics · Census 2021">{demographicLayers.map(layer=><option key={layer.id} value={layer.id}>{layer.label.replace("Census: ","")}</option>)}</optgroup>
       </select></label>
-      <div className={styles.sourceDetail} aria-live="polite"><strong>{publicLayer ? publicLayer.label : "Completed upgrades through TLink"}</strong><p>{publicLayer ? `Source: ${publicLayer.sourceLabel}. Values shown in ${publicLayer.unit}.` : demonstration ? "Source: fictional TLink demonstration records." : `Source: completed upgrades recorded in TLink · ${report.period.label}.`}</p><p>{publicLayer ? `Public data uses its own published reporting period. It is separate from ${demonstration ? "the fictional TLink demonstration activity" : "TLink activity"}.` : `${report.metrics.completedJobs === 0 ? "No completed TLink upgrades are recorded for this period. " : ""}Choose a public dataset to compare the wider community context.`}</p></div>
+      <div className={styles.sourceDetail} aria-live="polite"><strong>{publicLayer ? publicLayer.label : "Completed upgrades through TLink"}</strong><p>{publicLayer ? `Source: ${publicLayer.sourceLabel}. Values shown in ${publicLayer.unit}.` : demonstration ? "Source: fictional TLink demonstration records." : `Source: completed upgrades recorded in TLink · ${report.period.label}.`}</p><p>{demographicLayer ? "Historical Census context for whole ABS Postal Areas. It does not describe individual residents or prove why energy upgrades occurred. Select a postcode to compare with the state and view its upgrades." : publicLayer ? `Public data uses its own published reporting period. It is separate from ${demonstration ? "the fictional TLink demonstration activity" : "TLink activity"}.` : `${report.metrics.completedJobs === 0 ? "No completed TLink upgrades are recorded for this period. " : ""}Choose a public dataset to compare the wider community context.`}</p>{demographicLayer&&<p>{demographics.loading?"Loading Census demographics...":demographics.error?"Census demographics are temporarily unavailable. Other map layers remain available.":`${demographics.data?.rows.length??0} of ${report.scope.postcodes.length} reporting postcodes have an ABS 2021 profile. Missing postcodes stay unavailable.`}</p>}</div>
     </div>}
     <div className={styles.toolbar}><div className={styles.layers} aria-label="Map layers">
       <button type="button" aria-pressed={showTrades} onClick={()=>setShowTrades(!showTrades)}><span className={styles.tradeDot}/>Local trades</button>
@@ -326,8 +342,8 @@ export function CouncilMap({ report, api, publicLayers = [], postcodeDetails }: 
         {demonstration&&<div className={styles.attribution}>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a> · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noreferrer">Map issue</a></div>}
       </div>
       <aside ref={directoryPanel} className={`${styles.directory} ${selectedTrade?styles.profileDirectory:""} ${selectedCell&&!selectedTrade?styles.postcodeDirectory:""}`} aria-label={selectedCell ? `Postcode ${selectedCell.postcode} breakdown` : "Local trade directory"}>
-        <div className={styles.directoryHeader}><span className={styles.eyebrow}>{selectedCell&&!selectedTrade?"POSTCODE BREAKDOWN":"LOCAL DELIVERY NETWORK"}</span><h2>{selectedTrade?"Business profile":selectedCell?selectedCell.label:"Explore a postcode"}</h2><p>{selectedCell?`Postcode ${selectedCell.postcode}`:"Select any shaded area or postcode label to see its upgrades, installations and local trades."}</p></div>
-        {selectedCell&&!selectedTrade&&<div className={styles.postcodeData}><CouncilPostcodeDetails postcode={selectedCell.postcode} report={report} sources={postcodeDetails}/></div>}
+        <div className={styles.directoryHeader}><span className={styles.eyebrow}>{selectedCell&&!selectedTrade?"POSTCODE BREAKDOWN":"LOCAL DELIVERY NETWORK"}</span><h2>{selectedTrade?"Business profile":selectedCell?selectedCell.label:"Explore a postcode"}</h2><p>{selectedCell?`Postcode ${selectedCell.postcode}`:"Select any shaded area or postcode label to see its demographics, upgrades, installations and local trades."}</p></div>
+        {selectedCell&&!selectedTrade&&<div className={styles.postcodeData}>{onAskPostcode && !demonstration && demographics.data?.rows.some(row => row.code === selectedCell.postcode) && <button type="button" onClick={() => onAskPostcode(selectedCell.postcode)}>Ask Wattzun about this community</button>}<CouncilPostcodeDetails postcode={selectedCell.postcode} report={report} sources={postcodeDetails} demographics={demographics}/></div>}
         <label className={styles.search}>Find a trade or postcode<input type="search" value={query} onChange={event=>{setQuery(event.target.value);setSelection(null);}} placeholder="Business, service or postcode"/></label>
         {selection&&<button type="button" className={styles.back} onClick={()=>setSelection(null)}>← All postcodes and trades</button>}
         {selectedTrade?<div className={styles.profile}><span className={styles.businessAvatar}><CouncilIcon name="business" size={25}/></span><h3>{selectedTrade.name}</h3><p>{selectedTrade.suburb} {selectedTrade.state} {selectedTrade.postcode}</p><span className={styles.businessStatus}>{demonstration?"Fictional demonstration business":"Onboarded with TLink"}</span><h4>Services</h4><div className={styles.tags}>{selectedTrade.capabilities.map(capability=><span key={capability}>{capability}</span>)}</div>{selectedTrade.website&&<a href={selectedTrade.website} target="_blank" rel="noopener noreferrer">Visit business website ↗</a>}<p className={styles.small}>Pin shows the business postcode area, not its street address. Business location does not establish where every worker is based.</p></div>:<div className={styles.tradeList}>
@@ -338,7 +354,7 @@ export function CouncilMap({ report, api, publicLayers = [], postcodeDetails }: 
         <p className={styles.directoryFoot}>Business pins appear automatically for onboarded local trades. Private customer and job locations are never shown.</p>
       </aside>
     </div>
-    <p className={styles.layerNote}>{boundaryState==="loading"?"Loading postcode boundaries…":boundaryState==="unavailable"?"Postcode boundaries are temporarily unavailable. Approximate centre markers are shown.":`${boundaries.length} of ${report.map.cells.length} postcode boundaries available. Areas without a published boundary use a centre marker.`} {publicLayer&&`Heat groups similar ${publicLayer.unit} totals across all reporting postcodes, so a few large totals do not hide smaller differences. Zero uses the cool end of the scale; grey dashed areas have no usable value. Public values are not attributed to council or TLink campaigns.`}</p>
+    <p className={styles.layerNote}>{boundaryState==="loading"?"Loading postcode boundaries…":boundaryState==="unavailable"?"Postcode boundaries are temporarily unavailable. Approximate centre markers are shown.":`${boundaries.length} of ${report.map.cells.length} postcode boundaries available. Areas without a published boundary use a centre marker.`} {publicLayer&&`Heat groups similar ${publicLayer.unit} values across all reporting postcodes. Zero uses the cool end of the scale; grey dashed areas have no usable value. Public values are not attributed to council or TLink campaigns.`}</p>
     <section className={styles.dataTable} aria-label="Explore reporting postcodes">
       <div className={styles.tableToolbar}><div><h3>Explore reporting postcodes</h3><p>{report.map.cells.length} areas · select a postcode to focus the map</p></div><label>Find a postcode<input type="search" value={postcodeQuery} onChange={event=>{setPostcodeQuery(event.target.value);setPostcodePage(0);}} placeholder="Postcode or area"/></label></div>
       <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Postcode map data table"><table><caption>{publicLayer ? `${publicLayer.label} (${publicLayer.unit}). Source: ${publicLayer.sourceLabel}.` : `Completed upgrades recorded in TLink · ${report.period.label}.`}{demonstration ? " TLink activity and businesses are illustrative." : ""}</caption><thead><tr><th scope="col">Postcode</th>{publicLayer&&<th scope="col">{publicLayer.label}<span> {publicLayer.unit}</span></th>}<th scope="col">TLink upgrades</th><th scope="col">Local businesses</th></tr></thead><tbody>{displayedPostcodes.map(cell=><tr key={cell.postcode} data-selected={selectedPostcode===cell.postcode||undefined}><th scope="row"><button type="button" aria-pressed={selectedPostcode===cell.postcode} onClick={()=>chooseArea(cell,true)}>{cell.postcode}<span>{areaName(cell.label,cell.postcode)}</span>{!cell.position&&<small>Map location unavailable</small>}</button></th>{publicLayer&&<td>{publicNumber(activityValue(cell))}</td>}<td>{number(cell.completedJobs)}</td><td>{number(cell.registeredLocalBusinesses)}</td></tr>)}</tbody></table>{!postcodeRows.length&&<p className={styles.empty}>No reporting postcodes match your search.</p>}</div>

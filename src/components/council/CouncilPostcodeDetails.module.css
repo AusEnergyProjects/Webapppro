@@ -26,4 +26,15 @@
 .notice{padding:9px;border-radius:6px;background:var(--c-soft,#f3f8f5);border:1px solid var(--c-line,#d7e3e7)}
 .impact{margin-top:7px}
 .basis{padding:0 0 16px}
+.demographicTable{width:100%;border-collapse:collapse;font-size:11px;margin-top:12px}
+.demographicTable caption{text-align:left;font-size:10px;color:var(--c-muted,#57727d);padding-bottom:9px}
+.demographicTable th,.demographicTable td{padding:9px 4px;border-bottom:1px solid var(--c-line,#d7e3e7);vertical-align:top}
+.demographicTable th{text-align:left;font-weight:500}
+.demographicTable thead th{font-size:10px;font-weight:700;color:var(--c-muted,#57727d)}
+.demographicTable th:first-child{width:54%;padding-left:0}
+.demographicTable td{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:650}
+.demographicTable td:last-child{font-weight:400;color:var(--c-muted,#57727d)}
+.demographicTable small{display:block;font-size:9px;color:var(--c-muted,#57727d);margin-top:3px;font-weight:400}
+.planning{font-size:11px;line-height:1.6;margin:3px 0 0;padding-left:18px}
+.planning li+li{margin-top:7px}
 @media(max-width:480px){.metrics dd{font-size:22px}.source{padding:18px 0}.installations dt,.activities li>span{font-size:12px}}

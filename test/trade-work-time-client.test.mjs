@@ -291,13 +291,12 @@ test('web supporting form observes completion only after a successful complete s
   let accepted = false;
   const calls = [];
   const complete = editorFunction('../src/components/TradeJobFormsPanel.tsx', 'completeForm', {
-    form: { id: 'form-1', revision: 4 }, answers: {},
-    onSave: async (...args) => { calls.push(args); return accepted; }, timing: { markCompleted: () => calls.push('completed') },
+    saveAnswers: async (...args) => { calls.push(args); return accepted; }, timing: { markCompleted: () => calls.push('completed') },
   });
   await complete(); assert.equal(calls.includes('completed'), false);
   accepted = true; await complete();
   assert.equal(calls.at(-1), 'completed');
-  assert.equal(calls[1][3], true);
+  assert.deepEqual(calls[1], [true]);
 });
 
 test('native activity finish observes completion after durable local acceptance and never on a failed local save', async () => {

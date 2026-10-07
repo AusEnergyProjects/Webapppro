@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import * as community from "../src/lib/council-community.ts";
 import * as veu from "../src/lib/council-veu.ts";
 import { councilReportPeriod } from "../src/lib/council-reporting.ts";
+import * as demographics from "../src/lib/council-demographics.ts";
 
 const css = { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
 function load(path, dependencies) {
@@ -22,6 +23,39 @@ function load(path, dependencies) {
 const primitives = load("../src/components/council/CouncilPrimitives.tsx", { "react/jsx-runtime": jsx, "./CouncilWorkspace.module.css": css });
 const { CouncilPostcodeDetails } = load("../src/components/council/CouncilPostcodeDetails.tsx", {
   "react/jsx-runtime": jsx, "@/lib/council-community": community, "./CouncilPrimitives": primitives, "./CouncilPostcodeDetails.module.css": css,
+  "@/lib/council-demographics":demographics,
+});
+
+test("selected postcode compares historical Census demographics with the same-year state benchmark",()=>{
+  const snapshot=JSON.parse(readFileSync(new URL("../public/data/council-demographics/abs-2021.json",import.meta.url),"utf8"));
+  const fixture=fixtures();fixture.demographics={data:{...demographics.parseCouncilDemographics(snapshot),missingPostcodes:[]},loading:false,error:false};
+  const text=plain(render(fixture));
+  assert.match(text,/Community demographics Census 2021 · 10 August 2021 · Whole ABS Postal Area 3805/);
+  assert.match(text,/Population 58,600 Occupied private dwellings 17,929/);
+  assert.match(text,/Median weekly household income \$183 above state \$1,942 \$1,759/);
+  assert.match(text,/Rented homes 5.9 percentage points below state 22.6% 28.5%/);
+  assert.match(text,/People aged 65 and over 6.3 percentage points below state 10.5% 16.8%/);
+  assert.match(text,/historical|Historical/);
+  assert.match(text,/may cross council or state boundaries/);
+  assert.match(text,/do not show individual eligibility, intent or the cause of uptake/);
+  assert.match(text,/Approved activities 32/);
+  assert.match(render(fixture),/https:\/\/www.abs.gov.au\/census\/find-census-data\/quickstats\/2021\/POA3805/);
+  assert.equal(render(fixture,"3999"),"");
+});
+
+test("Census loading, failure, absent postcode and recorded zero remain distinct",()=>{
+  const fixture=fixtures();
+  fixture.demographics={data:null,loading:true,error:false};
+  assert.match(plain(render(fixture)),/Loading Census demographics/);
+  fixture.demographics={data:null,loading:false,error:true};
+  assert.match(plain(render(fixture)),/Census demographics are temporarily unavailable/);
+  fixture.demographics={data:{rows:[],states:[],missingPostcodes:["3805"]},loading:false,error:false};
+  assert.match(plain(render(fixture)),/No ABS 2021 demographic profile is available/);
+  fixture.demographics.data.rows=[{code:"3805",population:0,occupiedPrivateDwellings:0,averageHouseholdSize:null,...Object.fromEntries(demographics.COUNCIL_DEMOGRAPHIC_METRICS.filter(metric=>metric.key!=="population").map(metric=>[metric.key,null]))}];
+  const text=plain(render(fixture));
+  assert.match(text,/Population 0 Occupied private dwellings 0/);
+  assert.match(text,/Rented homes Not available Not available/);
+  assert.doesNotMatch(text,/0%/);
 });
 const plain = html => html.replace(/<[^>]*>/g, " ").replaceAll("&amp;", "&").replace(/\s+/g, " ").trim();
 const scope = { councilId: "fixture", name: "Fixture council", state: "VIC", postcodes: ["3805", "3806"] };

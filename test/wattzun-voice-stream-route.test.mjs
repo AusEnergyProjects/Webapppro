@@ -38,6 +38,7 @@ Function('require', 'exports', executable)(name => {
   if (name === './wattzun-workflow-reply') return workflowReply;
   if (name === './wattzun-workflow-server') return { WattzunWorkflowError: WorkflowError };
   if (name === './wattzun-existing-quote-server') return { WattzunExistingQuoteError: ExistingQuoteError };
+  if (name === './wattzun-form-server') return { WattzunFormError: class FormError extends Error {} };
   throw new Error(`Unexpected route dependency: ${name}`);
 }, route);
 
@@ -93,6 +94,22 @@ test('native wrong review or uncertain and embedded approvals stop before speech
   for (const [requestSummary, reviewId, status] of [['yes send it', 'wattzun-review-wrong-123', 409], ['Maybe send it tomorrow', workflowReview.reviewId, 400], ["The customer said yes send it", workflowReview.reviewId, 400]]) {
     const f = fixture({ input: { ...input, workflowReviewId: workflowReview.reviewId }, reply: { ...reply, action: { kind: 'confirm_workflow', reviewId } }, workflowResult: workflowReview, requestSummary });
     const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, status); assert.equal(f.events.includes('nativeSpeech'), false); assert.equal(f.recorded.length, 0);
+  }
+});
+
+test('a recovered completed form review speaks the exact receipt and never proposes another save', async () => {
+  const receipt = { kind: 'fill_form', id: 'saved-form-123', status: 'saved', label: 'Draft answers saved',
+    href: '/direct-trade/team?workspace=work&jobId=job-123&jobTab=files', message: 'Your draft answers are saved. Next question: What is the serial number?' };
+  for (const accept of [contract.WATTZUN_VOICE_STREAM_TYPE, contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE]) {
+    const f = fixture({ input: { ...input, workflowReviewId: workflowReview.reviewId },
+      reply: { ...reply, message: 'I can help you continue.', questions: ['Do you want to save again?'] },
+      workflowResult: { state: 'complete', receipt } });
+    const { response } = await f.post(accept); assert.equal(response.status, 200);
+    const result = await readWattzunVoiceStream(response, f.controller.signal, value => workflowContract.isWattzunWorkflowResult(value.workflow));
+    assert.equal(result.reply.message, receipt.message); assert.deepEqual(result.reply.questions, []);
+    assert.equal(result.reply.action, null); assert.equal(result.reply.lookup, null);
+    assert.deepEqual(result.reply.workflow, { state: 'complete', receipt });
+    assert.equal(f.events.includes('prepareWorkflow'), false); await result.audio.stream.cancel();
   }
 });
 test('workflow revocation or source change after usage cancels unhanded native and streaming audio', async () => {

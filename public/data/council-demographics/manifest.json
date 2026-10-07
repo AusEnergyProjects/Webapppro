@@ -1,0 +1,93 @@
+{
+  "name": "ABS 2021 Census, General Community Profile",
+  "url": "https://www.abs.gov.au/census/find-census-data/datapacks",
+  "geographyUrl": "https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs/edition-3-july-2021-june-2026/non-abs-structures/postal-areas",
+  "censusDate": "2021-08-10",
+  "licence": "https://creativecommons.org/licenses/by/4.0/",
+  "attribution": "Based on Australian Bureau of Statistics data. ABS data used with permission from the Australian Bureau of Statistics.",
+  "retrievedAt": "2026-10-07T06:50:48.694Z",
+  "geography": "ASGS Edition 3 Postal Areas 2021, whole areas; State and Territory benchmarks",
+  "censusPopulationBasis": "People: place of usual residence. Housing: occupied private dwellings, excluding visitor-only and other non-classifiable households (G37).",
+  "transformations": [
+    "Age 65+ is the sum of G01 Age_65_74_yr_P, Age_75_84_yr_P and Age_85ov_P divided by Tot_P_P.",
+    "Housing shares divide G37 category counts by Total_Total, including not-stated categories in the denominator. Owner occupation adds owned outright and owned with a mortgage.",
+    "Shares rounded to one decimal place. Zero-denominator or perturbation-inconsistent shares remain null. Blank values remain null; zero medians and averages are treated as unavailable, not genuine zero values.",
+    "No demographics are inferred for absent postcodes. No upgrade adoption rates or causal relationships are derived."
+  ],
+  "columns": {
+    "G01": [
+      "Tot_P_P",
+      "Age_65_74_yr_P",
+      "Age_75_84_yr_P",
+      "Age_85ov_P"
+    ],
+    "G02": [
+      "Median_age_persons",
+      "Median_tot_hhd_inc_weekly",
+      "Average_household_size"
+    ],
+    "G37": [
+      "Total_Total",
+      "R_Tot_Total",
+      "O_OR_Total",
+      "O_MTG_Total",
+      "Total_DS_Sep_house",
+      "Total_DS_Flat_apart"
+    ]
+  },
+  "sources": [
+    {
+      "geography": "POA",
+      "url": "https://www.abs.gov.au/census/find-census-data/datapacks/download/2021_GCP_POA_for_AUS_short-header.zip",
+      "bytes": 38014906,
+      "sha256": "ccca4c72ee769d81c13dd6cfaedff7df58819267384195118f3d3b87d6c64008",
+      "omittedCodes": [
+        "9494",
+        "9797"
+      ],
+      "tables": [
+        {
+          "name": "2021 Census GCP Postal Areas for AUS/2021Census_G01_AUST_POA.csv",
+          "sha256": "082fa6b868a085ba0676e0af584d26b524aa006a394eb13a3ded8c6dad74d34a"
+        },
+        {
+          "name": "2021 Census GCP Postal Areas for AUS/2021Census_G02_AUST_POA.csv",
+          "sha256": "6075a012e9798214474bb7e8bc323dc85fbc0529e78b205abb85c799421481ce"
+        },
+        {
+          "name": "2021 Census GCP Postal Areas for AUS/2021Census_G37_AUST_POA.csv",
+          "sha256": "73968a1ec2de6d755066eedfc73d6c9f64d81fcfca7cef08a8b532b2ebafdc63"
+        }
+      ],
+      "rows": 2641
+    },
+    {
+      "geography": "STE",
+      "url": "https://www.abs.gov.au/census/find-census-data/datapacks/download/2021_GCP_STE_for_AUS_short-header.zip",
+      "bytes": 4739560,
+      "sha256": "6267d16c87dec940a35a4b9c8f65e42d7962027bf7c5767718b5a295c6514d7a",
+      "omittedCodes": [],
+      "tables": [
+        {
+          "name": "2021 Census GCP States and Territories for AUS/2021Census_G01_AUST_STE.csv",
+          "sha256": "ecc15445a51b9a4789cfc19ef155ace88d4aff03f8d2293bb73796d51ba36626"
+        },
+        {
+          "name": "2021 Census GCP States and Territories for AUS/2021Census_G02_AUST_STE.csv",
+          "sha256": "d4c2fd9e2fd5d047ab8bafe19beb8406fc3733f59d92bd0cb05f7c290c98d11e"
+        },
+        {
+          "name": "2021 Census GCP States and Territories for AUS/2021Census_G37_AUST_STE.csv",
+          "sha256": "828a926085abc4088bfee782da6d3681188ee745eb427695ca7ddcbe4fea7ff5"
+        }
+      ],
+      "rows": 9
+    }
+  ],
+  "file": {
+    "name": "abs-2021.json",
+    "rows": 2641,
+    "bytes": 703236,
+    "sha256": "10fb197c059ff6159df7b2936171f6a0c05cf3f50f98cfbdfa3742df50d24af8"
+  }
+}

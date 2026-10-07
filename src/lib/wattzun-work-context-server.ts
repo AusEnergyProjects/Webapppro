@@ -2,13 +2,17 @@ import type { WattzunAccess } from "./wattzun-portal-access-server";
 import { loadWattzunTradeContext } from "./wattzun-trade-context-server";
 import { loadWattzunCreditexContext } from "./wattzun-creditex-context-server";
 import { loadWattzunCouncilContext } from "./wattzun-council-context-server";
+import { loadWattzunFormContext } from "./wattzun-form-server";
+import { loadWattzunCouncilDemographics } from "./wattzun-council-demographics-server";
 import { readWattzunWorkContextInfo, readWattzunWorkReference, WattzunWorkContextError,
   type WattzunWorkContext, type WattzunWorkContextInfo, type WattzunWorkReference } from "./wattzun-work-context";
 
 /** Server-only projections. Browser input selects a reference, never supplies facts. */
 export async function loadWattzunWorkContext(request: Request, access: WattzunAccess, reference: WattzunWorkReference): Promise<WattzunWorkContext> {
   if (!readWattzunWorkReference(reference, access.scope.portal)) throw new WattzunWorkContextError(403, "Choose a work item in your current workspace.");
-  const context = reference.kind === "trade_job" ? await loadWattzunTradeContext(request, access, reference)
+  const context = reference.kind === "trade_form" ? await loadWattzunFormContext(request, access, reference)
+    : reference.kind === "council_postcode" ? await loadWattzunCouncilDemographics(request, access, reference)
+    : reference.kind === "trade_job" ? await loadWattzunTradeContext(request, access, reference)
     : reference.kind === "creditex_audit" ? await loadWattzunCreditexContext(request, access, reference)
       : await loadWattzunCouncilContext(request, access, reference);
   validateWattzunWorkContext(context, access, reference);

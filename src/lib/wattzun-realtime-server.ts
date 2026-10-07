@@ -17,6 +17,9 @@ const TOOL = "wattzun_portal_reply";
 const TIMEOUT_MS = 55_000;
 const PROPOSAL_TOKENS = 2_500;
 const SPEECH_TOKENS = 2_048;
+// https://developers.openai.com/api/docs/models/gpt-realtime-2.1-mini
+const CONTEXT_TOKENS = 128_000;
+const CONTEXT_FRAMING_TOKENS = 512;
 const MAX_FRAME_CHARACTERS = 256_000;
 type RealtimeSocket = Pick<WorkersWebSocket, "accept" | "send" | "close" | "addEventListener" | "removeEventListener">;
 type RealtimeEvent = Record<string, unknown> & { type: string };
@@ -234,7 +237,11 @@ export async function prepareWattzunRealtimeTurn(
 
 async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDiagnostic): Promise<PreparedWattzunRealtimeTurn> {
   const contract = createWattzunPortalReplyContract(options);
-  const instructions = `${contract.instructions}\nThis is a live voice conversation. Give ordinary answers in one or two short sentences, usually under 35 words. For navigation, name the supplied button and what it opens. Add a permissions explanation only when the user is asking about missing access. Put necessary clarification questions in questions instead of repeating them in message. Preserve all required structured facts and review boundaries.\nrequestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output. When and only when action is confirm_workflow for the current reviewed task and the user gives a short explicit approval, preserve that actual approval phrase in requestSummary, such as 'yes send it', 'save it' or 'add it'. Do not reinterpret it as 'user confirms', turn a question into approval, or treat quoted wording or future intent as approval.\nREQUIRED RESPONSE TRANSPORT: Call ${TOOL} exactly once for every answer, clarification or scope reminder. This is a read-only reply-submission function, not an action tool. Its arguments must contain exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary. Use the supplied schema for every field. Never nest the reply content under a reply property, flatten action fields, or omit unused arrays/nulls. Do not output an assistant message, text, audio or preamble in this response. The function submits a proposal for validation; it cannot save or send anything.`;
+  const instructions = [contract.instructions,
+    "This is a live voice conversation: one or two short sentences, combined message and all questions normally under 45 words. Use one concise next necessary question in questions, without duplicating it in message; add questions only if essential. Name supplied navigation buttons. Explain permissions only for missing-access questions. The word target must not omit a material fact or required review detail.",
+    "requestSummary is an unconfirmed interpretation of the spoken task for the next turn, not a verbatim transcript or verified record; never speak it. Normally under 600 characters, always under 1800. Retain clearly heard task, names, spelling, addresses, scope and amounts; mark uncertainty, never invent or claim completion. Only for confirm_workflow with explicit approval of the current review, retain the actual approval phrase, e.g. 'yes send it', 'save it', 'add it'. Never substitute 'user confirms' or treat questions, quotations or future intent as approval.",
+    `Call ${TOOL} exactly once for every answer, clarification or scope reminder. Submit exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary, using their schema including unused arrays/nulls. Never nest the reply content under a reply property or flatten action fields. Do not output an assistant message, text, audio or preamble. This read-only proposal requires validation; it cannot save or send.`,
+  ].join("\n");
   const schema = { ...contract.schema, required: [...contract.schema.required, "requestSummary"],
     properties: { ...contract.schema.properties, requestSummary: { type: "string", minLength: 1, maxLength: 1_800 } } };
   const preferences = parseWattzunPreferences(options.input.preferences);
@@ -243,10 +250,13 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   const pcm = await readPcm(options.audio, options.signal);
   const context = JSON.stringify(contract.input);
   const promptBytes = new TextEncoder().encode(instructions + JSON.stringify(schema) + context).byteLength;
-  if (promptBytes > 64_000) incomplete();
+  const audioInputCeiling = Math.ceil(pcm.byteLength / 48_000 * 10) + 128;
+  // UTF-8 bytes conservatively bound text tokens. Leave the full proposal,
+  // bounded input audio and protocol framing in the model's context window.
+  // Reject excess before spending; never silently discard accepted facts.
+  if (promptBytes + audioInputCeiling + PROPOSAL_TOKENS + CONTEXT_FRAMING_TOKENS > CONTEXT_TOKENS) incomplete();
   // Keep reasoning for workflow decisions and retain the full accepted history.
   // Speech delivery reads only validated text and needs no further task reasoning.
-  const audioInputCeiling = Math.ceil(pcm.byteLength / 48_000 * 10) + 128;
   const model = "gpt-realtime-2.1-mini";
   const rates = { textInput: 0.6, textOutput: 2.4, audioInput: 10, audioOutput: 20 };
   // Current model rates: text input/output $0.60/$2.40 and audio $10/$20 per

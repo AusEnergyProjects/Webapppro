@@ -8,6 +8,7 @@ import { Miniflare } from "miniflare";
 import * as portal from "../src/lib/wattzun-portal.ts";
 import * as guide from "../src/lib/wattzun-portal-guide.ts";
 import * as workflowContract from "../src/lib/wattzun-workflow.ts";
+import * as navigation from "../src/lib/wattzun-navigation.ts";
 import { SURGE_USAGE_GUARD_ENV } from "../src/lib/energy-assistant-usage-guard.ts";
 import { syntheticWorkContext, workContextContract } from "./helpers/wattzun-work-context-fixture.mjs";
 
@@ -120,6 +121,7 @@ function fixture(options = {}) {
     "cloudflare:workers": cloudflare, "node:buffer": { Buffer }, "./energy-assistant-usage-guard": guard,
     "./workflow-ai-server": workflow, "./wattzun-actions": actions, "./wattzun-records": records,
     "./wattzun-workflow": workflowContract,
+    "./wattzun-navigation": navigation,
     "./wattzun-portal": portal, "./wattzun-portal-guide": guide,
     "./wattzun-work-context": workContextContract, "./wattzun-work-context.ts": workContextContract,
   }, { process: { env: { NODE_ENV: "test" } } });
@@ -146,6 +148,49 @@ async function bytes(stream) {
   const reader = stream.getReader(), chunks = [];
   while (true) { const chunk = await reader.read(); if (chunk.done) break; chunks.push(...chunk.value); }
   return chunks;
+}
+
+const utf8Bytes = value => new TextEncoder().encode(typeof value === "string" ? value : JSON.stringify(value)).byteLength;
+function maximumHistory(character = "H") {
+  const history = Array.from({ length: 6 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: character.repeat(4000) }));
+  history[5].content = history[5].content.slice(0, 4000 - (JSON.stringify(history).length - portal.WATTZUN_MAX_HISTORY_CHARACTERS));
+  assert.equal(JSON.stringify(history).length, portal.WATTZUN_MAX_HISTORY_CHARACTERS);
+  return history;
+}
+function maximumFormContext() {
+  const questions = [];
+  for (let index = 0; index < 20; index++) {
+    const field = { fieldKey: `field_${index}`, label: "Question ".padEnd(500, "L"), type: "text", required: true, canDraft: true,
+      value: "V".repeat(2000), hasSavedAnswer: true, valueOmitted: false, optionsTruncated: false, options: [] };
+    questions.push(field);
+    const excess = utf8Bytes(questions) - 18_000;
+    if (excess > 0) {
+      if (excess > field.value.length) questions.pop();
+      else field.value = field.value.slice(0, field.value.length - excess);
+      break;
+    }
+  }
+  assert.equal(utf8Bytes(questions), 18_000);
+  const context = syntheticWorkContext({ reference: { kind: "trade_form", formKind: "job_form", recordId: "synthetic-form", jobId: "synthetic-job" },
+    title: "Synthetic form ".padEnd(240, "T"),
+    sources: [{ id: "trade_form_questions", label: "Synthetic form ".padEnd(240, "T"),
+      href: "/direct-trade/dashboard?workspace=work&jobId=synthetic-job&jobTab=files", description: "Current saved form questions and answers. ".padEnd(1000, "D") }],
+    facts: { formKind: "job_form", formId: "synthetic-form", jobId: "synthetic-job", revision: 1, editable: true, visibleQuestionCount: 700, questions },
+    limitations: ["Only supplied observations may be recorded."] });
+  // Exercise the gateway's complete accepted projection bound as well as the
+  // form projector's 18 KB question window, without omitting saved answers.
+  while (utf8Bytes(context) < 24_000) {
+    context.limitations.push("");
+    context.limitations[context.limitations.length - 1] = "Bounded context limitation. ".padEnd(Math.min(1000, 24_000 - utf8Bytes(context)), "L");
+  }
+  assert.equal(utf8Bytes(context), 24_000);
+  assert.ok(context.limitations.length <= 8);
+  return context;
+}
+function nativePromptBytes(f) {
+  const session = f.socket.sent.find(event => event.type === "session.update").session;
+  const input = f.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text;
+  return utf8Bytes(session.instructions + JSON.stringify(session.tools[0].parameters) + input);
 }
 
 test("native reasoning receives the same selected facts and source contract before narration", async () => {
@@ -226,6 +271,9 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.deepEqual(session.reasoning, { effort: "low" }); assert.equal(session.parallel_tool_calls, false);
   assert.equal(session.truncation, "disabled");
   assert.match(session.instructions, /live voice conversation.*one or two short sentences/);
+  assert.match(session.instructions, /combined message and all questions normally under 45 words/);
+  assert.match(session.instructions, /one concise next necessary question/);
+  assert.match(session.instructions, /word target must not omit a material fact or required review detail/);
   const responses = f.socket.sent.filter(event => event.type === "response.create").map(event => event.response);
   assert.deepEqual(responses[0].tool_choice, session.tool_choice); assert.equal(responses[0].max_output_tokens, 2500);
   assert.equal(responses[1].conversation, "none"); assert.deepEqual(responses[1].tools, []); assert.equal(responses[1].tool_choice, "none");
@@ -700,6 +748,60 @@ test("dense Unicode conversation facts retain the reasoning model and full histo
   const context = JSON.parse(f.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text);
   assert.deepEqual(context.conversation, options.input.history);
   assert.ok(f.reservations[0].estimatedMicroUsd < 150000);
+});
+
+test("maximum accepted Unicode history is retained without a smaller arbitrary byte ceiling", async () => {
+  const options = request(); options.input.history = maximumHistory("漢");
+  assert.deepEqual(portal.parseWattzunTurn(options.input, true).history, options.input.history);
+  assert.equal(utf8Bytes(options.input.history), 71_620);
+  const f = fixture(), prepared = await f.prepareWattzunRealtimeTurn(options); await bytes(prepared.audio);
+  assert.ok(nativePromptBytes(f) > 64_000);
+  const input = JSON.parse(f.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text);
+  assert.deepEqual(input.conversation, options.input.history);
+  assert.equal(f.reservations.length, 1); assert.equal(f.calls.length, 1);
+});
+
+test("maximum selected form and accepted long history preserve supported workflow review facts", async () => {
+  const workContext = maximumFormContext();
+  const workflowContext = { state: "review", reviewId: "review-form-00000001", expiresAt: "2026-10-07T12:00:00Z", kind: "fill_form",
+    heading: "Review draft form answers", summary: "Save supplied draft answers only.", confirmationLabel: "Save draft answers",
+    lines: Array.from({ length: 20 }, (_, index) => ({ label: `Question ${index}`, value: "Saved answer ".padEnd(1000, "A") })) };
+  assert.equal(workflowContract.isWattzunWorkflowResult(workflowContext), true);
+  const options = request({ workContext, workflowContext, audio: wav(45 * 24_000) });
+  options.input.workReference = workContext.reference; options.input.history = maximumHistory();
+  options.input.workflowReviewId = workflowContext.reviewId;
+  assert.deepEqual(portal.parseWattzunTurn(options.input, true).history, options.input.history);
+  const f = fixture(), prepared = await f.prepareWattzunRealtimeTurn(options); await bytes(prepared.audio);
+  const input = JSON.parse(f.socket.sent.find(event => event.type === "conversation.item.create").item.content[0].text);
+  assert.deepEqual(input.conversation, options.input.history);
+  assert.deepEqual(input.workContext.facts, workContext.facts);
+  assert.deepEqual(input.workflowContext, workflowContext);
+  assert.ok(nativePromptBytes(f) > 64_000 && nativePromptBytes(f) <= 124_410);
+  assert.equal(f.reservations.length, 1); assert.equal(f.calls.length, 1);
+});
+
+test("provider context boundary reserves audio, proposal and framing and rejects one byte over before spending", async () => {
+  const workContext = maximumFormContext();
+  const workflowContext = { state: "review", reviewId: "review-form-00000001", expiresAt: "2026-10-07T12:00:00Z", kind: "fill_form",
+    heading: "Review draft form answers", summary: "Save supplied draft answers only.", confirmationLabel: "Save draft answers",
+    lines: Array.from({ length: 40 }, (_, index) => ({ label: `Question ${index}`, value: "" })) };
+  const options = request({ workContext, workflowContext, audio: wav(45 * 24_000) });
+  options.input.workReference = workContext.reference; options.input.history = maximumHistory();
+  options.input.workflowReviewId = workflowContext.reviewId;
+  const baseline = fixture(), first = await baseline.prepareWattzunRealtimeTurn(options); await bytes(first.audio);
+  // 128k provider context less 2500 proposal, 45*10+128 audio and 512 framing.
+  const ceiling = 128_000 - 2_500 - (45 * 10 + 128) - 512;
+  let remaining = ceiling - nativePromptBytes(baseline);
+  assert.ok(remaining > 0 && remaining < 40 * 2000);
+  for (const line of workflowContext.lines) { const length = Math.min(remaining, 2000); line.value = "A".repeat(length); remaining -= length; }
+  assert.equal(remaining, 0); assert.equal(workflowContract.isWattzunWorkflowResult(workflowContext), true);
+  const bounded = fixture(), prepared = await bounded.prepareWattzunRealtimeTurn(options); await bytes(prepared.audio);
+  assert.equal(nativePromptBytes(bounded), ceiling);
+  assert.equal(bounded.reservations.length, 1); assert.equal(bounded.calls.length, 1);
+  const line = workflowContext.lines.find(item => item.value.length < 2000); assert.ok(line); line.value += "A";
+  assert.equal(workflowContract.isWattzunWorkflowResult(workflowContext), true);
+  const excessive = fixture(); await assert.rejects(excessive.prepareWattzunRealtimeTurn(options), safeError);
+  assert.equal(excessive.reservations.length, 0); assert.equal(excessive.calls.length, 0);
 });
 
 test("native preparation reports bounded stage timings and measures first arguments without changing the completion gate", async () => {

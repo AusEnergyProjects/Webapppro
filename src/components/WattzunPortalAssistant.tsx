@@ -12,6 +12,8 @@ import { parseWattzunRecordLookup } from "@/lib/wattzun-records";
 import { parseWattzunActionProposal, type WattzunActionReceipt } from "@/lib/wattzun-actions";
 import { isWattzunWorkflowProposal, isWattzunWorkflowResult, type WattzunWorkflowOperation, type WattzunWorkflowResult } from "@/lib/wattzun-workflow";
 import { wattzunWorkflowReply } from "@/lib/wattzun-workflow-reply";
+import { isWattzunNavigationAction, wattzunNavigationDestination } from "@/lib/wattzun-navigation";
+import { dispatchWattzunFormSaved } from "@/lib/wattzun-form-client";
 import {
   WATTZUN_REALTIME_VOICE_STREAM_TYPE, wattzunSpokenReply,
   type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput, type WattzunVoiceResult,
@@ -38,7 +40,8 @@ function record(value: unknown): value is Record<string, unknown> { return Boole
 function isReply(value: unknown, portal?: WattzunPortal): value is WattzunReply {
   if (record(value) && value.workContext !== undefined && (!portal || !readWattzunWorkContextInfo(value.workContext, portal))) return false;
   if (record(value) && value.action !== undefined && value.action !== null) {
-    if (isWattzunWorkflowProposal(value.action)) { if (portal !== "trade") return false; }
+    if (portal && isWattzunNavigationAction(value.action, portal)) { /* Current portal destinations only. */ }
+    else if (isWattzunWorkflowProposal(value.action)) { if (portal !== "trade") return false; }
     else { try { parseWattzunActionProposal(value.action); } catch { return false; } }
   }
   if (record(value) && value.workflow !== undefined && (portal !== "trade" || !isWattzunWorkflowResult(value.workflow))) return false;
@@ -284,6 +287,11 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       && result.receipt.kind === "draft_job_quote" && result.receipt.status === "saved") {
       notifyTradeQuoteDraftSaved({ actorUid: user.uid, ownerUid: scope.scopeId, workOrderId });
     }
+    if (scope.portal === "trade" && firstCompletion && pending.proposal.kind === "fill_form"
+      && result.state === "complete" && result.receipt.kind === "fill_form" && result.receipt.status === "saved") {
+      dispatchWattzunFormSaved({ portal: "trade", scopeId: scope.scopeId, formKind: pending.proposal.formKind,
+        formId: pending.proposal.formId, jobId: pending.proposal.jobId });
+    }
   }, [scope.portal, scope.scopeId, user.uid]);
   const workflowReviewResult = useCallback((messageId: string, result: WattzunWorkflowResult) => {
     const previous = pendingWorkflowRef.current;
@@ -294,14 +302,20 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       append([{ id: crypto.randomUUID(), role: "assistant", content: reply.message, reply }]);
     }
   }, [append, workflowResult]);
-  const rememberWorkflow = useCallback((messageId: string, reply: WattzunReply) => {
+  const rememberWorkflow = useCallback((messageId: string, reply: WattzunReply, requestedReviewId?: string) => {
+    const current = pendingWorkflowRef.current;
+    if (current && requestedReviewId && requestedReviewId === current.reviewId && reply.workflow?.state === "complete"
+      && reply.workflow.receipt.kind === current.proposal.kind) {
+      workflowResult(current.messageId, reply.workflow);
+      return;
+    }
     const proposal = reply.action;
     if (!isWattzunWorkflowProposal(proposal) || proposal.kind === "confirm_workflow" || !reply.workflow) return;
     const prior = pendingWorkflowRef.current;
     if (prior && prior.messageId !== messageId) dismissAction(prior.messageId);
     pendingWorkflowRef.current = { messageId, proposal, result: reply.workflow,
       ...(reply.workflow.state === "review" ? { reviewId: reply.workflow.reviewId } : {}) };
-  }, [dismissAction]);
+  }, [dismissAction, workflowResult]);
   const requestInput = useCallback((message: string): WattzunTurnInput => {
     const pending = pendingWorkflowRef.current;
     return { portal: scope.portal, scopeId: scope.scopeId, requestId: crypto.randomUUID(), message,
@@ -349,10 +363,14 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       let reply = { ...payload.reply, ...(info ? { workContext: info } : {}) };
       if (reply.action?.kind === "confirm_workflow") reply = (await executeWorkflow(reply, controller.signal, generation)).reply;
       if (info) setWorkContext(info);
-      rememberWorkflow(`${input.requestId}:reply`, reply);
+      rememberWorkflow(`${input.requestId}:reply`, reply, input.workflowReviewId);
       append([{ id: input.requestId, role: "user", content: message }, { id: `${input.requestId}:reply`, role: "assistant", content: wattzunSpokenReply(reply), reply, ...(reply.action ? { reviewDraft: reply.action } : {}) }]);
       window.dispatchEvent(new CustomEvent(WATTZUN_USAGE_CHANGED_EVENT, { detail: { userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId } }));
       setDraft("");
+      if (reply.action?.kind === "open_workspace") {
+        const destination = wattzunNavigationDestination(reply.action, scope.portal);
+        if (destination) navigate(destination.href);
+      }
     } catch (requestError) {
       if (active.current && !controller.signal.aborted && generation === contextGeneration.current) setError(requestError instanceof Error ? requestError.message : "That question could not be sent. Try again.");
     } finally { if (textRequest.current === controller) { textRequest.current = null; if (active.current) setBusy(false); } }
@@ -361,7 +379,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     if (busy || callActive) return;
     voiceCall.current?.dispose();
     setMuted(false); setError("");
-    const replyGenerations = new WeakMap<WattzunVoiceResult, number>();
+    const replyGenerations = new WeakMap<WattzunVoiceResult, { generation: number; reviewId?: string }>();
     const call = new WattzunVoiceCall(createWattzunBrowserVoiceEnvironment(), {
       status: status => { if (active.current && voiceCall.current === call) setCallStatus(status); },
       async greeting(signal) {
@@ -405,7 +423,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
           }
           if (!active.current || combined.aborted || generation !== contextGeneration.current) throw new Error("The selected work changed. Ask again about the current work.");
           const validated = { ...result, reply: { ...result.reply, ...(info ? { workContext: info } : {}) } };
-          replyGenerations.set(validated, generation);
+          replyGenerations.set(validated, { generation, reviewId: input.workflowReviewId });
           return validated;
         } catch (failure) {
           if (result?.audio.mimeType === "audio/pcm") await result.audio.stream.cancel().catch(() => {});
@@ -414,25 +432,30 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         }
       },
       reply: result => {
-        if (!active.current || voiceCall.current !== call || replyGenerations.get(result) !== contextGeneration.current) {
+        const request = replyGenerations.get(result);
+        if (!active.current || voiceCall.current !== call || request?.generation !== contextGeneration.current) {
           if (result.audio.mimeType === "audio/pcm") void result.audio.stream.cancel().catch(() => {});
           return;
         }
         if (result.reply.workContext) setWorkContext(result.reply.workContext);
         const id = crypto.randomUUID();
-        rememberWorkflow(`${id}:reply`, result.reply);
+        rememberWorkflow(`${id}:reply`, result.reply, request.reviewId);
         const turns: Message[] = [{ id: `${id}:reply`, role: "assistant", content: wattzunSpokenReply(result.reply), reply: result.reply,
           ...(result.reply.action ? { reviewDraft: result.reply.action } : {}),
           ...(result.requestSummary ? { requestSummary: result.requestSummary } : {}) }];
         if (result.transcript.trim()) turns.unshift({ id, role: "user", content: result.transcript });
         append(turns);
-        if (result.reply.action || result.reply.lookup) onExpand?.();
+        if (result.reply.action?.kind === "open_workspace") {
+          const destination = wattzunNavigationDestination(result.reply.action, scope.portal);
+          if (destination) navigate(destination.href);
+        }
+        if ((result.reply.action && result.reply.action.kind !== "open_workspace") || result.reply.lookup) onExpand?.();
         window.dispatchEvent(new CustomEvent(WATTZUN_USAGE_CHANGED_EVENT, { detail: { userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId } }));
       },
     });
     voiceCall.current = call;
     void call.start();
-  }, [busy, callActive, requestInput, user, scope, append, onExpand, executeWorkflow, rememberWorkflow]);
+  }, [busy, callActive, requestInput, user, scope, append, onExpand, executeWorkflow, rememberWorkflow, navigate]);
 
   useEffect(() => {
     if (!openRequest || !presentation.ready || handledRequest.current === openRequest.id) return;
@@ -441,10 +464,14 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       handledRequest.current = openRequest.id;
       if (openRequest.workReference) selectWork(openRequest.workReference);
       if (openRequest.mode === "call") startCall();
-      else { if (openRequest.initialMessage !== undefined) setDraft(openRequest.initialMessage); composer.current?.focus(); }
+      else {
+        if (openRequest.initialMessage !== undefined) setDraft(openRequest.initialMessage);
+        if (callActive && openRequest.workReference?.kind === "trade_form") setSelectionNotice('Form selected. Say "help me fill this form" to start with its next question.');
+        composer.current?.focus();
+      }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [openRequest, presentation.ready, startCall, selectWork]);
+  }, [openRequest, presentation.ready, startCall, selectWork, callActive]);
 
   const hangUp = () => { voiceCall.current?.hangUp(); setMuted(false); };
   const toggleMute = () => { voiceCall.current?.toggleMute(); setMuted(current => !current); };
@@ -485,7 +512,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         : <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer">{link.label} <span aria-hidden="true">↗</span></a>)}</div>}
         {message.reply?.workContext && <details className={styles.contextSources}><summary>Sources and limits</summary><strong>{message.reply.workContext.title}</strong><div className={styles.links}>{message.reply.workContext.sources.map(source => <Link key={`${source.href}:${source.label}`} href={workspaceHref(source.href, scope, user.uid, pathname)} prefetch={false} onNavigate={event => { event.preventDefault(); navigate(source.href); }}>{source.label} <span aria-hidden="true">↗</span></Link>)}</div>{message.reply.workContext.limitations.length > 0 && <ul>{message.reply.workContext.limitations.map((limitation, index) => <li key={index}>{limitation}</li>)}</ul>}</details>}
         {scope.portal === "trade" && message.reply?.lookup && <WattzunRecordPicker user={user} scope={scope} lookup={message.reply.lookup} onNavigate={navigate} onSelectWork={selectWork} />}
-        {scope.portal === "trade" && message.reply?.action && (isWattzunWorkflowProposal(message.reply.action)
+        {scope.portal === "trade" && message.reply?.action && message.reply.action.kind !== "open_workspace" && (isWattzunWorkflowProposal(message.reply.action)
           ? message.reply.action.kind !== "confirm_workflow" && <WattzunWorkflowReview proposal={message.reply.action} initialResult={message.reply.workflow} user={user} scopeId={scope.scopeId} onResult={result => workflowReviewResult(message.id, result)} onCancel={() => dismissAction(message.id)} onNavigate={navigate} />
           : <WattzunActionReview proposal={message.reply.action} user={user} scopeId={scope.scopeId} onCreated={receipt => actionCreated(message.id, receipt)} onCancel={() => dismissAction(message.id)} onNavigate={navigate} />)}
       </article>)}

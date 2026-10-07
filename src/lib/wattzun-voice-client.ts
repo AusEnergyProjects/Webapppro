@@ -65,7 +65,9 @@ export class WattzunSpeechWindow {
     }
     else if (!this.heardSpeech && now - this.lastSpeech > 200) this.speechMilliseconds = 0;
     if (now - this.started >= WATTZUN_MAX_TURN_SECONDS * 1000) return this.heardSpeech ? "send" : "silent";
-    if (this.heardSpeech && now - this.lastSpeech >= 700) return "send";
+    // Preserve a natural pause between sentences; the next clause may contain
+    // the name, price or instruction that makes the task safe to complete.
+    if (this.heardSpeech && now - this.lastSpeech >= 1300) return "send";
     return "wait";
   }
 }

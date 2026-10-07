@@ -11,6 +11,7 @@ import * as schedule from '../src/lib/trade-schedule.ts';
 import * as equipment from '../src/lib/trade-quote-equipment.ts';
 import * as invoiceRegister from '../src/lib/trade-invoice-register.ts';
 import * as quoteHelper from '../src/lib/wattzun-existing-quote-server.ts';
+import * as formHelper from '../src/lib/wattzun-form-server.ts';
 
 class AccessError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const QuoteError = quoteHelper.WattzunExistingQuoteError;
@@ -32,6 +33,7 @@ Function('require', 'exports', compiled)(name => {
   if (name === './service-reminder-delivery') return { normalizeAustralianMobile: value => /^04\d{8}$/.test(value) ? '+61' + value.slice(1) : '', ReminderProviderDeliveryError: ProviderError };
   if (name === './trade-sms-billing') return { SMS_PART_PRICE_MICRO: 99000 };
   if (name === './wattzun-existing-quote-server') return quoteHelper;
+  if (name === './wattzun-form-server') return formHelper;
   if (name === './trade-team-server' || name === './trade-integration-crypto' || name === './trade-sms-server' || name === './trade-email-server'
     || name === './trade-email-recipient-server' || name === './trade-sms-wallet-server' || name.startsWith('@/app/api/')) return {};
   throw new Error(name);
@@ -147,6 +149,99 @@ function fixture(options = {}) {
   return { database, db, access, team, deps, statements, calls, addJob, prepare, portalPrepare, execute, post, invoice, cipher, decryptCalls: () => decryptCalls,
     authorityCalls: () => ({ access: accessCalls, team: teamCalls }), advance: milliseconds => { currentTime += milliseconds; } };
 }
+
+function formWorkflowFixture() {
+  const f = fixture({ team: { canViewFieldEvidence: true, canManageFieldEvidence: true, canViewCustomers: false } });
+  const state = { failBeforeSave: false, failAfterSave: false };
+  const saved = { id: 'form-one', templateName: 'Synthetic installation form', status: 'draft', revision: 1,
+    template: { fields: [{ key: 'site_notes', label: 'Site notes', type: 'text', required: true, maxLength: 240 }, { key: 'next_question', label: 'How many units?', type: 'text', required: true, maxLength: 240 }] }, answers: {} };
+  const formDeps = { team: async () => structuredClone(f.team), job: async () => ({ id: 'job-one', stage: 'ready', revision: 1 }),
+    getJobForms: async () => Response.json({ ok: true, forms: [structuredClone(saved)] }),
+    saveJobForm: async request => { const payload = await request.json(); assert.equal(payload.complete, false); assert.equal(payload.baseRevision, saved.revision);
+      if (state.failBeforeSave) throw new Error('Connection lost before canonical save');
+      saved.answers = payload.answers; saved.revision++; f.calls.push({ kind: 'form', payload });
+      if (state.failAfterSave) throw new Error('Connection lost after canonical save');
+      return Response.json({ ok: true, forms: [saved] }); } };
+  f.deps.prepareForm = (request, access, proposal) => formHelper.prepareWattzunForm(request, access, proposal, formDeps);
+  f.deps.executeForm = (request, access, prepared, id) => formHelper.executeWattzunForm(request, access, prepared, id, formDeps);
+  f.deps.formAccess = (request, access, prepared) => formHelper.verifyWattzunFormAccess(request, access, prepared, formDeps);
+  f.deps.formReceipt = (request, access, prepared) => formHelper.reconcileWattzunFormReceipt(request, access, prepared, formDeps);
+  const review = id => workflowModule.loadWattzunWorkflowReview(new Request('https://example.test/api/wattzun/voice'), f.access, id, f.deps);
+  return { ...f, saved, state, review, proposal: { kind: 'fill_form', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', answers: [{ fieldKey: 'site_notes', value: '  Access via side gate.  ' }] } };
+}
+
+test('next voice review load reconciles a saved form after its outer receipt was lost without writing again', async () => {
+  const f=formWorkflowFixture(), prepared=await f.prepare(f.proposal), id=prepared.body.result.reviewId;
+  f.state.failAfterSave=true; assert.equal((await f.execute(id)).status,503); assert.equal(f.calls.length,1);
+  const before=f.database.prepare('SELECT metadata FROM admin_audit_log WHERE id=?').get(id).metadata;
+  assert.equal(JSON.parse(before).state,'executing');
+  const recovered=await f.review(id);assert.equal(recovered.state,'complete');assert.equal(recovered.receipt.status,'saved');
+  assert.match(recovered.receipt.message,/Next question: How many units/);assert.equal(f.calls.length,1);
+  assert.equal(f.database.prepare('SELECT metadata FROM admin_audit_log WHERE id=?').get(id).metadata,before,'Review reconciliation is read-only');
+  assert.deepEqual(await f.review(id),recovered);assert.equal(f.calls.length,1);
+  const retried=await f.execute(id);assert.equal(retried.status,200);assert.deepEqual(retried.body.result,recovered);assert.equal(f.calls.length,1);
+});
+
+test('a pre-save form failure retains the same unchanged review until explicit approval retries the frozen write', async () => {
+  const f=formWorkflowFixture(), prepared=await f.prepare(f.proposal), id=prepared.body.result.reviewId;
+  f.state.failBeforeSave=true;assert.equal((await f.execute(id)).status,503);assert.equal(f.calls.length,0);
+  assert.deepEqual(await f.review(id),prepared.body.result);assert.equal(f.calls.length,0);
+  f.state.failBeforeSave=false;
+  assert.deepEqual(await f.review(id),prepared.body.result);assert.equal(f.calls.length,0,'Loading a review is never execution approval');
+  assert.equal((await f.execute(id)).status,200);assert.equal(f.calls.length,1);assert.equal(f.saved.answers.site_notes,'Access via side gate.');
+});
+
+test('executing form recovery rejects changed drafts, revoked access and tampered frozen payloads', async () => {
+  for(const reason of ['changed','revoked','tampered']){
+    const f=formWorkflowFixture(), prepared=await f.prepare(f.proposal), id=prepared.body.result.reviewId;
+    f.state.failBeforeSave=true;assert.equal((await f.execute(id)).status,503);
+    if(reason==='changed'){f.saved.answers.site_notes='Newer manual answer';f.saved.revision++;}
+    else if(reason==='revoked')f.team.canManageFieldEvidence=false;
+    else for(const encrypted of f.cipher.values())encrypted.prepared.form.payload.answers.next_question='Unreviewed answer';
+    await assert.rejects(f.review(id),error=>error.status===(reason==='revoked'?403:409));assert.equal(f.calls.length,0);
+  }
+});
+
+test('expired executing forms recover only an existing exact receipt and never save an unchanged draft', async () => {
+  for(const saved of [false,true]){
+    const f=formWorkflowFixture(), prepared=await f.prepare(f.proposal), id=prepared.body.result.reviewId;
+    f.state.failBeforeSave=!saved;f.state.failAfterSave=saved;assert.equal((await f.execute(id)).status,503);
+    f.state.failBeforeSave=false;f.state.failAfterSave=false;f.advance(16*60_000);
+    if(saved){const recovered=await f.review(id);assert.equal(recovered.state,'complete');assert.equal((await f.execute(id)).status,200);}
+    else{await assert.rejects(f.review(id),error=>error.status===409);assert.equal((await f.execute(id)).status,409);}
+    assert.equal(f.calls.length,saved?1:0);
+  }
+});
+
+test('reviewed form workflow saves native draft answers once and continues with the next question without customer access', async () => {
+  const f = formWorkflowFixture();
+  const review = await f.prepare(f.proposal);
+  assert.equal(review.status, 200); assert.equal(review.body.result.kind, 'fill_form');
+  assert.deepEqual(review.body.result.lines, [{ label: 'Site notes', value: 'Access via side gate.' }]);
+  assert.equal(f.calls.length, 0);
+  const result = await f.execute(review.body.result.reviewId);
+  assert.equal(result.status, 200); assert.equal(result.body.result.receipt.kind, 'fill_form');
+  assert.match(result.body.result.receipt.message, /saved.*Next question: How many units/);
+  assert.deepEqual(f.saved.answers, { site_notes: 'Access via side gate.', next_question: '' }); assert.equal(f.saved.status, 'draft');
+  assert.equal((await f.execute(review.body.result.reviewId)).status, 200);
+  assert.equal(f.calls.length, 1);
+  assert.ok(!f.statements.some(sql => sql.includes('JOIN trade_crm_customers')));
+  f.database.close();
+});
+
+test('form workflow rejects changed answers, lost permission and tampered frozen target before saving', async () => {
+  for (const scenario of ['changed', 'permission', 'tampered']) {
+    const f = formWorkflowFixture(), review = await f.prepare(f.proposal);
+    assert.equal(review.status, 200);
+    if (scenario === 'changed') { f.saved.answers.site_notes = 'Manual newer answer'; f.saved.revision++; }
+    if (scenario === 'permission') f.team.canManageFieldEvidence = false;
+    if (scenario === 'tampered') for (const payload of f.cipher.values()) payload.prepared.proposal.formId = 'other-form';
+    const result = await f.execute(review.body.result.reviewId);
+    assert.ok([403, 409, 503].includes(result.status)); assert.equal(f.calls.length, 0);
+    if (scenario === 'changed') assert.equal(f.saved.answers.site_notes, 'Manual newer answer');
+    f.database.close();
+  }
+});
 
 async function quoteWorkflowFixture(options = {}) {
   const f = fixture({ ...options, team: { isOwner: false, jobScope: 'own', canViewQuotes: true, canManageQuotes: true,

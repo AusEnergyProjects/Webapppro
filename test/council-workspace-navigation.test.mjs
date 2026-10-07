@@ -4,9 +4,9 @@ import test from "node:test";
 import { transformSync } from "esbuild";
 import * as navigation from "../src/lib/council-workspace-navigation.ts";
 
-const allPanels = { community: true, map: true, calculator: true, team: true, wattzun: true };
+const allPanels = { community: true, map: true, calculator: true, team: true, connect: true, wattzun: true };
 test("Council panel links use an exact allowlist and cannot select a council, role or creation action", () => {
-  for (const view of ["overview", "community", "map", "calculator", "activities", "economy", "campaigns", "sessions", "reports", "settings", "team", "wattzun"]) {
+  for (const view of ["overview", "community", "map", "calculator", "activities", "economy", "campaigns", "sessions", "reports", "settings", "team", "connect", "wattzun"]) {
     assert.equal(navigation.councilWorkspaceFromSearch(`?workspace=${view}&councilId=other&role=owner&create=true`, allPanels), view);
   }
   for (const search of ["", "?workspace=Reports", "?workspace=reports&workspace=team", "?workspace=__proto__", "?workspace=constructor", "?workspace=https://outside.test", "?workspace=reports%00", "?view=reports"]) {
@@ -16,7 +16,7 @@ test("Council panel links use an exact allowlist and cannot select a council, ro
 
 test("unavailable panels and demonstration Wattzun links fall back without exposing tools", () => {
   for (const panel of Object.keys(allPanels)) assert.equal(navigation.councilWorkspaceFromSearch(`?workspace=${panel}`, { ...allPanels, [panel]: false }), "overview");
-  assert.equal(navigation.councilWorkspaceFromSearch("?workspace=reports", { community: false, map: false, calculator: false, team: false, wattzun: false }), "reports");
+  assert.equal(navigation.councilWorkspaceFromSearch("?workspace=reports", { community: false, map: false, calculator: false, team: false, connect: false, wattzun: false }), "reports");
 });
 
 test("panel navigation preserves existing query context without duplicated workspace selectors", () => {
