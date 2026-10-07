@@ -159,6 +159,7 @@ function fixture(options = {}) {
       assert.equal(portal, input.portal); assert.equal(scopeId, input.scopeId);
       if (options.revokeAt === count) throw new AccessError(403, "Access revoked.");
       if (options.revokeDuringUsage && recorded.length) throw new AccessError(403, "Access revoked during usage recording.");
+      if (options.accessErrorDuringUsage && recorded.length) throw options.accessErrorDuringUsage;
       return count > 1 && options.changed ? options.changed : access;
     },
     context: async (_, current, reference) => {
@@ -416,6 +417,72 @@ test("text failure diagnostics identify the phase without logging requests, reco
     assert.equal(result.response.status, 503);
     assert.deepEqual(routeLogs.slice(before), [["Wattzun text turn failed", expected]]);
     assert.doesNotMatch(JSON.stringify(routeLogs.slice(before)), /private|business-one|staff-one|Draft a follow-up/);
+  }
+});
+
+test("final text diagnostics distinguish scope, selected-source and workflow failures without handing off a reply", async () => {
+  const workContext = syntheticWorkContext();
+  for (const [lateFailure, phase] of [
+    [{ accessErrorDuringUsage: new Error("secret-final-scope-key") }, "final_scope_source"],
+    [{ contextErrorDuringUsage: new Error("secret-final-source-SQL") }, "final_scope_source"],
+    [{ workflowErrorDuringUsage: new Error("secret-final-workflow-recipient") }, "final_workflow"],
+  ]) {
+    const before = routeLogs.length;
+    const f = fixture({ input: { ...input, workReference: workContext.reference, workflowReviewId: workflowReview.reviewId },
+      workContext, workflowResult: workflowReview, ...lateFailure });
+    const result = await f.post();
+    assert.equal(result.response.status, 503); assert.equal(f.recorded.length, 1);
+    assert.equal(result.body.reply, undefined); assert.equal(result.body.audio, undefined);
+    assert.deepEqual(routeLogs.slice(before), [["Wattzun text turn failed", { phase, category: "internal" }]]);
+    assert.doesNotMatch(JSON.stringify([routeLogs.slice(before), result.body]), /secret-final|business-one|staff-one|Draft a follow-up/);
+    if (phase === "final_scope_source") assert.equal(f.events.filter(event => event === "workflowReview").length, 1);
+    else assert.equal(f.events.filter(event => event === "workflowReview").length, 2);
+  }
+});
+
+test("text failure diagnostics use fixed categories for hosting, D1, immediate causes and known codes only", async () => {
+  const secret = "secret-key-token-customer-SQL-prompt";
+  const abort = new Error(secret); abort.name = "AbortError";
+  const unknownName = new Error(secret); unknownName.name = "private-name-D1_ERROR";
+  for (const [error, category] of [
+    [new Error(`D1_ERROR: Too many API requests by single worker invocation: ${secret}`), "api_request_limit"],
+    [new Error(`Too many subrequests: ${secret}`), "api_request_limit"],
+    [new Error(`API request limit exceeded: ${secret}`), "api_request_limit"],
+    [new Error(`Cannot perform I/O on behalf of a different request. ${secret}`), "different_request_io"],
+    [new Error(`Worker exceeded CPU time limit: ${secret}`), "cpu_limit"],
+    [new Error(`D1_ERROR: D1 DB exceeded its CPU time limit and was reset. ${secret}`), "cpu_limit"],
+    [new Error(`Compute limit exceeded: ${secret}`), "cpu_limit"],
+    [new Error(`D1_ERROR: D1 DB is overloaded. Requests queued for too long. ${secret}`), "database_overloaded"],
+    [new Error(`D1_ERROR: D1 DB is overloaded. Too many requests queued. ${secret}`), "database_overloaded"],
+    [new Error(`D1_ERROR: too_many_requests: ${secret}`), "database_overloaded"],
+    [new Error(`D1_ERROR: Your account has exceeded D1's free tier daily row read limit. ${secret}`), "database_quota"],
+    [new Error(`D1_ERROR: Your account has exceeded D1's free tier daily row write limit. ${secret}`), "database_quota"],
+    [new Error(`D1_ERROR: D1 query quota exceeded. ${secret}`), "database_quota"],
+    [new Error(`D1_ERROR: select private_customer from secret_table; ${secret}`), "database_error"],
+    [new Error(`D1_EXEC_ERROR: statement failed: ${secret}`), "database_error"],
+    [new Error(`D1_TYPE_ERROR: ${secret}`), "database_error"],
+    [new Error(`SQLITE_BUSY: ${secret}`), "database_error"],
+    [new Error(secret, { cause: new Error(`D1_ERROR: ${secret}`) }), "database_error"],
+    [new Error(`D1_ERROR: ${secret}`, { cause: "Too many API requests by single worker invocation" }), "api_request_limit"],
+    [new Error(secret, { cause: abort }), "aborted"],
+    [abort, "aborted"],
+    [new Error("TEAM_ACCESS_RECORD_REQUIRED"), "TEAM_ACCESS_RECORD_REQUIRED"],
+    [new Error("EMAIL_VERIFICATION_REQUIRED"), "EMAIL_VERIFICATION_REQUIRED"],
+    [new Error("ABN_REVIEW_REQUIRED"), "ABN_REVIEW_REQUIRED"],
+    [new Error("INTEGRATION_ENCRYPTION_UNAVAILABLE"), "INTEGRATION_ENCRYPTION_UNAVAILABLE"],
+    [new Error("INTEGRATION_CREDENTIALS_INVALID"), "INTEGRATION_CREDENTIALS_INVALID"],
+    [new Error(secret, { cause: "INTEGRATION_CREDENTIALS_INVALID" }), "INTEGRATION_CREDENTIALS_INVALID"],
+    [new Error(`INTEGRATION_CREDENTIALS_INVALID ${secret}`), "internal"],
+    [new Error(secret, { cause: new Error(secret, { cause: new Error("D1_ERROR: nested") }) }), "internal"],
+    [new Error(secret, { cause: { message: "D1_ERROR: untrusted object", secret } }), "internal"],
+    [unknownName, "internal"],
+  ]) {
+    const before = routeLogs.length;
+    const result = await fixture({ providerError: error }).post();
+    assert.equal(result.response.status, 503);
+    assert.deepEqual(routeLogs.slice(before), [["Wattzun text turn failed", { phase: "reply", category }]]);
+    assert.doesNotMatch(JSON.stringify([routeLogs.slice(before), result.body]), /secret-key|private_customer|secret_table|private-name|untrusted object|nested|business-one|staff-one|Draft a follow-up/);
+    assert.equal(result.body.reply, undefined);
   }
 });
 

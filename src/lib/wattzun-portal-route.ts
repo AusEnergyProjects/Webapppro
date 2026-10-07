@@ -79,6 +79,24 @@ function failure(error: unknown) {
   if (code === "WATTZUN_SPEECH_UNCLEAR") return json({ ok: false, error: "I could not hear that clearly. Please say it again, or type your question." }, 422);
   return json({ ok: false, error: "Wattzun could not complete this turn. Your records have not changed. Try again, or continue by typing." }, 503);
 }
+function failureCategory(error: unknown): string {
+  const cause = error instanceof Error ? error.cause : undefined;
+  // Inspect only the error and its immediate cause. Never emit their contents.
+  const messages = [error, cause].flatMap(value => value instanceof Error ? [value.message.slice(0, 4096)]
+    : typeof value === "string" ? [value.slice(0, 4096)] : []);
+  if (messages.some(message => /\btoo[_ -]many[_ -](?:api[_ -]requests|subrequests)\b|\b(?:subrequest|api request) limit\b|\bexceeded (?:the )?(?:maximum number of )?(?:subrequests|api requests)\b/i.test(message))) return "api_request_limit";
+  if (messages.some(message => /\bcannot perform I\/O on behalf of a different request\b/i.test(message))) return "different_request_io";
+  if (messages.some(message => /\b(?:CPU(?: time)?|compute) limit\b/i.test(message))) return "cpu_limit";
+  if (messages.some(message => /\bD1(?: DB)?(?: is)? overloaded\b/i.test(message)
+    || /\bD1(?:_ERROR|_EXEC_ERROR| DB)?\b/i.test(message) && /\btoo[_ -]many[_ -]requests\b/i.test(message))) return "database_overloaded";
+  if (messages.some(message => /\bD1(?:'s)? (?:free tier )?daily row (?:read|write) limit\b|\bD1(?: database)? (?:query |row |daily )?quota\b|\bD1(?:'s)? maximum account storage limit\b/i.test(message))) return "database_quota";
+  if (messages.some(message => /^(?:D1_(?:ERROR|EXEC_ERROR|TYPE_ERROR|COLUMN_NOTFOUND)|SQLITE_(?:ERROR|BUSY|LOCKED|IOERR|CORRUPT|FULL|CANTOPEN))\b/.test(message))) return "database_error";
+  if ([error, cause].some(value => value instanceof Error && value.name === "AbortError")) return "aborted";
+  const codes = new Set(["WORKFLOW_AI_UNAVAILABLE", "WORKFLOW_AI_INCOMPLETE", "WORKFLOW_AI_INPUT_LIMIT", "AUTH_REQUIRED",
+    "EMAIL_VERIFICATION_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED", "ABN_REVIEW_REQUIRED", "BUSINESS_ACCESS_REQUIRED",
+    "BUSINESS_SELECTION_REQUIRED", "INTEGRATION_ENCRYPTION_UNAVAILABLE", "INTEGRATION_CREDENTIALS_INVALID"]);
+  return messages.find(message => codes.has(message)) || "internal";
+}
 function acceptedOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return origin === new URL(request.url).origin && request.headers.get("sec-fetch-site") !== "cross-site";
@@ -224,7 +242,7 @@ export async function postWattzunPortal(request: Request, deps = defaults): Prom
     return json({ ok: false, error: "Send your question as JSON." }, 415);
   }
   const timing = turnTimer();
-  let phase: "auth" | "input" | "context" | "pending_workflow" | "reply" | "workflow" | "recheck" | "usage" = "auth";
+  let phase: "auth" | "input" | "context" | "pending_workflow" | "reply" | "workflow" | "recheck" | "usage" | "final_scope_source" | "final_workflow" = "auth";
   try {
     await timing.run("auth", () => deps.authenticate(request));
     requireOpenConversation(request);
@@ -246,15 +264,15 @@ export async function postWattzunPortal(request: Request, deps = defaults): Prom
     const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
     phase = "usage";
     await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "text" }));
-    phase = "recheck";
+    phase = "final_scope_source";
     const finalAccess = await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+    phase = "final_workflow";
     await timing.run("access", () => recheckWorkflow(request, finalAccess, input, workflow, deps));
     return timing.response(json({ ok: true, reply: withContext(reply, workContext) }));
   } catch (error) {
     const response = failure(error);
     if (response.status >= 500) {
-      const known = ["WORKFLOW_AI_UNAVAILABLE", "WORKFLOW_AI_INCOMPLETE", "WORKFLOW_AI_INPUT_LIMIT"];
-      console.warn("Wattzun text turn failed", { phase, category: error instanceof Error && known.includes(error.message) ? error.message : "internal" });
+      console.warn("Wattzun text turn failed", { phase, category: failureCategory(error) });
     }
     return timing.response(response);
   }
