@@ -151,8 +151,13 @@ test("browser capture startup failures stop granted tracks and close the microph
       } } },
     });
     try {
-      await assert.rejects(createWattzunBrowserVoiceEnvironment().microphone(), failure === "permission" ? /permission was denied/ : /could not be opened/);
-      assert.equal(state.closed, 1); assert.equal(state.stopped, failure === "permission" ? 0 : 1); assert.equal(state.resumed, failure === "permission" ? 0 : 1);
+      await assert.rejects(createWattzunBrowserVoiceEnvironment().microphone(), error => {
+        assert.equal(error.name, "WattzunVoiceStartupError");
+        assert.equal(error.reason, failure === "permission" ? "microphone" : "capture");
+        assert.match(error.message, failure === "permission" ? /browser or device blocked microphone access/ : /Voice capture could not start/);
+        return true;
+      });
+      assert.equal(state.closed, 1); assert.equal(state.stopped, failure === "permission" ? 0 : 1); assert.equal(state.resumed, 1, "Call audio unlocks before permission resolves");
     } finally { restore(); }
   }
 });

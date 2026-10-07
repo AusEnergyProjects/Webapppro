@@ -92,5 +92,6 @@ export function wattzunOffTopicReply(message: string, history: readonly WattzunT
   const relatedWeatherFollowup=weather&&!food&&!entertainment&&(industryContext.test(recentUser)||workflowContext.test(recentUser));
   if (related||relatedWeatherFollowup) return null;
   const topic=food?'restaurant and food recommendations':weather?'general weather forecasts':'unrelated entertainment';
-  return {kind:'answer',message:`Wattzun helps with TLink work, trade and energy questions, site forms, audits and council programs. I can’t help with ${topic} here. Tell me what you’re working on and I’ll help with the next step.`,questions:[],links:[{label:WATTZUN_PORTAL_GUIDE[portal][0].label,href:WATTZUN_PORTAL_GUIDE[portal][0].href}]};
+  const focus=portal==='trade'?'your TLink jobs, quotes, customers and day-to-day trade work':portal==='council'?'Council campaigns, resident communications and reporting':'Creditex audits, compliance questions and correction notes';
+  return {kind:'answer',message:`I can help with ${focus}. I can’t help with ${topic} here. Tell me what you’re working on and I’ll help with the next step.`,questions:[],links:[{label:WATTZUN_PORTAL_GUIDE[portal][0].label,href:WATTZUN_PORTAL_GUIDE[portal][0].href}]};
 }

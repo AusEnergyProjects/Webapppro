@@ -61,16 +61,15 @@ export function SiteHeader({ active }: { active: SiteActive }) {
             <span>Call</span>
           </a>
           <SurgeHeaderButton active={active === "surge"} />
-          <Link
+          <a
             className="site-tlink-link"
             href="/direct-trade/dashboard"
-            prefetch={false}
             aria-label="Open TLink"
             title="TLink"
           >
             <img className="site-tlink-mark" src="/tlink-icon-192.png" width="38" height="38" alt="" aria-hidden="true" decoding="async" />
             <span className="site-tlink-copy"><strong>TLink</strong></span>
-          </Link>
+          </a>
         </div>
       </header>
       <span className="site-content-anchor" id="site-content" tabIndex={-1} />

@@ -115,9 +115,9 @@ export default function PrivacyPage() {
             or review.
           </p>
           <div>
-            <Link className="btn" href="/direct-trade/dashboard">
+            <a className="btn" href="/direct-trade/dashboard">
               Open trade workspace
-            </Link>
+            </a>
             <Link className="btn ghost" href="/">
               Australian Energy Assessments home
             </Link>

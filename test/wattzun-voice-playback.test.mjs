@@ -98,14 +98,38 @@ test("truncated PCM after startup stops scheduled audio and reports one later pl
   lateEnd(); player.close(); player.close(); assert.deepEqual(events, { ended: 0, errors: 1 }); assert.equal(device.closed, 0);
 });
 
-test("stream failures reject before startup or report onError after startup", async () => {
+test("stream failures reject before startup without reporting playback", async () => {
   const earlyAudio = stream(), early = createWattzunPcmPlayback(context(), earlyAudio.input), earlyEvents = observe(early);
   const rejected = assert.rejects(early.play(), /network failed/); earlyAudio.controller.error(new Error("network failed")); await rejected;
   assert.deepEqual(earlyEvents, { ended: 0, errors: 0 }); early.close();
+});
+
+test("a late network failure drains scheduled and buffered complete samples before one error", async () => {
   const device = context(), audio = stream(), player = createWattzunPcmPlayback(device, audio.input), events = observe(player);
   const playing = player.play(); audio.controller.enqueue(pcm(Array(960).fill(1))); await playing;
+  const buffered = [1234, -4321, ...Array(398).fill(1000)];
+  audio.controller.enqueue(pcm(buffered)); audio.controller.enqueue(new Uint8Array([255])); await tick();
+  assert.equal(device.sources.length, 1, "The short final block has not yet been scheduled");
   audio.controller.error(new Error("network failed")); await tick();
-  assert.deepEqual(events, { ended: 0, errors: 1 }); assert.equal(device.sources[0].stopped, 1); assert.equal(audio.input.locked, false); player.close();
+  assert.equal(device.sources.length, 2); assert.deepEqual(events, { ended: 0, errors: 0 });
+  assert.deepEqual([...device.sources[1].buffer.data], buffered.map(value => value / 32768));
+  assert.ok(device.sources.every(source => source.stopped === 0)); assert.equal(audio.input.locked, false);
+  const lateEnds = device.sources.map(source => source.onended);
+  device.sources[0].end(); assert.deepEqual(events, { ended: 0, errors: 0 });
+  device.sources[1].end(); assert.deepEqual(events, { ended: 0, errors: 1 });
+  lateEnds.forEach(end => end()); player.close(); player.close();
+  assert.deepEqual(events, { ended: 0, errors: 1 }); assert.equal(device.closed, 0);
+});
+
+test("closing while a failed stream drains stops audio immediately and ignores late ends", async () => {
+  const device = context(), audio = stream(), player = createWattzunPcmPlayback(device, audio.input), events = observe(player);
+  const playing = player.play(); audio.controller.enqueue(pcm(Array(6000).fill(1))); await playing; await tick();
+  audio.controller.error(new Error("network failed")); await tick();
+  assert.equal(device.sources.length, 3); assert.deepEqual(events, { ended: 0, errors: 0 });
+  const lateEnds = device.sources.map(source => source.onended);
+  player.close(); player.close(); await tick();
+  assert.ok(device.sources.every(source => source.stopped === 1 && source.disconnected === 1));
+  lateEnds.forEach(end => end()); assert.deepEqual(events, { ended: 0, errors: 0 }); assert.equal(device.closed, 0);
 });
 
 test("the two-megabyte limit is cumulative and cancels a live reply before decoding excess bytes", async () => {
@@ -182,6 +206,39 @@ test("the call greeting streams through its resumed microphone context before EO
     assert.equal(commands.length, 0, "No worklet recording overlaps the greeting");
     audio.controller.close(); await tick(); assert.equal(statuses.at(-1), "speaking"); device.sources[0].end();
     assert.equal(statuses.at(-1), "listening"); assert.deepEqual(commands, [{ type: "start", id: 1 }]); assert.equal(device.closed, 0);
+    call.hangUp(); assert.equal(device.closed, 1); assert.equal(timers.size, 0);
+  } finally { call.dispose(); restore(); }
+});
+
+test("a call keeps speaking through a late audio stream failure then quietly resumes the same microphone", async () => {
+  const device = microphoneContext(), audio = stream(), commands = [], timers = new Set(), statuses = [], browserSpeech = [];
+  const restore = globals({
+    AudioContext: class { constructor() { return device; } },
+    AudioWorkletNode: class extends CaptureNode { constructor() { super(); this.port.postMessage = command => commands.push(command); } },
+    SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
+    navigator: { mediaDevices: { getUserMedia: async () => media() } },
+    window: {
+      setInterval(callback) { timers.add(callback); return callback; }, clearInterval(callback) { timers.delete(callback); },
+      speechSynthesis: { getVoices: () => [], speak(utterance) { browserSpeech.push(utterance); }, cancel() {} },
+    },
+  });
+  const call = new WattzunVoiceCall(createWattzunBrowserVoiceEnvironment(), {
+    greeting: async () => ({ mimeType: "audio/pcm", stream: audio.input }),
+    status: value => statuses.push(value),
+    submit: async () => { throw new Error("Greeting must never submit a user turn"); },
+    reply: () => { throw new Error("Greeting must never create a chat reply"); },
+  });
+  try {
+    const started = call.start(); await tick();
+    audio.controller.enqueue(pcm(Array(1000).fill(1000))); await started;
+    assert.equal(statuses.at(-1).state, "speaking"); assert.equal(commands.length, 0);
+    audio.controller.error(new Error("network failed")); await tick();
+    assert.equal(device.sources.length, 2); assert.equal(statuses.at(-1).state, "speaking");
+    assert.equal(commands.length, 0); assert.equal(browserSpeech.length, 0);
+    device.sources[0].end(); assert.equal(statuses.at(-1).state, "speaking");
+    device.sources[1].end();
+    assert.equal(statuses.at(-1).state, "listening"); assert.equal(statuses.at(-1).message, "Speak, then pause. Wattzun will reply.");
+    assert.deepEqual(commands, [{ type: "start", id: 1 }]); assert.equal(browserSpeech.length, 0); assert.equal(device.closed, 0);
     call.hangUp(); assert.equal(device.closed, 1); assert.equal(timers.size, 0);
   } finally { call.dispose(); restore(); }
 });

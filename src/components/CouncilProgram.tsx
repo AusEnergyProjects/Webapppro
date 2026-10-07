@@ -15,7 +15,7 @@ export function CouncilProgram({ campaign, unavailable = false }: { campaign: Pu
   const [enquiryOpen, setEnquiryOpen] = useState(false);
   const timeZone = campaign ? councilReportPeriod("year", campaign.state).timeZone : "Australia/Melbourne";
   return <main id="site-content" className={styles.entry}><div className={styles.entryPanel}>
-    <Link href="/council" className={styles.brand}><TLinkBrand context="Community programs" /></Link>
+    <a href="/council" className={styles.brand}><TLinkBrand context="Community programs" /></a>
     {campaign ? <>
       <span className={styles.eyebrow}>{campaign.councilName} · {campaign.kind === "session" ? "Information session" : "Local upgrade program"}</span>
       <h1>{campaign.title}</h1>

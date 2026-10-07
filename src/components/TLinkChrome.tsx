@@ -68,11 +68,11 @@ export function TLinkBrand({
 
 export function TLinkHeader({ active }: { active: TLinkSection }) {
   return <header className="tlink-site-header">
-    <Link className="tlink-home-link" href="/direct-trade/dashboard" aria-label="TLink trade ecosystem dashboard">
+    <a className="tlink-home-link" href="/direct-trade/dashboard" aria-label="TLink trade ecosystem dashboard">
       <TLinkBrand />
-    </Link>
+    </a>
     <nav aria-label="TLink navigation">
-      <Link className={active === "dashboard" ? "active" : ""} href="/direct-trade/dashboard">Dashboard</Link>
+      <a className={active === "dashboard" ? "active" : ""} href="/direct-trade/dashboard">Dashboard</a>
       <Link className={active === "standards" ? "active" : ""} href="/direct-trade/standards">Standards</Link>
     </nav>
     <AeaProductLink placement="site-header" />

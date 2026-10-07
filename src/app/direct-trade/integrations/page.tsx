@@ -61,9 +61,9 @@ export default function DirectTradeIntegrationsPage() {
             information in each provider.
           </p>
           <div>
-            <Link className="btn" href="/direct-trade/dashboard">
+            <a className="btn" href="/direct-trade/dashboard">
               Open TLink integrations
-            </Link>
+            </a>
             <Link className="btn ghost" href="/privacy">
               Read the privacy notice
             </Link>
@@ -110,9 +110,9 @@ export default function DirectTradeIntegrationsPage() {
             It does not read Gmail, contacts or unrelated calendar events.
           </p>
         </div>
-        <Link className="btn" href="/direct-trade/dashboard">
+        <a className="btn" href="/direct-trade/dashboard">
           Manage connections
-        </Link>
+        </a>
       </section>
 
       <SiteFooter>

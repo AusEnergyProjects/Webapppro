@@ -16,6 +16,7 @@ export function createWattzunPcmPlayback(context: AudioContext, stream: Readable
   let nextStart = 0;
   let started = false;
   let complete = false;
+  let readFailed = false;
   let ended = false;
   let failed = false;
   let closed = false;
@@ -40,6 +41,11 @@ export function createWattzunPcmPlayback(context: AudioContext, stream: Readable
   };
   const finish = () => {
     if (closed || failed || ended || !complete || sources.size) return;
+    if (readFailed) {
+      failed = true;
+      playback.onError();
+      return;
+    }
     ended = true;
     playback.onEnd();
   };
@@ -85,7 +91,20 @@ export function createWattzunPcmPlayback(context: AudioContext, stream: Readable
   const consume = async (activeReader: ReadableStreamDefaultReader<Uint8Array>) => {
     try {
       while (!closed && !failed) {
-        const chunk = await activeReader.read();
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try { chunk = await activeReader.read(); }
+        catch (error) {
+          if (closed || failed) return;
+          if (!started) { fail(error); return; }
+          // A lost connection cannot retract speech already received. Drain valid
+          // samples before reporting the failure, without announcing a clean end.
+          lowByte = null;
+          flush();
+          readFailed = true;
+          complete = true;
+          finish();
+          return;
+        }
         if (closed || failed) return;
         if (chunk.done) {
           if (lowByte !== null) throw new Error("Wattzun's audio ended with an incomplete sample.");

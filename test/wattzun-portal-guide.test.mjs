@@ -24,6 +24,19 @@ test('known unrelated requests are blocked even after a work topic, without a br
   assert.ok(wattzunOffTopicReply('What is the weather tomorrow?',[],'trade'));
 });
 
+test('off-topic reminders describe only the current portal role',()=>{
+  for(const [portal,expected,unrelated] of [
+    ['trade',/TLink jobs, quotes, customers and day-to-day trade work/,/Council|Creditex|audits/],
+    ['council',/Council campaigns, resident communications and reporting/,/Creditex|trade work|quotes|invoices/],
+    ['creditex',/Creditex audits, compliance questions and correction notes/,/Council|trade work|quotes|invoices/],
+  ]){
+    const reply=wattzunOffTopicReply('Recommend a restaurant for dinner.',[],portal);
+    assert.match(reply.message,expected);assert.doesNotMatch(reply.message,unrelated);
+    assert.deepEqual(reply.links,[{label:WATTZUN_PORTAL_GUIDE[portal][0].label,href:WATTZUN_PORTAL_GUIDE[portal][0].href}]);
+    assert.deepEqual(reply.questions,[]);
+  }
+});
+
 test('guidance points to existing owner/staff workflows and keeps automated record access separate',()=>{
   const trade=WATTZUN_PORTAL_GUIDE.trade;
   assert.equal(trade.find(item=>item.id==='trade_sales').href,'/direct-trade/dashboard?workspace=sales');

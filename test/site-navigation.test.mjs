@@ -201,11 +201,12 @@ test("the futuristic header links to one dedicated always-present Wattzun AI pag
 test("public header pages are prepared before a click while private workspaces stay on demand", () => {
   const primaryNav = `${chrome.slice(chrome.indexOf("export function SiteNav"), chrome.indexOf("export function SiteHeader"))}\n${responsiveNav}`;
   const bookLink = chrome.match(/<Link\s+className="site-book-link"[\s\S]*?<\/Link>/)?.[0] || "";
-  const tlinkLink = chrome.match(/<Link\s+className="site-tlink-link"[\s\S]*?<\/Link>/)?.[0] || "";
+  const tlinkLink = chrome.match(/<a\s+className="site-tlink-link"[\s\S]*?<\/a>/)?.[0] || "";
   assert.doesNotMatch(primaryNav, /prefetch=\{false\}/);
   assert.doesNotMatch(bookLink, /prefetch=\{false\}/);
   assert.doesNotMatch(surgeHeaderButton, /prefetch=\{false\}/);
-  assert.match(tlinkLink, /prefetch=\{false\}/);
+  assert.match(tlinkLink, /href="\/direct-trade\/dashboard"/);
+  assert.doesNotMatch(tlinkLink, /prefetch=/);
 });
 
 test("public navigation keeps TLink clearly branded", () => {

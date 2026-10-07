@@ -345,6 +345,38 @@ test('follow-up answers can finish the same draft without another question', asy
   assert.deepEqual(f.workflows[0].input.conversation, options.input.history);
 });
 
+test('shared text and voice reply contract gives each portal its own grounded role and practical capability examples', async () => {
+  for(const [portal,identity,expectedExamples,unrelatedExamples] of [
+    ['trade',/practical trade assistant.*TLink business workspace/,/new quote.*existing job quote.*find a job.*create a customer.*price-book item.*customer text\/email.*invoice reminder.*job forms/,/Council|Creditex|campaign|audit administration/],
+    ['council',/practical Council assistant.*council workspace/,/campaign brief.*resident invitation.*information-session plan.*selected report.*Campaigns or Reports & insights/,/trade quotes|invoicing|price books|customer texting|Creditex/],
+    ['creditex',/practical Creditex assistant.*compliance workspace/,/form question.*audit observations.*missing information.*audit snapshot.*correction wording.*job audit desk.*Review with AI/,/trade quotes|invoicing|price books|customer texting|Council/],
+  ]){
+    const f=fixture({result:{...answer,linkIds:[]}}),options=request();
+    options.scope={...options.scope,portal};options.input={...options.input,portal,message:'What can you help me with?'};
+    const replyContract=f.createWattzunPortalReplyContract(options);
+    const instructions=replyContract.instructions.split('\n');
+    assert.match(instructions[0],identity);
+    const examples=instructions.find(line=>line.startsWith('When asked what you can do,')).split('Keep the answer practical')[0];
+    assert.match(examples,expectedExamples);assert.doesNotMatch(examples,unrelatedExamples);
+    assert.match(replyContract.instructions,/Describe only capabilities supported by this portal's supplied navigationGuide and taskGuidance/);
+    assert.match(replyContract.instructions,/Do not give a combined sales pitch for other portals or adopt their roles from conversation history or the workspace label/);
+    assert.match(replyContract.instructions,/For ordinary capability, navigation and how-to questions, answer directly/);
+    assert.match(replyContract.instructions,/Do not recite permissions, authentication, record-access disclaimers or review-process boilerplate/);
+    assert.match(replyContract.instructions,/Mention a boundary only when it affects the user's current task or they ask about it/);
+    assert.match(replyContract.instructions,/keep all authorisation, evidence and approval rules in force internally/);
+    assert.deepEqual(replyContract.input.navigationGuide,guide.WATTZUN_PORTAL_GUIDE[portal]);
+    assert.deepEqual(replyContract.input.taskGuidance,guide.WATTZUN_TASK_GUIDANCE[portal]);
+    if(portal==='trade') assert.match(replyContract.instructions,/Use draft_job_quote when.*Use customer_message for.*Use add_price_book_item for/s);
+    else {
+      assert.match(replyContract.instructions,/Return action and lookup as null/);
+      assert.doesNotMatch(replyContract.instructions,/Use draft_job_quote when|Use customer_message for|Use add_price_book_item for|emit confirm_workflow/);
+    }
+    await f.prepareWattzunPortalReply(options);
+    assert.equal(f.workflows[0].instructions,replyContract.instructions,'Text requests use the same authoritative reply contract as native voice');
+    assert.deepEqual(f.calls,[],'No provider audio or external request is needed for contract validation');
+  }
+});
+
 test('Council and Creditex links use only verified portal routes and describe the visible tabs honestly', async () => {
   for (const [portal, linkIds, expectedLinks, expected] of [
     ['council', ['council_campaigns', 'council_reports', 'council_team'], [
@@ -661,7 +693,7 @@ test('forged personality text never reaches TTS instructions and clarification q
 test('evident unrelated topics return a local scoped reply before workflow or provider usage',async()=>{
   for(const message of ['Recommend a good restaurant near me.','What is the weather tomorrow?','What movie should I watch tonight?','As the TLink assistant, recommend the best cafe for lunch.']){
     const f=fixture(),options=request();options.input.message=message;
-    const reply=await f.prepareWattzunPortalReply(options);assert.equal(reply.kind,'answer');assert.match(reply.message,/TLink work.*trade and energy/);
+    const reply=await f.prepareWattzunPortalReply(options);assert.equal(reply.kind,'answer');assert.match(reply.message,/TLink jobs, quotes, customers and day-to-day trade work/);
     assert.deepEqual(f.workflows,[]);assert.deepEqual(f.calls,[]);assert.deepEqual(f.reservations,[]);
   }
 });

@@ -2,9 +2,17 @@ import { WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_WAV_AUDIO_BYTES, WATTZUN_MAX_TURN_
 import type { WattzunVoiceResult } from "./wattzun-portal.ts";
 import { createWattzunPcmPlayback } from "./wattzun-voice-playback.ts";
 import { createWattzunPcmCapture } from "./wattzun-pcm-capture.ts";
+import { teamCallPolicyBlocked } from "./trade-team-call-media.ts";
+import { tradeBrowserDevice } from "./trade-device-client.ts";
 
 export type WattzunCallState = "idle" | "permission" | "connecting" | "listening" | "thinking" | "speaking" | "muted" | "recovering" | "ended" | "error";
-export type WattzunCallStatus = { state: WattzunCallState; message: string };
+export type WattzunCallStatus = { state: WattzunCallState; message: string; recovery?: "reload" };
+export class WattzunVoiceStartupError extends Error {
+  readonly reason: "policy" | "microphone" | "audio" | "capture";
+  constructor(message: string, reason: "policy" | "microphone" | "audio" | "capture") {
+    super(message); this.name = "WattzunVoiceStartupError"; this.reason = reason;
+  }
+}
 /** Only current identity/access failures end an otherwise usable call. */
 export class WattzunVoiceCallError extends Error {
   readonly reason: "authentication" | "access";
@@ -12,8 +20,6 @@ export class WattzunVoiceCallError extends Error {
     super(message); this.name = "WattzunVoiceCallError"; this.reason = reason;
   }
 }
-const RECOVERY_NOTICE = "I'm still here. That reply didn't come through. Please say that last part again.";
-const SHORT_QUESTION_NOTICE = "I'm still here. Please repeat that question in a shorter part.";
 export interface WattzunRecorder {
   onData: (data: Blob) => void;
   onStop: () => void;
@@ -36,7 +42,6 @@ export interface WattzunPlayback {
 export interface WattzunVoiceEnvironment {
   microphone(): Promise<WattzunMicrophone>;
   playback(audio: WattzunVoiceResult["audio"]): WattzunPlayback;
-  prompt?(message: string): WattzunPlayback | null;
   now(): number;
   repeat(callback: () => void, milliseconds: number): () => void;
 }
@@ -83,16 +88,12 @@ export class WattzunVoiceCall {
   private playback: WattzunPlayback | null = null;
   private pending: AbortController | null = null;
   private muted = false;
-  private promptStarted = 0;
-  private promptPlayback: WattzunPlayback | null = null;
-  private recoveryMessage = "";
-  private stopRecoveryWatch: (() => void) | null = null;
   private readonly environment: WattzunVoiceEnvironment;
   private readonly callbacks: VoiceCallbacks;
   constructor(environment: WattzunVoiceEnvironment, callbacks: VoiceCallbacks) { this.environment = environment; this.callbacks = callbacks; }
-  private update(state: WattzunCallState, message = "") {
+  private update(state: WattzunCallState, message = "", recovery?: "reload") {
     this.state = state;
-    this.callbacks.status({ state, message });
+    this.callbacks.status({ state, message, ...(recovery ? { recovery } : {}) });
   }
   async start(): Promise<void> {
     if (this.active) return;
@@ -104,7 +105,6 @@ export class WattzunVoiceCall {
     const greetingCallback = this.callbacks.greeting;
     const pending = greetingCallback ? new AbortController() : null;
     let greetingAudio: WattzunVoiceResult["audio"] | null = null;
-    let greetingFailureMessage = "Wattzun's greeting did not come through. You can still speak in this call.";
     const discardGreeting = () => {
       const audio = greetingAudio;
       greetingAudio = null;
@@ -123,7 +123,6 @@ export class WattzunVoiceCall {
       return audio;
     }, error => {
       if (this.active && generation === this.generation && !pending.signal.aborted) {
-        if (error instanceof Error) greetingFailureMessage = error.message;
         if (error instanceof WattzunVoiceCallError) this.fail(error.message);
       }
       return null;
@@ -141,56 +140,32 @@ export class WattzunVoiceCall {
       if (!this.active || generation !== this.generation || pending?.signal.aborted) return;
       if (this.pending === pending) this.pending = null;
       if (!audio) {
-        this.recover(greetingFailureMessage);
+        this.recover();
         return;
       }
       if (this.muted) { this.update("muted"); return; }
       greetingAudio = null;
-      await this.playAudio(audio, generation, "Wattzun's greeting could not play. You can still speak in this call.");
+      await this.playAudio(audio, generation);
     } catch (error) {
       if (!this.active || generation !== this.generation) return;
       const message = error instanceof Error ? error.message : "Your microphone could not be opened.";
-      this.fail(message);
+      this.fail(message, error instanceof WattzunVoiceStartupError && error.reason === "policy" ? "reload" : undefined);
     } finally {
       pending?.signal.removeEventListener("abort", discardGreeting);
       discardGreeting();
       if (this.pending === pending) this.pending = null;
     }
   }
-  private recover(message: string, notice: typeof RECOVERY_NOTICE | typeof SHORT_QUESTION_NOTICE = RECOVERY_NOTICE) {
+  private recover() {
     if (!this.active || !this.microphone) return;
     this.pending?.abort(); this.pending = null;
     const playback = this.playback; this.playback = null; playback?.close();
-    this.clearRecoveryPrompt();
     this.discardCapture();
     this.microphone.mute(true);
-    if (this.muted) { this.update("muted", message); return; }
-    let prompt: WattzunPlayback | null;
-    try { prompt = this.environment.prompt?.(notice) || null; }
-    catch { prompt = null; }
-    if (!prompt) { this.listen(message); return; }
+    if (this.muted) { this.update("muted"); return; }
     const generation = this.generation;
-    const finish = () => {
-      if (this.active && generation === this.generation && this.promptPlayback === prompt) this.finishRecovery();
-    };
-    this.promptPlayback = prompt;
-    this.recoveryMessage = message;
-    this.promptStarted = this.environment.now();
-    prompt.onEnd = finish; prompt.onError = finish;
-    this.stopRecoveryWatch = this.environment.repeat(() => { if (this.environment.now() - this.promptStarted >= 8000) finish(); }, 1000);
-    this.update("recovering", message);
-    if (!this.active || generation !== this.generation || this.promptPlayback !== prompt) return;
-    try { void prompt.play().catch(finish); } catch { finish(); }
-  }
-  private clearRecoveryPrompt() {
-    this.stopRecoveryWatch?.(); this.stopRecoveryWatch = null;
-    const prompt = this.promptPlayback; this.promptPlayback = null; prompt?.close();
-  }
-  private finishRecovery() {
-    const message = this.recoveryMessage;
-    this.clearRecoveryPrompt();
-    if (!this.active) return;
-    if (this.muted) this.update("muted", message); else this.listen(message);
+    this.update("recovering");
+    if (this.active && generation === this.generation) this.listen();
   }
   private discardCapture() {
     const capture = this.capture;
@@ -201,7 +176,7 @@ export class WattzunVoiceCall {
     capture.stopSampling();
     capture.recorder.stop();
   }
-  private listen(message = "") {
+  private listen() {
     if (!this.active || !this.microphone || this.muted) return;
     try {
       this.microphone.mute(false);
@@ -214,7 +189,7 @@ export class WattzunVoiceCall {
         capture.bytes += chunk.size;
         const limit = chunk.type === "audio/wav" ? WATTZUN_MAX_WAV_AUDIO_BYTES : WATTZUN_MAX_AUDIO_BYTES;
         if (capture.bytes > limit) {
-          this.recover("That voice turn was too large. You're still connected. Please use a shorter question.", SHORT_QUESTION_NOTICE);
+          this.recover();
           return;
         }
         capture.chunks.push(chunk);
@@ -231,7 +206,7 @@ export class WattzunVoiceCall {
           void this.send(audio);
         } else {
           capture.chunks = [];
-          this.listen("I did not hear a question. Speak when you are ready.");
+          this.listen();
         }
       };
       recorder.start();
@@ -244,7 +219,7 @@ export class WattzunVoiceCall {
         capture.submit = decision === "send";
         recorder.stop();
       }, 100);
-      this.update("listening", message || "Speak, then pause. Wattzun will reply.");
+      this.update("listening", "Speak, then pause. Wattzun will reply.");
     } catch { this.fail("This browser could not record audio. Try an updated browser with microphone access."); }
   }
   private async send(audio: Blob) {
@@ -264,17 +239,17 @@ export class WattzunVoiceCall {
       if (!this.active || generation !== this.generation || pending.signal.aborted) return;
       if (this.muted) { this.update("muted"); return; }
       unplayedAudio = null;
-      await this.playAudio(result.audio, generation, "Wattzun replied in chat, but the audio could not play. You can still speak in this call.");
+      await this.playAudio(result.audio, generation);
     } catch (error) {
       if (!this.active || generation !== this.generation || pending.signal.aborted) return;
       const message = error instanceof Error ? error.message : "The voice reply could not be completed. Try again.";
-      if (error instanceof WattzunVoiceCallError) this.fail(message); else this.recover(message);
+      if (error instanceof WattzunVoiceCallError) this.fail(message); else this.recover();
     } finally {
       if (unplayedAudio?.mimeType === "audio/pcm") void unplayedAudio.stream.cancel().catch(() => {});
       if (this.pending === pending) this.pending = null;
     }
   }
-  private async playAudio(audio: WattzunVoiceResult["audio"], generation: number, errorMessage: string) {
+  private async playAudio(audio: WattzunVoiceResult["audio"], generation: number) {
     let unplayed = true;
     try {
       const playback = this.environment.playback(audio);
@@ -286,16 +261,15 @@ export class WattzunVoiceCall {
         this.playback = null;
         if (this.muted) this.update("muted"); else this.listen();
       };
-      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.recover(errorMessage); };
+      playback.onError = () => { if (this.playback === playback && this.active && generation === this.generation) this.recover(); };
       await playback.play().catch(error => { if (this.playback === playback) throw error; });
       if (this.playback === playback && this.active && generation === this.generation) this.update("speaking");
-    } catch { if (this.active && generation === this.generation) this.recover(errorMessage); } finally {
+    } catch { if (this.active && generation === this.generation) this.recover(); } finally {
       if (unplayed && audio.mimeType === "audio/pcm") void audio.stream.cancel().catch(() => {});
     }
   }
   toggleMute() {
     if (!this.active || !this.microphone) return;
-    this.clearRecoveryPrompt();
     this.muted = !this.muted;
     this.microphone.mute(true);
     if (this.muted) {
@@ -305,19 +279,16 @@ export class WattzunVoiceCall {
   }
   interrupt() {
     if (!this.active) return;
-    if (this.promptPlayback) { this.finishRecovery(); return; }
     if (!this.playback) return;
     this.playback.close();
     this.playback = null;
     if (this.muted) this.update("muted"); else this.listen();
   }
   hangUp() { if (!this.active) return; this.cleanup(); this.update("ended", "Call ended. You can continue in chat."); }
-  private fail(message: string) { this.cleanup(); this.update("error", message); }
+  private fail(message: string, recovery?: "reload") { this.cleanup(); this.update("error", message, recovery); }
   private cleanup() {
     this.active = false;
     ++this.generation;
-    this.clearRecoveryPrompt();
-    this.recoveryMessage = "";
     this.discardCapture();
     this.pending?.abort();
     this.pending = null;
@@ -336,28 +307,28 @@ export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment 
   return {
     now: () => performance.now(),
     repeat(callback, milliseconds) { const timer = window.setInterval(callback, milliseconds); return () => window.clearInterval(timer); },
-    prompt(message) {
-      if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") return null;
-      const utterance = new SpeechSynthesisUtterance(message);
-      utterance.lang = "en-AU";
-      const prompt: WattzunPlayback = {
-        onEnd: () => {}, onError: () => {},
-        async play() { window.speechSynthesis.speak(utterance); },
-        close() { utterance.onend = null; utterance.onerror = null; window.speechSynthesis.cancel(); },
-      };
-      utterance.onend = () => prompt.onEnd(); utterance.onerror = () => prompt.onError();
-      return prompt;
-    },
     async microphone() {
+      if (teamCallPolicyBlocked("audio")) {
+        throw new WattzunVoiceStartupError("This page carried over the public site's microphone block. Reload TLink to enable calling, then press Call Wattzun again.", "policy");
+      }
       if (!navigator.mediaDevices?.getUserMedia || typeof AudioWorkletNode === "undefined" || typeof AudioContext === "undefined") {
         throw new Error("Voice calls need a modern browser with microphone and AudioWorklet support on a secure connection.");
       }
-      const audioContext = new AudioContext();
       const generation = ++microphoneGeneration;
+      let audioContext: AudioContext | null = null;
       let stream: MediaStream | null = null;
+      let stage: "microphone" | "audio" | "capture" = "audio";
       try {
+        audioContext = new AudioContext();
+        // Unlock audio on the Call click stack, before a microphone dialog can
+        // consume the browser's user activation. Handle rejection immediately.
+        const resumed = audioContext.resume().then(() => null, () => new WattzunVoiceStartupError("Your browser could not start call audio. Tap Call Wattzun again with this page open in the foreground.", "audio"));
+        stage = "microphone";
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
-        await audioContext.resume();
+        stage = "audio";
+        const audioFailure = await resumed;
+        if (audioFailure) throw audioFailure;
+        stage = "capture";
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
         analyser.fftSize = 2048;
@@ -366,6 +337,7 @@ export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment 
         const capture = await createWattzunPcmCapture(audioContext, source);
         if (generation === microphoneGeneration) playbackContext = audioContext;
         const media = stream;
+        const context = audioContext;
         let closed = false;
         return {
           recorder: () => capture.recorder(),
@@ -374,19 +346,28 @@ export function createWattzunBrowserVoiceEnvironment(): WattzunVoiceEnvironment 
           close() {
             if (closed) return;
             closed = true;
-            if (playbackContext === audioContext) playbackContext = null;
+            if (playbackContext === context) playbackContext = null;
             capture.close();
-            for (const track of media.getTracks()) track.stop(); source.disconnect(); analyser.disconnect(); void audioContext.close().catch(() => {});
+            for (const track of media.getTracks()) track.stop(); source.disconnect(); analyser.disconnect(); void context.close().catch(() => {});
           },
         };
       } catch (error) {
         if (playbackContext === audioContext) playbackContext = null;
         stream?.getTracks().forEach(track => track.stop());
-        void audioContext.close().catch(() => {});
-        if (error instanceof Error && error.name === "NotAllowedError") throw new Error("Microphone permission was denied. Allow microphone access in your browser, then call again.");
-        if (error instanceof Error && error.name === "NotFoundError") throw new Error("No microphone was found. Connect one, then call again.");
-        if (error instanceof Error && error.name === "NotSupportedError") throw new Error("Native voice capture requires a modern browser with AudioWorklet support.");
-        throw new Error("Your microphone could not be opened. Check that it is available and call again.");
+        void audioContext?.close().catch(() => {});
+        if (error instanceof WattzunVoiceStartupError) throw error;
+        if (stage === "audio") throw new WattzunVoiceStartupError("Call audio could not start. Keep this page open and tap Call Wattzun again.", stage);
+        if (stage === "capture") throw new WattzunVoiceStartupError("Voice capture could not start. Reload TLink and try again in an up-to-date browser.", stage);
+        const name = error instanceof Error ? error.name : "";
+        if (name === "NotAllowedError" || name === "SecurityError") {
+          const device = tradeBrowserDevice();
+          throw new WattzunVoiceStartupError(device.platform === "android" && device.browser === "chrome"
+            ? "Chrome or Android blocked microphone access. If this site's microphone is already allowed, check Android Settings > Apps > Chrome > Permissions > Microphone, then call again."
+            : "Your browser or device blocked microphone access. Allow this site and your browser in microphone settings, then call again.", stage);
+        }
+        if (name === "NotFoundError" || name === "OverconstrainedError") throw new WattzunVoiceStartupError("No available microphone was found. Check your microphone or headset, then call again.", stage);
+        if (name === "NotReadableError" || name === "AbortError") throw new WattzunVoiceStartupError("Your microphone could not open. Close other apps using it, then call again.", stage);
+        throw new WattzunVoiceStartupError("Your microphone could not be opened. Check that it is available and call again.", stage);
       }
     },
     playback(result) {
