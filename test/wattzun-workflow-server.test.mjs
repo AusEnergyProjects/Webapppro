@@ -165,7 +165,7 @@ function formWorkflowFixture() {
     template: { fields: [{ key: 'site_notes', label: 'Site notes', type: 'text', required: true, maxLength: 240 }, { key: 'next_question', label: 'How many units?', type: 'text', required: true, maxLength: 240 }] }, answers: {} };
   const formDeps = { team: async () => structuredClone(f.team), job: async () => ({ id: 'job-one', stage: 'ready', revision: 1 }),
     selectedJobForm: async (team,id) => ({job:await formDeps.job(team,id),form:structuredClone(saved)}),
-    saveJobForm: async request => { const payload = await request.json(); assert.equal(typeof payload.complete, 'boolean'); assert.equal(payload.baseRevision, saved.revision);
+    saveJobForm: async (_team, _job, payload) => { assert.equal(typeof payload.complete, 'boolean'); assert.equal(payload.baseRevision, saved.revision);
       if (state.failBeforeSave) throw new Error('Connection lost before canonical save');
       saved.answers = payload.answers; saved.revision++; if (payload.complete) saved.status = 'complete'; f.calls.push({ kind: 'form', payload });
       if (state.failAfterSave) throw new Error('Connection lost after canonical save');

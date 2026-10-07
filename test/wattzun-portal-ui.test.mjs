@@ -156,11 +156,11 @@ test("follow-up history stays in memory, retains questions, and stays within the
     { role: "assistant", content: "Which job?\nWhat would you like to achieve?", id: "2" },
   ];
   assert.deepEqual(helpers.conversationHistory(messages), messages.map(({ role, content }) => ({ role, content })));
-  const shortTurns = Array.from({ length: 44 }, (_, index) => ({ id: String(index), role: index % 2 ? "assistant" : "user", content: `Turn ${index}` }));
+  const shortTurns = Array.from({ length: 260 }, (_, index) => ({ id: String(index), role: index % 2 ? "assistant" : "user", content: `Turn ${index}` }));
   const retained = helpers.conversationHistory(shortTurns);
   assert.equal(retained.length, portalContract.WATTZUN_MAX_HISTORY_TURNS);
-  assert.deepEqual(retained, shortTurns.slice(-40).map(({role,content})=>({role,content})));
-  assert.equal(portalContract.parseWattzunTurn({portal:'trade',scopeId:'business-a',requestId:'history-forty-fixture',message:'Continue',history:retained}).history.length,40);
+  assert.deepEqual(retained, shortTurns.slice(-256).map(({role,content})=>({role,content})));
+  assert.equal(portalContract.parseWattzunTurn({portal:'trade',scopeId:'business-a',requestId:'history-long-fixture',message:'Continue',history:retained}).history.length,256);
   const bounded = helpers.conversationHistory(Array.from({ length: 40 }, (_, index) => ({ id: String(index), role: index % 2 ? "assistant" : "user", content: String(index).padEnd(4000, "x") })));
   assert.ok(bounded.length < 40); assert.ok(JSON.stringify(bounded).length <= portalContract.WATTZUN_MAX_HISTORY_CHARACTERS); assert.ok(bounded.at(-1).content.startsWith("39"));
   assert.doesNotThrow(()=>portalContract.parseWattzunTurn({portal:'trade',scopeId:'business-a',requestId:'history-budget-fixture',message:'Continue',history:bounded}));

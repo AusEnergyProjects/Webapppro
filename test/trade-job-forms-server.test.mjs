@@ -40,7 +40,7 @@ function fixture() {
   for (const [id, job, owner] of [["form-one", "job-one", "owner-one"], ["form-two", "job-two", "owner-one"], ["foreign-form", "foreign-job", "foreign-owner"]]) {
     insert.run(id, job, owner, template.key, template.version, template.name, "AU", JSON.stringify(template), '{"work_date":"2026-10-07"}', "draft", 2, "", "", "2026-10-07T00:00:00.000Z", "2026-10-07T00:00:00.000Z");
   }
-  const reads = [], state = { assignedCalls: 0, beforeSelected: null, selectedResult: null };
+  const reads = [], state = { assignedCalls: 0, batches: 0, beforeSelected: null, selectedResult: null };
   const db = {
     prepare(sql) {
       assert.match(sql, /^\s*SELECT\b/i, "Selected-form reading must not write");
@@ -49,23 +49,28 @@ function fixture() {
           async first() { reads.push({ sql, values }); return database.prepare(sql).get(...values) ?? null; },
           async all() {
             reads.push({ sql, values });
-            if (state.beforeSelected) { const hook = state.beforeSelected; state.beforeSelected = null; hook(); }
-            if (state.selectedResult) return state.selectedResult();
+            if (state.selectedResult && sql.includes("FROM trade_job_forms")) return state.selectedResult();
             return { success: true, results: database.prepare(sql).all(...values) };
           },
         };
       } };
     },
-    batch() { assert.fail("One selected form does not require a batch or mutation"); },
+    async batch(statements) {
+      state.batches++;
+      if (state.beforeSelected) { const hook = state.beforeSelected; state.beforeSelected = null; hook(); }
+      return Promise.all(statements.map(statement => statement.all()));
+    },
   };
   const source = read("../src/lib/trade-team-server.ts"), ast = ts.createSourceFile("team.ts", source, ts.ScriptTarget.Latest, true);
-  const declaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "assignedJob");
-  assert.ok(declaration);
-  const compiled = ts.transpileModule(declaration.getText(ast).replace(/^export\s+/, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
-  const actualAssigned = new Function("getD1", "isJobMember", `${compiled}; return assignedJob;`)(() => db, isJobMember);
+  const declarations = ast.statements.filter(node => ts.isFunctionDeclaration(node) && ["assignedJob", "assignedJobStatement", "requireAssignedJob"].includes(node.name?.text));
+  assert.equal(declarations.length, 3);
+  const compiled = ts.transpileModule(declarations.map(node => node.getText(ast).replace(/^export\s+/, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+  const actual = new Function("getD1", "isJobMember", compiled + "; return {assignedJob, assignedJobStatement, requireAssignedJob};")(() => db, isJobMember);
   const service = loadModule(read("../src/lib/trade-job-forms-server.ts"), {
     "../../db": { getD1: () => db }, "./trade-form-library.mjs": formLibrary,
-    "./trade-team-server": { assignedJob: async (...args) => { state.assignedCalls++; return actualAssigned(...args); } },
+    "./trade-team-server": { ...actual, requireAssignedJob: async (...args) => { state.assignedCalls++; return actual.requireAssignedJob(...args); } },
+    "./trade-form-job-progress": { reconcileTradeFormJobProgress: () => assert.fail("Reading must not reconcile progress") },
+    "./trade-team-sync-server": {}, "./asset-lifecycle.mjs": {},
   });
   const team = { ownerUid: "owner-one", actorUid: "worker-one", memberId: "member-one", isOwner: false, jobScope: "own", canViewFieldEvidence: true };
   return { database, db, reads, state, service, team };
@@ -75,7 +80,7 @@ test("selected technical form uses canonical assignment once and reads only the 
   const f = fixture();
   try {
     const result = await f.service.readSelectedTradeJobForm(f.team, "job-one", "form-one");
-    assert.equal(f.state.assignedCalls, 1); assert.equal(f.reads.length, 2);
+    assert.equal(f.state.assignedCalls, 1); assert.equal(f.reads.length, 2); assert.equal(f.state.batches, 1);
     assert.deepEqual(f.reads.map(read => read.values), [["job-one", "owner-one"], ["form-one", "job-one", "owner-one"]]);
     assert.equal(result.job.id, "job-one"); assert.equal(result.job.customer_source, "platform_private");
     assert.equal(result.form.id, "form-one"); assert.equal(result.form.answers.work_date, "2026-10-07");
@@ -107,13 +112,24 @@ test("canonical own-scope appointment assignment is honoured and removed assignm
   } finally { f.database.close(); }
 });
 
+test("assignment changed before the selected-form transaction is denied using the shared canonical rule", async () => {
+  const f = fixture();
+  try {
+    f.state.beforeSelected = () => f.database.exec("UPDATE trade_work_orders SET assignee_member_id='member-two' WHERE id='job-one'");
+    await assert.rejects(f.service.readSelectedTradeJobForm(f.team, "job-one", "form-one"), /JOB_NOT_ASSIGNED/);
+    assert.equal(f.state.batches, 1);
+    assert.equal(f.state.assignedCalls, 1);
+    assert.equal(f.database.prepare("SELECT revision FROM trade_job_forms WHERE id='form-one'").get().revision, 2);
+  } finally { f.database.close(); }
+});
+
 test("fresh revoked field-evidence permission denies reading and never queries form answers", async () => {
   const f = fixture();
   try {
     await f.service.readSelectedTradeJobForm(f.team, "job-one", "form-one");
     f.team.canViewFieldEvidence = false; f.reads.length = 0;
     await assert.rejects(f.service.readSelectedTradeJobForm(f.team, "job-one", "form-one"), /FIELD_EVIDENCE_VIEW_REQUIRED/);
-    assert.equal(f.reads.length, 1); assert.doesNotMatch(f.reads[0].sql, /FROM trade_job_forms/);
+    assert.equal(f.reads.length, 0);
   } finally { f.database.close(); }
 });
 
@@ -124,7 +140,7 @@ test("archived or non-installer jobs are denied initially and when changed after
       try {
         const changeJob = () => f.database.exec(`UPDATE trade_work_orders SET ${change} WHERE id='job-one'`);
         if (duringRead) f.state.beforeSelected = changeJob; else changeJob();
-        await assert.rejects(f.service.readSelectedTradeJobForm(f.team, "job-one", "form-one"), duringRead ? /JOB_FORM_NOT_FOUND/ : /JOB_NOT_FOUND/);
+        await assert.rejects(f.service.readSelectedTradeJobForm(f.team, "job-one", "form-one"), /JOB_NOT_FOUND/);
       } finally { f.database.close(); }
     }
   }

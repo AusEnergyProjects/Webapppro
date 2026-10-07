@@ -43,8 +43,12 @@ export const WATTZUN_REALTIME_VOICE_STREAM_TYPE = "application/x-wattzun-realtim
 export const WATTZUN_MAX_AUDIO_BYTES = 2_000_000;
 export const WATTZUN_MAX_TURN_SECONDS = 45;
 export const WATTZUN_MAX_WAV_AUDIO_BYTES = WATTZUN_MAX_TURN_SECONDS * 24_000 * 2 + 44;
-export const WATTZUN_MAX_HISTORY_TURNS = 40;
-export const WATTZUN_MAX_HISTORY_CHARACTERS = 24_000;
+// A full assessment can have 78 questions plus corrections. Keep its literal
+// conversation while leaving room for the current form and reviewed workflow.
+export const WATTZUN_MAX_HISTORY_TURNS = 256;
+export const WATTZUN_MAX_HISTORY_CHARACTERS = 32_000;
+export const WATTZUN_MAX_HISTORY_BYTES = 72_000;
+export const WATTZUN_MAX_REQUEST_BYTES = 96_000;
 
 export class WattzunInputError extends Error {}
 export { wattzunPortalForPath } from "./wattzun-portal-path.ts";
@@ -80,7 +84,9 @@ export function parseWattzunTurn(value: unknown, audio = false): WattzunTurnInpu
       history.push({ role: turn.role, content: turn.content });
     }
   }
-  if (JSON.stringify(history).length > WATTZUN_MAX_HISTORY_CHARACTERS) throw new WattzunInputError("Start a new conversation to continue.");
+  const serializedHistory = JSON.stringify(history);
+  if (serializedHistory.length > WATTZUN_MAX_HISTORY_CHARACTERS
+    || new TextEncoder().encode(serializedHistory).byteLength > WATTZUN_MAX_HISTORY_BYTES) throw new WattzunInputError("Start a new conversation to continue.");
   const workReference = value.workReference === undefined ? undefined : readWattzunWorkReference(value.workReference, value.portal);
   if (workReference === null) throw new WattzunInputError("Choose a work item in your current portal before asking Wattzun about it.");
   const workflowReviewId = value.workflowReviewId;

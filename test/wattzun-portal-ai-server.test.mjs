@@ -1161,7 +1161,8 @@ test('only user speed changes TTS; brand voice and personality stay fixed despit
     assert.equal(url, 'https://api.openai.com/v1/audio/speech'); assert.equal(init.method, 'POST');
     assert.equal(body.model, 'gpt-4o-mini-tts'); assert.equal(body.response_format, 'mp3'); assert.equal(body.voice, 'cedar'); assert.equal(body.speed, speed);
     assert.equal(body.input, options.reply.message); assert.match(body.instructions, /warm, conversational/);
-    assert.match(body.instructions, /Read the input faithfully.*clarification questions/);
+    assert.match(body.instructions, /speak only the supplied text, exactly once, then stop/);
+    assert.match(body.instructions, /Read its questions aloud; do not answer them yourself/);
     assert.match(body.instructions, /voice and personality are fixed by Wattzun/);
     assert.match(body.instructions, /subtle, natural Australian accent.*relaxed conversational intonation/);
     assert.match(body.instructions, /Avoid an exaggerated accent, caricature or added slang/);

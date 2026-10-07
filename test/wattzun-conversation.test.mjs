@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { wattzunConversationHistory } from '../src/lib/wattzun-conversation.ts';
-import { parseWattzunTurn } from '../src/lib/wattzun-portal.ts';
+import { parseWattzunTurn, WATTZUN_MAX_HISTORY_TURNS, WATTZUN_MAX_HISTORY_CHARACTERS, WATTZUN_MAX_HISTORY_BYTES } from '../src/lib/wattzun-portal.ts';
+import { createVeuElectricalForm } from '../src/lib/veu-electrical-safety-form.ts';
 
 const draft={kind:'prepare_quote',firstName:'Alex',lastName:'Test',email:'',phone:'',addressQuery:'',serviceCategory:'electrical',description:'Inspection',
   lines:[{lineType:'labour',description:'Inspection',quantity:'1',unitPrice:'120',taxCode:'gst'}]};
@@ -39,12 +40,38 @@ test('whole quote lines and large scope survive context grouping without truncat
   assert.ok(history.some(turn=>turn.content.includes(JSON.stringify(proposal.description))));
 });
 
-test('context still follows the 40 turn and 24000 character API ceilings',()=>{
-  for(const content of ['short','x'.repeat(4000)]){
-    const history=wattzunConversationHistory(Array.from({length:90},(_,i)=>({role:i%2?'assistant':'user',content})));
-    assert.ok(history.length<=40);assert.ok(JSON.stringify(history).length<=24000);
+test('long context follows shared message, character and UTF-8 API ceilings',()=>{
+  for(const content of ['short','x'.repeat(4000),'漢'.repeat(4000)]){
+    const history=wattzunConversationHistory(Array.from({length:300},(_,i)=>({role:i%2?'assistant':'user',content})));
+    assert.ok(history.length<=WATTZUN_MAX_HISTORY_TURNS);assert.ok(JSON.stringify(history).length<=WATTZUN_MAX_HISTORY_CHARACTERS);
+    assert.ok(new TextEncoder().encode(JSON.stringify(history)).byteLength<=WATTZUN_MAX_HISTORY_BYTES);
     assert.doesNotThrow(()=>parseWattzunTurn({portal:'trade',scopeId:'test-business',requestId:'native-history-test-2',history},true));
   }
+});
+
+test('all 78 assessment questions and twelve corrections retain original spoken details in order',()=>{
+  const fields=createVeuElectricalForm().fields;
+  assert.equal(fields.length,78);
+  const messages=[
+    {role:'user',content:'The customer is Morgan Example. Morgan is M O R G A N. Example is E X A M P L E.'},
+    {role:'assistant',content:'What is the property address?'},
+    {role:'user',content:'152 Elizabeth Street, Melbourne, Victoria 3000.'},
+    {role:'assistant',content:'I will ask one question at a time and save your answers.'},
+  ];
+  for(const [index,field] of fields.entries())messages.push(
+    {role:'assistant',content:field.label},
+    {role:'user',content:`For question ${index+1}, my observed answer is ${field.type==='boolean'?'yes':`the inspection detail for ${field.key}`}.`},
+  );
+  for(let index=0;index<12;index++)messages.push(
+    {role:'user',content:index===11?'Please correct the customer name to Morgan Examples, with an S at the end. Keep the same street address.':`Please correct inspection note ${index+1}: the cable is supported along the western ceiling joist.`},
+    {role:'assistant',content:'I have your correction. What would you like to check next?'},
+  );
+  const history=wattzunConversationHistory(messages);
+  assert.equal(history.length,184);
+  assert.deepEqual(history,messages,'No question, supplied answer or correction may be shifted out during a full assessment');
+  assert.match(JSON.stringify(history),/Morgan Example/);assert.match(JSON.stringify(history),/152 Elizabeth Street, Melbourne, Victoria 3000/);
+  assert.match(history.at(-2).content,/Morgan Examples/);
+  assert.doesNotThrow(()=>parseWattzunTurn({portal:'trade',scopeId:'test-business',requestId:'full-assessment-history',history},true));
 });
 
 test('operational price-book and customer message facts survive follow-up without becoming proof of a save or send',()=>{

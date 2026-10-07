@@ -32,7 +32,7 @@ function fixture(formKind){
     async team(req){assert.equal(req.headers.get("X-TLink-Business"),"owner-one");assert.equal(req.headers.get("Authorization"),"Bearer synthetic");return team;},
     async job(current,id){assert.equal(current,team);assert.equal(id,"job-one");return job;},
     async selectedJobForm(current,id,formId){assert.equal(current,team);assert.equal(id,"job-one");assert.equal(formId,"form-one");return {job:await deps.job(current,id),form:structuredClone(supporting)};},
-    async saveJobForm(req){const body=await req.json();calls.push(body);assert.equal(body.complete,false);assert.equal(body.baseRevision,supporting.revision);supporting.answers=body.answers;supporting.revision++;if(state.failAfterSave)throw new Error("Connection lost after commit");return Response.json({ok:true,forms:[supporting]});},
+    async saveJobForm(current,currentJob,body){assert.equal(current,team);assert.deepEqual(currentJob,job);calls.push(body);assert.equal(body.complete,false);assert.equal(body.baseRevision,supporting.revision);supporting.answers=body.answers;supporting.revision++;if(state.failAfterSave)throw new Error("Connection lost after commit");return Response.json({ok:true,forms:[supporting]});},
     async loadActivity(current,id){assert.equal(current,team);assert.equal(id,"form-one");return structuredClone(activity);},
     async saveActivity(current,id,revision,answers){calls.push({id,revision,answers});assert.equal(revision,activity.revision);activity.answers=structuredClone(answers);activity.revision++;if(state.failAfterSave)throw new Error("Connection lost after commit");return structuredClone(activity);},
     async loadPack(db,input){assert.equal(db,access.db);assert.equal(input.ownerUid,team.ownerUid);assert.equal(input.actorUid,team.actorUid);assert.equal(input.actorMemberId,team.memberId);assert.equal(input.scope,team.jobScope);return structuredClone(workPack);},
@@ -417,7 +417,7 @@ function completedFixture(kind){
   const f=fixture(kind);
   if(kind==="job_form"){
     f.supporting.template.fields=[field("notes")];f.supporting.answers={notes:"Verified observation"};
-    f.deps.saveJobForm=async req=>{const body=await req.json();f.calls.push(body);assert.equal(body.complete,true);assert.equal(body.baseRevision,f.supporting.revision);f.supporting.answers=structuredClone(body.answers);f.supporting.status="complete";f.supporting.revision++;if(f.state.failAfterSave)throw new Error("Completion acknowledgement lost");return Response.json({ok:true});};
+    f.deps.saveJobForm=async (current,currentJob,body)=>{assert.equal(current,f.team);assert.deepEqual(currentJob,f.job);f.calls.push(body);assert.equal(body.complete,true);assert.equal(body.baseRevision,f.supporting.revision);f.supporting.answers=structuredClone(body.answers);f.supporting.status="complete";f.supporting.revision++;if(f.state.failAfterSave)throw new Error("Completion acknowledgement lost");return Response.json({ok:true});};
   }else if(kind==="activity_form"){
     f.activity.form.fields=[field("notes")];f.activity.answers={notes:"Verified observation"};
     f.deps.submitActivity=async(team,id,revision)=>{assert.equal(team,f.team);assert.equal(id,f.activity.id);assert.equal(revision,f.activity.revision);f.calls.push({kind:"submit"});f.activity.status="submitted_for_creditex_review";f.activity.revision++;if(f.state.failAfterSave)throw new Error("Completion acknowledgement lost");return structuredClone(f.activity);};

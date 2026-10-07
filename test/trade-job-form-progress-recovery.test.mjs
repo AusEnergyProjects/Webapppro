@@ -10,6 +10,13 @@ const patch = ast.statements.find(node => ts.isFunctionDeclaration(node) && node
 const compiled = ts.transpileModule(patch.getText(ast).replace("export ", ""), {
   compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
 }).outputText;
+const serverSource = fs.readFileSync(new URL("../src/lib/trade-job-forms-server.ts", import.meta.url), "utf8");
+const serverAst = ts.createSourceFile("server.ts", serverSource, ts.ScriptTarget.Latest, true);
+const saveDeclarations = serverAst.statements.filter(node => node.name && ["saveTradeJobForm", "TradeJobFormError"].includes(node.name.text));
+assert.equal(saveDeclarations.length, 2);
+const saveCompiled = ts.transpileModule(saveDeclarations.map(node => node.getText(serverAst).replace("export ", "")).join("\n"), {
+  compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+}).outputText;
 
 function fixture(overrides = {}) {
   const row = { id: "form", template_key: "test", template_snapshot: JSON.stringify({ fields: [{ key: "result", type: "text", required: true }] }),
@@ -19,7 +26,7 @@ function fixture(overrides = {}) {
   const dependencies = {
     sameOrigin: () => true,
     cleanAdminText: value => String(value || ""),
-    accessAndJob: async () => ({ access: { ownerUid: "owner", actorUid: "worker", canManageFieldEvidence: true }, job: { revision: 7 } }),
+    accessAndJob: async () => ({ access: { ownerUid: "owner", actorUid: "worker", canManageFieldEvidence: true }, job: { id: "job", revision: 7 } }),
     getD1: () => ({ prepare: () => ({ bind: () => ({ first: async () => row }) }), batch: () => assert.fail("A completed replay must never rewrite its form") }),
     parseJson: (value, fallback) => { try { return JSON.parse(value); } catch { return fallback; } },
     normalizeTradeFormAnswers,
@@ -31,7 +38,9 @@ function fixture(overrides = {}) {
     adminJson: (value, status = 200) => Response.json(value, { status }),
     formError: error => Response.json({ ok: false, error: error.message }, { status: 409 }),
   };
-  const handler = new Function(...Object.keys(dependencies), compiled + "; return PATCH;")(...Object.values(dependencies));
+  const saveTradeJobForm = new Function(...Object.keys(dependencies), saveCompiled + "; return saveTradeJobForm;")(...Object.values(dependencies));
+  const routeDependencies = { ...dependencies, saveTradeJobForm };
+  const handler = new Function(...Object.keys(routeDependencies), compiled + "; return PATCH;")(...Object.values(routeDependencies));
   return { calls, handler };
 }
 

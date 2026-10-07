@@ -43,7 +43,7 @@ function fixture(t, overrides = {}) {
     jobScope: "own", canViewFieldEvidence: true, ...overrides.access };
   const calls = { selected: [], jobs: [], authenticated: 0, manualSelected: [], manualJobs: [] };
   const db = { prepare: sql => ({ bind: (...values) => ({ first: async () => database.prepare(sql).get(...values) || null }) }) };
-  const jobs = functions("src/lib/trade-team-server.ts", ["assignedJob"], { getD1: () => db, isJobMember });
+  const jobs = functions("src/lib/trade-team-server.ts", ["assignedJob", "assignedJobStatement", "requireAssignedJob"], { getD1: () => db, isJobMember });
   const manual = functions("src/lib/creditex-manual-field-server.ts", ["manualFieldJobRow"], {
     CreditexManualFieldError: class extends Error { constructor(code, status, message) { super(message); this.code = code; this.status = status; } },
   });

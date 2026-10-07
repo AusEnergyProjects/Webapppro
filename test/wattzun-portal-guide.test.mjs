@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseWattzunPreferences, parseWattzunTurn, WATTZUN_BRAND_VOICE, WATTZUN_DEFAULT_PREFERENCES, WATTZUN_MAX_HISTORY_TURNS, WATTZUN_MAX_HISTORY_CHARACTERS } from '../src/lib/wattzun-portal.ts';
+import { parseWattzunPreferences, parseWattzunTurn, WATTZUN_BRAND_VOICE, WATTZUN_DEFAULT_PREFERENCES, WATTZUN_MAX_HISTORY_TURNS, WATTZUN_MAX_HISTORY_CHARACTERS, WATTZUN_MAX_HISTORY_BYTES } from '../src/lib/wattzun-portal.ts';
 import { WATTZUN_PORTAL_GUIDE, WATTZUN_TASK_GUIDANCE, wattzunOffTopicReply } from '../src/lib/wattzun-portal-guide.ts';
 
 test('speed-only preferences discard legacy and forged style fields at the shared boundary',()=>{
@@ -9,11 +9,14 @@ test('speed-only preferences discard legacy and forged style fields at the share
   for(const value of [null,[],{},1,{speed:2},{speed:'1'}]) assert.throws(()=>parseWattzunPreferences(value));
 });
 
-test('sustained task conversations retain up to forty turns within the unchanged history budget',()=>{
-  const input={portal:'trade',scopeId:'business',requestId:'synthetic-request-0001',message:'Continue this quote draft.',preferences:{speed:1},history:Array.from({length:40},(_,index)=>({role:index%2?'assistant':'user',content:`Task detail ${index}`}))};
-  assert.equal(WATTZUN_MAX_HISTORY_TURNS,40);assert.equal(WATTZUN_MAX_HISTORY_CHARACTERS,24000);assert.equal(parseWattzunTurn(input).history.length,40);
+test('sustained task conversations retain 256 messages with bounded characters and UTF-8 bytes',()=>{
+  const input={portal:'trade',scopeId:'business',requestId:'synthetic-request-0001',message:'Continue this quote draft.',preferences:{speed:1},history:Array.from({length:256},(_,index)=>({role:index%2?'assistant':'user',content:`Task detail ${index}`}))};
+  assert.equal(WATTZUN_MAX_HISTORY_TURNS,256);assert.equal(WATTZUN_MAX_HISTORY_CHARACTERS,32000);assert.equal(WATTZUN_MAX_HISTORY_BYTES,72000);assert.equal(parseWattzunTurn(input).history.length,256);
   assert.throws(()=>parseWattzunTurn({...input,history:[...input.history,{role:'user',content:'Excess turn'}]}));
   assert.throws(()=>parseWattzunTurn({...input,history:Array.from({length:8},()=>({role:'user',content:'x'.repeat(4000)}))}));
+  const unicode=Array.from({length:7},()=>({role:'user',content:'漢'.repeat(4000)}));
+  assert.ok(JSON.stringify(unicode).length<32000);
+  assert.throws(()=>parseWattzunTurn({...input,history:unicode}),'Oversized UTF-8 input is rejected even within the character budget');
 });
 
 test('known unrelated requests are blocked even after a work topic, without a brittle industry allowlist',()=>{

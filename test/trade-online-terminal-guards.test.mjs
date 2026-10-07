@@ -431,6 +431,9 @@ function formsRoute(db, actualLibrary = false) {
     "../../db": { getD1: () => db },
     "./trade-team-server": { assignedJob: assignedJobFor(db) },
     "./trade-form-library.mjs": formLibrary,
+    "./trade-form-job-progress": { reconcileTradeFormJobProgress: async () => ({ changed: false, stage: "in_progress", blockers: [] }) },
+    "./trade-team-sync-server": syncHelpers,
+    "./asset-lifecycle.mjs": { addMonthsToIsoDate: () => "2027-01-01" },
   });
   return loadTypescriptModule("../src/app/api/trade-job-forms/route.ts", {
     "../../../../db": { getD1: () => db },
@@ -533,6 +536,27 @@ test("form payload reads exact scoped work and answer rows in one ordered two-st
     assert.match(batches[0][0].sql, /SELECT w\.id, w\.service_category/); assert.match(batches[0][1].sql, /FROM trade_job_forms WHERE work_order_id = \? AND firebase_uid = \?/);
     assert.deepEqual(batches[0].map(item => item.values), [["job-1", "owner-1"], ["job-1", "owner-1"]]);
     assert.doesNotMatch(JSON.stringify(payload), /do not expose/);
+  } finally { database.close(); }
+});
+
+test("cancelling during the canonical form read never starts a mutation or progress reconciliation", async () => {
+  const { database, db } = preStartFormFixture();
+  try {
+    const controller = new AbortController(), originalPrepare = db.prepare;
+    const before = mutationState(database);
+    db.prepare = sql => {
+      const statement = originalPrepare(sql);
+      if (!sql.includes("SELECT form.id, form.template_key")) return statement;
+      return { bind(...values) {
+        const bound = statement.bind(...values);
+        return { async first() { const row = await bound.first(); controller.abort(); return row; } };
+      } };
+    };
+    const response = await formsRoute(db, true).PATCH(new Request(patchRequest({ workOrderId: "job-1", formId: "form-1", baseRevision: 3,
+      answers: { work_date: "2026-10-08", technician: "Alex Example" }, complete: false }), { signal: controller.signal }));
+    assert.equal(response.status, 500);
+    assert.equal((await response.json()).ok, false);
+    assert.deepEqual(mutationState(database), before);
   } finally { database.close(); }
 });
 

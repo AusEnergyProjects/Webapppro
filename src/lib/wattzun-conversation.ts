@@ -1,4 +1,4 @@
-import { WATTZUN_MAX_HISTORY_CHARACTERS, WATTZUN_MAX_HISTORY_TURNS, type WattzunReply, type WattzunTurn } from "./wattzun-portal.ts";
+import { WATTZUN_MAX_HISTORY_BYTES, WATTZUN_MAX_HISTORY_CHARACTERS, WATTZUN_MAX_HISTORY_TURNS, type WattzunReply, type WattzunTurn } from "./wattzun-portal.ts";
 
 /** Carry review facts between native audio turns without waiting for a transcript. */
 export function wattzunConversationHistory(messages: Array<WattzunTurn & { reply?: WattzunReply; reviewDraft?: WattzunReply["action"]; requestSummary?: string }>): WattzunTurn[] {
@@ -30,6 +30,11 @@ export function wattzunConversationHistory(messages: Array<WattzunTurn & { reply
       if (group.length) history.push({ role, content: prefix + JSON.stringify({ lines: group }) });
     }
   }
-  while (history.length > WATTZUN_MAX_HISTORY_TURNS || JSON.stringify(history).length > WATTZUN_MAX_HISTORY_CHARACTERS) history.shift();
+  while (history.length) {
+    const serialized = JSON.stringify(history);
+    if (history.length <= WATTZUN_MAX_HISTORY_TURNS && serialized.length <= WATTZUN_MAX_HISTORY_CHARACTERS
+      && new TextEncoder().encode(serialized).byteLength <= WATTZUN_MAX_HISTORY_BYTES) break;
+    history.shift();
+  }
   return history;
 }

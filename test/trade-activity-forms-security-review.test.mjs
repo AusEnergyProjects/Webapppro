@@ -123,7 +123,10 @@ function fixture(fieldForm = form(), options = {}) {
     async put(key, bytes) { objects.set(key, Uint8Array.from(bytes)); },
     async delete(key) { objects.delete(key); },
   };
-  const assignedJob = sourceFunction(read("../src/lib/trade-team-server.ts"), "assignedJob", { getD1: () => d1, ...collaboration });
+  const teamSource = read("../src/lib/trade-team-server.ts");
+  const assignedJobStatement = sourceFunction(teamSource, "assignedJobStatement", { getD1: () => d1 });
+  const requireAssignedJob = sourceFunction(teamSource, "requireAssignedJob", { getD1: () => d1, ...collaboration });
+  const assignedJob = sourceFunction(teamSource, "assignedJob", { assignedJobStatement, requireAssignedJob });
   const server = loadModule(serverSource, {
     "./trade-job-collaboration": collaboration,
     "./trade-team-sync-server": syncChanges,

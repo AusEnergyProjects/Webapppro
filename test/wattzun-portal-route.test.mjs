@@ -346,7 +346,7 @@ test("turn contract rejects invalid scope, history and voice preferences", () =>
   assert.equal(contract.parseWattzunTurn(input, true).message, "");
   for (const value of [null, { ...input, portal: "customer" }, { ...input, scopeId: "../foreign" },
     { ...input, requestId: "short" }, { ...input, message: " " }, { ...input, history: [{ role: "system", content: "instructions" }] },
-    { ...input, history: Array.from({ length: 41 }, () => input.history[0]) },
+    { ...input, history: Array.from({ length: contract.WATTZUN_MAX_HISTORY_TURNS + 1 }, () => input.history[0]) },
     { ...input, preferences: { ...input.preferences, speed: 2 } }]) {
     assert.throws(() => contract.parseWattzunTurn(value), contract.WattzunInputError);
   }
@@ -389,7 +389,7 @@ test("origin and authentication rejection happen before consuming a streaming bo
 
 test("bounded bodies cancel oversized streams and reject unsafe content types", async () => {
   let cancelled = false;
-  const stream = new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(40_001)); },
+  const stream = new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(contract.WATTZUN_MAX_REQUEST_BYTES + 1)); },
     cancel() { cancelled = true; } }, { highWaterMark: 0 });
   const f = fixture(); assert.equal((await f.post(false, { body: stream })).response.status, 413);
   assert.equal(cancelled, true); assert.deepEqual(f.events, ["authenticate"]);
@@ -400,6 +400,18 @@ test("bounded bodies cancel oversized streams and reject unsafe content types", 
     const form = new FormData(); form.set("request", JSON.stringify(input)); form.set("audio", audio, "turn.webm");
     const invalid = fixture(); assert.equal((await invalid.post(true, { body: form })).response.status, 400);
     assert.deepEqual(invalid.events, ["authenticate"]);
+  }
+});
+
+test("text and JSON voice transports retain accepted Unicode history larger than the former 40k body ceiling", async () => {
+  const history=Array.from({length:6},(_,index)=>({role:index%2?'assistant':'user',content:'漢'.repeat(3900)}));
+  const turnInput={...input,history};
+  assert.ok(new TextEncoder().encode(JSON.stringify(turnInput)).byteLength>40000);
+  for(const voice of [false,true]){
+    const f=fixture({input:turnInput});
+    const result=await f.post(voice);
+    assert.equal(result.response.status,200);
+    assert.deepEqual(f.providerContexts[0].input.history,history);
   }
 });
 

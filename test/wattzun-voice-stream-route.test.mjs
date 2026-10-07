@@ -391,6 +391,19 @@ function guidedRouteFixture() {
     control: () => route.postWattzunFormGuide(new Request('https://example.test/api/wattzun/form-guide', { method: 'POST', headers: { origin: 'https://example.test', 'content-type': 'application/json' }, body: JSON.stringify({ ...turnInput, message: turnInput.message || 'Start guided form completion' }) }), f.deps) };
 }
 
+test('native voice and guided control transports accept the full shared Unicode memory budget', async () => {
+  const history=Array.from({length:6},(_,index)=>({role:index%2?'assistant':'user',content:'漢'.repeat(3900)}));
+  const turnInput={...input,history};
+  assert.ok(new TextEncoder().encode(JSON.stringify(turnInput)).byteLength>40000);
+  const f=fixture({input:turnInput});
+  const {response}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.equal(response.status,200);
+  assert.deepEqual(f.providerContexts[0].input.history,history);
+  await response.body.cancel();
+  const guided=guidedRouteFixture();guided.turnInput.history=history;guided.turnInput.formGuide={...guided.turnInput.formGuide,stage:'start'};
+  const controlled=await guided.control();assert.equal(controlled.status,200);await controlled.body.cancel();
+});
+
 test('deterministic guided start speaks the real first question, counts its prepared speech and never calls the model or saves', async () => {
   const f = guidedRouteFixture(); f.turnInput.formGuide = { ...f.turnInput.formGuide, stage: 'start' };
   const response = await f.control(); assert.equal(response.status, 200);

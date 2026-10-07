@@ -161,11 +161,27 @@ async function bytes(stream) {
   return chunks;
 }
 
+test("speech completion measures approved narration without logging its contents", async () => {
+  const f = fixture();
+  const prepared = await f.prepareWattzunRealtimeTurn(request());
+  await bytes(prepared.audio);
+  const complete = f.infos.find(([event]) => event === "WATTZUN_REALTIME_SPEECH_COMPLETE");
+  assert.deepEqual(complete, ["WATTZUN_REALTIME_SPEECH_COMPLETE", {
+    approvedCharacters: answer.message.length, spokenCharacters: answer.message.length,
+    matchesApprovedWords: true, audioBytes: 4,
+  }]);
+  assert.doesNotMatch(JSON.stringify(f.infos), /Open Schedule|private-actor|private-business|fixture-key/);
+  const drift = fixture({ reply: { ...answer, message: "Open Jobs." } });
+  const other = await drift.prepareWattzunRealtimeTurn(request());
+  assert.deepEqual(await bytes(other.audio), [0x10, 0x80, 0x20, 0x01]);
+  assert.equal(drift.infos.find(([event]) => event === "WATTZUN_REALTIME_SPEECH_COMPLETE")[1].matchesApprovedWords, false);
+});
+
 const utf8Bytes = value => new TextEncoder().encode(typeof value === "string" ? value : JSON.stringify(value)).byteLength;
-function maximumHistory(character = "H") {
-  const history = Array.from({ length: 6 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: character.repeat(4000) }));
-  history[5].content = history[5].content.slice(0, 4000 - (JSON.stringify(history).length - portal.WATTZUN_MAX_HISTORY_CHARACTERS));
-  assert.equal(JSON.stringify(history).length, portal.WATTZUN_MAX_HISTORY_CHARACTERS);
+function maximumHistory(character = "H", characterLimit = portal.WATTZUN_MAX_HISTORY_CHARACTERS) {
+  const history = Array.from({ length: Math.ceil(characterLimit / 4000) }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: character.repeat(4000) }));
+  history.at(-1).content = history.at(-1).content.slice(0, 4000 - (JSON.stringify(history).length - characterLimit));
+  assert.equal(JSON.stringify(history).length, characterLimit);
   return history;
 }
 function maximumFormContext() {
@@ -843,6 +859,33 @@ test("native guided completion validates the actual present audio request before
   }
 });
 
+test("literal current speech controls guided completion even when the model summary paraphrases or contradicts consent", async () => {
+  const context = syntheticWorkContext({ reference: { kind: 'trade_form', formKind: 'job_form', recordId: 'form-one', jobId: 'job-one' }, sourceSha256: '1'.repeat(64) });
+  const sessionId = '00000000-0000-4000-8000-000000000001';
+  const progress = { sessionId, reference: context.reference, requestedReference: context.reference, recordId: 'form-one', revision: 1, sourceSha256: context.sourceSha256,
+    state: 'ready_to_complete', next: null, counts: { visible: 1, answered: 1, unanswered: 0, evidenceMissing: 0, manualMissing: 0, skipped: 0 }, skippedFieldKeys: [], completion: { ready: true, missing: [], status: 'draft' } };
+  for (const [transcript, requestSummary, allowed] of [
+    ['Yes, complete this form now.', 'User explicitly approved completion of the form in ready_to_complete state with no further questions.', true],
+    ['No, do not complete this form.', 'Complete this form now', false],
+    ['Would you complete this form?', 'Complete this form now', false],
+  ]) {
+    const f = fixture({ transcript, requestSummary, reply: { ...answer, message: 'Checking.', linkIds: [], action: { kind: 'complete_form' } } });
+    let executed = 0;
+    const options = request({ workContext: context, formGuideProgress: progress, transformReply: async (reply, currentRequest) => {
+      executed++;
+      assert.equal(currentRequest, transcript);
+      assert.equal(reply.action.kind, 'complete_form');
+      assert.equal(reply.action.formId, 'form-one');
+      return { ...reply, action: null, message: 'The form is complete.' };
+    } });
+    options.input = { ...options.input, workReference: context.reference,
+      formGuide: { sessionId, stage: 'continue', authorization: 'ordinary_form_answers', sourceSha256: context.sourceSha256, questionKey: '', skippedFieldKeys: [] } };
+    if (allowed) { const result = await f.prepareWattzunRealtimeTurn(options); await bytes(result.audio); }
+    else await assert.rejects(f.prepareWattzunRealtimeTurn(options), safeError);
+    assert.equal(executed, allowed ? 1 : 0);
+  }
+});
+
 test("native compact checkbox proposals bind the current form and speak only the canonical transformed result", async () => {
   const field = { fieldKey: 'access_confirmed', label: 'Safe access and work boundaries confirmed', type: 'checkbox', options: [], canDraft: true, hasSavedAnswer: false, value: false };
   const context = syntheticWorkContext({ reference: { kind: 'trade_form', formKind: 'job_form', recordId: 'form-one', jobId: 'job-one' },
@@ -1029,8 +1072,8 @@ test("dense Unicode conversation facts retain the reasoning model and full histo
   assert.ok(f.reservations[0].estimatedMicroUsd < 150000 + 30000 * 1.25);
 });
 
-test("maximum accepted Unicode history is retained without a smaller arbitrary byte ceiling", async () => {
-  const options = request(); options.input.history = maximumHistory("漢");
+test("the previously accepted 24k Unicode history is retained within the shared byte ceiling", async () => {
+  const options = request(); options.input.history = maximumHistory("漢", 24_000);
   assert.deepEqual(portal.parseWattzunTurn(options.input, true).history, options.input.history);
   assert.equal(utf8Bytes(options.input.history), 71_620);
   const f = fixture(), prepared = await f.prepareWattzunRealtimeTurn(options); await bytes(prepared.audio);

@@ -1,4 +1,4 @@
-import { WattzunInputError, WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_WAV_AUDIO_BYTES, WATTZUN_VOICE_STREAM_TYPE, WATTZUN_REALTIME_VOICE_STREAM_TYPE, isWattzunPortal, parseWattzunTurn,
+import { WattzunInputError, WATTZUN_MAX_AUDIO_BYTES, WATTZUN_MAX_WAV_AUDIO_BYTES, WATTZUN_MAX_REQUEST_BYTES, WATTZUN_VOICE_STREAM_TYPE, WATTZUN_REALTIME_VOICE_STREAM_TYPE, isWattzunPortal, parseWattzunTurn,
   type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurnInput } from "./wattzun-portal";
 import { authenticateWattzun, listWattzunScopes, requireWattzunAccess, wattzunAccessFailure,
   WattzunAccessError, type WattzunAccess } from "./wattzun-portal-access-server";
@@ -418,7 +418,7 @@ export async function postWattzunPortal(request: Request, deps = defaults): Prom
     await timing.run("auth", () => deps.authenticate(request));
     requireOpenConversation(request);
     phase = "input";
-    const bytes = await boundedBody(request, 40_000);
+    const bytes = await boundedBody(request, WATTZUN_MAX_REQUEST_BYTES);
     if (!bytes) return json({ ok: false, error: "The conversation is too large. Start a new conversation." }, 413);
     const input = parseWattzunTurn(JSON.parse(new TextDecoder().decode(bytes)));
     phase = "context";
@@ -462,12 +462,12 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
   try {
     await timing.run("auth", () => deps.authenticate(request));
     requireOpenConversation(request);
-    const bytes = await boundedBody(request, maximumAudio + 50_000);
+    const bytes = await boundedBody(request, maximumAudio + WATTZUN_MAX_REQUEST_BYTES + 10_000);
     if (!bytes) return json({ ok: false, error: "That voice turn is too large. Keep it under 45 seconds." }, 413);
     const form = await new Response(bytes, { headers: { "Content-Type": contentType } }).formData();
     const raw = form.get("request");
     const audio = form.get("audio");
-    if (typeof raw !== "string" || new TextEncoder().encode(raw).byteLength > 40_000 || !(audio instanceof Blob)
+    if (typeof raw !== "string" || new TextEncoder().encode(raw).byteLength > WATTZUN_MAX_REQUEST_BYTES || !(audio instanceof Blob)
       || audio.size < 100 || audio.size > maximumAudio
       || !/^audio\/(webm|mp4|mpeg|wav|ogg)(;codecs=[a-zA-Z0-9., -]+)?$/.test(audio.type)) {
       throw new WattzunInputError(realtime ? "Use a supported native microphone recording under 45 seconds." : "Use a supported microphone recording smaller than 2 MB.");
@@ -562,7 +562,7 @@ export async function postWattzunFormGuide(request: Request, deps = defaults): P
   const timing = turnTimer(); let audio: ReadableStream<Uint8Array> | undefined, handedOff = false, guideRequestId: string | undefined;
   try {
     await timing.run("auth", () => deps.authenticate(request)); requireOpenConversation(request);
-    const bytes = await boundedBody(request, 40_000);
+    const bytes = await boundedBody(request, WATTZUN_MAX_REQUEST_BYTES);
     if (!bytes) return json({ ok: false, error: "This form guide request is too large." }, 413);
     const input = parseWattzunTurn(JSON.parse(new TextDecoder().decode(bytes)));
     if (!input.formGuide || input.portal !== "trade" || input.workReference?.kind !== "trade_form" || input.workflowProposal || input.workflowReviewId) throw new WattzunInputError("Open the current TLink form and start its guide.");

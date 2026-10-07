@@ -1,4 +1,3 @@
-import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
@@ -7,17 +6,13 @@ import {
   jobSyncChangeStatements,
   nextJobRevision,
 } from "@/lib/trade-team-sync-server";
-import { normalizeTradeFormAnswers, tradeFormCompletion } from "@/lib/trade-form-library.mjs";
 import { publishedTradeFormTemplate, publishedTradeFormTemplatesFor } from "@/lib/trade-form-templates-server";
-import { addMonthsToIsoDate } from "@/lib/asset-lifecycle.mjs";
-import { TRADE_JOB_FORM_COLUMNS, tradeJobFormProjection } from "@/lib/trade-job-forms-server";
+import { TRADE_JOB_FORM_COLUMNS, tradeJobFormProjection, saveTradeJobForm, TradeJobFormError } from "@/lib/trade-job-forms-server";
 
 export const runtime = "edge";
 
-const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
-const PHONE_PATTERN = /(?:\+?\d[\s().-]*){8,}/;
-
 function formError(error: unknown) {
+  if (error instanceof TradeJobFormError) return adminJson({ ok: false, error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
@@ -32,22 +27,6 @@ function formError(error: unknown) {
   if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Imported jobs must first be started in TLink. Completed and cancelled jobs are locked." }, 409);
   if (code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job changed elsewhere. Refresh it before saving." }, 409);
   return adminJson({ ok: false, error: "The field form request could not be completed." }, 500);
-}
-
-function parseJson(value: unknown, fallback: unknown) {
-  try { return JSON.parse(String(value || "")); } catch { return fallback; }
-}
-
-function containsPrivateData(value: Record<string, unknown>, template: Record<string, unknown>) {
-  const dateFields = new Set<string>();
-  for (const field of Array.isArray(template.fields) ? template.fields : []) {
-    if (field && typeof field === "object" && field.type === "date" && typeof field.key === "string") dateFields.add(field.key);
-  }
-  // Canonical normalization has already rejected invalid dates. Exempt only an
-  // ISO date in its actual date field, never date-like text in ordinary answers.
-  const text = JSON.stringify(Object.fromEntries(Object.entries(value).filter(([key, answer]) =>
-    !dateFields.has(key) || typeof answer !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(answer))));
-  return EMAIL_PATTERN.test(text) || PHONE_PATTERN.test(text);
 }
 
 async function formPayload(ownerUid: string, workOrderId: string) {
@@ -172,118 +151,9 @@ export async function PATCH(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const { access, job } = await accessAndJob(request, workOrderId);
-    if (!access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
-    const formId = cleanAdminText(body.formId, 180);
-    const row = await getD1().prepare(`SELECT form.id, form.template_key, form.template_snapshot, form.answers, form.completed_by_uid,
-        form.status, form.revision, work_order.stage job_stage, work_order.revision job_revision
-      FROM trade_job_forms form
-      JOIN trade_work_orders work_order
-        ON work_order.id = form.work_order_id
-        AND work_order.firebase_uid = form.firebase_uid
-      WHERE form.id = ? AND form.work_order_id = ? AND form.firebase_uid = ?
-        AND work_order.record_status = 'active'`).bind(formId, workOrderId, access.ownerUid)
-      .first<Record<string, unknown>>();
-    if (!row) return adminJson({ ok: false, error: "Field form not found." }, 404);
-    if (Number(row.job_revision) !== Number(job.revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
-    const template = parseJson(row.template_snapshot, null) as Record<string, unknown> | null;
-    if (!template || !Array.isArray(template.fields)) return adminJson({ ok: false, error: "The saved form template is invalid." }, 409);
-    const replayRevision = Number(body.baseRevision);
-    if (row.status === "complete" && body.complete === true && row.completed_by_uid === access.actorUid
-      && Number.isInteger(replayRevision) && replayRevision + 1 === Number(row.revision)
-      && !["imported", "cancelled"].includes(String(row.job_stage))
-      && JSON.stringify(normalizeTradeFormAnswers(template, body.answers))
-        === JSON.stringify(normalizeTradeFormAnswers(template, parseJson(row.answers, {})))) {
-      // Retry an acknowledged identity without changing the immutable form or its original timestamps.
-      const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
-      return adminJson({ ok: true, duplicate: true, jobProgress, ...(await formPayload(access.ownerUid, workOrderId)) });
-    }
-    if (["imported", "completed", "cancelled"].includes(String(row.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
-    if (row.status === "complete") return adminJson({ ok: false, error: "This completed form is locked. Start a newer template version if the record must be replaced." }, 409);
-    const baseRevision = Number(body.baseRevision || row.revision);
-    if (!Number.isInteger(baseRevision) || baseRevision !== Number(row.revision)) {
-      return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This form changed elsewhere. Refresh it before saving." }, 409);
-    }
-    const answers = normalizeTradeFormAnswers(template, body.answers);
-    if (containsPrivateData(answers, template)) return adminJson({ ok: false, error: "Keep customer contact details and phone numbers out of technical field forms." }, 400);
-    const completion = tradeFormCompletion(template, answers);
-    const complete = body.complete === true;
-    if (complete && !completion.ready) return adminJson({ ok: false, error: `Complete the required fields: ${completion.missing.join(", ")}.` }, 400);
-    const now = new Date().toISOString();
-    const revision = nextJobRevision(job.revision);
-    const formRevision = nextJobRevision(row.revision);
-    const jobStage = String(row.job_stage);
-    const answerJson = JSON.stringify(answers);
-    const formStatus = complete ? "complete" : "draft";
-    const lifecycleStatements: D1PreparedStatement[] = [];
-    if (complete && row.template_key === "service-visit-support" && job.source_type === "recurring_service" && job.source_reference) {
-      const plan = await getD1().prepare(`SELECT id, asset_id, handover_pack_id, work_order_id, cadence_months
-        FROM trade_asset_service_plans WHERE id = ? AND firebase_uid = ?`)
-        .bind(job.source_reference, access.ownerUid).first<Record<string, unknown>>();
-      if (plan) {
-        const servicedAt = String(answers.work_date || now.slice(0, 10));
-        const nextDueAt = addMonthsToIsoDate(servicedAt, Number(plan.cadence_months));
-        lifecycleStatements.push(
-          getD1().prepare(`INSERT INTO trade_asset_service_events
-            (id, service_plan_id, asset_id, handover_pack_id, work_order_id, firebase_uid, event_type,
-             serviced_at, summary, provider_reference, next_due_at, created_at, updated_at)
-            SELECT ?, ?, ?, ?, ?, ?, 'service_completed', ?, 'Scheduled service form completed.', ?, ?, ?, ?
-            WHERE NOT EXISTS (SELECT 1 FROM trade_asset_service_events
-              WHERE service_plan_id = ? AND event_type = 'service_completed' AND provider_reference = ?)`)
-            .bind(crypto.randomUUID(), plan.id, plan.asset_id, plan.handover_pack_id, plan.work_order_id, access.ownerUid,
-              servicedAt, workOrderId, nextDueAt, now, now, plan.id, workOrderId),
-          getD1().prepare(`UPDATE trade_asset_service_plans SET next_due_at = ?, status = 'active', updated_at = ?
-            WHERE id = ? AND firebase_uid = ?`).bind(nextDueAt, now, plan.id, access.ownerUid),
-        );
-      }
-    }
-    await guardedOnlineChildMutationBatch(getD1(), [
-      getD1().prepare(`UPDATE trade_job_forms SET answers = ?, status = ?, revision = ?,
-        completed_by_uid = ?, completed_at = ?, updated_at = ?
-        WHERE id = ? AND work_order_id = ? AND firebase_uid = ? AND revision = ?
-          AND status <> 'complete'
-          AND EXISTS (
-            SELECT 1 FROM trade_work_orders work_order
-            WHERE work_order.id = trade_job_forms.work_order_id
-              AND work_order.firebase_uid = trade_job_forms.firebase_uid
-              AND work_order.record_status = 'active'
-              AND work_order.stage = ?
-              AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
-              AND work_order.revision = ?
-          )`)
-        .bind(answerJson, formStatus, formRevision, complete ? access.actorUid : "",
-          complete ? now : "", now, formId, workOrderId, access.ownerUid, baseRevision,
-          jobStage, Number(row.job_revision)),
-      getD1().prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
-        WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
-          AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?
-          AND EXISTS (
-            SELECT 1 FROM trade_job_forms child
-            WHERE child.id = ? AND child.work_order_id = trade_work_orders.id
-              AND child.firebase_uid = trade_work_orders.firebase_uid
-              AND child.answers = ? AND child.status = ?
-              AND child.revision = ? AND child.updated_at = ?
-          )`)
-        .bind(revision, now, workOrderId, access.ownerUid, jobStage, Number(row.job_revision),
-          formId, answerJson, formStatus, formRevision, now),
-      getD1().prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)`)
-        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, complete ? "field_form_completed" : "field_form_saved",
-          complete ? `${String(template.name || "Field form")} completed.` : `${String(template.name || "Field form")} saved.`, now),
-      ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
-          audienceMemberId: String(job.assignee_member_id || "") }),
-      ...lifecycleStatements,
-    ], {
-      childKind: "form",
-      childId: formId,
-      childRevision: formRevision,
-      jobRevision: revision,
-      jobStage,
-      ownerUid: access.ownerUid,
-      updatedAt: now,
-      workOrderId,
-    });
-    const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
-    return adminJson({ ok: true, jobProgress, ...(await formPayload(access.ownerUid, workOrderId)) });
+    const result = await saveTradeJobForm(access, job, { workOrderId, formId: cleanAdminText(body.formId, 180),
+      baseRevision: body.baseRevision, answers: body.answers, complete: body.complete }, request.signal);
+    return adminJson({ ok: true, ...result, ...(await formPayload(access.ownerUid, workOrderId)) });
   } catch (error) {
     if (error instanceof SyntaxError) return adminJson({ ok: false, error: "Invalid field form request." }, 400);
     return formError(error);

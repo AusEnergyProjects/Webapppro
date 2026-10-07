@@ -1,6 +1,6 @@
 import type { WattzunAccess } from "./wattzun-portal-access-server.ts";
-import type { TeamAccess } from "./trade-team-server.ts";
-import type { TradeJobFormProjection } from "./trade-job-forms-server.ts";
+import type { TeamAccess, AssignedTradeJob } from "./trade-team-server.ts";
+import type { TradeJobFormProjection, saveTradeJobForm } from "./trade-job-forms-server.ts";
 import type { ActivityRecord, ActivityAnswers } from "./trade-activity-form-types.ts";
 import type { PiesaRecord } from "./veu-electrical-assessment.ts";
 import type { PiesaMutationReceipt } from "./trade-veu-electrical-assessment-server.ts";
@@ -24,7 +24,7 @@ type Answer = string | number | boolean;
 type FormAnswer = Answer | string[];
 type Answers = Record<string, Answer>;
 type Row = Record<string, unknown>;
-type Job = { id: string; stage: string; revision: number };
+type Job = AssignedTradeJob;
 type Field = { key: string; label: string; type: string; required: boolean; writable: boolean;
   options: ReadonlyArray<{ value: string; label: string }>; maximumLength: number; minimumLength: number;
   minimumNumber: number | null; maximumNumber: number | null; numberStep: number | null;
@@ -36,7 +36,7 @@ type Field = { key: string; label: string; type: string; required: boolean; writ
 type JobTemplateField = { key: string; label: string; type: string; required: boolean; options: string[]; maxLength: number;
   phase: "before" | "after"; section: string; condition?: { fieldKey: string; equals?: Answer; notEquals?: Answer } };
 type JobTemplate = { fields: JobTemplateField[] };
-type Snapshot = { reference: Reference; title: string; href: string; recordId: string; revision: number; editable: boolean;
+type Snapshot = { reference: Reference; job: Job; title: string; href: string; recordId: string; revision: number; editable: boolean;
   schemaSha256: string; answers: Row; fields: Field[]; sourceSha256: string;
   status: string; completion: { ready: boolean; missing: Array<{ key: string; label: string }> };
   jobTemplate?: JobTemplate; activity?: ActivityRecord; assessment?: PiesaRecord; pack?: CreditexAssignedActivityWorkPackProjection };
@@ -90,7 +90,7 @@ export type WattzunFormDependencies = {
   team(request: Request): Promise<TeamAccess>;
   job(access: TeamAccess, jobId: string): Promise<Job>;
   selectedJobForm(access: TeamAccess, jobId: string, formId: string): Promise<{ job: Job; form: TradeJobFormProjection }>;
-  saveJobForm(request: Request): Promise<Response>;
+  saveJobForm: typeof saveTradeJobForm;
   loadActivity(access: TeamAccess, id: string): Promise<ActivityRecord>;
   saveActivity(access: TeamAccess, id: string, revision: number, answers: ActivityAnswers): Promise<ActivityRecord>;
   loadPack(db: D1Database, input: CreditexWorkPackTradeScope & { caseInstanceId: string }): Promise<CreditexAssignedActivityWorkPackProjection>;
@@ -109,7 +109,7 @@ const defaults: WattzunFormDependencies = {
   team: async request => (await import("./trade-team-server.ts")).requireInstallerTeamAccess(request),
   job: async (access, id) => (await import("./trade-team-server.ts")).assignedJob(access, id),
   selectedJobForm: async (team, jobId, formId) => (await import("./trade-job-forms-server.ts")).readSelectedTradeJobForm(team, jobId, formId),
-  saveJobForm: async request => (await import("@/app/api/trade-job-forms/route")).PATCH(request),
+  saveJobForm: async (team, job, input, signal) => (await import("./trade-job-forms-server.ts")).saveTradeJobForm(team, job, input, signal),
   loadActivity: async (access, id) => (await import("./trade-activity-forms-server.ts")).loadActivityRecord(access, id),
   saveActivity: async (access, id, revision, answers) => (await import("./trade-activity-forms-server.ts")).saveActivityAnswers(access, id, revision, answers),
   loadPack: async (db, input) => (await import("./creditex-activity-work-pack-server.ts")).loadAssignedCreditexActivityWorkPack(db, input),
@@ -150,7 +150,7 @@ async function canonicalCall<T>(operation: () => Promise<T>): Promise<T> {
   try { return await operation(); }
   catch (error) {
     if (!(error instanceof Error)) throw error;
-    if (["CreditexActivityWorkPackServerError", "PiesaError"].includes(error.name) && "status" in error && typeof error.status === "number" && error.status >= 400 && error.status <= 599) {
+    if (["CreditexActivityWorkPackServerError", "PiesaError", "TradeJobFormError"].includes(error.name) && "status" in error && typeof error.status === "number" && error.status >= 400 && error.status <= 599) {
       throw new WattzunFormError(error.status, error.message);
     }
     const known: Record<string, [number, string]> = {
@@ -166,6 +166,9 @@ async function canonicalCall<T>(operation: () => Promise<T>): Promise<T> {
       JOB_NOT_FOUND: [404, "This job was not found in your business."],
       JOB_FORM_NOT_FOUND: [404, "This form was not found on the selected job."],
       FIELD_EVIDENCE_VIEW_REQUIRED: [403, "Your current team access does not allow these form answers."],
+      FIELD_EVIDENCE_MANAGEMENT_REQUIRED: [403, "Your current team access does not allow these form changes."],
+      ONLINE_MUTATION_CONFLICT: [409, "This job changed while saving. Review its current form before continuing."],
+      TERMINAL_JOB_LOCKED: [409, "This job is closed and its forms cannot be changed."],
       FORM_PAYLOAD_UNAVAILABLE: [503, "The selected form could not be read. Keep this question open and try again."],
     };
     const mapped = known[error.message];
@@ -173,10 +176,9 @@ async function canonicalCall<T>(operation: () => Promise<T>): Promise<T> {
     throw error;
   }
 }
-function scoped(request: Request, access: WattzunAccess, pathname?: string, body?: object): Request {
+function scoped(request: Request, access: WattzunAccess): Request {
   const headers = new Headers(request.headers); headers.set("X-TLink-Business", access.scope.scopeId); headers.delete("Content-Length");
-  if (body) headers.set("Content-Type", "application/json");
-  return new Request(pathname ? new URL(pathname, request.url) : request.url, { method: body ? "PATCH" : "GET", headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+  return new Request(request.url, { method: "GET", headers, signal: request.signal });
 }
 async function teamAuthority(request: Request, access: WattzunAccess, reference: Reference, mutate: boolean, deps: WattzunFormDependencies, verifiedTeam?: TeamAccess) {
   if (access.scope.portal !== "trade" || !validReference(reference)) throw new WattzunFormError(403, "Choose a form in your current TLink business.");
@@ -209,12 +211,6 @@ function jobTemplate(raw: unknown): JobTemplate {
   if (new Set(fields.map(field => field.key)).size !== fields.length) throw new WattzunFormError(409, "The form contains duplicate questions.");
   return { fields };
 }
-async function body(response: Response): Promise<Row> {
-  const raw: unknown = await response.json();
-  if (!response.ok || !record(raw) || raw.ok !== true) throw new WattzunFormError(response.ok ? 503 : response.status, record(raw) && typeof raw.error === "string" ? raw.error.slice(0, 1000) : "The form could not be loaded or saved.");
-  return raw;
-}
-
 async function load(request: Request, access: WattzunAccess, reference: Reference, mutate: boolean, deps: WattzunFormDependencies, verifiedTeam?: TeamAccess): Promise<{ snapshot: Snapshot; team: TeamAccess }> {
   const team = await teamAuthority(request, access, reference, mutate, deps, verifiedTeam);
   const selected = reference.formKind === "job_form"
@@ -356,7 +352,7 @@ async function load(request: Request, access: WattzunAccess, reference: Referenc
   const schemaSha256 = await hash(schema);
   const sourceSha256 = await hash({ ownerUid: access.scope.scopeId, actorUid: access.actorUid, reference: { ...reference, recordId }, revision: currentRevision, schemaSha256, answers: allAnswers, editable, status,
     ...(assessment ? { initialAttestation: assessment.initialAttestation ?? null } : {}), ...(pack ? { governed: { responseSha256: pack.instance.responseSha256, dependencies: pack.response.dependencyResolutions, completion: pack.completion, calculatorPendingReviews: pack.calculatorPendingReviews, referenceDocuments: pack.referenceDocuments } } : {}) });
-  return { team, snapshot: { reference, title, href, recordId, revision: currentRevision, editable, schemaSha256, answers: allAnswers, fields, sourceSha256,
+  return { team, snapshot: { reference, job, title, href, recordId, revision: currentRevision, editable, schemaSha256, answers: allAnswers, fields, sourceSha256,
     status, completion,
     ...(supporting ? { jobTemplate: supporting } : {}), ...(activity ? { activity } : {}), ...(assessment ? { assessment } : {}), ...(pack ? { pack } : {}) } };
 }
@@ -685,7 +681,7 @@ async function executeForm(request: Request, access: WattzunAccess, prepared: Wa
   const payload = prepared.payload;
   request.signal.throwIfAborted();
   if (payload.formKind === "job_form") {
-    await body(await deps.saveJobForm(scoped(request, access, "/api/trade-job-forms", { workOrderId: prepared.reference.jobId, formId: prepared.reference.recordId, baseRevision: payload.baseRevision, answers: payload.answers, complete: false })));
+    await canonicalCall(() => deps.saveJobForm(team, snapshot.job, { workOrderId: prepared.reference.jobId, formId: prepared.reference.recordId, baseRevision: payload.baseRevision, answers: payload.answers, complete: false }, request.signal));
   } else if (payload.formKind === "activity_form") {
     await canonicalCall(() => deps.saveActivity(team, prepared.reference.recordId, payload.expectedRevision, payload.answers));
   } else if (payload.formKind === "veu_electrical") {
@@ -791,7 +787,7 @@ async function executeCompletion(request: Request, access: WattzunAccess, prepar
   await verifyCompletionSource(snapshot, prepared);
   request.signal.throwIfAborted();
   if (snapshot.reference.formKind === "job_form") {
-    await body(await deps.saveJobForm(scoped(request, access, "/api/trade-job-forms", { workOrderId: snapshot.reference.jobId, formId: snapshot.recordId, baseRevision: snapshot.revision, answers: snapshot.answers, complete: true })));
+    await canonicalCall(() => deps.saveJobForm(team, snapshot.job, { workOrderId: snapshot.reference.jobId, formId: snapshot.recordId, baseRevision: snapshot.revision, answers: snapshot.answers, complete: true }, request.signal));
   } else if (snapshot.reference.formKind === "activity_form") {
     await canonicalCall(() => deps.submitActivity(team, snapshot.recordId, snapshot.revision));
   } else if (snapshot.reference.formKind === "veu_electrical") {

@@ -154,11 +154,18 @@ export function canonicalTlinkSchemaGuardSql(sql: string) {
 }
 
 async function requireTlinkSchemaMigrations(database: D1Database) {
+  const tables = Object.entries(REQUIRED_COLUMNS);
+  // Check the same migration prerequisites in one D1 round trip. A cold voice
+  // request must not pay one network round trip for every table in the portal.
+  const results = await database.batch<{ name: string }>(tables.map(([table]) =>
+    database.prepare(`PRAGMA table_xinfo(\`${table}\`)`)));
+  if (results.length !== tables.length || results.some((result) =>
+    !result.success || !Array.isArray(result.results))) {
+    throw new Error("TLINK_SCHEMA_VERIFICATION_UNAVAILABLE");
+  }
   const missing: string[] = [];
-  for (const [table, required] of Object.entries(REQUIRED_COLUMNS)) {
-    const columns = await database.prepare(`PRAGMA table_xinfo(\`${table}\`)`)
-      .all<{ name: string }>();
-    const installed = new Set(columns.results.map((row) => String(row.name)));
+  for (const [index, [table, required]] of tables.entries()) {
+    const installed = new Set(results[index].results.map((row) => String(row.name)));
     if (!installed.size) {
       missing.push(`table:${table}`);
       continue;

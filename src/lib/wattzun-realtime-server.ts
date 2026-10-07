@@ -250,6 +250,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   const instructions = [contract.instructions,
     "This is a live voice conversation: one or two short sentences, combined message and all questions normally under 45 words. For clarification, briefly acknowledge and ask the next missing detail directly: use one concise next necessary question in questions without duplicating it in message. Do not narrate the whole workflow, repeat boilerplate or list later intake details before that question. Add questions only if essential. Name supplied navigation buttons. Explain permissions only for missing-access questions. The word target must not omit a material fact or required review detail.",
     "Ask for ONE logical detail at a time. Phone number and email are two different questions; never bundle them. A complete street address is one detail. Before asking, read the earlier user answers and corrections in history. Carry those literal values forward and ask only the next unanswered detail. Acknowledge in a few words; do not describe missing later fields or the review process during intake.",
+    "Use natural workplace language. When recalling an answer the user supplied, state the actual detail directly, without internal terms such as 'interpreted input' or 'customer profile setup'. Keep genuine uncertainty explicit. Explain unsaved or unsent status when reviewing an action or answering a status question; do not repeat that disclaimer after every ordinary intake answer. Put the next question only in questions, not again in message.",
     "requestSummary is private conversation memory, not a saved record; never speak it. Copy the current user's actual words and literal values, including name spelling, full street address, contact details, scope, quantities and prices. Never replace an answer with 'the user provided an address/name/details' or describe missing workflow requirements here: that would lose their answer. Mark words you could not hear clearly. Always under 1800 characters. For explicit approval retain the actual present approval or selection phrase, e.g. 'yes send it', 'I confirm this declaration', 'use the second one', 'complete this form now'. Never substitute 'user confirms', turn an ordinary answer into completion consent, or treat questions, quotations or future intent as approval.",
     `Call ${TOOL} exactly once for every answer, clarification or scope reminder. Submit exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary, using their schema including unused arrays/nulls. Never nest the reply content under a reply property or flatten action fields. Do not output an assistant message, text, audio or preamble. This read-only proposal requires validation; it cannot save or send.`,
     'Clarification argument shape example: {"message":"I can prepare that.","questions":["What detail should the draft include?"],"linkIds":[],"action":null,"lookup":null,"requestSummary":"User requests a draft; a necessary detail is missing."}. This illustrates all six fields, not wording to copy.',
@@ -309,7 +310,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   let resolvePhase: ((event: RealtimeEvent) => void) | undefined;
   let rejectPhase: ((error: Error) => void) | undefined;
   let approvalFailure: { error: unknown } | undefined;
-  let inputItemId = "", heardTranscript = "";
+  let inputItemId = "", heardTranscript = "", approvedSpeech = "";
   let output: ReadableStreamDefaultController<Uint8Array> | undefined;
   const closeSocket = () => {
     if (!socket || socketClosed) return;
@@ -492,6 +493,17 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
           if (item) item.done = true;
         }
         if (completedParts !== audioParts.size) rejectAudio("completion");
+        const spokenParts = event.response.output.flatMap((item: Record<string, unknown>) =>
+          Array.isArray(item.content) ? item.content.map((part: Record<string, unknown>) =>
+            typeof part.transcript === "string" ? part.transcript : "") : []);
+        const spokenText = spokenParts.join(" ");
+        const speechWords = (text: string) => text.toLocaleLowerCase("en-AU").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+        // Content-free evidence of narration drift. Never log customer speech or
+        // withhold a completed reply over punctuation or transcript variation.
+        console.info("WATTZUN_REALTIME_SPEECH_COMPLETE", {
+          approvedCharacters: approvedSpeech.length, spokenCharacters: spokenText.length,
+          matchesApprovedWords: speechWords(approvedSpeech) === speechWords(spokenText), audioBytes,
+        });
         drainAudio();
         output.close(); close();
       }
@@ -609,11 +621,15 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     diagnostic.substage = "summary";
     const requestSummary = clarificationOnly ? "" : contract.validate({ message: raw.requestSummary,
       questions: [], linkIds: [], action: null, lookup: null }).message;
+    // The parallel transcript is the current utterance when already available.
+    // A model's paraphrase ("user approved completion") must not replace the
+    // literal consent or correction that both validation and execution inspect.
+    const currentRequest = heardTranscript || requestSummary;
     diagnostic.substage = "reply";
     let reply: WattzunReply;
     try {
       reply = contract.validateVoice({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds,
-        action: clarificationOnly ? null : raw.action, lookup: clarificationOnly ? null : raw.lookup }, requestSummary);
+        action: clarificationOnly ? null : raw.action, lookup: clarificationOnly ? null : raw.lookup }, currentRequest);
     } catch (error) {
       if (error instanceof WattzunReplyValidationError && requestSummary && !signal.aborted) throw new WattzunRealtimeTurnError(error.reason, requestSummary);
       throw error;
@@ -623,7 +639,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     diagnostic.phase = "approval"; diagnostic.substage = "approval";
     const approvalStarted = performance.now();
     try {
-      if (options.transformReply) reply = await abortable(options.transformReply(reply, requestSummary), signal);
+      if (options.transformReply) reply = await abortable(options.transformReply(reply, currentRequest), signal);
       await abortable(options.beforeSpeech(), signal);
     }
     catch (error) { approvalFailure = { error }; throw error; }
@@ -635,9 +651,10 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     }, { highWaterMark: 0 });
     phase = "speech"; responseId = undefined;
     diagnostic.phase = "speech"; diagnostic.substage = "audio_stream";
+    approvedSpeech = wattzunNativeSpokenReply(reply);
     send({ type: "response.create", response: {
       conversation: "none", output_modalities: ["audio"], instructions: WATTZUN_SPEECH_INSTRUCTIONS,
-      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: wattzunNativeSpokenReply(reply) }] }],
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: approvedSpeech }] }],
       tools: [], tool_choice: "none", max_output_tokens: SPEECH_TOKENS, metadata: { phase: "speech" },
       reasoning: { effort: "minimal" },
     } });

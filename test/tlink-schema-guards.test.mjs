@@ -14,14 +14,14 @@ function testD1(database) {
   class Statement {
     constructor(sql, values = []) { this.sql = sql; this.values = values; }
     bind(...values) { return new Statement(this.sql, values); }
-    async all() { return { results: database.prepare(this.sql).all(...this.values) }; }
+    async all() { return { success: true, results: database.prepare(this.sql).all(...this.values) }; }
     async run() { const result = database.prepare(this.sql).run(...this.values); return { success: true, meta: { changes: Number(result.changes) } }; }
   }
   return {
     prepare(sql) { return new Statement(sql); },
     async batch(statements) {
       database.exec("BEGIN IMMEDIATE");
-      try { const results = []; for (const statement of statements) results.push(await statement.run()); database.exec("COMMIT"); return results; }
+      try { const results = []; for (const statement of statements) results.push(await (/^\s*(?:SELECT|PRAGMA)\b/i.test(statement.sql) ? statement.all() : statement.run())); database.exec("COMMIT"); return results; }
       catch (error) { database.exec("ROLLBACK"); throw error; }
     },
   };
@@ -309,6 +309,66 @@ test("runtime installer creates and verifies every TLink integrity guard", async
   assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 27);
 });
 
+test("cold TLink schema checks use one read batch and completed warm checks do no I/O", async () => {
+  const database = schemaDatabase();
+  const base = testD1(database);
+  const batches = [];
+  let operations = 0;
+  const d1 = {
+    prepare(sql) {
+      operations += 1;
+      const statement = base.prepare(sql);
+      if (/^PRAGMA\b/.test(sql)) {
+        // D1 batch runs this statement; an individual network read is a regression.
+        return { ...statement, all: () => { throw new Error("Sequential schema read"); }, run: () => statement.run() };
+      }
+      return statement;
+    },
+    async batch(statements) {
+      operations += 1;
+      batches.push(statements.map(statement => statement.sql));
+      return base.batch(statements.map(statement => base.prepare(statement.sql)));
+    },
+  };
+  try {
+    await ensureTlinkSchemaGuards(d1);
+    const schemaBatches = batches.filter(statements => statements.some(sql => /^PRAGMA\b/.test(sql)));
+    assert.equal(schemaBatches.length, 1);
+    assert.equal(schemaBatches[0].length, 29);
+    assert.equal(schemaBatches[0].every(sql => /^PRAGMA table_xinfo/.test(sql)), true);
+    const completedOperations = operations;
+    await ensureTlinkSchemaGuards(d1);
+    assert.equal(operations, completedOperations);
+    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, ALL_TLINK_GUARDS.length);
+  } finally { database.close(); }
+});
+
+test("incomplete or failed schema batches cannot mark TLink ready or install guards", async () => {
+  for (const corrupt of [
+    results => results.slice(1),
+    results => results.map((result, index) => index === 0 ? { ...result, success: false } : result),
+    results => results.map((result, index) => index === results.length - 1 ? { success: true } : result),
+  ]) {
+    const database = schemaDatabase();
+    const base = testD1(database);
+    let corrupted = true;
+    const d1 = {
+      ...base,
+      async batch(statements) {
+        const results = await base.batch(statements);
+        return corrupted ? corrupt(results) : results;
+      },
+    };
+    try {
+      await assert.rejects(ensureTlinkSchemaGuards(d1), /TLINK_SCHEMA_VERIFICATION_UNAVAILABLE/);
+      assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, 0);
+      corrupted = false;
+      await ensureTlinkSchemaGuards(d1);
+      assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, ALL_TLINK_GUARDS.length);
+    } finally { database.close(); }
+  }
+});
+
 test("TLink guard verification survives another request's stalled and then cancelled I/O", async () => {
   const database = schemaDatabase();
   const base = testD1(database);
@@ -316,6 +376,11 @@ test("TLink guard verification survives another request's stalled and then cance
   let reads = 0;
   const d1 = {
     ...base,
+    async batch(statements) {
+      reads += 1;
+      if (reads === 1) await parked.promise;
+      return base.batch(statements);
+    },
     prepare(sql) {
       const statement = base.prepare(sql);
       return {
@@ -323,7 +388,6 @@ test("TLink guard verification survives another request's stalled and then cance
         bind: (...values) => statement.bind(...values),
         async all() {
           reads += 1;
-          if (reads === 1) await parked.promise;
           return statement.all();
         },
         run: () => statement.run(),
@@ -596,7 +660,12 @@ test("runtime installer requires the specialist credential role schema", async (
 test("runtime installer requires the price-book category migration", async () => {
   const missingCategory = schemaDatabase();
   missingCategory.exec("ALTER TABLE trade_price_book_items DROP COLUMN category");
-  await assert.rejects(ensureTlinkSchemaGuards(testD1(missingCategory)), /TLINK_SCHEMA_MIGRATIONS_REQUIRED:column:trade_price_book_items.category/);
+  const d1 = testD1(missingCategory);
+  await assert.rejects(ensureTlinkSchemaGuards(d1), /TLINK_SCHEMA_MIGRATIONS_REQUIRED:column:trade_price_book_items.category/);
+  assert.equal(missingCategory.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, 0);
+  missingCategory.exec("ALTER TABLE trade_price_book_items ADD COLUMN category TEXT DEFAULT ''");
+  await ensureTlinkSchemaGuards(d1);
+  assert.equal(missingCategory.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, ALL_TLINK_GUARDS.length);
   missingCategory.close();
 });
 
