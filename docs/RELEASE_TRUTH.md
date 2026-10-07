@@ -1,5 +1,13 @@
 # TLink and Australian Energy Assessments release truth
 
+## Native electrical assessment and Wattzun usage policy, 8 October 2026
+
+Functional source `d721f985a421cf60fe779da91a6462d948541bea` is published as Sites 817 and Android production/preview updates for runtime 1.3.3. The installed TLink job screen now opens the canonical PIESA assessment inside the app. All 12 sections, conditional repeats, retained evidence, actual named signatures, completion, completed job Files and independent customer/business email statuses use the existing assessment service. Private PDF/evidence saves use the installed native folder picker and verified file writes. The browser editor shortcut was removed; no new native module or schema was added. Physical phone completion and inbox receipt remain unverified, and completion requires a connection.
+
+Trade, Council and Creditex Wattzun chat/voice have an isolated ledger with no TLink daily request or daily spend allowance. Public customer-facing Wattzun retains the configured 200/day signed-browser guard and existing network, spend, burst and concurrency protections. OpenAI account settings were not changed. A single actually heard email answer now receives an exact readback and one confirmation question before read-only quote intake advances. Prefixed intake requests and complete street-address components preserve one logical next question.
+
+The final affected integration suite passed 1295 tests, the mobile suite passed 596, typechecks and both Hermes exports passed, and the publication build/audits passed. Live synthetic calls retained the connection through navigation and confirmed the heard email before advancing; observed reply onset was approximately 6 to 9 seconds. Existing full-suite Creditex CSS assertion failure and physical-device limits are recorded with exact source/update identities in C:/Webproject/outputs/wattzun-guided-completion-20261007/FINAL_RELEASE.md. Test job TLJ-X2PKPTF3 retains blank draft assessment PIESA-75DE26F3 for the user's field test.
+
 ## Official electrical assessment and spoken-answer continuity, 8 October 2026
 
 Prepared from Sites 807 (`d9458611b7fe50e8ce35af7da3f83109e86c65be`). Forms and job Files add the official March 2026 VEU pre-installation electrical safety assessment. All 78 schema fields, conditional repeated rows, the original initial assessor attestation and two applicable actual signature slots use one standalone job assessment (migration 0256). It reuses native answer, evidence, signing, owner/team access and email primitives without fabricating a compliance intent. Completion stores and hashes the filled original PDF before freezing the record, then submits independently tracked customer/business copies. Accepted recipients are not resent; blocked, failed and uncertain outcomes remain visible. This is an electrician-completed assessment, not automatic certification or a VEU claim submission.
@@ -80,7 +88,7 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 7 October 2026
+Last reconciled locally: 8 October 2026
 
 ## Current delivery: council reporting and shared TLink dashboard access
 

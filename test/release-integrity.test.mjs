@@ -81,7 +81,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(agents, /immutable dated evidence baseline; never rewrite it as current status/);
   assert.match(readme, /immutable evidence baseline/);
   assert.match(releaseTruth, /only current implementation and release-status document/);
-  assert.match(roadmap, /Last reconciled: 7 October 2026/);
+  assert.match(roadmap, /Last reconciled: 8 October 2026/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-69/);
@@ -90,13 +90,18 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-71/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-70/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 7 October 2026/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 8 October 2026/);
   assert.match(
     handover,
     /Status: system audit and polish[^\n]*Customer self-service accounts[^\n]*\r?\nPrepared: 9 September 2026/,
   );
   assert.match(handover, /Current production: Sites version 499/);
-  assert.match(releaseTruth, /Last reconciled locally: 7 October 2026/);
+  assert.match(releaseTruth, /Last reconciled locally: 8 October 2026/);
+  assert.match(releaseTruth, /## Native electrical assessment and Wattzun usage policy, 8 October 2026/);
+  assert.match(releaseTruth, /Public customer-facing Wattzun retains the configured 200\/day signed-browser guard/);
+  assert.match(releaseTruth, /Physical phone completion and inbox receipt remain unverified/);
+  assert.match(currentHandover, /## Field verification: official VEU electrical safety assessment/);
+  assert.match(roadmap, /## Released follow-up: native PIESA completion and business Wattzun allowances/);
   assert.match(releaseTruth, /Migration 0249 records removal before storage cleanup/);
   assert.match(releaseTruth, /## Current implementation: simpler customer, trade and audit workflows/);
   assert.match(releaseTruth, /## Previous implementation: Creditex and Admin daily work and job audits/);

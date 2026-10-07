@@ -1,11 +1,15 @@
 # Next task handover
 
 Status: Wattzun form companion, call quality and Council community tools; guided end-to-end form completion and matching GitHub/Sites publication authorised.
-Prepared: 7 October 2026
+Prepared: 8 October 2026
 
-## Active addition: official VEU electrical safety assessment
+## Field verification: official VEU electrical safety assessment
 
 Outcome: add the March 2026 VEU pre-installation electrical safety assessment to a TLink job from Forms, capture every applicable question and actual required phone signature, populate the original PDF, retain its immutable completed copy in job Files, and email separate copies to the customer and completing business. Wattzun must guide the same canonical answers one question at a time; it cannot supply an electrician's findings or sign a declaration.
+
+Released functional source: `d721f985a421cf60fe779da91a6462d948541bea`, Sites 817 and Android production/preview runtime 1.3.3. The installed app uses its native 12-section runner, actual signatures, retained evidence and the existing canonical PDF/delivery service. The old browser editor handoff is removed. Focused integration 1295/1295 and mobile 596/596 passed; root/mobile typechecks, exports and publication build passed. Trade/Council/Creditex daily allowances are removed in an isolated ledger; the public customer 200/day guard and abuse protections remain.
+
+Next verification: Settings > Check for update > Restart now on the user's phone, then open Test Test Insulation (TLJ-X2PKPTF3) and its blank draft PIESA-75DE26F3. Verify physical camera/signatures, completed official PDF, job Files and both actual inboxes. Preserve actual findings, signature authority and delivery evidence; never fabricate completion to satisfy a demo. Live voice confirmed exact email readback and one next question without losing the call. Measured onset remains approximately 6 to 9 seconds. Exact release IDs and limitations are in C:/Webproject/outputs/wattzun-guided-completion-20261007/FINAL_RELEASE.md.
 
 Ownership: the official template and PDF mapping have one writer; the explicit standalone job-assessment record, additive migration, completion and delivery service have another; the Forms/job editor and narrow Wattzun adapter have another. The coordinator owns review, release and live evidence. Existing ActivityForm conditional-answer and signature primitives, object storage and the durable mail journal are reused. This assessment is not a fabricated compliance intent or a certificate-claim submission.
 

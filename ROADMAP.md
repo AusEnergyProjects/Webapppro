@@ -6,7 +6,13 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 7 October 2026
+Last reconciled: 8 October 2026
+
+## Released follow-up: native PIESA completion and business Wattzun allowances
+
+Functional source `d721f985a421cf60fe779da91a6462d948541bea` is published as Sites 817 and matching Android production/preview updates. The installed TLink job screen now completes the canonical 12-section electrical assessment, evidence and actual signatures through its native controls, retaining the official PDF and independent customer/business delivery states. The browser editor shortcut is removed. Test Test Insulation has blank draft PIESA-75DE26F3 attached; physical phone and inbox verification is the next acceptance step.
+
+Business Wattzun daily request/spend allowances are removed for trade, Council and Creditex; public customer assistance retains its configured 200/day guard and abuse controls. Native voice confirms the actually heard email before read-only intake advances and asks one logical next question. Validation and measured latency are recorded in docs/RELEASE_TRUTH.md and C:/Webproject/outputs/wattzun-guided-completion-20261007/FINAL_RELEASE.md. These released changes do not claim uninterrupted provider service or physical-device verification.
 
 ## Wattzun: practical office, onsite, Council and audit assistance
 
