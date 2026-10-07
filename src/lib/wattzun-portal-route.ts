@@ -543,7 +543,9 @@ export async function postWattzunFormGuide(request: Request, deps = defaults): P
     const workflow: WorkflowTurn = { guide: state };
     let reply: WattzunReply = { kind: "answer", message: `${input.formGuide.stage === "start" ? "I'll guide you through this form. " : ""}${wattzunFormGuideNarration(state.guide)}`, questions: [], links: [], action: null, lookup: null };
     if (pending) {
-      if (input.formGuideControl) throw new WattzunFormError(409, "Check the pending answer before changing this form guide.");
+      if (input.formGuideControl && !["repeat", "resume"].includes(input.formGuideControl.command)) throw new WattzunFormError(409, "Check the pending answer before changing this form guide.");
+      // Repeat/resume first reconcile the original request. Their stale field or
+      // control intent never changes the guide or dispatches another answer.
       const recovery = await deps.recoverGuidedForm(request, initial, input.workReference, input.formGuide, pending);
       if (recovery.state === "saved") { workflow.result = recovery.result; workflow.guidedReviewId = recovery.reviewId; }
       const current = recovery.state === "saved" ? await loadTurnGuide(request, initial, input, afterSavedGuideInput(input.formGuide, recovery.deferredFieldKeys), deps) : state;

@@ -388,6 +388,45 @@ test('a guided native lost save response recovers the original journal before th
   assert.equal(f.state.writes, 2); assert.equal(f.state.completed, false); assert.equal(final.reply.formGuide.state, 'ready_to_complete'); assert.match(final.reply.message, /Would you like.*complete/); await final.audio.stream.cancel();
 });
 
+test('pending repeat and resume controls reconcile the original answer read-only before speaking its current question', async () => {
+  for (const saved of [false, true]) for (const command of ['repeat', 'resume']) {
+    const f = guidedRouteFixture();
+    if (saved) {
+      f.state.failAfterSave = true;
+      assert.equal((await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE)).response.status, 503);
+      f.state.failAfterSave = false;
+    }
+    f.turnInput.requestId = `pending-${command}-${saved}-request-0002`;
+    f.turnInput.formGuide.pendingRequestId = input.requestId;
+    f.turnInput.formGuideControl = { kind: 'form_guide_control', command, fieldKey: command === 'repeat' ? 'notes' : '' };
+    f.deps.guideControl = async () => { throw new Error('A pending control must not mutate or advance the guide.'); };
+    f.deps.executeGuidedForm = async () => { throw new Error('Reconciliation must never dispatch another answer.'); };
+    const response = await f.control(); assert.equal(response.status, 200, `${command}, saved=${saved}`);
+    const result = await readWattzunVoiceStream(response, f.controller.signal, reply => Boolean(reply.formGuide));
+    assert.deepEqual(result.reply.formGuideRecovery, { requestId: input.requestId, state: saved ? 'saved' : 'not_saved' });
+    assert.equal(result.reply.formGuide.next.fieldKey, saved ? 'serial' : 'notes');
+    assert.equal(f.state.writes, saved ? 1 : 0); assert.equal(f.events.filter(event => event === 'recoverGuide').length, 1);
+    assert.equal(f.events.filter(event => event === 'realtime').length, saved ? 1 : 0);
+    assert.equal(result.reply.formGuide.state, 'question'); await result.audio.stream.cancel();
+  }
+});
+
+test('pending guide controls retain uncertainty on failed reconciliation and never skip, pause or complete another task', async () => {
+  for (const command of ['skip', 'pause', 'complete']) {
+    const f = guidedRouteFixture(); f.turnInput.formGuide.pendingRequestId = input.requestId;
+    f.turnInput.formGuideControl = { kind: 'form_guide_control', command, fieldKey: command === 'skip' ? 'notes' : command === 'pause' ? 'notes' : '' };
+    const response = await f.control(); assert.equal(response.status, 409);
+    assert.deepEqual((await response.json()).formGuideRecovery, { requestId: input.requestId, state: 'uncertain' });
+    assert.equal(f.state.writes, 0); assert.equal(f.events.includes('recoverGuide'), false); assert.equal(f.events.includes('streamSpeak'), false);
+  }
+  const f = guidedRouteFixture(); f.turnInput.formGuide.pendingRequestId = input.requestId;
+  f.turnInput.formGuideControl = { kind: 'form_guide_control', command: 'repeat', fieldKey: 'notes' };
+  f.deps.recoverGuidedForm = async () => { throw new FormError(409, 'The original saved answer could not be verified.'); };
+  const response = await f.control(); assert.equal(response.status, 409);
+  assert.deepEqual((await response.json()).formGuideRecovery, { requestId: input.requestId, state: 'uncertain' });
+  assert.equal(f.state.writes, 0); assert.equal(f.events.includes('streamSpeak'), false);
+});
+
 test('guided completion rejects draft-save approval and requires a separate current completion phrase', async () => {
   const f = guidedRouteFixture(); f.state.answers = { notes: 'Side gate', serial: 'ABC123' }; f.turnInput.formGuide.questionKey = '';
   f.options.reply.action = { kind: 'form_guide_control', command: 'complete', fieldKey: '' }; f.options.requestSummary = 'Save these answers';

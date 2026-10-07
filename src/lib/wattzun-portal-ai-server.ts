@@ -324,6 +324,21 @@ function validateReply(raw: unknown, guide: GuideLink[], portal: WattzunScope["p
     }
     }
   }
+  const guidedMutation = formGuide && reply.action && (reply.action.kind === "fill_form" || reply.action.kind === "complete_form"
+    || reply.action.kind === "form_step" || reply.action.kind === "form_guide_control" && reply.action.command === "complete");
+  if (guidedMutation) {
+    if (guideInput?.stage !== "continue" || guideInput.paused || guideInput.pendingRequestId
+      || guideInput.sourceSha256 !== formGuide.sourceSha256 || guideInput.questionKey !== (formGuide.next?.fieldKey ?? "")) {
+      throw new WattzunReplyValidationError("action_shape");
+    }
+    // The action above is validated; its execution has not happened yet. Model
+    // narration is discarded, including premature success or next questions.
+    // The guided route releases only the canonical result and fresh question.
+    reply.kind = "answer";
+    reply.message = "Checking the current form step.";
+    reply.questions = [];
+    reply.links = [];
+  }
   const spoken = wattzunSpokenReply(reply);
   if (spoken.length > MAX_SPOKEN_CHARACTERS) throw new WattzunReplyValidationError("spoken_bound");
   if (claimsCompletedAction(spoken) && !trustedReceipt(reply, workflowContext)) throw new WattzunReplyValidationError("completed_claim");

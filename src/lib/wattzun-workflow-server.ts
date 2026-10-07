@@ -605,11 +605,11 @@ export async function loadWattzunWorkflowReviewForTurn(request: Request, authori
   if (!finalAuthority) {
     // Receipt/reconciliation paths retain their standalone checks and still need
     // the route's fresh workspace handoff after those checks have finished.
-    finalAuthority = await refreshAuthority();
     const frozen = await readReview(authority.access, reviewId, deps);
+    finalAuthority = await refreshAuthority();
     const finalTeam = requireWattzunTurnTeam(finalAuthority);
     permissions(finalTeam, frozen.prepared.proposal);
-    await verifyTarget(request, authority.access, finalTeam, frozen.prepared, deps);
+    await verifyTarget(request, authority.access, finalTeam, frozen.prepared, deps, true);
   }
   request.signal.throwIfAborted();
   return { result, authority: finalAuthority };
@@ -713,7 +713,7 @@ async function loadWorkflowReview(request: Request, access: WattzunAccess, revie
   return frozen.prepared.review;
 }
 async function checkedComplete(request: Request, access: WattzunAccess, prepared: Prepared, receipt: WattzunWorkflowReceipt, deps: WattzunWorkflowDependencies): Promise<WattzunWorkflowResult> {
-  const team = await currentTeam(request, access, deps); permissions(team, prepared.proposal); await verifyTarget(request, access, team, prepared, deps);
+  const team = await currentTeam(request, access, deps); permissions(team, prepared.proposal); await verifyTarget(request, access, team, prepared, deps, true);
   return { state: "complete", receipt };
 }
 async function verifyTarget(request: Request, access: WattzunAccess, team: TeamAccess, prepared: Prepared, deps: WattzunWorkflowDependencies, turnOwned = false) {

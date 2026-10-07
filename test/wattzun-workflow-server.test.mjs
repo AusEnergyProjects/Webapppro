@@ -271,6 +271,60 @@ test('final review handoff rejects changed official registry metadata even when 
   assert.equal((await f.progress()).guide.sourceSha256, formSource); assert.equal(f.calls.length, 0);
 });
 
+for (const kind of ['fill_form', 'complete_form', 'form_step']) {
+  test(`${kind}: completed turn handoff keeps all three target loads and reuses each immediately fresh authority`, async () => {
+    const f = kind === 'form_step' ? await governedWorkflowFixture() : await guidedWorkflowFixture();
+    if (kind === 'complete_form') f.saved.answers = { site_notes: 'Side gate', next_question: '2' };
+    const { guide } = await f.progress(), proposal = kind === 'complete_form'
+      ? { kind, jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one' } : f.proposal;
+    const input = { ...f.session, productSearch: guide.productSearch, stage: 'continue', sourceSha256: guide.sourceSha256, questionKey: guide.next?.fieldKey || '' };
+    const executed = await workflowModule.executeWattzunGuidedFormForTurn(f.request, f.initial, f.reference, proposal, input,
+      `authority-reuse-${kind}-0001`, kind === 'complete_form' ? 'Complete this form now' : kind === 'form_step' ? 'Use X1' : '', f.deps);
+    const savedWrites = f.calls.length, events = [], originalTeam = f.deps.team, originalDecrypt = f.deps.decrypt, originalJob = f.formDeps.job;
+    const nativeMethod = kind === 'form_step' ? 'loadPack' : 'getJobForms', originalLoad = f.formDeps[nativeMethod];
+    f.deps.team = async request => { events.push('authority'); return originalTeam(request); };
+    f.deps.decrypt = async value => { events.push('journal'); return originalDecrypt(value); };
+    f.formDeps.team = async () => { throw new Error('The target must reuse the immediately fresh server team.'); };
+    f.formDeps.job = async (...args) => { events.push('assigned-job'); return originalJob(...args); };
+    f.formDeps[nativeMethod] = async (...args) => { events.push('snapshot'); return originalLoad(...args); };
+    const refreshed = await workflowModule.loadWattzunWorkflowReviewForTurn(f.request, f.initial, executed.reviewId, async () => {
+      events.push('final-refresh');
+      return { access: f.initial.access, tradeTeam: await f.deps.team(new Request(f.request, { headers: { 'X-TLink-Business': 'business-one' } })) };
+    }, f.deps);
+    assert.deepEqual(refreshed.result, executed.result); assert.equal(f.calls.length, savedWrites);
+    assert.deepEqual(events, ['journal', 'assigned-job', 'snapshot', 'authority', 'assigned-job', 'snapshot', 'journal', 'final-refresh', 'authority', 'assigned-job', 'snapshot']);
+  });
+}
+
+test('receipt handoff reads its final journal before refreshing authority and denies revocation during that read', async () => {
+  const f = await guidedWorkflowFixture(), executed = await f.executeGuided(f.proposal, await f.currentInput(), 'journal-revocation-answer-0001');
+  let reads = 0, targets = 0, refreshes = 0;
+  const originalDecrypt = f.deps.decrypt, originalJob = f.formDeps.job;
+  f.deps.decrypt = async value => { const payload = await originalDecrypt(value); if (++reads === 2) f.team.canManageFieldEvidence = false; return payload; };
+  f.formDeps.job = async (...args) => { targets++; return originalJob(...args); };
+  f.formDeps.team = async () => { throw new Error('No duplicate target authority lookup is permitted.'); };
+  await assert.rejects(workflowModule.loadWattzunWorkflowReviewForTurn(f.request, f.initial, executed.reviewId, async () => {
+    refreshes++; assert.equal(reads, 2, 'The final journal read completed before fresh authorization');
+    return { access: f.initial.access, tradeTeam: structuredClone(f.team) };
+  }, f.deps), error => error.status === 403);
+  assert.equal(targets, 2, 'Revoked final authority cannot reach the last target read'); assert.equal(refreshes, 1); assert.equal(f.calls.length, 1);
+});
+
+test('fresh completed-receipt authority still precedes current assignment and full form target validation', async () => {
+  for (const changed of ['assignment', 'form']) {
+    const f = await guidedWorkflowFixture(), executed = await f.executeGuided(f.proposal, await f.currentInput(), `receipt-target-${changed}-0001`);
+    let targetChanged = false, lastTargetChecked = false;
+    const originalJob = f.formDeps.job, originalForms = f.formDeps.getJobForms;
+    f.formDeps.job = async (...args) => { if (targetChanged && changed === 'assignment') { lastTargetChecked = true; throw new AccessError(403, 'Job assignment revoked.'); } return originalJob(...args); };
+    f.formDeps.getJobForms = async (...args) => { if (targetChanged && changed === 'form') { lastTargetChecked = true; return Response.json({ ok: true, forms: [] }); } return originalForms(...args); };
+    f.formDeps.team = async () => { throw new Error('No duplicate target authority lookup is permitted.'); };
+    await assert.rejects(workflowModule.loadWattzunWorkflowReviewForTurn(f.request, f.initial, executed.reviewId, async () => {
+      targetChanged = true; return { access: f.initial.access, tradeTeam: structuredClone(f.team) };
+    }, f.deps), error => error.status === (changed === 'assignment' ? 403 : 404));
+    assert.equal(lastTargetChecked, true); assert.equal(f.calls.length, 1);
+  }
+});
+
 test('guided journal recovers a lost save acknowledgement without rewriting, then saves the next real answer once', async () => {
   const f = await guidedWorkflowFixture(), first = await f.currentInput(), requestId = 'guided-answer-request-0001';
   f.state.failAfterSave = true;

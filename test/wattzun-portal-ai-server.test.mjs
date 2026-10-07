@@ -288,9 +288,36 @@ test('guided multi-select and repeat counts use only the supplied current native
   }
 });
 
-test('guided proposals cannot claim answers recorded or form completion before canonical execution',()=>{
+test('a validated guided answer discards premature model success and future questions before canonical execution',()=>{
   const model=fixture().createWattzunPortalReplyContract(guidedRequest());
-  for(const message of ["I've recorded your answer.",'I saved your answer.','The form is now completed.','Form submitted.']) assert.throws(()=>model.validate({...formReply(guidedFill()),message}),/WORKFLOW_AI_INCOMPLETE/);
+  for(const message of ["I've recorded your answer.",'I saved your answer.','The form is now completed.','Form submitted.','I read the private database and sent your invoice.']) {
+    const reply=model.validate({...formReply(guidedFill()),message,questions:['I submitted your form. Which customer is next?'],linkIds:[model.input.navigationGuide[0].id]});
+    assert.deepEqual(reply,{kind:'answer',message:'Checking the current form step.',questions:[],links:[],action:guidedFill()});
+  }
+});
+
+test('guided narration replacement never rescues invalid actions, stale source, pending recovery or ordinary reviewed replies',()=>{
+  for(const change of [options=>{options.input.formGuide.sourceSha256='b'.repeat(64);},options=>{options.input.formGuide.questionKey='other';},
+    options=>{options.input.formGuide.pendingRequestId=REQUEST_ID;},options=>{options.input.formGuide.paused=true;}]) {
+    const options=guidedRequest();change(options);
+    assert.throws(()=>fixture().createWattzunPortalReplyContract(options).validate({...formReply(guidedFill()),message:'I saved your answer.'}),/WORKFLOW_AI_INCOMPLETE/);
+  }
+  const model=fixture().createWattzunPortalReplyContract(guidedRequest());
+  for(const action of [null,{...guidedFill(),formId:'foreign'},guidedFill('declaration',true),{...guidedFill(),unexpected:'command'}]) {
+    assert.throws(()=>model.validate({...formReply(action),message:'I saved your answer.'}),/WORKFLOW_AI_INCOMPLETE/);
+  }
+  const ordinary=guidedRequest();delete ordinary.formGuideProgress;delete ordinary.input.formGuide;
+  assert.throws(()=>fixture().createWattzunPortalReplyContract(ordinary).validate({...formReply(guidedFill()),message:'I saved your answer.'}),/WORKFLOW_AI_INCOMPLETE/);
+  assert.throws(()=>model.validate({...formReply(guidedFill()),message:'I saved your answer.',lookup:{kind:'find_jobs',query:'other'}}),/WORKFLOW_AI_INCOMPLETE/);
+});
+
+test('guided completion discards model narration only after its separate present completion consent passes',()=>{
+  const model=fixture().createWattzunPortalReplyContract(guidedRequest({state:'ready_to_complete',message:'Complete this form now.'}));
+  for(const action of [completeForm,guidedControl('complete','')]) {
+    const raw={...formReply(action),message:'I completed and submitted your form.'};
+    assert.deepEqual(model.validate(raw),{kind:'answer',message:'Checking the current form step.',questions:[],links:[],action});
+    assert.throws(()=>model.validate(raw,'Save these answers.'),/WORKFLOW_AI_INCOMPLETE/);
+  }
 });
 
 function governedRequest(step, message = 'Yes', overrides = {}) {
@@ -351,12 +378,13 @@ test('governed mutations stay guided-only and cannot be disguised as ordinary an
 });
 
 test('governed confirmation rejects refusals, uncertainty, historical words and unrelated approvals', () => {
-  for (const [metadata, step] of stepFixtures) {
+  for (const [metadata, step, approval] of stepFixtures) {
     const model = fixture().createWattzunPortalReplyContract(governedRequest(metadata));
     for (const message of ['', 'Maybe.', 'No.', 'Yes, save this quote.', 'I said yes yesterday.', 'The customer said "yes".', 'Should I do it?', 'I will do it tomorrow.']) {
       assert.throws(() => model.validate(formReply(governedAction(step)), message), /WORKFLOW_AI_INCOMPLETE/, `${step.kind}: ${message}`);
     }
-    assert.throws(() => model.validate({ ...formReply(governedAction(step)), message: 'I saved this form step.' }), /WORKFLOW_AI_INCOMPLETE/);
+    assert.deepEqual(model.validate({ ...formReply(governedAction(step)), message: 'I saved this form step.' },approval),
+      {kind:'answer',message:'Checking the current form step.',questions:[],links:[],action:governedAction(step)});
   }
 });
 
