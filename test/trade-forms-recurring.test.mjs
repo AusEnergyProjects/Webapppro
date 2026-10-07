@@ -86,7 +86,7 @@ test("job forms enforce assignment scope, approved operations and privacy-safe e
   assert.match(formsRoute, /requireInstallerTeamAccess\(request\)/);
   assert.match(formsRoute, /assignedJob\(access, workOrderId\)/);
   assert.match(formsRoute, /FULL_ACCESS_REQUIRED/);
-  assert.match(formsRoute, /containsPrivateData\(answers\)/);
+  assert.match(formsRoute, /containsPrivateData\(answers, template\)/);
   assert.match(formsRoute, /row\.status === "complete"/);
   assert.match(formsRoute, /row\.template_key === "service-visit-support"/);
   assert.match(formsRoute, /addMonthsToIsoDate/);

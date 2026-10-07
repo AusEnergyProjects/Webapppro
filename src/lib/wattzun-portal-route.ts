@@ -11,7 +11,7 @@ import { loadWattzunWorkContext, validateWattzunWorkContext, wattzunWorkContextI
 import { WattzunWorkContextError, type WattzunWorkContext, type WattzunWorkReference } from "./wattzun-work-context";
 import { prepareWattzunWorkflow, prepareWattzunWorkflowForPortal, loadWattzunWorkflowReview,
   prepareWattzunWorkflowForTurn, verifyWattzunWorkflowForTurn, loadWattzunWorkflowReviewForTurn,
-  executeWattzunGuidedFormForTurn, recoverWattzunGuidedFormForTurn, WattzunWorkflowError, WattzunGuidedFormValidationError } from "./wattzun-workflow-server";
+  executeWattzunGuidedFormForTurn, recoverWattzunGuidedFormForTurn, verifyWattzunGuidedReceiptForTurn, WattzunWorkflowError, WattzunGuidedFormValidationError } from "./wattzun-workflow-server";
 import { readWattzunTurnAuthority, requireWattzunTurnTeam, type WattzunTurnAuthority } from "./wattzun-turn-authority-server";
 import { WattzunFormError, loadWattzunFormGuideForTurn, controlWattzunFormGuideForTurn, searchWattzunFormProductsForTurn } from "./wattzun-form-server";
 import { readWattzunFormProductSearchAction } from "./wattzun-form-step";
@@ -44,6 +44,7 @@ export type WattzunRouteDependencies = {
   searchFormProducts: typeof searchWattzunFormProductsForTurn;
   executeGuidedForm: typeof executeWattzunGuidedFormForTurn;
   recoverGuidedForm: typeof recoverWattzunGuidedFormForTurn;
+  verifyGuidedReceipt: typeof verifyWattzunGuidedReceiptForTurn;
   recordUsage: (options: WattzunUsageRecord) => Promise<void>;
   usage: (access: WattzunAccess) => Promise<WattzunUsage>;
 };
@@ -58,6 +59,7 @@ const defaults: WattzunRouteDependencies = {
   guide: loadWattzunFormGuideForTurn, guideControl: controlWattzunFormGuideForTurn,
   searchFormProducts: searchWattzunFormProductsForTurn,
   executeGuidedForm: executeWattzunGuidedFormForTurn, recoverGuidedForm: recoverWattzunGuidedFormForTurn,
+  verifyGuidedReceipt: verifyWattzunGuidedReceiptForTurn,
   recordUsage: recordWattzunUsage, usage: readWattzunUsage,
 };
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
@@ -179,7 +181,7 @@ function withContext(reply: WattzunReply, context?: WattzunWorkContext): Wattzun
   return context ? { ...reply, workContext: wattzunWorkContextInfo(context) } : reply;
 }
 type GuideTurn = { context: WattzunWorkContext; guide: WattzunFormGuideProgress; input: WattzunFormGuideInput };
-type WorkflowTurn = { result?: WattzunWorkflowResult; proposal?: WattzunWorkflowOperation; guide?: GuideTurn; guidedReviewId?: string };
+type WorkflowTurn = { result?: WattzunWorkflowResult; proposal?: WattzunWorkflowOperation; guide?: GuideTurn; guidedReviewId?: string; guidedRequestId?: string };
 function resumeGuideInput(input: WattzunFormGuideInput): WattzunFormGuideInput {
   return { sessionId: input.sessionId, stage: "resume", authorization: "ordinary_form_answers", skippedFieldKeys: input.skippedFieldKeys,
     ...(input.paused ? { paused: true } : {}), ...(input.productSearch ? { productSearch: input.productSearch } : {}) };
@@ -251,7 +253,7 @@ async function processGuidedReply(request: Request, authority: WattzunTurnAuthor
     return guideReply({ ...reply, kind: "clarification", message: error.message, questions: [wattzunFormGuideNarration(workflow.guide.guide)] }, workflow.guide, input.requestId);
   }
   if (!isWattzunWorkflowResult(executed.result) || executed.result.state !== "complete" || executed.result.receipt.kind !== proposal.kind) throw new WattzunFormError(503, "The answer's saved result is not confirmed. Resume this same request before continuing.");
-  workflow.result = executed.result; workflow.guidedReviewId = executed.reviewId;
+  workflow.result = executed.result; workflow.guidedReviewId = executed.reviewId; workflow.guidedRequestId = input.requestId;
   workflow.guide = await loadTurnGuide(request, authority, input, afterSavedGuideInput(state.input, executed.deferredFieldKeys), deps);
   const acknowledgement = proposal.kind === "fill_form" ? "Saved. " : proposal.kind === "form_step" ? `${executed.result.receipt.message} ` : "";
   return guideReply({ ...reply, kind: "answer", message: `${acknowledgement}${wattzunFormGuideNarration(workflow.guide.guide)}`, questions: [] }, workflow.guide, input.requestId, executed.result);
@@ -334,6 +336,15 @@ async function recheckWorkflow(request: Request, access: WattzunAccess, input: W
 async function releaseNativeTurn(request: Request, initial: WattzunTurnAuthority, input: WattzunTurnInput,
   context: WattzunWorkContext | undefined, workflow: WorkflowTurn, deps: WattzunRouteDependencies) {
   requireOpenConversation(request);
+  if (workflow.guide && workflow.guidedReviewId) {
+    if (input.workReference?.kind !== "trade_form" || !workflow.guidedRequestId) throw new WattzunFormError(403, "Choose the original guided answer before continuing.");
+    const checked = await deps.verifyGuidedReceipt(request, initial, input.workReference, workflow.guide.input,
+      workflow.guidedRequestId, workflow.guidedReviewId, () => deps.turnAuthority(request, input.portal, input.scopeId, initial));
+    if (JSON.stringify(checked.result) !== JSON.stringify(workflow.result)) throw new WattzunWorkflowError(409, "The original saved answer changed while Wattzun was replying.");
+    const fresh = await loadTurnGuide(request, checked.authority, input, resumeGuideInput(workflow.guide.input), deps);
+    if (fresh.context.sourceSha256 !== workflow.guide.context.sourceSha256) throw new WattzunFormError(409, "This form changed while Wattzun was answering. Resume its current question before continuing.");
+    requireOpenConversation(request); return;
+  }
   if (workflow.guide) {
     const fresh = await loadTurnGuide(request, initial, input, resumeGuideInput(workflow.guide.input), deps);
     if (fresh.context.sourceSha256 !== workflow.guide.context.sourceSha256) throw new WattzunFormError(409, "This form changed while Wattzun was answering. Resume its current question before continuing.");
@@ -472,7 +483,7 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
         const reference = input.workReference;
         if (reference?.kind !== "trade_form") throw new WattzunFormError(409, "Resume the original form to check this answer.");
         const recovery = await deps.recoverGuidedForm(request, initialAuthority, reference, guideInput, guideInput.pendingRequestId);
-        if (recovery.state === "saved") { workflow.result = recovery.result; workflow.guidedReviewId = recovery.reviewId; }
+        if (recovery.state === "saved") { workflow.result = recovery.result; workflow.guidedReviewId = recovery.reviewId; workflow.guidedRequestId = guideInput.pendingRequestId; }
         const currentGuide = recovery.state === "saved" ? await loadTurnGuide(request, initialAuthority, input, afterSavedGuideInput(guideInput, recovery.deferredFieldKeys), deps) : guide;
         workflow.guide = currentGuide;
         const reply = guideReply({ kind: "answer", message: recoveredGuideNarration(currentGuide.guide, workflow.result), questions: [], links: [], action: null, lookup: null }, currentGuide, guideInput.pendingRequestId, workflow.result);
@@ -547,7 +558,7 @@ export async function postWattzunFormGuide(request: Request, deps = defaults): P
       // Repeat/resume first reconcile the original request. Their stale field or
       // control intent never changes the guide or dispatches another answer.
       const recovery = await deps.recoverGuidedForm(request, initial, input.workReference, input.formGuide, pending);
-      if (recovery.state === "saved") { workflow.result = recovery.result; workflow.guidedReviewId = recovery.reviewId; }
+      if (recovery.state === "saved") { workflow.result = recovery.result; workflow.guidedReviewId = recovery.reviewId; workflow.guidedRequestId = pending; }
       const current = recovery.state === "saved" ? await loadTurnGuide(request, initial, input, afterSavedGuideInput(input.formGuide, recovery.deferredFieldKeys), deps) : state;
       workflow.guide = current;
       reply = guideReply({ ...reply, message: recoveredGuideNarration(current.guide, workflow.result) }, current, pending, workflow.result);

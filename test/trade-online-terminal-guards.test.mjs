@@ -12,6 +12,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
+import * as tradeFormLibrary from "../src/lib/trade-form-library.mjs";
 import { lifecycleGuardDependency } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -36,7 +37,9 @@ class TestD1Statement {
   }
 
   runSync() {
-    const result = this.database.prepare(this.sql).run(...this.values);
+    const prepared = this.database.prepare(this.sql);
+    if (/^\s*SELECT\b/i.test(this.sql)) return { success: true, results: prepared.all(...this.values), meta: { changes: 0 } };
+    const result = prepared.run(...this.values);
     return { success: true, meta: { changes: Number(result.changes) } };
   }
 
@@ -419,7 +422,7 @@ function workOrdersRoute(db, staffAccess = null) {
   });
 }
 
-function formsRoute(db) {
+function formsRoute(db, actualLibrary = false) {
   return loadTypescriptModule("../src/app/api/trade-job-forms/route.ts", {
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": adminServer,
@@ -428,7 +431,7 @@ function formsRoute(db) {
       requireInstallerTeamAccess: async () => access,
     },
     "@/lib/trade-team-sync-server": syncHelpers,
-    "@/lib/trade-form-library.mjs": {
+    "@/lib/trade-form-library.mjs": actualLibrary ? tradeFormLibrary : {
       normalizeTradeFormAnswers: (_template, answers) => answers || {},
       tradeFormCompletion: () => ({ ready: true, missing: [] }),
     },
@@ -447,6 +450,106 @@ function formsRoute(db) {
     },
   });
 }
+
+function preStartFormFixture() {
+  const f = fixture(), template = tradeFormLibrary.tradeFormTemplate("pre-start-risk-readiness", 1, "other");
+  assert.equal(template.fields.length, 6);
+  f.database.prepare("UPDATE trade_job_forms SET template_key=?,template_name=?,template_snapshot=? WHERE id='form-1'")
+    .run(template.key, template.name, JSON.stringify(template));
+  return { ...f, template, route: formsRoute(f.db, true) };
+}
+
+test("actual pre-start PATCH saves all six spoken answers including the date, then completes separately and replays without another write", async () => {
+  const { database, route } = preStartFormFixture();
+  try {
+    const answers = {}, supplied = { work_date: "2026-10-07", technician: "Alex Example", access_confirmed: true,
+      isolation_confirmed: true, hazards: "Work area isolated and clear", changes: "No scope changes" };
+    let revision = 3;
+    for (const [key, value] of Object.entries(supplied)) {
+      answers[key] = value;
+      const response = await route.PATCH(patchRequest({ workOrderId: "job-1", formId: "form-1", baseRevision: revision, answers, complete: false }));
+      const payload = await response.json(); assert.equal(response.status, 200, JSON.stringify(payload));
+      const form = payload.forms.find(item => item.id === "form-1");
+      revision++; assert.equal(form.revision, revision); assert.equal(form.status, "draft"); assert.equal(form.answers[key], value);
+      assert.equal(JSON.parse(database.prepare("SELECT answers FROM trade_job_forms WHERE id='form-1'").get().answers)[key], value);
+    }
+    assert.equal(database.prepare("SELECT count(*) n FROM trade_work_order_events WHERE event_type='field_form_saved'").get().n, 6);
+    const completeRequest = { workOrderId: "job-1", formId: "form-1", baseRevision: revision, answers, complete: true };
+    const completed = await route.PATCH(patchRequest(completeRequest)); const payload = await completed.json();
+    assert.equal(completed.status, 200, JSON.stringify(payload)); assert.equal(payload.forms[0].status, "complete"); assert.equal(payload.forms[0].revision, revision + 1);
+    assert.deepEqual(payload.forms[0].answers, supplied); assert.equal(payload.forms[0].ready, true);
+    const retained = database.prepare("SELECT * FROM trade_job_forms WHERE id='form-1'").get(), before = mutationState(database);
+    assert.equal(retained.completed_by_uid, access.actorUid); assert.ok(retained.completed_at);
+    const retry = await route.PATCH(patchRequest(completeRequest)); assert.equal(retry.status, 200); assert.equal((await retry.json()).duplicate, true);
+    assert.deepEqual(mutationState(database), before);
+    assert.equal(database.prepare("SELECT count(*) n FROM trade_work_order_events WHERE event_type='field_form_completed'").get().n, 1);
+  } finally { database.close(); }
+});
+
+test("actual form privacy gate still blocks phones, emails and date-like text outside canonical date fields without writes", async () => {
+  for (const [key, value] of [["technician", "0412345678"], ["hazards", "Phone +61 412 345 678"], ["changes", "Call (03) 9123 4567"],
+    ["hazards", "Contact customer@example.test"], ["changes", "2026-10-07"], ["technician", "04-1234-5678"]]) {
+    const { database, route } = preStartFormFixture();
+    try {
+      const before = mutationState(database), response = await route.PATCH(patchRequest({ workOrderId: "job-1", formId: "form-1", baseRevision: 3,
+        answers: { work_date: "2026-10-07", [key]: value }, complete: false }));
+      assert.equal(response.status, 400); assert.match((await response.json()).error, /Keep customer contact details/); assert.deepEqual(mutationState(database), before);
+    } finally { database.close(); }
+  }
+});
+
+test("date exemption follows canonical date normalization and cannot store an invalid date or contact data in a date field", async () => {
+  for (const date of ["2026-02-30", "2026-10-07 0412345678", "0412345678", "customer@example.test", "07/10/2026"]) {
+    const { database, route } = preStartFormFixture();
+    try {
+      const before = mutationState(database), response = await route.PATCH(patchRequest({ workOrderId: "job-1", formId: "form-1", baseRevision: 3,
+        answers: { work_date: date, technician: "Alex", access_confirmed: true, isolation_confirmed: true, hazards: "Clear", changes: "None" }, complete: true }));
+      assert.equal(response.status, 400); assert.match((await response.json()).error, /Complete the required fields/); assert.deepEqual(mutationState(database), before);
+    } finally { database.close(); }
+  }
+  const { database, route } = preStartFormFixture();
+  try {
+    const response = await route.PATCH(patchRequest({ workOrderId: "job-1", formId: "form-1", baseRevision: 3, answers: { work_date: "2028-02-29" }, complete: false }));
+    assert.equal(response.status, 200); assert.equal((await response.json()).forms[0].answers.work_date, "2028-02-29");
+  } finally { database.close(); }
+});
+
+test("form payload reads exact scoped work and answer rows in one ordered two-statement batch", async () => {
+  const { database, db } = preStartFormFixture();
+  try {
+    database.exec("INSERT INTO trade_job_forms SELECT 'foreign-form',work_order_id,'foreign-owner','foreign-template',template_version,template_name,jurisdiction,template_snapshot,'{\"private\":\"do not expose\"}',status,revision,completed_by_uid,completed_at,created_at,updated_at FROM trade_job_forms WHERE id='form-1'");
+    const batches = [], original = db.batch;
+    db.batch = async statements => { batches.push(statements); return original(statements); };
+    const route = formsRoute(db, true), response = await route.GET(new Request("https://example.test/api/trade-job-forms?workOrderId=job-1"));
+    const payload = await response.json(); assert.equal(response.status, 200); assert.deepEqual(payload.forms.map(item => item.id), ["form-1"]);
+    assert.equal(batches.length, 1); assert.equal(batches[0].length, 2);
+    assert.match(batches[0][0].sql, /SELECT w\.id, w\.service_category/); assert.match(batches[0][1].sql, /FROM trade_job_forms WHERE work_order_id = \? AND firebase_uid = \?/);
+    assert.deepEqual(batches[0].map(item => item.values), [["job-1", "owner-1"], ["job-1", "owner-1"]]);
+    assert.doesNotMatch(JSON.stringify(payload), /do not expose/);
+  } finally { database.close(); }
+});
+
+test("form payload batch failures and malformed results fail closed, while missing current work retains not-found precedence", async () => {
+  for (const fault of ["throw", "missing", "failed-work", "failed-forms", "malformed-forms", "missing-work"]) {
+    const { database, db } = preStartFormFixture();
+    try {
+      const original = db.batch;
+      db.batch = async statements => {
+        if (fault === "throw") throw new Error("D1 unavailable");
+        if (fault === "missing") return [];
+        const results = await original(statements);
+        if (fault === "failed-work") results[0].success = false;
+        if (fault === "failed-forms") results[1].success = false;
+        if (fault === "malformed-forms") results[1].results = null;
+        if (fault === "missing-work") { results[0].results = []; results[1] = undefined; }
+        return results;
+      };
+      const response = await formsRoute(db, true).GET(new Request("https://example.test/api/trade-job-forms?workOrderId=job-1"));
+      const payload = await response.json(); assert.equal(response.status, fault === "missing-work" ? 404 : 500); assert.equal(payload.ok, false); assert.equal(payload.forms, undefined);
+      assert.equal(database.prepare("SELECT count(*) n FROM trade_work_order_events").get().n, 0);
+    } finally { database.close(); }
+  }
+});
 
 const patchRequest = (body) => new Request("https://example.test/api", {
   method: "PATCH",

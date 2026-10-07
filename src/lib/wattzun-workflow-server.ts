@@ -519,6 +519,43 @@ function assertGuidedReview(prepared: Prepared, reference: FormReference, input:
     throw new WattzunWorkflowError(403, "This guided answer belongs to another form or session. Resume the original task to check it.");
   }
 }
+type NewGuidedJournal = { reviewId: string; frozen: Awaited<ReturnType<typeof readReview>> };
+/** A new guided save is internal: no intermediate review is returned to a client. */
+async function freezeNewGuidedWorkflow(request: Request, authority: WattzunTurnAuthority, reference: FormReference,
+  proposal: GuidedProposal, input: WattzunFormGuideInput, requestId: string, deps: WattzunWorkflowDependencies): Promise<NewGuidedJournal | null> {
+  if (!/^[A-Za-z0-9_-]{16,100}$/.test(requestId)) throw new WattzunWorkflowError(400, "Start a fresh action request.");
+  const access = authority.access, team = requireWattzunTurnTeam(authority); permissions(team, proposal);
+  const reviewId = `wr_${(await hash([access.scope.scopeId, access.actorUid, requestId])).slice(0, 48)}`;
+  const previous = await access.db.prepare("SELECT id FROM admin_audit_log WHERE id=?").bind(reviewId).first<Row>();
+  if (previous) return null; // Existing/replayed reviews retain their strict preparation path.
+  const prepared = await buildPrepared(request, access, team, proposal, reviewId, new Date(deps.now() + 15 * 60_000).toISOString(), deps, true, input, reference);
+  if ("state" in prepared) throw new WattzunGuidedFormValidationError(409, "The current answer could not be prepared. Repeat the question to continue.");
+  if (prepared.sourceSha256 !== input.sourceSha256) throw new WattzunGuidedFormValidationError(409, "This form changed before the answer could be saved. Use its current question.");
+  request.signal.throwIfAborted();
+  const fingerprint = await hash(proposal);
+  if (!await insertPreparedReview(access, prepared, fingerprint, deps)) return null;
+  const frozen = await readReview(access, reviewId, deps);
+  if (frozen.saved.fingerprint !== fingerprint || await hash(frozen.prepared.proposal) !== fingerprint || frozen.saved.state !== "prepared") throw new WattzunWorkflowError(409, "This answer's original review changed before execution.");
+  assertGuidedReview(frozen.prepared, reference, input);
+  if (frozen.prepared.guide?.sourceSha256 !== input.sourceSha256 || frozen.prepared.guide.questionKey !== input.questionKey) throw new WattzunWorkflowError(409, "This answer belongs to a different form question.");
+  return { reviewId, frozen };
+}
+async function executeNewGuidedWorkflow(request: Request, authority: WattzunTurnAuthority, journal: NewGuidedJournal,
+  deps: WattzunWorkflowDependencies): Promise<Extract<WattzunWorkflowResult, { state: "complete" }>> {
+  const { frozen, reviewId } = journal, prepared = frozen.prepared, access = authority.access;
+  if (!prepared.guide || !prepared.form && !prepared.completion && !prepared.formStep || frozen.saved.state !== "prepared") throw new WattzunWorkflowError(409, "Choose the original guided form answer.");
+  request.signal.throwIfAborted();
+  const team = requireWattzunTurnTeam(authority); permissions(team, prepared.proposal);
+  await markReviewExecuting(access, reviewId, frozen);
+  // Each canonical form executor independently checks fresh team/target/source
+  // immediately before writing, then verifies the saved source afterwards.
+  const receipt = await sendPrepared(request, access, team, prepared, reviewId, deps);
+  const result = { state: "complete" as const, receipt };
+  if (!isWattzunWorkflowResult(result) || receipt.kind !== prepared.proposal.kind || receipt.status !== (prepared.proposal.kind === "complete_form" ? "submitted" : "saved")) throw new WattzunWorkflowError(503, "The answer's saved receipt could not be verified. Resume this same request.");
+  await recordWorkflowReceipt(access, reviewId, frozen.saved, receipt);
+  request.signal.throwIfAborted();
+  return result;
+}
 /** Only an authorised ordinary answer, or distinct current completion consent, enters the existing journal. */
 export async function executeWattzunGuidedFormForTurn(request: Request, authority: WattzunTurnAuthority,
   reference: FormReference, proposal: GuidedProposal, input: WattzunFormGuideInput, requestId: string,
@@ -538,6 +575,9 @@ export async function executeWattzunGuidedFormForTurn(request: Request, authorit
       throw new WattzunGuidedFormValidationError(400, "Please confirm this current form step separately before it is recorded.");
     }
   }
+  const newJournal = await freezeNewGuidedWorkflow(request, authority, reference, proposal, checked, requestId, deps);
+  const deferredFieldKeys = proposal.kind === "fill_form" ? proposal.answers.filter(item => item.value === false && item.fieldKey === checked.questionKey).map(item => item.fieldKey) : [];
+  if (newJournal) return { reviewId: newJournal.reviewId, deferredFieldKeys, result: await executeNewGuidedWorkflow(request, authority, newJournal, deps) };
   const candidate = await prepareWorkflow(request, authority.access, proposal, requestId, false, deps, team, undefined, checked, reference);
   const reviewId = `wr_${(await hash([authority.access.scope.scopeId, authority.access.actorUid, requestId])).slice(0, 48)}`;
   const frozen = await readReview(authority.access, reviewId, deps);
@@ -546,12 +586,35 @@ export async function executeWattzunGuidedFormForTurn(request: Request, authorit
   if (!binding || binding.sourceSha256 !== checked.sourceSha256 || binding.questionKey !== checked.questionKey) {
     throw new WattzunWorkflowError(409, "This answer was already prepared for a different question. Check its original result first.");
   }
-  const deferredFieldKeys = proposal.kind === "fill_form" ? proposal.answers.filter(item => item.value === false && item.fieldKey === checked.questionKey).map(item => item.fieldKey) : [];
   if (candidate.state === "complete") return { reviewId, result: candidate, deferredFieldKeys };
   if (candidate.state !== "review") throw new WattzunWorkflowError(409, "The current form answer could not be prepared. Repeat the question to continue.");
   const result = await execute(request, authority.access, reviewId, deps);
   if (result.state !== "complete" || result.receipt.kind !== proposal.kind) throw new WattzunWorkflowError(503, "The saved result is not confirmed. Resume this same request before answering another question.");
   return { reviewId, result, deferredFieldKeys };
+}
+/** Journal binding precedes the fresh final authority and exact canonical receipt check. */
+export async function verifyWattzunGuidedReceiptForTurn(request: Request, authority: WattzunTurnAuthority,
+  reference: FormReference, input: WattzunFormGuideInput, originalRequestId: string, reviewId: string,
+  refreshAuthority: () => Promise<WattzunTurnAuthority>, deps: WattzunWorkflowDependencies = defaults): Promise<{
+    result: Extract<WattzunWorkflowResult, { state: "complete" }>; authority: WattzunTurnAuthority;
+  }> {
+  if (!/^[A-Za-z0-9_-]{16,100}$/.test(originalRequestId) || !readWattzunFormGuideInput(input)
+    || reviewId !== `wr_${(await hash([authority.access.scope.scopeId, authority.access.actorUid, originalRequestId])).slice(0, 48)}`) throw new WattzunWorkflowError(403, "Choose the original guided answer request.");
+  const frozen = await readReview(authority.access, reviewId, deps); assertGuidedReview(frozen.prepared, reference, input);
+  if (await hash(frozen.prepared.proposal) !== frozen.saved.fingerprint) throw new WattzunWorkflowError(409, "The original guided answer no longer matches its journal.");
+  const latest = await refreshAuthority();
+  if (latest.access.actorUid !== authority.access.actorUid || latest.access.scope.scopeId !== authority.access.scope.scopeId
+    || latest.access.scope.portal !== authority.access.scope.portal || latest.access.scope.label !== authority.access.scope.label) throw new WattzunWorkflowError(403, "Your workspace changed before this answer could be returned.");
+  request.signal.throwIfAborted();
+  const prepared = frozen.prepared; permissions(requireWattzunTurnTeam(latest), prepared.proposal);
+  const scoped = scopedRequest(request, latest.access.scope.scopeId);
+  const receipt = prepared.form ? await (deps.formReceipt ?? reconcileWattzunFormReceipt)(scoped, latest.access, prepared.form)
+    : prepared.completion ? await (deps.completionReceipt ?? reconcileWattzunFormCompletionReceipt)(scoped, latest.access, prepared.completion)
+      : prepared.formStep ? await (deps.formStepReceipt ?? reconcileWattzunFormStepReceipt)(scoped, latest.access, prepared.formStep) : null;
+  if (!receipt || receipt.kind !== prepared.proposal.kind || receipt.status !== (prepared.proposal.kind === "complete_form" ? "submitted" : "saved") || !isWattzunWorkflowResult({ state: "complete", receipt })
+    || frozen.saved.receipt && JSON.stringify(receipt) !== JSON.stringify(frozen.saved.receipt)) throw new WattzunWorkflowError(409, "The original answer's saved receipt changed. Check this same request before continuing.");
+  request.signal.throwIfAborted();
+  return { result: { state: "complete", receipt }, authority: latest };
 }
 /** Recovery never writes or retries; only the original actor/scope/request journal can prove a save. */
 export async function recoverWattzunGuidedFormForTurn(request: Request, authority: WattzunTurnAuthority,
@@ -652,12 +715,8 @@ async function prepareWorkflow(request: Request, access: WattzunAccess, proposal
     }
     return prepared;
   }
-  const encrypted = await deps.encrypt({ prepared });
-  const saved: ReviewMetadata = { fingerprint, expiresAt, kind: proposal.kind, sourceSha256: prepared.sourceSha256, encrypted, state: "prepared" };
-  const insertion = await access.db.prepare(`INSERT INTO admin_audit_log(id,admin_uid,action,entity_type,entity_id,summary,metadata,created_at)
-    VALUES (?,?,'wattzun.workflow_review','trade_business',?,'Prepared a user-reviewed Wattzun workflow.',?,?) ON CONFLICT(id) DO NOTHING`)
-    .bind(reviewId, access.actorUid, access.scope.scopeId, JSON.stringify(saved), new Date(deps.now()).toISOString()).run();
-  const newPortalReview = deferNewReview && insertion.meta.changes === 1;
+  const inserted = await insertPreparedReview(access, prepared, fingerprint, deps);
+  const newPortalReview = deferNewReview && inserted;
   return loadWorkflowReview(request, access, reviewId, deps, { expectedFingerprint: fingerprint,
     deferSourceRecheck: newPortalReview, preparedTeam: newPortalReview ? after : undefined, turnTeam, refreshTurnTeam });
 }
@@ -830,6 +889,23 @@ async function sendPrepared(request: Request, access: WattzunAccess, team: TeamA
     idempotencyKey: requestKey, callbackUrl: "", messageType: "trade_customer_email" }, { db: access.db, requireConnection: true, beforeSend });
   return messageReceipt(team, prepared, sent.providerMessageId, "submitted");
 }
+async function insertPreparedReview(access: WattzunAccess, prepared: Prepared, fingerprint: string, deps: WattzunWorkflowDependencies): Promise<boolean> {
+  const encrypted = await deps.encrypt({ prepared });
+  const saved: ReviewMetadata = { fingerprint, expiresAt: prepared.review.expiresAt, kind: prepared.proposal.kind, sourceSha256: prepared.sourceSha256, encrypted, state: "prepared" };
+  const insertion = await access.db.prepare(`INSERT INTO admin_audit_log(id,admin_uid,action,entity_type,entity_id,summary,metadata,created_at)
+    VALUES (?,?,'wattzun.workflow_review','trade_business',?,'Prepared a user-reviewed Wattzun workflow.',?,?) ON CONFLICT(id) DO NOTHING`)
+    .bind(prepared.review.reviewId, access.actorUid, access.scope.scopeId, JSON.stringify(saved), new Date(deps.now()).toISOString()).run();
+  return insertion.meta.changes === 1;
+}
+async function markReviewExecuting(access: WattzunAccess, reviewId: string, frozen: Awaited<ReturnType<typeof readReview>>) {
+  const changed = await access.db.prepare("UPDATE admin_audit_log SET metadata=? WHERE id=? AND admin_uid=? AND entity_id=? AND metadata=?")
+    .bind(JSON.stringify({ ...frozen.saved, state: "executing" }), reviewId, access.actorUid, access.scope.scopeId, String(frozen.row.metadata)).run();
+  if (changed.meta.changes !== 1) throw new WattzunWorkflowError(409, "This review is already being processed. Check the same review again.");
+}
+async function recordWorkflowReceipt(access: WattzunAccess, reviewId: string, saved: ReviewMetadata, receipt: WattzunWorkflowReceipt) {
+  await access.db.prepare("UPDATE admin_audit_log SET metadata=? WHERE id=? AND admin_uid=? AND entity_id=? AND json_extract(metadata,'$.state')='executing'")
+    .bind(JSON.stringify({ ...saved, state: receipt.status === "unknown" ? "executing" : "complete", receipt }), reviewId, access.actorUid, access.scope.scopeId).run();
+}
 async function execute(request: Request, access: WattzunAccess, reviewId: string, deps: WattzunWorkflowDependencies): Promise<WattzunWorkflowResult> {
   const team = await currentTeam(request, access, deps); const frozen = await readReview(access, reviewId, deps);
   permissions(team, frozen.prepared.proposal);
@@ -850,9 +926,7 @@ async function execute(request: Request, access: WattzunAccess, reviewId: string
     if ("state" in fresh || fresh.sourceSha256 !== frozen.saved.sourceSha256) throw new WattzunWorkflowError(409, "The job, invoice, recipient or connection changed. Prepare a fresh review.");
   }
   if (frozen.saved.state === "prepared") {
-    const changed = await access.db.prepare("UPDATE admin_audit_log SET metadata=? WHERE id=? AND admin_uid=? AND entity_id=? AND metadata=?")
-      .bind(JSON.stringify({ ...frozen.saved, state: "executing" }), reviewId, access.actorUid, access.scope.scopeId, String(frozen.row.metadata)).run();
-    if (changed.meta.changes !== 1) throw new WattzunWorkflowError(409, "This review is already being processed. Check the same review again.");
+    await markReviewExecuting(access, reviewId, frozen);
   }
   const current = await currentTeam(request, access, deps); permissions(current, frozen.prepared.proposal);
   let receipt: WattzunWorkflowReceipt;
@@ -861,8 +935,7 @@ async function execute(request: Request, access: WattzunAccess, reviewId: string
     if (!(error instanceof ReminderProviderDeliveryError) || !frozen.prepared.message) throw error;
     receipt = messageReceipt(current, frozen.prepared, reviewId, error.outcome === "indeterminate" ? "unknown" : "failed");
   }
-  await access.db.prepare("UPDATE admin_audit_log SET metadata=? WHERE id=? AND admin_uid=? AND entity_id=? AND json_extract(metadata,'$.state')='executing'")
-    .bind(JSON.stringify({ ...frozen.saved, state: receipt.status === "unknown" ? "executing" : "complete", receipt }), reviewId, access.actorUid, access.scope.scopeId).run();
+  await recordWorkflowReceipt(access, reviewId, frozen.saved, receipt);
   await currentTeam(request, access, deps);
   return { state: "complete", receipt };
 }

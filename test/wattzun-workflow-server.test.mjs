@@ -369,6 +369,70 @@ test('guided validation rejects a value before journal creation and dispatch, th
   const saved = await f.executeGuided(f.proposal, input, 'guided-valid-answer-00002'); assert.equal(saved.result.receipt.status, 'saved'); assert.equal(f.calls.length, 1);
 });
 
+test('a new guided answer retains canonical prewrite and postwrite checks with seven snapshots through its final handoff', async () => {
+  const f = await guidedWorkflowFixture(), getForms = f.formDeps.getJobForms; let snapshots = 0, canonicalAuthorities = 0;
+  f.formDeps.getJobForms = async (...args) => { snapshots++; return getForms(...args); };
+  f.formDeps.team = async () => { canonicalAuthorities++; return structuredClone(f.team); };
+  f.deps.team = async () => { throw new Error('New private guided execution must use the canonical executor authority, not a duplicate review authority.'); };
+  const input = await f.currentInput(), requestId = 'guided-snapshot-request-0001';
+  const saved = await f.executeGuided(f.proposal, input, requestId); assert.equal(snapshots, 4); assert.equal(canonicalAuthorities, 2);
+  const next = await f.progress(); assert.equal(next.guide.next.fieldKey, 'next_question'); assert.equal(snapshots, 5);
+  let refreshed = 0; const decrypts = f.decryptCalls();
+  const checked = await workflowModule.verifyWattzunGuidedReceiptForTurn(f.request, f.initial, f.reference, f.session, requestId, saved.reviewId, async () => {
+    refreshed++; assert.ok(f.decryptCalls() > decrypts, 'The exact journal is decrypted before final authority refresh');
+    return f.initial;
+  }, f.deps);
+  assert.deepEqual(checked.result, saved.result); assert.equal(refreshed, 1); assert.equal(snapshots, 6); assert.equal(canonicalAuthorities, 3);
+  const finalGuide = await f.progress(); assert.equal(finalGuide.context.sourceSha256, next.context.sourceSha256); assert.equal(snapshots, 7);
+  assert.equal(f.calls.length, 1); assert.equal(f.saved.revision, 2); assert.equal(f.saved.status, 'draft');
+});
+
+test('new private guided execution still denies current source changes or revoked canonical authority before its write', async () => {
+  for (const reason of ['source', 'permission', 'cipher']) {
+    const f = await guidedWorkflowFixture(), input = await f.currentInput(), encrypt = f.deps.encrypt;
+    f.deps.encrypt = async value => {
+      const encrypted = await encrypt(value);
+      if (reason === 'source') { f.saved.answers.site_notes = 'New office edit'; f.saved.revision++; }
+      if (reason === 'permission') f.team.canManageFieldEvidence = false;
+      if (reason === 'cipher') for (const payload of f.cipher.values()) payload.prepared.proposal.answers[0].value = 'Changed frozen proposal';
+      return encrypted;
+    };
+    await assert.rejects(f.executeGuided(f.proposal, input, `guided-new-${reason}-request-0001`), error => error.status >= 400);
+    assert.equal(f.calls.length, 0); assert.notEqual(f.saved.answers.site_notes, 'Access via side gate.');
+  }
+});
+
+test('guided final receipt verification binds original actor request and session before refresh and denies final source or grant changes', async () => {
+  const f = await guidedWorkflowFixture(), input = await f.currentInput(), requestId = 'guided-final-request-0001';
+  const saved = await f.executeGuided(f.proposal, input, requestId); let refreshed = 0;
+  const check = (reference = f.reference, guide = f.session, original = requestId, refresh = async () => { refreshed++; return f.initial; }) =>
+    workflowModule.verifyWattzunGuidedReceiptForTurn(f.request, f.initial, reference, guide, original, saved.reviewId, refresh, f.deps);
+  await assert.rejects(check(f.reference, f.session, 'wrong-original-request-0001'), error => error.status === 403);
+  await assert.rejects(check(f.reference, { ...f.session, sessionId: '00000000-0000-4000-8000-000000000002' }), error => error.status === 403);
+  await assert.rejects(check({ ...f.reference, recordId: 'another-form' }), error => error.status === 403); assert.equal(refreshed, 0);
+  await assert.rejects(check(f.reference, f.session, requestId, async () => ({ ...f.initial, access: { ...f.initial.access, actorUid: 'another-actor' } })), error => error.status === 403);
+  await assert.rejects(check(f.reference, f.session, requestId, async () => {
+    f.team.canManageFieldEvidence = false; return { ...f.initial, tradeTeam: structuredClone(f.team) };
+  }), error => error.status === 403); f.team.canManageFieldEvidence = true;
+  await assert.rejects(check(f.reference, f.session, requestId, async () => {
+    f.saved.answers.site_notes = 'Changed after journal read'; f.saved.revision++; return f.initial;
+  }), error => error.status === 409); assert.equal(f.calls.length, 1);
+});
+
+test('guided final receipt verification never writes while reconciling prepared or executing journal states', async () => {
+  for (const state of ['prepared', 'executing']) for (const saved of [false, true]) {
+    const f = await guidedWorkflowFixture(), input = await f.currentInput(), requestId = `guided-${state}-${saved}-request-0001`;
+    f.state.failAfterSave = true; await assert.rejects(f.executeGuided(f.proposal, input, requestId)); f.state.failAfterSave = false;
+    const row = f.database.prepare('SELECT id,metadata FROM admin_audit_log').get(), metadata = JSON.parse(row.metadata);
+    metadata.state = state; delete metadata.receipt; f.database.prepare('UPDATE admin_audit_log SET metadata=? WHERE id=?').run(JSON.stringify(metadata), row.id);
+    if (!saved) { f.saved.answers = {}; f.saved.revision = 1; }
+    const verify = () => workflowModule.verifyWattzunGuidedReceiptForTurn(f.request, f.initial, f.reference, f.session, requestId, row.id, async () => f.initial, f.deps);
+    if (saved) assert.equal((await verify()).result.receipt.status, 'saved');
+    else await assert.rejects(verify(), error => error.status === 409);
+    assert.equal(f.calls.length, 1); assert.equal(JSON.parse(f.database.prepare('SELECT metadata FROM admin_audit_log').get().metadata).state, state);
+  }
+});
+
 test('guided declarations require their native control and spoken agreement never creates a journal or signature', async () => {
   const f = await guidedWorkflowFixture();
   f.saved.template.fields.unshift({ key: 'consent', label: 'I personally declare these supplied facts are correct.', type: 'checkbox', required: true });
@@ -388,8 +452,8 @@ test('guided declarations require their native control and spoken agreement neve
 
 test('closing a guided call during canonical team verification stops before the business save', async () => {
   const f = await guidedWorkflowFixture(), input = await f.currentInput(), controller = new AbortController();
-  f.deps.team = async () => { controller.abort(); return f.team; };
-  await assert.rejects(workflowModule.executeWattzunGuidedFormForTurn(new Request(f.request.url, { signal: controller.signal }), f.initial, f.reference, f.proposal, input, 'guided-closed-call-000001', '', f.deps), error => error.status === 409);
+  f.formDeps.team = async () => { controller.abort(); return f.team; };
+  await assert.rejects(workflowModule.executeWattzunGuidedFormForTurn(new Request(f.request.url, { signal: controller.signal }), f.initial, f.reference, f.proposal, input, 'guided-closed-call-000001', '', f.deps), error => error.name === 'AbortError' || error.status === 409);
   assert.equal(f.calls.length, 0); assert.equal(f.saved.revision, 1);
 });
 

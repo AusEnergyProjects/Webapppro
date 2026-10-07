@@ -343,6 +343,11 @@ function guidedRouteFixture() {
   f.deps.reviewTurnWorkflow = async (_request, _authority, reviewId, refresh) => {
     assert.equal(reviewId, 'guided-review-1234567890'); return { result: [...journal.values()].at(-1).result, authority: await refresh() };
   };
+  f.deps.verifyGuidedReceipt = async (_request, _authority, selected, raw, originalRequestId, reviewId, refresh) => {
+    f.events.push('verifyGuidedReceipt'); assert.deepEqual(selected, reference); assert.equal(raw.sessionId, guideInput.sessionId);
+    assert.equal(reviewId, 'guided-review-1234567890'); const original = journal.get(originalRequestId); assert.ok(original);
+    return { result: original.result, authority: await refresh() };
+  };
   const freshAudio = () => { const audio = providerAudio(); audios.push(audio); audio.push(Uint8Array.from([0, 1, 2, 3])); audio.finish(); return audio.stream; };
   f.deps.realtime = async context => { f.events.push('realtime'); assert.ok(context.formGuideProgress); const reply = await context.transformReply(options.reply, options.requestSummary); await context.beforeSpeech(); return { reply, audio: freshAudio(), requestSummary: options.requestSummary }; };
   f.deps.streamSpeak = async context => { f.events.push('streamSpeak'); f.speechContexts.push(context); return freshAudio(); };

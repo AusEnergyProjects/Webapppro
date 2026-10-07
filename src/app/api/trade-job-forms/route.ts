@@ -37,22 +37,35 @@ function parseJson(value: unknown, fallback: unknown) {
   try { return JSON.parse(String(value || "")); } catch { return fallback; }
 }
 
-function containsPrivateData(value: unknown) {
-  const text = JSON.stringify(value || {});
+function containsPrivateData(value: Record<string, unknown>, template: Record<string, unknown>) {
+  const dateFields = new Set<string>();
+  for (const field of Array.isArray(template.fields) ? template.fields : []) {
+    if (field && typeof field === "object" && field.type === "date" && typeof field.key === "string") dateFields.add(field.key);
+  }
+  // Canonical normalization has already rejected invalid dates. Exempt only an
+  // ISO date in its actual date field, never date-like text in ordinary answers.
+  const text = JSON.stringify(Object.fromEntries(Object.entries(value).filter(([key, answer]) =>
+    !dateFields.has(key) || typeof answer !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(answer))));
   return EMAIL_PATTERN.test(text) || PHONE_PATTERN.test(text);
 }
 
 async function formPayload(ownerUid: string, workOrderId: string) {
   const db = getD1();
-  const work = await db.prepare(`SELECT w.id, w.service_category, w.source_type, d.customer_source FROM trade_work_orders w
+  const payload = await db.batch<Record<string, unknown>>([
+    db.prepare(`SELECT w.id, w.service_category, w.source_type, d.customer_source FROM trade_work_orders w
     LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
-    .bind(workOrderId, ownerUid).first<Record<string, unknown>>();
-  if (!work) throw new Error("JOB_NOT_FOUND");
-  const rows = await db.prepare(`SELECT id, template_key, template_version, template_name, jurisdiction,
+    .bind(workOrderId, ownerUid),
+    db.prepare(`SELECT id, template_key, template_version, template_name, jurisdiction,
       template_snapshot, answers, status, revision, completed_by_uid, completed_at, created_at, updated_at
     FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at`)
-    .bind(workOrderId, ownerUid).all<Record<string, unknown>>();
+    .bind(workOrderId, ownerUid),
+  ]);
+  if (!Array.isArray(payload) || payload.length !== 2 || !payload[0]?.success || !Array.isArray(payload[0].results) || payload[0].results.length > 1) throw new Error("FORM_PAYLOAD_UNAVAILABLE");
+  const work = payload[0].results[0];
+  if (!work) throw new Error("JOB_NOT_FOUND");
+  const rows = payload[1];
+  if (!rows?.success || !Array.isArray(rows.results)) throw new Error("FORM_PAYLOAD_UNAVAILABLE");
   return {
     serviceCategory: String(work.service_category),
     protectedJob: work.source_type === "opportunity" || work.customer_source === "platform_private",
@@ -201,7 +214,7 @@ export async function PATCH(request: Request) {
       return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This form changed elsewhere. Refresh it before saving." }, 409);
     }
     const answers = normalizeTradeFormAnswers(template, body.answers);
-    if (containsPrivateData(answers)) return adminJson({ ok: false, error: "Keep customer contact details and phone numbers out of technical field forms." }, 400);
+    if (containsPrivateData(answers, template)) return adminJson({ ok: false, error: "Keep customer contact details and phone numbers out of technical field forms." }, 400);
     const completion = tradeFormCompletion(template, answers);
     const complete = body.complete === true;
     if (complete && !completion.ready) return adminJson({ ok: false, error: `Complete the required fields: ${completion.missing.join(", ")}.` }, 400);
