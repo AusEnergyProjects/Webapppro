@@ -41,7 +41,9 @@ type DiagnosticStructure = {
   outerFieldCount?: number;
   replyFieldCount?: number;
   replyType?: DiagnosticValueType;
-  replyFieldTypes?: Partial<Record<"kind" | "message" | "questions" | "linkIds" | "action" | "lookup", DiagnosticValueType>>;
+  replyFieldTypes?: Partial<Record<"message" | "questions" | "linkIds" | "action" | "lookup", DiagnosticValueType>>;
+  questionCount?: number;
+  questionLengths?: (number | null)[];
   actionFieldCount?: number;
   actionFieldTypes?: Partial<Record<"kind" | "firstName" | "lastName" | "email" | "phone" | "addressQuery" | "serviceCategory" | "description" | "lines", DiagnosticValueType>>;
   lineCount?: number;
@@ -121,8 +123,12 @@ function captureArgumentStructure(diagnostic: TurnDiagnostic, raw: unknown) {
   if (record(raw.reply)) {
     diagnostic.structure.replyFieldCount = Object.keys(raw.reply).length;
     diagnostic.structure.replyFieldTypes = {};
-    for (const field of ["kind", "message", "questions", "linkIds", "action", "lookup"] as const) {
+    for (const field of ["message", "questions", "linkIds", "action", "lookup"] as const) {
       diagnostic.structure.replyFieldTypes[field] = valueType(raw.reply[field]);
+    }
+    if (Array.isArray(raw.reply.questions)) {
+      diagnostic.structure.questionCount = raw.reply.questions.length;
+      diagnostic.structure.questionLengths = raw.reply.questions.slice(0, 4).map(value => typeof value === "string" ? value.length : null);
     }
     if (record(raw.reply.action)) {
       diagnostic.structure.actionFieldCount = Object.keys(raw.reply.action).length;
@@ -453,7 +459,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     // Apply the same bounded text and false-completion/source-access checks to
     // memory. It remains an explicitly unconfirmed interpretation of the input.
     diagnostic.substage = "summary";
-    const requestSummary = contract.validate({ kind: "answer", message: raw.requestSummary,
+    const requestSummary = contract.validate({ message: raw.requestSummary,
       questions: [], linkIds: [], action: null, lookup: null }).message;
     diagnostic.duration("rt_validate", validateStarted);
     signal.throwIfAborted();

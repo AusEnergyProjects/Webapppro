@@ -25,8 +25,8 @@ const workflowExecutable=ts.transpileModule(readFileSync(new URL('../src/lib/wor
 const KEY = 'test-only-wattzun-key-never-real';
 const SECRET = 'test-only-wattzun-budget-secret';
 const REQUEST_ID = '00000000-0000-4000-8000-000000000001';
-const answer = { kind: 'answer', message: 'Open Schedule to review your visits.', questions: [], linkIds: ['trade_schedule'], action: null, lookup: null };
-const clarification = { kind: 'clarification', message: 'I can draft the invitation. I need two details first.', questions: ['Who is the invitation for?', 'What date and time should it include?'], linkIds: [], action: null, lookup: null };
+const answer = { message: 'Open Schedule to review your visits.', questions: [], linkIds: ['trade_schedule'], action: null, lookup: null };
+const clarification = { message: 'I can draft the invitation. I need two details first.', questions: ['Who is the invitation for?', 'What date and time should it include?'], linkIds: [], action: null, lookup: null };
 const proposal = { kind: 'prepare_quote', firstName: 'Jane', lastName: 'Smith', email: '', phone: '', addressQuery: '',
   serviceCategory: 'heat_pump', description: 'Replace the existing hot water system.',
   lines: [{ lineType: 'product', description: 'Heat pump supply', quantity: null, unitPrice: null, taxCode: null }] };
@@ -90,7 +90,8 @@ test('portal text reuses the guarded workflow provider with a strict small schem
   const call = f.workflows[0];
   assert.equal(call.db, options.db); assert.equal(call.actorUid, options.actorUid); assert.equal(call.scopeUid, 'trade:private-business');
   assert.equal(call.requestId, REQUEST_ID); assert.equal(call.name, 'wattzun_portal_reply'); assert.equal(call.responseProfile, 'wattzun');
-  assert.equal(call.schema.additionalProperties, false); assert.deepEqual(call.schema.required, ['kind', 'message', 'questions', 'linkIds', 'action', 'lookup']);
+  assert.equal(call.schema.additionalProperties, false); assert.deepEqual(call.schema.required, ['message', 'questions', 'linkIds', 'action', 'lookup']);
+  assert.deepEqual(Object.keys(call.schema.properties), call.schema.required);
   assert.equal(call.schema.properties.message.maxLength, 1800); assert.equal(call.schema.properties.questions.maxItems, 3);
   assert.equal(call.schema.properties.questions.items.maxLength, 300);
   assert.equal(call.schema.properties.action.anyOf[0].type, 'null');
@@ -117,7 +118,8 @@ test('portal text reuses the guarded workflow provider with a strict small schem
   assert.match(call.instructions, /Discuss housing improvements only when they support the user's requested work/);
   assert.match(call.instructions, /Do not start household energy-planner intake/);
   assert.match(call.instructions, /Never create a second job for an existing quote request/);
-  assert.match(call.instructions, /exactly these six keys: kind, message, questions, linkIds, action, lookup/);
+  assert.match(call.instructions, /exactly these five keys: message, questions, linkIds, action, lookup/);
+  assert.match(call.instructions, /Never omit unused keys or add a top-level kind field/);
   assert.match(call.instructions, /Never omit unused keys/);
   assert.match(call.instructions, /When action contains a proposal, lookup must be null/);
   assert.match(call.instructions, /When lookup contains a record search, action must be null/);
@@ -169,6 +171,22 @@ test('clarification asks the minimum relevant questions and history retains answ
   assert.match(call.instructions, /Never imply.*records were read/);
   assert.match(call.instructions, /voice and personality are fixed by Wattzun/);
   assert.match(call.instructions, /warm, conversational tone.*light humour/);
+});
+
+test('public answer and clarification kinds derive only from validated questions with or without an action', async () => {
+  for (const action of [null, proposal]) {
+    for (const questions of [[], ['  Which service address should this quote use?  ']]) {
+      const providerReply = { ...answer, message: 'Review the supplied details.', questions, linkIds: [], action };
+      assert.equal(Object.hasOwn(providerReply, 'kind'), false);
+      const f = fixture({ result: providerReply });
+      const reply = await f.prepareWattzunPortalReply(request());
+      assert.equal(reply.kind, questions.length ? 'clarification' : 'answer');
+      assert.deepEqual(reply.questions, questions.map(question => question.trim()));
+      assert.deepEqual(reply.action, action || undefined);
+      assert.equal(reply.lookup, undefined);
+      assert.equal(reply.message, providerReply.message);
+    }
+  }
 });
 
 test('follow-up answers can finish the same draft without another question', async () => {
@@ -291,12 +309,12 @@ test('canonical reply rejection reasons are static and retain no private provide
   const base = { ...answer, message: privateContent };
   for (const [reason, invalid] of [
     ['shape', { ...base, [privateContent]: privateContent }],
-    ['questions', { ...base, kind: 'clarification', questions: [privateContent.repeat(8)] }],
+    ['questions', { ...base, questions: [privateContent.repeat(8)] }],
     ['links', { ...base, linkIds: [privateContent] }],
     ['action_shape', { ...base, action: { ...proposal, firstName: privateContent, kind: privateContent } }],
     ['action_bounds', { ...base, action: { ...proposal, firstName: privateContent, description: 's'.repeat(1001) } }],
     ['lookup_shape', { ...base, lookup: { kind: 'job', query: privateContent.repeat(3) } }],
-    ['spoken_bound', { ...base, kind: 'clarification', message: privateContent.padEnd(1800, 'm'), questions: ['a'.repeat(200), 'b'.repeat(200), 'c'.repeat(200)] }],
+    ['spoken_bound', { ...base, message: privateContent.padEnd(1800, 'm'), questions: ['a'.repeat(200), 'b'.repeat(200), 'c'.repeat(200)] }],
     ['completed_claim', { ...base, message: `I saved the quote for ${privateContent}.` }],
     ['unloaded_access_claim', { ...base, message: `I read the database for ${privateContent}.` }],
   ]) {
@@ -344,12 +362,12 @@ test('action and lookup capabilities stay trade-only and mutually exclusive even
 const malformed = [
   ['null', null], ['array', []], ['unknown field', { ...answer, secret: 'extra' }], ['unknown kind', { ...answer, kind: 'action' }],
   ['empty message', { ...answer, message: ' ' }], ['message too long', { ...answer, message: 'x'.repeat(1801) }],
-  ['control character', { ...answer, message: 'hello\u0000' }], ['questions missing', { kind: 'answer', message: 'Hello', linkIds: [], action: null, lookup: null }],
-  ['nullable action missing', { kind: 'answer', message: 'Hello', questions: [], linkIds: [], lookup: null }],
-  ['nullable lookup missing', { kind: 'answer', message: 'Hello', questions: [], linkIds: [], action: null }],
+  ['control character', { ...answer, message: 'hello\u0000' }], ['questions missing', { message: 'Hello', linkIds: [], action: null, lookup: null }],
+  ['nullable action missing', { message: 'Hello', questions: [], linkIds: [], lookup: null }],
+  ['nullable lookup missing', { message: 'Hello', questions: [], linkIds: [], action: null }],
   ['questions not array', { ...answer, questions: 'What?' }], ['too many questions', { ...clarification, questions: ['A?', 'B?', 'C?', 'D?'] }],
   ['question too long', { ...clarification, questions: ['x'.repeat(301)] }], ['blank question', { ...clarification, questions: [' '] }],
-  ['clarification without question', { ...clarification, questions: [] }], ['answer with question', { ...answer, questions: ['What?'] }],
+  ['provider answer classifier', { ...answer, kind: 'answer' }], ['provider clarification classifier', { ...clarification, kind: 'clarification' }],
   ['unsupported link', { ...answer, linkIds: ['public_aea'] }], ['cross-portal link', { ...answer, linkIds: ['council_reports'] }],
   ['arbitrary URL', { ...answer, linkIds: ['https://untrusted.example/'] }], ['links not array', { ...answer, linkIds: {} }],
   ['too many links', { ...answer, linkIds: ['trade_work', 'trade_forms', 'trade_finance', 'trade_schedule'] }],

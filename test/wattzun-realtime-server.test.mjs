@@ -10,7 +10,7 @@ import * as guide from "../src/lib/wattzun-portal-guide.ts";
 import { SURGE_USAGE_GUARD_ENV } from "../src/lib/energy-assistant-usage-guard.ts";
 
 const KEY = "fixture-key-never-real";
-const answer = { kind: "answer", message: "Open Schedule to review your visits.", questions: [], linkIds: ["trade_schedule"], action: null, lookup: null };
+const answer = { message: "Open Schedule to review your visits.", questions: [], linkIds: ["trade_schedule"], action: null, lookup: null };
 const compile = (name, dependencies, globals = {}) => {
   const source = readFileSync(new URL(`../src/lib/${name}.ts`, import.meta.url), "utf8");
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -200,6 +200,7 @@ test("native quote proposals discard unchecked text preambles and speak only the
   const prepared = await f.prepareWattzunRealtimeTurn(request({ beforeSpeech: async () => { approved++; } }));
   await bytes(prepared.audio);
   assert.equal(approved, 1); assert.deepEqual(prepared.reply.action, quote.action);
+  assert.equal(prepared.reply.kind, "answer");
   assert.equal(prepared.reply.message, quote.message);
   assert.equal(f.socket.sent.filter(event => event.type === "response.create")[1].response.input[0].content[0].text, quote.message);
   assert.doesNotMatch(JSON.stringify({ reply: prepared.reply, summary: prepared.requestSummary, sent: f.socket.sent, logs: [f.errors, f.infos] }), /private-customer|Ignore review|I've sent/);
@@ -309,9 +310,10 @@ test("Upgrade ownership survives cancellation queued between fetch resolution an
 
 test("unconfirmed request memory preserves the task and supplied facts without becoming speech or a transcript", async () => {
   const summary = "User wants a heat-pump quote for Jane, name spelling unconfirmed. Supply is $2400 before GST. Street address is still missing.";
-  const reply = { kind: "clarification", message: "I can help prepare that quote.", questions: ["How is Jane's surname spelt?"], linkIds: [], action: null, lookup: null };
+  const reply = { message: "I can help prepare that quote.", questions: ["How is Jane's surname spelt?"], linkIds: [], action: null, lookup: null };
   const f = fixture({ reply, requestSummary: summary });
   const prepared = await f.prepareWattzunRealtimeTurn(request()); await bytes(prepared.audio);
+  assert.equal(prepared.reply.kind, "clarification");
   assert.equal(prepared.requestSummary, summary); assert.equal(prepared.transcript, undefined);
   const speech = f.socket.sent.filter(event => event.type === "response.create")[1].response;
   assert.equal(speech.input[0].content[0].text, portal.wattzunSpokenReply(prepared.reply));
@@ -511,7 +513,7 @@ test("native failure diagnostics identify validation substages using only static
     assert.deepEqual(diagnostic.outputKinds, ["function_call"]); assert.equal(diagnostic.outputItemCount, 1);
     assert.equal(diagnostic.argumentLength, example.arguments.length); assert.equal(diagnostic.outerFieldCount, example.outer);
     if (diagnostic.replyFieldTypes) assert.deepEqual(diagnostic.replyFieldTypes,
-      { kind: "string", message: "string", questions: "array", linkIds: "array", action: "null", lookup: "null" });
+      { message: "string", questions: "array", linkIds: "array", action: "null", lookup: "null" });
     assert.doesNotMatch(JSON.stringify(f.errors), /private-|fixture-key|example\.test|proposal-id|speech-id|Schedule|I've sent/);
     assert.equal(f.released(), 1);
   });
