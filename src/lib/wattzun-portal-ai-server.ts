@@ -244,7 +244,11 @@ export async function prepareWattzunPortalReply(options: PortalRequest): Promise
     requestId: options.input.requestId, name: "wattzun_portal_reply", responseProfile: "wattzun", instructions: contract.instructions,
     input: contract.input, schema: contract.schema, signal: options.signal,
   });
-  return contract.validate(raw);
+  try { return contract.validate(raw); }
+  catch (error) {
+    if (error instanceof WattzunReplyValidationError) console.warn("Wattzun reply rejected", { reason: error.reason });
+    throw error;
+  }
 }
 
 export function wattzunPortalProviderConfiguration(options: PortalRequest) {

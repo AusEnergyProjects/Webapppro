@@ -474,7 +474,7 @@ test('canonical reply rejection reasons are static and retain no private provide
       assert.ok(!(String(error) + error.stack + JSON.stringify(error)).includes(privateContent));
       return true;
     });
-    assert.deepEqual(f.logs, []);
+    assert.deepEqual(f.logs, [['Wattzun reply rejected', { reason }]]);
     assert.deepEqual(f.calls, []);
   }
 });
@@ -523,7 +523,10 @@ const malformed = [
 for (const [name, result] of malformed) {
   test(`structured reply rejects ${name}`, async () => {
     const f = fixture({ result }); await assert.rejects(f.prepareWattzunPortalReply(request()), safeError);
-    assert.deepEqual(f.calls, []); assert.deepEqual(f.logs, []);
+    assert.deepEqual(f.calls, []);
+    assert.equal(f.logs.length, 1); assert.equal(f.logs[0][0], 'Wattzun reply rejected');
+    assert.deepEqual(Object.keys(f.logs[0][1]), ['reason']);
+    assert.ok(['shape', 'questions', 'links', 'spoken_bound'].includes(f.logs[0][1].reason));
   });
 }
 

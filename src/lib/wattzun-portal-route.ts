@@ -222,24 +222,40 @@ export async function postWattzunPortal(request: Request, deps = defaults): Prom
     return json({ ok: false, error: "Send your question as JSON." }, 415);
   }
   const timing = turnTimer();
+  let phase: "auth" | "input" | "context" | "pending_workflow" | "reply" | "workflow" | "recheck" | "usage" = "auth";
   try {
     await timing.run("auth", () => deps.authenticate(request));
     requireOpenConversation(request);
+    phase = "input";
     const bytes = await boundedBody(request, 40_000);
     if (!bytes) return json({ ok: false, error: "The conversation is too large. Start a new conversation." }, 413);
     const input = parseWattzunTurn(JSON.parse(new TextDecoder().decode(bytes)));
+    phase = "context";
     const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
     const workContext = await timing.run("access", () => selectedContext(request, access, input, deps));
+    phase = "pending_workflow";
     const workflow = await timing.run("access", () => initialWorkflow(request, access, input, workContext, deps));
+    phase = "reply";
     const rawReply = await timing.run("llm", () => deps.reply({ ...access, input, workContext, workflowContext: workflow.result, signal: request.signal }));
+    phase = "workflow";
     const reply = await timing.run("access", () => processWorkflowReply(request, access, input, workContext, rawReply, workflow, deps));
+    phase = "recheck";
     const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
+    phase = "usage";
     await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "text" }));
+    phase = "recheck";
     const finalAccess = await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
     await timing.run("access", () => recheckWorkflow(request, finalAccess, input, workflow, deps));
     return timing.response(json({ ok: true, reply: withContext(reply, workContext) }));
-  } catch (error) { return timing.response(failure(error)); }
+  } catch (error) {
+    const response = failure(error);
+    if (response.status >= 500) {
+      const known = ["WORKFLOW_AI_UNAVAILABLE", "WORKFLOW_AI_INCOMPLETE", "WORKFLOW_AI_INPUT_LIMIT"];
+      console.warn("Wattzun text turn failed", { phase, category: error instanceof Error && known.includes(error.message) ? error.message : "internal" });
+    }
+    return timing.response(response);
+  }
 }
 export async function postWattzunVoice(request: Request, deps = defaults): Promise<Response> {
   if (!acceptedOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);

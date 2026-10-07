@@ -49,6 +49,11 @@ const workflowError = error => {
   assert.doesNotMatch(error.message + String(error.cause || ''), new RegExp(`${KEY}|${GUARD_SECRET}|provider-private-details`));
   return true;
 };
+const privateDiagnosticData = new RegExp(`${KEY}|${GUARD_SECRET}|provider-private-details|private-actor|private-business|untrusted\\.example|Ignore previous instructions|Review the supplied record`);
+function diagnostic(f, category, details) {
+  assert.deepEqual(f.logs, [[`[workflow-ai] ${category}`, details]]);
+  assert.doesNotMatch(JSON.stringify(f.logs), privateDiagnosticData);
+}
 
 test('configured provider uses strict Responses JSON schema, store false and no tools or mutation authority', async () => {
   const f = fixture(), options = request();
@@ -156,36 +161,79 @@ test('input limit counts UTF-8 bytes and does not reserve or send oversized cont
 });
 
 const malformed = [
-  ['response still running', { status: 'in_progress', output: [] }],
-  ['incomplete provider response', { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: complete().output }],
-  ['missing response output', { status: 'completed' }],
-  ['null response', null],
-  ['message refusal', { status: 'completed', output: [{ type: 'message', status: 'completed', content: [{ type: 'refusal', refusal: `provider-private-details ${KEY}` }] }] }],
-  ['incomplete message', { status: 'completed', output: [{ type: 'message', status: 'incomplete', content: complete().output[0].content }] }],
-  ['unfinished message in completed envelope', { status: 'completed', output: [{ type: 'message', status: 'in_progress', content: complete().output[0].content }] }],
-  ['missing message content', { status: 'completed', output: [{ type: 'message', status: 'completed' }] }],
-  ['empty output', { status: 'completed', output: [] }],
-  ['ambiguous multiple texts', { status: 'completed', output: [{ type: 'message', status: 'completed', content: [...complete().output[0].content, ...complete().output[0].content] }] }],
-  ['malformed structured output', complete(`{invalid provider-private-details ${KEY}`)],
-  ['excessive structured output', complete('x'.repeat(18001))],
+  ['response still running', { status: 'in_progress', output: [] }, 'response_status'],
+  ['incomplete provider response', { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: complete().output }, 'response_status'],
+  ['missing response output', { status: 'completed' }, 'response_output'],
+  ['null response', null, 'response_status'],
+  ['message refusal', { status: 'completed', output: [{ type: 'message', status: 'completed', content: [{ type: 'refusal', refusal: `provider-private-details ${KEY}` }] }] }, 'refusal'],
+  ['incomplete message', { status: 'completed', output: [{ type: 'message', status: 'incomplete', content: complete().output[0].content }] }, 'message_status'],
+  ['unfinished message in completed envelope', { status: 'completed', output: [{ type: 'message', status: 'in_progress', content: complete().output[0].content }] }, 'message_status'],
+  ['missing message content', { status: 'completed', output: [{ type: 'message', status: 'completed' }] }, 'message_content'],
+  ['empty output', { status: 'completed', output: [] }, 'text_count'],
+  ['ambiguous multiple texts', { status: 'completed', output: [{ type: 'message', status: 'completed', content: [...complete().output[0].content, ...complete().output[0].content] }] }, 'text_count'],
+  ['malformed structured output', complete(`{invalid provider-private-details ${KEY}`), 'structured_json'],
+  ['excessive structured output', complete('x'.repeat(18001)), 'text_size'],
 ];
-for (const [name, value] of malformed) {
+for (const [name, value, stage] of malformed) {
   test(`${name} fails closed and releases the reservation without exposing provider contents`, async () => {
     const f = fixture({ fetch: async () => response(value) }); await assert.rejects(f.requestWorkflowAi(request()), workflowError);
-    assert.equal(f.calls.length, 1); assert.equal(f.released(), 1); assert.deepEqual(f.logs, []);
+    assert.equal(f.calls.length, 1); assert.equal(f.released(), 1);
+    diagnostic(f, stage === 'structured_json' ? 'provider_transport_failure' : 'provider_incomplete', { stage });
   });
 }
 
 test('HTTP failures, fetch aborts, response read failures and malformed JSON release once and sanitize errors', async () => {
   const failedResponse = { ok: false, text: async () => { throw new Error('Provider error body must not be read'); } };
-  for (const fetch of [async () => failedResponse, async () => { throw new Error(`provider-private-details ${KEY}`); },
-    async () => { throw new DOMException(`provider-private-details ${KEY}`, 'AbortError'); },
-    async () => ({ ok: true, text: async () => { throw new Error(`provider-private-details ${KEY}`); } }),
-    async () => ({ ok: true, text: async () => `{invalid provider-private-details ${KEY}` }),
-    async () => ({ ok: true, text: async () => 'x'.repeat(100001) })]) {
+  for (const [fetch, category, details] of [[async () => failedResponse, 'provider_http_failure', { status: null, code: null, type: null }],
+    [async () => { throw new Error(`provider-private-details ${KEY}`); }, 'provider_transport_failure', { stage: 'request' }],
+    [async () => { throw new DOMException(`provider-private-details ${KEY}`, 'AbortError'); }, 'provider_transport_failure', { stage: 'request' }],
+    [async () => ({ ok: true, text: async () => { throw new Error(`provider-private-details ${KEY}`); } }), 'provider_transport_failure', { stage: 'response_read' }],
+    [async () => ({ ok: true, text: async () => `{invalid provider-private-details ${KEY}` }), 'provider_transport_failure', { stage: 'response_json' }],
+    [async () => ({ ok: true, text: async () => 'x'.repeat(100001) }), 'provider_incomplete', { stage: 'response_size' }]]) {
     const f = fixture({ fetch }); await assert.rejects(f.requestWorkflowAi(request()), workflowError);
-    assert.equal(f.released(), 1); assert.deepEqual(f.logs, []);
+    assert.equal(f.released(), 1); diagnostic(f, category, details);
   }
+});
+
+test('provider HTTP diagnostics retain only status and allowlisted error code/type, never message, content, headers or identity', async () => {
+  for (const [code, type, expectedCode, expectedType] of [
+    ['invalid_json_schema', 'invalid_request_error', 'invalid_json_schema', 'invalid_request_error'],
+    ['rate_limit_exceeded', 'rate_limit_error', 'rate_limit_exceeded', 'rate_limit_error'],
+    [`provider-private-details ${KEY}`, `provider-private-details ${GUARD_SECRET}`, null, null],
+    [{ key: KEY }, [GUARD_SECRET], null, null],
+  ]) {
+    const f = fixture({ fetch: async () => Response.json({ error: { code, type,
+      message: `provider-private-details ${KEY} ${GUARD_SECRET}`, param: 'private-business',
+      requestId: 'private-actor', input: request().input, output: complete().output },
+      unrelated: request() }, { status: 400, headers: { 'x-request-id': `provider-private-details ${KEY}` } }) });
+    await assert.rejects(f.requestWorkflowAi(request()), /^Error: WORKFLOW_AI_UNAVAILABLE$/);
+    diagnostic(f, 'provider_http_failure', { status: 400, code: expectedCode, type: expectedType });
+    assert.equal(f.calls.length, 1); assert.equal(f.released(), 1);
+  }
+});
+
+test('malformed or unreadable provider HTTP diagnostics preserve sanitized failure and emit only fixed metadata', async () => {
+  for (const body of [null, `invalid provider-private-details ${KEY}`, JSON.stringify({ error: `provider-private-details ${KEY}` })]) {
+    const f = fixture({ fetch: async () => new Response(body, { status: 502 }) });
+    await assert.rejects(f.requestWorkflowAi(request()), /^Error: WORKFLOW_AI_UNAVAILABLE$/);
+    diagnostic(f, 'provider_http_failure', { status: 502, code: null, type: null });
+    assert.equal(f.released(), 1);
+  }
+  const f = fixture({ fetch: async () => new Response(new ReadableStream({ start(controller) {
+    controller.error(new Error(`provider-private-details ${KEY}`));
+  } }), { status: 503 }) });
+  await assert.rejects(f.requestWorkflowAi(request()), /^Error: WORKFLOW_AI_UNAVAILABLE$/);
+  diagnostic(f, 'provider_http_failure', { status: 503, code: null, type: null });
+  assert.equal(f.released(), 1);
+});
+
+test('oversized provider HTTP diagnostic body is cancelled at 8KB without logging its contents', async () => {
+  let cancelled = 0;
+  const privateBody = new TextEncoder().encode(JSON.stringify({ error: { code: 'invalid_json_schema', type: 'invalid_request_error', message: `provider-private-details ${KEY}` }, oversized: 'x'.repeat(8192) }));
+  const f = fixture({ fetch: async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(privateBody); }, cancel() { cancelled++; } }), { status: 400 }) });
+  await assert.rejects(f.requestWorkflowAi(request()), /^Error: WORKFLOW_AI_UNAVAILABLE$/);
+  diagnostic(f, 'provider_http_failure', { status: 400, code: null, type: null });
+  assert.equal(cancelled, 1); assert.equal(f.calls.length, 1); assert.equal(f.released(), 1);
 });
 
 test('source digest is deterministic for the same JSON facts and changes with source edits', async () => {

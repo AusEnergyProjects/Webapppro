@@ -27,7 +27,8 @@ const source = ts.transpileModule(readFileSync(new URL("../src/lib/wattzun-porta
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const route = {};
-Function("require", "exports", source)(name => {
+const routeLogs = [];
+Function("require", "exports", "console", source)(name => {
   if (name === "./wattzun-portal") return contract;
   if (name === "./wattzun-greeting") return greeting;
   if (name === "./wattzun-portal-access-server") return {
@@ -45,7 +46,7 @@ Function("require", "exports", source)(name => {
   if (name === "./wattzun-workflow-server") return { WattzunWorkflowError: WorkflowError };
   if (name === "./wattzun-existing-quote-server") return { WattzunExistingQuoteError: ExistingQuoteError };
   throw new Error(name);
-}, route);
+}, route, { warn: (...args) => routeLogs.push(args) });
 const input = { portal: "trade", scopeId: "business-one", requestId: "synthetic-request-0001", message: "Draft a follow-up",
   history: [{ role: "user", content: "I need a quote follow-up" }], preferences: { ...contract.WATTZUN_DEFAULT_PREFERENCES } };
 const access = { db: {}, actorUid: "staff-one", scope: { portal: "trade", scopeId: "business-one", label: "Trade One" } };
@@ -391,6 +392,20 @@ test("provider errors are sanitised, with actionable usage and unclear-speech st
     assert.equal(result.response.status, status); assert.equal(result.body.ok, false);
     assert.ok(!result.body.error.includes(message)); assert.equal(result.body.reply, undefined);
     assert.equal(f.recorded.length, 0);
+  }
+});
+
+test("text failure diagnostics identify the phase without logging requests, records or arbitrary errors", async () => {
+  for (const [options, expected] of [
+    [{ providerError: new Error("WORKFLOW_AI_UNAVAILABLE") }, { phase: "reply", category: "WORKFLOW_AI_UNAVAILABLE" }],
+    [{ providerError: new Error("private provider key and customer details") }, { phase: "reply", category: "internal" }],
+    [{ reply: { ...reply, action: workflowProposal }, workflowError: new Error("private storage and customer details") }, { phase: "workflow", category: "internal" }],
+  ]) {
+    const before = routeLogs.length;
+    const result = await fixture(options).post();
+    assert.equal(result.response.status, 503);
+    assert.deepEqual(routeLogs.slice(before), [["Wattzun text turn failed", expected]]);
+    assert.doesNotMatch(JSON.stringify(routeLogs.slice(before)), /private|business-one|staff-one|Draft a follow-up/);
   }
 });
 
