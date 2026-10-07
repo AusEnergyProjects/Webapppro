@@ -458,4 +458,3 @@ test('actual price-book request dedup is actor and business scoped and optional 
   assert.equal((await f.post({ clientRequestId: 'bad' })).status, 400);
   assert.equal(f.database.prepare('SELECT COUNT(*) count FROM trade_price_book_items').get().count, 3);
 });
-
