@@ -464,16 +464,21 @@ async function prepareWorkflow(request: Request, access: WattzunAccess, proposal
   const insertion = await access.db.prepare(`INSERT INTO admin_audit_log(id,admin_uid,action,entity_type,entity_id,summary,metadata,created_at)
     VALUES (?,?,'wattzun.workflow_review','trade_business',?,'Prepared a user-reviewed Wattzun workflow.',?,?) ON CONFLICT(id) DO NOTHING`)
     .bind(reviewId, access.actorUid, access.scope.scopeId, JSON.stringify(saved), new Date(deps.now()).toISOString()).run();
+  const newPortalReview = deferNewReview && insertion.meta.changes === 1;
   return loadWorkflowReview(request, access, reviewId, deps, { expectedFingerprint: fingerprint,
-    deferSourceRecheck: deferNewReview && insertion.meta.changes === 1 });
+    deferSourceRecheck: newPortalReview, preparedTeam: newPortalReview ? after : undefined });
 }
 export async function loadWattzunWorkflowReview(request: Request, access: WattzunAccess, reviewId: string,
   deps: WattzunWorkflowDependencies = defaults): Promise<WattzunWorkflowResult> {
   return loadWorkflowReview(request, access, reviewId, deps);
 }
 async function loadWorkflowReview(request: Request, access: WattzunAccess, reviewId: string, deps: WattzunWorkflowDependencies,
-  options: { expectedFingerprint?: string; deferSourceRecheck?: boolean } = {}): Promise<WattzunWorkflowResult> {
-  const team = await currentTeam(request, access, deps); const frozen = await readReview(access, reviewId, deps);
+  options: { expectedFingerprint?: string; deferSourceRecheck?: boolean; preparedTeam?: TeamAccess } = {}): Promise<WattzunWorkflowResult> {
+  // A newly inserted portal review already has its post-preparation authority.
+  // Reuse it only as the comparison baseline; the fresh final team, target and
+  // quote-grant checks below still run before this function returns any review.
+  const team = options.preparedTeam ?? await currentTeam(request, access, deps);
+  const frozen = await readReview(access, reviewId, deps);
   if (options.expectedFingerprint && frozen.saved.fingerprint !== options.expectedFingerprint) throw new WattzunWorkflowError(409, "This review was prepared with different details. Start another review.");
   permissions(team, frozen.prepared.proposal);
   await verifyTarget(request, access, team, frozen.prepared, deps);

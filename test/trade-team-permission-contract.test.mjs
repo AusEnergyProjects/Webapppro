@@ -197,7 +197,14 @@ test("team access is permission- and scope-driven with no role template model", 
   // must not introduce staff role templates or replace saved permission flags.
   const ownerContextCheck = 'selected.role === "owner"';
   assert.equal(access.split(ownerContextCheck).length - 1, 1);
-  assert.match(access, /const selected = await selectTradeBusiness\(request, identity\);\s*if \(selected\.role === "owner"\) \{\s*const verified = await requireVerifiedTradeIdentity\(identity, \{ partnerTypes: \["installer"\] \}\)/);
+  const preflight = access.slice(access.indexOf("const identity = await requireFirebaseIdentity(request);"),
+    access.indexOf(`if (${ownerContextCheck})`));
+  assert.match(preflight, /if \(identity\.emailVerified && request\.headers\.get\("X-TLink-Business"\) === identity\.uid\s*&& requestedTradeBusiness\(request\) === identity\.uid\) \{/);
+  assert.match(preflight, /await ensureCreditexSchemaGuards\(db\);[\s\S]*const \[selection, verification\] = await Promise\.allSettled\(\[\s*selectTradeBusiness\(request, identity\),\s*requireVerifiedTradeIdentity\(identity, \{ partnerTypes: \["installer"\] \}\),\s*\]\);/);
+  assert.match(preflight, /if \(selection\.status === "rejected"\) throw selection\.reason;\s*if \(verification\.status === "rejected"\) throw verification\.reason;\s*selected = selection\.value;\s*verifiedOwner = verification\.value;\s*\} else \{\s*selected = await selectTradeBusiness\(request, identity\);\s*\}/);
+  assert.doesNotMatch(preflight, /ensureOwnerTeamMember\(/);
+  assert.match(access, /if \(selected\.role === "owner"\) \{\s*const verified = verifiedOwner \?\? await requireVerifiedTradeIdentity\(identity, \{ partnerTypes: \["installer"\] \}\);\s*const displayName = [^;]+;\s*const memberId = await ensureOwnerTeamMember\(identity\.uid, identity\.email, displayName, selected\.memberId\);/);
+  assert.equal((access.match(/await ensureOwnerTeamMember\(/g) || []).length, 1);
   assert.doesNotMatch(access.replace(ownerContextCheck, "true"), /\.role\b|\brole\s*[=!]==?/);
   assert.match(access, /canAssignJobs: Boolean\(member\.can_assign_jobs\)/);
   assert.match(access, /canApplyDiscounts: Boolean\(member\.can_apply_discounts\)/);

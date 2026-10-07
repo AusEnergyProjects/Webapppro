@@ -301,6 +301,45 @@ test('portal post-model quote preparation defers one rebuild to the strict final
   const strict = await quoteWorkflowFixture(); assert.equal((await strict.prepare(strict.proposal)).status, 200); assert.equal(strict.quoteReads(), 2);
 });
 
+test('only a newly inserted portal review reuses its preparation authority before a fresh final check', async () => {
+  const f = fixture(); const review = await f.portalPrepare(price);
+  assert.equal(review.state, 'review'); assert.deepEqual(f.authorityCalls(), { access: 0, team: 3 });
+  assert.equal(f.decryptCalls(), 1); assert.equal(f.calls.length, 0);
+  await f.portalPrepare(price);
+  assert.deepEqual(f.authorityCalls(), { access: 0, team: 6 }, 'reused reviews retain their full strict loader');
+  const strict = fixture(); assert.equal((await strict.prepare(price)).status, 200);
+  assert.deepEqual(strict.authorityCalls(), { access: 1, team: 4 }, 'standalone preparation keeps every existing check');
+});
+
+test('new portal review denies revocation at each retained authority boundary', async () => {
+  for (const teamRevokeAt of [1, 2, 3]) {
+    const f = fixture({ teamRevokeAt });
+    await assert.rejects(f.portalPrepare(price), error => error.status === 403);
+    assert.equal(f.authorityCalls().team, teamRevokeAt); assert.equal(f.calls.length, 0);
+  }
+});
+
+test('new portal review still rejects authority changes during encryption before returning internally', async () => {
+  for (const mutation of [{ actorUid: 'other-actor' }, { ownerUid: 'other-business' },
+    { isOwner: false, canManagePriceBook: false }]) {
+    const f = fixture(); const encrypt = f.deps.encrypt;
+    f.deps.encrypt = async payload => { const value = await encrypt(payload); Object.assign(f.team, mutation); return value; };
+    await assert.rejects(f.portalPrepare(price), error => error.status === 403);
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test('new portal review checks current grants after reading its encrypted row', async () => {
+  const f = fixture(); const decrypt = f.deps.decrypt;
+  f.deps.decrypt = async encrypted => {
+    const value = await decrypt(encrypted);
+    f.team.isOwner = false; f.team.canManagePriceBook = false;
+    return value;
+  };
+  await assert.rejects(f.portalPrepare(price), error => error.status === 403);
+  assert.equal(f.decryptCalls(), 1); assert.equal(f.calls.length, 0);
+});
+
 test('standalone preparation still rejects a source changed while freezing the review', async () => {
   const f = await quoteWorkflowFixture(); const encrypt = f.deps.encrypt;
   f.deps.encrypt = async payload => { const value = await encrypt(payload); f.changeQuote(); return value; };

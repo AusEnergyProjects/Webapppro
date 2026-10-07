@@ -5,8 +5,10 @@ import { requireTradeMyobSecondFactor } from "./trade-mfa-server";
 import {
   requireVerifiedTradeIdentity,
   tradeAccountProjection,
+  type VerifiedTradeAccess,
 } from "./trade-access-server";
-import { requestedTradeBusiness, selectTradeBusiness, TradeBusinessContextError } from "./trade-business-context-server";
+import { requestedTradeBusiness, selectTradeBusiness, TradeBusinessContextError, type TradeBusinessChoice } from "./trade-business-context-server";
+import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
 import { canAssignWithinScope } from "./trade-team-permission-policy.mjs";
 import { applyTradeCrewAccess } from "./trade-crews-server";
 import { isFieldSessionRequest, requireFieldSessionAccess } from "./trade-field-session-server";
@@ -126,9 +128,27 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
   }
   const identity = await requireFirebaseIdentity(request);
   const db = getD1();
-  const selected = await selectTradeBusiness(request, identity);
+  let selected: TradeBusinessChoice;
+  let verifiedOwner: VerifiedTradeAccess | undefined;
+  if (identity.emailVerified && request.headers.get("X-TLink-Business") === identity.uid
+    && requestedTradeBusiness(request) === identity.uid) {
+    // Finish cold schema installation before both canonical checks use the same binding.
+    await ensureCreditexSchemaGuards(db);
+    // Explicit self-selection can only select the owner arm of the business query.
+    // An MFA denial may be audited during this preflight even if selection also fails.
+    const [selection, verification] = await Promise.allSettled([
+      selectTradeBusiness(request, identity),
+      requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"] }),
+    ]);
+    if (selection.status === "rejected") throw selection.reason;
+    if (verification.status === "rejected") throw verification.reason;
+    selected = selection.value;
+    verifiedOwner = verification.value;
+  } else {
+    selected = await selectTradeBusiness(request, identity);
+  }
   if (selected.role === "owner") {
-    const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"] });
+    const verified = verifiedOwner ?? await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"] });
     const displayName = selected.managerName?.trim() || verified.businessName || "Business owner";
     const memberId = await ensureOwnerTeamMember(identity.uid, identity.email, displayName, selected.memberId);
     return { identity, ownerUid: identity.uid, actorUid: identity.uid, actorEmail: identity.email, memberId,

@@ -58,6 +58,8 @@ function fixture(t, options = {}) {
     "../../db": { getD1: () => db }, "./trade-job-collaboration": collaboration,
     "./firebase-server": {}, "./trade-mfa-server": {}, "./trade-access-server": {},
     "./trade-business-context-server": {}, "./trade-team-permission-policy.mjs": {},
+    // This fixture uses only assignedJob; full owner authorization is tested separately.
+    "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => { throw new Error("Unexpected owner preflight in assigned-job fixture"); } },
     "./trade-crews-server": {}, "./trade-field-session-server": {},
   });
   const team = { ownerUid: "business-one", actorUid: "actor-one", memberId: "member-one", isOwner: false,

@@ -14,10 +14,10 @@ const permissions = ["can_create_jobs", "can_manage_jobs", "can_assign_jobs", "c
   "can_view_field_evidence", "can_manage_field_evidence", "can_run_reports", "can_search_customers"];
 
 class Statement {
-  constructor(database, sql, values = [], calls = []) { this.database = database; this.sql = sql; this.values = values; this.calls = calls; }
-  bind(...values) { return new Statement(this.database, this.sql, values, this.calls); }
-  async first() { this.calls.push({ kind: "first", sql: this.sql }); return this.database.prepare(this.sql).get(...this.values) || null; }
-  async all() { this.calls.push({ kind: "all", sql: this.sql }); return { results: this.database.prepare(this.sql).all(...this.values) }; }
+  constructor(database, sql, values = [], calls = [], beforeRead) { this.database = database; this.sql = sql; this.values = values; this.calls = calls; this.beforeRead = beforeRead; }
+  bind(...values) { return new Statement(this.database, this.sql, values, this.calls, this.beforeRead); }
+  async first() { this.calls.push({ kind: "first", sql: this.sql }); await this.beforeRead?.("first", this.sql); return this.database.prepare(this.sql).get(...this.values) || null; }
+  async all() { this.calls.push({ kind: "all", sql: this.sql }); await this.beforeRead?.("all", this.sql); return { results: this.database.prepare(this.sql).all(...this.values) }; }
   async run() { this.calls.push({ kind: "run", sql: this.sql }); return { success: true, meta: { changes: Number(this.database.prepare(this.sql).run(...this.values).changes) } }; }
 }
 
@@ -45,9 +45,10 @@ function fixture(t, options = {}) {
     authTime: 1, signInProvider: "password", ...options.identity };
   const calls = { identity: [], mfa: [], schema: [], d1: [] };
   const db = {
-    prepare: sql => new Statement(database, sql, [], calls.d1),
+    prepare: sql => new Statement(database, sql, [], calls.d1, options.beforeRead),
     async batch(statements) {
       calls.d1.push({ kind: "batch", sql: statements.map(statement => statement.sql) });
+      await options.beforeRead?.("batch", statements[0].sql);
       if (statements.some(statement => /^SELECT id FROM trade_team_members/.test(statement.sql))) options.beforeBatch?.();
       database.exec("BEGIN");
       try {
@@ -72,7 +73,7 @@ function fixture(t, options = {}) {
         calls.identity.push(identity.uid);
         if (options.authError) throw new Error("AUTH_REQUIRED"); return identity;
       } },
-      "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => calls.schema.push("creditex") },
+      "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => { calls.schema.push("creditex"); await options.creditexGuard?.(); } },
       "./tlink-schema-guards": { ensureTlinkSchemaGuards: async () => calls.schema.push("tlink") },
       "./trade-mfa-server": { hasTradeSecondFactor: actor => actor?.secondFactor === "totp" || actor?.secondFactor === "phone",
         // Keep this fixture's MFA boundary mocked; real policy reads are covered by trade-owner-access-batch.
@@ -92,6 +93,7 @@ function fixture(t, options = {}) {
       "@/lib/admin-server": { adminJson: (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } }), mfaErrorResponse: () => null },
     };
     const require = specifier => {
+      if (specifier === "./trade-mfa-server" && options.realMfa) return load("src/lib/trade-mfa-server.ts");
       if (Object.hasOwn(dependencies, specifier)) return dependencies[specifier];
       if (specifier === "@/lib/firebase-server") return dependencies["./firebase-server"];
       if (specifier.startsWith("@/")) return load(`src/${specifier.slice(2)}.ts`);
@@ -357,4 +359,137 @@ test("staff access keeps fresh tenant membership, capability and MFA checks with
   assert.ok(f.calls.mfa.every(call => call.ownerUid === "employer"));
   f.database.prepare("UPDATE trade_team_members SET status='suspended' WHERE id=?").run("staff-member");
   await assert.rejects(f.teams.requireInstallerTeamAccess(f.request("employer")), { code: "BUSINESS_ACCESS_REQUIRED" });
+});
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(complete => { resolve = complete; });
+  return { promise, resolve };
+}
+
+async function bounded(promise) {
+  let timeout;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(new Error("Expected access read did not start")), 2000);
+    })]);
+  } finally { clearTimeout(timeout); }
+}
+
+for (const secondFactor of [undefined, "totp", "phone"]) {
+  test(`explicit own business overlaps both authoritative reads with ${secondFactor || "no"} second factor`, async t => {
+    const selectionStarted = deferred(), verificationStarted = deferred();
+    const releaseSelection = deferred(), releaseVerification = deferred();
+    let selectionReleased = false, verificationReleased = false;
+    const options = { identity: { secondFactor }, beforeRead: async (kind, sql) => {
+      if (kind === "all" && sql.includes("AS ownerUid")) {
+        selectionStarted.resolve(); await releaseSelection.promise;
+      }
+      if ((kind === "batch" || kind === "first") && /^SELECT account\.firebase_uid/.test(sql)) {
+        verificationStarted.resolve(); await releaseVerification.promise;
+      }
+    }, beforeBatch: () => {
+      assert.equal(selectionReleased, true, "no owner member repair before selection finishes");
+      assert.equal(verificationReleased, true, "no owner member repair before verification finishes");
+    } };
+    const f = fixture(t, options); f.owner(f.identity.uid); f.member("owner-member", f.identity.uid);
+    const pending = f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+    try {
+      await bounded(Promise.all([selectionStarted.promise, verificationStarted.promise]));
+      assert.equal(f.calls.d1.length, 2, "both fresh reads start while neither has completed");
+      assert.equal(f.calls.d1.some(call => call.kind === "run"), false);
+      selectionReleased = true; releaseSelection.resolve();
+      verificationReleased = true; releaseVerification.resolve();
+      const access = await pending;
+      assert.equal(access.isOwner, true); assert.equal(access.ownerUid, f.identity.uid);
+      assert.equal(access.memberId, "owner-member");
+      assert.equal(f.calls.d1.length, 3, "same selection, verification and member-repair calls");
+      assert.deepEqual(f.calls.schema, ["creditex", "creditex", "creditex", "tlink"]);
+    } finally { releaseSelection.resolve(); releaseVerification.resolve(); await pending.catch(() => {}); }
+  });
+}
+
+test("explicit own access completes cold schema initialization once before starting either read", async t => {
+  const guardStarted = deferred(), releaseGuard = deferred();
+  let ready = false, installing = false, installations = 0;
+  const f = fixture(t, { creditexGuard: async () => {
+    if (ready) return;
+    assert.equal(installing, false, "canonical checks must not concurrently install cold guards");
+    installing = true; installations += 1; guardStarted.resolve();
+    await releaseGuard.promise; ready = true; installing = false;
+  } });
+  f.owner(f.identity.uid);
+  const pending = f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
+  try {
+    await bounded(guardStarted.promise);
+    assert.deepEqual(f.calls.schema, ["creditex"]);
+    assert.deepEqual(f.calls.d1, []);
+    releaseGuard.resolve();
+    assert.equal((await pending).isOwner, true);
+    assert.equal(installations, 1);
+    assert.equal(f.calls.schema.filter(name => name === "creditex").length, 3,
+      "preflight and both canonical functions retain their schema checks");
+  } finally { releaseGuard.resolve(); await pending.catch(() => {}); }
+});
+
+test("concurrent own MFA denial is audited but selection rejection retains precedence and cannot repair members", async t => {
+  const f = fixture(t, { realMfa: true });
+  f.owner(f.identity.uid); f.member("owner-member", f.identity.uid);
+  f.owner("employer"); f.member("staff-one", "employer"); f.member("staff-duplicate", "employer");
+  f.database.exec(`CREATE TABLE trade_crm_integrations (firebase_uid TEXT, provider TEXT);
+    CREATE TABLE trade_crm_accounting_documents (firebase_uid TEXT, provider TEXT);
+    CREATE TABLE myob_security_events (id TEXT, actor_uid TEXT, owner_uid TEXT, action TEXT, resource_id TEXT, outcome TEXT);`);
+  f.database.prepare("INSERT INTO trade_crm_integrations VALUES (?,'myob')").run(f.identity.uid);
+  await assert.rejects(f.teams.requireInstallerTeamAccess(f.request(f.identity.uid)), {
+    code: "BUSINESS_ACCESS_REQUIRED", status: 403,
+    publicMessage: "Your team access needs checking. Ask the business administrator to review your membership.",
+  });
+  assert.deepEqual(f.database.prepare("SELECT actor_uid,owner_uid,action,outcome FROM myob_security_events").all().map(row => ({ ...row })), [{
+    actor_uid: f.identity.uid, owner_uid: f.identity.uid, action: "access.denied", outcome: "denied",
+  }]);
+  assert.equal(f.database.prepare("SELECT role FROM trade_team_members WHERE id='owner-member'").get().role, "field");
+  assert.equal(f.calls.d1.some(call => call.kind === "batch" && call.sql.some(sql => /^SELECT id FROM trade_team_members/.test(sql))), false);
+});
+
+test("own verification error is returned after successful selection without member repair", async t => {
+  const f = fixture(t, { mfaOwner: "person-1" });
+  f.owner(f.identity.uid); f.member("owner-member", f.identity.uid);
+  await assert.rejects(f.teams.requireInstallerTeamAccess(f.request(f.identity.uid)), { code: "MFA_REQUIRED" });
+  assert.equal(f.calls.d1.length, 2);
+  assert.equal(f.database.prepare("SELECT role FROM trade_team_members WHERE id='owner-member'").get().role, "field");
+});
+
+test("default own-business selection remains sequential and adds no preparatory schema call", async t => {
+  const selectionStarted = deferred(), verificationStarted = deferred(), releaseSelection = deferred();
+  const f = fixture(t, { beforeRead: async (kind, sql) => {
+    if (kind === "all" && sql.includes("AS ownerUid")) { selectionStarted.resolve(); await releaseSelection.promise; }
+    if (kind === "batch" && /^SELECT account\.firebase_uid/.test(sql)) verificationStarted.resolve();
+  } });
+  f.owner(f.identity.uid);
+  const pending = f.teams.requireInstallerTeamAccess(f.request());
+  try {
+    await bounded(selectionStarted.promise);
+    assert.deepEqual(f.calls.d1.map(call => call.kind), ["all"]);
+    assert.deepEqual(f.calls.schema, ["creditex", "tlink"]);
+    releaseSelection.resolve();
+    await bounded(verificationStarted.promise);
+    assert.equal((await pending).isOwner, true);
+    assert.equal(f.calls.schema.filter(name => name === "creditex").length, 2);
+  } finally { releaseSelection.resolve(); await pending.catch(() => {}); }
+});
+
+test("malformed, foreign and unverified self selections retain their original rejection boundaries", async t => {
+  const f = fixture(t); f.owner(f.identity.uid); f.member("owner-member", f.identity.uid);
+  for (const header of ["", "owner,other", "has space", "x".repeat(129)]) {
+    await assert.rejects(f.teams.requireInstallerTeamAccess(f.request(header)), { code: "BUSINESS_ACCESS_REQUIRED" });
+    assert.deepEqual(f.calls.schema, []); assert.deepEqual(f.calls.d1, []);
+  }
+  await assert.rejects(f.teams.requireInstallerTeamAccess(f.request("foreign-business")), { code: "BUSINESS_ACCESS_REQUIRED" });
+  assert.deepEqual(f.calls.d1.map(call => call.kind), ["all"]);
+  assert.deepEqual(f.calls.schema, ["creditex", "tlink"]);
+  f.calls.d1.length = 0; f.calls.schema.length = 0; f.identity.emailVerified = false;
+  await assert.rejects(f.teams.requireInstallerTeamAccess(f.request(f.identity.uid)), {
+    code: "EMAIL_VERIFICATION_REQUIRED", publicMessage: "Confirm your email address before opening your businesses.",
+  });
+  assert.deepEqual(f.calls.schema, []); assert.deepEqual(f.calls.d1, []);
 });
