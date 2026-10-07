@@ -5451,6 +5451,35 @@ async function replayAppliedWorkPackMutation(
   });
 }
 
+/** Read an exact applied native mutation without replaying or beginning a write. */
+export async function readAssignedCreditexActivityWorkPackMutationReceipt(
+  database: D1Database,
+  input: CreditexWorkPackTradeScope & Readonly<{
+    caseInstanceId: string;
+    baseRevision: number;
+    action: CreditexWorkPackMutationResult["action"];
+    idempotency: CreditexWorkPackMutationIdempotency;
+  }>,
+): Promise<CreditexWorkPackMutationResult | null> {
+  const row = await assignedInstanceRow(database, input, input.caseInstanceId, true);
+  const idempotency = validateMutationIdempotency(input.idempotency);
+  const receipt = await mutationReceipt(database, input, idempotency);
+  if (!receipt) return null;
+  if (receipt.payload_hash !== idempotency.payloadHash || receipt.action_type !== input.action
+    || receipt.entity_type !== "work_pack" || receipt.entity_id !== row.instance_key
+    || receipt.actor_uid !== input.actorUid || receipt.member_id !== input.actorMemberId || receipt.device_id !== idempotency.deviceId
+    || Number(receipt.base_revision) !== input.baseRevision) {
+    return fail("WORK_PACK_IDEMPOTENCY_MISMATCH", 409, "This client action ID was already used for different work-pack content.");
+  }
+  if (receipt.status !== "applied") return null;
+  if (!Number.isSafeInteger(input.baseRevision) || input.baseRevision < 1 || Number(receipt.result_revision) < input.baseRevision
+    || Number(receipt.result_revision) !== Number(row.revision)) {
+    return fail("WORK_PACK_REVISION_CONFLICT", 409, "This work pack changed after the saved action. Reload its current record before continuing.");
+  }
+  return Object.freeze({ status: "duplicate", action: input.action,
+    projection: await projectAssignedInstance(database, row, input.actorUid) });
+}
+
 async function applyReferenceAcknowledgements(
   database: D1Database,
   row: WorkPackInstanceRecord,

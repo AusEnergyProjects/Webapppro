@@ -8,7 +8,7 @@ import { businessFormPages, type BusinessFormField } from '@/lib/trade-business-
 import { visibleTradeFormFields } from '@/lib/trade-form-library.mjs';
 import { useFormTimeTracking, WorkTimeStatus } from "./TradeWorkTimeTracking";
 import { WattzunFormAssistButton } from "./WattzunFormAssistButton";
-import { WATTZUN_FORM_SAVED_EVENT, readWattzunFormSaved } from "@/lib/wattzun-form-client";
+import { WATTZUN_FORM_SAVED_EVENT, readWattzunFormSaved, dispatchWattzunFormNativeSaved } from "@/lib/wattzun-form-client";
 
 type Field = BusinessFormField;
 const sameAnswers = (left: Record<string, string | boolean>, right: Record<string, string | boolean>) => Object.keys(left).length === Object.keys(right).length && Object.entries(left).every(([key, value]) => right[key] === value);
@@ -125,6 +125,7 @@ function JobForm({ form, userUid, workOrderId, disabled, readOnly, onSave, onRel
     if (!next) return false;
     saved.current = next;
     if (answerRef.current === current) { answerRef.current = next.answers; setAnswers(next.answers); }
+    if (scopeId) dispatchWattzunFormNativeSaved({ portal: "trade", scopeId, formKind: "job_form", formId: next.id, oldFormId: form.id, jobId: workOrderId });
     setAssistantUpdate(""); return true;
   }
   async function loadAssistantAnswers() {

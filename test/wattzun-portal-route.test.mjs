@@ -6,6 +6,8 @@ import * as contract from "../src/lib/wattzun-portal.ts";
 import * as greeting from "../src/lib/wattzun-greeting.ts";
 import * as workflowContract from "../src/lib/wattzun-workflow.ts";
 import * as workflowReply from "../src/lib/wattzun-workflow-reply.ts";
+import * as formGuideContract from "../src/lib/wattzun-form-guide.ts";
+import * as formStepContract from "../src/lib/wattzun-form-step.ts";
 import { syntheticWorkContext, workContextContract, workContextGateway } from "./helpers/wattzun-work-context-fixture.mjs";
 
 const contextGateway = workContextGateway();
@@ -37,6 +39,9 @@ Function("require", "exports", "console", source)(name => {
       : error?.message === "AUTH_REQUIRED" ? { status: 401, message: "Sign in." } : null,
   };
   if (name === "./wattzun-portal-ai-server" || name === "./wattzun-realtime-server") return {};
+  if (name === "./wattzun-turn-authority-server") return {};
+  if (name === "./wattzun-form-guide") return formGuideContract;
+  if (name === "./wattzun-form-step") return formStepContract;
   if (name === "./wattzun-usage") return usageContract;
   if (name === "./wattzun-usage-server") return { WattzunUsageError: UsageError };
   if (name === "./wattzun-work-context" || name === "./wattzun-work-context.ts") return workContextContract;

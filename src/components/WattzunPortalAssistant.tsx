@@ -13,7 +13,10 @@ import { parseWattzunActionProposal, type WattzunActionReceipt } from "@/lib/wat
 import { isWattzunWorkflowProposal, isWattzunWorkflowResult, type WattzunWorkflowOperation, type WattzunWorkflowResult } from "@/lib/wattzun-workflow";
 import { wattzunWorkflowReply } from "@/lib/wattzun-workflow-reply";
 import { isWattzunNavigationAction, wattzunNavigationDestination } from "@/lib/wattzun-navigation";
-import { dispatchWattzunFormSaved } from "@/lib/wattzun-form-client";
+import { dispatchWattzunFormSaved, prepareWattzunFormCapture, captureWattzunFormPhoto, readWattzunFormCaptureSaved, readWattzunFormRefreshed, WATTZUN_FORM_REFRESHED_EVENT, WATTZUN_FORM_CAPTURE_SAVED_EVENT, type WattzunFormCaptureTarget } from "@/lib/wattzun-form-client";
+import { focusWattzunFormQuestion, WATTZUN_FORM_NATIVE_SAVED_EVENT } from "@/lib/wattzun-form-client";
+import { readWattzunFormGuideProgress, readWattzunFormGuideControl, type WattzunFormGuideInput, type WattzunFormGuideControl, type WattzunFormGuideProgress } from "@/lib/wattzun-form-guide";
+import { readWattzunFormProductSearchAction } from "@/lib/wattzun-form-step";
 import {
   WATTZUN_REALTIME_VOICE_STREAM_TYPE, wattzunSpokenReply,
   type WattzunPortal, type WattzunReply, type WattzunScope, type WattzunTurn, type WattzunTurnInput, type WattzunVoiceResult,
@@ -32,6 +35,7 @@ import styles from "./WattzunPortalAssistant.module.css";
 
 type Message = WattzunTurn & { id: string; reply?: WattzunReply; reviewDraft?: WattzunReply["action"]; requestSummary?: string };
 type PendingWorkflow = { messageId: string; proposal: WattzunWorkflowOperation; result: WattzunWorkflowResult; reviewId?: string; executionRequestId?: string };
+type FormGuideSession = { input: WattzunFormGuideInput; progress: WattzunFormGuideProgress | null; editorReference: Extract<WattzunWorkReference, { kind: "trade_form" }> };
 const portalNames: Record<WattzunPortal, string> = { trade: "TLink", council: "Council", creditex: "Creditex" };
 const callLabels: Record<WattzunCallStatus["state"], string> = {
   idle: "Ready to call", permission: "Microphone permission", connecting: "Connecting", listening: "Listening", thinking: "Thinking", speaking: "Wattzun is speaking", muted: "Microphone muted", recovering: "Still connected", ended: "Call ended", error: "Call could not continue",
@@ -39,9 +43,15 @@ const callLabels: Record<WattzunCallStatus["state"], string> = {
 function record(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function isReply(value: unknown, portal?: WattzunPortal): value is WattzunReply {
   if (record(value) && value.workContext !== undefined && (!portal || !readWattzunWorkContextInfo(value.workContext, portal))) return false;
+  if (record(value) && value.formGuide !== undefined && (portal !== "trade" || !readWattzunFormGuideProgress(value.formGuide))) return false;
+  if (record(value) && value.formGuideRecovery !== undefined && (portal !== "trade" || !record(value.formGuideRecovery)
+    || typeof value.formGuideRecovery.requestId !== "string" || !/^[A-Za-z0-9:_-]{16,180}$/.test(value.formGuideRecovery.requestId)
+    || !["saved", "not_saved", "uncertain"].includes(String(value.formGuideRecovery.state)))) return false;
   if (record(value) && value.action !== undefined && value.action !== null) {
     if (portal && isWattzunNavigationAction(value.action, portal)) { /* Current portal destinations only. */ }
     else if (isWattzunWorkflowProposal(value.action)) { if (portal !== "trade") return false; }
+    else if (readWattzunFormGuideControl(value.action)) { if (portal !== "trade" || !value.formGuide) return false; }
+    else if (readWattzunFormProductSearchAction(value.action)) { if (portal !== "trade" || !value.formGuide) return false; }
     else { try { parseWattzunActionProposal(value.action); } catch { return false; } }
   }
   if (record(value) && value.workflow !== undefined && (portal !== "trade" || !isWattzunWorkflowResult(value.workflow))) return false;
@@ -73,7 +83,9 @@ function replyWorkContext(reply: WattzunReply, portal: WattzunPortal, reference:
     return null;
   }
   const info = readWattzunWorkContextInfo(reply.workContext, portal);
-  if (!info || !sameWorkReference(info.reference, reference)) throw new Error("Wattzun returned information for different work. Ask again about your selected work.");
+  const guide = readWattzunFormGuideProgress(reply.formGuide);
+  const expected = guide && sameWorkReference(guide.requestedReference, reference) ? guide.reference : reference;
+  if (!info || !sameWorkReference(info.reference, expected)) throw new Error("Wattzun returned information for different work. Ask again about your selected work.");
   return info;
 }
 async function readCallResponse(response: Response, signal: AbortSignal, portal?: WattzunPortal) {
@@ -205,6 +217,15 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
   const [selectionNotice, setSelectionNotice] = useState("");
   const workReferenceRef = useRef<WattzunWorkReference | null>(null);
   const pendingWorkflowRef = useRef<PendingWorkflow | null>(null);
+  const guideSession = useRef<FormGuideSession | null>(null);
+  const [formGuide, setFormGuide] = useState<WattzunFormGuideProgress | null>(null);
+  const [captureTarget, setCaptureTargetState] = useState<WattzunFormCaptureTarget | null>(null);
+  const preparedCapture = useRef<WattzunFormCaptureTarget | null>(null);
+  const setCaptureTarget = useCallback((target: WattzunFormCaptureTarget | null) => { preparedCapture.current = target; setCaptureTargetState(target); }, []);
+  const [captureNotice, setCaptureNotice] = useState("");
+  const [editorRevision, setEditorRevision] = useState("");
+  const guideRequest = useRef<((control?: WattzunFormGuideControl) => Promise<boolean>) | null>(null);
+  const [guideQueued, setGuideQueued] = useState(false);
   const contextGeneration = useRef(0);
   const voiceContextRequest = useRef<AbortController | null>(null);
   const voiceCall = useRef<WattzunVoiceCall | null>(null);
@@ -224,6 +245,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     return () => {
       active.current = false;
       pendingWorkflowRef.current = null;
+      guideSession.current = null; guideRequest.current = null;
       textRequest.current?.abort();
       voiceContextRequest.current?.abort();
       voiceCall.current?.dispose();
@@ -241,6 +263,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     if (sameWorkReference(workReferenceRef.current, next)) return;
     contextGeneration.current++;
     pendingWorkflowRef.current = null;
+    guideSession.current = null; setFormGuide(null); setCaptureTarget(null); setCaptureNotice(""); setGuideQueued(false);
     workReferenceRef.current = next;
     textRequest.current?.abort(); textRequest.current = null;
     voiceContextRequest.current?.abort(); voiceContextRequest.current = null;
@@ -248,7 +271,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     messagesRef.current = [];
     setMessages([]); setBusy(false); setError(""); setWorkReference(next); setWorkContext(null);
     setSelectionNotice("Previous conversation cleared for the new work selection.");
-  }, [scope.portal]);
+  }, [scope.portal, setCaptureTarget]);
   const navigate = useCallback((href: string) => {
     const destination = workspaceHref(href, scope, user.uid, pathname);
     if (!/^\/(?!\/)/.test(destination)) return;
@@ -303,6 +326,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     }
   }, [append, workflowResult]);
   const rememberWorkflow = useCallback((messageId: string, reply: WattzunReply, requestedReviewId?: string) => {
+    if (reply.formGuide) return;
     const current = pendingWorkflowRef.current;
     if (current && requestedReviewId && requestedReviewId === current.reviewId && reply.workflow?.state === "complete"
       && reply.workflow.receipt.kind === current.proposal.kind) {
@@ -318,13 +342,45 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
   }, [dismissAction, workflowResult]);
   const requestInput = useCallback((message: string): WattzunTurnInput => {
     const pending = pendingWorkflowRef.current;
+    const guide = guideSession.current;
     return { portal: scope.portal, scopeId: scope.scopeId, requestId: crypto.randomUUID(), message,
       history: wattzunConversationHistory(messagesRef.current), preferences: { ...preferencesRef.current },
       ...(workReferenceRef.current ? { workReference: { ...workReferenceRef.current } } : {}),
-      ...(pending?.result.state === "review" ? { workflowReviewId: pending.result.reviewId }
+      ...(guide ? { formGuide: { ...guide.input } } : pending?.result.state === "review" ? { workflowReviewId: pending.result.reviewId }
         : pending && pending.result.state !== "complete" ? { workflowProposal: pending.proposal } : {}),
     };
   }, [scope]);
+  const acceptFormGuide = useCallback((reply: WattzunReply, input: WattzunTurnInput) => {
+    if (!input.formGuide) {
+      if (reply.formGuide) throw new Error("Start guided completion from your selected form first.");
+      return;
+    }
+    const current = guideSession.current;
+    const progress = readWattzunFormGuideProgress(reply.formGuide);
+    if (!current || !progress || progress.sessionId !== input.formGuide.sessionId || current.input.sessionId !== progress.sessionId
+      || !sameWorkReference(progress.requestedReference, input.workReference ?? null)) throw new Error("The guided form changed. Resume your selected form.");
+    const recovery = reply.formGuideRecovery;
+    const pending = current.input.pendingRequestId;
+    const unresolved = pending && (!recovery || recovery.requestId !== pending || recovery.state === "uncertain") ? pending : undefined;
+    current.progress = progress;
+    current.input = { sessionId: progress.sessionId, stage: progress.state === "paused" ? "resume" : "continue", authorization: "ordinary_form_answers", sourceSha256: progress.sourceSha256,
+      ...(progress.state === "paused" ? { paused: true } : {}),
+      ...(progress.productSearch ? { productSearch: progress.productSearch } : {}),
+      questionKey: progress.next?.fieldKey || "", skippedFieldKeys: progress.skippedFieldKeys, ...(unresolved ? { pendingRequestId: unresolved } : {}) };
+    workReferenceRef.current = progress.reference;
+    setWorkReference(progress.reference); setFormGuide(progress); setSelectionNotice("");
+    const receipt = reply.workflow?.state === "complete" ? reply.workflow.receipt : progress.receipt;
+    if (receipt && receipt.id === progress.recordId && (receipt.kind === "fill_form" && receipt.status === "saved" || receipt.kind === "complete_form" && receipt.status === "submitted"
+      || receipt.kind === "form_step" && (receipt.status === "saved" || receipt.status === "submitted"))) {
+      // A remounted editor knows the revision selected for this request. Keep
+      // the original cue too while an earlier editor refresh is still pending.
+      const editorIds = new Set([current.editorReference.recordId]);
+      if (input.workReference?.kind === "trade_form") editorIds.add(input.workReference.recordId);
+      for (const formId of editorIds) dispatchWattzunFormSaved({ portal: "trade", scopeId: scope.scopeId, formKind: progress.reference.formKind,
+        formId, jobId: progress.reference.jobId });
+    }
+    if (progress.state === "complete") guideSession.current = null;
+  }, [scope.scopeId]);
   const executeWorkflow = useCallback(async (reply: WattzunReply, signal: AbortSignal, generation: number) => {
     const pending = pendingWorkflowRef.current;
     const confirmation = reply.action;
@@ -352,6 +408,8 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     setBusy(true); setError("");
     try {
       const input = requestInput(message);
+      // Typed chat keeps its existing reviewed workflow. Keep any uncertain voice save for call recovery.
+      delete input.formGuide;
       const token = await user.getIdToken();
       if (!active.current || controller.signal.aborted) return;
       const payload = await responsePayload(await fetch("/api/wattzun/portal", {
@@ -379,10 +437,61 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     if (busy || callActive) return;
     voiceCall.current?.dispose();
     setMuted(false); setError("");
-    const replyGenerations = new WeakMap<WattzunVoiceResult, { generation: number; reviewId?: string }>();
+    const replyGenerations = new WeakMap<WattzunVoiceResult, { generation: number; input: WattzunTurnInput }>();
+    const guidedReply = async (signal: AbortSignal, control?: WattzunFormGuideControl) => {
+      const generation = contextGeneration.current;
+      const input = requestInput("Continue guided form completion.");
+      if (!input.formGuide) throw new Error("Select a form to complete by voice.");
+      if (input.formGuide.stage !== "start") input.formGuide = { ...input.formGuide, stage: "resume" };
+      if (control) input.formGuideControl = control;
+      const controller = new AbortController();
+      voiceContextRequest.current?.abort(); voiceContextRequest.current = controller;
+      const combined = AbortSignal.any([signal, controller.signal]);
+      const token = await user.getIdToken();
+      if (combined.aborted || generation !== contextGeneration.current) throw new Error("The selected form changed.");
+      const result = await readCallResponse(await fetch("/api/wattzun/form-guide", { method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: WATTZUN_REALTIME_VOICE_STREAM_TYPE },
+        body: JSON.stringify(input), signal: combined }), combined, scope.portal);
+      try {
+        if (combined.aborted || generation !== contextGeneration.current) throw new Error("The selected form changed.");
+        replyWorkContext(result.reply, scope.portal, input.workReference ?? null);
+      } catch (failure) {
+        if (result.audio.mimeType === "audio/pcm") await result.audio.stream.cancel().catch(() => {});
+        throw failure;
+      }
+      replyGenerations.set(result, { generation, input });
+      return result;
+    };
+    const consumeReply = (result: WattzunVoiceResult) => {
+      const request = replyGenerations.get(result);
+      if (!active.current || voiceCall.current !== call || request?.generation !== contextGeneration.current) {
+        if (result.audio.mimeType === "audio/pcm") void result.audio.stream.cancel().catch(() => {});
+        return;
+      }
+      acceptFormGuide(result.reply, request.input);
+      if (result.reply.workContext) setWorkContext(result.reply.workContext);
+      const id = crypto.randomUUID();
+      rememberWorkflow(`${id}:reply`, result.reply, request.input.workflowReviewId);
+      const turns: Message[] = [{ id: `${id}:reply`, role: "assistant", content: wattzunSpokenReply(result.reply), reply: result.reply,
+        ...(result.reply.action && !result.reply.formGuide ? { reviewDraft: result.reply.action } : {}),
+        ...(result.requestSummary ? { requestSummary: result.requestSummary } : {}) }];
+      if (result.transcript.trim()) turns.unshift({ id, role: "user", content: result.transcript });
+      append(turns);
+      if (result.reply.action?.kind === "open_workspace") {
+        const destination = wattzunNavigationDestination(result.reply.action, scope.portal);
+        if (destination) navigate(destination.href);
+      }
+      if (!result.reply.formGuide && ((result.reply.action && result.reply.action.kind !== "open_workspace") || result.reply.lookup)) onExpand?.();
+      window.dispatchEvent(new CustomEvent(WATTZUN_USAGE_CHANGED_EVENT, { detail: { userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId } }));
+    };
     const call = new WattzunVoiceCall(createWattzunBrowserVoiceEnvironment(), {
       status: status => { if (active.current && voiceCall.current === call) setCallStatus(status); },
       async greeting(signal) {
+        if (guideSession.current) {
+          const result = await guidedReply(signal);
+          consumeReply(result);
+          return result.audio;
+        }
         const token = await user.getIdToken();
         if (signal.aborted) throw new Error("Call ended.");
         const result = await readCallResponse(await fetch("/api/wattzun/greeting", { method: "POST",
@@ -402,6 +511,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
           const token = await user.getIdToken();
           if (combined.aborted) throw new Error("Call ended.");
           const form = new FormData();
+          if (input.formGuide && guideSession.current && !guideSession.current.input.pendingRequestId) guideSession.current.input.pendingRequestId = input.requestId;
           form.append("request", JSON.stringify(input));
           form.append("audio", audio, "question.wav");
           result = await readCallResponse(await fetch("/api/wattzun/voice", { method: "POST",
@@ -423,7 +533,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
           }
           if (!active.current || combined.aborted || generation !== contextGeneration.current) throw new Error("The selected work changed. Ask again about the current work.");
           const validated = { ...result, reply: { ...result.reply, ...(info ? { workContext: info } : {}) } };
-          replyGenerations.set(validated, { generation, reviewId: input.workflowReviewId });
+          replyGenerations.set(validated, { generation, input });
           return validated;
         } catch (failure) {
           if (result?.audio.mimeType === "audio/pcm") await result.audio.stream.cancel().catch(() => {});
@@ -431,31 +541,120 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
           throw failure;
         }
       },
-      reply: result => {
-        const request = replyGenerations.get(result);
-        if (!active.current || voiceCall.current !== call || request?.generation !== contextGeneration.current) {
-          if (result.audio.mimeType === "audio/pcm") void result.audio.stream.cancel().catch(() => {});
-          return;
-        }
-        if (result.reply.workContext) setWorkContext(result.reply.workContext);
-        const id = crypto.randomUUID();
-        rememberWorkflow(`${id}:reply`, result.reply, request.reviewId);
-        const turns: Message[] = [{ id: `${id}:reply`, role: "assistant", content: wattzunSpokenReply(result.reply), reply: result.reply,
-          ...(result.reply.action ? { reviewDraft: result.reply.action } : {}),
-          ...(result.requestSummary ? { requestSummary: result.requestSummary } : {}) }];
-        if (result.transcript.trim()) turns.unshift({ id, role: "user", content: result.transcript });
-        append(turns);
-        if (result.reply.action?.kind === "open_workspace") {
-          const destination = wattzunNavigationDestination(result.reply.action, scope.portal);
-          if (destination) navigate(destination.href);
-        }
-        if ((result.reply.action && result.reply.action.kind !== "open_workspace") || result.reply.lookup) onExpand?.();
-        window.dispatchEvent(new CustomEvent(WATTZUN_USAGE_CHANGED_EVENT, { detail: { userUid: user.uid, portal: scope.portal, scopeId: scope.scopeId } }));
-      },
+      reply: consumeReply,
     });
     voiceCall.current = call;
+    guideRequest.current = control => call.requestReply(signal => guidedReply(signal, control));
     void call.start();
-  }, [busy, callActive, requestInput, user, scope, append, onExpand, executeWorkflow, rememberWorkflow, navigate]);
+  }, [busy, callActive, requestInput, user, scope, append, onExpand, executeWorkflow, rememberWorkflow, navigate, acceptFormGuide]);
+
+  const startGuide = useCallback(() => {
+    if (scope.portal !== "trade" || workReferenceRef.current?.kind !== "trade_form") return;
+    pendingWorkflowRef.current = null;
+    guideSession.current = { input: { sessionId: crypto.randomUUID(), stage: "start", authorization: "ordinary_form_answers", skippedFieldKeys: [] }, progress: null, editorReference: workReferenceRef.current };
+    setFormGuide(null); setError(""); setSelectionNotice("Wattzun will save your answers as you speak and ask before completing the form.");
+    if (callActive) setGuideQueued(true);
+    else startCall();
+  }, [scope.portal, callActive, startCall]);
+
+  useEffect(() => {
+    if (!guideQueued || callStatus.state !== "listening" || !guideRequest.current || !guideSession.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      setGuideQueued(false);
+      void guideRequest.current?.();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [guideQueued, callStatus.state]);
+
+  useEffect(() => {
+    const capture = formGuide?.next;
+    if (formGuide?.state !== "capture" || capture?.type !== "photo" || formGuide.reference.formKind !== "work_pack") return;
+    let cancelled = false;
+    const target: WattzunFormCaptureTarget = { portal: "trade", scopeId: scope.scopeId, formKind: "work_pack", formId: formGuide.recordId,
+      jobId: formGuide.reference.jobId, fieldKey: capture.fieldKey };
+    void prepareWattzunFormCapture(target).then(result => {
+      if (cancelled) return;
+      setCaptureTarget(result.status === "ready" ? result.target : null);
+      setCaptureNotice(result.status === "ready" ? "" : result.message);
+    });
+    return () => { cancelled = true; };
+  }, [formGuide, scope.scopeId, setCaptureTarget, editorRevision]);
+
+  useEffect(() => {
+    const refreshed = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail = readWattzunFormRefreshed(event.detail);
+      const current = guideSession.current;
+      const progress = current?.progress;
+      if (!detail || !current || !progress || detail.scopeId !== scope.scopeId || detail.formKind !== progress.reference.formKind
+        || detail.jobId !== progress.reference.jobId || detail.formId !== progress.recordId) return;
+      setEditorRevision(`${detail.formId}:${progress.sourceSha256}`);
+    };
+    window.addEventListener(WATTZUN_FORM_REFRESHED_EVENT, refreshed);
+    return () => window.removeEventListener(WATTZUN_FORM_REFRESHED_EVENT, refreshed);
+  }, [scope.scopeId]);
+
+  useEffect(() => {
+    if (!callActive || formGuide?.state !== "manual" || formGuide.reference.formKind !== "work_pack" || !formGuide.next) return;
+    const opened = focusWattzunFormQuestion({ portal: "trade", scopeId: scope.scopeId, formKind: "work_pack", formId: formGuide.recordId,
+      jobId: formGuide.reference.jobId, fieldKey: formGuide.next.fieldKey });
+    if (opened) onMinimise?.();
+  }, [formGuide, callActive, scope.scopeId, editorRevision, onMinimise]);
+
+  useEffect(() => {
+    const saved = (event: Event) => {
+      const detail = event instanceof CustomEvent ? readWattzunFormRefreshed(event.detail) : null;
+      const current = guideSession.current, progress = current?.progress, selected = workReferenceRef.current;
+      if (!detail || !current || !progress || !["manual", "review"].includes(progress.state) || selected?.kind !== "trade_form"
+        || detail.scopeId !== scope.scopeId || detail.formKind !== selected.formKind || detail.jobId !== selected.jobId || detail.oldFormId !== selected.recordId) return;
+      // A native save is only a cue to reload. The server decides whether the signature or declaration is complete.
+      const reference = { ...selected, recordId: detail.formId };
+      workReferenceRef.current = reference; setWorkReference(reference);
+      current.input = { ...current.input, stage: "resume" };
+      setGuideQueued(true);
+    };
+    window.addEventListener(WATTZUN_FORM_NATIVE_SAVED_EVENT, saved);
+    return () => window.removeEventListener(WATTZUN_FORM_NATIVE_SAVED_EVENT, saved);
+  }, [scope.scopeId]);
+
+  useEffect(() => {
+    const saved = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail = readWattzunFormCaptureSaved(event.detail);
+      const current = guideSession.current;
+      const progress = current?.progress;
+      const prepared = preparedCapture.current;
+      if (!detail || !current || !progress || detail.scopeId !== scope.scopeId || progress.state !== "capture"
+        || progress.reference.formKind !== "work_pack" || detail.jobId !== progress.reference.jobId
+        || detail.fieldKey !== progress.next?.fieldKey
+        || detail.oldFormId !== progress.recordId && (!prepared || prepared.scopeId !== detail.scopeId || prepared.jobId !== detail.jobId || prepared.fieldKey !== detail.fieldKey || prepared.formId !== detail.oldFormId)) return;
+      // The event refreshes server context; it does not establish that the next question is complete.
+      const reference = { ...progress.reference, recordId: detail.formId };
+      workReferenceRef.current = reference; setWorkReference(reference);
+      current.input = { ...current.input, stage: "resume" };
+      setCaptureTarget(null); setCaptureNotice(""); setGuideQueued(true);
+    };
+    window.addEventListener(WATTZUN_FORM_CAPTURE_SAVED_EVENT, saved);
+    return () => window.removeEventListener(WATTZUN_FORM_CAPTURE_SAVED_EVENT, saved);
+  }, [scope.scopeId, setCaptureTarget]);
+
+  const takePhoto = () => {
+    if (!captureTarget || !captureWattzunFormPhoto(captureTarget)) {
+      setCaptureTarget(null); setCaptureNotice("Open the form's photo question, then choose Prepare camera.");
+    }
+  };
+  const prepareCamera = async () => {
+    const progress = guideSession.current?.progress;
+    if (progress?.state !== "capture" || progress.reference.formKind !== "work_pack" || !progress.next) return;
+    const generation = contextGeneration.current;
+    const target: WattzunFormCaptureTarget = { portal: "trade", scopeId: scope.scopeId, formKind: "work_pack", formId: progress.recordId,
+      jobId: progress.reference.jobId, fieldKey: progress.next.fieldKey };
+    const result = await prepareWattzunFormCapture(target);
+    if (!active.current || generation !== contextGeneration.current || guideSession.current?.progress !== progress) return;
+    setCaptureTarget(result.status === "ready" ? result.target : null);
+    setCaptureNotice(result.status === "ready" ? "" : result.message);
+    if (result.status === "unavailable" && workContext?.sources[0]) navigate(workContext.sources[0].href);
+  };
 
   useEffect(() => {
     if (!openRequest || !presentation.ready || handledRequest.current === openRequest.id) return;
@@ -463,7 +662,8 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       if (!active.current || handledRequest.current === openRequest.id) return;
       handledRequest.current = openRequest.id;
       if (openRequest.workReference) selectWork(openRequest.workReference);
-      if (openRequest.mode === "call") startCall();
+      if (openRequest.guidedForm) startGuide();
+      else if (openRequest.mode === "call") startCall();
       else {
         if (openRequest.initialMessage !== undefined) setDraft(openRequest.initialMessage);
         if (callActive && openRequest.workReference?.kind === "trade_form") setSelectionNotice('Form selected. Say "help me fill this form" to start with its next question.');
@@ -471,7 +671,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [openRequest, presentation.ready, startCall, selectWork, callActive]);
+  }, [openRequest, presentation.ready, startCall, startGuide, selectWork, callActive]);
 
   const hangUp = () => { voiceCall.current?.hangUp(); setMuted(false); };
   const toggleMute = () => { voiceCall.current?.toggleMute(); setMuted(current => !current); };
@@ -482,6 +682,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
       <button type="button" disabled={callStatus.state === "permission" || callStatus.state === "connecting"} aria-pressed={muted} onClick={toggleMute}>{muted ? "Unmute microphone" : "Mute microphone"}</button>
       <button className={styles.hangUp} type="button" onClick={hangUp}>Hang up</button>
       {workReference && <p className={styles.dockedContext}>Helping with: {workContext?.title || wattzunWorkLabel(workReference)}</p>}
+      {formGuide?.state === "capture" && <button type="button" disabled={callStatus.state === "thinking"} onClick={captureTarget ? takePhoto : prepareCamera}>{captureTarget ? "Take photo" : "Prepare camera"}</button>}
       {callStatus.state === "recovering" && callStatus.message && <p className={styles.callHint} role="status">{callStatus.message}</p>}
     </div>}
     <div className={styles.conversation} hidden={!expanded}>
@@ -505,6 +706,20 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
     </div>}
     {callStatus.message && <p className={callStatus.state === "error" ? styles.error : styles.callHint} role={callStatus.state === "error" ? "alert" : "status"}>{callStatus.message}</p>}
     {callStatus.recovery === "reload" && <div className={styles.callControls}><button type="button" onClick={() => window.location.reload()}>Reload for calling</button></div>}
+    {scope.portal === "trade" && workReference?.kind === "trade_form" && !formGuide && <div className={styles.callControls}><button type="button" disabled={busy || callStatus.state === "thinking" || guideQueued} onClick={startGuide}>Complete form by voice</button></div>}
+    {formGuide && <section className={styles.formGuide} aria-label="Guided form completion">
+      <div><strong>{formGuide.state === "complete" ? "Form completed" : "Completing your form"}</strong><span>{formGuide.counts.answered} of {formGuide.counts.visible} answered</span></div>
+      {formGuide.next && <p>{formGuide.next.label}</p>}
+      {formGuide.state === "ready_to_complete" && <p>All required items are ready. Tell Wattzun to complete the form.</p>}
+      {formGuide.state === "manual" && <p>{formGuide.next?.reason || "This step needs the named person's input."}</p>}
+      {formGuide.state === "review" && <p>{formGuide.completion.missing.join(" ")}</p>}
+      {formGuide.state === "paused" && <p>Paused. Say “continue the form” when you are ready.</p>}
+      {formGuide.state === "capture" && <><p>{formGuide.next?.reason || "Take the requested evidence photo. Wattzun will continue after it saves."}</p><button type="button" disabled={!callActive || callStatus.state === "thinking"} onClick={captureTarget ? takePhoto : prepareCamera}>{captureTarget ? "Take photo" : "Prepare camera"}</button>{captureNotice && <p role="status">{captureNotice}</p>}</>}
+      {formGuide.state !== "complete" && callActive && <div className={styles.guideControls}>
+        {formGuide.next && <><button type="button" disabled={callStatus.state !== "listening" && callStatus.state !== "speaking"} onClick={() => void guideRequest.current?.({ kind: "form_guide_control", command: "repeat", fieldKey: formGuide.next?.fieldKey || "" })}>Repeat question</button><button type="button" disabled={callStatus.state !== "listening"} onClick={() => void guideRequest.current?.({ kind: "form_guide_control", command: "skip", fieldKey: formGuide.next?.fieldKey || "" })}>Skip for now</button></>}
+        <button type="button" disabled={callStatus.state !== "listening"} onClick={() => void guideRequest.current?.({ kind: "form_guide_control", command: formGuide.state === "paused" ? "resume" : "pause", fieldKey: formGuide.next?.fieldKey || "" })}>{formGuide.state === "paused" ? "Resume form" : "Pause form"}</button>
+      </div>}
+    </section>}
     <div className={styles.messages} role="log" aria-live="polite" aria-label="Conversation with Wattzun">
       {!messages.length && <div className={styles.welcome}><h3>What can I help you with?</h3><p>Tell me what you want to get done. If I need more detail, I will ask.</p><div>{["What can you help me with?", "Help me find the next step"].map(example => <button key={example} type="button" disabled={callActive || busy} onClick={() => setDraft(example)}>{example}</button>)}</div></div>}
       {messages.map(message => <article key={message.id} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}><strong>{message.role === "user" ? "You" : "Wattzun"}</strong><p>{message.reply ? message.reply.message : message.content}</p>{message.reply && message.reply.questions.length > 0 && <ol>{message.reply.questions.map((question, index) => <li key={index}>{question}</li>)}</ol>}{message.reply && message.reply.links.length > 0 && <div className={styles.links}>{message.reply.links.map(link => wattzunPortalForPath(link.href.split(/[?#]/)[0]) === scope.portal
@@ -512,7 +727,7 @@ function WattzunConversation({ user, scope, openRequest, expanded = true, onExpa
         : <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer">{link.label} <span aria-hidden="true">↗</span></a>)}</div>}
         {message.reply?.workContext && <details className={styles.contextSources}><summary>Sources and limits</summary><strong>{message.reply.workContext.title}</strong><div className={styles.links}>{message.reply.workContext.sources.map(source => <Link key={`${source.href}:${source.label}`} href={workspaceHref(source.href, scope, user.uid, pathname)} prefetch={false} onNavigate={event => { event.preventDefault(); navigate(source.href); }}>{source.label} <span aria-hidden="true">↗</span></Link>)}</div>{message.reply.workContext.limitations.length > 0 && <ul>{message.reply.workContext.limitations.map((limitation, index) => <li key={index}>{limitation}</li>)}</ul>}</details>}
         {scope.portal === "trade" && message.reply?.lookup && <WattzunRecordPicker user={user} scope={scope} lookup={message.reply.lookup} onNavigate={navigate} onSelectWork={selectWork} />}
-        {scope.portal === "trade" && message.reply?.action && message.reply.action.kind !== "open_workspace" && (isWattzunWorkflowProposal(message.reply.action)
+        {scope.portal === "trade" && !message.reply?.formGuide && message.reply?.action && message.reply.action.kind !== "open_workspace" && message.reply.action.kind !== "form_guide_control" && message.reply.action.kind !== "search_form_products" && (isWattzunWorkflowProposal(message.reply.action)
           ? message.reply.action.kind !== "confirm_workflow" && <WattzunWorkflowReview proposal={message.reply.action} initialResult={message.reply.workflow} user={user} scopeId={scope.scopeId} onResult={result => workflowReviewResult(message.id, result)} onCancel={() => dismissAction(message.id)} onNavigate={navigate} />
           : <WattzunActionReview proposal={message.reply.action} user={user} scopeId={scope.scopeId} onCreated={receipt => actionCreated(message.id, receipt)} onCancel={() => dismissAction(message.id)} onNavigate={navigate} />)}
       </article>)}

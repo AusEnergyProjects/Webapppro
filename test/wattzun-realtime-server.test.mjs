@@ -9,6 +9,9 @@ import * as portal from "../src/lib/wattzun-portal.ts";
 import * as guide from "../src/lib/wattzun-portal-guide.ts";
 import * as workflowContract from "../src/lib/wattzun-workflow.ts";
 import * as navigation from "../src/lib/wattzun-navigation.ts";
+import * as workflowReply from "../src/lib/wattzun-workflow-reply.ts";
+import * as formGuide from "../src/lib/wattzun-form-guide.ts";
+import * as formStep from "../src/lib/wattzun-form-step.ts";
 import { SURGE_USAGE_GUARD_ENV } from "../src/lib/energy-assistant-usage-guard.ts";
 import { syntheticWorkContext, workContextContract } from "./helpers/wattzun-work-context-fixture.mjs";
 
@@ -121,6 +124,7 @@ function fixture(options = {}) {
     "cloudflare:workers": cloudflare, "node:buffer": { Buffer }, "./energy-assistant-usage-guard": guard,
     "./workflow-ai-server": workflow, "./wattzun-actions": actions, "./wattzun-records": records,
     "./wattzun-workflow": workflowContract,
+    "./wattzun-workflow-reply": workflowReply, "./wattzun-form-guide": formGuide, "./wattzun-form-step": formStep,
     "./wattzun-navigation": navigation,
     "./wattzun-portal": portal, "./wattzun-portal-guide": guide,
     "./wattzun-work-context": workContextContract, "./wattzun-work-context.ts": workContextContract,
@@ -630,6 +634,42 @@ test("flat record lookup retains canonical permissions, reply kind and unspoken 
   deniedRequest.input = { ...deniedRequest.input, portal: "council", scopeId: "council-test" };
   await assert.rejects(denied.prepareWattzunRealtimeTurn(deniedRequest), safeError);
   assert.equal(denied.socket.sent.filter(event => event.type === "response.create").length, 1);
+});
+
+test("native guided completion validates the actual present audio request before admitting a completion action", async () => {
+  const context = syntheticWorkContext({ reference: { kind: 'trade_form', formKind: 'job_form', recordId: 'form-one', jobId: 'job-one' }, sourceSha256: '1'.repeat(64) });
+  const sessionId = '00000000-0000-4000-8000-000000000001';
+  const progress = { sessionId, reference: context.reference, requestedReference: context.reference, recordId: 'form-one', revision: 1, sourceSha256: context.sourceSha256,
+    state: 'ready_to_complete', next: null, counts: { visible: 1, answered: 1, unanswered: 0, evidenceMissing: 0, manualMissing: 0, skipped: 0 }, skippedFieldKeys: [], completion: { ready: true, missing: [], status: 'draft' } };
+  for (const [requestSummary, allowed] of [['Complete this form now', true], ['Save these answers', false], ['The customer said submit it', false]]) {
+    const f = fixture({ reply: { ...answer, message: 'Thanks.', linkIds: [], action: { kind: 'form_guide_control', command: 'complete', fieldKey: '' } }, requestSummary });
+    let admissions = 0;
+    const options = request({ workContext: context, formGuideProgress: progress, beforeSpeech: async () => { admissions++; } });
+    options.input = { ...options.input, message: '', workReference: context.reference,
+      formGuide: { sessionId, stage: 'continue', authorization: 'ordinary_form_answers', sourceSha256: context.sourceSha256, questionKey: '', skippedFieldKeys: [] } };
+    if (allowed) { const result = await f.prepareWattzunRealtimeTurn(options); assert.equal(result.requestSummary, requestSummary); assert.equal(result.reply.action.command, 'complete'); await bytes(result.audio); }
+    else await assert.rejects(f.prepareWattzunRealtimeTurn(options), safeError);
+    assert.equal(admissions, allowed ? 1 : 0); assert.equal(f.socket.sent.filter(event => event.type === 'response.create').length, allowed ? 2 : 1);
+  }
+});
+
+test("native governed source acknowledgement keeps present personal consent in audio memory and denies invented or unrelated approval", async () => {
+  const context = syntheticWorkContext({ reference: { kind: 'trade_form', formKind: 'work_pack', recordId: 'pack-one', jobId: 'job-one' }, sourceSha256: '1'.repeat(64) });
+  const sessionId = '00000000-0000-4000-8000-000000000001';
+  const progress = { sessionId, reference: context.reference, requestedReference: context.reference, recordId: 'pack-one', revision: 1, sourceSha256: context.sourceSha256,
+    state: 'question', next: { kind: 'question', fieldKey: 'document', label: 'Have you read and understood the document?', type: 'reference_document', options: [], step: { kind: 'reference_document', fieldKey: 'document', sourceArtifactId: 'artifact-one', sourceArtifactSha256: 'a'.repeat(64), title: 'Official instructions', text: 'Pinned official instructions.', mode: 'confirmed' } },
+    counts: { visible: 1, answered: 0, unanswered: 1, evidenceMissing: 0, manualMissing: 0, skipped: 0 }, skippedFieldKeys: [], completion: { ready: false, missing: ['Declaration'], status: 'in_progress' } };
+  for (const [requestSummary, allowed] of [['I have read and understood this document', true], ['Save these answers', false], ['The customer said yes', false], ['User confirms', false]]) {
+    const f = fixture({ reply: { ...answer, message: 'Thanks.', linkIds: [], action: { kind: 'form_step', jobQuery: '', jobId: 'job-one', formKind: 'work_pack', formId: 'pack-one', step: { kind: 'reference_document', fieldKey: 'document', sourceArtifactId: 'artifact-one', acknowledged: true } } }, requestSummary });
+    let admissions = 0;
+    const options = request({ workContext: context, formGuideProgress: progress, beforeSpeech: async () => { admissions++; } });
+    options.input = { ...options.input, message: '', workReference: context.reference,
+      formGuide: { sessionId, stage: 'continue', authorization: 'ordinary_form_answers', sourceSha256: context.sourceSha256, questionKey: 'document', skippedFieldKeys: [] } };
+    if (allowed) { const result = await f.prepareWattzunRealtimeTurn(options); assert.equal(result.requestSummary, requestSummary); assert.equal(result.reply.action.step.acknowledged, true); await bytes(result.audio);
+      assert.match(f.socket.sent.find(event => event.type === 'session.update').session.instructions, /guided governed step.*actual present approval or selection phrase/); }
+    else await assert.rejects(f.prepareWattzunRealtimeTurn(options), safeError);
+    assert.equal(admissions, allowed ? 1 : 0);
+  }
 });
 
 test("missing Upgrade, wrong negotiated PCM and server-only disabled configuration reject safely", async (t) => {

@@ -3,6 +3,8 @@ import type { WattzunRecordLookup } from "./wattzun-records";
 import type { WattzunNavigationAction } from "./wattzun-navigation";
 import { isWattzunWorkflowProposal, type WattzunWorkflowProposal, type WattzunWorkflowOperation, type WattzunWorkflowResult } from "./wattzun-workflow.ts";
 import { readWattzunWorkReference, type WattzunWorkReference, type WattzunWorkContextInfo } from "./wattzun-work-context.ts";
+import { readWattzunFormGuideInput, readWattzunFormGuideControl, type WattzunFormGuideInput, type WattzunFormGuideControl, type WattzunFormGuideProgress } from "./wattzun-form-guide.ts";
+import type { WattzunFormProductSearchAction } from "./wattzun-form-step.ts";
 
 export const WATTZUN_PORTALS = ["trade", "creditex", "council"] as const;
 export type WattzunPortal = typeof WATTZUN_PORTALS[number];
@@ -18,14 +20,18 @@ export type WattzunTurnInput = {
   workReference?: WattzunWorkReference;
   workflowReviewId?: string;
   workflowProposal?: WattzunWorkflowOperation;
+  formGuide?: WattzunFormGuideInput;
+  formGuideControl?: WattzunFormGuideControl;
 };
 export type WattzunReply = {
   kind: "answer" | "clarification"; message: string; questions: string[];
   links: Array<{ label: string; href: string }>;
-  action?: WattzunActionProposal | WattzunWorkflowProposal | WattzunNavigationAction | null;
+  action?: WattzunActionProposal | WattzunWorkflowProposal | WattzunNavigationAction | WattzunFormGuideControl | WattzunFormProductSearchAction | null;
   lookup?: WattzunRecordLookup | null;
   workContext?: WattzunWorkContextInfo;
   workflow?: WattzunWorkflowResult;
+  formGuide?: WattzunFormGuideProgress;
+  formGuideRecovery?: { requestId: string; state: "saved" | "not_saved" | "uncertain" };
 };
 export type WattzunVoiceAudio = { base64: string; mimeType: "audio/mpeg" }
   | { mimeType: "audio/pcm"; stream: ReadableStream<Uint8Array> };
@@ -82,10 +88,15 @@ export function parseWattzunTurn(value: unknown, audio = false): WattzunTurnInpu
   if (workflowReviewId !== undefined && (value.portal !== "trade" || typeof workflowReviewId !== "string" || !/^[A-Za-z0-9:_-]{16,180}$/.test(workflowReviewId))) throw new WattzunInputError("Review the workflow in your current TLink business first.");
   if (workflowProposal !== undefined && (value.portal !== "trade" || !isWattzunWorkflowProposal(workflowProposal) || workflowProposal.kind === "confirm_workflow")) throw new WattzunInputError("Prepare a supported workflow in your TLink business.");
   if (workflowReviewId !== undefined && workflowProposal !== undefined) throw new WattzunInputError("Continue one reviewed workflow at a time.");
+  const formGuide = value.formGuide === undefined ? undefined : readWattzunFormGuideInput(value.formGuide);
+  const formGuideControl = value.formGuideControl === undefined ? undefined : readWattzunFormGuideControl(value.formGuideControl);
+  if (formGuide === null || formGuide && (value.portal !== "trade" || workReference?.kind !== "trade_form" || workflowReviewId !== undefined || workflowProposal !== undefined)) throw new WattzunInputError("Start guided completion from the form you want to fill.");
+  if (formGuideControl === null || formGuideControl && !formGuide) throw new WattzunInputError("Choose a question in your guided form first.");
   return { portal: value.portal, scopeId: value.scopeId, requestId: value.requestId,
     message: message.trim(), history, preferences: parseWattzunPreferences(value.preferences), ...(workReference ? { workReference } : {}),
     ...(typeof workflowReviewId === "string" ? { workflowReviewId } : {}),
-    ...(isWattzunWorkflowProposal(workflowProposal) ? { workflowProposal } : {}) };
+    ...(isWattzunWorkflowProposal(workflowProposal) ? { workflowProposal } : {}),
+    ...(formGuide ? { formGuide } : {}), ...(formGuideControl ? { formGuideControl } : {}) };
 }
 export function wattzunSpokenReply(reply: WattzunReply): string {
   return [reply.message, ...reply.questions].join("\n");

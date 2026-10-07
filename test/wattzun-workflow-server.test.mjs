@@ -12,6 +12,10 @@ import * as equipment from '../src/lib/trade-quote-equipment.ts';
 import * as invoiceRegister from '../src/lib/trade-invoice-register.ts';
 import * as quoteHelper from '../src/lib/wattzun-existing-quote-server.ts';
 import * as formHelper from '../src/lib/wattzun-form-server.ts';
+import { turnAuthorityContract } from './helpers/wattzun-turn-authority-fixture.mjs';
+import * as formGuide from '../src/lib/wattzun-form-guide.ts';
+import * as workflowReply from '../src/lib/wattzun-workflow-reply.ts';
+import * as workContext from '../src/lib/wattzun-work-context.ts';
 
 class AccessError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const QuoteError = quoteHelper.WattzunExistingQuoteError;
@@ -34,6 +38,10 @@ Function('require', 'exports', compiled)(name => {
   if (name === './trade-sms-billing') return { SMS_PART_PRICE_MICRO: 99000 };
   if (name === './wattzun-existing-quote-server') return quoteHelper;
   if (name === './wattzun-form-server') return formHelper;
+  if (name === './wattzun-turn-authority-server') return turnAuthorityContract;
+  if (name === './wattzun-form-guide') return formGuide;
+  if (name === './wattzun-workflow-reply') return workflowReply;
+  if (name === './wattzun-work-context') return workContext;
   if (name === './trade-team-server' || name === './trade-integration-crypto' || name === './trade-sms-server' || name === './trade-email-server'
     || name === './trade-email-recipient-server' || name === './trade-sms-wallet-server' || name.startsWith('@/app/api/')) return {};
   throw new Error(name);
@@ -157,18 +165,271 @@ function formWorkflowFixture() {
     template: { fields: [{ key: 'site_notes', label: 'Site notes', type: 'text', required: true, maxLength: 240 }, { key: 'next_question', label: 'How many units?', type: 'text', required: true, maxLength: 240 }] }, answers: {} };
   const formDeps = { team: async () => structuredClone(f.team), job: async () => ({ id: 'job-one', stage: 'ready', revision: 1 }),
     getJobForms: async () => Response.json({ ok: true, forms: [structuredClone(saved)] }),
-    saveJobForm: async request => { const payload = await request.json(); assert.equal(payload.complete, false); assert.equal(payload.baseRevision, saved.revision);
+    saveJobForm: async request => { const payload = await request.json(); assert.equal(typeof payload.complete, 'boolean'); assert.equal(payload.baseRevision, saved.revision);
       if (state.failBeforeSave) throw new Error('Connection lost before canonical save');
-      saved.answers = payload.answers; saved.revision++; f.calls.push({ kind: 'form', payload });
+      saved.answers = payload.answers; saved.revision++; if (payload.complete) saved.status = 'complete'; f.calls.push({ kind: 'form', payload });
       if (state.failAfterSave) throw new Error('Connection lost after canonical save');
       return Response.json({ ok: true, forms: [saved] }); } };
   f.deps.prepareForm = (request, access, proposal) => formHelper.prepareWattzunForm(request, access, proposal, formDeps);
   f.deps.executeForm = (request, access, prepared, id) => formHelper.executeWattzunForm(request, access, prepared, id, formDeps);
   f.deps.formAccess = (request, access, prepared) => formHelper.verifyWattzunFormAccess(request, access, prepared, formDeps);
   f.deps.formReceipt = (request, access, prepared) => formHelper.reconcileWattzunFormReceipt(request, access, prepared, formDeps);
+  f.deps.prepareGuidedForm = (request, access, proposal, input, team) => formHelper.prepareWattzunGuidedFormForTurn(request, access, proposal, input, team, formDeps);
+  f.deps.prepareTurnForm = (request, access, proposal, team) => formHelper.prepareWattzunFormForTurn(request, access, proposal, team, formDeps);
+  f.deps.formTurnAccess = (request, access, prepared, team) => formHelper.verifyWattzunFormAccessForTurn(request, access, prepared, team, formDeps);
+  f.deps.prepareCompletion = (request, access, proposal) => formHelper.prepareWattzunFormCompletion(request, access, proposal, formDeps);
+  f.deps.prepareTurnCompletion = (request, access, proposal, team) => formHelper.prepareWattzunFormCompletionForTurn(request, access, proposal, team, formDeps);
+  f.deps.executeCompletion = (request, access, prepared, id) => formHelper.executeWattzunFormCompletion(request, access, prepared, id, formDeps);
+  f.deps.completionAccess = (request, access, prepared) => formHelper.verifyWattzunFormCompletionAccess(request, access, prepared, formDeps);
+  f.deps.completionTurnAccess = (request, access, prepared, team) => formHelper.verifyWattzunFormCompletionAccessForTurn(request, access, prepared, team, formDeps);
+  f.deps.completionReceipt = (request, access, prepared) => formHelper.reconcileWattzunFormCompletionReceipt(request, access, prepared, formDeps);
+  f.deps.guide = (request, access, reference, input, team) => formHelper.loadWattzunFormGuideForTurn(request, access, reference, input, team, formDeps);
+  f.deps.prepareFormStep = (request, access, proposal) => formHelper.prepareWattzunFormStep(request, access, proposal, formDeps);
+  f.deps.prepareTurnFormStep = (request, access, proposal, team) => formHelper.prepareWattzunFormStepForTurn(request, access, proposal, team, formDeps);
+  f.deps.executeFormStep = (request, access, prepared, id) => formHelper.executeWattzunFormStep(request, access, prepared, id, formDeps);
+  f.deps.formStepAccess = (request, access, prepared) => formHelper.verifyWattzunFormStepAccess(request, access, prepared, formDeps);
+  f.deps.formStepTurnAccess = (request, access, prepared, team) => formHelper.verifyWattzunFormStepAccessForTurn(request, access, prepared, team, formDeps);
+  f.deps.verifyTurnFormStep = (request, access, prepared, team) => formHelper.verifyWattzunFormStepForTurn(request, access, prepared, team, formDeps);
+  f.deps.formStepReceipt = (request, access, prepared) => formHelper.reconcileWattzunFormStepReceipt(request, access, prepared, formDeps);
   const review = id => workflowModule.loadWattzunWorkflowReview(new Request('https://example.test/api/wattzun/voice'), f.access, id, f.deps);
-  return { ...f, saved, state, review, proposal: { kind: 'fill_form', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', answers: [{ fieldKey: 'site_notes', value: '  Access via side gate.  ' }] } };
+  return { ...f, saved, state, formDeps, review, proposal: { kind: 'fill_form', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', answers: [{ fieldKey: 'site_notes', value: '  Access via side gate.  ' }] } };
 }
+
+async function guidedWorkflowFixture() {
+  const f = formWorkflowFixture(), request = new Request('https://example.test/api/wattzun/voice');
+  const access = { ...f.access, scope: { ...f.access.scope, label: f.team.businessName } }, initial = { access, tradeTeam: structuredClone(f.team) };
+  const reference = { kind: 'trade_form', formKind: 'job_form', jobId: 'job-one', recordId: 'form-one' };
+  const session = { sessionId: '00000000-0000-4000-8000-000000000001', stage: 'resume', authorization: 'ordinary_form_answers', skippedFieldKeys: [] };
+  const progress = () => formHelper.loadWattzunFormGuideForTurn(request, access, reference, session, f.team, f.formDeps);
+  const currentInput = async () => { const { guide } = await progress(); return { ...session, stage: 'continue', sourceSha256: guide.sourceSha256, questionKey: guide.next?.fieldKey || '' }; };
+  const executeGuided = (proposal, input, requestId, consent = '') => workflowModule.executeWattzunGuidedFormForTurn(request, initial, reference, proposal, input, requestId, consent, f.deps);
+  const recover = (input, requestId, changes = {}) => workflowModule.recoverWattzunGuidedFormForTurn(request, initial, reference, { ...input, ...changes }, requestId, f.deps);
+  return { ...f, request, initial, reference, session, progress, currentInput, executeGuided, recover };
+}
+
+async function governedWorkflowFixture() {
+  const f = await guidedWorkflowFixture();
+  const reference = { kind: 'trade_form', formKind: 'work_pack', jobId: 'job-one', recordId: 'pack-original' };
+  const pack = { instance: { id: 'pack-current', workOrderId: 'job-one', instanceKey: 'stable-pack', revision: 3, status: 'in_progress', responseSha256: 'sha256:' + 'a'.repeat(64) },
+    definition: { title: 'Synthetic product form', schema: { sections: [{ sectionKey: 'general', repeatability: null, prompts: [] }],
+      dependencies: [{ kind: 'product', dependencyKey: 'products', label: 'Installed product', required: true, minimumCount: 1, maximumCount: 2 }] } },
+    signatureBindings: { definitionSha256: 'a', prefillSha256: 'b' }, response: { answers: {}, repeatableSections: {}, dependencyResolutions: {} },
+    completion: { visiblePromptKeys: [], ready: false, blockers: [] }, referenceDocuments: [], calculatorPendingReviews: [] };
+  const products = [{ selectionId: 'product-one', snapshotId: 'snapshot-one', brand: 'Example', manufacturer: 'Example Manufacturing', model: 'X1', sourceSha256: 'a'.repeat(64) }], receipts = new Map();
+  f.formDeps.loadPack = async () => structuredClone(pack);
+  f.formDeps.steps = {
+    products: async () => structuredClone(products),
+    selectProducts: async (_db, payload) => {
+      assert.equal(payload.caseInstanceId, pack.instance.id); assert.equal(payload.expectedResponseSha256, pack.instance.responseSha256);
+      const base = pack.instance.revision; f.calls.push({ kind: 'product', payload: structuredClone(payload) });
+      pack.response.dependencyResolutions[payload.dependencyKey] = { status: 'resolved', reference: payload.selections[0].selectionId };
+      pack.instance.id = 'pack-next'; pack.instance.revision++; pack.instance.responseSha256 = 'sha256:' + 'b'.repeat(64);
+      receipts.set(payload.idempotency.clientActionId, { base, result: pack.instance.revision, idempotency: structuredClone(payload.idempotency) });
+      if (f.state.failAfterSave) throw new Error('Lost acknowledgement after canonical product selection');
+      return { action: 'work_pack_select_official_products', status: 'applied', projection: structuredClone(pack) };
+    },
+    receipt: async (_db, payload) => {
+      const saved = receipts.get(payload.idempotency.clientActionId); if (!saved) return null;
+      assert.equal(payload.action, 'work_pack_select_official_products'); assert.equal(payload.baseRevision, saved.base); assert.deepEqual(payload.idempotency, saved.idempotency);
+      if (pack.instance.revision !== saved.result) throw new formHelper.WattzunFormError(409, 'Later canonical revision');
+      return { action: payload.action, status: 'duplicate', projection: structuredClone(pack) };
+    },
+  };
+  f.session.productSearch = { dependencyKey: 'products', search: 'heat pump' };
+  const proposal = { kind: 'form_step', jobQuery: '', jobId: 'job-one', formKind: 'work_pack', formId: 'pack-current',
+    step: { kind: 'official_product', dependencyKey: 'products', search: 'heat pump', selections: [{ selectionId: 'product-one', snapshotId: 'snapshot-one', quantity: 1 }] } };
+  const progress = () => formHelper.loadWattzunFormGuideForTurn(f.request, f.initial.access, reference, f.session, f.team, f.formDeps);
+  return { ...f, reference, pack, products, proposal, progress };
+}
+
+test('a scoped official product selection uses the real encrypted journal and recovers its exact native receipt without another selection', async () => {
+  const f = await governedWorkflowFixture(), { guide } = await f.progress();
+  assert.equal(guide.next.step.kind, 'official_product');
+  const input = { ...f.session, productSearch: guide.productSearch, stage: 'continue', sourceSha256: guide.sourceSha256, questionKey: guide.next.fieldKey };
+  for (const phrase of ['Save this quote', 'I used X1 yesterday', 'Maybe X1']) await assert.rejects(
+    workflowModule.executeWattzunGuidedFormForTurn(f.request, f.initial, f.reference, f.proposal, input, 'guided-product-request-0001', phrase, f.deps), error => error.status === 400);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 0); assert.equal(f.calls.length, 0);
+  f.state.failAfterSave = true;
+  await assert.rejects(workflowModule.executeWattzunGuidedFormForTurn(f.request, f.initial, f.reference, f.proposal, input, 'guided-product-request-0001', 'Use X1', f.deps), /Lost acknowledgement/);
+  assert.equal(f.calls.length, 1); assert.equal(f.pack.instance.revision, 4); f.state.failAfterSave = false;
+  const recovered = await workflowModule.recoverWattzunGuidedFormForTurn(f.request, f.initial, f.reference, input, 'guided-product-request-0001', f.deps);
+  assert.equal(recovered.state, 'saved'); assert.equal(recovered.result.receipt.kind, 'form_step'); assert.equal(recovered.result.receipt.id, 'pack-next');
+  assert.match(recovered.result.receipt.message, /selected official products/); assert.equal(f.calls.length, 1);
+  await assert.rejects(workflowModule.recoverWattzunGuidedFormForTurn(f.request, f.initial, f.reference, { ...input, sessionId: '00000000-0000-4000-8000-000000000002' }, 'guided-product-request-0001', f.deps), error => error.status === 403);
+  f.pack.instance.revision++;
+  await assert.rejects(workflowModule.recoverWattzunGuidedFormForTurn(f.request, f.initial, f.reference, input, 'guided-product-request-0001', f.deps), error => error.status === 409);
+  assert.equal(f.calls.length, 1);
+});
+
+test('final review handoff rejects changed official registry metadata even when the form source remains identical', async () => {
+  const f = await governedWorkflowFixture();
+  const candidate = await workflowModule.prepareWattzunWorkflowForTurn(f.request, f.initial, f.proposal, 'product-review-request-0001', f.deps);
+  assert.equal(candidate.state, 'review'); const formSource = (await f.progress()).guide.sourceSha256;
+  await assert.rejects(workflowModule.loadWattzunWorkflowReviewForTurn(f.request, f.initial, candidate.reviewId, async () => {
+    f.products[0].manufacturer = 'Registry correction'; return f.initial;
+  }, f.deps), error => error.status === 409);
+  assert.equal((await f.progress()).guide.sourceSha256, formSource); assert.equal(f.calls.length, 0);
+});
+
+test('guided journal recovers a lost save acknowledgement without rewriting, then saves the next real answer once', async () => {
+  const f = await guidedWorkflowFixture(), first = await f.currentInput(), requestId = 'guided-answer-request-0001';
+  f.state.failAfterSave = true;
+  await assert.rejects(f.executeGuided(f.proposal, first, requestId)); assert.equal(f.calls.length, 1); assert.equal(f.saved.revision, 2);
+  f.state.failAfterSave = false;
+  const recovered = await f.recover(first, requestId); assert.equal(recovered.state, 'saved'); assert.equal(recovered.result.receipt.kind, 'fill_form'); assert.equal(f.calls.length, 1);
+  const next = await f.currentInput(); assert.equal(next.questionKey, 'next_question');
+  const result = await f.executeGuided({ ...f.proposal, answers: [{ fieldKey: 'next_question', value: '2' }] }, next, 'guided-answer-request-0002');
+  assert.equal(result.result.state, 'complete'); assert.equal(f.calls.length, 2); assert.equal(f.saved.answers.site_notes, 'Access via side gate.'); assert.equal(f.saved.answers.next_question, '2');
+  assert.equal(f.saved.status, 'draft'); assert.equal((await f.progress()).guide.state, 'ready_to_complete');
+});
+
+test('guided final completion is a separate canonical action and lost completion receipts reconcile without another submit', async () => {
+  const f = await guidedWorkflowFixture(); f.saved.answers = { site_notes: 'Side gate', next_question: '2' };
+  const input = await f.currentInput(), proposal = { kind: 'complete_form', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one' };
+  for (const phrase of ['Save these answers', 'Send it', 'Maybe complete it tomorrow', 'The customer said complete it']) {
+    await assert.rejects(f.executeGuided(proposal, input, 'guided-completion-request-0001', phrase), error => error.status === 400);
+  }
+  assert.equal(f.calls.length, 0); f.state.failAfterSave = true;
+  await assert.rejects(f.executeGuided(proposal, input, 'guided-completion-request-0001', 'Complete this form now'));
+  assert.equal(f.calls.length, 1); assert.equal(f.saved.status, 'complete'); assert.equal(f.calls[0].payload.complete, true);
+  f.state.failAfterSave = false;
+  const recovered = await f.recover(input, 'guided-completion-request-0001'); assert.equal(recovered.state, 'saved'); assert.equal(recovered.result.receipt.kind, 'complete_form');
+  assert.equal(f.calls.length, 1); assert.equal((await f.progress()).guide.state, 'complete');
+});
+
+test('guided recovery is session scoped, never retries an unchanged unsaved draft and rejects changed request values', async () => {
+  const f = await guidedWorkflowFixture(), input = await f.currentInput(), requestId = 'guided-answer-request-0001';
+  f.state.failBeforeSave = true; await assert.rejects(f.executeGuided(f.proposal, input, requestId));
+  assert.equal((await f.recover(input, requestId)).state, 'not_saved'); assert.equal(f.calls.length, 0); assert.equal(f.saved.revision, 1);
+  await assert.rejects(f.recover(input, requestId, { sessionId: '00000000-0000-4000-8000-000000000002' }), error => error.status === 403);
+  await assert.rejects(f.executeGuided({ ...f.proposal, answers: [{ fieldKey: 'site_notes', value: 'Different' }] }, input, requestId), error => error.status === 409);
+  assert.equal(f.calls.length, 0);
+  assert.equal((await f.recover(input, 'guided-missing-request-0001')).state, 'not_saved');
+});
+
+test('guided validation rejects a value before journal creation and dispatch, then accepts a corrected answer', async () => {
+  const f = await guidedWorkflowFixture(), input = await f.currentInput();
+  await assert.rejects(f.executeGuided({ ...f.proposal, answers: [{ fieldKey: 'site_notes', value: 'x'.repeat(241) }] }, input, 'guided-invalid-answer-0001'),
+    error => error instanceof workflowModule.WattzunGuidedFormValidationError && error.status === 400);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 0); assert.equal(f.calls.length, 0); assert.equal(f.saved.revision, 1);
+  const saved = await f.executeGuided(f.proposal, input, 'guided-valid-answer-00002'); assert.equal(saved.result.receipt.status, 'saved'); assert.equal(f.calls.length, 1);
+});
+
+test('guided declarations require their native control and spoken agreement never creates a journal or signature', async () => {
+  const f = await guidedWorkflowFixture();
+  f.saved.template.fields.unshift({ key: 'consent', label: 'I personally declare these supplied facts are correct.', type: 'checkbox', required: true });
+  f.saved.answers = { site_notes: 'Side gate', next_question: '2', consent: false };
+  const progress = await f.progress(); assert.equal(progress.guide.state, 'manual');
+  assert.match(formGuide.wattzunFormGuideNarration(progress.guide), /(?:sign|declaration|form control)/i);
+  const input = { ...f.session, stage: 'continue', sourceSha256: progress.guide.sourceSha256, questionKey: 'consent' };
+  for (const proposal of [
+    { kind: 'form_step', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', step: { kind: 'declaration', fieldKey: 'consent', acknowledged: true } },
+    { ...f.proposal, answers: [{ fieldKey: 'consent', value: true }] },
+  ]) await assert.rejects(f.executeGuided(proposal, input, 'guided-declaration-000001', 'I confirm this declaration'), error => error.status >= 400);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM admin_audit_log').get().n, 0); assert.equal(f.calls.length, 0); assert.equal(f.saved.answers.consent, false);
+  // The native form control produces the real saved declaration; speech resumes from that saved source.
+  f.saved.answers.consent = true; f.saved.revision++;
+  const resumed = await f.progress(); assert.equal(resumed.guide.state, 'ready_to_complete'); assert.equal(f.saved.status, 'draft'); assert.equal(f.calls.length, 0);
+});
+
+test('closing a guided call during canonical team verification stops before the business save', async () => {
+  const f = await guidedWorkflowFixture(), input = await f.currentInput(), controller = new AbortController();
+  f.deps.team = async () => { controller.abort(); return f.team; };
+  await assert.rejects(workflowModule.executeWattzunGuidedFormForTurn(new Request(f.request.url, { signal: controller.signal }), f.initial, f.reference, f.proposal, input, 'guided-closed-call-000001', '', f.deps), error => error.status === 409);
+  assert.equal(f.calls.length, 0); assert.equal(f.saved.revision, 1);
+});
+
+test('an explicit false answer and lost acknowledgement preserve the current checkbox deferral without declaring the form ready', async () => {
+  const f = await guidedWorkflowFixture();
+  f.saved.template.fields.unshift({ key: 'checked', label: 'Is the test complete?', type: 'checkbox', required: true }); f.saved.answers.checked = false;
+  const input = await f.currentInput(); assert.equal(input.questionKey, 'checked'); f.state.failAfterSave = true;
+  await assert.rejects(f.executeGuided({ ...f.proposal, answers: [{ fieldKey: 'checked', value: false }] }, input, 'guided-false-answer-000001'));
+  f.state.failAfterSave = false;
+  const recovered = await f.recover(input, 'guided-false-answer-000001'); assert.equal(recovered.state, 'saved'); assert.deepEqual(recovered.deferredFieldKeys, ['checked']); assert.equal(f.calls.length, 1);
+  f.session.skippedFieldKeys = recovered.deferredFieldKeys;
+  const progress = await f.progress(); assert.equal(progress.guide.next.fieldKey, 'site_notes'); assert.equal(progress.guide.completion.ready, false);
+});
+
+test('guided work-pack lost-save recovery binds the original selector while canonical record id and revision advance', async () => {
+  const f = await guidedWorkflowFixture(), original = { kind: 'trade_form', formKind: 'work_pack', jobId: 'job-one', recordId: 'pack-original' };
+  const prompt = key => ({ promptKey: key, label: key, type: 'text', required: true, options: [], dependencyKeys: [], attestation: null, fileRequirement: null, referenceDocument: null, signerRoleKey: '', minimumLength: null, maximumLength: null, minimumNumber: null, maximumNumber: null, numberStep: null });
+  const pack = { instance: { id: 'pack-current', workOrderId: 'job-one', instanceKey: 'stable-pack', revision: 3, status: 'in_progress', responseSha256: 'sha256:' + 'a'.repeat(64) },
+    definition: { title: 'Synthetic work pack', schema: { sections: [{ sectionKey: 'general', repeatability: null, prompts: [prompt('notes'), prompt('serial')] }] } },
+    signatureBindings: { definitionSha256: 'a', prefillSha256: 'b' }, response: { answers: {}, repeatableSections: {} }, completion: { visiblePromptKeys: ['notes', 'serial'] } };
+  f.formDeps.loadPack = async () => structuredClone(pack);
+  f.formDeps.savePack = async (_db, payload) => {
+    assert.equal(payload.expectedResponseSha256, pack.instance.responseSha256); assert.equal(payload.caseInstanceId, pack.instance.id);
+    for (const patch of payload.sectionPatches) Object.assign(pack.response.answers, patch.answers);
+    pack.instance.id = 'pack-next'; pack.instance.revision++; pack.instance.responseSha256 = 'sha256:' + 'b'.repeat(64); f.calls.push({ kind: 'pack', payload });
+    throw new Error('Lost acknowledgement after canonical work-pack commit');
+  };
+  const { guide } = await formHelper.loadWattzunFormGuideForTurn(f.request, f.initial.access, original, f.session, f.team, f.formDeps);
+  assert.equal(guide.recordId, 'pack-current');
+  const input = { ...f.session, stage: 'continue', sourceSha256: guide.sourceSha256, questionKey: 'notes' };
+  const proposal = { kind: 'fill_form', jobQuery: '', jobId: 'job-one', formKind: 'work_pack', formId: guide.recordId, answers: [{ fieldKey: 'notes', value: 'Side gate' }] };
+  await assert.rejects(workflowModule.executeWattzunGuidedFormForTurn(f.request, f.initial, original, proposal, input, 'guided-pack-lost-00000001', '', f.deps), /Lost acknowledgement/);
+  assert.equal(f.calls.length, 1); assert.equal(pack.instance.revision, 4);
+  const recovered = await workflowModule.recoverWattzunGuidedFormForTurn(f.request, f.initial, original, input, 'guided-pack-lost-00000001', f.deps);
+  assert.equal(recovered.state, 'saved'); assert.equal(recovered.result.receipt.id, 'pack-next'); assert.equal(f.calls.length, 1);
+  await assert.rejects(workflowModule.recoverWattzunGuidedFormForTurn(f.request, f.initial, { ...original, recordId: 'another-pack' }, input, 'guided-pack-lost-00000001', f.deps), error => error.status === 403);
+  pack.instance.revision++; pack.response.answers.serial = 'Office edit';
+  await assert.rejects(workflowModule.recoverWattzunGuidedFormForTurn(f.request, f.initial, original, input, 'guided-pack-lost-00000001', f.deps), error => error.status === 409);
+  assert.equal(f.calls.length, 1);
+});
+
+function turnFixture(options = {}) {
+  const f = fixture(options), request = new Request('https://example.test/api/wattzun/voice');
+  const access = { ...f.access, scope: { ...f.access.scope, label: f.team.businessName } };
+  const snapshot = () => ({ access, tradeTeam: structuredClone(f.team) });
+  const initial = snapshot();
+  return { ...f, request, initial, snapshot,
+    turnPrepare: (proposal = price, requestId = 'synthetic-turn-request-0001') => workflowModule.prepareWattzunWorkflowForTurn(request, initial, proposal, requestId, f.deps),
+    turnReview: (reviewId, refresh) => workflowModule.loadWattzunWorkflowReviewForTurn(request, initial, reviewId, refresh || (async () => snapshot()), f.deps) };
+}
+
+test('private turn preparation reuses only its completed authority while final handoff refreshes once after frozen source rebuilding', async () => {
+  const f = turnFixture();
+  f.deps.team = async () => { throw new Error('An internal duplicate authority read is not permitted in this price-book turn.'); };
+  const candidate = await f.turnPrepare(); assert.equal(candidate.state, 'review'); assert.equal(f.calls.length, 0);
+  let refreshes = 0;
+  const checked = await f.turnReview(candidate.reviewId, async () => {
+    refreshes++; assert.ok(f.decryptCalls() >= 2); assert.equal(f.calls.length, 0); return f.snapshot();
+  });
+  assert.deepEqual(checked.result, candidate); assert.equal(refreshes, 1); assert.equal(f.calls.length, 0);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_price_book_items').get().n, 0);
+});
+
+test('turn final handoff still denies changed grants, source target and corrupt frozen payloads before private disclosure', async () => {
+  for (const reason of ['grant', 'archive', 'cipher']) {
+    const f = turnFixture(), candidate = await f.turnPrepare(reason === 'grant' ? price : customerMessage);
+    if (reason === 'cipher') for (const value of f.cipher.values()) value.prepared.review.lines = [{ label: 'Bad', value: { private: true } }];
+    await assert.rejects(f.turnReview(candidate.reviewId, async () => {
+      if (reason === 'grant') { f.team.isOwner = false; f.team.canManagePriceBook = false; }
+      if (reason === 'archive') f.database.exec("UPDATE trade_work_orders SET record_status='archived' WHERE id='job-one'");
+      return f.snapshot();
+    }), error => error.status === (reason === 'cipher' ? 503 : 403));
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test('turn choices refresh grants after source rebuilding and never expose private matches after revocation', async () => {
+  const f = turnFixture(); f.addJob('job-two');
+  const candidate = await f.turnPrepare(customerMessage); assert.equal(candidate.state, 'choose_job');
+  let refreshed = false;
+  await assert.rejects(workflowModule.verifyWattzunWorkflowForTurn(f.request, f.initial, customerMessage, 'synthetic-turn-request-0001', async () => {
+    refreshed = true; assert.ok(f.statements.filter(sql => sql.includes('FROM trade_work_orders w')).length >= 2);
+    f.team.canViewCustomers = false; return f.snapshot();
+  }, f.deps), error => error.status === 403);
+  assert.equal(refreshed, true); assert.equal(f.calls.length, 0);
+});
+
+test('turn candidates reject same request changed payloads and cancellation without executing a business action', async () => {
+  const f = turnFixture(); await f.turnPrepare();
+  await assert.rejects(f.turnPrepare({ ...price, unitPrice: '99.00' }), error => error.status === 409);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(workflowModule.prepareWattzunWorkflowForTurn(new Request(f.request.url, { signal: controller.signal }), f.initial, price, 'synthetic-turn-request-0001', f.deps), error => error.name === 'AbortError');
+  assert.equal(f.calls.length, 0);
+});
 
 test('next voice review load reconciles a saved form after its outer receipt was lost without writing again', async () => {
   const f=formWorkflowFixture(), prepared=await f.prepare(f.proposal), id=prepared.body.result.reviewId;

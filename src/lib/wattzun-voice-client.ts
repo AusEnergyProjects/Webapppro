@@ -232,7 +232,15 @@ export class WattzunVoiceCall {
     } catch { this.fail("This browser could not record audio. Try an updated browser with microphone access."); }
   }
   private async send(audio: Blob) {
-    if (!this.active || this.muted || this.pending) return;
+    await this.requestReply(signal => this.callbacks.submit(audio, signal));
+  }
+  /** Run a user-requested guide step through the same call, microphone and playback lifecycle. */
+  async requestReply(request: (signal: AbortSignal) => Promise<WattzunVoiceResult>): Promise<boolean> {
+    if (!this.active || !this.microphone || this.muted || this.pending) return false;
+    this.discardCapture();
+    const previousPlayback = this.playback;
+    this.playback = null;
+    previousPlayback?.close();
     const generation = this.generation;
     const pending = new AbortController();
     let unplayedAudio: WattzunVoiceResult["audio"] | null = null;
@@ -240,23 +248,24 @@ export class WattzunVoiceCall {
     this.microphone?.mute(true);
     this.update("thinking");
     try {
-      const result = await this.callbacks.submit(audio, pending.signal);
+      const result = await request(pending.signal);
       unplayedAudio = result.audio;
-      if (!this.active || generation !== this.generation || pending.signal.aborted) return;
+      if (!this.active || generation !== this.generation || pending.signal.aborted) return true;
       this.pending = null;
       this.callbacks.reply(result);
-      if (!this.active || generation !== this.generation || pending.signal.aborted) return;
-      if (this.muted) { this.update("muted"); return; }
+      if (!this.active || generation !== this.generation || pending.signal.aborted) return true;
+      if (this.muted) { this.update("muted"); return true; }
       unplayedAudio = null;
       await this.playAudio(result.audio, generation);
     } catch (error) {
-      if (!this.active || generation !== this.generation || pending.signal.aborted) return;
+      if (!this.active || generation !== this.generation || pending.signal.aborted) return true;
       const message = error instanceof Error ? error.message : "The voice reply could not be completed. Try again.";
       if (error instanceof WattzunVoiceCallError) this.fail(message); else this.recover();
     } finally {
       if (unplayedAudio?.mimeType === "audio/pcm") void unplayedAudio.stream.cancel().catch(() => {});
       if (this.pending === pending) this.pending = null;
     }
+    return true;
   }
   private async playAudio(audio: WattzunVoiceResult["audio"], generation: number) {
     let unplayed = true;

@@ -21,7 +21,7 @@ export const WATTZUN_HATS = [
 export type WattzunHat = typeof WATTZUN_HATS[number]["id"];
 export type WattzunPresentationScope = { userUid: string; portal: WattzunPortal; scopeId: string };
 export type WattzunPresentation = { hat: WattzunHat; speed: WattzunPreferences["speed"] };
-export type WattzunOpenRequest = { userUid: string; portal: WattzunPortal; scopeId?: string; mode: "call" | "message"; initialMessage?: string; workReference?: WattzunWorkReference };
+export type WattzunOpenRequest = { userUid: string; portal: WattzunPortal; scopeId?: string; mode: "call" | "message"; initialMessage?: string; workReference?: WattzunWorkReference; guidedForm?: true };
 export const WATTZUN_OPEN_EVENT = "wattzun:open";
 export const WATTZUN_READY_EVENT = "wattzun:ready";
 export const WATTZUN_USAGE_CHANGED_EVENT = "wattzun:usage-changed";
@@ -101,7 +101,8 @@ export function readWattzunOpenRequest(value: unknown): WattzunOpenRequest | nul
   if ("initialMessage" in value && value.initialMessage !== undefined && (typeof value.initialMessage !== "string" || value.initialMessage.length > 4000)) return null;
   const workReference = "workReference" in value && value.workReference !== undefined ? readWattzunWorkReference(value.workReference, value.portal) : undefined;
   if (workReference === null) return null;
-  return { userUid: value.userUid, portal: value.portal, mode: value.mode, ...("scopeId" in value && typeof value.scopeId === "string" ? { scopeId: value.scopeId } : {}), ...("initialMessage" in value && typeof value.initialMessage === "string" ? { initialMessage: value.initialMessage } : {}), ...(workReference ? { workReference } : {}) };
+  if ("guidedForm" in value && value.guidedForm !== undefined && (value.guidedForm !== true || value.portal !== "trade" || value.mode !== "call" || workReference?.kind !== "trade_form")) return null;
+  return { userUid: value.userUid, portal: value.portal, mode: value.mode, ...("scopeId" in value && typeof value.scopeId === "string" ? { scopeId: value.scopeId } : {}), ...("initialMessage" in value && typeof value.initialMessage === "string" ? { initialMessage: value.initialMessage } : {}), ...(workReference ? { workReference } : {}), ...("guidedForm" in value && value.guidedForm === true ? { guidedForm: true } : {}) };
 }
 export function requestWattzunAssistant(request: WattzunOpenRequest): Promise<boolean> {
   if (!readWattzunOpenRequest(request)) return Promise.resolve(false);

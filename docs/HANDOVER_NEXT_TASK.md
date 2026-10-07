@@ -1,9 +1,11 @@
 # Next task handover
 
-Status: Wattzun form companion, call quality and Council community tools; matching GitHub/Sites publication authorised.
+Status: Wattzun form companion, call quality and Council community tools; guided end-to-end form completion and matching GitHub/Sites publication authorised.
 Prepared: 7 October 2026
 
 ## Active follow-up: demonstrate useful, continuous work assistance
+
+Current acceptance: Fill by voice must ask, save and advance through the selected form without per-answer review clicks, then complete its real record after separate spoken confirmation. Repeated items, selections, declarations, official products, scenarios and calculator steps must use current native requirements and receipts. Photo capture is a user camera tap and a verified artifact link. Actual signatures and independent Creditex decisions cannot be invented. Preserve one call, handle uncertain writes by read-only receipt recovery, and refresh the current immutable form revision. Exact current validation, comparable latency samples and hosted completion evidence belong in C:/Webproject/outputs/wattzun-guided-completion-20261007/release-report.md; the earlier evidence below describes the previous release.
 
 Outcome: complete consecutive spoken form-answer reviews in the real TLink editors, navigate the current portal while the call stays connected, explain selected Council demographic figures and provide scoped Council team messaging. The Council demonstration is planned for 8 October. Existing customer/quote/message/price-book workflows remain part of the assistant and must retain their current permissions and receipts.
 

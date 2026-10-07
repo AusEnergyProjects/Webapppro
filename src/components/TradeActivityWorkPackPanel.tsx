@@ -48,7 +48,14 @@ import { TradeWorkPackSignaturePad } from "./TradeWorkPackSignaturePad";
 import styles from "./TradeActivityWorkPackPanel.module.css";
 import { useFormTimeTracking, WorkTimeStatus } from "./TradeWorkTimeTracking";
 import { WattzunFormAssistButton } from "./WattzunFormAssistButton";
-import { WATTZUN_FORM_SAVED_EVENT, readWattzunFormSaved } from "@/lib/wattzun-form-client";
+import {
+  WATTZUN_FORM_SAVED_EVENT, readWattzunFormSaved, dispatchWattzunFormRefreshed,
+  WATTZUN_FORM_FOCUS_EVENT, dispatchWattzunFormNativeSaved,
+  WATTZUN_FORM_CAPTURE_PREPARE_EVENT, WATTZUN_FORM_CAPTURE_EVENT,
+  readWattzunFormCaptureRequest, readWattzunFormCaptureTarget,
+  respondWattzunFormCapture, sameWattzunFormCaptureTarget, dispatchWattzunFormCaptureSaved,
+  type WattzunFormCaptureRequest,
+} from "@/lib/wattzun-form-client";
 
 const ENDPOINT = "/api/trade-team/work-packs";
 const WEB_DEVICE_STORAGE_KEY = "aea-creditex-work-pack-web-device-v1";
@@ -463,6 +470,7 @@ function WorkPack({
   const [response, setResponse] = useState(initialPack.response);
   const [dirty, setDirty] = useState<Record<string, CreditexWorkPackSectionPatch>>({});
   const [repeatSelection, setRepeatSelection] = useState<Record<string, string>>({});
+  const [captureRequest, setCaptureRequest] = useState<WattzunFormCaptureRequest | null>(null);
   const [signatureDrafts, setSignatureDrafts] = useState<Record<string, SignatureDraft>>({});
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -502,17 +510,28 @@ function WorkPack({
     assistantRefreshPending.current = true;
     if (assistantRefreshing.current || editorBusy.current || savingRef.current || conflictRef.current || Object.keys(dirtyRef.current).length || signatureInProgress.current) return;
     assistantRefreshing.current = true;
-    const before = packRef.current;
     try {
-      const latest = await onReload();
-      const next = latest.find(item => item.instance.instanceKey === before.instance.instanceKey);
-      if (!next) throw new Error("The saved activity form could not be found.");
-      if (packRef.current !== before || editorBusy.current || Object.keys(dirtyRef.current).length || signatureInProgress.current) return;
-      packRef.current = next; setPack(next); setResponse(next.response); onReplace(next);
-      assistantRefreshPending.current = false; setMessage("Wattzun's answers are saved in this form.");
+      while (assistantRefreshPending.current) {
+        assistantRefreshPending.current = false;
+        const before = packRef.current;
+        const latest = await onReload();
+        const next = latest.find(item => item.instance.instanceKey === before.instance.instanceKey);
+        if (!next) throw new Error("The saved activity form could not be found.");
+        if (packRef.current !== before || editorBusy.current || savingRef.current || conflictRef.current || Object.keys(dirtyRef.current).length || signatureInProgress.current) {
+          assistantRefreshPending.current = true;
+          return;
+        }
+        packRef.current = next; setPack(next); setResponse(next.response); onReplace(next);
+        displayedPackVersions.current.ids.add(next.instance.id);
+        setMessage("Wattzun's answers are saved in this form.");
+        if (scopeId && typeof next.instance.workOrderId === "string" && next.instance.workOrderId) {
+          dispatchWattzunFormRefreshed({ portal: "trade", scopeId, formKind: "work_pack", jobId: next.instance.workOrderId,
+            oldFormId: before.instance.id, formId: next.instance.id });
+        }
+      }
     } catch (error) { assistantRefreshPending.current = false; setMessage(error instanceof Error ? error.message : "The saved activity answers could not be refreshed."); }
     finally { assistantRefreshing.current = false; }
-  }, [onReload, onReplace]);
+  }, [onReload, onReplace, scopeId]);
   useEffect(() => {
     if (displayedPackVersions.current.instanceKey !== pack.instance.instanceKey) {
       displayedPackVersions.current = { instanceKey: pack.instance.instanceKey, ids: new Set() };
@@ -547,6 +566,62 @@ function WorkPack({
   }, [preview]);
 
   const sections = useMemo(() => visibleSections({ ...pack, response }), [pack, response]);
+  useEffect(() => {
+    const focus = (event: Event) => {
+      const target = event instanceof CustomEvent ? readWattzunFormCaptureTarget(event.detail) : null;
+      if (!target || target.scopeId !== scopeId || target.jobId !== pack.instance.workOrderId || !displayedPackVersions.current.ids.has(target.formId)
+        || readOnly || editorBusy.current || savingRef.current || Object.keys(dirtyRef.current).length || signatureInProgress.current) return;
+      for (const [index, section] of sections.entries()) {
+        const instances = section.repeatability ? response.repeatableSections[section.sectionKey] || [] : [{ instanceKey: "", answers: response.answers }];
+        for (const instance of instances) {
+          const prompt = section.prompts.find(item => responseKey({ section, prompt: item, repeatInstanceKey: instance.instanceKey }) === target.fieldKey);
+          if (!prompt || !["signature", "checkbox", "reference_document"].includes(prompt.type)
+            || !creditexActivityWorkPackVisibilityMatches(prompt.visibility, response.answers, instance.answers)
+            || prompt.dependencyKeys.some(key => !dependencyReady(pack, key))) continue;
+          if (prompt.type === "signature" && pack.instance.status !== "ready_to_sign") return;
+          event.preventDefault(); setOpen(true); setPage(index);
+          if (section.repeatability) setRepeatSelection(current => ({ ...current, [section.sectionKey]: instance.instanceKey }));
+          return;
+        }
+      }
+    };
+    window.addEventListener(WATTZUN_FORM_FOCUS_EVENT, focus);
+    return () => window.removeEventListener(WATTZUN_FORM_FOCUS_EVENT, focus);
+  }, [scopeId, pack, readOnly, response, sections]);
+  useEffect(() => {
+    const prepare = (event: Event) => {
+      const request = event instanceof CustomEvent ? readWattzunFormCaptureRequest(event.detail) : null;
+      if (!request || request.target.scopeId !== scopeId || request.target.jobId !== pack.instance.workOrderId
+        || !displayedPackVersions.current.ids.has(request.target.formId)) return;
+      const unavailable = (message: string) => respondWattzunFormCapture(request, { status: "unavailable", message });
+      if (readOnly || !["not_started", "in_progress"].includes(pack.instance.status)) {
+        unavailable("This form is not currently available for photo capture."); return;
+      }
+      if (editorBusy.current || savingRef.current || Object.keys(dirtyRef.current).length || signatureInProgress.current) {
+        unavailable("Wait for the form's current changes to finish saving, then try the photo again."); return;
+      }
+      for (const [index, section] of sections.entries()) {
+        const instances = section.repeatability ? response.repeatableSections[section.sectionKey] || []
+          : [{ instanceKey: "", answers: response.answers }];
+        for (const instance of instances) {
+          const prompt = section.prompts.find(item => responseKey({ section, prompt: item, repeatInstanceKey: instance.instanceKey }) === request.target.fieldKey);
+          if (!prompt) continue;
+          if (prompt.type !== "photo" || !prompt.fileRequirement
+            || !creditexActivityWorkPackVisibilityMatches(prompt.visibility, response.answers, instance.answers)
+            || prompt.dependencyKeys.some(key => !dependencyReady(pack, key))) {
+            unavailable("This photo question is not currently available. Check the form's requirements."); return;
+          }
+          setCaptureRequest({ ...request, target: { ...request.target, formId: pack.instance.id } });
+          setOpen(true); setPage(index);
+          if (section.repeatability) setRepeatSelection(current => ({ ...current, [section.sectionKey]: instance.instanceKey }));
+          return;
+        }
+      }
+      unavailable("This photo question is no longer visible in the selected form.");
+    };
+    window.addEventListener(WATTZUN_FORM_CAPTURE_PREPARE_EVENT, prepare);
+    return () => window.removeEventListener(WATTZUN_FORM_CAPTURE_PREPARE_EVENT, prepare);
+  }, [scopeId, pack, readOnly, response, sections]);
   const completion = useMemo(() => creditexActivityWorkPackCompletion({
     workPack: pack.definition.schema,
     response,
@@ -596,11 +671,18 @@ function WorkPack({
       throw error;
     }
     const projection = result.result.projection;
+    const previous = packRef.current;
     setPack(projection);
     setResponse(mergeWorkPackSectionPatches(projection.response,
       projection.definition.schema.sections, Object.values(dirtyRef.current)));
     packRef.current = projection;
+    displayedPackVersions.current.ids.add(projection.instance.id);
     onReplace(projection);
+    if (scopeId && typeof projection.instance.workOrderId === "string" && projection.instance.workOrderId
+      && projection.instance.instanceKey === previous.instance.instanceKey && projection.instance.workOrderId === previous.instance.workOrderId) {
+      dispatchWattzunFormNativeSaved({ portal: "trade", scopeId, formKind: "work_pack", jobId: projection.instance.workOrderId,
+        oldFormId: previous.instance.id, formId: projection.instance.id });
+    }
     return projection;
   }
 
@@ -1102,10 +1184,11 @@ function WorkPack({
   }
 
   async function uploadArtifact(context: PromptContext, file: File) {
+    const oldFormId = packRef.current.instance.id;
     setBusy(`artifact:${responseKey(context)}`);
     try {
       const upload = await uploadToBrowserCustody(context, file, "artifact");
-      await action("work_pack_commit", {
+      const saved = await action("work_pack_commit", {
         artifactLinks: [{
           sectionKey: context.section.sectionKey,
           repeatInstanceKey: context.repeatInstanceKey || undefined,
@@ -1114,7 +1197,17 @@ function WorkPack({
           deviceId: upload.deviceId,
         }],
       }, upload.deviceId);
+      if (context.prompt.type === "photo" && scopeId) {
+        const savedAnswer = answerFor(saved.response, context.section, context.repeatInstanceKey, context.prompt.promptKey);
+        const linked = saved.artifacts.find(artifact => artifact.promptKey === responseKey(context)
+          && artifact.artifactKind === "photo" && normaliseSha256(artifact.originalSha256) === upload.sha256
+          && artifact.capturedDeviceId === upload.deviceId && Array.isArray(savedAnswer) && savedAnswer.includes(artifact.id));
+        if (!linked) throw new Error("The uploaded photo could not be confirmed against this question. Refresh the form before continuing.");
+        dispatchWattzunFormCaptureSaved({ portal: "trade", scopeId, formKind: "work_pack", oldFormId,
+          formId: saved.instance.id, jobId: saved.instance.workOrderId, fieldKey: responseKey(context) });
+      }
       setMessage("Evidence saved to this activity form.");
+      setCaptureRequest(null);
     } catch (uploadError) {
       setMessage(uploadError instanceof Error ? uploadError.message : "The evidence could not be saved.");
     } finally {
@@ -1454,6 +1547,7 @@ function WorkPack({
         pack={{ ...pack, response }}
         section={currentSection}
         repeatSelection={repeatSelection}
+        captureRequest={Object.keys(dirty).length ? null : captureRequest}
         openedReferences={openedReferences}
         signatureDrafts={signatureDrafts}
         busy={busy}
@@ -1503,6 +1597,7 @@ function SectionPage({
   pack,
   section,
   repeatSelection,
+  captureRequest,
   openedReferences,
   signatureDrafts,
   busy,
@@ -1520,6 +1615,7 @@ function SectionPage({
   pack: CreditexAssignedActivityWorkPackProjection;
   section: CreditexWorkPackSection;
   repeatSelection: Record<string, string>;
+  captureRequest: WattzunFormCaptureRequest | null;
   openedReferences: ReadonlySet<string>;
   signatureDrafts: Record<string, SignatureDraft>;
   busy: string;
@@ -1558,7 +1654,7 @@ function SectionPage({
     {section.repeatability && !selected ? <div className={styles.empty}><strong>Add the first {section.repeatability.itemLabel.toLowerCase()}</strong><span>This section needs a separate record for each item.</span></div>
       : <div className={styles.prompts}>{prompts.map((prompt) => {
         const context: PromptContext = { section, repeatInstanceKey: selectedKey, prompt };
-        return <PromptField key={responseKey(context)} pack={pack} context={context} answer={answerFor(pack.response, section, selectedKey, prompt.promptKey)} signatureDraft={signatureDrafts[responseKey(context)]} openedReferences={openedReferences} busy={busy} readOnly={readOnly} onChange={(value) => onChange(selectedKey, prompt.promptKey, value)} onOpenReference={onOpenReference} onAcknowledgeReference={onAcknowledgeReference} onUpload={(file) => onUpload(context, file)} onSignatureDraft={(draft) => onSignatureDraft(responseKey(context), draft)} onCaptureSignature={(role, draft) => onCaptureSignature(context, role, draft)} />;
+        return <PromptField key={responseKey(context)} pack={pack} context={context} captureRequest={captureRequest?.target.fieldKey === responseKey(context) ? captureRequest : null} answer={answerFor(pack.response, section, selectedKey, prompt.promptKey)} signatureDraft={signatureDrafts[responseKey(context)]} openedReferences={openedReferences} busy={busy} readOnly={readOnly} onChange={(value) => onChange(selectedKey, prompt.promptKey, value)} onOpenReference={onOpenReference} onAcknowledgeReference={onAcknowledgeReference} onUpload={(file) => onUpload(context, file)} onSignatureDraft={(draft) => onSignatureDraft(responseKey(context), draft)} onCaptureSignature={(role, draft) => onCaptureSignature(context, role, draft)} />;
       })}</div>}
   </section>;
 }
@@ -1566,6 +1662,7 @@ function SectionPage({
 function PromptField({
   pack,
   context,
+  captureRequest,
   answer,
   signatureDraft,
   openedReferences,
@@ -1580,6 +1677,7 @@ function PromptField({
 }: {
   pack: CreditexAssignedActivityWorkPackProjection;
   context: PromptContext;
+  captureRequest: WattzunFormCaptureRequest | null;
   answer: unknown;
   signatureDraft?: SignatureDraft;
   openedReferences: ReadonlySet<string>;
@@ -1597,6 +1695,23 @@ function PromptField({
   const dependenciesBlocked = prompt.dependencyKeys.some((dependencyKey) =>
     !dependencyReady(pack, dependencyKey));
   const disabled = readOnly || dependenciesBlocked || pack.instance.status === "completed";
+  const captureInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const input = captureInput.current;
+    if (!captureRequest || !input || disabled || busy || captureRequest.target.formId !== pack.instance.id) return;
+    const capture = (event: Event) => {
+      const target = event instanceof CustomEvent ? readWattzunFormCaptureTarget(event.detail) : null;
+      if (!target || !sameWattzunFormCaptureTarget(target, captureRequest.target)
+        || !input.isConnected || input.matches(":disabled")) return;
+      // The assistant dispatches this synchronously from a real user click.
+      input.click(); event.preventDefault();
+    };
+    window.addEventListener(WATTZUN_FORM_CAPTURE_EVENT, capture);
+    input.scrollIntoView({ block: "center", behavior: "smooth" });
+    input.focus({ preventScroll: true });
+    respondWattzunFormCapture(captureRequest, { status: "ready", target: captureRequest.target });
+    return () => window.removeEventListener(WATTZUN_FORM_CAPTURE_EVENT, capture);
+  }, [captureRequest, disabled, busy, pack.instance.id]);
   const stage = pack.definition.schema.stages.find((item) => item.stageKey === prompt.stageKey);
   const attachments = Array.isArray(answer)
     ? answer.filter((item): item is string => typeof item === "string") : [];
@@ -1628,7 +1743,7 @@ function PromptField({
     {prompt.type === "checkbox" && <label className={styles.confirm}><input type="checkbox" checked={answer === true} onChange={(event) => onChange(event.target.checked)} /><span>{prompt.label}</span></label>}
     {(prompt.type === "photo" || prompt.type === "document") && <div className={styles.capture}>
       <div><strong>{attachments.length} saved</strong><small>{prompt.fileRequirement ? `${prompt.fileRequirement.minimumCount} to ${prompt.fileRequirement.maximumCount} required | ${prompt.fileRequirement.metadataRequired ? "metadata retained" : "standard file"}${prompt.fileRequirement.gpsRequired ? " | location required" : ""}` : "Governed file requirement"}</small></div>
-      {!readOnly && <label><span>{busy === `artifact:${key}` ? "Saving..." : prompt.type === "photo" ? "Take or add photo" : "Add document"}</span><input type="file" disabled={Boolean(busy)} accept={prompt.fileRequirement?.allowedContentTypes.join(",")} capture={prompt.type === "photo" ? "environment" : undefined} onChange={(event) => { const file = event.target.files?.[0]; if (file) void onUpload(file); event.currentTarget.value = ""; }} /></label>}
+      {!readOnly && <label><span>{busy === `artifact:${key}` ? "Saving..." : prompt.type === "photo" ? "Take or add photo" : "Add document"}</span><input ref={captureInput} type="file" disabled={Boolean(busy)} accept={prompt.fileRequirement?.allowedContentTypes.join(",")} capture={prompt.type === "photo" ? "environment" : undefined} onChange={(event) => { const file = event.target.files?.[0]; if (file) void onUpload(file); event.currentTarget.value = ""; }} /></label>}
     </div>}
     {prompt.type === "reference_document" && <div className={styles.references}>
       {references.map((document) => {

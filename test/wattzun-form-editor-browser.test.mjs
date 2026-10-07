@@ -17,7 +17,8 @@ const bundle = await build({ stdin: { resolveDir: root, loader: "tsx", contents:
   import React from 'react';import {createRoot} from 'react-dom/client';
   import {TradeJobFormsPanel} from './src/components/TradeJobFormsPanel';
   import {dispatchWattzunFormSaved} from './src/lib/wattzun-form-client';
-  window.fixtureOpens=[];window.fixtureWrites=[];window.fixtureReads=0;window.fixtureCompleted=0;
+  window.fixtureOpens=[];window.fixtureWrites=[];window.fixtureReads=0;window.fixtureCompleted=0;window.fixtureNativeSaves=[];
+  window.addEventListener('wattzun:form-native-saved',event=>window.fixtureNativeSaves.push(event.detail));
   window.fixtureForm={id:'form-one',templateKey:'inspection',templateVersion:1,templateName:'Site inspection',jurisdiction:'VIC',template:{guidance:'Record what you observed.',fields:[{key:'model',label:'Installed model',type:'text',required:true}]},answers:{},status:'draft',revision:1,ready:false,missing:['model'],completedAt:''};
   window.fixtureFetch=async(url,options={})=>{
     if(options.method==='PATCH'){
@@ -62,12 +63,14 @@ test("actual trade form editor safely hands saved context to Wattzun and refresh
         await page.getByRole("button", { name: "Fill with Wattzun", exact: true }).click();
         await page.waitForFunction(() => typeof window.fixtureReleaseSave === "function");
         assert.equal(await page.evaluate(() => window.fixtureOpens.length), 0, "No assistant request before the save succeeds");
+        assert.equal(await page.evaluate(() => window.fixtureNativeSaves.length), 0);
         await page.evaluate(() => window.fixtureReleaseSave());
         await page.waitForFunction(() => window.fixtureOpens.length === 1);
         const result = await page.evaluate(() => ({ writes: window.fixtureWrites, opens: window.fixtureOpens }));
         assert.deepEqual(result.writes[0], { formId: "form-one", baseRevision: 1, answers: { model: "Known model 123" }, complete: false, workOrderId: "job-one" });
         assert.deepEqual(result.opens[0], { userUid: "user-one", portal: "trade", scopeId: "business-one", mode: "message", workReference: { kind: "trade_form", formKind: "job_form", recordId: "form-one", jobId: "job-one" }, initialMessage: "Help me fill this form. Ask me the next unanswered question, one at a time." });
         assert.equal(await page.evaluate(() => window.fixtureCompleted), 0); assert.deepEqual(errors, []);
+        assert.deepEqual(await page.evaluate(() => window.fixtureNativeSaves), [{ portal: "trade", scopeId: "business-one", formKind: "job_form", formId: "form-one", oldFormId: "form-one", jobId: "job-one" }]);
       } finally { await page.close(); }
     });
     await t.test("failed save keeps the manual draft and does not open Wattzun", async () => {
@@ -77,7 +80,36 @@ test("actual trade form editor safely hands saved context to Wattzun and refresh
         await page.evaluate(() => { window.fixtureFailSave = true; });
         await page.getByRole("button", { name: "Fill with Wattzun", exact: true }).click();
         await page.getByRole("alert").waitFor(); assert.equal(await page.evaluate(() => window.fixtureOpens.length), 0);
+        assert.equal(await page.evaluate(() => window.fixtureNativeSaves.length), 0);
         assert.equal(await page.getByRole("textbox", { name: "Installed model" }).inputValue(), "Unsaved model"); assert.deepEqual(errors, []);
+      } finally { await page.close(); }
+    });
+    await t.test("Fill by voice saves first and explicitly starts the selected guided call", async () => {
+      const { page, errors } = await fixture(browser);
+      try {
+        await page.getByRole("textbox", { name: "Installed model" }).fill("Voice-ready model");
+        await page.evaluate(() => { window.fixtureDeferSave = true; });
+        await page.getByRole("button", { name: "Fill by voice", exact: true }).click();
+        await page.waitForFunction(() => typeof window.fixtureReleaseSave === "function");
+        assert.equal(await page.evaluate(() => window.fixtureOpens.length), 0);
+        await page.evaluate(() => window.fixtureReleaseSave());
+        await page.waitForFunction(() => window.fixtureOpens.length === 1);
+        const request = await page.evaluate(() => window.fixtureOpens[0]);
+        assert.equal(request.mode, "call"); assert.equal(request.guidedForm, true);
+        assert.deepEqual(request.workReference, { kind: "trade_form", formKind: "job_form", recordId: "form-one", jobId: "job-one" });
+        assert.equal(await page.evaluate(() => window.fixtureCompleted), 0); assert.deepEqual(errors, []);
+      } finally { await page.close(); }
+    });
+    await t.test("Fill by voice cannot bypass a failed manual draft save", async () => {
+      const { page, errors } = await fixture(browser);
+      try {
+        await page.getByRole("textbox", { name: "Installed model" }).fill("Keep this model");
+        await page.evaluate(() => { window.fixtureFailSave = true; });
+        await page.getByRole("button", { name: "Fill by voice", exact: true }).click();
+        await page.getByRole("alert").waitFor();
+        assert.equal(await page.evaluate(() => window.fixtureOpens.length), 0);
+        assert.equal(await page.getByRole("textbox", { name: "Installed model" }).inputValue(), "Keep this model");
+        assert.deepEqual(errors, []);
       } finally { await page.close(); }
     });
     await t.test("saved assistant answers refresh the actual field while foreign events and concurrent manual drafts are preserved", async () => {

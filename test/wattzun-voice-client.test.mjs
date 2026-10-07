@@ -6,6 +6,51 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 // Synthetic port results exercise media ownership only. They do not test a provider call.
 const voiceResult = { ok: true, transcript: "Help with my next step", reply: { kind: "clarification", message: "Which task are you working on?", questions: [], links: [] }, audio: { base64: "AA==", mimeType: "audio/mpeg" } };
+
+test('a requested guide step uses the active microphone and resumes listening after its question', async () => {
+  const h = harness(); await h.call.start();
+  assert.equal(await h.call.requestReply(async () => voiceResult), true);
+  assert.equal(h.status(), 'speaking'); assert.equal(h.state.microphoneRequested, 1);
+  assert.equal(h.state.submits.length, 0); assert.equal(h.state.replies.length, 1);
+  assert.equal(h.state.timers.size, 0);
+  h.state.players[0].onEnd(); assert.equal(h.status(), 'listening');
+  assert.equal(h.state.microphoneRequested, 1); assert.equal(h.state.timers.size, 1);
+  h.call.dispose();
+});
+
+test('guide controls cannot duplicate an in-flight answer or run with a muted or ended call', async () => {
+  const request = deferred(), h = harness({ request }); await h.call.start(); h.speak();
+  let invoked = 0;
+  const control = async () => { invoked++; return voiceResult; };
+  assert.equal(await h.call.requestReply(control), false);
+  request.resolve(voiceResult); await tick(); h.state.players[0].onEnd();
+  h.call.toggleMute(); assert.equal(await h.call.requestReply(control), false);
+  h.call.hangUp(); assert.equal(await h.call.requestReply(control), false);
+  assert.equal(invoked, 0); assert.equal(h.state.submits.length, 1);
+});
+
+test('repeating a guided question stops old playback without submitting captured audio', async () => {
+  const h = harness(); await h.call.start();
+  await h.call.requestReply(async () => voiceResult);
+  const oldPlayer = h.state.players[0];
+  await h.call.requestReply(async () => voiceResult);
+  assert.equal(h.state.playbackClosed, 1); assert.equal(h.state.players.length, 2);
+  oldPlayer.onEnd(); assert.equal(h.status(), 'speaking');
+  assert.equal(h.state.submits.length, 0); assert.equal(h.state.timers.size, 0);
+  h.state.players[1].onEnd(); assert.equal(h.status(), 'listening'); h.call.dispose();
+});
+
+test('hang-up aborts a requested guide step and discards its late private audio', async () => {
+  const h = harness(), pending = deferred(), pcm = greetingPcm(); await h.call.start();
+  let signal;
+  const step = h.call.requestReply(current => { signal = current; return pending.promise; });
+  h.call.hangUp(); assert.equal(signal.aborted, true);
+  pending.resolve({ ...voiceResult, audio: pcm.audio }); await step; await tick();
+  assert.equal(pcm.state.cancelled, 1); assert.equal(h.state.replies.length, 0);
+  assert.equal(h.state.players.length, 0); assert.equal(h.state.microphoneClosed, 1);
+  assert.equal(h.status(), 'ended');
+});
+
 function harness(options = {}) {
   const state = { now: 0, level: 0, microphoneRequested: 0, microphoneClosed: 0, microphoneMuted: false, recorderCount: 0, playbackClosed: 0, statuses: [], submits: [], replies: [], greetings: [], timers: new Set(), recorders: [], players: [] };
   const microphone = {

@@ -240,7 +240,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
   const contract = createWattzunPortalReplyContract(options);
   const instructions = [contract.instructions,
     "This is a live voice conversation: one or two short sentences, combined message and all questions normally under 45 words. For clarification, briefly acknowledge and ask the next missing detail directly: use one concise next necessary question in questions without duplicating it in message. Do not narrate the whole workflow, repeat boilerplate or list later intake details before that question. Add questions only if essential. Name supplied navigation buttons. Explain permissions only for missing-access questions. The word target must not omit a material fact or required review detail.",
-    "requestSummary is an unconfirmed interpretation of the spoken task for the next turn, not a verbatim transcript or verified record; never speak it. Normally under 600 characters, always under 1800. Retain clearly heard task, names, spelling, addresses, scope and amounts; mark uncertainty, never invent or claim completion. Only for confirm_workflow with explicit approval of the current review, retain the actual approval phrase, e.g. 'yes send it', 'save it', 'add it'. Never substitute 'user confirms' or treat questions, quotations or future intent as approval.",
+    "requestSummary is an unconfirmed interpretation of the spoken task for the next turn, not a verbatim transcript or verified record; never speak it. Normally under 600 characters, always under 1800. Retain clearly heard task, names, spelling, addresses, scope and amounts; mark uncertainty, never invent or claim completion. For explicit approval of the current review, guided governed step or form completion, retain the actual present approval or selection phrase, e.g. 'yes send it', 'I confirm this declaration', 'use the second one', 'complete this form now'. Never substitute 'user confirms', turn an ordinary answer into completion consent, or treat questions, quotations or future intent as approval.",
     `Call ${TOOL} exactly once for every answer, clarification or scope reminder. Submit exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary, using their schema including unused arrays/nulls. Never nest the reply content under a reply property or flatten action fields. Do not output an assistant message, text, audio or preamble. This read-only proposal requires validation; it cannot save or send.`,
     'Clarification argument shape example: {"message":"I can prepare that.","questions":["What detail should the draft include?"],"linkIds":[],"action":null,"lookup":null,"requestSummary":"User requests a draft; a necessary detail is missing."}. This illustrates all six fields, not wording to copy.',
   ].join("\n");
@@ -566,12 +566,13 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     diagnostic.substage = "envelope";
     if (!record(raw) || Object.keys(raw).length !== schema.required.length || schema.required.some(field => !Object.hasOwn(raw, field))) incomplete();
     diagnostic.substage = "reply";
-    let reply = contract.validate({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds, action: raw.action, lookup: raw.lookup });
     // Apply the same bounded text and false-completion/source-access checks to
     // memory. It remains an explicitly unconfirmed interpretation of the input.
     diagnostic.substage = "summary";
     const requestSummary = contract.validate({ message: raw.requestSummary,
       questions: [], linkIds: [], action: null, lookup: null }).message;
+    diagnostic.substage = "reply";
+    let reply = contract.validate({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds, action: raw.action, lookup: raw.lookup }, requestSummary);
     diagnostic.duration("rt_validate", validateStarted);
     signal.throwIfAborted();
     diagnostic.phase = "approval"; diagnostic.substage = "approval";

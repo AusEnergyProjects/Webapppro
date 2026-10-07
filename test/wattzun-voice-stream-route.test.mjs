@@ -6,6 +6,9 @@ import * as contract from '../src/lib/wattzun-portal.ts';
 import * as greeting from '../src/lib/wattzun-greeting.ts';
 import * as workflowContract from '../src/lib/wattzun-workflow.ts';
 import * as workflowReply from '../src/lib/wattzun-workflow-reply.ts';
+import * as formGuideContract from '../src/lib/wattzun-form-guide.ts';
+import * as formStepContract from '../src/lib/wattzun-form-step.ts';
+import { turnAuthorityContract } from './helpers/wattzun-turn-authority-fixture.mjs';
 import { readWattzunVoiceStream } from '../src/lib/wattzun-voice-stream.ts';
 import { syntheticWorkContext, workContextContract, workContextGateway } from './helpers/wattzun-work-context-fixture.mjs';
 
@@ -18,7 +21,9 @@ class UsageError extends Error {
   constructor(code) { super(`WATTZUN_USAGE_${code.toUpperCase()}`); this.code = code; }
 }
 class WorkflowError extends Error { constructor(status, message) { super(message); this.status = status; } }
+class GuidedValidationError extends WorkflowError {}
 class ExistingQuoteError extends Error { constructor(status, message) { super(message); this.status = status; } }
+class FormError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const route = {};
 const executable = ts.transpileModule(readFileSync(new URL('../src/lib/wattzun-portal-route.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -31,14 +36,17 @@ Function('require', 'exports', executable)(name => {
     wattzunAccessFailure: error => error instanceof AccessError ? { status: error.status, message: error.message } : null,
   };
   if (name === './wattzun-portal-ai-server' || name === './wattzun-realtime-server' || name === './wattzun-usage') return {};
+  if (name === './wattzun-turn-authority-server') return turnAuthorityContract;
+  if (name === './wattzun-form-guide') return formGuideContract;
+  if (name === './wattzun-form-step') return formStepContract;
   if (name === './wattzun-usage-server') return { WattzunUsageError: UsageError };
   if (name === './wattzun-work-context' || name === './wattzun-work-context.ts') return workContextContract;
   if (name === './wattzun-work-context-server') return contextGateway;
   if (name === './wattzun-workflow') return workflowContract;
   if (name === './wattzun-workflow-reply') return workflowReply;
-  if (name === './wattzun-workflow-server') return { WattzunWorkflowError: WorkflowError };
+  if (name === './wattzun-workflow-server') return { WattzunWorkflowError: WorkflowError, WattzunGuidedFormValidationError: GuidedValidationError };
   if (name === './wattzun-existing-quote-server') return { WattzunExistingQuoteError: ExistingQuoteError };
-  if (name === './wattzun-form-server') return { WattzunFormError: class FormError extends Error {} };
+  if (name === './wattzun-form-server') return { WattzunFormError: FormError };
   throw new Error(`Unexpected route dependency: ${name}`);
 }, route);
 
@@ -63,23 +71,23 @@ test('native and streaming voice prepare actual workflow reviews before narratio
     assert.deepEqual(result.reply.workflow, workflowReview); await result.audio.stream.cancel();
   }
 });
-test('native workflow skips a duplicate pre-preparation snapshot while retaining speech, pre-usage and final selected-source gates', async () => {
+test('native workflow uses one initial snapshot and one final source and authority handoff', async () => {
   const workContext = syntheticWorkContext();
   const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext,
     reply: { ...reply, action: workflowProposal }, workflowResult: workflowReview });
   const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, 200);
-  assert.equal(f.events.filter(value => value === 'context').length, 4);
-  assert.deepEqual(f.events.slice(f.events.indexOf('realtime') + 1, f.events.indexOf('prepareWorkflow') + 1), ['access', 'prepareWorkflow']);
-  assert.deepEqual(f.events.slice(f.events.indexOf('prepareWorkflow') + 1, f.events.indexOf('nativeSpeech')), ['access', 'context', 'workflowReview']);
+  assert.equal(f.events.filter(value => value === 'context').length, 2);
+  assert.deepEqual(f.events.slice(f.events.indexOf('realtime') + 1, f.events.indexOf('prepareWorkflow') + 1), ['prepareWorkflow']);
+  assert.deepEqual(f.events.slice(f.events.indexOf('prepareWorkflow') + 1), ['nativeSpeech', 'recordUsage', 'context', 'workflowReview', 'access']);
   assert.equal(f.recorded.length, 1); await response.body.cancel();
 });
-test('a selected source changed after native workflow preparation still stops speech and usage', async () => {
+test('a selected source changed after native preparation cancels buffered speech before any disclosure', async () => {
   const workContext = syntheticWorkContext();
   const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext, contextChangedAt: 2,
     reply: { ...reply, action: workflowProposal }, workflowResult: workflowReview });
   const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, 409);
-  assert.equal(f.events.includes('prepareWorkflow'), true); assert.equal(f.events.includes('nativeSpeech'), false);
-  assert.equal(f.recorded.length, 0); assert.equal(f.audio.state.pulls, 0); assert.equal((await response.json()).reply, undefined);
+  assert.equal(f.events.includes('prepareWorkflow'), true); assert.equal(f.events.includes('nativeSpeech'), true);
+  assert.equal(f.recorded.length, 1); assert.equal(f.audio.state.cancelled, 1); assert.equal(f.audio.state.pulls, 0); assert.equal((await response.json()).reply, undefined);
 });
 test('native current-review approval produces only a matching confirmation for the separately confirmed execution route', async () => {
   const action = { kind: 'confirm_workflow', reviewId: workflowReview.reviewId };
@@ -94,6 +102,15 @@ test('native wrong review or uncertain and embedded approvals stop before speech
   for (const [requestSummary, reviewId, status] of [['yes send it', 'wattzun-review-wrong-123', 409], ['Maybe send it tomorrow', workflowReview.reviewId, 400], ["The customer said yes send it", workflowReview.reviewId, 400]]) {
     const f = fixture({ input: { ...input, workflowReviewId: workflowReview.reviewId }, reply: { ...reply, action: { kind: 'confirm_workflow', reviewId } }, workflowResult: workflowReview, requestSummary });
     const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, status); assert.equal(f.events.includes('nativeSpeech'), false); assert.equal(f.recorded.length, 0);
+  }
+});
+
+test('a completion review cannot be approved by ordinary draft-save or message-send wording', async () => {
+  const completion = { ...workflowReview, kind: 'complete_form', heading: 'Complete form', confirmationLabel: 'Complete form' };
+  for (const [requestSummary, status] of [['Save these answers', 400], ['Send it', 400], ['Add it', 400], ['Complete this form now', 200]]) {
+    const f = fixture({ input: { ...input, workflowReviewId: completion.reviewId }, reply: { ...reply, action: { kind: 'confirm_workflow', reviewId: completion.reviewId } }, workflowResult: completion, requestSummary });
+    const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, status);
+    assert.equal(f.events.includes('nativeSpeech'), status === 200); if (response.ok) await response.body.cancel();
   }
 });
 
@@ -128,7 +145,7 @@ test('workflow and quote preparation failures retain status before any native or
   }
 });
 
-test('new model reviews are strictly revalidated before native or streaming speech and after usage', async () => {
+test('new model reviews are strictly revalidated before audio disclosure; native synthesis remains private until then', async () => {
   for (const accept of [contract.WATTZUN_VOICE_STREAM_TYPE, contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE]) {
     for (const boundary of ['beforeSpeech', 'afterUsage']) for (const changed of [false, true]) {
       const f = fixture({ reply: { ...reply, action: workflowProposal }, workflowResult: workflowReview });
@@ -144,7 +161,7 @@ test('new model reviews are strictly revalidated before native or streaming spee
       assert.equal((await response.json()).reply, undefined);
       assert.equal(f.events.includes('prepareProposedWorkflow'), true); assert.equal(f.events.includes('prepareWorkflow'), false);
       assert.equal(f.audio.state.pulls, 0);
-      if (boundary === 'beforeSpeech') {
+      if (boundary === 'beforeSpeech' && accept !== contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE) {
         assert.equal(f.events.includes('nativeSpeech'), false); assert.equal(f.events.includes('streamSpeak'), false);
         assert.equal(f.recorded.length, 0);
       } else {
@@ -247,6 +264,20 @@ function fixture(options = {}) {
       return options.workflowChangedDuringUsage && recorded.length ? options.workflowChangedDuringUsage : options.workflowResult;
     },
   };
+  deps.turnAuthority = async (request, portal, scopeId, previous) => {
+    const current = await deps.access(request, portal, scopeId);
+    if (previous && (current.actorUid !== previous.access.actorUid || JSON.stringify(current.scope) !== JSON.stringify(previous.access.scope))) throw new AccessError(403, 'Your workspace changed.');
+    return { access: current };
+  };
+  deps.prepareTurnWorkflow = async (request, authority, proposal, requestId) => (deps.prepareProposedWorkflow || deps.prepareWorkflow)(request, authority.access, proposal, requestId);
+  deps.reviewTurnWorkflow = async (request, authority, reviewId, refresh) => {
+    const result = await deps.workflowReview(request, authority.access, reviewId);
+    return { result, authority: await refresh() };
+  };
+  deps.verifyTurnWorkflow = async (request, authority, proposal, requestId, refresh) => {
+    const result = await deps.prepareWorkflow(request, authority.access, proposal, requestId);
+    await refresh(); return result;
+  };
   async function post(accept = contract.WATTZUN_VOICE_STREAM_TYPE) {
     const form = new FormData();
     form.set('request', JSON.stringify(turnInput));
@@ -261,12 +292,162 @@ function fixture(options = {}) {
   return { audio, events, recorded, providerSignals, providerContexts, workflowCalls, speechContexts, controller, deps, post };
 }
 
-test('native work context is checked before speech and only source metadata is published', async () => {
+function guidedRouteFixture() {
+  const reference = { kind: 'trade_form', formKind: 'job_form', recordId: 'form-one', jobId: 'job-one' };
+  const guideInput = { sessionId: '00000000-0000-4000-8000-000000000001', stage: 'continue', authorization: 'ordinary_form_answers', sourceSha256: '1'.repeat(64), questionKey: 'notes', skippedFieldKeys: [] };
+  const turnInput = { ...input, workReference: reference, formGuide: guideInput };
+  const options = { input: turnInput, requestSummary: 'Side gate', reply: { kind: 'answer', message: 'An untrusted success phrase.', questions: [], links: [], action: { kind: 'fill_form', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', answers: [{ fieldKey: 'notes', value: 'Side gate' }] } } };
+  const f = fixture(options), state = { revision: 1, answers: {}, writes: 0, failAfterSave: false, invalidAnswer: false, completed: false, step: null }, journal = new Map(), audios = [];
+  const team = { actorUid: access.actorUid, ownerUid: access.scope.scopeId, businessName: access.scope.label, canViewFieldEvidence: true, canManageFieldEvidence: true };
+  const source = () => String(state.revision).repeat(64);
+  const progress = raw => {
+    const next = state.step ? 'governed' : ['notes', 'serial'].find(key => !state.answers[key] && !raw.skippedFieldKeys.includes(key));
+    const guide = { sessionId: guideInput.sessionId, reference, requestedReference: reference, recordId: reference.recordId, revision: state.revision, sourceSha256: source(),
+      state: raw.paused ? 'paused' : state.completed ? 'complete' : next ? 'question' : 'ready_to_complete',
+      next: raw.paused || state.completed || !next ? null : { kind: 'question', fieldKey: next, label: next === 'notes' ? 'Where is site access?' : 'What is the serial number?', type: state.step?.kind || 'text', options: [], ...(state.step ? { step: state.step } : {}) },
+      counts: { visible: 2, answered: Object.keys(state.answers).length, unanswered: 2 - Object.keys(state.answers).length, evidenceMissing: 0, manualMissing: 0, skipped: raw.skippedFieldKeys.length },
+      skippedFieldKeys: raw.skippedFieldKeys, completion: { ready: !next, missing: next ? [next] : [], status: state.completed ? 'complete' : 'draft' },
+      ...(state.completed ? { receipt: { ...[...journal.values()].at(-1).result.receipt, status: 'submitted' } } : {}), ...(raw.productSearch ? { productSearch: raw.productSearch } : {}) };
+    return { guide, context: syntheticWorkContext({ reference, sourceSha256: source(), facts: { form: { title: 'Fixture form', answers: structuredClone(state.answers) } } }) };
+  };
+  const originalAuthority = f.deps.turnAuthority;
+  f.deps.turnAuthority = async (...args) => ({ ...await originalAuthority(...args), tradeTeam: { ...team } });
+  f.deps.guide = async (_request, current, selected, raw) => {
+    f.events.push('guide'); assert.equal(current.actorUid, access.actorUid); assert.deepEqual(selected, reference);
+    const result = progress(raw);
+    if (raw.stage === 'continue' && (raw.sourceSha256 !== source() || raw.questionKey !== (result.guide.next?.fieldKey || ''))) throw new FormError(409, 'The form question changed.');
+    return result;
+  };
+  f.deps.guideControl = async (_request, _access, _reference, raw, control) => progress({ ...raw, paused: control.command === 'pause', skippedFieldKeys: control.command === 'skip' ? [...raw.skippedFieldKeys, control.fieldKey] : raw.skippedFieldKeys });
+  f.deps.searchFormProducts = async (_request, _access, _reference, raw, action) => {
+    assert.equal(action.dependencyKey, state.step.dependencyKey); assert.equal(state.step.kind, 'official_product');
+    state.step = { ...state.step, search: action.search, choices: [{ selectionId: 'product-one', snapshotId: 'snapshot-one', label: 'Synthetic Model One', brand: 'Synthetic', model: 'Model One' }] };
+    return progress({ ...raw, productSearch: { dependencyKey: action.dependencyKey, search: action.search } });
+  };
+  f.deps.executeGuidedForm = async (_request, _authority, selected, proposal, raw, requestId) => {
+    assert.deepEqual(selected, reference); assert.equal(raw.sourceSha256, source());
+    if (state.invalidAnswer) throw new GuidedValidationError(400, 'Choose a valid date in day, month and year format.');
+    if (proposal.kind === 'fill_form') for (const answer of proposal.answers) state.answers[answer.fieldKey] = answer.value;
+    else if (proposal.kind === 'form_step') state.step = null;
+    else state.completed = true;
+    state.revision++; state.writes++;
+    const result = { state: 'complete', receipt: { kind: proposal.kind, id: reference.recordId, status: proposal.kind === 'complete_form' ? 'submitted' : 'saved', label: 'Open form', href: '/direct-trade/dashboard?workspace=work&jobId=job-one&jobTab=files', message: proposal.kind === 'fill_form' ? 'The answers are saved.' : proposal.kind === 'form_step' ? 'The calculator result is saved and remains pending independent Creditex review.' : 'The form is complete.' } };
+    const executed = { result, reviewId: 'guided-review-1234567890', deferredFieldKeys: [] }; journal.set(requestId, executed);
+    if (state.failAfterSave) throw new FormError(503, 'The save acknowledgement was lost.');
+    return executed;
+  };
+  f.deps.recoverGuidedForm = async (_request, _authority, selected, raw, requestId) => {
+    f.events.push('recoverGuide'); assert.deepEqual(selected, reference); assert.equal(raw.sessionId, guideInput.sessionId);
+    return journal.has(requestId) ? { state: 'saved', ...journal.get(requestId) } : { state: 'not_saved' };
+  };
+  f.deps.reviewTurnWorkflow = async (_request, _authority, reviewId, refresh) => {
+    assert.equal(reviewId, 'guided-review-1234567890'); return { result: [...journal.values()].at(-1).result, authority: await refresh() };
+  };
+  const freshAudio = () => { const audio = providerAudio(); audios.push(audio); audio.push(Uint8Array.from([0, 1, 2, 3])); audio.finish(); return audio.stream; };
+  f.deps.realtime = async context => { f.events.push('realtime'); assert.ok(context.formGuideProgress); const reply = await context.transformReply(options.reply, options.requestSummary); await context.beforeSpeech(); return { reply, audio: freshAudio(), requestSummary: options.requestSummary }; };
+  f.deps.streamSpeak = async context => { f.events.push('streamSpeak'); f.speechContexts.push(context); return freshAudio(); };
+  f.deps.recordUsage = async value => { f.events.push('recordUsage'); f.recorded.push(value); };
+  return { ...f, state, journal, options, turnInput, source, progress, audios,
+    control: () => route.postWattzunFormGuide(new Request('https://example.test/api/wattzun/form-guide', { method: 'POST', headers: { origin: 'https://example.test', 'content-type': 'application/json' }, body: JSON.stringify({ ...turnInput, message: turnInput.message || 'Start guided form completion' }) }), f.deps) };
+}
+
+test('deterministic guided start speaks the real first question, counts its prepared speech and never calls the model or saves', async () => {
+  const f = guidedRouteFixture(); f.turnInput.formGuide = { ...f.turnInput.formGuide, stage: 'start' };
+  const response = await f.control(); assert.equal(response.status, 200);
+  const result = await readWattzunVoiceStream(response, f.controller.signal, reply => Boolean(formGuideContract.readWattzunFormGuideProgress(reply.formGuide)));
+  assert.match(result.reply.message, /Where is site access/); assert.equal(result.reply.formGuide.next.fieldKey, 'notes');
+  assert.equal(f.events.includes('realtime'), false); assert.equal(f.state.writes, 0); assert.equal(f.recorded.length, 1);
+  assert.deepEqual(result.reply.formGuideRecovery, { requestId: input.requestId, state: 'not_saved' }); await result.audio.stream.cancel();
+});
+
+test('an invalid guided value before journal dispatch speaks its actual correction question and keeps the same task ready to answer', async () => {
+  const f = guidedRouteFixture(); f.state.invalidAnswer = true;
+  const invalid = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(invalid.response.status, 200);
+  const clarification = await readWattzunVoiceStream(invalid.response, f.controller.signal, reply => Boolean(reply.formGuide));
+  assert.equal(clarification.reply.kind, 'clarification'); assert.match(clarification.reply.message, /valid date/); assert.match(clarification.reply.questions[0], /site access/);
+  assert.deepEqual(clarification.reply.formGuideRecovery, { requestId: input.requestId, state: 'not_saved' }); assert.equal(f.state.writes, 0); assert.equal(f.journal.size, 0); await clarification.audio.stream.cancel();
+  f.state.invalidAnswer = false; f.turnInput.requestId = 'guided-valid-answer-000002';
+  const valid = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(valid.response.status, 200);
+  const saved = await readWattzunVoiceStream(valid.response, f.controller.signal, reply => reply.workflow?.receipt?.kind === 'fill_form');
+  assert.equal(f.state.writes, 1); assert.equal(saved.reply.formGuide.next.fieldKey, 'serial'); await saved.audio.stream.cancel();
+});
+
+test('a guided native lost save response recovers the original journal before the model and continues with the next answer', async () => {
+  const f = guidedRouteFixture(); f.state.failAfterSave = true;
+  const first = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(first.response.status, 503);
+  const error = await first.response.json(); assert.deepEqual(error.formGuideRecovery, { requestId: input.requestId, state: 'uncertain' }); assert.doesNotMatch(error.error, /records.*not changed/); assert.equal(f.state.writes, 1);
+  f.state.failAfterSave = false; f.turnInput.requestId = 'guided-recovery-request-0002'; f.turnInput.formGuide.pendingRequestId = input.requestId;
+  const recovered = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(recovered.response.status, 200);
+  const result = await readWattzunVoiceStream(recovered.response, f.controller.signal, reply => reply.workflow?.state === 'complete');
+  assert.equal(result.reply.formGuide.next.fieldKey, 'serial'); assert.match(result.reply.message, /serial number/);
+  assert.deepEqual(result.reply.formGuideRecovery, { requestId: input.requestId, state: 'saved' }); assert.equal(f.state.writes, 1); assert.equal(f.events.filter(event => event === 'realtime').length, 1); await result.audio.stream.cancel();
+  f.turnInput.requestId = 'guided-next-answer-000003'; f.turnInput.formGuide = { ...f.turnInput.formGuide, sourceSha256: f.source(), questionKey: 'serial', pendingRequestId: undefined };
+  f.options.reply.action = { ...f.options.reply.action, answers: [{ fieldKey: 'serial', value: 'ABC123' }] }; f.options.requestSummary = 'ABC123';
+  const next = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(next.response.status, 200);
+  const final = await readWattzunVoiceStream(next.response, f.controller.signal, reply => reply.workflow?.state === 'complete');
+  assert.equal(f.state.writes, 2); assert.equal(f.state.completed, false); assert.equal(final.reply.formGuide.state, 'ready_to_complete'); assert.match(final.reply.message, /Would you like.*complete/); await final.audio.stream.cancel();
+});
+
+test('guided completion rejects draft-save approval and requires a separate current completion phrase', async () => {
+  const f = guidedRouteFixture(); f.state.answers = { notes: 'Side gate', serial: 'ABC123' }; f.turnInput.formGuide.questionKey = '';
+  f.options.reply.action = { kind: 'form_guide_control', command: 'complete', fieldKey: '' }; f.options.requestSummary = 'Save these answers';
+  const invalid = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(invalid.response.status, 400); assert.equal(f.state.writes, 0);
+  f.turnInput.requestId = 'guided-complete-00000002'; f.options.requestSummary = 'Complete this form now';
+  const confirmed = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(confirmed.response.status, 200);
+  const result = await readWattzunVoiceStream(confirmed.response, f.controller.signal, reply => reply.workflow?.receipt?.kind === 'complete_form');
+  assert.equal(f.state.writes, 1); assert.equal(f.state.completed, true); assert.equal(result.reply.formGuide.state, 'complete'); await result.audio.stream.cancel();
+});
+
+test('governed native steps reject unrelated approvals before writes and speak the actual pending-review receipt', async () => {
+  const f = guidedRouteFixture(); f.state.step = { kind: 'calculator', dependencyKey: 'calculation-one' }; f.turnInput.formGuide.questionKey = 'governed';
+  f.options.reply.action = { kind: 'form_step', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', step: { kind: 'calculator', dependencyKey: 'calculation-one' } };
+  f.options.requestSummary = 'Save this quote';
+  const denied = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(denied.response.status, 200);
+  const clarification = await readWattzunVoiceStream(denied.response, f.controller.signal, reply => Boolean(reply.formGuide));
+  assert.equal(clarification.reply.kind, 'clarification'); assert.equal(clarification.reply.formGuideRecovery.state, 'not_saved'); assert.equal(f.state.writes, 0); await clarification.audio.stream.cancel();
+  f.turnInput.requestId = 'guided-calculator-000002'; f.options.requestSummary = 'Run the calculator now';
+  const valid = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(valid.response.status, 200);
+  const result = await readWattzunVoiceStream(valid.response, f.controller.signal, reply => reply.workflow?.receipt?.kind === 'form_step');
+  assert.match(result.reply.message, /pending independent Creditex review/); assert.match(result.reply.message, /Where is site access/); assert.equal(f.state.writes, 1); assert.equal(f.state.completed, false); await result.audio.stream.cancel();
+});
+
+test('a lost governed save recovers the original receipt and its pending-review warning without calling the model or running twice', async () => {
+  const f = guidedRouteFixture(); f.state.step = { kind: 'calculator', dependencyKey: 'calculation-one' }; f.turnInput.formGuide.questionKey = 'governed'; f.state.failAfterSave = true;
+  f.options.reply.action = { kind: 'form_step', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', step: { kind: 'calculator', dependencyKey: 'calculation-one' } }; f.options.requestSummary = 'Run the calculator now';
+  assert.equal((await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE)).response.status, 503); assert.equal(f.state.writes, 1);
+  f.state.failAfterSave = false; f.turnInput.requestId = 'guided-step-recover-00002'; f.turnInput.formGuide.pendingRequestId = input.requestId;
+  const recovered = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(recovered.response.status, 200);
+  const result = await readWattzunVoiceStream(recovered.response, f.controller.signal, reply => reply.workflow?.receipt?.kind === 'form_step');
+  assert.match(result.reply.message, /pending independent Creditex review/); assert.equal(result.reply.formGuideRecovery.state, 'saved'); assert.equal(f.state.writes, 1); assert.equal(f.events.filter(event => event === 'realtime').length, 1); await result.audio.stream.cancel();
+});
+
+test('official product search is read-only and returns canonical choices before a separate scoped selection', async () => {
+  const f = guidedRouteFixture(); f.state.step = { kind: 'official_product', dependencyKey: 'product-dependency', minimumCount: 1, maximumCount: 1, search: '', truncated: false, choices: [] }; f.turnInput.formGuide.questionKey = 'governed';
+  f.options.reply.action = { kind: 'search_form_products', dependencyKey: 'product-dependency', search: 'Model One' }; f.options.requestSummary = 'Find Model One';
+  const searched = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(searched.response.status, 200);
+  const choices = await readWattzunVoiceStream(searched.response, f.controller.signal, reply => reply.formGuide?.next?.step?.kind === 'official_product');
+  assert.equal(choices.reply.formGuide.next.step.choices[0].selectionId, 'product-one'); assert.equal(f.state.writes, 0); assert.equal(f.journal.size, 0); assert.equal(choices.reply.formGuideRecovery.state, 'not_saved'); await choices.audio.stream.cancel();
+  f.turnInput.requestId = 'guided-select-product-0002'; f.turnInput.formGuide.productSearch = choices.reply.formGuide.productSearch;
+  f.options.reply.action = { kind: 'form_step', jobQuery: '', jobId: 'job-one', formKind: 'job_form', formId: 'form-one', step: { kind: 'official_product', dependencyKey: 'product-dependency', search: 'Model One', selections: [{ selectionId: 'product-one', snapshotId: 'snapshot-one', quantity: 1 }] } }; f.options.requestSummary = 'Use Model One';
+  const selected = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(selected.response.status, 200); assert.equal(f.state.writes, 1); await selected.response.body.cancel();
+});
+
+test('guided source or permission change during usage cancels prepared PCM and retains uncertain original request recovery', async () => {
+  for (const reason of ['source', 'permission']) {
+    const f = guidedRouteFixture(), original = f.deps.recordUsage;
+    f.deps.recordUsage = async value => { await original(value); if (reason === 'source') f.state.revision++; else f.deps.turnAuthority = async () => { throw new AccessError(403, 'Permission revoked.'); }; };
+    const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, reason === 'source' ? 409 : 403);
+    const body = await response.json(); assert.equal(body.reply, undefined); assert.equal(body.audio, undefined); assert.equal(body.formGuideRecovery.state, 'uncertain');
+    assert.equal(f.state.writes, 1); assert.equal(f.audios[0].state.cancelled, 1); assert.equal(f.audios[0].state.pulls, 0);
+  }
+});
+
+test('native work context is checked before provider input and final handoff; only source metadata is published', async () => {
   const workContext = syntheticWorkContext();
   const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext });
   const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
   assert.equal(response.status, 200); assert.equal(f.providerContexts[0].workContext, workContext);
-  assert.deepEqual(f.events, ['authenticate', 'access', 'context', 'realtime', 'access', 'context', 'nativeSpeech', 'access', 'context', 'recordUsage', 'access', 'context']);
+  assert.deepEqual(f.events, ['authenticate', 'access', 'context', 'realtime', 'nativeSpeech', 'recordUsage', 'context', 'access']);
   const result = await readWattzunVoiceStream(response, f.controller.signal, value => Boolean(value.workContext));
   assert.deepEqual(result.reply.workContext, contextGateway.wattzunWorkContextInfo(workContext));
   assert.equal(result.reply.workContext.facts, undefined);
@@ -274,21 +455,21 @@ test('native work context is checked before speech and only source metadata is p
   await result.audio.stream.cancel();
 });
 
-test('native stale or revoked sources stop narration, cancel prepared audio and never publish a reply or usage', async () => {
+test('native stale or revoked sources cancel private prepared audio and never publish a reply or PCM', async () => {
   const workContext = syntheticWorkContext();
   for (const options of [
-    { contextChangedAt: 2, status: 409, speechStarted: false },
-    { contextError: new workContextContract.WattzunWorkContextError(403, 'Job access was revoked.'), contextErrorAt: 2, status: 403, speechStarted: false },
-    { contextChangedAt: 3, status: 409, speechStarted: true },
+    { contextChangedAt: 2, status: 409 },
+    { contextError: new workContextContract.WattzunWorkContextError(403, 'Job access was revoked.'), contextErrorAt: 2, status: 403 },
+    { contextChangedDuringUsage: true, status: 409 },
   ]) {
     const f = fixture({ ...options, input: { ...input, workReference: workContext.reference }, workContext });
     const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
     assert.equal(response.status, options.status);
     const body = await response.json();
     assert.equal(body.reply, undefined); assert.equal(body.audio, undefined);
-    assert.equal(f.events.includes('nativeSpeech'), options.speechStarted);
-    assert.equal(f.audio.state.cancelled, Number(options.speechStarted));
-    assert.equal(f.recorded.length, 0);
+    assert.equal(f.events.includes('nativeSpeech'), true);
+    assert.equal(f.audio.state.cancelled, 1); assert.equal(f.audio.state.pulls, 0);
+    assert.equal(f.recorded.length, 1);
   }
 });
 
@@ -319,7 +500,7 @@ test('source changes or record access revoked during usage recording cancel unha
       assert.equal(body.reply, undefined); assert.equal(body.audio, undefined); assert.equal(body.transcript, undefined);
       assert.equal(f.recorded.length, 1);
       assert.equal(f.audio.state.pulls, 0); assert.equal(f.audio.state.cancelled, 1);
-      assert.ok(f.events.lastIndexOf('access') > f.events.indexOf('recordUsage'));
+      assert.ok(Math.max(f.events.lastIndexOf('access'), f.events.lastIndexOf('context')) > f.events.indexOf('recordUsage'));
     }
   }
 });
@@ -374,7 +555,7 @@ test('the authorised streaming response and first audio arrive before provider E
 test('native audio bypasses transcription and legacy LLM/TTS while retaining access checks and usage',async()=>{
   const f=fixture();const {response,request}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
   assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
-  assert.deepEqual(f.events,['authenticate','access','realtime','access','nativeSpeech','access','recordUsage','access']);
+  assert.deepEqual(f.events,['authenticate','access','realtime','nativeSpeech','recordUsage','access']);
   assert.equal(f.recorded.length,1);assert.equal(f.providerSignals[0],request.signal);
   const result=await readWattzunVoiceStream(response,f.controller.signal,matchesReply);
   assert.equal(result.transcript,'');assert.deepEqual(result.reply,reply);
@@ -386,10 +567,38 @@ test('native audio bypasses transcription and legacy LLM/TTS while retaining acc
 });
 
 test('native audio cannot release speech when access is revoked or its usage write fails',async()=>{
-  for(const options of [{revokeAt:1},{revokeAt:2},{revokeAt:3},{usageError:new UsageError('unavailable')},{abortAt:'realtime'}]){
+  for(const options of [{revokeAt:1},{revokeAt:2},{usageError:new UsageError('unavailable')},{abortAt:'realtime'}]){
     const f=fixture(options);const {response}=await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
-    assert.ok(response.status>=400);assert.match(response.headers.get('content-type'),/json/);assert.equal(f.recorded.length,0);
-    if(options.revokeAt===3||options.usageError||options.abortAt) assert.equal(f.audio.state.cancelled,1);
+    assert.ok(response.status>=400);assert.match(response.headers.get('content-type'),/json/);assert.equal(f.recorded.length,options.revokeAt===2?1:0);
+    if(options.revokeAt===2||options.usageError||options.abortAt) assert.equal(f.audio.state.cancelled,1);
+  }
+});
+
+test('queued native PCM stays private while the final authority gate runs and is discarded on denial or cancellation', async () => {
+  for (const outcome of ['allow', 'deny', 'cancel']) {
+    const f = fixture(); let release, entered;
+    const gate = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { entered = resolve; });
+    const original = f.deps.turnAuthority;
+    f.deps.turnAuthority = async (...args) => {
+      if (args[3]) { entered(); await gate; if (outcome === 'deny') throw new AccessError(403, 'Current access was revoked.'); }
+      return original(...args);
+    };
+    let handedOff = false;
+    const pending = f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE).then(value => { handedOff = true; return value; });
+    await started;
+    f.audio.push(Uint8Array.from([0, 1, 2, 3])); f.audio.finish();
+    assert.equal(f.events.includes('nativeSpeech'), true); assert.equal(f.recorded.length, 1);
+    assert.equal(handedOff, false); assert.equal(f.audio.state.pulls, 0);
+    if (outcome === 'cancel') f.controller.abort(); release();
+    const { response } = await pending;
+    if (outcome === 'allow') {
+      const result = await readWattzunVoiceStream(response, f.controller.signal, matchesReply), reader = result.audio.stream.getReader();
+      assert.deepEqual((await reader.read()).value, Uint8Array.from([0, 1, 2, 3])); assert.equal((await reader.read()).done, true); reader.releaseLock();
+    } else {
+      assert.equal(response.status, outcome === 'deny' ? 403 : 409); const body = await response.json();
+      assert.equal(body.reply, undefined); assert.equal(body.audio, undefined); assert.equal(body.transcript, undefined);
+      assert.equal(f.audio.state.cancelled, 1); assert.equal(f.audio.state.pulls, 0);
+    }
   }
 });
 
@@ -568,7 +777,7 @@ test('provider failure before handoff returns generic JSON without leaking provi
   assert.equal(response.status, 503);
   const text = await response.text();
   assert.doesNotMatch(text, /provider-private-key|bearer-secret|synthetic-owner/);
-  assert.deepEqual(JSON.parse(text), { ok: false, error: 'Wattzun could not complete this turn. Your records have not changed. Try again, or continue by typing.' });
+  assert.deepEqual(JSON.parse(text), { ok: false, error: 'Wattzun could not confirm this turn. Check the same task before starting another action.' });
   assert.equal(f.recorded.length, 0);
 });
 

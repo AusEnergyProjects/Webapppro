@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import * as contract from '../src/lib/wattzun-portal.ts';
+import * as workContext from '../src/lib/wattzun-work-context.ts';
 
 const source = readFileSync(new URL('../src/lib/wattzun-appearance.ts', import.meta.url),'utf8');
 const compiled = ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
@@ -18,12 +19,20 @@ function harness({blocked=false}={}) {
     setTimeout:callback=>{timers.set(++timerId,callback);return timerId;},clearTimeout:id=>timers.delete(id),
     requestAnimationFrame:callback=>{callback();return 1;},cancelAnimationFrame:()=>{},
   };
-  const dependencies={react:{useState:initial=>{const slot=consumer();slot.state??=initial;return[slot.state,value=>{slot.state=value;}];},useRef:initial=>{const slot=consumer();slot.reference??={current:initial};return slot.reference;},useEffect:callback=>effects.push(callback)},'./wattzun-portal':contract};
+  const dependencies={react:{useState:initial=>{const slot=consumer();slot.state??=initial;return[slot.state,value=>{slot.state=value;}];},useRef:initial=>{const slot=consumer();slot.reference??={current:initial};return slot.reference;},useEffect:callback=>effects.push(callback)},'./wattzun-portal':contract,'./wattzun-work-context':workContext};
   const exported={};
   new Function('require','exports','window','CustomEvent','StorageEvent',compiled)(name=>dependencies[name],exported,window,CustomEvent,StorageEventFixture);
   return{...exported,values,window,effects,timers,render:(id,selected)=>{activeConsumer=id;return exported.useWattzunPresentation(selected);}};
 }
 const scope={userUid:'person-a',portal:'trade',scopeId:'business-a'};
+
+test('guided form calls require an explicit trade form selection and preserve the chosen mode',()=>{
+  const h=harness(),request={...scope,mode:'call',guidedForm:true,workReference:{kind:'trade_form',formKind:'job_form',recordId:'form-one',jobId:'job-one'}};
+  assert.deepEqual(h.readWattzunOpenRequest(request),request);
+  for(const patch of [{mode:'message'},{portal:'council'},{portal:'creditex'},{guidedForm:'true'},{workReference:undefined},{workReference:{kind:'trade_job',recordId:'job-one'}}]){
+    assert.equal(h.readWattzunOpenRequest({...request,...patch}),null);
+  }
+});
 
 test('appearance and speed storage isolate actors, portals and workspaces, and malformed/blocked values use defaults',()=>{
   const h=harness();

@@ -1,6 +1,7 @@
 import { POST as postPriceBook } from "@/app/api/trade-price-book/route";
 import { authenticateWattzun, requireWattzunAccess, wattzunAccessFailure, type WattzunAccess } from "./wattzun-portal-access-server";
 import { requireInstallerTeamAccess, type TeamAccess } from "./trade-team-server";
+import { requireWattzunTurnTeam, type WattzunTurnAuthority } from "./wattzun-turn-authority-server";
 import { jobMemberSql } from "./trade-job-collaboration";
 import { encryptProtectedPayload, decryptProtectedPayload } from "./trade-integration-crypto";
 import { sendTradeSms } from "./trade-sms-server";
@@ -18,7 +19,16 @@ import { readBoundedJsonRequest, BoundedJsonRequestError } from "./bounded-json-
 import { parseWattzunWorkflowProposal, isWattzunWorkflowResult, type WattzunWorkflowOperation, type WattzunWorkflowProposal,
   type WattzunWorkflowResult, type WattzunWorkflowReview, type WattzunWorkflowReceipt, type WattzunWorkflowJobChoice } from "./wattzun-workflow";
 import { prepareWattzunExistingQuote, executeWattzunExistingQuote, wattzunExistingQuoteAuthoritySha256, WattzunExistingQuoteError, type WattzunExistingQuotePrepared } from "./wattzun-existing-quote-server";
-import { prepareWattzunForm, executeWattzunForm, reconcileWattzunFormReceipt, verifyWattzunFormAccess, isWattzunFormPrepared, WattzunFormError, type WattzunFormPrepared } from "./wattzun-form-server";
+import { prepareWattzunForm, prepareWattzunFormForTurn, prepareWattzunGuidedFormForTurn, executeWattzunForm, reconcileWattzunFormReceipt,
+  verifyWattzunFormAccess, verifyWattzunFormAccessForTurn, isWattzunFormPrepared,
+  prepareWattzunFormCompletion, prepareWattzunFormCompletionForTurn, executeWattzunFormCompletion, reconcileWattzunFormCompletionReceipt,
+  verifyWattzunFormCompletionAccess, verifyWattzunFormCompletionAccessForTurn, isWattzunFormCompletionPrepared,
+  prepareWattzunFormStep, prepareWattzunFormStepForTurn, executeWattzunFormStep, reconcileWattzunFormStepReceipt,
+  verifyWattzunFormStepAccess, verifyWattzunFormStepAccessForTurn, verifyWattzunFormStepForTurn, isWattzunFormStepPrepared, loadWattzunFormGuideForTurn,
+  WattzunFormError, type WattzunFormPrepared, type WattzunFormCompletionPrepared, type WattzunFormStepPrepared } from "./wattzun-form-server";
+import { readWattzunFormGuideInput, type WattzunFormGuideInput } from "./wattzun-form-guide";
+import { readWattzunWorkReference, type WattzunWorkReference } from "./wattzun-work-context";
+import { isWattzunFormCompletionApproval, isWattzunFormStepApproval } from "./wattzun-workflow-reply";
 
 type Row = Record<string, unknown>;
 type Job = { id: string; work_number: string; title: string; revision: number; updated_at: string; detail_updated_at: string;
@@ -30,7 +40,9 @@ type MessagePrepared = { job: Job; channel: "sms" | "email"; recipient: string; 
   sms?: SmsReadiness; email?: { from: string; provider: string }; invoice?: Invoice };
 type PricePrepared = { input: ReturnType<typeof normalisePriceBookInput>; payload: Row };
 type Prepared = { proposal: WattzunWorkflowOperation; sourceSha256: string; review: WattzunWorkflowReview;
-  message?: MessagePrepared; price?: PricePrepared; quote?: WattzunExistingQuotePrepared; form?: WattzunFormPrepared };
+  message?: MessagePrepared; price?: PricePrepared; quote?: WattzunExistingQuotePrepared; form?: WattzunFormPrepared;
+  completion?: WattzunFormCompletionPrepared; formStep?: WattzunFormStepPrepared;
+  guide?: { sessionId: string; questionKey: string; sourceSha256: string; requestedReference: FormReference } };
 type ReviewMetadata = { fingerprint: string; expiresAt: string; kind: WattzunWorkflowOperation["kind"]; sourceSha256: string;
   encrypted: string; state: "prepared" | "executing" | "complete"; receipt?: WattzunWorkflowReceipt };
 export type WattzunWorkflowDependencies = {
@@ -42,6 +54,16 @@ export type WattzunWorkflowDependencies = {
   quoteAuthority: typeof wattzunExistingQuoteAuthoritySha256; now: () => number;
   prepareForm?: typeof prepareWattzunForm; executeForm?: typeof executeWattzunForm; formAccess?: typeof verifyWattzunFormAccess;
   formReceipt?: typeof reconcileWattzunFormReceipt;
+  prepareTurnForm?: typeof prepareWattzunFormForTurn; prepareGuidedForm?: typeof prepareWattzunGuidedFormForTurn;
+  formTurnAccess?: typeof verifyWattzunFormAccessForTurn;
+  prepareCompletion?: typeof prepareWattzunFormCompletion; prepareTurnCompletion?: typeof prepareWattzunFormCompletionForTurn;
+  executeCompletion?: typeof executeWattzunFormCompletion; completionReceipt?: typeof reconcileWattzunFormCompletionReceipt;
+  completionAccess?: typeof verifyWattzunFormCompletionAccess; completionTurnAccess?: typeof verifyWattzunFormCompletionAccessForTurn;
+  prepareFormStep?: typeof prepareWattzunFormStep; prepareTurnFormStep?: typeof prepareWattzunFormStepForTurn;
+  executeFormStep?: typeof executeWattzunFormStep; formStepReceipt?: typeof reconcileWattzunFormStepReceipt;
+  formStepAccess?: typeof verifyWattzunFormStepAccess; formStepTurnAccess?: typeof verifyWattzunFormStepAccessForTurn;
+  verifyTurnFormStep?: typeof verifyWattzunFormStepForTurn;
+  guide?: typeof loadWattzunFormGuideForTurn;
 };
 const defaults: WattzunWorkflowDependencies = { authenticate: authenticateWattzun, access: requireWattzunAccess, team: requireInstallerTeamAccess,
   encrypt: encryptProtectedPayload, decrypt: decryptProtectedPayload, sms: sendTradeSms, email: sendTradeCustomerEmail,
@@ -50,6 +72,8 @@ const defaults: WattzunWorkflowDependencies = { authenticate: authenticateWattzu
 export class WattzunWorkflowError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
+/** Only canonical preparation failures before journal creation or dispatch use this type. */
+export class WattzunGuidedFormValidationError extends WattzunWorkflowError {}
 function record(value: unknown): value is Row { return !!value && typeof value === "object" && !Array.isArray(value); }
 const clean = (value: unknown, length: number) => String(value ?? "").trim().slice(0, length);
 function json(body: object, status = 200) {
@@ -83,11 +107,12 @@ async function currentTeam(request: Request, access: WattzunAccess, deps: Wattzu
   // The canonical team service verifies identity, business, approval, MFA and
   // current grants together; a separate portal check repeats that same authority.
   const team = await deps.team(scopedRequest(request, access.scope.scopeId));
+  if (request.signal.aborted) throw new WattzunWorkflowError(409, "This action was closed. Prepare it again before continuing.");
   if (team.ownerUid !== access.scope.scopeId || team.actorUid !== access.actorUid) throw new WattzunWorkflowError(403, "Your business or access changed. Prepare this action again.");
   return team;
 }
 function permissions(team: TeamAccess, proposal: WattzunWorkflowOperation) {
-  if (proposal.kind === "fill_form") {
+  if (proposal.kind === "fill_form" || proposal.kind === "complete_form" || proposal.kind === "form_step") {
     if (!team.canViewFieldEvidence || !team.canManageFieldEvidence) throw new WattzunWorkflowError(403, "Form viewing and editing permission is required for this job.");
     return;
   }
@@ -269,13 +294,44 @@ async function messagePrepared(request: Request, access: WattzunAccess, team: Te
   return prepared;
 }
 async function buildPrepared(request: Request, access: WattzunAccess, team: TeamAccess, proposal: WattzunWorkflowOperation,
-  reviewId: string, expiresAt: string, deps: WattzunWorkflowDependencies): Promise<Prepared | WattzunWorkflowResult> {
+  reviewId: string, expiresAt: string, deps: WattzunWorkflowDependencies, turnOwned = false,
+  guideInput?: WattzunFormGuideInput, requestedReference?: FormReference): Promise<Prepared | WattzunWorkflowResult> {
   permissions(team, proposal);
   const base = { state: "review" as const, reviewId, expiresAt, kind: proposal.kind };
+  if (proposal.kind === "form_step") {
+    const scoped = scopedRequest(request, access.scope.scopeId);
+    const prepareStep = async () => {
+      try { return turnOwned ? await (deps.prepareTurnFormStep ?? prepareWattzunFormStepForTurn)(scoped, access, proposal, team)
+        : await (deps.prepareFormStep ?? prepareWattzunFormStep)(scoped, access, proposal); }
+      catch (error) { if (guideInput && error instanceof WattzunFormError && (error.status === 400 || error.status === 409)) throw new WattzunGuidedFormValidationError(error.status, error.message); throw error; }
+    };
+    const formStep = await prepareStep();
+    return { proposal, formStep, sourceSha256: formStep.sourceSha256,
+      ...(guideInput ? { guide: { sessionId: guideInput.sessionId, questionKey: guideInput.questionKey || "", sourceSha256: formStep.sourceSha256, requestedReference: requestedReference || formStep.reference } } : {}),
+      review: { ...base, heading: formStep.review.title, summary: formStep.review.summary, confirmationLabel: "Confirm form step", lines: formStep.review.fields, href: formStep.review.href } };
+  }
   if (proposal.kind === "fill_form") {
-    const form = await (deps.prepareForm ?? prepareWattzunForm)(scopedRequest(request, access.scope.scopeId), access, proposal);
+    const scoped = scopedRequest(request, access.scope.scopeId);
+    const prepareGuided = async (input: WattzunFormGuideInput) => {
+      try { return await (deps.prepareGuidedForm ?? prepareWattzunGuidedFormForTurn)(scoped, access, proposal, input, team); }
+      catch (error) { if (error instanceof WattzunFormError && (error.status === 400 || error.status === 409)) throw new WattzunGuidedFormValidationError(error.status, error.message); throw error; }
+    };
+    const form = guideInput ? await prepareGuided(guideInput)
+      : turnOwned ? await (deps.prepareTurnForm ?? prepareWattzunFormForTurn)(scoped, access, proposal, team)
+        : await (deps.prepareForm ?? prepareWattzunForm)(scoped, access, proposal);
     return { proposal, form, sourceSha256: form.sourceSha256,
+      ...(guideInput ? { guide: { sessionId: guideInput.sessionId, questionKey: guideInput.questionKey || "", sourceSha256: form.sourceSha256,
+        requestedReference: requestedReference || form.reference } } : {}),
       review: { ...base, heading: form.review.title, summary: form.review.summary, confirmationLabel: "Save form answers", lines: form.review.fields, href: form.review.href } };
+  }
+  if (proposal.kind === "complete_form") {
+    const scoped = scopedRequest(request, access.scope.scopeId);
+    const completion = turnOwned ? await (deps.prepareTurnCompletion ?? prepareWattzunFormCompletionForTurn)(scoped, access, proposal, team)
+      : await (deps.prepareCompletion ?? prepareWattzunFormCompletion)(scoped, access, proposal);
+    return { proposal, completion, sourceSha256: completion.sourceSha256,
+      ...(guideInput ? { guide: { sessionId: guideInput.sessionId, questionKey: "", sourceSha256: completion.sourceSha256,
+        requestedReference: requestedReference || completion.reference } } : {}),
+      review: { ...base, heading: completion.review.title, summary: completion.review.summary, confirmationLabel: "Complete form", lines: completion.review.fields, href: completion.review.href } };
   }
   if (proposal.kind === "add_price_book_item") {
     const questions: string[] = [];
@@ -332,10 +388,30 @@ function isFrozenPrepared(value: unknown): value is Prepared {
   let proposal: WattzunWorkflowProposal;
   try { proposal = parseWattzunWorkflowProposal(value.proposal); } catch { return false; }
   if (proposal.kind === "confirm_workflow" || proposal.kind !== value.review.kind || value.review.expiresAt.length !== 24 || !Number.isFinite(Date.parse(value.review.expiresAt))) return false;
+  if (value.guide !== undefined) {
+    const guide = value.guide;
+    const requested = record(guide) ? readWattzunWorkReference(guide.requestedReference, "trade") : undefined;
+    if (!record(guide) || Object.keys(guide).length !== 4 || proposal.kind !== "fill_form" && proposal.kind !== "complete_form" && proposal.kind !== "form_step"
+      || requested?.kind !== "trade_form" || requested.jobId !== proposal.jobId || requested.formKind !== proposal.formKind
+      || requested.formKind !== "work_pack" && requested.recordId !== proposal.formId
+      || !readWattzunFormGuideInput({ sessionId: guide.sessionId, questionKey: guide.questionKey, sourceSha256: guide.sourceSha256, stage: "continue", authorization: "ordinary_form_answers", skippedFieldKeys: [] })
+      || guide.sourceSha256 !== value.sourceSha256 || proposal.kind === "fill_form" && !proposal.answers.some(answer => answer.fieldKey === guide.questionKey)
+      || proposal.kind === "complete_form" && guide.questionKey !== "") return false;
+  }
+  if (proposal.kind === "form_step") return isWattzunFormStepPrepared(value.formStep) && value.formStep.sourceSha256 === value.sourceSha256
+    && value.formStep.reference.jobId === proposal.jobId && value.formStep.reference.recordId === proposal.formId && value.formStep.reference.formKind === proposal.formKind
+    && JSON.stringify(value.formStep.step) === JSON.stringify(proposal.step)
+    && value.message === undefined && value.quote === undefined && value.price === undefined && value.form === undefined && value.completion === undefined;
+  if (value.formStep !== undefined) return false;
+  if (proposal.kind === "complete_form") return isWattzunFormCompletionPrepared(value.completion) && value.completion.sourceSha256 === value.sourceSha256
+    && value.completion.reference.jobId === proposal.jobId && value.completion.reference.recordId === proposal.formId && value.completion.reference.formKind === proposal.formKind
+    && value.message === undefined && value.quote === undefined && value.price === undefined && value.form === undefined;
+  if (value.completion !== undefined) return false;
   if (proposal.kind === "fill_form") return isWattzunFormPrepared(value.form) && value.form.sourceSha256 === value.sourceSha256
     && value.form.reference.jobId === proposal.jobId && value.form.reference.recordId === proposal.formId && value.form.reference.formKind === proposal.formKind
     && value.form.patch.length === proposal.answers.length && value.form.patch.every((answer, index) => answer.fieldKey === proposal.answers[index].fieldKey
-      && answer.value === (typeof proposal.answers[index].value === "string" ? proposal.answers[index].value.trim() : proposal.answers[index].value))
+      && JSON.stringify(answer.value) === JSON.stringify(typeof proposal.answers[index].value === "string" ? proposal.answers[index].value.trim()
+        : Array.isArray(proposal.answers[index].value) ? proposal.answers[index].value.map(item => item.trim()) : proposal.answers[index].value))
     && value.message === undefined && value.quote === undefined && value.price === undefined;
   if (value.form !== undefined) return false;
   const text = (raw: unknown, max = 4000): raw is string => typeof raw === "string" && raw.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(raw);
@@ -393,7 +469,7 @@ function isReviewMetadata(value: unknown): value is ReviewMetadata {
   return record(value) && typeof value.fingerprint === "string" && /^[a-f0-9]{64}$/.test(value.fingerprint)
     && typeof value.expiresAt === "string" && Number.isFinite(Date.parse(value.expiresAt)) && typeof value.encrypted === "string"
     && typeof value.sourceSha256 === "string" && /^[a-f0-9]{64}$/.test(value.sourceSha256)
-    && ["add_price_book_item", "customer_message", "invoice_reminder", "draft_job_quote", "fill_form"].includes(String(value.kind))
+    && ["add_price_book_item", "customer_message", "invoice_reminder", "draft_job_quote", "fill_form", "complete_form", "form_step"].includes(String(value.kind))
     && ["prepared", "executing", "complete"].includes(String(value.state))
     && (value.receipt === undefined || isWattzunWorkflowResult({ state: "complete", receipt: value.receipt }));
 }
@@ -426,28 +502,142 @@ export async function prepareWattzunWorkflowForPortal(request: Request, access: 
   deps: WattzunWorkflowDependencies = defaults): Promise<WattzunWorkflowResult> {
   return prepareWorkflow(request, access, proposal, requestId, true, deps);
 }
+/** Private turn candidate. The route must validate again after usage before releasing it. */
+export async function prepareWattzunWorkflowForTurn(request: Request, authority: WattzunTurnAuthority,
+  proposal: WattzunWorkflowOperation, requestId: string, deps: WattzunWorkflowDependencies = defaults): Promise<WattzunWorkflowResult> {
+  request.signal.throwIfAborted();
+  return prepareWorkflow(request, authority.access, proposal, requestId, false, deps, requireWattzunTurnTeam(authority));
+}
+type GuidedProposal = Extract<WattzunWorkflowOperation, { kind: "fill_form" | "complete_form" | "form_step" }>;
+type FormReference = Extract<WattzunWorkReference, { kind: "trade_form" }>;
+export type WattzunGuidedFormRecovery = { state: "saved"; reviewId: string; deferredFieldKeys: string[]; result: Extract<WattzunWorkflowResult, { state: "complete" }> }
+  | { state: "not_saved" };
+function assertGuidedReview(prepared: Prepared, reference: FormReference, input: WattzunFormGuideInput) {
+  if (!prepared.guide || prepared.guide.sessionId !== input.sessionId
+    || prepared.proposal.kind !== "fill_form" && prepared.proposal.kind !== "complete_form" && prepared.proposal.kind !== "form_step"
+    || JSON.stringify(prepared.guide.requestedReference) !== JSON.stringify(reference)) {
+    throw new WattzunWorkflowError(403, "This guided answer belongs to another form or session. Resume the original task to check it.");
+  }
+}
+/** Only an authorised ordinary answer, or distinct current completion consent, enters the existing journal. */
+export async function executeWattzunGuidedFormForTurn(request: Request, authority: WattzunTurnAuthority,
+  reference: FormReference, proposal: GuidedProposal, input: WattzunFormGuideInput, requestId: string,
+  completionConsent = "", deps: WattzunWorkflowDependencies = defaults): Promise<{ reviewId: string; deferredFieldKeys: string[]; result: Extract<WattzunWorkflowResult, { state: "complete" }> }> {
+  const checked = readWattzunFormGuideInput(input);
+  if (!checked || checked.stage !== "continue" || checked.paused || checked.pendingRequestId || proposal.jobId !== reference.jobId
+    || reference.formKind !== "work_pack" && proposal.formId !== reference.recordId || proposal.formKind !== reference.formKind) throw new WattzunWorkflowError(409, "Resume the current form question before saving an answer.");
+  if (proposal.kind === "complete_form" && (!isWattzunFormCompletionApproval(completionConsent) || checked.questionKey !== "")) {
+    throw new WattzunWorkflowError(400, "Please confirm completion of this current form separately from answering its last question.");
+  }
+  request.signal.throwIfAborted();
+  const team = requireWattzunTurnTeam(authority);
+  if (proposal.kind === "form_step") {
+    const current = await (deps.guide ?? loadWattzunFormGuideForTurn)(request, authority.access, reference, checked, team);
+    const step = current.guide.next?.step;
+    if (current.guide.state !== "question" || !step || !isWattzunFormStepApproval(completionConsent, proposal.step, step)) {
+      throw new WattzunGuidedFormValidationError(400, "Please confirm this current form step separately before it is recorded.");
+    }
+  }
+  const candidate = await prepareWorkflow(request, authority.access, proposal, requestId, false, deps, team, undefined, checked, reference);
+  const reviewId = `wr_${(await hash([authority.access.scope.scopeId, authority.access.actorUid, requestId])).slice(0, 48)}`;
+  const frozen = await readReview(authority.access, reviewId, deps);
+  assertGuidedReview(frozen.prepared, reference, checked);
+  const binding = frozen.prepared.guide;
+  if (!binding || binding.sourceSha256 !== checked.sourceSha256 || binding.questionKey !== checked.questionKey) {
+    throw new WattzunWorkflowError(409, "This answer was already prepared for a different question. Check its original result first.");
+  }
+  const deferredFieldKeys = proposal.kind === "fill_form" ? proposal.answers.filter(item => item.value === false && item.fieldKey === checked.questionKey).map(item => item.fieldKey) : [];
+  if (candidate.state === "complete") return { reviewId, result: candidate, deferredFieldKeys };
+  if (candidate.state !== "review") throw new WattzunWorkflowError(409, "The current form answer could not be prepared. Repeat the question to continue.");
+  const result = await execute(request, authority.access, reviewId, deps);
+  if (result.state !== "complete" || result.receipt.kind !== proposal.kind) throw new WattzunWorkflowError(503, "The saved result is not confirmed. Resume this same request before answering another question.");
+  return { reviewId, result, deferredFieldKeys };
+}
+/** Recovery never writes or retries; only the original actor/scope/request journal can prove a save. */
+export async function recoverWattzunGuidedFormForTurn(request: Request, authority: WattzunTurnAuthority,
+  reference: FormReference, input: WattzunFormGuideInput, pendingRequestId: string,
+  deps: WattzunWorkflowDependencies = defaults): Promise<WattzunGuidedFormRecovery> {
+  if (!/^[A-Za-z0-9_-]{16,100}$/.test(pendingRequestId) || !readWattzunFormGuideInput(input)) throw new WattzunWorkflowError(400, "Choose the original guided answer request.");
+  request.signal.throwIfAborted();
+  const reviewId = `wr_${(await hash([authority.access.scope.scopeId, authority.access.actorUid, pendingRequestId])).slice(0, 48)}`;
+  let frozen: Awaited<ReturnType<typeof readReview>>;
+  try { frozen = await readReview(authority.access, reviewId, deps); }
+  catch (error) { if (error instanceof WattzunWorkflowError && error.status === 404) return { state: "not_saved" }; throw error; }
+  assertGuidedReview(frozen.prepared, reference, input);
+  const team = requireWattzunTurnTeam(authority); permissions(team, frozen.prepared.proposal);
+  await verifyTarget(request, authority.access, team, frozen.prepared, deps, true);
+  const prepared = frozen.prepared;
+  const receipt = prepared.form ? await (deps.formReceipt ?? reconcileWattzunFormReceipt)(scopedRequest(request, authority.access.scope.scopeId), authority.access, prepared.form)
+    : prepared.completion ? await (deps.completionReceipt ?? reconcileWattzunFormCompletionReceipt)(scopedRequest(request, authority.access.scope.scopeId), authority.access, prepared.completion)
+      : prepared.formStep ? await (deps.formStepReceipt ?? reconcileWattzunFormStepReceipt)(scopedRequest(request, authority.access.scope.scopeId), authority.access, prepared.formStep) : null;
+  request.signal.throwIfAborted();
+  const deferredFieldKeys = prepared.proposal.kind === "fill_form" ? prepared.proposal.answers.filter(item => item.value === false && item.fieldKey === prepared.guide?.questionKey).map(item => item.fieldKey) : [];
+  return receipt ? { state: "saved", reviewId, deferredFieldKeys, result: { state: "complete", receipt } } : { state: "not_saved" };
+}
+/** Final candidate validation owns one fresh authority read after source rebuilding. */
+export async function verifyWattzunWorkflowForTurn(request: Request, authority: WattzunTurnAuthority,
+  proposal: WattzunWorkflowOperation, requestId: string, refreshAuthority: () => Promise<WattzunTurnAuthority>,
+  deps: WattzunWorkflowDependencies = defaults): Promise<WattzunWorkflowResult> {
+  request.signal.throwIfAborted();
+  let refreshed = false;
+  const result = await prepareWorkflow(request, authority.access, proposal, requestId, false, deps, requireWattzunTurnTeam(authority),
+    async () => { refreshed = true; return requireWattzunTurnTeam(await refreshAuthority()); });
+  if (!refreshed) {
+    const finalTeam = requireWattzunTurnTeam(await refreshAuthority()); permissions(finalTeam, proposal);
+    const reviewId = `wr_${(await hash([authority.access.scope.scopeId, authority.access.actorUid, requestId])).slice(0, 48)}`;
+    const frozen = await readReview(authority.access, reviewId, deps);
+    await verifyTarget(request, authority.access, finalTeam, frozen.prepared, deps, true);
+  }
+  request.signal.throwIfAborted(); return result;
+}
+/** Reads frozen sources, then refreshes authority immediately before final target checks. */
+export async function loadWattzunWorkflowReviewForTurn(request: Request, authority: WattzunTurnAuthority,
+  reviewId: string, refreshAuthority: () => Promise<WattzunTurnAuthority>,
+  deps: WattzunWorkflowDependencies = defaults): Promise<{ result: WattzunWorkflowResult; authority: WattzunTurnAuthority }> {
+  request.signal.throwIfAborted();
+  let finalAuthority: WattzunTurnAuthority | undefined;
+  const result = await loadWorkflowReview(request, authority.access, reviewId, deps, {
+    turnTeam: requireWattzunTurnTeam(authority), refreshTurnTeam: async () => {
+      finalAuthority = await refreshAuthority();
+      return requireWattzunTurnTeam(finalAuthority);
+    },
+  });
+  if (!finalAuthority) {
+    // Receipt/reconciliation paths retain their standalone checks and still need
+    // the route's fresh workspace handoff after those checks have finished.
+    finalAuthority = await refreshAuthority();
+    const frozen = await readReview(authority.access, reviewId, deps);
+    const finalTeam = requireWattzunTurnTeam(finalAuthority);
+    permissions(finalTeam, frozen.prepared.proposal);
+    await verifyTarget(request, authority.access, finalTeam, frozen.prepared, deps);
+  }
+  request.signal.throwIfAborted();
+  return { result, authority: finalAuthority };
+}
 async function prepareWorkflow(request: Request, access: WattzunAccess, proposal: WattzunWorkflowOperation, requestId: string,
-  deferNewReview: boolean, deps: WattzunWorkflowDependencies): Promise<WattzunWorkflowResult> {
+  deferNewReview: boolean, deps: WattzunWorkflowDependencies, turnTeam?: TeamAccess,
+  refreshTurnTeam?: () => Promise<TeamAccess>, guideInput?: WattzunFormGuideInput, requestedReference?: FormReference): Promise<WattzunWorkflowResult> {
   if (!/^[A-Za-z0-9_-]{16,100}$/.test(requestId)) throw new WattzunWorkflowError(400, "Start a fresh action request.");
-  const team = await currentTeam(request, access, deps); permissions(team, proposal);
+  const team = turnTeam ?? await currentTeam(request, access, deps); permissions(team, proposal);
   const reviewId = `wr_${(await hash([access.scope.scopeId, access.actorUid, requestId])).slice(0, 48)}`;
   const fingerprint = await hash(proposal);
   const previous = await access.db.prepare("SELECT id,admin_uid,entity_id,action,metadata FROM admin_audit_log WHERE id=?").bind(reviewId).first<Row>();
   if (previous) {
     const saved = metadata(previous);
     if (saved.fingerprint !== fingerprint) throw new WattzunWorkflowError(409, "This request was already prepared with different details. Start a new review.");
-    return loadWattzunWorkflowReview(request, access, reviewId, deps);
+    return loadWorkflowReview(request, access, reviewId, deps, { turnTeam, refreshTurnTeam });
   }
   const expiresAt = new Date(deps.now() + 15 * 60_000).toISOString();
-  const prepared = await buildPrepared(request, access, team, proposal, reviewId, expiresAt, deps);
-  const after = await currentTeam(request, access, deps);
+  const prepared = await buildPrepared(request, access, team, proposal, reviewId, expiresAt, deps, !!turnTeam, guideInput, requestedReference);
+  if (!("state" in prepared) && guideInput && prepared.sourceSha256 !== guideInput.sourceSha256) throw new WattzunGuidedFormValidationError(409, "This form changed before the answer could be saved. Use its current question.");
+  const after = turnTeam ?? await currentTeam(request, access, deps);
   permissions(after, proposal);
   if (JSON.stringify(authority(after)) !== JSON.stringify(authority(team))) throw new WattzunWorkflowError(409, "Your permissions changed while preparing this action. Try again.");
   if ("state" in prepared) {
     if (proposal.kind !== "add_price_book_item") {
       const fresh = await buildPrepared(request, access, after, proposal, reviewId, expiresAt, deps);
       if (!("state" in fresh) || JSON.stringify(fresh) !== JSON.stringify(prepared)) throw new WattzunWorkflowError(409, "The matching jobs, invoices or customer access changed. Ask Wattzun to check again.");
-      const finalTeam = await currentTeam(request, access, deps); permissions(finalTeam, proposal);
+      const finalTeam = refreshTurnTeam ? await refreshTurnTeam() : turnTeam ?? await currentTeam(request, access, deps); permissions(finalTeam, proposal);
       if (JSON.stringify(authority(finalTeam)) !== JSON.stringify(authority(after))) throw new WattzunWorkflowError(409, "Your permissions changed before these choices could be shown. Try again.");
       if (fresh.state === "choose_job") {
         const finalJobs = await findJobs(access, finalTeam, proposal, deps);
@@ -456,6 +646,9 @@ async function prepareWorkflow(request: Request, access: WattzunAccess, proposal
         const final = await buildPrepared(request, access, finalTeam, proposal, reviewId, expiresAt, deps);
         if (!("state" in final) || JSON.stringify(final) !== JSON.stringify(fresh)) throw new WattzunWorkflowError(409, "The invoice choices changed before they could be shown. Ask Wattzun to check again.");
       }
+    } else if (refreshTurnTeam) {
+      const finalTeam = await refreshTurnTeam(); permissions(finalTeam, proposal);
+      if (JSON.stringify(authority(finalTeam)) !== JSON.stringify(authority(team))) throw new WattzunWorkflowError(409, "Your permissions changed before these choices could be shown. Try again.");
     }
     return prepared;
   }
@@ -466,22 +659,23 @@ async function prepareWorkflow(request: Request, access: WattzunAccess, proposal
     .bind(reviewId, access.actorUid, access.scope.scopeId, JSON.stringify(saved), new Date(deps.now()).toISOString()).run();
   const newPortalReview = deferNewReview && insertion.meta.changes === 1;
   return loadWorkflowReview(request, access, reviewId, deps, { expectedFingerprint: fingerprint,
-    deferSourceRecheck: newPortalReview, preparedTeam: newPortalReview ? after : undefined });
+    deferSourceRecheck: newPortalReview, preparedTeam: newPortalReview ? after : undefined, turnTeam, refreshTurnTeam });
 }
 export async function loadWattzunWorkflowReview(request: Request, access: WattzunAccess, reviewId: string,
   deps: WattzunWorkflowDependencies = defaults): Promise<WattzunWorkflowResult> {
   return loadWorkflowReview(request, access, reviewId, deps);
 }
 async function loadWorkflowReview(request: Request, access: WattzunAccess, reviewId: string, deps: WattzunWorkflowDependencies,
-  options: { expectedFingerprint?: string; deferSourceRecheck?: boolean; preparedTeam?: TeamAccess } = {}): Promise<WattzunWorkflowResult> {
+  options: { expectedFingerprint?: string; deferSourceRecheck?: boolean; preparedTeam?: TeamAccess; turnTeam?: TeamAccess;
+    refreshTurnTeam?: () => Promise<TeamAccess> } = {}): Promise<WattzunWorkflowResult> {
   // A newly inserted portal review already has its post-preparation authority.
   // Reuse it only as the comparison baseline; the fresh final team, target and
   // quote-grant checks below still run before this function returns any review.
-  const team = options.preparedTeam ?? await currentTeam(request, access, deps);
+  const team = options.turnTeam ?? options.preparedTeam ?? await currentTeam(request, access, deps);
   const frozen = await readReview(access, reviewId, deps);
   if (options.expectedFingerprint && frozen.saved.fingerprint !== options.expectedFingerprint) throw new WattzunWorkflowError(409, "This review was prepared with different details. Start another review.");
   permissions(team, frozen.prepared.proposal);
-  await verifyTarget(request, access, team, frozen.prepared, deps);
+  await verifyTarget(request, access, team, frozen.prepared, deps, !!options.turnTeam);
   const existingMessage = await journalledMessage(access, team, frozen.prepared, reviewId);
   if (existingMessage) return checkedComplete(request, access, frozen.prepared, existingMessage, deps);
   if (frozen.saved.state === "complete" && frozen.saved.receipt && Date.parse(frozen.saved.expiresAt) > deps.now()) return checkedComplete(request, access, frozen.prepared, frozen.saved.receipt, deps);
@@ -495,27 +689,50 @@ async function loadWorkflowReview(request: Request, access: WattzunAccess, revie
     if (recovered) return checkedComplete(request, access, frozen.prepared, recovered, deps);
     // The canonical draft is unchanged. Keep the same frozen review available
     // for explicit approval; merely loading it never retries a write.
+  } else if (frozen.saved.state === "executing" && frozen.prepared.completion) {
+    const recovered = await (deps.completionReceipt ?? reconcileWattzunFormCompletionReceipt)(scopedRequest(request, access.scope.scopeId), access, frozen.prepared.completion);
+    if (recovered) return checkedComplete(request, access, frozen.prepared, recovered, deps);
+  } else if (frozen.saved.state === "executing" && frozen.prepared.formStep) {
+    const recovered = await (deps.formStepReceipt ?? reconcileWattzunFormStepReceipt)(scopedRequest(request, access.scope.scopeId), access, frozen.prepared.formStep);
+    if (recovered) return checkedComplete(request, access, frozen.prepared, recovered, deps);
   } else if (frozen.saved.state !== "prepared") throw new WattzunWorkflowError(409, "This review has already been submitted. Check its result before preparing another action.");
   if (!options.deferSourceRecheck) {
-    const fresh = await buildPrepared(request, access, team, frozen.prepared.proposal, reviewId, frozen.saved.expiresAt, deps);
+    const fresh = await buildPrepared(request, access, team, frozen.prepared.proposal, reviewId, frozen.saved.expiresAt, deps, !!options.turnTeam);
     if ("state" in fresh || fresh.sourceSha256 !== frozen.saved.sourceSha256) throw new WattzunWorkflowError(409, "The job, invoice, recipient or connection changed. Prepare a fresh review.");
   }
-  const finalTeam = await currentTeam(request, access, deps); permissions(finalTeam, frozen.prepared.proposal);
+  const finalTeam = options.refreshTurnTeam ? await options.refreshTurnTeam() : options.turnTeam ?? await currentTeam(request, access, deps);
+  permissions(finalTeam, frozen.prepared.proposal);
   if (JSON.stringify(authority(finalTeam)) !== JSON.stringify(authority(team))) throw new WattzunWorkflowError(409, "Your permissions changed before the review could be shown. Prepare it again.");
   if (options.deferSourceRecheck && frozen.prepared.quote) {
     const quoteAuthority = await deps.quoteAuthority(finalTeam, { scopeId: access.scope.scopeId, actorUid: access.actorUid });
     if (quoteAuthority !== frozen.prepared.quote.authoritySha256) throw new WattzunExistingQuoteError(403, "Your quote permissions changed. Review the quote again.");
   }
-  await verifyTarget(request, access, finalTeam, frozen.prepared, deps);
+  await verifyTarget(request, access, finalTeam, frozen.prepared, deps, !!options.turnTeam);
+  if (frozen.prepared.formStep) await (deps.verifyTurnFormStep ?? verifyWattzunFormStepForTurn)(
+    scopedRequest(request, access.scope.scopeId), access, frozen.prepared.formStep, finalTeam);
   return frozen.prepared.review;
 }
 async function checkedComplete(request: Request, access: WattzunAccess, prepared: Prepared, receipt: WattzunWorkflowReceipt, deps: WattzunWorkflowDependencies): Promise<WattzunWorkflowResult> {
   const team = await currentTeam(request, access, deps); permissions(team, prepared.proposal); await verifyTarget(request, access, team, prepared, deps);
   return { state: "complete", receipt };
 }
-async function verifyTarget(request: Request, access: WattzunAccess, team: TeamAccess, prepared: Prepared, deps: WattzunWorkflowDependencies) {
+async function verifyTarget(request: Request, access: WattzunAccess, team: TeamAccess, prepared: Prepared, deps: WattzunWorkflowDependencies, turnOwned = false) {
+  if (prepared.formStep) {
+    const scoped = scopedRequest(request, access.scope.scopeId);
+    if (turnOwned) await (deps.formStepTurnAccess ?? verifyWattzunFormStepAccessForTurn)(scoped, access, prepared.formStep, team);
+    else await (deps.formStepAccess ?? verifyWattzunFormStepAccess)(scoped, access, prepared.formStep);
+    return;
+  }
   if (prepared.form) {
-    await (deps.formAccess ?? verifyWattzunFormAccess)(scopedRequest(request, access.scope.scopeId), access, prepared.form);
+    const scoped = scopedRequest(request, access.scope.scopeId);
+    if (turnOwned) await (deps.formTurnAccess ?? verifyWattzunFormAccessForTurn)(scoped, access, prepared.form, team);
+    else await (deps.formAccess ?? verifyWattzunFormAccess)(scoped, access, prepared.form);
+    return;
+  }
+  if (prepared.completion) {
+    const scoped = scopedRequest(request, access.scope.scopeId);
+    if (turnOwned) await (deps.completionTurnAccess ?? verifyWattzunFormCompletionAccessForTurn)(scoped, access, prepared.completion, team);
+    else await (deps.completionAccess ?? verifyWattzunFormCompletionAccess)(scoped, access, prepared.completion);
     return;
   }
   if (prepared.proposal.kind !== "add_price_book_item") {
@@ -556,7 +773,9 @@ function priceReceipt(team: TeamAccess, prepared: Prepared, id: string): Wattzun
   return { kind: prepared.proposal.kind, id, label: "Open price book", href: priceBookHref(team), status: "saved", message: "The item is saved in your business price book." };
 }
 async function recoverExpired(request: Request, access: WattzunAccess, team: TeamAccess, prepared: Prepared, reviewId: string, deps: WattzunWorkflowDependencies) {
+  if (prepared.formStep) return (deps.formStepReceipt ?? reconcileWattzunFormStepReceipt)(scopedRequest(request, access.scope.scopeId), access, prepared.formStep);
   if (prepared.form) return (deps.formReceipt ?? reconcileWattzunFormReceipt)(scopedRequest(request, access.scope.scopeId), access, prepared.form);
+  if (prepared.completion) return (deps.completionReceipt ?? reconcileWattzunFormCompletionReceipt)(scopedRequest(request, access.scope.scopeId), access, prepared.completion);
   if (prepared.quote) {
     const found = await deps.executeQuote(scopedRequest(request, access.scope.scopeId), { scopeId: access.scope.scopeId, actorUid: access.actorUid,
       prepared: prepared.quote, expectedSourceSha256: prepared.sourceSha256, allowSave: false });
@@ -577,8 +796,11 @@ async function recoverExpired(request: Request, access: WattzunAccess, team: Tea
   return priceReceipt(team, prepared, id);
 }
 async function sendPrepared(request: Request, access: WattzunAccess, team: TeamAccess, prepared: Prepared, reviewId: string, deps: WattzunWorkflowDependencies) {
+  request.signal.throwIfAborted();
   const requestKey = `wattzun-${reviewId}`;
+  if (prepared.formStep) return (deps.executeFormStep ?? executeWattzunFormStep)(scopedRequest(request, access.scope.scopeId), access, prepared.formStep, requestKey);
   if (prepared.form) return (deps.executeForm ?? executeWattzunForm)(scopedRequest(request, access.scope.scopeId), access, prepared.form, requestKey);
+  if (prepared.completion) return (deps.executeCompletion ?? executeWattzunFormCompletion)(scopedRequest(request, access.scope.scopeId), access, prepared.completion, requestKey);
   if (prepared.quote) {
     const result = await deps.executeQuote(scopedRequest(request, access.scope.scopeId), { scopeId: access.scope.scopeId, actorUid: access.actorUid,
       prepared: prepared.quote, expectedSourceSha256: prepared.sourceSha256 });
@@ -623,7 +845,7 @@ async function execute(request: Request, access: WattzunAccess, reviewId: string
   // Message services journal their own request IDs; quote saves reconcile their
   // exact frozen target; price-book creation uses the same deterministic key.
   // On retry they never manufacture a new send or append the same quote twice.
-  if (!frozen.prepared.quote && !frozen.prepared.form) {
+  if (!frozen.prepared.quote && !frozen.prepared.form && !frozen.prepared.completion && !frozen.prepared.formStep) {
     const fresh = await buildPrepared(request, access, team, frozen.prepared.proposal, reviewId, frozen.saved.expiresAt, deps);
     if ("state" in fresh || fresh.sourceSha256 !== frozen.saved.sourceSha256) throw new WattzunWorkflowError(409, "The job, invoice, recipient or connection changed. Prepare a fresh review.");
   }

@@ -63,6 +63,12 @@ const fixtures = {
           this.callbacks.reply(result);if(result.audio.mimeType==='audio/pcm')await result.audio.stream.cancel();this.resume();
         } catch(error) {this.requestFailed(error);}
       }
+      async requestReply(request) {
+        if(this.muted)return false;
+        this.callbacks.status({state:'thinking',message:''});
+        try {const result=await request(new AbortController().signal);this.callbacks.reply(result);if(result.audio.mimeType==='audio/pcm')await result.audio.stream.cancel();this.resume();}
+        catch(error){this.requestFailed(error);}return true;
+      }
       toggleMute() { this.muted=!this.muted; this.callbacks.status({state:this.muted?'muted':'listening',message:this.muted?'Microphone muted.':'Listening for your question.'}); }
       hangUp() { window.wattzunFixtureCounters.hungUp++; this.callbacks.status({state:'ended',message:'Call ended.'}); }
       dispose() { window.wattzunFixtureCounters.disposed++; }
@@ -127,6 +133,14 @@ const bundle = await build({
           {type:'audio',data:'EIAgAQ=='},{type:'done'}];
         return new Response(frames.map(frame=>JSON.stringify(frame)).join('\\n')+'\\n',
           {headers:{'Content-Type':'application/x-wattzun-realtime-voice+ndjson'}});
+      }
+      if((url==='/api/wattzun/form-guide'||url==='/api/wattzun/voice')&&body?.formGuide&&window.wattzunFixtureGuideReplies?.length) {
+        const supplied=window.wattzunFixtureGuideReplies.shift();
+        const progress={...supplied.formGuide,sessionId:body.formGuide.sessionId,requestedReference:body.workReference};
+        const reply={...supplied,formGuide:progress,workContext:{...defaultContext,reference:progress.reference},
+          formGuideRecovery:{requestId:body.formGuide.pendingRequestId||body.requestId,state:supplied.formGuideRecovery?.state||'not_saved'}};
+        const frames=[{type:'reply',transcript:'',requestSummary:'Supplied synthetic form answer.',reply},{type:'audio',data:'EIAgAQ=='},{type:'done'}];
+        return new Response(frames.map(frame=>JSON.stringify(frame)).join('\\n')+'\\n',{headers:{'Content-Type':'application/x-wattzun-realtime-voice+ndjson'}});
       }
       if(url==='/api/wattzun/voice'&&options.method==='POST') {
         const reply=window.wattzunFixtureVoiceReply||{kind:'answer',message:'Open Schedule to review your visits.',questions:[],links:[]};
@@ -577,6 +591,213 @@ async function selectFixtureWork(page,recordId,initialMessage) {
     workReference:{kind:'trade_job',recordId},...(initialMessage===undefined?{}:{initialMessage})}),{recordId,initialMessage});
   await page.getByRole('region',{name:'Selected work',exact:true}).waitFor();
 }
+
+const guidedReference={kind:'trade_form',formKind:'work_pack',recordId:'pack-guide-one',jobId:'job-john'};
+function guidedReply(index,state='question',options={}) {
+  const reference={...guidedReference,recordId:`pack-guide-${index}`};
+  const receipt=options.saved||state==='complete'?{kind:state==='complete'?'complete_form':'fill_form',id:reference.recordId,label:state==='complete'?'Form completed':'Answer saved',href:'/direct-trade/team?workspace=work&jobId=job-john&jobTab=files',status:state==='complete'?'submitted':'saved',message:state==='complete'?'Your form is complete.':'Your answer is saved.'}:undefined;
+  const next=state==='question'?{kind:'question',fieldKey:index===1?'installed_model':'serial_number',label:index===1?'What is the installed model?':'What is the serial number?',type:'text',options:[]}
+    :state==='capture'?{kind:'capture',fieldKey:'evidence_photo',label:'Take a photo of the installation.',type:'photo',options:[],capture:{minimumCount:1,maximumCount:4,savedCount:0,allowedContentTypes:['image/jpeg'],gpsRequired:false,captureTimeRequired:false,metadataRequired:false,originalRequired:false}}:null;
+  return {kind:next?'clarification':'answer',message:state==='complete'?'Your form is complete.':state==='ready_to_complete'?'All required items are ready. Shall I complete this form?':'Let’s complete this form.',questions:next?[next.label]:[],links:[],
+    formGuide:{sessionId:'00000000-0000-4000-8000-000000000000',requestedReference:guidedReference,reference,recordId:reference.recordId,revision:index,sourceSha256:String(index).repeat(64),state,next,
+      counts:{visible:3,answered:state==='complete'||state==='ready_to_complete'?3:index-1,unanswered:state==='complete'||state==='ready_to_complete'?0:4-index,evidenceMissing:state==='capture'?1:0,manualMissing:0,skipped:0},skippedFieldKeys:[],
+      completion:{ready:state==='ready_to_complete',missing:[],status:state==='complete'?'completed':'draft'},...(state==='complete'?{receipt}:{})},
+    formGuideRecovery:{state:options.uncertain?'uncertain':receipt?'saved':'not_saved'},...(receipt?{workflow:{state:'complete',receipt}}:{})};
+}
+
+test('guided call saves successive spoken answers and completes the actual selected form without per-answer review clicks',{skip:!browserPath&&'No installed browser for hands-free form checks'},async t=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try { for(const width of [1366,390]) await t.test(String(width),async()=>{
+    const first={...guidedReference,recordId:'pack-guide-1'};
+    const page=await contextPage(browser,width,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1),guidedReply(2,'question',{saved:true}),guidedReply(3,'ready_to_complete',{saved:true}),guidedReply(4,'complete')]});
+    const errors=[];page.on('pageerror',error=>errors.push(error.message));
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),first);
+    const guide=page.getByRole('region',{name:'Guided form completion'});
+    await guide.getByText('What is the installed model?',{exact:true}).waitFor();
+    await page.getByText('Listening',{exact:true}).waitFor();
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await guide.getByText('What is the serial number?',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('region',{name:'Review Wattzun workflow',exact:true}).count(),0);
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await guide.getByText('All required items are ready. Tell Wattzun to complete the form.',{exact:true}).waitFor();
+    assert.equal(await guide.getByText('Form completed',{exact:true}).count(),0,'The final answer never silently submits the form');
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureErrors),[],'Completion response accepted');
+    await guide.getByText('Form completed',{exact:true}).waitFor();
+    const requests=await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.body?.formGuide));
+    assert.equal(requests.length,4);
+    assert.deepEqual(requests.map(item=>item.body.workReference.recordId),['pack-guide-1','pack-guide-1','pack-guide-2','pack-guide-3']);
+    assert.ok(requests.every(item=>!item.body.workflowReviewId&&!item.body.workflowProposal));
+    assert.ok(requests.slice(1).every(item=>!item.body.formGuide.pendingRequestId),'Acknowledged answers clear pending recovery');
+    assert.equal(new Set(requests.map(item=>item.body.formGuide.sessionId)).size,1);
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url==='/api/wattzun/workflows').length),0,'No second client-side write or review call');
+    assert.deepEqual((await page.evaluate(()=>window.wattzunFixtureFormNotifications)).map(item=>item.formId),['pack-guide-1','pack-guide-1','pack-guide-2','pack-guide-1','pack-guide-3']);
+    assert.deepEqual(errors,[]);await page.close();
+  }); } finally {await browser.close();}
+});
+
+test('guided saves refresh a remounted editor at its current revision and keep the original in-flight cue',{skip:!browserPath&&'No installed browser for guided remount'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1),guidedReply(2,'question',{saved:true}),guidedReply(3,'capture',{saved:true})]});
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
+    await page.getByText('Listening',{exact:true}).waitFor();
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await page.getByRole('region',{name:'Guided form completion'}).getByText('What is the serial number?',{exact:true}).waitFor();
+    await page.evaluate(()=>{
+      history.pushState(history.state,'','/direct-trade/messages');window.dispatchEvent(new Event('fixture:navigate'));
+    });
+    await page.getByText('Listening',{exact:true}).waitFor();
+    await page.evaluate(()=>{
+      history.pushState(history.state,'','/direct-trade/team?workspace=work&jobId=job-john&jobTab=files');window.dispatchEvent(new Event('fixture:navigate'));
+      // A newly mounted native editor only knows its loaded current revision.
+      window.wattzunFixtureRemountedEditorCues=[];window.wattzunFixtureOriginalEditorCues=[];
+      window.addEventListener('wattzun:form-saved',event=>{
+        const detail=event.detail;
+        if(detail.scopeId!=='synthetic-business'||detail.jobId!=='job-john'||detail.formKind!=='work_pack')return;
+        if(detail.formId==='pack-guide-2')window.wattzunFixtureRemountedEditorCues.push(detail);
+        if(detail.formId==='pack-guide-1')window.wattzunFixtureOriginalEditorCues.push(detail);
+      });
+    });
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    const cues=await page.evaluate(()=>({current:window.wattzunFixtureRemountedEditorCues,original:window.wattzunFixtureOriginalEditorCues}));
+    assert.deepEqual(cues.current,[{portal:'trade',scopeId:'synthetic-business',formKind:'work_pack',formId:'pack-guide-2',jobId:'job-john'}]);
+    assert.deepEqual(cues.original,[{...cues.current[0],formId:'pack-guide-1'}]);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url==='/api/wattzun/voice').at(-1).body.workReference.recordId),'pack-guide-2');
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureErrors),[]);
+  } finally {await browser.close();}
+});
+
+test('a lost guided answer retains the exact pending request for read-only recovery and keeps the same call',{skip:!browserPath&&'No installed browser for guided recovery'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1)]});
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
+    await page.getByText('Listening',{exact:true}).waitFor();
+    await page.evaluate(()=>{window.wattzunFixtureFailures={'/api/wattzun/voice':{network:true,message:'Synthetic response lost'}};});
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    const lost=await page.evaluate(()=>window.wattzunFixtureRequests.at(-1).body.requestId);
+    await page.evaluate(reply=>{window.wattzunFixtureFailures={};window.wattzunFixtureGuideReplies=[reply];window.wattzunFixtureCall.resume();},guidedReply(2,'question',{saved:true}));
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    const recovery=await page.evaluate(()=>window.wattzunFixtureRequests.at(-1).body);
+    assert.equal(recovery.formGuide.pendingRequestId,lost);
+    await page.getByRole('region',{name:'Guided form completion'}).getByText('What is the serial number?',{exact:true}).waitFor();
+    await page.evaluate(reply=>{window.wattzunFixtureGuideReplies=[reply];},guidedReply(3,'ready_to_complete',{saved:true}));
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.at(-1).body.formGuide.pendingRequestId),undefined);
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+  } finally {await browser.close();}
+});
+
+test('guided photo handoff advances only after the exact canonical capture notification and preserves the call',{skip:!browserPath&&'No installed browser for guided camera handoff'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1,'capture'),guidedReply(2)]});
+    await page.evaluate(()=>{
+      window.wattzunFixtureCameraClicks=0;
+      window.addEventListener('wattzun:form-capture-prepare',event=>window.dispatchEvent(new CustomEvent('wattzun:form-capture-ready',{detail:{requestId:event.detail.requestId,result:{status:'ready',target:{...event.detail.target,formId:'pack-native-newer'}}}})));
+      window.addEventListener('wattzun:form-capture',event=>{event.preventDefault();window.wattzunFixtureCameraClicks++;window.wattzunFixtureCaptureTarget=event.detail;});
+    });
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
+    const guide=page.getByRole('region',{name:'Guided form completion'});
+    await guide.getByRole('button',{name:'Take photo',exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureCameraClicks),1);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.body?.formGuide).length),1,'Opening or cancelling a camera cannot advance');
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('wattzun:form-capture-saved',{detail:{...window.wattzunFixtureCaptureTarget,scopeId:'other-business',oldFormId:'pack-guide-1',formId:'pack-guide-2'}})));
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.body?.formGuide).length),1,'Foreign capture cannot advance');
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('wattzun:form-capture-saved',{detail:{...window.wattzunFixtureCaptureTarget,oldFormId:'pack-native-newer',formId:'pack-guide-2'}})));
+    await guide.getByText('What is the serial number?',{exact:true}).waitFor();
+    const resume=await page.evaluate(()=>window.wattzunFixtureRequests.at(-1).body);
+    assert.equal(resume.workReference.recordId,'pack-guide-2');assert.equal(resume.formGuide.stage,'resume');
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+  } finally {await browser.close();}
+});
+
+test('guided repeat pause and resume reuse the same microphone and preserve explicit paused intent',{skip:!browserPath&&'No installed browser for guided controls'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1),guidedReply(1),guidedReply(1,'paused'),guidedReply(1)]});
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
+    const guide=page.getByRole('region',{name:'Guided form completion'});
+    await guide.getByRole('button',{name:'Repeat question',exact:true}).click();
+    await page.getByText('Listening',{exact:true}).waitFor();
+    await guide.getByRole('button',{name:'Pause form',exact:true}).click();
+    await guide.getByText('Paused. Say “continue the form” when you are ready.',{exact:true}).waitFor();
+    await guide.getByRole('button',{name:'Resume form',exact:true}).click();
+    await guide.getByText('What is the installed model?',{exact:true}).waitFor();
+    const controls=await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.body?.formGuideControl));
+    assert.deepEqual(controls.map(item=>item.body.formGuideControl.command),['repeat','pause','resume']);
+    assert.equal(controls[2].body.formGuide.paused,true,'Pause remains until the server handles the explicit resume control');
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+  } finally {await browser.close();}
+});
+
+test('typing after hanging up uses normal chat while a subsequent call resumes its guided form',{skip:!browserPath&&'No installed browser for guided chat handoff'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1),guidedReply(1)]});
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
+    await page.getByText('Listening',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Hang up',exact:true}).click();
+    await page.getByRole('textbox',{name:'Message Wattzun',exact:true}).fill('Explain the next field.');
+    await page.getByRole('button',{name:'Send',exact:true}).click();
+    await page.waitForFunction(()=>window.wattzunFixtureRequests.some(item=>item.body?.message==='Explain the next field.'));
+    const typed=await page.evaluate(()=>window.wattzunFixtureRequests.find(item=>item.body?.message==='Explain the next field.').body);
+    assert.equal(typed.formGuide,undefined,'Normal text never sends voice-only guided authority');
+    assert.equal(typed.workReference.recordId,'pack-guide-1');
+    await page.getByRole('button',{name:'Call Wattzun',exact:true}).click();
+    await page.getByText('Listening',{exact:true}).waitFor();
+    const resumed=await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.url==='/api/wattzun/form-guide').at(-1).body);
+    assert.equal(resumed.formGuide.stage,'resume');
+    assert.equal(resumed.workReference.recordId,'pack-guide-1');
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureErrors),[]);
+  } finally {await browser.close();}
+});
+
+test('guided official product search persists the exact source query and refreshes a confirmed native step',{skip:!browserPath&&'No installed browser for product guide'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const product=guidedReply(1);
+    product.action={kind:'search_form_products',dependencyKey:'product',search:'Example model'};
+    product.formGuide.productSearch={dependencyKey:'product',search:'Example model'};
+    product.formGuide.next={kind:'question',fieldKey:'$dependency.product',label:'Which approved product?',type:'official_product',options:[],step:{kind:'official_product',dependencyKey:'product',minimumCount:1,maximumCount:1,search:'Example model',truncated:false,choices:[{selectionId:'product-one',snapshotId:'snapshot-one',label:'Example model',brand:'Example',model:'model'}]}};
+    const selected=guidedReply(2,'question',{saved:true});selected.workflow.receipt.kind='form_step';
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[product,selected]});
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
+    await page.getByText('Listening',{exact:true}).waitFor();
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await page.getByRole('region',{name:'Guided form completion'}).getByText('What is the serial number?',{exact:true}).waitFor();
+    const request=await page.evaluate(()=>window.wattzunFixtureRequests.at(-1).body);
+    assert.deepEqual(request.formGuide.productSearch,{dependencyKey:'product',search:'Example model'});
+    assert.equal((await page.evaluate(()=>window.wattzunFixtureFormNotifications)).length,1);
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureErrors),[]);
+  } finally {await browser.close();}
+});
+
+test('a short signing handoff opens the native question and continues only after a matching saved control',{skip:!browserPath&&'No installed browser for signature handoff'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try {
+    const signature=guidedReply(1,'manual');
+    signature.formGuide.next={kind:'manual',fieldKey:'customer_signature',label:'Customer signature',type:'signature',options:[],reason:'Please review and sign this declaration on screen.'};
+    const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[signature,guidedReply(2,'ready_to_complete')]});
+    await page.evaluate(()=>{window.wattzunFixtureFocused=[];window.addEventListener('wattzun:form-focus',event=>{event.preventDefault();window.wattzunFixtureFocused.push(event.detail);});});
+    await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
+    const dock=page.getByRole('region',{name:'Wattzun call',exact:true});await dock.getByText('Listening',{exact:true}).waitFor();
+    assert.equal((await page.evaluate(()=>window.wattzunFixtureFocused))[0].fieldKey,'customer_signature');
+    assert.equal(await page.getByRole('dialog',{name:'Wattzun',exact:true}).count(),0,'The actual signing form is visible while the call stays docked');
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('wattzun:form-native-saved',{detail:{portal:'trade',scopeId:'other-business',formKind:'work_pack',oldFormId:'pack-guide-1',formId:'pack-signed',jobId:'job-john'}})));
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.body?.formGuide).length),1);
+    await page.evaluate(()=>window.dispatchEvent(new CustomEvent('wattzun:form-native-saved',{detail:{portal:'trade',scopeId:'synthetic-business',formKind:'work_pack',oldFormId:'pack-guide-1',formId:'pack-signed',jobId:'job-john'}})));
+    await page.waitForFunction(()=>window.wattzunFixtureRequests.filter(item=>item.body?.formGuide).length===2);
+    await dock.getByText('Listening',{exact:true}).waitFor();
+    const request=await page.evaluate(()=>window.wattzunFixtureRequests.filter(item=>item.body?.formGuide).at(-1).body);
+    assert.equal(request.workReference.recordId,'pack-signed');assert.equal(request.formGuide.stage,'resume');
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureErrors),[]);
+  } finally {await browser.close();}
+});
 
 function quoteEditorResult(descriptions) {
   const items=descriptions.map((description,index)=>({id:'line-'+index,lineType:'product',description,quantityMilli:1000,unitPriceCents:100,taxCode:'none',sectionHeading:'Included work',priceBookItemId:'',jobPacketId:'',jobPacketLineId:'',totalCents:100}));

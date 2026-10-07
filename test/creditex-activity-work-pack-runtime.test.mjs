@@ -2878,3 +2878,118 @@ test('Imported transition at the work-pack write boundary leaves responses and r
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM trade_team_sync_changes WHERE entity_id=?").get(WORK_ORDER_ID).n,0);
  }finally{sqlite.close();}
 });
+
+async function readNativeReceiptWithoutWrites(database, sqlite, input) {
+  const changes = sqlite.prepare('SELECT total_changes() count').get().count;
+  const instances = sqlite.prepare('SELECT COUNT(*) count FROM compliance_activity_work_pack_instances').get().count;
+  const receipts = sqlite.prepare('SELECT COUNT(*) count FROM trade_offline_actions').get().count;
+  const batch = database.batch;
+  database.batch = async () => assert.fail('Receipt recovery must not execute a write batch');
+  try { return await server.readAssignedCreditexActivityWorkPackMutationReceipt(database, input); }
+  finally {
+    database.batch = batch;
+    assert.equal(sqlite.prepare('SELECT total_changes() count').get().count, changes, 'Recovery cannot perform any SQLite writes');
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM compliance_activity_work_pack_instances').get().count, instances);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM trade_offline_actions').get().count, receipts);
+  }
+}
+
+async function nativeReceiptFixture(clientActionId) {
+  const runtime = await seededRuntime();
+  try {
+    const { projection: before } = await openAssignedRuntimeWorkPack(runtime.database);
+    const mutation = idempotency(clientActionId);
+    const applied = await server.commitAssignedCreditexActivityWorkPack(runtime.database, {
+      ...scope(), caseInstanceId: before.instance.id, expectedResponseSha256: before.instance.responseSha256,
+      sectionPatches: [{ sectionKey: 'evidence', answers: { 'visit-note': 'Canonical receipt recovery observation' } }],
+      idempotency: mutation, now: '2026-08-15T00:00:03.000Z',
+    });
+    assert.equal(applied.status, 'applied');
+    return { ...runtime, before, applied,
+      input: { ...scope(), caseInstanceId: before.instance.id, baseRevision: before.instance.revision, action: 'work_pack_commit', idempotency: mutation } };
+  } catch (error) { runtime.sqlite.close(); throw error; }
+}
+
+test('work-pack applied mutation receipt recovers a lost acknowledgement through the native journal without another save', async () => {
+  const { sqlite, database, before, applied, input } = await nativeReceiptFixture('wattzun-receipt-applied');
+  try {
+    assert.notEqual(applied.projection.instance.id, before.instance.id, 'The native commit creates a new version');
+    for (const caseInstanceId of [before.instance.id, applied.projection.instance.id]) {
+      const result = await readNativeReceiptWithoutWrites(database, sqlite, { ...input, caseInstanceId });
+      assert.equal(result.status, 'duplicate'); assert.equal(result.action, 'work_pack_commit');
+      assert.equal(result.projection.instance.id, applied.projection.instance.id);
+      assert.equal(result.projection.instance.revision, applied.projection.instance.revision);
+      assert.equal(result.projection.instance.instanceKey, before.instance.instanceKey);
+      assert.equal(result.projection.response.answers['visit-note'], 'Canonical receipt recovery observation');
+      assert.equal(Object.isFrozen(result), true);
+    }
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM trade_offline_actions WHERE client_action_id=?').get(input.idempotency.clientActionId).count, 1);
+  } finally { sqlite.close(); }
+});
+
+test('work-pack applied mutation receipt binds the full action identity and rejects altered proof', async t => {
+  const { sqlite, database, input } = await nativeReceiptFixture('wattzun-receipt-identity');
+  try {
+    for (const [label, changed] of [
+      ['payload hash', { idempotency: { ...input.idempotency, payloadHash: 'f'.repeat(64) } }],
+      ['device', { idempotency: { ...input.idempotency, deviceId: 'other-device' } }],
+      ['action', { action: 'work_pack_prepare_signing' }],
+      ['base revision', { baseRevision: input.baseRevision + 1 }],
+      ['actor', { actorUid: WORKER_TWO_UID }],
+      ['member', { actorMemberId: MEMBER_TWO_ID }],
+    ]) await t.test(label, async () => {
+      await assert.rejects(readNativeReceiptWithoutWrites(database, sqlite, { ...input, ...changed }), error => error.code === 'WORK_PACK_IDEMPOTENCY_MISMATCH');
+    });
+    for (const [column, changed] of [['entity_type', 'different_entity'], ['entity_id', 'different-stable-work-pack']]) await t.test(column, async () => {
+      const original = sqlite.prepare(`SELECT ${column} value FROM trade_offline_actions WHERE client_action_id=?`).get(input.idempotency.clientActionId).value;
+      sqlite.prepare(`UPDATE trade_offline_actions SET ${column}=? WHERE client_action_id=?`).run(changed, input.idempotency.clientActionId);
+      try { await assert.rejects(readNativeReceiptWithoutWrites(database, sqlite, input), error => error.code === 'WORK_PACK_IDEMPOTENCY_MISMATCH'); }
+      finally { sqlite.prepare(`UPDATE trade_offline_actions SET ${column}=? WHERE client_action_id=?`).run(original, input.idempotency.clientActionId); }
+    });
+  } finally { sqlite.close(); }
+});
+
+test('work-pack applied mutation receipt leaves absent or unfinished actions unconfirmed and rejects impossible results', async () => {
+  const { sqlite, database, input, applied } = await nativeReceiptFixture('wattzun-receipt-state');
+  try {
+    assert.equal(await readNativeReceiptWithoutWrites(database, sqlite, { ...input, idempotency: idempotency('wattzun-receipt-absent') }), null);
+    for (const status of ['processing', 'failed']) {
+      sqlite.prepare('UPDATE trade_offline_actions SET status=? WHERE client_action_id=?').run(status, input.idempotency.clientActionId);
+      assert.equal(await readNativeReceiptWithoutWrites(database, sqlite, input), null, `${status} is not proof of a saved mutation`);
+    }
+    sqlite.prepare("UPDATE trade_offline_actions SET status='applied' WHERE client_action_id=?").run(input.idempotency.clientActionId);
+    for (const resultRevision of [0, applied.projection.instance.revision + 1]) {
+      sqlite.prepare('UPDATE trade_offline_actions SET result_revision=? WHERE client_action_id=?').run(resultRevision, input.idempotency.clientActionId);
+      await assert.rejects(readNativeReceiptWithoutWrites(database, sqlite, input), error => error.code === 'WORK_PACK_REVISION_CONFLICT');
+    }
+  } finally { sqlite.close(); }
+});
+
+test('work-pack applied mutation receipt rechecks owner assignment and active job visibility', async () => {
+  const { sqlite, database, input } = await nativeReceiptFixture('wattzun-receipt-scope');
+  try {
+    for (const changed of [{ ownerUid: 'foreign-business' }, { caseInstanceId: 'nonexistent-work-pack' }, { scope: 'assigned', actorMemberId: MEMBER_TWO_ID }]) {
+      await assert.rejects(readNativeReceiptWithoutWrites(database, sqlite, { ...input, ...changed }), error => error.code === 'WORK_PACK_INSTANCE_NOT_ASSIGNED');
+    }
+    sqlite.prepare('UPDATE trade_work_orders SET assignee_member_id=? WHERE id=?').run(MEMBER_TWO_ID, WORK_ORDER_ID);
+    await assert.rejects(readNativeReceiptWithoutWrites(database, sqlite, { ...input, scope: 'assigned' }), error => error.code === 'WORK_PACK_INSTANCE_NOT_ASSIGNED');
+    sqlite.prepare('UPDATE trade_work_orders SET assignee_member_id=?, record_status=? WHERE id=?').run(MEMBER_ID, 'deleted', WORK_ORDER_ID);
+    await assert.rejects(readNativeReceiptWithoutWrites(database, sqlite, input), error => error.code === 'WORK_PACK_INSTANCE_NOT_ASSIGNED');
+  } finally { sqlite.close(); }
+});
+
+test('work-pack applied mutation receipt never attributes a later native revision to the earlier action', async () => {
+  const { sqlite, database, input, applied } = await nativeReceiptFixture('wattzun-receipt-earlier');
+  try {
+    const later = await server.commitAssignedCreditexActivityWorkPack(database, {
+      ...scope(), caseInstanceId: applied.projection.instance.id, expectedResponseSha256: applied.projection.instance.responseSha256,
+      sectionPatches: [{ sectionKey: 'evidence', answers: { 'visit-note': 'A newer authorised observation' } }],
+      idempotency: idempotency('wattzun-receipt-later'), now: '2026-08-15T00:00:04.000Z',
+    });
+    assert.ok(later.projection.instance.revision > applied.projection.instance.revision);
+    for (const caseInstanceId of [input.caseInstanceId, applied.projection.instance.id, later.projection.instance.id]) {
+      await assert.rejects(readNativeReceiptWithoutWrites(database, sqlite, { ...input, caseInstanceId }), error => error.code === 'WORK_PACK_REVISION_CONFLICT');
+    }
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM trade_offline_actions').get().count, 2);
+  } finally { sqlite.close(); }
+});
