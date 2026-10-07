@@ -127,6 +127,26 @@ test("a reviewed SMS stays bound to its exact normalised customer phone", async 
   } finally { f.close(); }
 });
 
+test("reviewed SMS preflight revalidation runs before reservation and transport, while retries read the original journal", async () => {
+  const f = await connected();
+  try {
+    const noTransport = async () => assert.fail("A failed final review must never submit to the provider");
+    await assert.rejects(f.server.sendTradeSms(owner, "customer", "Reviewed text", "reviewed-preflight-0001", "", f.db, noTransport,
+      { expectedPhone: phone, beforeSend: async () => { throw new Error("INVOICE_SOURCE_CHANGED"); } }), /INVOICE_SOURCE_CHANGED/);
+    assert.equal(f.sqlite.prepare("SELECT COUNT(*) count FROM trade_sms_messages").get().count, 0);
+    await assert.rejects(f.server.sendTradeSms(owner, "customer", "Reviewed text", "reviewed-preflight-0002", "", f.db, noTransport,
+      { expectedPhone: phone, beforeSend: async () => { f.sqlite.exec("UPDATE trade_crm_customers SET phone='0499999999' WHERE id='customer'"); } }), /SMS_LIMIT_OR_PERMISSION_CHANGED/);
+    assert.equal(f.sqlite.prepare("SELECT COUNT(*) count FROM trade_sms_messages").get().count, 0);
+    f.sqlite.exec("UPDATE trade_crm_customers SET phone='0412 345 678' WHERE id='customer'");
+    let checks = 0; let submissions = 0;
+    const send = () => f.server.sendTradeSms(owner, "customer", "Reviewed text", "reviewed-preflight-0003", "", f.db,
+      async () => { submissions++; return json({ sid: messageSid, status: "queued", account_sid: credentials.accountSid, from, to: phone }); },
+      { expectedPhone: phone, beforeSend: async () => { checks++; } });
+    assert.equal((await send()).status, "queued"); assert.equal((await send()).status, "queued");
+    assert.equal(checks, 1); assert.equal(submissions, 1);
+  } finally { f.close(); }
+});
+
 test("segment counting includes GSM extension, Unicode and surrogate pairs; body is identified and bounded", () => {
   assert.equal(pure.smsSegments("a".repeat(160)), 1);
   assert.equal(pure.smsSegments("a".repeat(161)), 2);

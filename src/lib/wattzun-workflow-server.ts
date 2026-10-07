@@ -539,18 +539,18 @@ async function sendPrepared(request: Request, access: WattzunAccess, team: TeamA
   }
   const message = prepared.message;
   if (!message) throw new WattzunWorkflowError(503, "This reviewed action could not be read.");
+  const beforeSend = async () => {
+    const current = await currentTeam(request, access, deps); permissions(current, prepared.proposal);
+    const fresh = await buildPrepared(request, access, current, prepared.proposal, reviewId, prepared.review.expiresAt, deps);
+    if ("state" in fresh || fresh.sourceSha256 !== prepared.sourceSha256) throw new WattzunWorkflowError(409, "The reviewed customer, invoice or sending account changed. Nothing further was sent.");
+  };
   if (message.channel === "sms") {
-    const sent = await deps.sms(team, message.job.customer_id, message.body, requestKey, message.job.id, access.db, undefined, { purpose: "service", expectedPhone: message.recipient });
+    const sent = await deps.sms(team, message.job.customer_id, message.body, requestKey, message.job.id, access.db, undefined, { purpose: "service", expectedPhone: message.recipient, beforeSend });
     const status = sent.status === "delivered" ? "delivered" : sent.status === "failed" ? "failed" : sent.status === "unknown" ? "unknown" : sent.status === "queued" ? "queued" : "submitted";
     return messageReceipt(team, prepared, sent.id, status);
   }
   const sent = await deps.email(team.ownerUid, team.actorUid, { channel: "email", recipient: message.recipient, subject: message.subject, body: message.body,
-    idempotencyKey: requestKey, callbackUrl: "", messageType: "trade_customer_email" }, { db: access.db, requireConnection: true,
-    beforeSend: async () => {
-      const current = await currentTeam(request, access, deps); permissions(current, prepared.proposal);
-      const fresh = await buildPrepared(request, access, current, prepared.proposal, reviewId, prepared.review.expiresAt, deps);
-      if ("state" in fresh || fresh.sourceSha256 !== prepared.sourceSha256) throw new WattzunWorkflowError(409, "The reviewed customer, invoice or sending account changed. Nothing further was sent.");
-    } });
+    idempotencyKey: requestKey, callbackUrl: "", messageType: "trade_customer_email" }, { db: access.db, requireConnection: true, beforeSend });
   return messageReceipt(team, prepared, sent.providerMessageId, "submitted");
 }
 async function execute(request: Request, access: WattzunAccess, reviewId: string, deps: WattzunWorkflowDependencies): Promise<WattzunWorkflowResult> {

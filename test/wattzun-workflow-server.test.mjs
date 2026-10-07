@@ -96,9 +96,11 @@ function fixture(options = {}) {
     wallet: async () => ({ balanceMicro: options.balance ?? 10_000_000, reservedMicro: 0 }),
     emailSettings: async () => ({ providers: [{ id: 'google', available: true }], connection: options.disconnected ? null : { email: 'office@example.test', provider: 'google', status: 'connected' } }),
     emailRecipient: async (_, target) => database.prepare('SELECT c.email FROM trade_crm_customers c JOIN trade_crm_job_details d ON d.crm_customer_id=c.id WHERE d.work_order_id=?').get(target.workOrderId).email,
-    sms: async (actor, customerId, body, requestId, jobId) => {
-      calls.push({ kind: 'sms', body, requestId, jobId, customerId });
+    sms: async (actor, customerId, body, requestId, jobId, _db, _fetch, sendOptions) => {
       if (options.smsError) throw new Error('SMS_CONNECTION_REQUIRED');
+      options.smsBeforeSend?.(database, team);
+      await sendOptions.beforeSend();
+      calls.push({ kind: 'sms', body, requestId, jobId, customerId });
       const full = sms.tradeSmsBody(body, actor.businessName) + '\nJob JOB-' + jobId;
       database.prepare("INSERT OR IGNORE INTO trade_sms_messages VALUES('message-one',?,?,'outbound',?,?,?,?,?,'service',1,'2026-10-07')")
         .run(actor.ownerUid, requestId, options.smsStatus || 'queued', customerId, jobId, actor.actorUid, full);
@@ -297,6 +299,23 @@ test('a payment made after reminder review prevents chasing a now paid invoice',
   f.database.exec('UPDATE trade_crm_job_details SET paid_value_cents=10000');
   assert.equal((await f.execute(review.reviewId)).status, 409); assert.equal(f.calls.length, 0);
 });
+for (const [name, sql, operation] of [
+  ['payment during SMS preflight', 'UPDATE trade_crm_job_details SET paid_value_cents=10000', reminder],
+  ['recipient during SMS preflight', "UPDATE trade_crm_customers SET phone='0499999999'", customerMessage],
+  ['invoice total during SMS preflight', 'UPDATE trade_crm_quick_invoices SET total_cents=15000', reminder],
+  ['sender during SMS preflight', "UPDATE trade_sms_connections SET phone_number='+61400000001'", customerMessage],
+]) test(`a changed ${name} stops the provider and cannot return false completion`, async () => {
+  const f = fixture({ smsBeforeSend: database => database.exec(sql) });
+  if (operation.kind === 'invoice_reminder') f.invoice();
+  const review = (await f.prepare(operation)).body.result;
+  assert.equal(review.state, 'review');
+  const response = await f.execute(review.reviewId);
+  assert.equal(response.status, 409); assert.equal(response.body.ok, false);
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.database.prepare('SELECT COUNT(*) count FROM trade_sms_messages').get().count, 0);
+  const saved = JSON.parse(f.database.prepare('SELECT metadata FROM admin_audit_log WHERE id=?').get(review.reviewId).metadata);
+  assert.equal(saved.state, 'executing'); assert.equal(saved.receipt, undefined);
+});
 test('revoked assignment or send capability denies execution and old receipts', async () => {
   const f = fixture({ team: { isOwner: false, jobScope: 'own' } }); const review = (await f.prepare()).body.result;
   f.database.exec("UPDATE trade_work_orders SET assignee_member_id='another-member'"); assert.equal((await f.execute(review.reviewId)).status, 403);
@@ -330,8 +349,10 @@ test('expired submitted or unknown SMS and email reviews recover only canonical 
 });
 test('expired executing review without a transport journal never starts a fresh send', async () => {
   const f = fixture({ smsError: true }); const review = (await f.prepare()).body.result;
+  let attempts = 0; const originalSms = f.deps.sms;
+  f.deps.sms = (...args) => { attempts++; return originalSms(...args); };
   assert.equal((await f.execute(review.reviewId)).status, 409); f.advance(30 * 60_000);
-  assert.equal((await f.execute(review.reviewId)).status, 409); assert.equal(f.calls.length, 1);
+  assert.equal((await f.execute(review.reviewId)).status, 409); assert.equal(attempts, 1); assert.equal(f.calls.length, 0);
   assert.equal(f.database.prepare('SELECT COUNT(*) count FROM trade_sms_messages').get().count, 0);
 });
 test('expired price-book lost acknowledgement reconciles the exact saved item without another create call', async () => {

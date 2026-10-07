@@ -16,7 +16,7 @@ type Connection = { id: string; firebase_uid: string; provider: "twilio" | "clic
 type Customer = { id: string; phone: string };
 type Recipient = { id: string; customer_id: string; phone_number: string; consent_at: string; opted_out_at: string; marketing_consent_at:string };
 type Message = { id: string; connection_id: string; recipient_id: string; customer_id: string; direction: "inbound" | "outbound"; body: string; status: string; segments: number; request_id: string; provider_message_sid: string; created_at: string; work_order_id: string; actor_uid: string; actor_name: string; purpose:string; price_micro:number };
-export type SmsSendOptions = {purpose?:"service"|"marketing";expectedPhone?:string;automation?:{eventId:string;ruleKind:string;ruleRevision:number;appointmentId:string;appointmentStart:string}};
+export type SmsSendOptions = {purpose?:"service"|"marketing";expectedPhone?:string;beforeSend?:()=>Promise<void>;automation?:{eventId:string;ruleKind:string;ruleRevision:number;appointmentId:string;appointmentStart:string}};
 export type SmsActor = Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "displayName" | "isOwner" | "businessName" | "canSendSms" | "fieldSessionId">;
 type SmsJob = { id: string; work_number: string };
 
@@ -243,6 +243,7 @@ export async function sendTradeSms(actor: SmsActor, customerId: string, value: u
     extraValues.push(a.eventId,actor.ownerUid,customerId,workOrderId,a.ruleKind,a.ruleRevision,a.appointmentId,a.appointmentStart,now);
   }
   const extraSql=extraClauses.length?` AND ${extraClauses.join(" AND ")}`:"";
+  await options.beforeSend?.();
   // This single SQLite write reserves all segments, rechecks current consent/phone/connection, and claims the request ID.
   const insertion = db.prepare(`INSERT OR IGNORE INTO trade_sms_messages
     (id, connection_id, recipient_id, firebase_uid, customer_id, direction, body, status, segments, request_id, created_at, updated_at, work_order_id, actor_uid, actor_name,purpose,price_micro)
