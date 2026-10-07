@@ -16,7 +16,7 @@ type Connection = { id: string; firebase_uid: string; provider: "twilio" | "clic
 type Customer = { id: string; phone: string };
 type Recipient = { id: string; customer_id: string; phone_number: string; consent_at: string; opted_out_at: string; marketing_consent_at:string };
 type Message = { id: string; connection_id: string; recipient_id: string; customer_id: string; direction: "inbound" | "outbound"; body: string; status: string; segments: number; request_id: string; provider_message_sid: string; created_at: string; work_order_id: string; actor_uid: string; actor_name: string; purpose:string; price_micro:number };
-export type SmsSendOptions = {purpose?:"service"|"marketing";automation?:{eventId:string;ruleKind:string;ruleRevision:number;appointmentId:string;appointmentStart:string}};
+export type SmsSendOptions = {purpose?:"service"|"marketing";expectedPhone?:string;automation?:{eventId:string;ruleKind:string;ruleRevision:number;appointmentId:string;appointmentStart:string}};
 export type SmsActor = Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "displayName" | "isOwner" | "businessName" | "canSendSms" | "fieldSessionId">;
 type SmsJob = { id: string; work_number: string };
 
@@ -195,6 +195,8 @@ export async function recordSmsConsent(actor: SmsActor, customerId: string, note
 export async function sendTradeSms(actor: SmsActor, customerId: string, value: unknown, requestId: unknown, workOrderId = "", db: D1Database = getD1(), fetchImpl: typeof fetch = fetch, options:SmsSendOptions={}) {
   if (typeof requestId !== "string" || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new Error("SMS_REQUEST_ID_REQUIRED");
   const { customer, job, guard } = await smsContext(actor, customerId, workOrderId, db);
+  if (options.expectedPhone !== undefined && (!normalizeAustralianMobile(options.expectedPhone)
+    || normalizeAustralianMobile(customer.phone) !== normalizeAustralianMobile(options.expectedPhone))) throw new Error("SMS_PHONE_CHANGED");
   const body = tradeSmsBody(value, actor.businessName) + (job ? `\nJob ${job.work_number}` : "");
   const purpose=options.purpose||"service";
   if(purpose!=="service" && purpose!=="marketing") throw new Error("SMS_PURPOSE_INVALID");

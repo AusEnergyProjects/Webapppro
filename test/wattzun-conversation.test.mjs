@@ -46,3 +46,42 @@ test('context still follows the 40 turn and 24000 character API ceilings',()=>{
     assert.doesNotThrow(()=>parseWattzunTurn({portal:'trade',scopeId:'test-business',requestId:'native-history-test-2',history},true));
   }
 });
+
+test('operational price-book and customer message facts survive follow-up without becoming proof of a save or send',()=>{
+  const operations=[
+    {kind:'add_price_book_item',name:'Supply pump',description:'Agreed pump',itemType:'product',unitLabel:'each',unitPrice:'1450',supplierCost:null,taxCode:'gst'},
+    {kind:'customer_message',jobQuery:'John last week in Frankston',jobId:'',channel:'sms',subject:'',body:'Could you confirm access tomorrow?'},
+    {kind:'invoice_reminder',jobQuery:'John last week in Frankston',jobId:'',invoiceId:'',channel:'email',body:'A friendly invoice reminder.'},
+    {kind:'draft_job_quote',jobQuery:'John last week in Frankston',jobId:'',mode:'append',description:'Replace agreed pump',lines:[{lineType:'product',description:'Supply agreed pump',quantity:'1',unitPrice:'1450',taxCode:'gst'}]},
+  ];
+  for(const operation of operations){
+    const history=wattzunConversationHistory([{role:'assistant',content:'Review these details.',reply:{kind:'clarification',message:'Review these details.',questions:[],links:[],action:operation}}]);
+    assert.match(JSON.stringify(history),/unconfirmed facts, not a saved record/);
+    assert.match(JSON.stringify(history),new RegExp(operation.kind));
+    assert.doesNotThrow(()=>parseWattzunTurn({portal:'trade',scopeId:'test-business',requestId:'operational-history-fixture',message:'Continue',history}));
+  }
+});
+
+test('a confirmation proposal and frozen review IDs never enter untrusted conversational history',()=>{
+  const history=wattzunConversationHistory([{role:'assistant',content:'Ready to send.',reply:{kind:'answer',message:'Ready to send.',questions:[],links:[],action:{kind:'confirm_workflow',reviewId:'private-review-123456'}}}]);
+  assert.deepEqual(history,[{role:'assistant',content:'Ready to send.'}]);
+  assert.doesNotMatch(JSON.stringify(history),/confirm_workflow|private-review/);
+});
+
+test('workflow receipts contribute their honest public message without copying receipt or review authority into history',()=>{
+  const message='The provider accepted your reminder. Delivery is not yet confirmed.';
+  const history=wattzunConversationHistory([{role:'assistant',content:message,reply:{kind:'answer',message,questions:[],links:[{label:'Open reminder',href:'/direct-trade/team?workspace=work&jobId=private-job-id'}],action:null,
+    workflow:{state:'complete',receipt:{kind:'invoice_reminder',id:'private-receipt-id',label:'Open reminder',href:'/direct-trade/team?workspace=work&jobId=private-job-id',status:'submitted',message}}}}]);
+  assert.deepEqual(history,[{role:'assistant',content:message}]);
+  assert.doesNotMatch(JSON.stringify(history),/private-receipt-id|private-job-id|workflowReviewId/);
+});
+
+test('a completed server workflow replaces an earlier proposal in history even when receipt speech never arrived',()=>{
+  const message='The provider accepted your reminder. Delivery is not yet confirmed.';
+  const proposal={kind:'invoice_reminder',jobQuery:'John last week',jobId:'private-job-id',invoiceId:'private-invoice-id',channel:'sms',body:'A friendly reminder.'};
+  const history=wattzunConversationHistory([{role:'assistant',content:'Review this invoice reminder.',reviewDraft:proposal,
+    reply:{kind:'clarification',message:'Review this invoice reminder.',questions:['Shall I send it?'],links:[],action:proposal,
+      workflow:{state:'complete',receipt:{kind:'invoice_reminder',id:'private-receipt-id',label:'Open job',href:'/direct-trade/team?workspace=work&jobId=private-job-id',status:'submitted',message}}}}]);
+  assert.deepEqual(history,[{role:'assistant',content:message}]);
+  assert.doesNotMatch(JSON.stringify(history),/Earlier proposed|Shall I send|private-job-id|private-invoice-id|private-receipt-id/);
+});

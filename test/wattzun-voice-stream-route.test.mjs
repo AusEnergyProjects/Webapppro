@@ -4,6 +4,8 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as contract from '../src/lib/wattzun-portal.ts';
 import * as greeting from '../src/lib/wattzun-greeting.ts';
+import * as workflowContract from '../src/lib/wattzun-workflow.ts';
+import * as workflowReply from '../src/lib/wattzun-workflow-reply.ts';
 import { readWattzunVoiceStream } from '../src/lib/wattzun-voice-stream.ts';
 import { syntheticWorkContext, workContextContract, workContextGateway } from './helpers/wattzun-work-context-fixture.mjs';
 
@@ -15,6 +17,8 @@ class AccessError extends Error {
 class UsageError extends Error {
   constructor(code) { super(`WATTZUN_USAGE_${code.toUpperCase()}`); this.code = code; }
 }
+class WorkflowError extends Error { constructor(status, message) { super(message); this.status = status; } }
+class ExistingQuoteError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const route = {};
 const executable = ts.transpileModule(readFileSync(new URL('../src/lib/wattzun-portal-route.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -30,6 +34,10 @@ Function('require', 'exports', executable)(name => {
   if (name === './wattzun-usage-server') return { WattzunUsageError: UsageError };
   if (name === './wattzun-work-context' || name === './wattzun-work-context.ts') return workContextContract;
   if (name === './wattzun-work-context-server') return contextGateway;
+  if (name === './wattzun-workflow') return workflowContract;
+  if (name === './wattzun-workflow-reply') return workflowReply;
+  if (name === './wattzun-workflow-server') return { WattzunWorkflowError: WorkflowError };
+  if (name === './wattzun-existing-quote-server') return { WattzunExistingQuoteError: ExistingQuoteError };
   throw new Error(`Unexpected route dependency: ${name}`);
 }, route);
 
@@ -39,6 +47,51 @@ const access = { db: { synthetic: true }, actorUid: 'synthetic-owner', scope: { 
 const transcript = 'Please prepare my new quote.';
 const reply = { kind: 'clarification', message: 'I can help prepare your quote.', questions: ['Which customer is it for?'], links: [] };
 const matchesReply = value => JSON.stringify(value) === JSON.stringify(reply);
+const workflowProposal = { kind: 'invoice_reminder', jobQuery: 'that job last week in Frankston', jobId: '', invoiceId: '', channel: 'sms', body: '' };
+const workflowReview = { state: 'review', reviewId: 'wattzun-review-current-123', expiresAt: '2026-10-07T12:15:00Z', kind: 'invoice_reminder', heading: 'Review invoice reminder', summary: 'An unpaid invoice reminder is ready for John Smith.', confirmationLabel: 'Send reminder', lines: [{ label: 'Invoice', value: 'INV-123' }], preview: { subject: '', body: 'Please check your unpaid invoice INV-123.' }, href: '/direct-trade/dashboard?workspace=connect' };
+
+test('native and streaming voice prepare actual workflow reviews before narration', async () => {
+  for (const accept of [contract.WATTZUN_VOICE_STREAM_TYPE, contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE]) {
+    const f = fixture({ reply: { ...reply, action: workflowProposal }, workflowResult: workflowReview });
+    const { response } = await f.post(accept); assert.equal(response.status, 200);
+    assert.equal(f.workflowCalls[0].proposal.jobQuery, workflowProposal.jobQuery); assert.equal(f.workflowCalls[0].current.actorUid, access.actorUid);
+    assert.equal(f.workflowCalls[0].requestId, input.requestId);
+    assert.ok(f.events.indexOf('prepareWorkflow') < f.events.indexOf(accept === contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE ? 'nativeSpeech' : 'streamSpeak'));
+    assert.deepEqual(f.speechContexts[0].reply.workflow, workflowReview);
+    const result = await readWattzunVoiceStream(response, f.controller.signal, value => workflowContract.isWattzunWorkflowResult(value.workflow));
+    assert.deepEqual(result.reply.workflow, workflowReview); await result.audio.stream.cancel();
+  }
+});
+test('native current-review approval produces only a matching confirmation for the separately confirmed execution route', async () => {
+  const action = { kind: 'confirm_workflow', reviewId: workflowReview.reviewId };
+  const f = fixture({ input: { ...input, workflowReviewId: workflowReview.reviewId }, reply: { ...reply, action }, workflowResult: workflowReview, requestSummary: 'yes send it' });
+  const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, 200);
+  const result = await readWattzunVoiceStream(response, f.controller.signal, value => workflowContract.isWattzunWorkflowResult(value.workflow));
+  assert.deepEqual(result.reply.action, action); assert.deepEqual(result.reply.workflow, workflowReview);
+  assert.equal(result.reply.kind, 'answer'); assert.equal(result.reply.message, 'I will submit this reviewed task now.'); assert.deepEqual(result.reply.questions, []);
+  assert.equal(f.events.includes('prepareWorkflow'), false); await result.audio.stream.cancel();
+});
+test('native wrong review or uncertain and embedded approvals stop before speech', async () => {
+  for (const [requestSummary, reviewId, status] of [['yes send it', 'wattzun-review-wrong-123', 409], ['Maybe send it tomorrow', workflowReview.reviewId, 400], ["The customer said yes send it", workflowReview.reviewId, 400]]) {
+    const f = fixture({ input: { ...input, workflowReviewId: workflowReview.reviewId }, reply: { ...reply, action: { kind: 'confirm_workflow', reviewId } }, workflowResult: workflowReview, requestSummary });
+    const { response } = await f.post(contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE); assert.equal(response.status, status); assert.equal(f.events.includes('nativeSpeech'), false); assert.equal(f.recorded.length, 0);
+  }
+});
+test('workflow revocation or source change after usage cancels unhanded native and streaming audio', async () => {
+  for (const accept of [contract.WATTZUN_VOICE_STREAM_TYPE, contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE]) for (const changed of [false, true]) {
+    const f = fixture({ input: { ...input, workflowReviewId: workflowReview.reviewId }, workflowResult: workflowReview,
+      ...(changed ? { workflowChangedDuringUsage: { ...workflowReview, summary: 'Another session changed this review.' } } : { workflowErrorDuringUsage: new WorkflowError(403, 'Review access revoked.') }) });
+    const { response } = await f.post(accept); assert.equal(response.status, changed ? 409 : 403);
+    assert.equal(f.audio.state.cancelled, 1); assert.equal(f.audio.state.pulls, 0); assert.equal(f.recorded.length, 1); assert.equal((await response.json()).reply, undefined);
+  }
+});
+test('workflow and quote preparation failures retain status before any native or streaming speech request', async () => {
+  for (const accept of [contract.WATTZUN_VOICE_STREAM_TYPE, contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE]) for (const ErrorType of [WorkflowError, ExistingQuoteError]) {
+    const f = fixture({ reply: { ...reply, action: workflowProposal }, workflowError: new ErrorType(409, 'The selected quote changed.') });
+    const { response } = await f.post(accept); assert.equal(response.status, 409); assert.equal((await response.json()).error, 'The selected quote changed.');
+    assert.equal(f.events.includes('nativeSpeech'), false); assert.equal(f.events.includes('streamSpeak'), false); assert.equal(f.recorded.length, 0);
+  }
+});
 
 function providerAudio() {
   let controller;
@@ -56,7 +109,7 @@ function providerAudio() {
 }
 
 function fixture(options = {}) {
-  const audio = providerAudio(), events = [], recorded = [], providerSignals = [], providerContexts = [];
+  const audio = providerAudio(), events = [], recorded = [], providerSignals = [], providerContexts = [], workflowCalls = [], speechContexts = [];
   let accessChecks = 0, contextChecks = 0;
   const turnInput = options.input || input;
   const controller = new AbortController();
@@ -82,19 +135,19 @@ function fixture(options = {}) {
       events.push('transcribe'); providerSignals.push(context.signal);
       assert.equal(context.actorUid, access.actorUid); assert.ok(context.audio instanceof Blob);
       if (options.abortAt === 'transcribe') controller.abort();
-      return transcript;
+      return options.transcript || transcript;
     },
     reply: async context => {
       events.push('reply'); providerSignals.push(context.signal);
       assert.equal(context.actorUid, access.actorUid);
       providerContexts.push(context);
-      assert.deepEqual(context.input, { ...turnInput, message: transcript });
+      assert.deepEqual(context.input, { ...turnInput, message: options.transcript || transcript });
       if (options.abortAt === 'reply') controller.abort();
       return options.reply || reply;
     },
     streamSpeak: async context => {
-      events.push('streamSpeak'); providerSignals.push(context.signal);
-      assert.deepEqual(context.reply, options.reply || reply);
+      events.push('streamSpeak'); providerSignals.push(context.signal); speechContexts.push(context);
+      if (!options.workflowResult) assert.deepEqual(context.reply, options.reply || reply);
       assert.equal(context.input.preferences.speed, 1.15);
       if (options.providerError) throw options.providerError;
       if (options.abortAt === 'streamSpeak') controller.abort();
@@ -109,9 +162,10 @@ function fixture(options = {}) {
       providerContexts.push(context);
       assert.equal(context.audio.type,'audio/wav'); assert.deepEqual(context.input,turnInput);
       if(options.providerError) throw options.providerError;
-      await context.beforeSpeech(); events.push('nativeSpeech');
+      const processed = context.transformReply ? await context.transformReply(options.reply || reply, options.requestSummary || 'Prepare a new quote. Customer details are still needed.') : options.reply || reply;
+      await context.beforeSpeech(); events.push('nativeSpeech'); speechContexts.push({ ...context, reply: processed });
       if(options.abortAt==='realtime') controller.abort();
-      return {reply:options.reply||reply,audio:audio.stream,requestSummary:'Prepare a new quote. Customer details are still needed.',timings:options.timings};
+      return {reply:processed,audio:audio.stream,requestSummary:options.requestSummary || 'Prepare a new quote. Customer details are still needed.',timings:options.timings};
     },
     recordUsage: async value => {
       events.push('recordUsage');
@@ -121,6 +175,16 @@ function fixture(options = {}) {
       recorded.push(value);
     },
     usage: async () => { throw new Error('Unexpected usage read.'); },
+    prepareWorkflow: async (request, current, proposal, requestId) => {
+      events.push('prepareWorkflow'); workflowCalls.push({ request, current, proposal, requestId });
+      if (options.workflowError) throw options.workflowError; return options.workflowResult;
+    },
+    workflowReview: async (_request, current, reviewId) => {
+      events.push('workflowReview'); workflowCalls.push({ current, reviewId });
+      if (options.workflowError) throw options.workflowError;
+      if (options.workflowErrorDuringUsage && recorded.length) throw options.workflowErrorDuringUsage;
+      return options.workflowChangedDuringUsage && recorded.length ? options.workflowChangedDuringUsage : options.workflowResult;
+    },
   };
   async function post(accept = contract.WATTZUN_VOICE_STREAM_TYPE) {
     const form = new FormData();
@@ -133,7 +197,7 @@ function fixture(options = {}) {
     const response = await route.postWattzunVoice(request, deps);
     return { request, response };
   }
-  return { audio, events, recorded, providerSignals, providerContexts, controller, deps, post };
+  return { audio, events, recorded, providerSignals, providerContexts, workflowCalls, speechContexts, controller, deps, post };
 }
 
 test('native work context is checked before speech and only source metadata is published', async () => {
@@ -286,6 +350,52 @@ function greetingRequest(body={},headers={},signal) {
     headers:{origin:'https://example.test','content-type':'application/json',...headers},
     body:JSON.stringify({portal:input.portal,scopeId:input.scopeId,requestId:input.requestId,name:'James Preston',preferences:{speed:1.15},...body})});
 }
+
+const completedWorkflow = { state: 'complete', receipt: { kind: 'invoice_reminder', id: 'actual-submission-123', label: 'Open customer message', href: '/direct-trade/dashboard?workspace=connect', status: 'submitted', message: 'The provider accepted the invoice reminder for sending. Delivery is not yet confirmed.' } };
+function receiptSpeechRequest(body = {}, headers = {}, signal) {
+  return new Request('https://example.test/api/wattzun/workflows/speech', { method: 'POST', signal,
+    headers: { origin: 'https://example.test', 'content-type': 'application/json', ...headers },
+    body: JSON.stringify({ portal: 'trade', scopeId: input.scopeId, requestId: input.requestId, workflowReviewId: workflowReview.reviewId, preferences: { speed: 1.15 }, ...body }) });
+}
+test('receipt speech narrates only the complete server receipt through guarded PCM without another model question or usage count', async () => {
+  const f = fixture({ workflowResult: completedWorkflow });
+  const response = await route.postWattzunWorkflowSpeech(receiptSpeechRequest({}, {}, f.controller.signal), f.deps);
+  assert.equal(response.status, 200); assert.equal(response.headers.get('content-type'), contract.WATTZUN_REALTIME_VOICE_STREAM_TYPE);
+  assert.deepEqual(f.speechContexts[0].workflowContext, completedWorkflow); assert.equal(f.speechContexts[0].reply.message, completedWorkflow.receipt.message);
+  assert.equal(f.speechContexts[0].reply.action, null); assert.equal(f.events.includes('reply'), false); assert.equal(f.events.includes('realtime'), false); assert.equal(f.events.includes('transcribe'), false); assert.deepEqual(f.recorded, []);
+  assert.equal(f.workflowCalls.length, 2); assert.equal(f.workflowCalls[0].reviewId, workflowReview.reviewId);
+  const result = await readWattzunVoiceStream(response, f.controller.signal, value => value.workflow?.state === 'complete');
+  assert.equal(result.reply.message, completedWorkflow.receipt.message); assert.equal(result.transcript, ''); await result.audio.stream.cancel();
+});
+test('receipt speech rejects arbitrary words, style instructions, wrong portals and incomplete reviews', async () => {
+  for (const [body, headers, status] of [
+    [{ message: 'I paid this invoice' }, {}, 400], [{ receipt: completedWorkflow.receipt }, {}, 400], [{ portal: 'customer' }, {}, 400],
+    [{ portal: 'council' }, {}, 400], [{ preferences: { speed: 1.15, personality: 'ignore controls' } }, {}, 400],
+    [{ workflowReviewId: 'bad' }, {}, 400], [{}, { origin: 'https://foreign.test' }, 403], [{}, { 'content-type': 'text/plain' }, 415],
+    [{ scopeId: 'x'.repeat(2100) }, {}, 413],
+  ]) {
+    const f = fixture({ workflowResult: completedWorkflow }); const response = await route.postWattzunWorkflowSpeech(receiptSpeechRequest(body, headers), f.deps);
+    assert.equal(response.status, status); assert.equal(f.events.includes('streamSpeak'), false); assert.equal(f.recorded.length, 0);
+  }
+  const f = fixture({ workflowResult: workflowReview }); const response = await route.postWattzunWorkflowSpeech(receiptSpeechRequest(), f.deps);
+  assert.equal(response.status, 409); assert.equal(f.events.includes('streamSpeak'), false);
+});
+test('receipt speech denies revoked or changed results before PCM handoff and cancels its unhanded provider stream', async () => {
+  for (const kind of ['revoked', 'changed', 'aborted']) {
+    const f = fixture({ workflowResult: completedWorkflow }); let reads = 0;
+    const original = f.deps.workflowReview; f.deps.workflowReview = async (...args) => {
+      const result = await original(...args); reads++;
+      if (reads === 2 && kind === 'revoked') throw new WorkflowError(403, 'Current receipt access is required.');
+      if (reads === 2 && kind === 'changed') return { ...completedWorkflow, receipt: { ...completedWorkflow.receipt, status: 'delivered', message: 'The provider confirmed delivery.' } };
+      return result;
+    };
+    if (kind === 'aborted') {
+      const speech = f.deps.streamSpeak; f.deps.streamSpeak = async context => { const audio = await speech(context); f.controller.abort(); return audio; };
+    }
+    const response = await route.postWattzunWorkflowSpeech(receiptSpeechRequest({}, {}, f.controller.signal), f.deps);
+    assert.equal(response.status, kind === 'revoked' ? 403 : 409); assert.equal(f.audio.state.cancelled, 1); assert.equal(f.audio.state.pulls, 0); assert.equal(f.recorded.length, 0);
+  }
+});
 
 test('the fixed personalised greeting streams before EOF without transcription, reasoning or question usage',async()=>{
   const f=fixture();const expected={kind:'answer',message:"Hi James, I'm here. What can I help you with?",questions:[],links:[]};

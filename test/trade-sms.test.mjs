@@ -111,6 +111,22 @@ async function inbound(f, body, sid = messageSid, extra = {}) {
   await f.server.receiveSmsWebhook(request, connection.id, f.db);
 }
 
+test("a reviewed SMS stays bound to its exact normalised customer phone", async () => {
+  const f = await connected();
+  try {
+    for (const expectedPhone of ["+61499999999", "invalid"])
+      await assert.rejects(f.server.sendTradeSms(owner, "customer", "Reviewed text", "reviewed-request-0001", "", f.db,
+        async () => assert.fail("A mismatched reviewed number must not reach the provider"), { expectedPhone }), /SMS_PHONE_CHANGED/);
+    assert.equal(f.sqlite.prepare("SELECT COUNT(*) count FROM trade_sms_messages").get().count, 0);
+    const result = await f.server.sendTradeSms(owner, "customer", "Reviewed text", "reviewed-request-0001", "", f.db,
+      async (_url, options) => {
+        assert.equal(options.body.get("To"), phone);
+        return json({ sid: messageSid, status: "queued", account_sid: credentials.accountSid, from, to: phone });
+      }, { expectedPhone: phone });
+    assert.equal(result.status, "queued");
+  } finally { f.close(); }
+});
+
 test("segment counting includes GSM extension, Unicode and surrogate pairs; body is identified and bounded", () => {
   assert.equal(pure.smsSegments("a".repeat(160)), 1);
   assert.equal(pure.smsSegments("a".repeat(161)), 2);

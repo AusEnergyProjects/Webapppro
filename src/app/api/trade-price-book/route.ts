@@ -20,6 +20,7 @@ function errorResponse(error: unknown) {
   }
   if (code === "PRICE_BOOK_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can manage the price book." }, 403);
   if (code === "PRICE_BOOK_ITEM_NOT_FOUND") return adminJson({ ok: false, error: "Price-book item not found." }, 404);
+  if (code === "PRICE_BOOK_REQUEST_CONFLICT") return adminJson({ ok: false, error: "This item was already saved with different details or changed after saving. Open the price book to review it." }, 409);
   if (code === "PRICE_BOOK_LIMIT") return adminJson({ ok: false, error: "This workspace has reached its 5,000 item price-book limit." }, 409);
   if (code === "CATALOGUE_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "That catalogue item is no longer available. Choose another item or enter the supplier details manually." }, 409);
   if (code === "INVALID_PRICE_BOOK_SKILL") return adminJson({ ok: false, error: "Choose a required skill already listed on the business profile." }, 400);
@@ -95,6 +96,25 @@ async function ownedItem(ownerUid: string, itemId: string) {
     .bind(itemId, ownerUid).first<Row>();
   if (!row) throw new Error("PRICE_BOOK_ITEM_NOT_FOUND");
   return row;
+}
+
+function matchesCreatedItem(row: Row, input: Awaited<ReturnType<typeof preparedInput>>) {
+  return row.record_status === "active" && Number(row.price_revision) === 1
+    && row.name === input.name && row.description === input.description && row.item_type === input.itemType
+    && row.unit_label === input.unitLabel && Number(row.supplier_cost_cents_ex_gst) === input.supplierCostCentsExGst
+    && Number(row.sell_price_cents_ex_gst) === input.sellPriceCentsExGst && row.tax_code === input.taxCode
+    && Number(row.expected_duration_minutes) === input.expectedDurationMinutes && row.required_skill === input.requiredSkill
+    && row.supplier_name === input.supplierName && row.supplier_sku === input.supplierSku && row.supplier_product_id === input.supplierProductId
+    && String(row.category || "") === (input.category ?? "")
+    && JSON.stringify(parsePriceBookSolarPanel(row.solar_panel_json)) === JSON.stringify(input.solarPanel ?? null)
+    && (row.coverage_m2_per_unit_milli == null ? null : Number(row.coverage_m2_per_unit_milli)) === (input.coverageM2PerUnitMilli ?? null);
+}
+
+async function priceBookRequestId(ownerUid: string, actorUid: string, clientRequestId: unknown) {
+  if (clientRequestId === undefined) return null;
+  if (typeof clientRequestId !== "string" || !/^[A-Za-z0-9_-]{16,100}$/.test(clientRequestId)) throw new Error("INVALID_PRICE_BOOK_REQUEST");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([ownerUid, actorUid, clientRequestId])));
+  return `price-book-request-${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("").slice(0, 48)}`;
 }
 
 async function libraryPayload(ownerUid: string, url: URL) {
@@ -193,13 +213,22 @@ export async function POST(request: Request) {
   try {
     const access = await requireInstallerTeamAccess(request); requirePriceBookAccess(access, true); const body = await request.json() as Row;
     if (cleanAdminText(body.action, 30) !== "create") return adminJson({ ok: false, error: "Unsupported price-book action." }, 400);
-    const db = getD1(); const count = await db.prepare("SELECT COUNT(*) count FROM trade_price_book_items WHERE firebase_uid = ?")
+    const db = getD1(); const requestItemId = await priceBookRequestId(access.ownerUid, access.actorUid, body.clientRequestId);
+    const input = await preparedInput(access.ownerUid, body);
+    if (requestItemId) {
+      const existing = await db.prepare("SELECT * FROM trade_price_book_items WHERE id=? AND firebase_uid=?").bind(requestItemId, access.ownerUid).first<Row>();
+      if (existing) {
+        if (!matchesCreatedItem(existing, input)) throw new Error("PRICE_BOOK_REQUEST_CONFLICT");
+        return adminJson({ ok: true, item: itemPayload(existing) }, 201);
+      }
+    }
+    const count = await db.prepare("SELECT COUNT(*) count FROM trade_price_book_items WHERE firebase_uid = ?")
       .bind(access.ownerUid).first<Row>();
     if (Number(count?.count || 0) >= 5_000) throw new Error("PRICE_BOOK_LIMIT");
-    const input = await preparedInput(access.ownerUid, body); const id = crypto.randomUUID(); const now = new Date().toISOString();
-    const itemCode = `PB-${id.slice(0, 8).toUpperCase()}`;
+    const id = requestItemId || crypto.randomUUID(); const now = new Date().toISOString();
+    const itemCode = `PB-${(requestItemId ? id.slice(-16) : id.slice(0, 8)).toUpperCase()}`;
     await db.batch([
-      db.prepare(`INSERT INTO trade_price_book_items
+      db.prepare(`INSERT${requestItemId ? " OR IGNORE" : ""} INTO trade_price_book_items
         (id, firebase_uid, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
         sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points, expected_duration_minutes,
         required_skill, supplier_name, supplier_sku, supplier_product_id, record_status, price_revision,
@@ -209,14 +238,16 @@ export async function POST(request: Request) {
           input.supplierCostCentsExGst, input.sellPriceCentsExGst, input.taxCode, input.markupBasisPoints,
           input.marginBasisPoints, input.expectedDurationMinutes, input.requiredSkill, input.supplierName,
           input.supplierSku, input.supplierProductId, access.actorUid, access.actorUid, now, now, JSON.stringify(input.solarPanel ?? null), input.category ?? "", input.coverageM2PerUnitMilli ?? null),
-      db.prepare(`INSERT INTO trade_price_book_price_history
+      db.prepare(`INSERT${requestItemId ? " OR IGNORE" : ""} INTO trade_price_book_price_history
         (id, price_book_item_id, firebase_uid, price_revision, supplier_cost_cents_ex_gst, sell_price_cents_ex_gst,
         tax_code, markup_basis_points, margin_basis_points, change_type, changed_by_uid, changed_at)
         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, 'created', ?, ?)`)
-        .bind(crypto.randomUUID(), id, access.ownerUid, input.supplierCostCentsExGst, input.sellPriceCentsExGst,
+        .bind(requestItemId ? `${id}-created` : crypto.randomUUID(), id, access.ownerUid, input.supplierCostCentsExGst, input.sellPriceCentsExGst,
           input.taxCode, input.markupBasisPoints, input.marginBasisPoints, access.actorUid, now),
     ]);
-    return adminJson({ ok: true, item: itemPayload((await ownedItem(access.ownerUid, id))) }, 201);
+    const saved = await ownedItem(access.ownerUid, id);
+    if (!matchesCreatedItem(saved, input)) throw new Error("PRICE_BOOK_REQUEST_CONFLICT");
+    return adminJson({ ok: true, item: itemPayload(saved) }, 201);
   } catch (error) { return errorResponse(error); }
 }
 

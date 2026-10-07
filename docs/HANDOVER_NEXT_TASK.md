@@ -1,9 +1,21 @@
 # Next task handover
 
-Status: Selected job, audit and Council report assistance; matching GitHub/Sites publication authorised.
+Status: Reviewed operational Wattzun workflows; matching GitHub/Sites publication authorised.
 Prepared: 7 October 2026
 
-## Active follow-up: Wattzun works from the selected job, audit or Council report
+## Active follow-up: Wattzun completes reviewed trade workflows
+
+Outcome: resolve the right existing trade job from customer, street, suburb or visit-date clues; ask a short clarifying question for ambiguous matches; prepare and send a customer SMS or email or unpaid-invoice reminder; add a price-book item; and save an existing-job quote draft into the real quote editor. Missing facts stay explicit and the current user approves the frozen task by its single review button or a clear spoken/text confirmation.
+
+The shared strict workflow contract, assistant conversation and provider gateway own proposals and current review context. One writer owns the workflow backend and SMS recipient binding; another owns canonical existing-quote preparation/save; another owns the review component; the coordinator owns integration, review and publication. Reuse business/job permissions, SMS service consent/wallet/provider journals, connected-mailbox email journals, the price-book endpoint, canonical quote GET/save_draft, and encrypted admin audit entries. No new persistence layer, migration, dependency, key, model or paid gate.
+
+Acceptance: current actor/business/job grants and exact recipient, sender, invoice balance and quote source are rechecked at execution. Multiple matches require a choice. The current review token is actor/business-bound and expires; changed details require a fresh review. Single reviewed execution and existing service idempotency prevent duplicate sends, items and quote lines after uncertain acknowledgements. Status and speech use actual service receipts, including queued/unknown/failed states without fabricated delivery claims. Existing quote settings and commercial adjustments are preserved, issued/accepted quote revision remains explicit, and opening the editor preserves the call. Staff business selection, stale responses, cancellation and scope switches remain isolated. New customer spelling and signed Google address checks remain in the existing customer workflow.
+
+In scope: the four operational trade workflows, source-grounded trade/Council/Creditex help already released, task discovery and continued chat/native voice. Out of scope: marketing campaigns, audit decisions, claim submissions, payments, automatic invoice issuance, new credentials/vendors and attachment-byte interpretation. The user explicitly authorised these operational additions and matching GitHub/Sites publication. Production customer messages are not sent as QA.
+
+Validation: focused workflow, real quote/price-book/SMS service boundary, provider, route and React browser tests; typecheck; scoped lint; existing validate command and full suite because reviewed mutation/shared permission contracts change; migration integrity and exact committed publication build. Record pre-existing failures separately. Release evidence belongs in C:/Webproject/outputs/wattzun-operations-20261007/.
+
+## Previous follow-up: Wattzun works from the selected job, audit or Council report
 
 Outcome: users can ask Wattzun about the exact work they have selected, receive source-linked summaries, next steps and useful drafts, and continue the same message or voice conversation while using TLink, Council or Creditex.
 

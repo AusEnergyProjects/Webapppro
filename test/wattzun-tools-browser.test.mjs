@@ -12,7 +12,7 @@ const hats = [{ id: 'none', label: 'None' }, { id: 'hard-hat', label: 'Hard hat'
 const fixtures = {
   auth: `export function onAuthStateChanged(_auth, callback) { window.fixtureAuthListeners.add(callback); callback(window.fixtureUser); return ()=>window.fixtureAuthListeners.delete(callback); }`,
   firebase: 'export const firebaseAuth = {};',
-  business: `export const readTradeBusinessSelection = () => 'synthetic-trade-one';export const TRADE_BUSINESS_SELECTION_CHANGED_EVENT='tlink:business-selection-changed';`,
+  business: `export {createTradeBusinessFetch} from './src/lib/trade-business-client';export const readTradeBusinessSelection = () => 'synthetic-trade-one';export const TRADE_BUSINESS_SELECTION_CHANGED_EVENT='tlink:business-selection-changed';`,
   link: `import React from 'react'; export default function Link({href,onNavigate,prefetch,...props}) { return <a {...props} href={href} onClick={event=>{if(event.button||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey) return; event.preventDefault();let prevented=false;onNavigate?.({preventDefault(){prevented=true;}});if(!prevented)history.pushState(history.state,'',href);}}/>; }`,
   navigation: `export const usePathname=()=>location.pathname;export const useRouter=()=>({push:href=>history.pushState(history.state,'',href)});`,
   picker: `export const WattzunRecordPicker=()=>null;`,
@@ -256,13 +256,13 @@ test('all three portal Tools use personal scoped usage and deliberate draft/send
       await numbers(tools, [7, 3]);
       await tools.getByText('October 2026 · UTC', { exact: true }).waitFor();
       await tools.getByRole('combobox', { name: 'Speaking speed', exact: true }).selectOption('1.15');
-      const suggestion = portal === 'trade' ? 'Quotes and follow-ups' : portal === 'council' ? 'Campaigns and events' : 'Audit preparation';
+      const suggestion = portal === 'trade' ? 'Update an existing quote' : portal === 'council' ? 'Campaigns and events' : 'Audit preparation';
       await tools.getByRole('button', { name: new RegExp(`^${suggestion}`) }).click();
       const dialog = page.getByRole('dialog', { name: 'Wattzun', exact: true });
       await dialog.waitFor();
       const input = dialog.getByLabel('Message Wattzun', { exact: true });
       await page.waitForFunction(() => Boolean(document.querySelector('#wattzun-portal-message')?.value));
-      assert.match(await input.inputValue(), portal === 'trade' ? /prepare a quote/ : portal === 'council' ? /council campaign/ : /audit review/);
+      assert.match(await input.inputValue(), portal === 'trade' ? /draft changes to the quote for an existing job and save them into its real quote editor/ : portal === 'council' ? /council campaign/ : /audit review/);
       assert.equal(await page.evaluate(() => window.fixtureRequests.filter(request => request.method === 'POST').length), 0, 'Suggested prompt is editable and is not sent automatically');
       assert.equal(await page.evaluate(() => window.fixtureCounters.started + window.fixtureCounters.microphone), 0);
       await input.fill(`Help me with my ${portal} workflow`);

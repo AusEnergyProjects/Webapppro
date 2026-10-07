@@ -1,5 +1,6 @@
 import type { WattzunActionProposal } from "./wattzun-actions";
 import type { WattzunRecordLookup } from "./wattzun-records";
+import { isWattzunWorkflowProposal, type WattzunWorkflowProposal, type WattzunWorkflowOperation, type WattzunWorkflowResult } from "./wattzun-workflow.ts";
 import { readWattzunWorkReference, type WattzunWorkReference, type WattzunWorkContextInfo } from "./wattzun-work-context.ts";
 
 export const WATTZUN_PORTALS = ["trade", "creditex", "council"] as const;
@@ -14,13 +15,16 @@ export type WattzunTurnInput = {
   portal: WattzunPortal; scopeId: string; requestId: string; message: string;
   history: WattzunTurn[]; preferences: WattzunPreferences;
   workReference?: WattzunWorkReference;
+  workflowReviewId?: string;
+  workflowProposal?: WattzunWorkflowOperation;
 };
 export type WattzunReply = {
   kind: "answer" | "clarification"; message: string; questions: string[];
   links: Array<{ label: string; href: string }>;
-  action?: WattzunActionProposal | null;
+  action?: WattzunActionProposal | WattzunWorkflowProposal | null;
   lookup?: WattzunRecordLookup | null;
   workContext?: WattzunWorkContextInfo;
+  workflow?: WattzunWorkflowResult;
 };
 export type WattzunVoiceAudio = { base64: string; mimeType: "audio/mpeg" }
   | { mimeType: "audio/pcm"; stream: ReadableStream<Uint8Array> };
@@ -72,8 +76,15 @@ export function parseWattzunTurn(value: unknown, audio = false): WattzunTurnInpu
   if (JSON.stringify(history).length > WATTZUN_MAX_HISTORY_CHARACTERS) throw new WattzunInputError("Start a new conversation to continue.");
   const workReference = value.workReference === undefined ? undefined : readWattzunWorkReference(value.workReference, value.portal);
   if (workReference === null) throw new WattzunInputError("Choose a work item in your current portal before asking Wattzun about it.");
+  const workflowReviewId = value.workflowReviewId;
+  const workflowProposal = value.workflowProposal;
+  if (workflowReviewId !== undefined && (value.portal !== "trade" || typeof workflowReviewId !== "string" || !/^[A-Za-z0-9:_-]{16,180}$/.test(workflowReviewId))) throw new WattzunInputError("Review the workflow in your current TLink business first.");
+  if (workflowProposal !== undefined && (value.portal !== "trade" || !isWattzunWorkflowProposal(workflowProposal) || workflowProposal.kind === "confirm_workflow")) throw new WattzunInputError("Prepare a supported workflow in your TLink business.");
+  if (workflowReviewId !== undefined && workflowProposal !== undefined) throw new WattzunInputError("Continue one reviewed workflow at a time.");
   return { portal: value.portal, scopeId: value.scopeId, requestId: value.requestId,
-    message: message.trim(), history, preferences: parseWattzunPreferences(value.preferences), ...(workReference ? { workReference } : {}) };
+    message: message.trim(), history, preferences: parseWattzunPreferences(value.preferences), ...(workReference ? { workReference } : {}),
+    ...(typeof workflowReviewId === "string" ? { workflowReviewId } : {}),
+    ...(isWattzunWorkflowProposal(workflowProposal) ? { workflowProposal } : {}) };
 }
 export function wattzunSpokenReply(reply: WattzunReply): string {
   return [reply.message, ...reply.questions].join("\n");

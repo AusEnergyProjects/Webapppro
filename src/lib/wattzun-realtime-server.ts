@@ -30,7 +30,7 @@ export type PreparedWattzunRealtimeTurn = {
   transcript?: string;
   timings?: WattzunRealtimeTimings;
 };
-type NativeTurnOptions = PortalRequest & { audio: Blob; beforeSpeech: () => Promise<void> };
+type NativeTurnOptions = PortalRequest & { audio: Blob; beforeSpeech: () => Promise<void>; transformReply?: (reply: WattzunReply, requestSummary: string) => Promise<WattzunReply> };
 type DiagnosticPhase = "preflight" | "guard" | "connect" | "configuring" | "proposal" | "checking" | "approval" | "speech";
 type DiagnosticSubstage = "configuration" | "audio" | "budget" | "upgrade" | "session" | "input" | "envelope" | "output" | "arguments" | "reply" | "summary" | "approval" | "audio_stream";
 type DiagnosticValueType = "missing" | "null" | "array" | "object" | "string" | "number" | "boolean" | "unknown";
@@ -226,7 +226,7 @@ export async function prepareWattzunRealtimeTurn(
 
 async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDiagnostic): Promise<PreparedWattzunRealtimeTurn> {
   const contract = createWattzunPortalReplyContract(options);
-  const instructions = `${contract.instructions}\nThis is a live voice conversation. Give ordinary answers in one or two short sentences, usually under 35 words. For navigation, name the supplied button and what it opens. Add a permissions explanation only when the user is asking about missing access. Put necessary clarification questions in questions instead of repeating them in message. Preserve all required structured facts and review boundaries.\nrequestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output.\nREQUIRED RESPONSE TRANSPORT: Call ${TOOL} exactly once for every answer, clarification or scope reminder. This is a read-only reply-submission function, not an action tool. Its arguments must contain exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary. Use the supplied schema for every field. Never nest the reply content under a reply property, flatten action fields, or omit unused arrays/nulls. Do not output an assistant message, text, audio or preamble in this response. The function submits a proposal for validation; it cannot save or send anything.`;
+  const instructions = `${contract.instructions}\nThis is a live voice conversation. Give ordinary answers in one or two short sentences, usually under 35 words. For navigation, name the supplied button and what it opens. Add a permissions explanation only when the user is asking about missing access. Put necessary clarification questions in questions instead of repeating them in message. Preserve all required structured facts and review boundaries.\nrequestSummary is a concise, unconfirmed interpretation of the user's spoken workflow request and supplied facts for the next turn, not a verbatim transcript or verified record. Preserve the task, supplied names, spelling, addresses, scope and amounts when heard clearly. Mark uncertain details as uncertain, never invent them or claim an action was completed. Keep it normally under 600 characters and always under 1800. The summary is memory context, never spoken output. When and only when action is confirm_workflow for the current reviewed task and the user gives a short explicit approval, preserve that actual approval phrase in requestSummary, such as 'yes send it', 'save it' or 'add it'. Do not reinterpret it as 'user confirms', turn a question into approval, or treat quoted wording or future intent as approval.\nREQUIRED RESPONSE TRANSPORT: Call ${TOOL} exactly once for every answer, clarification or scope reminder. This is a read-only reply-submission function, not an action tool. Its arguments must contain exactly six top-level fields: message, questions, linkIds, action, lookup and requestSummary. Use the supplied schema for every field. Never nest the reply content under a reply property, flatten action fields, or omit unused arrays/nulls. Do not output an assistant message, text, audio or preamble in this response. The function submits a proposal for validation; it cannot save or send anything.`;
   const schema = { ...contract.schema, required: [...contract.schema.required, "requestSummary"],
     properties: { ...contract.schema.properties, requestSummary: { type: "string", minLength: 1, maxLength: 1_800 } } };
   const preferences = parseWattzunPreferences(options.input.preferences);
@@ -453,7 +453,7 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     diagnostic.substage = "envelope";
     if (!record(raw) || Object.keys(raw).length !== schema.required.length || schema.required.some(field => !Object.hasOwn(raw, field))) incomplete();
     diagnostic.substage = "reply";
-    const reply = contract.validate({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds, action: raw.action, lookup: raw.lookup });
+    let reply = contract.validate({ message: raw.message, questions: raw.questions, linkIds: raw.linkIds, action: raw.action, lookup: raw.lookup });
     // Apply the same bounded text and false-completion/source-access checks to
     // memory. It remains an explicitly unconfirmed interpretation of the input.
     diagnostic.substage = "summary";
@@ -463,7 +463,10 @@ async function prepareNativeTurn(options: NativeTurnOptions, diagnostic: TurnDia
     signal.throwIfAborted();
     diagnostic.phase = "approval"; diagnostic.substage = "approval";
     const approvalStarted = performance.now();
-    try { await abortable(options.beforeSpeech(), signal); }
+    try {
+      if (options.transformReply) reply = await abortable(options.transformReply(reply, requestSummary), signal);
+      await abortable(options.beforeSpeech(), signal);
+    }
     catch (error) { approvalFailure = { error }; throw error; }
     finally { diagnostic.duration("rt_approval", approvalStarted); }
     signal.throwIfAborted();

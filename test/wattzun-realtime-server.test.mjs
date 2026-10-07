@@ -7,6 +7,7 @@ import ts from "typescript";
 import { Miniflare } from "miniflare";
 import * as portal from "../src/lib/wattzun-portal.ts";
 import * as guide from "../src/lib/wattzun-portal-guide.ts";
+import * as workflowContract from "../src/lib/wattzun-workflow.ts";
 import { SURGE_USAGE_GUARD_ENV } from "../src/lib/energy-assistant-usage-guard.ts";
 import { syntheticWorkContext, workContextContract } from "./helpers/wattzun-work-context-fixture.mjs";
 
@@ -96,6 +97,7 @@ function fixture(options = {}) {
   const shared = compile("wattzun-portal-ai-server", {
     "cloudflare:workers": cloudflare, "node:buffer": { Buffer }, "./energy-assistant-usage-guard": guard,
     "./workflow-ai-server": workflow, "./wattzun-actions": actions, "./wattzun-records": records,
+    "./wattzun-workflow": workflowContract,
     "./wattzun-portal": portal, "./wattzun-portal-guide": guide,
     "./wattzun-work-context": workContextContract, "./wattzun-work-context.ts": workContextContract,
   }, { process: { env: { NODE_ENV: "test" } } });
@@ -215,6 +217,60 @@ test("native speech uses one reservation, the shared forced reply tool and only 
   assert.deepEqual(responses[1].reasoning, { effort: "minimal" });
   assert.ok(responses.every(response => !Object.hasOwn(response, "parallel_tool_calls")));
   assert.deepEqual(f.socket.closes, [{ code: 1000, reason: "Turn finished" }]);
+});
+
+test("native workflow proposals use the same exact parsers while preserving six flat transport fields", async t => {
+  for (const action of [
+    { kind: "add_price_book_item", name: "Installation", description: "Install supplied heat pump", itemType: "labour", unitLabel: "item", unitPrice: "350", supplierCost: null, taxCode: "gst" },
+    { kind: "customer_message", jobQuery: "that job last week in Frankston", jobId: "", channel: "sms", subject: "", body: "Thanks for today." },
+    { kind: "invoice_reminder", jobQuery: "that job last week in Frankston", jobId: "", invoiceId: "", channel: "email", body: "" },
+    { kind: "draft_job_quote", jobQuery: "John Smith", jobId: "", mode: "append", description: "Additional work", lines: [{ lineType: "labour", description: "Installation", quantity: "2", unitPrice: "50", taxCode: "gst" }] },
+  ]) await t.test(action.kind, async () => {
+    const f = fixture({ reply: { ...answer, message: "No worries, I can prepare that for review.", linkIds: [], action } });
+    const prepared = await f.prepareWattzunRealtimeTurn(request()); assert.deepEqual(prepared.reply.action, action); await bytes(prepared.audio);
+    const schema = f.socket.sent.find(event => event.type === "session.update").session.tools[0].parameters;
+    assert.deepEqual(schema.required, ["message", "questions", "linkIds", "action", "lookup", "requestSummary"]);
+    assert.deepEqual(Object.keys(schema.properties), schema.required); assert.equal(f.released(), 1);
+  });
+});
+test("native trusted workflow preparation replaces the proposal with relevant clarification before access approval and speech", async () => {
+  const action = { kind: "invoice_reminder", jobQuery: "last week in Frankston", jobId: "", invoiceId: "", channel: "sms", body: "" };
+  const f = fixture({ reply: { ...answer, message: "I can prepare that reminder.", action } });
+  const order = [];
+  const transformed = { kind: "clarification", message: "I found two matching jobs.", questions: ["Did you mean John Smith at 12 Fake Street or Jane Jones at 4 Sample Road?"], links: [], workflow: { state: "needs_details", questions: ["Which of those jobs do you mean?"] } };
+  const prepared = await f.prepareWattzunRealtimeTurn(request({
+    transformReply: async (reply, requestSummary) => {
+      order.push("prepare"); assert.deepEqual(reply.action, action); assert.equal(requestSummary, "User asks where to find Schedule.");
+      assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1); return transformed;
+    },
+    beforeSpeech: async () => { order.push("access"); assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1); },
+  }));
+  assert.deepEqual(order, ["prepare", "access"]); assert.deepEqual(prepared.reply, transformed); assert.equal(prepared.reply.action, undefined);
+  const speech = f.socket.sent.filter(event => event.type === "response.create")[1].response;
+  assert.equal(speech.input[0].content[0].text, portal.wattzunSpokenReply(transformed));
+  assert.doesNotMatch(speech.input[0].content[0].text, /I can prepare that reminder/); await bytes(prepared.audio); assert.equal(f.released(), 1);
+});
+test("native trusted workflow save receipt is narrated exactly after successful application preparation", async () => {
+  const action = { kind: "add_price_book_item", name: "Installation", description: "", itemType: "labour", unitLabel: "item", unitPrice: "350", supplierCost: null, taxCode: "gst" };
+  const f = fixture({ reply: { ...answer, message: "I can prepare that price book item.", action } });
+  const receipt = { kind: "add_price_book_item", id: "actual-item-123", label: "Open price book", href: "/direct-trade/dashboard?workspace=pricebook", status: "saved", message: "I saved Installation to your price book at $350 ex GST." };
+  const transformed = { kind: "answer", message: receipt.message, questions: [], links: [], workflow: { state: "complete", receipt } };
+  const prepared = await f.prepareWattzunRealtimeTurn(request({ transformReply: async () => transformed }));
+  assert.deepEqual(prepared.reply, transformed); assert.equal(f.socket.sent.filter(event => event.type === "response.create")[1].response.input[0].content[0].text, receipt.message);
+  await bytes(prepared.audio); assert.equal(f.released(), 1);
+});
+test("native trusted workflow access or stale-review failures retain identity and never request provider audio", async t => {
+  for (const status of [403, 409]) await t.test(String(status), async () => {
+    const f = fixture(); const rejected = Object.assign(new Error("The authorised workflow changed."), { status }); let approvals = 0;
+    await assert.rejects(f.prepareWattzunRealtimeTurn(request({ transformReply: async () => { throw rejected; }, beforeSpeech: async () => { approvals++; } })), error => error === rejected && error.status === status);
+    assert.equal(approvals, 0); assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1); assert.equal(f.released(), 1); assert.equal(f.timers.size, 0);
+  });
+});
+test("hangup during trusted workflow preparation releases native transport without speaking a stale review", async () => {
+  const f = fixture(); const controller = new AbortController(); let entered; const started = new Promise(resolve => { entered = resolve; });
+  const preparing = f.prepareWattzunRealtimeTurn(request({ signal: controller.signal, transformReply: async () => { entered(); return new Promise(() => {}); } }));
+  await started; controller.abort(new Error("Call ended")); await assert.rejects(preparing, safeError);
+  assert.equal(f.socket.sent.filter(event => event.type === "response.create").length, 1); assert.equal(f.released(), 1); assert.equal(f.timers.size, 0);
 });
 
 test("prepared turn returns before provider audio and reads chunks before provider EOF", async () => {

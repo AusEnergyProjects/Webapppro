@@ -8,10 +8,13 @@ import { chromium } from 'playwright-core';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const browserPath = [process.env.TEST_BROWSER_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/chromium'].find(value => value && fs.existsSync(value));
+const workflowOperation={kind:'invoice_reminder',jobQuery:'last week in Frankston',jobId:'job-john',invoiceId:'invoice-112',channel:'sms',body:'A friendly invoice reminder.'};
+const workflowReview={state:'review',reviewId:'review-ready-123456',expiresAt:'2026-10-07T23:59:00Z',kind:'invoice_reminder',heading:'Send invoice reminder',summary:'Send a reminder for invoice INV-112.',confirmationLabel:'Send text',lines:[{label:'Recipient',value:'John Smith · 0412 345 678'},{label:'Invoice',value:'INV-112 · $1,650.00 outstanding'}],preview:{subject:'',body:'Hi John, a friendly reminder about invoice INV-112.'},target:{jobId:'job-john',workNumber:'TL-112',title:'Agreed replacement',customerName:'John Smith',address:'12 Example Street, Frankston VIC 3199',scheduledAt:'2026-10-01T01:00:00Z',completedAt:'2026-10-02T01:00:00Z'}};
+const workflowReceipt={kind:'invoice_reminder',id:'message-saved-112',label:'Open submitted reminder',href:'/direct-trade/dashboard?workspace=work&jobId=job-john&jobTab=connect',status:'submitted',message:'Your reminder was accepted by the SMS provider. Delivery is not yet confirmed.'};
 const fixtures = {
   auth: `export function onAuthStateChanged(_auth, callback) { window.wattzunFixtureAuth=callback; callback({uid:'synthetic-user',displayName:'Synthetic Organisation',emailVerified:true,getIdToken:async()=>'synthetic-token'}); return ()=>{}; }`,
   firebase: 'export const firebaseAuth = {};',
-  business: `export const readTradeBusinessSelection = () => 'synthetic-business'; export const TRADE_BUSINESS_SELECTION_CHANGED_EVENT='tlink:business-selection-changed';`,
+  business: `export {createTradeBusinessFetch} from './src/lib/trade-business-client';export const readTradeBusinessSelection = () => 'synthetic-business'; export const TRADE_BUSINESS_SELECTION_CHANGED_EVENT='tlink:business-selection-changed';`,
   link: `import React from 'react'; export default function Link({href,onNavigate,prefetch,...props}) { return <a {...props} href={href} onClick={event=>{ if(event.button||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey) return; event.preventDefault(); let prevented=false; onNavigate?.({preventDefault(){prevented=true;}}); if(!prevented){history.pushState(history.state,'',href);window.dispatchEvent(new Event('fixture:navigate'));}}}/>; }`,
   navigation: `import {useSyncExternalStore} from 'react'; export function usePathname(){return useSyncExternalStore(callback=>{window.addEventListener('popstate',callback);window.addEventListener('fixture:navigate',callback);return()=>{window.removeEventListener('popstate',callback);window.removeEventListener('fixture:navigate',callback);}},()=>location.pathname);}export const useRouter=()=>({push:href=>{history.pushState(history.state,'',href);window.dispatchEvent(new Event('fixture:navigate'));}});`,
   public: `export const LazyPublicEnergyAssistantWidget=()=>null;`,
@@ -82,7 +85,7 @@ const bundle = await build({
     window.wattzunFixtureGreetingPcm=[];
     window.fetch=async (url,options={})=>{
       const body=options.body instanceof FormData?JSON.parse(options.body.get('request')):options.body?JSON.parse(options.body):null;
-      window.wattzunFixtureRequests.push({url,headers:options.headers,body});
+      window.wattzunFixtureRequests.push({url,headers:options.headers,body,scope:new Headers(options.headers).get('X-TLink-Business')});
       window.wattzunFixtureSignals.push({url,signal:options.signal});
       if(window.wattzunFixtureDelayedEndpoint===url)await new Promise(resolve=>{window.wattzunFixtureResolveDelayed=()=>{window.wattzunFixtureDelayedEndpoint=null;resolve();};});
       const failure=window.wattzunFixtureFailures?.[url];
@@ -93,6 +96,13 @@ const bundle = await build({
         sources:[{label:'Saved work details',href:body.portal==='council'?'/council?workspace=reports':body.portal==='creditex'?'/creditex/compliance':'/direct-trade/dashboard?workspace=work&jobId='+reference.recordId}],limitations:['Saved answers only. Uploaded file and photo contents have not been read.']}:undefined;
       const workContext=window.wattzunFixtureWorkContext===undefined?defaultContext:window.wattzunFixtureWorkContext;
       if(url.startsWith('/api/wattzun/portal?portal=')) { const portal=new URL(url,location.origin).searchParams.get('portal');return Response.json({ok:true,scopes:window.wattzunFixtureScopes||[{portal,scopeId:portal==='trade'?'synthetic-business':'synthetic-'+portal,label:'Synthetic '+portal+' business',personalName:'Alex'}]}); }
+      if(url==='/api/wattzun/workflows'&&options.method==='POST')return Response.json({ok:true,result:body.stage==='prepare'?window.wattzunFixturePreparedWorkflow:window.wattzunFixtureExecutedWorkflow});
+      if(url==='/api/wattzun/workflows/speech'&&options.method==='POST'){
+        const workflow=window.wattzunFixtureExecutedWorkflow,receipt=workflow.receipt;
+        const frames=[{type:'reply',transcript:'',reply:{kind:'answer',message:receipt.message,questions:[],links:[{label:receipt.label,href:receipt.href}],workflow}},
+          {type:'audio',data:'EIAgAQ=='},{type:'done'}];
+        return new Response(frames.map(frame=>JSON.stringify(frame)).join('\\n')+'\\n',{headers:{'Content-Type':'application/x-wattzun-realtime-voice+ndjson'}});
+      }
       if(url==='/api/wattzun/greeting'&&options.method==='POST') {
         const frames=[{type:'reply',transcript:'',reply:{kind:'answer',message:"Hi Alex, I'm here. What can I help you with?",questions:[],links:[]}},
           {type:'audio',data:'EIAgAQ=='},{type:'done'}];
@@ -101,13 +111,13 @@ const bundle = await build({
       }
       if(url==='/api/wattzun/voice'&&options.method==='POST') {
         const reply=window.wattzunFixtureVoiceReply||{kind:'answer',message:'Open Schedule to review your visits.',questions:[],links:[]};
-        const frames=[{type:'reply',transcript:'',requestSummary:'User asks how to find Schedule.',reply:{...reply,...(workContext?{workContext}:{})}},
+        const frames=[{type:'reply',transcript:'',requestSummary:window.wattzunFixtureRequestSummary||'User asks how to find Schedule.',reply:{...reply,...(workContext?{workContext}:{})}},
           {type:'audio',data:'EIAgAQ=='},{type:'done'}];
         const bytes=new TextEncoder().encode(frames.map(frame=>JSON.stringify(frame)).join('\\n')+'\\n');
         return new Response(new ReadableStream({start(controller){controller.enqueue(bytes);},cancel(){window.wattzunFixtureAudioCanceled=(window.wattzunFixtureAudioCanceled||0)+1;}}),
           {headers:{'Content-Type':'application/x-wattzun-realtime-voice+ndjson'}});
       }
-      if(url==='/api/wattzun/portal'&&options.method==='POST') return Response.json({ok:true,reply:{kind:'clarification',message:'I can help you follow up the sale. Tell me a little more so I can point you to the right next step.',questions:['Which job are you following up?','Do you want to call the customer or review the quote?'],links:window.wattzunFixtureLinks||[{label:'Open Sales',href:'/direct-trade/dashboard?workspace=sales'}],...(window.wattzunFixtureAction?{action:window.wattzunFixtureAction}:{}),...(workContext?{workContext}:{})}});
+      if(url==='/api/wattzun/portal'&&options.method==='POST') return Response.json({ok:true,reply:window.wattzunFixtureTextReply?{...window.wattzunFixtureTextReply,...(workContext?{workContext}:{})}:{kind:'clarification',message:'I can help you follow up the sale. Tell me a little more so I can point you to the right next step.',questions:['Which job are you following up?','Do you want to call the customer or review the quote?'],links:window.wattzunFixtureLinks||[{label:'Open Sales',href:'/direct-trade/dashboard?workspace=sales'}],...(window.wattzunFixtureAction?{action:window.wattzunFixtureAction}:{}),...(workContext?{workContext}:{})}});
       throw new Error('Unexpected fixture request: '+url);
     };
     function FixtureTools() {
@@ -135,6 +145,7 @@ const bundle = await build({
     builder.onResolve({ filter: /^@\/lib\/wattzun-records$/ }, () => ({ path: path.join(root, 'src/lib/wattzun-records.ts') }));
     builder.onResolve({ filter: /^@\/lib\/wattzun-actions$/ }, () => ({ path: path.join(root, 'src/lib/wattzun-actions.ts') }));
     builder.onResolve({ filter: /^@\/lib\/wattzun-work-context$/ }, () => ({ path: path.join(root, 'src/lib/wattzun-work-context.ts') }));
+    builder.onResolve({ filter: /^@\/lib\/wattzun-workflow$/ }, () => ({ path: path.join(root, 'src/lib/wattzun-workflow.ts') }));
   } }],
 });
 const script = bundle.outputFiles.find(file => file.path.endsWith('.js')).text;
@@ -659,5 +670,153 @@ test('different-record or unsafe response context never reaches chat or voice pl
     await page.evaluate(()=>window.wattzunFixtureCall.question());await dialog.getByText('Still connected',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>window.wattzunFixtureAudioCanceled),2);assert.equal(await dialog.getByRole('log',{name:'Conversation with Wattzun'}).locator('article').count(),0);
     assert.equal(await dialog.getByRole('button',{name:'Hang up',exact:true}).count(),1);assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('a server-prepared operational review appears without another prepare request and its actual receipt opens on the staff route',{skip:!browserPath&&'No installed browser for workflow integration checks'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+    await page.evaluate(({operation,review,receipt})=>{
+      window.wattzunFixtureTextReply={kind:'clarification',message:'Please review the exact reminder before sending.',questions:[],links:[],action:operation,workflow:review};
+      window.wattzunFixturePreparedWorkflow=review;window.wattzunFixtureExecutedWorkflow={state:'complete',receipt};
+    },{operation:workflowOperation,review:workflowReview,receipt:workflowReceipt});
+    await dialog.getByRole('textbox',{name:'Message Wattzun',exact:true}).fill('Send John a quick invoice reminder.');
+    await dialog.getByRole('button',{name:'Send',exact:true}).click();
+    const review=dialog.getByRole('region',{name:'Review Wattzun workflow',exact:true});await review.waitFor();
+    assert.match(await review.innerText(),/John Smith[\s\S]*12 Example Street/);
+    assert.match(await review.getByLabel('Message preview').innerText(),/invoice INV-112/);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>request.url==='/api/wattzun/workflows').length),0);
+    await review.getByRole('button',{name:'Send text',exact:true}).click();
+    const log=dialog.getByRole('log',{name:'Conversation with Wattzun'});
+    await log.getByText(workflowReceipt.message,{exact:true}).first().waitFor();
+    const [execution]=await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>request.url==='/api/wattzun/workflows'));
+    assert.equal(execution.body.stage,'execute');assert.equal(execution.body.reviewId,workflowReview.reviewId);assert.equal(execution.scope,'synthetic-business');
+    const link=log.getByRole('link',{name:workflowReceipt.label,exact:true});await link.waitFor();
+    assert.equal(await link.getAttribute('href'),'/direct-trade/team?workspace=work&jobId=job-john&jobTab=connect');
+    await page.evaluate(()=>{window.wattzunFixtureTextReply={kind:'answer',message:'Ready for your next task.',questions:[],links:[]};});
+    await dialog.getByRole('textbox',{name:'Message Wattzun',exact:true}).fill('Now help me with another customer.');
+    await dialog.getByRole('button',{name:'Send',exact:true}).click();await log.getByText('Ready for your next task.',{exact:true}).waitFor();
+    const next=await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>request.url==='/api/wattzun/portal'&&request.body).at(-1));
+    assert.equal(Object.hasOwn(next.body,'workflowReviewId'),false,'A completed reminder is not an active review for the next task');
+    assert.equal(Object.hasOwn(next.body,'workflowProposal'),false);
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();await dialog.getByText('Listening',{exact:true}).waitFor();
+    await link.click();await page.getByRole('region',{name:'Wattzun call',exact:true}).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('jobId'),'job-john');
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('a spoken exact approval executes once and speaks the server-verified receipt on the same call',{skip:!browserPath&&'No installed browser for spoken workflow confirmation'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+    await page.evaluate(({operation,review,receipt})=>{
+      window.wattzunFixtureVoiceReply={kind:'clarification',message:'Please review this invoice reminder for John Smith.',questions:[],links:[],action:operation,workflow:review};
+      window.wattzunFixturePreparedWorkflow=review;window.wattzunFixtureExecutedWorkflow={state:'complete',receipt};
+    },{operation:workflowOperation,review:workflowReview,receipt:workflowReceipt});
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();await dialog.getByText('Listening',{exact:true}).waitFor();
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await dialog.getByRole('button',{name:'Send text',exact:true}).waitFor();
+    const canceledBeforeApproval=await page.evaluate(()=>window.wattzunFixtureAudioCanceled||0);
+    await page.evaluate(id=>{
+      window.wattzunFixtureRequestSummary='yes send it';
+      window.wattzunFixtureVoiceReply={kind:'answer',message:'I will send the reviewed reminder.',questions:[],links:[],action:{kind:'confirm_workflow',reviewId:id}};
+    },workflowReview.reviewId);
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await dialog.getByRole('log',{name:'Conversation with Wattzun'}).getByText(workflowReceipt.message,{exact:true}).first().waitFor();
+    const requests=await page.evaluate(()=>window.wattzunFixtureRequests);
+    const execution=requests.filter(request=>request.url==='/api/wattzun/workflows');assert.equal(execution.length,1);
+    assert.equal(execution[0].body.reviewId,workflowReview.reviewId);assert.equal(execution[0].body.reviewed,true);
+    const speech=requests.filter(request=>request.url==='/api/wattzun/workflows/speech');assert.equal(speech.length,1);
+    assert.equal(speech[0].body.workflowReviewId,workflowReview.reviewId);
+    assert.equal(Object.hasOwn(speech[0].body,'message'),false,'Speech comes from the current server receipt rather than client-provided wording');
+    const voice=requests.filter(request=>request.url==='/api/wattzun/voice');assert.equal(voice[1].body.workflowReviewId,workflowReview.reviewId);
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureAudioCanceled),canceledBeforeApproval+1,'The unverified approval audio is discarded before receipt speech');
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>request.url==='/api/wattzun/workflows').length),1,'Reusing an old approval cannot send a second reminder');
+    assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('changing selected work revokes a pending workflow and an old voice approval never targets the new job',{skip:!browserPath&&'No installed browser for workflow selection boundaries'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+    await selectFixtureWork(page,'job-john');
+    await page.evaluate(({operation,review})=>window.wattzunFixtureVoiceReply={kind:'clarification',message:'Review John’s invoice reminder.',questions:[],links:[],action:operation,workflow:review},{operation:workflowOperation,review:workflowReview});
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await dialog.getByRole('button',{name:'Send text',exact:true}).waitFor();
+    await selectFixtureWork(page,'job-other');await dialog.getByRole('button',{name:'Send text',exact:true}).waitFor({state:'detached'});
+    await page.evaluate(id=>{window.wattzunFixtureRequestSummary='yes send it';window.wattzunFixtureVoiceReply={kind:'answer',message:'Send it now.',questions:[],links:[],action:{kind:'confirm_workflow',reviewId:id}};},workflowReview.reviewId);
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>request.url==='/api/wattzun/workflows').length),0);
+    const voice=await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>request.url==='/api/wattzun/voice').at(-1));
+    assert.deepEqual(voice.body.workReference,{kind:'trade_job',recordId:'job-other'});
+    assert.equal(Object.hasOwn(voice.body,'workflowReviewId'),false);assert.equal(Object.hasOwn(voice.body,'workflowProposal'),false);
+    assert.equal(await dialog.getByText(workflowReceipt.message,{exact:true}).count(),0);
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('a different review approval cannot execute the current workflow and a correct retry preserves the same call',{skip:!browserPath&&'No installed browser for exact workflow approval boundaries'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+    await page.evaluate(({operation,review,receipt})=>{
+      window.wattzunFixtureVoiceReply={kind:'clarification',message:'Review this invoice reminder.',questions:[],links:[],action:operation,workflow:review};
+      window.wattzunFixtureExecutedWorkflow={state:'complete',receipt};
+    },{operation:workflowOperation,review:workflowReview,receipt:workflowReceipt});
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await dialog.getByRole('button',{name:'Send text',exact:true}).waitFor();
+    await page.evaluate(()=>{window.wattzunFixtureRequestSummary='yes send it';window.wattzunFixtureVoiceReply={kind:'answer',message:'Send it.',questions:[],links:[],action:{kind:'confirm_workflow',reviewId:'different-review-123456'}};});
+    await page.evaluate(()=>window.wattzunFixtureCall.question());await dialog.getByText('Still connected',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>request.url==='/api/wattzun/workflows').length),0);
+    await page.evaluate(id=>{window.wattzunFixtureVoiceReply.action.reviewId=id;window.wattzunFixtureCall.resume();},workflowReview.reviewId);
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await dialog.getByRole('log',{name:'Conversation with Wattzun'}).getByText(workflowReceipt.message,{exact:true}).first().waitFor();
+    const executions=await page.evaluate(()=>window.wattzunFixtureRequests.filter(request=>request.url==='/api/wattzun/workflows'));
+    assert.equal(executions.length,1);assert.equal(executions[0].body.reviewId,workflowReview.reviewId);
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    assert.deepEqual(errors,[]);await page.close();
+  }finally{await browser.close();}
+});
+
+test('a failed receipt narration retains the actual saved outcome in follow-up history and never repeats the send',{skip:!browserPath&&'No installed browser for completed workflow speech failures'},async()=>{
+  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  try{
+    const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
+    await page.evaluate(({operation,review,receipt})=>{
+      window.wattzunFixtureVoiceReply={kind:'clarification',message:'Review this invoice reminder.',questions:[],links:[],action:operation,workflow:review};
+      window.wattzunFixtureExecutedWorkflow={state:'complete',receipt};
+    },{operation:workflowOperation,review:workflowReview,receipt:workflowReceipt});
+    await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();await page.evaluate(()=>window.wattzunFixtureCall.question());
+    await dialog.getByRole('button',{name:'Send text',exact:true}).waitFor();
+    await page.evaluate(id=>{
+      window.wattzunFixtureRequestSummary='yes send it';window.wattzunFixtureVoiceReply={kind:'answer',message:'Send it.',questions:[],links:[],action:{kind:'confirm_workflow',reviewId:id}};
+      window.wattzunFixtureFailures={'/api/wattzun/workflows/speech':{status:503,message:'Receipt narration is temporarily unavailable.'}};
+    },workflowReview.reviewId);
+    await page.evaluate(()=>window.wattzunFixtureCall.question());await dialog.getByText('Still connected',{exact:true}).waitFor();
+    await dialog.getByRole('log',{name:'Conversation with Wattzun'}).getByText(workflowReceipt.message,{exact:true}).first().waitFor();
+    await page.evaluate(()=>{
+      window.wattzunFixtureFailures={};window.wattzunFixtureRequestSummary='What should I do next?';
+      window.wattzunFixtureVoiceReply={kind:'answer',message:'You can continue with your next task.',questions:[],links:[]};window.wattzunFixtureCall.resume();
+    });
+    await page.evaluate(()=>window.wattzunFixtureCall.question());
+    const requests=await page.evaluate(()=>window.wattzunFixtureRequests);
+    assert.equal(requests.filter(request=>request.url==='/api/wattzun/workflows').length,1);
+    const followup=requests.filter(request=>request.url==='/api/wattzun/voice').at(-1);
+    assert.match(JSON.stringify(followup.body.history),/accepted by the SMS provider\. Delivery is not yet confirmed/);
+    assert.equal(Object.hasOwn(followup.body,'workflowReviewId'),false);assert.equal(Object.hasOwn(followup.body,'workflowProposal'),false);
+    assert.deepEqual(await page.evaluate(()=>window.wattzunFixtureCounters),{started:1,hungUp:0,disposed:0});
+    assert.deepEqual(errors,[]);await page.close();
   }finally{await browser.close();}
 });

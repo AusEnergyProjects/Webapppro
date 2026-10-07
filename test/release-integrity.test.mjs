@@ -1097,8 +1097,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Selected job, audit and Council report assistance/);
-  assert.match(currentHandover, /## Active follow-up: Wattzun works from the selected job, audit or Council report/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Reviewed operational Wattzun workflows/);
+  assert.match(currentHandover, /## Active follow-up: Wattzun completes reviewed trade workflows/);
+  assert.match(currentHandover, /Single reviewed execution and existing service idempotency prevent duplicate sends, items and quote lines/);
+  assert.match(releaseTruth, /## Reviewed operational Wattzun workflows, 7 October 2026/);
   assert.match(releaseTruth, /## Selected-work Wattzun assistance, 7 October 2026/);
   assert.match(roadmap, /It is proposed work, not a claim that every item is implemented/);
   assert.match(currentHandover, /## Previous handover: Council workspace\r?\n\r?\nStatus:[^\n]*Council workspace and shared TLink dashboard access/);

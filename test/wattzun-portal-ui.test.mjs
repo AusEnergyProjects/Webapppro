@@ -7,6 +7,8 @@ import * as recordContract from "../src/lib/wattzun-records.ts";
 import * as actionContract from "../src/lib/wattzun-actions.ts";
 import * as conversationContract from "../src/lib/wattzun-conversation.ts";
 import * as workContract from "../src/lib/wattzun-work-context.ts";
+import * as workflowContract from "../src/lib/wattzun-workflow.ts";
+import * as workflowReply from "../src/lib/wattzun-workflow-reply.ts";
 import { WattzunVoiceCallError } from "../src/lib/wattzun-voice-client.ts";
 import { readWattzunVoiceStream } from "../src/lib/wattzun-voice-stream.ts";
 
@@ -33,6 +35,8 @@ function load({ values = [null, [], "", false, null], refValues = {}, storage, e
     "@/lib/wattzun-portal": portalContract,
     "@/lib/wattzun-conversation": conversationContract,
     "@/lib/wattzun-work-context": workContract,
+    "@/lib/wattzun-workflow": workflowContract,
+    "@/lib/wattzun-workflow-reply": workflowReply,
     "@/lib/wattzun-appearance": {
       WATTZUN_OPEN_EVENT:'wattzun:open',WATTZUN_READY_EVENT:'wattzun:ready',WATTZUN_USAGE_CHANGED_EVENT:'wattzun:usage-changed',
       readWattzunOpenRequest:value=>value,
@@ -44,6 +48,7 @@ function load({ values = [null, [], "", false, null], refValues = {}, storage, e
     "./WattzunMascot": { WattzunMascot: "Mascot" },
     "./WattzunRecordPicker": { WattzunRecordPicker: "Picker" },
     "./WattzunActionReview": { WattzunActionReview: "Review" },
+    "./WattzunWorkflowReview": { WattzunWorkflowReview: "WorkflowReview" },
     "./WattzunPortalAssistant.module.css": { default: {} },
   };
   const exported = {};
@@ -116,7 +121,7 @@ test('conversation settings expose speed only and recovery keeps call controls w
   assert.equal(nodes(tree,node=>node.props?.['aria-label']==='Call check-in').length,0);
   assert.equal(nodes(tree,node=>node.type==='button'&&['Continue call','End call','Call Wattzun'].includes(text(node))).length,0);
   assert.equal(nodes(tree,node=>node.type==='textarea')[0].props.disabled,true);
-  assert.doesNotMatch(source,/confirming|continueCall|idleConfirmation/);
+  assert.doesNotMatch(source,/state:\s*["']confirming["']|continueCall|idleConfirmation/);
 });
 
 test('only authentication and access HTTP failures become terminal call errors while provider failures retain their messages',async()=>{
@@ -157,6 +162,20 @@ test("reply links reject off-site and malformed destinations before rendering", 
   assert.equal(isReply({ ...reply, questions: [17] }), false);
   assert.equal(isReply({...reply,lookup:{kind:'file',query:'JOB-24'}}),true);
   assert.equal(isReply({...reply,lookup:{kind:'customer',query:'JOB-24'}}),false);
+});
+
+test('operational reply guards accept supported prepared reviews and reject malformed or cross-portal workflows',()=>{
+  const {isReply}=load().exported.testHelpers;
+  const action={kind:'customer_message',jobQuery:'John Smith',jobId:'job-john',channel:'sms',subject:'',body:'Can you confirm access tomorrow?'};
+  const workflow={state:'review',reviewId:'review-current-123456',expiresAt:'2026-10-07T23:59:00Z',kind:'customer_message',heading:'Send customer text',summary:'Text the saved customer.',confirmationLabel:'Send text',lines:[{label:'Recipient',value:'John Smith · 0412 345 678'}]};
+  const reply={kind:'clarification',message:'Please review this text.',questions:[],links:[],action,workflow};
+  assert.equal(isReply(reply,'trade'),true);
+  for(const portal of ['creditex','council'])assert.equal(isReply(reply,portal),false);
+  assert.equal(isReply({...reply,workflow:{...workflow,reviewId:'bad'}},'trade'),false);
+  assert.equal(isReply({...reply,workflow:{...workflow,href:'https://outside.test'}},'trade'),false);
+  assert.equal(isReply({...reply,workflow:{...workflow,lines:[{label:'Recipient',value:17}]}},'trade'),false);
+  assert.equal(isReply({...reply,action:{kind:'confirm_workflow',reviewId:workflow.reviewId},workflow:undefined},'trade'),true);
+  assert.equal(isReply({...reply,action:{kind:'confirm_workflow',reviewId:'bad'},workflow:undefined},'trade'),false);
 });
 
 test('workspace links retain the current owner or staff route while preserving the selected record',()=>{

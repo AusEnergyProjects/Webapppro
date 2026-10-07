@@ -9,8 +9,12 @@ import { parseWattzunUsageScope, type WattzunUsage } from "./wattzun-usage";
 import { readWattzunUsage, recordWattzunUsage, WattzunUsageError, type WattzunUsageRecord } from "./wattzun-usage-server";
 import { loadWattzunWorkContext, validateWattzunWorkContext, wattzunWorkContextInfo } from "./wattzun-work-context-server";
 import { WattzunWorkContextError, type WattzunWorkContext, type WattzunWorkReference } from "./wattzun-work-context";
+import { prepareWattzunWorkflow, loadWattzunWorkflowReview, WattzunWorkflowError } from "./wattzun-workflow-server";
+import { WattzunExistingQuoteError } from "./wattzun-existing-quote-server";
+import { isWattzunWorkflowProposal, isWattzunWorkflowResult, type WattzunWorkflowOperation, type WattzunWorkflowResult } from "./wattzun-workflow";
+import { wattzunWorkflowReply, isWattzunWorkflowApproval } from "./wattzun-workflow-reply";
 
-type Context = WattzunAccess & { input: WattzunTurnInput; signal?: AbortSignal; workContext?: WattzunWorkContext };
+type Context = WattzunAccess & { input: WattzunTurnInput; signal?: AbortSignal; workContext?: WattzunWorkContext; workflowContext?: WattzunWorkflowResult };
 export type WattzunRouteDependencies = {
   authenticate: (request: Request) => Promise<void>;
   scopes: (request: Request, portal: WattzunPortal) => Promise<WattzunScope[]>;
@@ -20,7 +24,9 @@ export type WattzunRouteDependencies = {
   transcribe: (options: Context & { audio: Blob }) => Promise<string>;
   speak: (options: Context & { reply: WattzunReply }) => Promise<{ base64: string; mimeType: "audio/mpeg" }>;
   streamSpeak: (options: Context & { reply: WattzunReply }) => Promise<ReadableStream<Uint8Array>>;
-  realtime: (options: Context & { audio: Blob; beforeSpeech: () => Promise<void> }) => Promise<{ reply: WattzunReply; audio: ReadableStream<Uint8Array>; transcript?: string; requestSummary?: string; timings?: WattzunRealtimeTimings }>;
+  realtime: (options: Context & { audio: Blob; beforeSpeech: () => Promise<void>; transformReply?: (reply: WattzunReply, requestSummary: string) => Promise<WattzunReply> }) => Promise<{ reply: WattzunReply; audio: ReadableStream<Uint8Array>; transcript?: string; requestSummary?: string; timings?: WattzunRealtimeTimings }>;
+  prepareWorkflow?: typeof prepareWattzunWorkflow;
+  workflowReview?: typeof loadWattzunWorkflowReview;
   recordUsage: (options: WattzunUsageRecord) => Promise<void>;
   usage: (access: WattzunAccess) => Promise<WattzunUsage>;
 };
@@ -29,6 +35,7 @@ const defaults: WattzunRouteDependencies = {
   context: loadWattzunWorkContext,
   reply: prepareWattzunPortalReply, transcribe: transcribeWattzunPortalAudio, speak: speakWattzunPortalReply, streamSpeak: streamWattzunPortalReply,
   realtime: prepareWattzunRealtimeTurn,
+  prepareWorkflow: prepareWattzunWorkflow, workflowReview: loadWattzunWorkflowReview,
   recordUsage: recordWattzunUsage, usage: readWattzunUsage,
 };
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
@@ -58,6 +65,7 @@ function turnTimer() {
   };
 }
 function failure(error: unknown) {
+  if (error instanceof WattzunWorkflowError || error instanceof WattzunExistingQuoteError) return json({ ok: false, error: error.message }, error.status);
   if (error instanceof WattzunWorkContextError) return json({ ok: false, error: error.message }, error.status);
   if (error instanceof WattzunUsageError) return json({ ok: false, error: error.code === "conflict"
     ? "This request was already used for a different Wattzun exchange. Start a new turn."
@@ -130,6 +138,62 @@ async function recheckTurn(request: Request, access: WattzunAccess, input: Wattz
 function withContext(reply: WattzunReply, context?: WattzunWorkContext): WattzunReply {
   return context ? { ...reply, workContext: wattzunWorkContextInfo(context) } : reply;
 }
+type WorkflowTurn = { result?: WattzunWorkflowResult; proposal?: WattzunWorkflowOperation };
+function selectedWorkflowJob(proposal: WattzunWorkflowOperation, context?: WattzunWorkContext): WattzunWorkflowOperation {
+  if (!("jobId" in proposal) || proposal.jobId || context?.reference.kind !== "trade_job") return proposal;
+  // Another suburb, customer, date or job clue must be resolved on its own merits.
+  const query = proposal.jobQuery.trim();
+  if (query && !/^(?:(?:for|on) )?(?:this|that|the selected|the current|selected|current) (?:job|quote)(?: here)?[.!]?$/i.test(query)) return proposal;
+  return { ...proposal, jobId: context.reference.recordId };
+}
+async function preparedWorkflow(request: Request, access: WattzunAccess, input: WattzunTurnInput, proposal: WattzunWorkflowOperation, deps: WattzunRouteDependencies) {
+  requireOpenConversation(request);
+  if (!deps.prepareWorkflow) throw new WattzunWorkflowError(503, "The workflow preparation service is unavailable. Try again.");
+  const result = await deps.prepareWorkflow(request, access, proposal, input.requestId);
+  requireOpenConversation(request);
+  if (!isWattzunWorkflowResult(result)) throw new WattzunWorkflowError(503, "The prepared workflow could not be read. Prepare it again.");
+  return result;
+}
+async function reviewedWorkflow(request: Request, access: WattzunAccess, reviewId: string, deps: WattzunRouteDependencies) {
+  requireOpenConversation(request);
+  if (!deps.workflowReview) throw new WattzunWorkflowError(503, "The workflow review service is unavailable. Try again.");
+  const result = await deps.workflowReview(request, access, reviewId);
+  requireOpenConversation(request);
+  if (!isWattzunWorkflowResult(result) || (result.state !== "review" && result.state !== "complete")
+    || result.state === "review" && result.reviewId !== reviewId) throw new WattzunWorkflowError(503, "The current workflow review could not be read. Prepare it again.");
+  return result;
+}
+async function initialWorkflow(request: Request, access: WattzunAccess, input: WattzunTurnInput, context: WattzunWorkContext | undefined, deps: WattzunRouteDependencies): Promise<WorkflowTurn> {
+  if (input.workflowReviewId) return { result: await reviewedWorkflow(request, access, input.workflowReviewId, deps) };
+  if (!input.workflowProposal) return {};
+  const proposal = selectedWorkflowJob(input.workflowProposal, context);
+  return { proposal, result: await preparedWorkflow(request, access, input, proposal, deps) };
+}
+async function processWorkflowReply(request: Request, access: WattzunAccess, input: WattzunTurnInput, context: WattzunWorkContext | undefined,
+  reply: WattzunReply, workflow: WorkflowTurn, deps: WattzunRouteDependencies, requestSummary?: string): Promise<WattzunReply> {
+  if (!isWattzunWorkflowProposal(reply.action)) return workflow.result ? { ...reply, workflow: workflow.result } : reply;
+  const currentAccess = await recheckTurn(request, access, input, context, deps);
+  if (reply.action.kind === "confirm_workflow") {
+    if (workflow.result?.state !== "review" || reply.action.reviewId !== workflow.result.reviewId) throw new WattzunWorkflowError(409, "Approve only the current workflow review. Prepare it again if the details changed.");
+    if (!isWattzunWorkflowApproval(input.message || requestSummary || "")) throw new WattzunWorkflowError(400, "Please explicitly confirm this current review before it can be saved or sent.");
+    const current = await reviewedWorkflow(request, currentAccess, reply.action.reviewId, deps);
+    if (current.state !== "review") throw new WattzunWorkflowError(409, "This review already has a result. Check it before submitting another action.");
+    workflow.result = current;
+    return { ...reply, kind: "answer", message: "I will submit this reviewed task now.", questions: [], workflow: current };
+  }
+  const proposal = selectedWorkflowJob(reply.action, context);
+  workflow.proposal = proposal;
+  workflow.result = await preparedWorkflow(request, currentAccess, input, proposal, deps);
+  return wattzunWorkflowReply({ ...reply, action: proposal }, workflow.result);
+}
+async function recheckWorkflow(request: Request, access: WattzunAccess, input: WattzunTurnInput, workflow: WorkflowTurn, deps: WattzunRouteDependencies) {
+  if (!workflow.result) return;
+  const fresh = workflow.result.state === "review"
+    ? await reviewedWorkflow(request, access, workflow.result.reviewId, deps)
+    : input.workflowReviewId ? await reviewedWorkflow(request, access, input.workflowReviewId, deps)
+      : workflow.proposal ? await preparedWorkflow(request, access, input, workflow.proposal, deps) : undefined;
+  if (!fresh || JSON.stringify(fresh) !== JSON.stringify(workflow.result)) throw new WattzunWorkflowError(409, "This workflow changed while Wattzun was answering. Check the current review or result before continuing.");
+}
 export async function getWattzunPortal(request: Request, deps = defaults): Promise<Response> {
   try {
     await deps.authenticate(request);
@@ -167,10 +231,13 @@ export async function postWattzunPortal(request: Request, deps = defaults): Prom
     const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
     const workContext = await timing.run("access", () => selectedContext(request, access, input, deps));
-    const reply = await timing.run("llm", () => deps.reply({ ...access, input, workContext, signal: request.signal }));
+    const workflow = await timing.run("access", () => initialWorkflow(request, access, input, workContext, deps));
+    const rawReply = await timing.run("llm", () => deps.reply({ ...access, input, workContext, workflowContext: workflow.result, signal: request.signal }));
+    const reply = await timing.run("access", () => processWorkflowReply(request, access, input, workContext, rawReply, workflow, deps));
     const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
     await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "text" }));
-    await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+    const finalAccess = await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+    await timing.run("access", () => recheckWorkflow(request, finalAccess, input, workflow, deps));
     return timing.response(json({ ok: true, reply: withContext(reply, workContext) }));
   } catch (error) { return timing.response(failure(error)); }
 }
@@ -201,14 +268,20 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
     const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
     requireOpenConversation(request);
     const workContext = await timing.run("access", () => selectedContext(request, access, input, deps));
+    const workflow = await timing.run("access", () => initialWorkflow(request, access, input, workContext, deps));
     if (realtime) {
-      const prepared = await timing.run("realtime", () => deps.realtime({ ...access, input, workContext, audio, signal: request.signal,
-        beforeSpeech: async () => { await timing.run("access", () => recheckTurn(request, access, input, workContext, deps)); } }));
+      const prepared = await timing.run("realtime", () => deps.realtime({ ...access, input, workContext, workflowContext: workflow.result, audio, signal: request.signal,
+        transformReply: async (reply, summary) => timing.run("access", () => processWorkflowReply(request, access, input, workContext, reply, workflow, deps, summary)),
+        beforeSpeech: async () => {
+          const current = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
+          await timing.run("access", () => recheckWorkflow(request, current, input, workflow, deps));
+        } }));
       speechStream = prepared.audio;
       for (const [stage, duration] of Object.entries(prepared.timings || {})) timing.provider(stage, duration);
       const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
       await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
-      await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+      const finalAccess = await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+      await timing.run("access", () => recheckWorkflow(request, finalAccess, input, workflow, deps));
       const response = timing.response(new Response(voiceFrames(prepared.transcript || "", withContext(prepared.reply, workContext), speechStream, request.signal, prepared.requestSummary),
         { headers: { ...headers, "Content-Type": WATTZUN_REALTIME_VOICE_STREAM_TYPE } }));
       handedOff = true;
@@ -217,23 +290,27 @@ export async function postWattzunVoice(request: Request, deps = defaults): Promi
     const transcript = await timing.run("stt", () => deps.transcribe({ ...access, input, audio, signal: request.signal }));
     await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
     const spokenInput = { ...input, message: transcript };
-    const reply = await timing.run("llm", () => deps.reply({ ...access, input: spokenInput, workContext, signal: request.signal }));
-    await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
+    const rawReply = await timing.run("llm", () => deps.reply({ ...access, input: spokenInput, workContext, workflowContext: workflow.result, signal: request.signal }));
+    const reply = await timing.run("access", () => processWorkflowReply(request, access, spokenInput, workContext, rawReply, workflow, deps));
+    const speechAccess = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
+    await timing.run("access", () => recheckWorkflow(request, speechAccess, input, workflow, deps));
     // Existing open calls retain JSON/MP3 until they reload. New clients negotiate PCM frames.
     if (request.headers.get("accept") === WATTZUN_VOICE_STREAM_TYPE) {
-      speechStream = await timing.run("tts", () => deps.streamSpeak({ ...access, input: spokenInput, workContext, reply, signal: request.signal }));
+      speechStream = await timing.run("tts", () => deps.streamSpeak({ ...access, input: spokenInput, workContext, workflowContext: workflow.result, reply, signal: request.signal }));
       const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
       await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
-      await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+      const finalAccess = await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+      await timing.run("access", () => recheckWorkflow(request, finalAccess, input, workflow, deps));
       const response = timing.response(new Response(voiceFrames(transcript, withContext(reply, workContext), speechStream, request.signal),
         { headers: { ...headers, "Content-Type": WATTZUN_VOICE_STREAM_TYPE } }));
       handedOff = true;
       return response;
     }
-    const speech = await timing.run("tts", () => deps.speak({ ...access, input: spokenInput, workContext, reply, signal: request.signal }));
+    const speech = await timing.run("tts", () => deps.speak({ ...access, input: spokenInput, workContext, workflowContext: workflow.result, reply, signal: request.signal }));
     const latest = await timing.run("access", () => recheckTurn(request, access, input, workContext, deps));
     await timing.run("usage", () => deps.recordUsage({ access: latest, requestId: input.requestId, kind: "voice" }));
-    await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+    const finalAccess = await timing.run("access", () => recheckTurn(request, latest, input, workContext, deps));
+    await timing.run("access", () => recheckWorkflow(request, finalAccess, input, workflow, deps));
     return timing.response(json({ ok: true, transcript, reply: withContext(reply, workContext), audio: speech }));
   } catch (error) { return timing.response(failure(error)); }
   finally { if (speechStream && !handedOff) await speechStream.cancel().catch(() => {}); }
@@ -265,6 +342,44 @@ export async function postWattzunGreeting(request: Request, deps = defaults): Pr
       { headers: { ...headers, "Content-Type": WATTZUN_REALTIME_VOICE_STREAM_TYPE } }));
     handedOff = true;
     return response;
+  } catch (error) { return timing.response(failure(error)); }
+  finally { if (audio && !handedOff) await audio.cancel().catch(() => {}); }
+}
+
+/** Narrate only the current application receipt after a separately confirmed action. */
+export async function postWattzunWorkflowSpeech(request: Request, deps = defaults): Promise<Response> {
+  if (!acceptedOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
+  if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") return json({ ok: false, error: "Send the current workflow receipt request as JSON." }, 415);
+  const timing = turnTimer(); let audio: ReadableStream<Uint8Array> | undefined; let handedOff = false;
+  try {
+    await timing.run("auth", () => deps.authenticate(request)); requireOpenConversation(request);
+    const bytes = await boundedBody(request, 2_000);
+    if (!bytes) return json({ ok: false, error: "The workflow receipt request is too large." }, 413);
+    const raw: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    const keys = ["portal", "scopeId", "requestId", "workflowReviewId", "preferences"];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length !== keys.length || keys.some(key => !Object.hasOwn(raw, key))) throw new WattzunInputError("Send only the current TLink workflow receipt reference.");
+    const portal = Reflect.get(raw, "portal"); const preferences: unknown = Reflect.get(raw, "preferences");
+    if (portal !== "trade" || !preferences || typeof preferences !== "object" || Array.isArray(preferences) || Object.keys(preferences).some(key => key !== "speed")) throw new WattzunInputError("Choose your TLink business and a supported speaking speed.");
+    const input = parseWattzunTurn({ portal, scopeId: Reflect.get(raw, "scopeId"), requestId: Reflect.get(raw, "requestId"),
+      workflowReviewId: Reflect.get(raw, "workflowReviewId"), preferences, history: [], message: "Read the current verified workflow receipt." });
+    if (!input.workflowReviewId) throw new WattzunInputError("Choose the current completed workflow review.");
+    const reviewId = input.workflowReviewId;
+    const access = await timing.run("access", () => deps.access(request, input.portal, input.scopeId));
+    if (access.scope.portal !== input.portal || access.scope.scopeId !== input.scopeId) throw new WattzunAccessError(403, "Choose the TLink business that owns this workflow receipt.");
+    requireOpenConversation(request);
+    const result = await timing.run("access", () => reviewedWorkflow(request, access, reviewId, deps));
+    if (result.state !== "complete") throw new WattzunWorkflowError(409, "This workflow has no completed result to read yet. Review its current status first.");
+    const reply = wattzunWorkflowReply({ kind: "answer", message: "", questions: [], links: [], action: null }, result);
+    audio = await timing.run("tts", () => deps.streamSpeak({ ...access, input, reply, workflowContext: result, signal: request.signal }));
+    const latest = await timing.run("access", () => recheck(request, access, deps));
+    const refreshed = await timing.run("access", () => reviewedWorkflow(request, latest, reviewId, deps));
+    if (JSON.stringify(refreshed) !== JSON.stringify(result)) throw new WattzunWorkflowError(409, "The workflow receipt changed. Read its current result again.");
+    requireOpenConversation(request);
+    // Speech has the normal provider cost guard; a receipt is not another answered question.
+    const response = timing.response(new Response(voiceFrames("", reply, audio, request.signal), {
+      headers: { ...headers, "Content-Type": WATTZUN_REALTIME_VOICE_STREAM_TYPE },
+    }));
+    handedOff = true; return response;
   } catch (error) { return timing.response(failure(error)); }
   finally { if (audio && !handedOff) await audio.cancel().catch(() => {}); }
 }

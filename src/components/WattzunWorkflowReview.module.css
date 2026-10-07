@@ -1,0 +1,65 @@
+.review {
+  --workflow-bg: #fff;
+  --workflow-line: #ccd9de;
+  --workflow-ink: #172f40;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--workflow-line);
+  border-radius: 16px;
+  color: var(--workflow-ink);
+  background: var(--workflow-bg);
+}
+
+:global([data-tlink-colour-mode="night"]) .review,
+:global([data-colour-mode="night"]) .review {
+  --workflow-bg: #102625;
+  --workflow-line: #304d46;
+  --workflow-ink: #e0eeea;
+}
+
+.review h3, .review h4, .review p { margin: 0; }
+.review p { font-size: .88rem; line-height: 1.5; }
+.review button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--workflow-line);
+  border-radius: 9px;
+  color: inherit;
+  background: var(--workflow-bg);
+  font: inherit;
+  cursor: pointer;
+}
+.review button:focus-visible { outline: 3px solid #0bb6a1; outline-offset: 2px; }
+.review button:disabled { cursor: default; opacity: .6; }
+.review .primary { border-color: #08796e; color: #fff; background: #08796e; }
+.details { display: grid; gap: 7px; min-width: 0; margin: 0; }
+.details > div { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(0, 2fr); gap: 10px; }
+.details dt { font-size: .85rem; font-weight: 600; }
+.details dd { min-width: 0; margin: 0; font-size: .88rem; overflow-wrap: anywhere; }
+.message, .job, .line {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--workflow-line);
+  border-radius: 9px;
+  overflow-wrap: anywhere;
+}
+.message { white-space: pre-wrap; font-size: .9rem; line-height: 1.5; }
+.matches, .lines { display: grid; gap: 8px; min-width: 0; }
+.matches button { display: grid; gap: 5px; text-align: left; overflow-wrap: anywhere; }
+.matches span, .job span, .line span { font-size: .85rem; line-height: 1.45; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { opacity: .8; }
+.error { color: #a12920; overflow-wrap: anywhere; }
+:global([data-tlink-colour-mode="night"]) .error,
+:global([data-colour-mode="night"]) .error { color: #ffb4ad; }
+
+@media (max-width: 560px) {
+  .review { padding: 12px; }
+  .details > div { grid-template-columns: 1fr; gap: 3px; }
+  .actions button { flex: 1 1 140px; }
+}

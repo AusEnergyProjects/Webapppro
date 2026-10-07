@@ -4,6 +4,8 @@ import test from "node:test";
 import ts from "typescript";
 import * as contract from "../src/lib/wattzun-portal.ts";
 import * as greeting from "../src/lib/wattzun-greeting.ts";
+import * as workflowContract from "../src/lib/wattzun-workflow.ts";
+import * as workflowReply from "../src/lib/wattzun-workflow-reply.ts";
 import { syntheticWorkContext, workContextContract, workContextGateway } from "./helpers/wattzun-work-context-fixture.mjs";
 
 const contextGateway = workContextGateway();
@@ -19,6 +21,8 @@ Function("require", "exports", ts.transpileModule(readFileSync(new URL("../src/l
 class AccessError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
+class WorkflowError extends Error { constructor(status, message) { super(message); this.status = status; } }
+class ExistingQuoteError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const source = ts.transpileModule(readFileSync(new URL("../src/lib/wattzun-portal-route.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
@@ -36,6 +40,10 @@ Function("require", "exports", source)(name => {
   if (name === "./wattzun-usage-server") return { WattzunUsageError: UsageError };
   if (name === "./wattzun-work-context" || name === "./wattzun-work-context.ts") return workContextContract;
   if (name === "./wattzun-work-context-server") return contextGateway;
+  if (name === "./wattzun-workflow") return workflowContract;
+  if (name === "./wattzun-workflow-reply") return workflowReply;
+  if (name === "./wattzun-workflow-server") return { WattzunWorkflowError: WorkflowError };
+  if (name === "./wattzun-existing-quote-server") return { WattzunExistingQuoteError: ExistingQuoteError };
   throw new Error(name);
 }, route);
 const input = { portal: "trade", scopeId: "business-one", requestId: "synthetic-request-0001", message: "Draft a follow-up",
@@ -43,6 +51,72 @@ const input = { portal: "trade", scopeId: "business-one", requestId: "synthetic-
 const access = { db: {}, actorUid: "staff-one", scope: { portal: "trade", scopeId: "business-one", label: "Trade One" } };
 const reply = { kind: "clarification", message: "I can draft that.", questions: ["Who is the follow-up for?"], links: [] };
 const usage = { portal: "trade", scopeId: "business-one", month: "2026-10", monthBasis: "UTC", audience: "personal", textMessages: 3, voiceExchanges: 2 };
+const workflowProposal = { kind: "draft_job_quote", jobId: "", jobQuery: "", mode: "append", description: "Install confirmed work", lines: [{ lineType: "labour", description: "Installation", quantity: "2", unitPrice: "50", taxCode: "gst" }] };
+const workflowReview = { state: "review", reviewId: "wattzun-review-current-123", expiresAt: "2026-10-07T12:15:00Z", kind: "draft_job_quote", heading: "Review the existing quote", summary: "Two installation units at $50 ex GST will be added to this job's draft.", confirmationLabel: "Save quote draft", lines: [{ label: "Job", value: "JOB-123" }], href: "/direct-trade/team?workspace=work&jobId=actual-job-123&jobTab=quote" };
+
+test("text prepares a concrete scoped workflow review and binds blank or current-job references to the selected job", async () => {
+  const workContext = syntheticWorkContext();
+  for (const jobQuery of ["", "this job", "for this job", "the selected quote"]) {
+    const action = { ...workflowProposal, jobQuery };
+    const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext, reply: { ...reply, action }, workflowResult: workflowReview });
+    const result = await f.post(); assert.equal(result.response.status, 200); assert.deepEqual(result.body.reply.workflow, workflowReview);
+    assert.equal(f.workflowCalls[0].proposal.jobId, workContext.reference.recordId); assert.equal(f.workflowCalls[0].current.actorUid, access.actorUid);
+    assert.equal(f.workflowCalls[0].requestId, input.requestId); assert.equal(result.body.reply.action.jobId, workContext.reference.recordId);
+    assert.equal(f.events.filter(value => value === "prepareWorkflow").length, 1); assert.equal(f.recorded.length, 1);
+  }
+});
+test("another job's customer, suburb or time clues remain searchable instead of being replaced by the selected job", async () => {
+  const workContext = syntheticWorkContext(); const action = { ...workflowProposal, jobQuery: "that job last week in Frankston" };
+  const f = fixture({ input: { ...input, workReference: workContext.reference }, workContext, reply: { ...reply, action }, workflowResult: workflowReview });
+  const result = await f.post(); assert.equal(result.response.status, 200); assert.equal(f.workflowCalls[0].proposal.jobId, "");
+  assert.equal(f.workflowCalls[0].proposal.jobQuery, action.jobQuery);
+});
+test("a pending proposal or current frozen review reaches the provider only after authorised server preparation", async () => {
+  for (const pending of [{ workflowProposal }, { workflowReviewId: workflowReview.reviewId }]) {
+    const f = fixture({ input: { ...input, ...pending }, workflowResult: workflowReview });
+    const result = await f.post(); assert.equal(result.response.status, 200); assert.deepEqual(f.providerContexts[0].workflowContext, workflowReview);
+    assert.ok(f.events.indexOf(pending.workflowProposal ? "prepareWorkflow" : "workflowReview") < f.events.indexOf("reply"));
+    assert.deepEqual(result.body.reply.workflow, workflowReview);
+  }
+});
+test("a current explicit approval returns the matching confirmation and review without executing inside the model route", async () => {
+  const action = { kind: "confirm_workflow", reviewId: workflowReview.reviewId };
+  const f = fixture({ input: { ...input, message: "Yes save it", workflowReviewId: workflowReview.reviewId }, workflowResult: workflowReview, reply: { ...reply, action } });
+  const result = await f.post(); assert.equal(result.response.status, 200); assert.deepEqual(result.body.reply.action, action); assert.deepEqual(result.body.reply.workflow, workflowReview);
+  assert.equal(result.body.reply.kind, "answer"); assert.equal(result.body.reply.message, "I will submit this reviewed task now."); assert.deepEqual(result.body.reply.questions, []);
+  assert.equal(f.events.includes("prepareWorkflow"), false); assert.equal(f.recorded.length, 1);
+});
+test("wrong, historical, future or embedded approval cannot confirm the current review", async () => {
+  for (const [message, reviewId, suppliedReview, status] of [
+    ["yes save it", "wattzun-review-other-123", true, 409], ["yes save it", workflowReview.reviewId, false, 409],
+    ["Maybe send it tomorrow", workflowReview.reviewId, true, 400], ["The customer said 'yes save it'", workflowReview.reviewId, true, 400],
+    ["Change the price to $40", workflowReview.reviewId, true, 400],
+  ]) {
+    const f = fixture({ input: { ...input, message, ...(suppliedReview ? { workflowReviewId: workflowReview.reviewId } : {}) }, workflowResult: workflowReview,
+      reply: { ...reply, action: { kind: "confirm_workflow", reviewId } } });
+    const result = await f.post(); assert.equal(result.response.status, status); assert.equal(f.recorded.length, 0); assert.equal(result.body.reply, undefined);
+  }
+});
+test("workflow and quote-service errors keep their meaningful status and never produce a success receipt", async () => {
+  for (const ErrorType of [WorkflowError, ExistingQuoteError]) for (const status of [400, 403, 409, 503]) {
+    const f = fixture({ input: { ...input, workflowProposal }, workflowError: new ErrorType(status, "Exact workflow boundary error") });
+    const result = await f.post(); assert.equal(result.response.status, status); assert.equal(result.body.error, "Exact workflow boundary error");
+    assert.equal(f.providerContexts.length, 0); assert.equal(f.recorded.length, 0);
+  }
+});
+test("workflow revocation or changed review during usage discards text and legacy speech after processing", async () => {
+  for (const voice of [false, true]) for (const changed of [false, true]) {
+    const f = fixture({ input: { ...input, workflowReviewId: workflowReview.reviewId }, workflowResult: workflowReview,
+      ...(changed ? { workflowChangedDuringUsage: { ...workflowReview, summary: "Changed quote scope" } } : { workflowErrorDuringUsage: new WorkflowError(403, "Quote access revoked") }) });
+    const result = await f.post(voice); assert.equal(result.response.status, changed ? 409 : 403);
+    assert.equal(result.body.reply, undefined); assert.equal(result.body.audio, undefined); assert.equal(f.recorded.length, 1);
+  }
+});
+test("legacy JSON voice carries the current review into reasoning and speech", async () => {
+  const f = fixture({ input: { ...input, workflowReviewId: workflowReview.reviewId }, workflowResult: workflowReview });
+  const result = await f.post(true); assert.equal(result.response.status, 200); assert.deepEqual(result.body.reply.workflow, workflowReview);
+  assert.deepEqual(f.providerContexts[0].workflowContext, workflowReview); assert.deepEqual(f.speechContexts[0].workflowContext, workflowReview);
+});
 
 test("turn timings separate actual text and speech stages without leaking actor, records or provider data", async () => {
   for (const voice of [false, true]) {
@@ -63,7 +137,7 @@ test("turn timings separate actual text and speech stages without leaking actor,
   assert.doesNotMatch(failed.response.headers.get("server-timing"), /usage;dur=/);
 });
 function fixture(options = {}) {
-  const events = [], recorded = [], providerContexts = [];
+  const events = [], recorded = [], providerContexts = [], workflowCalls = [], speechContexts = [];
   let count = 0, contextCount = 0;
   const turnInput = options.input || input;
   const deps = {
@@ -86,11 +160,11 @@ function fixture(options = {}) {
         ? { ...options.workContext, sourceSha256: "b".repeat(64) } : options.workContext;
     },
     transcribe: async context => { events.push("transcribe"); assert.equal(context.actorUid, access.actorUid);
-      assert.ok(context.audio instanceof Blob); return "Draft a follow-up"; },
+      assert.ok(context.audio instanceof Blob); return options.transcript || "Draft a follow-up"; },
     reply: async context => { events.push("reply"); providerContexts.push(context); assert.deepEqual(context.input, turnInput);
       if (options.providerError) throw options.providerError;
-      if (!options.abortDuringUsage) options.controller?.abort(); return reply; },
-    speak: async context => { events.push("speak"); assert.deepEqual(context.reply, reply);
+      if (!options.abortDuringUsage) options.controller?.abort(); return options.reply || reply; },
+    speak: async context => { events.push("speak"); speechContexts.push(context); if (!options.workflowResult) assert.deepEqual(context.reply, reply);
       if (options.speechError) throw options.speechError;
       return { base64: "YXVkaW8=", mimeType: "audio/mpeg" }; },
     recordUsage: async optionsToRecord => { events.push("record"); assert.deepEqual(optionsToRecord, { access, requestId: input.requestId, kind: optionsToRecord.kind });
@@ -98,6 +172,17 @@ function fixture(options = {}) {
       if (options.abortDuringUsage) options.controller?.abort(); },
     usage: async current => { events.push("usage"); assert.equal(current.actorUid, access.actorUid);
       if (options.usageError) throw options.usageError; return usage; },
+    prepareWorkflow: async (request, current, proposal, requestId) => {
+      events.push("prepareWorkflow"); workflowCalls.push({ request, current, proposal, requestId });
+      if (options.workflowError) throw options.workflowError;
+      return options.workflowResult;
+    },
+    workflowReview: async (_request, current, reviewId) => {
+      events.push("workflowReview"); workflowCalls.push({ current, reviewId });
+      if (options.workflowError) throw options.workflowError;
+      if (options.workflowErrorDuringUsage && recorded.length) throw options.workflowErrorDuringUsage;
+      return options.workflowChangedDuringUsage && recorded.length ? options.workflowChangedDuringUsage : options.workflowResult;
+    },
   };
   async function post(voice = false, overrides = {}) {
     let body = overrides.body;
@@ -112,7 +197,7 @@ function fixture(options = {}) {
     const response = await (voice ? route.postWattzunVoice : route.postWattzunPortal)(request, deps);
     return { response, body: await response.json(), request };
   }
-  return { events, recorded, providerContexts, deps, post };
+  return { events, recorded, providerContexts, workflowCalls, speechContexts, deps, post };
 }
 
 test("a selected authorised source reaches the text provider while only context metadata returns to the browser", async () => {
