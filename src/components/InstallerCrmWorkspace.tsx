@@ -142,6 +142,7 @@ type CreateJobResult = {
   complianceIntentPlanned?: boolean; complianceIntentCount?: number; workPackReady?: boolean;
   workPackBlockers?: Array<{ code: string; message: string }>;
   rentalInspectionAttached?: boolean; rentalInspectionModuleCount?: number;
+  attachedFormCount?: number;
   calendarSynced?: number; calendarFailed?: number; customerDocuments?: CustomerDocumentSendResult;
   duplicateCandidates?: DuplicateCandidate[]; error?: string;
 };
@@ -1362,7 +1363,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         const matches = result.duplicateCandidates?.map((item) => `${item.displayName} (${item.customerNumber}: ${item.reasons.join(", ")})`).join("; ");
         throw new Error(matches ? `${result.error} Matches: ${matches}.` : result.error || "The customer, service site and job were not created.");
       }
-      await load(); setRefreshNonce((value) => value + 1);
+      let refreshFailed = false;
+      try { await load(); } catch { refreshFailed = true; }
+      setRefreshNonce((value) => value + 1);
       const calendarFailed = Number(result.calendarFailed || 0);
       const calendarSynced = Number(result.calendarSynced || 0);
       const workPackBlockerMessages = Array.from(new Set(
@@ -1371,6 +1374,8 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       const creationResults = [
         `${result.workNumber || "Job"} created and scheduled in TLink.`,
         result.rentalInspectionAttached ? `${result.rentalInspectionModuleCount || 1} rental inspection workflow ${(result.rentalInspectionModuleCount || 1) === 1 ? "module was" : "modules were"} attached.` : "",
+        result.attachedFormCount ? `${result.attachedFormCount} job form${result.attachedFormCount === 1 ? " was" : "s were"} attached.` : "",
+        refreshFailed ? "The job is saved. The latest workspace details could not be refreshed; reopen the saved job to check its forms." : "",
         result.complianceIntentPlanned && result.workPackReady
           ? "The governed activity form was attached to its draft compliance case and is ready for the assigned technician. No certificate was created."
           : result.complianceIntentPlanned
@@ -1380,7 +1385,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         calendarFailed ? `Calendar sync needs another try. ${calendarFailed} ${calendarFailed === 1 ? "update was" : "updates were"} not completed.` : "",
         result.customerDocuments?.requested ? result.customerDocuments.message : "",
       ].filter(Boolean).join(" ");
-      const needsAttention = calendarFailed > 0 || (result.complianceIntentPlanned && !result.workPackReady)
+      const needsAttention = refreshFailed || calendarFailed > 0 || (result.complianceIntentPlanned && !result.workPackReady)
         || (result.customerDocuments?.requested && ["failed", "unavailable"].includes(result.customerDocuments.status));
       setStatus(creationResults, needsAttention ? "warning" : "success", calendarFailed > 0);
       form.reset(); setNewJobSeed(null); setCreating(""); setView("jobs");
@@ -1476,7 +1481,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     </div>}
     {view === "jobs" && creating === "job" && <div className="crm-view crm-create-screen">
       <div className="crm-page-heading"><div><h3 ref={newJobHeadingRef} tabIndex={-1}>Create job</h3></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>Back to all jobs</button></div>
-      <section className="crm-create-card"><TradeNewJobForm key={newJobSeed?.sourceEnquiryId || "blank-job"} user={user} templates={templates} teamMembers={teamMembers} allowCustomerSearch={canSearchCustomerDirectory} canAssignJobs={!staffPermissions || staffPermissions.canAssignJobs} assignmentScope={staffPermissions?.jobScope || "team"} busy={busy === "create-job"} initial={newJobSeed || undefined} onSubmit={createJob} /></section>
+      <section className="crm-create-card"><TradeNewJobForm key={newJobSeed?.sourceEnquiryId || "blank-job"} user={user} templates={templates} teamMembers={teamMembers} allowCustomerSearch={canSearchCustomerDirectory} canAssignJobs={!staffPermissions || staffPermissions.canAssignJobs} canManageFieldEvidence={!staffPermissions || staffPermissions.canViewFieldEvidence && staffPermissions.canManageFieldEvidence} assignmentScope={staffPermissions?.jobScope || "team"} busy={busy === "create-job"} initial={newJobSeed || undefined} onSubmit={createJob} /></section>
     </div>}
 
     {view === "jobs" && creating !== "job" && creating !== "quote" && focusedJobId && <div className="crm-view crm-job-workspace">
@@ -1744,6 +1749,8 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   const hasActiveJobAppointment = Boolean(activeJobAppointmentKey);
   const [tab, setTab] = useState<JobDetailTab>(initialTab);
   const [formsOpen, setFormsOpen] = useState(true);
+  const [formLibraryOpen, setFormLibraryOpen] = useState<boolean | undefined>();
+  const [activityPickerOpen, setActivityPickerOpen] = useState<boolean | undefined>();
   const [workPlanOpen, setWorkPlanOpen] = useState(initialTab === "field");
   const [activityRecordsRequested, setActivityRecordsRequested] = useState(false);
   const [photoRequestOpen, setPhotoRequestOpen] = useState(false);
@@ -1993,6 +2000,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
       {complianceCases.length > 0 && <section className="crm-job-compliance"><header><div><span>Compliance intake</span><h4>{complianceCases.length} linked case{complianceCases.length === 1 ? "" : "s"}</h4></div><strong>Compliance review required</strong></header><div>{complianceCases.map((item) => <article key={item.id}><div><span>{item.caseNumber} | activity date {item.activityDate}</span><strong>{item.programCode} | {item.registryActivityCode || item.activityKey} | {item.title} | v{item.version}</strong><p>{[item.productCategory, item.scenarioCode ? `scenario ${item.scenarioCode}` : "", item.scenario].filter(Boolean).join(" | ")}</p></div><dl><div><dt>Case</dt><dd>{item.status.replaceAll("_", " ")}</dd></div><div><dt>Evidence</dt><dd>{item.evidenceStatus.replaceAll("_", " ")}</dd></div></dl>{item.officialSourceUrl && <a href={item.officialSourceUrl} target="_blank" rel="noreferrer">Open official {item.officialSourceVersion || item.officialSourceTitle || "activity"} source</a>}</article>)}</div><p>TLink has preserved the selected rule version for intake. This is not an eligibility decision, certificate calculation, evidence acceptance or rebate promise.</p></section>}
     </section>}
     {canViewFieldEvidence && <section className="crm-job-section" hidden={activeTab !== "files"} aria-label="Job files and forms">
+      {activeTab === "files" && canManageFieldEvidence && !['completed', 'cancelled'].includes(job.stage) && <div className="crm-wizard-actions" aria-label="Add job work and forms"><button type="button" className="btn btn-secondary" onClick={() => { setFormsOpen(true); setActivityPickerOpen(true); window.requestAnimationFrame(() => { const section = document.getElementById("job-files-rental"); section?.scrollIntoView({ behavior: "smooth", block: "start" }); section?.focus({ preventScroll: true }); }); }}>Add activity</button><button type="button" className="btn" onClick={() => { setFormsOpen(true); setFormLibraryOpen(true); window.requestAnimationFrame(() => { const section = document.getElementById("job-files-form-library"); section?.scrollIntoView({ behavior: "smooth", block: "start" }); section?.focus({ preventScroll: true }); }); }}>Add form</button></div>}
       {activeTab === "files" && <><section id="job-files-electrical-assessments"><TradeVeuElectricalAssessmentPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} /></section><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} showProgress={false} showElectricalAssessment={false} embedded canOpenInvoice={canViewInvoices} refreshKey={job.revision + filesRevision} onNavigate={(next) => {
         if (next === "forms" || next === "rental-assessment" || next === "activity-forms") {
           setFormsOpen(true);
@@ -2007,9 +2015,9 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
       }} onChanged={refreshJobFiles} /></>}
       <details className="crm-field-secondary" id="job-files-forms" tabIndex={-1} open={formsOpen} onToggle={(event) => setFormsOpen(event.currentTarget.open)}>
         <summary>Forms and assessments</summary>
-        <div id="job-files-rental" tabIndex={-1}><TradeRentalActivityPicker key={job.id} user={user} workOrderId={job.id} refreshKey={job.revision} active={activeTab === "files"} readOnly={!canManageFieldEvidence} initiallyAttached={job.serviceCategory === "rental-inspection"} onChanged={refreshJobFiles} onAttachmentChanged={setRentalAttached} /></div>
+        <div id="job-files-rental" tabIndex={-1}><TradeRentalActivityPicker key={job.id} user={user} workOrderId={job.id} refreshKey={job.revision} active={activeTab === "files"} readOnly={!canManageFieldEvidence} initiallyAttached={job.serviceCategory === "rental-inspection"} open={activityPickerOpen} onOpenChange={setActivityPickerOpen} onChanged={refreshJobFiles} onAttachmentChanged={setRentalAttached} /></div>
         {(complianceIntents.length > 0 || activityRecordsRequested) && <div id="job-files-activity-records" tabIndex={-1}><TradeActivityFieldRecords key={user.uid + job.id} user={user} workOrderId={job.id} canShare={canManageFieldEvidence} refreshKey={job.revision} /></div>}
-        <TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence || ['completed', 'cancelled'].includes(job.stage)} onChanged={refreshJobFiles} />
+        <div id="job-files-form-library" tabIndex={-1}><TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence || ['completed', 'cancelled'].includes(job.stage)} libraryOpen={formLibraryOpen} onLibraryOpenChange={setFormLibraryOpen} onChanged={refreshJobFiles} /></div>
       </details>
       {activeTab === "files" && <>
         {!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary" open={photoRequestOpen} onToggle={(event) => setPhotoRequestOpen(event.currentTarget.open)}><summary>Request customer photos</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}

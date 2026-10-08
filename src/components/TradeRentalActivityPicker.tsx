@@ -9,7 +9,8 @@ type Choice = { id: string; title: string; added: boolean; unavailableReason: st
 type Catalogue = { ok?: boolean; revision: number; canAdd: boolean; unavailableReason: string;
   rentalModules: Choice[]; rentalVisits?: Choice[]; message?: string; error?: string };
 export function TradeRentalActivityPicker({ user, workOrderId, refreshKey, readOnly, active, initiallyAttached,
-  onChanged, onAttachmentChanged }: { user: User; workOrderId: string; refreshKey: number; readOnly: boolean;
+  open, onOpenChange, onChanged, onAttachmentChanged }: { user: User; workOrderId: string; refreshKey: number; readOnly: boolean;
+  open?: boolean; onOpenChange?: (open: boolean) => void;
   active: boolean; initiallyAttached: boolean; onChanged: () => Promise<void>; onAttachmentChanged: (attached: boolean) => void }) {
   const fetch = useTradeBusinessFetch();
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
@@ -54,7 +55,7 @@ export function TradeRentalActivityPicker({ user, workOrderId, refreshKey, readO
     finally { setBusy(false); }
   }
   return <section hidden={!active} aria-label="Rental assessments and safety visits">
-    {!readOnly && <details className="crm-field-secondary" open={!attached}>
+    {!readOnly && <details className="crm-field-secondary" open={open ?? !attached} onToggle={(event) => onOpenChange?.(event.currentTarget.open)}>
       <summary>Add activity</summary><p>Choose individual checks or a visit bundle. One report covers the work performed on this visit.</p>
       <label><span>Assessment or safety visit</span><select value={selection} disabled={busy || !catalogue?.canAdd} onChange={(event) => setSelection(event.target.value)}>
         <option value="">Choose services</option>{choices.map((entry) => <option key={`${entry.kind}:${entry.id}`} value={`${entry.kind}:${entry.id}`}>{entry.title}{entry.added ? " (attached)" : ""}</option>)}

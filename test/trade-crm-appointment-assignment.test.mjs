@@ -2,6 +2,8 @@ import * as crewHelpers from "../src/lib/trade-crews.ts";
 import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
+import * as tradeFormLibrary from "../src/lib/trade-form-library.mjs";
+import * as formActors from "../src/lib/trade-message-media-access.ts";
 import { appointmentEndsAt } from "../src/lib/trade-schedule.ts";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
 import { jobSalesOutcomeFixture } from "./helpers/trade-job-sales-outcome-fixture.mjs";
@@ -428,6 +430,12 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
   const rentalCredentialHelpers = loadTypescriptModule("../src/lib/trade-rental-credentials.ts", {});
   return loadTypescriptModule("../src/app/api/trade-crm/route.ts", {
     "@/lib/trade-job-sales-outcome-server": jobSalesOutcomeFixture,
+    "@/lib/trade-job-form-attachment-server": loadTypescriptModule("../src/lib/trade-job-form-attachment-server.ts", {
+      "./trade-form-templates-server": loadTypescriptModule("../src/lib/trade-form-templates-server.ts", {
+        "../../db": { getD1: () => d1 }, "@/lib/trade-form-library.mjs": tradeFormLibrary,
+      }),
+      "./trade-message-media-access": formActors,
+    }),
     "@/lib/trade-business-reports-server": { loadBusinessReport: reportLoader },
     "@/lib/trade-business-reports": { ReportInputError },
     "../../../../db": { getD1: () => d1 },

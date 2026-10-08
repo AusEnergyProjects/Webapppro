@@ -1,4 +1,5 @@
 import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
+import { assertTradeFormAttachmentAccess, initialTradeJobForms, TradeFormSelectionError, tradeFormAttachmentAccessGuard, tradeFormPublicationGuard } from "@/lib/trade-job-form-attachment-server";
 import { changeJobSalesOutcome, JobSalesOutcomeError, loadJobSalesOutcomes } from "@/lib/trade-job-sales-outcome-server";
 import { tradeJobNeedsSchedulingSql } from "@/lib/trade-job-scheduling-attention";
 import { canAccessCrewMember, crewScheduleMemberIds, crewMutationGuard } from "@/lib/trade-crews";
@@ -399,6 +400,7 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof TradeFormSelectionError) return adminJson({ ok: false, error: error.message }, error.status);
   if (error instanceof JobSalesOutcomeError) return adminJson({ ok: false, code: "JOB_SALES_OUTCOME_BLOCKED", error: error.message }, error.status);
   if (error instanceof GnafDirectoryUnavailableError) return adminJson({ ok: false, error: error.message }, 503);
   if (error instanceof TradeMapInputError || error instanceof TradeMapLocationInputError) {
@@ -2392,6 +2394,8 @@ export async function POST(request: Request) {
       const requestedCategory = cleanAdminText(body.serviceCategory, 60)
         || cleanAdminText(template?.service_category, 60);
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
+      const initialForms = quickQuote ? [] : await initialTradeJobForms(body.formSelectionsJson, serviceCategory, identity.uid, db);
+      if (initialForms.length) await assertTradeFormAttachmentAccess(identity.access, db, true);
       if (!quickQuote && !rentalInspectionServiceAddressAccepted(serviceCategory, serviceSite?.address_state)) {
         return adminJson({ ok: false, error: "Rental inspections require a Victorian service address." }, 400);
       }
@@ -2559,6 +2563,22 @@ export async function POST(request: Request) {
           (id, work_order_id, firebase_uid, title, due_at, status, completed_at, revision, sort_order, created_at, updated_at)
           VALUES (?, ?, ?, ?, '', 'pending', '', 1, ?, ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, identity.uid, taskTitle, index, now, now)),
+        ...initialForms.flatMap((formTemplate) => {
+          const publication = tradeFormPublicationGuard(formTemplate, identity.uid);
+          const actor = tradeFormAttachmentAccessGuard(identity.access, true);
+          return [
+            creditexWriteGuard(db, identity.uid, `${actor.sql} AND ${publication.sql}`, [...actor.values, ...publication.values]),
+            db.prepare(`INSERT INTO trade_job_forms
+              (id, work_order_id, firebase_uid, template_key, template_version, template_name, jurisdiction,
+               template_snapshot, answers, status, revision, completed_by_uid, completed_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', 'draft', 1, '', '', ?, ?)`)
+              .bind(crypto.randomUUID(), workOrderId, identity.uid, formTemplate.key, formTemplate.version, formTemplate.name,
+                formTemplate.jurisdiction, JSON.stringify(formTemplate), now, now),
+            db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+              VALUES (?, ?, ?, 'field_form_started', ?, ?)`)
+              .bind(crypto.randomUUID(), workOrderId, identity.uid, `${formTemplate.name} started.`, now),
+          ];
+        }),
         ...(guided ? [
           db.prepare(`INSERT INTO trade_crm_appointments
             (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id, assignee_label,
@@ -2791,6 +2811,7 @@ export async function POST(request: Request) {
         workPackBlockers,
         rentalInspectionAttached: Boolean(rentalTemplate),
         rentalInspectionModuleCount: rentalModuleKeys.length,
+        attachedFormCount: initialForms.length,
         calendarSynced, calendarFailed, calendarInvite, customerDocuments, quickQuote }, 201);
     }
 

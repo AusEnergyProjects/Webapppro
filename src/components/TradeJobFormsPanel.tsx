@@ -16,7 +16,7 @@ type Template = { key: string; version: number; name: string; jurisdiction: stri
 type FormRecord = { id: string; templateKey: string; templateVersion: number; templateName: string; jurisdiction: string; template: { guidance: string; fields: Field[] }; answers: Record<string, string | boolean>; status: string; revision: number; ready: boolean; missing: string[]; completedAt: string };
 type Result = { ok?: boolean; jobProgress?: { pending?: boolean }; protectedJob?: boolean; serviceCategory?: string; templates?: Template[]; forms?: FormRecord[]; error?: string };
 
-export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, onChanged }: { user: User; workOrderId: string; readOnly?: boolean; onChanged?: () => Promise<void> }) {
+export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, libraryOpen: controlledLibraryOpen, onLibraryOpenChange, onChanged }: { user: User; workOrderId: string; readOnly?: boolean; libraryOpen?: boolean; onLibraryOpenChange?: (open: boolean) => void; onChanged?: () => Promise<void> }) {
   const fetch = useTradeBusinessFetch();
   const [result, setResult] = useState<Result>({ templates: [], forms: [] });
   const [loading, setLoading] = useState(true);
@@ -80,7 +80,7 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, onChan
     <section className="crm-active-forms"><header><strong>Job forms</strong><span>{(result.forms || []).filter((form) => form.status === "complete").length}/{(result.forms || []).length} complete</span></header>
       {(result.forms || []).length ? (result.forms || []).map((form) => <JobForm key={form.id} userUid={user.uid} onReload={reloadForm} form={form} workOrderId={workOrderId} disabled={readOnly || busy === `save:${form.id}`} readOnly={readOnly} onSave={save} />) : <div className="crm-empty"><strong>No forms added yet</strong><span>{readOnly ? "There are no field forms to review." : "Choose one supporting form below. Your business forms are available alongside supporting templates."}</span></div>}
     </section>
-    {!readOnly && <details className="crm-field-secondary" open={libraryOpen ?? !(result.forms || []).length} onToggle={event => setLibraryOpen(event.currentTarget.open)}>
+    {!readOnly && <details className="crm-field-secondary" open={controlledLibraryOpen ?? libraryOpen ?? !(result.forms || []).length} onToggle={event => { setLibraryOpen(event.currentTarget.open); onLibraryOpenChange?.(event.currentTarget.open); }}>
       <summary>Add a form to this job</summary>
       <section className="crm-form-library"><div><strong>Available for this work type</strong><span>{(result.templates || []).length} supporting form{(result.templates || []).length === 1 ? "" : "s"}</span></div><div>{(result.templates || []).map((template) => {
       const added = existingKeys.has(`${template.key}:${template.version}`);

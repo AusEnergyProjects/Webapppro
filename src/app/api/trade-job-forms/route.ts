@@ -7,11 +7,14 @@ import {
   nextJobRevision,
 } from "@/lib/trade-team-sync-server";
 import { publishedTradeFormTemplate, publishedTradeFormTemplatesFor } from "@/lib/trade-form-templates-server";
+import { assertTradeFormAttachmentAccess, TradeFormSelectionError, tradeFormTemplateMetadata } from "@/lib/trade-job-form-attachment-server";
+import { ENERGY_SERVICE_IDS, LEGACY_ENERGY_SERVICE_ALIASES } from "@/lib/energy-service-catalogue.mjs";
 import { TRADE_JOB_FORM_COLUMNS, tradeJobFormProjection, saveTradeJobForm, TradeJobFormError } from "@/lib/trade-job-forms-server";
 
 export const runtime = "edge";
 
 function formError(error: unknown) {
+  if (error instanceof TradeFormSelectionError) return adminJson({ ok: false, error: error.message }, error.status);
   if (error instanceof TradeJobFormError) return adminJson({ ok: false, error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
@@ -48,10 +51,7 @@ async function formPayload(ownerUid: string, workOrderId: string) {
   return {
     serviceCategory: String(work.service_category),
     protectedJob: work.source_type === "opportunity" || work.customer_source === "platform_private",
-    templates: (await publishedTradeFormTemplatesFor(String(work.service_category), undefined, ownerUid)).map((template) => ({
-      key: template.key, version: template.version, name: template.name, jurisdiction: template.jurisdiction,
-      description: template.description, guidance: template.guidance, fieldCount: template.fields.length,
-    })),
+    templates: (await publishedTradeFormTemplatesFor(String(work.service_category), undefined, ownerUid)).map(tradeFormTemplateMetadata),
     forms: rows.results.map(tradeJobFormProjection),
   };
 }
@@ -65,7 +65,18 @@ async function accessAndJob(request: Request, workOrderId: string) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
+    const parameters = new URL(request.url).searchParams;
+    if (parameters.get("mode") === "library") {
+      const access = await requireInstallerTeamAccess(request);
+      await assertTradeFormAttachmentAccess(access, getD1());
+      const serviceCategory = parameters.get("serviceCategory") || "";
+      if (![...ENERGY_SERVICE_IDS, ...Object.keys(LEGACY_ENERGY_SERVICE_ALIASES), "mounting-hardware", "controls"].includes(serviceCategory)) {
+        return adminJson({ ok: false, error: "Choose an available work type." }, 400);
+      }
+      return adminJson({ ok: true, serviceCategory,
+        templates: (await publishedTradeFormTemplatesFor(serviceCategory, getD1(), access.ownerUid)).map(tradeFormTemplateMetadata) });
+    }
+    const workOrderId = cleanAdminText(parameters.get("workOrderId"), 180);
     const { access } = await accessAndJob(request, workOrderId);
     if (!access.canViewFieldEvidence) throw new Error("FIELD_EVIDENCE_VIEW_REQUIRED");
     return adminJson({ ok: true, ...(await formPayload(access.ownerUid, workOrderId)) });

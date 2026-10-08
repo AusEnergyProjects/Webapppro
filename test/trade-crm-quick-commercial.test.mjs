@@ -14,6 +14,8 @@ import * as tradeJobLifecycle from '../src/lib/trade-job-lifecycle.ts';
 import * as tradeDataforceSource from '../src/lib/trade-dataforce-source.ts';
 import * as tradeMapDataset from '../src/lib/trade-map-dataset-server.ts';
 import * as tradeMapLocationCache from '../src/lib/trade-map-location-cache.ts';
+import * as tradeFormLibrary from '../src/lib/trade-form-library.mjs';
+import * as formActors from '../src/lib/trade-message-media-access.ts';
 
 const tradeJobLifecycleDependency = {
   ...tradeJobLifecycle,
@@ -85,6 +87,12 @@ function fixture(overrides = {}) {
   let numbers = 0;
   const route = moduleAt('../src/app/api/trade-crm/route.ts', {
     '@/lib/trade-job-sales-outcome-server': jobSalesOutcomeFixture,
+    '@/lib/trade-job-form-attachment-server': moduleAt('../src/lib/trade-job-form-attachment-server.ts', {
+      './trade-form-templates-server': moduleAt('../src/lib/trade-form-templates-server.ts', {
+        '../../db': { getD1: () => d1 }, '@/lib/trade-form-library.mjs': tradeFormLibrary,
+      }),
+      './trade-message-media-access': formActors,
+    }),
     '../../../../db': { getD1: () => d1 },
     '@/lib/admin-server': { mfaErrorResponse, adminJson: (body, status = 200) => Response.json(body, { status }), cleanAdminText: clean, sameOrigin: () => true },
     '@/lib/trade-access-server': { TradeAccessError: DomainError },

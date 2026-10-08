@@ -5,6 +5,7 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import type { User } from "firebase/auth";
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { SearchableLookup, type SearchableLookupOption } from "./SearchableLookup";
+import type { TradeJobFormSelection } from "./TradeNewJobFormsPicker";
 import {
   AustralianAddressLookup,
   type AustralianAddressSuggestion,
@@ -29,6 +30,7 @@ import {
 } from "@/lib/trade-compliance-intent";
 
 const TradeScheduleWorkspace = recoverableTradeWorkspace(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace), false);
+const TradeNewJobFormsPicker = recoverableTradeWorkspace(() => import("./TradeNewJobFormsPicker").then((module) => module.TradeNewJobFormsPicker), false);
 
 type Template = { id: string; name: string; title: string; serviceCategory: string; priority: string; description: string; taskTitles: string[] };
 type Customer = { id: string; customerNumber: string; displayName: string; email: string; phone: string; suburb: string; postcode: string };
@@ -181,6 +183,7 @@ export function TradeNewJobForm({
   teamMembers,
   allowCustomerSearch = true,
   canAssignJobs = true,
+  canManageFieldEvidence = true,
   assignmentScope = "team",
   busy,
   initial,
@@ -191,6 +194,7 @@ export function TradeNewJobForm({
   teamMembers: TeamMember[];
   allowCustomerSearch?: boolean;
   canAssignJobs?: boolean;
+  canManageFieldEvidence?: boolean;
   assignmentScope?: "own" | "team";
   busy: boolean;
   initial?: TradeNewJobInitial;
@@ -250,6 +254,8 @@ export function TradeNewJobForm({
     conflict: false,
   });
   const [plannedActivities, setPlannedActivities] = useState<PlannedComplianceActivity[]>([]);
+  const [selectedForms, setSelectedForms] = useState<TradeJobFormSelection[]>([]);
+  const [formPickerOpen, setFormPickerOpen] = useState(false);
   const [selectedRentalInspectionModules, setSelectedRentalInspectionModules] = useState<RentalInspectionModule[]>(["minimum_standards"]);
   const [activityDraftOpen, setActivityDraftOpen] = useState(false);
   const [draftClaimOutputCode, setDraftClaimOutputCode] = useState<ComplianceClaimOutputCode | "">("");
@@ -308,6 +314,8 @@ export function TradeNewJobForm({
   function changeServiceCategory(value: string) {
     if (!serviceCategories.has(value) || value === serviceCategory) return;
     setServiceCategory(value);
+    setSelectedForms([]);
+    setFormPickerOpen(false);
     setAssignableMembers(canChooseTeamAssignee ? teamMembers : selfMember ? [selfMember] : []);
     setAssigneeSearch("");
     setAssigneeRoster(null);
@@ -760,6 +768,7 @@ export function TradeNewJobForm({
     <input type="hidden" name="complianceIntentMode" value={complianceMode} />
     <input type="hidden" name="complianceActivitiesJson" value={complianceActivitiesJson} />
     <input type="hidden" name="rentalInspectionModulesJson" value={rentalInspectionModulesJson} />
+    <input type="hidden" name="formSelectionsJson" value={JSON.stringify(selectedForms.map(({ templateKey, templateVersion }) => ({ templateKey, templateVersion })))} />
     <input type="hidden" name="programTemplateId" value={legacyComplianceActivity?.programTemplateId || ""} />
     <input type="hidden" name="activityTemplateId" value={legacyComplianceActivity?.activityTemplateId || ""} />
     <input type="hidden" name="siteLabel" value="Primary site" />
@@ -820,6 +829,10 @@ export function TradeNewJobForm({
     </section>
 
     <section data-step="3" hidden={step !== 3} className="crm-wizard-panel"><header><span>3 of 5</span><h3 tabIndex={-1}>{serviceCategory === "rental-inspection" ? "Choose the inspection modules" : "Choose the program, if relevant"}</h3><p>{serviceCategory === "rental-inspection" ? "Minimum standards are selected by default. Select or unselect any module, with at least one service required for the job." : "Add every government certificate, rebate or support activity planned for this job. The exact published rules remain authoritative."}</p></header>
+      <div className="crm-wizard-actions crm-add-activity-action">
+        {serviceCategory !== "rental-inspection" && !activityDraftOpen && plannedActivities.length < MAX_PLANNED_COMPLIANCE_ACTIVITIES && <button type="button" className="btn" onClick={beginActivityDraft}>Add activity</button>}
+        {canManageFieldEvidence && <button type="button" className="btn btn-secondary" disabled={busy} aria-expanded={formPickerOpen} onClick={() => setFormPickerOpen((value) => !value)}>{formPickerOpen ? "Close form library" : "Add form"}</button>}
+      </div>
       {serviceCategory === "rental-inspection" ? <div className="crm-planned-activity-list" aria-label="Rental inspection modules">
         <div className="crm-compliance-notice wide"><strong>One report for this visit</strong><p>Choose a visit bundle or select individual services below. Future annual visits remain separate.</p>
           {RENTAL_VISIT_PRESETS.map((preset) => <button key={preset.key} type="button" className="btn btn-secondary" onClick={() => setSelectedRentalInspectionModules([...preset.moduleKeys])}>{preset.label}</button>)}
@@ -851,9 +864,6 @@ export function TradeNewJobForm({
         <strong>No government activity added</strong>
         <p>Continue to create an ordinary job, or add one or more activities for certificate, rebate or support review.</p>
       </div>}
-      {!activityDraftOpen && plannedActivities.length < MAX_PLANNED_COMPLIANCE_ACTIVITIES && <div className="crm-wizard-actions crm-add-activity-action">
-        <button type="button" className="btn" onClick={beginActivityDraft}>Add activity</button>
-      </div>}
       {activityDraftOpen && <div className="crm-activity-builder crm-compliance-notice">
         <strong>Add a controlled activity</strong>
         <div className="crm-form-grid">
@@ -879,6 +889,12 @@ export function TradeNewJobForm({
       </div>}
       {siteJurisdiction && claimOutputOptions.length === 0 && <div className="crm-wizard-message">No current or limited government certificate or support activity is listed for this state. You can create an ordinary job, but TLink will not invent an activity.</div>}
       </>}
+      {canManageFieldEvidence && (formPickerOpen || selectedForms.length > 0) && <section className="crm-compliance-notice" aria-label="Forms to add to the new job">
+        <strong>Job forms</strong>
+        <p>Add supporting forms or your business&apos;s published forms before creating the job.</p>
+        {selectedForms.length > 0 && <ul>{selectedForms.map((form) => <li key={`${form.templateKey}:${form.templateVersion}`}><span>{form.name} | Version {form.templateVersion}</span> <button type="button" className="crm-text-action" disabled={busy} onClick={() => setSelectedForms((current) => current.filter((item) => item.templateKey !== form.templateKey || item.templateVersion !== form.templateVersion))}>Remove {form.name}</button></li>)}</ul>}
+        {step === 3 && formPickerOpen && <TradeNewJobFormsPicker user={user} serviceCategory={serviceCategory} selections={selectedForms} disabled={busy} onChange={setSelectedForms} />}
+      </section>}
       <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(2)}>Back</button><button type="button" className="btn" onClick={() => next(4)}>Set appointment</button></div>
     </section>
 
@@ -964,6 +980,7 @@ export function TradeNewJobForm({
               <a href={program.officialSourceUrl} target="_blank" rel="noreferrer">Open {program.administeringBody} source</a>
             </article>)}</div>}
         </section>
+        {canManageFieldEvidence && <section><header><span>Job forms</span><button type="button" onClick={() => setStep(3)}>Edit</button></header>{selectedForms.length ? <ul>{selectedForms.map((form) => <li key={`${form.templateKey}:${form.templateVersion}`}>{form.name} | Version {form.templateVersion}</li>)}</ul> : <p>No supporting or business forms selected.</p>}</section>}
         <section><header><span>Schedule and field handoff</span><button type="button" onClick={() => setStep(4)}>Edit</button></header><dl>
           <div><dt>Appointment</dt><dd>{appointmentLabels[appointmentType]}</dd></div>
           <div><dt>Date and time</dt><dd>{scheduledStart ? new Date(scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }) : "Not set"}</dd></div>

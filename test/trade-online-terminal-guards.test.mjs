@@ -13,6 +13,7 @@ import ts from "typescript";
 import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
 import * as tradeFormLibrary from "../src/lib/trade-form-library.mjs";
+import * as formActors from "../src/lib/trade-message-media-access.ts";
 import { lifecycleGuardDependency } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -455,6 +456,12 @@ function formsRoute(db, actualLibrary = false) {
       }),
       publishedTradeFormTemplatesFor: async () => [],
     },
+    "@/lib/trade-job-form-attachment-server": loadTypescriptModule("../src/lib/trade-job-form-attachment-server.ts", {
+      "./trade-form-templates-server": loadTypescriptModule("../src/lib/trade-form-templates-server.ts", {
+        "../../db": { getD1: () => db }, "@/lib/trade-form-library.mjs": tradeFormLibrary,
+      }),
+      "./trade-message-media-access": formActors,
+    }),
     "@/lib/asset-lifecycle.mjs": {
       addMonthsToIsoDate: () => "2027-01-01",
     },
