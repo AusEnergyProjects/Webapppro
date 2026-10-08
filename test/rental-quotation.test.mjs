@@ -154,6 +154,51 @@ test("structured observations retain explicit units and accept safe measurements
   for (const value of ["1e3", "1,000", "-1", "Infinity", true, {}, []]) assert.equal(quotationModule.rentalObservationNumberIsValid(value), false);
 });
 
+test("ceiling quotations capture a clear joist gap without making a quote measurement mandatory", () => {
+  const template = rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+  const check = template.sections.find((section) => section.key === "ceiling_insulation").checks[0];
+  const fields = rentalAssessorFields(check);
+  const gap = fields.find((field) => field.key === "joistClearWidthMm");
+  assert.equal(gap.label, "Clear gap between ceiling joists");
+  assert.equal(gap.unit, "mm");
+  assert.equal(gap.required, false);
+  assert.equal(gap.requiredForAdverse, false);
+  assert.equal(rentalObservationResponseLabel(gap.key), "Clear gap between ceiling joists (mm)");
+  assert.deepEqual(fields.find((field) => field.key === "limitationReason").showIf.values, ["Not accessible", "Unsafe to measure", "Other"]);
+  assert.deepEqual(rentalAssessorFields({ key: check.key, responseFields: [] }), fields, "Existing drafts expose the new quoting observation without replacing their template");
+
+  const moduleTemplate = { key: "minimum_standards", sections: [{ key: "ceiling_insulation", title: "Ceiling insulation", checks: [{ key: check.key, required: true, repeatBy: "property", requiredEvidenceCount: 1 }] }] };
+  const input = { moduleTemplate, items: [{ id: "ceiling", itemKey: "ceiling", sectionKey: "ceiling_insulation", checkKey: check.key, instanceKey: "property", outcome: "does_not_meet", responseJson: { areaSquareMetres: "24" } }], findings: [{ itemId: "ceiling", title: "Bare ceiling", description: "No insulation above rear bedroom" }], evidenceCounts: { ceiling: 2 }, photoCounts: { ceiling: 2 } };
+  assert.equal(rentalAssessmentCompletion(input).complete, true, "An existing measured area remains complete without the optional gap");
+  input.items[0].responseJson = { joistClearWidthMm: "430" };
+  const gapOnly = rentalAssessmentCompletion(input);
+  assert.equal(gapOnly.complete, false, "A quote-only joist gap cannot replace the existing insulation-area observation");
+  assert.match(gapOnly.blockers.map((blocker) => blocker.label).join(" "), /basic measurements/);
+  input.items[0].responseJson = { areaSquareMetres: "24", joistClearWidthMm: "430" };
+  assert.equal(rentalAssessmentCompletion(input).complete, true);
+  for (const limitationStatus of ["Not accessible", "Unsafe to measure"]) {
+    input.items[0].responseJson = { limitationStatus, limitationReason: "No safe access through the locked roof hatch" };
+    assert.equal(rentalAssessmentCompletion(input).complete, true, limitationStatus);
+    assert.equal(Object.hasOwn(input.items[0].responseJson, "joistClearWidthMm"), false, "No measurement is inferred from the limitation");
+  }
+  input.items[0].responseJson = { areaSquareMetres: "24", joistClearWidthMm: "430.5" };
+  const invalid = rentalAssessmentCompletion(input);
+  assert.equal(invalid.complete, false);
+  assert.match(invalid.blockers.map((blocker) => blocker.label).join(" "), /whole number between 1 and 5000 mm/);
+});
+
+test("joist measurements use whole millimetres within the practical bound and preserve other numeric observations", () => {
+  for (const value of [undefined, null, "", "  ", "1", "430", " 5000 ", 1, 430, 5000]) {
+    assert.equal(quotationModule.rentalObservationNumberIsValid(value, "joistClearWidthMm"), true, String(value));
+  }
+  for (const value of [0, "0", -1, "-1", 430.5, "430.5", "430.0", 5001, "5001", "1e3", "1,000", "430 mm", Infinity, NaN, true, {}, []]) {
+    assert.equal(quotationModule.rentalObservationNumberIsValid(value, "joistClearWidthMm"), false, String(value));
+  }
+  for (const value of [0, "0", 430.5, "430.5", 5001, "5001"]) {
+    assert.equal(quotationModule.rentalObservationNumberIsValid(value, "areaSquareMetres"), true, "Existing measurements retain their range and decimal behaviour");
+  }
+});
+
 test("heater identity is captured once, including skipped optional fields, while results remain independent", () => {
   const target = { moduleId: "module", sectionKey: "heating", checkKey: "heating_2027_readiness", instanceKey: "property", locationLabel: "" };
   const source = { ...target, checkKey: "main_living_heater", outcome: "meets", response: { applianceType: "Gas heater", model: "Older readable label text", credentialNumber: "PRIVATE", testResult: "PASS", limitationReason: "Only this check was obstructed", outcome: "meets" } };
@@ -234,6 +279,18 @@ test("web markup uses compact controls and removes already captured equipment fi
   assert.match(future, /<input(?=[^>]*type="number")(?=[^>]*name="roomLengthMetres")[^>]*>/);
   assert.match(future, /Room length \(m\)/);
   assert.doesNotMatch(future, /<(?:input|select|textarea)[^>]*name="(?:model|serialNumber|applianceType|measurement)"/);
+  const ceilingSection = template.sections.find((entry) => entry.key === "ceiling_insulation");
+  const ceiling = renderToStaticMarkup(React.createElement(record.exports.AssessmentItemCard, {
+    ...props, section: ceilingSection, check: ceilingSection.checks[0],
+    item: { ...baseItem, sectionKey: ceilingSection.key, checkKey: ceilingSection.checks[0].key, response: { limitationStatus: "Unsafe to measure", limitationReason: "Locked hatch" } },
+  }));
+  const gapInput = ceiling.match(/<input[^>]*name="joistClearWidthMm"[^>]*>/)?.[0];
+  assert.ok(gapInput, "The ceiling answer renders the joist measurement");
+  for (const attribute of ['type="number"', 'inputMode="numeric"', 'min="1"', 'max="5000"', 'step="1"']) assert.ok(gapInput.includes(attribute), attribute);
+  assert.doesNotMatch(gapInput, /required/);
+  assert.match(ceiling, /Clear gap between ceiling joists \(mm\)/);
+  assert.match(ceiling, /inside faces of adjacent ceiling joists/);
+  assert.match(ceiling, /<input[^>]*name="limitationReason"[^>]*value="Locked hatch"/);
 });
 
 test("completion permits honest limited observations but never infers the applicable rental regime", () => {

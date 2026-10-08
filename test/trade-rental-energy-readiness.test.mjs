@@ -253,7 +253,7 @@ test("structured observations persist every shared field, including zero, withou
   const fixture = databaseFixture();
   try {
     const responseValues = {
-      ...Object.fromEntries(Object.keys(quotation.RENTAL_OBSERVATION_NUMBER_FIELDS).map((key, index) => [key, index ? "12.5" : 0])),
+      ...Object.fromEntries(Object.keys(quotation.RENTAL_OBSERVATION_NUMBER_FIELDS).map((key, index) => [key, key === "joistClearWidthMm" ? "430" : index ? "12.5" : 0])),
       ...Object.fromEntries(Object.entries(quotation.RENTAL_OBSERVATION_SELECT_OPTIONS).map(([key, options]) => [key, options[0].value])),
       applianceType: "Legacy installer description", measurement: "Earlier dimensions retained", model: "Existing model label",
       serialNumber: "SERIAL-123", actionTaken: "Observed from ground level", limitationReason: "Roof access was locked", unknownField: "discard",
@@ -265,6 +265,67 @@ test("structured observations persist every shared field, including zero, withou
     const expected = { ...responseValues }; delete expected.unknownField;
     expected[Object.keys(quotation.RENTAL_OBSERVATION_NUMBER_FIELDS)[0]] = "0";
     assert.deepEqual(JSON.parse(row.response_json), expected);
+  } finally { fixture.sql.close(); }
+});
+
+test("ceiling joist gaps persist as whole millimetres at both input bounds", async () => {
+  for (const joistClearWidthMm of [1, "430", "5000"]) {
+    const fixture = databaseFixture();
+    try {
+      const values = { joistClearWidthMm, areaSquareMetres: "12.5", insulationDepthMm: 0, insulationRating: "None" };
+      const response = await post(loadRoute(fixture), { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+        sectionKey: "ceiling_insulation", checkKey: "ceiling_2027_readiness", outcome: "does_not_meet", response: values,
+        publicNotes: "No insulation is visible in the accessible ceiling area.",
+        finding: { title: "Bare ceiling area", description: "No insulation is visible in the accessible ceiling area." } });
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+      const expected = { ...values, joistClearWidthMm: String(joistClearWidthMm), insulationDepthMm: "0" };
+      const row = fixture.sql.prepare("SELECT response_json FROM trade_rental_inspection_items WHERE check_key = 'ceiling_2027_readiness'").get();
+      assert.deepEqual(JSON.parse(row.response_json), expected);
+      const payload = await response.json();
+      assert.deepEqual(payload.items.find((item) => item.checkKey === "ceiling_2027_readiness").response, expected);
+      assert.equal(fixture.sql.prepare("SELECT revision FROM trade_rental_inspection_modules").get().revision, 2);
+    } finally { fixture.sql.close(); }
+  }
+});
+
+test("ceiling observations remain valid without a joist gap and retain safe-access limitations", async () => {
+  const observations = [
+    { outcome: "meets", response: { insulationRating: "R5 or above" } },
+    { outcome: "meets", response: { joistClearWidthMm: "", insulationRating: "R5 or above" }, expected: { insulationRating: "R5 or above" } },
+    { outcome: "not_accessible", response: { limitationStatus: "Not accessible", limitationReason: "The roof access hatch was locked." } },
+    { outcome: "not_accessible", response: { joistClearWidthMm: " ", limitationStatus: "Unsafe to measure", limitationReason: "Exposed wiring prevented safe roof-space access." },
+      expected: { limitationStatus: "Unsafe to measure", limitationReason: "Exposed wiring prevented safe roof-space access." } },
+  ];
+  for (const observation of observations) {
+    const fixture = databaseFixture();
+    try {
+      const response = await post(loadRoute(fixture), { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+        sectionKey: "ceiling_insulation", checkKey: "ceiling_2027_readiness", outcome: observation.outcome, response: observation.response,
+        publicNotes: observation.response.limitationReason || "Insulation is present in the accessible area.",
+        finding: { title: "Ceiling access limitation", description: observation.response.limitationReason || "Insulation is present in the accessible area." } });
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+      const row = fixture.sql.prepare("SELECT outcome, response_json FROM trade_rental_inspection_items WHERE check_key = 'ceiling_2027_readiness'").get();
+      assert.equal(row.outcome, observation.outcome);
+      assert.deepEqual(JSON.parse(row.response_json), observation.expected || observation.response);
+      assert.equal(Object.hasOwn(JSON.parse(row.response_json), "joistClearWidthMm"), false, "An unmeasured gap must not be invented");
+    } finally { fixture.sql.close(); }
+  }
+});
+
+test("invalid ceiling joist gaps are rejected before any assessment or job write", async () => {
+  const fixture = databaseFixture();
+  try {
+    const route = loadRoute(fixture);
+    const tables = ["trade_rental_inspection_modules", "trade_rental_inspections", "trade_work_orders", "trade_rental_inspection_items", "trade_rental_findings", "trade_rental_inspection_events"];
+    const before = tables.map((table) => fixture.sql.prepare(`SELECT * FROM ${table}`).all());
+    for (const joistClearWidthMm of [0, "0", -1, "-430", 430.5, "430.0", "0.5", 5001, "5001", "not measured", "430 mm", true, {}, []]) {
+      const response = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+        sectionKey: "ceiling_insulation", checkKey: "ceiling_2027_readiness", outcome: "does_not_meet", response: { joistClearWidthMm },
+        publicNotes: "No insulation is visible in the accessible ceiling area." });
+      assert.equal(response.status, 400, JSON.stringify(joistClearWidthMm));
+      assert.equal((await response.json()).code, "RENTAL_OBSERVATION_RESPONSE_INVALID");
+      assert.deepEqual(tables.map((table) => fixture.sql.prepare(`SELECT * FROM ${table}`).all()), before, `Rejected gap ${JSON.stringify(joistClearWidthMm)} must not change records or revisions`);
+    }
   } finally { fixture.sql.close(); }
 });
 

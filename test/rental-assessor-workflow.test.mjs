@@ -60,3 +60,12 @@ test('plain wording keeps uncertain ratings and specialist decisions honest', ()
   assert.equal(rentalWindowIsFixed('not_applicable', 'Fixed glazing; this window is not designed to open.'), true);
   assert.deepEqual(rentalAssessorOutcomePatch('window_operation_security', 'meets', fixed.publicNotes), { outcome: 'meets', publicNotes: '' });
 });
+
+test('ceiling quoting guidance asks for the safe inside-face gap rather than joist centres', () => {
+  const { help } = rentalAssessorCheckPresentation({ key: 'ceiling_2027_readiness' });
+  assert.match(help, /inside faces of adjacent ceiling joists in whole millimetres, not centre to centre/);
+  assert.match(help, /If the gap varies, record the other measurements and locations/);
+  assert.match(help, /Only measure from a safe access point/);
+  assert.match(help, /choose Not accessible or Unsafe to measure and give a brief reason/);
+  assert.match(help, /Existing insulation need not be upgraded solely because it is below R5/);
+});

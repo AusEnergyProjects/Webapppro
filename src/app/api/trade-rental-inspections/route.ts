@@ -135,7 +135,7 @@ function responseObject(value: unknown) {
     if (typeof value !== "string" && typeof value !== "number") throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
     const text = String(value).trim();
     if (!text) continue;
-    if (text.length > 500 || !rentalObservationNumberIsValid(text)) throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
+    if (text.length > 500 || !rentalObservationNumberIsValid(text, key)) throw new Error("RENTAL_OBSERVATION_RESPONSE_INVALID");
     result[key] = text;
   }
   for (const [key, options] of Object.entries(RENTAL_OBSERVATION_SELECT_OPTIONS)) {
@@ -214,7 +214,7 @@ function inspectionError(error: unknown) {
   if (code === "RENTAL_MUTATION_CONFLICT" || code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, error: "This assessment changed on another device. Refresh before trying again." }, 409);
   if (code === "RENTAL_RESPONSE_TOO_LARGE") return adminJson({ ok: false, error: "The assessment response is too large." }, 413);
   if (code === "RENTAL_OBSERVATION_RESPONSE_INVALID") return adminJson({ ok: false, code,
-    error: "Choose a listed observation option and enter measurements as zero or positive numbers." }, 400);
+    error: "Choose a listed observation option and enter valid measurements. Ceiling joist gaps must be whole millimetres from 1 to 5000; other measurements can be zero or positive numbers." }, 400);
   if (code === "INVALID_RENTAL_ITEM_KEY") return adminJson({ ok: false, error: "The repeated assessment item is invalid." }, 400);
   if (code === "RENTAL_MODULES_INCOMPLETE") return adminJson({ ok: false, error: "Every selected module must pass its completion checks before the report can be issued." }, 409);
   if (code === "RENTAL_MODULE_SET_INVALID") return adminJson({ ok: false, error: "The attached assessment modules do not match the frozen job selection. Ask an administrator to repair the job before issuing." }, 409);

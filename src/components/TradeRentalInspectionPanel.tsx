@@ -495,8 +495,10 @@ function AssessmentItemCard({
     if (!outcome) throw new Error("Choose an assessment result before saving the section.");
     const values = new FormData(form);
     const response = responseFromForm(values);
-    for (const field of responseFields) if (field.input === "number" && !rentalObservationNumberIsValid(response[field.key])) {
-      throw new Error(`Enter a valid number for ${field.label.toLowerCase()}.`);
+    for (const field of responseFields) if (field.input === "number" && !rentalObservationNumberIsValid(response[field.key], field.key)) {
+      throw new Error(field.step === 1
+        ? `Enter a whole number between ${field.min} and ${field.max} ${field.unit} for ${field.label.toLowerCase()}.`
+        : `Enter a valid number for ${field.label.toLowerCase()}.`);
     }
     if (needsSpecialistCredential && !dwelling) {
       response.credentialType = String(values.get("credentialType") || "");
@@ -643,7 +645,7 @@ function AssessmentItemCard({
             {value && !field.options?.some((option) => option.value === value) && <option value={value}>{value}</option>}
             {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select> : field.input === "textarea" ? <textarea name={field.key} rows={2} maxLength={500} value={value} onChange={(event) => change(event.target.value)} required={required} disabled={readOnly} />
-            : <input name={field.key} type={field.input === "number" ? "number" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} min={field.input === "number" ? 0 : undefined} step={field.input === "number" ? "any" : undefined} maxLength={500} value={value} onChange={(event) => change(event.target.value)} required={required} disabled={readOnly} />}
+            : <input name={field.key} type={field.input === "number" ? "number" : "text"} inputMode={field.step === 1 ? "numeric" : field.input === "number" ? "decimal" : undefined} min={field.input === "number" ? field.min ?? 0 : undefined} max={field.input === "number" ? field.max : undefined} step={field.input === "number" ? field.step ?? "any" : undefined} maxLength={500} value={value} onChange={(event) => change(event.target.value)} required={required} disabled={readOnly} />}
         </label>;
       })}</div>
       {needsSpecialistCredential && dwelling && <p>Matching qualifications are taken from the assigned assessor’s Team profile. Attach the test or verification record supporting this result.</p>}

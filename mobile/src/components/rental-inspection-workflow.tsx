@@ -126,7 +126,7 @@ function RentalObservationInput({ field, value, editable, onChange }: {
   return <View style={styles.field}><Text style={styles.label}>{field.label}{field.unit ? ' (' + field.unit + ')' : ''}</Text>
     <TextInput accessibilityLabel={field.label} editable={editable} style={[styles.input, field.input === 'textarea' && styles.notes]}
       value={text} onChangeText={onChange} multiline={field.input === 'textarea'}
-      keyboardType={field.input === 'number' ? 'decimal-pad' : 'default'} inputMode={field.input === 'number' ? 'decimal' : 'text'}
+      keyboardType={field.step === 1 ? 'number-pad' : field.input === 'number' ? 'decimal-pad' : 'default'} inputMode={field.step === 1 ? 'numeric' : field.input === 'number' ? 'decimal' : 'text'}
       maxLength={field.input === 'number' ? 12 : 500} /></View>;
 }
 function findingChoices(outcome: string): string[] {
@@ -509,8 +509,10 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (active.key !== 'minimum_standards' && check.repeatBy !== 'property' && !draft.locationLabel.trim()) throw new Error('Add the appliance, circuit or alarm location.');
     for (const responseField of rentalAssessorFields(check).filter((entry) => entry.input === 'number')) {
       const value = String(draft.response[responseField.key] ?? '').trim();
-      if (value && !rentalObservationNumberIsValid(value)) {
-        throw new Error('Enter a zero or positive number for ' + responseField.label.toLowerCase() + '.');
+      if (value && !rentalObservationNumberIsValid(value, responseField.key)) {
+        throw new Error(responseField.step === 1
+          ? 'Enter a whole number between ' + responseField.min + ' and ' + responseField.max + ' ' + responseField.unit + ' for ' + responseField.label.toLowerCase() + '.'
+          : 'Enter a zero or positive number for ' + responseField.label.toLowerCase() + '.');
       }
     }
     if (draft.outcome === 'not_applicable' && !draft.publicNotes.trim()) throw new Error('Explain why this check does not apply.');

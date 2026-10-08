@@ -174,6 +174,32 @@ test("structured assessment measurements print their units in both finding and c
   }
 });
 
+test("ceiling joist spacing prints its millimetre label and saved value in the finding and full assessment", async () => {
+  const snapshot = reportSnapshot();
+  const section = snapshot.modules[0].sections[0];
+  section.key = "ceiling_insulation";
+  section.title = "Ceiling insulation";
+  section.summary = "Accessible ceiling insulation observations.";
+  Object.assign(section.items[0], {
+    checkKey: "ceiling_2027_readiness", prompt: "Is insulation present throughout this accessible ceiling area?",
+    locationLabel: "Accessible ceiling area", publicNotes: "No insulation is visible in this accessible area.",
+    response: { joistClearWidthMm: "430", areaSquareMetres: "24.5", insulationRating: "None" },
+  });
+  Object.assign(snapshot.findings[0], {
+    title: "Plan ceiling insulation", description: "No insulation is visible in the accessible ceiling area.",
+    tradeCategory: "insulation_installer", locationLabel: "Accessible ceiling area",
+    recommendedAction: "Confirm safe access and plan insulation for the measured ceiling area.",
+    scopeSummary: "Insulate the accessible ceiling area.", quantityMilli: 24500, unitLabel: "m2",
+  });
+  const original = structuredClone(snapshot);
+  const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  const label = "Clear gap between ceiling joists (mm)";
+  assert.equal(content.split(label).length - 1, 2, "The measured gap label must appear in the linked finding and the complete assessment");
+  assert.equal((content.match(/^430 Tj$/gm) || []).length, 2, "The saved millimetre value must appear exactly once in each section");
+  assert.doesNotMatch(content, /Joist Clear Width|joistClearWidthMm/);
+  assert.deepEqual(snapshot, original);
+});
+
 test("rental assessment PDF rejects an incomplete report snapshot", async () => {
   await assert.rejects(() => createRentalAssessmentPdfBytes({ schemaVersion: "tlink-rental-report-v1" }), /valid rental assessment report snapshot/);
 });

@@ -228,8 +228,22 @@ test('queued read-only answers advance and compact controls use numeric keyboard
   assert.deepEqual(env.calls, ['advanced']);
   const control = source.slice(source.indexOf('function RentalObservationInput'), source.indexOf('function findingChoices'));
   assert.match(control, /<FieldSelect/);
-  assert.match(control, /keyboardType=\{field.input === 'number' \? 'decimal-pad'/);
   assert.match(control, /multiline=\{field.input === 'textarea'\}/);
+  const compiled = ts.transpileModule('export ' + control, { compilerOptions: {
+    target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
+  } }).outputText;
+  const element = (type, props) => ({ type, props });
+  const environment = { require: () => ({ jsx: element, jsxs: element }),
+    View: 'View', Text: 'Text', TextInput: 'TextInput', FieldSelect: 'FieldSelect', styles: {} };
+  const render = new Function('environment', 'with(environment) { const exports = {}; ' + compiled + '; return exports.RentalObservationInput; }')(environment);
+  for (const [key, keyboardType, inputMode] of [['joistClearWidthMm', 'number-pad', 'numeric'], ['areaSquareMetres', 'decimal-pad', 'decimal']]) {
+    const field = rentalAssessorFields({ key: 'ceiling_2027_readiness' }).find((entry) => entry.key === key);
+    const rendered = render({ field, value: '', editable: true, onChange() {} });
+    const input = rendered.props.children.find((entry) => entry.type === 'TextInput');
+    assert.equal(input.props.keyboardType, keyboardType);
+    assert.equal(input.props.inputMode, inputMode);
+    assert.equal(input.props.multiline, false);
+  }
 });
 
 test('invalid measurements stay editable on the phone instead of creating a queue conflict', async () => {
@@ -237,6 +251,36 @@ test('invalid measurements stay editable on the phone instead of creating a queu
   env.enqueueRentalSave = () => { throw new Error('Invalid observation must not enter queue'); };
   await assert.rejects(mountedSaveAnswer(env), /Enter a zero or positive number for room length/);
   assert.equal(env.cacheRef.current.drafts.draft.response.roomLengthMetres, '4..2');
+});
+
+test('phone saves the optional ceiling gap or an honest safe-access limitation in the durable answer', async () => {
+  for (const response of [
+    { areaSquareMetres: '24', joistClearWidthMm: '430' },
+    { areaSquareMetres: '24' },
+    { limitationStatus: 'Not accessible', limitationReason: 'Roof hatch is locked' },
+    { limitationStatus: 'Unsafe to measure', limitationReason: 'No safe access to joists' },
+  ]) {
+    const env = saveEnvironment(); env.check.key = 'ceiling_2027_readiness'; env.section.key = 'ceiling_insulation';
+    env.draft.response = response;
+    let queued;
+    env.enqueueRentalSave = async (input) => { queued = input; return { id: 'ceiling-on-phone' }; };
+    env.advanceQuestion = () => { env.advanced = true; };
+    await mountedSaveAnswer(env)();
+    assert.equal(env.advanced, true);
+    assert.deepEqual(queued.body.response, response);
+    if (response.limitationStatus) assert.equal(Object.hasOwn(queued.body.response, 'joistClearWidthMm'), false);
+  }
+});
+
+test('phone rejects invalid joist gaps before queuing and retains the answer for correction', async () => {
+  for (const value of ['0', '-1', '430.5', '5001', 'unknown']) {
+    const env = saveEnvironment(); env.check.key = 'ceiling_2027_readiness';
+    env.draft.response.joistClearWidthMm = value;
+    env.enqueueRentalSave = () => { throw new Error('Invalid gap must not enter queue'); };
+    await assert.rejects(mountedSaveAnswer(env), /Enter a whole number between 1 and 5000 mm for clear gap between ceiling joists/);
+    assert.equal(env.cacheRef.current.drafts.draft.response.joistClearWidthMm, value);
+    assert.equal(env.advanced, false);
+  }
 });
 
 test('clear mould and visible damage observations advance with no photos; a defect still needs context and detail', async () => {
