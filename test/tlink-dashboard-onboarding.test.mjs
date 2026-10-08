@@ -19,7 +19,9 @@ const text = node => node == null || typeof node === "boolean" ? "" : typeof nod
 function nodes(node, predicate) { if (!node || typeof node !== "object") return []; if (Array.isArray(node)) return node.flatMap(child => nodes(child, predicate)); return [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)]; }
 function renderGate(overrides = {}) {
   const values = { require: () => jsx, exports: {}, authReady: true, loading: false, user: { uid: "owner" }, error: "", profile, profileComplete: true,
-    profileSetupOpen: false, initialAuthMode: "signin", businessProfileSaved() {}, closeBusinessSetup() {}, leaveAccount() {}, setProfileRefresh() {}, setProfileSetupOpen() {},
+    profileSetupOpen: false, initialAuthMode: "signin", checkingApprovalStatus: false, approvalRefreshError: "",
+    verificationSending: false, verificationMessage: "", resendVerificationEmail() {},
+    businessProfileSaved() {}, closeBusinessSetup() {}, leaveAccount() {}, setProfileRefresh() {}, setProfileSetupOpen() {},
     DirectTradePartnerForm: "BusinessSetup", TradeAccessPanel: "TradeAccess", ...overrides };
   return Function(...Object.keys(values), `${gateCode}\nreturn result;`)(...Object.values(values));
 }

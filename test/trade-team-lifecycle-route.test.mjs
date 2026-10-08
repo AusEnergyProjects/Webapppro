@@ -150,7 +150,7 @@ function fixture() {
     CREATE TABLE trade_team_member_events (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
       actor_uid text NOT NULL, entity_type text NOT NULL, entity_id text NOT NULL, event_type text NOT NULL,
       metadata text NOT NULL, created_at text NOT NULL);
-    CREATE TABLE trade_accounts (firebase_uid text PRIMARY KEY, capabilities text NOT NULL);
+    CREATE TABLE trade_accounts (firebase_uid text PRIMARY KEY, capabilities text NOT NULL, brand_theme_key text NOT NULL DEFAULT 'emerald_navy');
     CREATE TABLE trade_work_orders (id text PRIMARY KEY, firebase_uid text NOT NULL, assignee_member_id text NOT NULL);
   `);
   database.exec(fs.readFileSync(new URL("../drizzle/0231_trade_crews.sql", import.meta.url), "utf8"));
@@ -169,7 +169,7 @@ function fixture() {
   insertMember("manager-1", "manager-uid", "active", "2026-08-12T00:00:00.000Z", 1);
   insertMember("target-1", "target-uid", "active", "2026-08-12T00:00:00.000Z");
   database.exec(`
-    INSERT INTO trade_accounts VALUES ('owner-1', '[]');
+    INSERT INTO trade_accounts (firebase_uid, capabilities) VALUES ('owner-1', '[]');
     INSERT INTO trade_mobile_devices VALUES ('device-1', 'owner-1', 'target-1', 'active', 'push-secret', '', '', '', '2026-08-12T00:00:00.000Z', 'private-voip-token', 1);
     INSERT INTO trade_field_access_codes VALUES ('field-code-1', 'owner-1', 'target-1', 'active', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_field_sessions VALUES ('field-session-1', 'owner-1', 'target-1', 'active', '', '2026-08-12T00:00:00.000Z');
@@ -187,6 +187,38 @@ async function patch(route, body) {
     method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
   }));
 }
+
+test('team payload inherits only the authorised employer theme without changing permissions', async () => {
+  const database = fixture();
+  try {
+    database.prepare("UPDATE trade_accounts SET brand_theme_key='violet_sunset' WHERE firebase_uid='owner-1'").run();
+    database.prepare("INSERT INTO trade_accounts(firebase_uid,capabilities,brand_theme_key) VALUES ('manager-uid','[]','amber_ink')").run();
+    const before = database.prepare('SELECT * FROM trade_team_members ORDER BY id').all();
+    const route = loadRoute(database, [], managerAccess);
+    const response = await route.GET(new Request('https://test/api/trade-team?ownerUid=manager-uid&brandThemeKey=amber_ink'));
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.access.brandThemeKey, 'violet_sunset');
+    assert.equal(result.access.permissions.canManageTeam, true);
+    assert.equal(result.access.permissions.canEditTeamPermissions, false);
+    assert.equal(result.access.permissions.canViewCustomers, false);
+    assert.equal(result.access.permissions.canManageQuotes, false);
+    assert.deepEqual(database.prepare('SELECT * FROM trade_team_members ORDER BY id').all(), before);
+    assert.equal(database.prepare('SELECT COUNT(*) count FROM trade_team_member_events').get().count, 0);
+  } finally { database.close(); }
+});
+
+test('team payload canonicalises an absent or unknown employer theme to the production default', async () => {
+  const database = fixture();
+  try {
+    const route = loadRoute(database, [], managerAccess);
+    for (const value of ['', 'arbitrary-css-value', 'VIOLET_SUNSET']) {
+      database.prepare('UPDATE trade_accounts SET brand_theme_key=? WHERE firebase_uid=?').run(value, managerAccess.ownerUid);
+      const response = await route.GET(new Request('https://test/api/trade-team'));
+      assert.equal(response.status, 200); assert.equal((await response.json()).access.brandThemeKey, 'emerald_navy');
+    }
+  } finally { database.close(); }
+});
 
 test("general roster document totals exclude owner-private onboarding files", async () => {
   const database = fixture();

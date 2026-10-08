@@ -13,6 +13,7 @@ import * as publicSite from '../../src/lib/public-site.ts';
 import * as tradeAbn from '../../src/lib/trade-abn.ts';
 import * as firebaseMfa from '../../src/lib/firebase-mfa.ts';
 import * as myobSecurityAudit from '../../src/lib/myob-security-audit.ts';
+import * as tradeBusinessBranding from '../../src/lib/trade-business-branding.ts';
 
 const read = (path) => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const unavailableRuntime = () => { throw new Error('Runtime authentication and D1 access are not provided by the SQL fixture.'); };
@@ -24,7 +25,7 @@ const runtimeModules = {
 };
 const modules = { 'node:crypto': crypto, 'creditex-training-curriculum': curriculum,
   'australian-government-program-catalogue': catalogue, 'creditex-onboarding-server': onboarding, 'energy-service-catalogue.mjs': energyServices, 'trade-team-service-states': teamServiceStates, 'training-service-sections.mjs': trainingSections,
-  'aea-trade-routing.mjs': aeaRouting, 'public-plan-enquiry.mjs': publicPlanConsent, 'public-site': publicSite, 'trade-abn': tradeAbn, 'firebase-mfa': firebaseMfa, 'myob-security-audit': myobSecurityAudit };
+  'aea-trade-routing.mjs': aeaRouting, 'public-plan-enquiry.mjs': publicPlanConsent, 'public-site': publicSite, 'trade-abn': tradeAbn, 'firebase-mfa': firebaseMfa, 'myob-security-audit': myobSecurityAudit, 'trade-business-branding': tradeBusinessBranding };
 export function certificateTestDependency(specifier) {
   return modules[specifier] || modules[specifier.split('/').at(-1).replace(/\.ts$/, '')];
 }
@@ -111,6 +112,7 @@ export function installCreditexTrainingFixture(database, { qualified = true } = 
   const categories = JSON.stringify([...new Set(catalogue.GOVERNMENT_ACTIVITY_TEMPLATES.map(activity => activity.serviceCategory))]);
   if (!columns.has('capabilities')) database.exec(`ALTER TABLE trade_accounts ADD COLUMN capabilities TEXT NOT NULL DEFAULT '${categories}'`);
   if (!columns.has('service_states')) database.exec(`ALTER TABLE trade_accounts ADD COLUMN service_states TEXT NOT NULL DEFAULT '["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"]'`);
+  if (!columns.has('brand_theme_key')) database.exec(`ALTER TABLE trade_accounts ADD COLUMN brand_theme_key TEXT NOT NULL DEFAULT '${tradeBusinessBranding.DEFAULT_TRADE_BRAND_THEME}'`);
   if (!columns.has('address_state')) database.exec("ALTER TABLE trade_accounts ADD COLUMN address_state TEXT NOT NULL DEFAULT 'VIC'");
   installAeaTradeOwnerFixtureSchema(database);
   const memberColumns = new Set(database.prepare('PRAGMA table_info(trade_team_members)').all().map(row => row.name));

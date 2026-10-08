@@ -21,9 +21,13 @@ const nodes = (node, matches) => node == null || typeof node !== "object" ? [] :
 const text = node => node == null || typeof node === "boolean" ? "" : typeof node !== "object" ? String(node) : Array.isArray(node) ? node.map(text).join(" ").replace(/\s+/g, " ") : text(renderedChildren(node));
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-function harness(initialChoices, { destination = "member", saved = "", disableNotifications = async () => {}, user = { uid: "person", emailVerified: true, getIdToken: async () => "identity-token" } } = {}) {
+function harness(initialChoices, { destination = "member", saved = "", disableNotifications = async () => {},
+  reloadUser = async () => {}, verifyEmail = async () => {}, signOutUser = async () => {}, respondBusiness,
+  user = { uid: "person", emailVerified: true, getIdToken: async () => "identity-token" } } = {}) {
   let cursor = 0, businesses = initialChoices, authObserver;
-  const state = [], effects = [], pending = [], requests = [], redirects = [], storage = new Map();
+  const state = [], effects = [], pending = [], requests = [], redirects = [], storage = new Map(), authCalls = [];
+  const windowListeners = new Map(), documentListeners = new Map();
+  const firebaseAuth = { currentUser: user };
   const store = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
   if (saved) businessClient.saveTradeBusinessSelection(user.uid, saved, store);
   const changed = (previous, next) => !previous || previous.length !== next.length || previous.some((value, index) => value !== next[index]);
@@ -39,14 +43,32 @@ function harness(initialChoices, { destination = "member", saved = "", disableNo
     readTradeBusinessSelection: uid => businessClient.readTradeBusinessSelection(uid, store),
     saveTradeBusinessSelection: (uid, ownerUid) => businessClient.saveTradeBusinessSelection(uid, ownerUid, store),
   };
-  const fetch = async (url, init) => { requests.push({ url, init }); return Response.json({ businesses, requiresSelection: businesses.length > 1 }); };
-  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": { onIdTokenChanged(_auth, callback) { authObserver = callback; callback(user); return () => {}; } }, "@/lib/firebase-client": { firebaseAuth: {} }, "@/lib/trade-device-client": { disableTradeDeviceNotifications: disableNotifications }, "@/lib/trade-business-client": context, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children }, "./TLinkWorkspaceBar": { TLinkWorkspaceBar: workspaceBar } };
+  const fetch = async (url, init) => { requests.push({ url, init });
+    if (url === "/api/trade-businesses" && respondBusiness) return respondBusiness(url, init);
+    return Response.json({ businesses, requiresSelection: businesses.length > 1 }); };
+  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": {
+    onIdTokenChanged(_auth, callback) { authObserver = callback; callback(firebaseAuth.currentUser); return () => {}; },
+    reload: async account => { authCalls.push(["reload", account.uid]); await reloadUser(account); },
+    sendEmailVerification: async (account, settings) => { authCalls.push(["verification", account.uid, settings]); await verifyEmail(account, settings); },
+    signOut: async auth => { authCalls.push(["sign-out"]); await signOutUser(auth); auth.currentUser = null; authObserver(null); },
+  }, "@/lib/firebase-client": { firebaseAuth }, "@/lib/trade-device-client": { disableTradeDeviceNotifications: disableNotifications }, "@/lib/trade-business-client": context, "./TradeBusinessProvider.module.css": { default: {} }, "./TradeWorkTimeTracking": { TradeWorkTimeProvider: ({ children }) => children }, "./TLinkWorkspaceBar": { TLinkWorkspaceBar: workspaceBar } };
   const exports = {};
-  const window = { location: { origin: "https://tlink.test", replace: url => redirects.push(url) }, history: { replaceState() {} } };
-  Function("require", "exports", "fetch", "window", compiled)(id => { assert.ok(dependencies[id], id); return dependencies[id]; }, exports, fetch, window);
+  const addListener = (listeners, name, callback) => { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(callback); };
+  const removeListener = (listeners, name, callback) => { listeners.get(name)?.delete(callback); };
+  const window = { location: { origin: "https://tlink.test", href: "https://tlink.test/direct-trade/team", replace: url => redirects.push(url) }, history: { replaceState() {} },
+    addEventListener: (name, callback) => addListener(windowListeners, name, callback),
+    removeEventListener: (name, callback) => removeListener(windowListeners, name, callback) };
+  const document = { visibilityState: "visible",
+    addEventListener: (name, callback) => addListener(documentListeners, name, callback),
+    removeEventListener: (name, callback) => removeListener(documentListeners, name, callback) };
+  Function("require", "exports", "fetch", "window", "document", compiled)(id => { assert.ok(dependencies[id], id); return dependencies[id]; }, exports, fetch, window, document);
   const child = jsx.jsx("article", { "data-tenant": true, children: "Tenant jobs and calls" });
   const render = () => { cursor = 0; const tree = exports.TradeBusinessGate({ destination, children: child }); for (const effect of pending.splice(0)) effect(); return tree; };
-  return { render, requests, redirects, store, setChoices: next => { businesses = next; }, authenticate: next => authObserver(next),
+  return { render, requests, redirects, store, authCalls, setChoices: next => { businesses = next; },
+    authenticate: next => { firebaseAuth.currentUser = next; authObserver(next); },
+    focus: () => { for (const callback of windowListeners.get("focus") || []) callback(); },
+    visibility: next => { document.visibilityState = next; for (const callback of documentListeners.get("visibilitychange") || []) callback(); },
+    unmount: () => { for (const effect of effects) effect?.cleanup?.(); },
     async settle() { let tree; for (let count = 0; count < 5; count++) { tree = render(); await tick(); } return tree; } };
 }
 
@@ -197,6 +219,102 @@ test("foreign saved selection is ignored and sign-out clears only that user's se
   h.render();
   assert.equal(businessClient.readTradeBusinessSelection("person", h.store), "");
   assert.equal(businessClient.readTradeBusinessSelection("other-person", h.store), "other-business");
+});
+
+test("verified SDK identity refreshes the JWT before loading business memberships", async () => {
+  const refreshes = [];
+  const h = harness([choice("employer")], { user: { uid: "person", emailVerified: true,
+    getIdToken: async force => { refreshes.push(force); return force ? "fresh-verified-token" : "stale-unverified-token"; } } });
+  const tree = await h.settle();
+  assert.deepEqual(refreshes, [true]);
+  assert.equal(h.requests[0].init.headers.Authorization, "Bearer fresh-verified-token");
+  assert.equal(tree.props.business.ownerUid, "employer");
+});
+
+test("same-object email verification opens memberships on return without signing in again", async () => {
+  const refreshes = [];
+  const user = { uid: "person", email: "person@example.test", emailVerified: false,
+    getIdToken: async force => { refreshes.push(force); return "fresh-verified-token"; } };
+  const h = harness([choice("employer")], { user });
+  let tree = await h.settle();
+  assert.match(text(tree), /Confirm your email/);
+  assert.match(text(tree), /junk or spam/);
+  assert.equal(h.requests.length, 0);
+  user.emailVerified = true;
+  h.focus();
+  tree = await h.settle();
+  assert.equal(tree.props.business.ownerUid, "employer");
+  assert.deepEqual(refreshes, [true]);
+  assert.equal(h.requests[0].init.headers.Authorization, "Bearer fresh-verified-token");
+  h.unmount();
+  h.focus(); await tick();
+  assert.equal(h.requests.length, 1);
+});
+
+test("backend unverified JWT response offers a verification recovery instead of an unrecoverable chooser error", async () => {
+  let attempts = 0;
+  const refreshes = [];
+  const h = harness([choice("employer")], {
+    user: { uid: "person", email: "person@example.test", emailVerified: true,
+      getIdToken: async force => { refreshes.push(force); return `fresh-token-${refreshes.length}`; } },
+    respondBusiness: async () => ++attempts === 1
+      ? Response.json({ code: "EMAIL_VERIFICATION_REQUIRED", error: "Confirm your email" }, { status: 403 })
+      : Response.json({ businesses: [choice("employer")] }),
+  });
+  let tree = await h.settle();
+  assert.match(text(tree), /Confirm your email/);
+  assert.equal(nodes(tree, node => node.type === "button" && text(node) === "Try again").length, 0);
+  nodes(tree, node => node.type === "button" && text(node) === "I've verified my email")[0].props.onClick();
+  tree = await h.settle();
+  assert.equal(tree.props.business.ownerUid, "employer");
+  assert.deepEqual(refreshes, [true, true]);
+  assert.deepEqual(h.requests.map(request => request.init.headers.Authorization), ["Bearer fresh-token-1", "Bearer fresh-token-2"]);
+  assert.deepEqual(h.authCalls.filter(call => call[0] === "reload"), [["reload", "person"]]);
+});
+
+test("verification resend reports delivery failure truthfully and keeps the current identity and saved selection", async () => {
+  let sendCount = 0;
+  const h = harness([choice("employer")], { saved: "employer", user: { uid: "person", email: "person@example.test",
+    emailVerified: false, getIdToken: async () => "token" }, verifyEmail: async () => {
+      if (++sendCount === 1) throw new Error("offline");
+    } });
+  let tree = await h.settle();
+  nodes(tree, node => node.type === "button" && text(node) === "Resend verification email")[0].props.onClick();
+  tree = await h.settle();
+  assert.match(text(tree), /verification email could not be sent/);
+  assert.doesNotMatch(text(tree), /Verification email sent/);
+  assert.equal(businessClient.readTradeBusinessSelection("person", h.store), "employer");
+  nodes(tree, node => node.type === "button" && text(node) === "Resend verification email")[0].props.onClick();
+  tree = await h.settle();
+  assert.match(text(tree), /Verification email sent/);
+  assert.match(text(tree), /junk or spam/);
+  assert.equal(h.authCalls.filter(call => call[0] === "verification").at(-1)[2].url, "https://tlink.test/direct-trade/team");
+  assert.equal(h.requests.length, 0);
+});
+
+test("chooser sign-out uses Firebase and clears only the signed-in user's saved tenant", async () => {
+  const h = harness([choice("one"), choice("two")]);
+  let tree = await h.settle();
+  businessClient.saveTradeBusinessSelection("person", "one", h.store);
+  businessClient.saveTradeBusinessSelection("other-person", "other-business", h.store);
+  nodes(tree, node => node.type === "button" && text(node) === "Sign out")[0].props.onClick();
+  tree = await h.settle();
+  assert.deepEqual(h.authCalls.filter(call => call[0] === "sign-out"), [["sign-out"]]);
+  assert.equal(businessClient.readTradeBusinessSelection("person", h.store), "");
+  assert.equal(businessClient.readTradeBusinessSelection("other-person", h.store), "other-business");
+  assert.doesNotMatch(text(tree), /Which business are you working with/);
+});
+
+test("failed chooser sign-out preserves choices and offers a usable retry", async () => {
+  const h = harness([choice("one"), choice("two")], { signOutUser: async () => { throw new Error("offline"); } });
+  let tree = await h.settle();
+  nodes(tree, node => node.type === "button" && text(node) === "Sign out")[0].props.onClick();
+  tree = await h.settle();
+  assert.match(text(tree), /Sign out could not be completed/);
+  assert.match(text(tree), /Which business are you working with/);
+  assert.equal(nodes(tree, node => node.type === "button" && text(node) === "Sign out")[0].props.disabled, false);
+  nodes(tree, node => node.type === "button" && text(node).includes("Business two"))[0].props.onClick();
+  assert.equal(h.render().props.business.ownerUid, "two");
 });
 
 test("invitation acceptance selects the invited business before any ambiguous team data load", async () => {

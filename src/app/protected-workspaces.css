@@ -2623,45 +2623,13 @@ html[data-tlink-colour-mode="night"] :is(.tlink-call-dock,.tlink-call-buttons) {
 }
 
 /* Authenticated team workspace chrome. */
-.tlink-team-shell.trade-portal-shell { display: block; width: 100%; min-height: 100dvh; margin: 0; padding: 0; color: var(--trade-ink); background: var(--trade-page); font-size: 14px; }
-/* The staff shell has no sidebar rail, so its sections must not inherit the owner dashboard gutters. */
-.tlink-team-shell.trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { margin-left: 0; margin-right: 0; min-width: 0; box-sizing: border-box; }
-.tlink-team-header { padding: 14px clamp(16px, 3vw, 40px) 16px; background: var(--trade-surface); border-bottom: 1px solid var(--trade-line); }
-.tlink-team-topbar, .tlink-team-headerActions, .tlink-team-businessBar, .tlink-team-brand, .tlink-team-footer { display: flex; align-items: center; }
-.tlink-team-topbar { justify-content: space-between; gap: 16px; }
-.tlink-team-brand { gap: 9px; color: var(--trade-ink); text-decoration: none; }
-.tlink-team-brand strong { font-size: 19px; letter-spacing: -.6px; }
-.tlink-team-brand img { width: 34px; height: 34px; border-radius: 9px; }
-.tlink-team-headerActions { gap: 8px; }
-.tlink-team-getApp, .tlink-team-themeToggle, .tlink-team-footer button { min-height: 44px; border: 1px solid var(--trade-line); border-radius: 10px; font: inherit; font-weight: 650; cursor: pointer; }
-.tlink-team-getApp { display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 0 14px; background: var(--trade-accent-soft); color: var(--trade-accent-soft-ink); text-decoration: none; }
-.tlink-team-themeToggle { display: grid; place-items: center; width: 44px; padding: 0; color: var(--trade-ink); background: var(--trade-surface); }
-.tlink-team-businessBar { justify-content: space-between; gap: 16px; margin-top: 14px; }
-.tlink-team-business { min-width: 0; display: grid; gap: 3px; }
-.tlink-team-business > span { color: var(--trade-muted); font-size: 11px; font-weight: 650; }
-.tlink-team-business > strong { color: var(--trade-ink); font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
-.tlink-team-navigation { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px clamp(16px, 3vw, 40px); border-bottom: 1px solid var(--trade-line); background: var(--trade-surface); }
-.tlink-team-navigation button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 13px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--trade-muted); font: inherit; font-weight: 600; cursor: pointer; }
-.tlink-team-navigation button > span { display: flex; align-items: center; gap: 5px; }
-.tlink-team-navigation button:hover { background: var(--trade-surface-soft); color: var(--trade-ink); }
-.tlink-team-navigation button[aria-current="page"] { background: var(--trade-accent-soft); border-color: var(--trade-line); color: var(--trade-accent-soft-ink); }
-.tlink-team-shell :is(button, a, select):focus-visible { outline: 3px solid var(--trade-accent-readable); outline-offset: 3px; }
-.tlink-team-content { padding: 22px clamp(16px, 3vw, 40px); min-width: 0; }
-.tlink-team-footer { justify-content: space-between; gap: 12px; padding: 8px clamp(16px, 3vw, 40px) 24px; color: var(--trade-muted); font-size: 12px; }
-.tlink-team-footer button { color: var(--trade-ink); background: var(--trade-surface); padding: 0 15px; }
+.tlink-team-shell.trade-portal-shell { width: 100%; min-height: 100dvh; margin: 0; padding: 0; color: var(--trade-ink); font-size: 14px; }
+.tlink-team-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav) { min-width: 0; box-sizing: border-box; }
+.tlink-team-shell .dashboard-account-actions { margin-left: auto; }
+.tlink-team-content { padding-top: 22px; min-width: 0; }
+.tlink-team-footer { padding: 8px 0 24px; color: var(--trade-muted); font-size: 12px; }
 .tlink-team-shell .team-field-tools { border-color: var(--trade-line); }
 .tlink-team-shell .team-field-tools h3 { color: var(--trade-ink); font-size: 15px; }
-
-@media (max-width: 700px) {
-  .tlink-team-header { padding: 10px 14px 12px; }
-  .tlink-team-businessBar { margin-top: 10px; gap: 10px; }
-  .tlink-team-business > strong { font-size: 14px; }
-  .tlink-team-navigation { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px 10px; }
-  .tlink-team-navigation button { flex-direction: column; gap: 5px; padding: 8px 2px; font-size: 11px; line-height: 1.25; min-height: 60px; }
-  .tlink-team-navigation button > span { flex-wrap: wrap; justify-content: center; gap: 3px; text-align: center; }
-  .tlink-team-content { padding: 18px 12px; }
-  .tlink-team-footer { padding: 0 14px 20px; }
-}
 
 .crm-manual-time > summary { color: var(--trade-ink, #173f34); cursor: pointer; font-weight: 700; min-height: 44px; padding: 12px 0; }
 .crm-manual-time > p { color: var(--trade-muted, #607873); font-size: 13px; line-height: 1.5; margin-bottom: 14px; }

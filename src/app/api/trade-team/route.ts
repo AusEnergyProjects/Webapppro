@@ -24,6 +24,7 @@ import {
 import { normalizeFieldAccessName } from "@/lib/trade-field-access-policy.mjs";
 import { normalizeEnergyServiceIds } from "@/lib/energy-service-catalogue.mjs";
 import { getBusinessServiceStates, memberServiceStateProjection, validateMemberServiceStates } from "@/lib/trade-team-service-states";
+import { DEFAULT_TRADE_BRAND_THEME, TRADE_BRAND_THEME_KEYS } from "@/lib/trade-business-branding";
 
 export const runtime = "edge";
 
@@ -436,6 +437,9 @@ type RosterOptions = {
 
 async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const db = getD1();
+  const ownerBranding = await db.prepare("SELECT brand_theme_key FROM trade_accounts WHERE firebase_uid = ?")
+    .bind(access.ownerUid).first<{ brand_theme_key: string }>();
+  const brandThemeKey = TRADE_BRAND_THEME_KEYS.find((key) => key === ownerBranding?.brand_theme_key) || DEFAULT_TRADE_BRAND_THEME;
   const businessServiceStates = await getBusinessServiceStates(db, access.ownerUid);
   const page = Math.max(1, Math.floor(Number(options.page) || 1));
   const pageSize = Math.min(ROSTER_PAGE_SIZE_MAX, Math.max(1, Math.floor(Number(options.pageSize) || ROSTER_PAGE_SIZE)));
@@ -524,7 +528,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
       .all<Record<string, unknown>>();
   return {
     businessServiceStates,
-    access: { businessName: access.businessName, displayName: access.displayName,
+    access: { businessName: access.businessName, displayName: access.displayName, brandThemeKey,
       memberId: access.memberId,
       isOwner: access.isOwner, canManageTeam: canManageTeam(access), crewId: access.crewId, crewLead: access.crewLead,
       permissions: { crewLead: access.crewLead, canCreateJobs: access.canCreateJobs, canManageJobs: access.canManageJobs,

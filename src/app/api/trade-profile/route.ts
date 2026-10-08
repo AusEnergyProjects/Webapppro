@@ -355,6 +355,8 @@ export async function GET(request: Request) {
       verificationReviewId: record.verification_review_id,
       verificationReviewedAt: record.verification_reviewed_at,
       verificationReviewedByUid: record.verification_reviewed_by_uid,
+      businessApprovalApproved: accessApproved,
+      emailVerified: identity.emailVerified,
       accessApproved: accessApproved && identity.emailVerified,
       availabilityStatus: record.availability_status,
       serviceBasePostcode: record.service_base_postcode || record.postcode,

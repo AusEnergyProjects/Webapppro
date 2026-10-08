@@ -8,14 +8,15 @@ import { TradePersonalNameSettings } from "./TradePersonalNameSettings";
 
 import { TradeBusinessGate, useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState, type Ref } from "react";
 import { browserPopupRedirectResolver, createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib/tlink-password-reset-client";
 import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
 import { SiteFooter } from "./ComparatorChrome";
-import { TLinkHeader, TLinkMark } from "./TLinkChrome";
+import { AeaProductLink, TLinkBrand, TLinkHeader, TLinkMark } from "./TLinkChrome";
+import { DEFAULT_TRADE_BRAND_THEME, type TradeBrandThemeKey } from "@/lib/trade-business-branding";
 import { TLinkNavigationIcon } from "./TLinkNavigationIcon";
 import { readTLinkColourMode, writeTLinkColourMode, TLINK_COLOUR_MODE_STORAGE_KEY, type TLinkColourMode } from "@/lib/trade-device-client";
 import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
@@ -33,7 +34,7 @@ const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
 import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlerts";
 
-type Result = { ownerUid?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; displayName: string; memberId: string; isOwner: boolean; crewId?: string; crewLead?: boolean; permissions: TradeTeamPermissions }; error?: string };
+type Result = { ownerUid?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; brandThemeKey?: TradeBrandThemeKey; displayName: string; memberId: string; isOwner: boolean; crewId?: string; crewLead?: boolean; permissions: TradeTeamPermissions }; error?: string };
 type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
 type PortalView = "business" | "sales" | "wattzun" | "map" | "team" | "forms" | "tasks" | "training" | "messages" | "time" | "crew";
@@ -75,19 +76,50 @@ function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm, cr
   permissions: TradeTeamPermissions; view: PortalView; crmView: string; crewId?: string;
   onView: (view: PortalView) => void; onCrm: (view: CrmShortcut) => void;
 }) {
-  return <nav className="tlink-team-navigation" aria-label="Staff workspace">
-    <button type="button" aria-current={view === "business" && crmView === "today" ? "page" : undefined} onClick={() => onCrm("today")}><TLinkNavigationIcon name="home" /><span>Home dashboard</span></button>
-    {teamCrmShortcuts(permissions).map(item => <button type="button" key={item.id} aria-current={view === "business" && crmView === item.id ? "page" : undefined} onClick={() => onCrm(item.id)}><TLinkNavigationIcon name={item.icon} /><span>{item.label}</span></button>)}
-    {canUseTeamSales(permissions, crewId) && <button type="button" aria-current={view === "sales" ? "page" : undefined} onClick={() => onView("sales")}><TLinkNavigationIcon name="leads" /><span>Sales</span></button>}
-    <button type="button" aria-current={view === "time" ? "page" : undefined} onClick={() => onView("time")}><TLinkNavigationIcon name="schedule" /><span>My time</span></button>
-    {crewId && <button type="button" aria-current={view === "crew" ? "page" : undefined} onClick={() => onView("crew")}><TLinkNavigationIcon name="team" /><span>My crew</span></button>}
-    <button type="button" aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
-    {permissions.canViewQuotes && permissions.canManageQuotes && <button type="button" aria-current={view === "map" ? "page" : undefined} onClick={() => onView("map")}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span></button>}
-    <button type="button" aria-current={view === 'forms' ? 'page' : undefined} onClick={() => onView('forms')}><TLinkNavigationIcon name="forms" /><span>Forms</span></button>
-    <button type="button" aria-current={view === "wattzun" ? "page" : undefined} onClick={() => onView("wattzun")}><TLinkNavigationIcon name="wattzun" /><span>Wattzun</span></button>
-    <button type="button" aria-current={view === "tasks" || view === "training" ? "page" : undefined} onClick={() => onView("tasks")}><TLinkNavigationIcon name="training" /><span>Tasks &amp; training</span></button>
-    {permissions.canManageTeam && <button type="button" aria-current={view === "team" ? "page" : undefined} onClick={() => onView("team")}><TLinkNavigationIcon name="team" /><span>Team</span></button>}
+  const shortcuts = teamCrmShortcuts(permissions);
+  return <nav className="dashboard-workspace-nav tlink-workspace-nav" aria-label="Staff workspace">
+    <div className="tlink-nav-group" role="group" aria-labelledby="staff-nav-daily">
+      <h2 id="staff-nav-daily" className="tlink-nav-heading">Daily work</h2>
+      <button type="button" className={view === "business" && crmView === "today" ? "active" : ""} aria-current={view === "business" && crmView === "today" ? "page" : undefined} onClick={() => onCrm("today")}><TLinkNavigationIcon name="home" /><span>Home dashboard</span></button>
+      {shortcuts.filter(item => item.id !== "pricebook" && item.id !== "reports").map(item => <button type="button" key={item.id} className={view === "business" && crmView === item.id ? "active" : ""} aria-current={view === "business" && crmView === item.id ? "page" : undefined} onClick={() => onCrm(item.id)}><TLinkNavigationIcon name={item.icon} /><span>{item.label}</span></button>)}
+      {canUseTeamSales(permissions, crewId) && <button type="button" className={view === "sales" ? "active" : ""} aria-current={view === "sales" ? "page" : undefined} onClick={() => onView("sales")}><TLinkNavigationIcon name="leads" /><span>Sales</span></button>}
+      <button type="button" className={view === "time" ? "active" : ""} aria-current={view === "time" ? "page" : undefined} onClick={() => onView("time")}><TLinkNavigationIcon name="schedule" /><span>My time</span></button>
+      {crewId && <button type="button" className={view === "crew" ? "active" : ""} aria-current={view === "crew" ? "page" : undefined} onClick={() => onView("crew")}><TLinkNavigationIcon name="team" /><span>My crew</span></button>}
+      <button type="button" className={view === "messages" ? "active" : ""} aria-current={view === "messages" ? "page" : undefined} onClick={() => onView("messages")}><TLinkNavigationIcon name="connect" /><span>Connect <TradeMessageUnreadBadge /></span></button>
+    </div>
+    <div className="tlink-nav-group" role="group" aria-labelledby="staff-nav-business">
+      <h2 id="staff-nav-business" className="tlink-nav-heading">Business tools</h2>
+      {shortcuts.filter(item => item.id === "pricebook" || item.id === "reports").map(item => <button type="button" key={item.id} className={view === "business" && crmView === item.id ? "active" : ""} aria-current={view === "business" && crmView === item.id ? "page" : undefined} onClick={() => onCrm(item.id)}><TLinkNavigationIcon name={item.icon} /><span>{item.label}</span></button>)}
+      <button type="button" className={view === "forms" ? "active" : ""} aria-current={view === "forms" ? "page" : undefined} onClick={() => onView("forms")}><TLinkNavigationIcon name="forms" /><span>Forms</span></button>
+      <button type="button" className={view === "tasks" || view === "training" ? "active" : ""} aria-current={view === "tasks" || view === "training" ? "page" : undefined} onClick={() => onView("tasks")}><TLinkNavigationIcon name="training" /><span>Tasks &amp; training</span></button>
+      {permissions.canManageTeam && <button type="button" className={view === "team" ? "active" : ""} aria-current={view === "team" ? "page" : undefined} onClick={() => onView("team")}><TLinkNavigationIcon name="team" /><span>Team</span></button>}
+    </div>
+    <div className="tlink-nav-group" role="group" aria-labelledby="staff-nav-specialist">
+      <h2 id="staff-nav-specialist" className="tlink-nav-heading">Specialist tools</h2>
+      <button type="button" className={view === "wattzun" ? "active" : ""} aria-current={view === "wattzun" ? "page" : undefined} onClick={() => onView("wattzun")}><TLinkNavigationIcon name="wattzun" /><span>Wattzun</span></button>
+      {permissions.canViewQuotes && permissions.canManageQuotes && <button type="button" className={view === "map" ? "active" : ""} aria-current={view === "map" ? "page" : undefined} onClick={() => onView("map")}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span></button>}
+    </div>
   </nav>;
+}
+
+function TeamWorkspaceHeader({ businessName, colourMode, onToggleColourMode, onSignOut, getAuthHeaders, headerRef }: {
+  businessName: string; colourMode: TLinkColourMode; onToggleColourMode: () => void; onSignOut: () => void;
+  getAuthHeaders: () => Promise<Record<string, string>>; headerRef: Ref<HTMLElement>;
+}) {
+  return <header className="dashboard-hero" ref={headerRef}>
+    <div className="trade-portal-brand"><TLinkBrand context="Team workspace" /></div>
+    <button type="button" className="tlink-colour-mode-toggle" data-mode={colourMode} aria-label="Night mode" aria-pressed={colourMode === "night"} title={colourMode === "night" ? "Switch to day mode" : "Switch to night mode"} onClick={onToggleColourMode}>
+      <span className="tlink-colour-mode-sun" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="3.25" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" /></svg></span>
+      <span className="tlink-colour-mode-moon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M20.4 15.1A8.7 8.7 0 0 1 8.9 3.6 8.8 8.8 0 1 0 20.4 15.1Z" /></svg></span>
+    </button>
+    <div className="dashboard-account-actions">
+      <AeaProductLink placement="trade-portal" />
+      <div className="dashboard-account-summary"><small>Team account</small><strong>{businessName}</strong></div>
+      <TradeTeamPresence getAuthHeaders={getAuthHeaders} />
+      <a className="tlink-get-app" href="/direct-trade/field-app"><TLinkMark size={25} /><span>Get the app</span></a>
+      <button type="button" onClick={onSignOut}>Sign out</button>
+    </div>
+  </header>;
 }
 
 function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
@@ -144,6 +176,25 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   }
   const [portalView, setPortalViewState] = useState<PortalView>("business");
   const [mapNavigation] = useState(createMapNavigationGuard);
+  const observePortalHeader = useCallback((header: HTMLElement | null) => {
+    const shell = header?.parentElement;
+    if (!header || !shell) return;
+    const businessSwitcher = document.querySelector<HTMLElement>("[data-tlink-business-switcher]");
+    const measure = () => {
+      const businessBarHeight = businessSwitcher?.offsetHeight || 0;
+      shell.style.setProperty("--trade-business-bar-height", `${businessBarHeight}px`);
+      shell.style.setProperty("--trade-header-stack-height", `${businessBarHeight + header.offsetHeight}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    if (businessSwitcher) observer.observe(businessSwitcher);
+    return () => {
+      observer.disconnect();
+      shell.style.removeProperty("--trade-business-bar-height");
+      shell.style.removeProperty("--trade-header-stack-height");
+    };
+  }, []);
   const registerMapSave = useCallback((save: (() => Promise<unknown>) | null) => mapNavigation.register(save), [mapNavigation]);
   const setPortalView = useCallback((view: PortalView) => { void mapNavigation.run(() => setPortalViewState(view)); }, [mapNavigation, setPortalViewState]);
   const [crmTarget, setCrmTarget] = useState<TLinkCommandTarget | null>(null);
@@ -402,7 +453,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   if (resolver) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
   if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setAuthRevision(current => current + 1); }} /><button type="button" onClick={() => void leaveAccount()}>Sign out</button></main>;
 
-  return <TradeMessageAlerts user={user} enabled={Boolean(data.access)} onOpen={threadId => { setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 })); setPortalView("messages"); }}><TradeTeamCallProvider user={user} enabled={Boolean(data.access)}><main className={teamReady ? `trade-team-page trade-portal-shell tlink-team-shell` : "wrap trade-team-page"} data-trade-colour-mode={teamReady ? colourMode : undefined}>{!teamReady && <TLinkHeader active="team" />}
+  return <TradeMessageAlerts user={user} enabled={Boolean(data.access)} onOpen={threadId => { setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 })); setPortalView("messages"); }}><TradeTeamCallProvider user={user} enabled={Boolean(data.access)}><main className={teamReady ? `trade-team-page trade-portal-shell tlink-team-shell is-installer` : "wrap trade-team-page"} data-trade-theme={teamReady ? data.access?.brandThemeKey || DEFAULT_TRADE_BRAND_THEME : undefined} data-trade-colour-mode={teamReady ? colourMode : undefined}>{!teamReady && <TLinkHeader active="team" />}
     {!invitationReady ? <section className="dashboard-state-card"><p role="status">Opening your invitation...</p></section>
       : invitationError ? <section className="dashboard-state-card"><h1>{invitationInvalid ? "Use your newest invitation" : "Let's try that again"}</h1><p role="alert">{invitationError}</p>{invitationInvalid ? <><p>Look for the most recent email titled &ldquo;You&apos;re invited to ... on TLink&rdquo;. Earlier invitation and password-reset links may refer to the old invitation.</p><p>Your business can also send you the current link from Team &gt; Copy invitation link.</p><a className="btn" href="/direct-trade/team">Already joined? Sign in</a></> : <button className="btn" type="button" onClick={() => setInvitationAttempt(current => current + 1)}>Try again</button>}</section>
       : !authReady ? <section className="dashboard-state-card"><h1>{invitation ? "Your invitation is ready" : "Opening TLink"}</h1><p role="status">{authDelayed ? "Sign-in is taking longer than expected. Check your connection and try again." : "Checking your sign-in..."}</p>{authDelayed && <button className="btn" type="button" onClick={() => window.location.reload()}>Try again</button>}</section>
@@ -433,21 +484,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       : !emailVerified ? <section className="team-auth-shell"><div className="team-auth-intro"><span>One final step</span><h1>Confirm your email</h1><p>Your login is ready. Confirm that {user.email} is yours to open your team&apos;s workspace.</p></div><div className="team-auth-card"><h2>Check your inbox</h2><p>Open the verification email, tap the link and return here. Your team&apos;s saved access will then open automatically.</p>{status && <p role="status">{status}</p>}<button className="btn" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verify"); await refreshVerification(true); setBusy(""); }}>{busy === "verify" ? "Checking..." : "I've verified my email"}</button><button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verification-email"); await sendVerification(user); setBusy(""); }}>{busy === "verification-email" ? "Sending..." : "Resend verification email"}</button><button className="customer-reset-link" type="button" onClick={() => void leaveAccount()}>Use another account</button></div></section>
       : loading ? <section className="dashboard-state-card"><p>Opening your workspace...</p></section>
       : !data.access ? <section className="dashboard-state-card"><span>Team access</span><h1>Opening your team</h1><p>{status || "Checking your saved access..."}</p><button className="btn" type="button" onClick={() => void leaveAccount()}>Use another account</button></section> : <>
-      <header className="tlink-team-header">
-        <div className="tlink-team-topbar">
-          <a className="tlink-team-brand" href="/direct-trade/team" aria-label="TLink team workspace"><TLinkMark size={34} /><strong>TLink</strong></a>
-          <div className="tlink-team-headerActions">
-            <a className="tlink-team-getApp" href="/direct-trade/field-app">Get the app <span aria-hidden="true">↗</span></a>
-            <button type="button" className="tlink-team-themeToggle" aria-label="Night mode" aria-pressed={colourMode === "night"} title={colourMode === "night" ? "Switch to day mode" : "Switch to night mode"} onClick={toggleColourMode}>
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">{colourMode === "night" ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5" /></> : <path d="M20.4 15.1A8.7 8.7 0 0 1 8.9 3.6 8.8 8.8 0 1 0 20.4 15.1Z" />}</svg>
-            </button>
-          </div>
-        </div>
-        <div className="tlink-team-businessBar">
-          <div className="tlink-team-business"><span>Working with</span><strong>{data.access.businessName}</strong></div>
-          <TradeTeamPresence key={user.uid} getAuthHeaders={async () => ({ Authorization: "Bearer " + await user.getIdToken() })} />
-        </div>
-      </header>
+      <TeamWorkspaceHeader key={user.uid} businessName={data.access.businessName} colourMode={colourMode} onToggleColourMode={toggleColourMode} onSignOut={() => void leaveAccount()} getAuthHeaders={async () => ({ Authorization: "Bearer " + await user.getIdToken() })} headerRef={observePortalHeader} />
       <TeamWorkspaceNavigation permissions={data.access.permissions} crewId={data.access.crewId} view={portalView} crmView={crmView} onView={setPortalView} onCrm={openCrm} />
       <div className="tlink-team-content">
       {portalView === "sales" && salesAllowed && <TradeSalesWorkspace key={salesScopeKey} user={user} onOpenJob={openSalesJob} onNewQuote={canCreateSalesQuote ? openSalesQuote : undefined} onRegisterLeave={registerMapSave} />}
@@ -461,6 +498,6 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       {(portalView === "tasks" || portalView === "training") && <TradeTasksAndTraining key={user.uid} user={user} tab={portalView} onTab={setPortalView} />}
       {portalView === "team" && permissions?.canManageTeam && <section className="team-field-tools" aria-label="Team management"><TradeTeamSettings user={user} onOpenOwnTraining={() => setPortalView("training")} onOpenSchedule={() => openCrm("schedule")} /></section>}
       {status && <p className="crm-status" role="status">{status}</p>}
-      </div><TradePersonalNameSettings key={`${user.uid}:${data.access.memberId}`} user={user} name={data.access.displayName} onSaved={displayName => setData(current => current.access ? { ...current, access: { ...current.access, displayName } } : current)} /><footer className="tlink-team-footer"><span>Signed in as {data.access.displayName}</span><button type="button" onClick={() => void leaveAccount()}>Sign out</button></footer>
+      </div><TradePersonalNameSettings key={`${user.uid}:${data.access.memberId}`} user={user} name={data.access.displayName} onSaved={displayName => setData(current => current.access ? { ...current, access: { ...current.access, displayName } } : current)} /><footer className="tlink-team-footer"><span>Signed in as {data.access.displayName}</span></footer>
     </>}{!teamReady && <SiteFooter>Team access is controlled by the installer business. Australian Energy Assessments protected customer identity and contact details remain unavailable.</SiteFooter>}</main></TradeTeamCallProvider></TradeMessageAlerts>;
 }

@@ -15,7 +15,7 @@ import {
 } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, reload, sendEmailVerification, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
@@ -78,6 +78,8 @@ const TradeTasksAndTraining = dynamic(() => import("./TradeTasksAndTraining").th
 const TradeSalesWorkspace = dynamic(() => import("./TradeSalesWorkspace").then(module => module.TradeSalesWorkspace), { loading: () => <p role="status">Opening sales...</p> });
 
 type DashboardProfile = TradeBusinessSettingsProfile & {
+  emailVerified: boolean;
+  businessApprovalApproved: boolean;
   entitlements: {
     verified: boolean;
     accessLabel: string;
@@ -835,6 +837,10 @@ function DirectTradeDashboardContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [mfaRequired, setMfaRequired] = useState(false);
+  const [checkingApprovalStatus, setCheckingApprovalStatus] = useState(false);
+  const [approvalRefreshError, setApprovalRefreshError] = useState("");
+  const [verificationSending, setVerificationSending] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState("");
   function closeBusinessSetup() {
     setProfileSetupOpen(false);
     const url = new URL(window.location.href);
@@ -1256,6 +1262,10 @@ function DirectTradeDashboardContent() {
     setProfile(null);
     setError("");
     setMfaRequired(false);
+    setCheckingApprovalStatus(false);
+    setApprovalRefreshError("");
+    setVerificationSending(false);
+    setVerificationMessage("");
     setOpportunities([]);
     setOpportunityBusy("");
     setOpportunityStatus("");
@@ -1343,48 +1353,104 @@ function DirectTradeDashboardContent() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    let checking = false;
+    let waitingForAccess = false;
+    let needsEmailVerification = false;
+    let timer: number | undefined;
+    const controller = new AbortController();
     const identityRevision = protectedIdentityRevision.current;
     const identityIsCurrent = () => (
-      protectedIdentityRevision.current === identityRevision
+      !cancelled
+      && protectedIdentityRevision.current === identityRevision
       && protectedIdentityUid.current === user.uid
     );
-    async function loadDashboard() {
-      setLoading(true);
-      setError("");
+    function clearTimer() {
+      window.clearTimeout(timer);
+      timer = undefined;
+    }
+    function scheduleApprovalCheck() {
+      clearTimer();
+      if (identityIsCurrent() && waitingForAccess && document.visibilityState === "visible") {
+        timer = window.setTimeout(() => { void loadDashboard(false); }, 10_000);
+      }
+    }
+    async function loadDashboard(initial = true) {
+      if (!identityIsCurrent() || checking || (!initial && (!waitingForAccess || document.visibilityState !== "visible"))) return;
+      clearTimer();
+      checking = true;
+      if (initial) { setLoading(true); setError(""); }
+      else setCheckingApprovalStatus(true);
       try {
-        const token = await user!.getIdToken();
+        // Review approval is read from D1. Mailbox and manual checks also refresh
+        // Firebase claims after the user follows their verification email.
+        if (needsEmailVerification || (initial && profileRefresh > 0)) await reload(user!);
+        if (!identityIsCurrent()) return;
+        const token = await user!.getIdToken(needsEmailVerification || (initial && profileRefresh > 0));
+        if (!identityIsCurrent()) return;
         const response = await fetch("/api/trade-profile", {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
+          signal: controller.signal,
         });
         const result = await response.json().catch(() => ({}));
-        if (cancelled || !identityIsCurrent()) return;
+        if (!identityIsCurrent()) return;
         if (isMfaRequiredResponse(result)) setMfaRequired(true);
         if (!response.ok)
           throw new Error(result.error || "The dashboard could not be loaded.");
-        if (!cancelled && identityIsCurrent()) {
-          const nextProfile = result.profile as DashboardProfile | null;
-          setProfile(nextProfile);
-          if (nextProfile) {
-            if (nextProfile.partnerType === "supplier" || !nextProfile.entitlements?.features?.installer_leads) setOpportunities([]);
-          }
+        const nextProfile = result.profile as DashboardProfile | null;
+        waitingForAccess = Boolean(nextProfile && nextProfile.accountStatus === "active" && !nextProfile.entitlements.verified);
+        needsEmailVerification = nextProfile?.emailVerified === false;
+        setApprovalRefreshError("");
+        setProfile(nextProfile);
+        if (nextProfile) {
+          if (nextProfile.partnerType === "supplier" || !nextProfile.entitlements?.features?.installer_leads) setOpportunities([]);
         }
       } catch (loadError) {
-        if (!cancelled && identityIsCurrent())
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "The dashboard could not be loaded.",
-          );
+        if (identityIsCurrent()) {
+          if (initial) setError(loadError instanceof Error ? loadError.message : "The dashboard could not be loaded.");
+          else setApprovalRefreshError("We could not check your latest account status. Check your connection; we will check again when this page is open.");
+        }
       } finally {
-        if (!cancelled && identityIsCurrent()) setLoading(false);
+        checking = false;
+        if (identityIsCurrent()) {
+          setLoading(false);
+          setCheckingApprovalStatus(false);
+          scheduleApprovalCheck();
+        }
       }
     }
+    const checkOnReturn = () => {
+      clearTimer();
+      if (document.visibilityState === "visible" && waitingForAccess) void loadDashboard(false);
+    };
+    window.addEventListener("focus", checkOnReturn);
+    document.addEventListener("visibilitychange", checkOnReturn);
     void loadDashboard();
     return () => {
       cancelled = true;
+      controller.abort();
+      clearTimer();
+      window.removeEventListener("focus", checkOnReturn);
+      document.removeEventListener("visibilitychange", checkOnReturn);
     };
   }, [fetch, profileRefresh, user]);
+
+  async function resendVerificationEmail() {
+    if (!user || verificationSending || protectedIdentityUid.current !== user.uid) return;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () => protectedIdentityRevision.current === identityRevision
+      && protectedIdentityUid.current === user.uid;
+    setVerificationSending(true);
+    setVerificationMessage("");
+    try {
+      await sendEmailVerification(user, { url: new URL("/direct-trade/dashboard", window.location.origin).toString() });
+      if (identityIsCurrent()) setVerificationMessage(`Verification email sent to ${user.email}. Check your inbox and junk or spam folder, open the link, then return here.`);
+    } catch {
+      if (identityIsCurrent()) setVerificationMessage("The verification email could not be sent. Check your connection and try again. If you have requested several emails, wait a few minutes before retrying.");
+    } finally {
+      if (identityIsCurrent()) setVerificationSending(false);
+    }
+  }
 
   useEffect(() => {
     if (profile?.partnerType === "supplier" && (workspace === "calculator" || workspace === "map" || workspace === "design")) {
@@ -2383,6 +2449,20 @@ function DirectTradeDashboardContent() {
         </section>
       ) : !profile || !profileComplete || profileSetupOpen ? (
         <DirectTradePartnerForm key={user.uid} onSaved={businessProfileSaved} onCancel={profileComplete ? closeBusinessSetup : undefined} onSignOut={leaveAccount} />
+      ) : profile.accountStatus === "active" && profile.emailVerified === false ? (
+        <section className="dashboard-state-card">
+          <span>Confirm your email</span>
+          <h1>{profile.businessApprovalApproved ? "Your business is approved. Confirm your email to open TLink." : "Confirm your email while we review your business"}</h1>
+          <p>Check the inbox and junk or spam folder for {user.email}. Open the verification email, follow its link, then return here. If you cannot find it, resend it below. Your saved business details do not need to be submitted again.</p>
+          <div className="trade-signed-in-actions">
+            <button className="btn" type="button" disabled={checkingApprovalStatus} onClick={() => setProfileRefresh(value => value + 1)}>I&apos;ve verified my email</button>
+            <button type="button" disabled={verificationSending} onClick={() => void resendVerificationEmail()}>{verificationSending ? "Sending verification email..." : "Resend verification email"}</button>
+            <button type="button" onClick={() => void leaveAccount()}>Sign out</button>
+          </div>
+          {verificationMessage && <p role="status">{verificationMessage}</p>}
+          {approvalRefreshError && <p role="status">{approvalRefreshError}</p>}
+          <p role="status">{checkingApprovalStatus ? "Checking your email and account status..." : "This page checks your status automatically while it is open."}</p>
+        </section>
       ) : !profile.entitlements.verified ? (
         <section className="dashboard-state-card">
           <span>Application review required</span>
@@ -2400,6 +2480,8 @@ function DirectTradeDashboardContent() {
             <button type="button" onClick={() => setProfileRefresh(value => value + 1)}>Refresh application status</button>
             <button type="button" onClick={() => void leaveAccount()}>Sign out</button>
           </div>
+          {approvalRefreshError && <p role="status">{approvalRefreshError}</p>}
+          <p role="status">{checkingApprovalStatus ? "Checking your application status..." : "Your dashboard will open automatically when your account is approved. You do not need to submit your profile again."}</p>
           <TradeAccessPanel profile={profile} />
         </section>
       ) : (

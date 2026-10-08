@@ -175,6 +175,28 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
     }
   }
 
+  async function sendVerification(account: User, accountNotice = "") {
+    try {
+      await sendEmailVerification(account, {
+        url: new URL("/direct-trade/dashboard", window.location.origin).toString(),
+      });
+      setAuthStatus(`${accountNotice}We sent a verification link to ${account.email}. Check your inbox and junk/spam folder, confirm your email, then return to TLink. You must verify your email before opening your workspace. You can complete your business details now.`);
+    } catch (error) {
+      setAuthStatus(`${accountNotice}Your account is created, but the verification email could not be sent. ${authMessage(error)} Use Resend verification email below. Your business details are kept here.`);
+    }
+  }
+
+  async function resendVerification() {
+    if (!user || user.emailVerified) return;
+    setAuthBusy(true);
+    setAuthStatus("Sending your verification email...");
+    try {
+      await sendVerification(user);
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
   async function useEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const email = authEmail.trim().toLowerCase();
@@ -187,10 +209,15 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
     try {
       if (authMode === "create") {
         const credential = await createUserWithEmailAndPassword(firebaseAuth, email, authPassword);
-        await updateProfile(credential.user, { displayName: authName.trim() });
-        await sendEmailVerification(credential.user).catch(() => undefined);
         setName(authName.trim());
-        setAuthStatus("Account created. We sent an email verification link, and you can complete the business profile now.");
+        setAuthPassword("");
+        let accountNotice = "";
+        try {
+          await updateProfile(credential.user, { displayName: authName.trim() });
+        } catch {
+          accountNotice = "Your account is created. The login display name could not be saved; your contact name is kept in the business details below. ";
+        }
+        await sendVerification(credential.user, accountNotice);
       } else {
         await signInWithEmailAndPassword(firebaseAuth, email, authPassword);
         setAuthStatus("Signed in. You can update the business profile below.");
@@ -273,7 +300,11 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
       setProfileSaved(true);
       setStatusType("ok");
       setStatus(
-        "Your business profile has been submitted for review. Protected trade access remains locked until the ABN and required business evidence are approved.",
+        result.profile?.accessApproved === true
+          ? "Your business profile is saved and your approved workspace is ready."
+          : result.profile?.emailVerified === false
+            ? "Your business profile is saved. Confirm your email before opening your workspace. Check your inbox and junk/spam folder, then open your application status to see the business review decision."
+            : "Your business profile has been submitted for review. Protected trade access remains locked until the ABN and required business evidence are approved.",
       );
       onSaved();
     } catch (error) {
@@ -290,7 +321,7 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
     <header className="crm-page-heading"><div><span>{user ? "Business setup" : "Welcome to TLink"}</span><h1>{user ? "Your business, ready to work" : "Your business starts here"}</h1><p>Free tools for your customers, jobs, team and compliance. No payment details required.</p></div>{onCancel && user && <button type="button" className="crm-back-button" onClick={onCancel}>Back to dashboard</button>}</header>
 
     {!authReady ? <section className="trade-auth-card trade-auth-loading" aria-live="polite"><span className="trade-auth-loader" aria-hidden="true" /><div><strong>Checking your secure sign-in</strong><p>Loading account options...</p></div></section> : !user ? <section className="trade-auth-card" aria-labelledby="trade-account-title">
-      <div className="trade-auth-intro"><h2 id="trade-account-title">{authMode === "create" ? "Create your free TLink account" : "Sign in to your dashboard"}</h2><p>Continue with Google or your business email.</p></div>
+      <div className="trade-auth-intro"><h2 id="trade-account-title">{authMode === "create" ? "Create your free TLink account" : "Sign in to your dashboard"}</h2><p>Continue with Google or your business email.</p><p>Joining someone else&apos;s team? <a href="/direct-trade/team">Open your team invitation</a> instead of creating a business.</p></div>
       <div className="trade-auth-panel">
         <button className="trade-google-button" type="button" onClick={useGoogle} disabled={authBusy}><img aria-hidden="true" alt="" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />Continue with Google</button>
         <div className="trade-auth-divider"><span>or use email</span></div>
@@ -307,8 +338,10 @@ export function DirectTradePartnerForm({ initialMode = "signin", onSaved, onCanc
       <aside className="trade-auth-benefits"><strong>Build the profile first</strong><ul><li>National service-area and capability profile</li><li>Customers, quotes, jobs and team tools</li><li>No payment details or per-lead charge</li><li>Core workspace access after approval</li></ul></aside>
     </section> : !profileLoaded ? <section className="dashboard-state-card" role="status"><p>Loading your business details...</p></section> : profileError ? <section className="dashboard-state-card" role="alert"><h2>Business details could not be loaded</h2><p>{profileError}</p><button type="button" onClick={() => { setProfileLoaded(false); setProfileRetry(value => value + 1); }}>Try again</button></section> : <>
       <section className="trade-signed-in" aria-label="Signed in account"><div><span>{profileSaved ? "Business profile" : "Secure account connected"}</span><strong>{user.email}</strong><small>{profileSaved ? "Keep your business and contact details up to date." : "Complete the business profile to begin review."}</small></div><div className="trade-signed-in-actions"><a href="/direct-trade/security">Account security</a><button type="button" onClick={() => void onSignOut()}>Sign out</button></div></section>
+      {!user.emailVerified && <section className="dashboard-state-card" aria-label="Confirm account email"><h2>Confirm your email</h2><p>Check your inbox and junk/spam folder for the verification link sent to {user.email}. You must verify your email before opening your workspace. You can complete your business details now. Email confirmation and business approval are separate steps.</p><button type="button" className="btn" disabled={authBusy} onClick={() => void resendVerification()}>{authBusy ? "Sending..." : "Resend verification email"}</button></section>}
+      {authStatus && <p className="trade-auth-status" role="status">{authStatus}</p>}
       <form className="direct-trade-brief" onSubmit={submitProfile} noValidate>
-        <section className="direct-trade-form-section" aria-labelledby="partner-business-title"><div className="direct-trade-form-heading"><span>Business details</span><h2 id="partner-business-title">Where you work and what you do</h2><p>A business address is required for account integrity and verification. Approved local business names, suburbs, postcodes and capabilities appear automatically in the local council trade directory. Your street address and private contact details are not included.</p></div><div className="direct-trade-field-grid trade-account-fields"><Field label="Business name"><input required type="text" value={businessName} onChange={(event) => setBusinessName(event.target.value)} autoComplete="organization" /></Field><Field label="ABN"><input required type="text" inputMode="numeric" pattern="[0-9]{11}" maxLength={11} value={abn} onChange={(event) => setAbn(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="11 digit ABN" /></Field><Field label="Business website" optional="optional"><input type="url" value={businessWebsite} onChange={(event) => setBusinessWebsite(event.target.value)} inputMode="url" placeholder="https://example.com.au" /></Field><AustralianAddressLookup className="f" label="Business street address" required value={addressLine1} onChange={setAddressLine1} onSelect={selectBusinessAddress} /><Field label="Suburb or locality"><input required type="text" value={suburb} onChange={(event) => setSuburb(event.target.value)} autoComplete="address-level2" /></Field><Field label="State or territory"><select required value={addressState} onChange={(event) => setAddressState(event.target.value)} autoComplete="address-level1"><option value="">Choose one</option>{states.map((value) => <option value={value} key={value}>{value}</option>)}</select></Field><Field label="Postcode"><input required type="text" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={postcode} onChange={(event) => setPostcode(event.target.value.replace(/\D/g, "").slice(0, 4))} autoComplete="postal-code" /></Field></div><fieldset className="partner-check-group"><legend>States and territories served</legend><div className="partner-chip-grid">{states.map((value) => <label className={serviceStates.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={serviceStates.includes(value)} onChange={() => toggle(value, serviceStates, setServiceStates)} />{value}</label>)}</div></fieldset><fieldset className="partner-check-group"><legend>{partnerType === "installer" ? "Installation capabilities" : "Product categories"}</legend><div className="partner-category-grid">{categories.map(([value, label]) => <label className={selectedCategories.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={selectedCategories.includes(value)} onChange={() => toggle(value, selectedCategories, setSelectedCategories)} />{label}</label>)}</div></fieldset><Field label={partnerType === "installer" ? "Capabilities and credential summary" : "Products, warranties and support summary"} optional="optional" hint="Maximum 800 characters. Do not upload or paste licence documents, identity records, customer lists, wholesale price files or confidential contracts."><textarea maxLength={800} rows={5} value={partnerNotes} onChange={(event) => setPartnerNotes(event.target.value)} /></Field></section>
+        <section className="direct-trade-form-section" aria-labelledby="partner-business-title"><div className="direct-trade-form-heading"><span>Business details</span><h2 id="partner-business-title">Where you work and what you do</h2><p>A business address is required for account integrity and verification. Approved local business names, suburbs, postcodes and capabilities appear automatically in the local council trade directory. Your street address and private contact details are not included.</p></div><div className="direct-trade-field-grid trade-account-fields"><Field label="Business name"><input required type="text" value={businessName} onChange={(event) => setBusinessName(event.target.value)} autoComplete="organization" /></Field><Field label="ABN"><input required type="text" inputMode="numeric" pattern="[0-9]{11}" maxLength={11} value={abn} onChange={(event) => setAbn(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="11 digit ABN" /></Field><AustralianAddressLookup className="f" label="Business street address" required value={addressLine1} onChange={setAddressLine1} onSelect={selectBusinessAddress} /><Field label="Suburb or locality"><input required type="text" value={suburb} onChange={(event) => setSuburb(event.target.value)} autoComplete="address-level2" /></Field><Field label="State or territory"><select required value={addressState} onChange={(event) => setAddressState(event.target.value)} autoComplete="address-level1"><option value="">Choose one</option>{states.map((value) => <option value={value} key={value}>{value}</option>)}</select></Field><Field label="Postcode"><input required type="text" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={postcode} onChange={(event) => setPostcode(event.target.value.replace(/\D/g, "").slice(0, 4))} autoComplete="postal-code" /></Field></div><fieldset className="partner-check-group"><legend>States and territories served</legend><div className="partner-chip-grid">{states.map((value) => <label className={serviceStates.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={serviceStates.includes(value)} onChange={() => toggle(value, serviceStates, setServiceStates)} />{value}</label>)}</div></fieldset><fieldset className="partner-check-group"><legend>{partnerType === "installer" ? "Installation capabilities" : "Product categories"}</legend><div className="partner-category-grid">{categories.map(([value, label]) => <label className={selectedCategories.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={selectedCategories.includes(value)} onChange={() => toggle(value, selectedCategories, setSelectedCategories)} />{label}</label>)}</div></fieldset><details><summary>Optional business details</summary><p>You can add your website and summary later by updating this business profile.</p><Field label="Business website" optional="optional"><input type="url" value={businessWebsite} onChange={(event) => setBusinessWebsite(event.target.value)} inputMode="url" placeholder="https://example.com.au" /></Field><Field label={partnerType === "installer" ? "Capabilities and credential summary" : "Products, warranties and support summary"} optional="optional" hint="Maximum 800 characters. Do not upload or paste licence documents, identity records, customer lists, wholesale price files or confidential contracts."><textarea maxLength={800} rows={5} value={partnerNotes} onChange={(event) => setPartnerNotes(event.target.value)} /></Field></details></section>
         <section className="direct-trade-form-section" aria-labelledby="partner-contact-title"><div className="direct-trade-form-heading"><span>Account contact</span><h2 id="partner-contact-title">Who manages this account?</h2><p>This person receives account, profile, verification and suitable-opportunity communication.</p></div><div className="direct-trade-field-grid"><Field label="Contact name"><input required type="text" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></Field><Field label="Account email"><input required type="email" value={user.email || ""} readOnly aria-readonly="true" /></Field><Field label="Business contact number"><input required type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" /></Field></div><label className="direct-trade-consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I agree that Australian Energy Assessments, as the operator of TLink, may maintain this business profile, display the approved business details described above to local councils and contact me about account activity, verification and suitable opportunities. Account creation does not replace licensing, accreditation, insurance or scheme requirements.</span></label><button className="btn direct-trade-submit" disabled={sending}>{sending ? "Saving..." : profileSaved ? "Update business profile" : "Submit business profile for review"}</button>{status && <p className={`direct-trade-form-status ${statusType}`} role="status">{status}</p>}</section>
       </form>
     </>}

@@ -34,8 +34,10 @@ function render(permissions = {}, view = 'business', crmView = 'jobs', crewId) {
 
 test('field staff use one Home and Jobs workflow with Connect and their schedule', () => {
   const ui = render();
-  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'Forms', 'Wattzun', 'Tasks & training']);
+  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'Forms', 'Tasks & training', 'Wattzun']);
   assert.equal(ui.tree.props['aria-label'], 'Staff workspace');
+  assert.equal(ui.tree.props.className, 'dashboard-workspace-nav tlink-workspace-nav');
+  assert.deepEqual(flatten(ui.tree).filter(node => node.type === 'h2').map(label), ['Daily work', 'Business tools', 'Specialist tools']);
   assert.equal(ui.button('Jobs').props['aria-current'], 'page');
   assert.equal(ui.button('My work'), undefined);
   assert.equal(flatten(ui.tree).filter(node => node.type === 'UnreadBadge').length, 1);
@@ -152,11 +154,26 @@ test('Sales quote creation uses the existing job quote path and requires create 
 test('authenticated team shell exposes installation and theme while public invitation chrome stays conditional', () => {
   assert.match(portal, /!teamReady && <TLinkHeader active="team"/);
   assert.match(portal, /!teamReady && <SiteFooter>/);
-  assert.match(portal, /className="tlink-team-getApp" href="\/direct-trade\/field-app"/);
+  assert.match(portal, /className="tlink-get-app" href="\/direct-trade\/field-app"/);
   assert.match(portal, /aria-label="Night mode" aria-pressed=\{colourMode === "night"\}/);
   assert.match(portal, /readTLinkColourMode\(window\.localStorage\)/);
   assert.match(portal, /writeTLinkColourMode\(window\.localStorage, next\)/);
   assert.doesNotMatch(portal, /className="team-portal-hero"/);
+  assert.doesNotMatch(portal, /tlink-team-header|tlink-team-navigation|tlink-team-themeToggle/);
+  assert.match(portal, /<header className="dashboard-hero" ref=\{headerRef\}/);
+  assert.match(portal, /<TLinkBrand context="Team workspace"/);
+  assert.match(portal, /data-trade-theme=\{teamReady \? data\.access\?\.brandThemeKey \|\| DEFAULT_TRADE_BRAND_THEME : undefined\}/);
+  assert.match(portal, /<TeamWorkspaceHeader key=\{user\.uid\} businessName=\{data\.access\.businessName\}/);
+  assert.match(portal, /shell\.style\.setProperty\("--trade-header-stack-height"/);
+});
+
+test('staff sidebar uses shared active styling without exposing owner-only destinations', () => {
+  for (const [view, crmView, selected] of [['business', 'today', 'Home dashboard'], ['business', 'jobs', 'Jobs'], ['business', 'schedule', 'Schedule'], ['messages', 'jobs', 'Connect '], ['forms', 'jobs', 'Forms'], ['training', 'jobs', 'Tasks & training'], ['wattzun', 'jobs', 'Wattzun']]) {
+    const ui = render({}, view, crmView);
+    assert.equal(ui.button(selected).props.className, 'active');
+    assert.equal(ui.buttons.filter(button => button.props.className === 'active').length, 1);
+    for (const name of ['Business settings', 'Leads', 'Finance', 'Follow-ups', 'Trade network', 'Calculator']) assert.equal(ui.button(name), undefined);
+  }
 });
 
 test('direct tools retain the original staff permission object and save map designs before leaving', () => {
