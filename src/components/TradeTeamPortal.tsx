@@ -4,7 +4,6 @@ import TradeTeamPresence from "./TradeTeamPresence";
 import { WattzunToolsWorkspace } from "./WattzunToolsWorkspace";
 import { TradeTeamTimeWorkspace } from "./TradeTeamTimeWorkspace";
 import { TradeCrewWorkspace } from "./TradeCrewWorkspace";
-import { TradePersonalProfileSettings } from "./TradePersonalProfileSettings";
 
 import { TradeBusinessGate, useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
@@ -32,6 +31,7 @@ const TradeFormsWorkspace = dynamic(() => import('./TradeFormsWorkspace').then(m
 const TradeTasksAndTraining = dynamic(() => import("./TradeTasksAndTraining").then(module => module.TradeTasksAndTraining), { loading: () => <p role="status">Loading tasks and training...</p> });
 const TradeSalesWorkspace = dynamic(() => import("./TradeSalesWorkspace").then(module => module.TradeSalesWorkspace), { loading: () => <p role="status">Opening sales...</p> });
 const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then(module => module.TradeMessagesWorkspace));
+const TradePersonalProfileSettings = dynamic(() => import("./TradePersonalProfileSettings").then(module => module.TradePersonalProfileSettings), { loading: () => <p role="status">Opening your profile...</p> });
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
 import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlerts";
 
@@ -498,7 +498,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       <TeamWorkspaceHeader key={user.uid} businessName={data.access.businessName} colourMode={colourMode} onToggleColourMode={toggleColourMode} onProfile={() => setPortalView("profile")} onSignOut={() => void leaveAccount()} getAuthHeaders={async () => ({ Authorization: "Bearer " + await user.getIdToken() })} headerRef={observePortalHeader} />
       <TeamWorkspaceNavigation permissions={data.access.permissions} crewId={data.access.crewId} view={portalView} crmView={crmView} onView={setPortalView} onCrm={openCrm} />
       <div className="tlink-team-content">
-      {portalView === "profile" && <TradePersonalProfileSettings key={`${user.uid}:${business?.ownerUid}:${data.access.memberId}`} user={user} name={data.access.displayName} appearance={appearance} employerTheme={employerTheme} storageAvailable={appearanceState.scope === appearanceScope && appearanceState.storageAvailable} onAppearanceChange={changeAppearance} onSaved={displayName => setData(current => current.access ? { ...current, access: { ...current.access, displayName } } : current)} />}
+      {portalView === "profile" && <TradePersonalProfileSettings key={`${user.uid}:${business?.ownerUid}:${data.access.memberId}`} user={user} name={data.access.displayName} appearance={appearance} employerTheme={employerTheme} storageAvailable={appearanceState.scope === appearanceScope && appearanceState.storageAvailable} onAppearanceChange={changeAppearance} onResetAppearance={() => changeAppearance({ ...DEFAULT_TRADE_PERSONAL_APPEARANCE })} onSaved={displayName => setData(current => current.access ? { ...current, access: { ...current.access, displayName } } : current)} />}
       {portalView === "sales" && salesAllowed && <TradeSalesWorkspace key={salesScopeKey} user={user} onOpenJob={openSalesJob} onNewQuote={canCreateSalesQuote ? openSalesQuote : undefined} onRegisterLeave={registerMapSave} />}
       {portalView === "sales" && !salesAllowed && <section className="dashboard-state-card"><p role="alert">Customer and quote access is required to open Sales.</p><button type="button" onClick={() => openCrm("jobs")}>Open jobs</button></section>}
       {portalView === "time" && <TradeTeamTimeWorkspace user={user} />}

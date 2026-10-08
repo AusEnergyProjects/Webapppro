@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { TRADE_BRAND_THEME_KEYS, TRADE_BRAND_THEME_OPTIONS, type TradeBrandThemeKey } from "@/lib/trade-business-branding";
-import { DEFAULT_TRADE_PERSONAL_APPEARANCE, type TradePersonalAppearance } from "@/lib/trade-personal-appearance";
+import type { TradePersonalAppearance } from "@/lib/trade-personal-appearance";
 import { useTradeBusinessFetch, useTradePersonalNameUpdate } from "./TradeBusinessProvider";
 import styles from "./TradePersonalProfileSettings.module.css";
 
@@ -33,9 +33,9 @@ async function requestProfile(request: typeof fetch, user: User, method: "GET" |
   } finally { window.clearTimeout(timeout); signal?.removeEventListener("abort", abort); }
 }
 
-export function TradePersonalProfileSettings({ user, name, appearance, employerTheme, storageAvailable, onAppearanceChange, onSaved }: {
+export function TradePersonalProfileSettings({ user, name, appearance, employerTheme, storageAvailable, onAppearanceChange, onResetAppearance, onSaved }: {
   user: User; name: string; appearance: TradePersonalAppearance; employerTheme: TradeBrandThemeKey; storageAvailable: boolean;
-  onAppearanceChange: (appearance: TradePersonalAppearance) => void; onSaved: (name: string) => void;
+  onAppearanceChange: (appearance: TradePersonalAppearance) => void; onResetAppearance: () => void; onSaved: (name: string) => void;
 }) {
   const request = useTradeBusinessFetch();
   const updatePersonalName = useTradePersonalNameUpdate();
@@ -95,7 +95,7 @@ export function TradePersonalProfileSettings({ user, name, appearance, employerT
             <option value="">Use business colours ({TRADE_BRAND_THEME_OPTIONS[employerTheme].label})</option>
             {TRADE_BRAND_THEME_KEYS.map(theme => <option key={theme} value={theme}>{TRADE_BRAND_THEME_OPTIONS[theme].label}</option>)}
           </select></label>
-          <button type="button" className="btn secondary" onClick={() => onAppearanceChange({ ...DEFAULT_TRADE_PERSONAL_APPEARANCE })}>Reset my dashboard</button>
+          <button type="button" className="btn secondary" onClick={onResetAppearance}>Reset my dashboard</button>
           <p className={styles.help} role="status">{storageAvailable ? "Your choices are remembered on this device for your account in this business." : "Your choices apply in this tab. Your browser is not allowing them to be remembered."}</p>
         </div>
       </section>

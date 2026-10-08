@@ -36,7 +36,7 @@ const bundle = await build({
       return <main className="trade-team-page trade-portal-shell tlink-team-shell is-installer" data-trade-theme={personalTheme} data-trade-colour-mode={colourMode}>
         <TeamWorkspaceHeader businessName="Australian Energy Assessments" colourMode={colourMode} headerRef={null} getAuthHeaders={async()=>({})} onSignOut={()=>{}} onProfile={()=>setView('profile')} onToggleColourMode={toggleColourMode}/>
         <TeamWorkspaceNavigation permissions={window.fixturePermissions} view={view} crmView="today" onView={setView} onCrm={()=>setView('business')}/>
-        <div className="tlink-team-content">{view==='profile'?<TradePersonalProfileSettings key={user.uid+':'+business.ownerUid} user={user} name={displayName} appearance={appearance} employerTheme="violet_sunset" storageAvailable={appearanceState.scope===appearanceScope&&appearanceState.storageAvailable} onAppearanceChange={changeAppearance} onSaved={name=>{setDisplayName(name);window.fixtureSavedNames.push(name)}}/>:<p>Other scoped workspace</p>}</div>
+        <div className="tlink-team-content">{view==='profile'?<TradePersonalProfileSettings key={user.uid+':'+business.ownerUid} user={user} name={displayName} appearance={appearance} employerTheme="violet_sunset" storageAvailable={appearanceState.scope===appearanceScope&&appearanceState.storageAvailable} onAppearanceChange={changeAppearance} onResetAppearance={()=>changeAppearance({...DEFAULT_TRADE_PERSONAL_APPEARANCE})} onSaved={name=>{setDisplayName(name);window.fixtureSavedNames.push(name)}}/>:<p>Other scoped workspace</p>}</div>
         <footer className="tlink-team-footer">Signed in as {displayName}</footer>
       </main>;
     }createRoot(document.getElementById('root')).render(<Fixture/>);

@@ -255,6 +255,8 @@ test('Sales, tasks, training, communication, time and profile deep links keep th
   }
   assert.match(portal, /window\.addEventListener\("popstate", applyWorkspaceLink\)/);
   assert.match(portal, /portalView === "profile" && <TradePersonalProfileSettings/);
+  assert.match(portal, /const TradePersonalProfileSettings = dynamic\(\(\) => import\("\.\/TradePersonalProfileSettings"\)/);
+  assert.doesNotMatch(portal, /import \{ TradePersonalProfileSettings \} from/);
   assert.doesNotMatch(portal, /TradePersonalNameSettings/);
 });
 
