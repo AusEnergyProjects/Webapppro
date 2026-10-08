@@ -79,6 +79,7 @@ test("receipt confirms the saved request without promising responses or email de
   assert.match(dialog, /Your enquiry is saved with Australian Energy Assessments\./);
   assert.match(dialog, /reference: result\.reference/);
   assert.match(dialog, /submitState\.reference \? <div><span>Your reference<\/span><strong>\{submitState\.reference\}/);
+  assert.match(dialog, /demonstration \? "Preview complete" : "Request received"/);
   assert.match(dialog, /based on your selected services and their service areas/);
   assert.match(dialog, /review the details you agreed to share\. Responses depend on availability/);
   assert.match(dialog, /import \{ PUBLIC_SITE \} from "@\/lib\/public-site"/);
@@ -111,7 +112,8 @@ test("quick request modal has keyboard and mobile safeguards", () => {
   assert.match(dialog, /\.filter\(\(element\) => element\.tabIndex >= 0\)/);
   assert.match(dialog, /document\.body\.style\.overflow = "hidden"/);
   assert.match(dialog, /returnTarget\?\.isConnected\) returnTarget\.focus\(\)/);
-  assert.match(dialog, /successCloseRef\.current\?\.focus\(\)/);
+  assert.match(dialog, /successCloseRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(dialog, /if \(submitState\.kind !== "success"\) return;[\s\S]*?dialogRef\.current\.scrollTop = 0/);
   assert.match(dialog, /ref=\{successCloseRef\} type="button" onClick=\{onClose\}>Done/);
   assert.match(dialog, /const dismissible = submitState\.kind !== "sending"/);
   assert.match(dialog, /disabled=\{submitState\.kind === "sending"\}/);

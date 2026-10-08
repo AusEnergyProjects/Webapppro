@@ -61,8 +61,8 @@ test("corrupted storage, non-demo identity, unsafe logos, malformed campaign dat
 
 test("reset produces the original council, palette and coherent default sample", () => {
   const report = councilDemoReport(createCouncilDemoState(now),now);
-  assert.equal(report.metrics.completedJobs,1596);
-  assert.equal(report.metrics.registeredLocalBusinesses,47);
-  assert.equal(report.scope.name,"Greendale Demonstration Council");
+  assert.equal(report.metrics.completedJobs,4890);
+  assert.equal(report.metrics.registeredLocalBusinesses,107);
+  assert.equal(report.scope.name,"City of Port Phillip Demonstration");
   assert.equal(report.mode,"demonstration");
 });

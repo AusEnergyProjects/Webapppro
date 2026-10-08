@@ -9,7 +9,7 @@ export const hubContactSql = `FROM trade_opportunities opportunity
     AND ${publicPlanContactReleaseAccessSql("contact")} AND datetime(contact.granted_at) IS NOT NULL`;
 
 async function prepareCustomerHub(db: D1Database, opportunityId: string, email: string, expectedReleaseId = '', onlyMissing = false) {
-  const contact = await db.prepare(`SELECT contact.id,contact.customer_email ${hubContactSql}`).bind(opportunityId).first<{id:string;customer_email:string}>();
+  const contact = await db.prepare(`SELECT contact.id,contact.customer_email,opportunity.expires_at contact_expires_at ${hubContactSql}`).bind(opportunityId).first<{id:string;customer_email:string;contact_expires_at:string}>();
   if (!contact || (expectedReleaseId && contact.id !== expectedReleaseId) || contact.customer_email.trim().toLowerCase() !== email.trim().toLowerCase()) throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
   const emailHash = await hashQuoteLinkSecret(email.trim().toLowerCase());
   const existing=await db.prepare('SELECT id FROM customer_quote_hubs WHERE opportunity_id=?').bind(opportunityId).first<{id:string}>();
@@ -21,7 +21,7 @@ async function prepareCustomerHub(db: D1Database, opportunityId: string, email: 
       token_hash=excluded.token_hash,encrypted_token=excluded.encrypted_token,expires_at=excluded.expires_at,revoked_at=''
     WHERE ?=0 AND customer_quote_hubs.id=excluded.id AND (customer_quote_hubs.release_id<>excluded.release_id OR customer_quote_hubs.email_hash<>excluded.email_hash
       OR customer_quote_hubs.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR customer_quote_hubs.revoked_at<>'')`)
-    .bind(id,opportunityId,contact.id,emailHash,email.trim().toLowerCase(),await hashQuoteLinkSecret(secret),encrypted,new Date(Date.now()+90*86400000).toISOString(),now,
+    .bind(id,opportunityId,contact.id,emailHash,email.trim().toLowerCase(),await hashQuoteLinkSecret(secret),encrypted,contact.contact_expires_at,now,
       opportunityId,contact.id,email.trim().toLowerCase(),onlyMissing?1:0).run();
   const stored=await db.prepare(`SELECT id,encrypted_token,token_hash FROM customer_quote_hubs WHERE opportunity_id=? AND release_id=? AND email_hash=? AND revoked_at='' AND expires_at>?`)
     .bind(opportunityId,contact.id,emailHash,now).first<{id:string;encrypted_token:string;token_hash:string}>();

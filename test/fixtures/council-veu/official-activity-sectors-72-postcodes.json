@@ -1,0 +1,754 @@
+{
+  "sourceUrl": "https://veu.esc.vic.gov.au/vpr/s/public-registry",
+  "extractedAt": "2026-10-08T00:42:34.907Z",
+  "postcodes": [
+    "3169",
+    "3172",
+    "3182",
+    "3183",
+    "3184",
+    "3186",
+    "3187",
+    "3188",
+    "3189",
+    "3190",
+    "3191",
+    "3192",
+    "3193",
+    "3194",
+    "3195",
+    "3196",
+    "3197",
+    "3202",
+    "3205",
+    "3206",
+    "3207",
+    "3804",
+    "3805",
+    "3806",
+    "3807",
+    "3808",
+    "3809",
+    "3810",
+    "3812",
+    "3813",
+    "3814",
+    "3815",
+    "3910",
+    "3911",
+    "3912",
+    "3913",
+    "3915",
+    "3916",
+    "3918",
+    "3919",
+    "3922",
+    "3925",
+    "3926",
+    "3927",
+    "3928",
+    "3929",
+    "3930",
+    "3931",
+    "3933",
+    "3934",
+    "3936",
+    "3939",
+    "3940",
+    "3941",
+    "3942",
+    "3943",
+    "3944",
+    "3953",
+    "3956",
+    "3959",
+    "3975",
+    "3976",
+    "3977",
+    "3978",
+    "3979",
+    "3980",
+    "3981",
+    "3984",
+    "3991",
+    "3992",
+    "3995",
+    "3996"
+  ],
+  "query": {
+    "Query": {
+      "Version": 2,
+      "From": [
+        {
+          "Name": "f",
+          "Entity": "Fact_Activity",
+          "Type": 0
+        },
+        {
+          "Name": "r",
+          "Entity": "Ref_Address",
+          "Type": 0
+        }
+      ],
+      "Select": [
+        {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Source": "f"
+              }
+            },
+            "Property": "Activity_Type__c"
+          },
+          "Name": "activity"
+        },
+        {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Source": "r"
+              }
+            },
+            "Property": "Postcode__c"
+          },
+          "Name": "postcode"
+        },
+        {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Source": "f"
+              }
+            },
+            "Property": "Sector__c"
+          },
+          "Name": "sector"
+        },
+        {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Source": "f"
+                  }
+                },
+                "Property": "VEECs__c"
+              }
+            },
+            "Function": 0
+          },
+          "Name": "certificates"
+        },
+        {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Source": "f"
+                  }
+                },
+                "Property": "Activity_Type__c"
+              }
+            },
+            "Function": 5
+          },
+          "Name": "activities"
+        }
+      ],
+      "Where": [
+        {
+          "Condition": {
+            "In": {
+              "Expressions": [
+                {
+                  "Column": {
+                    "Expression": {
+                      "SourceRef": {
+                        "Source": "f"
+                      }
+                    },
+                    "Property": "Activity_Status__c"
+                  }
+                }
+              ],
+              "Values": [
+                [
+                  {
+                    "Literal": {
+                      "Value": "'Approved'"
+                    }
+                  }
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "Condition": {
+            "In": {
+              "Expressions": [
+                {
+                  "Column": {
+                    "Expression": {
+                      "SourceRef": {
+                        "Source": "r"
+                      }
+                    },
+                    "Property": "Postcode__c"
+                  }
+                }
+              ],
+              "Values": [
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3169'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3172'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3182'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3183'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3184'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3186'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3187'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3188'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3189'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3190'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3191'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3192'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3193'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3194'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3195'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3196'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3197'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3202'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3205'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3206'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3207'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3804'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3805'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3806'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3807'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3808'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3809'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3810'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3812'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3813'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3814'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3815'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3910'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3911'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3912'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3913'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3915'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3916'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3918'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3919'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3922'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3925'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3926'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3927'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3928'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3929'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3930'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3931'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3933'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3934'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3936'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3939'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3940'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3941'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3942'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3943'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3944'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3953'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3956'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3959'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3975'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3976'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3977'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3978'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3979'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3980'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3981'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3984'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3991'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3992'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3995'"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "Literal": {
+                      "Value": "'3996'"
+                    }
+                  }
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Binding": {
+      "DataReduction": {
+        "DataVolume": 6,
+        "Primary": {
+          "Window": {
+            "Count": 15000
+          }
+        }
+      },
+      "Primary": {
+        "Groupings": [
+          {
+            "Projections": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "Subtotal": 1
+          }
+        ]
+      },
+      "Version": 1
+    },
+    "ExecutionMetricsKind": 1
+  },
+  "refreshed": {
+    "local": "8/10/2026 5:12:07 AM",
+    "utc": "2026-10-07T18:12:07.000Z"
+  },
+  "model": "{\"models\":[{\"id\":664626,\"dbName\":\"93dfde74-9213-4c52-ac47-5b3aec919ce2\"}],\"exploration\":{\"report\":{\"objectId\":\"8fd064b2-c06c-44f0-8d9d-d7c5804fcd1f\",\"modelId\":664626,\"model\":{\"id\":664626,\"dbName\":\"93dfde74-9213-4c52-ac47-5b3aec919ce2\"}},\"explorationContent\":{\"explorationDocument\":\"{\\\"pages\\\":{\\\"pages\\\":[{\\\"filePath\\\":\\\"bd06cbfb601714686762/page.json\\\",\\\"content\\\":{\\\"$schema\\\":\\\"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json\\\",\\\"name\\\":\\\"bd06cbfb601714686762\\\",\\\"displayName\\\":\\\"Activities\\\",\\\"displayOption\\\":\\\"FitToPage\\\",\\\"height\\\":720,\\\"width\\\":1280,\\\"filterConfig\\\":{\\\"filters\\\":[{\\\"name\\\":\\\"8fbe0bbd297ec9003ec7\\\",\\\"displayName\\\":\\\"Activity Type\\\",\\\"ordinal\\\":0,\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Type__c\\\"}},\\\"type\\\":\\\"Categorical\\\",\\\"howCreated\\\":\\\"User\\\"},{\\\"name\\\":\\\"08b61e286b4d0b579dbb\\\",\\\"displayName\\\":\\\"Postcode\\\",\\\"ordinal\\\":1,\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Ref_Address\\\"}},\\\"Property\\\":\\\"Postcode__c\\\"}},\\\"type\\\":\\\"Categorical\\\",\\\"howCreated\\\":\\\"User\\\"},{\\\"name\\\":\\\"ed1a7b26a431bbd6ade9\\\",\\\"ordinal\\\":2,\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Dim_PostCode\\\"}},\\\"Property\\\":\\\"Region\\\"}},\\\"type\\\":\\\"Categorical\\\",\\\"howCreated\\\":\\\"User\\\"},{\\\"name\\\":\\\"414ab1ff5cb75d4c92ec\\\",\\\"displayName\\\":\\\"Sector\\\",\\\"ordinal\\\":3,\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Sector__c\\\"}},\\\"type\\\":\\\"Categorical\\\",\\\"howCreated\\\":\\\"User\\\"},{\\\"name\\\":\\\"d46eb6d05eeac996762e\\\",\\\"displayName\\\":\\\"Activity Date\\\",\\\"ordinal\\\":4,\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Date__c\\\"}},\\\"type\\\":\\\"Categorical\\\",\\\"howCreated\\\":\\\"User\\\"},{\\\"name\\\":\\\"58935cc84b9c6f4beb25\\\",\\\"ordinal\\\":5,\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Status__c\\\"}},\\\"type\\\":\\\"Categorical\\\",\\\"filter\\\":{\\\"Version\\\":2,\\\"From\\\":[{\\\"Name\\\":\\\"f\\\",\\\"Entity\\\":\\\"Fact_Activity\\\",\\\"Type\\\":0}],\\\"Where\\\":[{\\\"Condition\\\":{\\\"In\\\":{\\\"Expressions\\\":[{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Source\\\":\\\"f\\\"}},\\\"Property\\\":\\\"Activity_Status__c\\\"}}],\\\"Values\\\":[[{\\\"Literal\\\":{\\\"Value\\\":\\\"'Approved'\\\"}}]]}}}]},\\\"howCreated\\\":\\\"User\\\",\\\"isHiddenInViewMode\\\":true,\\\"isLockedInViewMode\\\":true}],\\\"filterSortOrder\\\":\\\"Custom\\\"}},\\\"visualContainers\\\":[{\\\"filePath\\\":\\\"visuals/b6007595bee42b98f99f/visual.json\\\",\\\"content\\\":{\\\"$schema\\\":\\\"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json\\\",\\\"name\\\":\\\"b6007595bee42b98f99f\\\",\\\"position\\\":{\\\"x\\\":0,\\\"y\\\":352.09726443769,\\\"z\\\":0,\\\"height\\\":308.32826747720367,\\\"width\\\":1280,\\\"tabOrder\\\":0},\\\"visual\\\":{\\\"visualType\\\":\\\"tableEx\\\",\\\"query\\\":{\\\"queryState\\\":{\\\"Values\\\":{\\\"projections\\\":[{\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Type__c\\\"}},\\\"queryRef\\\":\\\"Fact_Activity.Activity_Type__c\\\",\\\"nativeQueryRef\\\":\\\"Activity Type\\\",\\\"displayName\\\":\\\"Activity Type\\\"},{\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Ref_Address\\\"}},\\\"Property\\\":\\\"Postcode__c\\\"}},\\\"queryRef\\\":\\\"Ref_Address.Postcode__c\\\",\\\"nativeQueryRef\\\":\\\"Postcode\\\",\\\"displayName\\\":\\\"Postcode\\\"},{\\\"field\\\":{\\\"Aggregation\\\":{\\\"Expression\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"VEECs__c\\\"}},\\\"Function\\\":0}},\\\"queryRef\\\":\\\"Sum(Fact_Activity.VEECs__c)\\\",\\\"nativeQueryRef\\\":\\\"No. of VEECs\\\",\\\"displayName\\\":\\\"No. of VEECs\\\"},{\\\"field\\\":{\\\"Aggregation\\\":{\\\"Expression\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Type__c\\\"}},\\\"Function\\\":5}},\\\"queryRef\\\":\\\"CountNonNull(Fact_Activity.Activity_Type__c)\\\",\\\"nativeQueryRef\\\":\\\"No. of Activities\\\",\\\"displayName\\\":\\\"No. of Activities\\\"},{\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Dim_PostCode\\\"}},\\\"Property\\\":\\\"Region\\\"}},\\\"queryRef\\\":\\\"Dim_PostCode.Region\\\",\\\"nativeQueryRef\\\":\\\"Region\\\"}],\\\"showAll\\\":true}},\\\"sortDefinition\\\":{\\\"sort\\\":[{\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Type__c\\\"}},\\\"direction\\\":\\\"Ascending\\\"}]}},\\\"objects\\\":{\\\"columnWidth\\\":[{\\\"properties\\\":{\\\"value\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"135.42063026124055D\\\"}}}},\\\"selector\\\":{\\\"metadata\\\":\\\"Ref_Address.Postcode__c\\\"}},{\\\"properties\\\":{\\\"value\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"166.94054150687163D\\\"}}}},\\\"selector\\\":{\\\"metadata\\\":\\\"CountNonNull(Fact_Activity.Activity_Type__c)\\\"}},{\\\"properties\\\":{\\\"value\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"154.91844927638212D\\\"}}}},\\\"selector\\\":{\\\"metadata\\\":\\\"Sum(Fact_Activity.VEECs__c)\\\"}},{\\\"properties\\\":{\\\"value\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"515.6343581498727D\\\"}}}},\\\"selector\\\":{\\\"metadata\\\":\\\"Fact_Activity.Activity_Type__c\\\"}},{\\\"properties\\\":{\\\"value\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"180.89927654188975D\\\"}}}},\\\"selector\\\":{\\\"metadata\\\":\\\"Dim_PostCode.Region\\\"}}],\\\"columnHeaders\\\":[{\\\"properties\\\":{}}]},\\\"visualContainerObjects\\\":{\\\"title\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"true\\\"}}},\\\"text\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"'Activity Details'\\\"}}},\\\"bold\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"true\\\"}}}}}],\\\"border\\\":[{\\\"properties\\\":{\\\"radius\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"25D\\\"}}},\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"true\\\"}}}}}]},\\\"drillFilterOtherVisuals\\\":true},\\\"filterConfig\\\":{\\\"filters\\\":[{\\\"name\\\":\\\"54ac388352363ca44e91\\\",\\\"ordinal\\\":0,\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Type__c\\\"}},\\\"type\\\":\\\"Categorical\\\"},{\\\"name\\\":\\\"ebe3853aff35abac8b7b\\\",\\\"ordinal\\\":1,\\\"field\\\":{\\\"Aggregation\\\":{\\\"Expression\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Type__c\\\"}},\\\"Function\\\":5}},\\\"type\\\":\\\"Advanced\\\"},{\\\"name\\\":\\\"aa6bf361694ae0afefec\\\",\\\"ordinal\\\":2,\\\"field\\\":{\\\"Aggregation\\\":{\\\"Expression\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"VEECs__c\\\"}},\\\"Function\\\":0}},\\\"type\\\":\\\"Advanced\\\"},{\\\"name\\\":\\\"6022c9ac1bc8ad6065d1\\\",\\\"ordinal\\\":3,\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Ref_Address\\\"}},\\\"Property\\\":\\\"Postcode__c\\\"}},\\\"type\\\":\\\"Categorical\\\"},{\\\"name\\\":\\\"ff9b1d258fd6adedc7e8\\\",\\\"ordinal\\\":4,\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Region__c\\\"}},\\\"type\\\":\\\"Categorical\\\",\\\"howCreated\\\":\\\"User\\\"}],\\\"filterSortOrder\\\":\\\"Custom\\\"}}},{\\\"filePath\\\":\\\"visuals/e9b3f6b423ab8c61af65/visual.json\\\",\\\"content\\\":{\\\"$schema\\\":\\\"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json\\\",\\\"name\\\":\\\"e9b3f6b423ab8c61af65\\\",\\\"position\\\":{\\\"x\\\":984.4518272425248,\\\"y\\\":21.262458471760798,\\\"z\\\":5000,\\\"height\\\":65.91362126245846,\\\"width\\\":238.13953488372093,\\\"tabOrder\\\":5000},\\\"visual\\\":{\\\"visualType\\\":\\\"card\\\",\\\"query\\\":{\\\"queryState\\\":{\\\"Values\\\":{\\\"projections\\\":[{\\\"field\\\":{\\\"Aggregation\\\":{\\\"Expression\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"LastRefreshedDateTime\\\"}},\\\"Property\\\":\\\"Last Refreshed DateTime\\\"}},\\\"Function\\\":3}},\\\"queryRef\\\":\\\"Min(LastRefreshedDateTime.Last Refreshed DateTime)\\\",\\\"nativeQueryRef\\\":\\\"Last Refreshed\\\",\\\"displayName\\\":\\\"Last Refreshed\\\"}]}}},\\\"objects\\\":{\\\"labels\\\":[{\\\"properties\\\":{\\\"fontSize\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"10D\\\"}}},\\\"fontFamily\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"'''Segoe UI'', wf_segoe-ui_normal, helvetica, arial, sans-serif'\\\"}}}}}],\\\"categoryLabels\\\":[{\\\"properties\\\":{\\\"fontSize\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"10D\\\"}}}}}]},\\\"drillFilterOtherVisuals\\\":true}}},{\\\"filePath\\\":\\\"visuals/c5eb5edf4cb5e30eb1cc/visual.json\\\",\\\"content\\\":{\\\"$schema\\\":\\\"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json\\\",\\\"name\\\":\\\"c5eb5edf4cb5e30eb1cc\\\",\\\"position\\\":{\\\"x\\\":0,\\\"y\\\":106.99088145896657,\\\"z\\\":3000,\\\"height\\\":235.37993920972644,\\\"width\\\":1280,\\\"tabOrder\\\":2000},\\\"visual\\\":{\\\"visualType\\\":\\\"barChart\\\",\\\"query\\\":{\\\"queryState\\\":{\\\"Category\\\":{\\\"projections\\\":[{\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Type__c\\\"}},\\\"queryRef\\\":\\\"Fact_Activity.Activity_Type__c\\\",\\\"nativeQueryRef\\\":\\\"Activity Type\\\",\\\"active\\\":true,\\\"displayName\\\":\\\"Activity Type\\\"}]},\\\"Y\\\":{\\\"projections\\\":[{\\\"field\\\":{\\\"Aggregation\\\":{\\\"Expression\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Id\\\"}},\\\"Function\\\":5}},\\\"queryRef\\\":\\\"CountNonNull(Fact_Activity.Id)\\\",\\\"nativeQueryRef\\\":\\\"No. of Activities\\\",\\\"displayName\\\":\\\"No. of Activities\\\"}]}},\\\"sortDefinition\\\":{\\\"sort\\\":[{\\\"field\\\":{\\\"Aggregation\\\":{\\\"Expression\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Id\\\"}},\\\"Function\\\":5}},\\\"direction\\\":\\\"Descending\\\"}],\\\"isDefaultSort\\\":true}},\\\"objects\\\":{\\\"labels\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"true\\\"}}}}}],\\\"dataPoint\\\":[{\\\"properties\\\":{\\\"fill\\\":{\\\"solid\\\":{\\\"color\\\":{\\\"expr\\\":{\\\"ThemeDataColor\\\":{\\\"ColorId\\\":2,\\\"Percent\\\":0.4}}}}}}}]},\\\"visualContainerObjects\\\":{\\\"border\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"true\\\"}}},\\\"radius\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"25D\\\"}}}}}],\\\"title\\\":[{\\\"properties\\\":{\\\"text\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"'Number of Activities'\\\"}}}}}]},\\\"drillFilterOtherVisuals\\\":true},\\\"filterConfig\\\":{\\\"filters\\\":[{\\\"name\\\":\\\"370553ade233c256044a\\\",\\\"field\\\":{\\\"Column\\\":{\\\"Expression\\\":{\\\"SourceRef\\\":{\\\"Entity\\\":\\\"Fact_Activity\\\"}},\\\"Property\\\":\\\"Activity_Type__c\\\"}},\\\"type\\\":\\\"Categorical\\\",\\\"objects\\\":{\\\"general\\\":[{\\\"properties\\\":{\\\"isInvertedSelectionMode\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"true\\\"}}}}}]}}]}}},{\\\"filePath\\\":\\\"visuals/b040f806f5a66a857a34/visual.json\\\",\\\"content\\\":{\\\"$schema\\\":\\\"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json\\\",\\\"name\\\":\\\"b040f806f5a66a857a34\\\",\\\"position\\\":{\\\"x\\\":516.2264150943396,\\\"y\\\":23.547169811320753,\\\"z\\\":2000,\\\"height\\\":55.24528301886792,\\\"width\\\":247.2452830188679,\\\"tabOrder\\\":1000},\\\"visual\\\":{\\\"visualType\\\":\\\"textbox\\\",\\\"objects\\\":{\\\"general\\\":[{\\\"properties\\\":{\\\"paragraphs\\\":[{\\\"textRuns\\\":[{\\\"value\\\":\\\"Activities Register\\\",\\\"textStyle\\\":{\\\"fontWeight\\\":\\\"bold\\\",\\\"fontSize\\\":\\\"20pt\\\",\\\"color\\\":\\\"#003d7c\\\"}}]}]}}]},\\\"drillFilterOtherVisuals\\\":true}}},{\\\"filePath\\\":\\\"visuals/38b80a3fb6806c4ed806/visual.json\\\",\\\"content\\\":{\\\"$schema\\\":\\\"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json\\\",\\\"name\\\":\\\"38b80a3fb6806c4ed806\\\",\\\"position\\\":{\\\"x\\\":0,\\\"y\\\":660.4255319148937,\\\"z\\\":6000,\\\"height\\\":60.30395136778116,\\\"width\\\":1280,\\\"tabOrder\\\":6000},\\\"visual\\\":{\\\"visualType\\\":\\\"textbox\\\",\\\"objects\\\":{\\\"general\\\":[{\\\"properties\\\":{\\\"paragraphs\\\":[{\\\"textRuns\\\":[{\\\"value\\\":\\\"Note: Some expired or invalid VEECs were not migrated from the old VEU Registry to the new system. Therefore, total amounts reported here do not represent total amounts of activities undertaken or VEECs created over the life of the program. VEEC statuses may not be updated in real time; most VEEC creations, registrations and transfers are processed in batches with one running overnight and one during the day. \\\",\\\"textStyle\\\":{\\\"fontSize\\\":\\\"8pt\\\",\\\"color\\\":\\\"#000000\\\"}},{\\\"value\\\":\\\"This register is refreshed daily in the early morning.\\\",\\\"textStyle\\\":{\\\"fontSize\\\":\\\"8pt\\\"}}]}]}}]},\\\"visualContainerObjects\\\":{\\\"border\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"true\\\"}}},\\\"radius\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"25D\\\"}}}}}],\\\"background\\\":[{\\\"properties\\\":{\\\"transparency\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"0D\\\"}}}}}]},\\\"drillFilterOtherVisuals\\\":true}}},{\\\"filePath\\\":\\\"visuals/2f4e0c0368441bac6a73/visual.json\\\",\\\"content\\\":{\\\"$schema\\\":\\\"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json\\\",\\\"name\\\":\\\"2f4e0c0368441bac6a73\\\",\\\"position\\\":{\\\"x\\\":20.830188679245282,\\\"y\\\":13.584905660377357,\\\"z\\\":4000,\\\"height\\\":75.16981132075472,\\\"width\\\":211.01886792452828,\\\"tabOrder\\\":4000},\\\"visual\\\":{\\\"visualType\\\":\\\"image\\\",\\\"objects\\\":{\\\"general\\\":[{\\\"properties\\\":{\\\"imageUrl\\\":{\\\"expr\\\":{\\\"ResourcePackageItem\\\":{\\\"PackageName\\\":\\\"RegisteredResources\\\",\\\"PackageType\\\":1,\\\"ItemName\\\":\\\"Screenshot_2025-07-08_at_4.45.583591894762952.png\\\"}}}}}],\\\"imageScaling\\\":[{\\\"properties\\\":{\\\"imageScalingType\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"'Fill'\\\"}}}}}]},\\\"visualContainerObjects\\\":{\\\"border\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"false\\\"}}}}}],\\\"dropShadow\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"false\\\"}}}}}],\\\"background\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"false\\\"}}},\\\"color\\\":{\\\"solid\\\":{\\\"color\\\":{\\\"expr\\\":{\\\"ThemeDataColor\\\":{\\\"ColorId\\\":2,\\\"Percent\\\":0}}}}}}}]},\\\"drillFilterOtherVisuals\\\":true},\\\"howCreated\\\":\\\"InsertVisualButton\\\"}},{\\\"filePath\\\":\\\"visuals/2c68eade1d508fb6bf22/visual.json\\\",\\\"content\\\":{\\\"$schema\\\":\\\"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json\\\",\\\"name\\\":\\\"2c68eade1d508fb6bf22\\\",\\\"position\\\":{\\\"x\\\":0,\\\"y\\\":10,\\\"z\\\":1000,\\\"height\\\":82,\\\"width\\\":1279.698113207547,\\\"tabOrder\\\":3000},\\\"visual\\\":{\\\"visualType\\\":\\\"shape\\\",\\\"objects\\\":{\\\"shape\\\":[{\\\"properties\\\":{\\\"tileShape\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"'rectangleRounded'\\\"}}}}}],\\\"rotation\\\":[{\\\"properties\\\":{\\\"shapeAngle\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"0L\\\"}}}}}],\\\"fill\\\":[{\\\"properties\\\":{\\\"fillColor\\\":{\\\"solid\\\":{\\\"color\\\":{\\\"expr\\\":{\\\"ThemeDataColor\\\":{\\\"ColorId\\\":0,\\\"Percent\\\":0}}}}}},\\\"selector\\\":{\\\"id\\\":\\\"default\\\"}}],\\\"outline\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"false\\\"}}}}}],\\\"shadow\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"false\\\"}}}}}]},\\\"visualContainerObjects\\\":{\\\"dropShadow\\\":[{\\\"properties\\\":{\\\"show\\\":{\\\"expr\\\":{\\\"Literal\\\":{\\\"Value\\\":\\\"false\\\"}}}}}]},\\\"drillFilterOtherVisuals\\\":true},\\\"howCreated\\\":\\\"InsertVisualButton\\\"}}]}]}}\"}}}",
+  "schema": "{\"schemas\":[{\"modelId\":664626,\"error\":null,\"schema\":{\"Entities\":[{\"Name\":\"Fact_Activity\",\"Properties\":[{\"Name\":\"Activity_Status__c\",\"DataType\":1,\"Column\":{\"DefaultAggregate\":1},\"StableName\":\"421988b2-9dfc-4990-b830-96cea8ff2927\"},{\"Name\":\"Activity_Type__c\",\"DataType\":1,\"Column\":{\"DefaultAggregate\":1},\"StableName\":\"ee564e6c-b9e5-4b1b-b4ae-26588a00f51c\"},{\"Name\":\"Sector__c\",\"DataType\":1,\"Column\":{\"DefaultAggregate\":1},\"StableName\":\"53e8c791-6556-4358-9a88-9d719699dcca\"},{\"Name\":\"Activity_Date__c\",\"DataType\":7,\"FormatString\":\"%d/MM/yyyy\",\"Column\":{\"DefaultAggregate\":1,\"Variations\":[{\"Name\":\"Variation\",\"Default\":true,\"NavigationProperty\":\"LocalDateTable_d2f1e809-08f0-40c4-accc-690fe6a1bb7b_Date\",\"DefaultHierarchy\":\"Date Hierarchy\"}]},\"StableName\":\"71ae09e6-89e5-4996-8114-9e38844cddc2\"},{\"Name\":\"VEECs__c\",\"DataType\":3,\"FormatString\":\"0\",\"Column\":{\"DefaultAggregate\":2},\"StableName\":\"b9dc3aec-6b21-4ab2-b0f4-bb4bdb73840b\"}]},{\"Name\":\"Ref_Address\",\"Properties\":[{\"Name\":\"Postcode__c\",\"DataType\":1,\"Column\":{\"DefaultAggregate\":1},\"StableName\":\"7f4727b8-994e-4db5-ba0b-a54046d9a281\"}]}]}}]}",
+  "response": "{\"jobIds\":[\"5702c725-63a9-4daf-902b-913d1829f15a\"],\"results\":[{\"jobId\":\"5702c725-63a9-4daf-902b-913d1829f15a\",\"result\":{\"data\":{\"timestamp\":\"2026-10-08T00:42:34.544Z\",\"rootActivityId\":\"49397ddf-a96e-4ff3-9178-7718196c9cab\",\"descriptor\":{\"Select\":[{\"Kind\":1,\"Depth\":0,\"Value\":\"G0\",\"GroupKeys\":[{\"Source\":{\"Entity\":\"Fact_Activity\",\"Property\":\"Activity_Type__c\"},\"Calc\":\"G0\",\"IsSameAsSelect\":true}],\"Name\":\"activity\"},{\"Kind\":1,\"Depth\":0,\"Value\":\"G1\",\"GroupKeys\":[{\"Source\":{\"Entity\":\"Ref_Address\",\"Property\":\"Postcode__c\"},\"Calc\":\"G1\",\"IsSameAsSelect\":true}],\"Name\":\"postcode\"},{\"Kind\":1,\"Depth\":0,\"Value\":\"G2\",\"GroupKeys\":[{\"Source\":{\"Entity\":\"Fact_Activity\",\"Property\":\"Sector__c\"},\"Calc\":\"G2\",\"IsSameAsSelect\":true}],\"Name\":\"sector\"},{\"Kind\":2,\"Value\":\"M0\",\"Format\":\"0\",\"Subtotal\":[\"A0\"],\"Name\":\"certificates\"},{\"Kind\":2,\"Value\":\"M1\",\"Subtotal\":[\"A1\"],\"Name\":\"activities\"}],\"Expressions\":{\"Primary\":{\"Groupings\":[{\"Keys\":[{\"Source\":{\"Entity\":\"Fact_Activity\",\"Property\":\"Activity_Type__c\"},\"Select\":0},{\"Source\":{\"Entity\":\"Ref_Address\",\"Property\":\"Postcode__c\"},\"Select\":1},{\"Source\":{\"Entity\":\"Fact_Activity\",\"Property\":\"Sector__c\"},\"Select\":2}],\"Member\":\"DM1\",\"SubtotalMember\":\"DM0\"}]}},\"Version\":2},\"metrics\":{\"Version\":\"1.0.0\",\"Events\":[{\"Id\":\"67e63f05-3692-478a-82a4-331a648baa56\",\"Name\":\"Execute Semantic Query\",\"Component\":\"DSE\",\"Start\":\"2026-10-08T00:42:34.5442757Z\",\"End\":\"2026-10-08T00:42:34.8732881Z\"},{\"Id\":\"087b1217-fd85-4fbd-b8bd-5f2a8aba04c4\",\"ParentId\":\"67e63f05-3692-478a-82a4-331a648baa56\",\"Name\":\"Execute DAX Query\",\"Component\":\"DSE\",\"Start\":\"2026-10-08T00:42:34.5442757Z\",\"End\":\"2026-10-08T00:42:34.8420232Z\",\"Metrics\":{\"RowCount\":2081}},{\"Id\":\"9E9302B6-E66E-47F9-804A-D6B3113BD2C6\",\"ParentId\":\"087b1217-fd85-4fbd-b8bd-5f2a8aba04c4\",\"Name\":\"Execute Query\",\"Component\":\"AS\",\"Start\":\"2026-10-08T00:42:34.587Z\",\"End\":\"2026-10-08T00:42:34.823Z\"},{\"Id\":\"D39E31B9-3DBC-464F-BB7D-762F817EA96D\",\"ParentId\":\"9E9302B6-E66E-47F9-804A-D6B3113BD2C6\",\"Name\":\"Serialize Rowset\",\"Component\":\"AS\",\"Start\":\"2026-10-08T00:42:34.82Z\",\"End\":\"2026-10-08T00:42:34.823Z\"}]},\"fromCache\":false,\"dsr\":{\"Version\":2,\"MinorVersion\":1,\"DS\":[{\"N\":\"DS0\",\"PH\":[{\"DM0\":[{\"S\":[{\"N\":\"A0\",\"T\":3},{\"N\":\"A1\",\"T\":4}],\"C\":[\"6313034.3800000008\",606901]}]},{\"DM1\":[{\"S\":[{\"N\":\"G0\",\"T\":1,\"DN\":\"D0\"},{\"N\":\"G1\",\"T\":1,\"DN\":\"D1\"},{\"N\":\"G2\",\"T\":1,\"DN\":\"D2\"},{\"N\":\"M0\",\"T\":3},{\"N\":\"M1\",\"T\":4}],\"C\":[0,0,0,274,27]},{\"C\":[1,163,17],\"R\":5},{\"C\":[2,98,8],\"R\":5},{\"C\":[3,54,5],\"R\":5},{\"C\":[4,208,13],\"R\":5},{\"C\":[5,1,2,1],\"R\":1},{\"C\":[0,27,3],\"R\":3},{\"C\":[6,58,5],\"R\":5},{\"C\":[7,52],\"R\":21},{\"C\":[8,1,299,32],\"R\":1},{\"C\":[0,42,5],\"R\":3},{\"C\":[9,1,9,1],\"R\":1},{\"C\":[0,23,3],\"R\":3},{\"C\":[10,19,2],\"R\":5},{\"C\":[11,1,111,12],\"R\":1},{\"C\":[0,85,6],\"R\":3},{\"C\":[12,104,9],\"R\":5},{\"C\":[13,1,57,6],\"R\":1},{\"C\":[0,142,19],\"R\":3},{\"C\":[14,116,15],\"R\":5},{\"C\":[15,92,11],\"R\":5},{\"C\":[16,23,2],\"R\":5},{\"C\":[17,32],\"R\":21},{\"C\":[18,576,58],\"R\":5},{\"C\":[19,260,28],\"R\":5},{\"C\":[20,63,6],\"R\":5},{\"C\":[21,50,7],\"R\":5},{\"C\":[22,262,24],\"R\":5},{\"C\":[23,9,1],\"R\":5},{\"C\":[24,7],\"R\":21},{\"C\":[25,18,2],\"R\":5},{\"C\":[26,41,6],\"R\":5},{\"C\":[27,2,1],\"R\":5},{\"C\":[28,6],\"R\":21},{\"C\":[29,75,7],\"R\":5},{\"C\":[30,21,4],\"R\":5},{\"C\":[31,9,1],\"R\":5},{\"C\":[32,32,4],\"R\":5},{\"C\":[33,1,2,1],\"R\":1},{\"C\":[0,52,5],\"R\":3},{\"C\":[34,14,3],\"R\":5},{\"C\":[35,19,2],\"R\":5},{\"C\":[36,26],\"R\":21},{\"C\":[37,63,7],\"R\":5},{\"C\":[38,25,1],\"R\":5},{\"C\":[39,24],\"R\":21},{\"C\":[40,138,15],\"R\":5},{\"C\":[41,256,27],\"R\":5},{\"C\":[42,1,2,1],\"R\":1},{\"C\":[0,963,99],\"R\":3},{\"C\":[43,230,28],\"R\":5},{\"C\":[44,73,5],\"R\":5},{\"C\":[45,124,6],\"R\":5},{\"C\":[46,40,5],\"R\":5},{\"C\":[47,1,2,1],\"R\":1},{\"C\":[0,129,5],\"R\":3},{\"C\":[48,37,2],\"R\":5},{\"C\":[1,0,15,3],\"R\":4},{\"C\":[1,21.17,4],\"R\":5},{\"C\":[2,50.62,9],\"R\":5},{\"C\":[3,12,3],\"R\":5},{\"C\":[4,27,6],\"R\":5},{\"C\":[5,34],\"R\":21},{\"C\":[6,33.11],\"R\":21},{\"C\":[7,64,10],\"R\":5},{\"C\":[8,11,2],\"R\":5},{\"C\":[9,\"29.509999999999998\",4],\"R\":5},{\"C\":[10,18,3],\"R\":5},{\"C\":[11,\"43.019999999999996\",8],\"R\":5},{\"C\":[49,114,14],\"R\":5},{\"C\":[12,28,4],\"R\":5},{\"C\":[13,52,10],\"R\":5},{\"C\":[14,39.47,9],\"R\":5},{\"C\":[15,43,7],\"R\":5},{\"C\":[50,14,2],\"R\":5},{\"C\":[16,13,4],\"R\":5},{\"C\":[17,44],\"R\":21},{\"C\":[51,18,1],\"R\":5},{\"C\":[18,31,4],\"R\":5},{\"C\":[19,43.01,7],\"R\":5},{\"C\":[52,18,1],\"R\":5},{\"C\":[22,4,2],\"R\":5},{\"C\":[25,10,1],\"R\":5},{\"C\":[26,36,3],\"R\":5},{\"C\":[28,5,1],\"R\":5},{\"C\":[53,14],\"R\":21},{\"C\":[29,19],\"R\":21},{\"C\":[54,14,3],\"R\":5},{\"C\":[30,10.76,1],\"R\":5},{\"C\":[55,79,10],\"R\":5},{\"C\":[32,1,25,1],\"R\":1},{\"C\":[0,60,7],\"R\":3},{\"C\":[33,31,5],\"R\":5},{\"C\":[34,40],\"R\":21},{\"C\":[35,45],\"R\":21},{\"C\":[36,7.04,1],\"R\":5},{\"C\":[56,24,2],\"R\":5},{\"C\":[37,36,7],\"R\":5},{\"C\":[57,5,1],\"R\":5},{\"C\":[58,10],\"R\":21},{\"C\":[59,14.08,2],\"R\":5},{\"C\":[40,3,1],\"R\":5},{\"C\":[41,13,2],\"R\":5},{\"C\":[42,39.59,6],\"R\":5},{\"C\":[43,6,1],\"R\":5},{\"C\":[47,5],\"R\":21},{\"C\":[48,25],\"R\":21},{\"C\":[2,0,8052,4064],\"R\":4},{\"C\":[1,7608,3769],\"R\":5},{\"C\":[2,2871,1192],\"R\":5},{\"C\":[3,2974,1492],\"R\":5},{\"C\":[4,2347,1188],\"R\":5},{\"C\":[5,3666,1278],\"R\":5},{\"C\":[6,3541,1309],\"R\":5},{\"C\":[7,4703,1981],\"R\":5},{\"C\":[8,1712,836],\"R\":5},{\"C\":[9,2416,1224],\"R\":5},{\"C\":[10,2414,875],\"R\":5},{\"C\":[11,5976,2883],\"R\":5},{\"C\":[49,3946,1545],\"R\":5},{\"C\":[12,3080,1368],\"R\":5},{\"C\":[13,9218,4086],\"R\":5},{\"C\":[14,6187,3101],\"R\":5},{\"C\":[15,3406,1459],\"R\":5},{\"C\":[60,1717,439],\"R\":5},{\"C\":[50,1003,611],\"R\":5},{\"C\":[16,2902,980],\"R\":5},{\"C\":[17,1697,844],\"R\":5},{\"C\":[51,2782,910],\"R\":5},{\"C\":[18,28572,12221],\"R\":5},{\"C\":[19,20454,9323],\"R\":5},{\"C\":[20,2291,1053],\"R\":5},{\"C\":[52,325,150],\"R\":5},{\"C\":[21,7026,4249],\"R\":5},{\"C\":[22,20544,9964],\"R\":5},{\"C\":[23,242,128],\"R\":5},{\"C\":[61,120,48],\"R\":5},{\"C\":[24,467,197],\"R\":5},{\"C\":[25,584,252],\"R\":5},{\"C\":[26,7192,3001],\"R\":5},{\"C\":[27,586,296],\"R\":5},{\"C\":[28,3500,1527],\"R\":5},{\"C\":[53,501,293],\"R\":5},{\"C\":[29,3072,1561],\"R\":5},{\"C\":[62,32,8],\"R\":5},{\"C\":[63,757,333],\"R\":5},{\"C\":[54,854,345],\"R\":5},{\"C\":[30,1096,680],\"R\":5},{\"C\":[31,254,145],\"R\":5},{\"C\":[64,376,163],\"R\":5},{\"C\":[55,129,73],\"R\":5},{\"C\":[65,7,3],\"R\":5},{\"C\":[66,89,55],\"R\":5},{\"C\":[32,3062,1138],\"R\":5},{\"C\":[33,7592,3046],\"R\":5},{\"C\":[67,68,24],\"R\":5},{\"C\":[34,4289,1808],\"R\":5},{\"C\":[35,3016,1327],\"R\":5},{\"C\":[36,4669,2256],\"R\":5},{\"C\":[56,1315,626],\"R\":5},{\"C\":[37,2243,1162],\"R\":5},{\"C\":[68,282,141],\"R\":5},{\"C\":[57,409,191],\"R\":5},{\"C\":[58,271,126],\"R\":5},{\"C\":[38,596,415],\"R\":5},{\"C\":[39,165,124],\"R\":5},{\"C\":[59,84,61],\"R\":5},{\"C\":[40,9381,4250],\"R\":5},{\"C\":[41,13342,6345],\"R\":5},{\"C\":[42,46009,22697],\"R\":5},{\"C\":[43,23374,13433],\"R\":5},{\"C\":[69,32,19],\"R\":5},{\"C\":[44,849,356],\"R\":5},{\"C\":[45,1634,778],\"R\":5},{\"C\":[46,675,464],\"R\":5},{\"C\":[70,66,35],\"R\":5},{\"C\":[71,140,96],\"R\":5},{\"C\":[47,1575,1193],\"R\":5},{\"C\":[48,515,371],\"R\":5},{\"C\":[3,0,1,7,7]},{\"C\":[0,4304,2649],\"R\":3},{\"C\":[1,1,65,3],\"R\":1},{\"C\":[0,3879,2244],\"R\":3},{\"C\":[2,1,210,57],\"R\":1},{\"C\":[0,1452,1294],\"R\":3},{\"C\":[3,1,52,2],\"R\":1},{\"C\":[0,1622,1292],\"R\":3},{\"C\":[4,1,2,1],\"R\":1},{\"C\":[0,965,751],\"R\":3},{\"C\":[5,1,141,141],\"R\":1},{\"C\":[0,1612,1099],\"R\":3},{\"C\":[6,1,276,272],\"R\":1},{\"C\":[0,1214,728],\"R\":3},{\"C\":[7,1,4,4],\"R\":1},{\"C\":[0,1276,881],\"R\":3},{\"C\":[8,1,132,3],\"R\":1},{\"C\":[0,942,683],\"R\":3},{\"C\":[9,1,3,2],\"R\":1},{\"C\":[0,1014,713],\"R\":3},{\"C\":[10,1,204,77],\"R\":1},{\"C\":[0,961,704],\"R\":3},{\"C\":[11,1,2,2],\"R\":1},{\"C\":[0,2558,1685],\"R\":3},{\"C\":[49,1,1,1],\"R\":1},{\"C\":[0,1172,687],\"R\":3},{\"C\":[12,1,1,1],\"R\":1},{\"C\":[0,1169,700],\"R\":3},{\"C\":[13,1,50,41],\"R\":1},{\"C\":[0,3794,2164],\"R\":3},{\"C\":[14,1,2,2],\"R\":1},{\"C\":[0,2423,1613],\"R\":3},{\"C\":[15,1253,699],\"R\":5},{\"C\":[60,896,696],\"R\":5},{\"C\":[50,1,17,3],\"R\":1},{\"C\":[0,824,697],\"R\":3},{\"C\":[16,1,1,1],\"R\":1},{\"C\":[0,435,342],\"R\":3},{\"C\":[17,1,5,5],\"R\":1},{\"C\":[0,1030,711],\"R\":3},{\"C\":[51,1,38,3],\"R\":1},{\"C\":[0,1019,470],\"R\":3},{\"C\":[18,1,180,116],\"R\":1},{\"C\":[0,12581,6510],\"R\":3},{\"C\":[19,1,28,2],\"R\":1},{\"C\":[0,10118,5237],\"R\":3},{\"C\":[20,1,1,1],\"R\":1},{\"C\":[0,1077,539],\"R\":3},{\"C\":[52,232,145],\"R\":5},{\"C\":[21,1,185,185],\"R\":1},{\"C\":[0,5584,2738],\"R\":3},{\"C\":[22,1,11,4],\"R\":1},{\"C\":[0,12033,6668],\"R\":3},{\"C\":[23,193,114],\"R\":5},{\"C\":[61,1,26,1],\"R\":1},{\"C\":[0,83,46],\"R\":3},{\"C\":[24,286,151],\"R\":5},{\"C\":[25,1,46,1],\"R\":1},{\"C\":[0,440,261],\"R\":3},{\"C\":[26,2407,1477],\"R\":5},{\"C\":[27,1,13,1],\"R\":1},{\"C\":[0,257,169],\"R\":3},{\"C\":[28,1,144,131],\"R\":1},{\"C\":[0,1320,736],\"R\":3},{\"C\":[53,1,4,1],\"R\":1},{\"C\":[0,360,217],\"R\":3},{\"C\":[29,1,93,93],\"R\":1},{\"C\":[0,1713,1160],\"R\":3},{\"C\":[62,118,52],\"R\":5},{\"C\":[63,350,215],\"R\":5},{\"C\":[54,317,205],\"R\":5},{\"C\":[30,1,222,58],\"R\":1},{\"C\":[0,3773,1867],\"R\":3},{\"C\":[31,1,105,31],\"R\":1},{\"C\":[0,920,450],\"R\":3},{\"C\":[64,357,179],\"R\":5},{\"C\":[55,1,8,1],\"R\":1},{\"C\":[0,202,113],\"R\":3},{\"C\":[65,1,3,2],\"R\":1},{\"C\":[0,10,7],\"R\":3},{\"C\":[66,151,84],\"R\":5},{\"C\":[32,1231,620],\"R\":5},{\"C\":[33,3084,1945],\"R\":5},{\"C\":[67,29,12],\"R\":5},{\"C\":[34,2223,1249],\"R\":5},{\"C\":[35,1,23,2],\"R\":1},{\"C\":[0,1709,967],\"R\":3},{\"C\":[36,1,44,2],\"R\":1},{\"C\":[0,2407,1545],\"R\":3},{\"C\":[56,1,9,1],\"R\":1},{\"C\":[0,653,432],\"R\":3},{\"C\":[37,1,18,2],\"R\":1},{\"C\":[0,1916,1040],\"R\":3},{\"C\":[68,1,13,1],\"R\":1},{\"C\":[0,297,155],\"R\":3},{\"C\":[57,1,26,1],\"R\":1},{\"C\":[0,510,222],\"R\":3},{\"C\":[58,1,20,1],\"R\":1},{\"C\":[0,290,124],\"R\":3},{\"C\":[38,1,18,4],\"R\":1},{\"C\":[0,1547,713],\"R\":3},{\"C\":[39,1,20,1],\"R\":1},{\"C\":[0,684,330],\"R\":3},{\"C\":[59,1,20,1],\"R\":1},{\"C\":[0,275,161],\"R\":3},{\"C\":[40,1,8,2],\"R\":1},{\"C\":[0,5370,2785],\"R\":3},{\"C\":[41,1,1,1],\"R\":1},{\"C\":[0,6074,3587],\"R\":3},{\"C\":[42,1,36,34],\"R\":1},{\"C\":[0,27813,14706],\"R\":3},{\"C\":[43,1,5,2],\"R\":1},{\"C\":[0,19042,9116],\"R\":3},{\"C\":[69,56,23],\"R\":5},{\"C\":[44,507,272],\"R\":5},{\"C\":[45,1,120,1],\"R\":1},{\"C\":[0,1673,762],\"R\":3},{\"C\":[46,1,30,3],\"R\":1},{\"C\":[0,1813,782],\"R\":3},{\"C\":[70,141,50],\"R\":5},{\"C\":[71,347,152],\"R\":5},{\"C\":[47,1,323,109],\"R\":1},{\"C\":[0,3758,1788],\"R\":3},{\"C\":[48,1,85,1],\"R\":1},{\"C\":[0,1807,864],\"R\":3},{\"C\":[4,0,34,1],\"R\":4},{\"C\":[1,27],\"R\":21},{\"C\":[4,34],\"R\":21},{\"C\":[5],\"R\":29},{\"C\":[7],\"R\":29},{\"C\":[13,23],\"R\":21},{\"C\":[15,66,2],\"R\":5},{\"C\":[60,34,1],\"R\":5},{\"C\":[51,68,2],\"R\":5},{\"C\":[18,27,1],\"R\":5},{\"C\":[54],\"R\":29},{\"C\":[32,69,2],\"R\":5},{\"C\":[36,34,1],\"R\":5},{\"C\":[37,28],\"R\":21},{\"C\":[42,74,2],\"R\":5},{\"C\":[45,72],\"R\":21},{\"C\":[48,24,1],\"R\":5},{\"C\":[5,0,28],\"R\":20},{\"C\":[1],\"R\":29},{\"C\":[2,203,6],\"R\":5},{\"C\":[3,64,3],\"R\":5},{\"C\":[4,289,9],\"R\":5},{\"C\":[5,76,2],\"R\":5},{\"C\":[6,33,1],\"R\":5},{\"C\":[7,52,2],\"R\":5},{\"C\":[9,127,4],\"R\":5},{\"C\":[10,120],\"R\":21},{\"C\":[11,187,6],\"R\":5},{\"C\":[49,133,4],\"R\":5},{\"C\":[12,34,1],\"R\":5},{\"C\":[13,142,5],\"R\":5},{\"C\":[14,19,1],\"R\":5},{\"C\":[15,23],\"R\":21},{\"C\":[16,34],\"R\":21},{\"C\":[17,42],\"R\":21},{\"C\":[51,28],\"R\":21},{\"C\":[18,68,2],\"R\":5},{\"C\":[19,101,3],\"R\":5},{\"C\":[52,23,1],\"R\":5},{\"C\":[22,68,2],\"R\":5},{\"C\":[23,130,4],\"R\":5},{\"C\":[61,42,1],\"R\":5},{\"C\":[24,212,6],\"R\":5},{\"C\":[25,440,12],\"R\":5},{\"C\":[26,114,4],\"R\":5},{\"C\":[27,34,1],\"R\":5},{\"C\":[28,139,5],\"R\":5},{\"C\":[53,28,1],\"R\":5},{\"C\":[29,136,4],\"R\":5},{\"C\":[63,57,2],\"R\":5},{\"C\":[54,68],\"R\":21},{\"C\":[30,117,3],\"R\":5},{\"C\":[31,72,2],\"R\":5},{\"C\":[64,110,3],\"R\":5},{\"C\":[55,388,12],\"R\":5},{\"C\":[66,50,2],\"R\":5},{\"C\":[32,384,12],\"R\":5},{\"C\":[33,236,8],\"R\":5},{\"C\":[34,260],\"R\":21},{\"C\":[35,326,10],\"R\":5},{\"C\":[36,609,20],\"R\":5},{\"C\":[56,269,8],\"R\":5},{\"C\":[37,2018,60],\"R\":5},{\"C\":[68,937,28],\"R\":5},{\"C\":[57,409,13],\"R\":5},{\"C\":[58,297,9],\"R\":5},{\"C\":[38,1,24,1],\"R\":1},{\"C\":[0,378,12],\"R\":3},{\"C\":[39,195,6],\"R\":5},{\"C\":[59,189,5],\"R\":5},{\"C\":[42,160,6],\"R\":5},{\"C\":[46,177,5],\"R\":5},{\"C\":[47,293,9],\"R\":5},{\"C\":[48,372,11],\"R\":5},{\"C\":[6,7,39,1],\"R\":4},{\"C\":[49,43],\"R\":21},{\"C\":[14,42],\"R\":21},{\"C\":[15,16],\"R\":21},{\"C\":[18,66,3],\"R\":5},{\"C\":[19,12,1],\"R\":5},{\"C\":[52,43],\"R\":21},{\"C\":[21,42],\"R\":21},{\"C\":[22,46,2],\"R\":5},{\"C\":[23,39,1],\"R\":5},{\"C\":[61,43],\"R\":21},{\"C\":[24,37],\"R\":21},{\"C\":[25,38],\"R\":21},{\"C\":[28,78,2],\"R\":5},{\"C\":[30,124,4],\"R\":5},{\"C\":[31,15,1],\"R\":5},{\"C\":[64,42],\"R\":21},{\"C\":[33,22],\"R\":21},{\"C\":[35,37,2],\"R\":5},{\"C\":[37,18,1],\"R\":5},{\"C\":[38,170,4],\"R\":5},{\"C\":[39,158],\"R\":21},{\"C\":[42,48,2],\"R\":5},{\"C\":[69,45,1],\"R\":5},{\"C\":[44,34],\"R\":21},{\"C\":[45,67,2],\"R\":5},{\"C\":[46],\"R\":29},{\"C\":[47,90],\"R\":21},{\"C\":[48,80],\"R\":21},{\"C\":[7,0,1,1880,63]},{\"C\":[0,819,41],\"R\":3},{\"C\":[1,1,410,10],\"R\":1},{\"C\":[0,1370,64],\"R\":3},{\"C\":[2,1,52,2],\"R\":1},{\"C\":[0,488,27],\"R\":3},{\"C\":[3,1,48,2],\"R\":1},{\"C\":[0,338,19],\"R\":3},{\"C\":[4,1,25,1],\"R\":1},{\"C\":[0,227,12],\"R\":3},{\"C\":[5,1,24,1],\"R\":1},{\"C\":[0,745,39],\"R\":3},{\"C\":[6,1,50,2],\"R\":1},{\"C\":[0,839,41],\"R\":3},{\"C\":[7,1,24,1],\"R\":1},{\"C\":[0,699,35],\"R\":3},{\"C\":[8,1,3566,116],\"R\":1},{\"C\":[0,266,13],\"R\":3},{\"C\":[9,1,350,15],\"R\":1},{\"C\":[0,749,32],\"R\":3},{\"C\":[10,1,151,6],\"R\":1},{\"C\":[0,471,22],\"R\":3},{\"C\":[11,1,2962,99],\"R\":1},{\"C\":[0,2689,123],\"R\":3},{\"C\":[49,1,246,10],\"R\":1},{\"C\":[0,907,44],\"R\":3},{\"C\":[12,1,468,17],\"R\":1},{\"C\":[0,1195,59],\"R\":3},{\"C\":[13,1,4086,134],\"R\":1},{\"C\":[0,3297,150],\"R\":3},{\"C\":[14,1,177,5],\"R\":1},{\"C\":[0,4870,220],\"R\":3},{\"C\":[15,1,76,3],\"R\":1},{\"C\":[0,3772,149],\"R\":3},{\"C\":[60,1,95,3],\"R\":1},{\"C\":[0,153,7],\"R\":3},{\"C\":[50,1,190,9],\"R\":1},{\"C\":[0,229],\"R\":19},{\"C\":[16,1,24,1],\"R\":1},{\"C\":[0,101,5],\"R\":3},{\"C\":[17,1,175,7],\"R\":1},{\"C\":[0,951,49],\"R\":3},{\"C\":[51,1,62,2],\"R\":1},{\"C\":[0,2117,86],\"R\":3},{\"C\":[18,1,167,7],\"R\":1},{\"C\":[0,1709,81],\"R\":3},{\"C\":[19,1,316,11],\"R\":1},{\"C\":[0,2525,113],\"R\":3},{\"C\":[20,1,147,4],\"R\":1},{\"C\":[0,1435,67],\"R\":3},{\"C\":[52,1,236,7],\"R\":1},{\"C\":[0,5338,217],\"R\":3},{\"C\":[21,1,57,1],\"R\":1},{\"C\":[0,1219,53],\"R\":3},{\"C\":[22,1,1104,41],\"R\":1},{\"C\":[0,7609,320],\"R\":3},{\"C\":[23,1,167,4],\"R\":1},{\"C\":[0,3887,148],\"R\":3},{\"C\":[61,1,49,1],\"R\":1},{\"C\":[0,1260,51],\"R\":3},{\"C\":[24,1,283,6],\"R\":1},{\"C\":[0,2188,88],\"R\":3},{\"C\":[25,1,234,8],\"R\":1},{\"C\":[0,3826,152],\"R\":3},{\"C\":[26,1,105,3],\"R\":1},{\"C\":[0,3002,129],\"R\":3},{\"C\":[27,1,327,11],\"R\":1},{\"C\":[0,2268,93],\"R\":3},{\"C\":[28,1,993,36],\"R\":1},{\"C\":[0,5304,216],\"R\":3},{\"C\":[53,1,289,10],\"R\":1},{\"C\":[0,1124,51],\"R\":3},{\"C\":[29,1,1305,47],\"R\":1},{\"C\":[0,3137,140],\"R\":3},{\"C\":[62,1380,65],\"R\":5},{\"C\":[63,1,30,1],\"R\":1},{\"C\":[0,1593,69],\"R\":3},{\"C\":[54,1,13,1],\"R\":1},{\"C\":[0,837,35],\"R\":3},{\"C\":[30,1,497,11],\"R\":1},{\"C\":[0,26067,977],\"R\":3},{\"C\":[31,1,224,7],\"R\":1},{\"C\":[0,10163,387],\"R\":3},{\"C\":[64,1,184,6],\"R\":1},{\"C\":[0,3197,136],\"R\":3},{\"C\":[55,1,408,8],\"R\":1},{\"C\":[0,2313,105],\"R\":3},{\"C\":[65,1,132,4],\"R\":1},{\"C\":[0,292,14],\"R\":3},{\"C\":[66,1,84,2],\"R\":1},{\"C\":[0,886,43],\"R\":3},{\"C\":[32,1,160,7],\"R\":1},{\"C\":[0,1978,91],\"R\":3},{\"C\":[33,1,665,25],\"R\":1},{\"C\":[0,6343,253],\"R\":3},{\"C\":[67,1,626,17],\"R\":1},{\"C\":[0,1574,59],\"R\":3},{\"C\":[34,1,37,1],\"R\":1},{\"C\":[0,3211,120],\"R\":3},{\"C\":[35,1,2365,79],\"R\":1},{\"C\":[0,4117,177],\"R\":3},{\"C\":[36,1,626,24],\"R\":1},{\"C\":[0,6358,282],\"R\":3},{\"C\":[56,1,73,2],\"R\":1},{\"C\":[0,2601,109],\"R\":3},{\"C\":[37,1,286,11],\"R\":1},{\"C\":[0,8856,392],\"R\":3},{\"C\":[68,2101,94],\"R\":5},{\"C\":[57,1,112,6],\"R\":1},{\"C\":[0,1156,53],\"R\":3},{\"C\":[58,1,65,1],\"R\":1},{\"C\":[0,329,15],\"R\":3},{\"C\":[38,1,372,14],\"R\":1},{\"C\":[0,10220,398],\"R\":3},{\"C\":[39,1,191,6],\"R\":1},{\"C\":[0,9883,381],\"R\":3},{\"C\":[59,1,19,1],\"R\":1},{\"C\":[0,3651,137],\"R\":3},{\"C\":[40,1,102,4],\"R\":1},{\"C\":[0,190,14],\"R\":3},{\"C\":[41,1,181,8],\"R\":1},{\"C\":[0,1727,77],\"R\":3},{\"C\":[42,1,1951,61],\"R\":1},{\"C\":[0,13192,601],\"R\":3},{\"C\":[43,1,303,10],\"R\":1},{\"C\":[0,1210,53],\"R\":3},{\"C\":[69,477,19],\"R\":5},{\"C\":[44,1,326,10],\"R\":1},{\"C\":[0,8763,344],\"R\":3},{\"C\":[45,1,1720,46],\"R\":1},{\"C\":[0,13177,492],\"R\":3},{\"C\":[46,1,345,11],\"R\":1},{\"C\":[0,17138,640],\"R\":3},{\"C\":[70,1,26,1],\"R\":1},{\"C\":[0,1102,41],\"R\":3},{\"C\":[71,2506,96],\"R\":5},{\"C\":[47,1,697,23],\"R\":1},{\"C\":[0,24061,923],\"R\":3},{\"C\":[48,1,32,1],\"R\":1},{\"C\":[0,10880,427],\"R\":3},{\"C\":[8,4,58,1],\"R\":4},{\"C\":[22,48],\"R\":21},{\"C\":[24],\"R\":29},{\"C\":[38,50],\"R\":21},{\"C\":[39,150,3],\"R\":5},{\"C\":[47,98,2],\"R\":5},{\"C\":[9,0,1,1211,25]},{\"C\":[0,22754,2781],\"R\":3},{\"C\":[1,1,132,7],\"R\":1},{\"C\":[0,21490,2532],\"R\":3},{\"C\":[2,1,317,15],\"R\":1},{\"C\":[0,5097,1251],\"R\":3},{\"C\":[3,1,86,6],\"R\":1},{\"C\":[0,9455,1144],\"R\":3},{\"C\":[4,4338,653],\"R\":5},{\"C\":[5,1,113,6],\"R\":1},{\"C\":[0,14072,1512],\"R\":3},{\"C\":[6,1,38,2],\"R\":1},{\"C\":[0,12776,1333],\"R\":3},{\"C\":[7,1,222,9],\"R\":1},{\"C\":[0,10928,1372],\"R\":3},{\"C\":[8,1,111,13],\"R\":1},{\"C\":[0,4781,589],\"R\":3},{\"C\":[9,1,10,3],\"R\":1},{\"C\":[0,6425,898],\"R\":3},{\"C\":[10,1,35,5],\"R\":1},{\"C\":[0,4970,571],\"R\":3},{\"C\":[11,1,107,10],\"R\":1},{\"C\":[0,16542,2094],\"R\":3},{\"C\":[49,1,1,1],\"R\":1},{\"C\":[0,12787,1300],\"R\":3},{\"C\":[12,1,20,5],\"R\":1},{\"C\":[0,7865,952],\"R\":3},{\"C\":[13,1,234,14],\"R\":1},{\"C\":[0,20871,2593],\"R\":3},{\"C\":[14,1,106,9],\"R\":1},{\"C\":[0,13516,1976],\"R\":3},{\"C\":[15,1,17,1],\"R\":1},{\"C\":[0,8226,923],\"R\":3},{\"C\":[60,1,27,3],\"R\":1},{\"C\":[0,831,108],\"R\":3},{\"C\":[50,1,68,9],\"R\":1},{\"C\":[0,2484,502],\"R\":3},{\"C\":[16,1,357,5],\"R\":1},{\"C\":[0,6071,760],\"R\":3},{\"C\":[17,1,12,2],\"R\":1},{\"C\":[0,5116,835],\"R\":3},{\"C\":[51,1,5,1],\"R\":1},{\"C\":[0,9934,683],\"R\":3},{\"C\":[18,1,33,5],\"R\":1},{\"C\":[0,60832,6488],\"R\":3},{\"C\":[19,1,202,5],\"R\":1},{\"C\":[0,45643,4909],\"R\":3},{\"C\":[20,1,17,1],\"R\":1},{\"C\":[0,6184,590],\"R\":3},{\"C\":[52,1,3,1],\"R\":1},{\"C\":[0,2736,200],\"R\":3},{\"C\":[21,6130,721],\"R\":5},{\"C\":[22,1,26,6],\"R\":1},{\"C\":[0,48883,5681],\"R\":3},{\"C\":[23,1,16,1],\"R\":1},{\"C\":[0,1797,159],\"R\":3},{\"C\":[61,629,62],\"R\":5},{\"C\":[24,1,93,3],\"R\":1},{\"C\":[0,2160,203],\"R\":3},{\"C\":[25,1,9,2],\"R\":1},{\"C\":[0,2266,214],\"R\":3},{\"C\":[26,1,108,5],\"R\":1},{\"C\":[0,18765,2049],\"R\":3},{\"C\":[27,2467,269],\"R\":5},{\"C\":[28,1,132,3],\"R\":1},{\"C\":[0,12014,1214],\"R\":3},{\"C\":[53,1,45,2],\"R\":1},{\"C\":[0,2779,266],\"R\":3},{\"C\":[29,1,90,5],\"R\":1},{\"C\":[0,10169,1328],\"R\":3},{\"C\":[62,1,100,2],\"R\":1},{\"C\":[0,775,74],\"R\":3},{\"C\":[63,3552,328],\"R\":5},{\"C\":[54,1,1,1],\"R\":1},{\"C\":[0,2464,308],\"R\":3},{\"C\":[30,1,182,14],\"R\":1},{\"C\":[0,14416,1671],\"R\":3},{\"C\":[31,1,31,3],\"R\":1},{\"C\":[0,4657,495],\"R\":3},{\"C\":[64,1,15,1],\"R\":1},{\"C\":[0,2942,282],\"R\":3},{\"C\":[55,1021,102],\"R\":5},{\"C\":[65,399,38],\"R\":5},{\"C\":[66,858,85],\"R\":5},{\"C\":[32,1,34,2],\"R\":1},{\"C\":[0,12148,1176],\"R\":3},{\"C\":[33,1,187,13],\"R\":1},{\"C\":[0,19280,2535],\"R\":3},{\"C\":[67,1,51,1],\"R\":1},{\"C\":[0,892,75],\"R\":3},{\"C\":[34,1,91,2],\"R\":1},{\"C\":[0,13038,1384],\"R\":3},{\"C\":[35,1,155,5],\"R\":1},{\"C\":[0,12601,1345],\"R\":3},{\"C\":[36,1,23,7],\"R\":1},{\"C\":[0,14499,1797],\"R\":3},{\"C\":[56,6342,996],\"R\":5},{\"C\":[37,1,110,7],\"R\":1},{\"C\":[0,12522,1453],\"R\":3},{\"C\":[68,1,11,2],\"R\":1},{\"C\":[0,2841,329],\"R\":3},{\"C\":[57,1,60,2],\"R\":1},{\"C\":[0,1748,176],\"R\":3},{\"C\":[58,248,39],\"R\":5},{\"C\":[38,1,50,3],\"R\":1},{\"C\":[0,12016,1078],\"R\":3},{\"C\":[39,1,46,3],\"R\":1},{\"C\":[0,4379,434],\"R\":3},{\"C\":[59,1,2,1],\"R\":1},{\"C\":[0,871,82],\"R\":3},{\"C\":[40,1,3,2],\"R\":1},{\"C\":[0,13751,1541],\"R\":3},{\"C\":[41,1,6,1],\"R\":1},{\"C\":[0,25736,3369],\"R\":3},{\"C\":[42,1,1204,30],\"R\":1},{\"C\":[0,87224,10635],\"R\":3},{\"C\":[43,1,513,2],\"R\":1},{\"C\":[0,13862,1698],\"R\":3},{\"C\":[69,412,35],\"R\":5},{\"C\":[44,2597,289],\"R\":5},{\"C\":[45,1,67,6],\"R\":1},{\"C\":[0,4720,471],\"R\":3},{\"C\":[46,1,30,1],\"R\":1},{\"C\":[0,6880,686],\"R\":3},{\"C\":[70,418,35],\"R\":5},{\"C\":[71,1,24,1],\"R\":1},{\"C\":[0,1192,106],\"R\":3},{\"C\":[47,1,25,3],\"R\":1},{\"C\":[0,17968,1806],\"R\":3},{\"C\":[48,1,29,2],\"R\":1},{\"C\":[0,10189,957],\"R\":3},{\"C\":[10,0,1,17,8]},{\"C\":[0,3281,1275],\"R\":3},{\"C\":[1,1,5,2],\"R\":1},{\"C\":[0,3804,1354],\"R\":3},{\"C\":[2,1,118,4],\"R\":1},{\"C\":[0,523,247],\"R\":3},{\"C\":[3,1,1,1],\"R\":1},{\"C\":[0,1167,446],\"R\":3},{\"C\":[4,1,2,1],\"R\":1},{\"C\":[0,572,236],\"R\":3},{\"C\":[5,1,7,2],\"R\":1},{\"C\":[0,2641,797],\"R\":3},{\"C\":[6,1,6,2],\"R\":1},{\"C\":[0,2510,794],\"R\":3},{\"C\":[7,1,24,5],\"R\":1},{\"C\":[0,2180,745],\"R\":3},{\"C\":[8,1,8,2],\"R\":1},{\"C\":[0,770,310],\"R\":3},{\"C\":[9,1,4,1],\"R\":1},{\"C\":[0,1093,470],\"R\":3},{\"C\":[10,1,1,1],\"R\":1},{\"C\":[0,1108,349],\"R\":3},{\"C\":[11,1,41,5],\"R\":1},{\"C\":[0,2963,1153],\"R\":3},{\"C\":[49,1,1,1],\"R\":1},{\"C\":[0,2868,868],\"R\":3},{\"C\":[12,1,9,4],\"R\":1},{\"C\":[0,1653,565],\"R\":3},{\"C\":[13,1,31,9],\"R\":1},{\"C\":[0,4632,1455],\"R\":3},{\"C\":[14,1,39,7],\"R\":1},{\"C\":[0,3000,1088],\"R\":3},{\"C\":[15,1618,556],\"R\":5},{\"C\":[60,1,4,1],\"R\":1},{\"C\":[0,137,59],\"R\":3},{\"C\":[50,1,4,1],\"R\":1},{\"C\":[0,330,157],\"R\":3},{\"C\":[16,1,7,2],\"R\":1},{\"C\":[0,863,372],\"R\":3},{\"C\":[17,1,39,1],\"R\":1},{\"C\":[0,771,338],\"R\":3},{\"C\":[51,1,1,1],\"R\":1},{\"C\":[0,1877,428],\"R\":3},{\"C\":[18,1,57,5],\"R\":1},{\"C\":[0,10862,3635],\"R\":3},{\"C\":[19,1,8,2],\"R\":1},{\"C\":[0,9157,3059],\"R\":3},{\"C\":[20,1,5,1],\"R\":1},{\"C\":[0,1425,380],\"R\":3},{\"C\":[52,1,18,1],\"R\":1},{\"C\":[0,1308,199],\"R\":3},{\"C\":[21,1,206,1],\"R\":1},{\"C\":[0,1023,304],\"R\":3},{\"C\":[22,1,14,4],\"R\":1},{\"C\":[0,7129,2760],\"R\":3},{\"C\":[23,1,7,1],\"R\":1},{\"C\":[0,938,196],\"R\":3},{\"C\":[61,248,53],\"R\":5},{\"C\":[24,1,5,2],\"R\":1},{\"C\":[0,491,133],\"R\":3},{\"C\":[25,1,4,1],\"R\":1},{\"C\":[0,675,163],\"R\":3},{\"C\":[26,1,6,1],\"R\":1},{\"C\":[0,3808,1185],\"R\":3},{\"C\":[27,788,242],\"R\":5},{\"C\":[28,1,7,2],\"R\":1},{\"C\":[0,2732,868],\"R\":3},{\"C\":[53,1,2,1],\"R\":1},{\"C\":[0,706,201],\"R\":3},{\"C\":[29,1,15,3],\"R\":1},{\"C\":[0,2183,770],\"R\":3},{\"C\":[62,1,3,1],\"R\":1},{\"C\":[0,237,54],\"R\":3},{\"C\":[63,982,259],\"R\":5},{\"C\":[54,1,1,1],\"R\":1},{\"C\":[0,577,198],\"R\":3},{\"C\":[30,1,69,11],\"R\":1},{\"C\":[0,3099,961],\"R\":3},{\"C\":[31,1,9,2],\"R\":1},{\"C\":[0,1058,327],\"R\":3},{\"C\":[64,1,11,1],\"R\":1},{\"C\":[0,942,216],\"R\":3},{\"C\":[55,324,70],\"R\":5},{\"C\":[65,100,22],\"R\":5},{\"C\":[66,1,24,1],\"R\":1},{\"C\":[0,289,57],\"R\":3},{\"C\":[32,1,31,3],\"R\":1},{\"C\":[0,4105,980],\"R\":3},{\"C\":[33,1,22,6],\"R\":1},{\"C\":[0,3924,1422],\"R\":3},{\"C\":[67,330,60],\"R\":5},{\"C\":[34,3682,995],\"R\":5},{\"C\":[35,1,18,3],\"R\":1},{\"C\":[0,2601,778],\"R\":3},{\"C\":[36,1,40,3],\"R\":1},{\"C\":[0,3488,1132],\"R\":3},{\"C\":[56,1192,574],\"R\":5},{\"C\":[37,1,24,5],\"R\":1},{\"C\":[0,4766,1275],\"R\":3},{\"C\":[68,1305,317],\"R\":5},{\"C\":[57,1,6,2],\"R\":1},{\"C\":[0,584,148],\"R\":3},{\"C\":[58,120,19],\"R\":5},{\"C\":[38,1,35,1],\"R\":1},{\"C\":[0,2337,725],\"R\":3},{\"C\":[39,1,11,2],\"R\":1},{\"C\":[0,857,260],\"R\":3},{\"C\":[59,1,39,2],\"R\":1},{\"C\":[0,241,62],\"R\":3},{\"C\":[40,2114,734],\"R\":5},{\"C\":[41,1,5,3],\"R\":1},{\"C\":[0,4210,1656],\"R\":3},{\"C\":[42,1,24,5],\"R\":1},{\"C\":[0,13559,5061],\"R\":3},{\"C\":[43,1495,569],\"R\":5},{\"C\":[69,89,26],\"R\":5},{\"C\":[44,563,184],\"R\":5},{\"C\":[45,815,255],\"R\":5},{\"C\":[46,1341,436],\"R\":5},{\"C\":[70,1,42,1],\"R\":1},{\"C\":[0,78,27],\"R\":3},{\"C\":[71,1,1,1],\"R\":1},{\"C\":[0,178,61],\"R\":3},{\"C\":[47,1,2,1],\"R\":1},{\"C\":[0,2662,955],\"R\":3},{\"C\":[48,1,12,3],\"R\":1},{\"C\":[0,2149,625],\"R\":3},{\"C\":[11,0,1,32,2]},{\"C\":[0,3246,397],\"R\":3},{\"C\":[1,1,2,1],\"R\":1},{\"C\":[0,3360,391],\"R\":3},{\"C\":[2,1,131,7],\"R\":1},{\"C\":[0,2947,361],\"R\":3},{\"C\":[3,2705,322],\"R\":5},{\"C\":[4,2015,207],\"R\":5},{\"C\":[5,1,98,5],\"R\":1},{\"C\":[0,9355,578],\"R\":3},{\"C\":[6,5408,415],\"R\":5},{\"C\":[7,1,27,2],\"R\":1},{\"C\":[0,4087,374],\"R\":3},{\"C\":[8,1,58,6],\"R\":1},{\"C\":[0,1325,122],\"R\":3},{\"C\":[9,1,32,3],\"R\":1},{\"C\":[0,2498,248],\"R\":3},{\"C\":[10,1,10,1],\"R\":1},{\"C\":[0,2457,194],\"R\":3},{\"C\":[11,1,34,3],\"R\":1},{\"C\":[0,3876,476],\"R\":3},{\"C\":[49,1,33,3],\"R\":1},{\"C\":[0,5092,387],\"R\":3},{\"C\":[12,2287,247],\"R\":5},{\"C\":[13,1,33,7],\"R\":1},{\"C\":[0,6244,648],\"R\":3},{\"C\":[14,1,10,2],\"R\":1},{\"C\":[0,4006,425],\"R\":3},{\"C\":[15,2275,228],\"R\":5},{\"C\":[60,462,36],\"R\":5},{\"C\":[50,1,169,18],\"R\":1},{\"C\":[0,1309,135],\"R\":3},{\"C\":[16,1,20,1],\"R\":1},{\"C\":[0,2836,282],\"R\":3},{\"C\":[17,1,174,13],\"R\":1},{\"C\":[0,2844,304],\"R\":3},{\"C\":[51,1,34,1],\"R\":1},{\"C\":[0,3227,191],\"R\":3},{\"C\":[18,10931,1307],\"R\":5},{\"C\":[19,1,87,5],\"R\":1},{\"C\":[0,13315,1271],\"R\":3},{\"C\":[20,1,24,1],\"R\":1},{\"C\":[0,1879,162],\"R\":3},{\"C\":[52,888,65],\"R\":5},{\"C\":[21,706,70],\"R\":5},{\"C\":[22,1,10,3],\"R\":1},{\"C\":[0,8308,965],\"R\":3},{\"C\":[23,245,26],\"R\":5},{\"C\":[61,142,10],\"R\":5},{\"C\":[24,265,35],\"R\":5},{\"C\":[25,189],\"R\":21},{\"C\":[26,1,32,2],\"R\":1},{\"C\":[0,4208,462],\"R\":3},{\"C\":[27,602,68],\"R\":5},{\"C\":[28,2164,264],\"R\":5},{\"C\":[53,642,67],\"R\":5},{\"C\":[29,1,21,3],\"R\":1},{\"C\":[0,1009,184],\"R\":3},{\"C\":[62,1,33,1],\"R\":1},{\"C\":[0,326,26],\"R\":3},{\"C\":[63,766,100],\"R\":5},{\"C\":[54,373,62],\"R\":5},{\"C\":[30,1,24,3],\"R\":1},{\"C\":[0,4026,362],\"R\":3},{\"C\":[31,1,20,2],\"R\":1},{\"C\":[0,1001,100],\"R\":3},{\"C\":[64,1,27,3],\"R\":1},{\"C\":[0,568,57],\"R\":3},{\"C\":[55,188,23],\"R\":5},{\"C\":[65,88,11],\"R\":5},{\"C\":[66,380,23],\"R\":5},{\"C\":[32,4448,395],\"R\":5},{\"C\":[33,1,45,6],\"R\":1},{\"C\":[0,4833,585],\"R\":3},{\"C\":[67,356,30],\"R\":5},{\"C\":[34,1,38,1],\"R\":1},{\"C\":[0,5319,460],\"R\":3},{\"C\":[35,1,49,2],\"R\":1},{\"C\":[0,4124,311],\"R\":3},{\"C\":[36,1,36,4],\"R\":1},{\"C\":[0,3632,391],\"R\":3},{\"C\":[56,1162,171],\"R\":5},{\"C\":[37,1,17,2],\"R\":1},{\"C\":[0,4199,396],\"R\":3},{\"C\":[68,1,3,1],\"R\":1},{\"C\":[0,1226,109],\"R\":3},{\"C\":[57,1,5,2],\"R\":1},{\"C\":[0,1134,77],\"R\":3},{\"C\":[58,472,22],\"R\":5},{\"C\":[38,987,148],\"R\":5},{\"C\":[39,527,68],\"R\":5},{\"C\":[59,62,10],\"R\":5},{\"C\":[40,1,45,2],\"R\":1},{\"C\":[0,2869,288],\"R\":3},{\"C\":[41,2903,420],\"R\":5},{\"C\":[42,1,22,3],\"R\":1},{\"C\":[0,14182,1508],\"R\":3},{\"C\":[43,714,73],\"R\":5},{\"C\":[69,18,6],\"R\":5},{\"C\":[44,390,52],\"R\":5},{\"C\":[45,479,63],\"R\":5},{\"C\":[46,1134,100],\"R\":5},{\"C\":[70,30,2],\"R\":5},{\"C\":[71,391,27],\"R\":5},{\"C\":[47,1,53,2],\"R\":1},{\"C\":[0,2373,246],\"R\":3},{\"C\":[48,2704,224],\"R\":5},{\"C\":[12,0,67,5],\"R\":4},{\"C\":[1,1,17,1],\"R\":1},{\"C\":[0,121,9],\"R\":3},{\"C\":[2,433,40],\"R\":5},{\"C\":[3,372,33],\"R\":5},{\"C\":[4,303,32],\"R\":5},{\"C\":[5,1,252,2],\"R\":1},{\"C\":[0,842,63],\"R\":3},{\"C\":[6,506,34],\"R\":5},{\"C\":[7,477,32],\"R\":5},{\"C\":[8,1,2,1],\"R\":1},{\"C\":[0,7],\"R\":19},{\"C\":[9,137,9],\"R\":5},{\"C\":[10,225,15],\"R\":5},{\"C\":[11,1,41,1],\"R\":1},{\"C\":[0,423,23],\"R\":3},{\"C\":[49,1,172,1],\"R\":1},{\"C\":[0,749,42],\"R\":3},{\"C\":[12,265,16],\"R\":5},{\"C\":[13,1,9,1],\"R\":1},{\"C\":[0,603,40],\"R\":3},{\"C\":[14,491,34],\"R\":5},{\"C\":[15,186,15],\"R\":5},{\"C\":[60,29,2],\"R\":5},{\"C\":[50,312,20],\"R\":5},{\"C\":[16,324],\"R\":21},{\"C\":[17,821,62],\"R\":5},{\"C\":[51,1,1,1],\"R\":1},{\"C\":[0,155,6],\"R\":3},{\"C\":[18,368,21],\"R\":5},{\"C\":[19,918,52],\"R\":5},{\"C\":[20,67,5],\"R\":5},{\"C\":[52,9,2],\"R\":5},{\"C\":[21,130,8],\"R\":5},{\"C\":[22,375,25],\"R\":5},{\"C\":[23,31,3],\"R\":5},{\"C\":[26,277,18],\"R\":5},{\"C\":[27,75,5],\"R\":5},{\"C\":[28,100],\"R\":21},{\"C\":[53,49,4],\"R\":5},{\"C\":[29,107,7],\"R\":5},{\"C\":[62,46,3],\"R\":5},{\"C\":[63,15,2],\"R\":5},{\"C\":[54,8,1],\"R\":5},{\"C\":[30,103,10],\"R\":5},{\"C\":[31,30,1],\"R\":5},{\"C\":[64,153,5],\"R\":5},{\"C\":[55,90,4],\"R\":5},{\"C\":[65,128,6],\"R\":5},{\"C\":[66,63,3],\"R\":5},{\"C\":[32,1,80,1],\"R\":1},{\"C\":[0,590,31],\"R\":3},{\"C\":[33,488,27],\"R\":5},{\"C\":[34,373,22],\"R\":5},{\"C\":[35,1,67,1],\"R\":1},{\"C\":[0,393,18],\"R\":3},{\"C\":[36,1,41,1],\"R\":1},{\"C\":[0,230,12],\"R\":3},{\"C\":[56,41,2],\"R\":5},{\"C\":[37,456,27],\"R\":5},{\"C\":[68,241,13],\"R\":5},{\"C\":[57,112,9],\"R\":5},{\"C\":[58,97,7],\"R\":5},{\"C\":[39,44,1],\"R\":5},{\"C\":[40,1,73],\"R\":17},{\"C\":[0,185,13],\"R\":3},{\"C\":[41,81,8],\"R\":5},{\"C\":[42,1121,76],\"R\":5},{\"C\":[43,325,18],\"R\":5},{\"C\":[44,81,1],\"R\":5},{\"C\":[45,3],\"R\":21},{\"C\":[46,132,3],\"R\":5},{\"C\":[48,30,1],\"R\":5},{\"C\":[13,0,1,36,2]},{\"C\":[0,1223,186],\"R\":3},{\"C\":[1,1,38,1],\"R\":1},{\"C\":[0,1765,303],\"R\":3},{\"C\":[2,1,11,1],\"R\":1},{\"C\":[0,341,98],\"R\":3},{\"C\":[3,608,109],\"R\":5},{\"C\":[4,369,72],\"R\":5},{\"C\":[5,1,2,1],\"R\":1},{\"C\":[0,884,212],\"R\":3},{\"C\":[6,837,144],\"R\":5},{\"C\":[7,783,146],\"R\":5},{\"C\":[8,229,42],\"R\":5},{\"C\":[9,499,98],\"R\":5},{\"C\":[10,390,76],\"R\":5},{\"C\":[11,1,66,1],\"R\":1},{\"C\":[0,1215,213],\"R\":3},{\"C\":[49,1,6,1],\"R\":1},{\"C\":[0,1195,209],\"R\":3},{\"C\":[12,689,130],\"R\":5},{\"C\":[13,1,17,1],\"R\":1},{\"C\":[0,2111,368],\"R\":3},{\"C\":[14,1,20,3],\"R\":1},{\"C\":[0,1173,230],\"R\":3},{\"C\":[15,985,147],\"R\":5},{\"C\":[60,63,10],\"R\":5},{\"C\":[50,198,49],\"R\":5},{\"C\":[16,425,98],\"R\":5},{\"C\":[17,1,3,1],\"R\":1},{\"C\":[0,443,81],\"R\":3},{\"C\":[51,931,123],\"R\":5},{\"C\":[18,1,2,1],\"R\":1},{\"C\":[0,5456,895],\"R\":3},{\"C\":[19,4859,762],\"R\":5},{\"C\":[20,1,3,1],\"R\":1},{\"C\":[0,841,103],\"R\":3},{\"C\":[52,359,53],\"R\":5},{\"C\":[21,704,96],\"R\":5},{\"C\":[22,3851,620],\"R\":5},{\"C\":[23,1,11,1],\"R\":1},{\"C\":[0,103,24],\"R\":3},{\"C\":[61,45,8],\"R\":5},{\"C\":[24,130,19],\"R\":5},{\"C\":[25,1,2,1],\"R\":1},{\"C\":[0,98,23],\"R\":3},{\"C\":[26,2126,333],\"R\":5},{\"C\":[27,383,49],\"R\":5},{\"C\":[28,1182,207],\"R\":5},{\"C\":[53,204,35],\"R\":5},{\"C\":[29,658,129],\"R\":5},{\"C\":[62,56,11],\"R\":5},{\"C\":[63,411,57],\"R\":5},{\"C\":[54,1,2,1],\"R\":1},{\"C\":[0,277,50],\"R\":3},{\"C\":[30,1,21,2],\"R\":1},{\"C\":[0,1791,277],\"R\":3},{\"C\":[31,1,8,1],\"R\":1},{\"C\":[0,679,83],\"R\":3},{\"C\":[64,331,46],\"R\":5},{\"C\":[55,165,21],\"R\":5},{\"C\":[65,72,10],\"R\":5},{\"C\":[66,73,12],\"R\":5},{\"C\":[32,1716,253],\"R\":5},{\"C\":[33,1,3,1],\"R\":1},{\"C\":[0,2086,348],\"R\":3},{\"C\":[67,85,12],\"R\":5},{\"C\":[34,1882,268],\"R\":5},{\"C\":[35,1,38,1],\"R\":1},{\"C\":[0,1246,218],\"R\":3},{\"C\":[36,1404,241],\"R\":5},{\"C\":[56,336,74],\"R\":5},{\"C\":[37,1,14,1],\"R\":1},{\"C\":[0,1368,247],\"R\":3},{\"C\":[68,346,62],\"R\":5},{\"C\":[57,355,50],\"R\":5},{\"C\":[58,59,4],\"R\":5},{\"C\":[38,1,9,2],\"R\":1},{\"C\":[0,1076,158],\"R\":3},{\"C\":[39,1,26,1],\"R\":1},{\"C\":[0,307,54],\"R\":3},{\"C\":[59,1,46,2],\"R\":1},{\"C\":[0,39,7],\"R\":3},{\"C\":[40,1506,251],\"R\":5},{\"C\":[41,1753,332],\"R\":5},{\"C\":[42,1,26,3],\"R\":1},{\"C\":[0,8563,1290],\"R\":3},{\"C\":[43,1499,208],\"R\":5},{\"C\":[69,32,8],\"R\":5},{\"C\":[44,260,53],\"R\":5},{\"C\":[45,230,49],\"R\":5},{\"C\":[46,640,110],\"R\":5},{\"C\":[70,22,3],\"R\":5},{\"C\":[71,120,17],\"R\":5},{\"C\":[47,1731,234],\"R\":5},{\"C\":[48,1047,144],\"R\":5},{\"C\":[14,0,22,2],\"R\":4},{\"C\":[2,44,3],\"R\":5},{\"C\":[4,9],\"R\":21},{\"C\":[5,168,13],\"R\":5},{\"C\":[6,177,8],\"R\":5},{\"C\":[7,68,3],\"R\":5},{\"C\":[8,70,1],\"R\":5},{\"C\":[9,3],\"R\":21},{\"C\":[10,4],\"R\":21},{\"C\":[11,17],\"R\":21},{\"C\":[49,50,3],\"R\":5},{\"C\":[12,74,2],\"R\":5},{\"C\":[13,48,5],\"R\":5},{\"C\":[14,32,3],\"R\":5},{\"C\":[50,40],\"R\":21},{\"C\":[16,7,2],\"R\":5},{\"C\":[17,35,4],\"R\":5},{\"C\":[51,26,1],\"R\":5},{\"C\":[19,37,2],\"R\":5},{\"C\":[21,102],\"R\":21},{\"C\":[24,10,1],\"R\":5},{\"C\":[26,28,2],\"R\":5},{\"C\":[27,47,1],\"R\":5},{\"C\":[30,93,3],\"R\":5},{\"C\":[32,24,1],\"R\":5},{\"C\":[33,11],\"R\":21},{\"C\":[34,24],\"R\":21},{\"C\":[37,50],\"R\":21},{\"C\":[68,8],\"R\":21},{\"C\":[57,28,2],\"R\":5},{\"C\":[39,5,1],\"R\":5},{\"C\":[40,65,4],\"R\":5},{\"C\":[41,24,1],\"R\":5},{\"C\":[42,1,28,2],\"R\":1},{\"C\":[0,236,10],\"R\":3},{\"C\":[43,81,3],\"R\":5},{\"C\":[15,0,1,2,2]},{\"C\":[0,1,1],\"R\":3},{\"C\":[2,1],\"R\":25},{\"C\":[0],\"R\":27},{\"C\":[7],\"R\":29},{\"C\":[8,1],\"R\":25},{\"C\":[11],\"R\":29},{\"C\":[13],\"R\":29},{\"C\":[14,2,2],\"R\":5},{\"C\":[17],\"R\":29},{\"C\":[0,1,1],\"R\":3},{\"C\":[19,2,2],\"R\":5},{\"C\":[21,1,1],\"R\":5},{\"C\":[30,1],\"R\":25},{\"C\":[35,2,2],\"R\":5},{\"C\":[38,1,1],\"R\":5},{\"C\":[40,0],\"R\":25},{\"C\":[41],\"R\":29},{\"C\":[42],\"R\":29},{\"C\":[16,19,3,3],\"R\":4},{\"C\":[32,1,1],\"R\":5},{\"C\":[33],\"R\":29},{\"C\":[37],\"R\":29},{\"C\":[43],\"R\":29},{\"C\":[47],\"R\":29},{\"C\":[17,0,3,3],\"R\":4},{\"C\":[1,1,1],\"R\":5},{\"C\":[2,3,3],\"R\":5},{\"C\":[3,2,2],\"R\":5},{\"C\":[6,1,1],\"R\":5},{\"C\":[7,2,2],\"R\":5},{\"C\":[9,1,1],\"R\":5},{\"C\":[11,5,5],\"R\":5},{\"C\":[12,3,3],\"R\":5},{\"C\":[13,2,2],\"R\":5},{\"C\":[14,6,6],\"R\":5},{\"C\":[15,2,2],\"R\":5},{\"C\":[50,3,3],\"R\":5},{\"C\":[17,2,2],\"R\":5},{\"C\":[51,1,1],\"R\":5},{\"C\":[18,6,6],\"R\":5},{\"C\":[19],\"R\":29},{\"C\":[20,1,1],\"R\":5},{\"C\":[22,4,4],\"R\":5},{\"C\":[29,1,1],\"R\":5},{\"C\":[32,2,2],\"R\":5},{\"C\":[33,6,6],\"R\":5},{\"C\":[34,2,2],\"R\":5},{\"C\":[36],\"R\":29},{\"C\":[38],\"R\":29},{\"C\":[40],\"R\":29},{\"C\":[41],\"R\":29},{\"C\":[42,12,12],\"R\":5},{\"C\":[43,5,5],\"R\":5},{\"C\":[48,1,1],\"R\":5},{\"C\":[18,0,4225,2277],\"R\":4},{\"C\":[1,4559,2514],\"R\":5},{\"C\":[2,2056,1248],\"R\":5},{\"C\":[3,2015,1156],\"R\":5},{\"C\":[4,1522,869],\"R\":5},{\"C\":[5,2475,1320],\"R\":5},{\"C\":[6,2568,1398],\"R\":5},{\"C\":[7,3382,1841],\"R\":5},{\"C\":[8,1395,751],\"R\":5},{\"C\":[9,2289,1238],\"R\":5},{\"C\":[10,1380,753],\"R\":5},{\"C\":[11,4011,2260],\"R\":5},{\"C\":[49,3240,1779],\"R\":5},{\"C\":[12,2089,1186],\"R\":5},{\"C\":[13,6520,3683],\"R\":5},{\"C\":[14,5069,2803],\"R\":5},{\"C\":[15,2133,1166],\"R\":5},{\"C\":[60,392,215],\"R\":5},{\"C\":[50,1280,707],\"R\":5},{\"C\":[16,1774,940],\"R\":5},{\"C\":[17,2160,1147],\"R\":5},{\"C\":[51,1258,678],\"R\":5},{\"C\":[18,12306,7022],\"R\":5},{\"C\":[19,11548,6509],\"R\":5},{\"C\":[20,1470,828],\"R\":5},{\"C\":[52,660,353],\"R\":5},{\"C\":[21,5150,2999],\"R\":5},{\"C\":[22,12479,7070],\"R\":5},{\"C\":[23,350,182],\"R\":5},{\"C\":[61,148,83],\"R\":5},{\"C\":[24,371,206],\"R\":5},{\"C\":[25,680,350],\"R\":5},{\"C\":[26,4625,2612],\"R\":5},{\"C\":[27,539,298],\"R\":5},{\"C\":[28,2723,1475],\"R\":5},{\"C\":[53,469,254],\"R\":5},{\"C\":[29,2073,1091],\"R\":5},{\"C\":[62,82,46],\"R\":5},{\"C\":[63,612,333],\"R\":5},{\"C\":[54,472,251],\"R\":5},{\"C\":[30,3229,1418],\"R\":5},{\"C\":[31,1247,573],\"R\":5},{\"C\":[64,449,241],\"R\":5},{\"C\":[55,282,153],\"R\":5},{\"C\":[65,30,17],\"R\":5},{\"C\":[66,81,44],\"R\":5},{\"C\":[32,2954,1558],\"R\":5},{\"C\":[33,4742,2571],\"R\":5},{\"C\":[67,113,61],\"R\":5},{\"C\":[34,2812,1483],\"R\":5},{\"C\":[35,1943,1040],\"R\":5},{\"C\":[36,2834,1510],\"R\":5},{\"C\":[56,807,429],\"R\":5},{\"C\":[37,2191,1186],\"R\":5},{\"C\":[68,448,245],\"R\":5},{\"C\":[57,230,127],\"R\":5},{\"C\":[58,106,57],\"R\":5},{\"C\":[38,1471,826],\"R\":5},{\"C\":[39,501,240],\"R\":5},{\"C\":[59,144,65],\"R\":5},{\"C\":[40,4162,2274],\"R\":5},{\"C\":[41,5785,3224],\"R\":5},{\"C\":[42,26199,14671],\"R\":5},{\"C\":[43,13112,7566],\"R\":5},{\"C\":[69,50,24],\"R\":5},{\"C\":[44,758,408],\"R\":5},{\"C\":[45,1201,691],\"R\":5},{\"C\":[46,1540,857],\"R\":5},{\"C\":[70,134,65],\"R\":5},{\"C\":[71,376,174],\"R\":5},{\"C\":[47,2476,1348],\"R\":5},{\"C\":[48,1276,680],\"R\":5},{\"C\":[19,0,1,192,6]},{\"C\":[1,861,8],\"R\":5},{\"C\":[2,337,10],\"R\":5},{\"C\":[3,97,3],\"R\":5},{\"C\":[4,757,2],\"R\":5},{\"C\":[5,215,5],\"R\":5},{\"C\":[6,70,2],\"R\":5},{\"C\":[7,363,4],\"R\":5},{\"C\":[8,371,7],\"R\":5},{\"C\":[9,193,4],\"R\":5},{\"C\":[10,528,11],\"R\":5},{\"C\":[11,470],\"R\":21},{\"C\":[49,635,3],\"R\":5},{\"C\":[12,865,9],\"R\":5},{\"C\":[13,506,12],\"R\":5},{\"C\":[14,1897,11],\"R\":5},{\"C\":[15,188,5],\"R\":5},{\"C\":[50,1660,9],\"R\":5},{\"C\":[16,175,4],\"R\":5},{\"C\":[17,345,6],\"R\":5},{\"C\":[18,453,14],\"R\":5},{\"C\":[19,1273,11],\"R\":5},{\"C\":[20,896,4],\"R\":5},{\"C\":[52,27,1],\"R\":5},{\"C\":[22,298,11],\"R\":5},{\"C\":[23,149,2],\"R\":5},{\"C\":[24,47,1],\"R\":5},{\"C\":[26,2407,2],\"R\":5},{\"C\":[27,206,5],\"R\":5},{\"C\":[28,3375,9],\"R\":5},{\"C\":[53,54,2],\"R\":5},{\"C\":[29,498,8],\"R\":5},{\"C\":[63,101,3],\"R\":5},{\"C\":[54,27,1],\"R\":5},{\"C\":[30,1000,5],\"R\":5},{\"C\":[31,50,1],\"R\":5},{\"C\":[64,47],\"R\":21},{\"C\":[32,83,3],\"R\":5},{\"C\":[33,9620,31],\"R\":5},{\"C\":[34,101,3],\"R\":5},{\"C\":[35,290,7],\"R\":5},{\"C\":[36,346,8],\"R\":5},{\"C\":[56,190,4],\"R\":5},{\"C\":[37,189,7],\"R\":5},{\"C\":[68,148,4],\"R\":5},{\"C\":[57,71,3],\"R\":5},{\"C\":[58,27,1],\"R\":5},{\"C\":[38,322,6],\"R\":5},{\"C\":[40,609,3],\"R\":5},{\"C\":[41,1540,8],\"R\":5},{\"C\":[42,4305,37],\"R\":5},{\"C\":[43,2405,6],\"R\":5},{\"C\":[44,380,2],\"R\":5},{\"C\":[45,118],\"R\":21},{\"C\":[46,446,3],\"R\":5},{\"C\":[47,1062,5],\"R\":5},{\"C\":[48,28,1],\"R\":5},{\"C\":[20,0,7143,145],\"R\":4},{\"C\":[1,4635,72],\"R\":5},{\"C\":[2,12263,200],\"R\":5},{\"C\":[3,5426,98],\"R\":5},{\"C\":[4,2190,48],\"R\":5},{\"C\":[5,6205,127],\"R\":5},{\"C\":[6,1334,31],\"R\":5},{\"C\":[7,5106,116],\"R\":5},{\"C\":[8,6873,146],\"R\":5},{\"C\":[9,2648,58],\"R\":5},{\"C\":[10,3208,65],\"R\":5},{\"C\":[11,9213,178],\"R\":5},{\"C\":[49,4864,73],\"R\":5},{\"C\":[12,4162,84],\"R\":5},{\"C\":[13,12751,194],\"R\":5},{\"C\":[14,5529,105],\"R\":5},{\"C\":[15,3079,49],\"R\":5},{\"C\":[60,1882,21],\"R\":5},{\"C\":[50,12763,208],\"R\":5},{\"C\":[16,3003,45],\"R\":5},{\"C\":[17,8250,133],\"R\":5},{\"C\":[51,595,7],\"R\":5},{\"C\":[18,9840,181],\"R\":5},{\"C\":[19,12204,129],\"R\":5},{\"C\":[20,3407,54],\"R\":5},{\"C\":[52,956,10],\"R\":5},{\"C\":[21,3453,33],\"R\":5},{\"C\":[22,11552,211],\"R\":5},{\"C\":[23,646,12],\"R\":5},{\"C\":[61,415,3],\"R\":5},{\"C\":[24,1818,25],\"R\":5},{\"C\":[25,2950,26],\"R\":5},{\"C\":[26,2318,39],\"R\":5},{\"C\":[27,1269,18],\"R\":5},{\"C\":[28,4185,70],\"R\":5},{\"C\":[53,1637,22],\"R\":5},{\"C\":[29,5120,72],\"R\":5},{\"C\":[62,386,4],\"R\":5},{\"C\":[63,588,8],\"R\":5},{\"C\":[54,474,7],\"R\":5},{\"C\":[30,7571,89],\"R\":5},{\"C\":[31,4540,75],\"R\":5},{\"C\":[64,5441,18],\"R\":5},{\"C\":[65,76,1],\"R\":5},{\"C\":[66,124,3],\"R\":5},{\"C\":[32,2346,43],\"R\":5},{\"C\":[33,17179,181],\"R\":5},{\"C\":[67,593,9],\"R\":5},{\"C\":[34,1270,18],\"R\":5},{\"C\":[35,4676,70],\"R\":5},{\"C\":[36,10045,102],\"R\":5},{\"C\":[56,1170,19],\"R\":5},{\"C\":[37,4433,64],\"R\":5},{\"C\":[68,589,10],\"R\":5},{\"C\":[57,2222,24],\"R\":5},{\"C\":[58,333,4],\"R\":5},{\"C\":[38,3702,52],\"R\":5},{\"C\":[39,3096,22],\"R\":5},{\"C\":[59,1010,11],\"R\":5},{\"C\":[40,3881,76],\"R\":5},{\"C\":[41,4957,90],\"R\":5},{\"C\":[42,24776,363],\"R\":5},{\"C\":[43,15525,65],\"R\":5},{\"C\":[69,194,2],\"R\":5},{\"C\":[44,2989,27],\"R\":5},{\"C\":[45,1739,25],\"R\":5},{\"C\":[46,2068,29],\"R\":5},{\"C\":[70,700,7],\"R\":5},{\"C\":[71,191,3],\"R\":5},{\"C\":[47,5249,75],\"R\":5},{\"C\":[48,3205,49],\"R\":5},{\"C\":[21,1,603,1],\"R\":4},{\"C\":[12,692],\"R\":21},{\"C\":[14,1841],\"R\":21},{\"C\":[20,438],\"R\":21},{\"C\":[22,322],\"R\":21},{\"C\":[41,600],\"R\":21},{\"C\":[22,0,77616,451],\"R\":4},{\"C\":[1,21520,144],\"R\":5},{\"C\":[2,35159,266],\"R\":5},{\"C\":[3,10810,145],\"R\":5},{\"C\":[4,5294,78],\"R\":5},{\"C\":[5,29515,146],\"R\":5},{\"C\":[6,5511,28],\"R\":5},{\"C\":[7,7842,89],\"R\":5},{\"C\":[8,107796,834],\"R\":5},{\"C\":[9,16152,175],\"R\":5},{\"C\":[10,18976,92],\"R\":5},{\"C\":[11,101146,745],\"R\":5},{\"C\":[49,1816,46],\"R\":5},{\"C\":[12,57602,272],\"R\":5},{\"C\":[13,144424,1021],\"R\":5},{\"C\":[14,13350,143],\"R\":5},{\"C\":[15,1917,23],\"R\":5},{\"C\":[60,32652,138],\"R\":5},{\"C\":[50,51933,346],\"R\":5},{\"C\":[16,15488,36],\"R\":5},{\"C\":[17,163658,756],\"R\":5},{\"C\":[51,3241,26],\"R\":5},{\"C\":[18,67101,235],\"R\":5},{\"C\":[19,17636,163],\"R\":5},{\"C\":[20,4301,48],\"R\":5},{\"C\":[52,1366,14],\"R\":5},{\"C\":[21,7962,40],\"R\":5},{\"C\":[22,79167,676],\"R\":5},{\"C\":[23,1488,25],\"R\":5},{\"C\":[61,2423,22],\"R\":5},{\"C\":[24,3255,42],\"R\":5},{\"C\":[25,6103,57],\"R\":5},{\"C\":[26,11001,93],\"R\":5},{\"C\":[27,3527,44],\"R\":5},{\"C\":[28,24184,239],\"R\":5},{\"C\":[53,5240,74],\"R\":5},{\"C\":[29,17125,199],\"R\":5},{\"C\":[62,1623,6],\"R\":5},{\"C\":[63,501,5],\"R\":5},{\"C\":[54,545,11],\"R\":5},{\"C\":[30,9327,85],\"R\":5},{\"C\":[31,2866,35],\"R\":5},{\"C\":[64,1306,20],\"R\":5},{\"C\":[55,341,4],\"R\":5},{\"C\":[65,593,9],\"R\":5},{\"C\":[66,657,10],\"R\":5},{\"C\":[32,10657,59],\"R\":5},{\"C\":[33,45919,348],\"R\":5},{\"C\":[67,3430,39],\"R\":5},{\"C\":[34,3705,26],\"R\":5},{\"C\":[35,9089,110],\"R\":5},{\"C\":[36,19975,162],\"R\":5},{\"C\":[56,3550,24],\"R\":5},{\"C\":[37,2732,43],\"R\":5},{\"C\":[68,48,1],\"R\":5},{\"C\":[57,1307,17],\"R\":5},{\"C\":[58,99,1],\"R\":5},{\"C\":[38,24549,196],\"R\":5},{\"C\":[39,3900,50],\"R\":5},{\"C\":[59,1677,19],\"R\":5},{\"C\":[40,15092,97],\"R\":5},{\"C\":[41,7434,71],\"R\":5},{\"C\":[42,56485,455],\"R\":5},{\"C\":[43,11260,54],\"R\":5},{\"C\":[69,803,4],\"R\":5},{\"C\":[44,3181,38],\"R\":5},{\"C\":[45,13537,128],\"R\":5},{\"C\":[46,4973,56],\"R\":5},{\"C\":[70,212,6],\"R\":5},{\"C\":[71,1547,16],\"R\":5},{\"C\":[47,14195,121],\"R\":5},{\"C\":[48,2570,31],\"R\":5},{\"C\":[23,0,1122,7],\"R\":4},{\"C\":[1,3027,13],\"R\":5},{\"C\":[2,292,6],\"R\":5},{\"C\":[5,116,2],\"R\":5},{\"C\":[7,62,1],\"R\":5},{\"C\":[8,2049,11],\"R\":5},{\"C\":[9,314,3],\"R\":5},{\"C\":[10,133,2],\"R\":5},{\"C\":[11,521,5],\"R\":5},{\"C\":[49,114,2],\"R\":5},{\"C\":[12,727,8],\"R\":5},{\"C\":[13,4660,19],\"R\":5},{\"C\":[14,1052,4],\"R\":5},{\"C\":[60,134,1],\"R\":5},{\"C\":[50,711,2],\"R\":5},{\"C\":[16,27],\"R\":21},{\"C\":[17,16260,17],\"R\":5},{\"C\":[51,489,5],\"R\":5},{\"C\":[18,1738,15],\"R\":5},{\"C\":[19,3256,13],\"R\":5},{\"C\":[20,603,1],\"R\":5},{\"C\":[52,877,5],\"R\":5},{\"C\":[21,1240,4],\"R\":5},{\"C\":[22,6068,42],\"R\":5},{\"C\":[23,2041,17],\"R\":5},{\"C\":[61,6131,8],\"R\":5},{\"C\":[24,1106,15],\"R\":5},{\"C\":[25,2714,19],\"R\":5},{\"C\":[26,950,9],\"R\":5},{\"C\":[27,307,5],\"R\":5},{\"C\":[28,3246,23],\"R\":5},{\"C\":[53,739,12],\"R\":5},{\"C\":[29,951,17],\"R\":5},{\"C\":[63,560,1],\"R\":5},{\"C\":[54,9],\"R\":21},{\"C\":[30,1885,5],\"R\":5},{\"C\":[31,1239,3],\"R\":5},{\"C\":[64,204,4],\"R\":5},{\"C\":[65,64,2],\"R\":5},{\"C\":[66,62],\"R\":21},{\"C\":[32,385,3],\"R\":5},{\"C\":[33,1643,12],\"R\":5},{\"C\":[67,509,8],\"R\":5},{\"C\":[34,466,4],\"R\":5},{\"C\":[35,141],\"R\":21},{\"C\":[36,3647,17],\"R\":5},{\"C\":[37,44,2],\"R\":5},{\"C\":[58,633,1],\"R\":5},{\"C\":[38,3930,39],\"R\":5},{\"C\":[39,2960,18],\"R\":5},{\"C\":[59,2335,15],\"R\":5},{\"C\":[40,887,4],\"R\":5},{\"C\":[41,1210,3],\"R\":5},{\"C\":[42,6942,48],\"R\":5},{\"C\":[43,2363,20],\"R\":5},{\"C\":[69,420,3],\"R\":5},{\"C\":[44,4074,12],\"R\":5},{\"C\":[45,4464,51],\"R\":5},{\"C\":[46,1798,21],\"R\":5},{\"C\":[70,598,4],\"R\":5},{\"C\":[71,207,2],\"R\":5},{\"C\":[47,1682,9],\"R\":5},{\"C\":[48,591,5],\"R\":5},{\"C\":[24,0,180,31],\"R\":4},{\"C\":[1,100,22],\"R\":5},{\"C\":[2,311,80],\"R\":5},{\"C\":[3,169,39],\"R\":5},{\"C\":[4,142,31],\"R\":5},{\"C\":[5,231,48],\"R\":5},{\"C\":[6,42,6],\"R\":5},{\"C\":[7,279,54],\"R\":5},{\"C\":[8,116,23],\"R\":5},{\"C\":[9,134,25],\"R\":5},{\"C\":[10,122,26],\"R\":5},{\"C\":[11,308,63],\"R\":5},{\"C\":[49,169,37],\"R\":5},{\"C\":[12,211,42],\"R\":5},{\"C\":[13,248,55],\"R\":5},{\"C\":[14,146,31],\"R\":5},{\"C\":[15,105,23],\"R\":5},{\"C\":[60,21,6],\"R\":5},{\"C\":[50,277,63],\"R\":5},{\"C\":[16,83,21],\"R\":5},{\"C\":[17,261,60],\"R\":5},{\"C\":[51,3,1],\"R\":5},{\"C\":[18,420,90],\"R\":5},{\"C\":[19,236,58],\"R\":5},{\"C\":[20,95,20],\"R\":5},{\"C\":[52,13,3],\"R\":5},{\"C\":[21,86,19],\"R\":5},{\"C\":[22,375,75],\"R\":5},{\"C\":[23,10,3],\"R\":5},{\"C\":[24,39,9],\"R\":5},{\"C\":[25,35],\"R\":21},{\"C\":[26,52,16],\"R\":5},{\"C\":[27,13,3],\"R\":5},{\"C\":[28,76,19],\"R\":5},{\"C\":[53,16,4],\"R\":5},{\"C\":[29,157,36],\"R\":5},{\"C\":[63,12,4],\"R\":5},{\"C\":[54,10,2],\"R\":5},{\"C\":[30,234,39],\"R\":5},{\"C\":[31,147,22],\"R\":5},{\"C\":[64,25,3],\"R\":5},{\"C\":[66,13],\"R\":21},{\"C\":[32,85,19],\"R\":5},{\"C\":[33,309,64],\"R\":5},{\"C\":[67,3,1],\"R\":5},{\"C\":[34,67,14],\"R\":5},{\"C\":[35,92,22],\"R\":5},{\"C\":[36,167,31],\"R\":5},{\"C\":[56,33,6],\"R\":5},{\"C\":[37,100,26],\"R\":5},{\"C\":[68,13,3],\"R\":5},{\"C\":[57,78,16],\"R\":5},{\"C\":[58,3,1],\"R\":5},{\"C\":[38,138,20],\"R\":5},{\"C\":[39,4,1],\"R\":5},{\"C\":[40,111,23],\"R\":5},{\"C\":[41,184,38],\"R\":5},{\"C\":[42,582,129],\"R\":5},{\"C\":[43,69,16],\"R\":5},{\"C\":[44,38,10],\"R\":5},{\"C\":[45,80,11],\"R\":5},{\"C\":[46,42,9],\"R\":5},{\"C\":[71,4,1],\"R\":5},{\"C\":[47,87,17],\"R\":5},{\"C\":[48,91,13],\"R\":5},{\"C\":[25,11,0,7,1]},{\"C\":[18,10],\"R\":21},{\"C\":[19,20,2],\"R\":5},{\"C\":[22,11,1],\"R\":5},{\"C\":[33,10],\"R\":21},{\"C\":[34,7],\"R\":21},{\"C\":[57,20,2],\"R\":5},{\"C\":[40,9,1],\"R\":5},{\"C\":[41],\"R\":29},{\"C\":[42,28,3],\"R\":5},{\"C\":[26,0,1,8,1]},{\"C\":[0,3511,427],\"R\":3},{\"C\":[1,3873,475],\"R\":5},{\"C\":[2,566,69],\"R\":5},{\"C\":[3,1,8,1],\"R\":1},{\"C\":[0,868,106],\"R\":3},{\"C\":[4,610,76],\"R\":5},{\"C\":[5,1229,153],\"R\":5},{\"C\":[6,1478,182],\"R\":5},{\"C\":[7,1931,240],\"R\":5},{\"C\":[8,803,98],\"R\":5},{\"C\":[9,1,9,1],\"R\":1},{\"C\":[0,1294,160],\"R\":3},{\"C\":[10,912,113],\"R\":5},{\"C\":[11,1,7,1],\"R\":1},{\"C\":[0,2621,326],\"R\":3},{\"C\":[49,2007,250],\"R\":5},{\"C\":[12,1202,149],\"R\":5},{\"C\":[13,4297,535],\"R\":5},{\"C\":[14,3375,414],\"R\":5},{\"C\":[15,1544,190],\"R\":5},{\"C\":[60,606,75],\"R\":5},{\"C\":[50,343,43],\"R\":5},{\"C\":[16,275,34],\"R\":5},{\"C\":[17,543,68],\"R\":5},{\"C\":[51,1008,120],\"R\":5},{\"C\":[18,12133,1470],\"R\":5},{\"C\":[19,1,9,1],\"R\":1},{\"C\":[0,10274,1268],\"R\":3},{\"C\":[20,916,113],\"R\":5},{\"C\":[52,99,11],\"R\":5},{\"C\":[21,2849,341],\"R\":5},{\"C\":[22,9802,1186],\"R\":5},{\"C\":[23,69,8],\"R\":5},{\"C\":[61,18,2],\"R\":5},{\"C\":[24,102,12],\"R\":5},{\"C\":[25,135,16],\"R\":5},{\"C\":[26,3568,436],\"R\":5},{\"C\":[27,1,9,1],\"R\":1},{\"C\":[0,357,44],\"R\":3},{\"C\":[28,2214,270],\"R\":5},{\"C\":[53,468,57],\"R\":5},{\"C\":[29,1,8,1],\"R\":1},{\"C\":[0,1741,215],\"R\":3},{\"C\":[62,31,4],\"R\":5},{\"C\":[63,656,81],\"R\":5},{\"C\":[54,568,70],\"R\":5},{\"C\":[30,407,50],\"R\":5},{\"C\":[31,115,14],\"R\":5},{\"C\":[64,203,26],\"R\":5},{\"C\":[55,229,29],\"R\":5},{\"C\":[65,45,5],\"R\":5},{\"C\":[66,61,8],\"R\":5},{\"C\":[32,2043,249],\"R\":5},{\"C\":[33,1,7,1],\"R\":1},{\"C\":[0,3894,485],\"R\":3},{\"C\":[67,39,5],\"R\":5},{\"C\":[34,2708,338],\"R\":5},{\"C\":[35,1389,173],\"R\":5},{\"C\":[36,2204,271],\"R\":5},{\"C\":[56,540,68],\"R\":5},{\"C\":[37,1,7,1],\"R\":1},{\"C\":[0,1567,192],\"R\":3},{\"C\":[68,273,33],\"R\":5},{\"C\":[57,175,22],\"R\":5},{\"C\":[58,58,7],\"R\":5},{\"C\":[38,207,26],\"R\":5},{\"C\":[39,67,8],\"R\":5},{\"C\":[59,50,6],\"R\":5},{\"C\":[40,4504,545],\"R\":5},{\"C\":[41,1,8,1],\"R\":1},{\"C\":[0,5774,697],\"R\":3},{\"C\":[42,1,18,2],\"R\":1},{\"C\":[0,23444,2826],\"R\":3},{\"C\":[43,8255,984],\"R\":5},{\"C\":[44,194,21],\"R\":5},{\"C\":[45,201,24],\"R\":5},{\"C\":[46,340,42],\"R\":5},{\"C\":[70,8,1],\"R\":5},{\"C\":[71,48,6],\"R\":5},{\"C\":[47,472,57],\"R\":5},{\"C\":[48,290,35],\"R\":5},{\"C\":[27,10,9,1],\"R\":4},{\"C\":[28,0,1,415,7]},{\"C\":[2,72,2],\"R\":5},{\"C\":[4,131],\"R\":21},{\"C\":[5,123],\"R\":21},{\"C\":[7,16,1],\"R\":5},{\"C\":[8,469,7],\"R\":5},{\"C\":[9,180,3],\"R\":5},{\"C\":[11,45,1],\"R\":5},{\"C\":[13,265,5],\"R\":5},{\"C\":[14,135,2],\"R\":5},{\"C\":[17,16,1],\"R\":5},{\"C\":[19,132,3],\"R\":5},{\"C\":[21,119,2],\"R\":5},{\"C\":[22,316,4],\"R\":5},{\"C\":[29,180,3],\"R\":5},{\"C\":[64,251,4],\"R\":5},{\"C\":[33,159,2],\"R\":5},{\"C\":[67,82],\"R\":21},{\"C\":[35,90,1],\"R\":5},{\"C\":[40,13],\"R\":21},{\"C\":[42,360,5],\"R\":5},{\"C\":[43,226,3],\"R\":5},{\"C\":[29,0,9307,129],\"R\":4},{\"C\":[1,4910,56],\"R\":5},{\"C\":[2,2211,18],\"R\":5},{\"C\":[3,918,9],\"R\":5},{\"C\":[4,94,2],\"R\":5},{\"C\":[5,1523,13],\"R\":5},{\"C\":[6,532,6],\"R\":5},{\"C\":[7,2092,21],\"R\":5},{\"C\":[8,12687,196],\"R\":5},{\"C\":[9,1781,29],\"R\":5},{\"C\":[10,517,5],\"R\":5},{\"C\":[11,8951,128],\"R\":5},{\"C\":[49,1253,17],\"R\":5},{\"C\":[12,4115,67],\"R\":5},{\"C\":[13,17824,275],\"R\":5},{\"C\":[14,2663,31],\"R\":5},{\"C\":[15,165,3],\"R\":5},{\"C\":[60,679,7],\"R\":5},{\"C\":[50,2140,29],\"R\":5},{\"C\":[16,264,6],\"R\":5},{\"C\":[17,2893,35],\"R\":5},{\"C\":[51,1356,13],\"R\":5},{\"C\":[18,2990,44],\"R\":5},{\"C\":[19,3877,32],\"R\":5},{\"C\":[20,543,5],\"R\":5},{\"C\":[52,371,2],\"R\":5},{\"C\":[21,3166,20],\"R\":5},{\"C\":[22,13553,146],\"R\":5},{\"C\":[23,3057,20],\"R\":5},{\"C\":[61,4466,42],\"R\":5},{\"C\":[24,2066,19],\"R\":5},{\"C\":[25,2134],\"R\":21},{\"C\":[26,2129,28],\"R\":5},{\"C\":[27,1413,17],\"R\":5},{\"C\":[28,6595,72],\"R\":5},{\"C\":[53,2384,28],\"R\":5},{\"C\":[29,4954,63],\"R\":5},{\"C\":[62,1377,11],\"R\":5},{\"C\":[54,1014,6],\"R\":5},{\"C\":[30,2699,23],\"R\":5},{\"C\":[31,658,5],\"R\":5},{\"C\":[64,781,9],\"R\":5},{\"C\":[55,658,2],\"R\":5},{\"C\":[65,690,7],\"R\":5},{\"C\":[66,100,1],\"R\":5},{\"C\":[32,1436,10],\"R\":5},{\"C\":[33,6694,94],\"R\":5},{\"C\":[67,3305,38],\"R\":5},{\"C\":[34,2458,10],\"R\":5},{\"C\":[35,4023,35],\"R\":5},{\"C\":[36,9406,69],\"R\":5},{\"C\":[56,2434,7],\"R\":5},{\"C\":[37,2115,17],\"R\":5},{\"C\":[57,541,6],\"R\":5},{\"C\":[58,765,1],\"R\":5},{\"C\":[38,12207,72],\"R\":5},{\"C\":[39,5972,38],\"R\":5},{\"C\":[59,3485,19],\"R\":5},{\"C\":[40,1251,13],\"R\":5},{\"C\":[41,1350,17],\"R\":5},{\"C\":[42,14397,166],\"R\":5},{\"C\":[43,4544,39],\"R\":5},{\"C\":[69,368,4],\"R\":5},{\"C\":[44,1394,18],\"R\":5},{\"C\":[45,7383,57],\"R\":5},{\"C\":[46,3391,24],\"R\":5},{\"C\":[70,479,7],\"R\":5},{\"C\":[71,1297,8],\"R\":5},{\"C\":[47,4704,49],\"R\":5},{\"C\":[48,1821,16],\"R\":5},{\"C\":[30,0,0,48,24]},{\"C\":[1,16,8],\"R\":5},{\"C\":[2,48,24],\"R\":5},{\"C\":[3,50,25],\"R\":5},{\"C\":[4,36,18],\"R\":5},{\"C\":[5,48,24],\"R\":5},{\"C\":[6,30,15],\"R\":5},{\"C\":[7,34,17],\"R\":5},{\"C\":[8,12,6],\"R\":5},{\"C\":[9,30,15],\"R\":5},{\"C\":[10,8,4],\"R\":5},{\"C\":[11,72,36],\"R\":5},{\"C\":[49,34,17],\"R\":5},{\"C\":[12,18,9],\"R\":5},{\"C\":[13,82,41],\"R\":5},{\"C\":[14,36,18],\"R\":5},{\"C\":[15,12,6],\"R\":5},{\"C\":[60,4,2],\"R\":5},{\"C\":[50,14,7],\"R\":5},{\"C\":[16,36,18],\"R\":5},{\"C\":[17,86,43],\"R\":5},{\"C\":[51,2,1],\"R\":5},{\"C\":[18,34,17],\"R\":5},{\"C\":[19,58,29],\"R\":5},{\"C\":[20,4,2],\"R\":5},{\"C\":[52,14,7],\"R\":5},{\"C\":[21,12,6],\"R\":5},{\"C\":[22,26,13],\"R\":5},{\"C\":[23,2,1],\"R\":5},{\"C\":[25,4,2],\"R\":5},{\"C\":[26,20,10],\"R\":5},{\"C\":[27,4,2],\"R\":5},{\"C\":[28,2,1],\"R\":5},{\"C\":[29],\"R\":29},{\"C\":[62],\"R\":29},{\"C\":[31],\"R\":29},{\"C\":[64,6,3],\"R\":5},{\"C\":[55,8,4],\"R\":5},{\"C\":[32,22,11],\"R\":5},{\"C\":[33,16,8],\"R\":5},{\"C\":[34,18,9],\"R\":5},{\"C\":[35,8,4],\"R\":5},{\"C\":[36,16,8],\"R\":5},{\"C\":[56,2,1],\"R\":5},{\"C\":[37,4,2],\"R\":5},{\"C\":[68,2,1],\"R\":5},{\"C\":[58],\"R\":29},{\"C\":[38,10,5],\"R\":5},{\"C\":[39,4,2],\"R\":5},{\"C\":[59,2,1],\"R\":5},{\"C\":[40,8,4],\"R\":5},{\"C\":[41,20,10],\"R\":5},{\"C\":[42,32,16],\"R\":5},{\"C\":[43,20,10],\"R\":5},{\"C\":[44,2,1],\"R\":5},{\"C\":[47,10,5],\"R\":5},{\"C\":[48,12,6],\"R\":5},{\"C\":[31,1,4,2],\"R\":4},{\"C\":[2,6,3],\"R\":5},{\"C\":[3,4,2],\"R\":5},{\"C\":[4,10,5],\"R\":5},{\"C\":[5,8,4],\"R\":5},{\"C\":[6,14,7],\"R\":5},{\"C\":[7,16,8],\"R\":5},{\"C\":[10,6,3],\"R\":5},{\"C\":[11,10,5],\"R\":5},{\"C\":[49],\"R\":29},{\"C\":[12,14,7],\"R\":5},{\"C\":[13,10,5],\"R\":5},{\"C\":[14],\"R\":29},{\"C\":[15,4,2],\"R\":5},{\"C\":[60],\"R\":29},{\"C\":[50,6,3],\"R\":5},{\"C\":[16,2,1],\"R\":5},{\"C\":[17,4,2],\"R\":5},{\"C\":[51,2,1],\"R\":5},{\"C\":[18,18,9],\"R\":5},{\"C\":[19,14,7],\"R\":5},{\"C\":[22,8,4],\"R\":5},{\"C\":[26,4,2],\"R\":5},{\"C\":[28],\"R\":29},{\"C\":[54,2,1],\"R\":5},{\"C\":[30],\"R\":29},{\"C\":[31],\"R\":29},{\"C\":[64,10,5],\"R\":5},{\"C\":[55,2,1],\"R\":5},{\"C\":[66],\"R\":29},{\"C\":[32,4,2],\"R\":5},{\"C\":[33,22,11],\"R\":5},{\"C\":[34,8,4],\"R\":5},{\"C\":[36,10,5],\"R\":5},{\"C\":[37,6,3],\"R\":5},{\"C\":[59,2,1],\"R\":5},{\"C\":[40,4,2],\"R\":5},{\"C\":[41,6,3],\"R\":5},{\"C\":[42,20,10],\"R\":5},{\"C\":[43,4,2],\"R\":5},{\"C\":[47,2,1],\"R\":5},{\"C\":[48,4,2],\"R\":5},{\"C\":[32,17,1,51,1]},{\"C\":[22,52],\"R\":21},{\"C\":[33,0,0,255,20]},{\"C\":[1,763,54],\"R\":5},{\"C\":[2,72,6],\"R\":5},{\"C\":[3,43,4],\"R\":5},{\"C\":[4,61,6],\"R\":5},{\"C\":[5,235,18],\"R\":5},{\"C\":[6,299,22],\"R\":5},{\"C\":[7,285,23],\"R\":5},{\"C\":[8,83,6],\"R\":5},{\"C\":[9,150,11],\"R\":5},{\"C\":[10,178,14],\"R\":5},{\"C\":[11,575,36],\"R\":5},{\"C\":[49,661,48],\"R\":5},{\"C\":[12,434,32],\"R\":5},{\"C\":[13,1102,80],\"R\":5},{\"C\":[14,512,37],\"R\":5},{\"C\":[15,408,19],\"R\":5},{\"C\":[60,17,1],\"R\":5},{\"C\":[50,43,4],\"R\":5},{\"C\":[16,66,6],\"R\":5},{\"C\":[17,41,3],\"R\":5},{\"C\":[51,80,7],\"R\":5},{\"C\":[18,784,63],\"R\":5},{\"C\":[19,681,53],\"R\":5},{\"C\":[20,56,4],\"R\":5},{\"C\":[21,16,1],\"R\":5},{\"C\":[22,236,21],\"R\":5},{\"C\":[24,8,1],\"R\":5},{\"C\":[25,16,2],\"R\":5},{\"C\":[26,652,64],\"R\":5},{\"C\":[27,121,11],\"R\":5},{\"C\":[28,314,31],\"R\":5},{\"C\":[53,62,6],\"R\":5},{\"C\":[29,72,7],\"R\":5},{\"C\":[63,102,10],\"R\":5},{\"C\":[54,53,6],\"R\":5},{\"C\":[64,55],\"R\":21},{\"C\":[55,19,2],\"R\":5},{\"C\":[65,8,1],\"R\":5},{\"C\":[32,361,31],\"R\":5},{\"C\":[33,1,8,1],\"R\":1},{\"C\":[0,310,23],\"R\":3},{\"C\":[34,469,34],\"R\":5},{\"C\":[35,60,8],\"R\":5},{\"C\":[36,208,17],\"R\":5},{\"C\":[56,3,1],\"R\":5},{\"C\":[37,156,13],\"R\":5},{\"C\":[68,48,4],\"R\":5},{\"C\":[57,16,2],\"R\":5},{\"C\":[58,64,5],\"R\":5},{\"C\":[40,76],\"R\":21},{\"C\":[41,222,19],\"R\":5},{\"C\":[42,901,79],\"R\":5},{\"C\":[43,26,4],\"R\":5},{\"C\":[45,33,2],\"R\":5},{\"C\":[34,0,1,85,1]},{\"C\":[0,38231,577],\"R\":3},{\"C\":[1,1,67,3],\"R\":1},{\"C\":[0,41157,678],\"R\":3},{\"C\":[2,1,72,5],\"R\":1},{\"C\":[0,4772,211],\"R\":3},{\"C\":[3,1,79,3],\"R\":1},{\"C\":[0,8843,287],\"R\":3},{\"C\":[4,1,20,1],\"R\":1},{\"C\":[0,6035,215],\"R\":3},{\"C\":[5,1,55,2],\"R\":1},{\"C\":[0,15345,366],\"R\":3},{\"C\":[6,1,57,3],\"R\":1},{\"C\":[0,16921,313],\"R\":3},{\"C\":[7,1,70,5],\"R\":1},{\"C\":[0,16302,345],\"R\":3},{\"C\":[8,1,183,12],\"R\":1},{\"C\":[0,6949,137],\"R\":3},{\"C\":[9,9750,208],\"R\":5},{\"C\":[10,1,9,2],\"R\":1},{\"C\":[0,7957,198],\"R\":3},{\"C\":[11,1,30,4],\"R\":1},{\"C\":[0,25035,521],\"R\":3},{\"C\":[49,1,21,3],\"R\":1},{\"C\":[0,19069,422],\"R\":3},{\"C\":[12,1,168,6],\"R\":1},{\"C\":[0,12689,279],\"R\":3},{\"C\":[13,1,147,8],\"R\":1},{\"C\":[0,49654,966],\"R\":3},{\"C\":[14,28382,700],\"R\":5},{\"C\":[15,16787,318],\"R\":5},{\"C\":[60,5466,96],\"R\":5},{\"C\":[50,1,42,3],\"R\":1},{\"C\":[0,2752,194],\"R\":3},{\"C\":[16,1,166,2],\"R\":1},{\"C\":[0,3170,100],\"R\":3},{\"C\":[17,1,14,2],\"R\":1},{\"C\":[0,6035,401],\"R\":3},{\"C\":[51,14628,206],\"R\":5},{\"C\":[18,1,35,3],\"R\":1},{\"C\":[0,158371,2171],\"R\":3},{\"C\":[19,121561,1797],\"R\":5},{\"C\":[20,13076,208],\"R\":5},{\"C\":[52,1193,26],\"R\":5},{\"C\":[21,46639,678],\"R\":5},{\"C\":[22,1,257,9],\"R\":1},{\"C\":[0,108271,1635],\"R\":3},{\"C\":[23,1124,25],\"R\":5},{\"C\":[61,141,5],\"R\":5},{\"C\":[24,1,3,1],\"R\":1},{\"C\":[0,1445,34],\"R\":3},{\"C\":[25,1,40,1],\"R\":1},{\"C\":[0,2740,52],\"R\":3},{\"C\":[26,1,114,3],\"R\":1},{\"C\":[0,35449,656],\"R\":3},{\"C\":[27,3950,78],\"R\":5},{\"C\":[28,1,7,1],\"R\":1},{\"C\":[0,19347,378],\"R\":3},{\"C\":[53,1,12,3],\"R\":1},{\"C\":[0,4369,93],\"R\":3},{\"C\":[29,1,226,8],\"R\":1},{\"C\":[0,10808,278],\"R\":3},{\"C\":[62,376,17],\"R\":5},{\"C\":[63,1,60,3],\"R\":1},{\"C\":[0,4370,96],\"R\":3},{\"C\":[54,1,7,1],\"R\":1},{\"C\":[0,3801,86],\"R\":3},{\"C\":[30,2104,59],\"R\":5},{\"C\":[31,568,25],\"R\":5},{\"C\":[64,1,7,1],\"R\":1},{\"C\":[0,2721,71],\"R\":3},{\"C\":[55,1,20,2],\"R\":1},{\"C\":[0,1689,54],\"R\":3},{\"C\":[65,160,8],\"R\":5},{\"C\":[66,1,16,1],\"R\":1},{\"C\":[0,269,15],\"R\":3},{\"C\":[32,1,12,2],\"R\":1},{\"C\":[0,23210,442],\"R\":3},{\"C\":[33,1,170,10],\"R\":1},{\"C\":[0,31915,669],\"R\":3},{\"C\":[67,483,10],\"R\":5},{\"C\":[34,1,39,2],\"R\":1},{\"C\":[0,26490,531],\"R\":3},{\"C\":[35,1,48,3],\"R\":1},{\"C\":[0,14827,349],\"R\":3},{\"C\":[36,1,41,2],\"R\":1},{\"C\":[0,15183,368],\"R\":3},{\"C\":[56,1,45,1],\"R\":1},{\"C\":[0,3647,116],\"R\":3},{\"C\":[37,1,104,2],\"R\":1},{\"C\":[0,15311,393],\"R\":3},{\"C\":[68,1,6,1],\"R\":1},{\"C\":[0,3558,108],\"R\":3},{\"C\":[57,1,12,1],\"R\":1},{\"C\":[0,3370,78],\"R\":3},{\"C\":[58,1,12,1],\"R\":1},{\"C\":[0,1385,40],\"R\":3},{\"C\":[38,1,26,2],\"R\":1},{\"C\":[0,2262,69],\"R\":3},{\"C\":[39,196,22],\"R\":5},{\"C\":[59,96,10],\"R\":5},{\"C\":[40,1,15,1],\"R\":1},{\"C\":[0,57867,814],\"R\":3},{\"C\":[41,1,65,1],\"R\":1},{\"C\":[0,66066,945],\"R\":3},{\"C\":[42,1,490,17],\"R\":1},{\"C\":[0,276386,3917],\"R\":3},{\"C\":[43,143269,1890],\"R\":5},{\"C\":[44,1302,27],\"R\":5},{\"C\":[45,1,23,2],\"R\":1},{\"C\":[0,2611,43],\"R\":3},{\"C\":[46,3690,85],\"R\":5},{\"C\":[70,250,3],\"R\":5},{\"C\":[71,230,11],\"R\":5},{\"C\":[47,1,17,3],\"R\":1},{\"C\":[0,3650,154],\"R\":3},{\"C\":[48,1,12,2],\"R\":1},{\"C\":[0,2798,104],\"R\":3},{\"C\":[35,26,13,2],\"R\":4},{\"C\":[36,0,1,5992,3]},{\"C\":[1,140,1],\"R\":5},{\"C\":[2,502],\"R\":21},{\"C\":[3,1049],\"R\":21},{\"C\":[5,2925,3],\"R\":5},{\"C\":[7,1415,1],\"R\":5},{\"C\":[8,7679,2],\"R\":5},{\"C\":[10,461,1],\"R\":5},{\"C\":[11,889],\"R\":21},{\"C\":[12,6190,4],\"R\":5},{\"C\":[13,11060,6],\"R\":5},{\"C\":[14,623,1],\"R\":5},{\"C\":[15,633],\"R\":21},{\"C\":[50,3579],\"R\":21},{\"C\":[17,10896,3],\"R\":5},{\"C\":[18,6865,7],\"R\":5},{\"C\":[19,4737,2],\"R\":5},{\"C\":[20,243,1],\"R\":5},{\"C\":[22,18010,6],\"R\":5},{\"C\":[26,5734,3],\"R\":5},{\"C\":[27,3263,2],\"R\":5},{\"C\":[28,2942],\"R\":21},{\"C\":[29,1061],\"R\":21},{\"C\":[30,2248],\"R\":21},{\"C\":[64,2370,1],\"R\":5},{\"C\":[33,9812,4],\"R\":5},{\"C\":[34,171,1],\"R\":5},{\"C\":[35,1639],\"R\":21},{\"C\":[36,13084,2],\"R\":5},{\"C\":[57,1134,1],\"R\":5},{\"C\":[38,886],\"R\":21},{\"C\":[40,5125,2],\"R\":5},{\"C\":[41,682],\"R\":21},{\"C\":[42,1276],\"R\":21},{\"C\":[43,303,1],\"R\":5},{\"C\":[45,663],\"R\":21},{\"C\":[47,1831,2],\"R\":5}]}],\"IC\":true,\"HAD\":true,\"ValueDicts\":{\"D0\":[\"10(18) - Space heating - Room air to air heat pump\",\"13 - Double glazed window\",\"15 - Weather sealing\",\"17 - Low flow shower rose\",\"1A - Water heating - Gas/LPG storage replacing electric resistance\",\"1B - Water heating - Gas/LPG instantaneous replacing electric resistance\",\"1C(18) - Water heating - Electric boosted solar replacing electric resistance\",\"1D(18) - Water heating - Heat pump replacing electric resistance\",\"1F - Water heating - Gas/LPG boosted solar replacing electric resistance\",\"21A(18) - Lighting - Incandescent GLS or CFL replacement\",\"21B - Lighting - Incandescent reflector lamp replacement\",\"21C - Lighting - 12V halogen lamp replacement\",\"21D - Lighting - 12V downlight and transformer replacement\",\"21E - Lighting - Mains voltage GU10 halogen lamp replaced with GU10 lamp\",\"21F - Lighting - Mains voltage GU10 downlight replaced with integrated downlight\",\"22 - High efficiency refrigerator and freezer\",\"24 - High efficiency television\",\"25 - Energy efficient clothes dryer\",\"30 - In-home display unit\",\"32(18) - HE Refrigerated Display Cabinet\",\"32(21) - Refrigerated cabinet\",\"34 J6(18) - Building based lighting upgrade\",\"34 Non J6(18) - Building based lighting upgrade\",\"35(18) - Non building based lighting upgrade\",\"36 - Water efficient pre-rinse spray valve\",\"3B - Water heating - Gas/LPG boosted solar replacing gas/LPG\",\"3C - Water heating - Heat pump replacing gas\",\"3D - Water heating - Electric boosted solar replacing gas\",\"43 - Cold Room\",\"44 - Commercial and industrial heat pump water heater\",\"45 - Home energy rating assessment\",\"46 - Induction cooktops\",\"47 - Commercial and industrial solar PV system\",\"5(18) - Space heating - Ducted gas heater\",\"6(23) - Space heating and cooling - High efficiency air conditioner\",\"9(18) - Space heating - Gas/LPG room heater\",\"PBA measurement and verification\"],\"D1\":[\"3169\",\"3172\",\"3182\",\"3183\",\"3184\",\"3186\",\"3187\",\"3188\",\"3189\",\"3190\",\"3191\",\"3192\",\"3194\",\"3195\",\"3196\",\"3197\",\"3206\",\"3207\",\"3805\",\"3806\",\"3807\",\"3809\",\"3810\",\"3812\",\"3814\",\"3815\",\"3910\",\"3911\",\"3912\",\"3915\",\"3922\",\"3925\",\"3930\",\"3931\",\"3934\",\"3936\",\"3939\",\"3941\",\"3953\",\"3956\",\"3975\",\"3976\",\"3977\",\"3978\",\"3980\",\"3981\",\"3984\",\"3995\",\"3996\",\"3193\",\"3205\",\"3804\",\"3808\",\"3913\",\"3919\",\"3927\",\"3940\",\"3943\",\"3944\",\"3959\",\"3202\",\"3813\",\"3916\",\"3918\",\"3926\",\"3928\",\"3929\",\"3933\",\"3942\",\"3979\",\"3991\",\"3992\"],\"D2\":[\"Residential\",\"Business\"]}}]}}}}]}",
+  "fullEvidenceSha256": {
+    "model": "dfe644c536d74855e1b372bb8c842c1c895b51ef6c604da09cb6d2ddb8098ee7",
+    "schema": "c265e615cb51081eefa85542d0571807b32d42a0c322a5021b82fcb11c793d85",
+    "response": "b025a265a9edc8e94f81df5d2b0e06d954b68b0c87fd0fa33a5d90daaf99df72"
+  },
+  "fixtureProjection": "Official response retained exactly; model/schema retain only exact activity control and sector source fields"
+}

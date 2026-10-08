@@ -64,6 +64,32 @@ function validQuickUpgrade(overrides = {}) {
   };
 }
 
+test("enquiry timing and explicit business sector survive canonical validation without widening contact sharing", () => {
+  const parsed = validateLeadPayload(validQuickUpgrade({ quoteWindowValue: 2, quoteWindowUnit: "months", requestedCompletion: "one-month", customerSector: "business" }));
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.value.quoteWindowValue, 2);
+  assert.equal(parsed.value.quoteWindowUnit, "months");
+  assert.equal(parsed.value.requestedCompletion, "one-month");
+  assert.equal(parsed.value.customerSector, "business");
+  const envelope = createLeadEnvelope(parsed.value);
+  assert.equal(envelope.customerSector, "business");
+  assert.equal(envelope.directTradeTriage.contactConsentReceipt.disclosedFields.includes("customer_name"), false);
+  assert.equal(envelope.directTradeTriage.contactConsentReceipt.disclosedFields.includes("customer_phone"), false);
+  for (const input of [{ quoteWindowValue: 0 }, { requestedCompletion: "date", requestedCompletionDate: "bad-date" }, { customerSector: "guess" }]) {
+    assert.equal(validateLeadPayload(validQuickUpgrade(input)).ok, false);
+  }
+});
+
+test("a verified custom council host cannot submit another council's request or silently drop attribution", async () => {
+  let writes = 0;
+  const handler = quickHandler({ createOpportunityFromLead: async () => { writes++; return { id: "saved", allocation: { activeCount: 1 } }; } });
+  for (const body of [validQuickUpgrade(), validQuickUpgrade({ councilReference: "b".repeat(32) })]) {
+    const response = await handler(new Request("https://ausenergyassessments.com/api/leads", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://ausenergyassessments.com", "x-tlink-council-reference": "a".repeat(32) }, body: JSON.stringify(body) }));
+    assert.equal(response.status, 400);
+  }
+  assert.equal(writes, 0);
+});
+
 test("the quick upgrade contract uses one bounded current consent and stable public identity", () => {
   assert.equal(QUICK_UPGRADE_ENQUIRY_KIND, "quick-upgrade-options");
   assert.equal(QUICK_UPGRADE_SOURCE_JOURNEY, "quick-upgrade-options");
@@ -474,7 +500,9 @@ function sourceDatabase() {
     source_reference text NOT NULL, contact_limit integer NOT NULL,
     maximum_connected_installers integer NOT NULL, expires_at text NOT NULL,
     expired_at text NOT NULL, created_by_uid text NOT NULL, created_at text NOT NULL,
-    updated_at text NOT NULL
+    updated_at text NOT NULL,
+    quote_window_value integer NOT NULL DEFAULT 30, quote_window_unit text NOT NULL DEFAULT 'days',
+    requested_completion text NOT NULL DEFAULT 'flexible', requested_work_by text NOT NULL DEFAULT '', customer_sector text NOT NULL DEFAULT 'unclassified'
   );
   CREATE UNIQUE INDEX trade_opportunities_source_reference_idx
     ON trade_opportunities (source_reference) WHERE source_reference <> '';

@@ -177,7 +177,7 @@ test("public plan validation keeps only the bounded canonicalizable snapshot and
     "clientStartedAt", "consent", "customerFirstName", "customerLastName", "customerState", "customerStreetAddress", "customerSuburb", "customerUnitNumber",
     "email", "enquiry", "name", "phone", "postcode",
     "planSnapshot", "preferredContact", "projectCategories", "projectNotes", "quotePreparation", "submissionType", "submittedAt", "tradeSharing",
-    "submissionId", "upgrades", "website",
+    "submissionId", "upgrades", "website", "quoteWindowValue", "quoteWindowUnit", "requestedCompletion", "requestedCompletionDate", "customerSector",
   ].sort());
   assert.equal(result.value.planSnapshot.propertyContext.propertyType, "townhouse");
   assert.equal("items" in result.value.planSnapshot, false);

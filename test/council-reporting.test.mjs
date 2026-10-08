@@ -8,13 +8,14 @@ import { loadCouncilDemo } from "../src/lib/council-demo.ts";
 import { postcodeCoordinate } from "../src/lib/postcode-distance.ts";
 import { isValidAbn } from "../src/lib/trade-abn.ts";
 import { creditexCanonicalSha256 } from "../src/lib/creditex-interchange-preflight.ts";
+import { councilReportCsv } from "../src/lib/council-report-export.ts";
 
 const now=new Date("2026-09-23T03:00:00Z");
 const scope={ councilId:"council-a",name:"Test council",state:"VIC",postcodes:["3000","3001"],period:"quarter" };
 const schema=fs.readFileSync(new URL("../db/schema.ts",import.meta.url),"utf8");
 function fixture() {
   const db=new DatabaseSync(":memory:");
-  for (const name of ["trade_accounts","trade_account_verification_reviews","trade_work_orders","trade_crm_job_details","trade_crm_service_sites","trade_work_order_events","trade_crm_quick_invoices","trade_crm_accepted_invoices","trade_crm_quick_invoice_credits","trade_opportunities","trade_opportunity_matches","compliance_cases","compliance_calculation_runs","compliance_calculator_versions","compliance_calculator_engine_receipts"]) {
+  for (const name of ["trade_accounts","trade_account_verification_reviews","trade_work_orders","trade_crm_job_details","trade_crm_customers","trade_crm_service_sites","trade_work_order_events","trade_crm_quick_invoices","trade_crm_accepted_invoices","trade_crm_quick_invoice_credits","trade_opportunities","trade_opportunity_matches","compliance_cases","compliance_programs","compliance_activity_versions","compliance_calculation_runs","compliance_calculator_versions","compliance_calculator_engine_receipts"]) {
     const start=schema.indexOf(`sqliteTable("${name}", {`); assert.ok(start>=0);
     const block=schema.slice(start,schema.indexOf("}, (table)",start));
     const cols=[...block.matchAll(/(text|integer|real)\("([a-z_0-9]+)"/g)];
@@ -39,7 +40,8 @@ function fixture() {
   };
   account();
   const job=(id,overrides={}) => {
-    const { owner="owner",date="2026-09-10T12:00:00Z",postcode="3000",state="VIC",activity="hot-water",stage="completed",invoice=true,customer=`customer-${id}`,siteOwner=owner,...work }=overrides;
+    const { owner="owner",date="2026-09-10T12:00:00Z",postcode="3000",state="VIC",activity="hot-water",stage="completed",invoice=true,customer=`customer-${id}`,customerType="residential",customerOwner=owner,siteOwner=owner,...work }=overrides;
+    if (!db.prepare("SELECT id FROM trade_crm_customers WHERE id=? AND firebase_uid=?").get(customer,customerOwner)) insert("trade_crm_customers",{id:customer,firebase_uid:customerOwner,customer_type:customerType});
     insert("trade_work_orders",{ id,firebase_uid:owner,partner_type:"installer",work_type:"job",record_status:"active",stage,service_category:activity,created_at:date,...work });
     insert("trade_crm_job_details",{ id:`d-${id}`,work_order_id:id,firebase_uid:owner,service_site_id:`s-${id}`,crm_customer_id:customer });
     insert("trade_crm_service_sites",{ id:`s-${id}`,firebase_uid:siteOwner,customer_id:customer,postcode,address_state:state,record_status:"active" });
@@ -48,12 +50,14 @@ function fixture() {
   };
   const prepare=(sql,values=[]) => ({ sql,values,bind:(...args) => prepare(sql,args),first:async () => db.prepare(sql).get(...values),all:async () => ({ results:db.prepare(sql).all(...values) }) });
   const d1={ prepare,batch:async statements => statements.map(statement => ({ results:db.prepare(statement.sql).all(...statement.values) })) };
-  const impact=(job,unit="VEEC",suffix="") => {
-    const key=`${job}-${unit}${suffix}`; const hash=creditexCanonicalSha256({ evidence:true }); const pdf="a".repeat(64); const input={ postcode:"3000" }; const output={ output:{ decimal:"20",unit },receiptHash:hash };
+  const impact=(job,unit="VEEC",suffix="",options={}) => {
+    const key=`${job}-${unit}${suffix}`; const hash=creditexCanonicalSha256({ evidence:true }); const pdf="a".repeat(64); const input={ postcode:"3000",...options.inputs }; const output={ output:{ decimal:"20",unit },receiptHash:hash };
     const packet={ contract:"creditex-output-action-packet/v1",actionKind:"certificate_submission",outputClass:"tradable_certificate",outputCode:unit,programCode:unit==="VEEC" ? "VEU" : "SRES",complianceCaseId:`case-${key}`,caseRevision:1,workPack:{ finalRecordId:`final-${key}` },calculation:{ runId:`calc-${key}`,quantity:"20",unit,runByUid:"runner",verifiedByUid:"verifier",verifiedAt:"2026-09-01",inputSha256:creditexCanonicalSha256(input),outputSha256:creditexCanonicalSha256(output),receiptSha256:hash,calculatorVersionId:`calculator-${key}`,engineCalculatorKey:`key-${key}`,engineCalculatorVersion:1,calculatorSourceSha256:pdf } };
     const packetHash=creditexCanonicalSha256(packet); const reference=`provider-${key}`;
     const response={ packetSha256:packetHash,outcome:"provider_accepted",recordedByUid:"outcome-reviewer",providerReference:reference };
     insert("compliance_cases",{ id:`case-${key}`,organisation_id:"org",work_order_id:job,installer_uid:"owner",status:"accepted",revision:1,activity_version_id:`activity-${key}` });
+    insert("compliance_programs",{ id:`program-${key}`,organisation_id:"org",program_code:options.programCode || (unit==="VEEC" ? "VEU" : "SRES") });
+    insert("compliance_activity_versions",{ id:`activity-${key}`,program_id:`program-${key}`,registry_activity_code:options.activityCode || "" });
     insert("compliance_calculation_runs",{ id:`calc-${key}`,organisation_id:"org",case_id:`case-${key}`,case_revision:1,status:"verified",calculator_version_id:`calculator-${key}`,input_snapshot:JSON.stringify(input),output_snapshot:JSON.stringify(output),run_by_uid:"runner" });
     insert("compliance_calculator_versions",{ id:`calculator-${key}`,organisation_id:"org",activity_version_id:`activity-${key}`,approval_state:"approved",calculator_key:`key-${key}`,version:1,official_source_sha256:pdf });
     insert("compliance_calculator_engine_receipts",{ id:`engine-${key}`,organisation_id:"org",calculator_version_id:`calculator-${key}`,calculator_version_number:1,result:"passed",suite_receipt_hash:creditexCanonicalSha256({ suite:true }),vector_count:10,executed_by_uid:"engine-runner",executed_at:"2026-09-01" });
@@ -83,14 +87,15 @@ test("demo data is deterministic, fictional and reconciles across six months and
   assert.equal(report.campaigns.reduce((sum,row) => sum+row.enquiries,0),report.metrics.attributedEnquiries);
   assert.equal(loadCouncilDemo("quarter",now).trend.length,3);
   assert.ok(report.metrics.estimatedTonnesCo2e < report.metrics.veecQuantity+report.metrics.stcQuantity);
-  assert.deepEqual(report.map.cells.map(row => row.postcode),["3805","3806","3977","3980"]);
+  assert.deepEqual(report.map.cells.map(row => row.postcode),["3004","3006","3181","3182","3183","3184","3185","3205","3206","3207"]);
+  for(const key of ["completedJobs","completedValueCents","veecQuantity","stcQuantity","estimatedTonnesCo2e"])assert.equal(report.sectors.rows.reduce((sum,row)=>sum+row.metrics[key],0),report.metrics[key],key);
   assert.equal(report.map.cells.reduce((sum,row) => sum+row.completedJobs,0),report.metrics.completedJobs);
   assert.equal(report.map.cells.reduce((sum,row) => sum+row.registeredLocalBusinesses,0),report.metrics.registeredLocalBusinesses);
   for (const cell of report.map.cells) {
     const [lat,lng]=postcodeCoordinate(cell.postcode);
     assert.deepEqual(cell.position,{ lat,lng });
   }
-  assert.match(report.map.boundaryNote,/synthetic outcomes, no council affiliation/);
+  assert.match(report.map.boundaryNote,/synthetic TLink outcomes, no council affiliation/);
 });
 
 test("fixed periods use Australian calendar dates and exact daylight-saving boundaries",() => {
@@ -313,4 +318,90 @@ test("council aggregates and governed evidence execute within actual Cloudflare 
     }
     for (const period of ["quarter","year","all"]) assert.deepEqual(await loadCouncilReport(db,{ ...scope,period },now),await f.report({ period }));
   } finally { f.db.close(); await runtime.dispose(); }
+});
+
+test("business, residential and unclassified work reconcile from owner-scoped customers, not delivering trades",async()=>{
+  const f=fixture();
+  for (const sector of ["business","residential",""]) for(let i=0;i<5;i++) f.job(`${sector || 'unknown'}-${i}`,{customerType:sector});
+  const report=await f.report();
+  assert.equal(report.metrics.completedJobs,15);
+  assert.deepEqual(report.sectors.rows.map(row=>[row.key,row.metrics.completedJobs,row.metrics.completedValueCents]),[["business",5,50000],["residential",5,50000],["unclassified",5,50000]]);
+  assert.equal(report.sectors.rows.reduce((sum,row)=>sum+row.metrics.completedJobs,0),report.metrics.completedJobs);
+  assert.ok(report.sectors.rows.every(row=>row.activities[0].completedJobs===5));
+  assert.equal(report.sectors.basis,"recorded_customer_type");
+  assert.doesNotMatch(JSON.stringify(report),/customer-business|customer-residential|firebase_uid|work_order_id/);
+  f.db.exec("UPDATE trade_crm_customers SET firebase_uid='another-owner' WHERE customer_type='business'");
+  assert.deepEqual((await f.report()).sectors.rows.map(row=>row.metrics.completedJobs),[0,5,10]);
+});
+
+test("sector postcode activity month intersections and fixed-period complements cannot expose small groups",async()=>{
+  for (const small of [
+    {customerType:"business",postcode:"3001"},
+    {customerType:"business",activity:"solar"},
+    {customerType:"business",date:"2026-08-01T00:00:00Z"},
+    {customerType:"business",date:"2026-05-01T00:00:00Z"},
+  ]) {
+    const f=fixture(); jobs(f,5,{customerType:"business"});
+    for(let i=0;i<5;i++)f.job(`res-${i}`);
+    f.job("small",small);
+    for(const period of ["quarter","year","all"]){
+      const report=await f.report({period});
+      assert.equal(report.sectors.suppressed,true,JSON.stringify(small));
+      assert.ok(report.sectors.rows.every(row=>row.metrics.completedJobs===null && row.metrics.completedValueCents===null && row.activities.length===0 && row.postcodes.length===0 && row.trend.length===0));
+    }
+  }
+});
+
+test("five completed jobs for one sector customer do not establish a safe sector cohort",async()=>{
+  const f=fixture();jobs(f,5,{customerType:"business",customer:"same"});
+  for(let i=0;i<5;i++)f.job(`res-${i}`);
+  const report=await f.report();assert.equal(report.metrics.completedJobs,10);assert.equal(report.sectors.suppressed,true);
+  assert.ok(report.sectors.rows.every(row=>row.metrics.completedJobs===null));
+});
+
+test("sector generation and storage use supported current accepted inputs and preserve unit distinctions",async()=>{
+  const f=fixture();
+  for(let i=0;i<5;i++){
+    f.job(`pv-${i}`,{customerType:"business",activity:"solar"});
+    f.impact(`pv-${i}`,"STC","",{activityCode:"PV",inputs:{ratedCapacityKw:"6.6"}});
+    f.job(`battery-${i}`,{customerType:"business",activity:"battery"});
+    f.impact(`battery-${i}`,"STC","",{activityCode:"BESS",inputs:{claimScope:"new_system",nominalCapacityKwh:"15",usableCapacityKwh:"13.5"}});
+    f.impact(`pv-${i}`);
+  }
+  const report=await f.report(),business=report.sectors.rows[0].metrics;
+  assert.equal(business.completedJobs,10);assert.equal(business.generationInstallations,5);assert.equal(business.generationCapacityKw,33);
+  assert.equal(business.storageInstallations,5);assert.equal(business.storageCapacityKwh,67.5);assert.equal(business.measuredGenerationKwh,null);
+  assert.equal(business.stcQuantity,200);assert.equal(business.veecQuantity,100);assert.equal(business.estimatedTonnesCo2e,100);
+  assert.equal(report.sectors.rows[1].metrics.generationCapacityKw,null);
+  assert.match(report.methodology.join(" "),/No metered generation dataset/);
+});
+
+test("invalid, ungoverned or extension-only capacity and small evidence complements are unavailable",async()=>{
+  for(const options of [
+    {activityCode:"PV",inputs:{ratedCapacityKw:"6.6"},programCode:"VEU"},
+    {activityCode:"PV",inputs:{ratedCapacityKw:"6.6 kW"}},
+    {activityCode:"BESS",inputs:{claimScope:"extension",usableCapacityKwh:"13.5"}},
+    {activityCode:"SWH",inputs:{ratedCapacityKw:"6.6"}},
+  ]){
+    const f=fixture();jobs(f,5,{customerType:"business"});for(let i=0;i<5;i++)f.impact(`j${i}`,"STC","",options);
+    const m=(await f.report()).sectors.rows[0].metrics;assert.equal(m.generationCapacityKw,null);assert.equal(m.storageCapacityKwh,null);
+  }
+  const f=fixture();jobs(f,5,{customerType:"business"});for(let i=0;i<5;i++)f.impact(`j${i}`,"STC","",{activityCode:"PV",inputs:{ratedCapacityKw:"6.6"}});
+  f.job("unsupported",{customerType:"business"});
+  const report=await f.report();assert.equal(report.metrics.completedJobs,6);assert.equal(report.sectors.rows[0].metrics.generationCapacityKw,null);assert.equal(report.metrics.stcQuantity,null);assert.equal(report.dataQuality.impactCoverageJobs,null);
+});
+
+test("council CSV exports protected sector figures with precise energy units and unavailable actual generation",async()=>{
+  const f=fixture();jobs(f,5,{customerType:"business"});
+  const report=await f.report(),csv=councilReportCsv(report);
+  assert.match(csv,/Customer sector.*Rated generation capacity kW.*Usable storage capacity kWh.*Measured electricity generated kWh/);
+  assert.match(csv,/"Business","5","500"/);assert.match(csv,/"Residential","0","0"/);
+  assert.match(csv,/Withheld or unavailable/);assert.doesNotMatch(csv,/customer-j0|i-j0|firebase_uid/);
+  f.job("small-residential");const hidden=councilReportCsv(await f.report());assert.doesNotMatch(hidden,/"Business","5"/);
+});
+
+test("empty sectors are true zero completed work but unsupported energy evidence remains unavailable",async()=>{
+  const report=await fixture().report();assert.equal(report.sectors.suppressed,false);
+  assert.deepEqual(report.sectors.rows.map(row=>row.metrics.completedJobs),[0,0,0]);
+  assert.ok(report.sectors.rows.every(row=>row.metrics.generationCapacityKw===null && row.metrics.storageCapacityKwh===null && row.metrics.measuredGenerationKwh===null));
 });

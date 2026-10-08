@@ -3,14 +3,17 @@ export type CouncilVeuPeriodKey = "quarter" | "year" | "all";
 export type CouncilVeuPeriod = { key: CouncilVeuPeriodKey; label: string; startDate: string | null; endDate: string | null; dateBasis: "activity_date" };
 export type CouncilVeuMeasures = { activities: number | null; reportedVeecEquivalents: number | null; estimatedLifetimeTonnesCo2e: number | null };
 export type CouncilVeuActivity = CouncilVeuMeasures & { activity: string };
-export type CouncilVeuRow = { activity: string; postcode: string; activities: number; reportedVeecEquivalents: number | null };
+export type CouncilVeuSectorKey = "business" | "residential" | "unclassified";
+export type CouncilVeuRow = { activity: string; postcode: string; activities: number; reportedVeecEquivalents: number | null; sector?: CouncilVeuSectorKey; sourceSector?: string | null };
 export type CouncilVeuSnapshot = {
+  sectorBasis?: "official_activity_sector";
   version: 1; postcodes: string[]; period: CouncilVeuPeriod; rows: CouncilVeuRow[];
   totals: { activities: number; reportedVeecEquivalents: number | null };
   fetchedAt: string; sourceRefreshedAt: string;
   provenance: { responseSha256: string; querySha256: string; modelSha256: string; schemaSha256: string };
 };
 export type CouncilVeuReport = {
+  sectors?: { basis: "official_activity_sector"; rows: Array<{ key: CouncilVeuSectorKey; label: string; totals: CouncilVeuMeasures; activities: CouncilVeuActivity[]; postcodes: Array<CouncilVeuMeasures & { postcode: string }> }>; note: string };
   scope: { councilId: string; name: string; state: string; postcodes: string[] };
   period: CouncilVeuPeriod;
   totals: CouncilVeuMeasures;
@@ -70,9 +73,10 @@ export function councilVeuQuery(postcodes: string[], period: CouncilVeuPeriod): 
   return {
     Query: { Version: 2, From: [{ Name: "f", Entity: "Fact_Activity", Type: 0 }, { Name: "r", Entity: "Ref_Address", Type: 0 }],
       Select: [ { ...column("f", "Activity_Type__c"), Name: "activity" }, { ...column("r", "Postcode__c"), Name: "postcode" },
+        { ...column("f", "Sector__c"), Name: "sector" },
         { Aggregation: { Expression: column("f", "VEECs__c"), Function: 0 }, Name: "certificates" },
         { Aggregation: { Expression: column("f", "Activity_Type__c"), Function: 5 }, Name: "activities" } ], Where: where },
-    Binding: { DataReduction: { DataVolume: 6, Primary: { Window: { Count: 5000 } } }, Primary: { Groupings: [{ Projections: [0, 1, 2, 3], Subtotal: 1 }] }, Version: 1 }, ExecutionMetricsKind: 1,
+    Binding: { DataReduction: { DataVolume: 6, Primary: { Window: { Count: 15000 } } }, Primary: { Groupings: [{ Projections: [0, 1, 2, 3, 4], Subtotal: 1 }] }, Version: 1 }, ExecutionMetricsKind: 1,
   };
 }
 
@@ -84,7 +88,7 @@ function cells(rows: unknown[], expected: Array<[string, number]>, dictionaries:
     const row = record(raw);
     if (!index) {
       schema = list(row.S).map(record);
-      if (schema.length !== expected.length || schema.some((field, i) => field.N !== expected[i][0] || field.T !== expected[i][1] || (field.DN !== undefined && (i > 1 || typeof field.DN !== "string" || !/^D\d+$/.test(field.DN))))) throw new Error("VEU aggregate schema changed");
+      if (schema.length !== expected.length || schema.some((field, i) => field.N !== expected[i][0] || field.T !== expected[i][1] || (field.DN !== undefined && (expected[i][1]!==1 || typeof field.DN !== "string" || !/^D\d+$/.test(field.DN))))) throw new Error("VEU aggregate schema changed");
     } else if (row.S !== undefined) throw new Error("Repeated VEU aggregate schema");
     const source = row.C === undefined ? [] : list(row.C);
     const repeat = row.R ?? 0, absent = row["Ø"] ?? 0;
@@ -115,14 +119,25 @@ function cells(rows: unknown[], expected: Array<[string, number]>, dictionaries:
   });
 }
 
-export function parseCouncilVeuResponse(raw: string, postcodes: string[]): Pick<CouncilVeuSnapshot, "rows" | "totals"> {
+const sectorKey=(value: string | null): CouncilVeuSectorKey=>value==="Business" ? "business" : value==="Residential" ? "residential" : "unclassified";
+const sectorValues=[{key:"business",label:"Business"},{key:"residential",label:"Residential"},{key:"unclassified",label:"Not classified"}] as const;
+export function parseCouncilVeuResponse(raw: string, postcodes: string[]): Pick<CouncilVeuSnapshot, "rows" | "totals" | "sectorBasis"> {
   if (raw.length > 8_000_000) throw new Error("VEU response too large");
   const area = new Set(councilVeuPostcodes(postcodes));
   const results = list(record(JSON.parse(raw)).results);
   if (results.length !== 1) throw new Error("VEU result count changed");
   const data = record(record(record(results[0]).result).data);
   const select = list(record(data.descriptor).Select).map(record);
-  if (JSON.stringify(select.map(item => [item.Name, item.Value])) !== JSON.stringify([["activity", "G0"], ["postcode", "G1"], ["certificates", "M0"], ["activities", "M1"]])) throw new Error("VEU projections changed");
+  const projections=JSON.stringify(select.map(item=>[item.Name,item.Value]));
+  const hasSectors=projections===JSON.stringify([["activity","G0"],["postcode","G1"],["sector","G2"],["certificates","M0"],["activities","M1"]]);
+  if (!hasSectors && projections!==JSON.stringify([["activity", "G0"], ["postcode", "G1"], ["certificates", "M0"], ["activities", "M1"]])) throw new Error("VEU projections changed");
+  if (hasSectors) {
+    const keys=list(select[2].GroupKeys);
+    if (keys.length!==1) throw new Error("VEU sector source changed");
+    const source=record(record(keys[0]).Source);
+    if (source.Entity!=="Fact_Activity" || source.Property!=="Sector__c") throw new Error("VEU sector source changed");
+  }
+  const basis=hasSectors ? {sectorBasis:"official_activity_sector" as const} : {};
   const datasets = list(record(data.dsr).DS);
   if (datasets.length !== 1) throw new Error("VEU dataset count changed");
   const dataset = record(datasets[0]);
@@ -130,24 +145,29 @@ export function parseCouncilVeuResponse(raw: string, postcodes: string[]): Pick<
   const phases = list(dataset.PH);
   if (phases.length !== 2) throw new Error("VEU aggregate phases changed");
   const grandRows = list(record(phases[0]).DM0), detailRows = list(record(phases[1]).DM1);
-  if (grandRows.length !== 1 || detailRows.length >= 5000) throw new Error("VEU aggregate window exceeded");
+  if (grandRows.length !== 1 || detailRows.length >= (hasSectors ? 15000 : 5000)) throw new Error("VEU aggregate window exceeded");
   const dictionary = dataset.ValueDicts === undefined ? {} : record(dataset.ValueDicts);
   const grand = cells(grandRows, [["A0", 3], ["A1", 4]], {})[0];
-  if (!detailRows.length && grand.every(value => value === null || value === 0)) return { rows: [], totals: { activities: 0, reportedVeecEquivalents: 0 } };
+  if (!detailRows.length && grand.every(value => value === null || value === 0)) return { ...basis,rows: [], totals: { activities: 0, reportedVeecEquivalents: 0 } };
   const officialVeecs = amount(grand[0]), officialActivities = count(grand[1]);
   const seen = new Set<string>();
-  const rows = cells(detailRows, [["G0", 1], ["G1", 1], ["M0", 3], ["M1", 4]], dictionary).map(([activity, postcode, veecs, activities]) => {
+  const fields:Array<[string,number]>=[["G0",1],["G1",1],...(hasSectors ? [["G2",1] as [string,number]] : []),["M0",3],["M1",4]];
+  const rows = cells(detailRows, fields, dictionary).map(values => {
+    const [activity,postcode]=values;
+    const [sourceSector,veecs,activities]=hasSectors ? values.slice(2) : [undefined,...values.slice(2)];
     if (typeof activity !== "string" || !activity.trim() || activity.length > 300 || /[\u0000-\u001f\u007f]/.test(activity) || typeof postcode !== "string" || !area.has(postcode)) throw new Error("Invalid VEU activity or postcode");
-    const key = `${postcode}:${activity}`;
+    if (hasSectors && (sourceSector!==null && (typeof sourceSector!=="string" || sourceSector.length>100 || /[\u0000-\u001f\u007f]/.test(sourceSector)))) throw new Error("Invalid VEU sector");
+    const key = JSON.stringify([postcode,activity,sourceSector]);
     if (seen.has(key)) throw new Error("Duplicate VEU aggregate group");
     seen.add(key);
-    const row = { activity, postcode, activities: count(activities), reportedVeecEquivalents: amount(veecs) };
+    const row: CouncilVeuRow = { activity, postcode, activities: count(activities), reportedVeecEquivalents: amount(veecs) };
+    if (hasSectors) { const rawSector=typeof sourceSector==="string" ? sourceSector : null; row.sector=sectorKey(rawSector);row.sourceSector=rawSector; }
     if (row.activities === 0) throw new Error("VEU detail group contains no activity");
     return row;
   });
   const knownVeecs = rounded(rows.reduce((sum, row) => sum + (row.reportedVeecEquivalents ?? 0), 0));
   if (rows.reduce((sum, row) => sum + row.activities, 0) !== officialActivities || (officialVeecs !== null ? !sameNumber(knownVeecs, officialVeecs) : rows.some(row => row.reportedVeecEquivalents !== null))) throw new Error("VEU aggregates do not reconcile with the source total");
-  return { rows, totals: { activities: officialActivities, reportedVeecEquivalents: rows.some(row => row.reportedVeecEquivalents === null) ? null : officialVeecs } };
+  return { ...basis,rows, totals: { activities: officialActivities, reportedVeecEquivalents: rows.some(row => row.reportedVeecEquivalents === null) ? null : officialVeecs } };
 }
 
 export function isCouncilVeuSnapshot(value: unknown): value is CouncilVeuSnapshot {
@@ -161,12 +181,18 @@ export function isCouncilVeuSnapshot(value: unknown): value is CouncilVeuSnapsho
     const expectedPeriod = councilVeuPeriod(period.key, period.key === "all" ? new Date(item.fetchedAt) : new Date(`${period.endDate}T00:00:00Z`));
     if (period.startDate !== expectedPeriod.startDate || period.label !== expectedPeriod.label) return false;
     if (["responseSha256", "querySha256", "modelSha256", "schemaSha256"].some(key => typeof provenance[key] !== "string" || !/^[a-f0-9]{64}$/.test(provenance[key]))) return false;
-    const rows = list(item.rows); if (rows.length >= 5000) return false;
+    if (item.sectorBasis!==undefined && item.sectorBasis!=="official_activity_sector") return false;
+    const rows = list(item.rows); if (rows.length >= (item.sectorBasis ? 15000 : 5000)) return false;
     let activities = 0, veecs = 0, unknown = false; const seen = new Set<string>();
     for (const raw of rows) {
       const row = record(raw);
-      if (typeof row.activity !== "string" || !row.activity.trim() || row.activity.length > 300 || /[\u0000-\u001f\u007f]/.test(row.activity) || typeof row.postcode !== "string" || !codes.includes(row.postcode) || seen.has(`${row.postcode}:${row.activity}`)) return false;
-      seen.add(`${row.postcode}:${row.activity}`);
+      if (item.sectorBasis) {
+        if (row.sourceSector!==null && (typeof row.sourceSector!=="string" || row.sourceSector.length>100 || /[\u0000-\u001f\u007f]/.test(row.sourceSector))) return false;
+        if (row.sector!==sectorKey(row.sourceSector)) return false;
+      } else if (row.sector!==undefined || row.sourceSector!==undefined) return false;
+      const identity=JSON.stringify([row.postcode,row.activity,row.sourceSector]);
+      if (typeof row.activity !== "string" || !row.activity.trim() || row.activity.length > 300 || /[\u0000-\u001f\u007f]/.test(row.activity) || typeof row.postcode !== "string" || !codes.includes(row.postcode) || seen.has(identity)) return false;
+      seen.add(identity);
       const quantity = count(row.activities); if (!quantity) return false;
       activities += quantity; const units = amount(row.reportedVeecEquivalents); unknown ||= units === null; veecs += units ?? 0;
     }
@@ -185,18 +211,24 @@ export function councilVeuReport(snapshot: CouncilVeuSnapshot, scope: CouncilVeu
   const rows = snapshot.rows.filter(row => area.includes(row.postcode));
   const available = area.filter(postcode => snapshot.postcodes.includes(postcode));
   const complete = available.length === area.length;
+  const activities=(values: CouncilVeuRow[],known=complete)=>[...new Set(values.map(row=>row.activity))].sort().map(activity=>({activity,...measures(values.filter(row=>row.activity===activity),known)}));
   return {
     scope: { ...scope, postcodes: area }, period: snapshot.period, totals: measures(rows, complete),
     postcodes: area.map(postcode => {
       const postcodeRows = rows.filter(row => row.postcode === postcode), known = available.includes(postcode);
-      return { postcode, ...measures(postcodeRows, known), activityBreakdown: known ? postcodeRows.map(row => ({ activity: row.activity, ...measures([row]) })) : null };
+      return { postcode, ...measures(postcodeRows, known), activityBreakdown: known ? activities(postcodeRows,true) : null };
     }),
-    activities: [...new Set(rows.map(row => row.activity))].sort().map(activity => ({ activity, ...measures(rows.filter(row => row.activity === activity), complete) })),
+    activities: activities(rows),
+    ...(snapshot.sectorBasis ? {sectors:{basis:snapshot.sectorBasis,rows:sectorValues.map(sector=>{
+      const matches=rows.filter(row=>row.sector===sector.key);
+      return {...sector,totals:measures(matches,complete),activities:activities(matches),postcodes:area.map(postcode=>({postcode,...measures(matches.filter(row=>row.postcode===postcode),available.includes(postcode))}))};
+    }),note:"Business and residential are the official public activity record's Sector field, not the installing trade's business status or an inference from upgrade type. Unrecognised and missing sector values remain not classified. Activities are not unique premises, equipment units or jobs. VEU activity data has no installed generation/storage capacity or metered generation measure. Older retained snapshots may not include sector data."}} : {}),
     source: { url: COUNCIL_VEU_SOURCE_URL, refreshedAt: snapshot.sourceRefreshedAt, fetchedAt: snapshot.fetchedAt, ...freshness,
       stale: freshness.refreshFailed || now - Date.parse(snapshot.sourceRefreshedAt) > 48 * 3600_000 || now - Date.parse(freshness.checkedAt) > 24 * 3600_000 },
     provenance: snapshot.provenance, coverage: { availablePostcodes: available.length, requestedPostcodes: area.length, missingVeecGroups: rows.filter(row => row.reportedVeecEquivalents === null).length, installerLocality: "unavailable" },
     notes: [
       "Official VEU public Activities report, filtered to approved activities in the selected postcodes. Dates are activity dates, not certificate creation or registration dates.",
+      "Business and residential activity uses the official Sector field. It does not infer land use from activity type. The sector totals reconcile to the same approved postcode/activity source total; they are a split of that total, not additional upgrades.",
       "Reported VEEC equivalents come from the activity report's No. of VEECs field and can include fractional values. They are not a verified count of registered or issued certificates.",
       "Estimated lifetime CO2-e uses one reported VEEC equivalent per tonne under the VEU method. It is a deemed lifetime estimate, not measured emissions or annual savings.",
       "Community VEU, CER installations, TLink work and council referrals may describe the same upgrades. Never add these totals together or claim all community activity was caused by the council.",

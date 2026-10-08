@@ -1,3 +1,4 @@
+import { normalizeEnquiryTiming, enquiryDeadlines, enquiryCompletionLabel } from "@/lib/enquiry-timing.mjs";
 import { aeaDeliveredServiceScopeSql, tradeOpportunityServiceScopeAllowed } from "@/lib/aea-trade-routing.mjs";
 import { aeaTradeOwnerSql, tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { getD1 } from "../../db";
@@ -49,7 +50,7 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
     SELECT 'marketplace-' || m.id, m.firebase_uid, 'tlink_marketplace', m.id, '', m.id,
       CASE WHEN m.status IN ('interested', 'connected') THEN 'contacted'
            WHEN m.status IN ('declined', 'closed') THEN 'lost' ELSE 'new' END,
-      'residential', '', '', '', '', '', '', '', '', '',
+      CASE WHEN o.customer_sector = 'business' THEN 'business' ELSE 'residential' END, '', '', '', '', '', '', '', '', '',
       COALESCE(json_extract(m.matched_categories, '$[0]'), 'other'), m.matched_categories,
       o.summary,
       o.priority, o.state, 1,
@@ -183,6 +184,11 @@ type DirectTradeLead = {
     uploadKeyHash?: string;
   };
   timeframe?: string;
+  quoteWindowValue?: number;
+  quoteWindowUnit?: string;
+  requestedCompletion?: string;
+  requestedCompletionDate?: string;
+  customerSector?: string;
   directTradeTriage?: {
     status?: string;
     autoSend?: boolean;
@@ -489,13 +495,16 @@ export async function createOpportunityFromLead(payload: DirectTradeLead, referr
   )
     ? new Date(String(payload.submittedAt))
     : new Date();
+  const enquiryTiming = normalizeEnquiryTiming(payload, submittedAt.getTime());
+  if (!enquiryTiming.ok) throw new Error("ENQUIRY_TIMING_INVALID");
+  const deadlines = enquiryDeadlines(enquiryTiming.value, submittedAt);
   const categoryNames = categories.map((item) => CATEGORY_LABELS[item]);
   const priorities = Array.isArray(payload.projectPriorities)
     ? payload.projectPriorities.slice(0, 7).map(readable)
     : [];
-  const property = readable(String(payload.propertyType || "home"));
+  const property = readable(String(payload.propertyType || (payload.customerSector === "business" ? "business premises" : "home")));
   const stage = readable(String(payload.projectStage || "planning"));
-  const summary = `${property} project at the ${stage.toLowerCase()} stage. ${priorities.length ? `Priorities: ${priorities.join(", ")}. ` : ""}${payload.sourceJourney === "public-home-energy-plan"
+  const summary = `${property} project at the ${stage.toLowerCase()} stage. Requested completion: ${enquiryCompletionLabel(deadlines.requestedWorkBy, enquiryTiming.value.requestedCompletion)}. Quotes and contact close ${new Date(deadlines.expiresAt).toLocaleDateString("en-AU", { timeZone: "Australia/Sydney" })}. ${priorities.length ? `Priorities: ${priorities.join(", ")}. ` : ""}${payload.sourceJourney === "public-home-energy-plan"
     ? "Only the contact fields the customer consented to share are available to approved matching TLink trades. The private home plan and PDF are not shared with trades."
     : payload.sourceJourney === QUICK_UPGRADE_SOURCE_JOURNEY
       ? "The customer requested upgrade options without completing a home plan. Only the request and contact fields they consented to share are available to approved matching TLink trades."
@@ -543,7 +552,10 @@ export async function createOpportunityFromLead(payload: DirectTradeLead, referr
     sourceReference: reference,
     contactLimit: DEFAULT_CONTACT_LIMIT,
     maximumConnectedInstallers: DEFAULT_CONNECTED_INSTALLERS,
-    expiresAt: opportunityExpiry(submittedAt),
+    expiresAt: deadlines.expiresAt,
+    ...enquiryTiming.value,
+    requestedWorkBy: deadlines.requestedWorkBy,
+    customerSector: ["residential", "business"].includes(payload.customerSector || "") ? payload.customerSector : "unclassified",
     createdAt,
     publicPlanEnquiry: protectedPublicLead,
   }, contactRelease ? {

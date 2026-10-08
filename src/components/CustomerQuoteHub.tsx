@@ -1,4 +1,5 @@
 "use client";
+import { enquiryCompletionLabel } from "@/lib/enquiry-timing.mjs";
 import {useCallback,useEffect,useRef,useState,type ComponentProps} from "react";
 import type {CustomerQuoteHub as Hub,HubQuestion,HubBusinessProfile,HubQuoteComparison} from "@/lib/customer-quote-hub";
 import {prepareCustomerPhotoUpload} from "@/lib/customer-photo-upload";
@@ -121,7 +122,7 @@ function HubWorkspace({token}:{token:string}){
   return <main id="site-content" className={styles.shell}><div className={styles.container}>
     <div className={styles.brand}><strong>TLink<span>●</span></strong><span>Your private project</span></div>
     {!hub?<section className={styles.panel}><h1>{error?'Your link is unavailable':'Opening your project'}</h1><p role={error?'alert':undefined}>{error||'Checking your private link…'}</p>{error&&<button onClick={()=>void load()}>Try again</button>}</section>:<>
-      <header className={styles.header}><div><h1>{hub.title}</h1><p>One place for all {hub.services.length>1?`${hub.services.length} services`:'your quotes and requests'}.</p></div>
+      <header className={styles.header}><div><h1>{hub.title}</h1><p>One place for all {hub.services.length>1?`${hub.services.length} services`:'your quotes and requests'}.</p><p>Requested completion: {enquiryCompletionLabel(hub.requestedWorkBy,hub.requestedCompletion)}. Quotes and contact automatically close on {new Date(hub.contactExpiresAt).toLocaleDateString("en-AU")}.</p></div>
         <div className={styles.switchBox}><span id="hub-accepting-label">Accepting quotes and questions</span><button type="button" role="switch" aria-checked={hub.accepting} aria-labelledby="hub-accepting-label" disabled={Boolean(busy)} onClick={()=>void toggle()} className={styles.switch}><i/>{hub.accepting?'On':'Off'}</button></div>
       </header>
       <nav className={styles.nav} aria-label="Project"><button aria-current={tab==='overview'?'page':undefined} onClick={()=>setTab('overview')}>Overview</button><button aria-current={tab==='quotes'?'page':undefined} onClick={()=>setTab('quotes')}>Quotes <span>{hub.quotes.length}</span></button><button aria-current={tab==='requests'?'page':undefined} onClick={()=>setTab('requests')}>Q&A {outstanding.length>0&&<span>{outstanding.length}</span>}</button></nav>

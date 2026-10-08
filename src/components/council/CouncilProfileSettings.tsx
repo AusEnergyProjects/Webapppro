@@ -4,6 +4,8 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import NextImage from "next/image";
 import type { CouncilProfile, CouncilProfileInput } from "@/lib/council-profile";
 import { COUNCIL_THEME_PRESETS } from "@/lib/council-theme";
+import { PUBLIC_SITE } from "@/lib/public-site";
+import { PORT_PHILLIP_JOURNEY_DEMO_PATH } from "@/lib/council-public-branding";
 import { CouncilIcon } from "./CouncilPrimitives";
 import shared from "./CouncilWorkspace.module.css";
 import styles from "./CouncilProfileSettings.module.css";
@@ -70,6 +72,16 @@ export function CouncilProfileSettings({ profile, value, canManage, dirty, demon
   const fileInput = useRef<HTMLInputElement>(null);
   const postcodeId = useId();
   const disabled = !canManage || saving || preparingLogo;
+  const journey = value.publicJourney ?? { enabled: false, homeUrl: null, requestedHostname: null };
+  const savedJourney = profile.publicJourney;
+  const sharePath = demonstration ? PORT_PHILLIP_JOURNEY_DEMO_PATH : savedJourney?.sharePath;
+  const shareUrl = sharePath ? `${PUBLIC_SITE.apexUrl}${sharePath}` : null;
+  const customDomainUrl = !demonstration && savedJourney?.customDomainUrl;
+  async function copyJourneyLink() {
+    if (!shareUrl) return;
+    try { await navigator.clipboard.writeText(customDomainUrl || shareUrl); setNotice(demonstration ? "Demonstration link copied. No enquiry is sent from this preview." : "Council journey link copied. It retains your council's referral reference."); }
+    catch { setError("Your browser could not copy the link. Select and copy the address below."); }
+  }
   function update(next: CouncilProfileInput) { setNotice(""); setError(""); onChange(next); }
   function useSampleLogo() {
     try { update({ ...value, logoDataUrl: demonstrationLogo(value.name, value.theme.primaryColor) }); }
@@ -124,6 +136,16 @@ export function CouncilProfileSettings({ profile, value, canManage, dirty, demon
         <legend>Your workspace colours</legend><p className={styles.intro}>Try a theme or choose your council colours. The whole workspace previews your changes as you go.</p>
         <div className={styles.presets} role="group" aria-label="Council theme presets">{COUNCIL_THEME_PRESETS.map(preset => <button type="button" key={preset.name} aria-pressed={value.theme.primaryColor.toLowerCase() === preset.primaryColor && value.theme.accentColor.toLowerCase() === preset.accentColor} onClick={() => update({ ...value, theme: { primaryColor: preset.primaryColor, accentColor: preset.accentColor } })}><span className={styles.swatch} style={{ background: `linear-gradient(135deg,${preset.primaryColor} 50%,${preset.accentColor} 50%)` }} />{preset.name}</button>)}</div>
         <div className={styles.colours}><label>Primary colour<div><input type="color" aria-label="Primary colour" value={value.theme.primaryColor} onChange={event => update({ ...value, theme: { ...value.theme, primaryColor: event.target.value } })} /><input key={value.theme.primaryColor} className={styles.hexInput} type="text" aria-label="Primary colour hex" defaultValue={value.theme.primaryColor.toUpperCase()} pattern="#[0-9a-fA-F]{6}" maxLength={7} spellCheck={false} onChange={event => { if (/^#[0-9a-f]{6}$/i.test(event.target.value)) update({ ...value, theme: { ...value.theme, primaryColor: event.target.value.toLowerCase() } }); }} onBlur={event => { if (!/^#[0-9a-f]{6}$/i.test(event.target.value)) setError("Enter a six-digit hex colour, such as #032733."); }} /></div></label><label>Accent colour<div><input type="color" aria-label="Accent colour" value={value.theme.accentColor} onChange={event => update({ ...value, theme: { ...value.theme, accentColor: event.target.value } })} /><input key={value.theme.accentColor} className={styles.hexInput} type="text" aria-label="Accent colour hex" defaultValue={value.theme.accentColor.toUpperCase()} pattern="#[0-9a-fA-F]{6}" maxLength={7} spellCheck={false} onChange={event => { if (/^#[0-9a-f]{6}$/i.test(event.target.value)) update({ ...value, theme: { ...value.theme, accentColor: event.target.value.toLowerCase() } }); }} onBlur={event => { if (!/^#[0-9a-f]{6}$/i.test(event.target.value)) setError("Enter a six-digit hex colour, such as #032733."); }} /></div></label></div><p className={styles.hint}>Text and button shades adjust automatically for readable day and night modes.</p>
+      </fieldset>
+      <fieldset className={styles.section} disabled={disabled}>
+        <legend>Your public customer journey</legend><p className={styles.intro}>Offer residents and businesses a familiar council header, a return link to your website and one enquiry flow. Enquiries from this link are attributed to your council.</p>
+        <label className={styles.toggle}><input type="checkbox" checked={journey.enabled} onChange={event => update({ ...value, publicJourney: { ...journey, enabled: event.target.checked } })} />Enable the council-branded journey</label>
+        <label className={styles.field}>Council home website<input type="url" inputMode="url" placeholder="https://www.yourcouncil.vic.gov.au/" maxLength={1000} value={journey.homeUrl ?? ""} required={journey.enabled} onChange={event => update({ ...value, publicJourney: { ...journey, homeUrl: event.target.value || null } })} /></label>
+        <p className={styles.hint}>{demonstration ? "This demonstration opens a fixed City of Port Phillip preview. Live customer journeys use your saved name, logo and colours." : "Your saved name, logo and colours also appear in the customer journey."}</p>
+        <label className={styles.field}>Your own domain or subdomain <span className={styles.optional}>(optional)</span><input type="text" inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="energy.yourcouncil.vic.gov.au" maxLength={253} value={journey.requestedHostname ?? ""} onChange={event => update({ ...value, publicJourney: { ...journey, requestedHostname: event.target.value || null } })} /></label>
+        <p className={styles.hint}>{savedJourney?.domainStatus === "verified" ? "Domain connected. Customers can open your council's public journey here." : journey.requestedHostname ? "Setup pending. TLink must confirm your domain's DNS and hosting before it can serve the journey. Your standard council link works while this is arranged." : "The council link works immediately after saving. A custom domain requires your council's DNS administrator and TLink hosting setup."}</p>
+        {shareUrl && <div className={styles.shareBox}><strong>{demonstration ? "City of Port Phillip demonstration" : "Your saved council link"}</strong><input readOnly aria-label="Council customer journey link" value={customDomainUrl || shareUrl} onFocus={event => event.target.select()} /><div><a className={shared.secondaryButton} href={demonstration ? PORT_PHILLIP_JOURNEY_DEMO_PATH : customDomainUrl || sharePath || "#"} target="_blank" rel="noopener noreferrer">{demonstration ? "Preview customer journey" : "Open customer journey"} ↗</a><button type="button" className={shared.secondaryButton} onClick={() => void copyJourneyLink()}>Copy link</button></div><p className={styles.hint}>{demonstration ? "A clearly labelled preview. No enquiry is sent, no providers are contacted and no council endorsement is implied." : "The link continues to work when you update your council profile. Customer details stay private in council reporting."}</p></div>}
+        {!demonstration && journey.enabled && !shareUrl && <p className={styles.hint}>Save your profile to create your permanent council journey link.</p>}
       </fieldset>
       <div className={styles.saveBar}><span>{dirty || postcodeText ? "Previewing unsaved changes" : "Your saved council profile"}</span><div><button type="button" className={shared.secondaryButton} disabled={disabled || (!dirty && !postcodeText)} onClick={() => { onCancel(); setPostcodeText(""); setError(""); setNotice(""); }}>Cancel changes</button><button type="submit" className={shared.primaryButton} disabled={disabled || (!dirty && !postcodeText)}><CouncilIcon name="check" size={16} />{saving ? "Saving profile..." : "Save council profile"}</button></div></div>
     </div>

@@ -17,7 +17,7 @@ const object = (value: unknown): Record<string, unknown> => {
 const array = (value: unknown): unknown[] => { if (!Array.isArray(value)) throw new Error("VEU source controls changed"); return value; };
 
 /** Check the source report's actual approved-activity contract, separately from products. */
-export function validateCouncilVeuControls(modelText: string, schemaText: string) {
+export function validateCouncilVeuControls(modelText: string, schemaText: string, requireSectors=false) {
   validateCreditexVeuPowerBiModel(modelText);
   const model = object(JSON.parse(modelText));
   const exploration = object(object(model.exploration).explorationContent);
@@ -50,7 +50,7 @@ export function validateCouncilVeuControls(modelText: string, schemaText: string
   const result = object(schemas[0]);
   if (result.modelId !== CREDITEX_VEU_MODEL_ID || result.error !== null) throw new Error("VEU schema identity changed");
   const entities = array(object(result.schema).Entities).map(object);
-  for (const [entityName, expectedFields] of Object.entries({ Fact_Activity: { Activity_Status__c: 1, Activity_Type__c: 1, Activity_Date__c: 7, VEECs__c: 3 }, Ref_Address: { Postcode__c: 1 } })) {
+  for (const [entityName, expectedFields] of Object.entries({ Fact_Activity: { Activity_Status__c: 1, Activity_Type__c: 1, Activity_Date__c: 7, VEECs__c: 3, ...(requireSectors ? {Sector__c:1} : {}) }, Ref_Address: { Postcode__c: 1 } })) {
     const entity = entities.find(item => item.Name === entityName);
     if (!entity) throw new Error("VEU activity schema changed");
     const fields = array(entity.Properties).map(object);
@@ -70,6 +70,7 @@ export async function fetchCouncilVeuSnapshot(postcodes: string[], key: CouncilV
     if (evidence.responses.length !== 1) throw new Error("VEU source query count changed");
     const response = evidence.responses[0];
     const values = parseCouncilVeuResponse(response, area);
+    if (values.sectorBasis) validateCouncilVeuControls(evidence.model,evidence.schema,true);
     const snapshot: CouncilVeuSnapshot = {
       version: 1, postcodes: area, period, ...values, fetchedAt: new Date(now).toISOString(), sourceRefreshedAt: evidence.sourceRefreshedAt.utc,
       provenance: { responseSha256: await sha256(response), querySha256: await sha256(JSON.stringify(query)), modelSha256: await sha256(evidence.model), schemaSha256: await sha256(evidence.schema) },
@@ -85,10 +86,22 @@ export async function runtimeCouncilVeuCache(): Promise<VeuCache | undefined> {
 }
 
 export async function councilVeuBaseline(): Promise<CouncilVeuSnapshot[]> {
-  const file = await import("./council-veu-baseline.ts");
-  const value: unknown = file.default;
-  if (!Array.isArray(value) || !value.every(isCouncilVeuSnapshot)) throw new Error("Invalid retained VEU baseline");
-  return value;
+  const [legacy,sectors]=await Promise.all([import("./council-veu-baseline.ts"),import("./council-veu-sector-baseline.ts")]);
+  return mergeCouncilVeuBaselines([legacy.default,sectors.default]);
+}
+
+export function mergeCouncilVeuBaselines(groups: unknown[]): CouncilVeuSnapshot[] {
+  const snapshots: CouncilVeuSnapshot[]=[],seen=new Map<string,string>();
+  for (const group of groups) {
+    if (!Array.isArray(group) || !group.every(isCouncilVeuSnapshot)) throw new Error("Invalid retained VEU baseline");
+    for (const snapshot of group) {
+      const identity=JSON.stringify([snapshot.postcodes,snapshot.period.key,snapshot.period.startDate,snapshot.period.endDate,snapshot.fetchedAt]);
+      const payload=JSON.stringify(snapshot),prior=seen.get(identity);
+      if (prior!==undefined && prior!==payload) throw new Error("Conflicting retained VEU snapshot identity");
+      if (prior===undefined) {seen.set(identity,payload);snapshots.push(snapshot);}
+    }
+  }
+  return snapshots;
 }
 
 export async function loadCouncilVeuSnapshot(postcodes: string[], key: CouncilVeuPeriodKey, options: { now?: number; cache?: VeuCache; baseline?: CouncilVeuSnapshot[]; fetchImpl?: SourceFetch; loadEvidence?: EvidenceLoader } = {}): Promise<LoadedCouncilVeu> {
@@ -100,7 +113,7 @@ export async function loadCouncilVeuSnapshot(postcodes: string[], key: CouncilVe
   let saved: SavedVeu | undefined = baseline ? { snapshot: baseline, checkedAt: baseline.fetchedAt, refreshFailed: false } : undefined;
   let dataOrigin: LoadedCouncilVeu["dataOrigin"] = "baseline";
   const keyHash = await sha256(JSON.stringify({ area, key, start: period.startDate }));
-  const cacheKey = new Request(`https://council-veu.internal/snapshot-v1/${keyHash}`);
+  const cacheKey = new Request(`https://council-veu.internal/snapshot-v2-sectors/${keyHash}`);
   if (options.cache) {
     try {
       const response = await options.cache.match(cacheKey);

@@ -262,6 +262,7 @@ export async function GET(request: Request) {
       WHERE bounded_match.firebase_uid = ?
         AND bounded_match.id IN (SELECT value FROM json_each(?))
         AND bounded_opportunity.status IN ('open', 'paused')
+        AND datetime(bounded_opportunity.expires_at) > datetime('now')
         AND bounded_match.status IN ('offered', 'viewed', 'interested', 'connected')
       ORDER BY bounded_opportunity.created_at DESC, bounded_match.matched_at DESC, bounded_match.id ASC
       LIMIT 100
@@ -273,6 +274,7 @@ export async function GET(request: Request) {
       AND o.source_reference = 'customer-project:' || p.id
     WHERE m.firebase_uid = ? AND (? = '' OR m.id = ?)
       AND o.status IN ('open', 'paused')
+      AND datetime(o.expires_at) > datetime('now')
       AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
@@ -302,7 +304,7 @@ export async function GET(request: Request) {
       o.id, o.title, o.project_type, o.suburb opportunity_suburb,
       o.postcode opportunity_postcode, o.state, o.service_categories,
       o.priority, o.timing, o.summary, o.status, o.contact_limit,
-      o.expires_at, o.source_reference, o.created_at,
+      o.expires_at, o.source_reference, o.created_at, o.requested_work_by, o.requested_completion, o.customer_sector,
       p.id customer_project_id, p.firebase_uid customer_uid
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
@@ -704,6 +706,9 @@ export async function GET(request: Request) {
         serviceCategories: parseJsonList(row.service_categories),
         priority: row.priority,
         timing: row.timing,
+        requestedWorkBy: String(row.requested_work_by || ""),
+        requestedCompletion: String(row.requested_completion || "flexible"),
+        customerSector: String(row.customer_sector || "unclassified"),
         summary: row.summary,
         propertyContext: buildInstallerPropertyContext(
           parseStoredJson(row.property_context, {}),

@@ -7,9 +7,9 @@ const scope={councilId:'c',name:'Council',state:'VIC',postcodes:['3805','3806'],
 const now=new Date('2026-10-05T02:00:00Z');
 function fixture(){
  const sql=new DatabaseSync(':memory:');
- sql.exec(`CREATE TABLE trade_opportunities(id TEXT,postcode TEXT,state TEXT,created_at TEXT,is_synthetic INTEGER,source_reference TEXT,created_by_uid TEXT); CREATE TABLE public_trade_lead_contact_releases(opportunity_id TEXT,status TEXT,withdrawn_at TEXT,customer_email TEXT)`);
+ sql.exec(`CREATE TABLE trade_opportunities(id TEXT,postcode TEXT,state TEXT,created_at TEXT,is_synthetic INTEGER,source_reference TEXT,created_by_uid TEXT,customer_sector TEXT); CREATE TABLE public_trade_lead_contact_releases(opportunity_id TEXT,status TEXT,withdrawn_at TEXT,customer_email TEXT)`);
  const prepare=(query,args=[])=>({bind:(...v)=>prepare(query,v),all:async()=>({results:sql.prepare(query).all(...args)})});
- const add=(id,opts={})=>{const {postcode='3805',state='VIC',date='2026-10-02T02:00:00Z',synthetic=0,status='active',customer=id+'@example.invalid',source='lead-intake'}=opts;sql.prepare('INSERT INTO trade_opportunities VALUES(?,?,?,?,?,?,?)').run(id,postcode,state,date,synthetic,id,source);sql.prepare('INSERT INTO public_trade_lead_contact_releases VALUES(?,?,?,?)').run(id,status,'',customer)};
+ const add=(id,opts={})=>{const {postcode='3805',state='VIC',date='2026-10-02T02:00:00Z',synthetic=0,status='active',customer=id+'@example.invalid',source='lead-intake',sector='unclassified'}=opts;sql.prepare('INSERT INTO trade_opportunities VALUES(?,?,?,?,?,?,?,?)').run(id,postcode,state,date,synthetic,id,source,sector);sql.prepare('INSERT INTO public_trade_lead_contact_releases VALUES(?,?,?,?)').run(id,status,'',customer)};
  return {db:{prepare},add,close:()=>sql.close()};
 }
 test('community enquiries cover the approved area and exclude synthetic, private and withdrawn records',async()=>{
@@ -19,6 +19,17 @@ test('community enquiries cover the approved area and exclude synthetic, private
 test('repeated enquiries from one contact do not establish a safe customer cohort',async()=>{const {db,add}=fixture();for(let i=0;i<8;i++)add('a'+i,{customer:'same@example.invalid'});const r=await loadCouncilEnquiries(db,scope,now);assert.equal(r.total,null);assert.equal(r.suppressed,true)});
 test('small postcode and complementary period groups suppress the complete breakdown family',async()=>{const {db,add}=fixture();for(let i=0;i<8;i++)add('a'+i);add('small',{postcode:'3806',date:'2026-08-01T00:00:00Z'});const r=await loadCouncilEnquiries(db,scope,now);assert.equal(r.total,null);assert.ok(r.postcodes.every(r=>r.count===null));assert.deepEqual(r.trend,[])});
 test('empty activity returns a genuine zero',async()=>{const {db}=fixture();const r=await loadCouncilEnquiries(db,scope,now);assert.equal(r.total,0);assert.equal(r.suppressed,false)});
+
+test('public enquiry sectors use explicit customer classification with legacy records unclassified',async()=>{
+ const {db,add}=fixture();for(const sector of ['business','residential','unclassified'])for(let i=0;i<5;i++)add(sector+i,{sector});
+ const r=await loadCouncilEnquiries(db,scope,now);assert.equal(r.total,15);assert.equal(r.sectors.suppressed,false);
+ assert.deepEqual(r.sectors.rows.map(row=>[row.key,row.count]),[['business',5],['residential',5],['unclassified',5]]);
+ assert.equal(JSON.stringify(r).includes('@'),false);
+});
+test('small enquiry sector intersections hide the complete sector family without inventing zeros',async()=>{
+ const {db,add}=fixture();for(let i=0;i<5;i++)add('res'+i,{sector:'residential'});for(let i=0;i<5;i++)add('business'+i,{sector:'business'});add('small-business',{sector:'business',date:'2026-09-02T02:00:00Z'});
+ const r=await loadCouncilEnquiries(db,scope,now);assert.equal(r.sectors.suppressed,true);assert.ok(r.sectors.rows.every(row=>row.count===null));
+});
 
 test('Victorian month boundaries use local midnight in both daylight and standard time',async()=>{
  for(const [month,boundary,reportDate] of [

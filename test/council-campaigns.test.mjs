@@ -13,8 +13,10 @@ const valid={title:"Autumn upgrades",kind:"campaign",audience:"everyone",startsA
 function fixture(){
   const sql=new DatabaseSync(":memory:");sql.exec("PRAGMA foreign_keys=ON");
   sql.exec(`CREATE TABLE trade_opportunities(id TEXT PRIMARY KEY,title TEXT,project_type TEXT,postcode TEXT,state TEXT,service_categories TEXT,priority TEXT,timing TEXT,summary TEXT,status TEXT,source_reference TEXT,contact_limit INTEGER,maximum_connected_installers INTEGER,expires_at TEXT,expired_at TEXT,created_by_uid TEXT,created_at TEXT,updated_at TEXT); CREATE UNIQUE INDEX source_identity ON trade_opportunities(source_reference) WHERE source_reference<>'';`);
+  sql.exec(fs.readFileSync(new URL("../drizzle/0257_enquiry_windows.sql",import.meta.url),"utf8"));
   sql.exec(fs.readFileSync(new URL("../drizzle/0250_council_workspace.sql",import.meta.url),"utf8"));
   sql.exec(`INSERT INTO council_organisations VALUES('one','First Council','first-council','VIC','active','2026-09-23','2026-09-23'); INSERT INTO council_organisations VALUES('two','Second Council','second-council','VIC','active','2026-09-23','2026-09-23'); INSERT INTO council_postcodes VALUES('one','VIC','3000','admin','2026-09-23'); INSERT INTO council_postcodes VALUES('two','VIC','3001','admin','2026-09-23');`);
+  for (const file of ["0251_council_profile.sql", "0258_council_public_branding.sql"]) sql.exec(fs.readFileSync(new URL(`../drizzle/${file}`,import.meta.url),"utf8"));
   sql.prepare("INSERT INTO council_campaigns(id,council_id,code,title,kind,audience,status,created_at,updated_at) VALUES('campaign','one',?,'Autumn upgrades','campaign','everyone','active','2026-09-23','2026-09-23')").run(code);
   const prepare=(text,values=[])=>({text,values,bind:(...next)=>prepare(text,next),first:async()=>sql.prepare(text).get(...values)||null,all:async()=>({results:sql.prepare(text).all(...values)}),run:async()=>({meta:{changes:sql.prepare(text).run(...values).changes}})});
   const db={prepare,async batch(statements){sql.exec("BEGIN");try{const result=statements.map(stmt=>({meta:{changes:sql.prepare(stmt.text).run(...stmt.values).changes}}));sql.exec("COMMIT");return result;}catch(error){sql.exec("ROLLBACK");throw error;}}};
@@ -37,7 +39,7 @@ test("referral only resolves an active campaign in its approved postcode and sta
 });
 test("public campaign projection exposes no internal identifiers or customer data",async()=>{
   const f=fixture();const result=await loadPublicCouncilCampaign(f.db,code);
-  assert.deepEqual(Object.keys(result).sort(),["code","title","kind","audience","startsAt","location","meetingUrl","councilName","state","postcodes"].sort());
+  assert.deepEqual(Object.keys(result).sort(),["code","title","kind","audience","startsAt","location","meetingUrl","councilName","state","postcodes","logoDataUrl","primaryColor","accentColor","homeUrl"].sort());
   f.sql.exec("UPDATE council_organisations SET status='suspended'");assert.equal(await loadPublicCouncilCampaign(f.db,code),null);
 });
 test("new opportunity and council attribution persist atomically, once, without reassigning retries",async()=>{

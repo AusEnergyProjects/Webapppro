@@ -1,4 +1,4 @@
-import { councilReportPeriod, councilSmallCohort, type CouncilEnquirySummary, type CouncilReportInput } from "./council-reporting.ts";
+import { COUNCIL_SECTORS, councilReportPeriod, councilSmallCohort, type CouncilEnquirySummary, type CouncilReportInput } from "./council-reporting.ts";
 import { reportWindow } from "./trade-business-reports.ts";
 
 type Cell = { dimension: string; key: string; count: number; people: number; missing: number };
@@ -23,7 +23,7 @@ export async function loadCouncilEnquiries(db: Pick<D1Database,"prepare">, input
   const query = `WITH area AS (SELECT value postcode FROM json_each(?)), months AS (
     SELECT json_extract(value,'$.key') key,json_extract(value,'$.startUtc') starts,json_extract(value,'$.endUtc') ends FROM json_each(?)
   ), source AS MATERIALIZED (
-    SELECT o.id,o.postcode,o.created_at,
+    SELECT o.id,o.postcode,o.created_at,CASE WHEN o.customer_sector IN ('business','residential') THEN o.customer_sector ELSE 'unclassified' END sector,
       CASE WHEN julianday(o.created_at)>=julianday(?) THEN 'quarter' WHEN julianday(o.created_at)>=julianday(?) THEN 'earlier_year' ELSE 'earlier_history' END band,
       NULLIF(lower(trim(r.customer_email,char(9)||char(10)||char(13)||' ')),'') customer
     FROM trade_opportunities o
@@ -36,18 +36,25 @@ export async function loadCouncilEnquiries(db: Pick<D1Database,"prepare">, input
     UNION ALL SELECT 'postcode',postcode,COUNT(*),COUNT(DISTINCT customer),SUM(customer IS NULL) FROM selected GROUP BY postcode
     UNION ALL SELECT 'month',m.key,COUNT(*),COUNT(DISTINCT s.customer),SUM(s.customer IS NULL)
       FROM selected s JOIN months m ON julianday(s.created_at)>=julianday(m.starts) AND julianday(s.created_at)<julianday(m.ends) GROUP BY m.key
+    UNION ALL SELECT 'sector',sector,COUNT(*),COUNT(DISTINCT customer),SUM(customer IS NULL) FROM selected GROUP BY sector
     UNION ALL SELECT 'privacy',s.band||':'||s.postcode||':'||COALESCE(m.key,'before_trend'),COUNT(*),COUNT(DISTINCT s.customer),SUM(s.customer IS NULL)
       FROM source s LEFT JOIN months m ON julianday(s.created_at)>=julianday(m.starts) AND julianday(s.created_at)<julianday(m.ends)
       GROUP BY s.band,s.postcode,COALESCE(m.key,'before_trend')
+    UNION ALL SELECT 'sector_privacy',s.sector||':'||s.band||':'||s.postcode||':'||COALESCE(m.key,'before_trend'),COUNT(*),COUNT(DISTINCT s.customer),SUM(s.customer IS NULL)
+      FROM source s LEFT JOIN months m ON julianday(s.created_at)>=julianday(m.starts) AND julianday(s.created_at)<julianday(m.ends)
+      GROUP BY s.sector,s.band,s.postcode,COALESCE(m.key,'before_trend')
   ) SELECT * FROM cells`;
   const {results} = await db.prepare(query).bind(JSON.stringify(input.postcodes),JSON.stringify(months),quarter.startUtc,year.startUtc,input.state,period.endUtc,period.startUtc).all<Cell>();
   // Protect postcode/month intersections and the older remainder as well as visible
   // totals. Otherwise all-time minus the last 12 months could reveal a small cohort.
-  const suppressed = results.some(row => (row.count>0 && (councilSmallCohort(row.people) || row.people===0 || row.missing>0)));
+  const unsafe=(row: Cell)=>row.count>0 && (councilSmallCohort(row.people) || row.people===0 || row.missing>0);
+  const suppressed = results.filter(row=>row.dimension!=='sector' && row.dimension!=='sector_privacy').some(unsafe);
+  const sectorSuppressed=suppressed || results.some(unsafe);
   return {
     total: suppressed ? null : Number(results.find(row=>row.dimension==='total')?.count ?? 0),
     postcodes: input.postcodes.map(postcode=>({postcode,count:suppressed ? null : Number(results.find(row=>row.dimension==='postcode' && row.key===postcode)?.count ?? 0)})),
     trend: suppressed ? [] : results.filter(row=>row.dimension==='month').sort((a,b)=>a.key.localeCompare(b.key)).map(row=>({month:row.key,count:Number(row.count)})),
     suppressed,
+    sectors:{suppressed:sectorSuppressed,rows:COUNCIL_SECTORS.map(sector=>({...sector,count:sectorSuppressed ? null : Number(results.find(row=>row.dimension==='sector' && row.key===sector.key)?.count ?? 0)}))},
   };
 }

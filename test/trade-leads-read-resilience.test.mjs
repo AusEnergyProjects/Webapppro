@@ -280,7 +280,7 @@ test("trade lead reads split base rows and execute consent authorization within 
   assert.doesNotMatch(baseRead, /customer_project_quotes|customer_project_contact_releases|customer_project_arrival_proposals/);
   assert.doesNotMatch(baseRead, /property_context|customer_goal|contact_release_id|arrival_proposal_id/);
   assert.doesNotMatch(baseRead, /any_public_contact|public_contact\.id IS NOT NULL/);
-  assert.equal(d1StatementBudget(baseRead).projection, 28);
+  assert.equal(d1StatementBudget(baseRead).projection, 31);
   assert.match(baseRead, /LIMIT 100/);
   assert.match(baseRead, /o\.created_at DESC, m\.matched_at DESC, m\.id ASC/);
   assert.match(projectRead, /o\.created_at DESC, m\.matched_at DESC, m\.id ASC/);
@@ -424,7 +424,8 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
       id TEXT PRIMARY KEY, title TEXT DEFAULT '', project_type TEXT DEFAULT '', suburb TEXT DEFAULT '',
       postcode TEXT DEFAULT '', state TEXT DEFAULT '', service_categories TEXT DEFAULT '[]',
       priority TEXT DEFAULT '', timing TEXT DEFAULT '', summary TEXT DEFAULT '', status TEXT DEFAULT 'open',
-      contact_limit INTEGER DEFAULT 2, expires_at TEXT DEFAULT '', source_reference TEXT DEFAULT '', created_at TEXT DEFAULT ''
+      contact_limit INTEGER DEFAULT 2, expires_at TEXT DEFAULT '2999-01-01T00:00:00Z', source_reference TEXT DEFAULT '', created_at TEXT DEFAULT '',
+      requested_work_by TEXT DEFAULT '', requested_completion TEXT DEFAULT 'flexible', customer_sector TEXT DEFAULT 'unclassified'
     );
     CREATE TABLE customer_projects (id TEXT PRIMARY KEY, firebase_uid TEXT, opportunity_id TEXT);
     CREATE TABLE customer_consent_receipts (
@@ -485,6 +486,10 @@ test("the authoritative base read supports broad and exact loads, caps at 100, a
     1,
   );
 
+  database.prepare("UPDATE trade_opportunities SET expires_at='2000-01-01T00:00:00Z' WHERE id='opportunity-000'").run();
+  assert.equal(loadBase("match-000").length, 0, "expired leads are hidden before stale-expiry cleanup");
+  assert.equal(database.prepare(quoteRead).all("installer-1", JSON.stringify(["match-000"])).length, 0, "a cached pre-expiry candidate cannot disclose quote details after expiry");
+  database.prepare("UPDATE trade_opportunities SET expires_at='2999-01-01T00:00:00Z' WHERE id='opportunity-000'").run();
   insertOpportunity.run("project-opportunity", "Project", "customer-project:project-1");
   database.prepare("INSERT INTO customer_projects VALUES ('project-1', 'customer-1', 'project-opportunity')").run();
   insertMatch.run(

@@ -4,7 +4,7 @@ import test from "node:test";
 import { transformSync } from "esbuild";
 import { addressLocalitiesForPostcode } from "../src/lib/address-localities.mjs";
 import * as contract from "../src/lib/council-veu.ts";
-import { councilVeuBaseline, fetchCouncilVeuSnapshot, loadCouncilVeuSnapshot, validateCouncilVeuControls } from "../src/lib/council-veu-server.ts";
+import { councilVeuBaseline, fetchCouncilVeuSnapshot, loadCouncilVeuSnapshot, mergeCouncilVeuBaselines, validateCouncilVeuControls } from "../src/lib/council-veu-server.ts";
 
 const fixture = JSON.parse(fs.readFileSync(new URL("./fixtures/council-veu/official-activities.json", import.meta.url), "utf8"));
 const area = ["3805", "3806", "3977", "3980"];
@@ -25,6 +25,65 @@ test("official VEU postcode/activity evidence decodes compressed repeats and rec
   assert.ok(all.rows.some(row => row.reportedVeecEquivalents === 43.01));
   assert.deepEqual(contract.parseCouncilVeuResponse(fixture.responses.year, area).totals, { activities: 4789, reportedVeecEquivalents: 194563 });
   assert.deepEqual(contract.parseCouncilVeuResponse(fixture.responses.quarter, area), { rows: [], totals: { activities: 0, reportedVeecEquivalents: 0 } });
+});
+
+const sectorFixture=JSON.parse(fs.readFileSync(new URL("./fixtures/council-veu/official-activity-sectors-72-postcodes.json",import.meta.url),"utf8"));
+test("official VEU Sector field splits the same72-postcode activity total and lifetime abatement",async()=>{
+  const parsed=contract.parseCouncilVeuResponse(sectorFixture.response,sectorFixture.postcodes);
+  assert.equal(parsed.sectorBasis,"official_activity_sector");assert.equal(parsed.rows.length,2080);
+  assert.equal(parsed.totals.activities,606901);assert.ok(Math.abs(parsed.totals.reportedVeecEquivalents-6313034.38)<0.00001);
+  validateCouncilVeuControls(sectorFixture.model,sectorFixture.schema,true);
+  const snapshot=await fetchCouncilVeuSnapshot(sectorFixture.postcodes,"all",{now:Date.parse(sectorFixture.extractedAt),loadEvidence:async()=>({model:sectorFixture.model,schema:sectorFixture.schema,sourceRefreshedAt:sectorFixture.refreshed,responses:[sectorFixture.response]})});
+  assert.equal(contract.isCouncilVeuSnapshot(snapshot),true);
+  const report=contract.councilVeuReport(snapshot,{...scope,postcodes:sectorFixture.postcodes},{checkedAt:snapshot.fetchedAt,refreshFailed:false,dataOrigin:"live"},Date.parse(snapshot.fetchedAt));
+  assert.deepEqual(report.sectors.rows.map(row=>[row.key,row.totals.activities]),[["business",23888],["residential",583013],["unclassified",0]]);
+  assert.equal(report.sectors.rows[0].totals.estimatedLifetimeTonnesCo2e,2374870);
+  assert.equal(report.sectors.rows.reduce((sum,row)=>sum+row.totals.activities,0),report.totals.activities);
+  assert.ok(Math.abs(report.sectors.rows.reduce((sum,row)=>sum+row.totals.estimatedLifetimeTonnesCo2e,0)-report.totals.estimatedLifetimeTonnesCo2e)<0.00001);
+  for(const row of report.sectors.rows){
+    assert.equal(row.postcodes.reduce((sum,item)=>sum+item.activities,0),row.totals.activities);
+    assert.equal(row.activities.reduce((sum,item)=>sum+item.activities,0),row.totals.activities);
+  }
+  for(const row of report.postcodes)assert.equal(new Set(row.activityBreakdown.map(item=>item.activity)).size,row.activityBreakdown.length);
+  assert.match(report.sectors.note,/not.*inference from upgrade type/);
+  assert.doesNotMatch(JSON.stringify(report),/OwnerId|Contact__c|Address__c|Business_Company_Name/);
+});
+
+test("official unknown and missing VEU sector values stay unclassified and cannot be inferred from activities",()=>{
+  for(const sourceSector of [null,"Commercial","residential",""]){
+    const response=JSON.parse(sectorFixture.response),ds=dataset(response);
+    ds.ValueDicts.D2[0]=sourceSector;
+    const parsed=contract.parseCouncilVeuResponse(JSON.stringify(response),sectorFixture.postcodes);
+    const changedRows=parsed.rows.filter(row=>row.sourceSector===sourceSector);
+    assert.ok(changedRows.length>0);assert.ok(changedRows.every(row=>row.sector==='unclassified'));
+    assert.equal(parsed.totals.activities,606901);
+  }
+});
+
+test("VEU sector source drift, compression errors, truncated windows and duplicate groups are rejected",()=>{
+  const schema=JSON.parse(sectorFixture.schema);schema.schemas[0].schema.Entities[0].Properties=schema.schemas[0].schema.Entities[0].Properties.filter(p=>p.Name!=='Sector__c');
+  assert.throws(()=>validateCouncilVeuControls(sectorFixture.model,JSON.stringify(schema),true),/field changed/);
+  for(const mutate of [
+    value=>{dataset(value).PH[1].DM1[0].S[2].T=3;},
+    value=>{value.results[0].result.data.descriptor.Select[2].GroupKeys[0].Source.Property='Industry_Business_Type__c';},
+    value=>{dataset(value).PH[1].DM1[1].R=32;},
+    value=>{dataset(value).PH[1].DM1.push({R:31,C:[]});},
+    value=>{dataset(value).PH[1].DM1=Array.from({length:15000},()=>dataset(value).PH[1].DM1[0]);},
+    value=>{dataset(value).PH[0].DM0[0].C[1]++;},
+  ]){const response=JSON.parse(sectorFixture.response);mutate(response);assert.throws(()=>contract.parseCouncilVeuResponse(JSON.stringify(response),sectorFixture.postcodes));}
+  const query=contract.councilVeuQuery(sectorFixture.postcodes,contract.councilVeuPeriod("all"));
+  assert.equal(query.Query.Select[2].Column.Property,"Sector__c");assert.equal(query.Binding.DataReduction.Primary.Window.Count,15000);
+  assert.doesNotMatch(JSON.stringify(query),/ABN__c|OwnerId|Contact__c|Business_Company_Name|Address__c/);
+});
+
+test("VEU sector snapshots reject forged classification and retain missing scope as unavailable",async()=>{
+  const snapshot=await fetchCouncilVeuSnapshot(sectorFixture.postcodes,"all",{now:Date.parse(sectorFixture.extractedAt),loadEvidence:async()=>({model:sectorFixture.model,schema:sectorFixture.schema,sourceRefreshedAt:sectorFixture.refreshed,responses:[sectorFixture.response]})});
+  const bad=structuredClone(snapshot);bad.rows[0].sector=bad.rows[0].sector==='business' ? 'residential' : 'business';assert.equal(contract.isCouncilVeuSnapshot(bad),false);
+  const missingBasis=structuredClone(snapshot);delete missingBasis.sectorBasis;assert.equal(contract.isCouncilVeuSnapshot(missingBasis),false);
+  const report=contract.councilVeuReport(snapshot,{...scope,postcodes:["3805","3999"]},{checkedAt:snapshot.fetchedAt,refreshFailed:false,dataOrigin:"cache"},Date.parse(snapshot.fetchedAt));
+  assert.ok(report.sectors.rows.every(row=>row.totals.activities===null && row.postcodes.find(item=>item.postcode==='3999').activities===null));
+  const baseline=(await councilVeuBaseline()).find(item=>item.period.key==='all');
+  assert.equal(contract.councilVeuReport(baseline,scope,{checkedAt:baseline.fetchedAt,refreshFailed:false,dataOrigin:"baseline"},now).sectors,undefined);
 });
 
 test("incomplete pages, schema drift, malformed masks, duplicate/outside scope groups and totals mismatch are rejected", () => {
@@ -112,7 +171,7 @@ test("official model identity, approved filter, displayed aggregation and source
 });
 
 test("captured baselines are valid and reports keep source totals, missing areas and installer uncertainty explicit", async () => {
-  const baseline = await councilVeuBaseline(); assert.equal(baseline.length, 3); assert.ok(baseline.every(contract.isCouncilVeuSnapshot));
+  const baseline = await councilVeuBaseline(); assert.equal(baseline.filter(item=>!item.sectorBasis).length, 3); assert.equal(baseline.filter(item=>item.sectorBasis).length,4); assert.ok(baseline.every(contract.isCouncilVeuSnapshot));
   const snapshot = baseline.find(item => item.period.key === "all");
   const report = contract.councilVeuReport(snapshot, scope, { checkedAt: snapshot.fetchedAt, refreshFailed: false, dataOrigin: "baseline" }, now);
   assert.equal(report.totals.activities, 159161); assert.equal(report.totals.estimatedLifetimeTonnesCo2e, 1378258.6);
@@ -127,6 +186,24 @@ test("captured baselines are valid and reports keep source totals, missing areas
   assert.equal(contract.isCouncilVeuSnapshot(bad), false);
   const badPeriod = structuredClone(baseline.find(item => item.period.key === "year")); badPeriod.period.startDate = "2026-02-01";
   assert.equal(contract.isCouncilVeuSnapshot(badPeriod), false);
+});
+
+test("retained Port Phillip official sectors cover its10approved postcodes and stay separate from fictional TLink outcomes",async()=>{
+  const all=await councilVeuBaseline();
+  const area=["3004","3006","3181","3182","3183","3184","3185","3205","3206","3207"];
+  const snapshots=all.filter(item=>JSON.stringify(item.postcodes)===JSON.stringify(area));
+  assert.deepEqual(snapshots.map(item=>item.period.key),["all","year","quarter"]);
+  const year=snapshots.find(item=>item.period.key==='year');assert.equal(year.totals.activities,920);assert.equal(year.totals.reportedVeecEquivalents,21488);
+  assert.ok(snapshots.every(item=>item.sectorBasis==='official_activity_sector' && Object.values(item.provenance).every(hash=>/^[a-f0-9]{64}$/.test(hash))));
+  const report=contract.councilVeuReport(year,{...scope,name:"City of Port Phillip",postcodes:area},{checkedAt:year.fetchedAt,refreshFailed:false,dataOrigin:'baseline'},Date.parse(year.fetchedAt));
+  assert.deepEqual(report.sectors.rows.map(row=>[row.key,row.totals.activities,row.totals.estimatedLifetimeTonnesCo2e]),[['business',61,5168],['residential',859,16320],['unclassified',0,0]]);
+  assert.equal(snapshots.find(item=>item.period.key==='quarter').totals.activities,0);
+  assert.equal(report.source.refreshedAt,'2026-10-07T18:12:07.000Z');
+  assert.equal(mergeCouncilVeuBaselines([snapshots,snapshots]).length,3);
+  const conflict=structuredClone(year);conflict.provenance.responseSha256='a'.repeat(64);
+  assert.throws(()=>mergeCouncilVeuBaselines([[year],[conflict]]),/Conflicting/);
+  const invalid=structuredClone(year);invalid.rows[0].activities++;
+  assert.throws(()=>mergeCouncilVeuBaselines([[invalid]]),/Invalid retained/);
 });
 
 test("source acquisition retains four integrity hashes and refuses future source refresh timestamps", async () => {
@@ -253,6 +330,18 @@ async function demoRouteFixture(at = now) {
   Function("require", "module", "exports", "Date", code)(key => { assert.ok(Object.hasOwn(dependencies, key)); return dependencies[key]; }, loaded, loaded.exports, Clock);
   return { route: loaded.exports, baselineLoads: () => baselineLoads };
 }
+
+test("public demo selects the complete Port Phillip sector snapshot and keeps better-covered legacy scopes",async()=>{
+  const baseline=await councilVeuBaseline(),portPhillip=baseline.find(item=>item.period.key==='year' && item.postcodes.includes('3207'));
+  const f=await demoRouteFixture(Date.parse(portPhillip.fetchedAt)+1);
+  const get=query=>f.route.GET(new Request(`https://example.test/api/council/veu/demo?${query}`));
+  const response=await get(`postcodes=${portPhillip.postcodes.join(',')}&period=year`),body=await response.json();
+  assert.equal(response.status,200);assert.equal(body.report.coverage.availablePostcodes,10);assert.equal(body.report.totals.activities,920);
+  assert.equal(body.report.sectors.rows[0].totals.activities,61);assert.equal(body.report.source.dataOrigin,'baseline');
+  const legacy=await (await get(`postcodes=${area.join(',')}&period=year`)).json();
+  assert.equal(legacy.report.coverage.availablePostcodes,4);assert.equal(legacy.report.totals.activities,4789);assert.equal(legacy.report.sectors,undefined);
+  assert.equal(f.baselineLoads(),2);
+});
 
 test("public VEU demo serves only retained official aggregates and never labels unknown areas zero", async () => {
   const fixture = await demoRouteFixture();

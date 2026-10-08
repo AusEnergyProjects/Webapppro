@@ -282,6 +282,7 @@ test("workflow start validates only the latest exact contact release", () => {
       '${PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION}', '${PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE}',
       '2026-08-12T00:00:00.000Z', '', '[]'
     );`);
+  database.exec(read("../drizzle/0257_enquiry_windows.sql"));
   const insertRelease = database.prepare(`INSERT INTO public_trade_lead_contact_releases
     VALUES (?, 'opportunity-1', 'AEA-20260812-0011223344556677', ?, ?, ?, '', '',
       'customer@example.com', '', '', '', '', '', '3000', '', ?, ?, ?, ?)`);
@@ -549,6 +550,13 @@ test("the final public lead issue guard executes against the exact accepted disc
       customer_source text NOT NULL, accepted_disclosure_sha256 text NOT NULL,
       accepted_disclosure_snapshot text NOT NULL
     );
+    CREATE TABLE trade_work_orders(id text, firebase_uid text, source_reference text);
+    CREATE TABLE trade_opportunity_matches(id text, firebase_uid text, opportunity_id text, status text);
+    CREATE TABLE trade_opportunities(id text, status text, expires_at text);
+    CREATE TABLE customer_quote_hubs(opportunity_id text, accepting integer);
+    INSERT INTO trade_work_orders VALUES ('job-1','trade-a','match-1');
+    INSERT INTO trade_opportunity_matches VALUES ('match-1','trade-a','opportunity-1','interested');
+    INSERT INTO trade_opportunities VALUES ('opportunity-1','open','2999-01-01T00:00:00Z');
     INSERT INTO trade_crm_job_details VALUES (
       'job-1', 'trade-a', 'public_lead_released', '${disclosureSha256}',
       '{"contract":"tlink-public-lead-accepted-disclosure-v1"}'
@@ -560,6 +568,12 @@ test("the final public lead issue guard executes against the exact accepted disc
   });
   const holds = () => Boolean(database.prepare(`SELECT 1 held WHERE ${guard.sql}`).get(...guard.bindings));
   assert.equal(holds(), true);
+  database.prepare("UPDATE trade_opportunities SET expires_at = '2000-01-01T00:00:00Z'").run();
+  assert.equal(holds(), false, "quote admission ends at the contact window");
+  database.prepare("UPDATE trade_opportunities SET expires_at = '2999-01-01T00:00:00Z'").run();
+  database.prepare("INSERT INTO customer_quote_hubs VALUES ('opportunity-1',0)").run();
+  assert.equal(holds(), false, "customer opt-out blocks new quote issue");
+  database.prepare("DELETE FROM customer_quote_hubs").run();
   database.prepare("UPDATE trade_crm_job_details SET accepted_disclosure_sha256 = ?")
     .run("b".repeat(64));
   assert.equal(holds(), false, "a changed durable disclosure fingerprint blocks the atomic issue commit");

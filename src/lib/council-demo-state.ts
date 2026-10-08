@@ -1,7 +1,8 @@
 import { parseCouncilCampaignInput, type CouncilCampaign } from "./council-campaigns.ts";
-import { COUNCIL_DEFAULT_THEME, parseCouncilProfileInput, type CouncilProfile } from "./council-profile.ts";
+import { parseCouncilProfileInput, type CouncilProfile } from "./council-profile.ts";
 import { loadCouncilDemo } from "./council-demo.ts";
 import type { CouncilPeriodKey, CouncilReport } from "./council-reporting.ts";
+import { PORT_PHILLIP_DEMO_BRANDING, PORT_PHILLIP_JOURNEY_DEMO_PATH } from "./council-public-branding.ts";
 
 export const COUNCIL_DEMO_STORAGE_KEY = "tlink.council.demonstration.v1";
 export type CouncilDemoState = { version: 1; profile: CouncilProfile; campaigns: CouncilCampaign[]; period: CouncilPeriodKey };
@@ -14,7 +15,9 @@ export function createCouncilDemoState(now = new Date()): CouncilDemoState {
   const report = loadCouncilDemo("year",now);
   return {
     version: 1, period: "year",
-    profile: { councilId: "demonstration", name: report.scope.name, state: "VIC", postcodes: report.scope.postcodes, logoDataUrl: null, theme: {...COUNCIL_DEFAULT_THEME}, updatedAt: now.toISOString() },
+    profile: { councilId: "demonstration", name: report.scope.name, state: "VIC", postcodes: report.scope.postcodes, logoDataUrl: null, theme: {...PORT_PHILLIP_DEMO_BRANDING.theme}, updatedAt: now.toISOString(),
+      publicJourney: { enabled: true, homeUrl: PORT_PHILLIP_DEMO_BRANDING.homeUrl, requestedHostname: null,
+        domainStatus: "not_requested", sharePath: PORT_PHILLIP_JOURNEY_DEMO_PATH, customDomainUrl: null } },
     campaigns: report.campaigns.map((row,index) => ({ id: row.id, councilId: "demonstration", code: row.referenceCode, title: row.name,
       kind: index === 2 ? "session" : "campaign", audience: index === 1 ? "businesses" : "everyone", status: "active",
       startsAt: index === 2 ? "2026-10-08T07:00:00.000Z" : null, location: index === 2 ? "Demonstration community centre" : null,
@@ -30,7 +33,9 @@ export function readCouncilDemoState(raw: string | null): CouncilDemoState | nul
     const savedProfile = record(saved?.profile);
     if (!saved || saved.version !== 1 || !savedProfile || savedProfile.councilId !== "demonstration" || savedProfile.state !== "VIC"
       || (saved.period !== "quarter" && saved.period !== "year" && saved.period !== "all") || !Array.isArray(saved.campaigns) || saved.campaigns.length > 100) return null;
-    const profile = parseCouncilProfileInput({ name: savedProfile.name, postcodes: savedProfile.postcodes, logoDataUrl: savedProfile.logoDataUrl, theme: savedProfile.theme },"VIC");
+    const savedJourney = record(savedProfile.publicJourney);
+    const profile = parseCouncilProfileInput({ name: savedProfile.name, postcodes: savedProfile.postcodes, logoDataUrl: savedProfile.logoDataUrl, theme: savedProfile.theme,
+      ...(savedJourney ? { publicJourney: { enabled: savedJourney.enabled, homeUrl: savedJourney.homeUrl, requestedHostname: savedJourney.requestedHostname } } : {}) },"VIC");
     if (typeof savedProfile.updatedAt !== "string" || !Number.isFinite(Date.parse(savedProfile.updatedAt))) return null;
     const ids = new Set<string>();
     const campaigns: CouncilCampaign[] = saved.campaigns.map((value: unknown) => {
@@ -46,7 +51,9 @@ export function readCouncilDemoState(raw: string | null): CouncilDemoState | nul
         createdAt: row.createdAt, updatedAt: row.updatedAt, shareUrl: `/council/demo?campaign=${encodeURIComponent(row.id)}` };
     });
     if (loadCouncilDemo().campaigns.some(campaign => !ids.has(campaign.id))) return null;
-    return { version: 1, period: saved.period, profile: {...profile,councilId:"demonstration",state:"VIC",updatedAt:savedProfile.updatedAt},campaigns };
+    const { publicJourney: restoredJourney, ...restoredIdentity } = profile;
+    return { version: 1, period: saved.period, profile: {...restoredIdentity,councilId:"demonstration",state:"VIC",updatedAt:savedProfile.updatedAt,
+      ...(restoredJourney ? { publicJourney: { ...restoredJourney, domainStatus: "not_requested", sharePath: PORT_PHILLIP_JOURNEY_DEMO_PATH, customDomainUrl: null } } : {}) },campaigns };
   } catch { return null; }
 }
 

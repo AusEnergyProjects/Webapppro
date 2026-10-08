@@ -208,6 +208,16 @@ test("hub email delivery reuses the exact capability and rejects wrong recipient
   }
 });
 
+test("the customer's project link lasts for the selected contact window and displays their work deadline", async t => {
+  const f = await fixture(t);
+  assert.equal(f.hubRow().expires_at, future, "a quote window longer than 90 days must not lose its customer link early");
+  f.update("trade_opportunities", { requested_work_by: "2099-08-30", requested_completion: "date", customer_sector: "business" }, "id='project-a'");
+  const view = await f.view();
+  assert.equal(view.requestedWorkBy, "2099-08-30");
+  assert.equal(view.requestedCompletion, "date");
+  assert.equal(view.contactExpiresAt, future);
+});
+
 test("quote child capabilities require exact business, customer, job, version and live link bindings", async t => {
   const f = await fixture(t);
   const cases = [

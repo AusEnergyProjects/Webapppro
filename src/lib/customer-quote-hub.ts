@@ -9,5 +9,5 @@ export type HubQuestion = { id: string; prompt: string; kind: "text" | "photo" |
   authorType:'customer'|'trade'; business: string; businessProfile?:HubBusinessProfile; replies:HubReply[];
   answer: string; revision: number; closed: boolean; files: { id: string; name: string; type: string }[] };
 export type TradeHubQuestion = Omit<HubQuestion,'business'|'businessProfile'|'replies'> & {replies:Omit<HubReply,'business'|'businessProfile'>[]};
-export type CustomerQuoteHub = { title: string; reference: string; expiresAt: string; accepting: boolean; revision: number;
+export type CustomerQuoteHub = { title: string; reference: string; expiresAt: string; contactExpiresAt: string; requestedWorkBy: string; requestedCompletion: string; accepting: boolean; revision: number;
   services: HubService[]; quotes: HubQuote[]; questions: HubQuestion[] };

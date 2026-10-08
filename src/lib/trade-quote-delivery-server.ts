@@ -1,3 +1,4 @@
+import { publicLeadIssueAccessGuard } from "./public-lead-quote-workflow.mjs";
 import type { ReminderProviderMessage } from "./service-reminder-delivery.ts";
 import { reminderProviderFailureOutcome } from "./service-reminder-delivery.ts";
 import {
@@ -412,6 +413,10 @@ export async function drainTradeQuoteDeliveries(options: DrainOptions) {
       const message = options.prepareMessage
         ? await options.prepareMessage(row)
         : await defaultPrepareMessage(db, row, now);
+      if (row.source_type === "public_lead") {
+        const guard = publicLeadIssueAccessGuard(String(row.firebase_uid), { ...row, id: row.work_order_id, public_lead_enquiry: true });
+        if (!await db.prepare(`SELECT 1 WHERE ${guard.sql}`).bind(...guard.bindings).first()) throw new Error("QUOTE_DELIVERY_ACCESS_ENDED");
+      }
       // Readiness and document preparation can retry without ever reaching a provider.
       // Preserve historical dispatch evidence until the adapter journals this submission.
       const dispatch = await db.prepare(`UPDATE trade_crm_quote_deliveries SET last_attempt_at = ?

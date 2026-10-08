@@ -52,7 +52,9 @@ function sourceDatabase() {
     expired_at text NOT NULL,
     created_by_uid text NOT NULL,
     created_at text NOT NULL,
-    updated_at text NOT NULL
+    updated_at text NOT NULL,
+    quote_window_value integer NOT NULL DEFAULT 30, quote_window_unit text NOT NULL DEFAULT 'days',
+    requested_completion text NOT NULL DEFAULT 'flexible', requested_work_by text NOT NULL DEFAULT '', customer_sector text NOT NULL DEFAULT 'unclassified'
   );
   CREATE UNIQUE INDEX trade_opportunities_source_reference_idx
     ON trade_opportunities (source_reference) WHERE source_reference <> '';

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { searchPublicSite, type PublicSiteSearchResult } from "@/lib/public-site-search";
 import styles from "./PublicSiteSearch.module.css";
 
+const OPEN_NAVIGATION_SELECTOR = ".site-nav-shell details[open]";
+
 export function PublicSiteSearch() {
   const router = useRouter();
   const inputId = useId();
@@ -17,21 +19,21 @@ export function PublicSiteSearch() {
   const showResults = open && query.trim().length > 0;
 
   useEffect(() => {
-    if (!showResults || results.length === 0) return;
+    if (!showResults || !results.length) return;
     router.prefetch(results[activeIndex >= 0 ? activeIndex : 0].path);
   }, [activeIndex, results, router, showResults]);
 
   useEffect(() => {
     function closeWhenOutside(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-      document.querySelectorAll<HTMLDetailsElement>(".site-nav-shell details[open]").forEach((disclosure) => {
+      document.querySelectorAll<HTMLDetailsElement>(OPEN_NAVIGATION_SELECTOR).forEach((disclosure) => {
         if (!disclosure.contains(event.target as Node)) disclosure.open = false;
       });
     }
 
     function closeNavigationOnEscape(event: globalThis.KeyboardEvent) {
       if (event.key !== "Escape") return;
-      const disclosures = [...document.querySelectorAll<HTMLDetailsElement>(".site-nav-shell details[open]")];
+      const disclosures = [...document.querySelectorAll<HTMLDetailsElement>(OPEN_NAVIGATION_SELECTOR)];
       if (!disclosures.length) return;
       const focusedDisclosure = document.activeElement instanceof Element
         ? document.activeElement.closest<HTMLDetailsElement>("details[open]")
@@ -62,7 +64,7 @@ export function PublicSiteSearch() {
       return;
     }
 
-    if (!showResults || results.length === 0) return;
+    if (!showResults || !results.length) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setActiveIndex((current) => (current + 1) % results.length);

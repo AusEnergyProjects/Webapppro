@@ -1,7 +1,19 @@
 # Next task handover
 
-Status: Wattzun form companion, call quality and Council community tools; guided end-to-end form completion and matching GitHub/Sites publication authorised.
+Status: SECCCA council feedback: customer enquiry windows, council-branded journeys and official-source council reporting; matching GitHub/Sites publication authorised.
 Prepared: 8 October 2026
+
+## Current delivery: council journey and reporting
+
+Outcome: customers choose a quote/contact window which closes automatically and a requested work-completion deadline. Council administrators publish an attributed council-branded enquiry journey using their existing profile and a return-home link; custom domains activate only after verified hosting/DNS setup. City of Port Phillip is an explicitly labelled demonstration. Official CER/VEU community activity is the main council view, with business/residential breakdowns only where the source supports them. TLink participation stays separately labelled. Council-nominated report recipients receive a branded PDF after a new CER monthly edition is detected, with a durable snapshot, per-recipient delivery history and no duplicate ambiguous resends.
+
+Ownership: enquiry windows/intake/matching projections and migration 0257 have one writer; council profile/public journey/domain projection and migration 0258 have another; council protected sector aggregates and official VEU sector data have another. The coordinator owns report PDF/settings/delivery migration 0259, worker integration, final source review, evidence and release. Shared edits are coordinated explicitly. Reuse opportunity expiry, campaign attribution, existing membership checks, R2 storage, provider mail service and worker daily maintenance; no new vendor or dependency.
+
+Acceptance: server-side expiry blocks new quotes and released contact access while preserving accepted-job records. Completion targets are customer requests, not a promise of trade availability. Preserve AEA-only versus marketplace consent, exact postcode scope and existing sharing choices. Custom council hosts expose only their public journey and required public endpoints/assets, never private dashboards or tokens. Official source provenance, dates, coverage, missing values and aggregate reconciliation remain visible; never infer commercial use from system size, call installed capacity generation, or add overlapping schemes. Council private cohort and complementary suppression remain intact across sectors, postcodes, activities and fixed periods. Monthly reports use current council scope and authorised settings at generation and delivery, retain immutable PDF/hash before sending and distinguish provider acceptance from inbox delivery. Real customer/council mail is not sent as QA.
+
+Validation: focused parser/D1/privacy/domain/expiry/delivery and responsive UI tests, visual PDF rendering, typecheck/lint, full tests and migration integrity for changed persistence/permissions, committed publication build and affected live flows. Record existing failures separately. Remaining custom DNS and recipient configuration must be reported honestly. Evidence: C:/Webproject/outputs/council-seccca-feedback-20261008/.
+
+Resolved live incident: the user increased AEA's radius to 1000 km. Existing enquiry AEA-20261006-4DD61921E72345C6 was rematched through the audited Admin action, allocated to AEA and confirmed in its trade Leads. One matching email was accepted by the provider. Customer-selected sharing still controls the disclosed contact fields; inbox receipt was not checked.
 
 ## Field verification: official VEU electrical safety assessment
 

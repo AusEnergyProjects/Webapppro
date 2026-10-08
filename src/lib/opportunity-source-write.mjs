@@ -1,3 +1,4 @@
+import { enquiryDeadlines } from "./enquiry-timing.mjs";
 import { tradeOpportunityServiceScopeAllowed, tradeOpportunityServiceScopeSql } from "./aea-trade-routing.mjs";
 import { isAllQualifiedTradeConsent } from "./public-plan-enquiry.mjs";
 /** @param {import("./council-campaign-server.ts").CouncilReferral | null} councilAttribution */
@@ -18,8 +19,8 @@ export async function persistLeadOpportunity(
   const insert = database.prepare(`INSERT INTO trade_opportunities
     (id, title, project_type, postcode, state, service_categories, priority, timing, summary, status,
      source_reference, contact_limit, maximum_connected_installers, expires_at, expired_at,
-     created_by_uid, created_at, updated_at)
-    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'lead-intake', ?, ? ${referralGuard}
+     created_by_uid, created_at, updated_at, quote_window_value, quote_window_unit, requested_completion, requested_work_by, customer_sector)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'lead-intake', ?, ?, ?, ?, ?, ?, ? ${referralGuard}
     ON CONFLICT(source_reference) WHERE source_reference <> '' DO NOTHING`)
     .bind(
       record.id,
@@ -38,6 +39,11 @@ export async function persistLeadOpportunity(
       record.expiresAt,
       record.createdAt,
       record.createdAt,
+      record.quoteWindowValue ?? 30,
+      record.quoteWindowUnit || "days",
+      record.requestedCompletion || "flexible",
+      record.requestedWorkBy || "",
+      record.customerSector || "unclassified",
       ...(councilAttribution ? [record.state,record.postcode,councilAttribution.campaignId,councilAttribution.councilId,councilAttribution.code] : []),
     );
   if (councilAttribution) {
@@ -53,9 +59,9 @@ export async function persistLeadOpportunity(
     await insert.run();
   }
   const canonical = await database.prepare(record.sourceReference
-    ? `SELECT id, status, postcode, state, service_categories
+    ? `SELECT id, status, postcode, state, service_categories, created_at, quote_window_value, quote_window_unit, requested_completion, requested_work_by, customer_sector
       FROM trade_opportunities WHERE source_reference = ? LIMIT 1`
-    : `SELECT id, status, postcode, state, service_categories
+    : `SELECT id, status, postcode, state, service_categories, created_at, quote_window_value, quote_window_unit, requested_completion, requested_work_by, customer_sector
       FROM trade_opportunities WHERE id = ? LIMIT 1`)
     .bind(record.sourceReference || record.id)
     .first();
@@ -77,7 +83,12 @@ export async function persistLeadOpportunity(
     }
   })();
   if (
-    String(canonical.postcode) !== String(record.postcode)
+    Number(canonical.quote_window_value) !== (record.quoteWindowValue ?? 30)
+    || String(canonical.quote_window_unit) !== (record.quoteWindowUnit || "days")
+    || String(canonical.requested_completion) !== (record.requestedCompletion || "flexible")
+    || String(canonical.customer_sector) !== (record.customerSector || "unclassified")
+    || String(canonical.requested_work_by) !== (record.requestedCompletion ? enquiryDeadlines(record, String(canonical.created_at)).requestedWorkBy : "")
+    || String(canonical.postcode) !== String(record.postcode)
     || String(canonical.state) !== String(record.state)
     || JSON.stringify(canonicalCategories) !== JSON.stringify(requestedCategories)
   ) throw new Error("OPPORTUNITY_SOURCE_REFERENCE_MISMATCH");

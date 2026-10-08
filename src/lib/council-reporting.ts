@@ -16,9 +16,21 @@ export type CouncilBreakdown = { key: string; label: string; completedJobs: numb
 export type CouncilPostcodeBreakdown = CouncilBreakdown & { registeredLocalBusinesses: number | null };
 export type CouncilMapCell = { postcode: string; label: string; position: { lat: number; lng: number } | null; completedJobs: number | null; registeredLocalBusinesses: number | null };
 export type CouncilCampaignReport = { id: string; name: string; referenceCode: string; channel: string; enquiries: number | null; completedJobs: number | null; completedValueCents: number | null };
-export type CouncilEnquirySummary = { total: number | null; postcodes: Array<{ postcode: string; count: number | null }>; trend: Array<{ month: string; count: number | null }>; suppressed: boolean };
+export const COUNCIL_SECTORS = [{ key: "business", label: "Business" }, { key: "residential", label: "Residential" }, { key: "unclassified", label: "Not classified" }] as const;
+export type CouncilSectorKey = typeof COUNCIL_SECTORS[number]["key"];
+export type CouncilSectorMetrics = Pick<CouncilMeasures, "completedJobs" | "completedValueCents" | "veecQuantity" | "stcQuantity" | "estimatedTonnesCo2e"> & {
+  generationInstallations: number | null; generationCapacityKw: number | null;
+  storageInstallations: number | null; storageCapacityKwh: number | null;
+  measuredGenerationKwh: number | null;
+};
+export type CouncilSectorReport = {
+  basis: "recorded_customer_type"; suppressed: boolean; coverageNote: string;
+  rows: Array<{ key: CouncilSectorKey; label: string; metrics: CouncilSectorMetrics; activities: CouncilBreakdown[]; postcodes: CouncilBreakdown[]; trend: Array<CouncilBreakdown & { start: string; end: string }> }>;
+};
+export type CouncilEnquirySummary = { total: number | null; postcodes: Array<{ postcode: string; count: number | null }>; trend: Array<{ month: string; count: number | null }>; suppressed: boolean; sectors?: { suppressed: boolean; rows: Array<{ key: CouncilSectorKey; label: string; count: number | null }> } };
 export type CouncilReport = {
   enquiries?: CouncilEnquirySummary;
+  sectors?: CouncilSectorReport;
   generatedAt: string; mode: "live" | "demonstration";
   scope: Omit<CouncilReportInput, "period">;
   period: CouncilReportPeriod;
@@ -48,6 +60,7 @@ export function councilSmallCohort(count: number) { return count > 0 && count < 
 export const COUNCIL_REPORT_METHODOLOGY = [
   "Reporting covers completed work recorded in TLink within the council's approved postcode area. It does not measure all activity in the municipality. Postcodes can cross council boundaries.",
   "A completed job is an active work order currently marked completed with a recorded completion event. Each job is counted once under its primary activity, including jobs with several activities.",
+  "Business and residential outcomes use the owning CRM customer's recorded customer type, not the delivering trade's business status or an inferred property type. Missing, conflicting or unsupported classifications are shown as not classified. This describes the recorded customer sector, not independently verified land use.",
   "Work value is recorded issued TLink invoicing less issued credits, in AUD excluding GST, for those completed jobs. Quotes, estimates and unissued invoices are excluded. This is work value, not council revenue or total local economic impact.",
   "Local means the delivering business's recorded business address is in the approved council postcode area and state. Service coverage is not a business location. Unknown business locations are reported separately. Work orders do not measure employment created.",
   "Only active businesses with an authoritative approved ABN review are counted as registered local trades. Synthetic accounts and their work are excluded from live reporting.",
@@ -56,5 +69,6 @@ export const COUNCIL_REPORT_METHODOLOGY = [
   "STCs and VEECs are separate scheme units and must not be added together. STCs are not tonnes of carbon. Carbon estimates require a documented emissions method, timeframe and protection against counting the same upgrade twice.",
   "Impact totals include only immutable, independently reviewed certificate packets with a retained, hash-verified provider acceptance, linked to the current completed job and case revision. Provider acceptance is not proof of registry issuance. Multiple ambiguous packets for the same job and scheme are withheld.",
   "VEEC quantities represent deemed lifetime tonnes of CO2 equivalent under VEU. Displayed abatement uses accepted VEEC quantities only, excludes STCs and is not annual or measured emissions reduction. Trend displays the latest 12 months of the selected period; all-time headline totals retain the complete history.",
+  "Generation and storage capacity include only current, independently reviewed, provider-accepted SRES packets retaining hash-verified calculator inputs for generation (PV, wind or hydro rated kW) or new-system batteries (usable kWh). These are partial evidence-backed installation counts and capacities, not all installations or electricity generated. No metered generation dataset is connected, so actual generation in kWh is unavailable. Sector figures and their time, activity and postcode intersections use complementary cohort protection.",
   "Customer names, addresses, contacts, ABNs and job identifiers are never included. Small cohorts and complementary breakdowns are withheld. The minimum cohort is five distinct customer records, not proof of five distinct people. Live reports use fixed periods and the full approved area; changing totals over time are not a guarantee of anonymity.",
 ];

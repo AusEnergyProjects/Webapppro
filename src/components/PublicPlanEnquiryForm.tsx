@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { EnquiryTimingFields, DEFAULT_ENQUIRY_TIMING, type EnquiryTiming } from "./EnquiryTimingFields";
 import {
   AustralianAddressLookup,
   type AustralianAddressSuggestion,
@@ -224,6 +225,7 @@ function submissionCoreKey({
   interests,
   message,
   tradeSharing,
+  timing,
   quoteAnswers,
   quotePhotos,
   planSnapshot,
@@ -244,6 +246,7 @@ function submissionCoreKey({
     phone: boolean;
     address: boolean;
   };
+  timing: EnquiryTiming;
   quoteAnswers: QuotePreparationAnswer[];
   quotePhotos: QuotePhotoSelection[];
   planSnapshot: PublicPlanSnapshot;
@@ -261,6 +264,7 @@ function submissionCoreKey({
     interests: [...interests].sort(),
     message: message.trim(),
     tradeSharing,
+    timing,
     quoteAnswers: [...quoteAnswers]
       .sort((left, right) => left.questionId.localeCompare(right.questionId)),
     quotePhotos: quotePhotos
@@ -330,6 +334,7 @@ export function PublicPlanEnquiryForm({
   const [interests, setInterests] = useState<PublicPlanUpgradeInterest[]>(() =>
     initialAllowedInterests(suggestedInterests));
   const [message, setMessage] = useState("");
+  const [timing, setTiming] = useState(DEFAULT_ENQUIRY_TIMING);
   const [quoteAnswers, setQuoteAnswers] = useState<Record<string, string>>({});
   const [includeKnownPlanAnswers, setIncludeKnownPlanAnswers] = useState(false);
   const [quotePhotos, setQuotePhotos] = useState<QuotePhotoSelection[]>([]);
@@ -965,6 +970,7 @@ export function PublicPlanEnquiryForm({
           phone: sharePhone,
           address: shareAddress,
         },
+        timing,
         quoteAnswers: preparedQuoteAnswers,
         quotePhotos,
         planSnapshot,
@@ -1005,6 +1011,8 @@ export function PublicPlanEnquiryForm({
           postcode,
           projectCategories: interests,
           projectNotes: message,
+          ...timing,
+          customerSector: "residential",
           tradeSharing: {
             email: true,
             postcode: true,
@@ -1511,6 +1519,7 @@ export function PublicPlanEnquiryForm({
           </details>
         </div>
 
+        <EnquiryTimingFields value={timing} onChange={setTiming} />
         {<fieldset className={styles.shareChoices}>
           <legend>Choose what matching trades can see</legend>
           <p>Your email, postcode, selected services, message and any optional quote details or photos are included so trades can reply and understand what you need. Your name, phone and full property address are selected by default. Untick any box to keep that detail private from matching trades. Relevant facts from your plan are included only when you choose to share the read-only summary above.</p>

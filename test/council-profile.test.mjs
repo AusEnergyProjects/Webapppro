@@ -62,7 +62,7 @@ test("profile auth, atomic writes and branding execute against actual Cloudflare
     const db = await runtime.getD1Database("DB");
     await db.prepare("CREATE TABLE trade_opportunities(id TEXT PRIMARY KEY)").run();
     await db.prepare("CREATE TABLE admin_audit_log(id TEXT PRIMARY KEY,admin_uid TEXT NOT NULL,action TEXT NOT NULL,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,summary TEXT NOT NULL,metadata TEXT NOT NULL,created_at TEXT NOT NULL)").run();
-    for (const file of ["0250_council_workspace.sql", "0251_council_profile.sql"]) {
+    for (const file of ["0250_council_workspace.sql", "0251_council_profile.sql", "0258_council_public_branding.sql"]) {
       for (const statement of read(`../drizzle/${file}`).split("--> statement-breakpoint")) if (statement.trim()) await db.prepare(statement).run();
     }
     let identity;
@@ -87,6 +87,8 @@ test("profile auth, atomic writes and branding execute against actual Cloudflare
     });
     const reset = async () => {
       beforeBatch = undefined; identity = { uid: "member-uid", email: "member@example.test", emailVerified: true };
+      await db.prepare("UPDATE council_organisations SET public_campaign_id=NULL").run();
+      await db.prepare("DELETE FROM council_campaigns").run();
       await db.batch(["council_postcodes", "council_memberships", "council_organisations", "admin_audit_log"].map(table => db.prepare(`DELETE FROM ${table}`)));
       await db.batch([
         db.prepare("INSERT INTO council_organisations(id,name,slug,state,status,created_at,updated_at) VALUES ('owned','Original council','original-council','VIC','active','2026-09-23','2026-09-23'),('other','Other council','other-council','VIC','active','2026-09-23','2026-09-23')"),
@@ -106,7 +108,8 @@ test("profile auth, atomic writes and branding execute against actual Cloudflare
       const body = { ...valid(), logoDataUrl, theme: { primaryColor: "#123456", accentColor: "#ABCDEF" } };
       const saved = await route.PATCH(request("PATCH", body)); assert.equal(saved.status, 200, await saved.clone().text());
       const result = (await saved.json()).profile;
-      assert.deepEqual(result, { councilId: "owned", name: body.name, state: "VIC", postcodes: ["3175", "3805"], logoDataUrl, theme: { primaryColor: "#123456", accentColor: "#abcdef" }, updatedAt: result.updatedAt });
+      assert.deepEqual(result, { councilId: "owned", name: body.name, state: "VIC", postcodes: ["3175", "3805"], logoDataUrl, theme: { primaryColor: "#123456", accentColor: "#abcdef" }, updatedAt: result.updatedAt,
+        publicJourney: { enabled: false, homeUrl: null, requestedHostname: null, domainStatus: "not_requested", sharePath: null, customDomainUrl: null } });
       assert.deepEqual((await (await route.GET(request())).json()).profile, result);
       const audit = await db.prepare("SELECT * FROM admin_audit_log").first(); const metadata = JSON.parse(audit.metadata);
       assert.equal(audit.admin_uid, "member-uid"); assert.equal(audit.entity_id, "owned"); assert.deepEqual(metadata.before.postcodes, ["3175"]);
@@ -170,5 +173,60 @@ test("profile auth, atomic writes and branding execute against actual Cloudflare
       assert.deepEqual((await response.json()).profile.postcodes, postcodes); assert.equal(await auditCount(), 1);
       assert.ok((await db.prepare("SELECT metadata FROM admin_audit_log").first()).metadata.length < 4000);
     });
+
+    await t.test("enabling a council journey creates one stable attributed campaign; edits preserve its reference and old clients preserve settings", async () => {
+      await reset();
+      const publicJourney = { enabled: true, homeUrl: "https://www.portphillip.vic.gov.au/", requestedHostname: "energy.portphillip.vic.gov.au" };
+      const enabled = await route.PATCH(request("PATCH", { ...valid(), publicJourney }));
+      assert.equal(enabled.status, 200, await enabled.clone().text());
+      const first = (await enabled.json()).profile.publicJourney;
+      assert.match(first.sharePath, /^\/council\/program\/[a-f0-9]{32}$/);
+      assert.equal(first.domainStatus, "pending"); assert.equal(first.customDomainUrl, null);
+      const campaigns = (await db.prepare("SELECT id,code,council_id,status FROM council_campaigns").all()).results;
+      assert.equal(campaigns.length, 1); assert.equal(campaigns[0].council_id, "owned");
+      const edited = await route.PATCH(request("PATCH", { ...valid(), name: "Renamed council", publicJourney }));
+      assert.equal(edited.status, 200); assert.equal((await edited.json()).profile.publicJourney.sharePath, first.sharePath);
+      assert.equal((await db.prepare("SELECT COUNT(*) n FROM council_campaigns").first()).n, 1);
+      assert.equal((await route.PATCH(request("PATCH", valid()))).status, 200);
+      assert.deepEqual((await (await route.GET(request())).json()).profile.publicJourney, first);
+      const paused = await route.PATCH(request("PATCH", { ...valid(), publicJourney: { ...publicJourney, enabled: false } }));
+      assert.equal(paused.status, 200); assert.equal((await paused.json()).profile.publicJourney.sharePath, null);
+      assert.equal((await db.prepare("SELECT status FROM council_campaigns").first()).status, "paused");
+      await route.PATCH(request("PATCH", { ...valid(), publicJourney }));
+      assert.equal((await (await route.GET(request())).json()).profile.publicJourney.sharePath, first.sharePath);
+    });
+
+    await t.test("council users cannot claim domain verification; changing hostname revokes verified binding atomically", async () => {
+      await reset();
+      const publicJourney = { enabled: true, homeUrl: "https://www.portphillip.vic.gov.au/", requestedHostname: "energy.portphillip.vic.gov.au" };
+      assert.equal((await route.PATCH(request("PATCH", { ...valid(), publicJourney: { ...publicJourney, domainStatus: "verified" } }))).status, 400);
+      await route.PATCH(request("PATCH", { ...valid(), publicJourney }));
+      await db.prepare("UPDATE council_organisations SET public_hostname_verified_at='2026-10-08T01:00:00.000Z' WHERE id='owned'").run();
+      const verified = (await (await route.GET(request())).json()).profile.publicJourney;
+      assert.equal(verified.domainStatus, "verified"); assert.equal(verified.customDomainUrl, "https://energy.portphillip.vic.gov.au/");
+      await route.PATCH(request("PATCH", { ...valid(), publicJourney }));
+      assert.equal((await (await route.GET(request())).json()).profile.publicJourney.domainStatus, "verified");
+      await route.PATCH(request("PATCH", { ...valid(), publicJourney: { ...publicJourney, requestedHostname: "upgrades.portphillip.vic.gov.au" } }));
+      assert.equal((await (await route.GET(request())).json()).profile.publicJourney.domainStatus, "pending");
+      assert.equal((await db.prepare("SELECT public_hostname_verified_at FROM council_organisations WHERE id='owned'").first()).public_hostname_verified_at, null);
+    });
+
+    await t.test("revoked membership cannot create or enable a public journey", async () => {
+      await reset();
+      beforeBatch = () => db.prepare("UPDATE council_memberships SET role='viewer'").run();
+      assert.equal((await route.PATCH(request("PATCH", { ...valid(), publicJourney: { enabled: true, homeUrl: "https://www.portphillip.vic.gov.au/", requestedHostname: null } }))).status, 403);
+      assert.equal((await db.prepare("SELECT COUNT(*) n FROM council_campaigns").first()).n, 0);
+      assert.equal((await db.prepare("SELECT public_journey_enabled n FROM council_organisations WHERE id='owned'").first()).n, 0);
+      assert.equal(await auditCount(), 0);
+    });
   } finally { await runtime.dispose(); }
+});
+
+test("public journey settings reject unsafe home redirects, private or reserved domains, verification fields and missing home links", () => {
+  const publicJourney = { enabled: true, homeUrl: "https://www.portphillip.vic.gov.au/", requestedHostname: "energy.portphillip.vic.gov.au" };
+  assert.deepEqual(contract.parseCouncilProfileInput({ ...valid(), publicJourney }, "VIC").publicJourney, publicJourney);
+  for (const change of [{ homeUrl: null }, { homeUrl: "javascript:alert(1)" }, { homeUrl: "https://me:secret@www.portphillip.vic.gov.au/" }, { homeUrl: "//hostile.example/path" }, { homeUrl: "https://127.0.0.1/" }, { homeUrl: "https://localhost/" }, { homeUrl: "https://example.com:444/" },
+    { requestedHostname: "https://energy.portphillip.vic.gov.au" }, { requestedHostname: "127.0.0.1" }, { requestedHostname: "energy.local" }, { requestedHostname: "ausenergyassessments.com" }, { requestedHostname: "unrelated.chatgpt.site" }, { requestedHostname: "energy.portphillip.vic.gov.au/path" }, { requestedHostname: "energy.portphillip.vic.gov.au:443" }, { enabled: "yes" }, { verifiedAt: "now" }]) {
+    assert.throws(() => contract.parseCouncilProfileInput({ ...valid(), publicJourney: { ...publicJourney, ...change } }, "VIC"), contract.CouncilProfileInputError, JSON.stringify(change));
+  }
 });

@@ -12,14 +12,36 @@ const activityLabel = (value: number | null, measure: ActivityMeasure) => value 
 
 export function CouncilSummary({ report }: { report: CouncilReport }) {
   const m = report.metrics;
-  return <div className={`${styles.metrics} ${report.enquiries ? styles.metricsSix : ""}`}>
+  return <><CouncilSectorOutcomes report={report} /><div className={`${styles.metrics} ${report.enquiries ? styles.metricsSix : ""}`}>
     <CouncilMetric label="Completed upgrades" value={councilNumber(m.completedJobs)} detail="Completed work recorded in your area" icon="check" accent />
     {report.enquiries && <CouncilMetric label="Community enquiries" value={councilNumber(report.enquiries.total)} detail="All recorded enquiries in your postcodes" icon="users" />}
     <CouncilMetric label="Estimated lifetime emissions avoided" value={m.estimatedTonnesCo2e === null ? "Not available" : `${councilNumber(m.estimatedTonnesCo2e)} t`} detail={m.estimatedTonnesCo2e === null ? "Awaiting supported impact evidence" : "CO₂-e over upgrade lifetimes, not per year"} icon="leaf" />
     <CouncilMetric label="Work delivered locally" value={m.localSharePercent === null ? "Not available" : `${councilNumber(m.localSharePercent)}%`} detail="Delivered by businesses based in your area" icon="business" />
     <CouncilMetric label="Onboarded local trades" value={councilNumber(m.registeredLocalBusinesses)} detail="Approved businesses based in your area" icon="business" />
     <CouncilMetric label="Completed work value" value={councilMoney(m.completedValueCents, true)} detail="Recorded invoiced work, excluding GST" icon="activity" />
-  </div>;
+  </div></>;
+}
+
+export function CouncilSectorOutcomes({ report }: { report: CouncilReport }) {
+  const [selectedKey,setSelectedKey]=useState("business");
+  const sectors=report.sectors;
+  if (!sectors) return null;
+  const selected=sectors.rows.find(row=>row.key===selectedKey) ?? sectors.rows[0];
+  const unclassified=sectors.rows.find(row=>row.key==='unclassified');
+  return <CouncilPanel title="TLink business and residential outcomes" subtitle={report.mode==='demonstration' ? "Fictional TLink outcomes, clearly separated by customer sector" : "Completed upgrades recorded in TLink, clearly separated by customer sector"}>
+    <div className={styles.evenColumns}>{sectors.rows.filter(row=>row.key!=='unclassified').map(row=><CouncilMetric key={row.key} label={`${row.label} completed upgrades`} value={councilNumber(row.metrics.completedJobs)} detail="Each completed job counted once" icon={row.key==='business' ? 'business' : 'users'} accent={row.key==='business'} />)}</div>
+    <p className={styles.formHint}>Not classified: {councilNumber(unclassified?.metrics.completedJobs ?? null)} completed upgrades. Classification uses the recorded customer type; it does not infer who occupies a property.</p>
+    <div className={styles.segmentedControl} aria-label="TLink customer sector">{sectors.rows.map(row=><button type="button" key={row.key} aria-pressed={row.key===selected.key} onClick={()=>setSelectedKey(row.key)}>{row.label}</button>)}</div>
+    <div className={styles.metrics}>
+      <CouncilMetric label={`${selected.label} work value`} value={councilMoney(selected.metrics.completedValueCents,true)} detail="Issued invoicing, excluding GST" icon="activity" />
+      <CouncilMetric label={`${selected.label} lifetime CO₂-e reduction`} value={selected.metrics.estimatedTonnesCo2e===null ? "Not available" : `${councilNumber(selected.metrics.estimatedTonnesCo2e)} t`} detail="Supported VEU deemed lifetime abatement" icon="leaf" />
+      <CouncilMetric label="Generation capacity" value={selected.metrics.generationCapacityKw===null ? "Not available" : `${councilNumber(selected.metrics.generationCapacityKw)} kW`} detail={`${councilNumber(selected.metrics.generationInstallations)} ${report.mode==='demonstration' ? 'sample' : 'evidence-backed'} generation installations`} icon="activity" />
+      <CouncilMetric label="Usable battery storage" value={selected.metrics.storageCapacityKwh===null ? "Not available" : `${councilNumber(selected.metrics.storageCapacityKwh)} kWh`} detail={`${councilNumber(selected.metrics.storageInstallations)} ${report.mode==='demonstration' ? 'sample' : 'evidence-backed new-system'} battery installations`} icon="activity" />
+    </div>
+    <p className={styles.formHint}>Actual electricity generated: {selected.metrics.measuredGenerationKwh===null ? "not available. Metered generation is not connected." : `${councilNumber(selected.metrics.measuredGenerationKwh)} kWh.`} Capacity and completed upgrade counts are separate measures.</p>
+    {selected.activities.length ? <div className={styles.tableWrap}><table className={styles.table}><caption className={styles.srOnly}>{selected.label} TLink activities</caption><thead><tr><th scope="col">{selected.label} activity</th><th scope="col" className={styles.numberCell}>Completed</th><th scope="col" className={styles.numberCell}>Work value, ex GST</th><th scope="col" className={styles.numberCell}>Lifetime t CO₂-e</th></tr></thead><tbody>{selected.activities.map(row=><tr key={row.key}><th scope="row">{row.label}</th><td className={styles.numberCell}>{councilNumber(row.completedJobs)}</td><td className={styles.numberCell}>{councilMoney(row.completedValueCents)}</td><td className={styles.numberCell}>{councilNumber(row.estimatedTonnesCo2e)}</td></tr>)}</tbody></table></div> : <CouncilEmpty title={sectors.suppressed ? "Sector outcomes are privacy protected" : `No recorded ${selected.label.toLowerCase()} activity yet`}>{sectors.suppressed ? "Small sectors and related activity, postcode and time figures stay private." : "Completed upgrades will appear here as this customer sector participates in TLink."}</CouncilEmpty>}
+    <p className={styles.formHint}>{sectors.coverageNote}</p>
+  </CouncilPanel>;
 }
 
 export function CouncilTrend({ report }: { report: CouncilReport }) {
@@ -107,6 +129,7 @@ export function CouncilEnquiries({ report }: { report: CouncilReport }) {
   const selected = enquiries.postcodes.find(row => row.postcode === selectedPostcode);
   const max = Math.max(1, ...enquiries.trend.map(row => row.count ?? 0));
   return <CouncilPanel title="Your community is taking the next step" subtitle="All recorded enquiries in your reporting postcodes" action={<CouncilPill muted>Community interest</CouncilPill>}>
+    {enquiries.sectors && <div className={styles.metrics}>{enquiries.sectors.rows.map(row=><CouncilMetric key={row.key} label={`${row.label} enquiries`} value={councilNumber(row.count)} detail={enquiries.sectors!.suppressed ? "Small customer groups withheld" : "Customer-selected sector"} icon={row.key==='business' ? 'business' : 'users'} accent={row.key==='business'} />)}</div>}
     <div className={styles.enquiryHeadline}><strong>{councilNumber(selected ? selected.count : enquiries.total)}</strong><div><span>{selected ? `enquiries in ${selected.postcode}` : "community enquiries"}</span><small>{report.period.label}</small></div><label><span className={styles.srOnly}>Enquiry postcode</span><select value={selected?.postcode ?? ""} onChange={event => setSelectedPostcode(event.target.value)}><option value="">All postcodes</option>{enquiries.postcodes.map(row => <option key={row.postcode} value={row.postcode}>{row.postcode}</option>)}</select></label></div>
     {enquiries.trend.some(row => row.count !== null) ? <><div className={styles.enquiryTrend} aria-label="Monthly enquiries across all reporting postcodes">{enquiries.trend.map(row => <div key={row.month}><span>{councilNumber(row.count)}</span><div><i style={{ height: row.count === null ? 0 : `${row.count / max * 100}%` }} /></div><small>{councilMonth(row.month)}</small></div>)}</div><p className={styles.formHint}>Monthly trend shows the whole reporting area. Selecting a postcode changes the enquiry total above.</p></> : <CouncilEmpty title={enquiries.suppressed ? "Enquiries are privacy protected" : "Interest will appear here"} icon="users">{enquiries.suppressed ? "Small customer groups are withheld. Unavailable figures are never shown as zero." : "Recorded enquiries in your postcodes will appear as people take the next step."}</CouncilEmpty>}
     <div className={styles.insight}><CouncilIcon name="campaign" size={17} /><p><strong>{councilNumber(report.metrics.attributedEnquiries)} enquiries carry a council campaign reference.</strong> All-area enquiries also include other sources. Interest is not the same as completed work or a unique household.</p></div>

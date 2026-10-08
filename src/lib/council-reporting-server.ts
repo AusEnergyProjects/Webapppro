@@ -4,7 +4,7 @@ import { australiaLocalDateTime } from "./trade-schedule.ts";
 import { postcodeCoordinate } from "./postcode-distance.ts";
 import { ENERGY_SERVICE_LABELS } from "./energy-service-catalogue.mjs";
 import { reportWindow } from "./trade-business-reports.ts";
-import { COUNCIL_MINIMUM_COHORT, COUNCIL_REPORT_METHODOLOGY, CouncilReportInputError, councilReportPeriod, councilSmallCohort, type CouncilBreakdown, type CouncilReport, type CouncilReportInput } from "./council-reporting.ts";
+import { COUNCIL_MINIMUM_COHORT, COUNCIL_REPORT_METHODOLOGY, COUNCIL_SECTORS, CouncilReportInputError, councilReportPeriod, councilSmallCohort, type CouncilBreakdown, type CouncilReport, type CouncilReportInput, type CouncilSectorKey } from "./council-reporting.ts";
 
 type Row = Record<string, unknown>;
 const amount = (value: unknown) => { const result = Number(value || 0); if (!Number.isFinite(result)) throw new Error("Invalid council aggregate."); return result; };
@@ -18,6 +18,7 @@ eligible_accounts AS MATERIALIZED (
   WHERE a.is_synthetic=0 AND a.partner_type='installer' AND ${verifiedTradeAccountPredicate("a")}
 ), completed AS MATERIALIZED (
   SELECT w.id,w.firebase_uid,COALESCE(NULLIF(w.service_category,''),'other') activity,
+    CASE WHEN customer.customer_type IN ('business','residential') THEN customer.customer_type ELSE 'unclassified' END sector,
     s.postcode,MIN(e.created_at) completed_at,
     CASE WHEN a.postcode='' OR a.address_state='' THEN 'unknown'
       WHEN a.address_state=? AND a.postcode IN (SELECT postcode FROM area) THEN 'local' ELSE 'outside' END locality,
@@ -27,6 +28,7 @@ eligible_accounts AS MATERIALIZED (
   FROM trade_work_orders w
   JOIN trade_accounts a ON a.firebase_uid=w.firebase_uid AND a.is_synthetic=0
   JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
+  LEFT JOIN trade_crm_customers customer ON customer.id=d.crm_customer_id AND customer.firebase_uid=w.firebase_uid
   JOIN trade_crm_service_sites s ON s.id=d.service_site_id AND s.firebase_uid=w.firebase_uid AND s.record_status='active'
   JOIN trade_work_order_events e ON e.work_order_id=w.id AND e.firebase_uid=w.firebase_uid AND e.event_type='job_completed'
   WHERE w.record_status='active' AND w.partner_type='installer' AND w.work_type='job' AND w.stage='completed'
@@ -63,7 +65,8 @@ const measures = `COUNT(*) jobs,COUNT(DISTINCT customer_key) customers,
   COALESCE(SUM(CASE WHEN locality='unknown' THEN 1 ELSE 0 END),0) unknown_jobs,
   COALESCE(SUM(CASE WHEN campaign_id IS NOT NULL THEN 1 ELSE 0 END),0) attributed_jobs`;
 
-const impactSql = `SELECT j.id job_id,j.customer_key,j.postcode,j.activity,j.completed_at,
+const impactSql = `SELECT j.id job_id,j.customer_key,j.postcode,j.activity,j.sector,j.completed_at,
+  activity.registry_activity_code,activity_program.program_code activity_program_code,
   p.organisation_id,p.id packet_id,p.packet_snapshot,p.packet_sha256,p.quantity_text,p.unit,p.output_code,p.program_code,
   p.compliance_case_id,p.case_revision,p.work_pack_final_record_id,p.calculation_run_id,p.calculation_input_sha256,p.calculation_output_sha256,p.calculation_receipt_sha256,
   calc.input_snapshot,calc.output_snapshot,calc.run_by_uid calculation_run_by,
@@ -74,6 +77,8 @@ const impactSql = `SELECT j.id job_id,j.customer_key,j.postcode,j.activity,j.com
   latest.actor_kind,latest.actor_uid,submitted.actor_uid submitted_by
   FROM all_jobs j
   JOIN compliance_cases c ON c.work_order_id=j.id AND c.installer_uid=j.firebase_uid AND c.status NOT IN ('rejected','closed')
+  LEFT JOIN compliance_activity_versions activity ON activity.id=c.activity_version_id
+  LEFT JOIN compliance_programs activity_program ON activity_program.id=activity.program_id AND activity_program.organisation_id=c.organisation_id
   JOIN compliance_output_action_packets p ON p.compliance_case_id=c.id AND p.organisation_id=c.organisation_id AND p.case_revision=c.revision
     AND p.action_kind='certificate_submission' AND p.output_class='tradable_certificate'
     AND ((p.program_code='VEU' AND p.unit='VEEC' AND p.output_code='VEEC') OR (p.program_code='SRES' AND p.unit='STC' AND p.output_code='STC'))
@@ -112,7 +117,11 @@ const impactSql = `SELECT j.id job_id,j.customer_key,j.postcode,j.activity,j.com
   WHERE julianday(j.completed_at)<julianday(?)
     AND ((latest.actor_kind='adapter' AND latest.actor_uid=receipt.adapter_id) OR (latest.actor_kind IN ('admin','compliance') AND latest.actor_uid<>submitted.actor_uid))`;
 
-type Impact = { job: string; customer: string; postcode: string; activity: string; completedAt: string; unit: "VEEC" | "STC"; quantity: number; final: string; calculation: string };
+type Impact = { job: string; customer: string; postcode: string; activity: string; sector: CouncilSectorKey; completedAt: string; unit: "VEEC" | "STC"; quantity: number; final: string; calculation: string; generationCapacityKw: number | null; storageCapacityKwh: number | null };
+function capacity(value: unknown) {
+  if (typeof value!=="string" || !/^\d+(?:\.\d{1,8})?$/.test(value)) return null;
+  const result=Number(value); return Number.isFinite(result) && result>0 ? result : null;
+}
 function object(value: unknown): Record<string,unknown> | null { return value && typeof value==="object" && !Array.isArray(value) ? value as Record<string,unknown> : null; }
 function verifiedImpact(row: Row): Impact | null {
   try {
@@ -146,7 +155,11 @@ function verifiedImpact(row: Row): Impact | null {
       const manual=object(response);
       if (!manual || manual.packetSha256!==row.packet_sha256 || manual.outcome!=="provider_accepted" || manual.recordedByUid!==row.actor_uid || manual.providerReference!==row.provider_reference || row.request_sha256!==row.packet_sha256) return null;
     }
-    return { job:String(row.job_id),customer:String(row.customer_key || ""),postcode:String(row.postcode),activity:String(row.activity),completedAt:String(row.completed_at),unit:row.unit,quantity,final:`${row.organisation_id}:${row.work_pack_final_record_id}`,calculation:`${row.organisation_id}:${row.calculation_run_id}` };
+    const input=object(JSON.parse(String(row.input_snapshot)));
+    const sres=row.unit==="STC" && row.program_code==="SRES" && row.activity_program_code==="SRES";
+    const generationCapacityKw=sres && ["PV","WIND","HYDRO"].includes(String(row.registry_activity_code)) ? capacity(input?.ratedCapacityKw) : null;
+    const storageCapacityKwh=sres && row.registry_activity_code==="BESS" && input?.claimScope==="new_system" ? capacity(input.usableCapacityKwh) : null;
+    return { job:String(row.job_id),customer:String(row.customer_key || ""),postcode:String(row.postcode),activity:String(row.activity),sector:row.sector==="business" || row.sector==="residential" ? row.sector : "unclassified",completedAt:String(row.completed_at),unit:row.unit,quantity,final:`${row.organisation_id}:${row.work_pack_final_record_id}`,calculation:`${row.organisation_id}:${row.calculation_run_id}`,generationCapacityKw,storageCapacityKwh };
   } catch { return null; } // Invalid persisted evidence is omitted, never treated as a zero outcome.
 }
 function acceptedImpacts(rows: Row[]) {
@@ -190,6 +203,11 @@ export async function loadCouncilReport(database: Pick<D1Database,"prepare"|"bat
   // Fixed month boundaries include Australian daylight-saving transitions.
   const months: Array<{ key: string; start: string; end: string; startUtc: string; endUtc: string }> = [];
   const firstTrendMonth=new Date(`${period.end.slice(0,7)}-01T00:00:00Z`); firstTrendMonth.setUTCMonth(firstTrendMonth.getUTCMonth()-11);
+  const privacyMonths: typeof months = [];
+  for (let date=new Date(firstTrendMonth);date.toISOString().slice(0,10)<=period.end;date.setUTCMonth(date.getUTCMonth()+1)) {
+    const start=date.toISOString().slice(0,10),end=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,0)).toISOString().slice(0,10);
+    privacyMonths.push({key:start.slice(0,7),...reportWindow(start,end<period.end ? end : period.end,input.state)});
+  }
   const trendStart=firstTrendMonth.toISOString().slice(0,10)>period.start ? firstTrendMonth.toISOString().slice(0,10) : period.start;
   for (let date = new Date(`${trendStart.slice(0,7)}-01T00:00:00Z`); date.toISOString().slice(0,10) <= period.end; date.setUTCMonth(date.getUTCMonth()+1)) {
     const start = date.toISOString().slice(0,10);
@@ -229,6 +247,14 @@ export async function loadCouncilReport(database: Pick<D1Database,"prepare"|"bat
     database.prepare(`${base} ${impactSql}`).bind(...args,period.endUtc),
     database.prepare(`${base} SELECT postcode key,COUNT(*) businesses FROM eligible_accounts
       WHERE address_state=? AND postcode IN (SELECT postcode FROM area) GROUP BY postcode ORDER BY postcode`).bind(...args,input.state),
+    database.prepare(`${base}, months AS (SELECT json_extract(value,'$.key') key,json_extract(value,'$.startUtc') starts,json_extract(value,'$.endUtc') ends FROM json_each(?)),
+      bands AS MATERIALIZED (SELECT *,CASE WHEN julianday(completed_at)>=julianday(?) THEN 'quarter' WHEN julianday(completed_at)>=julianday(?) THEN 'earlier_year' ELSE 'earlier_history' END band FROM all_jobs WHERE julianday(completed_at)<julianday(?))
+      SELECT 'total' dimension,sector,'' key,${measures} FROM jobs GROUP BY sector
+      UNION ALL SELECT 'activities',sector,activity,${measures} FROM jobs GROUP BY sector,activity
+      UNION ALL SELECT 'postcodes',sector,postcode,${measures} FROM jobs GROUP BY sector,postcode
+      UNION ALL SELECT 'trend',sector,m.key,${measures} FROM jobs JOIN months m ON julianday(completed_at)>=julianday(m.starts) AND julianday(completed_at)<julianday(m.ends) GROUP BY sector,m.key
+      UNION ALL SELECT 'privacy',sector,band||':'||postcode||':'||activity||':'||COALESCE(m.key,'before_trend'),${measures}
+      FROM bands LEFT JOIN months m ON julianday(completed_at)>=julianday(m.starts) AND julianday(completed_at)<julianday(m.ends) GROUP BY sector,band,postcode,activity,COALESCE(m.key,'before_trend')`).bind(...args,JSON.stringify(privacyMonths),quarter.startUtc,year.startUtc,period.endUtc),
   ]);
   const total = results[0].results[0] || {};
   const privacyPeriods = results[5].results;
@@ -238,8 +264,11 @@ export async function loadCouncilReport(database: Pick<D1Database,"prepare"|"bat
   const tradePostcodes=results[10].results;
   const localBusinessCount=(postcode: string) => amount(tradePostcodes.find(row => row.key===postcode)?.businesses);
   const privacyGroups = results[7].results;
+  const sectorRows=results[11].results;
+  const sectorSuppressed=suppressed || sectorRows.some(cohortUnsafe);
+  if (sectorSuppressed && amount(total.jobs)>0) suppressedBreakdowns.push("customer sectors");
   const suppressLocality = suppressed || localityUnsafe(total) || [...allGroups,...privacyPeriods,...privacyGroups].some(localityUnsafe);
-  const suppressMoney = suppressed || [total,...allGroups,...privacyPeriods,...privacyGroups].some(moneyUnsafe);
+  const suppressMoney = suppressed || [total,...allGroups,...privacyPeriods,...privacyGroups,...sectorRows].some(moneyUnsafe);
   const groups = (rows: Row[], name: string, label: (key: string) => string) => {
     if (suppressed || rows.some(cohortUnsafe) || privacyGroups.some(row => row.dimension===name && cohortUnsafe(row))) { if (rows.length) suppressedBreakdowns.push(name); return []; }
     return rows.map(row => breakdown(row,label(String(row.key)),suppressLocality,suppressMoney));
@@ -263,17 +292,31 @@ export async function loadCouncilReport(database: Pick<D1Database,"prepare"|"bat
   const impacts=acceptedImpacts(results[9].results);
   const selectedImpacts=impacts.filter(row => Date.parse(row.completedAt)>=Date.parse(period.startUtc) && Date.parse(row.completedAt)<Date.parse(period.endUtc));
   const impactUnsafe=(rows: Impact[]) => rows.length>0 && (new Set(rows.map(row => row.job)).size<COUNCIL_MINIMUM_COHORT || new Set(rows.map(row => row.customer).filter(Boolean)).size<COUNCIL_MINIMUM_COHORT);
+  const evidenceComplementUnsafe=(rows: Impact[]) => sectorRows.filter(row=>row.dimension==='privacy').some(cell=>{
+    const matching=rows.filter(row=>{
+      const band=Date.parse(row.completedAt)>=Date.parse(quarter.startUtc) ? "quarter" : Date.parse(row.completedAt)>=Date.parse(year.startUtc) ? "earlier_year" : "earlier_history";
+      const month=australiaLocalDateTime(input.state,new Date(row.completedAt)).slice(0,7);
+      const monthKey=privacyMonths.some(item=>item.key===month) ? month : "before_trend";
+      return row.sector===cell.sector && `${band}:${row.postcode}:${row.activity}:${monthKey}`===cell.key;
+    });
+    if (!matching.length) return false;
+    const remainingJobs=amount(cell.jobs)-new Set(matching.map(row=>row.job)).size;
+    // A lower bound on distinct customers in the complement prevents a visible
+    // evidence subset from revealing one unsupported customer's contribution.
+    const remainingCustomers=amount(cell.customers)-new Set(matching.map(row=>row.customer)).size;
+    return remainingJobs>0 && remainingCustomers<COUNCIL_MINIMUM_COHORT;
+  });
   const schemeHidden=(unit: Impact["unit"]) => {
     if (suppressed) return true;
     const partitions=new Map<string,Impact[]>();
     for (const row of impacts.filter(row => row.unit===unit)) {
       const band=Date.parse(row.completedAt)>=Date.parse(quarter.startUtc) ? "quarter" : Date.parse(row.completedAt)>=Date.parse(year.startUtc) ? "earlier_year" : "history";
       const month=australiaLocalDateTime(input.state,new Date(row.completedAt)).slice(0,7);
-      for (const key of [`band:${band}`,`activity:${band}:${row.activity}`,`postcode:${band}:${row.postcode}`,`month:${month}`]) {
+      for (const key of [`band:${band}`,`activity:${band}:${row.activity}`,`postcode:${band}:${row.postcode}`,`month:${month}`,`sector:${band}:${month}:${row.postcode}:${row.activity}:${row.sector}`]) {
         const values=partitions.get(key) || []; values.push(row); partitions.set(key,values);
       }
     }
-    return [...partitions.values()].some(impactUnsafe);
+    return [...partitions.values()].some(impactUnsafe) || evidenceComplementUnsafe(impacts.filter(row=>row.unit===unit));
   };
   const hiddenVeec=schemeHidden("VEEC"); const hiddenStc=schemeHidden("STC");
   const impactTotals=(rows: Impact[]) => {
@@ -286,7 +329,31 @@ export async function loadCouncilReport(database: Pick<D1Database,"prepare"|"bat
   for (const row of postcodeGroups) Object.assign(row,impactTotals(selectedImpacts.filter(item => item.postcode===row.key)));
   for (const row of trend) Object.assign(row,impactTotals(selectedImpacts.filter(item => australiaLocalDateTime(input.state,new Date(item.completedAt)).slice(0,7)===row.key)));
   if ((hiddenVeec || hiddenStc) && selectedImpacts.length) suppressedBreakdowns.push("certificate evidence");
-  const impactCoverageJobs=suppressed ? null : safeNumber(new Set(selectedImpacts.map(row => row.job)).size);
+  const impactCoverageJobs=suppressed || sectorSuppressed || impactUnsafe(selectedImpacts) || evidenceComplementUnsafe(impacts) ? null : safeNumber(new Set(selectedImpacts.map(row => row.job)).size);
+  const capacityTotals=(rows: Impact[],metric: "generationCapacityKw" | "storageCapacityKwh") => {
+    const matching=rows.filter(row=>row[metric]!==null);
+    const partitions=new Map<string,Impact[]>();
+    for (const row of impacts.filter(row=>row[metric]!==null)) {
+      const band=Date.parse(row.completedAt)>=Date.parse(quarter.startUtc) ? "quarter" : Date.parse(row.completedAt)>=Date.parse(year.startUtc) ? "earlier_year" : "history";
+      const month=australiaLocalDateTime(input.state,new Date(row.completedAt)).slice(0,7);
+      const key=`${band}:${month}:${row.postcode}:${row.activity}:${row.sector}`;
+      const values=partitions.get(key) || []; values.push(row); partitions.set(key,values);
+    }
+    const hidden=sectorSuppressed || !matching.length || impactUnsafe(matching) || [...partitions.values()].some(impactUnsafe) || evidenceComplementUnsafe(impacts.filter(row=>row[metric]!==null));
+    return { installations:hidden ? null : new Set(matching.map(row=>row.job)).size,capacity:hidden ? null : matching.reduce((sum,row)=>sum+(row[metric] ?? 0),0) };
+  };
+  const sectors={basis:"recorded_customer_type" as const,suppressed:sectorSuppressed,
+    coverageNote:"Business and residential use the recorded CRM customer type. Not classified includes missing or unsupported customer records. Each completed job appears once under its primary activity. Generation and storage show only reviewed, provider-accepted SRES installation evidence, so coverage can be incomplete. Capacity is not electricity generated; metered generation is not connected. Small sectors and their complementary activity, postcode and time intersections are withheld.",
+    rows:COUNCIL_SECTORS.map(sector=>{
+      const total=sectorRows.find(row=>row.dimension==='total' && row.sector===sector.key) || {};
+      const sectorImpacts=selectedImpacts.filter(row=>row.sector===sector.key);
+      const generation=capacityTotals(sectorImpacts,"generationCapacityKw"),storage=capacityTotals(sectorImpacts,"storageCapacityKwh");
+      const sectorImpact=sectorSuppressed ? {veecQuantity:null,stcQuantity:null,estimatedTonnesCo2e:null} : impactTotals(sectorImpacts);
+      const rows=(dimension: string)=>sectorSuppressed ? [] : sectorRows.filter(row=>row.dimension===dimension && row.sector===sector.key && (dimension!=="trend" || months.some(month=>month.key===row.key))).map(row=>({ ...breakdown(row,dimension==='activities' ? ENERGY_SERVICE_LABELS[String(row.key)] || "Other energy upgrade" : String(row.key),true,suppressMoney),...impactTotals(sectorImpacts.filter(item=>dimension==='activities' ? item.activity===row.key : dimension==='postcodes' ? item.postcode===row.key : australiaLocalDateTime(input.state,new Date(item.completedAt)).slice(0,7)===row.key)) }));
+      return {key:sector.key,label:sector.label,metrics:{completedJobs:sectorSuppressed ? null : amount(total.jobs),completedValueCents:money(total,sectorSuppressed || suppressMoney),...sectorImpact,
+        generationInstallations:generation.installations,generationCapacityKw:generation.capacity,storageInstallations:storage.installations,storageCapacityKwh:storage.capacity,measuredGenerationKwh:null},
+        activities:rows("activities"),postcodes:rows("postcodes"),trend:rows("trend").map(row=>{const month=months.find(month=>month.key===row.key)!;return {...row,start:month.start,end:month.end};})};
+    })};
   const mapCells=postcodes.map(postcode => {
     const coordinate=postcodeCoordinate(postcode);
     const group=postcodeGroups.find(row => row.key===postcode);
@@ -301,7 +368,7 @@ export async function loadCouncilReport(database: Pick<D1Database,"prepare"|"bat
       localSharePercent:localJobs !== null && completedJobs ? localJobs/completedJobs*100 : null,
       registeredLocalBusinesses:amount(results[4].results[0]?.businesses),attributedEnquiries:campaignSuppressed ? null : safeNumber(enquiries),attributedCompletedJobs:campaignSuppressed ? null : safeNumber(total.attributed_jobs),
       ...totals },
-    activities,postcodes:postcodeGroups,trend,campaigns,
+    activities,postcodes:postcodeGroups,trend,campaigns,sectors,
     map:{ coordinateBasis:"postcode_centroid",cells:mapCells,boundaryNote:"Postcode centres show the approved reporting area approximately. They are not business or customer addresses and do not define an official council boundary." },
     dataQuality:{ minimumCohort:COUNCIL_MINIMUM_COHORT,suppressed,suppressedBreakdowns,missingInvoice:suppressed ? null : safeNumber(amount(total.jobs)-amount(total.invoiced_jobs)),missingLocality:unknownLocalityJobs,missingCarbonMethod:totals.veecQuantity===null,
       impactEvidence:totals.veecQuantity!==null || totals.stcQuantity!==null ? "provider_accepted" : "unavailable",impactCoverageJobs,

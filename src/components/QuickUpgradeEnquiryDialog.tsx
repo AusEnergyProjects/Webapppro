@@ -22,6 +22,9 @@ import {
   QUICK_UPGRADE_CONSENT_PURPOSE,
   QUICK_UPGRADE_ENQUIRY_KIND,
 } from "@/lib/quick-upgrade-enquiry.mjs";
+import { EnquiryTimingFields, DEFAULT_ENQUIRY_TIMING } from "./EnquiryTimingFields";
+import { normalizeEnquiryTiming } from "@/lib/enquiry-timing.mjs";
+import type { CouncilPublicBranding } from "@/lib/council-public-branding";
 import { PUBLIC_SITE } from "@/lib/public-site";
 import styles from "./QuickUpgradeEnquiry.module.css";
 
@@ -48,12 +51,18 @@ function serviceLabel(id: string, label: string) {
 export function QuickUpgradeEnquiryDialog({
   initialPostcode = "",
   initialServices = [],
+  initialCustomerSector = "residential",
   councilReference,
+  councilBranding,
+  demonstration = false,
   onClose,
 }: {
   initialPostcode?: string;
   initialServices?: string[];
+  initialCustomerSector?: "residential" | "business";
   councilReference?: string;
+  councilBranding?: CouncilPublicBranding;
+  demonstration?: boolean;
   onClose: () => void;
 }) {
   const startingPostcode = /^\d{4}$/.test(initialPostcode) ? initialPostcode : "";
@@ -86,6 +95,8 @@ export function QuickUpgradeEnquiryDialog({
   const [shareName, setShareName] = useState(true);
   const [sharePhone, setSharePhone] = useState(true);
   const [notes, setNotes] = useState("");
+  const [timing, setTiming] = useState(DEFAULT_ENQUIRY_TIMING);
+  const [customerSector, setCustomerSector] = useState<string>(initialCustomerSector);
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [website, setWebsite] = useState("");
   const [error, setError] = useState("");
@@ -107,7 +118,10 @@ export function QuickUpgradeEnquiryDialog({
 
   useEffect(() => {
     if (submitState.kind !== "success") return;
-    const frame = window.requestAnimationFrame(() => successCloseRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => {
+      successCloseRef.current?.focus({ preventScroll: true });
+      if (dialogRef.current) dialogRef.current.scrollTop = 0;
+    });
     return () => window.cancelAnimationFrame(frame);
   }, [submitState.kind]);
 
@@ -269,10 +283,12 @@ export function QuickUpgradeEnquiryDialog({
       setSubmitState({ kind: "error", message: "Choose the suburb listed for the property postcode." });
       return;
     }
+    const normalizedTiming = normalizeEnquiryTiming(timing);
+    if (!normalizedTiming.ok) { setSubmitState({ kind: "error", message: normalizedTiming.error }); return; }
     const core = JSON.stringify({
       services: [...services].sort(), postcode, locality, streetAddress: streetAddress.trim(),
       unitNumber: unitNumber.trim(), email: email.trim().toLowerCase(), firstName: firstName.trim(),
-      lastName: lastName.trim(), phone: phone.trim(), shareName, sharePhone, notes: notes.trim(), consentAccepted,
+      lastName: lastName.trim(), phone: phone.trim(), shareName, sharePhone, notes: notes.trim(), consentAccepted, timing, customerSector,
     });
     if (!submissionId.current || (lastAttemptCore.current && lastAttemptCore.current !== core)) {
       submissionId.current = createSubmissionId();
@@ -285,6 +301,10 @@ export function QuickUpgradeEnquiryDialog({
     lastAttemptCore.current = core;
     if (!consentAccepted || !consentGrantedAt.current) {
       setSubmitState({ kind: "error", message: "Confirm the sharing notice before sending your request." });
+      return;
+    }
+    if (demonstration) {
+      setSubmitState({ kind: "success", message: "Demonstration only. Your answers stay in this page. No enquiry is sent and no providers are contacted." });
       return;
     }
     setSubmitState({ kind: "sending", message: "Sending your request securely..." });
@@ -309,6 +329,8 @@ export function QuickUpgradeEnquiryDialog({
           postcode,
           projectCategories: services,
           projectNotes: notes.trim(),
+          ...normalizedTiming.value,
+          customerSector,
           tradeSharing: {
             email: true,
             postcode: true,
@@ -356,32 +378,35 @@ export function QuickUpgradeEnquiryDialog({
         aria-describedby={descriptionId}
         aria-labelledby={titleId}
         aria-modal="true"
-        className={`${styles.dialog}${submitState.kind === "success" ? ` ${styles.receiptDialog}` : ""}`}
+        className={`${styles.dialog}${councilBranding ? ` ${styles.councilDialog}` : ""}${submitState.kind === "success" ? ` ${styles.receiptDialog}` : ""}`}
         onKeyDown={handleKeyDown}
         ref={dialogRef}
         role="dialog"
       >
         <header className={styles.header}>
           <div>
+            {councilBranding && <div className={styles.councilBrand}>{councilBranding.logoDataUrl && <Image src={councilBranding.logoDataUrl} width={140} height={52} alt={councilBranding.councilName} unoptimized />}<strong>{councilBranding.councilName}</strong>{councilBranding.homeUrl && <a href={councilBranding.homeUrl}>Back to council website</a>}</div>}
             <span>{submitState.kind === "success" ? `${PUBLIC_SITE.name} + TLink` : "Independent service matching"}</span>
-            <h2 id={titleId}>{submitState.kind === "success" ? "Thank you. Your request has been received." : "Get upgrade options without the runaround"}</h2>
+            <h2 id={titleId}>{submitState.kind === "success" ? demonstration ? "Demonstration complete" : "Thank you. Your request has been received." : "Get upgrade options without the runaround"}</h2>
             <p id={descriptionId}>{submitState.kind === "success" ? submitState.message : "Choose what you need and send one clear request to all approved TLink businesses that offer at least one selected service and cover your area."}</p>
           </div>
           <button className={styles.closeButton} type="button" onClick={onClose} disabled={!dismissible} aria-label="Close upgrade options">Close</button>
         </header>
 
+        {demonstration && <p className={styles.demoNotice}>Demonstration only. Your answers stay in this page. No enquiry is sent and no providers are contacted.</p>}
         {submitState.kind === "success" ? (
           <div className={styles.success}>
             <div className={styles.receiptReference} role="status">
               <span className={styles.receiptCheck} aria-hidden="true">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="m5 12 4.5 4.5L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </span>
-              {submitState.reference ? <div><span>Your reference</span><strong>{submitState.reference}</strong></div> : <strong>Request received</strong>}
+              {submitState.reference ? <div><span>Your reference</span><strong>{submitState.reference}</strong></div> : <strong>{demonstration ? "Preview complete" : "Request received"}</strong>}
             </div>
             <div className={styles.receiptNext}>
               <h3>What happens next</h3>
-              <p>{"Your request is matched to approved TLink trade businesses based on your selected services and their service areas."}</p>
-              <p>{"Suitable businesses can review the details you agreed to share. Responses depend on availability."}</p>
+              <p>{demonstration ? "In the live journey, requests are matched to approved businesses for the selected services and area." : "Your request is matched to approved TLink trade businesses based on your selected services and their service areas."}</p>
+              <p>{demonstration ? "This preview did not save an enquiry or contact any business." : "Suitable businesses can review the details you agreed to share. Responses depend on availability."}</p>
+              <p>Quotes and contact window: {timing.quoteWindowValue} {timing.quoteWindowUnit}. Any accepted work can continue after the window closes.</p>
             </div>
             <div className={styles.receiptHelp}>
               <h3>Need a hand?</h3>
@@ -421,6 +446,7 @@ export function QuickUpgradeEnquiryDialog({
               <div className={styles.body}>
                 <div className={styles.requestSummary}><p><strong>Your request:</strong> {ENERGY_SERVICE_CATALOGUE.filter((service) => services.includes(service.id)).map((service) => serviceLabel(service.id, service.label)).join(", ")}</p><button type="button" disabled={!dismissible} onClick={() => setStep(1)}>Edit or add services</button></div>
                 <div className={styles.stepHeading}><span>Step 2 of 2</span><h3>Where is the property?</h3><p>{"We use the address to find approved businesses that service the right area."}</p></div>
+                <label className={styles.notes}><span>Is this request for a home or a business?</span><select value={customerSector} onChange={event => setCustomerSector(event.target.value)}><option value="residential">Home / residential property</option><option value="business">Business premises</option></select></label>
                 <div className={styles.addressGrid}>
                   <label><span>Postcode *</span><input ref={postcodeRef} value={postcode} onChange={(event) => changePostcode(event.target.value)} inputMode="numeric" autoComplete="postal-code" pattern="\d{4}" maxLength={4} required /></label>
                   <label className={styles.suburb}><span>Suburb *</span><select value={locality ? localityValue(locality) : ""} onChange={(event) => changeLocality(event.target.value)} disabled={lookupState !== "ready"} required><option value="">{lookupState === "loading" ? "Loading suburbs..." : "Choose the listed suburb"}</option>{localities.map((entry) => <option value={localityValue(entry)} key={localityValue(entry)}>{entry.suburb}, {entry.state}</option>)}</select>{lookupError ? <small className={styles.fieldError}>{lookupError}</small> : null}</label>
@@ -440,6 +466,7 @@ export function QuickUpgradeEnquiryDialog({
                   <label><input type="checkbox" checked={shareName} onChange={(event) => setShareName(event.target.checked)} /> Share my name</label>
                   <label><input type="checkbox" checked={sharePhone} onChange={(event) => setSharePhone(event.target.checked)} /> Share my phone number</label>
                 </div>}
+                <EnquiryTimingFields value={timing} onChange={setTiming} />
                 <label className={styles.notes}><span>Anything useful to add?</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} maxLength={500} placeholder="For example: what you want to improve, when you hope to start, or what you are unsure about." /><small>Do not include account numbers, meter numbers, access codes or payment details.</small></label>
                 {<div className={styles.sharingSummary}>
                   <h4>What matching businesses will receive</h4>
@@ -459,7 +486,7 @@ export function QuickUpgradeEnquiryDialog({
               {step === 1 ? <button type="button" onClick={onClose}>Not now</button> : <button type="button" disabled={!dismissible} onClick={() => { setStep(1); setSubmitState({ kind: "idle", message: "" }); }}>Back</button>}
               {step === 1
                 ? <button key="continue" className={styles.primary} type="button" onClick={continueToDetails}>Continue</button>
-                : <button className={styles.primary} type="submit" disabled={submitState.kind === "sending"}>{submitState.kind === "sending" ? "Sending securely..." : "Send my request"}</button>}
+                : <button className={styles.primary} type="submit" disabled={submitState.kind === "sending"}>{submitState.kind === "sending" ? "Sending securely..." : demonstration ? "Preview my request" : "Send my request"}</button>}
             </footer>
           </form>
         )}

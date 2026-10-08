@@ -88,6 +88,7 @@ for (const name of ["council-community-baseline", "council-veu-baseline"]) {
   }
 }
 const guardedPdfEntryKeys = [
+  "src/lib/council-monthly-report-pdf.ts",
   "src/lib/trade-accepted-invoice-pdf-server.ts",
   "src/lib/creditex-activity-work-pack-pdf-renderer.ts",
   "src/lib/customer-plan-pdf.mjs",

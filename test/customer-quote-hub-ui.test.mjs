@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import * as enquiryTiming from "../src/lib/enquiry-timing.mjs";
 
 const source = fs.readFileSync(new URL("../src/components/CustomerQuoteHub.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: {
@@ -23,7 +24,7 @@ function navigate(tree, label) {
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 const data = {
-  title: "Private home upgrade", reference: "PRIVATE-PROJECT-123", expiresAt: "2099-01-01T00:00:00.000Z", accepting: true, revision: 1,
+  title: "Private home upgrade", reference: "PRIVATE-PROJECT-123", expiresAt: "2099-01-01T00:00:00.000Z", contactExpiresAt: "2099-01-01T00:00:00.000Z", requestedWorkBy: "2026-12-12", requestedCompletion: "date", accepting: true, revision: 1,
   services: [{ id: "solar", label: "Solar" }, { id: "air-conditioning", label: "Air conditioning" }],
   quotes: [{ id: "quote-one", business: "Private Solar Business", number: "Q-123", services: ["solar"], totalCents: 100000, status: "active", blocked: false }],
   questions: [
@@ -67,6 +68,7 @@ function harness(t, api, token = "private-hub-token", search = "", beforeEffects
   };
   const loaded = {};
   Function("require", "exports", "fetch", "window", `${compiled}\nexports.HubWorkspace=HubWorkspace;`)(name => {
+    if (name === "@/lib/enquiry-timing.mjs") return enquiryTiming;
     if (name === "react") return hooks;
     if (name === "react/jsx-runtime") return jsx;
     if (name === "@/lib/customer-photo-upload") return { prepareCustomerPhotoUpload: async file => file };

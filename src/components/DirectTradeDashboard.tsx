@@ -1,4 +1,5 @@
 "use client";
+import { enquiryCompletionLabel } from "@/lib/enquiry-timing.mjs";
 
 import TradeTeamPresence from "./TradeTeamPresence";
 
@@ -108,6 +109,9 @@ type DashboardOpportunity = {
   expiresAt: string;
   priority: string;
   timing: string;
+  requestedWorkBy: string;
+  requestedCompletion: string;
+  customerSector: string;
   summary: string;
   propertyContext: Record<string, string | string[]>;
   enquiryPack: null | {
@@ -2791,7 +2795,7 @@ function DirectTradeDashboardContent() {
                             <strong>{customerName}</strong>
                             <small><time dateTime={opportunity.createdAt}>Enquired {new Date(opportunity.createdAt).toLocaleString("en-AU", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</time></small>
                             <p>{opportunity.enquiryPack?.summary || opportunity.summary}</p>
-                            <small>{opportunityBroadLocation(opportunity)} | {opportunity.timing.replaceAll("_", " ")}</small>
+                            <small>{opportunityBroadLocation(opportunity)} | {enquiryCompletionLabel(opportunity.requestedWorkBy, opportunity.requestedCompletion)}</small>
                           </button>;
                         })}
                       </nav>
@@ -2951,11 +2955,11 @@ function DirectTradeDashboardContent() {
                             </p>
                             <dl>
                               <div>
-                                <dt>Work</dt>
+                                <dt>Work {opportunity.customerSector === "business" ? "(business)" : opportunity.customerSector === "residential" ? "(home)" : ""}</dt>
                                 <dd>{services.join(", ") || "Scope to review"}</dd>
                               </div>
                               <div>
-                                <dt>Timing</dt>
+                                <dt>Requested completion</dt>
                                 <dd>{opportunity.timing.replaceAll("_", " ")}</dd>
                               </div>
                               <div>
@@ -3015,7 +3019,7 @@ function DirectTradeDashboardContent() {
                               Qualified trade allocation {opportunity.allocationRank}
                             </span>
                             <span>
-                              Expires{" "}
+                              Quotes close{" "}
                               {new Date(
                                 opportunity.expiresAt,
                               ).toLocaleDateString("en-AU")}

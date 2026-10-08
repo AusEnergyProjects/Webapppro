@@ -329,7 +329,7 @@ export async function startPublicLeadQuoteWorkflow(
     throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
   }
   const row = await db.prepare(`SELECT m.id match_id, m.matched_categories,
-      o.id opportunity_id, o.title, o.summary, o.priority, o.source_reference,
+      o.id opportunity_id, o.title, o.summary, o.priority, o.source_reference, o.requested_work_by, o.requested_completion, o.customer_sector,
       o.postcode opportunity_postcode, o.state,
       o.service_categories opportunity_service_categories,
       contact.id public_contact_release_id,
@@ -547,8 +547,8 @@ export async function startPublicLeadQuoteWorkflow(
       (id, firebase_uid, customer_number, customer_type, first_name, last_name,
        business_name, business_number, email, phone, address_line_1, address_line_2,
        suburb, address_state, postcode, tags, private_notes, record_status, created_at, updated_at)
-      VALUES (?, ?, ?, 'residential', ?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, '', 'active', ?, ?)`)
-      .bind(ids.customerId, installerUid, customerNumber,
+      VALUES (?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, '', 'active', ?, ?)`)
+      .bind(ids.customerId, installerUid, customerNumber, snapshot.customerSector === "business" ? "business" : "residential",
         acceptedCrmName.firstName, acceptedCrmName.lastName,
         snapshot.contact.email, snapshot.contact.phone,
         snapshot.contact.addressLine1, snapshot.contact.addressLine2,

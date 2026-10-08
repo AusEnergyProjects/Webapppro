@@ -31,12 +31,26 @@ export function councilReportCsv(report: CouncilReport) {
   for (const [kind,values] of [["Activity",report.activities],["Postcode",report.postcodes],["Month",report.trend]] as const) {
     for (const row of values) rows.push([kind,row.label,row.completedJobs,row.completedValueCents === null ? null : row.completedValueCents / 100,row.localJobs,row.veecQuantity,row.stcQuantity,row.estimatedTonnesCo2e]);
   }
+  if (report.sectors) {
+    rows.push([], ["TLink business and residential outcomes"], ["Sector classification and evidence",report.sectors.coverageNote],
+      ["Customer sector","Completed jobs","Work value AUD ex GST","VEEC quantity","STC quantity","Deemed lifetime tCO2e","Evidence-backed generation installations","Rated generation capacity kW","Evidence-backed battery installations","Usable storage capacity kWh","Measured electricity generated kWh"]);
+    for (const row of report.sectors.rows) {
+      const m=row.metrics;
+      rows.push([row.label,m.completedJobs,m.completedValueCents===null ? null : m.completedValueCents/100,m.veecQuantity,m.stcQuantity,m.estimatedTonnesCo2e,m.generationInstallations,m.generationCapacityKw,m.storageInstallations,m.storageCapacityKwh,m.measuredGenerationKwh]);
+    }
+    rows.push([], ["Customer sector","Breakdown","Area or activity","Completed jobs","Work value AUD ex GST","VEEC quantity","STC quantity","Deemed lifetime tCO2e"]);
+    for (const sector of report.sectors.rows) for (const [kind,values] of [["Activity",sector.activities],["Postcode",sector.postcodes],["Month",sector.trend]] as const) for (const row of values) rows.push([sector.label,kind,row.label,row.completedJobs,row.completedValueCents===null ? null : row.completedValueCents/100,row.veecQuantity,row.stcQuantity,row.estimatedTonnesCo2e]);
+  }
   rows.push([], ["Campaign","Reference","Attributed enquiries","Completed jobs","Work value AUD ex GST"]);
   for (const row of report.campaigns) rows.push([row.name,row.referenceCode,row.enquiries,row.completedJobs,row.completedValueCents === null ? null : row.completedValueCents / 100]);
   rows.push([], ["Map postcode","Locality","Completed upgrades","Onboarded local businesses"]);
   for (const cell of report.map.cells) rows.push([cell.postcode,cell.label,cell.completedJobs,cell.registeredLocalBusinesses]);
   rows.push(["Map location basis",report.map.boundaryNote]);
   if (report.enquiries) {
+    if (report.enquiries.sectors) {
+      rows.push([], ["Community enquiry customer sector","Enquiries"]);
+      for (const row of report.enquiries.sectors.rows) rows.push([row.label,row.count]);
+    }
     rows.push([], ["Community enquiries by postcode","Enquiries"]);
     for (const row of report.enquiries.postcodes) rows.push([row.postcode,row.count]);
     rows.push([], ["Community enquiries by month","Enquiries"]);

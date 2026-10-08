@@ -53,7 +53,7 @@ export async function hubQuestions(db:D1Database,opportunityId:string,accepting:
 
 export async function loadCustomerQuoteHub(db:D1Database,hub:HubAuthority):Promise<CustomerQuoteHub>{
   const scope=hubAuthorityScope(hub);
-  const details=await db.prepare(`SELECT opportunity.title,opportunity.source_reference,opportunity.service_categories,hub.accepting,hub.revision
+  const details=await db.prepare(`SELECT opportunity.title,opportunity.source_reference,opportunity.service_categories,opportunity.expires_at contact_expires_at,opportunity.requested_work_by,opportunity.requested_completion,hub.accepting,hub.revision
     FROM customer_quote_hubs hub JOIN trade_opportunities opportunity ON opportunity.id=hub.opportunity_id WHERE hub.id=? AND ${scope.sql}`)
     .bind(hub.id,...scope.values).first<Row>();
   if(!details)throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
@@ -73,7 +73,7 @@ export async function loadCustomerQuoteHub(db:D1Database,hub:HubAuthority):Promi
   const now=new Date().toISOString();
   const questions=await hubQuestions(db,hub.opportunity_id,Boolean(details.accepting));
   if(!await db.prepare(`SELECT 1 WHERE ${scope.sql}`).bind(...scope.values).first())throw new Error("CUSTOMER_HUB_ACCESS_ENDED");
-  return {title:String(details.title),reference:String(details.source_reference),expiresAt:hub.expires_at,accepting:Boolean(details.accepting),revision:Number(details.revision),
+  return {title:String(details.title),reference:String(details.source_reference),expiresAt:hub.expires_at,contactExpiresAt:String(details.contact_expires_at),requestedWorkBy:String(details.requested_work_by||""),requestedCompletion:String(details.requested_completion||"flexible"),accepting:Boolean(details.accepting),revision:Number(details.revision),
     services:strings(details.service_categories).map(id=>({id,label:ENERGY_SERVICE_LABELS[id]||id})),
     quotes:quotes.results.map(row=>({id:String(row.id),business:String(row.business_name),businessProfile:customerHubBusinessProfile(row),number:String(row.quote_number),services:strings(row.service_categories),
       totalCents:Number(row.total_cents),status:String(row.status),blocked:row.status==='active'&&(String(row.expires_at)<=now || (Boolean(row.valid_until)&&String(row.valid_until)<now.slice(0,10)))})),questions};

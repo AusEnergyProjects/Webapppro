@@ -63,9 +63,10 @@ export type CouncilWorkspaceProps = {
   communitySummarySlot?: ReactNode;
   teamSlot?: ReactNode;
   connectSlot?: ReactNode;
+  monthlyReportsSlot?: ReactNode;
 };
 
-export function CouncilWorkspace({ report, profile, campaigns, loading = false, error, notice, canManage, onPeriodChange, onRefresh, onSignOut, onSaveCampaign, onSaveProfile, onExport, onExitDemo, mapSlot, calculatorSlot, onResetDemo, communitySlot, communitySummarySlot, teamSlot, connectSlot, portalUser = null, workspaceActions }: CouncilWorkspaceProps) {
+export function CouncilWorkspace({ report, profile, campaigns, loading = false, error, notice, canManage, onPeriodChange, onRefresh, onSignOut, onSaveCampaign, onSaveProfile, onExport, onExitDemo, mapSlot, calculatorSlot, onResetDemo, communitySlot, communitySummarySlot, teamSlot, connectSlot, monthlyReportsSlot, portalUser = null, workspaceActions }: CouncilWorkspaceProps) {
   const [view, setView] = useState<CouncilView>("overview");
   const [createOnOpen, setCreateOnOpen] = useState(false);
   const [colourMode, setColourMode] = useState<TLinkColourMode>("day");
@@ -76,7 +77,8 @@ export function CouncilWorkspace({ report, profile, campaigns, loading = false, 
   const communityAvailable = Boolean(communitySlot), mapAvailable = Boolean(mapSlot), calculatorAvailable = Boolean(calculatorSlot), teamAvailable = Boolean(teamSlot), connectAvailable = Boolean(connectSlot);
   const wattzunAvailable = !demo && Boolean(portalUser);
   const identity = profileDraft ?? profile;
-  const savedInput: CouncilProfileInput = { name: profile.name, postcodes: profile.postcodes, logoDataUrl: profile.logoDataUrl, theme: profile.theme };
+  const savedInput: CouncilProfileInput = { name: profile.name, postcodes: profile.postcodes, logoDataUrl: profile.logoDataUrl, theme: profile.theme,
+    ...(profile.publicJourney ? { publicJourney: { enabled: profile.publicJourney.enabled, homeUrl: profile.publicJourney.homeUrl, requestedHostname: profile.publicJourney.requestedHostname } } : {}) };
   const profileDirty = profileDraft !== null && JSON.stringify(profileDraft) !== JSON.stringify(savedInput);
   const initials = identity.name.split(" ").filter(Boolean).slice(0, 2).map(word => word[0]).join("") || "C";
   const themeVariables = councilThemeVariables(identity.theme, colourMode);
@@ -143,7 +145,7 @@ export function CouncilWorkspace({ report, profile, campaigns, loading = false, 
           {view === "team" && teamSlot}
           {connectSlot && <div hidden={view !== "connect"}>{connectSlot}</div>}
           {view === "calculator" && calculatorSlot}
-          {view === "reports" && <><div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => window.print()}>Print complete report</button></div>{communitySlot}<CouncilEnquiries report={report} /><CouncilReports report={report} onExport={onExport} onAskWattzun={wattzunAvailable && profile.councilId === report.scope.councilId ? askWattzun : undefined} /></>}
+          {view === "reports" && <>{monthlyReportsSlot}<div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => window.print()}>Print complete report</button></div>{communitySlot}<CouncilEnquiries report={report} /><CouncilReports report={report} onExport={onExport} onAskWattzun={wattzunAvailable && profile.councilId === report.scope.councilId ? askWattzun : undefined} /></>}
           {view === "settings" && <CouncilProfileSettings profile={profile} value={profileDraft ?? savedInput} canManage={canManage} dirty={profileDirty} demonstration={demo} onChange={setProfileDraft} onSave={saveProfile} onCancel={() => setProfileDraft(null)} onResetDemo={onResetDemo} />}
         </>}
         <footer className={styles.bottomNote}><span><CouncilIcon name="shield" size={13} />Aggregated insights. No private customer records.</span><span>{demo ? "Illustrative demonstration" : "TLink recorded activity"} · Updated {councilDateTime(report.generatedAt,report.period.timeZone)}</span></footer>

@@ -441,6 +441,7 @@ test("public CRM lead storage stays pseudonymous while reads project only the cu
     );`);
   apply(database, baseMigration);
   apply(database, addressMigration);
+  database.exec(read("../drizzle/0257_enquiry_windows.sql"));
   database.exec(`INSERT INTO trade_opportunities
       (id, source_reference, postcode, state, summary, priority, status, expires_at)
       VALUES ('opportunity-1', 'AEA-20260810-CRM', '3000', 'VIC', 'Customer project.', 'standard', 'open', '2099-08-10T04:00:00.000Z');
@@ -624,9 +625,9 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(opportunityServer, /customerMessage \? \["customer_message"\] : \[\]/);
   assert.match(opportunityServer, /json_valid\(contact\.disclosed_fields\)/);
   const syncSource = opportunityServer.match(/export async function syncMarketplaceEnquiries[\s\S]*?^}/m)?.[0] || "";
-  assert.match(syncSource, /'residential', '', '', '', '', '', '', '', '', ''/);
+  assert.match(syncSource, /CASE WHEN o\.customer_sector = 'business' THEN 'business' ELSE 'residential' END, '', '', '', '', '', '', '', '', ''/);
   assert.doesNotMatch(syncSource, /THEN contact\.(?:customer_first_name|customer_email|customer_message)/);
-  assert.match(opportunityServer, /'residential', '', '', '', '', '', '', '', '', '',/);
+  assert.match(opportunityServer, /CASE WHEN o\.customer_sector = 'business' THEN 'business' ELSE 'residential' END, '', '', '', '', '', '', '', '', '',/);
   assert.match(opportunityServer, /o\.summary,[\s\S]*o\.priority, o\.state, 1,[\s\S]*'protected'/);
   assert.match(opportunityServer, /ON CONFLICT\(opportunity_id, firebase_uid\) DO NOTHING/);
   assert.match(tradeRoute, /public_trade_lead_contact_releases public_contact/);

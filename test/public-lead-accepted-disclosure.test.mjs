@@ -270,6 +270,8 @@ function workflowFixture() {
   applyMigration(database, acceptedJobFilesMigration);
   applyMigration(database, customerDocumentDeliveryMigration);
   applyMigration(database, read("../drizzle/0229_trade_map_preparation.sql"));
+  applyMigration(database, read("../drizzle/0245_customer_quote_hub.sql"));
+  applyMigration(database, read("../drizzle/0257_enquiry_windows.sql"));
   installMissingDraftDeletionContext(database);
   const now = "2026-08-12T01:00:00.000Z";
   const matchId = "39c16039-4acd-4664-a2e5-3d8ad0dd7dd6";
@@ -282,7 +284,8 @@ function workflowFixture() {
     "postcode",
     "service_categories",
   ]);
-  database.prepare(`INSERT INTO trade_opportunities VALUES
+  database.prepare(`INSERT INTO trade_opportunities
+    (id, title, summary, priority, source_reference, postcode, state, status, expires_at, service_categories) VALUES
     ('opportunity-1', 'Heat-pump hot-water quote', 'Replace the existing hot-water unit.',
      'standard', ?, '3000', 'VIC', 'open', '2099-08-12T00:00:00.000Z', '["hot-water"]')`).run(reference);
   database.prepare(`INSERT INTO trade_opportunity_matches
@@ -423,6 +426,14 @@ test("Interested persists only disclosed customer context and survives later mar
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_quotes").get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_quote_versions WHERE status = 'draft'").get().count, 1);
 
+  const accessGuard = publicLeadIssueAccessGuard("trade-a", {
+    id: ids.workOrderId,
+    public_lead_enquiry: 1,
+    accepted_disclosure_sha256: detail.accepted_disclosure_sha256,
+  });
+  assert.ok(database.prepare(`SELECT 1 held WHERE ${accessGuard.sql}`)
+    .get(...accessGuard.bindings), "an active enquiry can issue a quote tied to its immutable accepted snapshot");
+
   database.prepare(`UPDATE public_trade_lead_contact_releases
     SET status = 'withdrawn', withdrawn_at = '2026-08-12T02:00:00.000Z',
       updated_at = '2026-08-12T02:00:00.000Z' WHERE id = 'release-1'`).run();
@@ -473,13 +484,8 @@ test("Interested persists only disclosed customer context and survives later mar
   assert.equal(scheduled.customer_first_name, "Private");
   assert.equal(scheduled.suburb, "Melbourne");
 
-  const accessGuard = publicLeadIssueAccessGuard("trade-a", {
-    id: ids.workOrderId,
-    public_lead_enquiry: 1,
-    accepted_disclosure_sha256: detail.accepted_disclosure_sha256,
-  });
-  assert.ok(database.prepare(`SELECT 1 held WHERE ${accessGuard.sql}`)
-    .get(...accessGuard.bindings), "quote issue remains tied to the immutable accepted snapshot");
+  assert.equal(database.prepare(`SELECT 1 held WHERE ${accessGuard.sql}`)
+    .get(...accessGuard.bindings), undefined, "a closed enquiry rejects a new quote while its persisted job remains accessible");
   assert.throws(() => database.prepare(`UPDATE trade_crm_job_details
     SET accepted_disclosure_snapshot = '{}' WHERE work_order_id = ?`).run(ids.workOrderId),
   /accepted public lead disclosure is immutable/);

@@ -1,3 +1,4 @@
+import { normalizeEnquiryTiming } from "./enquiry-timing.mjs";
 import { australianStateLabel, canonicalAustralianState, postcodeMatchesState, residentialStateFromPostcode } from "./australian-postcodes.mjs";
 import { resolveAddressLocalityTuple } from "./address-localities.mjs";
 import {
@@ -202,6 +203,10 @@ export function validateLeadPayload(raw) {
   const publicPlanEnquiry = isPublicPlanEnquiry(enquiry);
   const rentalAssessmentRequest = isPublicRentalAssessmentRequest(enquiry);
   const quickUpgradeEnquiry = isQuickUpgradeEnquiry(enquiry);
+  const timing = publicPlanEnquiry || quickUpgradeEnquiry ? normalizeEnquiryTiming(raw) : null;
+  if (timing && !timing.ok) return timing;
+  const customerSector = quickUpgradeEnquiry ? (raw.customerSector === undefined ? "residential" : raw.customerSector) : "residential";
+  if (quickUpgradeEnquiry && !["residential", "business"].includes(customerSector)) return { ok: false, error: "Choose whether this request is for a home or a business." };
   const name = publicPlanEnquiry || quickUpgradeEnquiry
     ? [customerFirstName, customerLastName].filter(Boolean).join(" ")
     : suppliedName;
@@ -318,6 +323,8 @@ export function validateLeadPayload(raw) {
         preferredContact: phone ? "either" : "email",
         projectNotes,
         tradeSharing: tradeSharing.value,
+        ...timing.value,
+        customerSector,
       },
     };
   }
@@ -528,6 +535,8 @@ export function validateLeadPayload(raw) {
         preferredContact: email && phone ? "either" : email ? "email" : "phone",
         projectNotes: cleanText(raw.projectNotes, 500),
         tradeSharing: raw.tradeSharing,
+        ...timing.value,
+        customerSector,
         quotePreparation: raw.quotePreparation,
         planSnapshot: raw.planSnapshot,
       },

@@ -37,12 +37,15 @@ export async function loadPublicCouncilCampaign(db: Pick<D1Database, "prepare">,
   if (!code) return null;
   // Public projection is a deliberate allowlist. No membership, customer, job or analytics fields.
   return db.prepare(`SELECT c.code,c.title,c.kind,c.audience,c.starts_at startsAt,c.location,c.meeting_url meetingUrl,
-    o.name councilName,o.state,
+    o.name councilName,o.state,o.logo_data_url logoDataUrl,
+    o.primary_color primaryColor,o.accent_color accentColor,
+    CASE WHEN o.public_journey_enabled=1 THEN o.public_home_url ELSE NULL END homeUrl,
     (SELECT json_group_array(p.postcode) FROM council_postcodes p WHERE p.council_id=o.id) postcodes
     FROM council_campaigns c JOIN council_organisations o ON o.id=c.council_id AND o.status='active'
     WHERE c.code=? AND c.status='active'`).bind(code).first<{
       code: string; title: string; kind: CouncilCampaign["kind"]; audience: CouncilCampaign["audience"];
       startsAt: string | null; location: string | null; meetingUrl: string | null;
       councilName: string; state: string; postcodes: string;
+      logoDataUrl: string | null; primaryColor: string; accentColor: string; homeUrl: string | null;
     }>();
 }

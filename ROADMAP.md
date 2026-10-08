@@ -8,6 +8,12 @@ Engineering owner: technical lead
 
 Last reconciled: 8 October 2026
 
+## Current implementation: SECCCA council journey and reporting feedback
+
+Customer enquiry expiry and work-completion requests, attributed council-branded journeys, official VEU Business/Residential activity, separately sourced CER installation/storage reporting, protected TLink sectors and council PDF/monthly recipient delivery are implemented with migrations 0257 to 0259. City of Port Phillip is the clearly labelled demonstration. Exact tests and matching source/deployment evidence are maintained in `C:/Webproject/outputs/council-seccca-feedback-20261008/FINAL_RELEASE.md`.
+
+Remaining activation: a council owner/editor nominates report recipients and enables delivery; custom council domains require real hosting/DNS verification. Actual measured generation, an official CER business/residential split and inbox receipt are not supplied by this release. Continue to keep community-wide official activity and TLink platform participation distinct.
+
 ## Released follow-up: native PIESA completion and business Wattzun allowances
 
 Functional source `d721f985a421cf60fe779da91a6462d948541bea` is published as Sites 817 and matching Android production/preview updates. The installed TLink job screen now completes the canonical 12-section electrical assessment, evidence and actual signatures through its native controls, retaining the official PDF and independent customer/business delivery states. The browser editor shortcut is removed. Test Test Insulation has blank draft PIESA-75DE26F3 attached; physical phone and inbox verification is the next acceptance step.

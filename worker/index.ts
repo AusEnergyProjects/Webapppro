@@ -83,6 +83,8 @@ import {
 } from "../src/lib/public-redirects.mjs";
 import { releaseIdentityFromEnvironment } from "../src/lib/release-identity.mjs";
 import { removeExpiredIntegrationStates } from "../src/lib/myob-security-audit";
+import { resolveCouncilPublicHost, isCouncilPlatformHost, COUNCIL_PUBLIC_REFERENCE_HEADER, type CouncilPublicHostDecision } from "../src/lib/council-public-branding";
+import { runCouncilMonthlyReports, hasDueCouncilMonthlyReports, drainCouncilMonthlyReportEmails, type CouncilMonthlyArtifactStore } from "../src/lib/council-monthly-report-server";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
@@ -531,6 +533,35 @@ function cacheableHtmlResponse(response: Response) {
 
 const worker = {
   async fetch(request: Request, env: unknown, ctx: ExecutionContext): Promise<Response> {
+    const ingressHeaders = new Headers(request.headers);
+    ingressHeaders.delete(COUNCIL_PUBLIC_REFERENCE_HEADER);
+    request = new Request(request, { headers: ingressHeaders });
+    let publicHost: CouncilPublicHostDecision = { kind: "platform" };
+    if (!isCouncilPlatformHost(request.url)) {
+      try {
+        publicHost = await resolveCouncilPublicHost(getD1(), request.url, request.method);
+      } catch {
+        publicHost = { kind: "deny" };
+      }
+    }
+    if (publicHost.kind === "deny") {
+      return secureResponse(new Response("This council journey is unavailable.", { status: 404, headers: { "Cache-Control": PRIVATE_HTML_CACHE_CONTROL } }), request, env);
+    }
+    if (publicHost.kind === "council") {
+      const headers = new Headers(request.headers);
+      headers.delete("cookie");
+      headers.delete("authorization");
+      headers.set(COUNCIL_PUBLIC_REFERENCE_HEADER, publicHost.code);
+      const target = new URL(request.url);
+      if (publicHost.rewritePath) target.pathname = publicHost.rewritePath;
+      const routedRequest = new Request(target, new Request(request, { headers }));
+      const handled = await handler.fetch(routedRequest, env as never, ctx as never);
+      const response = secureResponse(queueBackgroundDispatches(handled, ctx, routedRequest, env), routedRequest, env);
+      const publicHeaders = new Headers(response.headers);
+      publicHeaders.set("Cache-Control", PRIVATE_HTML_CACHE_CONTROL);
+      publicHeaders.delete("Set-Cookie");
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers: publicHeaders });
+    }
     const pathRedirect = legacyPathRedirect(request);
     if (pathRedirect) return pathRedirect;
     const redirect = canonicalHostRedirect(request, env);
@@ -560,6 +591,16 @@ const worker = {
   async scheduled(controller: ScheduledController, workerEnv: unknown, ctx: ExecutionContext) {
     const tasks: Promise<unknown>[] = [];
     if (controller.cron === NOTIFICATION_DELIVERY_CRON) {
+      const councilArtifactStore = (workerEnv as { EVIDENCE?: CouncilMonthlyArtifactStore }).EVIDENCE;
+      if (councilArtifactStore) tasks.push(drainCouncilMonthlyReportEmails({ db: getD1(), artifactStore: councilArtifactStore })
+        .catch(() => console.error("Council monthly report email queue could not be processed.")));
+      if (councilArtifactStore) tasks.push(hasDueCouncilMonthlyReports(getD1()).then(async due => {
+        if (!due) return;
+        await runCouncilMonthlyReports({ db: getD1(), artifactStore: councilArtifactStore, buildPdf: async bundle => {
+          const { createCouncilMonthlyReportPdf } = await import("../src/lib/council-monthly-report-pdf");
+          return createCouncilMonthlyReportPdf(bundle);
+        } });
+      }).catch(() => console.error("Council monthly report generation queue could not be processed.")));
       const teamMemberBucket = (workerEnv as { EVIDENCE?: TradeTeamMemberCleanupBucket }).EVIDENCE;
       const documentExpiryEmail = serviceReminderProviderConfiguration().email;
       const registryArtifactStore = (workerEnv as {
@@ -661,6 +702,12 @@ const worker = {
     }
     if (controller.cron === DAILY_MAINTENANCE_CRON) {
       const db = getD1();
+      const councilArtifactStore = (workerEnv as { EVIDENCE?: CouncilMonthlyArtifactStore }).EVIDENCE;
+      if (councilArtifactStore) tasks.push(runCouncilMonthlyReports({ db, artifactStore: councilArtifactStore, buildPdf: async bundle => {
+        const { createCouncilMonthlyReportPdf } = await import("../src/lib/council-monthly-report-pdf");
+        return createCouncilMonthlyReportPdf(bundle);
+      } })
+        .catch(() => console.error("Council monthly report generation could not be processed.")));
       tasks.push(
         cleanupExpiredTradeMapLocations(db).catch((error) => {
           console.error("Map location retention cleanup failed.", error instanceof Error ? error.message : "Unknown error");

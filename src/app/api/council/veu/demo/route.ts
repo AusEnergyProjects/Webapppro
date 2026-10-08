@@ -19,7 +19,8 @@ export async function GET(request: Request) {
     const now = Date.now(), requested = councilVeuPeriod(period, new Date(now));
     const snapshot = (await councilVeuBaseline()).filter(item => item.period.key === period && item.period.startDate === requested.startDate
       && (item.period.endDate === null || (requested.endDate !== null && item.period.endDate <= requested.endDate))
-      && Date.parse(item.fetchedAt) <= now).sort((a, b) => b.fetchedAt.localeCompare(a.fetchedAt))[0];
+      && Date.parse(item.fetchedAt) <= now).sort((a, b) =>
+        postcodes.filter(postcode=>b.postcodes.includes(postcode)).length-postcodes.filter(postcode=>a.postcodes.includes(postcode)).length || b.fetchedAt.localeCompare(a.fetchedAt))[0];
     if (!snapshot) return json({ ok: false, error: "A saved public activity snapshot is not available for this reporting period." }, 503);
     const report = councilVeuReport(snapshot, { councilId: "public-demo", name: "Selected Victorian postcodes", state: "VIC", postcodes },
       { checkedAt: snapshot.fetchedAt, refreshFailed: false, dataOrigin: "baseline" }, now);

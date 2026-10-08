@@ -7,6 +7,8 @@ import { transform } from "esbuild";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { chromium } from "playwright-core";
+import { COUNCIL_DEFAULT_THEME } from "../src/lib/council-profile.ts";
+import { councilThemeVariables } from "../src/lib/council-theme.ts";
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const browserPath = [process.env.TEST_BROWSER_PATH, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "/usr/bin/chromium"].find(value => value && fs.existsSync(value));
@@ -23,8 +25,9 @@ const nothing = () => null;
 const dependencies = {
   React, Link, BrandBar: nothing, PublicSiteSearch: nothing, SiteNav: nothing,
   ServicesHeaderLink: nothing, SurgeHeaderButton: nothing, TLinkBrand: () => React.createElement("span", null, "TLink"),
-  AeaProductLink: nothing, PUBLIC_SITE: { phoneHref: "tel:0000000000", phoneDisplay: "Phone" },
+  AeaProductLink: nothing, PUBLIC_SITE: { apexUrl: "", phoneHref: "tel:0000000000", phoneDisplay: "Phone" },
   useState: React.useState, councilReportPeriod: () => ({ timeZone: "Australia/Melbourne" }),
+  COUNCIL_DEFAULT_THEME, councilThemeVariables,
   QuickUpgradeEnquiryDialog: nothing, styles: { entry: "entry", entryPanel: "panel", brand: "brand", secondary: "secondary" },
 };
 
@@ -43,7 +46,7 @@ const CouncilProgram = await component("src/components/CouncilProgram.tsx", "Cou
 const entries = [
   { path: "/", target: "/direct-trade/dashboard", name: "Open TLink", component: SiteHeader, props: { active: "start" } },
   { path: "/direct-trade/standards", target: "/direct-trade/dashboard", name: "Dashboard", component: TLinkHeader, props: { active: "standards" } },
-  { path: "/council/program/example", target: "/council", selector: 'a[href="/council"]', component: CouncilProgram, props: { campaign: null } },
+  { path: "/council/program/example", target: "/council", selector: 'a[href$="/council"]', component: CouncilProgram, props: { campaign: null } },
 ];
 
 test("public portal entry links do not inherit a document's prohibited microphone policy", { skip: !browserPath, timeout: 30000 }, async () => {
@@ -62,9 +65,11 @@ test("public portal entry links do not inherit a document's prohibited microphon
     const page = await browser.newPage();
     page.setDefaultTimeout(5000);
     const base = `http://127.0.0.1:${server.address().port}`;
+    dependencies.PUBLIC_SITE.apexUrl = base;
     for (const entry of entries) {
       await page.goto(`${base}${entry.path}`);
       assert.equal(await page.evaluate(() => document.featurePolicy.allowsFeature("microphone")), false, `${entry.path} prohibits microphone use`);
+      if (entry.selector) assert.equal(await page.locator(entry.selector).getAttribute("href"), `${base}${entry.target}`, "Council entry uses the platform origin for custom-host compatibility");
       await (entry.selector ? page.locator(entry.selector) : page.getByRole("link", { name: entry.name, exact: true })).click();
       await page.waitForURL(`${base}${entry.target}`);
       assert.equal(await page.evaluate(() => document.featurePolicy.allowsFeature("microphone")), true, `${entry.path} entry acquires the portal document policy`);

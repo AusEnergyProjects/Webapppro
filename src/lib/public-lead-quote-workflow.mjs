@@ -68,6 +68,9 @@ export function publicLeadQuoteWorkflowSnapshot(row, allowAeaDelivery = false) {
     reference: String(row.source_reference || "").trim().slice(0, 120),
     title: String(row.opportunity_title || row.title || "").trim().slice(0, 180) || "Customer enquiry",
     summary: String(row.summary || "").trim().slice(0, 1200),
+    requestedWorkBy: String(row.requested_work_by || ""),
+    requestedCompletion: String(row.requested_completion || "flexible"),
+    customerSector: String(row.customer_sector || "unclassified"),
     priority: String(row.opportunity_priority || row.priority || "standard").trim().slice(0, 40) || "standard",
   };
 }
@@ -115,6 +118,9 @@ export function publicLeadAcceptedDisclosure(snapshot, row, acceptedAt, photos =
       categories: snapshot.categories,
       serviceLabels: snapshot.serviceLabels,
       quoteAnswers: snapshot.answers,
+      requestedWorkBy: snapshot.requestedWorkBy,
+      requestedCompletion: snapshot.requestedCompletion,
+      customerSector: snapshot.customerSector,
     },
     photos: photos.map((photo) => ({
       id: String(photo.id || ""),
@@ -153,9 +159,16 @@ export function publicLeadIssueAccessGuard(ownerUid, row) {
   return {
     sql: `EXISTS (
       SELECT 1 FROM trade_crm_job_details accepted_detail
+      JOIN trade_work_orders enquiry_work ON enquiry_work.id = accepted_detail.work_order_id AND enquiry_work.firebase_uid = accepted_detail.firebase_uid
+      JOIN trade_opportunity_matches enquiry_match ON enquiry_match.id = enquiry_work.source_reference AND enquiry_match.firebase_uid = enquiry_work.firebase_uid
+      JOIN trade_opportunities enquiry_opportunity ON enquiry_opportunity.id = enquiry_match.opportunity_id
       WHERE accepted_detail.work_order_id = ?
         AND accepted_detail.firebase_uid = ?
         AND accepted_detail.customer_source = 'public_lead_released'
+        AND enquiry_match.status IN ('interested', 'connected')
+        AND enquiry_opportunity.status = 'open'
+        AND datetime(enquiry_opportunity.expires_at) > datetime('now')
+        AND NOT EXISTS (SELECT 1 FROM customer_quote_hubs paused_hub WHERE paused_hub.opportunity_id = enquiry_opportunity.id AND paused_hub.accepting = 0)
         AND accepted_detail.accepted_disclosure_sha256 = ?
         AND json_extract(accepted_detail.accepted_disclosure_snapshot, '$.contract') =
           'tlink-public-lead-accepted-disclosure-v1'

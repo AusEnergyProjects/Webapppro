@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import * as publicLeadWorkflow from "../src/lib/public-lead-quote-workflow.mjs";
 import ts from "typescript";
 import { DatabaseSync } from "node:sqlite";
 import { ReminderProviderDeliveryError } from "../src/lib/service-reminder-delivery.ts";
@@ -130,7 +131,7 @@ function fixture() {
     current_version_number integer, status text
   );
   CREATE TABLE trade_work_orders (
-    id text PRIMARY KEY, firebase_uid text, record_status text, source_type text, stage text DEFAULT 'backlog'
+    id text PRIMARY KEY, firebase_uid text, record_status text, source_type text, source_reference text DEFAULT '', stage text DEFAULT 'backlog'
   );
   CREATE TABLE trade_crm_job_details (
     work_order_id text, firebase_uid text, crm_customer_id text,
@@ -391,6 +392,7 @@ async function preparedPdfDelivery({ revision = 3, sizeBytes, mismatchedPdf = fa
   const pdf = new Uint8Array(sizeBytes);
   let pdfReads = 0;
   const dependencies = {
+    "./public-lead-quote-workflow.mjs": publicLeadWorkflow,
     "./trade-quote-hub-email-server.ts": { tradeQuoteCustomerHubEmailUrl: async (_db, input, provisionMissing) => {
       assert.deepEqual(input, { ownerUid: "owner-1", workOrderId: "work-1", customerId: "customer-1", recipientEmail: "customer@example.com" });
       assert.equal(provisionMissing, undefined, 'delivery retries must never provision or rotate a capability');
@@ -449,6 +451,33 @@ test("lost or cancelled opportunity blocks a previously queued quote email befor
       sendEmail: async () => { sends++; } });
     assert.equal(sends, 0);
     assert.equal(result.outcomes[0].code, "QUOTE_DELIVERY_REVISION_INACTIVE");
+    f.database.close();
+  }
+});
+
+test("public enquiry quote expiry and customer opt-out are rechecked after document preparation before transport", async () => {
+  for (const state of ["open", "expired", "paused"]) {
+    const f = await preparedPdfDelivery({ sizeBytes: 100 });
+    f.database.exec(`CREATE TABLE trade_opportunity_matches(id TEXT, firebase_uid TEXT, opportunity_id TEXT, status TEXT);
+      CREATE TABLE trade_opportunities(id TEXT, status TEXT, expires_at TEXT);
+      CREATE TABLE customer_quote_hubs(opportunity_id TEXT, accepting INTEGER);
+      INSERT INTO trade_work_orders(id,firebase_uid,source_type,source_reference) VALUES('work-1','owner-1','public_lead','match-1');
+      INSERT INTO trade_crm_job_details(work_order_id,firebase_uid,customer_source,accepted_disclosure_sha256,accepted_disclosure_snapshot)
+        VALUES('work-1','owner-1','public_lead_released','${"a".repeat(64)}','{"contract":"tlink-public-lead-accepted-disclosure-v1"}');
+      INSERT INTO trade_opportunity_matches VALUES('match-1','owner-1','opportunity-1','interested');
+      INSERT INTO trade_opportunities VALUES('opportunity-1','open','2999-01-01T00:00:00Z');`);
+    let sends = 0;
+    const result = await f.drain({ ...f.options,
+      loadContext: async () => ({ ...await f.options.loadContext(), source_type: "public_lead", accepted_disclosure_sha256: "a".repeat(64) }),
+      prepareMessage: async () => {
+        if (state === "expired") f.database.exec("UPDATE trade_opportunities SET expires_at='2000-01-01T00:00:00Z'");
+        if (state === "paused") f.database.exec("INSERT INTO customer_quote_hubs VALUES('opportunity-1',0)");
+        return { channel: "email", recipient: "customer@example.com", subject: "Quote", body: "Quote", idempotencyKey: "provider-key", callbackUrl: "https://example.com/callback" };
+      },
+      sendEmail: async () => { sends++; return { provider: "test", providerMessageId: "receipt-1", providerStatus: "accepted" }; },
+    });
+    assert.equal(sends, state === "open" ? 1 : 0, state);
+    if (state !== "open") assert.equal(result.outcomes[0].code, "QUOTE_DELIVERY_ACCESS_ENDED");
     f.database.close();
   }
 });
@@ -726,6 +755,7 @@ test("mailbox routing distinguishes unsent quote preparation from historical dis
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const dependencies = {
+    "./public-lead-quote-workflow.mjs": publicLeadWorkflow,
     "./service-reminder-delivery.ts": await import("../src/lib/service-reminder-delivery.ts"),
     "./trade-quote-delivery-policy.mjs": await import("../src/lib/trade-quote-delivery-policy.mjs"),
   };

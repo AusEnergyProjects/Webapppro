@@ -133,6 +133,10 @@ export function createLeadPostHandler({
     }
     // Explicit campaign links only. No inferred attribution, cookies or altered consent.
     const councilReference = raw?.councilReference;
+    const hostCouncilReference = request.headers.get("x-tlink-council-reference");
+    if (hostCouncilReference && (!quickUpgradeEnquiry || councilReference !== hostCouncilReference)) {
+      return respond({ ok: false, error: "Use this council's enquiry form to send your request." }, 400, "council_host_reference_rejected");
+    }
     if (councilReference !== undefined && (!quickUpgradeEnquiry || typeof councilReference !== "string" || !/^[a-f0-9]{32}$/.test(councilReference))) {
       return respond({ ok: false, error: "The council campaign reference is invalid." }, 400, "council_reference_rejected");
     }
