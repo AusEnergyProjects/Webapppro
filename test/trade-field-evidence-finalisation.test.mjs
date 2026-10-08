@@ -107,6 +107,7 @@ function evidenceDatabase() {
     CREATE TABLE trade_work_orders (
       id text PRIMARY KEY NOT NULL,
       firebase_uid text NOT NULL,
+      stage text NOT NULL DEFAULT 'scheduled',
       revision integer NOT NULL,
       updated_at text NOT NULL
     );
@@ -502,11 +503,12 @@ function routeHarness(database, storage, options = {}) {
     "@/lib/trade-team-server": {
       assignedJob: async (_access, workOrderId) => {
         const job = database.prepare(
-          "SELECT revision FROM trade_work_orders WHERE id = ? AND firebase_uid = ?",
+          "SELECT stage, revision FROM trade_work_orders WHERE id = ? AND firebase_uid = ?",
         ).get(workOrderId, access.ownerUid);
         if (!job) throw new Error("JOB_NOT_FOUND");
         return {
           revision: Number(job.revision),
+          stage: job.stage,
           assignee_member_id: access.memberId,
           source_type: "internal",
         };
@@ -1626,6 +1628,68 @@ test("device revoke and completion races cannot remove completed evidence bytes"
         WHERE id = 'device-row-1'`).get().status,
       "revoked",
     );
+  }
+});
+
+test("generic PDFs upload to canonical job Files before and after job completion with one replayable media identity", async () => {
+  for (const stage of ["scheduled", "completed"]) {
+    const database = evidenceDatabase();
+    const storage = evidenceBucket();
+    try {
+      seedJobsAndCompliance(database);
+      database.prepare("UPDATE trade_work_orders SET stage=? WHERE id='job-legacy'").run(stage);
+      const { route } = routeHarness(database, storage);
+      const bytes = FILE_BYTES["application/pdf"];
+      const initiateRequest = {
+        action: "initiate", deviceId: "device-001", platform: "ios", appVersion: "1.0.0",
+        clientUploadId: `generic-pdf-${stage}`, workOrderId: "job-legacy", fileName: "job-record.pdf",
+        contentType: "application/pdf", sizeBytes: bytes.byteLength, category: "document", caption: "Job document",
+      };
+      const initiated = await post(route, initiateRequest);
+      const initiatedPayload = await initiated.json();
+      assert.equal(initiated.status, 201, JSON.stringify(initiatedPayload));
+      const sessionId = initiatedPayload.upload.id;
+      const session = database.prepare("SELECT object_key FROM trade_mobile_upload_sessions WHERE id=?").get(sessionId);
+      storage.completionBytes.set(session.object_key, bytes);
+      const part = new FormData();
+      for (const [key, value] of Object.entries({ action: "upload_part", deviceId: "device-001", platform: "ios", appVersion: "1.0.0", sessionId, partNumber: "1" })) part.set(key, value);
+      part.set("file", new File([bytes], "job-record.pdf", { type: "application/pdf" }));
+      const uploadedPart = await route.POST(new Request("https://app.example/api/trade-team/media", { method: "POST", body: part }));
+      assert.equal(uploadedPart.status, 200, JSON.stringify(await uploadedPart.clone().json()));
+      const completionRequest = { action: "complete", deviceId: "device-001", platform: "ios", appVersion: "1.0.0", sessionId };
+      const completed = await post(route, completionRequest);
+      const completedPayload = await completed.json();
+      assert.equal(completed.status, 201, JSON.stringify(completedPayload));
+      assert.equal(completedPayload.result.duplicate, false);
+      const mediaId = completedPayload.result.mediaId;
+      const files = database.prepare(`SELECT id,work_order_id,firebase_uid,category,file_name,content_type,size_bytes,object_key,caption,original_sha256
+        FROM trade_crm_job_media WHERE work_order_id=? AND firebase_uid=?`).all("job-legacy", "installer-owner");
+      assert.deepEqual(files.map(row => ({ ...row })), [{
+        id: mediaId, work_order_id: "job-legacy", firebase_uid: "installer-owner", category: "document",
+        file_name: "job-record.pdf", content_type: "application/pdf", size_bytes: bytes.byteLength,
+        object_key: session.object_key, caption: "Job document", original_sha256: sha256(bytes),
+      }]);
+      assert.deepEqual(storage.objects.get(session.object_key), bytes);
+      assert.deepEqual({ ...database.prepare("SELECT stage,revision FROM trade_work_orders WHERE id='job-legacy'").get() }, { stage, revision: 2 });
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_case_evidence").get().count, 0);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_case_events").get().count, 0);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_audit_events").get().count, 0);
+      assert.equal(database.prepare("SELECT status FROM compliance_cases WHERE id='case-1'").get().status, "accepted");
+      const replay = await post(route, completionRequest);
+      const replayPayload = await replay.json();
+      assert.equal(replay.status, 200);
+      assert.equal(replayPayload.duplicate, true);
+      assert.equal(replayPayload.result.mediaId, mediaId);
+      const repeatedInitiation = await post(route, initiateRequest);
+      const repeatedInitiationPayload = await repeatedInitiation.json();
+      assert.equal(repeatedInitiation.status, 200);
+      assert.equal(repeatedInitiationPayload.duplicate, true);
+      assert.equal(repeatedInitiationPayload.upload.id, sessionId);
+      assert.equal(repeatedInitiationPayload.upload.mediaId, mediaId);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_job_media").get().count, 1);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 1);
+      assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-legacy'").get().revision, 2);
+    } finally { database.close(); }
   }
 });
 

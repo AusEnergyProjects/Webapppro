@@ -629,10 +629,8 @@ export async function queueAction(action: OfflineAction, expectedOwner?: LocalDa
     }
     if (action.appointmentId) job.appointmentRevision = (job.appointmentRevision || 0) + 1;
     if (action.transition === 'start_work') job.stage = 'in_progress';
-    if (action.transition === 'finish' && !action.appointmentId && !job.collaborativeJob) {
-      job.stage = 'completed';
-      job.lifecycleStatus = 'completed';
-    }
+    // Parent completion comes from the server acknowledgement. A queued or
+    // discarded finish must not leave the job appearing completed locally.
   }
   if (action.type === 'set_task_status' && action.taskId && action.status) {
     const task = job.tasks.find((item) => item.id === action.taskId);

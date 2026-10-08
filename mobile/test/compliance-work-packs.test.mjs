@@ -576,8 +576,8 @@ test('forms drive job completion while existing queued completion receipts remai
     /activityWorkPacks|complianceIntents|governed evidence|Creditex/,
   );
   assert.match(database, /action\.transition === 'finish'[\s\S]*status IN \('conflict', 'rejected'\)/);
-  assert.match(database, /job\.stage = 'completed'/);
-  assert.match(database, /job\.lifecycleStatus = 'completed'/);
+  assert.doesNotMatch(sourceFunction(database, 'applyQueuedProjection'), /job\.(stage|lifecycleStatus) = 'completed'/);
+  assert.match(sourceFunction(database, 'resolveAction'), /Object\.assign\(job, result\.jobState\)/);
 });
 
 test('the mobile completion evaluator stays deterministic with the authoritative server evaluator', () => {

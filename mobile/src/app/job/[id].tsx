@@ -38,6 +38,7 @@ import {
 import {
   addUpload,
   discardUpload,
+  getJobCompletionQueueState,
   getSetting,
   listLocallyFinishedActivityIntentIds,
   listPendingWorkPackActions,
@@ -45,6 +46,7 @@ import {
   listWorkPackAnswerConflicts,
   resolveWorkPackAnswerConflict,
   setSetting,
+  type JobCompletionQueueState,
 } from '@/lib/database';
 import { activityIntentComplete } from '@/lib/activity-field-completion';
 import { APP_VERSION } from '@/lib/config';
@@ -132,6 +134,32 @@ function jobFinishLocalBlockers(job: FieldJob) {
     job.rentalInspection && job.rentalInspection.status !== 'issued' ? 'the issued rental assessment report' : '',
     job.openIssues ? 'open issues' : '',
   ].filter(Boolean);
+}
+
+function jobHasNoRequiredForms(job: FieldJob, assessment: FieldElectricalAssessmentState | null) {
+  return job.fieldLane !== 'creditex_manual'
+    && !job.forms.length
+    && !job.rentalInspection
+    && !job.complianceIntents?.length
+    && !job.activityWorkPacks?.length
+    && !complianceCasesForJob(job).length
+    && assessment?.workOrderId === job.id
+    && assessment.state === 'empty';
+}
+
+function jobCompletionMessage(job: FieldJob, state: JobCompletionQueueState | null) {
+  if (!state) return 'Checking completion status...';
+  if (state.finish && ['queued', 'retry'].includes(state.finish.status)) {
+    return 'Completion saved on this device. Waiting for TLink to confirm it. Check Sync for progress.';
+  }
+  if (state.finish) {
+    return `Completion was not accepted. ${state.finish.errorMessage || 'Open Sync to review the saved action before trying again.'}`;
+  }
+  if (job.stage === 'completed') return 'Job completed and synced to TLink.';
+  if (job.appointmentStatus === 'completed' && job.collaborativeJob) {
+    return 'Your visit is complete. Other visits or job requirements still need to finish.';
+  }
+  return 'No forms are required. Complete the job when the work is finished. Files can be uploaded before or after completion.';
 }
 
 async function openVerifiedWorkPackDocument(
@@ -310,6 +338,8 @@ export default function JobScreen() {
   const [activityLoadError, setActivityLoadError] = useState('');
   const [electricalAssessmentState, setElectricalAssessmentState] = useState<FieldElectricalAssessmentState | null>(null);
   const [electricalAssessmentId, setElectricalAssessmentId] = useState<string | null>(null);
+  const [completionQueue, setCompletionQueue] = useState<{ workOrderId: string; state: JobCompletionQueueState } | null>(null);
+  const finishingJob = useRef(false);
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
   const pickingDocument = useRef(false);
@@ -317,14 +347,16 @@ export default function JobScreen() {
   const load = useCallback(async (refreshActivityForms = true) => {
     const workOrderId = String(id);
     try {
-    const [nextJob, problems, pendingActions, finishedActivityIntents, nextAnswerConflicts] = await Promise.all([
+    const [nextJob, problems, pendingActions, finishedActivityIntents, nextAnswerConflicts, nextCompletionQueue] = await Promise.all([
       findJob(workOrderId),
       listWorkPackProblems(workOrderId),
       listPendingWorkPackActions(workOrderId),
       listLocallyFinishedActivityIntentIds(workOrderId),
       listWorkPackAnswerConflicts(workOrderId),
+      getJobCompletionQueueState(workOrderId),
     ]);
     setJob(nextJob);
+    setCompletionQueue({ workOrderId, state: nextCompletionQueue });
     setAnswerConflicts(nextAnswerConflicts);
     setLoadingJob(false);
     setJobLoadError('');
@@ -505,6 +537,56 @@ export default function JobScreen() {
     } catch (error) {
       Alert.alert('Task could not be saved', error instanceof Error ? error.message : 'Try again.');
     } finally { setBusy(''); }
+  }
+
+  async function completeJob() {
+    if (!job || busy || finishingJob.current) return;
+    finishingJob.current = true;
+    setBusy('finish');
+    setSavedMessage('');
+    try {
+      const [currentJob, currentQueue] = await Promise.all([
+        findJob(job.id), getJobCompletionQueueState(job.id),
+      ]);
+      if (!currentJob || currentJob.id !== job.id) throw new Error('This job is no longer available. Sync to check your assignment.');
+      setCompletionQueue({ workOrderId: job.id, state: currentQueue });
+      if (currentQueue.finish && ['queued', 'retry'].includes(currentQueue.finish.status)) {
+        setSavedMessage(jobCompletionMessage(currentJob, currentQueue));
+        return;
+      }
+      if (['completed', 'cancelled'].includes(currentJob.stage)) {
+        if (currentQueue.finish) throw new Error('Refresh this job in Sync to review the completion that was not accepted.');
+        setSavedMessage(currentJob.stage === 'completed' ? 'Job completed and synced to TLink.' : 'Cancelled jobs cannot be completed.');
+        return;
+      }
+      if (!jobHasNoRequiredForms(currentJob, electricalAssessmentState)) {
+        throw new Error('Complete this job through its required forms. Connect to check the current forms if they are not shown.');
+      }
+      const blockers = jobFinishLocalBlockers(currentJob);
+      if (blockers.length) throw new Error(`Complete ${blockers.join(', ')} before finishing the job.`);
+      const activeVisit = Boolean(currentJob.appointmentId)
+        && ['scheduled', 'en_route', 'arrived', 'in_progress'].includes(currentJob.appointmentStatus);
+      if (activeVisit && (!Number.isSafeInteger(currentJob.appointmentRevision) || Number(currentJob.appointmentRevision) < 1)) {
+        throw new Error('Sync this visit before completing it. Its current revision is not available on this device.');
+      }
+      await saveAction({
+        type: 'advance_field_job', transition: 'finish', workOrderId: currentJob.id,
+        baseRevision: currentJob.revision,
+        ...(activeVisit ? { appointmentId: currentJob.appointmentId, baseAppointmentRevision: currentJob.appointmentRevision } : {}),
+      });
+      const [updatedJob, updatedQueue] = await Promise.all([
+        findJob(job.id), getJobCompletionQueueState(job.id),
+      ]);
+      setCompletionQueue({ workOrderId: job.id, state: updatedQueue });
+      if (!updatedJob || updatedJob.id !== job.id) throw new Error('The completion was saved, but this job is no longer available. Check Sync for its result.');
+      setJob(updatedJob);
+      setSavedMessage(jobCompletionMessage(updatedJob, updatedQueue));
+    } catch (error) {
+      Alert.alert('Job completion needs attention', error instanceof Error ? error.message : 'Check Sync before trying again.');
+    } finally {
+      finishingJob.current = false;
+      setBusy('');
+    }
   }
 
   async function addTime() {
@@ -1298,6 +1380,11 @@ export default function JobScreen() {
   const complianceIntents = job.complianceIntents || [];
   const complianceCases = complianceCasesForJob(job);
   const finishBlockers = jobFinishLocalBlockers(job);
+  const formlessJob = jobHasNoRequiredForms(job, electricalAssessmentState);
+  const completionState = completionQueue?.workOrderId === job.id ? completionQueue.state : null;
+  const completionPending = Boolean(completionState?.finish && ['queued', 'retry'].includes(completionState.finish.status));
+  const completionProblem = Boolean(completionState?.finish && !completionPending);
+  const completionLabel = job.collaborativeJob && (job.remainingActiveVisits || 0) > 1 ? 'Complete visit' : 'Complete job';
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   const creditexManual = job.fieldLane === 'creditex_manual';
   const syntheticManual = job.recordMode === 'synthetic_test' && creditexManual;
@@ -1309,7 +1396,7 @@ export default function JobScreen() {
   return (
     <Screen scrollKey={activeFormId || 'overview'}>
       <View style={styles.hero}>
-        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{lifecycleLabel(job, activityRecords)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
+        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{completionPending ? 'Completion pending' : completionProblem ? 'Completion not accepted' : lifecycleLabel(job, activityRecords)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
         <Text style={styles.title}>{job.title || 'Field job'}</Text>
         <Text style={styles.body}>{job.protectedJob ? job.siteArea || 'Protected service area' : [job.customerName, job.serviceAddress || job.siteArea || 'Service site not added'].filter(Boolean).join(' | ')}</Text>
         {job.appointmentStartsAt ? <Text style={styles.meta}>{new Date(job.appointmentStartsAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</Text> : null}
@@ -1327,6 +1414,7 @@ export default function JobScreen() {
         <Text style={styles.cardTitle}>Job actions</Text>
         {!job.protectedJob && (job.customerPhone || job.serviceAddress) ? <View style={styles.row}>{job.customerPhone ? <><Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`tel:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Call</Text></Pressable><Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`sms:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Text</Text></Pressable></> : null}{job.serviceAddress ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.serviceAddress)}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Directions</Text></Pressable> : null}</View> : null}
         <FieldButton variant="secondary" onPress={() => setActiveFormId('files')}>Files</FieldButton>
+        {!syntheticManual ? <FieldButton variant="secondary" disabled={Boolean(busy)} loading={busy === 'document:general'} onPress={() => void chooseDocument()}>Upload file</FieldButton> : null}
         {!syntheticManual && !complianceCases.length ? <FieldButton variant="secondary" disabled={Boolean(busy)} loading={busy === 'photo:general'} onPress={() => void capturePhoto()}>Take photo</FieldButton> : null}
         {job.description ? <Text style={styles.body}>{job.description}</Text> : null}
       </View> : null}
@@ -1435,6 +1523,7 @@ export default function JobScreen() {
         <View style={styles.row}><FieldButton variant="secondary" loading={busy === 'photo:general'} style={styles.flex} onPress={() => void capturePhoto()}>Take photo</FieldButton><FieldButton variant="secondary" loading={busy === 'document:general'} style={styles.flex} onPress={() => void chooseDocument()}>Add document</FieldButton></View></> : null}
         {complianceCases.length ? <Text style={styles.meta}>General job files remain separate and are not submitted against a governed requirement.</Text> : null}
         <Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} already synced</Text>
+        {job.media.map(file => <View key={file.id}><Text style={styles.taskTitle}>{file.fileName}</Text>{file.caption ? <Text style={styles.meta}>{file.caption}</Text> : null}</View>)}
         {!creditexManual ? <FieldSwmsFiles key={job.id} workOrderId={job.id} online={sync.online} onOpen={data => { setSwmsDraft(data); setActiveFormId('swms'); }} /> : null}
         {!creditexManual ? <><Text style={styles.meta}>Form activity is timestamped automatically. Add manual time only for work that is not captured by forms.</Text><FieldButton variant="secondary" onPress={() => setActiveFormId('time')}>Add manual time</FieldButton></> : null}
       </View> : null}
@@ -1451,8 +1540,10 @@ export default function JobScreen() {
 
       {!activeFormId && !creditexManual ? <View style={styles.card}>
         <Text style={styles.cardTitle}>Work progress</Text>
-        <Text style={styles.body}>Work activity is recorded as you complete job forms.</Text>
-        {finishBlockers.length ? <Text style={styles.meta}>{`Complete ${finishBlockers.join(', ')} to finish the job.`}</Text> : <Text style={styles.meta}>{job.stage === 'completed' ? 'All required work is complete.' : 'TLink confirms completion after the required forms and server checks finish syncing.'}</Text>}
+        <Text style={styles.body}>{(formlessJob && !completionProblem) || completionPending ? jobCompletionMessage(job, completionState) : 'Work activity is recorded as you complete job forms.'}</Text>
+        {completionProblem ? <Text accessibilityLiveRegion="polite" style={styles.warningText}>{jobCompletionMessage(job, completionState)}</Text> : null}
+        {finishBlockers.length ? <Text style={styles.meta}>{`Complete ${finishBlockers.join(', ')} to finish the job.`}</Text> : !formlessJob && !completionPending && !completionProblem ? <Text style={styles.meta}>{job.stage === 'completed' ? 'All required work is complete.' : 'TLink confirms completion after the required forms and server checks finish syncing.'}</Text> : null}
+        {formlessJob && !['completed', 'cancelled'].includes(job.stage) && (!job.collaborativeJob || ['scheduled', 'en_route', 'arrived', 'in_progress'].includes(job.appointmentStatus)) ? <FieldButton disabled={Boolean(busy) || completionPending || !completionState || Boolean(finishBlockers.length)} loading={busy === 'finish'} onPress={() => void completeJob()}>{completionLabel}</FieldButton> : null}
         <WorkTimeStatus />
       </View> : null}
 

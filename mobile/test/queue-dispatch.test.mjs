@@ -32,7 +32,7 @@ function fixture() {
     saveJob: async (_db, job) => { sql.prepare('INSERT OR REPLACE INTO jobs VALUES (?, ?, ?)').run(job.id, job.fieldLane, JSON.stringify(job)); },
     workPackUploadIds: () => [], Crypto: { randomUUID: () => 'new-retry-id' }, deleteEncryptedBundle: () => {},
   };
-  const names = ['persistQueuedAction', 'queueAction', 'queuedActions', 'resolveAction', 'retryConflict', 'applyQueuedForm', 'applyQueuedProjection', 'applyChanges', 'resolvedWorkPackAnswerPatches', 'resolveWorkPackAnswerConflict', 'mergeSectionPatches', 'patchKey'];
+  const names = ['persistQueuedAction', 'queueAction', 'queuedActions', 'resolveAction', 'retryConflict', 'discardAction', 'getJobCompletionQueueState', 'applyQueuedForm', 'applyQueuedProjection', 'applyChanges', 'resolvedWorkPackAnswerPatches', 'resolveWorkPackAnswerConflict', 'mergeSectionPatches', 'patchKey'];
   const functions = names.map((name) => {
     const node = ast.statements.find((entry) => ts.isFunctionDeclaration(entry) && entry.name?.text === name);
     assert.ok(node, name); return node.getText(ast).replace(/^export\s+/, '');
@@ -168,6 +168,29 @@ test('queued finish projects only its own visit and a visit conflict never autom
   await f.api.resolveAction('visit-finish',{status:'conflict',code:'REVISION_CONFLICT',currentRevision:9});
   assert.equal(f.rows()[0].id,'visit-finish');assert.equal(f.rows()[0].status,'conflict');
   assert.equal(JSON.parse(f.rows()[0].payload).baseRevision,5);
+});
+
+test('an unacknowledged no-visit finish cannot complete the parent after rejection and discard', async t => {
+  const f = fixture(); t.after(() => f.sql.close());
+  const job = { id: 'job', fieldLane: 'trade_team', revision: 5, stage: 'ready', lifecycleStatus: 'unscheduled',
+    appointmentId: '', appointmentStatus: '', forms: [], tasks: [] };
+  f.sql.prepare('INSERT INTO jobs VALUES (?,?,?)').run('job', 'trade_team', JSON.stringify(job));
+  const finish = { clientActionId: 'no-visit-finish', type: 'advance_field_job', workOrderId: 'job', transition: 'finish', baseRevision: 5 };
+  const savedJob = () => JSON.parse(f.sql.prepare('SELECT payload FROM jobs').get().payload);
+  await f.api.queueAction(finish);
+  assert.equal((await f.api.getJobCompletionQueueState('job')).finish.status, 'queued');
+  assert.equal(savedJob().stage, 'ready'); assert.equal(savedJob().lifecycleStatus, 'unscheduled');
+  await f.api.resolveAction(finish.clientActionId, { status: 'rejected', code: 'JOB_COMPLETION_BLOCKED', error: 'Required form was added.' });
+  assert.deepEqual((await f.api.getJobCompletionQueueState('job')).finish,
+    { status: 'rejected', errorCode: 'JOB_COMPLETION_BLOCKED', errorMessage: 'Required form was added.' });
+  await f.api.discardAction(finish.clientActionId);
+  assert.equal((await f.api.getJobCompletionQueueState('job')).finish, null);
+  assert.equal(savedJob().stage, 'ready'); assert.equal(savedJob().lifecycleStatus, 'unscheduled');
+  await f.api.queueAction({ ...finish, clientActionId: 'acknowledged-finish' });
+  await f.api.resolveAction('acknowledged-finish', { status: 'applied', jobState: { revision: 6, stage: 'completed', lifecycleStatus: 'completed' } });
+  assert.equal((await f.api.getJobCompletionQueueState('job')).finish, null);
+  assert.equal(savedJob().stage, 'completed'); assert.equal(savedJob().lifecycleStatus, 'completed');
+  assert.equal(savedJob().revision, 6);
 });
 
 test('acknowledgement restores authoritative parent status while preserving pending task and form drafts',async t=>{

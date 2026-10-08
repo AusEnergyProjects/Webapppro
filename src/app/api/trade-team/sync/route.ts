@@ -4,10 +4,11 @@ import { CreditexComplianceError, creditexMutationConflict } from "@/lib/credite
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
-import { fieldFinishWithoutActiveAppointment, fieldTransitionExpectedStatus } from "@/lib/trade-field-completion-policy";
+import { fieldFinishWithoutActiveAppointment, fieldTransitionExpectedStatus, formlessFieldJobGuard } from "@/lib/trade-field-completion-policy";
 import { activityConsumerDocuments } from "@/lib/trade-activity-forms-library";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { jobMemberSql } from "@/lib/trade-job-collaboration";
+import { messageActorGuard } from "@/lib/trade-message-media-access";
 import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
   requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
 import { normalizeTradeFormAnswers, tradeFormCompletion } from "@/lib/trade-form-library.mjs";
@@ -2181,9 +2182,34 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
           WHERE work_order_id = ? AND firebase_uid = ? AND status = 'issued' LIMIT 1`)
           .bind(workOrderId, access.ownerUid).first<{ id: string }>()
       : null;
+    const formless = formlessFieldJobGuard(access.ownerUid, workOrderId);
+    const identity = messageActorGuard(access);
+    const formlessCompletionGuard = {
+      sql: `${formless.sql} AND ${identity.sql}
+        AND (SELECT COUNT(*) FROM trade_crm_appointments completion_visit
+          WHERE completion_visit.work_order_id = ? AND completion_visit.firebase_uid = ?) <= 1
+        AND EXISTS (SELECT 1 FROM trade_team_members completion_actor
+          WHERE completion_actor.id = ? AND completion_actor.owner_uid = ?
+            AND (? = 1 OR (completion_actor.can_manage_jobs = 1
+              AND (? = 'own' OR (completion_actor.job_scope = 'team'
+                AND NOT EXISTS (SELECT 1 FROM trade_crew_members restricted_actor
+                  WHERE restricted_actor.owner_uid = completion_actor.owner_uid AND restricted_actor.member_id = completion_actor.id))))))
+        AND EXISTS (SELECT 1 FROM trade_work_orders completion_job
+          WHERE completion_job.id = ? AND completion_job.firebase_uid = ? AND completion_job.record_status = 'active'
+            AND completion_job.partner_type = 'installer' AND completion_job.assignee_member_id = ?
+            AND (? = 1 OR ${jobMemberSql("completion_job")})
+            AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details completion_details
+              WHERE completion_details.work_order_id = completion_job.id AND completion_details.firebase_uid = completion_job.firebase_uid
+                AND completion_details.pipeline_stage = 'lost'))`,
+      values: [...formless.values, ...identity.values, workOrderId, access.ownerUid, access.memberId, access.ownerUid, access.isOwner ? 1 : 0, access.jobScope,
+        workOrderId, access.ownerUid, String(job.assignee_member_id || ""), access.isOwner || access.jobScope === "team" ? 1 : 0, access.memberId],
+    };
+    const hasNoRequiredForms = transitionName === "finish" && !issuedRental
+      && Number(visitCounts?.active || 0) === 0 && Number(visitCounts?.total || 0) <= 1
+      && Boolean(await db.prepare(`SELECT 1 eligible WHERE ${formlessCompletionGuard.sql}`).bind(...formlessCompletionGuard.values).first());
     const finishWithoutAppointment = transitionName === "finish"
       && Number(visitCounts?.active || 0) === 0 && Number(visitCounts?.total || 0) <= 1
-      && fieldFinishWithoutActiveAppointment(capturedJobStage, String(appointment?.status || ""), Boolean(issuedRental));
+      && fieldFinishWithoutActiveAppointment(capturedJobStage, String(appointment?.status || ""), Boolean(issuedRental), hasNoRequiredForms);
     if (!appointment && !finishWithoutAppointment) return { clientActionId, status: "rejected", code: "APPOINTMENT_REQUIRED", error: "Schedule this job before starting field work." };
     const expectedAppointmentStatus = fieldTransitionExpectedStatus(transitionName, String(appointment?.status || ""), transition.from);
     if (!finishWithoutAppointment && appointment?.status !== expectedAppointmentStatus) return { clientActionId, status: "rejected", code: "OUT_OF_ORDER", error: `This action is out of order. The appointment is ${String(appointment?.status).replaceAll("_", " ")}.` };
@@ -2215,11 +2241,15 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       : parentTransition === "finish"
         ? "completed"
         : capturedJobStage;
-    const appointmentAppliedGuard = finishWithoutAppointment ? `EXISTS (
+    const finishWithoutAppointmentBasis = issuedRental ? {
+      sql: `EXISTS (
       SELECT 1 FROM trade_rental_inspections issued_rental
       WHERE issued_rental.work_order_id = ? AND issued_rental.firebase_uid = ?
         AND issued_rental.status = 'issued'
-    ) AND NOT EXISTS (
+      )`,
+      values: [workOrderId, access.ownerUid],
+    } : formlessCompletionGuard;
+    const appointmentAppliedGuard = finishWithoutAppointment ? `(${finishWithoutAppointmentBasis.sql}) AND NOT EXISTS (
       SELECT 1 FROM trade_crm_appointments active_appointment
       WHERE active_appointment.work_order_id = ? AND active_appointment.firebase_uid = ?
         AND active_appointment.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
@@ -2230,7 +2260,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
         AND field_appointment.last_transition_by_uid = ?
     )`;
     const appointmentAppliedValues = finishWithoutAppointment
-      ? [workOrderId, access.ownerUid, workOrderId, access.ownerUid]
+      ? [...finishWithoutAppointmentBasis.values, workOrderId, access.ownerUid]
       : [appointment?.id, access.ownerUid, Number(appointment?.revision || 0) + 1, transition.to, now, access.actorUid];
     const finishBlockerGuard = `(
       ? <> 'finish'

@@ -6,6 +6,7 @@ import * as activityCompletion from "../src/lib/trade-activity-forms-completion.
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
 import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
+import * as messageMediaAccess from "../src/lib/trade-message-media-access.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -112,6 +113,7 @@ function loadRoute(mocks) {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (specifier === "@/lib/trade-form-job-progress") return { reconcileTradeFormJobProgress: async () => ({ changed: false, stage: "in_progress", blockers: [] }) };
     if (specifier === "@/lib/trade-job-collaboration") return jobCollaboration;
+    if (specifier === "@/lib/trade-message-media-access") return messageMediaAccess;
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
     if (specifier === "@/lib/trade-job-lifecycle") return tradeJobLifecycleDependency;
@@ -528,6 +530,7 @@ function syncDatabase(stage = "in_progress", revision = 5) {
     new URL("../drizzle/0173_trade_activity_customer_document_delivery.sql", import.meta.url),
     "utf8",
   ));
+  database.exec(fs.readFileSync(new URL("../drizzle/0256_trade_veu_electrical_assessments.sql", import.meta.url), "utf8"));
   database.prepare(`INSERT INTO trade_work_orders
     (id, firebase_uid, partner_type, record_status, stage, revision, updated_at)
     VALUES ('job-1', 'owner-1', 'installer', 'active', ?, ?, 'initial')`)
@@ -544,12 +547,13 @@ function syncDatabase(stage = "in_progress", revision = 5) {
     .run();
   installCreditexTrainingFixture(database, { qualified: false });
   database.exec("ALTER TABLE trade_team_members ADD COLUMN can_view_field_evidence INTEGER NOT NULL DEFAULT 1");
+  database.exec("ALTER TABLE trade_team_members ADD COLUMN can_manage_jobs INTEGER NOT NULL DEFAULT 1; ALTER TABLE trade_team_members ADD COLUMN job_scope TEXT NOT NULL DEFAULT 'own'");
   database.exec("INSERT INTO trade_accounts(firebase_uid,abn,business_name) VALUES ('owner-1','53004085616','Training fixture Pty Ltd'); INSERT INTO trade_team_members(id,owner_uid,member_uid,status) VALUES ('member-1','owner-1','actor-1','active')");
   installCreditexTrainingFixture(database);
   return database;
 }
 
-function routeHarness(database, { assigned = true, workPacks = [], memberId = "member-1", formProgress } = {}) {
+function routeHarness(database, { assigned = true, workPacks = [], memberId = "member-1", formProgress, accessPatch = {} } = {}) {
   const d1 = testD1(database);
   const workPackCalls = [];
   const workPackMutationCalls = [];
@@ -563,6 +567,7 @@ function routeHarness(database, { assigned = true, workPacks = [], memberId = "m
     canManageJobs: true,
     canViewFieldEvidence: true,
     canManageFieldEvidence: true,
+    ...accessPatch,
   };
   const route = loadRoute({
     ...(formProgress ? { "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: formProgress } } : {}),
@@ -577,13 +582,13 @@ function routeHarness(database, { assigned = true, workPacks = [], memberId = "m
     "@/lib/trade-team-server": {
       assignedJob: async (_access, workOrderId) => {
         if (!assigned) throw new Error("JOB_NOT_ASSIGNED");
-        const row = database.prepare(`SELECT revision FROM trade_work_orders
+        const row = database.prepare(`SELECT revision, assignee_member_id FROM trade_work_orders
           WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
           .get(workOrderId, access.ownerUid);
         if (!row) throw new Error("JOB_NOT_FOUND");
         return {
           revision: Number(row.revision),
-          assignee_member_id: "member-1",
+          assignee_member_id: row.assignee_member_id,
           source_type: "internal",
           source_reference: "",
         };
@@ -1647,6 +1652,250 @@ test("rental parent finish retains report, terminal-job and atomic appointment g
     assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id = 'job-1'").get().revision, 5);
     assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events WHERE event_type = 'job_completed'").get().count, 0);
     database.close();
+  }
+});
+
+function formlessJobDatabase(appointmentStatus = "", stage = "scheduled") {
+  const database = syncDatabase(stage, 5);
+  prepareFinishableJob(database);
+  if (appointmentStatus) database.prepare("UPDATE trade_crm_appointments SET status = ?").run(appointmentStatus);
+  else database.exec("DELETE FROM trade_crm_appointments");
+  database.exec(`INSERT INTO trade_crm_job_details (id,work_order_id,firebase_uid,pipeline_stage,updated_at)
+    VALUES ('detail-1','job-1','owner-1','scheduled','initial')`);
+  return database;
+}
+
+function formlessFinish(clientActionId = "formless-job-finish") {
+  return { clientActionId, type: "advance_field_job", workOrderId: "job-1", baseRevision: 5, transition: "finish" };
+}
+
+function addGeneralForm(database, { ownerUid = "owner-1", workOrderId = "job-1", status = "draft" } = {}) {
+  database.prepare(`INSERT INTO trade_job_forms
+    (id,work_order_id,firebase_uid,template_key,template_snapshot,status,revision,answers,completed_by_uid,completed_at,updated_at)
+    VALUES ('attached-form',?,?,'field-form','{"fields":[]}',?,1,'{}','','','initial')`)
+    .run(workOrderId, ownerUid, status);
+}
+
+function assertNoFormlessCompletion(database) {
+  assert.notEqual(database.prepare("SELECT stage FROM trade_work_orders WHERE id='job-1'").get().stage, "completed");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_mobile_push_outbox").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions WHERE status='applied'").get().count, 0);
+  assert.equal(database.prepare("SELECT pipeline_stage FROM trade_crm_job_details WHERE work_order_id='job-1'").get().pipeline_stage, "scheduled");
+}
+
+test("form-less jobs finish explicitly without appointments and preserve ended visits on replay", async () => {
+  for (const appointmentStatus of ["", "cancelled", "completed", "no_show"]) {
+    const database = formlessJobDatabase(appointmentStatus);
+    try {
+      const appointmentBefore = database.prepare("SELECT * FROM trade_crm_appointments").all();
+      const { route } = routeHarness(database);
+      const action = formlessFinish(`formless-finish-${appointmentStatus || "absent"}`);
+      const result = (await postActions(route, [action])).payload.results[0];
+      assert.equal(result.status, "applied", appointmentStatus || "absent");
+      assert.equal(result.jobState.stage, "completed");
+      assert.equal(result.jobState.revision, 6);
+      assert.equal(result.jobState.remainingActiveVisits, 0);
+      assert.deepEqual(database.prepare("SELECT * FROM trade_crm_appointments").all(), appointmentBefore);
+      assert.equal(database.prepare("SELECT pipeline_stage FROM trade_crm_job_details").get().pipeline_stage, "complete");
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count, 2);
+      assert.equal((await postActions(route, [action])).payload.results[0].status, "duplicate");
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events WHERE event_type='job_completed'").get().count, 1);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions WHERE status='applied'").get().count, 1);
+    } finally { database.close(); }
+  }
+});
+
+test("a scheduled form-less visit still completes directly without inferred travel or work start", async () => {
+  const database = formlessJobDatabase("scheduled");
+  try {
+    database.exec("UPDATE trade_crm_appointments SET travel_started_at='',arrived_at='',work_started_at='',last_transition_by_uid=''");
+    const { route } = routeHarness(database);
+    const result = (await postActions(route, [{ ...formlessFinish(), appointmentId: "appointment-1", baseAppointmentRevision: 1 }])).payload.results[0];
+    assert.equal(result.status, "applied");
+    assert.equal(result.jobState.stage, "completed");
+    const appointment = database.prepare("SELECT * FROM trade_crm_appointments").get();
+    assert.equal(appointment.status, "completed");
+    assert.ok(appointment.completed_at);
+    assert.equal(appointment.travel_started_at, "");
+    assert.equal(appointment.arrived_at, "");
+    assert.equal(appointment.work_started_at, "");
+  } finally { database.close(); }
+});
+
+test("saved forms and governed work never acquire the no-form appointment exception", async () => {
+  const scenarios = [
+    ["draft form", database => addGeneralForm(database)],
+    ["completed form", database => addGeneralForm(database, { status: "complete" })],
+    ["electrical assessment", database => {
+      const payload = JSON.stringify({ id: "electrical", workOrderId: "job-1", ownerUid: "owner-1", revision: 1, status: "draft", completedAt: "" });
+      database.prepare(`INSERT INTO trade_veu_electrical_assessments
+        (id,work_order_id,owner_uid,revision,status,payload,payload_sha256,actor_uid,created_at,updated_at)
+        VALUES ('electrical','job-1','owner-1',1,'draft',?,?,'actor-1','initial','initial')`).run(payload, "a".repeat(64));
+    }],
+    ["rental inspection", database => database.exec("INSERT INTO trade_rental_inspections(id,work_order_id,firebase_uid,status) VALUES ('rental','job-1','owner-1','draft')")],
+    ["activity record", database => {
+      seedComplianceIntent(database, { id: "record-intent" });
+      const payload = JSON.stringify({ id: "record", intentId: "record-intent", workOrderId: "job-1", ownerUid: "owner-1", organisationId: "org-veec", revision: 1, status: "draft", form: { activityTemplateId: "veu-6" } });
+      database.prepare(`INSERT INTO trade_activity_field_records
+        (id,intent_id,work_order_id,owner_uid,organisation_id,activity_template_id,revision,status,payload,actor_uid,created_at,updated_at)
+        VALUES ('record','record-intent','job-1','owner-1','org-veec','veu-6',1,'draft',?,'actor-1','initial','initial')`).run(payload);
+      database.exec("UPDATE trade_work_order_compliance_intents SET status='cancelled'");
+    }],
+    ["work-pack instance", database => {
+      seedLinkedWorkPack(database);
+      database.exec("UPDATE trade_work_order_compliance_intents SET status='cancelled'; UPDATE compliance_cases SET status='closed'");
+    }],
+    ["planned activity", database => seedComplianceIntent(database)],
+    ["linked activity", database => seedComplianceIntent(database, { status: "case_linked" })],
+    ["active case", database => {
+      seedLinkedWorkPack(database);
+      database.exec("DELETE FROM compliance_activity_work_pack_instances; UPDATE trade_work_order_compliance_intents SET status='cancelled'");
+    }],
+  ];
+  for (const [label, seed] of scenarios) {
+    const database = formlessJobDatabase();
+    try {
+      seed(database);
+      const { route } = routeHarness(database);
+      const result = (await postActions(route, [formlessFinish()])).payload.results[0];
+      assert.equal(result.status, "rejected", label);
+      assert.equal(result.code, "APPOINTMENT_REQUIRED", label);
+      assertNoFormlessCompletion(database);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count, 0);
+    } finally { database.close(); }
+  }
+});
+
+test("form-less finish retains tasks, issues, work-plan and photo completion blockers", async () => {
+  const scenarios = [
+    ["task", database => database.exec("INSERT INTO trade_work_order_tasks(id,work_order_id,firebase_uid,status,completed_at,revision,updated_at) VALUES ('required','job-1','owner-1','pending','',1,'initial')")],
+    ["issue", database => database.exec("INSERT INTO trade_crm_job_notes VALUES ('issue','job-1','owner-1','issue','open')")],
+    ["plan", database => database.exec("INSERT INTO trade_crm_job_plans(id,work_order_id,firebase_uid) VALUES ('plan','job-1','owner-1'); INSERT INTO trade_crm_job_plan_requirements VALUES ('requirement','plan','owner-1','required')")],
+    ["photo", database => database.exec("DELETE FROM trade_crm_job_media")],
+  ];
+  for (const [label, seed] of scenarios) {
+    const database = formlessJobDatabase();
+    try {
+      seed(database);
+      const result = (await postActions(routeHarness(database).route, [formlessFinish()])).payload.results[0];
+      assert.equal(result.code, "FINISH_BLOCKED", label);
+      assertNoFormlessCompletion(database);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count, 0);
+    } finally { database.close(); }
+  }
+});
+
+test("form-less finish reasserts form absence, actor authority, assignment and visit set atomically", async () => {
+  const scenarios = [
+    ["form attached", database => addGeneralForm(database, { status: "complete" })],
+    ["issued rental added with form", database => {
+      addGeneralForm(database, { status: "complete" });
+      database.exec("INSERT INTO trade_rental_inspections(id,work_order_id,firebase_uid,status) VALUES ('rental','job-1','owner-1','issued')");
+    }],
+    ["assignment", database => database.exec("UPDATE trade_work_orders SET assignee_member_id='member-2'")],
+    ["actor revoked", database => database.exec("UPDATE trade_team_members SET status='inactive' WHERE id='member-1'")],
+    ["permission revoked", database => database.exec("UPDATE trade_team_members SET can_manage_jobs=0 WHERE id='member-1'")],
+    ["actor identity", database => database.exec("UPDATE trade_team_members SET member_uid='other-actor' WHERE id='member-1'")],
+    ["job revision", database => database.exec("UPDATE trade_work_orders SET revision=6")],
+    ["new visit", database => database.exec("INSERT INTO trade_crm_appointments(id,work_order_id,firebase_uid,status,starts_at,revision,updated_at) VALUES ('new-visit','job-1','owner-1','scheduled','',1,'initial')")],
+    ["photo changed", database => database.exec("UPDATE trade_crm_photo_requests SET revision=revision+1")],
+  ];
+  for (const [label, mutate] of scenarios) {
+    const database = formlessJobDatabase();
+    try {
+      const { route, d1 } = routeHarness(database);
+      d1.injectBeforeNextBatch(() => mutate(database));
+      const result = (await postActions(route, [formlessFinish()])).payload.results[0];
+      assert.equal(result.status, "conflict", label);
+      assert.equal(result.code, "REVISION_CONFLICT", label);
+      assertNoFormlessCompletion(database);
+    } finally { database.close(); }
+  }
+});
+
+test("form-less eligibility stays scoped to the exact business and job", async () => {
+  for (const scope of [{ ownerUid: "other-owner" }, { workOrderId: "other-job" }]) {
+    const database = formlessJobDatabase();
+    try {
+      addGeneralForm(database, scope);
+      assert.equal((await postActions(routeHarness(database).route, [formlessFinish()])).payload.results[0].status, "applied");
+    } finally { database.close(); }
+  }
+});
+
+test("an ended visit added during no-form completion cannot bypass the single-visit cap", async () => {
+  for (const status of ["completed", "cancelled", "no_show"]) {
+    const database = formlessJobDatabase("completed");
+    try {
+      const existingAppointment = database.prepare("SELECT * FROM trade_crm_appointments WHERE id='appointment-1'").get();
+      const { route, d1 } = routeHarness(database);
+      d1.injectBeforeNextBatch(() => database.prepare(`INSERT INTO trade_crm_appointments
+        (id,work_order_id,firebase_uid,status,starts_at,revision,updated_at)
+        VALUES ('new-ended-visit','job-1','owner-1',?,'',1,'initial')`).run(status));
+      const result = (await postActions(route, [formlessFinish()])).payload.results[0];
+      assert.equal(result.status, "conflict", status);
+      assert.equal(result.code, "REVISION_CONFLICT", status);
+      assertNoFormlessCompletion(database);
+      assert.deepEqual(database.prepare("SELECT * FROM trade_crm_appointments WHERE id='appointment-1'").get(), existingAppointment);
+    } finally { database.close(); }
+  }
+});
+
+test("no-form completion honours owner, team-manager and restricted worker scope", async () => {
+  for (const scenario of ["owner", "team-manager", "restricted-worker"]) {
+    const database = formlessJobDatabase();
+    try {
+      let accessPatch = {};
+      if (scenario === "owner") {
+        database.exec("UPDATE trade_work_orders SET assignee_member_id=''; UPDATE trade_team_members SET member_uid='owner-1',can_manage_jobs=0 WHERE id='member-1'");
+        accessPatch = { isOwner: true, actorUid: "owner-1", jobScope: "team" };
+      } else if (scenario === "team-manager") {
+        database.exec("UPDATE trade_work_orders SET assignee_member_id='member-2'; UPDATE trade_team_members SET job_scope='team' WHERE id='member-1'");
+        accessPatch = { jobScope: "team" };
+      } else {
+        database.exec("UPDATE trade_team_members SET job_scope='team' WHERE id='member-1'; INSERT INTO trade_crew_members(owner_uid,crew_id,member_id) VALUES ('owner-1','crew','member-1')");
+      }
+      const result = (await postActions(routeHarness(database, { accessPatch }).route, [formlessFinish()])).payload.results[0];
+      assert.equal(result.status, "applied", scenario);
+      assert.equal(result.jobState.stage, "completed", scenario);
+    } finally { database.close(); }
+  }
+});
+
+test("team-manager scope revocation prevents an atomic no-form completion", async () => {
+  for (const scenario of ["scope", "crew"]) {
+    const database = formlessJobDatabase();
+    try {
+      database.exec("UPDATE trade_work_orders SET assignee_member_id='member-2'; UPDATE trade_team_members SET job_scope='team' WHERE id='member-1'");
+      const { route, d1 } = routeHarness(database, { accessPatch: { jobScope: "team" } });
+      d1.injectBeforeNextBatch(() => database.exec(scenario === "scope"
+        ? "UPDATE trade_team_members SET job_scope='own' WHERE id='member-1'"
+        : "INSERT INTO trade_crew_members(owner_uid,crew_id,member_id) VALUES ('owner-1','crew','member-1')"));
+      assert.equal((await postActions(route, [formlessFinish()])).payload.results[0].status, "conflict", scenario);
+      assertNoFormlessCompletion(database);
+    } finally { database.close(); }
+  }
+});
+
+test("stale, terminal, ambiguous and unauthorized no-form finish requests do not write", async () => {
+  for (const scenario of ["stale", "imported", "completed", "cancelled", "ambiguous", "unassigned", "no-permission"]) {
+    const database = formlessJobDatabase();
+    try {
+      if (["imported", "completed", "cancelled"].includes(scenario)) database.prepare("UPDATE trade_work_orders SET stage=?").run(scenario);
+      if (scenario === "ambiguous") {
+        database.exec("INSERT INTO trade_crm_appointments(id,work_order_id,firebase_uid,status,starts_at,revision,updated_at) VALUES ('ended-1','job-1','owner-1','completed','',1,'initial'),('ended-2','job-1','owner-1','completed','',1,'initial')");
+      }
+      const { route } = routeHarness(database, { assigned: scenario !== "unassigned", accessPatch: scenario === "no-permission" ? { canManageJobs: false } : {} });
+      const action = { ...formlessFinish(), baseRevision: scenario === "stale" ? 4 : 5 };
+      const result = (await postActions(route, [action])).payload.results[0];
+      assert.equal(result.code, scenario === "stale" ? "REVISION_CONFLICT" : scenario === "ambiguous" ? "VISIT_SELECTION_REQUIRED"
+        : scenario === "unassigned" ? "JOB_NOT_ASSIGNED" : scenario === "no-permission" ? "JOB_MANAGEMENT_REQUIRED" : "JOB_TERMINAL", scenario);
+      assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-1'").get().revision, 5);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count, 0);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 0);
+    } finally { database.close(); }
   }
 });
 
