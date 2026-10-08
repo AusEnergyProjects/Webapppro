@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { pendingRentalDocuments, retainRentalDocument, uploadRentalDocument, discardRentalDocument, type PendingRentalDocument } from '@/lib/rental-document-attachments';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view';
@@ -119,6 +119,7 @@ function RentalObservationInput({ field, value, editable, onChange }: {
   field: ObservationField; value: unknown; editable: boolean; onChange: (value: string) => void;
 }) {
   const text = String(value ?? '');
+  const decimal = field.input === 'number' && field.step !== 1;
   if (field.input === 'select') {
     const options = field.options || [];
     return <View style={styles.field}><FieldSelect label={field.label} value={text} disabled={!editable} onChange={onChange}
@@ -126,8 +127,9 @@ function RentalObservationInput({ field, value, editable, onChange }: {
   }
   return <View style={styles.field}><Text style={styles.label}>{field.label}{field.unit ? ' (' + field.unit + ')' : ''}</Text>
     <TextInput accessibilityLabel={field.label} editable={editable} style={[styles.input, field.input === 'textarea' && styles.notes]}
-      value={text} onChangeText={onChange} multiline={field.input === 'textarea'}
-      keyboardType={field.step === 1 ? 'number-pad' : field.input === 'number' ? 'decimal-pad' : 'default'} inputMode={field.step === 1 ? 'numeric' : field.input === 'number' ? 'decimal' : 'text'}
+      value={text} onChangeText={(value) => onChange(decimal && /^(?:\d+,\d*|,\d+)$/.test(value.trim()) ? value.trim().replace(',', '.') : value)} multiline={field.input === 'textarea'}
+      keyboardType={field.step === 1 ? 'number-pad' : decimal ? Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'decimal-pad' : 'default'}
+      inputMode={field.step === 1 ? 'numeric' : decimal ? Platform.OS === 'ios' ? undefined : 'decimal' : 'text'}
       maxLength={field.input === 'number' ? 12 : 500} />{field.help ? <Text style={styles.small}>{field.help}</Text> : null}</View>;
 }
 function findingChoices(outcome: string): string[] {
@@ -143,6 +145,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const [cursor, setCursor] = useState<Cursor>({ sectionKey: '', checkIndex: 0, instanceKey: 'property' });
   const [page, setPage] = useState<Page>('categories');
   const [metadataIndex, setMetadataIndex] = useState(0);
+  const [firstSetupModuleId, setFirstSetupModuleId] = useState('');
   const [detailIndex, setDetailIndex] = useState(0);
   const [cache, setCache] = useState<Cache>(emptyCache);
   const [loaded, setLoaded] = useState(false);
@@ -160,12 +163,28 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const pendingWrite = useRef(Promise.resolve());
   const localOwner = useRef<LocalDataOwner | null>(null);
   const loadedCacheKey = useRef('');
+  const promptedModules = useRef(new Set<string>());
+  const selectedModuleId = useRef(moduleId);
   const onChangedRef = useRef(onChanged);
   useEffect(() => { onChangedRef.current = onChanged; }, [onChanged]);
   const applyResult = useCallback((result: RentalAssessmentResult) => {
     setData((current) => (current.inspection?.revision || 0) > (result.inspection?.revision || 0) ? current : result);
     setModuleId((selected) => result.modules?.some((entry) => entry.id === selected) ? selected : result.modules?.[0]?.id || '');
   }, []);
+  const openInitialSetup = useCallback((result: RentalAssessmentResult, records: RentalSaveRecord[], selectedId = selectedModuleId.current) => {
+    const assessmentModule = result.modules?.find((entry) => entry.id === selectedId) || result.modules?.[0];
+    if (!assessmentModule || promptedModules.current.has(assessmentModule.id)) return;
+    promptedModules.current.add(assessmentModule.id);
+    const field = assessmentModule.template.metadataFields.find((entry) => entry.key === 'homeStarCommissioned');
+    const existingWork = result.items?.some((entry) => entry.moduleId === assessmentModule.id)
+      || unfinishedDrafts(assessmentModule, result, cacheRef.current, records).length > 0
+      || records.some((entry) => entry.module.id === assessmentModule.id && entry.status !== 'succeeded')
+      || Object.keys(cacheRef.current.answers[assessmentModule.id] || {}).length > 0;
+    if (result.permissions?.canEdit !== true || assessmentModule.status === 'complete' || assessmentModule.key !== 'minimum_standards'
+      || !field || typeof assessmentModule.answers.homeStarCommissioned === 'boolean' || existingWork) return;
+    setFirstSetupModuleId(assessmentModule.id); setMetadataIndex(0); setPage('metadata');
+  }, []);
+  useEffect(() => { selectedModuleId.current = moduleId; }, [moduleId]);
   useEffect(() => { cacheRef.current = cache; }, [cache]);
   const persist = useCallback((value = cacheRef.current) => {
     const owner = localOwner.current;
@@ -177,6 +196,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   useEffect(() => {
     let live = true;
     void (async () => {
+      let saved: Awaited<ReturnType<typeof getRentalSaveState>> | undefined;
       try {
         if (loadedCacheKey.current !== cacheKey) {
           const owner = await getLocalDataOwner();
@@ -191,17 +211,17 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         }
         const pendingDocuments = await pendingRentalDocuments(workOrderId);
         if (live) setDocuments(pendingDocuments);
-        const saved = await getRentalSaveState(workOrderId);
-        if (live) { setSaves(saved.records); if (saved.result) { applyResult(saved.result); setLoaded(true); } }
+        saved = await getRentalSaveState(workOrderId);
+        if (live) { setSaves(saved.records); if (saved.result) { applyResult(saved.result); setLoaded(true); if (!online) openInitialSetup(saved.result, saved.records); } }
         if (!online) return;
         const result = await loadRentalResult(workOrderId);
-        if (live) applyResult(result);
+        if (live) { applyResult(result); openInitialSetup(result, saved.records); }
         void processRentalSaveQueue(workOrderId).catch(() => { /* The queue retains failed saves and their error. */ });
-      } catch (e) { if (live) setError(e instanceof Error ? e.message : 'Could not open the assessment.'); }
+      } catch (e) { if (live) { if (saved?.result) openInitialSetup(saved.result, saved.records); setError(e instanceof Error ? e.message : 'Could not open the assessment.'); } }
       finally { if (live) setLoaded(true); }
     })();
     return () => { live = false; };
-  }, [workOrderId, cacheKey, online, applyResult]);
+  }, [workOrderId, cacheKey, online, applyResult, openInitialSetup]);
   useEffect(() => {
     if (!loaded || !data.modules) return;
     const remaining: Cache['answers'] = {};
@@ -316,8 +336,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     return instance.join(':') !== 'property' || !sections.some((entry) => entry.key === sectionKey);
   }) : [];
   const baseDraft = savedDraft ? { ...savedDraft, locationLabel: cursor.instanceKey === 'property' ? 'Property' : savedDraft.locationLabel } : undefined;
-  const presentation = check ? rentalAssessorCheckPresentation(check, { assessmentScope: active?.template.assessmentScope, outcome: baseDraft?.outcome, publicNotes: baseDraft?.publicNotes }) : undefined;
-  const photoRequirement = check ? rentalAssessorEvidenceRequirement(check, baseDraft?.outcome || '') : { minimumFiles: 0, minimumPhotos: 0, reason: '' };
+  const presentation = check ? rentalAssessorCheckPresentation(check, { assessmentScope: active?.template.assessmentScope, outcome: baseDraft?.outcome, publicNotes: baseDraft?.publicNotes, response: baseDraft?.response }) : undefined;
+  const photoRequirement = check ? rentalAssessorEvidenceRequirement(check, baseDraft?.outcome || '', baseDraft?.response) : { minimumFiles: 0, minimumPhotos: 0, reason: '' };
   const sharedObservation = rentalSharedObservationResponse({
     target: { moduleId: active?.id || '', sectionKey: section?.key, checkKey: check?.key || '', instanceKey: cursor.instanceKey, locationLabel: baseDraft?.locationLabel },
     candidates: observationCandidates, currentResponse: baseDraft?.response || {},
@@ -335,7 +355,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const observationsReady = active ? rentalObservationsComplete(data, active.id) && !activeHasDraft && !pendingSaves.length : false;
   const metadata = active?.template.metadataFields.map(rentalAssessorMetadataField).filter((f) => f.key !== 'roomRoster' && f.phase !== 'profile' && f.source !== 'team_profile' && f.source !== 'automatic' && !(active.key === 'minimum_standards' && f.key === 'credentialConfirmed')
     && !['coverageConfirmed', 'assessorDeclaration', 'credentialConfirmed'].includes(f.key)
-    && (f.phase !== 'final' || observationsReady)) || [];
+    && (f.phase !== 'final' || observationsReady)).sort((a, b) => Number(b.key === 'homeStarCommissioned') - Number(a.key === 'homeStarCommissioned')) || [];
   const accessSuggestion = active ? rentalAccessLimitations(data.items || [], active.id) : '';
   const field = metadata[metadataIndex];
   const timing = useFormTimeTracking({ formKind: 'rental_inspection', formId: data.inspection?.id || '', workOrderId,
@@ -379,7 +399,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     await perform('leave', async () => { await persist(); onReturnToJob(); });
   }
   function backToSectionsOrJob() {
-    if (page !== 'categories') { setPage('categories'); return; }
+    if (page !== 'categories') { setFirstSetupModuleId(''); setPage('categories'); return; }
     if (busyRef.current) return Alert.alert('Saving on phone', 'Your latest change is being saved. Try again in a moment.');
     void leave();
   }
@@ -400,7 +420,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (stepIndex < 0) { setPage('categories'); return; }
     const target = propertySteps[stepIndex + 1];
     if (target) openCheck(target.section, target.checkIndex);
-    else { setMetadataIndex(0); setPage(editable && metadata.length ? 'metadata' : 'review'); }
+    else { setMetadataIndex(Math.max(0, metadata.findIndex((entry) => entry.key !== 'homeStarCommissioned'))); setPage(editable && metadata.length ? 'metadata' : 'review'); }
   }
   function changeAnswer(fieldKey: string, value: unknown) {
     timing.activity();
@@ -433,19 +453,26 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       openCheck(section, cursor.checkIndex, nextCursor.instanceKey);
     });
   }
-  async function capture() {
+  async function capture(fromGallery = false) {
     if (!editable || !draft) return;
-    await perform('camera', async () => {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Camera access needed', 'Allow TLink to use the camera in Settings.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Open settings', onPress: () => void Linking.openSettings() }]);
-        return;
+    if (fromGallery && (active?.key !== 'minimum_standards' || check?.key !== 'ceiling_2027_readiness')) return;
+    await perform(fromGallery ? 'gallery' : 'camera', async () => {
+      if (!fromGallery) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Camera access needed', 'Allow TLink to use the camera in Settings.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Open settings', onPress: () => void Linking.openSettings() }]);
+          return;
+        }
       }
       // GPS runs alongside the camera. Weak indoor reception must never hold the Next button.
-      const locationCapture = observeLocation(true);
-      const captured = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 1, exif: true, cameraType: ImagePicker.CameraType.back });
+      const locationCapture = fromGallery ? null : observeLocation(true);
+      const captured = fromGallery
+        ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, allowsMultipleSelection: false, quality: 1, exif: true })
+        : await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 1, exif: true, cameraType: ImagePicker.CameraType.back });
       if (captured.canceled || !captured.assets[0]) return;
       const asset = captured.assets[0];
+      // Gallery metadata describes where and when the file was added, not where its original photo was taken.
+      const photoLocation = locationCapture || observeLocation(true);
       const suffix = asset.mimeType === 'image/heic' ? '.heic' : asset.mimeType === 'image/png' ? '.png' : '.jpg';
       const owner = localOwner.current;
       if (!owner) throw new Error('Sign in again before taking photos.');
@@ -457,12 +484,13 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       try { await new File(asset.uri).copy(retained); assertLocalDataOwner(owner); }
       catch (error) { if (retained.exists) await retained.delete(); throw error; }
       // Retain the captured bytes before asking for location; a failed GPS fix must not lose the photo.
-      const photo: Photo = { uri: retained.uri, width: asset.width, height: asset.height, capture: observedTime(), location: null, locationPending: true };
+      const photo: Photo = { uri: retained.uri, width: asset.width, height: asset.height, capture: observedTime(), location: null, locationPending: true,
+        ...(fromGallery ? { source: 'native_file_upload' as const } : {}) };
       const currentDraft = cacheRef.current.drafts[key] || draft;
       const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...currentDraft, photos: [...currentDraft.photos, photo] } } };
       setCache(next); cacheRef.current = next; await persist(next);
       const capturedDraftKey = key;
-      void locationCapture.then(async (location) => {
+      void photoLocation.then(async (location) => {
         // This checkpoint survives Next, navigation and a process restart. Never attach a later location to another photo.
         await rememberRentalPhotoLocation(workOrderId, photo.uri, location, owner);
         if (!mounted.current) return;
@@ -530,7 +558,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         quantityMilli: existingFinding?.quantityMilli || 0, unitLabel: existingFinding?.unitLabel || 'each',
         details: { ...existingFinding?.details, quotation: draft.quotation, immediateAction: draft.immediateAction.trim(), responsiblePeopleNotified: draft.notified } } : undefined };
     const photoCount = evidence.filter((entry) => entry.contentType.startsWith('image/')).length + draft.photos.length;
-    const requirement = rentalAssessorEvidenceRequirement(check, draft.outcome);
+    const requirement = rentalAssessorEvidenceRequirement(check, draft.outcome, draft.response);
     if (!check.requiredPdfCount && (evidence.length + draft.photos.length < requirement.minimumFiles || photoCount < requirement.minimumPhotos)) {
       throw new Error(requirement.reason);
     }
@@ -595,14 +623,20 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   }
   async function saveMetadata() {
     if (!active || !field) return;
-    if (queuedMetadata) { if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); return; }
-    if (field?.required && (field.type === 'checkbox' ? answers[field.key] !== true : !String(answers[field.key] || '').trim())) return setError('Complete this answer before continuing.');
-    if (answers[field.key] === undefined) {
-      if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review');
-      return;
+    const firstQuestion = field.key === 'homeStarCommissioned' && firstSetupModuleId === active.id;
+    function advance() {
+      if (firstQuestion) {
+        setFirstSetupModuleId('');
+        const first = propertySteps[0];
+        if (first) openCheck(first.section, first.checkIndex); else setPage('categories');
+      } else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review');
     }
+    if (queuedMetadata) { advance(); return; }
+    if (field?.required && (field.type === 'checkbox' ? answers[field.key] !== true : !String(answers[field.key] || '').trim())) return setError('Complete this answer before continuing.');
+    const value = answers[field.key] === undefined && firstQuestion ? false : answers[field.key];
+    if (value === undefined) { advance(); return; }
     await perform('metadata', async () => {
-      const body = { action: 'save_module_answers', moduleId: active.id, expectedRevision: active.revision, answers: { [field.key]: answers[field.key] } };
+      const body = { action: 'save_module_answers', moduleId: active.id, expectedRevision: active.revision, answers: { [field.key]: value } };
       if (field.phase === 'final') await request(body);
       else {
         const record = await enqueueRentalSave({ workOrderId, body, module: active, draftKey: `metadata:${active.id}:${field.key}`, draftSnapshot: body.answers });
@@ -612,7 +646,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       const nextCache = { ...cacheRef.current, answers: { ...cacheRef.current.answers } };
       if (Object.keys(remaining).length) nextCache.answers[active.id] = remaining; else delete nextCache.answers[active.id];
       await persist(nextCache); cacheRef.current = nextCache; setCache(nextCache);
-      if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review');
+      advance();
     });
   }
   async function reviewQueuedAnswer() {
@@ -693,6 +727,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   }
   function previous() {
     setError('');
+    if (page === 'metadata' && field?.key === 'homeStarCommissioned' && firstSetupModuleId === active?.id) { setFirstSetupModuleId(''); return setPage('categories'); }
     if (page === 'safety') return setPage(check?.responseType === 'outcome' ? 'answer' : 'finding');
     if (page === 'finding') { if (check?.responseType !== 'outcome' && responseFields.length) { setDetailIndex(responseFields.length - 1); return setPage('details'); } return setPage('answer'); }
     if (page === 'details') { if (detailIndex > 0) return setDetailIndex(detailIndex - 1); return setPage('answer'); }
@@ -727,7 +762,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       </View> : null}
       {page === 'categories' ? <>
         <Text style={styles.title}>{active.key === 'minimum_standards' ? RENTAL_ASSESSOR_TITLE : active.title}</Text>
-        {data.modules && data.modules.length > 1 ? <FieldSelect label="Assessment" value={active.id} disabled={Boolean(busy)} options={data.modules.map((m) => ({ value: m.id, label: m.title }))} onChange={setModuleId} /> : null}
+        {data.modules && data.modules.length > 1 ? <FieldSelect label="Assessment" value={active.id} disabled={Boolean(busy)} options={data.modules.map((m) => ({ value: m.id, label: m.title }))} onChange={(id) => { setModuleId(id); selectedModuleId.current = id; setFirstSetupModuleId(''); openInitialSetup(data, saves, id); }} /> : null}
         {editable && active.key === 'minimum_standards' && (active.template.assessmentScope !== 'current_minimum_standards' || Number(active.template.templateVersion || 1) < RENTAL_ASSESSMENT_TEMPLATE_VERSION) ? <>
           <FieldButton disabled={Boolean(busy) || hasDraft || earlierDrafts.length > 0 || pendingSaves.length > 0 || !online} onPress={() => void perform('scope', async () => { await request({ action: 'set_assessment_scope', moduleId: active.id, scope: 'current_minimum_standards', expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: active.revision }); })}>{active.template.assessmentScope === 'current_minimum_standards' ? 'Update assessment questions' : 'Open the complete rental assessment'}</FieldButton>
           {hasDraft || earlierDrafts.length || pendingSaves.length ? <Text style={styles.small}>Finish or sync your edited answers before updating the assessment questions.</Text> : <Text style={styles.small}>Add the latest quoting questions and HomeStar option. Saved answers and evidence stay attached.</Text>}
@@ -741,7 +776,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
           const entries = data.items?.filter((i) => i.moduleId === active.id && i.sectionKey === s.key && i.checkKey === c.key && (active.key !== 'minimum_standards' || i.instanceKey === 'property')) || [];
           const pending = activeDrafts.some(([draftKey]) => active.key === 'minimum_standards' ? draftKey === itemKey(active, { sectionKey: s.key, checkIndex, instanceKey: 'property' }) : draftKey.startsWith(draftPrefix(active) + [s.key, checkIndex].join(':') + ':'));
           return !pending && entries.length > 0 && entries.every((entry) => {
-            const requirement = rentalAssessorEvidenceRequirement(c, entry.outcome);
+            const requirement = rentalAssessorEvidenceRequirement(c, entry.outcome, entry.response);
             return entry.outcome && (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active').length || 0) >= requirement.minimumFiles
               && (data.evidence?.filter((e) => e.itemId === entry.id && e.status === 'active' && e.contentType.startsWith('image/')).length || 0) >= requirement.minimumPhotos;
           });
@@ -765,11 +800,14 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
           {(data.evidence || []).filter((photo) => photo.itemId === entry.id && photo.status === 'active').map((photo) => <Text key={photo.id} style={styles.small}>Evidence retained: {photo.caption || photo.fileName}</Text>)}
         </View>)}
       </> : page === 'metadata' && field ? <>
-        <Text style={styles.small}>{field.phase === 'final' ? 'Final declaration' : 'Property details'} · {metadataIndex + 1} of {metadata.length}</Text>
+        <Text style={styles.small}>{firstSetupModuleId === active.id && field.key === 'homeStarCommissioned' ? 'Start the assessment' : field.phase === 'final' ? 'Final declaration' : 'Property details'} · {metadataIndex + 1} of {metadata.length}</Text>
         <Text style={styles.title}>{active.key === 'minimum_standards' && field.key === 'coverageConfirmed' ? 'I have checked the property and recorded any areas I could not access.' : field.label}</Text>
         {field.help ? <Text style={styles.body}>{field.help}</Text> : null}
         {field.key === 'areasNotAccessed' && accessSuggestion && !String(answers[field.key] || '').trim() ? <FieldButton variant="secondary" disabled={!editable || Boolean(busy) || Boolean(queuedMetadata)} onPress={() => changeAnswer(field.key, accessSuggestion)}>Use recorded access limitations</FieldButton> : null}
-        {field.type === 'checkbox' ? <FieldButton variant={answers[field.key] === true ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy) || Boolean(queuedMetadata)} onPress={() => changeAnswer(field.key, answers[field.key] !== true)}>{answers[field.key] === true ? 'Confirmed' : 'I confirm'}</FieldButton>
+        {field.type === 'checkbox' ? field.key === 'homeStarCommissioned' ? <View style={styles.options}>
+          <FieldButton variant={answers[field.key] === true ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy) || Boolean(queuedMetadata)} onPress={() => changeAnswer(field.key, true)}>Yes</FieldButton>
+          <FieldButton variant={answers[field.key] !== true ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy) || Boolean(queuedMetadata)} onPress={() => changeAnswer(field.key, false)}>No</FieldButton>
+        </View> : <FieldButton variant={answers[field.key] === true ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy) || Boolean(queuedMetadata)} onPress={() => changeAnswer(field.key, answers[field.key] !== true)}>{answers[field.key] === true ? 'Confirmed' : 'I confirm'}</FieldButton>
           : field.type === 'select' ? field.options.map((option) => <Pressable key={option.value} disabled={!editable || Boolean(busy) || Boolean(queuedMetadata)} onPress={() => changeAnswer(field.key, option.value)} style={[styles.category, answers[field.key] === option.value && styles.selected]}><Text style={styles.categoryTitle}>{option.label}</Text></Pressable>)
           : field.type === 'date' ? <FieldDatePicker label="Date" value={String(answers[field.key] || '')} disabled={!editable || Boolean(busy) || Boolean(queuedMetadata)} onChange={(value) => changeAnswer(field.key, value)} />
           : <TextInput editable={editable && !busy && !queuedMetadata} style={[styles.input, field.type === 'textarea' && styles.notes]} placeholder={field.required ? 'Enter details' : 'Optional'} value={String(answers[field.key] || '')} onChangeText={(v) => changeAnswer(field.key, v)} multiline={field.type === 'textarea'} maxLength={4000} />}
@@ -785,7 +823,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         })}
         {unfinishedMetadata(active, cache, saves).length ? <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => { setMetadataIndex(0); setPage('metadata'); }}>Review property details</FieldButton> : null}
         {active.status === 'complete' ? <Text style={styles.body}>{active.title} is complete.</Text> : null}
-        {remainingModules.length ? <><Text style={styles.small}>Complete these assessments before creating and emailing the report:</Text>{remainingModules.map((assessmentModule) => <FieldButton key={assessmentModule.id} variant="secondary" disabled={Boolean(busy)} onPress={() => { setModuleId(assessmentModule.id); setError(''); setPage('categories'); }}>{assessmentModule.title}</FieldButton>)}</> : null}
+        {remainingModules.length ? <><Text style={styles.small}>Complete these assessments before creating and emailing the report:</Text>{remainingModules.map((assessmentModule) => <FieldButton key={assessmentModule.id} variant="secondary" disabled={Boolean(busy)} onPress={() => { setModuleId(assessmentModule.id); selectedModuleId.current = assessmentModule.id; setFirstSetupModuleId(''); setError(''); setPage('categories'); openInitialSetup(data, saves, assessmentModule.id); }}>{assessmentModule.title}</FieldButton>)}</> : null}
         {(active.template.metadataFields || []).map(rentalAssessorMetadataField).filter((f) => f.source === 'team_profile').map((f) => <Text key={f.key} style={styles.body}>{f.label}: {String(active.answers[f.key] || 'Not recorded in Team profile')}</Text>)}
         {active.status !== 'complete' ? <>
           {completionBlockers.map((blocker) => <FieldButton key={blocker.key} variant="secondary" disabled={Boolean(busy)} onPress={() => openCompletionIssue(blocker.key)}>{blocker.label}</FieldButton>)}
@@ -829,12 +867,13 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
             <FieldButton variant={draft.severity === 'immediate_safety_risk' ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy)} onPress={() => change({ severity: draft.severity === 'immediate_safety_risk' ? 'required' : 'immediate_safety_risk' })}>{draft.severity === 'immediate_safety_risk' ? 'Immediate danger flagged' : 'Flag an immediate danger'}</FieldButton>
           </> : null}
           <View style={styles.photo}>
-            {photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <><Text style={styles.body}>{photoRequirement.reason}</Text>{check.photoGuidance ? <Text style={styles.small}>{check.photoGuidance}</Text> : null}</> : <Text style={styles.small}>No photo required for this answer. Add one if it helps explain your observation.</Text>}
+            {photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <><Text style={styles.body}>{photoRequirement.reason}</Text>{presentation?.photoGuidance || check.photoGuidance ? <Text style={styles.small}>{presentation?.photoGuidance || check.photoGuidance}</Text> : null}</> : <Text style={styles.small}>No photo required for this answer. Add one if it helps explain your observation.</Text>}
             <FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'camera'} onPress={() => void capture()}>{photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? 'Take photo' : 'Add optional photo'}</FieldButton>
+            {active.key === 'minimum_standards' && check.key === 'ceiling_2027_readiness' ? <FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'gallery'} onPress={() => void capture(true)}>Upload from gallery</FieldButton> : null}
             {evidence.length || draft.photos.length || photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone{photoRequirement.minimumPhotos ? ' · ' + photoRequirement.minimumPhotos + ' photos required' : photoRequirement.minimumFiles ? ' · ' + photoRequirement.minimumFiles + ' evidence file required' : ''}</Text> : null}
           {draft.photos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} alt={`Pending photo ${index + 1}`} accessibilityLabel={`Pending photo ${index + 1}`} />
-            <Text style={styles.small}>Photo {index + 1} saved {new Date(p.capture.captureObservedAtUtc).toLocaleTimeString()} · {p.mediaId ? 'Uploaded, ready to link' : p.location?.location.state === 'captured' ? 'GPS ' + Math.round(p.location.location.accuracyMetres || 0) + ' m' : p.locationPending ? 'Recording GPS; you can press Next' : 'GPS needs review; you can keep assessing'}</Text>
+            <Text style={styles.small}>Photo {index + 1} {p.source === 'native_file_upload' ? 'added from gallery' : 'saved'} {new Date(p.capture.captureObservedAtUtc).toLocaleTimeString()} · {p.mediaId ? 'Uploaded, ready to link' : p.location?.location.state === 'captured' ? 'GPS ' + Math.round(p.location.location.accuracyMetres || 0) + ' m' : p.locationPending ? 'Recording GPS; you can press Next' : 'GPS needs review; you can keep assessing'}</Text>
             {!p.mediaId && (p.location?.location.state !== 'captured' || p.location.location.accuracyMetres === null || p.location.location.accuracyMetres > 100 || p.location.location.mocked) ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void refreshPhotoGps(index)}>Retry GPS</FieldButton> : null}
             <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void removePhoto(p.uri)}>Remove pending photo</FieldButton>
           </View>)}</View>

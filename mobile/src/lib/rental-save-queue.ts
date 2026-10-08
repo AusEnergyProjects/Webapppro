@@ -25,6 +25,7 @@ const RENTAL_IMAGE_ATTEMPTS = [[1600, 0.68], [1600, 0.56], [1400, 0.64], [1200, 
 
 export type RentalQueuedPhoto = {
   uri: string; width: number; height: number;
+  source?: 'in_app_camera' | 'native_file_upload';
   capture: ReturnType<typeof observedTime>;
   location: Awaited<ReturnType<typeof observeLocation>> | null;
   locationPending?: boolean;
@@ -597,7 +598,7 @@ async function preparePhotoCheckpoint(owner: LocalDataOwner, record: RentalSaveR
       }
       photo.prepared = { uri: retained.uri, name: `${photo.clientUploadId}.jpg`, size: retained.size,
         envelope: JSON.stringify({ schemaVersion: 1, kind: 'tlink-rental-inspection-photo', captureSessionId: photo.captureSessionId,
-          source: 'in_app_camera', capture: photo.capture, locationPermission: observation.permission, location,
+          source: photo.source || 'in_app_camera', capture: photo.capture, locationPermission: observation.permission, location,
           processing: { privacySafeDerivative: true, exifCopied: false, outputFormat: 'image/jpeg', widthPixels: prepared.width,
             heightPixels: prepared.height, maximumWidthPixels: 1600 } }) };
       // This durable checkpoint precedes the first request. Retries send the exact JPEG and envelope again.

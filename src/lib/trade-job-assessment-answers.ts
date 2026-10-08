@@ -134,7 +134,7 @@ export function rentalInspectionAnswers(payload: RentalInspectionAnswerPayload):
           const prefix = `${check.key}:${item.id}`;
           const location = item.locationLabel || (items.length > 1 ? `Item ${index + 1}` : '');
           const presentation = rentalAssessorCheckPresentation(check, {
-            assessmentScope: module.template.assessmentScope, outcome: item.outcome, publicNotes: item.publicNotes,
+            assessmentScope: module.template.assessmentScope, outcome: item.outcome, publicNotes: item.publicNotes, response: item.response,
           });
           rows.push({ key: prefix, question: `${check.prompt}${location ? ` (${location})` : ''}`,
             answer: textValue(item.outcome, presentation.outcomeOptions) });

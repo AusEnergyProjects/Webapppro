@@ -15,7 +15,9 @@ const bundle=await build({stdin:{resolveDir:root,loader:"tsx",contents:`
  import {TradeVeuElectricalAssessmentPanel,VeuElectricalFormLibrary} from './src/components/TradeVeuElectricalAssessmentPanel';
  window.formOpenRequests=[];window.piesaEvents=[];window.addEventListener('wattzun:form-native-saved',event=>window.piesaEvents.push(event.detail));
  const user={uid:'actor-one',getIdToken:async()=>'synthetic-token'};
- createRoot(document.getElementById('root')).render(location.search.includes('catalogue')?<VeuElectricalFormLibrary user={user}/>:<TradeVeuElectricalAssessmentPanel user={user} workOrderId="job-one" readOnly={location.search.includes('readonly')}/>);
+ const root=createRoot(document.getElementById('root'));
+ window.refreshPiesa=refreshKey=>root.render(<><span hidden data-piesa-refresh={refreshKey}/>{location.search.includes('catalogue')?<VeuElectricalFormLibrary user={user}/>:<TradeVeuElectricalAssessmentPanel user={user} workOrderId="job-one" readOnly={location.search.includes('readonly')} refreshKey={refreshKey}/>}</>);
+ window.refreshPiesa(0);
  `},bundle:true,write:false,outfile:"piesa.js",format:"iife",jsx:"automatic",plugins:[{name:"synthetic-business",setup(builder){
  builder.onResolve({filter:/TradeBusinessProvider$/},()=>({path:"business",namespace:"fixture"}));
  builder.onResolve({filter:/wattzun-appearance$/},()=>({path:"assistant",namespace:"fixture"}));
@@ -25,10 +27,13 @@ const js=bundle.outputFiles.find(x=>x.path.endsWith(".js")).text,css=bundle.outp
 
 function presentation(record,state={}){const completion=veuElectricalCompletion(record);const {ownerUid,...visible}=record;void ownerUid;return {...visible,
  ...(state.prefillAnswers?{prefillAnswers:state.prefillAnswers,businessContactSuggestion:state.businessContactSuggestion}:{}),
- evidence:record.evidence.map(({objectKey,previewObjectKey,...evidence})=>evidence),ready:completion.ready,missing:completion.missing,signingScopes:{before:activitySigningScope(record,"before"),after:activitySigningScope(record,"after")},reportUrl:record.status==="complete"?"/api/trade-veu-electrical-assessments?recordId=piesa-one&view=pdf":"",delivery:record.status==="complete"?[{role:"customer",status:"accepted",message:"Provider accepted the customer copy.",acceptedAt:"2026-10-08T00:10:00Z"},{role:"business",status:"blocked",message:"Add a business email address, then retry delivery.",acceptedAt:""}]:[]};}
+ evidence:record.evidence.map(({objectKey,previewObjectKey,...evidence})=>{void objectKey;void previewObjectKey;return evidence;}),ready:completion.ready,missing:completion.missing,signingScopes:{before:activitySigningScope(record,"before"),after:activitySigningScope(record,"after")},reportUrl:record.status==="complete"?"/api/trade-veu-electrical-assessments?recordId=piesa-one&view=pdf":"",delivery:record.status==="complete"?[{role:"customer",status:"accepted",message:"Provider accepted the customer copy.",acceptedAt:"2026-10-08T00:10:00Z"},{role:"business",status:"blocked",message:"Add a business email address, then retry delivery.",acceptedAt:""}]:[]};}
 async function setup(browser,width,query="") {
- const page=await browser.newPage({viewport:{width,height:900}}),record=electricalRecord(),writes=[],state={rejectNextSave:false};
+ const page=await browser.newPage({viewport:{width,height:900}}),record=electricalRecord(),writes=[],state={rejectNextSave:false,listReads:0};
  let started=query.includes("readonly")||query.includes("prefill");
+ let confirmInitialList;
+ state.initialListSeen=new Promise(resolve=>{confirmInitialList=resolve;});
+ state.attachExternally=()=>{started=true;};
  if(query.includes("prefill")){
   record.answers={initial_rec_name:"Manual REC name"};
   state.prefillAnswers={job_reference:"TLJ-SYNTHETIC",property_address:"12 Synthetic Street, Frankston, VIC, 3199",owner_name:"Synthetic Customer",initial_electrician_name:"Synthetic Electrician",initial_electrician_licence:"SYNTHETIC-LICENCE"};
@@ -43,7 +48,11 @@ async function setup(browser,width,query="") {
   if(request.method()==="GET") {
    if(url.searchParams.has("catalogue"))result={ok:true,form:record.form,source:{url:VEU_ELECTRICAL_SOURCE_URL,path:VEU_ELECTRICAL_SOURCE_PATH,sha256:VEU_ELECTRICAL_SOURCE_SHA256,label:"March 2026"}};
    else if(url.searchParams.has("recordId"))result={ok:true,record:presentation(record,state)};
-   else result={ok:true,canManage:true,records:started?[presentation(record,state)]:[]};
+   else {
+    const snapshot=started?[presentation(record,state)]:[];state.listReads++;
+    if(state.listReads===1){confirmInitialList();if(query.includes('delayed-list'))await new Promise(resolve=>{state.releaseInitialList=resolve;});}
+    result={ok:true,canManage:true,records:snapshot};
+   }
   } else {
    const multipart=request.headers()["content-type"]?.startsWith("multipart/form-data");
    const data=multipart?await new Request(request.url(),{method:request.method(),headers:request.headers(),body:request.postDataBuffer()}).formData():null;
@@ -116,6 +125,32 @@ test("official assessment native controls save every applicable field and real i
   const events=await page.evaluate(()=>window.piesaEvents);assert.ok(events.every(x=>x.scopeId==="owner-one"&&x.formKind==="veu_electrical"&&x.formId==="piesa-one"));assert.ok(events.length>=3);assert.deepEqual(f.errors,[]);
   if(process.env.PIESA_UI_QA_OUTPUT){fs.mkdirSync(process.env.PIESA_UI_QA_OUTPUT,{recursive:true});await page.screenshot({path:`${process.env.PIESA_UI_QA_OUTPUT}/piesa-${width}px-complete.png`,fullPage:true});}await page.close();
  });}finally{await browser.close();}
+});
+
+test("an external attachment arriving during the initial list request appears without restarting the form",{skip:!executablePath&&"Native browser unavailable",timeout:30000},async()=>{
+ const browser=await chromium.launch({executablePath,headless:true});try{
+  const f=await setup(browser,390,"?delayed-list");await f.state.initialListSeen;
+  f.state.attachExternally();await f.page.evaluate(()=>window.refreshPiesa(1));await f.page.locator('[data-piesa-refresh="1"]').waitFor({state:"attached"});
+  f.state.releaseInitialList();
+  await f.page.getByRole("button",{name:"Open assessment",exact:true}).waitFor();
+  assert.equal(f.state.listReads,2,"The skipped refresh runs when the initial busy request finishes");
+  assert.equal(f.writes.length,0,"Showing an externally attached record does not start another assessment");
+  await f.page.getByRole("button",{name:"Open assessment",exact:true}).click();
+  await f.page.locator('[id="piesa-piesa-one-job_reference"]').waitFor();
+  assert.deepEqual(f.errors,[]);await f.page.close();
+ }finally{await browser.close();}
+});
+
+test("an external attachment refresh preserves the existing open assessment and unsaved answers",{skip:!executablePath&&"Native browser unavailable",timeout:30000},async()=>{
+ const browser=await chromium.launch({executablePath,headless:true});try{
+  const f=await setup(browser,390,"?prefill");await f.page.getByRole("button",{name:"Open assessment",exact:true}).click();
+  const reference=f.page.locator('[id="piesa-piesa-one-job_reference"]');await reference.fill("UNSAVED-LOCAL-ANSWER");
+  await f.page.evaluate(()=>window.refreshPiesa(1));await f.page.locator('[data-piesa-refresh="1"]').waitFor({state:"attached"});
+  assert.equal(await reference.inputValue(),"UNSAVED-LOCAL-ANSWER");
+  assert.equal(f.state.listReads,1,"An existing editor is not replaced by an external list refresh");
+  assert.equal(f.writes.length,0);assert.equal(f.record.answers.job_reference,undefined);
+  assert.deepEqual(f.errors,[]);await f.page.close();
+ }finally{await browser.close();}
 });
 
 test("conditional medical attachment and failed-save retry preserve actual answers and request identity",{skip:!executablePath&&"Native browser unavailable",timeout:30000},async()=>{

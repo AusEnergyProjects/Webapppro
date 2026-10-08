@@ -1,9 +1,29 @@
 import type { TeamAccess } from './trade-team-server';
 import { messageActorGuard } from './trade-message-media-access';
 import { publishedTradeFormTemplatesFor, type TradeFormTemplate } from './trade-form-templates-server';
+import { normalizeRentalAssessmentModules, RENTAL_ASSESSMENT_MODULE_KEYS, RENTAL_INSPECTION_SERVICE_CATEGORY } from './trade-rental-assessment.mjs';
 
 export class TradeFormSelectionError extends Error {
   constructor(message: string, public status = 400) { super(message); }
+}
+
+export function initialRentalAssessmentModules(value: unknown, serviceCategory: string): string[] {
+  if (value === undefined || value === "") return serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY
+    ? normalizeRentalAssessmentModules(undefined) : [];
+  const invalid = () => new TradeFormSelectionError("Choose rental assessment forms from the form library.");
+  if (typeof value !== "string" || value.length > 2048) throw invalid();
+  let parsed: unknown;
+  try { parsed = JSON.parse(value); } catch { throw invalid(); }
+  if (!Array.isArray(parsed) || parsed.length > RENTAL_ASSESSMENT_MODULE_KEYS.length
+    || parsed.some(key => typeof key !== "string" || !RENTAL_ASSESSMENT_MODULE_KEYS.some(moduleKey => moduleKey === key))
+    || new Set(parsed).size !== parsed.length) throw invalid();
+  return parsed.length ? normalizeRentalAssessmentModules(parsed) : [];
+}
+
+export function initialVeuElectricalAssessmentSelection(value: unknown): boolean {
+  if (value === undefined || value === false || value === "false") return false;
+  if (value === true || value === "true") return true;
+  throw new TradeFormSelectionError("Choose whether to add the insulation electrical safety assessment.");
 }
 
 export function tradeFormTemplateMetadata(template: TradeFormTemplate) {

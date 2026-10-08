@@ -42,7 +42,7 @@ export function rentalEvidenceCapture(value) {
   const accuracyMetres = finite(location.accuracyMetres);
   const locationMocked = location.mocked === true ? true : location.mocked === false ? false : null;
   const source = String(envelope.source || "");
-  if (!capturedAtUtc || !["in_app_camera", "web_file_upload"].includes(source)) return null;
+  if (!capturedAtUtc || !["in_app_camera", "web_file_upload", "native_file_upload"].includes(source)) return null;
   const locationCaptured = String(location.state || "") === "captured"
     && Boolean(locationObservedAtUtc)
     && latitude !== null && latitude >= -90 && latitude <= 90

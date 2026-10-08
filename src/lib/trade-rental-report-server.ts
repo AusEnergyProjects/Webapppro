@@ -468,7 +468,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
               ...(item.derived ? { derived: true } : {}),
               prompt: historicalObservation ? `Earlier observation: ${String(assessmentCheck?.prompt || item.checkKey)}`
                 : item.derived ? "2027 showerhead readiness, derived from the recorded WELS rating"
-                  : module.module_key === "minimum_standards" ? rentalAssessorCheckPresentation(assessmentCheck || { key: item.checkKey }).prompt : String(assessmentCheck?.prompt || item.checkKey),
+                  : module.module_key === "minimum_standards" ? rentalAssessorCheckPresentation(assessmentCheck || { key: item.checkKey }, { response: observation.response }).prompt : String(assessmentCheck?.prompt || item.checkKey),
               ...(item.evidenceSourceItemId ? { evidenceSourceItemId: String(itemPublicIds.get(String(item.evidenceSourceItemId)) || "") } : {}),
               historicalObservation,
               standardDescription: rentalReportCheckStandard({ ...item, standardDescription: assessmentCheck?.prompt,

@@ -1,6 +1,8 @@
 "use client";
 
 import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { TradeJobFormLibrary } from "./TradeJobFormLibrary";
+import type { TradeJobFormLibraryOption } from "@/lib/trade-job-form-library";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
@@ -22,6 +24,8 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, librar
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
+  const [libraryRevision, setLibraryRevision] = useState(0);
+  const attachmentInFlight = useRef(false);
   const [libraryOpen, setLibraryOpen] = useState<boolean | null>(null);
 
   const request = useCallback(async (method: "GET" | "POST" | "PATCH" = "GET", body?: Record<string, unknown>) => {
@@ -54,12 +58,47 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, librar
     catch { setStatus(`${acknowledgement} The latest job details could not be refreshed. Reopen the job to check its status.`); }
   }
 
-  async function start(template: Template) {
-    if (readOnly) return;
-    setBusy(`start:${template.key}`); setStatus("Adding the versioned form to this job...");
-    try { const next = await request("POST", { templateKey: template.key, templateVersion: template.version }); await acknowledgeSave(next, "Field form added to this job."); }
-    catch (error) { setStatus(error instanceof Error ? error.message : "The field form could not be added."); }
-    finally { setBusy(""); }
+  async function attach(option: TradeJobFormLibraryOption, revision?: number) {
+    if (readOnly || attachmentInFlight.current || option.added || option.unavailableReason) return;
+    attachmentInFlight.current = true; setBusy(`start:${option.id}`); setStatus(`Adding ${option.name}...`);
+    let attached = false;
+    try {
+      const selection = option.selection;
+      if (selection.kind === "business") {
+        const next = await request("POST", { templateKey: selection.templateKey, templateVersion: selection.templateVersion });
+        attached = true; await acknowledgeSave(next, `${option.name} added to this job.`);
+      } else {
+        const token = await user.getIdToken();
+        async function mutate(endpoint: string, body: Record<string, unknown>) {
+          const response = await fetch(endpoint, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ ...body, workOrderId }), cache: "no-store" });
+          const next = await response.json() as { ok?: boolean; error?: string };
+          if (!response.ok || !next.ok) throw new Error(next.error || "This form could not be added.");
+          return next;
+        }
+        if (selection.kind === "piesa") {
+          await mutate("/api/trade-veu-electrical-assessments", { action: "start" }); attached = true;
+        } else {
+          if (!Number.isSafeInteger(revision)) throw new Error("Refresh the form library before adding this form.");
+          await mutate("/api/field/job-activities", selection.kind === "rental"
+            ? { kind: "rental", moduleKey: selection.moduleKey, expectedRevision: revision }
+            : { kind: "program", programTemplateId: selection.programTemplateId, activityTemplateId: selection.activityTemplateId, variantId: selection.variantId, expectedRevision: revision });
+          attached = true;
+          if (selection.kind === "creditex") {
+            const response = await fetch(`/api/trade-activity-forms?workOrderId=${encodeURIComponent(workOrderId)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+            const list = await response.json() as { records?: Array<{ intentId: string; activityTemplateId: string }>; error?: string };
+            if (!response.ok) throw new Error(list.error || "The activity form could not be opened.");
+            const record = list.records?.find(item => item.activityTemplateId === selection.activityTemplateId);
+            if (!record?.intentId) throw new Error("The saved activity could not be found. Refresh the job to continue.");
+            await mutate("/api/trade-activity-forms", { action: "open", intentId: record.intentId, variantId: selection.variantId });
+          }
+        }
+        await acknowledgeSave({}, `${option.name} added to this job.`);
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "The form could not be added.";
+      setStatus(attached ? `The activity is saved on this job, but its form needs attention: ${detail}` : detail);
+      if (attached) { try { await onChanged?.(); } catch { /* The saved attachment remains visible on reopening. */ } }
+    } finally { attachmentInFlight.current = false; setBusy(""); setLibraryRevision(value => value + 1); }
   }
 
   async function save(formId: string, baseRevision: number, answers: Record<string, string | boolean>, complete: boolean) {
@@ -73,19 +112,16 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, librar
   const reloadForm = useCallback(async (formId: string) => (await request()).forms?.find(form => form.id === formId) ?? null, [request]);
 
   if (loading) return <div className="crm-empty"><strong>Opening field forms</strong><span>Loading the forms available for this work type.</span></div>;
-  const existingKeys = new Set((result.forms || []).map((form) => `${form.templateKey}:${form.templateVersion}`));
+  const showLibrary = controlledLibraryOpen ?? libraryOpen ?? !(result.forms || []).length;
 
   return <div className="crm-job-forms">
-    <header><div><span>Forms</span><h4>{readOnly ? "Saved job forms" : "Forms for this job"}</h4></div><small>These forms organise technical job evidence. They do not replace licences, permits, formal certificates, standards or scheme documents required for the actual work.</small></header>
-    <section className="crm-active-forms"><header><strong>Job forms</strong><span>{(result.forms || []).filter((form) => form.status === "complete").length}/{(result.forms || []).length} complete</span></header>
-      {(result.forms || []).length ? (result.forms || []).map((form) => <JobForm key={form.id} userUid={user.uid} onReload={reloadForm} form={form} workOrderId={workOrderId} disabled={readOnly || busy === `save:${form.id}`} readOnly={readOnly} onSave={save} />) : <div className="crm-empty"><strong>No forms added yet</strong><span>{readOnly ? "There are no field forms to review." : "Choose one supporting form below. Your business forms are available alongside supporting templates."}</span></div>}
+    <header><div><span>Forms</span><h4>{readOnly ? "Saved job forms" : "Forms for this job"}</h4></div><small>Rental assessments and Creditex records open in their own sections on this job.</small></header>
+    <section className="crm-active-forms"><header><strong>Business forms</strong><span>{(result.forms || []).filter((form) => form.status === "complete").length}/{(result.forms || []).length} complete</span></header>
+      {(result.forms || []).length ? (result.forms || []).map((form) => <JobForm key={form.id} userUid={user.uid} onReload={reloadForm} form={form} workOrderId={workOrderId} disabled={readOnly || busy === `save:${form.id}`} readOnly={readOnly} onSave={save} />) : <div className="crm-empty"><strong>No business forms added yet</strong><span>{readOnly ? "There are no field forms to review." : "Search the form library to add a rental assessment, Creditex form or published business form."}</span></div>}
     </section>
-    {!readOnly && <details className="crm-field-secondary" open={controlledLibraryOpen ?? libraryOpen ?? !(result.forms || []).length} onToggle={event => { setLibraryOpen(event.currentTarget.open); onLibraryOpenChange?.(event.currentTarget.open); }}>
+    {!readOnly && <details className="crm-field-secondary" open={showLibrary} onToggle={event => { setLibraryOpen(event.currentTarget.open); onLibraryOpenChange?.(event.currentTarget.open); }}>
       <summary>Add a form to this job</summary>
-      <section className="crm-form-library"><div><strong>Available for this work type</strong><span>{(result.templates || []).length} supporting form{(result.templates || []).length === 1 ? "" : "s"}</span></div><div>{(result.templates || []).map((template) => {
-      const added = existingKeys.has(`${template.key}:${template.version}`);
-      return <article key={`${template.key}:${template.version}`}><div><span>{template.jurisdiction} | Version {template.version}</span><strong>{template.name}</strong><p>{template.description}</p><small>{template.fieldCount} fields</small></div><button type="button" disabled={added || busy === `start:${template.key}`} onClick={() => void start(template)}>{added ? "Added" : "Add to job"}</button></article>;
-    })}</div></section>
+      {showLibrary && <TradeJobFormLibrary user={user} workOrderId={workOrderId} serviceCategory={result.serviceCategory || "other"} selectedIds={[]} disabled={Boolean(busy)} refreshKey={libraryRevision} onSelect={attach} />}
 
     </details>}
     {status && <p className="crm-inline-status" role="status">{status}</p>}

@@ -115,11 +115,14 @@ test("inactive answers print as retained history, separately from current cable 
   assert.match(content, /CURRENT concealed route/);
   assert.match(content, /CURRENT labels unreadable/);
   assert.match(content, /Earlier answers retained/);
-  assert.match(content, /Earlier: Cooktop cable length \(m\)/);
+  const drawnText = [...content.matchAll(/^(.+) Tj$/gm)].map((match) => match[1]).join(" ");
+  // The longer label wraps beside the value in the PDF's two-column row.
+  assert.match(drawnText, /Earlier: Cooktop to switchboard cable (?:15 )?run \(m\)/);
   assert.match(content, /EARLIER route recorded/);
   const html = await renderReportSnapshot(snapshot);
   assert.match(html, /Earlier answers retained/);
   assert.match(html, /These answers do not apply to the current selection/);
+  assert.match(html, /Cooktop to switchboard cable run/);
   assert.match(html, /Confirmed non-IC4 downlight count/);
 });
 

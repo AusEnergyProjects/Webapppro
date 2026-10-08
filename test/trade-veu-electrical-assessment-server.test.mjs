@@ -22,6 +22,7 @@ function compile(path, imports = {}) {
 }
 const types = compile('../src/lib/veu-electrical-assessment.ts');
 const guards = compile('../src/lib/trade-veu-electrical-schema-guards.ts', { './tlink-schema-guards': guardSql });
+const draft = compile('../src/lib/trade-veu-electrical-draft.ts', { './trade-activity-forms': activity, './veu-electrical-safety-form': form });
 const owner = { ownerUid: 'owner', actorUid: 'owner', memberId: 'owner-member', isOwner: true, displayName: 'Casey Electrician', jobScope: 'team', canViewFieldEvidence: true, canManageFieldEvidence: true };
 const worker = { ...owner, actorUid: 'worker-uid', memberId: 'worker', isOwner: false, jobScope: 'team' };
 const ink = [{ points: [{ x: 0.05, y: 0.1 }, { x: 0.4, y: 0.8 }, { x: 0.9, y: 0.2 }] }];
@@ -89,6 +90,7 @@ function fixture(t,realPdf=false) {
     'cloudflare:workers': { env: { EVIDENCE: bucket } }, '../../db': { getD1: () => db }, './trade-job-collaboration': membership,
     './trade-account-predicates': predicates, './trade-activity-forms': activity, './trade-activity-form-flow': flow,
     './veu-electrical-safety-form': form, './veu-electrical-assessment': types, './trade-veu-electrical-schema-guards': guards,
+    './trade-veu-electrical-draft': draft,
     './service-reminder-delivery': reminder,
     './trade-form-job-progress': { async reconcileTradeFormJobProgress(access, workOrderId, options) {
       const record = sql.prepare('SELECT status,pdf_object_key,pdf_sha256,pdf_size_bytes FROM trade_veu_electrical_assessments WHERE work_order_id=? AND owner_uid=?').get(workOrderId, access.ownerUid);
@@ -135,6 +137,37 @@ test('standalone start is job scoped, idempotent and has no compliance intent', 
   assert.equal('intentId' in first, false); assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_versions').get().n, 1);
   await assert.rejects(h.service.startPiesaRecord(owner, 'foreign-job'), /access/);
   await assert.rejects(h.service.readPiesaRecord({ ...owner, ownerUid: 'foreign', actorUid: 'foreign' }, first.id), /not found/);
+});
+
+for (const state of ['NSW', 'QLD', '']) test(`a new standalone PIESA rejects a ${state || 'missing'} service-site jurisdiction without creating a record`, async t => {
+  const h = fixture(t);
+  h.sql.prepare('UPDATE trade_crm_service_sites SET address_state=? WHERE id=?').run(state, 'site');
+  await assert.rejects(h.start(), error => error.code === 'PIESA_JURISDICTION_REQUIRED' && error.status === 400);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_assessments').get().n, 0);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_versions').get().n, 0);
+});
+
+test('standalone PIESA creation rechecks the service-site jurisdiction at the insert boundary', async t => {
+  const h = fixture(t);
+  h.hook(query => {
+    if (/INSERT OR IGNORE INTO trade_veu_electrical_assessments/.test(query)) {
+      h.sql.exec("UPDATE trade_crm_service_sites SET address_state='NSW' WHERE id='site'");
+      h.hook(() => {});
+    }
+  });
+  await assert.rejects(h.start(), error => error.code === 'PIESA_REVISION_CONFLICT');
+  assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_assessments').get().n, 0);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_versions').get().n, 0);
+});
+
+test('an existing historical PIESA remains readable and editable after its job service-site state changes', async t => {
+  const h = fixture(t), first = await h.start();
+  h.sql.exec("UPDATE trade_crm_service_sites SET address_state='NSW' WHERE id='site'");
+  assert.deepEqual(await h.start(), first);
+  assert.deepEqual(await h.service.readPiesaRecord(owner, first.id), first);
+  const saved = await h.service.savePiesaAnswers(owner, first.id, first.revision, { life_support: false }, 'historical-state-edit');
+  assert.equal(saved.answers.life_support, false); assert.equal(saved.revision, 2);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_assessments').get().n, 1);
 });
 
 function electricianProfile(h, memberId = 'owner-member', licence = 'SYNTHETIC-LICENCE') {
@@ -255,8 +288,13 @@ for (const [reason, change] of [
   ['a foreign business site', "UPDATE trade_crm_service_sites SET firebase_uid='foreign'"],
   ['an archived site', "UPDATE trade_crm_service_sites SET record_status='archived'"],
 ]) test(`job defaults do not use ${reason}`, async t => {
-  const h = fixture(t); h.sql.exec(change); const record = await h.start();
+  const h = fixture(t), initial = await h.start();
+  const saved = await h.service.savePiesaAnswers(owner, initial.id, initial.revision, { owner_name: 'Sam Owner' }, 'existing-site-defaults');
+  h.sql.exec(change); const record = await h.start();
   assert.equal(record.answers.property_address, undefined); assert.equal(record.answers.owner_name, 'Sam Owner');
+  assert.equal(record.id, saved.id);
+  const view = await h.service.piesaPresentation(owner, record);
+  assert.equal(view.prefillAnswers.property_address, undefined);
 });
 
 test('attested, signed and completed answers/scopes never gain new profile defaults', async t => {

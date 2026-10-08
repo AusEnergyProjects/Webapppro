@@ -380,7 +380,8 @@ function MetadataForm({ module, busy, readOnly, onSave, onDirtyChange, phase = "
   phase?: "setup" | "final";
 }) {
   const fields = useMemo(() => (module.template.metadataFields || []).map(rentalAssessorMetadataField)
-    .filter((field) => field.source === "assessment" && field.phase === phase && !(module.key === "minimum_standards" && field.key === "credentialConfirmed")), [module.template.metadataFields, module.key, phase]);
+    .filter((field) => field.source === "assessment" && field.phase === phase && !(module.key === "minimum_standards" && field.key === "credentialConfirmed"))
+    .sort((a, b) => Number(b.key === "homeStarCommissioned") - Number(a.key === "homeStarCommissioned")), [module.template.metadataFields, module.key, phase]);
   const formRef = useRef<HTMLFormElement>(null);
   const dirtyKey = `${module.id}:${phase}`;
   useEffect(() => {
@@ -467,22 +468,25 @@ function AssessmentItemCard({
   const isAdverse = adverseOutcomes.has(outcome);
   const simpleReview = check.key === "outlet_lighting_protection" && check.verificationBasis === "licensed_electrician_video_review";
   const readiness = rentalCheckIsReadiness(check, module.template.assessmentScope);
-  const presentation = rentalAssessorCheckPresentation(check, { assessmentScope: module.template.assessmentScope, outcome, publicNotes });
+  const [responseValues, setResponseValues] = useState<Record<string, unknown>>(item.response);
+  const presentation = rentalAssessorCheckPresentation(check, { assessmentScope: module.template.assessmentScope, outcome, publicNotes, response: responseValues });
   const fixedWindow = check.key === "window_operation_security" && rentalWindowIsFixed(outcome, publicNotes);
-  const evidenceRequirement = rentalAssessorEvidenceRequirement(check, outcome);
+  const evidenceRequirement = rentalAssessorEvidenceRequirement(check, outcome, responseValues);
   const quotation = rentalQuotation(finding?.details.quotation);
   const responseFields = rentalAssessorFields(check, { templateVersion: Number(module.template.templateVersion || 1) });
   const shower = ["showerhead_rating", "shower_2027_readiness"].includes(check.key);
-  const [responseValues, setResponseValues] = useState<Record<string, unknown>>(item.response);
   const [editEquipment, setEditEquipment] = useState(false);
   const dwelling = module.key === "minimum_standards";
   const [locationLabel, setLocationLabel] = useState(dwelling && !historical ? "Property" : item.locationLabel);
   const shared = rentalSharedObservationResponse({ target: { ...item, locationLabel },
     candidates: dwelling && !historical ? observationCandidates.map((candidate) => candidate.moduleId === module.id && candidate.instanceKey === "property" ? { ...candidate, locationLabel: "Property" } : candidate) : observationCandidates,
     currentResponse: responseValues });
-  const equipmentKeys = responseFields.filter((field) => field.shared).map((field) => field.key);
-  const ownEquipmentRecorded = Boolean(item.id) && equipmentKeys.some((key) => String(item.response[key] || "").trim());
-  const recordedKeys = ownEquipmentRecorded ? equipmentKeys : shared.recordedKeys;
+  const equipmentFields = responseFields.filter((field) => field.shared);
+  const equipmentKeys = equipmentFields.map((field) => field.key);
+  const hasRecordedEquipmentValue = (value: unknown) => typeof value === "number" ? Number.isFinite(value) : typeof value === "string" && Boolean(value.trim());
+  const ownEquipmentRecorded = Boolean(item.id) && equipmentKeys.some((key) => hasRecordedEquipmentValue(item.response[key]));
+  const recordedKeys = ownEquipmentRecorded ? equipmentFields.filter((field) => !field.captureVersion
+    || hasRecordedEquipmentValue(item.response[field.key]) || shared.recordedKeys.includes(field.key)).map((field) => field.key) : shared.recordedKeys;
   const visibleFields = responseFields.filter((field) => {
     if (shower && field.key === "welsRating") return false;
     const value = String(shared.response[field.key] ?? "").trim();
@@ -497,6 +501,9 @@ function AssessmentItemCard({
   const uploadBusy = busy === `upload:${item.id}`;
   const dirtyKey = item.id || `${module.id}:${section.key}:${check.key}:${item.instanceKey}`;
   const formRef = useRef<HTMLFormElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  const galleryInput = useRef<HTMLInputElement>(null);
+  const photoUploadInFlight = useRef(false);
 
   function responseFromForm(values: FormData) {
     const formLocation = String(values.get("locationLabel") ?? locationLabel).trim().replace(/\s+/g, " ").toLowerCase();
@@ -591,6 +598,19 @@ function AssessmentItemCard({
     if (!(file instanceof File) || !file.name) return;
     await onUpload(item, file, String(values.get("purpose") || check.prompt));
     form.reset();
+  }
+
+  async function uploadPickedPhoto(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file || !item.id || readOnly || busy || photoUploadInFlight.current) return;
+    photoUploadInFlight.current = true;
+    try {
+      const purpose = input.form ? String(new FormData(input.form).get("purpose") || check.prompt) : check.prompt;
+      await onUpload(item, file, purpose);
+    } finally {
+      input.value = "";
+      photoUploadInFlight.current = false;
+    }
   }
 
   const response = item.response || {};
@@ -714,14 +734,18 @@ function AssessmentItemCard({
     <section className={styles.evidenceArea}>
       <header><div><span>Evidence</span><strong>{evidenceRequirement.minimumFiles === 0 ? `${evidence.length} optional file${evidence.length === 1 ? "" : "s"}` : `${evidence.length} of ${evidenceRequirement.minimumFiles} required file${evidenceRequirement.minimumFiles === 1 ? "" : "s"}`}</strong></div></header>
       {evidenceRequirement.minimumPhotos > 0 && <p>{evidence.filter((entry) => entry.contentType.startsWith("image/")).length} of {evidenceRequirement.minimumPhotos} required photo{evidenceRequirement.minimumPhotos === 1 ? "" : "s"}. {evidenceRequirement.reason}</p>}
-      {(evidenceRequirement.minimumFiles > 0 || evidenceRequirement.minimumPhotos > 0) && check.photoGuidance && <p>{check.photoGuidance}</p>}
+      {(evidenceRequirement.minimumFiles > 0 || evidenceRequirement.minimumPhotos > 0) && (presentation.photoGuidance || check.photoGuidance) && <p>{presentation.photoGuidance || check.photoGuidance}</p>}
       {evidence.length > 0 && <ul>{evidence.map((entry) => <li key={entry.id}><div><strong>{entry.fileName}</strong><small>{entry.caption || entry.purpose} | {bytesLabel(entry.sizeBytes)}</small>{entry.capture && <small>{entry.capture.source === "in_app_camera" ? "Captured" : "Added"} {dateLabel(entry.capture.capturedAtUtc)}{entry.capture.locationCaptured && entry.capture.latitude !== null && entry.capture.longitude !== null && entry.capture.accuracyMetres !== null ? ` | device-reported GPS ${entry.capture.latitude.toFixed(6)}, ${entry.capture.longitude.toFixed(6)} | accuracy ${Math.round(entry.capture.accuracyMetres)} m` : ""}</small>}</div>{!readOnly && <button type="button" disabled={busy === `unlink:${entry.id}`} onClick={() => void onUnlink(item, entry.id)}>{busy === `unlink:${entry.id}` ? "Removing..." : "Remove link"}</button>}</li>)}</ul>}
       {!item.id ? <p className={styles.saveFirst}>{evidenceRequirement.minimumFiles === 0 ? "Save this answer. You can add a photo later if it helps explain the observation." : "Save the answer first, then attach the required photo or document."}</p>
         : !readOnly && <form className={styles.uploadForm} onSubmit={upload}>
-          <label><span>{check.requiredPdfCount ? "Professional report PDF" : "Photo or PDF"}</span><input name="file" type="file" accept={check.requiredPdfCount ? "application/pdf" : "image/jpeg,image/png,image/webp,application/pdf"} capture={check.requiredPdfCount ? undefined : "environment"} required /></label>
+          {module.key === "minimum_standards" && check.key === "ceiling_2027_readiness" ? <>
+            <input ref={cameraInput} name="cameraPhoto" type="file" accept="image/*" capture="environment" hidden onChange={event => void uploadPickedPhoto(event.currentTarget)} />
+            <input ref={galleryInput} name="galleryPhoto" type="file" accept="image/*" hidden onChange={event => void uploadPickedPhoto(event.currentTarget)} />
+            <div><button type="button" disabled={Boolean(busy)} onClick={() => cameraInput.current?.click()}>Take photo</button>{" "}<button type="button" disabled={Boolean(busy)} onClick={() => galleryInput.current?.click()}>Upload from gallery</button></div>
+          </> : <label><span>{check.requiredPdfCount ? "Professional report PDF" : "Photo or PDF"}</span><input name="file" type="file" accept={check.requiredPdfCount ? "application/pdf" : "image/jpeg,image/png,image/webp,application/pdf"} capture={check.requiredPdfCount ? undefined : "environment"} required /></label>}
           <p>A fresh device-reported GPS position within 100 metres is required for every assessment photo. TLink records the time, coordinates and accuracy in the issued report. PDFs record the time they were added.</p>
           <label><span>What this evidence shows</span><input name="purpose" defaultValue={check.prompt} maxLength={300} /></label>
-          <button type="submit" disabled={uploadBusy}>{uploadBusy ? "Uploading..." : check.requiredPdfCount ? "Attach professional PDF" : "Take photo or add file"}</button>
+          {module.key === "minimum_standards" && check.key === "ceiling_2027_readiness" ? uploadBusy && <p role="status">Uploading photo...</p> : <button type="submit" disabled={uploadBusy}>{uploadBusy ? "Uploading..." : check.requiredPdfCount ? "Attach professional PDF" : "Take photo or add file"}</button>}
         </form>}
     </section>
   </article>;

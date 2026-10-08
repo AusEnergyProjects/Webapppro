@@ -72,6 +72,19 @@ test('conditional unanswered fields stay hidden but earlier saved values remain 
   assert.equal(answer(form, 'Earlier oven width').answer, '590 mm');
 });
 
+test('shared hot water answers describe the observed apartment supply rather than certifying the plant', () => {
+  const payload = rentalFixture();
+  payload.modules[0].key = 'minimum_standards';
+  payload.modules[0].template.sections[0].checks = [{ key: 'hot_water_2027_readiness', prompt: 'Saved hot-water question', repeatBy: 'property' }];
+  payload.items = [item('water', { checkKey: 'hot_water_2027_readiness', response: {
+    hotWaterSupplyType: 'Shared building system', sharedHotWaterServiceStatus: 'Hot water supplied when checked', sharedHotWaterLimitation: 'Building plant not accessible',
+  } })];
+  const before = structuredClone(payload);
+  const [form] = rentalInspectionAnswers(payload);
+  assert.equal(answer(form, 'Saved hot-water question (Bedroom)').answer, 'Hot water supplied; shared plant not inspected');
+  assert.deepEqual(payload, before);
+});
+
 test('findings, notes and active evidence remain readable and scoped to their saved observation', () => {
   const payload = rentalFixture();
   payload.items = [item('one', { publicNotes: 'Access limited', internalNotes: 'Arrange follow-up', response: { credentialNumber: 'EL123', roomId: 'internal-room-id', showerCaptureVersion: 1 } })];

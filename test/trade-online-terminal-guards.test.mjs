@@ -14,6 +14,7 @@ import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 import * as lifecycleSql from "../src/lib/creditex-job-lifecycle-sql.ts";
 import * as tradeFormLibrary from "../src/lib/trade-form-library.mjs";
 import * as formActors from "../src/lib/trade-message-media-access.ts";
+import * as rentalAssessment from "../src/lib/trade-rental-assessment.mjs";
 import { lifecycleGuardDependency } from "./helpers/creditex-lifecycle-guards-fixture.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -461,6 +462,7 @@ function formsRoute(db, actualLibrary = false) {
         "../../db": { getD1: () => db }, "@/lib/trade-form-library.mjs": tradeFormLibrary,
       }),
       "./trade-message-media-access": formActors,
+      "./trade-rental-assessment.mjs": rentalAssessment,
     }),
     "@/lib/asset-lifecycle.mjs": {
       addMonthsToIsoDate: () => "2027-01-01",

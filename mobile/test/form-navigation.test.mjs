@@ -88,13 +88,15 @@ test('every rental question, metadata, review and recovery page returns to secti
   for (const page of ['answer', 'details', 'finding', 'safety', 'metadata', 'review', 'earlier']) {
     const draft = { answer: 'working', photos: Array.from({ length: 50 }, (_, id) => ({ uri: `local-photo-${id}` })) };
     const environment = {
-      page, busyRef: { current: false }, draft,
+      page, busyRef: { current: false }, draft, firstSetupModuleId: 'module',
+      setFirstSetupModuleId(value) { environment.firstSetupModuleId = value; },
       leave() { assert.fail('Question back must not leave the form'); },
     };
     environment.setPage = (next) => { environment.page = next; };
     const subject = methods(rental, 'RentalInspectionWorkflow', ['backToSectionsOrJob'], environment);
     subject.backToSectionsOrJob();
     assert.equal(environment.page, 'categories');
+    assert.equal(environment.firstSetupModuleId, '');
     assert.equal(environment.draft, draft);
     assert.equal(draft.photos.length, 50);
     await settle();

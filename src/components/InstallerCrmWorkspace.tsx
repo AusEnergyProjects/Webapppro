@@ -142,7 +142,9 @@ type CreateJobResult = {
   complianceIntentPlanned?: boolean; complianceIntentCount?: number; workPackReady?: boolean;
   workPackBlockers?: Array<{ code: string; message: string }>;
   rentalInspectionAttached?: boolean; rentalInspectionModuleCount?: number;
-  attachedFormCount?: number;
+  attachedFormCount?: number; veuElectricalAssessmentAttached?: boolean;
+  activityForms?: Array<{ recordId: string }>;
+  activityFormBlockers?: Array<{ activityTemplateId: string; code: string; message: string }>;
   calendarSynced?: number; calendarFailed?: number; customerDocuments?: CustomerDocumentSendResult;
   duplicateCandidates?: DuplicateCandidate[]; error?: string;
 };
@@ -1374,6 +1376,9 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       const creationResults = [
         `${result.workNumber || "Job"} created and scheduled in TLink.`,
         result.rentalInspectionAttached ? `${result.rentalInspectionModuleCount || 1} rental inspection workflow ${(result.rentalInspectionModuleCount || 1) === 1 ? "module was" : "modules were"} attached.` : "",
+        result.veuElectricalAssessmentAttached ? "Insulation electrical safety assessment attached." : "",
+        result.activityForms?.length ? `${result.activityForms.length} Creditex field form${result.activityForms.length === 1 ? " was" : "s were"} attached.` : "",
+        ...(result.activityFormBlockers || []).map(item => item.message),
         result.attachedFormCount ? `${result.attachedFormCount} job form${result.attachedFormCount === 1 ? " was" : "s were"} attached.` : "",
         refreshFailed ? "The job is saved. The latest workspace details could not be refreshed; reopen the saved job to check its forms." : "",
         result.complianceIntentPlanned && result.workPackReady
@@ -1385,7 +1390,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         calendarFailed ? `Calendar sync needs another try. ${calendarFailed} ${calendarFailed === 1 ? "update was" : "updates were"} not completed.` : "",
         result.customerDocuments?.requested ? result.customerDocuments.message : "",
       ].filter(Boolean).join(" ");
-      const needsAttention = refreshFailed || calendarFailed > 0 || (result.complianceIntentPlanned && !result.workPackReady)
+      const needsAttention = refreshFailed || calendarFailed > 0 || Boolean(result.activityFormBlockers?.length) || (result.complianceIntentPlanned && !result.workPackReady)
         || (result.customerDocuments?.requested && ["failed", "unavailable"].includes(result.customerDocuments.status));
       setStatus(creationResults, needsAttention ? "warning" : "success", calendarFailed > 0);
       form.reset(); setNewJobSeed(null); setCreating(""); setView("jobs");
@@ -2001,7 +2006,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
     </section>}
     {canViewFieldEvidence && <section className="crm-job-section" hidden={activeTab !== "files"} aria-label="Job files and forms">
       {activeTab === "files" && canManageFieldEvidence && !['completed', 'cancelled'].includes(job.stage) && <div className="crm-wizard-actions" aria-label="Add job work and forms"><button type="button" className="btn btn-secondary" onClick={() => { setFormsOpen(true); setActivityPickerOpen(true); window.requestAnimationFrame(() => { const section = document.getElementById("job-files-rental"); section?.scrollIntoView({ behavior: "smooth", block: "start" }); section?.focus({ preventScroll: true }); }); }}>Add activity</button><button type="button" className="btn" onClick={() => { setFormsOpen(true); setFormLibraryOpen(true); window.requestAnimationFrame(() => { const section = document.getElementById("job-files-form-library"); section?.scrollIntoView({ behavior: "smooth", block: "start" }); section?.focus({ preventScroll: true }); }); }}>Add form</button></div>}
-      {activeTab === "files" && <><section id="job-files-electrical-assessments"><TradeVeuElectricalAssessmentPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} /></section><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} showProgress={false} showElectricalAssessment={false} embedded canOpenInvoice={canViewInvoices} refreshKey={job.revision + filesRevision} onNavigate={(next) => {
+      {activeTab === "files" && <><section id="job-files-electrical-assessments"><TradeVeuElectricalAssessmentPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} refreshKey={filesRevision} /></section><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} showProgress={false} showElectricalAssessment={false} embedded canOpenInvoice={canViewInvoices} refreshKey={job.revision + filesRevision} onNavigate={(next) => {
         if (next === "forms" || next === "rental-assessment" || next === "activity-forms") {
           setFormsOpen(true);
           if (next === "activity-forms") setActivityRecordsRequested(true);

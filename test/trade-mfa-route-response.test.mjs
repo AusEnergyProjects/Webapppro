@@ -44,6 +44,7 @@ function deniedRoute(routeName, error) {
     isTradeComplianceIntentScheduleConflict: () => false,
     isRentalInspectionAssignmentConflict: () => false,
     CreditexComplianceError: OtherDomainError,
+    TradeFormSelectionError: OtherDomainError,
     TradeAddressVerificationError: OtherDomainError,
     TradeComplianceIntentError: OtherDomainError,
     ComplianceDomainError: OtherDomainError,

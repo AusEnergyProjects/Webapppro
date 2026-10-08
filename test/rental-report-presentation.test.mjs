@@ -84,7 +84,7 @@ test("cooktop cable quoting preserves recorded zero and explicitly marks absent 
     assert.equal(entries.cooktopCableRunMetres, expected);
     const content = pdfText(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
     const drawText = [...content.matchAll(/^(.+) Tj$/gm)].map((match) => match[1]);
-    const labelIndex = drawText.indexOf("Cooktop cable length (m)");
+    const labelIndex = drawText.indexOf("Cooktop to switchboard cable run (m)");
     assert.ok(labelIndex >= 0, "The cooktop cable measurement has its own labelled field");
     assert.equal(drawText[labelIndex + 1], String(expected), "The rendered value preserves zero and distinguishes uncaptured data");
     assert.deepEqual(snapshot, before);
@@ -147,6 +147,30 @@ test("category rollups distinguish evidence limits, incomplete checks, future up
   assert.equal(rentalReportSectionResult({ ...kitchen, items: [{ checkKey: "unknown", outcome: "meets" }] }, options).tone, "caution");
 });
 
+test("shared building hot water reports the observed apartment supply without certifying an inaccessible plant", async () => {
+  const assessmentModule = completedModule();
+  const section = assessmentModule.sections.find((entry) => entry.key === "hot_water");
+  const item = section.items[0];
+  item.response = { hotWaterSupplyType: "Shared building system", sharedHotWaterServiceStatus: "Hot water supplied when checked", sharedHotWaterLimitation: "Building plant not accessible" };
+  assessmentModule.sections = [section];
+  const snapshot = reportWithModule(assessmentModule);
+  const before = structuredClone(snapshot);
+  const shown = rentalReportAnswerPresentation(item, { moduleKey: assessmentModule.key });
+  assert.equal(shown.label, "Hot water supplied; shared plant not inspected");
+  assert.equal(shown.context, "Shared building plant not assessed");
+  const summary = rentalReportSectionResult(rentalReportSectionGroups(assessmentModule).future[0], { moduleKey: assessmentModule.key });
+  assert.equal(summary.label, "Apartment supply working; shared plant not assessed");
+  assert.equal(summary.tone, "good");
+  const content = pdfText(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  assert.match(content, /Hot water supplied; shared plant not inspected/);
+  assert.match(content, /Shared building plant not assessed/);
+  assert.doesNotMatch(content, /Ready for assessed requirement|Ready for the recorded requirement/);
+  assert.deepEqual(snapshot, before);
+  assert.equal(rentalReportAnswerPresentation({ ...item, answerLabel: "Earlier frozen answer" }, { moduleKey: assessmentModule.key }).label, "Earlier frozen answer");
+  item.response.sharedHotWaterServiceStatus = "Not checked";
+  assert.equal(rentalReportSectionResult(rentalReportSectionGroups(assessmentModule).future[0], { moduleKey: assessmentModule.key }).tone, "caution");
+});
+
 test("new quoting inputs are unknown for earlier capture and never guessed or added to the saved answer", () => {
   const oldHotWater = { checkKey: "hot_water_2027_readiness", outcome: "does_not_meet", response: { model: "Existing gas system" } };
   const before = structuredClone(oldHotWater);
@@ -171,6 +195,20 @@ test("new quoting inputs are unknown for earlier capture and never guessed or ad
   }
   const shared = Object.fromEntries(rentalReportObservationEntries({ checkKey: "hot_water_2027_readiness", outcome: "specialist_verification_required", response: { hotWaterSupplyType: "Shared building system", sharedHotWaterServiceStatus: "Hot water supplied when checked", sharedHotWaterLimitation: "Plant not inspected", cableMeasurementStatus: "Measured", hotWaterCableRunMetres: "15" } }));
   assert.ok(!Object.hasOwn(shared, "hotWaterCableRunMetres"));
+});
+
+test("retired downlight evidence text stays in recorded or historical answers without adding a missing text prompt", () => {
+  const counted = { checkKey: "artificial_lighting", outcome: "meets", response: { downlightCountStatus: "Counted", nonIc4DownlightCount: "7" } };
+  assert.ok(!Object.hasOwn(Object.fromEntries(rentalReportObservationEntries(counted)), "downlightEvidence"));
+  for (const historicalObservation of [false, true]) {
+    const old = { ...counted, historicalObservation, response: { ...counted.response, downlightEvidence: "Visual" } };
+    const before = structuredClone(old);
+    assert.equal(Object.fromEntries(rentalReportObservationEntries(old)).downlightEvidence, "Visual");
+    assert.deepEqual(old, before);
+  }
+  const corrected = { ...counted, response: { downlightCountStatus: "Unknown", downlightCountLimitation: "Labels inaccessible", nonIc4DownlightCount: "7", downlightEvidence: "Earlier label check" } };
+  assert.equal(Object.fromEntries(rentalReportRetainedObservationEntries(corrected)).downlightEvidence, "Earlier label check");
+  assert.ok(!Object.hasOwn(Object.fromEntries(rentalReportObservationEntries(corrected)), "downlightEvidence"));
 });
 
 test("retired rating questions preserve saved values and their active or retained report history", async () => {

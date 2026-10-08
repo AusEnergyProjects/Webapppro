@@ -23,8 +23,9 @@ function parseList<T>(value: unknown): T[] {
   } catch { return []; }
 }
 
-export async function publishedTradeFormTemplatesFor(serviceCategory: string, database?: D1Database, ownerUid = ""): Promise<TradeFormTemplate[]> {
-  const builtIns = tradeFormTemplatesFor(serviceCategory) as TradeFormTemplate[];
+export async function publishedTradeFormTemplatesFor(serviceCategory: string, database?: D1Database, ownerUid = "",
+  options: { allCategories?: boolean; includeBuiltIns?: boolean } = {}): Promise<TradeFormTemplate[]> {
+  const builtIns = options.includeBuiltIns === false ? [] : tradeFormTemplatesFor(serviceCategory) as TradeFormTemplate[];
   const rows = await (database || getD1()).prepare(`SELECT template_key, version, name, jurisdiction, categories, description, guidance, fields, status, scope_owner_uid
     FROM trade_form_templates candidate
     WHERE (scope_owner_uid = '' OR scope_owner_uid = ?) AND status <> 'draft'
@@ -37,7 +38,7 @@ export async function publishedTradeFormTemplatesFor(serviceCategory: string, da
     jurisdiction: String(row.jurisdiction), categories: parseList<string>(row.categories),
     description: String(row.description), guidance: String(row.guidance),
     fields: parseList<TradeFormField>(row.fields), governed: !row.scope_owner_uid,
-  })).filter((template) => template.categories.includes(serviceCategory || "other"));
+  })).filter((template) => options.allCategories || template.categories.includes(serviceCategory || "other"));
   const governedKeys = new Set(rows.results.map((row) => String(row.template_key)));
   return [...builtIns.filter((template) => !governedKeys.has(template.key)), ...governed]
     .sort((left, right) => left.name.localeCompare(right.name) || right.version - left.version);

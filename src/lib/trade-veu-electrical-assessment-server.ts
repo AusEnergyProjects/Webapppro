@@ -10,6 +10,7 @@ import type { ActivityAnswers, ActivityEvidence, ActivitySignature } from "./tra
 import { createVeuElectricalForm, veuElectricalCompletion, VEU_ELECTRICAL_SIGNER_FIELDS } from "./veu-electrical-safety-form";
 import { PiesaError, type PiesaRecord, type PiesaPresentation, type PiesaDelivery, type PiesaDeliveryRole } from "./veu-electrical-assessment";
 import { ensurePiesaSchemaGuards } from "./trade-veu-electrical-schema-guards";
+import { createPiesaDraft } from "./trade-veu-electrical-draft";
 import { sendTradeCustomerEmail } from "./trade-email-server";
 import { reminderProviderFailureOutcome } from "./service-reminder-delivery";
 import { reconcileTradeFormJobProgress } from "./trade-form-job-progress";
@@ -183,14 +184,19 @@ export async function startPiesaRecord(access:TeamAccess,workOrderId:string) {
   const job=await scope(access,workOrderId,true),db=getD1();await ensurePiesaSchemaGuards(db);
   const existing=await db.prepare("SELECT * FROM trade_veu_electrical_assessments WHERE work_order_id=? AND owner_uid=?").bind(workOrderId,access.ownerUid).first<Row>();
   if(existing)return parse(existing);
-  const defaults=await piesaProfileDefaults(access,workOrderId),form=createVeuElectricalForm(),now=stamp(),id=crypto.randomUUID();
-  const record:PiesaRecord={id,workOrderId,ownerUid:access.ownerUid,recordNumber:`PIESA-${id.slice(0,8).toUpperCase()}`,revision:1,status:"draft",form,formSha256:activityHash(form),
-    answers:defaults.answers,evidence:[],signatures:[],signerDefaults:{customer:String(defaults.answers.owner_name||""),technician:String(defaults.answers.initial_electrician_name||"")},createdAt:now,updatedAt:now,completedAt:""};
+  const jurisdictionSql=`EXISTS(SELECT 1 FROM trade_crm_job_details details JOIN trade_crm_service_sites site
+    ON site.id=details.service_site_id AND site.firebase_uid=details.firebase_uid AND site.record_status='active'
+    WHERE details.work_order_id=w.id AND details.firebase_uid=w.firebase_uid AND upper(trim(site.address_state))='VIC')`;
+  const jurisdiction=await db.prepare(`SELECT w.id FROM trade_work_orders w WHERE w.id=? AND w.firebase_uid=? AND ${jurisdictionSql}`)
+    .bind(workOrderId,access.ownerUid).first();
+  if(!jurisdiction)fail("PIESA_JURISDICTION_REQUIRED","The insulation electrical safety assessment requires a Victorian service address.",400);
+  const defaults=await piesaProfileDefaults(access,workOrderId),now=stamp(),id=crypto.randomUUID();
+  const record=createPiesaDraft({id,workOrderId,ownerUid:access.ownerUid,createdAt:now,answers:defaults.answers});
   const payload=activityCanonical(record);
   await scope(access,workOrderId,true);
   const guard=currentAccess(access,true);
   await db.prepare(`INSERT OR IGNORE INTO trade_veu_electrical_assessments(id,work_order_id,owner_uid,revision,status,payload,payload_sha256,actor_uid,created_at,updated_at)
-    SELECT ?,?,?,1,'draft',?,?,?,?,? WHERE EXISTS(SELECT 1 FROM trade_work_orders w WHERE w.id=? AND w.firebase_uid=? AND w.revision=? AND w.record_status='active' AND w.stage NOT IN ('imported','cancelled','completed') AND ${guard.sql})`)
+    SELECT ?,?,?,1,'draft',?,?,?,?,? WHERE EXISTS(SELECT 1 FROM trade_work_orders w WHERE w.id=? AND w.firebase_uid=? AND w.revision=? AND w.record_status='active' AND w.stage NOT IN ('imported','cancelled','completed') AND ${guard.sql} AND ${jurisdictionSql})`)
     .bind(id,workOrderId,access.ownerUid,payload,activityHash(payload),access.actorUid,now,now,workOrderId,access.ownerUid,job.revision,...guard.values).run();
   const saved=await db.prepare("SELECT * FROM trade_veu_electrical_assessments WHERE work_order_id=? AND owner_uid=?").bind(workOrderId,access.ownerUid).first<Row>();
   if(!saved)fail("PIESA_REVISION_CONFLICT","This job changed. Open the assessment again.");

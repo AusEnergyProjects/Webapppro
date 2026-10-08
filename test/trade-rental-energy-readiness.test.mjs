@@ -194,6 +194,7 @@ test("quoting capture API persists actual cable, count, heating/cooling rating a
     ["kitchen", "cooktop_function", { cableMeasurementStatus: "Estimated", cooktopCableRunMetres: 15.75, cableRouteBasis: "Roof route includes 3m wall drop" }],
     ["hot_water", "hot_water_2027_readiness", { hotWaterSupplyType: "Individual unit", cableMeasurementStatus: "Unable to determine", cableLimitationReason: "Switchboard route concealed" }],
     ["lighting", "artificial_lighting", { downlightCountStatus: "Counted", nonIc4DownlightCount: 7, downlightEvidence: "Seven readable non-IC4 labels" }],
+    ["lighting", "artificial_lighting", { downlightCountStatus: "Counted", nonIc4DownlightCount: 7 }],
     ["lighting", "artificial_lighting", { downlightCountStatus: "Unknown", downlightCountLimitation: "Labels not accessible", nonIc4DownlightCount: "7", downlightEvidence: "Earlier estimate retained" }],
     ["cooling", "cooling_2027_readiness", { applianceType: "Ducted", coolingGemsStatus: "Not available", coolingRatingLimitation: "No star label; request registration information" }],
     ["hot_water", "hot_water_2027_readiness", { hotWaterSupplyType: "Shared building system", sharedHotWaterServiceStatus: "Hot water supplied when checked", sharedHotWaterLimitation: "Building plant not inspected; ask manager for access" }],
@@ -302,6 +303,88 @@ test("actual module completion enforces v4 downlight truth but preserves v3 comp
         assert.equal(completed.status, 200, JSON.stringify(await completed.clone().json()));
         assert.equal(JSON.parse(fixture.sql.prepare("SELECT response_json FROM trade_rental_inspection_items").get().response_json).nonIc4DownlightCount, "7");
       }
+    } finally { fixture.sql.close(); }
+  }
+});
+
+test("v4 completion requires quote-ready cable runs for working appliances while v3 keeps its frozen completion contract", async () => {
+  const cases = [
+    ["kitchen", "cooktop_function", "cooktopCableRunMetres", {}],
+    ["hot_water", "hot_water_2027_readiness", "hotWaterCableRunMetres", { applianceType: "Gas storage", hotWaterSupplyType: "Individual unit" }],
+    ["hot_water", "hot_water_2027_readiness", "hotWaterCableRunMetres", { applianceType: "Instant gas", hotWaterSupplyType: "Individual unit" }],
+    ["hot_water", "hot_water_2027_readiness", "hotWaterCableRunMetres", { applianceType: "Heat pump", hotWaterSupplyType: "Individual unit" }],
+    ["heating", "main_living_heater", "airconTotalCableMetres", { applianceType: "Gas heater" }],
+    ["heating", "heating_2027_readiness", "airconTotalCableMetres", { applianceType: "Split system" }],
+  ];
+  for (const version of [3, 4]) for (const [sectionKey, checkKey, lengthKey, identity] of cases) {
+    const fixture = databaseFixture();
+    try {
+      const template = { key: "minimum_standards", templateVersion: version, credentialGate: "assigned_assessor", metadataFields: [], sections: [{ key: sectionKey, title: "Appliance observation", checks: [{ key: checkKey, required: true, repeatBy: "property", requiredEvidenceCount: 0, responseFields: [] }] }] };
+      const frozen = JSON.stringify(template);
+      fixture.sql.prepare("UPDATE trade_rental_inspection_modules SET template_snapshot = ?, answers = ?").run(frozen, JSON.stringify({ coverageConfirmed: true, assessorDeclaration: true }));
+      fixture.sql.prepare("UPDATE trade_rental_inspection_items SET section_key = ?, check_key = ?, location_label = 'Property', response_json = ?, required_evidence_count = 0").run(sectionKey, checkKey, JSON.stringify(identity));
+      fixture.sql.exec(`INSERT INTO trade_crm_job_media (id,work_order_id,firebase_uid,file_name,content_type,size_bytes) VALUES ('appliance-photo','job','owner','appliance.jpg','image/jpeg',32);
+        INSERT INTO trade_rental_evidence_links (id,inspection_id,module_id,item_id,job_media_id,firebase_uid,evidence_type,status) VALUES ('appliance-link','inspection','module','old-item','appliance-photo','owner','photo','active');`);
+      const route = loadRoute(fixture), request = { action: "complete_module", moduleId: "module", expectedRevision: 1 };
+      const initial = await post(route, request);
+      assert.equal(initial.status, version === 4 ? 409 : 200, `${checkKey} v${version}: ${JSON.stringify(await initial.clone().json())}`);
+      if (version === 4) {
+        assert.match(JSON.stringify((await initial.json()).blockers), /cable length was measured/);
+        for (const partial of [
+          { cableMeasurementStatus: "Measured", cableRouteBasis: "Observed roof route" },
+          { cableMeasurementStatus: "Estimated", [lengthKey]: "12.5" },
+          { cableMeasurementStatus: "Unable to determine" },
+        ]) {
+          fixture.sql.prepare("UPDATE trade_rental_inspection_items SET response_json = ?").run(JSON.stringify({ ...identity, ...partial }));
+          const incomplete = await post(route, request); assert.equal(incomplete.status, 409, JSON.stringify(await incomplete.clone().json()));
+          assert.equal(fixture.sql.prepare("SELECT status FROM trade_rental_inspection_modules").get().status, "draft");
+          assert.equal(fixture.sql.prepare("SELECT COUNT(*) count FROM trade_rental_inspection_events").get().count, 0, "Rejected completion does not write an event or complete the module");
+        }
+        fixture.sql.prepare("UPDATE trade_rental_inspection_items SET response_json = ?").run(JSON.stringify({ ...identity, cableMeasurementStatus: "Unable to determine", cableLimitationReason: "Concealed cable route could not be checked safely" }));
+        const completed = await post(route, request); assert.equal(completed.status, 200, JSON.stringify(await completed.clone().json()));
+      }
+      assert.equal(fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot, frozen, "Quoting capture never rewrites the frozen template");
+      assert.equal(fixture.sql.prepare("SELECT status FROM trade_rental_inspection_modules").get().status, "complete");
+    } finally { fixture.sql.close(); }
+  }
+});
+
+test("actual v4 shared hot-water completion accepts a working apartment supply with one photo and rejects contradictory or missing observations", async () => {
+  for (const [sharedHotWaterServiceStatus, sharedHotWaterLimitation, expectedStatus, blocker] of [
+    ["Hot water supplied when checked", "Building plant not accessible", 200, null],
+    ["No hot water when checked", "Building plant not accessible", 409, /needing action/],
+    ["Not checked", "Building plant not accessible", 409, /could not be checked/],
+    ["Hot water supplied when checked", "", 409, /not inspected/],
+  ]) {
+    const fixture = databaseFixture();
+    try {
+      const current = templates.rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+      const section = current.sections.find(entry => entry.key === "hot_water");
+      const template = { ...current, metadataFields: current.metadataFields.filter(field => ["coverageConfirmed", "assessorDeclaration"].includes(field.key)), sections: [section] };
+      const frozen = JSON.stringify(template);
+      fixture.sql.prepare("UPDATE trade_rental_inspection_modules SET template_snapshot = ?, template_version = 4, answers = ?").run(frozen, JSON.stringify({ rentalRegime: "ordinary_residential" }));
+      const route = loadRoute(fixture);
+      const responseValues = { hotWaterSupplyType: "Shared building system", sharedHotWaterServiceStatus, sharedHotWaterLimitation, limitationStatus: "Not accessible", model: "Earlier individual unit observation" };
+      const saved = await post(route, { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+        sectionKey: "hot_water", checkKey: "hot_water_2027_readiness", outcome: "meets", response: responseValues });
+      assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
+      const item = fixture.sql.prepare("SELECT * FROM trade_rental_inspection_items WHERE check_key = 'hot_water_2027_readiness'").get();
+      assert.deepEqual(JSON.parse(item.response_json), Object.fromEntries(Object.entries(responseValues).filter(([, value]) => value !== "")), "Actual nonblank answers and inactive history persist; plant measurements or certifications are never invented");
+      assert.equal((await post(route, { action: "save_module_answers", moduleId: "module", expectedRevision: 2, answers: { rentalRegime: "ordinary_residential", coverageConfirmed: true, assessorDeclaration: true } })).status, 200);
+      const finish = { action: "complete_module", moduleId: "module", expectedRevision: 3 };
+      if (expectedStatus === 200) {
+        const absentPhoto = await post(route, finish);
+        assert.equal(absentPhoto.status, 409);
+        assert.match(JSON.stringify((await absentPhoto.json()).blockers), /photo|evidence/i, "Actual apartment supply evidence is still required");
+      }
+      fixture.sql.prepare("INSERT INTO trade_crm_job_media (id,work_order_id,firebase_uid,file_name,content_type,size_bytes) VALUES ('apartment-supply-photo','job','owner','apartment-tap.jpg','image/jpeg',32)").run();
+      fixture.sql.prepare("INSERT INTO trade_rental_evidence_links (id,inspection_id,module_id,item_id,job_media_id,firebase_uid,evidence_type,status) VALUES ('supply-photo-link','inspection','module',?,'apartment-supply-photo','owner','photo','active')").run(item.id);
+      const finished = await post(route, finish);
+      assert.equal(finished.status, expectedStatus, JSON.stringify(await finished.clone().json()));
+      if (blocker) assert.match(JSON.stringify((await finished.json()).blockers), blocker);
+      assert.equal(fixture.sql.prepare("SELECT status FROM trade_rental_inspection_modules").get().status, expectedStatus === 200 ? "complete" : "draft");
+      assert.equal(fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot, frozen, "Observed apartment supply never rewrites the frozen standard or issued history");
+      assert.equal(fixture.sql.prepare("SELECT COUNT(*) count FROM trade_crm_job_media").get().count, 1, "An inaccessible plant photo is not required to finish the supply observation");
     } finally { fixture.sql.close(); }
   }
 });

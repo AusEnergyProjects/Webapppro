@@ -12,6 +12,7 @@ const formsServer = read("../src/lib/trade-job-forms-server.ts");
 const recurringServer = read("../src/lib/trade-recurring-jobs-server.ts");
 const lifecycleRoute = read("../src/app/api/trade-asset-lifecycle/route.ts");
 const formsUi = read("../src/components/TradeJobFormsPanel.tsx");
+const formLibraryUi = read("../src/components/TradeJobFormLibrary.tsx");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 const mobileJob = read("../mobile/src/app/job/[id].tsx");
 const worker = read("../worker/index.ts");
@@ -120,8 +121,11 @@ test("schedule automation retains daily and owner-scoped API triggers", () => {
 });
 
 test("web and native field interfaces expose forms progressively", () => {
-  assert.match(formsUi, /Available for this work type/);
-  assert.match(formsUi, /do not replace licences, permits, formal certificates/);
+  assert.match(formsUi, /<summary>Add a form to this job<\/summary>/);
+  assert.match(formsUi, /<TradeJobFormLibrary user=\{user\} workOrderId=\{workOrderId\}/);
+  assert.match(formLibraryUi, /Search rental, Creditex or business forms/);
+  assert.match(formsUi, /\{form\.template\.guidance\}/);
+  assert.match(tradeFormTemplate("pre-start-risk-readiness", 1, "other").guidance, /licences, permits, safety documents and formal certificates required/);
   assert.match(formsUi, /Check and complete/);
   assert.match(syncRoute, /FROM trade_job_forms f JOIN trade_work_orders/);
   assert.match(syncRoute, /forms: formRows\.results/);

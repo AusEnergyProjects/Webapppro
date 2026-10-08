@@ -614,7 +614,7 @@ test("heavy workspaces load dynamically and profile readiness does not wait for 
     assert.match(crm, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
   }
 
-  const profileLoadStart = dashboard.indexOf("async function loadDashboard()");
+  const profileLoadStart = dashboard.indexOf("async function loadDashboard(initial = true)");
   const profileLoadEnd = dashboard.indexOf("}, [fetch, profileRefresh, user]);", profileLoadStart);
   assert.ok(profileLoadStart >= 0 && profileLoadEnd > profileLoadStart);
   const profileLoad = dashboard.slice(profileLoadStart, profileLoadEnd);
@@ -674,8 +674,11 @@ test("Home dashboard preserves direct work and finance navigation", () => {
 
 test("CRM writes no longer return the full customer and job workspace", () => {
   assert.equal((route.match(/crmPayload\(identity\)/g) || []).length, 0);
-  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: complianceIntents\.length > 0,\s*complianceIntentCount: complianceIntents\.length,\s*complianceWorkPacks,\s*workPackReady,\s*workPackBlockers,\s*rentalInspectionAttached: Boolean\(rentalTemplate\),\s*rentalInspectionModuleCount: rentalModuleKeys\.length,\s*calendarSynced, calendarFailed, calendarInvite, customerDocuments, quickQuote \}, 201\)/);
+  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: complianceIntents\.length > 0,\s*complianceIntentCount: complianceIntents\.length,\s*complianceWorkPacks,\s*workPackReady,\s*workPackBlockers,\s*activityForms,\s*activityFormBlockers,\s*rentalInspectionAttached: Boolean\(rentalTemplate\),\s*rentalInspectionModuleCount: rentalModuleKeys\.length,\s*veuElectricalAssessmentAttached: Boolean\(piesaDraft\),\s*attachedFormCount: initialForms\.length,\s*calendarSynced, calendarFailed, calendarInvite, customerDocuments, quickQuote \}, 201\)/);
   assert.match(crm, /type CreateJobResult = \{[\s\S]*complianceIntentPlanned\?: boolean; complianceIntentCount\?: number; workPackReady\?: boolean;[\s\S]*workPackBlockers\?: Array<\{ code: string; message: string \}>;[\s\S]*rentalInspectionAttached\?: boolean; rentalInspectionModuleCount\?: number;[\s\S]*calendarSynced\?: number; calendarFailed\?: number;/);
+  assert.match(crm, /attachedFormCount\?: number; veuElectricalAssessmentAttached\?: boolean;/);
+  assert.match(crm, /activityForms\?: Array<\{ recordId: string \}>;/);
+  assert.match(crm, /activityFormBlockers\?: Array<\{ activityTemplateId: string; code: string; message: string \}>;/);
   assert.match(newJob, /The assigned compliance team can review the customer, site, activity and schedule/);
   assert.match(newJob, /regulated case opens only when the exact published rule, product, evidence policy and calculation pathway are ready/);
   assert.match(route, /return adminJson\(\{ ok: true, id, customerNumber \}, 201\)/);

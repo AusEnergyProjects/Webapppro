@@ -64,6 +64,7 @@ function panelHarness(name, initialProps, request) {
     "./TradeActivityWorkPackPanel": { TradeActivityWorkPackPanel: "TradeActivityWorkPackPanel" },
     "./TradeVeuElectricalAssessmentPanel": { TradeVeuElectricalAssessmentPanel: "TradeVeuElectricalAssessmentPanel" },
     "./TradeSwmsPanel": { TradeSwmsPanel: "TradeSwmsPanel" },
+    "./TradeJobFormLibrary": { TradeJobFormLibrary: "TradeJobFormLibrary" },
     '@/lib/trade-business-form-design': businessFormDesign,
     '@/lib/trade-form-library.mjs': tradeFormLibrary,
     "./TradeWorkTimeTracking": { WorkTimeStatus: "WorkTimeStatus", useFormTimeTracking: () => ({ bind: {}, markCompleted() {} }) },
@@ -170,6 +171,9 @@ test("refreshKey reloads readiness while preserving the existing editor identity
 
 const form = { id: "form-1", templateKey: "inspection", templateVersion: 1, templateName: "Inspection", status: "draft", revision: 2, answers: {}, missing: [] };
 const formData = { ok: true, serviceCategory: "electrical", forms: [form], templates: [{ key: "extra", version: 1, name: "Extra form", fieldCount: 2 }] };
+const extraFormOption = { id: "business:extra:1", name: "Extra form", group: "Business forms", jurisdiction: "AU", description: "Synthetic published business form",
+  categories: ["electrical"], searchText: "extra form", unavailableReason: "",
+  selection: { kind: "business", templateKey: "extra", templateVersion: 1, name: "Extra form" } };
 function formsHarness({ pending = false, refreshFails = false, writeFails = false, readOnly = false, empty = false } = {}) {
   const changes = [];
   const data = { ...formData, forms: empty ? [] : formData.forms };
@@ -200,14 +204,16 @@ test("draft save and add-form success notify the parent, while failed writes and
   const h = formsHarness(); let tree = await h.ready();
   assert.deepEqual(await child(tree, "JobForm").props.onSave("form-1", 2, {}, false), { ...form, status: "draft", revision: 3 });
   assert.match(text(h.render()), /Field form saved\./);
-  tree = h.render(); button(tree, "Add to job").props.onClick(); await idle();
+  tree = h.render(); nodes(tree, node => node.type === "details")[0].props.onToggle({ currentTarget: { open: true } });
+  await child(h.render(), "TradeJobFormLibrary").props.onSelect(extraFormOption);
   assert.deepEqual(h.changes, ["refresh", "refresh"]);
-  assert.match(text(h.render()), /Field form added to this job/);
+  assert.match(text(h.render()), /Extra form added to this job/);
+  assert.deepEqual(JSON.parse(h.calls.at(-1).body), { templateKey: "extra", templateVersion: 1, workOrderId: "job" });
   for (const options of [{ writeFails: true }, { readOnly: true }]) {
     const blocked = formsHarness(options); const blockedTree = await blocked.ready();
     assert.equal(await child(blockedTree, "JobForm").props.onSave("form-1", 2, {}, true), null);
     assert.deepEqual(blocked.changes, []);
-    if (options.readOnly) { assert.equal(button(blockedTree, "Add to job"), undefined); assert.equal(blocked.calls.length, 1); }
+    if (options.readOnly) { assert.equal(child(blockedTree, "TradeJobFormLibrary"), undefined); assert.equal(blocked.calls.length, 1); }
     else assert.match(text(blocked.render()), /Required answer missing/);
   }
 });
@@ -216,10 +222,14 @@ test("supporting-form catalogue follows attached forms and opens for empty jobs 
   const h = formsHarness({ empty: true }); let tree = await h.ready();
   const catalogue = nodes(tree, node => node.type === "details")[0];
   assert.equal(catalogue.props.open, true); assert.equal(child(catalogue, "TradeBusinessFormEditor"), undefined);
+  assert.equal(child(catalogue, "TradeJobFormLibrary").props.workOrderId, "job");
+  assert.equal(child(catalogue, "TradeJobFormLibrary").props.serviceCategory, "electrical");
   const sections = nodes(tree, node => node.props?.className === "crm-active-forms" || node.type === "details");
   assert.equal(sections[0].props.className, "crm-active-forms");
   catalogue.props.onToggle({ currentTarget: { open: false } }); tree = h.render();
   const collapsed = nodes(tree, node => node.type === "details")[0]; assert.equal(collapsed.props.open, false);
   assert.equal(child(collapsed, "TradeBusinessFormEditor"), undefined);
-  assert.ok(button(collapsed, "Add to job"));
+  assert.equal(child(collapsed, "TradeJobFormLibrary"), undefined);
+  collapsed.props.onToggle({ currentTarget: { open: true } });
+  assert.ok(child(h.render(), "TradeJobFormLibrary"));
 });

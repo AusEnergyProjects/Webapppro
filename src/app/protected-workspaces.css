@@ -836,6 +836,11 @@
 .crm-job-forms > header h4 { color: var(--color-aea-ink); font-family: var(--font-aea-heading); font-size: .92rem; margin: 2px 0 0; }
 .crm-job-forms > header small { color: var(--color-aea-muted); font-size: .54rem; line-height: 1.5; max-width: 430px; text-align: right; }
 .crm-form-library { background: #f2f8f5; border-radius: 11px; padding: 11px; }
+.crm-form-library > label { display: grid; font-size: .65rem; font-weight: 750; gap: 6px; margin: 12px 0 8px; }
+.crm-form-library input[type="search"] { background: var(--trade-surface-raised, #fff); border: 1px solid var(--trade-line, #d5e3de); border-radius: 8px; color: var(--trade-ink, var(--color-aea-ink)); font-size: .7rem; min-height: 42px; padding: 10px; width: 100%; }
+.crm-form-library > label + div { display: flex; flex-wrap: wrap; gap: 6px; }
+.crm-form-library > div:last-child > section { display: grid; gap: 6px; }
+.crm-form-library > div:last-child h4 { font-size: .72rem; margin: 10px 0 2px; }
 .crm-form-library > div:first-child, .crm-active-forms > header { align-items: center; display: flex; font-size: .56rem; justify-content: space-between; }
 .crm-form-library > div:first-child span, .crm-active-forms > header span { color: var(--color-aea-muted); }
 .crm-form-library > div:last-child { display: grid; gap: 6px; margin-top: 8px; }

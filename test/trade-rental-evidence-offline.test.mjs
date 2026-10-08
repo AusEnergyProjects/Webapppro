@@ -57,3 +57,17 @@ test('later linking uses the original receipt and report rendering does not age 
   assert.ok(rentalEvidencePhotoCapture(envelope()));
   assert.equal(rentalEvidencePhotoCapture(envelope(), { receivedAtUtc: at(sevenDays + 1) }), null);
 });
+
+test('native gallery photos preserve the upload source and every photo metadata gate', () => {
+  const uploaded = { ...envelope(), source: 'native_file_upload' };
+  const captured = rentalEvidencePhotoCapture(uploaded, { receivedAtUtc: at(60 * 1000) });
+  assert.equal(captured.source, 'native_file_upload'); assert.equal(captured.capturedAtUtc, capturedAt);
+  for (const change of [
+    value => { value.location.observedAtUtc = at(120001); }, value => { value.location.accuracyMetres = 101; },
+    value => { value.location.mocked = true; }, value => { value.location.state = 'unavailable'; },
+    value => { value.capture.captureObservedAtUtc = 'invalid'; }, value => { value.source = 'other_gallery'; },
+  ]) {
+    const invalid = structuredClone(uploaded); change(invalid);
+    assert.equal(rentalEvidencePhotoCapture(invalid, { receivedAtUtc: at(60 * 1000) }), null);
+  }
+});

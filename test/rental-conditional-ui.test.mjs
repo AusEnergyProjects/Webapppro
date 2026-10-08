@@ -77,6 +77,30 @@ function card(checkKey, response, extra = {}) {
 }
 const input = (tree, name) => nodes(tree, node => node.props?.name === name)[0];
 
+test("web insulation offers separate camera and gallery pickers through the existing evidence upload", async () => {
+  const uploads = [];
+  const h = card("ceiling_2027_readiness", {}, { onUpload: async (...args) => { uploads.push(args); } });
+  let tree = h.render();
+  const camera = input(tree, "cameraPhoto"), gallery = input(tree, "galleryPhoto");
+  assert.equal(camera.props.capture, "environment"); assert.equal(gallery.props.capture, undefined);
+  assert.equal(camera.props.accept, "image/*"); assert.equal(gallery.props.accept, "image/*");
+  const clicks = [];
+  camera.props.ref.current = { click() { clicks.push("camera"); } };
+  gallery.props.ref.current = { click() { clicks.push("gallery"); } };
+  nodes(tree, node => node.type === "button" && text(node) === "Take photo")[0].props.onClick();
+  nodes(tree, node => node.type === "button" && text(node) === "Upload from gallery")[0].props.onClick();
+  assert.deepEqual(clicks, ["camera", "gallery"]);
+  const selected = new File(["photo"], "insulation.jpg", { type: "image/jpeg" });
+  const control = { files: [selected], value: "selected" };
+  gallery.props.onChange({ currentTarget: control }); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(uploads.length, 1); assert.equal(uploads[0][0].id, "item"); assert.equal(uploads[0][1], selected);
+  assert.equal(uploads[0][2], fixtures("ceiling_2027_readiness").check.prompt); assert.equal(control.value, "");
+  const busy = card("ceiling_2027_readiness", {}, { busy: "upload:item" }); tree = busy.render();
+  for (const label of ["Take photo", "Upload from gallery"]) assert.equal(nodes(tree, node => node.type === "button" && text(node) === label)[0].props.disabled, true);
+  assert.equal(input(card("cooling_2027_readiness").render(), "galleryPhoto"), undefined);
+  assert.equal(input(card("ceiling_2027_readiness", {}, { readOnly: true }).render(), "galleryPhoto"), undefined);
+});
+
 test("web changing a limitation hides its old reason without losing the stored value", () => {
   const response = { limitationStatus: "Other", limitationReason: "Plant behind locked door" };
   const h = card("hot_water_2027_readiness", response);
@@ -90,7 +114,9 @@ test("web cable branches follow the current status while retired rating answers 
   const response = { applianceType: "Split system", cableMeasurementStatus: "Measured", airconTotalCableMetres: "18", cableRouteBasis: "Wall route",
     heatingGemsStatus: "Label recorded", heatingEnergyRating: "4 stars", heatingRatingZone: "Cold", heatingRatingBasis: "Appliance label" };
   const h = card("heating_2027_readiness", response);
-  let tree = h.render(); assert.ok(input(tree, "airconTotalCableMetres"));
+  let tree = h.render();
+  nodes(tree, node => node.type === "button" && text(node) === "Edit equipment details")[0].props.onClick();
+  tree = h.render(); assert.ok(input(tree, "airconTotalCableMetres"));
   for (const suffix of ["GemsStatus", "EnergyRating", "RatingZone", "RatingBasis", "GemsReference", "RatingLimitation"]) assert.equal(input(tree, `heating${suffix}`), undefined);
   input(tree, "cableMeasurementStatus").props.onChange({ target: { value: "Unable to determine" } });
   tree = h.render();
@@ -100,17 +126,44 @@ test("web cable branches follow the current status while retired rating answers 
   assert.equal(response.airconTotalCableMetres, "18"); assert.equal(response.heatingEnergyRating, "4 stars");
 });
 
+test("a saved heater model does not hide cable questions that have never been answered", () => {
+  const response = { applianceType: "Split system", model: "Existing heater model" };
+  const h = card("main_living_heater", response);
+  let tree = h.render();
+  assert.equal(input(tree, "model"), undefined); assert.equal(input(tree, "serialNumber"), undefined, "Existing optional identity blanks retain their previous compact presentation");
+  assert.ok(input(tree, "cableMeasurementStatus"), "A model cannot stand in for a measured or estimated cable basis");
+  input(tree, "cableMeasurementStatus").props.onChange({ target: { value: "Estimated" } });
+  tree = h.render(); assert.ok(input(tree, "airconTotalCableMetres")); assert.ok(input(tree, "cableRouteBasis"));
+  assert.equal(response.cableMeasurementStatus, undefined); assert.equal(response.airconTotalCableMetres, undefined);
+});
+
+test("web reuses actual saved and inherited zero cable measurements without hiding missing capture fields", () => {
+  for (const airconTotalCableMetres of [0, "0"]) {
+    const response = { applianceType: "Split system", model: "Recorded heater", cableMeasurementStatus: "Measured", airconTotalCableMetres, cableRouteBasis: "Unit beside switchboard" };
+    const h = card("main_living_heater", response); const tree = h.render();
+    for (const key of ["cableMeasurementStatus", "airconTotalCableMetres", "cableRouteBasis"]) assert.equal(input(tree, key), undefined);
+    assert.equal(h.body().response.airconTotalCableMetres, airconTotalCableMetres);
+    const future = card("heating_2027_readiness", { applianceType: "Split system", model: "Recorded heater" }, { observationCandidates: [{ ...fixtures("main_living_heater", response).item, id: "current-heater" }] });
+    const futureTree = future.render();
+    for (const key of ["cableMeasurementStatus", "airconTotalCableMetres", "cableRouteBasis"]) assert.equal(input(futureTree, key), undefined);
+    assert.equal(future.body().response.airconTotalCableMetres, airconTotalCableMetres);
+  }
+  const partial = card("heating_2027_readiness", { model: "Existing model", cableMeasurementStatus: "Measured", airconTotalCableMetres: "" });
+  const tree = partial.render(); assert.ok(input(tree, "airconTotalCableMetres")); assert.ok(input(tree, "cableRouteBasis"));
+});
+
 test("web heater and cooling saves preserve old ratings and accept appliances without rating answers", () => {
   for (const [checkKey, mode] of [["heater_efficiency", "heating"], ["heating_2027_readiness", "heating"], ["cooling_2027_readiness", "cooling"]]) {
     for (const rating of [{}, { [`${mode}GemsStatus`]: "Label recorded", [`${mode}EnergyRating`]: "4 stars", [`${mode}RatingZone`]: "Cold", [`${mode}RatingBasis`]: "Appliance label", [`${mode}GemsReference`]: "Recorded model" }]) {
-      const response = { applianceType: "Split system", ...rating };
+      const cable = checkKey === "heater_efficiency" ? {} : { cableMeasurementStatus: "Unable to determine", cableLimitationReason: "Concealed route; electrician to confirm" };
+      const response = { applianceType: "Split system", ...cable, ...rating };
       const h = card(checkKey, response);
       const tree = h.render();
       for (const suffix of ["GemsStatus", "EnergyRating", "RatingZone", "RatingBasis", "GemsReference", "RatingLimitation"]) assert.equal(input(tree, `${mode}${suffix}`), undefined);
       const saved = h.body();
       assert.equal(saved.outcome, "meets");
       for (const [key, value] of Object.entries(rating)) assert.equal(saved.response[key], value);
-      assert.deepEqual(response, { applianceType: "Split system", ...rating });
+      assert.deepEqual(response, { applianceType: "Split system", ...cable, ...rating });
     }
   }
 });
@@ -126,6 +179,19 @@ test("web v4 saves require the logical current quoting answer while v3 snapshots
   const h = card("artificial_lighting", {}); h.render(); assert.throws(h.body, /non-IC4 downlight count/);
   const legacy = card("artificial_lighting", {}, { module: fixtures("artificial_lighting", {}, "meets", 3).module });
   const tree = legacy.render(); assert.equal(input(tree, "downlightCountStatus"), undefined); assert.equal(legacy.body().outcome, "meets");
+});
+
+test("web confirms non-IC4 count without a free-text evidence question and preserves any earlier text", () => {
+  for (const downlightEvidence of [undefined, "Visual"]) {
+    const response = { downlightCountStatus: "Counted", nonIc4DownlightCount: "7", ...(downlightEvidence ? { downlightEvidence } : {}) };
+    const h = card("artificial_lighting", response);
+    const tree = h.render();
+    assert.equal(input(tree, "downlightEvidence"), undefined);
+    assert.ok(input(tree, "downlightCountStatus")); assert.ok(input(tree, "nonIc4DownlightCount"));
+    const saved = h.body(); assert.equal(saved.response.nonIc4DownlightCount, "7");
+    if (downlightEvidence) assert.equal(saved.response.downlightEvidence, downlightEvidence);
+    assert.deepEqual(response, { downlightCountStatus: "Counted", nonIc4DownlightCount: "7", ...(downlightEvidence ? { downlightEvidence } : {}) });
+  }
 });
 
 test("correcting the web outcome removes required photo requests and retains attached evidence", () => {
@@ -160,12 +226,40 @@ test("HomeStar branding is an optional web choice, starts off and persists only 
   const h = mount('MetadataForm', { module: assessmentModule, busy: false, readOnly: false, onSave: async answers => { saved = answers; } });
   const tree = h.render(); const checkbox = input(tree, 'homeStarCommissioned');
   assert.ok(checkbox); assert.equal(checkbox.props.type, 'checkbox'); assert.equal(checkbox.props.defaultChecked, false); assert.equal(checkbox.props.required, undefined);
+  assert.equal(nodes(tree, node => Boolean(node.props?.name))[0].props.name, 'homeStarCommissioned');
+  assert.match(text(tree), /Is this assessment commissioned by Home Star Upgrades\?/);
   const definition = assessmentModule.template.metadataFields.find(field => field.key === 'homeStarCommissioned');
   assert.equal(definition.required, false); assert.equal(definition.phase, 'setup');
   const form = nodes(tree, node => node.type === 'form')[0];
   await form.props.onSubmit({ preventDefault() {}, currentTarget: form.props.ref.current }); assert.equal(saved, undefined, 'Opening and saving untouched optional settings does not enable a brand');
   form.props.ref.current.values.set('homeStarCommissioned', 'on');
   await form.props.onSubmit({ preventDefault() {}, currentTarget: form.props.ref.current }); assert.deepEqual(saved, { homeStarCommissioned: true });
+});
+
+test('web puts an existing Home Star field first without inserting it into earlier snapshots or clearing a saved decision', () => {
+  const assessmentModule = fixtures('artificial_lighting').module;
+  const reversed = { ...assessmentModule, answers: { homeStarCommissioned: true }, template: { ...assessmentModule.template, metadataFields: [...assessmentModule.template.metadataFields].reverse() } };
+  const baseline = JSON.stringify(reversed);
+  const h = mount('MetadataForm', { module: reversed, busy: false, readOnly: false, onSave: async () => {} });
+  const tree = h.render(); const controls = nodes(tree, node => Boolean(node.props?.name));
+  assert.equal(controls[0].props.name, 'homeStarCommissioned'); assert.equal(controls[0].props.defaultChecked, true);
+  assert.equal(JSON.stringify(reversed), baseline);
+  const old = { ...assessmentModule, template: { ...assessmentModule.template, metadataFields: assessmentModule.template.metadataFields.filter(field => field.key !== 'homeStarCommissioned') } };
+  const legacy = mount('MetadataForm', { module: old, busy: false, readOnly: false, onSave: async () => {} });
+  assert.equal(input(legacy.render(), 'homeStarCommissioned'), undefined);
+});
+
+test('web shared building hot water updates wording and photo guidance immediately from the selected answers', () => {
+  const h = card('hot_water_2027_readiness', { hotWaterSupplyType: 'Individual unit' });
+  let tree = h.render(); assert.doesNotMatch(text(tree), /Is hot water supplied to this apartment\?/);
+  input(tree, 'hotWaterSupplyType').props.onChange({ target: { value: 'Shared building system' } });
+  tree = h.render(); assert.match(text(tree), /Is hot water supplied to this apartment\?/);
+  assert.match(text(tree), /Hot water supplied; shared plant not inspected/);
+  assert.match(text(tree), /apartment tap or shower/); assert.doesNotMatch(text(tree), /complete system data plate/);
+  input(tree, 'sharedHotWaterServiceStatus').props.onChange({ target: { value: 'Hot water supplied when checked' } });
+  tree = h.render(); assert.match(text(tree), /Hot water supplied; shared plant not inspected/);
+  assert.equal(input(tree, 'limitationStatus'), undefined); assert.equal(input(tree, 'limitationReason'), undefined);
+  assert.ok(input(tree, 'sharedHotWaterLimitation'));
 });
 
 test("web working cooling asks for canonical operating evidence and shows the actual guidance", () => {

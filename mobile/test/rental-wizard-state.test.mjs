@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import { rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationBlockers, rentalSharedObservationResponse, rentalObservationFieldIsVisible } from '../../src/lib/rental-quotation.mjs';
-import { rentalAssessorEvidenceRequirement, rentalAssessorMetadataField, rentalAssessorOutcomePatch } from '../../src/lib/rental-assessor-workflow.mjs';
+import { rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorMetadataField, rentalAssessorOutcomePatch } from '../../src/lib/rental-assessor-workflow.mjs';
 import { RENTAL_ASSESSMENT_TEMPLATE_VERSION, rentalAssessmentTemplateSnapshot } from '../../src/lib/trade-rental-assessment.mjs';
 
 const code = ts.transpileModule(readFileSync(new URL('../src/lib/rental-inspection.ts', import.meta.url), 'utf8'), {
@@ -51,7 +51,7 @@ test('rental metadata inputs remain visible above the device keyboard', () => {
 });
 
 test('camera is available before an answer exists and metadata mutations use the server revision contract', () => {
-  const capture = source.slice(source.indexOf('async function capture()'), source.indexOf('async function updatePhoto'));
+  const capture = source.slice(source.indexOf('async function capture('), source.indexOf('async function updatePhoto'));
   assert.ok(capture.indexOf('observeLocation(true)') < capture.indexOf('await ImagePicker.launchCameraAsync'), 'GPS starts while the camera is open');
   assert.doesNotMatch(capture, /await locationCapture|await observeLocation/);
   assert.doesNotMatch(capture, /if \(!item\.id\)|if \(!draft\.item\.id\)/);
@@ -162,7 +162,7 @@ test('assessor screens use observable fields without requiring a trade specifica
 });
 
 test('editing one property answer retains only dirty fields, without hidden profile blockers', () => {
-  const implementation = source.slice(source.indexOf('  function changeAnswer('), source.indexOf('  async function capture()'));
+  const implementation = source.slice(source.indexOf('  function changeAnswer('), source.indexOf('  async function capture('));
   const compiled = ts.transpileModule(`export ${implementation.trim()}`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
@@ -235,15 +235,30 @@ test('queued read-only answers advance and compact controls use numeric keyboard
   } }).outputText;
   const element = (type, props) => ({ type, props });
   const environment = { require: () => ({ jsx: element, jsxs: element }),
-    View: 'View', Text: 'Text', TextInput: 'TextInput', FieldSelect: 'FieldSelect', styles: {} };
+    View: 'View', Text: 'Text', TextInput: 'TextInput', FieldSelect: 'FieldSelect', styles: {}, Platform: { OS: 'android' } };
   const render = new Function('environment', 'with(environment) { const exports = {}; ' + compiled + '; return exports.RentalObservationInput; }')(environment);
-  for (const [key, keyboardType, inputMode] of [['joistClearWidthMm', 'number-pad', 'numeric'], ['areaSquareMetres', 'decimal-pad', 'decimal']]) {
+  for (const [os, key, keyboardType, inputMode] of [['android', 'joistClearWidthMm', 'number-pad', 'numeric'], ['android', 'areaSquareMetres', 'decimal-pad', 'decimal'], ['ios', 'joistClearWidthMm', 'number-pad', 'numeric'], ['ios', 'areaSquareMetres', 'numbers-and-punctuation', undefined]]) {
+    environment.Platform.OS = os;
     const field = rentalAssessorFields({ key: 'ceiling_2027_readiness' }).find((entry) => entry.key === key);
-    const rendered = render({ field, value: '', editable: true, onChange() {} });
+    let changed;
+    const rendered = render({ field, value: '', editable: true, onChange(value) { changed = value; } });
     const input = rendered.props.children.find((entry) => entry.type === 'TextInput');
     assert.equal(input.props.keyboardType, keyboardType);
     assert.equal(input.props.inputMode, inputMode);
     assert.equal(input.props.multiline, false);
+    input.props.onChangeText('15,2'); assert.equal(changed, key === 'areaSquareMetres' ? '15.2' : '15,2');
+    if (key === 'areaSquareMetres') {
+      for (const [value, expected] of [['15,', '15.'], [',5', '.5'], ['15.2', '15.2'], ['1,2,3', '1,2,3'], ['1.2,3', '1.2,3'], ['-1,2', '-1,2']]) {
+        input.props.onChangeText(value); assert.equal(changed, expected);
+      }
+    }
+  }
+  let narrative;
+  const textField = render({ field: { input: 'textarea', label: 'Notes' }, value: '', editable: true, onChange(value) { narrative = value; } });
+  const note = textField.props.children.find(entry => entry.type === 'TextInput'); note.props.onChangeText('Gate, roof and unit');
+  assert.equal(narrative, 'Gate, roof and unit'); assert.equal(note.props.keyboardType, 'default'); assert.equal(note.props.inputMode, 'text');
+  for (const [key, value] of [['areaSquareMetres', '1,2,3'], ['areaSquareMetres', '1.2,3'], ['joistClearWidthMm', '450,5'], ['nonIc4DownlightCount', '2,5']]) {
+    assert.equal(rentalObservationNumberIsValid(value, key), false, key + ': ' + value);
   }
 });
 
@@ -392,6 +407,65 @@ test('the camera releases the form after durable photo storage while GPS remains
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(env.remembered[0], 'job'); assert.equal(env.remembered[1], retained.uri);
   assert.deepEqual(env.cacheRef.current.drafts, {}, 'Late GPS must not recreate a submitted draft');
+});
+
+test('insulation gallery selection retains its original and truthfully records upload-time metadata without camera access', async () => {
+  let resolveGps;
+  const gps = new Promise(resolve => { resolveGps = resolve; });
+  const files = new Set(['gallery.heic']);
+  class Directory { constructor() { this.uri = 'file:///document/rental-original-photos'; } async create() {} }
+  class File {
+    constructor(...parts) { this.uri = parts.map(part => part.uri || part).join('/'); }
+    get exists() { return files.has(this.uri); }
+    async copy(target) { files.add(target.uri); }
+    delete() { files.delete(this.uri); }
+  }
+  const env = { editable: true, draft: { photos: [] }, key: 'insulation', workOrderId: 'job',
+    active: { key: 'minimum_standards' }, check: { key: 'ceiling_2027_readiness' },
+    writes: [], cacheRef: { current: { drafts: {}, answers: {} } }, localOwner: { current: { key: 'owner', epoch: 1 } }, mounted: { current: true },
+    perform: async (name, action) => { assert.equal(name, 'gallery'); await action(); },
+    observeLocation: () => { env.gpsStarted = true; return gps; }, observedTime: () => ({ captureObservedAtUtc: '2026-10-08T08:00:00Z' }),
+    ImagePicker: { requestCameraPermissionsAsync() { assert.fail('Gallery does not need camera permission'); }, launchCameraAsync() { assert.fail('Gallery does not open the camera'); },
+      launchImageLibraryAsync: async options => { assert.equal(env.gpsStarted, undefined, 'GPS describes selection time, not time spent browsing the library');
+        assert.deepEqual(options, { mediaTypes: ['images'], allowsEditing: false, allowsMultipleSelection: false, quality: 1, exif: true });
+        return { canceled: false, assets: [{ uri: 'gallery.heic', width: 3000, height: 2000, mimeType: 'image/heic', exif: { DateTimeOriginal: '2025:01:01 00:00:00' } }] }; } },
+    Crypto: { randomUUID: () => 'gallery-photo-id' }, Directory, File, Paths: { document: 'file:///document' },
+    assertLocalDataOwner() {}, setCache() {}, persist: async cache => { env.writes.push(JSON.parse(JSON.stringify(cache))); },
+    rememberRentalPhotoLocation: async (...args) => { env.remembered = args; }, setError(message) { env.error = message; } };
+  await mountedHandler('capture', 'updatePhoto', env)(true);
+  const retained = env.writes[0].drafts.insulation.photos[0];
+  assert.equal(retained.source, 'native_file_upload'); assert.equal(retained.locationPending, true);
+  assert.equal(retained.capture.captureObservedAtUtc, '2026-10-08T08:00:00Z', 'EXIF date is never represented as the current observed upload time');
+  assert.ok(retained.uri.endsWith('.heic')); assert.ok(files.has(retained.uri));
+  env.cacheRef.current = { drafts: {}, answers: {} };
+  resolveGps({ permission: { granted: true }, location: { state: 'captured' } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(env.remembered[1], retained.uri); assert.deepEqual(env.cacheRef.current.drafts, {});
+});
+
+test('gallery cancellation and non-insulation calls never retain or queue a photo', async () => {
+  const env = { editable: true, draft: { photos: [] }, active: { key: 'minimum_standards' }, check: { key: 'ceiling_2027_readiness' },
+    perform: async (_name, run) => run(), ImagePicker: { launchImageLibraryAsync: async () => ({ canceled: true, assets: null }) },
+    observeLocation() { assert.fail('Canceled selection does not record a location'); }, persist() { assert.fail('Canceled selection has no draft mutation'); } };
+  await mountedHandler('capture', 'updatePhoto', env)(true);
+  env.check.key = 'cooling_2027_readiness'; env.perform = () => assert.fail('Gallery is limited to insulation');
+  await mountedHandler('capture', 'updatePhoto', env)(true);
+});
+
+test('native insulation exposes camera and gallery controls with the same edit and busy gates', () => {
+  const select = (node, ast) => ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.photo}>';
+  const env = { check: { key: 'ceiling_2027_readiness' }, photoRequirement: { minimumFiles: 1, minimumPhotos: 1 }, active: { key: 'minimum_standards' },
+    presentation: undefined,
+    styles: {}, editable: true, busy: '', evidence: [], draft: { photos: [] }, View: 'view', Text: 'text', Image: 'image', FieldButton: 'button',
+    capture(fromGallery) { env.called = fromGallery; } };
+  const button = label => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button' && renderedText(node) === label)[0];
+  assert.equal(button('Take photo').props.disabled, false); assert.equal(button('Upload from gallery').props.disabled, false);
+  button('Upload from gallery').props.onPress(); assert.equal(env.called, true);
+  for (const patch of [{ editable: false }, { busy: 'camera' }, { busy: 'gallery' }]) {
+    const old = Object.fromEntries(Object.keys(patch).map(key => [key, env[key]])); Object.assign(env, patch);
+    assert.equal(button('Take photo').props.disabled, true); assert.equal(button('Upload from gallery').props.disabled, true); Object.assign(env, old);
+  }
+  env.check.key = 'cooling_2027_readiness'; assert.equal(button('Upload from gallery'), undefined);
 });
 
 test('dwelling checks retain historical dimensions without asking for them again; fixed windows save their reason without typing', async () => {
@@ -621,6 +695,7 @@ test('native photo prompts reflect the corrected answer while previously capture
   const select = (node, ast) => ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.photo}>';
   const photo = { uri: 'saved.jpg', capture: { captureObservedAtUtc: '2026-10-08T00:00:00Z' }, mediaId: 'saved-media' };
   const env = { check, photoRequirement: rentalAssessorEvidenceRequirement(check, 'does_not_meet'), active: { key: 'minimum_standards' },
+    presentation: undefined,
     styles: {}, editable: true, busy: '', evidence: [], draft: { photos: [photo] }, View: 'view', Text: 'text', Image: 'image', FieldButton: 'button',
     capture() { assert.fail('Rendering does not capture or delete evidence'); }, refreshPhotoGps() {}, removePhoto() { assert.fail('Changing an answer never deletes a photo'); } };
   let tree = renderedNativeBranch(select, env); assert.match(renderedText(tree), /2.*photos required/); assert.match(renderedText(tree), /overview/);
@@ -643,19 +718,103 @@ test('native earlier records include retired property switchboard answers but ne
   assert.deepEqual(earlier, [old]); assert.equal(current.checkKey, 'outlet_lighting_protection');
 });
 
-test('the native HomeStar logo question is optional, starts off and only toggles on a deliberate press', () => {
+test('the native Home Star question is first, optional, defaults to No and changes only on a deliberate press', () => {
   const currentTemplate = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards;
   const declaration = source.slice(source.indexOf('  const metadata ='), source.indexOf('  const accessSuggestion ='));
   const active = { key: 'minimum_standards', template: currentTemplate };
   const metadata = new Function('environment', 'with(environment){' + ts.transpileModule(declaration + '\nreturn metadata;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + '}')({ active, observationsReady: false, rentalAssessorMetadataField });
   const field = metadata.find(entry => entry.key === 'homeStarCommissioned');
   assert.ok(field); assert.equal(field.type, 'checkbox'); assert.equal(field.required, false); assert.equal(field.phase, 'setup');
-  const env = { field, answers: {}, editable: true, busy: '', queuedMetadata: undefined, FieldButton: 'button',
+  assert.equal(metadata[0], field); assert.equal(field.label, 'Is this assessment commissioned by Home Star Upgrades?');
+  const env = { field, answers: {}, editable: true, busy: '', queuedMetadata: undefined, FieldButton: 'button', View: 'view', styles: {},
     changeAnswer(key, value) { env.answers[key] = value; } };
   const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === "field.type === 'checkbox'" && node.getText(ast).includes('changeAnswer(field.key');
-  let control = renderedNativeBranch(select, env); assert.equal(control.props.variant, 'secondary'); assert.match(renderedText(control), /I confirm/); assert.equal(env.answers.homeStarCommissioned, undefined);
-  control.props.onPress(); assert.equal(env.answers.homeStarCommissioned, true);
-  control = renderedNativeBranch(select, env); assert.equal(control.props.variant, 'primary'); control.props.onPress(); assert.equal(env.answers.homeStarCommissioned, false);
+  const buttons = () => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button');
+  assert.deepEqual(buttons().map(renderedText), ['Yes', 'No']); assert.equal(buttons()[0].props.variant, 'secondary'); assert.equal(buttons()[1].props.variant, 'primary');
+  assert.equal(env.answers.homeStarCommissioned, undefined, 'Opening the prompt does not edit the saved assessment');
+  buttons()[0].props.onPress(); assert.equal(env.answers.homeStarCommissioned, true); assert.equal(buttons()[0].props.variant, 'primary');
+  buttons()[1].props.onPress(); assert.equal(env.answers.homeStarCommissioned, false); assert.equal(buttons()[1].props.variant, 'primary');
+  env.busy = 'metadata'; assert.ok(buttons().every(button => button.props.disabled));
+});
+
+test('fresh native assessments open Home Star first once while saved answers, queues and drafts resume without interruption', () => {
+  const ast = ts.createSourceFile('rental-inspection-workflow.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  function visit(node) { if (ts.isVariableDeclaration(node) && node.name.getText(ast) === 'openInitialSetup') callback = node.initializer.arguments[0]; ts.forEachChild(node, visit); }
+  visit(ast); assert.ok(callback);
+  const helpers = source.slice(source.indexOf('const emptyCache'), source.indexOf('function RentalTextField'));
+  const compiled = ts.transpileModule(helpers + '\nexport const initialize = ' + callback.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const evaluate = env => new Function('environment', 'with(environment){const exports={};' + compiled + ';return exports.initialize(data, records);}')(env);
+  const template = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards;
+  const baseline = JSON.stringify(template);
+  const assessmentModule = { id: 'module', key: 'minimum_standards', template, answers: {}, status: 'not_started' };
+  const prefix = ['module', template.assessmentScope || 'legacy', template.templateVersion || 1].join(':') + ':';
+  const fresh = () => {
+    const env = { selectedModuleId: { current: '' }, promptedModules: { current: new Set() },
+      data: { modules: [assessmentModule], items: [], permissions: { canEdit: true } }, records: [], cacheRef: { current: { drafts: {}, answers: {} } }, calls: [],
+      setFirstSetupModuleId(value) { env.calls.push(['first', value]); }, setMetadataIndex(value) { env.calls.push(['index', value]); }, setPage(value) { env.calls.push(['page', value]); } };
+    return env;
+  };
+  const env = fresh(); evaluate(env); assert.deepEqual(env.calls, [['first', 'module'], ['index', 0], ['page', 'metadata']]);
+  evaluate(env); assert.equal(env.calls.length, 3, 'Navigation or refresh never repeats the initial prompt');
+  for (const patch of [{ module: { answers: { homeStarCommissioned: true } } }, { module: { answers: { homeStarCommissioned: false } } },
+    { items: [{ moduleId: 'module' }] }, { drafts: { [prefix + 'lighting:0:property']: { photos: ['retained'] } } },
+    { records: [{ module: { id: 'module' }, status: 'queued' }] }, { answers: { module: { tenancyStartDate: '2026-10-08' } } },
+    { module: { template: { ...template, metadataFields: template.metadataFields.filter(field => field.key !== 'homeStarCommissioned') } } },
+    { permissions: { canEdit: false } }, { module: { status: 'complete' } }]) {
+    const saved = fresh(); Object.assign(saved.data, { modules: [{ ...assessmentModule, ...patch.module }] }, patch.items && { items: patch.items }, patch.permissions && { permissions: patch.permissions });
+    if (patch.drafts) saved.cacheRef.current.drafts = patch.drafts;
+    if (patch.answers) saved.cacheRef.current.answers = patch.answers;
+    if (patch.records) saved.records = patch.records;
+    evaluate(saved); assert.deepEqual(saved.calls, [], JSON.stringify(patch));
+  }
+  assert.equal(JSON.stringify(template), baseline, 'No existing frozen template is modified to introduce the prompt');
+  assert.match(source, /applyResult\(result\); openInitialSetup\(result, saved.records\)/, 'Initial routing occurs in the completed load callback');
+});
+
+test('the first native Home Star choice uses durable metadata saving then opens observations without clearing other drafts', async () => {
+  for (const choice of [undefined, false, true]) {
+    let release;
+    const storage = new Promise(resolve => { release = resolve; });
+    const env = { active: { id: 'module', revision: 7 }, field: { key: 'homeStarCommissioned', type: 'checkbox', required: false }, firstSetupModuleId: 'module', queuedMetadata: undefined,
+      answers: choice === undefined ? {} : { homeStarCommissioned: choice }, metadataIndex: 0, metadata: [{ key: 'homeStarCommissioned' }, { key: 'tenancyStartDate' }],
+      propertySteps: [{ section: { key: 'electrical' }, checkIndex: 0 }], workOrderId: 'job',
+      cacheRef: { current: { drafts: { retained: { photos: ['original'] } }, answers: { module: { tenancyStartDate: '2026-10-08', ...(choice === undefined ? {} : { homeStarCommissioned: choice }) } } } },
+      perform: async (_name, run) => run(), enqueueRentalSave: async input => { env.sent = input; await storage; return { id: 'saved' }; },
+      setSaves() {}, setCache() {}, persist: async () => {}, setFirstSetupModuleId(value) { env.firstSetupModuleId = value; },
+      openCheck(section, index) { env.opened = [section.key, index]; }, setPage() { assert.fail('The first question advances to the first observation'); }, setMetadataIndex() { assert.fail('Do not ask every property detail before observations'); } };
+    const saving = mountedHandler('saveMetadata', 'reviewQueuedAnswer', env)(); await Promise.resolve();
+    assert.equal(env.opened, undefined); assert.equal(env.firstSetupModuleId, 'module');
+    release(); await saving;
+    assert.deepEqual(env.sent.body, { action: 'save_module_answers', moduleId: 'module', expectedRevision: 7, answers: { homeStarCommissioned: choice === true } });
+    assert.equal(env.firstSetupModuleId, ''); assert.deepEqual(env.opened, ['electrical', 0]);
+    assert.deepEqual(env.cacheRef.current.drafts, { retained: { photos: ['original'] } });
+    assert.deepEqual(env.cacheRef.current.answers.module, { tenancyStartDate: '2026-10-08' });
+  }
+});
+
+test('completing native observations proceeds to the next metadata field without asking Home Star again', () => {
+  const env = { active: { key: 'minimum_standards' }, section: { key: 'last' }, check: { key: 'last-check' }, cursor: { checkIndex: 0 }, editable: true,
+    propertySteps: [{ section: { key: 'last' }, checkIndex: 0 }], metadata: [{ key: 'homeStarCommissioned' }, { key: 'tenancyStartDate' }],
+    setMetadataIndex(value) { env.index = value; }, setPage(value) { env.page = value; } };
+  mountedHandler('advanceQuestion', 'changeAnswer', env)(); assert.equal(env.index, 1); assert.equal(env.page, 'metadata');
+});
+
+test('native shared hot water uses current response for apartment wording, save requirements and retained photo guidance', async () => {
+  const template = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards;
+  const check = template.sections.flatMap(section => section.checks).find(entry => entry.key === 'hot_water_2027_readiness');
+  const response = { hotWaterSupplyType: 'Shared building system', sharedHotWaterServiceStatus: 'Hot water supplied when checked', sharedHotWaterLimitation: 'Shared plant locked; request manager access' };
+  const declaration = source.slice(source.indexOf('  const presentation ='), source.indexOf('  const sharedObservation ='));
+  const env = { check, active: { key: 'minimum_standards', template }, baseDraft: { outcome: 'meets', response }, rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement };
+  const current = new Function('environment', 'with(environment){' + ts.transpileModule(declaration + '\nreturn {presentation, photoRequirement};', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + '}')(env);
+  assert.equal(current.presentation.prompt, 'Is hot water supplied to this apartment?');
+  assert.match(current.photoRequirement.reason, /apartment tap or shower/);
+  const select = (node, ast) => ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.photo}>';
+  const tree = renderedNativeBranch(select, { check, ...current, active: env.active, styles: {}, editable: true, busy: '', evidence: [], draft: { photos: [] }, View: 'view', Text: 'text', FieldButton: 'button' });
+  assert.match(renderedText(tree), /apartment tap or shower/); assert.doesNotMatch(renderedText(tree), /complete system data plate/);
+  const save = saveEnvironment(); save.active = { id: 'module', revision: 1, key: 'minimum_standards', template }; save.check = check; save.draft.response = response;
+  save.enqueueRentalSave = async input => { save.sent = input; return { id: 'saved' }; }; save.advanceQuestion = () => {};
+  await mountedSaveAnswer(save)(); assert.deepEqual(save.sent.body.response, response);
 });
 
 test('a real unsaved answer stays on review with an actionable message instead of bouncing to sections', async () => {

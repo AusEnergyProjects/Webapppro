@@ -24,7 +24,8 @@ test("version four adds default-off HomeStar setup and quote capture through exp
   for (const checkKey of ["main_living_heater", "heating_2027_readiness", "cooktop_function", "hot_water_2027_readiness", "artificial_lighting"]) {
     const old = rentalAssessorFields({ key: checkKey }, { templateVersion: 3 });
     const current = rentalAssessorFields({ key: checkKey }, { templateVersion: 4 });
-    assert.ok(!old.some((entry) => entry.captureVersion === 4));
+    const cableKeys = ["cableMeasurementStatus", "hotWaterCableRunMetres", "airconTotalCableMetres", "cooktopCableRunMetres", "cableRouteBasis", "cableLimitationReason"];
+    assert.ok(old.filter((entry) => entry.captureVersion === 4).every((entry) => cableKeys.includes(entry.key)), "Only quoting cable controls become available in earlier active editors");
     assert.ok(current.some((entry) => entry.captureVersion === 4));
     assert.deepEqual(rentalObservationBlockers({ checkKey, outcome: "meets", response: {}, enforceQuoteCapture: false }), [], "Earlier snapshots retain their completion contract");
   }
@@ -32,11 +33,15 @@ test("version four adds default-off HomeStar setup and quote capture through exp
 });
 
 test("appliance cable capture records metres and route even for working equipment", () => {
-  for (const [checkKey, lengthKey] of [["hot_water_2027_readiness", "hotWaterCableRunMetres"], ["heating_2027_readiness", "airconTotalCableMetres"], ["cooktop_function", "cooktopCableRunMetres"]]) {
+  for (const [checkKey, lengthKey, appliance, reportLabel] of [["hot_water_2027_readiness", "hotWaterCableRunMetres", "hot-water system", "Hot-water system to switchboard cable run"], ["heating_2027_readiness", "airconTotalCableMetres", "RCAC", "RCAC to switchboard cable run"], ["cooktop_function", "cooktopCableRunMetres", "cooktop", "Cooktop to switchboard cable run"], ["main_living_heater", "airconTotalCableMetres", "RCAC", "RCAC to switchboard cable run"]]) {
     const fields = rentalObservationFields(checkKey);
-    assert.deepEqual(rentalObservationBlockers({ checkKey, outcome: "meets", response: {}, enforceQuoteCapture: true }), [], "A working appliance does not require replacement cabling measurements");
+    assert.match(rentalObservationBlockers({ checkKey, outcome: "meets", response: {}, enforceQuoteCapture: true }).join(" "), /cable length was measured/, "Version-four quoting capture does not skip working appliances");
     assert.match(rentalObservationBlockers({ checkKey, outcome: "does_not_meet", response: { measurement: "Existing installation photographed" }, enforceQuoteCapture: true }).join(" "), /cable length was measured/);
     assert.equal(fields.find((entry) => entry.key === lengthKey).unit, "m");
+    assert.equal(fields.find((entry) => entry.key === lengthKey).label, `How far is the cable run from the ${appliance} to the switchboard?`);
+    assert.equal(fields.find((entry) => entry.key === "cableMeasurementStatus").label, `Can you measure or estimate the cable run from the ${appliance} to the switchboard?`);
+    assert.equal(fields.find((entry) => entry.key === "cableRouteBasis").label, "Where would the cable run?");
+    assert.equal(rentalObservationResponseLabel(lengthKey), `${reportLabel} (m)`);
     const response = { cableMeasurementStatus: "Measured", [lengthKey]: "12.5", cableRouteBasis: "Switchboard through accessible roof route, including a 2m drop" };
     assert.ok(fields.filter((entry) => entry.key === lengthKey || entry.key === "cableRouteBasis").every((entry) => quotationModule.rentalObservationFieldIsVisible(entry, { outcome: "meets", response })));
     for (const cableMeasurementStatus of ["Measured", "Estimated"]) {
@@ -50,10 +55,35 @@ test("appliance cable capture records metres and route even for working equipmen
   assert.match(rentalObservationBlockers({ checkKey: "main_living_heater", outcome: "meets", response: { applianceType: "Gas heater" }, enforceQuoteCapture: true }).join(" "), /cable length was measured/);
 });
 
+test("working gas and non-gas appliances require quote capture without guessing the cooktop fuel", () => {
+  for (const [checkKey, types] of [["hot_water_2027_readiness", ["Gas storage", "Instant gas", "Heat pump", "Electric storage", "Unknown"]], ["main_living_heater", ["Gas heater", "Split system", "Unknown"]], ["heating_2027_readiness", ["Gas heater", "Split system", "Unknown"]], ["cooktop_function", [undefined]]]) {
+    for (const applianceType of types) {
+      const response = applianceType ? { applianceType } : {};
+      assert.match(rentalObservationBlockers({ checkKey, outcome: "meets", response, enforceQuoteCapture: true }).join(" "), /cable length was measured/);
+      for (const outcome of ["not_assessed", "not_applicable"]) assert.deepEqual(rentalObservationBlockers({ checkKey, outcome, response, enforceQuoteCapture: true }), []);
+    }
+  }
+  assert.ok(!rentalObservationFields("cooktop_function").some(field => field.key === "applianceType"), "No new fuel assumption or question is introduced");
+});
+
+test("older active editors show all cable controls without changing their frozen templates or requiring new answers", () => {
+  const frozen = { key: "minimum_standards", templateVersion: 3, metadataFields: [], sections: [{ key: "kitchen", checks: [{ key: "cooktop_function", required: true, repeatBy: "property", requiredEvidenceCount: 0, responseFields: [] }] }] };
+  const before = structuredClone(frozen);
+  for (const version of [1, 2, 3]) for (const [checkKey, lengthKey] of [["cooktop_function", "cooktopCableRunMetres"], ["hot_water_2027_readiness", "hotWaterCableRunMetres"], ["heating_2027_readiness", "airconTotalCableMetres"], ["main_living_heater", "airconTotalCableMetres"]]) {
+    const controls = rentalAssessorFields({ key: checkKey }, { templateVersion: version });
+    assert.ok(["cableMeasurementStatus", lengthKey, "cableRouteBasis", "cableLimitationReason"].every(key => controls.some(field => field.key === key)), `${checkKey} v${version}`);
+    assert.deepEqual(rentalObservationBlockers({ checkKey, outcome: "meets", response: {}, enforceQuoteCapture: false }), []);
+  }
+  const result = rentalAssessmentCompletion({ moduleTemplate: frozen, items: [{ id: "cooktop", checkKey: "cooktop_function", sectionKey: "kitchen", instanceKey: "property", outcome: "meets", responseJson: "{}" }], answers: {} });
+  assert.equal(result.complete, true, JSON.stringify(result.blockers));
+  assert.deepEqual(frozen, before, "Rendering current controls and checking completion do not rewrite an earlier frozen template");
+});
+
 test("non-IC4 counts are actual whole counts and unknown status does not infer zero", () => {
   const input = { checkKey: "artificial_lighting", outcome: "meets", enforceQuoteCapture: true };
   for (const nonIc4DownlightCount of [0, "0", 7, "7", String(Number.MAX_SAFE_INTEGER)]) {
     assert.equal(quotationModule.rentalObservationNumberIsValid(nonIc4DownlightCount, "nonIc4DownlightCount"), true);
+    assert.deepEqual(rentalObservationBlockers({ ...input, response: { downlightCountStatus: "Counted", nonIc4DownlightCount } }), [], "A confirmed count does not need an extra free-text evidence answer");
     assert.deepEqual(rentalObservationBlockers({ ...input, response: { downlightCountStatus: "Counted", nonIc4DownlightCount, downlightEvidence: "Readable non-IC4 labels; photo references recorded" } }), []);
   }
   for (const value of [-1, "-1", 1.5, "1.0", "1e3", "1,000", Number.MAX_SAFE_INTEGER + 1, true, {}, []]) assert.equal(quotationModule.rentalObservationNumberIsValid(value, "nonIc4DownlightCount"), false, JSON.stringify(value));
@@ -67,6 +97,17 @@ test("non-IC4 counts are actual whole counts and unknown status does not infer z
     assert.equal(response.nonIc4DownlightCount, "7", "Earlier data is retained without being an active count");
   }
   assert.deepEqual(rentalObservationBlockers({ ...input, response: { downlightCountStatus: "No downlights" } }), []);
+});
+
+test("downlight evidence text is retired while count controls and the existing photo guidance remain", () => {
+  const fields = rentalAssessorFields({ key: "artificial_lighting" }, { templateVersion: 4 });
+  assert.equal(fields.find((field) => field.key === "downlightEvidence").legacy, true);
+  assert.ok(fields.filter((field) => !field.legacy).some((field) => field.key === "downlightCountStatus"));
+  assert.ok(fields.filter((field) => !field.legacy).some((field) => field.key === "nonIc4DownlightCount"));
+  const template = rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+  const check = template.sections.flatMap((section) => section.checks).find((check) => check.key === "artificial_lighting");
+  assert.match(check.photoGuidance, /light off.*on/);
+  assert.ok(workflowModule.rentalAssessorEvidenceRequirement(check, "does_not_meet").minimumPhotos > 0);
 });
 
 test("correcting a conditional selection hides inactive answers without deleting them or using them to complete", () => {
@@ -117,15 +158,39 @@ test("rating status, stars, climate zone, evidence and unavailable reason no lon
   assert.deepEqual(rentalObservationBlockers({ checkKey: "heater_efficiency", outcome: "meets", response: gas, enforceQuoteCapture: true }), []);
 });
 
-test("shared building hot water records apartment supply without requiring unseen plant dimensions or passing it", () => {
-  const response = { hotWaterSupplyType: "Shared building system", sharedHotWaterServiceStatus: "Hot water supplied when checked", sharedHotWaterLimitation: "Building plant not inspected; request building manager information", widthMm: "old", hotWaterCableRunMetres: "old", cableMeasurementStatus: "Measured" };
+test("working shared building hot water can complete its apartment supply observation without certifying the unseen plant", () => {
+  const response = { hotWaterSupplyType: "Shared building system", sharedHotWaterServiceStatus: "Hot water supplied when checked", sharedHotWaterLimitation: "Building plant not inspected; request building manager information", widthMm: "old", hotWaterCableRunMetres: "old", cableMeasurementStatus: "Measured", limitationStatus: "Other", limitationReason: "Earlier generic limitation" };
   const input = { checkKey: "hot_water_2027_readiness", outcome: "specialist_verification_required", response, enforceQuoteCapture: true };
   assert.deepEqual(rentalObservationBlockers(input), []);
   const projection = quotationModule.rentalObservationResponseProjection(input.checkKey, input.outcome, response);
   assert.equal(Object.hasOwn(projection.response, "hotWaterCableRunMetres"), false);
   assert.equal(projection.retainedResponse.hotWaterCableRunMetres, "old");
-  assert.match(rentalObservationBlockers({ ...input, outcome: "meets" }).join(" "), /does not verify/);
+  assert.equal(Object.hasOwn(projection.response, "limitationStatus"), false);
+  assert.equal(Object.hasOwn(projection.response, "limitationReason"), false);
+  assert.equal(projection.retainedResponse.limitationStatus, "Other");
+  assert.equal(projection.retainedResponse.limitationReason, "Earlier generic limitation");
+  assert.deepEqual(rentalObservationBlockers({ ...input, outcome: "meets" }), []);
   assert.match(rentalObservationBlockers({ ...input, response: { ...response, sharedHotWaterLimitation: "" } }).join(" "), /not inspected/);
+  const visible = rentalAssessorFields({ key: input.checkKey }, { templateVersion: 4 }).filter((field) => quotationModule.rentalObservationFieldIsVisible(field, { outcome: "meets", response }));
+  for (const key of ["applianceType", "model", "serialNumber", "widthMm", "heightMm", "accessWidthMm", "accessStatus", "cableMeasurementStatus", "hotWaterCableRunMetres", "cableRouteBasis", "limitationStatus", "limitationReason"]) {
+    assert.ok(!visible.some((field) => field.key === key), `An inaccessible shared plant does not request ${key}`);
+  }
+  for (const key of ["hotWaterSupplyType", "sharedHotWaterServiceStatus", "sharedHotWaterLimitation"]) assert.ok(visible.some((field) => field.key === key));
+  assert.equal(response.widthMm, "old", "Earlier equipment observations remain untouched but inactive");
+  const individualResponse = { ...response, hotWaterSupplyType: "Individual unit" };
+  const ordinaryLimits = rentalObservationFields(input.checkKey).filter((field) => ["limitationStatus", "limitationReason"].includes(field.key));
+  assert.ok(ordinaryLimits.every((field) => quotationModule.rentalObservationFieldIsVisible(field, { outcome: "meets", response: individualResponse })), "Individual units retain the original limitation controls");
+});
+
+test("shared hot-water completion rejects a supplied result when the apartment had no hot water or was not checked", () => {
+  const input = { checkKey: "hot_water_2027_readiness", outcome: "meets", enforceQuoteCapture: true };
+  const response = { hotWaterSupplyType: "Shared building system", sharedHotWaterLimitation: "Building plant not accessible" };
+  for (const [sharedHotWaterServiceStatus, outcome, message] of [["No hot water when checked", "does_not_meet", /needing action/], ["Not checked", "not_accessible", /could not be checked/]]) {
+    assert.match(rentalObservationBlockers({ ...input, response: { ...response, sharedHotWaterServiceStatus } }).join(" "), message);
+    assert.deepEqual(rentalObservationBlockers({ ...input, outcome, response: { ...response, sharedHotWaterServiceStatus } }), []);
+  }
+  for (const sharedHotWaterServiceStatus of [undefined, "Assumed supplied", ""]) assert.match(rentalObservationBlockers({ ...input, response: { ...response, sharedHotWaterServiceStatus } }).join(" "), /supply observed/);
+  assert.match(rentalObservationBlockers({ ...input, response: { ...response, sharedHotWaterServiceStatus: "Hot water supplied when checked", sharedHotWaterLimitation: " " } }).join(" "), /not inspected/);
 });
 
 test("older shower answers cannot hide uncaptured WELS and flow fields", () => {
@@ -344,6 +409,43 @@ test("shared defaults refuse other assets, rooms, instances, modules and conflic
   assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [source], currentResponse }).response, { ...currentResponse, applianceType: "Gas heater", serialNumber: "SERIAL-A" }, "An explicitly cleared current field stays cleared");
 });
 
+test("the same main heater shares its recorded RCAC cable run once without copying results or hiding uncaptured measurements", () => {
+  const target = { moduleId: "module", sectionKey: "heating", checkKey: "heating_2027_readiness", instanceKey: "property", locationLabel: "Property" };
+  const source = { ...target, checkKey: "main_living_heater", outcome: "meets", response: { applianceType: "Split system", model: "MODEL-A", serialNumber: "SERIAL-A", cableMeasurementStatus: "Measured", airconTotalCableMetres: 0, cableRouteBasis: "Switchboard beside unit; no additional cable run observed", credentialVerified: true, outcome: "meets" } };
+  const before = structuredClone(source);
+  const inherited = rentalSharedObservationResponse({ target, candidates: [source] });
+  assert.deepEqual(inherited.response, { applianceType: "Split system", model: "MODEL-A", serialNumber: "SERIAL-A", cableMeasurementStatus: "Measured", airconTotalCableMetres: 0, cableRouteBasis: "Switchboard beside unit; no additional cable run observed" });
+  assert.ok(["cableMeasurementStatus", "airconTotalCableMetres", "cableRouteBasis"].every(key => inherited.inheritedKeys.includes(key) && inherited.recordedKeys.includes(key)));
+  assert.ok(!inherited.recordedKeys.includes("cableLimitationReason"), "An unrecorded optional limitation is not claimed as captured");
+  assert.equal(Object.hasOwn(inherited.response, "outcome"), false);
+  assert.equal(Object.hasOwn(inherited.response, "credentialVerified"), false);
+  assert.deepEqual(source, before);
+  assert.deepEqual(rentalObservationBlockers({ checkKey: target.checkKey, outcome: "meets", response: inherited.response, enforceQuoteCapture: true }), []);
+  const blank = rentalSharedObservationResponse({ target, candidates: [{ ...source, response: { applianceType: "Split system", model: "MODEL-A" } }] });
+  for (const key of ["cableMeasurementStatus", "airconTotalCableMetres", "cableRouteBasis", "cableLimitationReason"]) assert.ok(!blank.recordedKeys.includes(key), "An earlier uncaptured cable field remains available to answer");
+  for (const checkKey of ["main_living_heater", "heating_2027_readiness"]) {
+    assert.ok(rentalObservationFields(checkKey).filter(field => ["cableMeasurementStatus", "airconTotalCableMetres", "cableRouteBasis", "cableLimitationReason"].includes(field.key)).every(field => field.shared === true && field.captureVersion === 4));
+  }
+  for (const checkKey of ["cooktop_function", "hot_water_2027_readiness"]) assert.ok(rentalObservationFields(checkKey).filter(field => ["cableMeasurementStatus", "cableRouteBasis", "cableLimitationReason"].includes(field.key)).every(field => field.shared !== true));
+});
+
+test("RCAC cable reuse retains identity boundaries and never overwrites a corrected current distance or explicit clear", () => {
+  const target = { moduleId: "module", checkKey: "heating_2027_readiness", instanceKey: "property", locationLabel: "Property" };
+  const source = { ...target, checkKey: "main_living_heater", outcome: "meets", response: { applianceType: "Split system", model: "MODEL-A", serialNumber: "SERIAL-A", cableMeasurementStatus: "Measured", airconTotalCableMetres: 12, cableRouteBasis: "Roof route" } };
+  for (const currentResponse of [{ model: "MODEL-B" }, { serialNumber: "SERIAL-B" }, { applianceType: "Gas heater" }]) assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [source], currentResponse }).response, currentResponse);
+  for (const changed of [{ moduleId: "other-module" }, { instanceKey: "other-heater" }, { locationLabel: "Bedroom" }, { checkKey: "cooling_2027_readiness" }, { checkKey: "cooktop_function" }, { checkKey: "hot_water_2027_readiness" }]) assert.deepEqual(rentalSharedObservationResponse({ target, candidates: [{ ...source, ...changed }] }).response, {}, JSON.stringify(changed));
+  const currentResponse = { model: "MODEL-A", cableMeasurementStatus: "Estimated", airconTotalCableMetres: 14, cableRouteBasis: "Corrected route through hallway" };
+  const corrected = rentalSharedObservationResponse({ target, candidates: [source], currentResponse });
+  assert.deepEqual(corrected.response, { ...currentResponse, applianceType: "Split system", serialNumber: "SERIAL-A" }, "A changed measurement does not suggest a different heater or revive an earlier length");
+  for (const key of ["cableMeasurementStatus", "airconTotalCableMetres", "cableRouteBasis"]) assert.ok(!corrected.inheritedKeys.includes(key));
+  const explicitlyCleared = rentalSharedObservationResponse({ target, candidates: [source], currentResponse: { airconTotalCableMetres: "", cableRouteBasis: "" } });
+  assert.equal(explicitlyCleared.response.airconTotalCableMetres, "");
+  assert.equal(explicitlyCleared.response.cableRouteBasis, "");
+  const latestCleared = rentalSharedObservationResponse({ target, candidates: [source, { ...source, response: { model: "MODEL-A", cableMeasurementStatus: "", airconTotalCableMetres: "", cableRouteBasis: "" } }] });
+  assert.equal(Object.hasOwn(latestCleared.response, "airconTotalCableMetres"), false, "The latest source clear never revives an older source distance");
+  assert.ok(!latestCleared.recordedKeys.includes("cableMeasurementStatus"));
+});
+
 test("latest queued or local shared capture supersedes older saved values without reviving blanks", () => {
   const target = { moduleId: "module", checkKey: "heater_efficiency", instanceKey: "property", locationLabel: "" };
   const source = { ...target, checkKey: "main_living_heater", outcome: "meets", response: { model: "OLD MODEL" } };
@@ -394,6 +496,10 @@ test("web markup uses compact controls and removes already captured equipment fi
   assert.match(future, /<input(?=[^>]*type="number")(?=[^>]*name="roomLengthMetres")[^>]*>/);
   assert.match(future, /Room length \(m\)/);
   assert.doesNotMatch(future, /<(?:input|select|textarea)[^>]*name="(?:model|serialNumber|applianceType|measurement)"/);
+  assert.match(future, /<select[^>]*name="cableMeasurementStatus"/, "An earlier heater identity without cable answers still asks for the first distance observation");
+  const recordedCable = render("heating_2027_readiness", [{ ...candidates[0], response: { ...candidates[0].response, cableMeasurementStatus: "Measured", airconTotalCableMetres: 0, cableRouteBasis: "Switchboard beside unit" } }]);
+  assert.doesNotMatch(recordedCable, /<(?:input|select|textarea)[^>]*name="(?:cableMeasurementStatus|airconTotalCableMetres|cableRouteBasis|cableLimitationReason)"/, "The recorded same-unit cable run is not asked for again at the future heating check");
+  assert.match(recordedCable, /Switchboard beside unit/);
   const ceilingSection = template.sections.find((entry) => entry.key === "ceiling_insulation");
   const ceiling = renderToStaticMarkup(React.createElement(record.exports.AssessmentItemCard, {
     ...props, section: ceilingSection, check: ceilingSection.checks[0],

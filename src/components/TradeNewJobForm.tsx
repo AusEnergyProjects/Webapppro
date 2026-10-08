@@ -5,7 +5,7 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import type { User } from "firebase/auth";
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { SearchableLookup, type SearchableLookupOption } from "./SearchableLookup";
-import type { TradeJobFormSelection } from "./TradeNewJobFormsPicker";
+import { tradeJobFormSelectionId, type TradeJobFormSelection, type TradeJobFormLibraryOption } from "@/lib/trade-job-form-library";
 import {
   AustralianAddressLookup,
   type AustralianAddressSuggestion,
@@ -30,7 +30,7 @@ import {
 } from "@/lib/trade-compliance-intent";
 
 const TradeScheduleWorkspace = recoverableTradeWorkspace(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace), false);
-const TradeNewJobFormsPicker = recoverableTradeWorkspace(() => import("./TradeNewJobFormsPicker").then((module) => module.TradeNewJobFormsPicker), false);
+const TradeJobFormLibrary = recoverableTradeWorkspace(() => import("./TradeJobFormLibrary").then((module) => module.TradeJobFormLibrary), false);
 
 type Template = { id: string; name: string; title: string; serviceCategory: string; priority: string; description: string; taskTitles: string[] };
 type Customer = { id: string; customerNumber: string; displayName: string; email: string; phone: string; suburb: string; postcode: string };
@@ -80,8 +80,8 @@ const serviceLabels: Record<string, string> = {
 };
 const appointmentLabels: Record<string, string> = { phone_call: "Phone call", site_visit: "Site visit", quote_review: "Quote review", installation: "Installation", service: "Service visit", admin: "Office task" };
 const buildingTypes = [["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]];
-const ordinarySteps = ["Work", "Customer", "Program", "Appointment", "Review"];
-const rentalInspectionSteps = ["Work", "Customer", "Inspection", "Appointment", "Review"];
+const ordinarySteps = ["Work", "Customer", "Forms", "Appointment", "Review"];
+const rentalInspectionSteps = ["Work", "Customer", "Forms", "Appointment", "Review"];
 const rentalInspectionModules: ReadonlyArray<{ key: RentalInspectionModule; label: string; help: string }> = [
   { key: "minimum_standards", label: "Rental minimum standards assessment", help: "Selected by default. Untick it when this job is only for separate safety checks." },
   { key: "electrical_safety_check", label: "Electrical safety check", help: "Adds the separate licensed electrical safety workflow." },
@@ -254,9 +254,10 @@ export function TradeNewJobForm({
     conflict: false,
   });
   const [plannedActivities, setPlannedActivities] = useState<PlannedComplianceActivity[]>([]);
-  const [selectedForms, setSelectedForms] = useState<TradeJobFormSelection[]>([]);
+  const [selectedForms, setSelectedForms] = useState<Extract<TradeJobFormSelection, { kind: "business" }>[]>([]);
   const [formPickerOpen, setFormPickerOpen] = useState(false);
-  const [selectedRentalInspectionModules, setSelectedRentalInspectionModules] = useState<RentalInspectionModule[]>(["minimum_standards"]);
+  const [selectedRentalInspectionModules, setSelectedRentalInspectionModules] = useState<RentalInspectionModule[]>(() => serviceCategory === "rental-inspection" ? ["minimum_standards"] : []);
+  const [attachPiesa, setAttachPiesa] = useState(false);
   const [activityDraftOpen, setActivityDraftOpen] = useState(false);
   const [draftClaimOutputCode, setDraftClaimOutputCode] = useState<ComplianceClaimOutputCode | "">("");
   const [draftProgramTemplateId, setDraftProgramTemplateId] = useState("");
@@ -315,6 +316,7 @@ export function TradeNewJobForm({
     if (!serviceCategories.has(value) || value === serviceCategory) return;
     setServiceCategory(value);
     setSelectedForms([]);
+    setAttachPiesa(false);
     setFormPickerOpen(false);
     setAssignableMembers(canChooseTeamAssignee ? teamMembers : selfMember ? [selfMember] : []);
     setAssigneeSearch("");
@@ -615,6 +617,39 @@ export function TradeNewJobForm({
   const legacyComplianceActivity = plannedActivities[0];
   const complianceActivitiesJson = JSON.stringify(plannedActivities);
   const rentalInspectionModulesJson = JSON.stringify(selectedRentalInspectionModules);
+  const allSelectedForms: TradeJobFormSelection[] = [
+    ...selectedForms,
+    ...selectedRentalInspectionModules.map(moduleKey => ({ kind: "rental" as const, moduleKey, name: rentalInspectionModules.find(module => module.key === moduleKey)?.label || moduleKey })),
+    ...plannedActivityDetails.map(({ selection, activity }) => ({ kind: "creditex" as const, ...selection, name: activity.title })),
+    ...(attachPiesa ? [{ kind: "piesa" as const, name: "Pre-installation electrical safety assessment (Insulation)" }] : []),
+  ];
+  function selectForm(option: TradeJobFormLibraryOption) {
+    if (busy || option.unavailableReason || option.added || allSelectedForms.some(item => tradeJobFormSelectionId(item) === option.id)) return;
+    const selection = option.selection;
+    if (selection.kind === "business") {
+      if (selectedForms.some(item => item.templateKey === selection.templateKey)) return;
+      if (selectedForms.length >= 20) { setMessage("Select up to 20 business forms during setup. More can be added to the saved job."); return; }
+      setSelectedForms(current => [...current, selection]);
+    } else if (selection.kind === "rental") setSelectedRentalInspectionModules(current => [...current, selection.moduleKey]);
+    else if (selection.kind === "piesa") setAttachPiesa(true);
+    else {
+      if (plannedActivities.length >= MAX_PLANNED_COMPLIANCE_ACTIVITIES) { setMessage("Select up to 12 Creditex activities during setup."); return; }
+      const variantId = activityRequiresPremisesVariant(selection.activityTemplateId) ? activityPremisesVariantId(selection.activityTemplateId, buildingType) : selection.variantId;
+      if (activityRequiresPremisesVariant(selection.activityTemplateId) && !variantId) { setMessage("Choose the building type before adding this activity form."); return; }
+      setPlannedActivities(current => [...current, { programTemplateId: selection.programTemplateId, activityTemplateId: selection.activityTemplateId, ...(variantId ? { variantId } : {}) }]);
+      if (!plannedActivities.length) { nonComplianceAppointmentType.current = appointmentType; setAppointmentType("installation"); }
+    }
+    setMessage(""); setHighestStep(current => Math.min(current, 3));
+  }
+  function removeForm(selection: TradeJobFormSelection) {
+    if (busy) return;
+    if (selection.kind === "business") setSelectedForms(current => current.filter(item => item.templateKey !== selection.templateKey));
+    else if (selection.kind === "rental") setSelectedRentalInspectionModules(current => current.filter(key => key !== selection.moduleKey));
+    else if (selection.kind === "piesa") setAttachPiesa(false);
+    else removePlannedActivity(selection);
+    setHighestStep(current => Math.min(current, 3));
+  }
+
   const steps = serviceCategory === "rental-inspection" ? rentalInspectionSteps : ordinarySteps;
 
   function toggleRentalInspectionModule(module: RentalInspectionModule) {
@@ -768,6 +803,7 @@ export function TradeNewJobForm({
     <input type="hidden" name="complianceIntentMode" value={complianceMode} />
     <input type="hidden" name="complianceActivitiesJson" value={complianceActivitiesJson} />
     <input type="hidden" name="rentalInspectionModulesJson" value={rentalInspectionModulesJson} />
+    <input type="hidden" name="attachVeuElectricalAssessment" value={String(attachPiesa)} />
     <input type="hidden" name="formSelectionsJson" value={JSON.stringify(selectedForms.map(({ templateKey, templateVersion }) => ({ templateKey, templateVersion })))} />
     <input type="hidden" name="programTemplateId" value={legacyComplianceActivity?.programTemplateId || ""} />
     <input type="hidden" name="activityTemplateId" value={legacyComplianceActivity?.activityTemplateId || ""} />
@@ -825,15 +861,15 @@ export function TradeNewJobForm({
           clearCompliancePlan();
         }} /></div>}
       </fieldset>}
-      <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(1)}>Back</button><button type="button" className="btn" disabled={checkingDuplicates || loadingSites} onClick={() => void continueFromCustomer()}>{checkingDuplicates ? "Checking customer..." : loadingSites ? "Loading customer..." : serviceCategory === "rental-inspection" ? "Choose inspection modules" : "Choose program"}</button></div>
+      <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(1)}>Back</button><button type="button" className="btn" disabled={checkingDuplicates || loadingSites} onClick={() => void continueFromCustomer()}>{checkingDuplicates ? "Checking customer..." : loadingSites ? "Loading customer..." : "Choose forms"}</button></div>
     </section>
 
-    <section data-step="3" hidden={step !== 3} className="crm-wizard-panel"><header><span>3 of 5</span><h3 tabIndex={-1}>{serviceCategory === "rental-inspection" ? "Choose the inspection modules" : "Choose the program, if relevant"}</h3><p>{serviceCategory === "rental-inspection" ? "Minimum standards are selected by default. Select or unselect any module, with at least one service required for the job." : "Add every government certificate, rebate or support activity planned for this job. The exact published rules remain authoritative."}</p></header>
+    <section data-step="3" hidden={step !== 3} className="crm-wizard-panel"><header><span>3 of 5</span><h3 tabIndex={-1}>{"Add forms and activities"}</h3><p>{"Search the form library to add rental assessments, Creditex activity forms and your business forms to this job."}</p></header>
       <div className="crm-wizard-actions crm-add-activity-action">
         {serviceCategory !== "rental-inspection" && !activityDraftOpen && plannedActivities.length < MAX_PLANNED_COMPLIANCE_ACTIVITIES && <button type="button" className="btn" onClick={beginActivityDraft}>Add activity</button>}
-        {canManageFieldEvidence && <button type="button" className="btn btn-secondary" disabled={busy} aria-expanded={formPickerOpen} onClick={() => setFormPickerOpen((value) => !value)}>{formPickerOpen ? "Close form library" : "Add form"}</button>}
+        {canManageFieldEvidence && <button type="button" className="btn btn-secondary" disabled={busy} aria-expanded={formPickerOpen} onClick={() => { resetActivityDraft(); setFormPickerOpen((value) => !value); }}>{formPickerOpen ? "Close form library" : "Add form"}</button>}
       </div>
-      {serviceCategory === "rental-inspection" ? <div className="crm-planned-activity-list" aria-label="Rental inspection modules">
+      {serviceCategory === "rental-inspection" ? !formPickerOpen && <div className="crm-planned-activity-list" aria-label="Rental inspection modules">
         <div className="crm-compliance-notice wide"><strong>One report for this visit</strong><p>Choose a visit bundle or select individual services below. Future annual visits remain separate.</p>
           {RENTAL_VISIT_PRESETS.map((preset) => <button key={preset.key} type="button" className="btn btn-secondary" onClick={() => setSelectedRentalInspectionModules([...preset.moduleKeys])}>{preset.label}</button>)}
         </div>
@@ -844,7 +880,7 @@ export function TradeNewJobForm({
         {!selectedRentalInspectionModules.length && <p className="crm-wizard-message" role="alert">Choose at least one inspection or safety-check service.</p>}
         <p className="crm-form-note">Every selected module remains a separate record and requires the appropriate qualified worker.</p>
       </div> : <>
-      {plannedActivityDetails.length > 0 && <div className="crm-planned-activity-list" aria-label="Planned government activities">
+      {!formPickerOpen && plannedActivityDetails.length > 0 && <div className="crm-planned-activity-list" aria-label="Planned government activities">
         {plannedActivityDetails.map(({ selection, program, activity, calculation }, index) => <article className="crm-compliance-notice crm-planned-activity-card" key={`${selection.programTemplateId}:${selection.activityTemplateId}`}>
           <div className="crm-inline-heading">
             <strong>Activity {index + 1} | {program.programCode} | {activity.registryActivityCode || activity.activityKey}</strong>
@@ -860,7 +896,7 @@ export function TradeNewJobForm({
           </dl>
         </article>)}
       </div>}
-      {!activityDraftOpen && plannedActivities.length === 0 && <div className="crm-compliance-notice">
+      {!formPickerOpen && !activityDraftOpen && plannedActivities.length === 0 && <div className="crm-compliance-notice">
         <strong>No government activity added</strong>
         <p>Continue to create an ordinary job, or add one or more activities for certificate, rebate or support review.</p>
       </div>}
@@ -887,13 +923,12 @@ export function TradeNewJobForm({
           <button type="button" className="btn" onClick={addPlannedActivity}>Add activity</button>
         </div>
       </div>}
-      {siteJurisdiction && claimOutputOptions.length === 0 && <div className="crm-wizard-message">No current or limited government certificate or support activity is listed for this state. You can create an ordinary job, but TLink will not invent an activity.</div>}
+      {!formPickerOpen && siteJurisdiction && claimOutputOptions.length === 0 && <div className="crm-wizard-message">No current or limited government certificate or support activity is listed for this state. You can create an ordinary job, but TLink will not invent an activity.</div>}
       </>}
-      {canManageFieldEvidence && (formPickerOpen || selectedForms.length > 0) && <section className="crm-compliance-notice" aria-label="Forms to add to the new job">
-        <strong>Job forms</strong>
-        <p>Add supporting forms or your business&apos;s published forms before creating the job.</p>
-        {selectedForms.length > 0 && <ul>{selectedForms.map((form) => <li key={`${form.templateKey}:${form.templateVersion}`}><span>{form.name} | Version {form.templateVersion}</span> <button type="button" className="crm-text-action" disabled={busy} onClick={() => setSelectedForms((current) => current.filter((item) => item.templateKey !== form.templateKey || item.templateVersion !== form.templateVersion))}>Remove {form.name}</button></li>)}</ul>}
-        {step === 3 && formPickerOpen && <TradeNewJobFormsPicker user={user} serviceCategory={serviceCategory} selections={selectedForms} disabled={busy} onChange={setSelectedForms} />}
+      {canManageFieldEvidence && (formPickerOpen || allSelectedForms.length > 0) && <section className="crm-compliance-notice" aria-label="Forms to add to the new job">
+        <strong>Selected job forms</strong>
+        {allSelectedForms.length > 0 && <ul>{allSelectedForms.map(form => <li key={tradeJobFormSelectionId(form)}><span>{form.name}{form.kind === "business" ? ` | Version ${form.templateVersion}` : ""}</span> <button type="button" className="crm-text-action" disabled={busy} onClick={() => removeForm(form)}>Remove {form.name}</button></li>)}</ul>}
+        {step === 3 && formPickerOpen && <TradeJobFormLibrary user={user} serviceCategory={serviceCategory} addressState={siteJurisdiction} buildingType={buildingType} selectedIds={allSelectedForms.map(tradeJobFormSelectionId)} disabled={busy} onSelect={selectForm} />}
       </section>}
       <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(2)}>Back</button><button type="button" className="btn" onClick={() => next(4)}>Set appointment</button></div>
     </section>
@@ -980,7 +1015,7 @@ export function TradeNewJobForm({
               <a href={program.officialSourceUrl} target="_blank" rel="noreferrer">Open {program.administeringBody} source</a>
             </article>)}</div>}
         </section>
-        {canManageFieldEvidence && <section><header><span>Job forms</span><button type="button" onClick={() => setStep(3)}>Edit</button></header>{selectedForms.length ? <ul>{selectedForms.map((form) => <li key={`${form.templateKey}:${form.templateVersion}`}>{form.name} | Version {form.templateVersion}</li>)}</ul> : <p>No supporting or business forms selected.</p>}</section>}
+        {canManageFieldEvidence && <section><header><span>Job forms</span><button type="button" onClick={() => setStep(3)}>Edit</button></header>{allSelectedForms.length ? <ul>{allSelectedForms.map(form => <li key={tradeJobFormSelectionId(form)}>{form.name}{form.kind === "business" ? ` | Version ${form.templateVersion}` : ""}</li>)}</ul> : <p>No forms selected.</p>}</section>}
         <section><header><span>Schedule and field handoff</span><button type="button" onClick={() => setStep(4)}>Edit</button></header><dl>
           <div><dt>Appointment</dt><dd>{appointmentLabels[appointmentType]}</dd></div>
           <div><dt>Date and time</dt><dd>{scheduledStart ? new Date(scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }) : "Not set"}</dd></div>

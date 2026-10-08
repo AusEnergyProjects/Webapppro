@@ -463,6 +463,40 @@ function photo() {
     location: { permission: { granted: true }, location: { state: 'captured', observedAtUtc: '2026-09-09T04:00:01Z', accuracyMetres: 10, mocked: false, latitude: -37, longitude: 144 } } };
 }
 
+test('gallery and camera evidence share durable upload/linking while their source remains truthful', async () => {
+  for (const source of ['native_file_upload', undefined]) {
+    const h = harness(), input = fixture().input;
+    input.photos = [{ ...photo(), ...(source ? { source } : {}) }];
+    await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+    const upload = h.state.calls.find(call => call.path === '/api/trade-field-work');
+    assert.ok(upload); const envelope = JSON.parse(upload.body.get('evidenceEnvelope'));
+    assert.equal(envelope.source, source || 'in_app_camera');
+    assert.equal(envelope.capture.captureObservedAtUtc, input.photos[0].capture.captureObservedAtUtc);
+    assert.equal(envelope.location.observedAtUtc, input.photos[0].location.location.observedAtUtc);
+    assert.equal(h.state.result.evidence.length, 1); assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  }
+});
+
+test('gallery cannot bypass accurate fresh GPS or the saved answer revision gate', async () => {
+  for (const change of [
+    value => { value.location = null; }, value => { value.location.location.mocked = true; },
+    value => { value.location.location.accuracyMetres = 101; }, value => { value.location.location.observedAtUtc = '2026-09-09T04:02:01Z'; },
+  ]) {
+    const h = harness(), input = fixture().input;
+    const selected = { ...photo(), source: 'native_file_upload' }; change(selected); input.photos = [selected];
+    await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+    assert.equal(h.state.calls.some(call => call.path === '/api/trade-field-work'), false);
+    assert.equal((await h.queue.getRentalSaveState('job-1')).conflicts, 1);
+  }
+  const h = harness(), input = fixture().input;
+  input.photos = [{ ...photo(), source: 'native_file_upload' }];
+  h.state.result.items.push({ ...input.baseItem, id: 'changed-item', revision: 3, outcome: 'does_not_meet', publicNotes: 'Changed elsewhere' });
+  await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal(h.state.calls.some(call => call.path === '/api/trade-field-work'), false);
+  assert.equal(h.state.result.items[0].publicNotes, 'Changed elsewhere');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).conflicts, 1);
+});
+
 const legacyCredentialMessage = 'The assigned assessor needs a current matching credential and supporting team document before this module can be completed.';
 function seedCredentialSave(h, extra = {}) {
   const input = fixture().input;

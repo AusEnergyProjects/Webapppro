@@ -93,6 +93,7 @@ export function rentalShowerAssessmentProjection({ moduleTemplate, items, findin
  * @returns {T & {phase:string,source:string}}
  */
 export function rentalAssessorMetadataField(field) {
+  if (field.key === "homeStarCommissioned") return { ...field, label: "Is this assessment commissioned by Home Star Upgrades?", phase: "setup", source: "assessment" };
   if (field.key === "inspectionDate") return { ...field, phase: "setup", source: "automatic" };
   if (["assessorName", "electricianName", "gasfitterName", "workerName", "licenceNumber", "qualificationType", "qualificationNumber"].includes(field.key)) {
     return { ...field, phase: "profile", source: "team_profile" };
@@ -140,12 +141,13 @@ const equipmentChecks = new Set([
   "heating_2027_readiness", "cooling_2027_readiness", "hot_water_2027_readiness", "shower_2027_readiness",
   "ceiling_2027_readiness", "doors_2027_readiness", "windows_2027_readiness", "vents_2027_readiness",
 ]);
+const sharedHotWaterPhotoGuidance = "Add a photo of the accessible apartment tap or shower used to check the hot-water supply. Record the supply you observed and why the shared plant was not inspected. A photo of the inaccessible building plant or its data plate is not required.";
 
 /** App evidence policy. Counts are not represented as statutory photo requirements.
- * @param {unknown} check @param {unknown} outcome
+ * @param {unknown} check @param {unknown} outcome @param {unknown} [response]
  * @returns {{minimumFiles:number, minimumPhotos:number, reason:string}}
  */
-export function rentalAssessorEvidenceRequirement(check, outcome) {
+export function rentalAssessorEvidenceRequirement(check, outcome, response) {
   const definition = record(check);
   const key = checkKey(check);
   if (Number(definition.requiredPdfCount || 0) > 0 && ["meets", "does_not_meet"].includes(outcome)) return { minimumFiles: Number(definition.requiredPdfCount), minimumPhotos: 0, reason: "Attach the complete authenticated professional PDF. A photo or a repair certificate alone does not replace this record." };
@@ -170,6 +172,10 @@ export function rentalAssessorEvidenceRequirement(check, outcome) {
   if (outcome === "not_accessible") return { minimumFiles: 0, minimumPhotos: 0, reason: "Describe what could not be reached and why. Add any safe supporting evidence available." };
   if (outcome === "specialist_verification_required" || outcome === "exemption_evidence_pending") return { minimumFiles: 0, minimumPhotos: 0, reason: "Record what is known and what needs verification. Attach any available photo or document; do not invent missing evidence." };
   if (outcome !== "meets" && outcome !== "not_applicable") return { minimumFiles: 0, minimumPhotos: 0, reason: "Choose an answer before adding supporting evidence." };
+  if (key === "hot_water_2027_readiness" && record(response).hotWaterSupplyType === "Shared building system" && outcome === "meets") return {
+    minimumFiles: Math.max(1, requiredFiles), minimumPhotos: 1,
+    reason: sharedHotWaterPhotoGuidance,
+  };
   if (specialist) return { minimumFiles: Math.max(1, requiredFiles), minimumPhotos: 0, reason: "Attach the test, service or verification record needed to support this result. A photo alone does not certify the result." };
   if (outcome === "not_applicable") return { minimumFiles: 0, minimumPhotos: 0, reason: "Explain why this check does not apply. No photo is required just to show an absent item." };
   if (ordinaryClearChecks.has(key)) return { minimumFiles: 0, minimumPhotos: 0, reason: "No photo is required for this clear observation. Add one if it would help explain the record." };
@@ -216,7 +222,8 @@ const presentation = {
 /** Plain labels preserve every stored outcome's direction and current/future distinction.
  * Existing legal help remains available wherever a short observation cannot state all criteria.
  * @param {unknown} check
- * @param {{assessmentScope?:unknown,outcome?:unknown,publicNotes?:unknown}} [options]
+ * @param {{assessmentScope?:unknown,outcome?:unknown,publicNotes?:unknown,response?:unknown}} [options]
+ * @returns {{prompt:string,help:string,phaseLabel:string,outcomeOptions:Array<{value:string,label:string}>,photoGuidance?:string}}
  */
 export function rentalAssessorCheckPresentation(check, options = {}) {
   const definition = record(check);
@@ -232,6 +239,20 @@ export function rentalAssessorCheckPresentation(check, options = {}) {
       { value: "not_accessible", label: "Could not inspect safely / no access" },
       { value: "not_applicable", label: "Does not apply" },
       ...(options.outcome === "exemption_evidence_pending" ? [{ value: "exemption_evidence_pending", label: "Exception evidence pending" }] : []),
+    ],
+  };
+  if (checkKey(check) === "hot_water_2027_readiness" && record(options.response).hotWaterSupplyType === "Shared building system") return {
+    prompt: "Is hot water supplied to this apartment?",
+    help: "Record the hot-water supply checked in this apartment and why the shared building plant was not inspected. This records the apartment supply; the plant's efficiency and future replacement requirements have not been assessed.",
+    phaseLabel: "Apartment hot-water supply",
+    photoGuidance: sharedHotWaterPhotoGuidance,
+    outcomeOptions: [
+      { value: "meets", label: "Hot water supplied; shared plant not inspected" },
+      { value: "does_not_meet", label: "No hot water supplied" },
+      { value: "specialist_verification_required", label: "Apartment supply needs checking" },
+      { value: "not_accessible", label: "Could not check apartment supply" },
+      { value: "not_applicable", label: "Does not apply" },
+      { value: "exemption_evidence_pending", label: "Possible exception; evidence needed" },
     ],
   };
   const wording = presentation[checkKey(check)];

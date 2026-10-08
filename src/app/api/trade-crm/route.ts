@@ -1,5 +1,5 @@
 import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
-import { assertTradeFormAttachmentAccess, initialTradeJobForms, TradeFormSelectionError, tradeFormAttachmentAccessGuard, tradeFormPublicationGuard } from "@/lib/trade-job-form-attachment-server";
+import { assertTradeFormAttachmentAccess, initialRentalAssessmentModules, initialTradeJobForms, initialVeuElectricalAssessmentSelection, TradeFormSelectionError, tradeFormAttachmentAccessGuard, tradeFormPublicationGuard } from "@/lib/trade-job-form-attachment-server";
 import { changeJobSalesOutcome, JobSalesOutcomeError, loadJobSalesOutcomes } from "@/lib/trade-job-sales-outcome-server";
 import { tradeJobNeedsSchedulingSql } from "@/lib/trade-job-scheduling-attention";
 import { canAccessCrewMember, crewScheduleMemberIds, crewMutationGuard } from "@/lib/trade-crews";
@@ -114,7 +114,6 @@ import {
 } from "@/lib/trade-schedule-server";
 import {
   RENTAL_INSPECTION_SERVICE_CATEGORY,
-  normalizeRentalAssessmentModules,
   normalizeRentalAssessmentScope,
   rentalInspectionServiceAddressAccepted,
   rentalAssessmentTemplateSnapshot,
@@ -2395,9 +2394,16 @@ export async function POST(request: Request) {
         || cleanAdminText(template?.service_category, 60);
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
       const initialForms = quickQuote ? [] : await initialTradeJobForms(body.formSelectionsJson, serviceCategory, identity.uid, db);
-      if (initialForms.length) await assertTradeFormAttachmentAccess(identity.access, db, true);
-      if (!quickQuote && !rentalInspectionServiceAddressAccepted(serviceCategory, serviceSite?.address_state)) {
+      const rentalModuleKeys = quickQuote ? [] : initialRentalAssessmentModules(body.rentalInspectionModulesJson, serviceCategory);
+      const attachVeuElectricalAssessment = !quickQuote && initialVeuElectricalAssessmentSelection(body.attachVeuElectricalAssessment);
+      if (initialForms.length || rentalModuleKeys.length || attachVeuElectricalAssessment) {
+        await assertTradeFormAttachmentAccess(identity.access, db, true);
+      }
+      if (!quickQuote && !rentalInspectionServiceAddressAccepted(rentalModuleKeys.length ? RENTAL_INSPECTION_SERVICE_CATEGORY : serviceCategory, serviceSite?.address_state)) {
         return adminJson({ ok: false, error: "Rental inspections require a Victorian service address." }, 400);
+      }
+      if (attachVeuElectricalAssessment && String(serviceSite?.address_state || "").toUpperCase() !== "VIC") {
+        return adminJson({ ok: false, error: "The insulation electrical safety assessment requires a Victorian service address." }, 400);
       }
       const displayName = createCustomer
         ? (businessName || `${firstName} ${lastName}`.trim())
@@ -2413,7 +2419,8 @@ export async function POST(request: Request) {
       const workNumber = await nextTlinkJobNumber(db, now);
       const requestedAssigneeMemberId = quickQuote ? "" : cleanAdminText(body.assigneeMemberId, 180);
       const assigneeMemberId = requestedAssigneeMemberId;
-      const requiredServiceCategories = [...new Set([serviceCategory, ...complianceIntents.map((intent) => intent.activity.serviceCategory)])];
+      const requiredServiceCategories = [...new Set([serviceCategory, ...complianceIntents.map((intent) => intent.activity.serviceCategory),
+        ...(rentalModuleKeys.length ? [RENTAL_INSPECTION_SERVICE_CATEGORY] : [])])];
       const trainingActivities = certificateActivityIds(complianceIntents.map((intent) => intent.activity.templateId));
       if (trainingActivities.length) await assertCertificateActivityEligibility(db, {
         ownerUid: identity.uid, actorMemberId: identity.memberId, assignedMemberId: assigneeMemberId,
@@ -2487,9 +2494,6 @@ export async function POST(request: Request) {
       );
       const recordStage = guided ? "scheduled" : "backlog";
       const pipelineStage = guided ? "scheduled" : "enquiry";
-      const rentalModuleKeys = !quickQuote && serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY
-        ? normalizeRentalAssessmentModules(body.rentalInspectionModulesJson)
-        : [];
       if (!quickQuote && serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY && !rentalModuleKeys.length) {
         return adminJson({ ok: false, error: "Choose at least one rental assessment or safety-check module." }, 400);
       }
@@ -2513,6 +2517,21 @@ export async function POST(request: Request) {
       const rentalInspectionId = rentalTemplate ? crypto.randomUUID() : "";
       const rentalInspectionNumber = rentalTemplate ? `RMS-${workNumber.replace(/^TLJ-/, "")}` : "";
       if (rentalTemplate) await ensureTradeRentalSchemaGuards(db);
+      const piesaDraft = attachVeuElectricalAssessment ? await (async () => {
+        const [{ createPiesaDraft }, { ensurePiesaSchemaGuards }] = await Promise.all([
+          import("@/lib/trade-veu-electrical-draft"), import("@/lib/trade-veu-electrical-schema-guards"),
+        ]);
+        await ensurePiesaSchemaGuards(db);
+        return createPiesaDraft({ id: crypto.randomUUID(), workOrderId, ownerUid: identity.uid, createdAt: now,
+          answers: {
+            job_reference: workNumber,
+            property_address: [serviceSite?.address_line_1, serviceSite?.address_line_2, serviceSite?.suburb,
+              serviceSite?.address_state, serviceSite?.postcode].filter(Boolean).join(", "),
+            owner_name: createCustomer ? [firstName, lastName].filter(Boolean).join(" ")
+              : [existingCustomer?.first_name, existingCustomer?.last_name].filter(Boolean).join(" "),
+          },
+        });
+      })() : null;
       const rentalPropertySnapshot = rentalTemplate ? JSON.stringify({
         schemaVersion: "tlink-rental-property-v1",
         customer: {
@@ -2579,6 +2598,20 @@ export async function POST(request: Request) {
               .bind(crypto.randomUUID(), workOrderId, identity.uid, `${formTemplate.name} started.`, now),
           ];
         }),
+        ...(rentalTemplate || piesaDraft ? (() => {
+          const actor = tradeFormAttachmentAccessGuard(identity.access, true);
+          return [creditexWriteGuard(db, identity.uid, actor.sql, actor.values)];
+        })() : []),
+        ...(piesaDraft ? [
+          (await import("@/lib/trade-veu-electrical-draft")).initialPiesaDraftStatement(db, piesaDraft, identity.access.actorUid),
+          db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+            VALUES (?, ?, ?, 'field_form_started', ?, ?)`)
+            .bind(crypto.randomUUID(), workOrderId, identity.uid, "Pre-installation electrical safety assessment (Insulation) started.", now),
+        ] : []),
+        ...(!guided && rentalTemplate && assigneeMemberId ? requiredServiceCategories.map((requiredCategory) => tradeCrmScheduleMemberGuardStatement(db, {
+          access: identity.access, ownerUid: identity.uid, memberId: assigneeMemberId,
+          serviceCategory: requiredCategory, changedAt: now, rentalGates, credentialDate,
+        })) : []),
         ...(guided ? [
           db.prepare(`INSERT INTO trade_crm_appointments
             (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id, assignee_label,
@@ -2770,13 +2803,52 @@ export async function POST(request: Request) {
         } catch {
           workPackBlockers = [{
             code: "work_pack_auto_open_failed",
-            message: "The job and appointment were saved, but the activity form could not be attached. Refresh the job before field work or ask Creditex to restore the governed form.",
+            message: "The job and appointment were saved, but the governed work pack could not be opened. Refresh the job before field work or ask Creditex to restore its governed setup.",
           }];
         }
       }
       const workPackReady = preparedComplianceIntents.length > 0
         && complianceWorkPacks.length === preparedComplianceIntents.length
         && complianceWorkPacks.every((item) => item.workPackReady);
+      const activityForms: { intentId: string; activityTemplateId: string; recordId: string;
+        recordNumber: string; formVersion: number; variantId: string }[] = [];
+      const activityFormBlockers: { activityTemplateId: string; code: string; message: string }[] = [];
+      if (preparedComplianceIntents.length) {
+        try {
+          const { openActivityRecord } = await import("@/lib/trade-activity-forms-server");
+          const selectedActivityIds = preparedComplianceIntents.map((prepared) => prepared.intent.activity.templateId);
+          const savedIntents = await db.prepare(`SELECT intent.id, intent.activity_template_id FROM trade_work_order_compliance_intents intent
+            JOIN trade_work_orders work ON work.id = intent.work_order_id AND work.firebase_uid = intent.installer_uid
+              AND work.record_status = 'active'
+            WHERE intent.work_order_id = ? AND intent.installer_uid = ? AND intent.status IN ('planned', 'case_linked')
+              AND intent.activity_template_id IN (SELECT value FROM json_each(?))`)
+            .bind(workOrderId, identity.uid, JSON.stringify(selectedActivityIds)).all<{ id: string; activity_template_id: string }>();
+          for (const prepared of preparedComplianceIntents) {
+            const activityTemplateId = prepared.intent.activity.templateId;
+            const saved = savedIntents.results.find((intent) => intent.activity_template_id === activityTemplateId);
+            if (!saved) {
+              activityFormBlockers.push({ activityTemplateId, code: "ACTIVITY_INTENT_NOT_ACTIVE",
+                message: "The job was saved, but this activity is no longer active. Refresh the job before opening its form." });
+              continue;
+            }
+            try {
+              const record = await openActivityRecord(identity.access, workOrderId, saved.id, prepared.intent.snapshot.activity.variantId || "");
+              activityForms.push({ intentId: saved.id, activityTemplateId, recordId: record.id, recordNumber: record.recordNumber,
+                formVersion: record.form.version, variantId: record.form.variantId });
+            } catch (error) {
+              const code = error instanceof CreditexComplianceError ? error.code
+                : error instanceof Error && /^[A-Z][A-Z0-9_]{0,99}$/.test(error.message) ? error.message : "ACTIVITY_FORM_OPEN_FAILED";
+              activityFormBlockers.push({ activityTemplateId, code,
+                message: "The job was saved, but its activity form could not be opened. Open the saved job to check the form and any training or access requirements." });
+            }
+          }
+        } catch {
+          for (const prepared of preparedComplianceIntents) activityFormBlockers.push({
+            activityTemplateId: prepared.intent.activity.templateId, code: "ACTIVITY_FORM_OPEN_FAILED",
+            message: "The job was saved, but its activity form could not be opened. Refresh the saved job before field work.",
+          });
+        }
+      }
       let calendarSynced = 0;
       let calendarFailed = 0;
       if (guided) {
@@ -2809,8 +2881,11 @@ export async function POST(request: Request) {
         complianceWorkPacks,
         workPackReady,
         workPackBlockers,
+        activityForms,
+        activityFormBlockers,
         rentalInspectionAttached: Boolean(rentalTemplate),
         rentalInspectionModuleCount: rentalModuleKeys.length,
+        veuElectricalAssessmentAttached: Boolean(piesaDraft),
         attachedFormCount: initialForms.length,
         calendarSynced, calendarFailed, calendarInvite, customerDocuments, quickQuote }, 201);
     }

@@ -779,8 +779,10 @@ export function rentalAssessmentCompletion(input) {
         }
         const evidenceSource = item.derived && item.evidenceSourceItemId ? items.find((source) => source.id === item.evidenceSourceItemId) : null;
         const evidenceCheck = evidenceSource ? rentalAssessmentCheck(moduleTemplate, evidenceSource.sectionKey, evidenceSource.checkKey)?.check || assessmentCheck : assessmentCheck;
+        const response = parsedObject(item.responseJson);
         const evidenceRequirement = rentalAssessorEvidenceRequirement({ ...evidenceCheck,
-          requiredEvidenceCount: Math.max(Number((evidenceSource || item).requiredEvidenceCount || 0), Number(evidenceCheck.requiredEvidenceCount || 0)) }, evidenceSource?.outcome || outcome);
+          requiredEvidenceCount: Math.max(Number((evidenceSource || item).requiredEvidenceCount || 0), Number(evidenceCheck.requiredEvidenceCount || 0)) }, evidenceSource?.outcome || outcome,
+        evidenceSource ? parsedObject(evidenceSource.responseJson) : response);
         const requiredEvidenceCount = evidenceRequirement.minimumFiles;
         const suppliedEvidenceCount = Math.max(0, Number(evidenceCounts[evidenceSource?.id || item.id] ?? evidenceCounts[evidenceSource?.itemKey || item.itemKey] ?? 0));
         if (suppliedEvidenceCount < requiredEvidenceCount) {
@@ -792,7 +794,6 @@ export function rentalAssessmentCompletion(input) {
         }
         if (Number(assessmentCheck.requiredPdfCount || 0) > 0 && ["meets", "does_not_meet"].includes(outcome)
           && Number(pdfCounts[item.id] || 0) < assessmentCheck.requiredPdfCount) blockers.push({ key: `document:${item.itemKey}`, label: `${itemLabel}: attach the complete professional PDF.` });
-        const response = parsedObject(item.responseJson);
         const finding = findings.find((candidate) => candidate?.itemId === item.id || candidate?.itemKey === item.itemKey);
         if (!item.derived && (finding || Number(moduleTemplate.templateVersion || 0) >= 4)) {
           for (const [index, message] of rentalObservationBlockers({ checkKey: assessmentCheck.key, outcome, response, finding,

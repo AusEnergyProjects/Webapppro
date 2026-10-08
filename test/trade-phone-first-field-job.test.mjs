@@ -68,10 +68,10 @@ test("new job uses structured sites, provider-neutral suggestions and manual fal
 
 test("guided intake removes manual titles and carries scheduling into the same flow", () => {
   assert.doesNotMatch(newJob, /name="title"|datalist|type your own|Appointment title/);
-  assert.match(newJob, /const ordinarySteps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
-  assert.match(newJob, /const rentalInspectionSteps = \["Work", "Customer", "Inspection", "Appointment", "Review"\]/);
+  assert.match(newJob, /const ordinarySteps = \["Work", "Customer", "Forms", "Appointment", "Review"\]/);
+  assert.match(newJob, /const rentalInspectionSteps = \["Work", "Customer", "Forms", "Appointment", "Review"\]/);
   assert.match(newJob, /const steps = serviceCategory === "rental-inspection" \? rentalInspectionSteps : ordinarySteps/);
-  for (const step of ["Choose the work", "Add or attach the customer", "Choose the program, if relevant", "Set the appointment", "Review and create"]) assert.match(newJob, new RegExp(step));
+  for (const step of ["Choose the work", "Add or attach the customer", "Add forms and activities", "Set the appointment", "Review and create"]) assert.match(newJob, new RegExp(step));
   assert.match(newJob, /name="buildingType"/);
   assert.match(newJob, /name="startsAt"/);
   assert.doesNotMatch(newJob, /More appointment options/);

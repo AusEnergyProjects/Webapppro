@@ -85,6 +85,12 @@ export function rentalReportSectionResult(section, options = {}) {
   const templateSections = section.readiness ? VIC_RENTAL_ENERGY_READINESS_TEMPLATE.modules.minimum_standards.sections : currentSections;
   const expected = options.moduleKey === "minimum_standards" ? templateSections.find((entry) => entry.key === section.key)?.checks || [] : [];
   if (expected.some((check) => check.required && !items.some((item) => item.checkKey === check.key))) return result("Partly assessed; see details", "caution");
+  if (section.readiness && items.some((item) => item.checkKey === "hot_water_2027_readiness"
+    && record(item.response).hotWaterSupplyType === "Shared building system")) {
+    const supplied = items.filter((item) => item.checkKey === "hot_water_2027_readiness")
+      .every((item) => record(item.response).sharedHotWaterServiceStatus === "Hot water supplied when checked");
+    return result(supplied ? "Apartment supply working; shared plant not assessed" : "Apartment supply unconfirmed; shared plant not assessed", supplied ? "good" : "caution");
+  }
   if (section.readiness) return result("Ready for assessed requirement", "good");
   if (["mould_damp", "structural_soundness"].includes(section.key)) return result("No issue observed", "good");
   return result("Meets assessed standard", "good");
@@ -152,6 +158,12 @@ export function rentalReportAnswerPresentation(value, options = {}) {
   const frozenChoice = Array.isArray(frozenOptions) ? frozenOptions.find((entry) => entry?.value === outcome) : undefined;
   const fallback = recordedOutcomes[outcome] || "Answer not recorded";
   let answer = typeof item.answerLabel === "string" ? item.answerLabel.trim() : "";
+  const sharedHotWater = key === "hot_water_2027_readiness" && response.hotWaterSupplyType === "Shared building system";
+  if (!answer && sharedHotWater && knownCheck && !item.historicalObservation) {
+    answer = outcome === "meets" && response.sharedHotWaterServiceStatus !== "Hot water supplied when checked"
+      ? "Apartment hot-water supply not confirmed"
+      : rentalAssessorCheckPresentation(check, { outcome, response }).outcomeOptions.find((choice) => choice.value === outcome)?.label || "";
+  }
   if (!answer && options.moduleKey === "minimum_standards" && ["showerhead_rating", "shower_2027_readiness"].includes(key)) {
     // The rating was the selected answer, not a second Yes/No compliance response.
     if (["meets", "does_not_meet"].includes(outcome)) {
@@ -165,7 +177,7 @@ export function rentalReportAnswerPresentation(value, options = {}) {
       ? "Fixed window; opening check does not apply" : "No openable windows";
   }
   if (!answer && knownCheck && !item.historicalObservation) {
-    answer = rentalAssessorCheckPresentation(check, { outcome }).outcomeOptions.find((choice) => choice.value === outcome)?.label || "";
+    answer = rentalAssessorCheckPresentation(check, { outcome, response }).outcomeOptions.find((choice) => choice.value === outcome)?.label || "";
     if (key === "ceiling_2027_readiness" && ["meets", "does_not_meet"].includes(outcome)) {
       const rating = RENTAL_OBSERVATION_SELECT_OPTIONS.insulationRating.find((choice) => choice.value === response.insulationRating);
       if (rating) answer += `; existing insulation: ${rating.label}`;
@@ -175,7 +187,8 @@ export function rentalReportAnswerPresentation(value, options = {}) {
   const readiness = rentalCheckIsReadiness({ ...record(check), ...item }, options.assessmentScope);
   const context = options.applicabilityLimitation && options.moduleKey === "minimum_standards"
     ? "Legal applicability unconfirmed"
-    : readiness && outcome === "meets" ? "Ready for the recorded requirement"
+    : sharedHotWater && outcome === "meets" ? "Shared building plant not assessed"
+      : readiness && outcome === "meets" ? "Ready for the recorded requirement"
       : readiness && outcome === "does_not_meet" ? "Upgrade planning required" : "";
   return { label: answer, context };
 }

@@ -28,12 +28,12 @@ function draftWithKnownDetails(record: PiesaPresentation, draft: ActivityAnswers
   return next;
 }
 
-export function TradeVeuElectricalAssessmentPanel({ user, workOrderId, readOnly = false }: { user: User; workOrderId: string; readOnly?: boolean }) {
+export function TradeVeuElectricalAssessmentPanel({ user, workOrderId, readOnly = false, refreshKey = 0 }: { user: User; workOrderId: string; readOnly?: boolean; refreshKey?: number }) {
   const business = useTradeBusiness();
-  return <AssessmentPanel key={`${user.uid}:${business?.ownerUid || user.uid}:${business?.memberId || ""}:${workOrderId}`} user={user} workOrderId={workOrderId} readOnly={readOnly} />;
+  return <AssessmentPanel key={`${user.uid}:${business?.ownerUid || user.uid}:${business?.memberId || ""}:${workOrderId}`} user={user} workOrderId={workOrderId} readOnly={readOnly} refreshKey={refreshKey} />;
 }
 
-function AssessmentPanel({ user, workOrderId, readOnly }: { user: User; workOrderId: string; readOnly: boolean }) {
+function AssessmentPanel({ user, workOrderId, readOnly, refreshKey }: { user: User; workOrderId: string; readOnly: boolean; refreshKey: number }) {
   const fetch = useTradeBusinessFetch(), business = useTradeBusiness(), scopeId = business?.ownerUid || user.uid;
   const [records, setRecords] = useState<PiesaPresentation[]>([]), [record, setRecord] = useState<PiesaPresentation | null>(null);
   const [draft, setDraft] = useState<ActivityAnswers>({}), [canManage, setCanManage] = useState(false);
@@ -86,6 +86,17 @@ function AssessmentPanel({ user, workOrderId, readOnly }: { user: User; workOrde
       .finally(() => { if (mounted.current && id === sequence.current) setBusy(""); });
     return () => { mounted.current = false; sequence.current = id + 1; };
   }, [request, workOrderId, readOnly]);
+  useEffect(() => {
+    if (!refreshKey || current.current.record || current.current.busy) return;
+    let active = true;
+    void request(`?workOrderId=${encodeURIComponent(workOrderId)}`).then(result => {
+      if (!active || current.current.record || current.current.busy) return;
+      setRecords(result.records || []); setCanManage(result.canManage === true);
+      const next = result.records?.[0];
+      if (next) { setRecord(next); setDraft(!readOnly && result.canManage === true ? draftWithKnownDetails(next, next.answers) : next.answers); }
+    }).catch(failure => { if (active) setError(failure instanceof Error ? failure.message : "The added assessment could not be loaded."); });
+    return () => { active = false; };
+  }, [request, workOrderId, readOnly, refreshKey, busy]);
   const writable = !readOnly && canManage && record?.status === "draft";
   const fields = useMemo(() => record ? expandedActivityFields(record.form, draft) : [], [record, draft]);
   const sections = [...new Set(fields.map(field => field.section))];

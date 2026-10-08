@@ -71,8 +71,8 @@ test("guided setup starts trade-owned work as a customer or job and creates one 
     enquiryRoute,
     /if \(action === "create"\) \{[\s\S]*Add trade-sourced work as a customer or job[\s\S]*\}, 410\);/,
   );
-  assert.match(form, /const ordinarySteps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
-  assert.match(form, /const rentalInspectionSteps = \["Work", "Customer", "Inspection", "Appointment", "Review"\]/);
+  assert.match(form, /const ordinarySteps = \["Work", "Customer", "Forms", "Appointment", "Review"\]/);
+  assert.match(form, /const rentalInspectionSteps = \["Work", "Customer", "Forms", "Appointment", "Review"\]/);
   assert.match(form, /const steps = serviceCategory === "rental-inspection" \? rentalInspectionSteps : ordinarySteps/);
   assert.doesNotMatch(form, /name="title"|datalist/);
   assert.doesNotMatch(workspace, /placeholder="Appointment title"/);
@@ -136,7 +136,7 @@ test("guided activity forms auto-open only after the job and intent commit", () 
   assert.match(guidedCreate, /installerUid: identity\.uid,[\s\S]*actorUid: identity\.uid/);
   assert.match(guidedCreate, /workPackReady = preparedComplianceIntents\.length > 0[\s\S]*complianceWorkPacks\.every\(\(item\) => item\.workPackReady\)/);
   assert.match(guidedCreate, /complianceWorkPacks,[\s\S]*workPackReady,[\s\S]*workPackBlockers,/);
-  assert.match(guidedCreate, /The job and appointment were saved, but the activity form could not be attached/);
+  assert.match(guidedCreate, /The job and appointment were saved, but the governed work pack could not be opened/);
 });
 
 test("guided appointment controls align search actions and expand only while scheduling", () => {

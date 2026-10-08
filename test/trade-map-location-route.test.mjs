@@ -37,6 +37,7 @@ function fixture(options = {}) {
     withTradeMapPreparation: response => response,
     TRADE_MAP_PREPARATION_BATCH_SIZE: 25,
     TradeMapInputError, TradeMapLocationInputError, GnafDirectoryUnavailableError,
+    TradeFormSelectionError: OtherDomainError,
     mfaErrorResponse: () => null, creditexMutationConflict: () => null,
     isTradeJobScheduleEligibilityConflict: () => false, isTradeComplianceIntentScheduleConflict: () => false,
     isRentalInspectionAssignmentConflict: () => false,

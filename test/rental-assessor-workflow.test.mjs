@@ -36,6 +36,57 @@ test('frozen metadata uses automatic capture and Team profile without changing t
   assert.equal(rentalAssessorMetadataField({ key: 'agreementStartDate', type: 'date' }).source, 'assessment');
 });
 
+test('Home Star commissioning is the assessment setup question even in an older frozen checkbox', () => {
+  const field = { key: 'homeStarCommissioned', label: 'HomeStar opt-in', type: 'checkbox', phase: 'final', source: 'team_profile', required: false, defaultValue: false };
+  const before = structuredClone(field);
+  const shown = rentalAssessorMetadataField(field);
+  assert.equal(shown.label, 'Is this assessment commissioned by Home Star Upgrades?');
+  assert.equal(shown.phase, 'setup');
+  assert.equal(shown.source, 'assessment');
+  assert.equal(shown.required, false);
+  assert.equal(shown.defaultValue, false);
+  assert.deepEqual(field, before);
+});
+
+test('shared hot water asks about the observed apartment supply with no inferred plant compliance', () => {
+  const check = { key: 'hot_water_2027_readiness', assessmentPhase: 'energy_readiness_2027', requiredEvidenceCount: 1 };
+  const response = { hotWaterSupplyType: 'Shared building system', sharedHotWaterServiceStatus: 'Hot water supplied when checked', sharedHotWaterLimitation: 'Building plant not accessible' };
+  const before = structuredClone({ check, response });
+  const shown = rentalAssessorCheckPresentation(check, { outcome: 'meets', response });
+  assert.equal(shown.prompt, 'Is hot water supplied to this apartment?');
+  assert.equal(shown.phaseLabel, 'Apartment hot-water supply');
+  assert.equal(shown.outcomeOptions.find(option => option.value === 'meets').label, 'Hot water supplied; shared plant not inspected');
+  assert.equal(shown.outcomeOptions.find(option => option.value === 'does_not_meet').label, 'No hot water supplied');
+  assert.match(shown.help, /plant's efficiency and future replacement requirements have not been assessed/);
+  assert.doesNotMatch(shown.outcomeOptions.map(option => option.label).join(' '), /Ready|efficien.*verified/i);
+  for (const sharedHotWaterServiceStatus of ['No hot water when checked', 'Not checked', undefined]) {
+    const choices = rentalAssessorCheckPresentation(check, { response: { ...response, sharedHotWaterServiceStatus } });
+    assert.equal(choices.outcomeOptions.find(option => option.value === 'meets').label, 'Hot water supplied; shared plant not inspected', 'The answer option remains clear before its required observation is entered; server completion validates contradictory or absent observations separately');
+  }
+  for (const hotWaterSupplyType of ['Individual unit', 'Unknown', undefined]) {
+    const original = rentalAssessorCheckPresentation(check, { response: { ...response, hotWaterSupplyType } });
+    assert.match(original.prompt, /2027 replacement requirement/);
+    assert.equal(original.photoGuidance, undefined);
+  }
+  assert.deepEqual({ check, response }, before, 'Presentation does not rewrite the frozen check or saved observation');
+});
+
+test('shared hot-water photo policy records accessible apartment supply and retains unresolved/adverse evidence rules', () => {
+  const check = { key: 'hot_water_2027_readiness', credentialGate: 'assigned_assessor', requiredEvidenceCount: 1 };
+  const response = { hotWaterSupplyType: 'Shared building system', sharedHotWaterServiceStatus: 'Hot water supplied when checked' };
+  const required = rentalAssessorEvidenceRequirement(check, 'meets', response);
+  assert.equal(required.minimumPhotos, 1);
+  assert.equal(required.minimumFiles, 1);
+  assert.match(required.reason, /accessible apartment tap or shower/);
+  assert.match(required.reason, /inaccessible building plant or its data plate is not required/);
+  assert.equal(rentalAssessorCheckPresentation(check, { response }).photoGuidance, required.reason);
+  assert.equal(rentalAssessorEvidenceRequirement({ ...check, requiredEvidenceCount: 3 }, 'meets', response).minimumFiles, 3, 'A recorded higher evidence-file contract is preserved');
+  assert.equal(rentalAssessorEvidenceRequirement(check, 'not_accessible', { ...response, sharedHotWaterServiceStatus: 'Not checked' }).minimumPhotos, 0);
+  assert.equal(rentalAssessorEvidenceRequirement(check, 'does_not_meet', { ...response, sharedHotWaterServiceStatus: 'No hot water when checked' }).minimumPhotos, 2);
+  assert.equal(rentalAssessorEvidenceRequirement(check, 'specialist_verification_required', response).minimumPhotos, 0);
+  assert.match(rentalAssessorEvidenceRequirement(check, 'meets', { hotWaterSupplyType: 'Individual unit' }).reason, /identifying the equipment/);
+});
+
 test('all current and future categories are assessed once for the dwelling', () => {
   const checks = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards.sections.flatMap(s => s.checks);
   assert.equal(checks.length, 31);
