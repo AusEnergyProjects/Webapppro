@@ -12,6 +12,7 @@ import * as rental from '../src/lib/trade-rental-assessment.mjs';
 import * as safety from '../src/lib/rental-safety-visit.mjs';
 import * as rentalGuards from '../src/lib/trade-rental-schema-guards.ts';
 import * as credentials from '../src/lib/trade-rental-credentials.ts';
+import * as serviceCatalogue from '../src/lib/energy-service-catalogue.mjs';
 import * as jobCollaboration from '../src/lib/trade-job-collaboration.ts';
 import * as bounded from '../src/lib/bounded-json-request.ts';
 import { certificateTestDependency, installCreditexTrainingFixture } from './helpers/creditex-training-fixture.mjs';
@@ -103,6 +104,7 @@ function fixture(accessOverrides = {}) {
     '@/lib/trade-activity-forms-library': forms, '@/lib/trade-compliance-intent': intent,
     '@/lib/rental-safety-visit.mjs': safety, '@/lib/trade-rental-assessment.mjs': rental, '@/lib/trade-rental-schema-guards': rentalGuards,
     '@/lib/trade-rental-credentials': credentials, '@/lib/bounded-json-request': bounded,
+    '@/lib/energy-service-catalogue.mjs': serviceCatalogue,
   });
   const get = () => route.GET(new Request('https://example.test/api/field/job-activities?workOrderId=job'));
   const post = (extra, headers = {}) => route.POST(new Request('https://example.test/api/field/job-activities', {
@@ -120,6 +122,63 @@ test('existing electrical job offers real rental, VEU and STC forms with availab
   for (const activity of body.activities.filter((item) => !forms.activityFieldCatalogue().some((form) => form.activityTemplateId === item.id))) {
     assert.match(activity.unavailableReason, /not available/);
   }
+});
+
+for (const capability of ['minimum-rental-standards', 'rental-inspection']) {
+  test(`assigned staff can attach minimum standards with the saved ${capability} service`, async () => {
+    const f = fixture({ isOwner: false, actorUid: 'worker-uid' });
+    f.database.prepare('UPDATE trade_team_members SET member_uid=?, capabilities=? WHERE id=?')
+      .run('worker-uid', JSON.stringify([capability]), 'worker');
+    const available = await (await f.get()).json();
+    assert.equal(available.rentalModules.find((item) => item.id === 'minimum_standards').unavailableReason, '');
+    assert.match(available.activities.find((item) => item.id === 'veu-1').unavailableReason, /work type enabled/,
+      'A rental alias cannot enable unrelated program work');
+    const response = await f.post({ kind: 'rental', moduleKey: 'minimum_standards' });
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    const inspection = f.database.prepare('SELECT * FROM trade_rental_inspections').get();
+    assert.equal(inspection.firebase_uid, 'owner');
+    assert.equal(inspection.assessor_uid, 'worker-uid');
+    assert.equal(inspection.assessor_member_id, 'worker');
+    assert.deepEqual(JSON.parse(inspection.selected_modules_snapshot), ['minimum_standards']);
+    assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 5);
+  });
+}
+
+test('office-only, unrelated and invalid saved staff services cannot attach rental work', async () => {
+  for (const saved of ['[]', '["electrical"]', '{}', 'not-json']) {
+    const f = fixture({ isOwner: false, actorUid: 'worker-uid' });
+    f.database.prepare('UPDATE trade_team_members SET member_uid=?, capabilities=? WHERE id=?')
+      .run('worker-uid', saved, 'worker');
+    const available = await (await f.get()).json();
+    assert.match(available.rentalModules.find((item) => item.id === 'minimum_standards').unavailableReason, /work type enabled/);
+    assert.equal((await f.post({ kind: 'rental', moduleKey: 'minimum_standards' })).status, 409);
+    assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspections').get().n, 0);
+    assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 4);
+  }
+});
+
+test('canonical rental service still requires the current safety qualification and supporting document', async () => {
+  const f = fixture({ isOwner: false, actorUid: 'worker-uid' });
+  f.database.prepare('UPDATE trade_team_members SET member_uid=?, capabilities=? WHERE id=?')
+    .run('worker-uid', '["minimum-rental-standards"]', 'worker');
+  const available = await (await f.get()).json();
+  assert.match(available.rentalModules.find((item) => item.id === 'electrical_safety_check').unavailableReason, /current matching qualification and supporting document/);
+  assert.equal((await f.post({ kind: 'rental', moduleKey: 'electrical_safety_check' })).status, 409);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspections').get().n, 0);
+});
+
+test('a canonical staff rental service removed during attachment rolls back every job write', async () => {
+  const f = fixture({ isOwner: false, actorUid: 'worker-uid' });
+  f.database.prepare('UPDATE trade_team_members SET member_uid=?, capabilities=? WHERE id=?')
+    .run('worker-uid', '["minimum-rental-standards"]', 'worker');
+  await rentalGuards.ensureTradeRentalSchemaGuards(f.db);
+  f.beforeBatch(() => f.database.exec("UPDATE trade_team_members SET capabilities='[]' WHERE id='worker'"));
+  const response = await f.post({ kind: 'rental', moduleKey: 'minimum_standards' });
+  assert.equal(response.status, 409, JSON.stringify(await response.clone().json()));
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspections').get().n, 0);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_work_order_events').get().n, 0);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_team_sync_changes').get().n, 0);
+  assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 4);
 });
 
 test('rental attach uses canonical snapshots on the same job and customer and retries without duplicates', async () => {

@@ -12,6 +12,7 @@ import { CREDITEX_PARTNER_ORGANISATION_CODE, MAX_TRADE_COMPLIANCE_ACTIVITIES, re
 import { RENTAL_ASSESSMENT_MODULES, normalizeRentalAssessmentModules, rentalAssessmentTemplateSnapshot } from "@/lib/trade-rental-assessment.mjs";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 import { rentalAssignmentCredentialSql, rentalAssignmentRequiredGates } from "@/lib/trade-rental-credentials";
+import { LEGACY_ENERGY_SERVICE_ALIASES } from "@/lib/energy-service-catalogue.mjs";
 
 import { RENTAL_VISIT_PRESETS, RENTAL_SAFETY_TEMPLATE_VERSION, rentalVisitPreset } from "@/lib/rental-safety-visit.mjs";
 
@@ -19,6 +20,12 @@ export const runtime = "edge";
 type Row = Record<string, unknown>;
 const text = (value: unknown) => String(value || "");
 const editableInspection = new Set(["draft", "scheduled", "in_progress"]);
+
+function serviceCapabilityIds(serviceCategory: string) {
+  const canonical = LEGACY_ENERGY_SERVICE_ALIASES[serviceCategory] || serviceCategory;
+  return [canonical, ...Object.entries(LEGACY_ENERGY_SERVICE_ALIASES)
+    .filter(([, service]) => service === canonical).map(([alias]) => alias)];
+}
 
 async function context(access: TeamAccess, workOrderId: string) {
   const job = await assignedJob(access, workOrderId);
@@ -63,7 +70,9 @@ async function workerReason(context: Context, serviceCategory: string, rentalMod
   if (!details?.display_name) return "The assigned team member is no longer active. Reassign the job first.";
   let capabilities: unknown = [];
   try { capabilities = JSON.parse(text(details.capabilities) || "[]"); } catch { /* Invalid saved capabilities grant no additional access. */ }
-  if (details.member_uid !== access.ownerUid && (!Array.isArray(capabilities) || !capabilities.includes(serviceCategory))) {
+  const acceptedCapabilities = serviceCapabilityIds(serviceCategory);
+  if (details.member_uid !== access.ownerUid && (!Array.isArray(capabilities)
+    || !capabilities.some((capability) => acceptedCapabilities.includes(capability)))) {
     return "The assigned team member does not have this work type enabled in Teams. Reassign the job or update their work types.";
   }
   const gates = rentalAssignmentRequiredGates(rentalModule ? [rentalModule] : []);
@@ -189,10 +198,11 @@ export async function POST(request: Request) {
     statements.push(db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
       SELECT ?, ?, ?, 'online_mutation_guard', NULL, ? WHERE NOT EXISTS (
         SELECT 1 FROM trade_team_members member WHERE member.id = ? AND member.owner_uid = ? AND member.status = 'active'
-          AND (member.member_uid = ? OR EXISTS (SELECT 1 FROM json_each(member.capabilities) capability WHERE capability.value = ?))
+          AND (member.member_uid = ? OR EXISTS (SELECT 1 FROM json_each(member.capabilities) capability
+            WHERE capability.value IN (SELECT value FROM json_each(?))))
           AND ${rentalAssignmentCredentialSql("member.id", "member.owner_uid")})`)
       .bind(crypto.randomUUID(), current.workOrderId, access.ownerUid, now, current.job.assignee_member_id,
-        access.ownerUid, access.ownerUid, activityCategory, JSON.stringify(gates), credentialDate, credentialDate));
+        access.ownerUid, access.ownerUid, JSON.stringify(serviceCapabilityIds(activityCategory)), JSON.stringify(gates), credentialDate, credentialDate));
 
     if (kind === "program") {
       const intent = resolveTradeComplianceIntent({ mode: "planned", programTemplateId: body.programTemplateId,
