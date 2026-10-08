@@ -14,7 +14,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View, type ScrollView } from 'react-native';
 import { KeyboardAwareScrollView } from './keyboard-aware-scroll-view';
 import { FieldButton } from './field-button';
 import { FieldDatePicker } from './field-date-picker';
@@ -44,6 +44,8 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
   const [pending, setPending] = useState<PendingEvidence | null>(null);
   const current = useRef({ record, answers, busy: '', alive: true });
+  const offeredPrefills = useRef(new Set<string>());
+  const scroll = useRef<ScrollView>(null);
   const mutation = useRef({ identity: '', requestId: '' });
   const dirty = Boolean(record && !sameAnswers(record.answers, answers));
   const ink = Object.values(signatures).some(signature => signature.strokes.length > 0);
@@ -51,7 +53,7 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
 
   function confirmLeave(leave: () => void) {
     if (current.current.busy) { Alert.alert('Please wait', 'Wait for the assessment request to finish.'); return; }
-    if (dirty || ink || pending) Alert.alert('Unsaved assessment', 'Save your answers, signature or evidence before leaving. Discard only if you do not need these unsaved changes.', [
+    if (dirty || ink || pending) Alert.alert('Unsaved assessment', 'Continue the assessment to save your answers, signature or evidence. Discard only if you do not need these unsaved changes.', [
       { text: 'Keep working', style: 'cancel' }, { text: 'Discard unsaved changes', style: 'destructive', onPress: () => {
         if (pending) { const file = new File(pending.uri); if (file.exists) file.delete(); }
         leave();
@@ -60,16 +62,26 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     else leave();
   }
   usePreventRemove(Boolean(busy || dirty || ink || pending), ({ data }) => confirmLeave(() => navigation.dispatch(data.action)));
-  const adopt = useCallback((next: PiesaPresentation, saved = false) => {
+  const adopt = useCallback((next: PiesaPresentation, saved = false, includePrefills = false) => {
     if (!next || next.id !== recordId || next.workOrderId !== workOrderId || !['draft', 'complete'].includes(next.status)
       || !Number.isSafeInteger(next.revision) || !Array.isArray(next.form?.fields) || !Array.isArray(next.form.declarations)
       || !next.answers || typeof next.answers !== 'object' || Array.isArray(next.answers) || !next.signerFields
       || !Array.isArray(next.evidence) || !Array.isArray(next.signatures) || !Array.isArray(next.missing)
       || typeof next.ready !== 'boolean' || !next.signingScopes?.before || !next.signingScopes.after
-      || typeof next.reportUrl !== 'string' || !Array.isArray(next.delivery)) throw new Error('This assessment does not match the selected job.');
+      || typeof next.reportUrl !== 'string' || !Array.isArray(next.delivery)
+      || next.prefillAnswers !== undefined && (!next.prefillAnswers || typeof next.prefillAnswers !== 'object' || Array.isArray(next.prefillAnswers))
+      || next.businessContactSuggestion !== undefined && (!next.businessContactSuggestion || typeof next.businessContactSuggestion.name !== 'string' || typeof next.businessContactSuggestion.phone !== 'string')) throw new Error('This assessment does not match the selected job.');
     const previous = current.current.record;
     const completedElsewhere = next.status === 'complete' && previous?.status === 'draft' && !saved && !sameAnswers(previous.answers, current.current.answers);
     const merge = previous && !saved && next.status === 'draft' ? mergeActivityAnswers(previous.answers, current.current.answers, next.answers) : { merged: next.answers, conflicts: [] };
+    if (!saved && includePrefills && next.status === 'draft') {
+      merge.merged = { ...merge.merged };
+      for (const [key, value] of Object.entries(next.prefillAnswers || {})) {
+        // A deliberately cleared suggestion must stay cleared on refresh.
+        if (!offeredPrefills.current.has(key) && (merge.merged[key] === undefined || merge.merged[key] === '')) merge.merged[key] = value;
+        offeredPrefills.current.add(key);
+      }
+    }
     current.current.record = next; current.current.answers = merge.merged;
     setRecord(next); setAnswers(merge.merged);
     setSignatures(existing => Object.fromEntries(Object.entries(existing).filter(([key]) => {
@@ -86,7 +98,7 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     if (!online) throw new Error('Connect to load and complete this assessment.');
     const result = await apiRequest<Result>(`${endpoint}?recordId=${encodeURIComponent(recordId)}`, { signal });
     if (signal?.aborted || !current.current.alive) return;
-    adopt(result.record); setCanManage(result.canManage === true);
+    adopt(result.record, false, result.canManage === true); setCanManage(result.canManage === true);
   }, [online, apiRequest, recordId, adopt]);
   useEffect(() => {
     const state = current.current; state.alive = true;
@@ -120,6 +132,42 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     const previous = current.current.record;
     if (!previous || sameAnswers(previous.answers, current.current.answers)) return;
     await mutate('save', { answers: current.current.answers }, 'PATCH');
+  }
+  function showPage(next: string) {
+    setPage(next);
+    scroll.current?.scrollTo({ y: 0, animated: false });
+  }
+  async function moveTo(next: string) {
+    if (!record) return;
+    const destination = pages.indexOf(next), previous = pages.indexOf(page);
+    if (destination < 0 || destination === previous) return;
+    if (writable) {
+      await save();
+      if (!current.current.alive) return;
+      const saved = current.current.record;
+      if (!saved || saved.status !== 'draft') return;
+      if (destination > previous) {
+        const savedFields = expandedActivityFields(saved.form, saved.answers);
+        const missing = saved.missing.find(item => {
+          if (item.kind === 'signature') return destination > pages.indexOf('signatures');
+          const field = savedFields.find(candidate => candidate.key === item.key);
+          return field ? pages.indexOf(field.section) < destination : destination >= pages.indexOf('signatures');
+        });
+        if (missing) {
+          showPage(savedFields.find(field => field.key === missing.key)?.section || 'signatures');
+          throw new Error(`Complete ${missing.label} before continuing. Your answers are saved.`);
+        }
+        if (pending) throw new Error('Upload the retained evidence before continuing. Your answers are saved.');
+      }
+    } else if (dirty) throw new Error('Reconnect with assessment access to save your answers before changing sections.');
+    if (current.current.alive) showPage(next);
+  }
+  async function confirmInitial() {
+    await save();
+    const saved = current.current.record;
+    if (!current.current.alive || !saved || saved.status !== 'draft') return;
+    if (saved.answers.initial_correct === true && saved.initialAttestation?.scopeSha256 === saved.signingScopes.before) return;
+    await mutate('attest_initial', { action: 'attest_initial', scopeSha256: saved.signingScopes.before, accepted: true });
   }
   function edit(key: string, value: string | number | boolean) {
     const next = { ...current.current.answers };
@@ -189,14 +237,14 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     const label = `${field.label}${field.required ? ' *' : ''}${field.repeatGroup ? ` · ${activityRepeatItemLabel(field.repeatGroup)} ${field.repeatIndex + 1}` : ''}`;
     const evidence = record?.evidence.filter(item => item.fieldKey === field.key) || [];
     return <View key={field.key} style={styles.question}>
-      <Text style={styles.label}>{label}</Text>{field.help ? <Text style={styles.help}>{field.help}</Text> : null}
+      {!['boolean', 'select', 'date'].includes(field.type) || field.key === 'initial_correct' ? <Text style={styles.label}>{label}</Text> : null}{field.help ? <Text style={styles.help}>{field.help}</Text> : null}
       {field.key === 'initial_correct' ? <>
-        <Text style={styles.help}>{answers.initial_correct === true ? 'Initial assessment declaration confirmed.' : 'Save and review the initial assessment before confirming this declaration.'}</Text>
-        <FieldButton disabled={disabled || dirty || answers.initial_correct === true} onPress={() => void perform('attest', () => mutate('attest_initial', { action: 'attest_initial', scopeSha256: record!.signingScopes.before, accepted: true }))}>Confirm initial assessment declaration</FieldButton>
-      </> : field.type === 'boolean' || field.type === 'select' ? <FieldSelect label={field.label} value={field.type === 'boolean' ? answers[field.key] === true ? 'yes' : answers[field.key] === false ? 'no' : '' : String(answers[field.key] ?? '')} disabled={disabled}
+        <Text style={styles.help}>{answers.initial_correct === true && !dirty ? 'Initial assessment declaration confirmed.' : 'Review the initial assessment, then confirm this declaration. Your answers save automatically.'}</Text>
+        <FieldButton disabled={disabled || Boolean(pending) || answers.initial_correct === true && !dirty} onPress={() => void perform('attest', confirmInitial)}>Confirm initial assessment declaration</FieldButton>
+      </> : field.type === 'boolean' || field.type === 'select' ? <FieldSelect label={label} value={field.type === 'boolean' ? answers[field.key] === true ? 'yes' : answers[field.key] === false ? 'no' : '' : String(answers[field.key] ?? '')} disabled={disabled}
         options={field.type === 'boolean' ? [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] : field.options.map(option => ({ value: option, label: activityOptionLabel(option, field.optionLabels?.[option]) }))}
         onChange={value => edit(field.key, field.type === 'boolean' ? value === 'yes' : value)} />
-        : field.type === 'date' ? <FieldDatePicker label={field.label} value={String(answers[field.key] || '')} disabled={disabled} onChange={value => edit(field.key, value)} />
+        : field.type === 'date' ? <FieldDatePicker label={label} value={String(answers[field.key] || '')} disabled={disabled} onChange={value => edit(field.key, value)} />
           : field.type === 'photo' || field.type === 'document' ? <>
             {field.type === 'photo' ? <FieldButton variant="secondary" disabled={disabled || Boolean(pending)} onPress={() => void perform('camera', () => capture(field, true))}>Take evidence photo</FieldButton> : null}
             <FieldButton variant="secondary" disabled={disabled || Boolean(pending)} onPress={() => void perform('document', () => capture(field, false))}>Choose {field.type === 'photo' ? 'evidence photo' : 'document'}</FieldButton>
@@ -217,13 +265,15 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     const saved = record.signatures.find(item => item.declarationKey === declaration.key);
     const fieldKey = record.signerFields[declaration.key], signerName = fieldKey ? String(answers[fieldKey] || '').trim() : '';
     const draft = signatures[declaration.key] || freshSignature(declaration, signerName);
-    const role: FieldWorkPackSignerRole = { roleKey: declaration.key, label: declaration.title, capacity: declaration.title,
+    const role: FieldWorkPackSignerRole = { roleKey: declaration.key, label: declaration.title.replace(/\s+signature$/i, ''), capacity: declaration.title,
       identitySource: declaration.role === 'customer' ? 'customer_context' : 'manual_verified', minimumSignatures: 1, maximumSignatures: 1, identityRequirements: [] };
     return <View key={declaration.key} style={styles.question}><Text style={styles.title}>{declaration.title}</Text>
       {saved ? <Text style={styles.help}>Signed by {saved.signerName} · {new Date(saved.signedAt).toLocaleString('en-AU')}</Text> : <>
         <Text style={styles.label}>{signerName || 'Enter the signer’s name in the assessment first.'}</Text>
         <Text style={styles.help}>{boundActivityDeclaration(declaration, answers)}</Text>
-        {!signatureReady ? <Text style={styles.help}>Save and complete the required answers, evidence and initial declaration before signing.</Text> : null}
+        {!signatureReady ? <><Text style={styles.help}>Complete these required items before signing:</Text>
+          {record.missing.filter(item => item.kind !== 'signature').map(item => <FieldButton key={`${item.kind}:${item.key}`} variant="quiet" disabled={Boolean(busy)} onPress={() => void perform('section', () => moveTo(fields.find(field => field.key === item.key)?.section || page))}>{item.label}</FieldButton>)}
+        </> : !accepted[declaration.key] ? <Text style={styles.help}>Tick the declaration below to enable the signature box.</Text> : null}
         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: accepted[declaration.key] || false }} disabled={disabled || !signatureReady} onPress={() => setAccepted(previous => ({ ...previous, [declaration.key]: !previous[declaration.key] }))}>
           <Text style={styles.label}>{accepted[declaration.key] ? '☑' : '☐'} I am the named signer and have read and agree to this declaration.</Text>
         </Pressable>
@@ -236,7 +286,7 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     </View>;
   }
 
-  return <KeyboardAwareScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+  return <KeyboardAwareScrollView ref={scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
     <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => confirmLeave(onReturnToJob)}>Back to job</FieldButton>
     <Text style={styles.title}>Pre-installation electrical safety assessment (Insulation)</Text>
     {record ? <Text style={styles.help}>{record.recordNumber} · {record.status === 'complete' ? 'Completed' : dirty ? 'Unsaved answers' : 'Saved'}</Text> : null}
@@ -246,10 +296,19 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     {!loading && online ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void perform('refresh', () => refresh())}>Refresh saved assessment</FieldButton> : null}
     {record ? <>
       {!canManage && record.status === 'draft' ? <Text style={styles.help}>This assessment is view only for your current access.</Text> : null}
-      <FieldSelect label="Assessment section" value={page} disabled={Boolean(busy)} options={pages.map(section => ({ value: section, label: section === 'signatures' ? 'Signatures' : section === 'review' ? 'Review and completion' : section }))} onChange={setPage} />
-      {sections.includes(page) ? <><Text style={styles.title}>{page}</Text>{fields.filter(field => field.section === page).map(renderField)}{!fields.some(field => field.section === page) ? <Text style={styles.help}>This section does not apply to the saved assessment choices.</Text> : null}</> : page === 'signatures' ? declarations.map(renderDeclaration) : <>
+      <FieldSelect label="Assessment section" value={page} disabled={Boolean(busy)} options={pages.map(section => ({ value: section, label: section === 'signatures' ? 'Signatures' : section === 'review' ? 'Review and completion' : section }))} onChange={next => void perform('section', () => moveTo(next))} />
+      {sections.includes(page) ? <><Text style={styles.title}>{page}</Text>
+        {record.businessContactSuggestion && fields.some(field => field.section === page && field.key === 'initial_rec_name') ? <>
+          <Text style={styles.help}>Your business contact is {record.businessContactSuggestion.name}{record.businessContactSuggestion.phone ? ` · ${record.businessContactSuggestion.phone}` : ''}. Use these details only if they are the Registered Electrical Contractor for this assessment. Check and enter the REC registration number yourself.</Text>
+          <FieldButton variant="secondary" disabled={disabled || Boolean(answers.initial_rec_name && (answers.initial_rec_phone || !record.businessContactSuggestion.phone))} onPress={() => {
+            const suggestion = record.businessContactSuggestion!;
+            if (!current.current.answers.initial_rec_name) edit('initial_rec_name', suggestion.name);
+            if (!current.current.answers.initial_rec_phone && suggestion.phone) edit('initial_rec_phone', suggestion.phone);
+          }}>Use business contact details</FieldButton>
+        </> : null}
+        {fields.filter(field => field.section === page).map(renderField)}{!fields.some(field => field.section === page) ? <Text style={styles.help}>This section does not apply to the saved assessment choices.</Text> : null}</> : page === 'signatures' ? declarations.map(renderDeclaration) : <>
         <Text style={styles.title}>{record.status === 'complete' ? 'Completed assessment' : record.ready && !dirty ? 'Ready to complete' : 'Still required'}</Text>
-        {record.missing.map(item => <FieldButton key={`${item.kind}:${item.key}`} variant="quiet" disabled={Boolean(busy)} onPress={() => setPage(fields.find(field => field.key === item.key)?.section || 'signatures')}>{item.label}</FieldButton>)}
+        {record.missing.map(item => <FieldButton key={`${item.kind}:${item.key}`} variant="quiet" disabled={Boolean(busy)} onPress={() => void perform('section', () => moveTo(fields.find(field => field.key === item.key)?.section || 'signatures'))}>{item.label}</FieldButton>)}
         {record.status === 'draft' ? <FieldButton disabled={disabled || dirty || Boolean(pending) || !record.ready} onPress={() => void perform('complete', async () => {
           await mutate('complete', { action: 'complete' });
           if (current.current.record?.status === 'complete') { try { await onChanged(); } catch { setNotice('Assessment completed and PDF retained. Refresh the job to update its progress.'); } }
@@ -261,9 +320,9 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
         </>}
       </>}
       {pending ? <View style={styles.question}><Text style={styles.error}>This evidence is retained on your phone and still needs uploading: {pending.name}</Text><FieldButton disabled={disabled} onPress={() => void perform('upload', () => upload(pending))}>Retry evidence upload</FieldButton></View> : null}
-      {record.status === 'draft' ? <FieldButton disabled={disabled || !dirty} onPress={() => void perform('save', save)}>{busy === 'save' ? 'Saving answers...' : 'Save answers'}</FieldButton> : null}
-      <View style={styles.navigation}><FieldButton variant="secondary" disabled={Boolean(busy) || pages.indexOf(page) <= 0} onPress={() => setPage(pages[Math.max(0, pages.indexOf(page) - 1)])}>Previous</FieldButton>
-        <FieldButton variant="secondary" disabled={Boolean(busy) || pages.indexOf(page) >= pages.length - 1 || !online && dirty} onPress={() => void perform('next', async () => { if (writable) await save(); if (current.current.alive) setPage(pages[Math.min(pages.length - 1, pages.indexOf(page) + 1)]); })}>Next section</FieldButton></View>
+      {record.status === 'draft' ? <Text style={styles.help}>{busy === 'next' || busy === 'back' || busy === 'section' ? 'Saving and checking this section...' : 'Answers save automatically when you use Next or Back.'}</Text> : null}
+      <View style={styles.navigation}><FieldButton variant="secondary" disabled={Boolean(busy) || pages.indexOf(page) <= 0 || !online && dirty} onPress={() => void perform('back', () => moveTo(pages[Math.max(0, pages.indexOf(page) - 1)]))}>Back</FieldButton>
+        <FieldButton variant="secondary" disabled={Boolean(busy) || pages.indexOf(page) >= pages.length - 1 || !online && dirty} onPress={() => void perform('next', () => moveTo(pages[Math.min(pages.length - 1, pages.indexOf(page) + 1)]))}>Next</FieldButton></View>
     </> : null}
   </KeyboardAwareScrollView>;
 }

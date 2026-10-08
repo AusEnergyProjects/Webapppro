@@ -31,6 +31,10 @@ export type PiesaDelivery = {
 };
 export type PiesaPresentation = Omit<PiesaRecord, "ownerUid" | "evidence"> & {
   evidence: Omit<ActivityEvidence, "objectKey" | "previewObjectKey">[];
+  /** Unsaved known details for blank, unsigned draft fields. Saving remains explicit and audited. */
+  prefillAnswers?: ActivityAnswers;
+  /** Business contact details are a suggestion, never proof of REC registration. */
+  businessContactSuggestion?: { name: string; phone: string };
   missing: PiesaMissing[];
   ready: boolean;
   signingScopes: { before: string; after: string };

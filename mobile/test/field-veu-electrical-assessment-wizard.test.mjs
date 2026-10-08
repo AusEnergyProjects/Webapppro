@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import { electricalFixture } from '../../test/helpers/veu-electrical-fixture.mjs';
 import { VEU_ELECTRICAL_SIGNER_FIELDS, veuElectricalCompletion } from '../../src/lib/veu-electrical-safety-form.ts';
-import { activityHash, activitySigningScope, normaliseActivityAnswers } from '../../src/lib/trade-activity-forms.ts';
+import { activityHash, activityMissing, activitySigningScope, normaliseActivityAnswers } from '../../src/lib/trade-activity-forms.ts';
 import * as flow from '../../src/lib/trade-activity-form-flow.ts';
 
 const source = fs.readFileSync(new URL('../src/components/FieldVeuElectricalAssessmentWizard.tsx', import.meta.url), 'utf8');
@@ -64,10 +64,13 @@ function harness({ record = fixture(), canManage = true, online = true } = {}) {
       if (activitySigningScope(next, 'before') !== activitySigningScope(state.record, 'before')) { delete next.initialAttestation; if (state.record.answers.initial_correct === true) next.answers.initial_correct = false; }
     } else if (body.action === 'attest_initial') {
       assert.equal(body.scopeSha256, activitySigningScope(next, 'before')); assert.equal(body.accepted, true);
-      next.answers.initial_correct = true; next.initialAttestation = { actorUid: 'electrician', confirmedAt: '2026-10-08T03:00:00Z', scopeSha256: activitySigningScope(next, 'before') };
+      next.answers.initial_correct = true;
+      if (activityMissing(next, 'before', false).length) throw new Error('Complete the initial assessment answers and attachments first.');
+      next.initialAttestation = { actorUid: 'electrician', confirmedAt: '2026-10-08T03:00:00Z', scopeSha256: activitySigningScope(next, 'before') };
     } else if (body.action === 'upload') {
       next.evidence.push({ id: 'evidence-one', fieldKey: body.fieldKey, fileName: body.file.name, contentType: body.file.type, sha256: activityHash('evidence'), size: body.file.size });
     } else if (body.action === 'sign') {
+      assert.equal(veuElectricalCompletion(next).missing.some(item => item.kind !== 'signature'), false, 'Canonical whole-form prerequisites gate genuine signatures');
       const declaration = next.form.declarations.find(item => item.key === body.declarationKey);
       assert.equal(body.signerName, next.answers[VEU_ELECTRICAL_SIGNER_FIELDS[declaration.key]]); assert.equal(body.accepted, true);
       assert.equal(body.scopeSha256, activitySigningScope(next, declaration.phase)); assert.ok(inkExports.activitySignatureStrokesAreValid(body.strokes));
@@ -102,13 +105,14 @@ function harness({ record = fixture(), canManage = true, online = true } = {}) {
   const visit = node => Array.isArray(node) ? node.flatMap(visit) : !node || typeof node !== 'object' ? [] : [node, ...visit(node.props?.children)];
   const nodes = () => visit(tree);
   const button = text => nodes().find(node => node.type === 'FieldButton' && [node.props.children].flat(5).join('') === text);
-  const select = label => nodes().find(node => ['FieldSelect', 'FieldDatePicker', 'TextInput'].includes(node.type) && (node.props.label === label || node.props.accessibilityLabel === label));
+  const matchesLabel = (node, label) => node.props.label === label || node.props.label?.startsWith(`${label} *`) || node.props.label?.startsWith(`${label} ·`) || node.props.accessibilityLabel === label;
+  const select = label => nodes().find(node => ['FieldSelect', 'FieldDatePicker', 'TextInput'].includes(node.type) && matchesLabel(node, label));
   async function press(text) { const node = button(text); assert.ok(node, text); assert.equal(node.props.disabled, false, `Button enabled: ${text}`); node.props.onPress(); await flush(); render(); }
-  async function section(page) { select('Assessment section').props.onChange(page); render(); }
-  function answer(field, value) { const node = nodes().filter(node => ['FieldSelect', 'FieldDatePicker', 'TextInput'].includes(node.type) && (node.props.label === field.label || node.props.accessibilityLabel === field.label))[field.repeatIndex || 0]; assert.ok(node, field.key); assert.notEqual(node.props.disabled, true, field.key); assert.notEqual(node.props.editable, false, field.key);
+  async function section(page) { select('Assessment section').props.onChange(page); await flush(); render(); }
+  function answer(field, value) { const node = nodes().filter(node => ['FieldSelect', 'FieldDatePicker', 'TextInput'].includes(node.type) && matchesLabel(node, field.label))[field.repeatIndex || 0]; assert.ok(node, field.key); assert.notEqual(node.props.disabled, true, field.key); assert.notEqual(node.props.editable, false, field.key);
     if (node.type === 'TextInput') node.props.onChangeText(String(value)); else node.props.onChange(field.type === 'boolean' ? value ? 'yes' : 'no' : String(value)); render(); }
   return { state, render, nodes, button, select, press, section, answer,
-    texts: () => nodes().filter(node => node.type === 'Text').flatMap(node => [node.props.children].flat(4)).join(' '),
+    texts: () => nodes().filter(node => ['Text', 'FieldSelect', 'FieldDatePicker'].includes(node.type)).flatMap(node => node.type === 'Text' ? [node.props.children].flat(4) : node.props.label).join(' '),
     cleanup() { for (const effect of effects) effect?.cleanup?.(); unmounted = true; } };
 }
 async function load(h) { h.render(); await flush(); h.render(); }
@@ -121,7 +125,7 @@ test('an empty native assessment can be answered through all sections, attach ev
   for (const section of [...new Set(target.form.fields.map(field => field.section))]) {
     await h.section(section);
     for (const field of flow.expandedActivityFields(target.form, target.answers).filter(field => field.section === section)) {
-      if (field.key === 'initial_correct') { await h.press('Save answers'); await h.press('Confirm initial assessment declaration'); continue; }
+      if (field.key === 'initial_correct') { await h.press('Confirm initial assessment declaration'); continue; }
       if (field.type === 'document') {
         h.state.files.set('synthetic-consent.pdf', new TextEncoder().encode('%PDF-test'));
         h.state.document = { canceled: false, assets: [{ uri: 'synthetic-consent.pdf', name: 'Synthetic consent.pdf' }] }; await h.press('Choose document'); continue;
@@ -132,7 +136,8 @@ test('an empty native assessment can be answered through all sections, attach ev
       }
       h.answer(field, target.answers[field.key] ?? (field.type === 'boolean' ? false : field.type === 'date' ? '2026-10-08' : 'Synthetic optional observation'));
     }
-    if (!h.button('Save answers').props.disabled) await h.press('Save answers');
+    await h.press('Next');
+    assert.notEqual(h.select('Assessment section').props.value, section, `Complete section advances: ${section}`);
   }
   assert.equal(h.state.record.evidence.length, 1); assert.ok(h.state.record.initialAttestation); assert.equal(h.state.record.answers['$repeat.appliances'], 2);
   assert.ok(h.state.record.answers.coes_number); assert.equal(h.state.record.signatures.length, 0);
@@ -151,7 +156,10 @@ test('an empty native assessment can be answered through all sections, attach ev
 
 test('every official section and conditional question is rendered from the canonical schema', async () => {
   const value = electricalFixture({ life_support: true, life_support_consent: true, alternative_supply: true, recessed_luminaires: true, ceiling_appliances: true,
-    other_hazards_present: true, assessment_outcome: 'rectification_required', electrical_works_performed: true, '$repeat.appliances': 2, '$repeat.other_hazards': 2 });
+    other_hazards_present: true, assessment_outcome: 'rectification_required', electrical_works_performed: true, work_tps: true,
+    rectification_notes: 'Completed synthetic rectification', '$repeat.appliances': 2, '$repeat.other_hazards': 2 });
+  value.evidence.push({ id: 'saved-consent', fieldKey: 'life_support_record', sha256: activityHash('consent'), contentType: 'application/pdf', fileName: 'Consent.pdf', size: 100 });
+  value.initialAttestation.scopeSha256 = activitySigningScope(value, 'before');
   value.status = 'draft'; const h = harness({ record: value }); await load(h);
   const sections = [...new Set(value.form.fields.map(field => field.section))]; assert.equal(sections.length, 12); assert.equal(value.form.fields.length, 78);
   assert.deepEqual(h.select('Assessment section').props.options.slice(0, 12).map(item => item.value), sections);
@@ -171,17 +179,18 @@ test('native answers save the full merge, explicit No and dates, with safe retry
   const h = harness({ record: initial }); await load(h);
   const field = initial.form.fields.find(item => item.key === 'life_support'); h.answer(field, false);
   const date = initial.form.fields.find(item => item.type === 'date' && item.section === field.section); if (date) h.answer(date, '2026-10-09');
-  h.state.writeError = new Error('Synthetic network failure'); await h.press('Save answers'); assert.match(h.texts(), /Unsaved answers/);
+  h.state.writeError = new Error('Synthetic network failure'); await h.press('Next'); assert.match(h.texts(), /Unsaved answers/);
   const first = h.state.requests.at(-1).body; assert.equal(first.answers.life_support, false); assert.equal(first.answers.property_address, 'Existing address'); assert.equal(first.answers.owner_name, 'Sam Owner');
-  h.state.writeError = null; await h.press('Save answers'); assert.equal(h.state.requests.at(-1).body.requestId, first.requestId); assert.equal(h.state.record.answers.life_support, false);
-  assert.equal(h.button('Save answers').props.disabled, true); h.cleanup();
+  h.state.writeError = null; await h.press('Next'); assert.equal(h.state.requests.at(-1).body.requestId, first.requestId); assert.equal(h.state.record.answers.life_support, false);
+  assert.match(h.texts(), /Complete Job Reference ID/); assert.equal(h.select('Assessment section').props.value, field.section);
+  assert.equal(h.button('Save answers'), undefined); h.cleanup();
 });
 
 test('refresh merges remote answers while preserving unsaved local answers and conflicts', async () => {
   const h = harness({ record: fixture({ answers: { life_support: true } }) }); await load(h);
   h.answer(h.state.record.form.fields.find(item => item.key === 'life_support'), false);
   h.state.record.answers.owner_name = 'New remote owner'; await h.press('Refresh saved assessment');
-  await h.press('Save answers'); assert.equal(h.state.record.answers.owner_name, 'New remote owner'); assert.equal(h.state.record.answers.life_support, false);
+  await h.press('Next'); assert.equal(h.state.record.answers.owner_name, 'New remote owner'); assert.equal(h.state.record.answers.life_support, false);
   h.answer(h.state.record.form.fields.find(item => item.key === 'life_support'), true);
   h.state.record.answers.life_support = 'remote conflict'; await h.press('Refresh saved assessment'); assert.match(h.texts(), /also changed elsewhere/);
   h.cleanup();
@@ -191,7 +200,9 @@ test('wrong-job, malformed records, denied access and offline states never write
   for (const response of [{ record: { id: 'wrong' }, canManage: true }, { record: { ...presentation(fixture()), workOrderId: 'other-job' }, canManage: true }, { record: { ...presentation(fixture()), answers: [] }, canManage: true }]) {
     const h = harness(); h.state.loadResponse = response; await load(h); assert.match(h.texts(), /does not match/); assert.equal(h.select('Assessment section'), undefined); h.cleanup();
   }
-  const denied = harness({ canManage: false }); await load(denied); assert.equal(denied.button('Save answers').props.disabled, true); assert.match(denied.texts(), /view only/); denied.cleanup();
+  const denied = harness({ canManage: false }); await load(denied); assert.equal(denied.button('Save answers'), undefined); assert.match(denied.texts(), /view only/);
+  await denied.section('signatures'); assert.equal(denied.nodes().find(node => node.type === 'SignatureCapture').props.disabled, true);
+  assert.equal(denied.state.requests.filter(request => request.init.method).length, 0); denied.cleanup();
   const offline = harness({ online: false }); await load(offline); assert.equal(offline.state.requests.length, 0); assert.match(offline.texts(), /Connect/); offline.cleanup();
 });
 
@@ -209,8 +220,10 @@ test('initial attestation uses its own saved-scope endpoint and invalidates corr
   assert.equal(h.select(record.form.fields.find(field => field.key === 'initial_correct').label), undefined);
   await h.press('Confirm initial assessment declaration'); assert.equal(h.state.requests.at(-1).body.action, 'attest_initial'); assert.equal(h.state.record.answers.initial_correct, true);
   const electrician = record.form.fields.find(field => field.key === 'initial_electrician_name'); h.answer(electrician, 'Changed actual electrician');
-  assert.equal(h.button('Confirm initial assessment declaration').props.disabled, true); await h.press('Save answers'); assert.equal(h.state.record.answers.initial_correct, false);
-  await h.press('Confirm initial assessment declaration'); assert.equal(h.state.record.answers.initial_correct, true); h.cleanup();
+  assert.equal(h.button('Confirm initial assessment declaration').props.disabled, false);
+  await h.press('Confirm initial assessment declaration'); assert.equal(h.state.record.answers.initial_correct, true);
+  assert.equal(h.state.requests.at(-2).init.method, 'PATCH'); assert.equal(h.state.requests.at(-1).body.action, 'attest_initial');
+  assert.equal(h.state.record.initialAttestation.scopeSha256, activitySigningScope(h.state.record, 'before')); h.cleanup();
 });
 
 test('a native selected original is retained after failed upload and retries with its bound revision', async () => {
@@ -226,7 +239,8 @@ test('a native selected original is retained after failed upload and retries wit
 
 test('actual owner ink and consent complete the native form and expose real PDF and both delivery states', async () => {
   const value = electricalFixture(); value.status = 'draft'; const h = harness({ record: value }); await load(h);
-  await h.section('review'); assert.equal(h.button('Complete assessment and email PDF').props.disabled, true);
+  await h.section('review'); assert.equal(h.select('Assessment section').props.value, 'signatures'); assert.match(h.texts(), /before continuing/);
+  assert.equal(h.nodes().find(node => node.type === 'SignatureCapture').props.disabled, true);
   await h.section('signatures'); const checkbox = h.nodes().find(node => node.type === 'Pressable'); assert.equal(checkbox.props.disabled, false); checkbox.props.onPress(); h.render();
   let pad = h.nodes().find(node => node.type === 'SignatureCapture'); assert.equal(pad.props.disabled, false); assert.equal(pad.props.value.signerName, value.answers.owner_name);
   assert.equal(h.button('Save owner signature').props.disabled, true); pad.props.onChange({ ...pad.props.value, strokes }); h.render(); await h.press('Save owner signature');
@@ -267,6 +281,137 @@ test('native navigation blocks unsaved work and clears abandoned retained eviden
   const h = harness(); await load(h); h.answer(h.state.record.form.fields.find(field => field.key === 'life_support'), false);
   h.button('Back to job').props.onPress(); assert.equal(h.state.left, 0); assert.match(h.state.alerts.at(-1)[0], /Unsaved/);
   h.state.alerts.at(-1)[2][1].onPress(); assert.equal(h.state.left, 1); h.cleanup();
+});
+
+test('Next and the section selector cannot bypass empty required fields or invent an answer', async () => {
+  const h = harness(); await load(h); const first = h.select('Assessment section').props.value;
+  assert.equal(h.button('Save answers'), undefined);
+  await h.press('Next'); assert.equal(h.select('Assessment section').props.value, first); assert.match(h.texts(), /Complete Job Reference ID/);
+  await h.section('signatures'); assert.equal(h.select('Assessment section').props.value, first);
+  assert.equal(h.state.requests.filter(request => request.init.method).length, 0); assert.deepEqual(h.state.record.answers, {});
+  h.cleanup();
+});
+
+test('whitespace is not a required answer, while an explicit No survives autosave', async () => {
+  const h = harness(); await load(h); const field = key => h.state.record.form.fields.find(item => item.key === key);
+  h.answer(field('job_reference'), '   '); h.answer(field('property_address'), 'Synthetic address');
+  h.answer(field('inspection_date'), '2026-10-08'); h.answer(field('life_support'), false);
+  await h.press('Next'); assert.match(h.texts(), /Complete Job Reference ID/); assert.equal(h.state.record.answers.job_reference, undefined);
+  assert.equal(h.state.record.answers.life_support, false); assert.equal(h.select('Assessment section').props.value, field('job_reference').section);
+  h.answer(field('job_reference'), 'SYNTHETIC-JOB'); await h.press('Next');
+  assert.notEqual(h.select('Assessment section').props.value, field('job_reference').section);
+  assert.equal(h.state.record.answers.job_reference, 'SYNTHETIC-JOB'); h.cleanup();
+});
+
+test('Back persists an incomplete section and a failed save leaves its answers and page intact', async () => {
+  const record = electricalFixture(); record.status = 'draft'; const h = harness({ record }); await load(h);
+  const owner = record.form.fields.find(field => field.key === 'owner_name'); await h.section(owner.section);
+  h.answer(owner, 'Changed owner'); const page = h.select('Assessment section').props.value;
+  h.state.writeError = new Error('Synthetic save interrupted'); await h.press('Back');
+  assert.equal(h.select('Assessment section').props.value, page); assert.equal(h.select(owner.label).props.value, 'Changed owner');
+  assert.equal(h.state.record.answers.owner_name, 'Sam Owner'); const failed = h.state.requests.at(-1).body;
+  h.state.writeError = null; await h.press('Back'); assert.equal(h.state.requests.at(-1).body.requestId, failed.requestId);
+  assert.equal(h.state.record.answers.owner_name, 'Changed owner'); assert.notEqual(h.select('Assessment section').props.value, page);
+  await h.section(owner.section); h.answer(owner, ''); await h.press('Back');
+  assert.equal(h.state.record.answers.owner_name, undefined); assert.notEqual(h.select('Assessment section').props.value, page);
+  h.cleanup();
+});
+
+test('a missing conditional evidence document blocks Next in its own section', async () => {
+  const record = electricalFixture({ life_support: true, life_support_consent: true }); record.status = 'draft';
+  const h = harness({ record }); await load(h); const evidence = record.form.fields.find(field => field.key === 'life_support_record');
+  await h.press('Next'); assert.equal(h.select('Assessment section').props.value, evidence.section); assert.ok(h.texts().includes(evidence.label));
+  assert.equal(h.nodes().some(node => node.type === 'SignatureCapture'), false);
+  h.state.files.set('consent.pdf', new TextEncoder().encode('%PDF-synthetic-consent'));
+  h.state.document = { canceled: false, assets: [{ uri: 'consent.pdf', name: 'Consent.pdf' }] };
+  await h.press('Choose document'); await h.press('Next'); assert.notEqual(h.select('Assessment section').props.value, evidence.section);
+  h.cleanup();
+});
+
+test('initial confirmation never attests after failed autosave or incomplete initial answers', async () => {
+  const record = electricalFixture(); record.status = 'draft'; delete record.answers.initial_correct; delete record.initialAttestation;
+  const h = harness({ record }); await load(h); const electrician = record.form.fields.find(field => field.key === 'initial_electrician_name');
+  await h.section(electrician.section); h.answer(electrician, 'Updated electrician');
+  h.state.writeError = new Error('Synthetic connection loss'); await h.press('Confirm initial assessment declaration');
+  assert.equal(h.state.requests.some(request => request.body?.action === 'attest_initial'), false);
+  assert.equal(h.select(electrician.label).props.value, 'Updated electrician'); assert.equal(h.state.record.answers.initial_correct, undefined);
+  h.state.writeError = null; h.answer(electrician, ''); await h.press('Confirm initial assessment declaration');
+  assert.match(h.texts(), /Complete the initial assessment answers/); assert.equal(h.state.record.initialAttestation, undefined);
+  assert.equal(h.state.record.answers.initial_correct, undefined); h.cleanup();
+});
+
+test('an unchanged normalized initial scope keeps its actual attestation without submitting it twice', async () => {
+  const record = electricalFixture(); record.status = 'draft'; const h = harness({ record }); await load(h);
+  const electrician = record.form.fields.find(field => field.key === 'initial_electrician_name'); await h.section(electrician.section);
+  h.answer(electrician, `${record.answers.initial_electrician_name} `); await h.press('Confirm initial assessment declaration');
+  assert.equal(h.state.record.answers.initial_correct, true); assert.equal(h.state.record.initialAttestation.scopeSha256, record.initialAttestation.scopeSha256);
+  assert.equal(h.state.requests.filter(request => request.body?.action === 'attest_initial').length, 0);
+  assert.equal(h.state.requests.filter(request => request.init.method === 'PATCH').length, 1); assert.doesNotMatch(h.texts(), /already been recorded/); h.cleanup();
+});
+
+test('a blank no-rectification form completes sequentially through required observations, attestation and genuine owner ink', async () => {
+  const target = electricalFixture(); const h = harness(); await load(h);
+  for (const section of [...new Set(target.form.fields.map(field => field.section))]) {
+    assert.equal(h.select('Assessment section').props.value, section, 'Only the visible current section is answered');
+    for (const field of flow.expandedActivityFields(target.form, target.answers).filter(field => field.section === section && field.required)) {
+      if (field.key === 'initial_correct') await h.press('Confirm initial assessment declaration');
+      else h.answer(field, target.answers[field.key]);
+    }
+    await h.press('Next'); assert.notEqual(h.select('Assessment section').props.value, section);
+  }
+  assert.equal(h.select('Assessment section').props.value, 'signatures'); assert.equal(h.state.record.signatures.length, 0);
+  assert.equal(h.nodes().filter(node => node.type === 'SignatureCapture').length, 1); assert.ok(h.state.record.initialAttestation);
+  await h.press('Next'); assert.equal(h.select('Assessment section').props.value, 'signatures', 'Actual signature cannot be skipped');
+  const checkbox = h.nodes().find(node => node.type === 'Pressable'); checkbox.props.onPress(); h.render();
+  const pad = h.nodes().find(node => node.type === 'SignatureCapture'); assert.equal(pad.props.disabled, false);
+  pad.props.onChange({ ...pad.props.value, strokes }); h.render(); await h.press('Save owner signature'); await h.press('Next');
+  assert.equal(h.select('Assessment section').props.value, 'review'); await h.press('Complete assessment and email PDF');
+  assert.equal(h.state.record.status, 'complete'); assert.ok(h.button('Save completed assessment PDF on phone')); h.cleanup();
+});
+
+test('authoritative blank-only prefills remain editable, save on Next and never return after a local clear', async () => {
+  const h = harness(); h.state.loadResponse = { record: { ...presentation(h.state.record), prefillAnswers: {
+    job_reference: 'KNOWN-JOB', property_address: 'Known job address', owner_name: 'Known owner', initial_electrician_name: 'Known member',
+  } }, canManage: true }; await load(h);
+  const field = key => h.state.record.form.fields.find(item => item.key === key);
+  assert.equal(h.select(field('job_reference').label).props.value, 'KNOWN-JOB'); assert.equal(h.state.record.answers.job_reference, undefined);
+  h.answer(field('job_reference'), ''); await h.press('Refresh saved assessment'); assert.equal(h.select(field('job_reference').label).props.value, '');
+  h.answer(field('job_reference'), 'Confirmed job'); h.answer(field('inspection_date'), '2026-10-08'); h.answer(field('life_support'), false);
+  h.state.loadResponse = null; await h.press('Next'); assert.equal(h.state.record.answers.job_reference, 'Confirmed job');
+  assert.equal(h.state.record.answers.property_address, 'Known job address'); assert.equal(h.state.record.answers.owner_name, 'Known owner'); h.cleanup();
+});
+
+test('business contact suggestion requires an explicit action and never fills a REC registration or overwrites a name', async () => {
+  const record = electricalFixture(); record.status = 'draft'; delete record.initialAttestation; delete record.answers.initial_correct;
+  delete record.answers.initial_rec_phone; record.answers.initial_rec_name = 'Actual REC';
+  const h = harness({ record }); h.state.loadResponse = { record: { ...presentation(record), businessContactSuggestion: { name: 'Business suggestion', phone: '0399999999' } }, canManage: true };
+  await load(h); const field = key => record.form.fields.find(item => item.key === key); await h.section(field('initial_rec_name').section);
+  assert.equal(h.select(field('initial_rec_phone').label).props.value, ''); assert.match(h.texts(), /only if they are the Registered Electrical Contractor/);
+  const registration = h.select(field('initial_rec_number').label).props.value; await h.press('Use business contact details');
+  assert.equal(h.select(field('initial_rec_name').label).props.value, 'Actual REC'); assert.equal(h.select(field('initial_rec_phone').label).props.value, '0399999999');
+  assert.equal(h.select(field('initial_rec_number').label).props.value, registration); assert.equal(h.state.record.answers.initial_rec_phone, undefined); h.cleanup();
+});
+
+test('read-only prefills do not create unsaved work or prevent viewing later sections', async () => {
+  const h = harness({ canManage: false }); h.state.loadResponse = { record: { ...presentation(h.state.record), prefillAnswers: { job_reference: 'Suggested job' } }, canManage: false };
+  await load(h); assert.doesNotMatch(h.texts(), /Unsaved answers/); assert.equal(h.select('Job Reference ID').props.value, '');
+  await h.section('review'); assert.equal(h.select('Assessment section').props.value, 'review'); assert.equal(h.state.leaveGuard.blocked, false);
+  assert.equal(h.state.requests.filter(request => request.init.method).length, 0); h.cleanup();
+});
+
+test('a required true declaration and an unanswered repeated observation block forward navigation', async () => {
+  const record = electricalFixture({ ceiling_appliances: true, '$repeat.appliances': 2 }); record.status = 'draft';
+  const h = harness({ record }); await load(h); const declaration = record.form.fields.find(field => field.key === 'owner_access');
+  await h.section(declaration.section); h.answer(declaration, false); await h.press('Next');
+  assert.equal(h.select('Assessment section').props.value, declaration.section); assert.ok(h.texts().includes(declaration.label));
+  h.answer(declaration, true); await h.press('Back');
+  // Reconfirm the genuine initial declaration if a changed before-phase answer invalidated it.
+  const initial = record.form.fields.find(field => field.key === 'initial_correct');
+  await h.section(initial.section); if (!h.button('Confirm initial assessment declaration').props.disabled) await h.press('Confirm initial assessment declaration');
+  const repeated = flow.expandedActivityFields(record.form, record.answers).find(field => field.repeatGroup === 'appliances' && field.repeatIndex === 1 && field.required && field.type === 'text');
+  await h.section(repeated.section); h.answer(repeated, ''); await h.press('Next');
+  assert.equal(h.select('Assessment section').props.value, repeated.section); assert.ok(h.texts().includes(repeated.label));
+  assert.equal(h.state.record.answers[repeated.key], undefined); h.cleanup();
 });
 
 test('native job and picker mount the runner rather than handing completion to a web editor', () => {

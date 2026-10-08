@@ -58,6 +58,17 @@ function fixture(t,realPdf=false) {
     INSERT INTO trade_crm_customers VALUES('customer','owner','customer@example.com','Sam','Owner','active');
     INSERT INTO trade_team_members VALUES('owner-member','owner','owner','active',1,1,'team');
     INSERT INTO trade_team_members VALUES('worker','owner','worker-uid','active',1,1,'team');`);
+  sql.exec(`ALTER TABLE trade_accounts ADD COLUMN phone TEXT NOT NULL DEFAULT '';
+    ALTER TABLE trade_accounts ADD COLUMN document_phone TEXT NOT NULL DEFAULT '';
+    ALTER TABLE trade_crm_job_details ADD COLUMN service_site_id TEXT NOT NULL DEFAULT '';
+    ALTER TABLE trade_team_members ADD COLUMN first_name TEXT NOT NULL DEFAULT '';
+    ALTER TABLE trade_team_members ADD COLUMN last_name TEXT NOT NULL DEFAULT '';
+    CREATE TABLE trade_crm_service_sites(id TEXT,firebase_uid TEXT,customer_id TEXT,record_status TEXT,address_line_1 TEXT,address_line_2 TEXT,suburb TEXT,address_state TEXT,postcode TEXT);
+    CREATE TABLE trade_team_member_credentials(id TEXT,owner_uid TEXT,team_member_id TEXT,credential_number TEXT,credential_type TEXT,rental_gate TEXT,jurisdiction TEXT,status TEXT,expires_at TEXT,file_id TEXT,updated_at TEXT);
+    CREATE TABLE trade_team_member_files(id TEXT,owner_uid TEXT,team_member_id TEXT,status TEXT,expires_at TEXT);
+    INSERT INTO trade_crm_service_sites VALUES('site','owner','customer','active','12 Synthetic Street','','Frankston','VIC','3199');
+    UPDATE trade_crm_job_details SET service_site_id='site';
+    UPDATE trade_accounts SET phone='0399990000',document_phone='0399990001' WHERE firebase_uid='owner';`);
   sql.exec(read('../drizzle/0256_trade_veu_electrical_assessments.sql').replaceAll('--> statement-breakpoint', ''));
   let hook = () => {}, lostBatch = false, mailFailure = null, inBatch = false;
   const roundTrips = [];
@@ -124,6 +135,144 @@ test('standalone start is job scoped, idempotent and has no compliance intent', 
   assert.equal('intentId' in first, false); assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM trade_veu_electrical_versions').get().n, 1);
   await assert.rejects(h.service.startPiesaRecord(owner, 'foreign-job'), /access/);
   await assert.rejects(h.service.readPiesaRecord({ ...owner, ownerUid: 'foreign', actorUid: 'foreign' }, first.id), /not found/);
+});
+
+function electricianProfile(h, memberId = 'owner-member', licence = 'SYNTHETIC-LICENCE') {
+  h.sql.prepare('UPDATE trade_team_members SET first_name=?,last_name=? WHERE id=?').run('Casey', memberId === 'owner-member' ? 'Current' : 'Assigned', memberId);
+  h.sql.prepare('INSERT INTO trade_team_member_files VALUES(?,?,?,?,?)').run(`file-${memberId}`, 'owner', memberId, 'active', '2027-10-08');
+  h.sql.prepare('INSERT INTO trade_team_member_credentials VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(`credential-${memberId}`, 'owner', memberId, licence,
+    'licence', 'licensed_electrician', 'VIC', 'active', '2027-10-08', `file-${memberId}`, '2026-10-08');
+}
+
+test('new assessments save only known job/customer details, leaving findings and REC authority unanswered', async t => {
+  const h = fixture(t), record = await h.start();
+  assert.deepEqual(record.answers, { job_reference: 'J-001', property_address: '12 Synthetic Street, Frankston, VIC, 3199', owner_name: 'Sam Owner' });
+  assert.equal(record.signerDefaults.technician, '', 'An account business display name is not an electrician');
+  assert.equal(record.initialAttestation, undefined); assert.deepEqual(record.signatures, []);
+  const view = await h.service.piesaPresentation(owner, record);
+  assert.deepEqual(view.prefillAnswers, {});
+  assert.deepEqual(view.businessContactSuggestion, { name: 'Example Electrical', phone: '0399990001' });
+  assert.ok(view.missing.some(item => item.key === 'initial_rec_number'));
+  assert.equal(h.sql.prepare('SELECT actor_uid FROM trade_veu_electrical_assessments').get().actor_uid, owner.actorUid);
+});
+
+test('existing attached drafts offer blank defaults without writing, changing scopes or overwriting entered answers', async t => {
+  const h = fixture(t), first = await h.start();
+  const saved = await h.service.savePiesaAnswers(owner, first.id, first.revision, { property_address: 'Manual inspection address', life_support: false }, 'existing-draft');
+  const before = h.sql.prepare('SELECT * FROM trade_veu_electrical_assessments').get();
+  const view = await h.service.piesaPresentation(owner, saved);
+  assert.deepEqual(view.answers, saved.answers);
+  assert.deepEqual(view.prefillAnswers, { job_reference: 'J-001', owner_name: 'Sam Owner' });
+  assert.equal(view.signingScopes.before, activity.activitySigningScope(saved, 'before'));
+  assert.equal(view.signingScopes.after, activity.activitySigningScope(saved, 'after'));
+  assert.deepEqual(h.sql.prepare('SELECT * FROM trade_veu_electrical_assessments').get(), before);
+  assert.deepEqual(await h.start(), saved, 'Opening an existing record is idempotent');
+  const persisted = await h.service.savePiesaAnswers(owner, saved.id, saved.revision, { ...view.answers, ...view.prefillAnswers }, 'accept-known-details');
+  assert.equal(persisted.answers.property_address, 'Manual inspection address'); assert.equal(persisted.answers.life_support, false);
+  assert.equal(persisted.answers.job_reference, 'J-001'); assert.equal(persisted.answers.owner_name, 'Sam Owner');
+});
+
+test('electrician defaults belong to the current named worker with supported current credentials, not the job assignee', async t => {
+  const h = fixture(t); electricianProfile(h); electricianProfile(h, 'worker', 'SYNTHETIC-ASSIGNED');
+  const record = await h.start();
+  assert.equal(record.answers.initial_electrician_name, 'Casey Current'); assert.equal(record.answers.initial_electrician_licence, 'SYNTHETIC-LICENCE');
+  assert.equal(record.signerDefaults.technician, 'Casey Current');
+  const saved = await h.service.savePiesaAnswers(owner, record.id, record.revision, { initial_electrician_name: 'Manual Electrician' }, 'manual-worker');
+  const view = await h.service.piesaPresentation(worker, saved);
+  assert.equal(view.prefillAnswers.initial_electrician_name, undefined);
+  assert.equal(view.prefillAnswers.initial_electrician_licence, undefined, 'Another worker licence cannot be paired with a manual electrician name');
+  assert.equal(view.signerDefaults.technician, 'Manual Electrician');
+  assert.equal(view.prefillAnswers.rectification_electrician_name, undefined);
+  const otherLicence = await h.service.savePiesaAnswers(owner, saved.id, saved.revision, { initial_electrician_licence: 'MANUAL-OTHER-LICENCE' }, 'manual-licence');
+  const otherLicenceView = await h.service.piesaPresentation(owner, otherLicence);
+  assert.equal(otherLicenceView.prefillAnswers.initial_electrician_name, undefined); assert.equal(otherLicenceView.signerDefaults.technician, '');
+});
+
+for (const [reason, change] of [
+  ['expired licence', "UPDATE trade_team_member_credentials SET expires_at='2020-01-01'"],
+  ['suspended licence', "UPDATE trade_team_member_credentials SET status='suspended'"],
+  ['different state', "UPDATE trade_team_member_credentials SET jurisdiction='NSW'"],
+  ['unsupported credential type', "UPDATE trade_team_member_credentials SET credential_type='training'"],
+  ['missing electrician gate', "UPDATE trade_team_member_credentials SET rental_gate=''"],
+  ['missing current expiry', "UPDATE trade_team_member_credentials SET expires_at=''"],
+  ['expired evidence', "UPDATE trade_team_member_files SET expires_at='2020-01-01'"],
+  ['inactive evidence', "UPDATE trade_team_member_files SET status='deleted'"],
+  ['foreign evidence owner', "UPDATE trade_team_member_files SET owner_uid='foreign'"],
+  ['another worker evidence', "UPDATE trade_team_member_files SET team_member_id='worker'"],
+  ['missing individual name', "UPDATE trade_team_members SET last_name='' WHERE id='owner-member'"],
+]) test(`electrician defaults do not infer authority from ${reason}`, async t => {
+  const h = fixture(t); electricianProfile(h); h.sql.exec(change);
+  const record = await h.start();
+  const knownName = reason === 'missing individual name' ? undefined : 'Casey Current';
+  assert.equal(record.answers.initial_electrician_name, knownName); assert.equal(record.answers.initial_electrician_licence, undefined);
+  assert.equal(record.signerDefaults.technician, knownName || '');
+  assert.ok(form.veuElectricalCompletion(record).missing.some(item => item.key === 'initial_electrician_licence'));
+});
+
+test('a known person can fill their editable name while missing licence remains required, and actor binding is exact', async t => {
+  const h = fixture(t);
+  h.sql.exec("UPDATE trade_team_members SET first_name='Casey',last_name='Current' WHERE id='owner-member'");
+  const record = await h.start(); assert.equal(record.answers.initial_electrician_name, 'Casey Current');
+  assert.equal(record.answers.initial_electrician_licence, undefined);
+  const other = { ...owner, memberId: 'worker' };
+  electricianProfile(h, 'worker');
+  const saved = await h.service.savePiesaAnswers(owner, record.id, record.revision, {}, 'blank-old-identity');
+  const view = await h.service.piesaPresentation(other, saved);
+  assert.equal(view.prefillAnswers.initial_electrician_name, undefined); assert.equal(view.prefillAnswers.initial_electrician_licence, undefined);
+});
+
+test('read-only access sees saved answers without editable profile defaults or contact suggestions', async t => {
+  const h = fixture(t), record = await h.start();
+  const saved = await h.service.savePiesaAnswers(owner, record.id, record.revision, {}, 'empty-old-record');
+  const view = await h.service.piesaPresentation({ ...owner, canManageFieldEvidence: false }, saved);
+  assert.deepEqual(view.answers, {}); assert.deepEqual(view.prefillAnswers, {}); assert.equal(view.businessContactSuggestion, undefined);
+  assert.deepEqual(view.signerDefaults, saved.signerDefaults);
+});
+
+test('access revocation while reading defaults rejects the view rather than returning stale private details', async t => {
+  const h = fixture(t), record = await h.start(); let revoked = false;
+  h.hook(query => {
+    if (!revoked && query.includes('SELECT member.first_name,member.last_name,credential.credential_number')) {
+      revoked = true; h.sql.exec("UPDATE trade_accounts SET account_status='suspended'");
+    }
+  });
+  await assert.rejects(h.service.piesaPresentation(owner, record), error => error.code === 'PIESA_ACCESS_REQUIRED');
+  assert.equal(revoked, true);
+});
+
+for (const [reason, change] of [
+  ['private platform customer', "UPDATE trade_crm_job_details SET customer_source='platform_private'"],
+  ['opportunity', "UPDATE trade_work_orders SET source_type='opportunity' WHERE id='job'"],
+  ['inactive customer', "UPDATE trade_crm_customers SET record_status='archived'"],
+  ['foreign customer owner', "UPDATE trade_crm_customers SET firebase_uid='foreign'"],
+]) test(`job defaults withhold customer identity/address for ${reason}`, async t => {
+  const h = fixture(t); h.sql.exec(change); const record = await h.start();
+  assert.deepEqual(record.answers, { job_reference: 'J-001' }); assert.equal(record.signerDefaults.customer, '');
+});
+
+for (const [reason, change] of [
+  ['a different customer site', "UPDATE trade_crm_service_sites SET customer_id='other'"],
+  ['a foreign business site', "UPDATE trade_crm_service_sites SET firebase_uid='foreign'"],
+  ['an archived site', "UPDATE trade_crm_service_sites SET record_status='archived'"],
+]) test(`job defaults do not use ${reason}`, async t => {
+  const h = fixture(t); h.sql.exec(change); const record = await h.start();
+  assert.equal(record.answers.property_address, undefined); assert.equal(record.answers.owner_name, 'Sam Owner');
+});
+
+test('attested, signed and completed answers/scopes never gain new profile defaults', async t => {
+  const h = fixture(t), attested = await h.attested();
+  const signed = await h.service.signPiesaDeclaration(owner, attested.id, attested.revision, { declarationKey: 'property_owner',
+    signerName: attested.answers.owner_name, strokes: ink, accepted: true, scopeSha256: activity.activitySigningScope(attested, 'after') }, 'prefill-owner-signature');
+  for (const record of [attested, signed]) {
+    const view = await h.service.piesaPresentation(owner, record);
+    assert.deepEqual(view.prefillAnswers, {}); assert.equal(view.businessContactSuggestion, undefined);
+    assert.deepEqual(view.answers, record.answers); assert.deepEqual(view.signerDefaults, record.signerDefaults);
+  }
+  const done = await h.service.completePiesaRecord(owner, signed.id, signed.revision, 'prefill-complete');
+  const before = h.sql.prepare('SELECT * FROM trade_veu_electrical_assessments').get();
+  const view = await h.service.piesaPresentation(owner, done);
+  assert.deepEqual(view.prefillAnswers, {}); assert.equal(view.businessContactSuggestion, undefined);
+  assert.deepEqual(view.answers, done.answers); assert.deepEqual(h.sql.prepare('SELECT * FROM trade_veu_electrical_assessments').get(), before);
 });
 
 test('PIESA completion reconciles saved job progress and exact completion retries repair a pending projection', async t => {

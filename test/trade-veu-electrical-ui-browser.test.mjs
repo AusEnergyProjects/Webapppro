@@ -23,10 +23,18 @@ const bundle=await build({stdin:{resolveDir:root,loader:"tsx",contents:`
  }}]});
 const js=bundle.outputFiles.find(x=>x.path.endsWith(".js")).text,css=bundle.outputFiles.find(x=>x.path.endsWith(".css")).text;
 
-function presentation(record){const completion=veuElectricalCompletion(record);const {ownerUid,...visible}=record;void ownerUid;return {...visible,evidence:record.evidence.map(({objectKey,previewObjectKey,...evidence})=>evidence),ready:completion.ready,missing:completion.missing,signingScopes:{before:activitySigningScope(record,"before"),after:activitySigningScope(record,"after")},reportUrl:record.status==="complete"?"/api/trade-veu-electrical-assessments?recordId=piesa-one&view=pdf":"",delivery:record.status==="complete"?[{role:"customer",status:"accepted",message:"Provider accepted the customer copy.",acceptedAt:"2026-10-08T00:10:00Z"},{role:"business",status:"blocked",message:"Add a business email address, then retry delivery.",acceptedAt:""}]:[]};}
+function presentation(record,state={}){const completion=veuElectricalCompletion(record);const {ownerUid,...visible}=record;void ownerUid;return {...visible,
+ ...(state.prefillAnswers?{prefillAnswers:state.prefillAnswers,businessContactSuggestion:state.businessContactSuggestion}:{}),
+ evidence:record.evidence.map(({objectKey,previewObjectKey,...evidence})=>evidence),ready:completion.ready,missing:completion.missing,signingScopes:{before:activitySigningScope(record,"before"),after:activitySigningScope(record,"after")},reportUrl:record.status==="complete"?"/api/trade-veu-electrical-assessments?recordId=piesa-one&view=pdf":"",delivery:record.status==="complete"?[{role:"customer",status:"accepted",message:"Provider accepted the customer copy.",acceptedAt:"2026-10-08T00:10:00Z"},{role:"business",status:"blocked",message:"Add a business email address, then retry delivery.",acceptedAt:""}]:[]};}
 async function setup(browser,width,query="") {
  const page=await browser.newPage({viewport:{width,height:900}}),record=electricalRecord(),writes=[],state={rejectNextSave:false};
- let started=query.includes("readonly");const errors=[];page.on("pageerror",e=>errors.push(e.message));page.setDefaultTimeout(7000);
+ let started=query.includes("readonly")||query.includes("prefill");
+ if(query.includes("prefill")){
+  record.answers={initial_rec_name:"Manual REC name"};
+  state.prefillAnswers={job_reference:"TLJ-SYNTHETIC",property_address:"12 Synthetic Street, Frankston, VIC, 3199",owner_name:"Synthetic Customer",initial_electrician_name:"Synthetic Electrician",initial_electrician_licence:"SYNTHETIC-LICENCE"};
+  state.businessContactSuggestion={name:"Synthetic Business",phone:"0399990001"};
+ }
+ const errors=[];page.on("pageerror",e=>errors.push(e.message));page.setDefaultTimeout(7000);
  await page.route("https://fixture.invalid/**",async route=>{
   const request=route.request(),url=new URL(request.url());
   if(url.pathname!=="/api/trade-veu-electrical-assessments")return route.fulfill({status:200,contentType:"text/html",body:"<!doctype html><html><body></body></html>"});
@@ -34,8 +42,8 @@ async function setup(browser,width,query="") {
   let result;
   if(request.method()==="GET") {
    if(url.searchParams.has("catalogue"))result={ok:true,form:record.form,source:{url:VEU_ELECTRICAL_SOURCE_URL,path:VEU_ELECTRICAL_SOURCE_PATH,sha256:VEU_ELECTRICAL_SOURCE_SHA256,label:"March 2026"}};
-   else if(url.searchParams.has("recordId"))result={ok:true,record:presentation(record)};
-   else result={ok:true,canManage:true,records:started?[presentation(record)]:[]};
+   else if(url.searchParams.has("recordId"))result={ok:true,record:presentation(record,state)};
+   else result={ok:true,canManage:true,records:started?[presentation(record,state)]:[]};
   } else {
    const multipart=request.headers()["content-type"]?.startsWith("multipart/form-data");
    const data=multipart?await new Request(request.url(),{method:request.method(),headers:request.headers(),body:request.postDataBuffer()}).formData():null;
@@ -63,7 +71,7 @@ async function setup(browser,width,query="") {
     }else throw new Error("Unexpected assessment action");
     record.revision++;
    }
-   result={ok:true,record:presentation(record)};
+   result={ok:true,record:presentation(record,state)};
   }
   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(result)});
  });
@@ -130,5 +138,42 @@ test("official safety library is authenticated, source-based and read-only; job 
   const f=await setup(browser,390,"?catalogue");await f.page.getByText("VICTORIA · OFFICIAL FORM",{exact:true}).waitFor();await f.page.getByText("View assessment questions",{exact:true}).click();await f.page.getByText("Date of inspection",{exact:true}).waitFor();
   assert.equal(await f.page.getByRole("button",{name:"Start assessment",exact:true}).count(),0);assert.equal(await f.page.locator("input,select,textarea").count(),0);assert.equal(f.writes.length,0);assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await f.page.close();
   const g=await setup(browser,390,"?readonly");await g.page.getByRole("button",{name:"Open assessment",exact:true}).click();assert.equal(await g.page.getByRole("button",{name:"Save answers",exact:true}).count(),0);assert.equal(await g.page.getByRole("button",{name:"Fill by voice",exact:true}).count(),0);assert.equal(await g.page.locator("fieldset input:not(:disabled),fieldset select:not(:disabled)").count(),0);assert.equal(g.writes.length,0);await g.page.close();
+ }finally{await browser.close();}
+});
+
+test("existing draft known details are visible, editable and explicitly saved; REC suggestions never claim registration",{skip:!executablePath&&"Native browser unavailable",timeout:40000},async t=>{
+ const browser=await chromium.launch({executablePath,headless:true});try{
+  for(const width of [1366,390])await t.test(`${width}px`,async()=>{
+   const f=await setup(browser,width,"?prefill"),{page}=f;
+   await page.getByRole("button",{name:"Open assessment",exact:true}).click();
+   assert.equal(await page.locator('[id="piesa-piesa-one-job_reference"]').inputValue(),"TLJ-SYNTHETIC");
+   assert.equal(await page.locator('[id="piesa-piesa-one-property_address"]').inputValue(),"12 Synthetic Street, Frankston, VIC, 3199");
+   assert.equal(await page.locator('[id="piesa-piesa-one-inspection_date"]').inputValue(),"");
+   assert.equal(f.record.answers.job_reference,undefined);assert.equal(f.writes.length,0,"Reading a draft does not persist its defaults");
+   await page.locator('[id="piesa-piesa-one-job_reference"]').fill("");
+   const refreshed=page.waitForResponse(response=>response.url().includes("recordId="));
+   await page.getByRole("button",{name:"Refresh",exact:true}).click();await refreshed;
+   assert.equal(await page.locator('[id="piesa-piesa-one-job_reference"]').inputValue(),"","Refresh preserves a locally cleared answer");
+   const b3=f.record.form.fields.find(field=>field.key==="initial_rec_name").section;
+   await page.getByLabel("Assessment section",{exact:true}).selectOption({label:b3});
+   assert.equal(await page.locator('[id="piesa-piesa-one-initial_electrician_name"]').inputValue(),"Synthetic Electrician");
+   assert.equal(await page.locator('[id="piesa-piesa-one-initial_rec_name"]').inputValue(),"Manual REC name");
+   assert.equal(await page.locator('[id="piesa-piesa-one-initial_rec_phone"]').inputValue(),"");
+   await page.getByRole("button",{name:"Use business contact details",exact:true}).click();
+   assert.equal(await page.locator('[id="piesa-piesa-one-initial_rec_name"]').inputValue(),"Manual REC name","Opt-in never overwrites an entered contractor name");
+   assert.equal(await page.locator('[id="piesa-piesa-one-initial_rec_phone"]').inputValue(),"0399990001");
+   assert.equal(await page.locator('[id="piesa-piesa-one-initial_rec_number"]').inputValue(),"");
+   assert.equal(f.writes.length,0,"The contact suggestion is still an editable local answer");
+   await page.getByRole("button",{name:"Save answers",exact:true}).click();await page.getByText("Saved.",{exact:true}).waitFor();
+   assert.equal(f.writes.length,1);assert.equal(f.record.answers.initial_rec_phone,"0399990001");
+   assert.equal(f.record.answers.initial_rec_name,"Manual REC name");assert.equal(f.record.answers.job_reference,undefined,"Blank answers are omitted by canonical normalization");
+   await page.getByLabel("Assessment section",{exact:true}).selectOption({label:f.record.form.fields[0].section});
+   assert.equal(await page.locator('[id="piesa-piesa-one-job_reference"]').inputValue(),"","Successful save does not reapply an intentionally cleared default");
+   assert.equal(f.record.answers.initial_rec_number,undefined);assert.equal(f.record.initialAttestation,undefined);assert.equal(f.record.signatures.length,0);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(f.errors,[]);await page.close();
+  });
+  const readonly=await setup(browser,390,"?readonly&prefill");await readonly.page.getByRole("button",{name:"Open assessment",exact:true}).click();
+  assert.equal(await readonly.page.locator('[id="piesa-piesa-one-job_reference"]').inputValue(),"","Read-only answers remain the actual saved record");
+  assert.equal(readonly.writes.length,0);await readonly.page.close();
  }finally{await browser.close();}
 });

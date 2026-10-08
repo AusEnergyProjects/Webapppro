@@ -18,6 +18,15 @@ const endpoint = "/api/trade-veu-electrical-assessments";
 type Source = { url: string; path: string; sha256: string; label: string };
 type Result = { ok: boolean; error?: string; record?: PiesaPresentation; records?: PiesaPresentation[]; canManage?: boolean; form?: ActivityForm; source?: Source };
 const equal = (left: ActivityAnswers, right: ActivityAnswers) => JSON.stringify(Object.entries(left).sort()) === JSON.stringify(Object.entries(right).sort());
+const blank = (value: ActivityAnswers[string]) => value === undefined || typeof value === "string" && !value.trim();
+function draftWithKnownDetails(record: PiesaPresentation, draft: ActivityAnswers, base?: ActivityAnswers) {
+  if (record.status !== "draft" || record.signatures.length || record.initialAttestation) return draft;
+  const next = { ...draft };
+  for (const [key, value] of Object.entries(record.prefillAnswers || {})) {
+    if (blank(next[key]) && (!base || Object.hasOwn(base, key) === Object.hasOwn(draft, key) && base[key] === draft[key])) next[key] = value;
+  }
+  return next;
+}
 
 export function TradeVeuElectricalAssessmentPanel({ user, workOrderId, readOnly = false }: { user: User; workOrderId: string; readOnly?: boolean }) {
   const business = useTradeBusiness();
@@ -52,7 +61,9 @@ function AssessmentPanel({ user, workOrderId, readOnly }: { user: User; workOrde
     const previous = current.current.record;
     if (next.workOrderId !== workOrderId) throw new Error("This assessment does not belong to the selected job.");
     const merged = previous?.id === next.id ? mergeActivityAnswers(previous.answers, current.current.draft, next.answers) : { merged: next.answers, conflicts: [] };
-    setRecord(next); setDraft(merged.merged); setRecords(items => [next, ...items.filter(item => item.id !== next.id)]);
+    const withDetails = !native && !readOnly && canManage
+      ? draftWithKnownDetails(next, merged.merged, previous?.id === next.id ? previous.answers : undefined) : merged.merged;
+    setRecord(next); setDraft(withDetails); setRecords(items => [next, ...items.filter(item => item.id !== next.id)]);
     setInk({}); setAccepted({});
     if (merged.conflicts.length) setError("Some answers changed elsewhere. Your unsaved answers are still here; review them before saving.");
     if (previous) {
@@ -60,18 +71,21 @@ function AssessmentPanel({ user, workOrderId, readOnly }: { user: User; workOrde
       dispatchWattzunFormRefreshed(detail);
       if (native) dispatchWattzunFormNativeSaved(detail);
     }
-  }, [scopeId, workOrderId]);
+  }, [scopeId, workOrderId, readOnly, canManage]);
   useEffect(() => {
     mounted.current = true; const id = ++sequence.current;
     void request(`?workOrderId=${encodeURIComponent(workOrderId)}`).then(result => {
       if (!mounted.current || id !== sequence.current) return;
       if (!Array.isArray(result.records)) throw new Error("The assessment list could not be read.");
       setRecords(result.records); setCanManage(result.canManage === true);
-      if (result.records[0]) { setRecord(result.records[0]); setDraft(result.records[0].answers); }
+      if (result.records[0]) {
+        const next = result.records[0];
+        setRecord(next); setDraft(!readOnly && result.canManage === true ? draftWithKnownDetails(next, next.answers) : next.answers);
+      }
     }).catch(failure => { if (mounted.current && id === sequence.current) setError(failure instanceof Error ? failure.message : "The assessments could not be loaded."); })
       .finally(() => { if (mounted.current && id === sequence.current) setBusy(""); });
     return () => { mounted.current = false; sequence.current = id + 1; };
-  }, [request, workOrderId]);
+  }, [request, workOrderId, readOnly]);
   const writable = !readOnly && canManage && record?.status === "draft";
   const fields = useMemo(() => record ? expandedActivityFields(record.form, draft) : [], [record, draft]);
   const sections = [...new Set(fields.map(field => field.section))];
@@ -164,7 +178,16 @@ function AssessmentPanel({ user, workOrderId, readOnly }: { user: User; workOrde
         {record && <><strong>{record.recordNumber} · {record.status === "complete" ? "Complete" : "Draft"}</strong><button type="button" disabled={Boolean(busy)} onClick={() => setOpen(value => !value)}>{open ? "Close assessment" : "Open assessment"}</button><button type="button" disabled={Boolean(busy)} onClick={() => void reload()}>Refresh</button></>}
       </div>{!record && <p>No electrical safety assessment has been started on this job.</p>}
       {record && open && <><div className={styles.toolbar}><label>Section<select aria-label="Assessment section" value={Math.min(page, sections.length)} onChange={event => setPage(Number(event.target.value))}>{sections.map((section, index) => <option key={section} value={index}>{section}</option>)}<option value={sections.length}>Signatures and completion</option></select></label>{writable && <><button type="button" disabled={Boolean(busy) || !dirty} onClick={() => run(save)}>{busy === "save" ? "Saving..." : "Save answers"}</button><WattzunFormAssistButton userUid={user.uid} formKind="veu_electrical" jobId={workOrderId} disabled={Boolean(busy)} beforeOpen={save} /></>}</div>
-        {page < sections.length ? <fieldset className={styles.questions} disabled={Boolean(busy) || !writable}><legend>{sections[page]}</legend>{fields.filter(field => field.section === sections[page]).map(field => <div key={field.key} className={styles.question} data-assessment-key={field.key}>
+        {page < sections.length ? <fieldset className={styles.questions} disabled={Boolean(busy) || !writable}><legend>{sections[page]}</legend>
+          {sections[page] === record.form.fields.find(field => field.key === "initial_rec_name")?.section && record.businessContactSuggestion
+            && (record.businessContactSuggestion.name || record.businessContactSuggestion.phone) && <div className={styles.question}>
+              <p>Your business contact: {record.businessContactSuggestion.name}{record.businessContactSuggestion.phone ? ` · ${record.businessContactSuggestion.phone}` : ""}. Use these editable details only if this business is the Registered Electrical Contractor for this assessment. Enter its actual REC registration number.</p>
+              <button type="button" disabled={!writable || Boolean(busy) || !blank(draft.initial_rec_name) && !blank(draft.initial_rec_phone)} onClick={() => setDraft(previous => ({ ...previous,
+                ...(blank(previous.initial_rec_name) && record.businessContactSuggestion?.name ? { initial_rec_name: record.businessContactSuggestion.name } : {}),
+                ...(blank(previous.initial_rec_phone) && record.businessContactSuggestion?.phone ? { initial_rec_phone: record.businessContactSuggestion.phone } : {}),
+              }))}>Use business contact details</button>
+            </div>}
+          {fields.filter(field => field.section === sections[page]).map(field => <div key={field.key} className={styles.question} data-assessment-key={field.key}>
           <label htmlFor={`piesa-${record.id}-${field.key}`}>{field.label}{field.required && <span> *</span>}{field.repeatGroup && <small> {activityRepeatItemLabel(field.repeatGroup)} {field.repeatIndex + 1}</small>}</label>
           {field.help && <p>{field.help}</p>}
           {field.key === "initial_correct" ? <><p>{draft.initial_correct === true ? "Initial assessment attestation saved." : "Review the initial assessment and confirm this declaration on screen."}</p><button type="button" disabled={dirty || draft.initial_correct === true} onClick={() => run(() => mutate("attest_initial", { action: "attest_initial", recordId: record.id, baseRevision: record.revision, scopeSha256: record.signingScopes.before, accepted: true }))}>Confirm initial assessment declaration</button></>

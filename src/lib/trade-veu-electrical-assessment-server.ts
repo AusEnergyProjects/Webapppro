@@ -6,7 +6,7 @@ import { verifiedTradeAccountPredicate } from "./trade-account-predicates";
 import { activityCanonical, activityConditionMet, activityDeclarationText, activityHash, activityMissing,
   activitySigningScope, normaliseActivityAnswers, validateActivityStrokes } from "./trade-activity-forms";
 import { expandedActivityFields } from "./trade-activity-form-flow";
-import type { ActivityEvidence, ActivitySignature } from "./trade-activity-form-types";
+import type { ActivityAnswers, ActivityEvidence, ActivitySignature } from "./trade-activity-form-types";
 import { createVeuElectricalForm, veuElectricalCompletion, VEU_ELECTRICAL_SIGNER_FIELDS } from "./veu-electrical-safety-form";
 import { PiesaError, type PiesaRecord, type PiesaPresentation, type PiesaDelivery, type PiesaDeliveryRole } from "./veu-electrical-assessment";
 import { ensurePiesaSchemaGuards } from "./trade-veu-electrical-schema-guards";
@@ -113,23 +113,79 @@ export async function listPiesaRecords(access:TeamAccess,workOrderId:string) {
   return Promise.all(rows.results.map(row=>piesaPresentation(access,parse(row))));
 }
 async function recipients(ownerUid:string,workOrderId:string) {
-  const row=await getD1().prepare(`SELECT a.email business_email,a.business_name,c.email customer_email,c.first_name,c.last_name,
-      d.crm_customer_id,w.work_number,d.customer_source,w.source_type
+  const row=await getD1().prepare(`SELECT a.email business_email,c.email customer_email,d.customer_source,w.source_type
     FROM trade_work_orders w JOIN trade_accounts a ON a.firebase_uid=w.firebase_uid
     LEFT JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
     LEFT JOIN trade_crm_customers c ON c.id=d.crm_customer_id AND c.firebase_uid=w.firebase_uid AND c.record_status='active'
     WHERE w.id=? AND w.firebase_uid=? AND w.record_status='active' AND w.partner_type='installer'`)
-    .bind(workOrderId,ownerUid).first<{business_email:string;business_name:string;customer_email:string;first_name:string;last_name:string;work_number:string;customer_source:string;source_type:string}>();
-  return {business:email(row?.business_email),customer:row && row.source_type!=="opportunity" && ["trade_owned","public_lead_released"].includes(row.customer_source)?email(row.customer_email):"",
-    customerName:row?[row.first_name,row.last_name].filter(Boolean).join(" "):"",businessName:row?.business_name||"Your business"};
+    .bind(workOrderId,ownerUid).first<{business_email:string;customer_email:string;customer_source:string;source_type:string}>();
+  return {business:email(row?.business_email),customer:row && row.source_type!=="opportunity" && ["trade_owned","public_lead_released"].includes(row.customer_source)?email(row.customer_email):""};
+}
+async function piesaProfileDefaults(access:TeamAccess,workOrderId:string) {
+  const db=getD1(),guard=currentAccess(access,false);
+  const context=await db.prepare(`SELECT w.work_number,c.first_name,c.last_name,
+      site.address_line_1,site.address_line_2,site.suburb,site.address_state,site.postcode,
+      account.business_name,COALESCE(NULLIF(account.document_phone,''),account.phone) business_phone
+    FROM trade_work_orders w JOIN trade_accounts account ON account.firebase_uid=w.firebase_uid
+    LEFT JOIN trade_crm_job_details details ON details.work_order_id=w.id AND details.firebase_uid=w.firebase_uid
+      AND w.source_type<>'opportunity' AND details.customer_source IN ('trade_owned','public_lead_released')
+    LEFT JOIN trade_crm_customers c ON c.id=details.crm_customer_id AND c.firebase_uid=w.firebase_uid AND c.record_status='active'
+    LEFT JOIN trade_crm_service_sites site ON site.id=details.service_site_id AND site.firebase_uid=w.firebase_uid
+      AND site.customer_id=c.id AND site.record_status='active'
+    WHERE w.id=? AND w.firebase_uid=? AND w.partner_type='installer' AND w.record_status='active' AND ${guard.sql}`)
+    .bind(workOrderId,access.ownerUid,...guard.values)
+    .first<{work_number:string;first_name:string;last_name:string;address_line_1:string;address_line_2:string;suburb:string;
+      address_state:string;postcode:string;business_name:string;business_phone:string}>();
+  if(!context)fail("PIESA_ACCESS_REQUIRED","Your current business or job access does not include this assessment.",403);
+  const now=stamp();
+  // A saved individual identity is editable; a licence additionally needs its
+  // current supporting credential. Neither is a finding about this property.
+  const technician=await db.prepare(`SELECT member.first_name,member.last_name,credential.credential_number
+    FROM trade_team_members member LEFT JOIN trade_team_member_credentials credential
+      ON credential.team_member_id=member.id AND credential.owner_uid=member.owner_uid
+      AND credential.rental_gate='licensed_electrician' AND credential.credential_type IN ('licence','registration')
+      AND credential.status='active' AND trim(credential.credential_number)<>'' AND credential.jurisdiction IN ('VIC','NATIONAL')
+      AND credential.expires_at<>'' AND date(credential.expires_at)>=date(?)
+      AND EXISTS(SELECT 1 FROM trade_team_member_files file WHERE file.id=credential.file_id
+        AND file.owner_uid=member.owner_uid AND file.team_member_id=member.id AND file.status='active'
+        AND file.expires_at<>'' AND date(file.expires_at)>=date(?))
+    WHERE member.id=? AND member.owner_uid=? AND member.status='active'
+      AND trim(member.first_name)<>'' AND trim(member.last_name)<>''
+      AND (member.member_uid=? OR (?<>'' AND ?='field-member:'||member.id AND EXISTS(SELECT 1 FROM trade_field_sessions session
+        WHERE session.id=? AND session.owner_uid=member.owner_uid AND session.team_member_id=member.id AND session.status='active' AND session.expires_at>?)))
+    ORDER BY credential.updated_at DESC,credential.id DESC LIMIT 1`)
+    .bind(now,now,access.memberId,access.ownerUid,access.actorUid,access.fieldSessionId||"",access.actorUid,access.fieldSessionId||"",now)
+    .first<{first_name:string;last_name:string;credential_number:string|null}>();
+  const answers:ActivityAnswers={};
+  const add=(key:string,value:string)=>{if(value.trim())answers[key]=value.trim();};
+  add("job_reference",context.work_number||"");
+  add("property_address",[context.address_line_1,context.address_line_2,context.suburb,context.address_state,context.postcode].filter(Boolean).join(", "));
+  add("owner_name",[context.first_name,context.last_name].filter(Boolean).join(" "));
+  if(technician){
+    add("initial_electrician_name",[technician.first_name,technician.last_name].map(value=>value.trim()).join(" "));
+    add("initial_electrician_licence",technician.credential_number||"");
+  }
+  return {answers,businessContactSuggestion:{name:(context.business_name||"").trim(),phone:(context.business_phone||"").trim()}};
+}
+function blankPiesaDefaults(record:PiesaRecord,defaults:ActivityAnswers):ActivityAnswers {
+  if(record.status!=="draft"||record.signatures.length||record.initialAttestation)return {};
+  return Object.fromEntries(Object.entries(defaults).filter(([key])=>{
+    const value=record.answers[key];
+    // Keep a manually entered electrician and licence together. Another user's
+    // otherwise valid profile must never supply the missing half of that pair.
+    const otherKey=key==="initial_electrician_name"?"initial_electrician_licence":key==="initial_electrician_licence"?"initial_electrician_name":"";
+    if(otherKey&&String(record.answers[otherKey]||"").trim()
+      &&String(record.answers[otherKey]).trim().toLocaleLowerCase("en-AU")!==String(defaults[otherKey]||"").trim().toLocaleLowerCase("en-AU"))return false;
+    return value===undefined||typeof value==="string"&&!value.trim();
+  }));
 }
 export async function startPiesaRecord(access:TeamAccess,workOrderId:string) {
   const job=await scope(access,workOrderId,true),db=getD1();await ensurePiesaSchemaGuards(db);
   const existing=await db.prepare("SELECT * FROM trade_veu_electrical_assessments WHERE work_order_id=? AND owner_uid=?").bind(workOrderId,access.ownerUid).first<Row>();
   if(existing)return parse(existing);
-  const contacts=await recipients(access.ownerUid,workOrderId),form=createVeuElectricalForm(),now=stamp(),id=crypto.randomUUID();
+  const defaults=await piesaProfileDefaults(access,workOrderId),form=createVeuElectricalForm(),now=stamp(),id=crypto.randomUUID();
   const record:PiesaRecord={id,workOrderId,ownerUid:access.ownerUid,recordNumber:`PIESA-${id.slice(0,8).toUpperCase()}`,revision:1,status:"draft",form,formSha256:activityHash(form),
-    answers:{},evidence:[],signatures:[],signerDefaults:{customer:contacts.customerName,technician:access.displayName},createdAt:now,updatedAt:now,completedAt:""};
+    answers:defaults.answers,evidence:[],signatures:[],signerDefaults:{customer:String(defaults.answers.owner_name||""),technician:String(defaults.answers.initial_electrician_name||"")},createdAt:now,updatedAt:now,completedAt:""};
   const payload=activityCanonical(record);
   await scope(access,workOrderId,true);
   const guard=currentAccess(access,true);
@@ -303,7 +359,14 @@ function deliveryMessage(row:DeliveryRow) {
 export async function piesaPresentation(access:TeamAccess,record:PiesaRecord):Promise<PiesaPresentation> {
   await scope(access,record.workOrderId);const {ownerUid,evidence,...publicRecord}=record;void ownerUid;
   const completion=veuElectricalCompletion(record);
+  const editable=access.canManageFieldEvidence&&record.status==="draft"&&!record.signatures.length&&!record.initialAttestation;
+  const defaults=editable?await piesaProfileDefaults(access,record.workOrderId):null;
+  if(defaults)await scope(access,record.workOrderId);
+  const prefillAnswers=defaults?blankPiesaDefaults(record,defaults.answers):{};
   return {...publicRecord,evidence:evidence.map(({objectKey,previewObjectKey,...item})=>{void objectKey;void previewObjectKey;return item;}),missing:completion.missing,ready:completion.ready,
+    prefillAnswers,
+    ...(defaults?{businessContactSuggestion:defaults.businessContactSuggestion,
+      signerDefaults:{customer:String(record.answers.owner_name||prefillAnswers.owner_name||""),technician:String(record.answers.initial_electrician_name||prefillAnswers.initial_electrician_name||"")}}:{}),
     signingScopes:{before:activitySigningScope(record,"before"),after:activitySigningScope(record,"after")},signerFields:VEU_ELECTRICAL_SIGNER_FIELDS,reportUrl:record.status==="complete"?`${API}?recordId=${encodeURIComponent(record.id)}&view=pdf`:"",
     delivery:(await deliveryRows(access,record.id)).map(row=>({role:row.recipient_role,status:row.status,message:deliveryMessage(row),acceptedAt:row.accepted_at}))};
 }
