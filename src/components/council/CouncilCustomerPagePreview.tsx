@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef } from "react";
+import { lazy, Suspense, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { CouncilProfileInput } from "@/lib/council-profile";
 import { councilThemeVariables } from "@/lib/council-theme";
-import { CouncilProgram } from "../CouncilProgram";
 import styles from "./CouncilProfileSettings.module.css";
+
+const CouncilProgram = lazy(() => import("../CouncilProgram").then(module => ({ default: module.CouncilProgram })));
 
 export function CouncilCustomerPagePreview({ profile, state, onClose }: {
   profile: CouncilProfileInput;
@@ -59,7 +60,7 @@ export function CouncilCustomerPagePreview({ profile, state, onClose }: {
       <button ref={closeButton} type="button" onClick={onClose}>Close preview</button>
     </header>
     <div className={styles.customerPreviewViewport}>
-      <CouncilProgram embeddedPreview demonstration campaign={{
+      <Suspense fallback={<p role="status" aria-live="polite">Loading your customer page preview...</p>}><CouncilProgram embeddedPreview demonstration campaign={{
         code: "PROFILE-PREVIEW",
         title: "Better energy for your home or business",
         kind: "campaign",
@@ -74,7 +75,7 @@ export function CouncilCustomerPagePreview({ profile, state, onClose }: {
         primaryColor: profile.theme.primaryColor,
         accentColor: profile.theme.accentColor,
         homeUrl: profile.publicJourney?.homeUrl,
-      }} />
+      }} /></Suspense>
     </div>
   </dialog>, document.body);
 }
