@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
+import { isValidAbn, normalizeAbn } from "../src/lib/trade-abn.ts";
 
 const text = node => node == null || typeof node === "boolean" ? "" : typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join(" ") : text(node.props?.children);
 const nodes = (node, predicate) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(child => nodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...nodes(node.props?.children, predicate)];
@@ -30,7 +31,8 @@ function harness({ catalogue = false, partners = false, preferences, saved = fal
       : name.endsWith("WorkspaceTableTools") ? { WorkspaceTableTools, downloadWorkspaceCsv() {} }
         : name.endsWith("admin-workspace") ? { readable: value => value, workspaceError: error => error.message, dateTime: value => value }
           : name.endsWith("australian-postcodes.mjs") ? { AUSTRALIAN_STATE_CODES: ["VIC"] }
-            : name.endsWith(".css") ? { default: {} } : {};
+            : name.endsWith("trade-abn") ? { isValidAbn, normalizeAbn }
+              : name.endsWith(".css") ? { default: {} } : {};
   const api = async path => {
     requests.push(path);
     if (path.startsWith("/api/admin/list-views")) return { preferences: preferences || { filter: "open", listing: "open", pageSize: 25 }, saved };

@@ -7,6 +7,7 @@ import { WorkspaceListControls, type WorkspaceListPreferences } from "@/componen
 import { downloadWorkspaceCsv } from "@/components/WorkspaceTableTools";
 import { dateTime, readable, resetWorkspaceListView, saveWorkspaceListView, workspaceError } from "@/components/admin-workspace";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
+import { isValidAbn, normalizeAbn } from "@/lib/trade-abn";
 import styles from "./AdminAccountWorkspace.module.css";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
@@ -15,7 +16,7 @@ type Account = {
   firebaseUid: string; email: string; businessName: string; abn?: string; contactName: string; phone?: string; partnerType: string;
   businessWebsite?: string; addressLine1?: string; suburb?: string; addressState: string; postcode: string;
   serviceStates: string[]; capabilities: string[]; summary?: string; accountStatus: string; verificationStatus: string;
-  verifiedAbn: string; verificationReviewedAt: string; verificationReviewedByUid: string; accessApproved: boolean;
+  verifiedAbn: string; verificationReviewId: string; verificationReviewedAt: string; verificationReviewedByUid: string; approvalReviewExists: boolean; accessApproved: boolean;
   officialAbnLookupUrl: string; availabilityStatus: string; createdAt: string; updatedAt: string;
   serviceBasePostcode: string; serviceRadiusKm: number;
 };
@@ -75,6 +76,21 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
   const [accountNote, setAccountNote] = useState("");
   const [legalEntityName, setLegalEntityName] = useState("");
   const [reviewMethod, setReviewMethod] = useState("official_abr_lookup");
+  const [savedAccount, setSavedAccount] = useState<Account | null>(null);
+  const accountSavePending = useRef(false);
+  const [accountSaveBusy, setAccountSaveBusy] = useState(false);
+  const [accountSaveStatus, setAccountSaveStatus] = useState<{ message: string; error: boolean } | null>(null);
+  const moderationNote = useRef<HTMLTextAreaElement>(null);
+  const legalEntityInput = useRef<HTMLInputElement>(null);
+  const originalAccount = savedAccount;
+  const originalAbn = normalizeAbn(originalAccount?.abn);
+  const existingApprovalValid = originalAccount?.verificationStatus === "approved"
+    && isValidAbn(originalAbn) && normalizeAbn(originalAccount.verifiedAbn) === originalAbn
+    && Boolean(originalAccount.verificationReviewId && originalAccount.verificationReviewedAt && originalAccount.verificationReviewedByUid && originalAccount.approvalReviewExists);
+  const freshApprovalRequired = selectedAccount?.account.verificationStatus === "approved" && !existingApprovalValid;
+  const reviewNoteRequired = Boolean(freshApprovalRequired || (selectedAccount && originalAccount
+    && selectedAccount.account.verificationStatus !== originalAccount.verificationStatus
+    && ["approved", "needs_information", "rejected", "expired"].includes(selectedAccount.account.verificationStatus)));
 
   const loadAccounts = useCallback(async (announce = false) => {
     const params = new URLSearchParams({ page: String(accountPage), pageSize: String(accountPageSize), sort: accountSort });
@@ -106,6 +122,7 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
       const result = await api(`/api/admin/accounts?uid=${encodeURIComponent(uid)}`);
       if (!result.account || !result.entitlements) throw new Error("Business account details were unavailable.");
       const reviews = result.reviews || [];
+      setSavedAccount(result.account);
       setSelectedAccount({
         account: result.account,
         documents: result.documents || [],
@@ -116,8 +133,9 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
       });
       setLegalEntityName(reviews[0]?.legal_entity_name || result.account.businessName);
       setReviewMethod(reviews[0]?.review_method || "official_abr_lookup");
-      setAccountNote(""); setStatus("");
-    } catch (error) { setStatus(workspaceError(error, "The secure account action could not be completed.")); }
+      setAccountNote(""); setAccountSaveStatus(null); setStatus("");
+      return true;
+    } catch (error) { setStatus(workspaceError(error, "The secure account action could not be completed.")); return false; }
   }, [api, setStatus]);
 
   useEffect(() => {
@@ -171,7 +189,17 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
   async function searchAccounts(event?: FormEvent) { event?.preventDefault(); if (accountPage !== 1) setAccountPage(1); else await loadAccounts(true); }
   function updateSelectedAccount(key: keyof Account, value: string) { setSelectedAccount((current) => current ? { ...current, account: { ...current.account, [key]: value } } : current); }
   async function saveAccount(event: FormEvent) {
-    event.preventDefault(); if (!selectedAccount) return;
+    event.preventDefault(); if (!selectedAccount || accountSavePending.current) return;
+    if (reviewNoteRequired && !accountNote.trim()) {
+      const message = "Record the evidence and reason for this decision.";
+      setAccountSaveStatus({ message, error: true }); setStatus(message); moderationNote.current?.focus(); return;
+    }
+    if (freshApprovalRequired && !legalEntityName.trim()) {
+      const message = "Record the legal entity name shown in the ABN register.";
+      setAccountSaveStatus({ message, error: true }); setStatus(message); legalEntityInput.current?.focus(); return;
+    }
+    accountSavePending.current = true; setAccountSaveBusy(true);
+    setAccountSaveStatus({ message: "Saving moderation decision...", error: false });
     setStatus("Saving moderation decision...");
     try {
       await api("/api/admin/accounts", { method: "PATCH", body: JSON.stringify({
@@ -182,8 +210,13 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
         sourceReference: reviewMethod === "official_abr_lookup" ? selectedAccount.account.officialAbnLookupUrl : "",
         note: accountNote,
       }) });
-      await openAccount(selectedAccount.account.firebaseUid); await searchAccounts(); setStatus("Account decision saved and recorded in the audit history.");
-    } catch (error) { setStatus(workspaceError(error, "The secure account action could not be completed.")); }
+      const refreshed = await openAccount(selectedAccount.account.firebaseUid); await searchAccounts();
+      const message = refreshed ? "Account decision saved and recorded in the audit history." : "Account decision saved. Reopen the account to refresh its current details.";
+      setAccountSaveStatus({ message, error: false }); setStatus(message);
+    } catch (error) {
+      const message = workspaceError(error, "The secure account action could not be completed.");
+      setAccountSaveStatus({ message, error: true }); setStatus(message);
+    } finally { accountSavePending.current = false; setAccountSaveBusy(false); }
   }
   async function downloadEvidence(id: unknown, fileName: unknown) {
     setStatus("Preparing protected document download...");
@@ -213,20 +246,23 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
     <div className="workspace-table-actionbar"><button className="workspace-csv-export" type="button" disabled={!accounts.length} onClick={exportPartners}>Export visible partners CSV</button></div>
     <div className={styles.layout}>
       <section className={`admin-panel tlink-data-table ${styles.list}`}><div className="admin-table-header"><span>Business</span><span>Type</span><span>Verification</span><span>Account</span></div>
-        {accounts.length ? accounts.map((account) => <button key={account.firebaseUid} className={selectedAccount?.account.firebaseUid === account.firebaseUid ? styles.selected : ""} onClick={() => void openAccount(account.firebaseUid)}><span><strong>{account.businessName}</strong><small>{account.email}<br />{account.addressState} {account.postcode} · {account.accessApproved ? "Access approved" : "ABN review required"}</small></span><span>{account.partnerType === "supplier" ? "Wholesaler" : "Installer"}</span><span className={`admin-pill admin-pill-${account.verificationStatus}`}>{readable(account.verificationStatus)}</span><span className={`admin-pill admin-pill-${account.accountStatus}`}>{readable(account.accountStatus)}</span></button>) : <p className="admin-empty">No accounts match these filters.</p>}
+        {accounts.length ? accounts.map((account) => <button key={account.firebaseUid} disabled={accountSaveBusy} className={selectedAccount?.account.firebaseUid === account.firebaseUid ? styles.selected : ""} onClick={() => void openAccount(account.firebaseUid)}><span><strong>{account.businessName}</strong><small>{account.email}<br />{account.addressState} {account.postcode} · {account.accessApproved ? "Access approved" : "ABN review required"}</small></span><span>{account.partnerType === "supplier" ? "Wholesaler" : "Installer"}</span><span className={`admin-pill admin-pill-${account.verificationStatus}`}>{readable(account.verificationStatus)}</span><span className={`admin-pill admin-pill-${account.accountStatus}`}>{readable(account.accountStatus)}</span></button>) : <p className="admin-empty">No accounts match these filters.</p>}
       </section>
       <aside className={`admin-panel ${styles.detail}`}>
         {selectedAccount ? <>
           <div className="admin-panel-heading"><span>{selectedAccount.account.partnerType}</span><h2>{selectedAccount.account.businessName}</h2><p>{selectedAccount.account.contactName} · {selectedAccount.account.email} · {selectedAccount.account.phone || "No phone"}</p></div>
           <div className={styles.facts}><div><span>Business address</span><strong>{selectedAccount.account.addressLine1}<br />{selectedAccount.account.suburb} {selectedAccount.account.addressState} {selectedAccount.account.postcode}</strong></div><div><span>ABN</span><strong>{selectedAccount.account.abn || "Not provided"}</strong>{selectedAccount.account.officialAbnLookupUrl && <a href={selectedAccount.account.officialAbnLookupUrl} target="_blank" rel="noreferrer">Open official ABN Register record</a>}</div><div><span>Access boundary</span><strong>{selectedAccount.account.accessApproved ? "Approved ABN access" : "Blocked pending ABN review"}</strong><small>{selectedAccount.account.verificationReviewedAt ? `Last approved ${dateTime(selectedAccount.account.verificationReviewedAt)}` : "No approved review is recorded."}</small></div><div><span>Serviceability</span><strong>{selectedAccount.account.partnerType === "installer" ? `${selectedAccount.account.serviceBasePostcode || selectedAccount.account.postcode} base, ${selectedAccount.account.serviceRadiusKm || 50} km radius; ${selectedAccount.account.serviceStates.join(", ")}` : selectedAccount.account.serviceStates.join(", ")}</strong></div><div><span>Capabilities</span><strong>{selectedAccount.account.capabilities.map((value) => capabilityLabels[value] || readable(value)).join(", ")}</strong></div><div><span>Joined</span><strong>{dateTime(selectedAccount.account.createdAt)}</strong></div></div>
-          <form className={styles.moderationForm} onSubmit={saveAccount}>
-            <label>Account status<select value={selectedAccount.account.accountStatus} onChange={(event) => updateSelectedAccount("accountStatus", event.target.value)} disabled={role === "reviewer"}><option>active</option><option>suspended</option><option>closed</option></select></label>
-            <label>Verification<select value={selectedAccount.account.verificationStatus} onChange={(event) => { updateSelectedAccount("verificationStatus", event.target.value); if (event.target.value === "approved") setReviewMethod("official_abr_lookup"); }}>{["submitted", "under_review", "needs_information", "approved", "rejected", "expired"].map((value) => <option key={value}>{value}</option>)}</select></label>
-            <label>Availability<select value={selectedAccount.account.availabilityStatus} onChange={(event) => updateSelectedAccount("availabilityStatus", event.target.value)} disabled={role === "reviewer"}><option>open</option><option>limited</option><option>paused</option></select></label>
-            <label>Review method<select value={reviewMethod} onChange={(event) => setReviewMethod(event.target.value)}><option value="official_abr_lookup">Official ABN Register lookup</option><option value="document_review">Business evidence review</option></select></label>
-            <label className={styles.full}>Registered legal entity name<input value={legalEntityName} onChange={(event) => setLegalEntityName(event.target.value)} placeholder="Exactly as shown in the ABN Register" /></label>
+          <form className={styles.moderationForm} onSubmit={saveAccount} noValidate aria-busy={accountSaveBusy}>
+            <label>Account status<select value={selectedAccount.account.accountStatus} onChange={(event) => updateSelectedAccount("accountStatus", event.target.value)} disabled={role === "reviewer" || accountSaveBusy}><option>active</option><option>suspended</option><option>closed</option></select></label>
+            <label>Verification<select aria-label="Verification" disabled={accountSaveBusy} value={selectedAccount.account.verificationStatus} onChange={(event) => { updateSelectedAccount("verificationStatus", event.target.value); if (event.target.value === "approved") setReviewMethod("official_abr_lookup"); }}>{["submitted", "under_review", "needs_information", "approved", "rejected", "expired"].map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label>Availability<select value={selectedAccount.account.availabilityStatus} onChange={(event) => updateSelectedAccount("availabilityStatus", event.target.value)} disabled={role === "reviewer" || accountSaveBusy}><option>open</option><option>limited</option><option>paused</option></select></label>
+            <label>Review method<select disabled={accountSaveBusy} value={reviewMethod} onChange={(event) => setReviewMethod(event.target.value)}><option value="official_abr_lookup">Official ABN Register lookup</option><option value="document_review">Business evidence review</option></select></label>
+            <label className={styles.full}>Registered legal entity name{freshApprovalRequired ? " *" : ""}<input ref={legalEntityInput} disabled={accountSaveBusy} required={freshApprovalRequired} value={legalEntityName} onChange={(event) => setLegalEntityName(event.target.value)} placeholder="Exactly as shown in the ABN Register" /></label>
             <section className={`${styles.featureControls} ${styles.full}`}><div><span>Access and permissions</span><h3>{selectedAccount.entitlements.accessLabel}</h3><p>An active account receives every role-appropriate core tool only after an administrator confirms the business against its official ABN Register record. Changing the ABN, business name or account type removes access until a fresh review is completed.</p></div></section>
-            <label className={styles.full}>Internal moderation note<textarea value={accountNote} onChange={(event) => setAccountNote(event.target.value)} placeholder="Record evidence reviewed, follow-up needed or reason for a decision." /></label><button type="submit">Save and audit decision</button>
+            <label className={styles.full}>Internal moderation note{reviewNoteRequired ? " *" : ""}<textarea ref={moderationNote} disabled={accountSaveBusy} required={reviewNoteRequired} aria-describedby={reviewNoteRequired ? "partner-review-note-help" : undefined} value={accountNote} onChange={(event) => setAccountNote(event.target.value)} placeholder="Record evidence reviewed, follow-up needed or reason for a decision." /></label>
+            {reviewNoteRequired && <p id="partner-review-note-help" className={`${styles.full} ${styles.reviewHelp}`}>Required for this decision. Record the evidence you reviewed and why you are making this decision.</p>}
+            <button type="submit" disabled={accountSaveBusy}>{accountSaveBusy ? "Saving decision..." : "Save and audit decision"}</button>
+            {accountSaveStatus && <p className={`${styles.full} ${styles.saveStatus}`} role={accountSaveStatus.error ? "alert" : "status"}>{accountSaveStatus.message}</p>}
           </form>
           <section className={styles.evidence}><h3>Verification evidence</h3>{selectedAccount.documents.length ? selectedAccount.documents.map((document) => <article key={String(document.id)}><div><strong>{String(document.file_name)}</strong><small>{readable(String(document.category))} · {Math.ceil(Number(document.size_bytes) / 1024)} KB · {readable(String(document.status))}</small></div><button onClick={() => void downloadEvidence(document.id, document.file_name)}>Protected download</button></article>) : <p>No verification documents uploaded.</p>}</section>
           <section className={styles.notes}><h3>ABN review history</h3>{selectedAccount.reviews.length ? selectedAccount.reviews.map((review) => <article key={review.id}><p><strong>{readable(review.decision)}</strong> · ABN {review.abn} · {review.legal_entity_name}</p><p>{review.note}</p><small>{readable(review.review_method)} · {dateTime(review.reviewed_at)}</small></article>) : <p>No ABN review has been recorded.</p>}</section>

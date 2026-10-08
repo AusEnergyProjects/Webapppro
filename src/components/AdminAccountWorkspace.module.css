@@ -16,6 +16,10 @@
 .moderationForm button, .evidence button { background: var(--action-primary); border: 0; border-radius: 9px; color: #fff; cursor: pointer; font-size: 0.8rem; font-weight: 850; padding: 9px 12px; }
 .full, .moderationForm button { grid-column: 1 / -1; }
 .moderationForm textarea { min-height: 100px; resize: vertical; }
+.moderationForm button:disabled { cursor: wait; opacity: .65; }
+.reviewHelp, .saveStatus { color: var(--color-aea-text); font-size: .8rem; line-height: 1.45; margin: 0; }
+.saveStatus { border: 1px solid var(--color-aea-line); border-radius: 9px; padding: 10px; overflow-wrap: anywhere; }
+.saveStatus[role="alert"] { background: #fff1ef; border-color: #d69a91; color: #8f251b; }
 .featureControls { background: #f5faf8; border: 1px solid var(--color-aea-line); border-radius: 12px; margin: 7px 0; padding: 15px; }
 .featureControls > div:first-child > span { color: var(--color-aea-green-dark); display: block; font-size: 0.8rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
 .featureControls h3 { color: var(--color-aea-ink); font-size: .92rem; margin-top: 3px; }
