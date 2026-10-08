@@ -14,6 +14,7 @@ import {
   publicRentalReportValue,
   rentalAssessmentCompletion,
   rentalAssessmentCheck,
+  rentalAssessmentHistoricalCheck,
   rentalRegimeAssessment,
   rentalReportExpiresAt,
 } from "@/lib/trade-rental-assessment.mjs";
@@ -37,7 +38,9 @@ import { loadCustomerPlanPdfFonts } from "@/lib/customer-plan-pdf-fonts";
 import { rentalEvidenceCapture, rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
 import { rentalAssessorCheckPresentation, rentalShowerAssessmentProjection } from "@/lib/rental-assessor-workflow.mjs";
 import { assertRentalModuleCredentialCurrent } from "@/lib/trade-rental-credentials";
-import { rentalReportAnswerPresentation } from "@/lib/rental-report-answer.mjs";
+import { rentalReportAnswerPresentation, rentalReportCheckStandard } from "@/lib/rental-report-answer.mjs";
+import { rentalReportBrandingProfile } from "@/lib/rental-report-branding.mjs";
+import { rentalObservationResponseProjection } from "@/lib/rental-quotation.mjs";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 
 type Row = Record<string, unknown>;
@@ -232,7 +235,9 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
   }
   const activeItems = itemRows.results.filter((item) => {
     const assessmentModule = moduleRows.results.find((candidate) => candidate.id === item.module_id);
-    return Boolean(rentalAssessmentCheck(parsedObject(assessmentModule?.template_snapshot), String(item.section_key), String(item.check_key)));
+    const template = parsedObject(assessmentModule?.template_snapshot);
+    return Boolean(rentalAssessmentCheck(template, String(item.section_key), String(item.check_key))
+      || rentalAssessmentHistoricalCheck(template, String(item.section_key), String(item.check_key)));
   });
   const activeItemIds = new Set(activeItems.map((item) => String(item.id)));
   const activeEvidence = evidenceRows.results.filter((evidence) => activeItemIds.has(String(evidence.item_id)));
@@ -418,8 +423,9 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
   const reportFindings = projected.flatMap((module) => module.findings);
   const itemPublicIds = new Map(reportItems.map((item) => [String(item.id), crypto.randomUUID()]));
   const findingPublicIds = new Map(reportFindings.map((finding) => [String(finding.id), crypto.randomUUID()]));
-  const historicalItemIds = new Set(reportItems.filter((item) => item.instanceKey && item.instanceKey !== "property"
-    && source.modules.some((module) => module.id === item.moduleId && module.module_key === "minimum_standards"))
+  const historicalItemIds = new Set(reportItems.filter((item) => source.modules.some((module) => module.id === item.moduleId && module.module_key === "minimum_standards"
+    && (item.instanceKey && item.instanceKey !== "property" || parsedArray(parsedObject(module.template_snapshot).historicalChecks)
+      .some((entry) => parsedObject(parsedObject(entry).check).key === item.checkKey))))
     .map((item) => String(item.id)));
   const modules = source.modules.map((module) => {
     const template = parsedObject(module.template_snapshot);
@@ -444,12 +450,17 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
           title: String(section.title),
           summary: String(section.summary || ""),
           items: moduleItems.filter((item) => item.sectionKey === section.key).map((item) => {
-            const assessmentCheck = checks.map(parsedObject).find((check) => check.key === item.checkKey);
+            const historicalCheck = parsedArray(template.historicalChecks).map(parsedObject).find((entry) => entry.sectionKey === section.key && parsedObject(entry.check).key === item.checkKey);
+            const assessmentCheck = checks.map(parsedObject).find((check) => check.key === item.checkKey) || (historicalCheck ? parsedObject(historicalCheck.check) : undefined);
             const historicalObservation = historicalItemIds.has(String(item.id));
+            const observation = historicalObservation
+              ? { response: parsedObject(item.response), retainedResponse: {} }
+              : rentalObservationResponseProjection(String(item.checkKey), String(item.outcome), parsedObject(item.response));
             return {
               itemKey: String(item.itemKey), sectionKey: String(item.sectionKey), checkKey: String(item.checkKey),
               instanceKey: String(item.instanceKey), locationLabel: String(item.locationLabel || ""),
-              outcome: String(item.outcome), response: parsedObject(item.response), publicNotes: String(item.publicNotes || ""),
+              outcome: String(item.outcome), response: observation.response, publicNotes: String(item.publicNotes || ""),
+              ...(Object.keys(observation.retainedResponse).length ? { retainedResponse: observation.retainedResponse } : {}),
               answerLabel: rentalReportAnswerPresentation({ ...item, historicalObservation }, {
                 moduleKey: module.module_key, check: assessmentCheck, assessmentScope: template.assessmentScope,
               }).label,
@@ -460,6 +471,9 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
                   : module.module_key === "minimum_standards" ? rentalAssessorCheckPresentation(assessmentCheck || { key: item.checkKey }).prompt : String(assessmentCheck?.prompt || item.checkKey),
               ...(item.evidenceSourceItemId ? { evidenceSourceItemId: String(itemPublicIds.get(String(item.evidenceSourceItemId)) || "") } : {}),
               historicalObservation,
+              standardDescription: rentalReportCheckStandard({ ...item, standardDescription: assessmentCheck?.prompt,
+                verificationBasis: assessmentCheck?.verificationBasis }, { moduleKey: String(module.module_key) }),
+              ...(assessmentCheck?.verificationBasis ? { verificationBasis: String(assessmentCheck.verificationBasis) } : {}),
               effectiveFrom: String(assessmentCheck?.effectiveFrom || ""),
               assessmentPhase: String(assessmentCheck?.assessmentPhase || (template.assessmentScope === "energy_readiness_2027" ? "energy_readiness_2027" : "current")),
               trigger: String(assessmentCheck?.trigger || ""),
@@ -518,6 +532,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
       revision: input.revision,
       issuedAt: input.issuedAt,
       generatedAt: input.issuedAt,
+      branding: rentalReportBrandingProfile(source.business, minimumAnswers.homeStarCommissioned),
     },
     business: {
       name: businessName,
@@ -791,7 +806,7 @@ async function createRentalAssessmentReport(input: RentalReportIssueInput) {
       "@/lib/trade-rental-report-pdf.mjs"
     );
     const { rentalReportBrandBytes } = await import("@/lib/trade-rental-report-brand");
-    const pdfBytes = await createRentalAssessmentPdfBytes(snapshot, assets, fonts, rentalReportBrandBytes());
+    const pdfBytes = await createRentalAssessmentPdfBytes(snapshot, assets, fonts, rentalReportBrandBytes(snapshot));
     pdfReference = await prepareImmutableIssuedPdfReference({
       kind: "rental-report",
       documentId: reportId,

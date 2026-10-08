@@ -1,9 +1,10 @@
 import fontkit from "@pdf-lib/fontkit";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, pushGraphicsState, popGraphicsState, rectangle, clip, endPath } from "pdf-lib";
 import { publicRentalReportValue, rentalCheckIsReadiness, VIC_RENTAL_ASSESSMENT_TEMPLATE } from "./trade-rental-assessment.mjs";
 import { RENTAL_QUOTATION_FIELDS, RENTAL_OBSERVATION_NUMBER_FIELDS, rentalQuotation, rentalObservationResponseLabel } from "./rental-quotation.mjs";
 import { rentalImageWithinReportLimit } from "./trade-rental-image-dimensions.mjs";
-import { rentalReportAnswerPresentation } from "./rental-report-answer.mjs";
+import { rentalReportAnswerPresentation, rentalReportCheckStandard, rentalReportSectionGroups, rentalReportSectionResult, rentalReportScopeText, rentalReportObservationEntries, rentalReportRetainedObservationEntries } from "./rental-report-answer.mjs";
+import { rentalReportBranding } from "./rental-report-branding.mjs";
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -87,10 +88,6 @@ function objectEntries(value) {
   return Object.entries(value).filter(([, entry]) => entry !== "" && entry !== null && entry !== undefined);
 }
 
-function observationEntries(value) {
-  return objectEntries(value).filter(([key]) => key !== "showerCaptureVersion");
-}
-
 function metadataValue(moduleKey, key, value) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   const field = VIC_RENTAL_ASSESSMENT_TEMPLATE.modules[moduleKey]?.metadataFields.find((entry) => entry.key === key);
@@ -102,6 +99,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     throw new TypeError("A valid rental assessment report snapshot is required.");
   }
   snapshot = publicRentalReportValue(snapshot);
+  const branding = rentalReportBranding(snapshot);
   const pdf = await PDFDocument.create();
   pdf.setTitle(`Rental assessment ${safe(snapshot.report.number)}`);
   pdf.setAuthor(safe(snapshot.business?.name || "TLink trade business"));
@@ -117,11 +115,16 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   const bold = useEmbeddedFonts
     ? await pdf.embedFont(fontBytes.bold, { subset: false })
     : await pdf.embedFont(StandardFonts.HelveticaBold);
-  const brand = brandBytes instanceof Uint8Array ? await pdf.embedPng(brandBytes) : null;
+  const tlinkBytes = brandBytes instanceof Uint8Array ? brandBytes : brandBytes?.tlink;
+  const brand = tlinkBytes instanceof Uint8Array ? await pdf.embedPng(tlinkBytes) : null;
+  const aeaBrand = branding.homestar && brandBytes?.aea instanceof Uint8Array ? await pdf.embedPng(brandBytes.aea) : null;
+  const homestarBrand = branding.homestar && brandBytes?.homestar instanceof Uint8Array ? await pdf.embedPng(brandBytes.homestar) : null;
   const pages = [];
   const evidenceReferences = new Map((snapshot.evidence || []).map((entry, index) => [entry.id, `E${String(index + 1).padStart(3, "0")}`]));
   const renderedEvidence = new Map();
   const allItems = (snapshot.modules || []).flatMap((module) => (module.sections || []).flatMap((section) => (section.items || []).map((item) => ({ ...item, sectionTitle: section.title, readiness: rentalCheckIsReadiness(item, module.assessmentScope) }))));
+  const summaryModules = (snapshot.modules || []).map((module) => ({ module, groups: rentalReportSectionGroups(module) }));
+  const itemStandards = new Map((snapshot.modules || []).flatMap((module) => (module.sections || []).flatMap((section) => (section.items || []).map((item) => [item.id, rentalReportCheckStandard(item, { moduleKey: module.key })]))));
   const workArea = (finding) => allItems.find((item) => item.id === finding.itemId)?.sectionTitle || label(finding.category || "Required work");
   const isHistoricalFinding = (finding) => finding.historicalObservation === true || allItems.find((item) => item.id === finding.itemId)?.historicalObservation === true;
   const reportFindings = (snapshot.findings || []).filter((finding) => finding.status !== "compliant" && !isHistoricalFinding(finding));
@@ -142,9 +145,22 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     }
     if (brand) page.drawImage(brand, { x: MARGIN, y: PAGE_HEIGHT - 48, width: 25, height: 25 });
     page.drawText("TLink", { x: MARGIN + (brand ? 33 : 0), y: PAGE_HEIGHT - 41, font: bold, size: 17, color: palette.ink });
-    page.drawText("PROPERTY ASSESSMENTS", { x: MARGIN + 91, y: PAGE_HEIGHT - 38, font: regular, size: 7, color: palette.muted });
-    if (snapshot.preview === true) page.drawText("SAMPLE | NOT ISSUED", { x: PAGE_WIDTH - MARGIN - 96, y: PAGE_HEIGHT - 38, size: 6.8, font: bold, color: palette.warning });
-    y = PAGE_HEIGHT - 76;
+    if (branding.homestar) {
+      for (const [image, x, width] of [[aeaBrand, MARGIN + 155, 142], [homestarBrand, PAGE_WIDTH - MARGIN - 138, 138]]) {
+        if (!image) continue;
+        const isHomeStar = image === homestarBrand;
+        const scale = isHomeStar ? width / image.width : Math.min(width / image.width, 50 / image.height);
+        const boxY = PAGE_HEIGHT - 56;
+        // Frame the supplied logo's white margins without changing its source bytes.
+        if (isHomeStar) page.pushOperators(pushGraphicsState(), rectangle(x, boxY, width, 50), clip(), endPath());
+        page.drawImage(image, { x, y: boxY + (50 - image.height * scale) / 2, width: image.width * scale, height: image.height * scale });
+        if (isHomeStar) page.pushOperators(popGraphicsState());
+      }
+      if (!aeaBrand) page.drawText("Australian Energy Assessments", { x: MARGIN + 138, y: PAGE_HEIGHT - 39, font: bold, size: 8.5, color: palette.ink });
+      if (!homestarBrand) page.drawText("HomeStar Upgrades", { x: PAGE_WIDTH - MARGIN - 125, y: PAGE_HEIGHT - 39, font: bold, size: 10, color: palette.ink });
+    } else page.drawText("PROPERTY ASSESSMENTS", { x: MARGIN + 91, y: PAGE_HEIGHT - 38, font: regular, size: 7, color: palette.muted });
+    if (snapshot.preview === true) page.drawText("SAMPLE | NOT ISSUED", { x: PAGE_WIDTH - MARGIN - 96, y: PAGE_HEIGHT - (branding.homestar ? 68 : 38), size: 6.8, font: bold, color: palette.warning });
+    y = PAGE_HEIGHT - (branding.homestar ? 91 : 76);
   }
 
   function ensure(height) {
@@ -197,6 +213,8 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     const keyLines = wrap(regular, safe(key), 8.2, keyWidth - 8);
     const valueLines = wrap(regular, printable, size, CONTENT_WIDTH - keyWidth - 8);
     const lineCount = Math.max(keyLines.length, valueLines.length);
+    const rowHeight = lineCount * 13 + 5;
+    if (rowHeight <= PAGE_HEIGHT - 132) ensure(rowHeight + 2);
     for (let index = 0; index < lineCount; index += 1) {
       ensure(15);
       if (keyLines[index]) page.drawText(keyLines[index], { x: MARGIN, y: y - 8.6, font: regular, size: 8.2, color: palette.muted });
@@ -254,7 +272,14 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     for (let offset = 0; offset < entries.length; offset += 2) {
       const row = entries.slice(offset, offset + 2);
       const images = await Promise.all(row.map(embedEvidence));
-      ensure(200);
+      const captions = row.map((entry) => {
+        const standard = itemStandards.get(entry.itemId);
+        const caption = standard ? `Assessed standard: ${standard}` : entry.caption || entry.purpose || entry.fileName || "Evidence";
+        const lines = wrap(regular, evidenceReferences.get(entry.id) + " | " + safe(caption), 7.8, columnWidth);
+        return standard ? lines : lines.slice(0, 3);
+      });
+      const rowHeight = 168 + Math.max(...captions.map((lines) => lines.length)) * 10;
+      ensure(rowHeight);
       const top = y;
       for (let column = 0; column < row.length; column += 1) {
         const entry = row[column];
@@ -270,11 +295,10 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
           page.drawText(evidenceAssets[entry.id]?.bytes ? "Evidence attached to this PDF" : "Evidence file indexed", { x: x + 12, y: top - 82, font: regular, size: 8, color: palette.muted });
         }
         renderedEvidence.set(entry.id, pages.length);
-        const caption = (entry.caption || entry.purpose || entry.fileName || "Evidence");
-        const lines = wrap(regular, evidenceReferences.get(entry.id) + " | " + safe(caption), 7.8, columnWidth).slice(0, 3);
+        const lines = captions[column];
         for (let line = 0; line < lines.length; line += 1) page.drawText(lines[line], { x, y: top - 159 - line * 10, font: regular, size: 7.8, color: palette.muted });
       }
-      y = top - 198;
+      y = top - rowHeight;
     }
   }
 
@@ -299,7 +323,9 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
         const size = options.size || 7;
         for (const line of wrap(font, value, size, innerWidth)) lines.push({ value: line, font, size, height: options.height || 9, color: options.bold ? palette.ink : palette.muted });
       };
-      addLines(entry.caption || entry.purpose || "Assessment evidence", { bold: true, size: 8.2, height: 10.5 });
+      const standard = itemStandards.get(entry.itemId);
+      addLines(standard ? `Assessed standard: ${standard}` : entry.caption || entry.purpose || "Assessment evidence", { bold: true, size: 8.2, height: 10.5 });
+      if (standard && entry.caption && standard !== entry.caption) addLines(`Captured caption: ${entry.caption}`);
       if (entry.purpose && entry.purpose !== entry.caption) addLines(`Purpose: ${entry.purpose}`);
       addLines(`File: ${entry.fileName || "Evidence file"} | ${entry.contentType || "Unknown format"}`, { size: 6.5, height: 8 });
       if (entry.capture?.capturedAtUtc) addLines(`${entry.capture.source === "in_app_camera" ? "Captured" : "Added"}: ${dateTime(entry.capture.capturedAtUtc)}`);
@@ -382,25 +408,15 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   text("Rental assessment", { bold: true, size: 32, lineHeight: 40, after: 12 });
   text(snapshot.property.address, { bold: true, size: 16, lineHeight: 20, width: CONTENT_WIDTH, after: 12 });
   text(snapshot.inspection?.title || "Victorian rental minimum standards assessment", { size: 9, lineHeight: 13, color: palette.muted, after: 18 });
+  text(rentalReportScopeText(snapshot), { size: 9, lineHeight: 13, after: 12 });
   keyValue("Assessment date", dateOnly(snapshot.inspection?.assessmentDate || snapshot.report.issuedAt));
   keyValue("Prepared by", brief(snapshot.issuer?.name, 85));
+  keyValue("Assessment provider", branding.issuerLabel);
+  if (branding.homestar) keyValue("Commissioned by", branding.commissionerLabel);
   keyValue("Report reference", snapshot.report.number);
   keyValue("Prepared for", brief(snapshot.property?.customerName, 85));
+  keyValue("New energy standards begin", "1 March 2027; draughtproofing from 1 July 2027");
   rule(7);
-  const currentItems = allItems.filter((item) => !item.historicalObservation);
-  const currentIssues = currentItems.filter((item) => !item.readiness && item.outcome === "does_not_meet").length;
-  const futureIssues = currentItems.filter((item) => item.readiness && item.outcome === "does_not_meet").length;
-  const uncertain = currentItems.filter((item) => !["meets", "does_not_meet", "not_applicable"].includes(item.outcome)).length;
-  const stats = [[currentIssues, "Current issues", palette.danger], [futureIssues, "Future upgrades", palette.blue], [uncertain, "Need verification", palette.warning], [reportFindings.length, "Work items", palette.primary]];
-  ensure(77);
-  for (let index = 0; index < stats.length; index += 1) {
-    const x = MARGIN + index * (CONTENT_WIDTH + 8) / 4;
-    page.drawRectangle({ x, y: y - 65, width: (CONTENT_WIDTH - 24) / 4, height: 65, color: palette.soft });
-    page.drawRectangle({ x, y: y - 2, width: (CONTENT_WIDTH - 24) / 4, height: 2, color: stats[index][2] });
-    page.drawText(String(stats[index][0]), { x: x + 12, y: y - 31, size: 23, font: bold, color: stats[index][2] });
-    page.drawText(stats[index][1], { x: x + 12, y: y - 48, size: 7.2, font: regular, color: palette.ink });
-  }
-  y -= 84;
   heading("At a glance", "Work to arrange");
   for (const finding of reportFindings.slice(0, 3)) keyValue(brief(workArea(finding), 35), brief(finding.title));
   if (reportFindings.length > 3) text(`Plus ${reportFindings.length - 3} further scopes in the work details.`, { size: 8.5, color: palette.muted, after: 6 });
@@ -410,14 +426,37 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   const urgent = reportFindings.filter((finding) => ["immediate_safety_risk", "urgent"].includes(finding.severity));
   const earlierUrgent = historicalFindings.some((finding) => ["immediate_safety_risk", "urgent"].includes(finding.severity));
   text(urgent.length ? "Urgent attention: " + urgent.slice(0, 2).map((finding) => brief(finding.title, 90)).join("; ") + ". See the work details for immediate actions." : earlierUrgent ? "An earlier urgent finding remains in the history. Its resolution is not confirmed in this report." : "No immediate or urgent safety finding is recorded in the current assessment. Review the work details and limitations.", { size: 9.2, lineHeight: 14, after: 9 });
-  text(reportFindings.length ? "Share the observations, measurements and photos with the relevant trades. They use this evidence to define the work and prepare quotes. Future upgrades show their own start date and trigger." : "No current work scopes were recorded. Read the assessment, history and access limitations before relying on any individual result.", { size: 9.2, lineHeight: 14, after: 10 });
+  text(branding.nextSteps, { size: 9.2, lineHeight: 14, after: 10 });
   if (allItems.some((item) => item.readiness)) text("Planning findings do not establish non-compliance today.", { size: 8.5, color: palette.muted, after: 8 });
   const limitation = snapshot.inspection?.applicabilityLimitation;
   if (limitation) { badge("Applicable minimum standards not assessed", "warning"); text(limitation, { size: 8.5, lineHeight: 12, after: 5 }); }
+  addPage();
+  heading("01 / Simple compliance summary", "Current assessment at a glance", "Each result applies to the recorded checks and accessible areas. A positive result is not a whole-property compliance certificate. Missing checks, unknown ratings and access limits still need follow-up.");
+  const currentGroups = summaryModules.flatMap(({ module, groups }) => groups.current.map((section) => ({ module, section })));
+  if (!currentGroups.length) text("Current minimum standards were outside this assessment. See the energy-readiness summary and any separately completed safety modules.", { size: 9, after: 10 });
+  for (const { module, section } of currentGroups) {
+    const result = rentalReportSectionResult(section, { moduleKey: module.key, applicabilityLimitation: module.key === "minimum_standards" ? snapshot.inspection?.applicabilityLimitation : undefined });
+    keyValue(section.heading, result.label, { keyWidth: 298, size: 8.5 });
+  }
+  text("The detailed assessment later in this report explains each standard and preserves every recorded answer, comment and evidence reference.", { size: 8.5, lineHeight: 12, color: palette.muted, after: 8 });
   text("This report records the assessed conditions at the inspection date. It is not a blanket compliance certificate. Separate electrical, gas and smoke-alarm records apply only where included and authenticated. Contractors remain responsible for defining the work, compliant design and installation.", { size: 8, lineHeight: 11, color: palette.muted });
 
   addPage();
-  heading("02 / Work details", "Observations for quoting", "Observed conditions, recorded measurements and photos for trades to assess the work and prepare quotes.");
+  heading("02 / Minimum energy efficiency standards (MEES)", "2027 energy standards", "The first changes begin on 1 March 2027. Draughtproofing begins on 1 July 2027. Each requirement has its own trigger. Future upgrade planning does not by itself mean the property fails today's rules.");
+  const futureGroups = summaryModules.flatMap(({ module, groups }) => groups.future.map((section) => ({ module, section })));
+  if (!futureGroups.length) text("Energy readiness was not assessed in this report. These dates are provided for planning and do not add results to the recorded assessment.", { size: 9, lineHeight: 13 });
+  for (const { module, section } of futureGroups) {
+    const result = rentalReportSectionResult(section, { moduleKey: module.key, applicabilityLimitation: snapshot.inspection?.applicabilityLimitation });
+    ensure(95);
+    keyValue(section.heading, result.label, { keyWidth: 298, size: 8.5 });
+    const triggers = [...new Set(section.items.map((item) => item.trigger).filter(Boolean))];
+    if (triggers.length) text(triggers.join(". "), { size: 8, lineHeight: 11, color: palette.muted, after: 8 });
+    rule(4);
+  }
+  text("Cooling has a further deadline of 1 July 2030. Applicable exceptions need supporting evidence. Review the detailed checks for the requirement, recorded result and any unresolved questions.", { size: 8.5, lineHeight: 12, color: palette.muted, after: 8 });
+
+  addPage();
+  heading("03 / Technical details", "Observations for quoting", "Recorded measurements, observations and geotagged photos help owners, agents and contractors plan the work and prepare remote quotes. Missing information remains marked as not recorded. Contractors must confirm the final design and scope.");
   if (!reportFindings.length) {
     badge("No current work scopes recorded");
   }
@@ -440,7 +479,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     }
     ensure(95);
     const tone = finding.severity === "immediate_safety_risk" ? "danger" : ["urgent", "required"].includes(finding.severity) ? "warning" : "primary";
-    badge(historical ? `Earlier observation | Recorded ${label(finding.severity).toLowerCase()}` : `ITEM ${String(index + 1).padStart(2, "0")} | ${label(finding.severity)}`, tone);
+    badge(`ITEM ${String(index + 1).padStart(2, "0")} | ${historical ? "Earlier observation | Recorded " : ""}${label(finding.severity)}`, tone);
     text(finding.title, { bold: true, size: 11, lineHeight: 15, after: 3 });
     keyValue(historical ? "Recorded status" : "Status", label(finding.status));
     keyValue("Location", finding.locationLabel);
@@ -451,9 +490,9 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     for (const field of RENTAL_QUOTATION_FIELDS) keyValue(field.label, quotation[field.key]);
     const assessedItem = allItems.find((item) => item.id === finding.itemId);
     const legacyValues = new Set(Object.values(quotation).map((value) => safe(value).trim()).filter(Boolean));
-    for (const [key, value] of observationEntries(assessedItem?.response)) {
+    for (const [key, value] of rentalReportObservationEntries(assessedItem)) {
       const printable = typeof value === "boolean" ? (value ? "Yes" : "No") : safe(value);
-      if (Object.hasOwn(RENTAL_OBSERVATION_NUMBER_FIELDS, key) || !legacyValues.has(printable.trim())) keyValue(rentalObservationResponseLabel(key), printable);
+      if (Object.hasOwn(RENTAL_OBSERVATION_NUMBER_FIELDS, key) || !legacyValues.has(printable.trim())) keyValue(rentalObservationResponseLabel(key), printable, { keyWidth: rentalObservationResponseLabel(key).length > 36 ? 250 : 145 });
     }
     if (assessedItem?.trigger) keyValue("Future requirement trigger", assessedItem.trigger);
     if (Number(finding.quantityMilli) > 0) keyValue("Quantity", `${Number(finding.quantityMilli) / 1000} ${finding.unitLabel || "each"}`);
@@ -470,8 +509,8 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     rule(12);
     text("Resolved finding history", { bold: true, size: 13, lineHeight: 17, color: palette.primary, after: 4 });
     text("These findings were recorded earlier in the assessment and marked compliant or resolved before issue.", { size: 8.7, lineHeight: 12, color: palette.muted, after: 8 });
-    for (const finding of resolvedFindings) {
-      badge("Resolved finding");
+    for (const [index, finding] of resolvedFindings.entries()) {
+      badge(`ITEM ${String(orderedFindings.length + index + 1).padStart(2, "0")} | Resolved finding`);
       text(finding.title, { bold: true, size: 10, lineHeight: 14, after: 3 });
       keyValue("Category", label(finding.category));
       keyValue("Location", finding.locationLabel);
@@ -481,25 +520,28 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     }
   }
 
-  for (const assessmentModule of snapshot.modules || []) {
+  addPage();
+  heading("04 / Complete issued record", "Detailed assessment", "The following sections record the standard, the assessor's answer, comments and measurements. Photo evidence and its capture location remain linked to the check they support.");
+  for (const { module: assessmentModule, groups } of summaryModules) {
     ensure(280);
-    heading(assessmentModule.required ? "Included module" : "Optional module", assessmentModule.title, assessmentModule.reportBoundary);
+    heading(assessmentModule.required ? "Included module" : "Optional module", assessmentModule.title, assessmentModule.key === "minimum_standards" ? rentalReportScopeText(assessmentModule) : assessmentModule.reportBoundary);
     badge(`Completed | ${assessmentModule.completedAt ? dateTime(assessmentModule.completedAt) : "Recorded"}`);
     if (assessmentModule.credential && Object.keys(assessmentModule.credential).length) {
       keyValue("Assessor", assessmentModule.credential.assessorName || snapshot.issuer?.name);
       if (assessmentModule.credential.credentialName || assessmentModule.credential.credentialType || assessmentModule.credential.credentialNumber) keyValue("Credential", [assessmentModule.credential.credentialName || assessmentModule.credential.credentialType, assessmentModule.credential.credentialNumber].filter(Boolean).join(" | "));
       keyValue("Issuer / jurisdiction", [assessmentModule.credential.issuer, assessmentModule.credential.jurisdiction].filter(Boolean).join(" | "));
       if (assessmentModule.credential.expiresAt) keyValue("Credential valid until", dateOnly(assessmentModule.credential.expiresAt));
-      keyValue("Verification", assessmentModule.credential.verificationBasis === "manager_attested_document" ? "Manager-attested credential document" : assessmentModule.credential.verificationBasis === "assigned_team_profile" ? "Assigned TLink team member and final assessment declaration" : "Assessor declaration");
+      keyValue("Verification", assessmentModule.credential.verificationBasis === "manager_attested_document" ? "Manager-attested credential document" : assessmentModule.credential.verificationBasis === "assigned_team_profile" ? "Assigned assessment team member and final assessment declaration" : "Assessor declaration");
       keyValue("Supporting record", assessmentModule.credential.supportingFileTitle);
     }
-    for (const [key, value] of objectEntries(assessmentModule.answers)) {
+    for (const [key, value] of objectEntries(assessmentModule.answers).filter(([key]) => key !== "homeStarCommissioned")) {
       keyValue(label(key), metadataValue(assessmentModule.key, key, value));
     }
-    for (const section of assessmentModule.sections || []) {
+    for (const section of [...groups.current, ...groups.future]) {
       ensure(160);
       rule(11);
-      text(section.title, { bold: true, size: 14, lineHeight: 18, color: palette.primary, after: 3 });
+      if (section.readiness) kicker("2027 energy standards");
+      text(section.heading, { bold: true, size: 14, lineHeight: 18, color: palette.primary, after: 3 });
       if (section.summary) text(section.summary, { size: 8.7, lineHeight: 12, color: palette.muted, after: 7 });
       for (const item of section.items || []) {
         ensure(72);
@@ -508,13 +550,18 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
         const answer = rentalReportAnswerPresentation(item, { moduleKey: assessmentModule.key, assessmentScope: assessmentModule.assessmentScope,
           applicabilityLimitation: snapshot.inspection?.applicabilityLimitation });
         badge(`${item.historicalObservation ? "Earlier result: " : ""}${answer.label}${item.locationLabel ? ` | ${item.locationLabel}` : ""}`, tone);
-        text(item.prompt, { bold: true, size: 9.7, lineHeight: 13, after: 3 });
+        text(item.standardDescription || item.prompt, { bold: true, size: 9.7, lineHeight: 13, after: 3 });
         if (answer.context) keyValue("Assessment context", answer.context);
         if (item.trigger) keyValue("Applies when", item.trigger);
         if (item.locationLabel) keyValue("Location", item.locationLabel);
-        if (item.publicNotes) keyValue("Report detail", item.publicNotes);
-        for (const [key, value] of observationEntries(item.response)) {
-          keyValue(rentalObservationResponseLabel(key), typeof value === "boolean" ? (value ? "Yes" : "No") : value);
+        if (item.publicNotes) keyValue("Assessor comments", item.publicNotes);
+        for (const [key, value] of rentalReportObservationEntries(item)) {
+          keyValue(rentalObservationResponseLabel(key), typeof value === "boolean" ? (value ? "Yes" : "No") : value, { keyWidth: rentalObservationResponseLabel(key).length > 36 ? 250 : 145 });
+        }
+        const retained = rentalReportRetainedObservationEntries(item);
+        if (retained.length) {
+          text("Earlier answers retained; these do not apply to the current selection.", { size: 8.3, color: palette.muted });
+          for (const [key, value] of retained) keyValue(`Earlier: ${rentalObservationResponseLabel(key)}`, typeof value === "boolean" ? (value ? "Yes" : "No") : value);
         }
         await evidenceBlock((snapshot.evidence || []).filter((entry) => entry.itemId === item.id));
         y -= 4;
@@ -529,7 +576,8 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   keyValue("ABN", snapshot.business?.abn);
   keyValue("Business contact", [snapshot.business?.email, snapshot.business?.phone].filter(Boolean).join(" | "));
   keyValue("Business address", snapshot.business?.address);
-  keyValue(snapshot.inspection?.assessmentScope === "energy_readiness_2027" ? "FIRST PHASE STARTS" : "RULES EFFECTIVE", dateOnly(snapshot.inspection?.rulesEffectiveFrom));
+  keyValue("NEW ENERGY STANDARDS", "1 March 2027; draughtproofing from 1 July 2027");
+  keyValue(snapshot.inspection?.assessmentScope === "energy_readiness_2027" ? "FIRST PHASE STARTS" : "Recorded rules version date", dateOnly(snapshot.inspection?.rulesEffectiveFrom));
   keyValue("Issued by", snapshot.issuer?.name);
   keyValue("Role", snapshot.issuer?.role);
   keyValue("Qualification", snapshot.issuer?.qualificationType);

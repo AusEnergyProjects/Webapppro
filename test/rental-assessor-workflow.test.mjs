@@ -3,6 +3,27 @@ import test from 'node:test';
 import { rentalAssessorMetadataField, rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorOutcomePatch, rentalWindowIsFixed } from '../src/lib/rental-assessor-workflow.mjs';
 import { rentalAssessmentTemplateSnapshot } from '../src/lib/trade-rental-assessment.mjs';
 
+test('frozen v3 cooling keeps its single-photo rule while v4 asks for equipment and operation evidence', () => {
+  const current = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards.sections.find((section) => section.key === 'cooling').checks[0];
+  const frozen = structuredClone(current);
+  delete frozen.operationPhotoRequired;
+  assert.equal(rentalAssessorEvidenceRequirement(frozen, 'meets').minimumPhotos, 1);
+  assert.equal(rentalAssessorEvidenceRequirement(current, 'meets').minimumPhotos, 2);
+  assert.match(rentalAssessorEvidenceRequirement(current, 'meets').reason, /controller switched on or operating indicator/);
+  assert.match(rentalAssessorEvidenceRequirement(current, 'meets').reason, /alone does not prove cooling performance/);
+  assert.equal(rentalAssessorEvidenceRequirement(current, 'does_not_meet').minimumPhotos, 2);
+});
+
+test('versioned switchboard capture has exactly two authoritative results and one required photo for either', () => {
+  const check = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards.sections.find((section) => section.key === 'electrical_safety').checks[0];
+  assert.deepEqual(rentalAssessorCheckPresentation(check).outcomeOptions, [{ value: 'meets', label: 'Meets' }, { value: 'does_not_meet', label: "Doesn't meet" }]);
+  for (const outcome of ['meets', 'does_not_meet']) assert.equal(rentalAssessorEvidenceRequirement(check, outcome).minimumPhotos, 1);
+  const frozen = { ...check, credentialGate: 'licensed_electrician' };
+  delete frozen.verificationBasis;
+  assert.ok(rentalAssessorCheckPresentation(frozen).outcomeOptions.some((entry) => entry.value === 'specialist_verification_required'));
+  assert.equal(rentalAssessorEvidenceRequirement(frozen, 'does_not_meet').minimumPhotos, 2);
+});
+
 test('frozen metadata uses automatic capture and Team profile without changing the source', () => {
   for (const key of ['assessorName', 'qualificationType', 'qualificationNumber', 'licenceNumber']) {
     const old = { key, type: 'text', required: true };
@@ -17,7 +38,7 @@ test('frozen metadata uses automatic capture and Team profile without changing t
 
 test('all current and future categories are assessed once for the dwelling', () => {
   const checks = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards.sections.flatMap(s => s.checks);
-  assert.equal(checks.length, 32);
+  assert.equal(checks.length, 31);
   assert.equal(checks.filter(c => c.assessmentPhase === 'energy_readiness_2027').length, 8);
   assert.ok(checks.every(c => c.repeatBy === 'property'));
   assert.match(rentalAssessorCheckPresentation({ key: 'toilet_function' }).prompt, /property have a working toilet/);

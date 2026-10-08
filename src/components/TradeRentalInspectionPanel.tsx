@@ -11,8 +11,8 @@ import {
   useState,
 } from "react";
 import type { User } from "firebase/auth";
-import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalSharedObservationResponse, rentalObservationNumberIsValid } from "@/lib/rental-quotation.mjs";
-import { rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
+import { RENTAL_QUOTATION_FIELDS, rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalSharedObservationResponse, rentalObservationNumberIsValid, rentalObservationFieldIsVisible, rentalObservationBlockers } from "@/lib/rental-quotation.mjs";
+import { RENTAL_ASSESSMENT_TEMPLATE_VERSION, rentalCheckIsReadiness } from "@/lib/trade-rental-assessment.mjs";
 import { RENTAL_SHOWER_CHOICES, rentalAssessorSections, rentalShowerChoicePatch, rentalShowerChoiceValue, rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorOutcomePatch, rentalWindowIsFixed, rentalAssessorMetadataField } from "@/lib/rental-assessor-workflow.mjs";
 import styles from "./TradeRentalInspectionPanel.module.css";
 import { useFormTimeTracking, WorkTimeStatus } from "./TradeWorkTimeTracking";
@@ -40,6 +40,7 @@ type AssessmentCheck = {
   photoGuidance: string;
   help: string;
   credentialGate: string;
+  verificationBasis?: string;
   assessmentPhase?: string;
   trigger?: string;
   responseFields?: Array<{ key: string; label: string; required: boolean }>;
@@ -61,6 +62,7 @@ type ModuleTemplate = {
   reportBoundary: string;
   metadataFields: MetadataField[];
   sections: AssessmentSection[];
+  historicalChecks?: Array<{ sectionKey: string; sectionTitle: string; sectionSummary: string; check: AssessmentCheck }>;
 };
 
 type AssessmentModule = {
@@ -190,6 +192,12 @@ function earlierObservationItems(module: AssessmentModule, section: AssessmentSe
       if (sourceCheck) earlier.push(...items.filter((item) => item.sectionKey === sourceSection.key && item.checkKey === sourceCheck.key)
         .map((item) => ({ item, section: sourceSection, check: sourceCheck })));
     }
+  }
+  if (section.checks[0]?.key === check.key) for (const previous of module.template.historicalChecks || []) {
+    if (previous.sectionKey !== section.key) continue;
+    const earlierSection = { key: previous.sectionKey, title: previous.sectionTitle, summary: previous.sectionSummary, checks: [previous.check] };
+    earlier.push(...items.filter((item) => item.sectionKey === previous.sectionKey && item.checkKey === previous.check.key)
+      .map((item) => ({ item, section: earlierSection, check: previous.check })));
   }
   return earlier;
 }
@@ -363,15 +371,23 @@ function metadataAnswerPatch(fields: MetadataField[], values: FormData, previous
   return answers;
 }
 
-function MetadataForm({ module, busy, readOnly, onSave, phase = "setup" }: {
+function MetadataForm({ module, busy, readOnly, onSave, onDirtyChange, phase = "setup" }: {
   module: AssessmentModule;
   busy: boolean;
   readOnly: boolean;
   onSave: (answers: Record<string, unknown>) => Promise<void>;
+  onDirtyChange?: (key: string, dirty: boolean) => void;
   phase?: "setup" | "final";
 }) {
-  const fields = (module.template.metadataFields || []).map(rentalAssessorMetadataField)
-    .filter((field) => field.source === "assessment" && field.phase === phase && !(module.key === "minimum_standards" && field.key === "credentialConfirmed"));
+  const fields = useMemo(() => (module.template.metadataFields || []).map(rentalAssessorMetadataField)
+    .filter((field) => field.source === "assessment" && field.phase === phase && !(module.key === "minimum_standards" && field.key === "credentialConfirmed")), [module.template.metadataFields, module.key, phase]);
+  const formRef = useRef<HTMLFormElement>(null);
+  const dirtyKey = `${module.id}:${phase}`;
+  useEffect(() => {
+    if (readOnly) onDirtyChange?.(dirtyKey, false);
+    else if (!busy && formRef.current) onDirtyChange?.(dirtyKey, Object.keys(metadataAnswerPatch(fields, new FormData(formRef.current), module.answers)).length > 0);
+  }, [busy, dirtyKey, fields, module.answers, onDirtyChange, readOnly]);
+  useEffect(() => () => onDirtyChange?.(dirtyKey, false), [dirtyKey, onDirtyChange]);
   if (!fields.length) return null;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -385,23 +401,23 @@ function MetadataForm({ module, busy, readOnly, onSave, phase = "setup" }: {
       <span>{phase === "final" ? "Finish the assessment" : "Property details"}</span>
       <strong>Review</strong>
     </summary>
-    <form onSubmit={submit} className={styles.metadataForm}>
+    <form ref={formRef} onSubmit={submit} onChange={(event) => onDirtyChange?.(dirtyKey, Object.keys(metadataAnswerPatch(fields, new FormData(event.currentTarget), module.answers)).length > 0)} className={styles.metadataForm}>
       {fields.map((field) => {
         const value = module.answers[field.key];
         if (field.type === "checkbox") return <label className={styles.checkField} key={field.key}>
-          <input type="checkbox" name={field.key} defaultChecked={value === true} disabled={readOnly} />
+          <input type="checkbox" name={field.key} defaultChecked={value === true} disabled={readOnly || busy} />
           <span>{module.key === "minimum_standards" && field.key === "coverageConfirmed" ? "I have checked the property and recorded any areas I could not access." : field.label}{field.required ? " *" : ""}{field.help && <small>{field.help}</small>}</span>
         </label>;
         return <label key={field.key}>
           <span>{field.label}{field.required ? " *" : ""}</span>
           {field.type === "textarea"
-            ? <textarea name={field.key} defaultValue={String(value || "")} rows={3} maxLength={4000} placeholder={field.placeholder} disabled={readOnly} />
+            ? <textarea name={field.key} defaultValue={String(value || "")} rows={3} maxLength={4000} placeholder={field.placeholder} disabled={readOnly || busy} />
             : field.type === "select"
-              ? <select name={field.key} defaultValue={String(value || "")} disabled={readOnly}>
+              ? <select name={field.key} defaultValue={String(value || "")} disabled={readOnly || busy}>
                 <option value="">Choose one</option>
                 {field.options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
               </select>
-              : <input name={field.key} type={field.type} defaultValue={String(value || "")} maxLength={500} placeholder={field.placeholder} disabled={readOnly} />}
+              : <input name={field.key} type={field.type} defaultValue={String(value || "")} maxLength={500} placeholder={field.placeholder} disabled={readOnly || busy} />}
           {field.help && <small>{field.help}</small>}
         </label>;
       })}
@@ -449,12 +465,13 @@ function AssessmentItemCard({
   const [publicNotes, setPublicNotes] = useState(finding?.description || item.publicNotes);
   const [severity, setSeverity] = useState(finding?.severity || "required");
   const isAdverse = adverseOutcomes.has(outcome);
+  const simpleReview = check.key === "outlet_lighting_protection" && check.verificationBasis === "licensed_electrician_video_review";
   const readiness = rentalCheckIsReadiness(check, module.template.assessmentScope);
   const presentation = rentalAssessorCheckPresentation(check, { assessmentScope: module.template.assessmentScope, outcome, publicNotes });
   const fixedWindow = check.key === "window_operation_security" && rentalWindowIsFixed(outcome, publicNotes);
   const evidenceRequirement = rentalAssessorEvidenceRequirement(check, outcome);
   const quotation = rentalQuotation(finding?.details.quotation);
-  const responseFields = rentalAssessorFields(check);
+  const responseFields = rentalAssessorFields(check, { templateVersion: Number(module.template.templateVersion || 1) });
   const shower = ["showerhead_rating", "shower_2027_readiness"].includes(check.key);
   const [responseValues, setResponseValues] = useState<Record<string, unknown>>(item.response);
   const [editEquipment, setEditEquipment] = useState(false);
@@ -471,8 +488,7 @@ function AssessmentItemCard({
     const value = String(shared.response[field.key] ?? "").trim();
     if (field.shared && recordedKeys.includes(field.key) && !editEquipment) return false;
     if (field.legacy && (!historical || !value)) return false;
-    if (field.showForOutcomes && !field.showForOutcomes.includes(outcome)) return false;
-    return !field.showIf || value || field.showIf.values.includes(String(shared.response[field.showIf.key] || ""));
+    return rentalObservationFieldIsVisible(field, { outcome, response: shared.response });
   });
   const needsSpecialistCredential = outcome === "meets" && ["licensed_electrician", "licensed_gasfitter", "suitably_qualified_smoke_alarm_worker"].includes(check.credentialGate)
     && check.credentialGate !== module.template.credentialGate;
@@ -495,7 +511,7 @@ function AssessmentItemCard({
     if (!outcome) throw new Error("Choose an assessment result before saving the section.");
     const values = new FormData(form);
     const response = responseFromForm(values);
-    for (const field of responseFields) if (field.input === "number" && !rentalObservationNumberIsValid(response[field.key], field.key)) {
+    for (const field of responseFields) if (field.input === "number" && rentalObservationFieldIsVisible(field, { outcome, response }) && !rentalObservationNumberIsValid(response[field.key], field.key)) {
       throw new Error(field.step === 1
         ? `Enter a whole number between ${field.min} and ${field.max} ${field.unit} for ${field.label.toLowerCase()}.`
         : `Enter a valid number for ${field.label.toLowerCase()}.`);
@@ -505,7 +521,7 @@ function AssessmentItemCard({
       response.credentialNumber = String(values.get("credentialNumber") || "");
       response.credentialVerified = values.has("credentialVerified");
     }
-    const findingBody = isAdverse ? {
+    const findingBody = isAdverse && (!simpleReview || String(values.get("publicNotes") || "").trim()) ? {
       title: finding?.title || `${section.title}: ${readiness && outcome === "does_not_meet" ? "upgrade observation" : "assessment observation"}`,
       description: String(values.get("publicNotes") || ""),
       standardReference: finding?.standardReference || "",
@@ -525,6 +541,11 @@ function AssessmentItemCard({
         notificationTime: String(values.get("notificationTime") || ""),
       },
     } : undefined;
+    const enforceQuoteCapture = Number(module.template.templateVersion || 0) >= 4;
+    if (isAdverse || enforceQuoteCapture) {
+      const blockers = rentalObservationBlockers({ checkKey: check.key, outcome, response, finding: findingBody, enforceQuoteCapture });
+      if (blockers.length) throw new Error(blockers[0]);
+    }
     return {
       action: "save_item",
       moduleId: module.id,
@@ -536,7 +557,7 @@ function AssessmentItemCard({
       locationLabel: dwelling && !historical ? "Property" : String(values.get("locationLabel") || locationLabel),
       outcome,
       response,
-      publicNotes: isAdverse ? item.publicNotes : String(values.get("publicNotes") || ""),
+      publicNotes: isAdverse && !simpleReview ? item.publicNotes : String(values.get("publicNotes") || ""),
       internalNotes: String(values.get("internalNotes") || ""),
       sortOrder: item.sortOrder,
       finding: findingBody,
@@ -574,8 +595,8 @@ function AssessmentItemCard({
 
   const response = item.response || {};
   const reportNote = <label>
-    <span>{isAdverse ? rentalFindingDescriptionLabel(outcome) : "Report detail"}{isAdverse || outcome === "not_applicable" ? " *" : ""}</span>
-    <textarea name="publicNotes" required={isAdverse || outcome === "not_applicable"} rows={2} maxLength={isAdverse ? 8000 : 4000} value={publicNotes} onChange={(event) => setPublicNotes(event.target.value)} placeholder={outcome === "not_applicable" ? "Why does this check not apply?" : "Briefly describe the issue and where it can be found."} disabled={readOnly} />
+    <span>{isAdverse && !simpleReview ? rentalFindingDescriptionLabel(outcome) : "Report detail"}{isAdverse && !simpleReview || outcome === "not_applicable" ? " *" : ""}</span>
+    <textarea name="publicNotes" required={isAdverse && !simpleReview || outcome === "not_applicable"} rows={2} maxLength={isAdverse ? 8000 : 4000} value={publicNotes} onChange={(event) => setPublicNotes(event.target.value)} placeholder={outcome === "not_applicable" ? "Why does this check not apply?" : "Briefly describe the issue and where it can be found."} disabled={readOnly} />
     <small>Included in the report for the agent, owner and trades.</small>
   </label>;
   return <article className={`${styles.itemCard} ${outcome ? styles.answered : ""}`}>
@@ -627,7 +648,7 @@ function AssessmentItemCard({
       </aside>
 
       {fixedWindow ? <><input type="hidden" name="publicNotes" value={publicNotes} /><p>{publicNotes}</p></>
-        : isAdverse || outcome === "not_applicable" ? reportNote
+        : isAdverse && !simpleReview || outcome === "not_applicable" ? reportNote
           : <details className={styles.technicalDetails}><summary>Add a report note, optional</summary>{reportNote}</details>}
 
       {recordedKeys.length > 0 && <aside className={styles.guidance}>
@@ -646,6 +667,7 @@ function AssessmentItemCard({
             {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select> : field.input === "textarea" ? <textarea name={field.key} rows={2} maxLength={500} value={value} onChange={(event) => change(event.target.value)} required={required} disabled={readOnly} />
             : <input name={field.key} type={field.input === "number" ? "number" : "text"} inputMode={field.step === 1 ? "numeric" : field.input === "number" ? "decimal" : undefined} min={field.input === "number" ? field.min ?? 0 : undefined} max={field.input === "number" ? field.max : undefined} step={field.input === "number" ? field.step ?? "any" : undefined} maxLength={500} value={value} onChange={(event) => change(event.target.value)} required={required} disabled={readOnly} />}
+          {field.help && <small>{field.help}</small>}
         </label>;
       })}</div>
       {needsSpecialistCredential && dwelling && <p>Matching qualifications are taken from the assigned assessor’s Team profile. Attach the test or verification record supporting this result.</p>}
@@ -658,7 +680,7 @@ function AssessmentItemCard({
         </div>
       </details>}
 
-      {isAdverse && <section className={styles.findingFields}>
+      {isAdverse && !simpleReview && <section className={styles.findingFields}>
         <header><span>Observation</span><strong>{evidenceRequirement.minimumPhotos > 0 ? "Include an overview and close photo" : "Record what needs follow-up"}</strong></header>
         <div className={styles.detailGrid}>
           <label><span>Severity *</span><select name="severity" value={severity} onChange={(event) => setSeverity(event.target.value)} disabled={readOnly}>{severityOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
@@ -692,6 +714,7 @@ function AssessmentItemCard({
     <section className={styles.evidenceArea}>
       <header><div><span>Evidence</span><strong>{evidenceRequirement.minimumFiles === 0 ? `${evidence.length} optional file${evidence.length === 1 ? "" : "s"}` : `${evidence.length} of ${evidenceRequirement.minimumFiles} required file${evidenceRequirement.minimumFiles === 1 ? "" : "s"}`}</strong></div></header>
       {evidenceRequirement.minimumPhotos > 0 && <p>{evidence.filter((entry) => entry.contentType.startsWith("image/")).length} of {evidenceRequirement.minimumPhotos} required photo{evidenceRequirement.minimumPhotos === 1 ? "" : "s"}. {evidenceRequirement.reason}</p>}
+      {(evidenceRequirement.minimumFiles > 0 || evidenceRequirement.minimumPhotos > 0) && check.photoGuidance && <p>{check.photoGuidance}</p>}
       {evidence.length > 0 && <ul>{evidence.map((entry) => <li key={entry.id}><div><strong>{entry.fileName}</strong><small>{entry.caption || entry.purpose} | {bytesLabel(entry.sizeBytes)}</small>{entry.capture && <small>{entry.capture.source === "in_app_camera" ? "Captured" : "Added"} {dateLabel(entry.capture.capturedAtUtc)}{entry.capture.locationCaptured && entry.capture.latitude !== null && entry.capture.longitude !== null && entry.capture.accuracyMetres !== null ? ` | device-reported GPS ${entry.capture.latitude.toFixed(6)}, ${entry.capture.longitude.toFixed(6)} | accuracy ${Math.round(entry.capture.accuracyMetres)} m` : ""}</small>}</div>{!readOnly && <button type="button" disabled={busy === `unlink:${entry.id}`} onClick={() => void onUnlink(item, entry.id)}>{busy === `unlink:${entry.id}` ? "Removing..." : "Remove link"}</button>}</li>)}</ul>}
       {!item.id ? <p className={styles.saveFirst}>{evidenceRequirement.minimumFiles === 0 ? "Save this answer. You can add a photo later if it helps explain the observation." : "Save the answer first, then attach the required photo or document."}</p>
         : !readOnly && <form className={styles.uploadForm} onSubmit={upload}>
@@ -720,6 +743,15 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   const [localItems, setLocalItems] = useState<Record<string, LocalItem[]>>({});
   const [observationDrafts, setObservationDrafts] = useState<Record<string, AssessmentItem>>({});
   const [dirtyItems, setDirtyItems] = useState<Set<string>>(() => new Set());
+  const [dirtyMetadata, setDirtyMetadata] = useState<Set<string>>(() => new Set());
+  const markMetadataDirty = useCallback((key: string, dirty: boolean) => {
+    setDirtyMetadata((current) => {
+      if (current.has(key) === dirty) return current;
+      const next = new Set(current);
+      if (dirty) next.add(key); else next.delete(key);
+      return next;
+    });
+  }, []);
   const itemDraftProviders = useRef(new Map<string, AssessmentItemDraftProvider>());
   const recordObservation = useCallback((item: AssessmentItem) => {
     const key = `${item.moduleId}:${item.checkKey}:${item.instanceKey}`;
@@ -1056,11 +1088,11 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     <aside className={styles.boundary}>
       <strong>{activeModule.template.title}</strong>
       <p>{activeModule.template.reportBoundary}</p>
-      {canEdit && !latestReport && activeModule.key === "minimum_standards" && (activeModule.template.assessmentScope !== "current_minimum_standards" || Number(activeModule.template.templateVersion || 1) < 3) && <button type="button" className={styles.primaryButton} disabled={Boolean(busy) || dirtyItems.size > 0} onClick={() => void mutate({ action: "set_assessment_scope", moduleId: activeModule.id, scope: "current_minimum_standards", expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: activeModule.revision }, "scope", "Full assessment attached. Saved observations retained; review the added checks and declarations.")}>Expand to full minimum standards + 2027 readiness</button>}
+      {canEdit && !latestReport && activeModule.key === "minimum_standards" && (activeModule.template.assessmentScope !== "current_minimum_standards" || Number(activeModule.template.templateVersion || 1) < RENTAL_ASSESSMENT_TEMPLATE_VERSION) && <><button type="button" className={styles.primaryButton} disabled={Boolean(busy) || dirtyItems.size > 0 || dirtyMetadata.size > 0} onClick={() => void mutate({ action: "set_assessment_scope", moduleId: activeModule.id, scope: "current_minimum_standards", expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: activeModule.revision }, "scope", "Assessment questions updated. Saved observations and evidence retained; review the added questions.")}>{activeModule.template.assessmentScope === "current_minimum_standards" ? "Update assessment questions" : "Expand to full minimum standards + 2027 readiness"}</button>{dirtyItems.size > 0 || dirtyMetadata.size > 0 ? <p>Save your edited answers before updating the assessment questions.</p> : <p>Add the latest quoting questions and HomeStar option while keeping saved answers and evidence.</p>}</>}
       <span>Required issuer capability: {activeModule.requiredCapability.replaceAll("_", " ")}</span>
     </aside>
 
-    <MetadataForm module={activeModule} busy={busy === `metadata:${activeModule.id}`} readOnly={!canEdit || activeModule.status === "complete"} onSave={saveMetadata} /></>}
+    <MetadataForm module={activeModule} busy={busy === `metadata:${activeModule.id}` || busy === "scope"} readOnly={!canEdit || activeModule.status === "complete"} onSave={saveMetadata} onDirtyChange={markMetadataDirty} /></>}
 
     <div className={styles.sectionLayout}>
       {!activeSection ? <section className={styles.sectionOverview}>
@@ -1118,7 +1150,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
       </main>}
     </div>
 
-    {!activeSection && <><MetadataForm module={activeModule} busy={busy === `metadata:${activeModule.id}`} readOnly={!canEdit || activeModule.status === "complete"} onSave={saveMetadata} phase="final" /><section className={styles.completionCard}>
+    {!activeSection && <><MetadataForm module={activeModule} busy={busy === `metadata:${activeModule.id}` || busy === "scope"} readOnly={!canEdit || activeModule.status === "complete"} onSave={saveMetadata} onDirtyChange={markMetadataDirty} phase="final" /><section className={styles.completionCard}>
       <header><div><span>Server-checked completion</span><h4>{activeModule.title}</h4></div><strong>{activeModule.status === "complete" ? "Complete" : moduleCompletion?.complete ? "Ready" : "Not ready"}</strong></header>
       {activeModule.status === "complete" ? <p>Completed {dateLabel(activeModule.completedAt)}. Reopen it only when a correction is required before issue.</p>
         : moduleCompletion?.blockers?.length ? <><p>The report cannot be issued until these items are cleared:</p><ul>{moduleCompletion.blockers.map((blocker) => {

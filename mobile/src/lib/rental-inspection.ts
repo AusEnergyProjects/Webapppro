@@ -19,6 +19,8 @@ export type RentalAssessmentCheck = {
   requiredEvidenceCount: number;
   responseType: string;
   requiredPdfCount?: number;
+  verificationBasis?: 'licensed_electrician_video_review';
+  operationPhotoRequired?: boolean;
   responseFields?: Array<{ key: string; label: string; required: boolean }>;
   repeatBy: string;
   photoGuidance: string;
@@ -54,6 +56,7 @@ export type RentalAssessmentModule = {
     assessmentScope?: 'energy_readiness_2027' | 'current_minimum_standards';
     templateVersion?: number;
     safetyVisitVersion?: number;
+    historicalChecks?: Array<{ sectionKey: string; sectionTitle: string; sectionSummary: string; check: RentalAssessmentCheck }>;
   };
   answers: Record<string, unknown>;
   revision: number;
@@ -62,6 +65,7 @@ export type RentalAssessmentModule = {
 
 export type RentalAssessmentItem = {
   id: string;
+  historicalObservation?: boolean;
   moduleId: string;
   itemKey: string;
   sectionKey: string;

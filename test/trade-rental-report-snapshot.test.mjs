@@ -6,6 +6,8 @@ import * as assessment from "../src/lib/trade-rental-assessment.mjs";
 import * as evidence from "../src/lib/trade-rental-evidence.mjs";
 import * as workflow from "../src/lib/rental-assessor-workflow.mjs";
 import * as answerPresentation from "../src/lib/rental-report-answer.mjs";
+import * as branding from "../src/lib/rental-report-branding.mjs";
+import * as quotation from "../src/lib/rental-quotation.mjs";
 
 test("dwelling report preserves earlier faults and evidence without treating them as current dwelling answers", async () => {
   const sourceText = fs.readFileSync(new URL("../src/lib/trade-rental-report-server.ts", import.meta.url), "utf8");
@@ -21,6 +23,7 @@ test("dwelling report preserves earlier faults and evidence without treating the
     "@/lib/trade-rental-evidence.mjs": evidence, "@/lib/trade-rental-credentials": {},
     "@/lib/rental-assessor-workflow.mjs": workflow,
     "@/lib/rental-report-answer.mjs": answerPresentation,
+    "@/lib/rental-report-branding.mjs": branding, "@/lib/rental-quotation.mjs": quotation,
     "@/lib/trade-rental-schema-guards": {},
   };
   const moduleRecord = { exports: {} };
@@ -80,6 +83,7 @@ test("one shower observation renders a current pass, future recommendation and s
     "@/lib/trade-rental-evidence.mjs": evidence, "@/lib/trade-rental-credentials": {},
     "@/lib/rental-assessor-workflow.mjs": workflow, "@/lib/trade-rental-schema-guards": {},
     "@/lib/rental-report-answer.mjs": answerPresentation,
+    "@/lib/rental-report-branding.mjs": branding, "@/lib/rental-quotation.mjs": quotation,
   };
   const moduleRecord = { exports: {} };
   new Function("require", "module", "exports", compiled)((id) => {

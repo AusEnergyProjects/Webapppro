@@ -89,6 +89,21 @@ test("retired shower observations and their evidence stay reachable under the ma
   assert.equal(legacy.response.welsRating, "3 stars");
 });
 
+test("updated switchboard observations retain the retired property answer and its photos as read-only history", () => {
+  const previous = (template.historicalChecks || []).find(entry => entry.check.key === "switchboard_observation");
+  // New assessments need no historical definition; an explicitly upgraded snapshot contains it.
+  const oldCheck = previous?.check || { key: "switchboard_observation", prompt: "The switchboard and circuit schedule have been recorded.", repeatBy: "property", responseType: "outcome", requiredEvidenceCount: 1, credentialGate: "assigned_assessor" };
+  const { section, check } = entryFor("outlet_lighting_protection");
+  const frozen = assessmentModule({ template: { ...template, historicalChecks: [{ sectionKey: section.key, sectionTitle: section.title, sectionSummary: section.summary, check: oldCheck }] } });
+  const retired = { id: "retired-board", moduleId: frozen.id, sectionKey: section.key, checkKey: oldCheck.key, instanceKey: "property", locationLabel: "Property", outcome: "meets", response: { model: "Old board label" }, publicNotes: "", internalNotes: "", revision: 1 };
+  const earlier = earlierObservationItems(frozen, section, check, [retired]);
+  assert.equal(earlier.length, 1); assert.equal(earlier[0].item, retired); assert.equal(earlier[0].check, oldCheck);
+  const markup = renderToStaticMarkup(React.createElement(AssessmentItemCard, { module: frozen, section: earlier[0].section, check: oldCheck, item: retired,
+    historical: true, readOnly: true, evidence: [{ id: "old-photo", itemId: retired.id, fileName: "saved-switchboard.jpg", contentType: "image/jpeg", sizeBytes: 512 }],
+    observationCandidates: [], busy: "", onSave() {}, onUpload() {}, onUnlink() {}, onDirtyChange() {}, onRegisterDraft() {}, onObservationChange() {} }));
+  assert.match(markup, /Earlier observation|saved-switchboard.jpg|Old board label/); assert.doesNotMatch(markup, /Save changes|Remove link/);
+});
+
 test("a historical room result cannot supply a dwelling answer, while an existing property record is reused", () => {
   const old = item("mould_damp_observation", { id: "room-result", instanceKey: "bedroom-1", locationLabel: "Bedroom 1" });
   const other = item("mould_damp_observation", { id: "other-result", instanceKey: "bathroom-1", locationLabel: "Bathroom 1", outcome: "does_not_meet" });

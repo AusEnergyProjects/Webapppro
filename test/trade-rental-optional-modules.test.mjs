@@ -8,6 +8,8 @@ import * as assessment from "../src/lib/trade-rental-assessment.mjs";
 import * as evidence from "../src/lib/trade-rental-evidence.mjs";
 import * as workflow from "../src/lib/rental-assessor-workflow.mjs";
 import * as answerPresentation from "../src/lib/rental-report-answer.mjs";
+import * as branding from "../src/lib/rental-report-branding.mjs";
+import * as quotation from "../src/lib/rental-quotation.mjs";
 import {
   assertRentalModuleCredentialCurrent,
   currentRentalModuleCredentialSnapshot,
@@ -214,6 +216,7 @@ function reportBuilder(objects) {
     "@/lib/trade-rental-evidence.mjs": evidence, "@/lib/trade-rental-credentials": {},
     "@/lib/rental-assessor-workflow.mjs": workflow, "@/lib/trade-rental-schema-guards": {},
     "@/lib/rental-report-answer.mjs": answerPresentation,
+    "@/lib/rental-report-branding.mjs": branding, "@/lib/rental-quotation.mjs": quotation,
   };
   const moduleRecord = { exports: {} };
   new Function("require", "module", "exports", compiled)((id) => {

@@ -21,7 +21,8 @@ import { RENTAL_ADVERSE_OUTCOMES, newRentalItem,
   type RentalAssessmentModule, type RentalAssessmentSection } from '@/lib/rental-inspection';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { FieldRentalInspectionSummary } from '@/lib/types';
-import { rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalObservationBlockers, rentalSharedObservationResponse, rentalObservationNumberIsValid } from '../../../src/lib/rental-quotation.mjs';
+import { rentalQuotation, rentalAssessorFields, rentalFindingDescriptionLabel, rentalObservationBlockers, rentalSharedObservationResponse, rentalObservationNumberIsValid, rentalObservationFieldIsVisible } from '../../../src/lib/rental-quotation.mjs';
+import { RENTAL_ASSESSMENT_TEMPLATE_VERSION } from '../../../src/lib/trade-rental-assessment.mjs';
 import { RENTAL_ASSESSOR_TITLE, rentalAssessorMetadataField, rentalAssessorOutcomePatch, rentalWindowIsFixed,
   rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorSections,
   RENTAL_SHOWER_CHOICES, rentalShowerChoicePatch, rentalShowerChoiceValue } from '../../../src/lib/rental-assessor-workflow.mjs';
@@ -120,14 +121,14 @@ function RentalObservationInput({ field, value, editable, onChange }: {
   const text = String(value ?? '');
   if (field.input === 'select') {
     const options = field.options || [];
-    return <FieldSelect label={field.label} value={text} disabled={!editable} onChange={onChange}
-      options={text && !options.some((option) => option.value === text) ? [...options, { value: text, label: text }] : options} />;
+    return <View style={styles.field}><FieldSelect label={field.label} value={text} disabled={!editable} onChange={onChange}
+      options={text && !options.some((option) => option.value === text) ? [...options, { value: text, label: text }] : options} />{field.help ? <Text style={styles.small}>{field.help}</Text> : null}</View>;
   }
   return <View style={styles.field}><Text style={styles.label}>{field.label}{field.unit ? ' (' + field.unit + ')' : ''}</Text>
     <TextInput accessibilityLabel={field.label} editable={editable} style={[styles.input, field.input === 'textarea' && styles.notes]}
       value={text} onChangeText={onChange} multiline={field.input === 'textarea'}
       keyboardType={field.step === 1 ? 'number-pad' : field.input === 'number' ? 'decimal-pad' : 'default'} inputMode={field.step === 1 ? 'numeric' : field.input === 'number' ? 'decimal' : 'text'}
-      maxLength={field.input === 'number' ? 12 : 500} /></View>;
+      maxLength={field.input === 'number' ? 12 : 500} />{field.help ? <Text style={styles.small}>{field.help}</Text> : null}</View>;
 }
 function findingChoices(outcome: string): string[] {
   if (outcome === 'specialist_verification_required') return ['Visible condition recorded; specialist verification needed', 'Label unreadable', 'Could not safely check'];
@@ -264,6 +265,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   // A retired page is reachable only to recover its existing draft or queued photos.
   const section = sections.find((s) => s.key === cursor.sectionKey) || active?.template.sections.find((s) => s.key === cursor.sectionKey);
   const check = section?.checks[cursor.checkIndex];
+  const simpleReview = check?.key === 'outlet_lighting_protection' && check.verificationBasis === 'licensed_electrician_video_review';
   const showerCheck = check && ['showerhead_rating', 'shower_2027_readiness'].includes(check.key);
   const storedItem = data.items?.find((i) => i.moduleId === active?.id && i.sectionKey === cursor.sectionKey && i.checkKey === check?.key && i.instanceKey === cursor.instanceKey);
   const item = active && section && check ? storedItem || newRentalItem(active, section, check, cursor.instanceKey) : undefined;
@@ -305,7 +307,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const observationCandidates = candidates.map((candidate) => candidate.moduleId === active?.id && candidate.instanceKey === 'property'
     ? { ...candidate, locationLabel: 'Property' } : candidate);
   const propertySteps = sections.flatMap((group) => group.checks.map((_entry, checkIndex) => ({ section: group, checkIndex })));
-  const earlierItems = active?.key === 'minimum_standards' ? (data.items || []).filter((entry) => entry.moduleId === active.id && entry.instanceKey !== 'property') : [];
+  const earlierItems = active?.key === 'minimum_standards' ? (data.items || []).filter((entry) => entry.moduleId === active.id && (entry.instanceKey !== 'property'
+    || active.template.historicalChecks?.some((previous) => previous.sectionKey === entry.sectionKey && previous.check.key === entry.checkKey))) : [];
   const activeDrafts = active ? unfinishedDrafts(active, data, cache, saves) : [];
   const earlierDrafts = active?.key === 'minimum_standards' ? activeDrafts.filter(([draftKey]) => {
     if (!draftKey.startsWith(draftPrefix(active))) return false;
@@ -320,11 +323,10 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     candidates: observationCandidates, currentResponse: baseDraft?.response || {},
   });
   const draft = baseDraft ? { ...baseDraft, response: sharedObservation.response } : undefined;
-  const responseFields = draft && draft.outcome && draft.outcome !== 'not_applicable' && check ? rentalAssessorFields(check).filter((entry) =>
+  const responseFields = draft && draft.outcome && draft.outcome !== 'not_applicable' && check ? rentalAssessorFields(check, { templateVersion: Number(active?.template.templateVersion || 1) }).filter((entry) =>
     (!showerCheck || entry.key !== 'welsRating')
     && (!entry.legacy || active?.key !== 'minimum_standards' && String(draft.response[entry.key] ?? '').trim())
-    && (!entry.showForOutcomes || entry.showForOutcomes.includes(draft.outcome))
-    && (!entry.showIf || entry.showIf.values.includes(String(draft.response[entry.showIf.key] ?? '')) || String(draft.response[entry.key] ?? '').trim())
+    && rentalObservationFieldIsVisible(entry, { outcome: draft.outcome, response: draft.response })
     && (!entry.shared || !sharedObservation.recordedKeys.includes(entry.key) || editEquipmentKey === key)) : [];
   const detailField = responseFields[detailIndex];
   const editable = data.permissions?.canEdit === true && active?.status !== 'complete'
@@ -507,7 +509,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (!active || !item || !draft || !section || !check) return;
     if (!draft.outcome) throw new Error('Choose an answer.');
     if (active.key !== 'minimum_standards' && check.repeatBy !== 'property' && !draft.locationLabel.trim()) throw new Error('Add the appliance, circuit or alarm location.');
-    for (const responseField of rentalAssessorFields(check).filter((entry) => entry.input === 'number')) {
+    for (const responseField of rentalAssessorFields(check, { templateVersion: Number(active.template.templateVersion || 1) }).filter((entry) => entry.input === 'number' && rentalObservationFieldIsVisible(entry, { outcome: draft.outcome, response: draft.response }))) {
       const value = String(draft.response[responseField.key] ?? '').trim();
       if (value && !rentalObservationNumberIsValid(value, responseField.key)) {
         throw new Error(responseField.step === 1
@@ -517,13 +519,13 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     }
     if (draft.outcome === 'not_applicable' && !draft.publicNotes.trim()) throw new Error('Explain why this check does not apply.');
     const adverse = RENTAL_ADVERSE_OUTCOMES.has(draft.outcome);
-    if (adverse && !draft.findingDescription.trim()) throw new Error('Add a short note about what you saw or could not check.');
-    if (adverse && draft.severity === 'immediate_safety_risk' && (!draft.immediateAction.trim() || !draft.notified)) throw new Error('Record the make-safe action and notification.');
+    if (adverse && !simpleReview && !draft.findingDescription.trim()) throw new Error('Add a short note about what you saw or could not check.');
+    if (adverse && !simpleReview && draft.severity === 'immediate_safety_risk' && (!draft.immediateAction.trim() || !draft.notified)) throw new Error('Record the make-safe action and notification.');
     const existingFinding = data.findings?.find((finding) => finding.itemId === item.id);
     const body = { action: 'save_item', moduleId: active.id, expectedModuleRevision: active.revision,
       expectedItemRevision: item.revision, sectionKey: section.key, checkKey: check.key, instanceKey: item.instanceKey,
       locationLabel: draft.locationLabel.trim(), outcome: draft.outcome, response: draft.response, publicNotes: draft.publicNotes.trim(), internalNotes: draft.internalNotes.trim(), sortOrder: item.sortOrder,
-      finding: adverse ? { ...existingFinding, title: draft.findingTitle.trim() || section.title + ': ' + readable(draft.outcome), description: draft.findingDescription.trim(),
+      finding: adverse && (!simpleReview || draft.publicNotes.trim() || draft.findingDescription.trim()) ? { ...existingFinding, title: draft.findingTitle.trim() || section.title + ': ' + readable(draft.outcome), description: simpleReview ? draft.publicNotes.trim() || draft.findingDescription.trim() : draft.findingDescription.trim(),
         scopeSummary: draft.scopeSummary.trim(), severity: draft.severity, recommendedAction: draft.scopeSummary.trim(),
         quantityMilli: existingFinding?.quantityMilli || 0, unitLabel: existingFinding?.unitLabel || 'each',
         details: { ...existingFinding?.details, quotation: draft.quotation, immediateAction: draft.immediateAction.trim(), responsiblePeopleNotified: draft.notified } } : undefined };
@@ -532,8 +534,9 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (!check.requiredPdfCount && (evidence.length + draft.photos.length < requirement.minimumFiles || photoCount < requirement.minimumPhotos)) {
       throw new Error(requirement.reason);
     }
-    if (adverse) {
-      const blockers = rentalObservationBlockers({ checkKey: check.key, outcome: draft.outcome, response: draft.response, finding: body.finding });
+    const enforceQuoteCapture = Number(active.template.templateVersion || 0) >= 4;
+    if (adverse || enforceQuoteCapture) {
+      const blockers = rentalObservationBlockers({ checkKey: check.key, outcome: draft.outcome, response: draft.response, finding: body.finding, enforceQuoteCapture });
       if (blockers.length) throw new Error(blockers[0]);
     }
     // Missing GPS is retained for Sync to explain and resolve. It must not trap the assessor on this check.
@@ -556,14 +559,14 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       if (editable && detailField?.required && ['meets', 'does_not_meet'].includes(draft.outcome) && !String(draft.response[detailField.key] ?? '').trim()) return setError('Record this result before continuing.');
       if (check.responseType !== 'outcome' && detailIndex + 1 < responseFields.length) { setDetailIndex(detailIndex + 1); return; }
     }
-    if (check.responseType !== 'outcome' && (page === 'answer' || page === 'details') && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome)) {
+    if (!simpleReview && check.responseType !== 'outcome' && (page === 'answer' || page === 'details') && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome)) {
       change({ findingDescription: draft.findingDescription.trim() ? draft.findingDescription : draft.publicNotes || String(draft.response.limitationReason || ''),
         quotation: { ...rentalQuotation(draft.quotation), measurements: draft.quotation?.measurements || String(draft.response.measurement || ''), specification: draft.quotation?.specification || [draft.response.make, draft.response.model].filter(Boolean).join(' ') },
         quantity: draft.quantity ?? String((data.findings?.find((finding) => finding.itemId === item?.id)?.quantityMilli || 0) / 1000),
         unitLabel: draft.unitLabel || data.findings?.find((finding) => finding.itemId === item?.id)?.unitLabel || 'each' });
       setPage('finding'); return;
     }
-    if (page === 'finding' || (page === 'answer' && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome))) {
+    if (!simpleReview && (page === 'finding' || (page === 'answer' && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome)))) {
       if (editable && !draft.findingDescription.trim()) return setError('Add a short note about what you saw or could not check.');
       if (draft.severity === 'immediate_safety_risk') { setPage('safety'); return; }
     }
@@ -725,9 +728,9 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       {page === 'categories' ? <>
         <Text style={styles.title}>{active.key === 'minimum_standards' ? RENTAL_ASSESSOR_TITLE : active.title}</Text>
         {data.modules && data.modules.length > 1 ? <FieldSelect label="Assessment" value={active.id} disabled={Boolean(busy)} options={data.modules.map((m) => ({ value: m.id, label: m.title }))} onChange={setModuleId} /> : null}
-        {editable && active.key === 'minimum_standards' && (active.template.assessmentScope !== 'current_minimum_standards' || Number(active.template.templateVersion || 1) < 3) ? <>
-          <FieldButton disabled={Boolean(busy) || activeHasDraft || earlierDrafts.length > 0 || pendingSaves.length > 0 || !online} onPress={() => void perform('scope', async () => { await request({ action: 'set_assessment_scope', moduleId: active.id, scope: 'current_minimum_standards', expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: active.revision }); })}>Open the complete rental assessment</FieldButton>
-          {earlierDrafts.length ? <Text style={styles.small}>Finish the answers under Earlier saved observations before updating this assessment.</Text> : null}
+        {editable && active.key === 'minimum_standards' && (active.template.assessmentScope !== 'current_minimum_standards' || Number(active.template.templateVersion || 1) < RENTAL_ASSESSMENT_TEMPLATE_VERSION) ? <>
+          <FieldButton disabled={Boolean(busy) || hasDraft || earlierDrafts.length > 0 || pendingSaves.length > 0 || !online} onPress={() => void perform('scope', async () => { await request({ action: 'set_assessment_scope', moduleId: active.id, scope: 'current_minimum_standards', expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: active.revision }); })}>{active.template.assessmentScope === 'current_minimum_standards' ? 'Update assessment questions' : 'Open the complete rental assessment'}</FieldButton>
+          {hasDraft || earlierDrafts.length || pendingSaves.length ? <Text style={styles.small}>Finish or sync your edited answers before updating the assessment questions.</Text> : <Text style={styles.small}>Add the latest quoting questions and HomeStar option. Saved answers and evidence stay attached.</Text>}
         </> : null}
         <Text style={styles.body}>Check the whole property once in each category. Add photos and total measurements where shown.</Text>
         {earlierItems.length || earlierDrafts.length ? <FieldButton variant="quiet" onPress={() => setPage('earlier')}>Earlier saved observations</FieldButton> : null}
@@ -756,6 +759,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         }}>Finish saved answer: {previousDraft.locationLabel || 'Earlier observation'}</FieldButton>)}
         {earlierItems.map((entry) => <View key={entry.id} style={styles.photo}>
           <Text style={styles.label}>{entry.locationLabel || 'Earlier observation'} | {sections.find((group) => group.key === entry.sectionKey)?.title || entry.sectionKey}</Text>
+          {active.template.historicalChecks?.find((previous) => previous.sectionKey === entry.sectionKey && previous.check.key === entry.checkKey)?.check.prompt ? <Text style={styles.small}>{active.template.historicalChecks.find((previous) => previous.sectionKey === entry.sectionKey && previous.check.key === entry.checkKey)?.check.prompt}</Text> : null}
           <Text style={styles.body}>{readable(entry.outcome)}{entry.publicNotes ? ': ' + entry.publicNotes : ''}</Text>
           {Object.entries(entry.response).filter(([responseKey, value]) => responseKey !== 'roomId' && value !== '' && value !== null).map(([responseKey, value]) => <Text key={responseKey} style={styles.small}>{readable(responseKey)}: {String(value)}</Text>)}
           {(data.evidence || []).filter((photo) => photo.itemId === entry.id && photo.status === 'active').map((photo) => <Text key={photo.id} style={styles.small}>Evidence retained: {photo.caption || photo.fileName}</Text>)}
@@ -817,7 +821,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
             {responseFields.map((responseField) => <RentalObservationInput key={responseField.key} field={responseField} value={draft.response[responseField.key]} editable={editable && !busy}
               onChange={(value) => change({ response: { ...draft.response, [responseField.key]: value } })} />)}
           </> : null}
-          {check.responseType === 'outcome' && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? <>
+          {check.responseType === 'outcome' && !simpleReview && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? <>
             <Text style={styles.label}>{rentalFindingDescriptionLabel(draft.outcome)}</Text>
             <View style={styles.options}>{findingChoices(draft.outcome).map((choice) => <Pressable key={choice} disabled={!editable || Boolean(busy)}
               onPress={() => change({ findingDescription: choice })} style={[styles.option, draft.findingDescription === choice && styles.selected]}><Text style={styles.categoryTitle}>{choice}</Text></Pressable>)}</View>
@@ -825,7 +829,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
             <FieldButton variant={draft.severity === 'immediate_safety_risk' ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy)} onPress={() => change({ severity: draft.severity === 'immediate_safety_risk' ? 'required' : 'immediate_safety_risk' })}>{draft.severity === 'immediate_safety_risk' ? 'Immediate danger flagged' : 'Flag an immediate danger'}</FieldButton>
           </> : null}
           <View style={styles.photo}>
-            {photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <><Text style={styles.body}>{photoRequirement.reason}</Text>{active.key !== 'minimum_standards' ? <Text style={styles.small}>{check.photoGuidance}</Text> : null}</> : <Text style={styles.small}>No photo required for this answer. Add one if it helps explain your observation.</Text>}
+            {photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <><Text style={styles.body}>{photoRequirement.reason}</Text>{check.photoGuidance ? <Text style={styles.small}>{check.photoGuidance}</Text> : null}</> : <Text style={styles.small}>No photo required for this answer. Add one if it helps explain your observation.</Text>}
             <FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'camera'} onPress={() => void capture()}>{photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? 'Take photo' : 'Add optional photo'}</FieldButton>
             {evidence.length || draft.photos.length || photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone{photoRequirement.minimumPhotos ? ' · ' + photoRequirement.minimumPhotos + ' photos required' : photoRequirement.minimumFiles ? ' · ' + photoRequirement.minimumFiles + ' evidence file required' : ''}</Text> : null}
           {draft.photos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>

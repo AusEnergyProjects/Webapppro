@@ -5,6 +5,8 @@ import { setImmediate } from 'node:timers/promises';
 import test from 'node:test';
 import ts from 'typescript';
 import * as evidence from '../src/lib/trade-rental-evidence.mjs';
+import * as branding from '../src/lib/rental-report-branding.mjs';
+import * as quotation from '../src/lib/rental-quotation.mjs';
 
 const source = fs.readFileSync(new URL('../src/lib/trade-rental-report-server.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(`${source}\nexport { evidenceForSnapshot, storePreparedRentalEvidence };`, {
@@ -22,6 +24,7 @@ function service(bucket) {
     '@/lib/trade-rental-evidence.mjs': evidence, '@/lib/trade-rental-credentials': {},
     '@/lib/rental-assessor-workflow.mjs': {}, '@/lib/trade-rental-schema-guards': {},
     '@/lib/rental-report-answer.mjs': {},
+    '@/lib/rental-report-branding.mjs': branding, '@/lib/rental-quotation.mjs': quotation,
   };
   const moduleRecord = { exports: {} };
   new Function('require', 'module', 'exports', compiled)((id) => {

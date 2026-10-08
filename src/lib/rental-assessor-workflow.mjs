@@ -153,6 +153,10 @@ export function rentalAssessorEvidenceRequirement(check, outcome) {
   const requiredFiles = Number.isInteger(requested) && requested >= 0 ? requested : 1;
   const credential = String(definition.credentialGate || "assigned_assessor");
   const specialist = !["assigned_assessor", "qualified_assessor"].includes(credential) || ["test_result", "action_record"].includes(String(definition.responseType));
+  if (key === "outlet_lighting_protection" && definition.verificationBasis === "licensed_electrician_video_review") return { minimumFiles: Math.max(1, requiredFiles), minimumPhotos: 1,
+    reason: "Add a clear photo of the accessible switchboard front and readable labels, with the licensed electrician's selected video-review result. Do not remove covers or touch electrical parts." };
+  if (key === "cooling_2027_readiness" && definition.operationPhotoRequired === true && outcome === "meets") return { minimumFiles: Math.max(2, requiredFiles), minimumPhotos: 2,
+    reason: "Add a photo identifying the cooling equipment and a photo of its controller switched on or operating indicator. Record what was observed; an indicator photo alone does not prove cooling performance." };
   const sealOrVent = ["doors_2027_readiness", "windows_2027_readiness", "vents_2027_readiness"].includes(key);
   if (sealOrVent && ["meets", "does_not_meet", "specialist_verification_required"].includes(String(outcome))) {
     const vent = key === "vents_2027_readiness";
@@ -216,6 +220,10 @@ const presentation = {
  */
 export function rentalAssessorCheckPresentation(check, options = {}) {
   const definition = record(check);
+  if (checkKey(check) === "outlet_lighting_protection" && definition.verificationBasis === "licensed_electrician_video_review") return {
+    prompt: String(definition.prompt), help: String(definition.help || ""), phaseLabel: "Current requirement",
+    outcomeOptions: [{ value: "meets", label: "Meets" }, { value: "does_not_meet", label: "Doesn't meet" }],
+  };
   if (definition.presentationStyle === "safety-summary") return {
     prompt: String(definition.prompt), help: String(definition.help || ""), phaseLabel: "This visit",
     outcomeOptions: [

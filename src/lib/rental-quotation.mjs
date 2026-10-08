@@ -22,11 +22,17 @@ export const RENTAL_OBSERVATION_NUMBER_FIELDS = Object.freeze({
   areaSquareMetres: "m2", sealLengthMetres: "m", flowLitresPerMinute: "L/min", collectedLitres: "L", flowSeconds: "seconds",
   count: "", workingBurners: "", insulationDepthMm: "mm", hatchWidthMm: "mm", accessWidthMm: "mm",
   cabinetWidthMm: "mm", cabinetHeightMm: "mm", cabinetDepthMm: "mm", joistClearWidthMm: "mm",
+  hotWaterCableRunMetres: "m", airconTotalCableMetres: "m", cooktopCableRunMetres: "m", nonIc4DownlightCount: "",
 });
 // A practical input bound for a clear joist gap, not a compliance threshold.
 const joistClearWidthRange = Object.freeze({ min: 1, max: 5000, step: 1 });
 export function rentalObservationNumberIsValid(value, key = "") {
   if (value === undefined || value === null) return true;
+  if (key === "nonIc4DownlightCount") {
+    if (typeof value !== "string" && typeof value !== "number") return false;
+    const text = String(value).trim();
+    return !text || (/^\d+$/.test(text) && Number.isSafeInteger(Number(text)) && Number(text) >= 0);
+  }
   if (key === "joistClearWidthMm") {
     if (typeof value !== "string" && typeof value !== "number") return false;
     const text = String(value).trim();
@@ -41,7 +47,12 @@ export function rentalObservationNumberIsValid(value, key = "") {
 }
 export function rentalObservationResponseLabel(key) {
   const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Total insulation area required", sealLengthMetres: "Total draughtproofing length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", cabinetWidthMm: "Cabinet opening width", cabinetHeightMm: "Cabinet opening height", cabinetDepthMm: "Cabinet opening depth", joistClearWidthMm: "Clear gap between ceiling joists", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
-  const name = names[key] || String(key).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
+  const quotationNames = { hotWaterCableRunMetres: "Hot-water cable length", airconTotalCableMetres: "Heating / AC cable length", cooktopCableRunMetres: "Cooktop cable length", cableMeasurementStatus: "Cable length basis", cableRouteBasis: "Cable route and measurement basis", cableLimitationReason: "Cable measurement limitation", nonIc4DownlightCount: "Confirmed non-IC4 downlight count", downlightCountStatus: "Non-IC4 downlight count status", downlightEvidence: "Downlight label / count evidence", downlightCountLimitation: "Downlight count limitation" };
+  for (const mode of ["heating", "cooling"]) {
+    const title = mode === "heating" ? "Heating" : "Cooling";
+    Object.assign(quotationNames, { [`${mode}GemsStatus`]: `${title} energy-rating status`, [`${mode}EnergyRating`]: `${title} recorded rating or stars`, [`${mode}GemsReference`]: `${title} model / GEMS reference`, [`${mode}RatingZone`]: `${title} rating climate zone`, [`${mode}RatingBasis`]: `${title} rating evidence basis`, [`${mode}RatingLimitation`]: `${title} rating limitation` });
+  }
+  const name = names[key] || quotationNames[key] || String(key).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
   const unit = RENTAL_OBSERVATION_NUMBER_FIELDS[key];
   return unit ? `${name} (${unit})` : name;
 }
@@ -54,12 +65,22 @@ export const RENTAL_OBSERVATION_SELECT_OPTIONS = Object.freeze({
   insulationRating: choices(["None", "Below R5", "R5 or above", "Unknown"]),
   ventType: choices(["Wall grille", "Air brick", "Covered / sealed vent", "Mixed types", "Not sure"]),
   welsRating: choices(["Not labelled / unknown", "Below 3 stars", "3 stars", "4 stars or above"]),
+  cableMeasurementStatus: choices(["Measured", "Estimated", "Unable to determine"]),
+  downlightCountStatus: choices(["Counted", "No downlights", "Unknown", "Unverified"]),
+  heatingGemsStatus: choices(["Label recorded", "Not available", "Unreadable", "Unverified", "Not applicable"]),
+  coolingGemsStatus: choices(["Label recorded", "Not available", "Unreadable", "Unverified", "Not applicable"]),
+  heatingRatingZone: choices(["Hot", "Average", "Cold", "Multiple zones (record each rating)", "Not shown / legacy label"]),
+  coolingRatingZone: choices(["Hot", "Average", "Cold", "Multiple zones (record each rating)", "Not shown / legacy label"]),
+  heatingRatingBasis: choices(["Appliance label", "GEMS registration", "Other evidence"]),
+  coolingRatingBasis: choices(["Appliance label", "GEMS registration", "Other evidence"]),
+  hotWaterSupplyType: choices(["Individual unit", "Shared building system", "Unknown"]),
+  sharedHotWaterServiceStatus: choices(["Hot water supplied when checked", "No hot water when checked", "Not checked"]),
 });
 const heaterOptions = choices(["Split system", "Ducted", "Gas heater", "Wood / solid fuel", "Other", "No heater", "Unknown"]);
 const coolingOptions = choices(["Split system", "Ducted", "Evaporative", "Other", "No fixed cooling", "Unknown"]);
 const hotWaterOptions = choices(["Heat pump", "Electric storage", "Gas storage", "Instant gas", "Solar", "Other", "Unknown"]);
 
-/** @typedef {{ key: string, label: string, required: boolean, input: 'text'|'number'|'select'|'textarea', unit?: string, min?: number, max?: number, step?: number, options?: Array<{value:string,label:string}>, showIf?: {key:string,values:string[]}, showForOutcomes?: string[], shared?: boolean, legacy?: boolean, requiredForAdverse?: boolean }} RentalObservationField */
+/** @typedef {{ key: string, label: string, required: boolean, input: 'text'|'number'|'select'|'textarea', captureVersion?: number, help?: string, unit?: string, min?: number, max?: number, step?: number, options?: Array<{value:string,label:string}>, showIf?: {key:string,values:string[]}, showIfAll?: Array<{key:string,values:string[]}>, showForOutcomes?: string[], shared?: boolean, legacy?: boolean, requiredForAdverse?: boolean }} RentalObservationField */
 /** @returns {RentalObservationField} */
 const shortText = (key, label, extra = {}) => ({ key, label, required: false, input: "text", ...extra });
 /** @returns {RentalObservationField} */
@@ -70,6 +91,56 @@ const identityFields = () => [shortText("model", "Make / model from label (optio
 const limitationFields = (reasonStatuses = ["Other"]) => [selectField("limitationStatus", "Anything you could not check?", RENTAL_OBSERVATION_SELECT_OPTIONS.limitationStatus), shortText("limitationReason", "Brief reason", { showIf: { key: "limitationStatus", values: reasonStatuses } })];
 const roomFields = () => [numberField("roomLengthMetres", "Room length"), numberField("roomWidthMetres", "Room width"), numberField("roomHeightMetres", "Ceiling height")];
 const heatingChecks = ["main_living_heater", "heater_operation", "heater_efficiency", "heating_2027_readiness"];
+const cableLengthKey = (checkKey) => checkKey === "hot_water_2027_readiness" ? "hotWaterCableRunMetres"
+  : checkKey === "cooktop_function" ? "cooktopCableRunMetres"
+    : ["main_living_heater", "heating_2027_readiness"].includes(checkKey) ? "airconTotalCableMetres" : "";
+/** @returns {RentalObservationField[]} */
+const cableFields = (checkKey) => [
+  selectField("cableMeasurementStatus", "Cable length basis", RENTAL_OBSERVATION_SELECT_OPTIONS.cableMeasurementStatus, { help: "Record a safe observation for quoting. An electrician must confirm the route, cable size and circuit before installation." }),
+  { ...numberField(cableLengthKey(checkKey), checkKey === "hot_water_2027_readiness" ? "Switchboard to hot-water cable length" : checkKey === "cooktop_function" ? "Switchboard to cooktop cable length" : "Total heating / air-conditioning cable length"), requiredForAdverse: false, showIf: { key: "cableMeasurementStatus", values: ["Measured", "Estimated"] } },
+  shortText("cableRouteBasis", "Cable route and measurement basis", { showIf: { key: "cableMeasurementStatus", values: ["Measured", "Estimated"] }, help: ["main_living_heater", "heating_2027_readiness"].includes(checkKey) ? "State the proposed switchboard-to-unit route and any indoor/outdoor interconnection, rises and drops included in the total. State excluded or concealed lengths." : "State the proposed switchboard-to-appliance route, rises and drops, and how the length was measured or estimated." }),
+  shortText("cableLimitationReason", "Why could the cable length not be determined?", { showIf: { key: "cableMeasurementStatus", values: ["Unable to determine"] } }),
+].map((field) => ({ ...field, captureVersion: 4 }));
+const gemsAppliances = { heating: ["Split system", "Ducted", "Other", "Unknown"], cooling: ["Split system", "Ducted", "Evaporative", "Other", "Unknown"] };
+/** @param {'heating'|'cooling'} mode @returns {RentalObservationField[]} */
+const energyRatingFields = (mode) => {
+  const statusKey = `${mode}GemsStatus`;
+  const applianceCondition = { key: "applianceType", values: gemsAppliances[mode] };
+  const extra = { showIfAll: [applianceCondition] };
+  return [
+    selectField(statusKey, `${mode === "heating" ? "Heating" : "Cooling"} GEMS / energy-rating label status`, RENTAL_OBSERVATION_SELECT_OPTIONS[statusKey], { ...extra, help: "Record the actual appliance label or registration evidence. Leave the rating unknown when it is unavailable; this observation does not determine legal compliance." }),
+    shortText(`${mode}EnergyRating`, `${mode === "heating" ? "Heating" : "Cooling"} rating or stars from the label`, { ...extra, showIf: { key: statusKey, values: ["Label recorded"] }, help: "Copy the rating and its units or stars exactly. State the climate zone where the label distinguishes zones." }),
+    selectField(`${mode}RatingZone`, "Rating climate zone", RENTAL_OBSERVATION_SELECT_OPTIONS[`${mode}RatingZone`], { ...extra, showIf: { key: statusKey, values: ["Label recorded"] } }),
+    selectField(`${mode}RatingBasis`, "Rating evidence basis", RENTAL_OBSERVATION_SELECT_OPTIONS[`${mode}RatingBasis`], { ...extra, showIf: { key: statusKey, values: ["Label recorded"] } }),
+    shortText(`${mode}GemsReference`, "Model / GEMS registration reference (optional)", { ...extra, showIf: { key: statusKey, values: ["Label recorded"] } }),
+    shortText(`${mode}RatingLimitation`, "Why was the rating not recorded or not applicable?", { ...extra, showIf: { key: statusKey, values: ["Not available", "Unreadable", "Unverified", "Not applicable"] } }),
+  ].map((field) => ({ ...field, captureVersion: 4 }));
+};
+/** @returns {RentalObservationField[]} */
+const hotWaterFields = () => [
+  selectField("hotWaterSupplyType", "Hot-water supply", RENTAL_OBSERVATION_SELECT_OPTIONS.hotWaterSupplyType, { captureVersion: 4, help: "A shared building plant is separate from checking hot-water supply at this apartment. Shared supply alone does not confirm the plant's efficiency or create an exemption." }),
+  selectField("sharedHotWaterServiceStatus", "Hot-water supply observed in this apartment", RENTAL_OBSERVATION_SELECT_OPTIONS.sharedHotWaterServiceStatus, { captureVersion: 4, showIf: { key: "hotWaterSupplyType", values: ["Shared building system"] } }),
+  shortText("sharedHotWaterLimitation", "Shared plant inspection limitation", { captureVersion: 4, showIf: { key: "hotWaterSupplyType", values: ["Shared building system"] }, help: "Record that the building plant was not inspected and what access or information is needed. Describe only the apartment supply you actually checked." }),
+  ...[selectField("applianceType", "Hot-water type", hotWaterOptions), ...identityFields(), numberField("widthMm", "Unit width"), numberField("heightMm", "Unit height"), numberField("accessWidthMm", "Clear access width"), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus), ...cableFields("hot_water_2027_readiness")]
+    .map((field) => ({ ...field, showIfAll: [...(field.showIfAll || []), { key: "hotWaterSupplyType", values: ["", "Individual unit", "Unknown"] }] })),
+];
+
+/** Current answer controls visibility; retained earlier values do not reopen an inactive branch. */
+export function rentalObservationFieldIsVisible(field, { outcome, response = {} }) {
+  return (!field.showForOutcomes || field.showForOutcomes.includes(outcome))
+    && (!field.showIf || field.showIf.values.includes(String(response[field.showIf.key] || "")))
+    && (!field.showIfAll || field.showIfAll.every((condition) => condition.values.includes(String(response[condition.key] || ""))));
+}
+
+/** Split current observations from retained inactive answers without deleting either. */
+export function rentalObservationResponseProjection(checkKey, outcome, response = {}, visibilityResponse = response) {
+  const fields = rentalObservationFields(checkKey);
+  const inactiveKeys = new Set(fields.filter((field) => !rentalObservationFieldIsVisible(field, { outcome, response: visibilityResponse })).map((field) => field.key));
+  return {
+    response: Object.fromEntries(Object.entries(response).filter(([key]) => !inactiveKeys.has(key))),
+    retainedResponse: Object.fromEntries(Object.entries(response).filter(([key]) => inactiveKeys.has(key))),
+  };
+}
 
 /** Explicit asset groups; heating and cooling are never assumed to be the same unit. */
 export function rentalObservationGroup(checkKey) {
@@ -83,6 +154,8 @@ export function rentalObservationFields(checkKey) {
   if (heatingChecks.includes(checkKey)) return [
     selectField("applianceType", "Heater type", heaterOptions, { shared: true }), ...identityFields(),
     ...(checkKey === "heating_2027_readiness" ? [...roomFields(), selectField("accessStatus", "Access to heater", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus), ...limitationFields()] : []),
+    ...(["main_living_heater", "heating_2027_readiness"].includes(checkKey) ? cableFields(checkKey) : []),
+    ...(["heater_efficiency", "heating_2027_readiness"].includes(checkKey) ? energyRatingFields("heating") : []),
     shortText("measurement", "Earlier measurement notes", { legacy: true }), shortText("actionTaken", "Earlier location notes", { legacy: true }),
     ...(checkKey !== "heating_2027_readiness" ? [shortText("limitationReason", "Earlier observation limitation", { legacy: true })] : []),
   ];
@@ -91,7 +164,11 @@ export function rentalObservationFields(checkKey) {
   if (["appliance_identity_condition", "alarm_identity_location", "fixed_special_equipment"].includes(checkKey)) return [...identityFields(), ...limitationFields()];
   /** @type {Record<string, RentalObservationField[]>} */
   const specific = {
-    cooktop_function: [...identityFields(), numberField("widthMm", "Cooktop width"), numberField("depthMm", "Cooktop depth"), numberField("workingBurners", "Working burners")],
+    cooktop_function: [...identityFields(), numberField("widthMm", "Cooktop width"), numberField("depthMm", "Cooktop depth"), numberField("workingBurners", "Working burners"), ...cableFields(checkKey)],
+    artificial_lighting: [selectField("downlightCountStatus", "Non-IC4 downlight count status", RENTAL_OBSERVATION_SELECT_OPTIONS.downlightCountStatus),
+      { ...numberField("nonIc4DownlightCount", "Confirmed non-IC4 downlight count"), min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, requiredForAdverse: false, showIf: { key: "downlightCountStatus", values: ["Counted"] }, help: "Count only downlights confirmed as non-IC4 from readable labels or reliable evidence. Enter 0 only when none are confirmed; an unknown rating is not a confirmed count." },
+      shortText("downlightEvidence", "Downlight label / count evidence", { showIf: { key: "downlightCountStatus", values: ["Counted"] } }),
+      shortText("downlightCountLimitation", "Why is the non-IC4 count unknown or unverified?", { showIf: { key: "downlightCountStatus", values: ["Unknown", "Unverified"] } })].map((field) => ({ ...field, captureVersion: 4 })),
     oven_function: [...identityFields(),
       ...[numberField("cabinetWidthMm", "Cabinet opening width, if safely visible"), numberField("cabinetHeightMm", "Cabinet opening height, if safely visible"), numberField("cabinetDepthMm", "Cabinet opening depth, if safely visible")]
         .map((field) => ({ ...field, showForOutcomes: ["does_not_meet"], requiredForAdverse: false })),
@@ -101,8 +178,8 @@ export function rentalObservationFields(checkKey) {
     doors_2027_readiness: [numberField("count", "Total doors needing seals"), numberField("sealLengthMetres", "Total door draughtproofing length (metres)")].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
     vents_2027_readiness: [selectField("ventType", "Wall vent type", RENTAL_OBSERVATION_SELECT_OPTIONS.ventType, { showForOutcomes: ["meets", "does_not_meet", "specialist_verification_required"] }), { ...numberField("count", "Total wall vents needing sealing"), showForOutcomes: ["does_not_meet", "specialist_verification_required"] }],
     shower_2027_readiness: [selectField("welsRating", "Confirmed WELS rating", RENTAL_OBSERVATION_SELECT_OPTIONS.welsRating, { shared: true }), { ...numberField("flowLitresPerMinute", "Main shower flow (litres per minute)"), shared: true }, shortText("model", "Make / model from label (optional)", { shared: true })],
-    cooling_2027_readiness: [selectField("applianceType", "Cooling type", coolingOptions), ...identityFields(), ...roomFields(), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
-    hot_water_2027_readiness: [selectField("applianceType", "Hot-water type", hotWaterOptions), ...identityFields(), numberField("widthMm", "Unit width"), numberField("heightMm", "Unit height"), numberField("accessWidthMm", "Clear access width"), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
+    cooling_2027_readiness: [selectField("applianceType", "Cooling type", coolingOptions), ...identityFields(), ...energyRatingFields("cooling"), ...roomFields(), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
+    hot_water_2027_readiness: hotWaterFields(),
     window_covering: [{ ...numberField("count", "Total coverings needing attention"), showForOutcomes: ["does_not_meet"] }],
   };
   if (!specific[checkKey]) return [];
@@ -113,10 +190,11 @@ export function rentalObservationFields(checkKey) {
  * @param {{ key: string, responseType?: string, responseFields?: Array<{ key: string, label: string, required: boolean }> }} assessmentCheck
  * @returns {RentalObservationField[]}
  */
-export function rentalAssessorFields(assessmentCheck) {
+export function rentalAssessorFields(assessmentCheck, { templateVersion = 4 } = {}) {
   if (["test_result", "action_record"].includes(assessmentCheck?.responseType)) return (assessmentCheck.responseFields || []).map((field) => ({ ...field, input: "textarea" }));
   const fields = rentalObservationFields(assessmentCheck?.key);
-  return fields.length ? fields : (assessmentCheck?.responseFields || []).map((field) => ({ ...field, input: "text" }));
+  return fields.length ? fields.filter((field) => !field.captureVersion || templateVersion >= field.captureVersion)
+    : (assessmentCheck?.responseFields || []).map((field) => ({ ...field, input: "text" }));
 }
 
 const normalizedLocation = (value) => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -166,9 +244,12 @@ export function rentalFindingDescriptionLabel(outcome) {
   return "What did you notice?";
 }
 
-export function rentalObservationBlockers({ checkKey, outcome, response, finding }) {
+export function rentalObservationBlockers({ checkKey, outcome, response, finding, enforceQuoteCapture = false }) {
   const blockers = [];
-  const numericFields = rentalObservationFields(checkKey).filter((field) => field.input === "number");
+  const recordedResponse = response || {};
+  const currentResponse = rentalObservationResponseProjection(checkKey, outcome, response || {}).response;
+  response = currentResponse;
+  const numericFields = rentalObservationFields(checkKey).filter((field) => field.input === "number" && rentalObservationFieldIsVisible(field, { outcome, response }));
   const numericValues = numericFields.filter((field) => String(response?.[field.key] ?? "").trim());
   const validNumber = (field) => rentalObservationNumberIsValid(response[field.key], field.key);
   for (const field of numericValues.filter((field) => !validNumber(field))) blockers.push(field.step === 1
@@ -178,11 +259,55 @@ export function rentalObservationBlockers({ checkKey, outcome, response, finding
     && numericFields.some((field) => field.requiredForAdverse);
   if (measurementNeeded && !String(response?.measurement || "").trim()
     // The optional joist gap is quoting information, not a substitute for the existing area observation.
-    && !numericValues.some((field) => field.key !== "joistClearWidthMm" && validNumber(field))
+    && !numericValues.some((field) => field.requiredForAdverse && validNumber(field))
     && !String(response?.limitationReason || "").trim()
+    && !(recordedResponse.limitationStatus === undefined && String(recordedResponse.limitationReason || "").trim())
     && !["Not accessible", "Unsafe to measure"].includes(response?.limitationStatus)
     && !rentalQuotation(finding?.details?.quotation).measurements.trim()) {
     blockers.push("Record the basic measurements, or explain what you could not safely measure.");
+  }
+  if (enforceQuoteCapture && !["not_assessed", "not_applicable"].includes(outcome)) {
+    const lengthKey = cableLengthKey(checkKey);
+    // Working equipment does not require a proposed replacement measurement until quoting capture is started.
+    const sharedHotWater = checkKey === "hot_water_2027_readiness" && response.hotWaterSupplyType === "Shared building system";
+    const cableStarted = lengthKey && ["cableMeasurementStatus", lengthKey, "cableRouteBasis", "cableLimitationReason"].some((key) => String(response[key] ?? "").trim());
+    const cableNeeded = lengthKey && !sharedHotWater && (cableStarted || outcome === "does_not_meet"
+      || checkKey === "main_living_heater" && response.applianceType === "Gas heater");
+    if (cableNeeded) {
+      const status = response.cableMeasurementStatus;
+      if (!RENTAL_OBSERVATION_SELECT_OPTIONS.cableMeasurementStatus.some((option) => option.value === status)) blockers.push("Record whether the cable length was measured, estimated or unable to be determined.");
+      else if (status === "Unable to determine") {
+        if (!String(response.cableLimitationReason || "").trim()) blockers.push("Explain why the cable length could not be determined.");
+      } else {
+        if (!String(response[lengthKey] ?? "").trim()) blockers.push("Record the cable length in metres.");
+        if (!String(response.cableRouteBasis || "").trim()) blockers.push("State the cable route and measurement or estimate basis.");
+      }
+    }
+    if (checkKey === "artificial_lighting") {
+      const status = response.downlightCountStatus;
+      if (!RENTAL_OBSERVATION_SELECT_OPTIONS.downlightCountStatus.some((option) => option.value === status)) blockers.push("Record the confirmed non-IC4 downlight count, or its unknown or unverified status.");
+      else if (status === "Counted") {
+        if (!String(response.nonIc4DownlightCount ?? "").trim()) blockers.push("Record the whole non-IC4 downlight count, including zero when confirmed.");
+        if (!String(response.downlightEvidence || "").trim()) blockers.push("Record the downlight label or evidence used for the count.");
+      } else if (["Unknown", "Unverified"].includes(status) && !String(response.downlightCountLimitation || "").trim()) blockers.push("Explain why the non-IC4 downlight count is unknown or unverified.");
+    }
+    if (sharedHotWater) {
+      if (!RENTAL_OBSERVATION_SELECT_OPTIONS.sharedHotWaterServiceStatus.some((option) => option.value === response.sharedHotWaterServiceStatus)) blockers.push("Record only the hot-water supply observed in this apartment.");
+      if (!String(response.sharedHotWaterLimitation || "").trim()) blockers.push("Record that the shared building plant was not inspected and what needs confirmation.");
+      if (outcome === "meets") blockers.push("Apartment hot-water supply does not verify the shared plant's efficiency. Record the plant as needing verification when it was not inspected.");
+    }
+    const ratingMode = ["heater_efficiency", "heating_2027_readiness"].includes(checkKey) ? "heating" : checkKey === "cooling_2027_readiness" ? "cooling" : "";
+    if (ratingMode && gemsAppliances[ratingMode].includes(response.applianceType)) {
+      const status = response[`${ratingMode}GemsStatus`];
+      if (!RENTAL_OBSERVATION_SELECT_OPTIONS[`${ratingMode}GemsStatus`].some((option) => option.value === status)) blockers.push("Record the energy-rating label status for this appliance.");
+      else if (status === "Label recorded") {
+        if (!String(response[`${ratingMode}EnergyRating`] || "").trim()) blockers.push("Copy the actual heating or cooling rating and units or stars from the label.");
+        for (const suffix of ["RatingZone", "RatingBasis"]) {
+          if (!RENTAL_OBSERVATION_SELECT_OPTIONS[`${ratingMode}${suffix}`].some((option) => option.value === response[`${ratingMode}${suffix}`])) blockers.push(suffix === "RatingZone" ? "Record the rating climate zone or state that the label does not show one." : "Record the label or registration evidence basis for the rating.");
+        }
+      }
+      else if (status !== "Label recorded" && !String(response[`${ratingMode}RatingLimitation`] || "").trim()) blockers.push("Explain why the energy rating was unavailable, unverified or not applicable.");
+    }
   }
   return blockers;
 }

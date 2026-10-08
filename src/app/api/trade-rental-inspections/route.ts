@@ -15,10 +15,12 @@ import {
   RENTAL_ASSESSMENT_FINDING_SEVERITIES,
   RENTAL_ASSESSMENT_OUTCOMES,
   rentalAssessmentCheck,
+  rentalAssessmentHistoricalCheck,
   rentalCheckIsReadiness,
   rentalAssessmentCompletion,
   rentalAssessmentItemKey,
   rentalAssessmentTemplateSnapshot,
+  rentalAssessmentTemplateWithHistory,
   normalizeRentalAssessmentScope,
   RENTAL_ASSESSMENT_SCOPES,
 } from "@/lib/trade-rental-assessment.mjs";
@@ -29,6 +31,7 @@ import {
   RENTAL_OBSERVATION_SELECT_OPTIONS,
   RENTAL_QUOTATION_FIELDS,
   rentalObservationNumberIsValid,
+  rentalObservationResponseProjection,
   rentalQuotation,
 } from "@/lib/rental-quotation.mjs";
 import { currentRentalModuleCredentialSnapshot, rentalModuleProfileAnswers } from "@/lib/trade-rental-credentials";
@@ -124,6 +127,10 @@ function responseObject(value: unknown) {
     "notificationRecipient", "notificationTime", "applianceType", "gasType", "manufactureDate",
     "certificationNumber", "ratedCurrent", "testCurrent", "tripTime", "circuitIdentifier",
     "modelNumber", "powerSource", "rcdButtonResult",
+    "cableRouteBasis", "cableLimitationReason", "downlightEvidence", "downlightCountLimitation",
+    "heatingEnergyRating", "heatingGemsReference", "heatingRatingLimitation",
+    "coolingEnergyRating", "coolingGemsReference", "coolingRatingLimitation",
+    "sharedHotWaterLimitation",
   ];
   for (const key of textFields) {
     const text = cleanAdminText(source[key], 500);
@@ -214,7 +221,7 @@ function inspectionError(error: unknown) {
   if (code === "RENTAL_MUTATION_CONFLICT" || code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, error: "This assessment changed on another device. Refresh before trying again." }, 409);
   if (code === "RENTAL_RESPONSE_TOO_LARGE") return adminJson({ ok: false, error: "The assessment response is too large." }, 413);
   if (code === "RENTAL_OBSERVATION_RESPONSE_INVALID") return adminJson({ ok: false, code,
-    error: "Choose a listed observation option and enter valid measurements. Ceiling joist gaps must be whole millimetres from 1 to 5000; other measurements can be zero or positive numbers." }, 400);
+    error: "Choose a listed observation option and enter valid measurements. Downlight counts must be whole counts of zero or more. Ceiling joist gaps must be whole millimetres from 1 to 5000; other measurements can be zero or positive numbers." }, 400);
   if (code === "INVALID_RENTAL_ITEM_KEY") return adminJson({ ok: false, error: "The repeated assessment item is invalid." }, 400);
   if (code === "RENTAL_MODULES_INCOMPLETE") return adminJson({ ok: false, error: "Every selected module must pass its completion checks before the report can be issued." }, 409);
   if (code === "RENTAL_MODULE_SET_INVALID") return adminJson({ ok: false, error: "The attached assessment modules do not match the frozen job selection. Ask an administrator to repair the job before issuing." }, 409);
@@ -403,10 +410,12 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
     return { ...assessmentModule, answers: { ...assessmentModule.answers, ...profileAnswers,
       inspectionDate: assessmentDate(assessmentModule.answers, firstObservation) } };
   }));
-  const items = itemRows.results.map(presentItem).filter((item) => {
+  const items = itemRows.results.map(presentItem).map((item) => {
     const template = modules.find((module) => module.id === item.moduleId)?.template;
-    return Boolean(rentalAssessmentCheck(template, item.sectionKey, item.checkKey));
-  });
+    const historical = !rentalAssessmentCheck(template, item.sectionKey, item.checkKey)
+      && rentalAssessmentHistoricalCheck(template, item.sectionKey, item.checkKey);
+    return { ...item, ...(historical ? { historicalObservation: true } : {}) };
+  }).filter((item) => item.historicalObservation || Boolean(rentalAssessmentCheck(modules.find((module) => module.id === item.moduleId)?.template, item.sectionKey, item.checkKey)));
   const activeItemIds = new Set(items.map((item) => item.id));
   const findings = findingRows.results.map(presentFinding).filter((finding) => activeItemIds.has(finding.itemId));
   const evidence = evidenceRows.results.map(presentEvidence).filter((entry) => activeItemIds.has(entry.itemId));
@@ -595,8 +604,14 @@ async function setAssessmentScope(context: InspectionContext, body: Row) {
   const expectedRevision = integer(body.expectedModuleRevision);
   if (expectedRevision !== integer(assessmentModule.revision)) throw new Error("RENTAL_MUTATION_CONFLICT");
   const snapshot = rentalAssessmentTemplateSnapshot(["minimum_standards"], scope);
-  const template = snapshot.modules.minimum_standards;
-  const answers = normaliseModuleAnswers(template, parsedObject(assessmentModule.answers));
+  const previousTemplate = parsedObject(assessmentModule.template_snapshot);
+  const template = rentalAssessmentTemplateWithHistory(snapshot.modules.minimum_standards, previousTemplate);
+  if (previousTemplate.assessmentScope === scope && integer(previousTemplate.templateVersion) === template.templateVersion) {
+    return adminJson({ ok: true, ...(await assessmentPayload(context)) });
+  }
+  const currentAnswers = parsedObject(assessmentModule.answers);
+  const answers: Record<string, unknown> = { ...normaliseModuleAnswers(template, currentAnswers),
+    ...(Object.hasOwn(currentAnswers, "roomRoster") ? { roomRoster: currentAnswers.roomRoster } : {}) };
   answers.coverageConfirmed = false;
   answers.assessorDeclaration = false;
   const now = new Date().toISOString();
@@ -682,7 +697,9 @@ async function saveItem(context: InspectionContext, body: Row) {
   const located = rentalAssessmentCheck(template, sectionKey, checkKey);
   if (!located) return adminJson({ ok: false, error: "Choose a valid assessment check." }, 400);
   const assessmentCheck = parsedObject(located.check);
-  const response = responseObject(body.response);
+  const submittedResponse = parsedObject(body.response);
+  const currentObservation = rentalObservationResponseProjection(checkKey, cleanAdminText(body.outcome, 60), submittedResponse);
+  const response = responseObject(currentObservation.response);
   // Pending answers captured by an earlier app keep their item identity so
   // their queued photos still attach correctly. The dwelling workflow always
   // submits property; no room roster is needed to save or finish it.
@@ -703,6 +720,8 @@ async function saveItem(context: InspectionContext, body: Row) {
   const itemKey = rentalAssessmentItemKey(String(assessmentModule.module_key), sectionKey, checkKey, instanceKey);
   const outcome = cleanAdminText(body.outcome, 60);
   if (!OUTCOMES.has(outcome)) return adminJson({ ok: false, error: "Choose an assessment result." }, 400);
+  const videoReviewedSwitchboard = assessmentCheck.verificationBasis === "licensed_electrician_video_review";
+  if (videoReviewedSwitchboard && !["meets", "does_not_meet"].includes(outcome)) return adminJson({ ok: false, error: "Record the licensed electrician's Meets or Doesn't meet answer from the video review." }, 400);
   if (outcome === "meets" && ["licensed_electrician", "licensed_gasfitter", "suitably_qualified_smoke_alarm_worker"].includes(String(assessmentCheck.credentialGate))
     && assessmentCheck.credentialGate !== template.credentialGate) {
     const gate = String(assessmentCheck.credentialGate);
@@ -727,12 +746,23 @@ async function saveItem(context: InspectionContext, body: Row) {
   if (outcome === "not_applicable" && !publicNotes) {
     return adminJson({ ok: false, error: "Explain in the public report why this check is not applicable." }, 400);
   }
-  const existing = await getD1().prepare(`SELECT id, revision FROM trade_rental_inspection_items
+  const existing = await getD1().prepare(`SELECT id, revision, response_json FROM trade_rental_inspection_items
     WHERE inspection_id = ? AND item_key = ? AND firebase_uid = ?`)
     .bind(context.inspection.id, itemKey, context.access.ownerUid).first<Row>();
   const expectedItemRevision = integer(body.expectedItemRevision);
   if ((existing && expectedItemRevision !== integer(existing.revision)) || (!existing && expectedItemRevision !== 0)) {
     throw new Error("RENTAL_MUTATION_CONFLICT");
+  }
+  // The current controller determines which answers apply. Keep valid recorded
+  // inactive values, while an invalid unsaved value in a now-hidden control is not an observation.
+  const previousInactive = rentalObservationResponseProjection(checkKey, outcome, parsedObject(existing?.response_json), submittedResponse).retainedResponse;
+  for (const inactive of [previousInactive, currentObservation.retainedResponse]) {
+    for (const [key, value] of Object.entries(inactive)) {
+      try { Object.assign(response, responseObject({ [key]: value })); }
+      catch (error) {
+        if (!(error instanceof Error) || error.message !== "RENTAL_OBSERVATION_RESPONSE_INVALID") throw error;
+      }
+    }
   }
   const itemId = existing ? String(existing.id) : crypto.randomUUID();
   const now = new Date().toISOString();
@@ -778,7 +808,10 @@ async function saveItem(context: InspectionContext, body: Row) {
     WHERE inspection_id = ? AND finding_key = ? AND firebase_uid = ?`)
     .bind(context.inspection.id, `finding:${itemKey}`, context.access.ownerUid).first<Row>();
   const ordinaryRegimeUnconfirmed = Number(template.templateVersion) >= 3 && assessmentModule.module_key === "minimum_standards" && parsedObject(assessmentModule.answers).rentalRegime !== "ordinary_residential";
-  const finding = adverse ? findingInput(body, outcome, itemKey, locationLabel, rentalCheckIsReadiness(assessmentCheck, template.assessmentScope) || ordinaryRegimeUnconfirmed) : null;
+  const suppliedFinding = parsedObject(body.finding);
+  const findingBody = videoReviewedSwitchboard && outcome === "does_not_meet" ? { ...body, finding: { ...suppliedFinding,
+    title: suppliedFinding.title || String(assessmentCheck.prompt), description: suppliedFinding.description || "Recorded result: Does not meet." } } : body;
+  const finding = adverse ? findingInput(findingBody, outcome, itemKey, locationLabel, rentalCheckIsReadiness(assessmentCheck, template.assessmentScope) || ordinaryRegimeUnconfirmed) : null;
   if (finding) {
     const findingId = existingFinding ? String(existingFinding.id) : crypto.randomUUID();
     const findingRevision = integer(existingFinding?.revision) + 1;

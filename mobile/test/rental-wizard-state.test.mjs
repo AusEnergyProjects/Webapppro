@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
-import { rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationBlockers, rentalSharedObservationResponse } from '../../src/lib/rental-quotation.mjs';
+import { rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationBlockers, rentalSharedObservationResponse, rentalObservationFieldIsVisible } from '../../src/lib/rental-quotation.mjs';
 import { rentalAssessorEvidenceRequirement, rentalAssessorMetadataField, rentalAssessorOutcomePatch } from '../../src/lib/rental-assessor-workflow.mjs';
+import { RENTAL_ASSESSMENT_TEMPLATE_VERSION, rentalAssessmentTemplateSnapshot } from '../../src/lib/trade-rental-assessment.mjs';
 
 const code = ts.transpileModule(readFileSync(new URL('../src/lib/rental-inspection.ts', import.meta.url), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
@@ -103,9 +104,9 @@ function saveEnvironment() {
     photos: [1, 2].map((id) => ({ uri: `photo-${id}`, capture: { captureObservedAtUtc: captured },
       location: { location: { state: 'captured', accuracyMetres: 12, mocked: false, observedAtUtc: captured } } })) };
   return {
-    active: { id: 'module', revision: 1 }, item: { revision: 0, instanceKey: 'property', sortOrder: 0 }, storedItem: undefined,
+    active: { id: 'module', revision: 1, template: { templateVersion: 3 } }, item: { revision: 0, instanceKey: 'property', sortOrder: 0 }, storedItem: undefined,
     section: { key: 'bathroom' }, check: { key: 'bathroom', repeatBy: 'property', requiredEvidenceCount: 1, prompt: 'Bathroom condition' },
-    draft, data: { findings: [] }, evidence: [], RENTAL_ADVERSE_OUTCOMES: new Set(), rentalAssessorFields, rentalObservationNumberIsValid,
+    draft, data: { findings: [] }, evidence: [], simpleReview: false, RENTAL_ADVERSE_OUTCOMES: new Set(), rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationFieldIsVisible,
     rentalAssessorEvidenceRequirement, rentalObservationBlockers,
     workOrderId: 'job', key: 'draft', cacheRef: { current: { drafts: { draft }, answers: {} } },
     setSaves() {}, setCache() {}, persist: async () => {}, advanced: false,
@@ -154,7 +155,7 @@ test('Next saves and advances while the retained photo has no GPS fix yet', asyn
 });
 
 test('assessor screens use observable fields without requiring a trade specification', () => {
-  assert.match(source, /rentalAssessorFields\(check\)/);
+  assert.match(source, /rentalAssessorFields\(check, \{ templateVersion:/);
   assert.match(source, /rentalFindingDescriptionLabel\(draft\.outcome\)/);
   assert.doesNotMatch(source, /label="Recommended next step"|label="Quantity for the work"|RENTAL_QUOTATION_FIELDS\.map/);
   assert.doesNotMatch(source, /!draft\.scopeSummary\.trim\(\)/);
@@ -180,7 +181,7 @@ function mountedNext(environment) {
 }
 function nextEnvironment() {
   const env = { draft: { outcome: 'meets', response: { applianceType: 'Split system' }, findingDescription: '', severity: 'required' },
-    check: { responseType: 'outcome' }, editable: true, page: 'answer', responseFields: [{ key: 'applianceType' }],
+    check: { responseType: 'outcome' }, simpleReview: false, editable: true, page: 'answer', responseFields: [{ key: 'applianceType' }],
     RENTAL_ADVERSE_OUTCOMES: new Set(['does_not_meet', 'specialist_verification_required']), calls: [],
     detailIndex: 0, detailField: undefined };
   env.setPage = (page) => { env.page = page; env.calls.push(page); };
@@ -251,6 +252,61 @@ test('invalid measurements stay editable on the phone instead of creating a queu
   env.enqueueRentalSave = () => { throw new Error('Invalid observation must not enter queue'); };
   await assert.rejects(mountedSaveAnswer(env), /Enter a zero or positive number for room length/);
   assert.equal(env.cacheRef.current.drafts.draft.response.roomLengthMetres, '4..2');
+});
+
+test('current phone statuses hide retained conditional answers after correcting a mistaken selection', () => {
+  const declaration = source.slice(source.indexOf('  const responseFields ='), source.indexOf('  const detailField ='));
+  const compiled = ts.transpileModule(declaration + '\nreturn responseFields;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const env = { draft: { outcome: 'meets', response: { limitationStatus: 'Other', limitationReason: 'Locked hatch',
+    cableMeasurementStatus: 'Measured', hotWaterCableRunMetres: '20', cableRouteBasis: 'Observed wall route' } },
+    active: { key: 'minimum_standards', template: { templateVersion: 4 } }, check: { key: 'hot_water_2027_readiness' },
+    showerCheck: false, rentalAssessorFields, rentalObservationFieldIsVisible, sharedObservation: { recordedKeys: [] }, editEquipmentKey: '', key: 'draft' };
+  const evaluate = () => new Function('environment', 'with(environment){' + compiled + '}')(env).map(field => field.key);
+  assert.ok(evaluate().includes('limitationReason')); assert.ok(evaluate().includes('hotWaterCableRunMetres'));
+  env.draft.response.limitationStatus = 'No limitation'; env.draft.response.cableMeasurementStatus = 'Unable to determine';
+  assert.ok(!evaluate().includes('limitationReason')); assert.ok(!evaluate().includes('hotWaterCableRunMetres'));
+  assert.ok(!evaluate().includes('cableRouteBasis')); assert.ok(evaluate().includes('cableLimitationReason'));
+  assert.equal(env.draft.response.hotWaterCableRunMetres, '20'); assert.equal(env.draft.response.limitationReason, 'Locked hatch');
+  env.draft.response.hotWaterSupplyType = 'Shared building system';
+  const shared = evaluate(); assert.ok(shared.includes('sharedHotWaterServiceStatus'));
+  for (const field of ['model', 'applianceType', 'hotWaterCableRunMetres', 'cableMeasurementStatus', 'cableLimitationReason']) assert.ok(!shared.includes(field), field);
+});
+
+test('v4 Next rejects a missing current quoting answer even when the observation meets', async () => {
+  const env = saveEnvironment(); env.check.key = 'artificial_lighting'; env.active.template.templateVersion = 4;
+  env.enqueueRentalSave = () => { throw new Error('Missing capture must not enter queue'); };
+  await assert.rejects(mountedSaveAnswer(env), /non-IC4 downlight count/);
+  assert.equal(env.advanced, false); assert.equal(env.cacheRef.current.drafts.draft, env.draft);
+  env.draft.response = { downlightCountStatus: 'Unknown', downlightCountLimitation: 'Labels not safely accessible', nonIc4DownlightCount: 'previous-invalid' };
+  env.enqueueRentalSave = async input => { env.queued = input; return { id: 'saved' }; }; env.advanceQuestion = () => { env.advanced = true; };
+  await mountedSaveAnswer(env)(); assert.equal(env.advanced, true);
+  assert.equal(env.queued.body.response.nonIc4DownlightCount, 'previous-invalid', 'Keep inactive earlier data; current report projection decides relevance');
+});
+
+test('v4 phone Next permits an honest cable limitation with inactive invalid numeric history', async () => {
+  const env = saveEnvironment(); env.check.key = 'cooktop_function'; env.active.template.templateVersion = 4;
+  env.draft.response = { cableMeasurementStatus: 'Unable to determine', cableLimitationReason: 'Concealed route', cooktopCableRunMetres: '3..2' };
+  env.enqueueRentalSave = async input => { env.queued = input; return { id: 'saved' }; }; env.advanceQuestion = () => { env.advanced = true; };
+  await mountedSaveAnswer(env)(); assert.equal(env.advanced, true); assert.equal(env.queued.body.response.cooktopCableRunMetres, '3..2');
+});
+
+test('native reviewed switchboard Next requires its photo and permits both results without extra questions', async () => {
+  const currentTemplate = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards;
+  const check = currentTemplate.sections.flatMap(section => section.checks).find(entry => entry.key === 'outlet_lighting_protection');
+  const declaration = source.slice(source.indexOf('  const simpleReview ='), source.indexOf('  const showerCheck ='));
+  const simple = new Function('check', ts.transpileModule(declaration + '\nreturn simpleReview;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(check);
+  assert.equal(simple, true);
+  for (const outcome of ['meets', 'does_not_meet']) {
+    const env = saveEnvironment(); env.check = check; env.simpleReview = simple; env.active.key = 'minimum_standards'; env.active.template.templateVersion = 4;
+    env.draft.outcome = outcome; env.draft.findingDescription = ''; env.draft.publicNotes = ''; env.draft.photos = [];
+    env.RENTAL_ADVERSE_OUTCOMES = new Set(['does_not_meet']); env.draft.severity = 'required'; env.draft.immediateAction = ''; env.draft.notified = false;
+    env.enqueueRentalSave = async input => { env.queued = input; return { id: 'saved-review' }; }; env.advanceQuestion = () => { env.advanced = true; };
+    await assert.rejects(mountedSaveAnswer(env), /photo/); assert.equal(env.queued, undefined);
+    env.draft.photos = [{ uri: 'switchboard.jpg' }]; await mountedSaveAnswer(env)();
+    assert.equal(env.queued.body.outcome, outcome); assert.equal(env.queued.body.finding, undefined); assert.equal(env.advanced, true);
+    const next = nextEnvironment(); next.check = check; next.simpleReview = simple; next.draft.outcome = outcome; next.draft.findingDescription = '';
+    await mountedNext(next)(); assert.deepEqual(next.calls, ['saved']);
+  }
 });
 
 test('phone saves the optional ceiling gap or an honest safe-access limitation in the durable answer', async () => {
@@ -343,7 +399,7 @@ test('dwelling checks retain historical dimensions without asking for them again
   const compiled = ts.transpileModule(declaration + '\nreturn responseFields;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const evaluate = (environment) => new Function('environment', 'with(environment){' + compiled + '}')(environment);
   const draft = { outcome: 'meets', response: { widthMm: '2400', heightMm: '1800' } };
-  const env = { draft, active: { key: 'minimum_standards' }, check: { key: 'window_covering' }, showerCheck: false, rentalAssessorFields, sharedObservation: { recordedKeys: [] }, editEquipmentKey: '', key: 'draft' };
+  const env = { draft, active: { key: 'minimum_standards', template: { templateVersion: 3 } }, check: { key: 'window_covering' }, showerCheck: false, rentalAssessorFields, rentalObservationFieldIsVisible, sharedObservation: { recordedKeys: [] }, editEquipmentKey: '', key: 'draft' };
   assert.equal(evaluate(env).some((field) => field.key === 'widthMm'), false);
   assert.equal(draft.response.widthMm, '2400');
   draft.outcome = 'does_not_meet'; assert.equal(evaluate(env).some((field) => field.key === 'widthMm'), false);
@@ -523,6 +579,85 @@ test('unfinished metadata ignores saved values and legacy signoff caches, but re
   assert.equal(assessmentModule.answers.assessorDeclaration, undefined, 'Discarding an obsolete local signoff never certifies the server answer');
 });
 
+function renderedNativeBranch(select, environment) {
+  const ast = ts.createSourceFile('rental-inspection-workflow.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let branch;
+  function visit(node) { if (select(node, ast)) branch = node; ts.forEachChild(node, visit); }
+  visit(ast); assert.ok(branch, 'Evaluate the actual native JSX branch');
+  const output = ts.transpileModule(`export function render() { return ${branch.getText(ast)}; }`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const jsx = (type, props) => ({ type, props });
+  const render = new Function('environment', 'require', `with(environment) { const exports = {}; ${output}; return exports.render; }`)(environment,
+    name => { assert.equal(name, 'react/jsx-runtime'); return { jsx, jsxs: jsx, Fragment: 'fragment' }; });
+  return render();
+}
+const renderedNodes = (node, predicate) => node == null || typeof node !== 'object' ? [] : Array.isArray(node)
+  ? node.flatMap(child => renderedNodes(child, predicate)) : [...(predicate(node) ? [node] : []), ...renderedNodes(node.props?.children, predicate)];
+const renderedText = node => node == null || typeof node === 'boolean' ? '' : typeof node !== 'object' ? String(node)
+  : Array.isArray(node) ? node.map(renderedText).join(' ') : renderedText(node.props?.children);
+
+test('native update is explicit, revision checked and unavailable with metadata, photo, queue or offline work', async () => {
+  const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast).includes('RENTAL_ASSESSMENT_TEMPLATE_VERSION');
+  const env = { editable: true, active: { id: 'module', key: 'minimum_standards', revision: 8,
+    template: { assessmentScope: 'current_minimum_standards', templateVersion: 3 } },
+    data: { inspection: { revision: 11 } }, RENTAL_ASSESSMENT_TEMPLATE_VERSION, busy: '', hasDraft: false,
+    earlierDrafts: [], pendingSaves: [], online: true, styles: {}, FieldButton: 'button', Text: 'text',
+    perform: async (_kind, run) => run(), request: async body => { env.sent = body; } };
+  const button = () => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button')[0];
+  assert.equal(button().props.disabled, false); assert.match(renderedText(button()), /Update assessment questions/);
+  await button().props.onPress(); await Promise.resolve();
+  assert.deepEqual(env.sent, { action: 'set_assessment_scope', moduleId: 'module', scope: 'current_minimum_standards', expectedInspectionRevision: 11, expectedModuleRevision: 8 });
+  for (const patch of [{ busy: 'scope' }, { hasDraft: true }, { earlierDrafts: [['earlier', {}]] }, { pendingSaves: [{}] }, { online: false }]) {
+    const previous = Object.fromEntries(Object.keys(patch).map(key => [key, env[key]])); Object.assign(env, patch);
+    assert.equal(button().props.disabled, true, JSON.stringify(patch)); Object.assign(env, previous);
+  }
+  env.active.template.templateVersion = RENTAL_ASSESSMENT_TEMPLATE_VERSION; assert.equal(button(), undefined);
+});
+
+test('native photo prompts reflect the corrected answer while previously captured photos remain', () => {
+  const currentTemplate = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards;
+  const check = currentTemplate.sections.flatMap(section => section.checks).find(entry => entry.key === 'mould_damp_observation');
+  const select = (node, ast) => ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.photo}>';
+  const photo = { uri: 'saved.jpg', capture: { captureObservedAtUtc: '2026-10-08T00:00:00Z' }, mediaId: 'saved-media' };
+  const env = { check, photoRequirement: rentalAssessorEvidenceRequirement(check, 'does_not_meet'), active: { key: 'minimum_standards' },
+    styles: {}, editable: true, busy: '', evidence: [], draft: { photos: [photo] }, View: 'view', Text: 'text', Image: 'image', FieldButton: 'button',
+    capture() { assert.fail('Rendering does not capture or delete evidence'); }, refreshPhotoGps() {}, removePhoto() { assert.fail('Changing an answer never deletes a photo'); } };
+  let tree = renderedNativeBranch(select, env); assert.match(renderedText(tree), /2.*photos required/); assert.match(renderedText(tree), /overview/);
+  env.photoRequirement = rentalAssessorEvidenceRequirement(check, 'meets'); tree = renderedNativeBranch(select, env);
+  assert.doesNotMatch(renderedText(tree), /photos required/); assert.match(renderedText(tree), /No photo required/); assert.match(renderedText(tree), /Add optional photo/);
+  assert.equal(renderedNodes(tree, node => node.type === 'image')[0].props.source.uri, 'saved.jpg'); assert.equal(env.draft.photos[0], photo);
+  env.check = currentTemplate.sections.flatMap(section => section.checks).find(entry => entry.key === 'cooling_2027_readiness');
+  env.photoRequirement = rentalAssessorEvidenceRequirement(env.check, 'meets');
+  assert.match(renderedText(renderedNativeBranch(select, env)), /controller|operating indicator/i);
+});
+
+test('native earlier records include retired property switchboard answers but never replace the current check', () => {
+  const declaration = source.slice(source.indexOf('  const earlierItems ='), source.indexOf('  const activeDrafts ='));
+  const old = { id: 'old-board', moduleId: 'module', sectionKey: 'electrical_safety', checkKey: 'switchboard_observation', instanceKey: 'property', response: { model: 'Old label' } };
+  const current = { id: 'new-board', moduleId: 'module', sectionKey: 'electrical_safety', checkKey: 'outlet_lighting_protection', instanceKey: 'property' };
+  const otherBusinessModule = { ...old, id: 'another-module', moduleId: 'other-module' };
+  const env = { data: { items: [old, current, otherBusinessModule] }, active: { id: 'module', key: 'minimum_standards',
+    template: { historicalChecks: [{ sectionKey: 'electrical_safety', check: { key: 'switchboard_observation' } }] } } };
+  const earlier = new Function('environment', 'with(environment){' + ts.transpileModule(declaration + '\nreturn earlierItems;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + '}')(env);
+  assert.deepEqual(earlier, [old]); assert.equal(current.checkKey, 'outlet_lighting_protection');
+});
+
+test('the native HomeStar logo question is optional, starts off and only toggles on a deliberate press', () => {
+  const currentTemplate = rentalAssessmentTemplateSnapshot(['minimum_standards']).modules.minimum_standards;
+  const declaration = source.slice(source.indexOf('  const metadata ='), source.indexOf('  const accessSuggestion ='));
+  const active = { key: 'minimum_standards', template: currentTemplate };
+  const metadata = new Function('environment', 'with(environment){' + ts.transpileModule(declaration + '\nreturn metadata;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + '}')({ active, observationsReady: false, rentalAssessorMetadataField });
+  const field = metadata.find(entry => entry.key === 'homeStarCommissioned');
+  assert.ok(field); assert.equal(field.type, 'checkbox'); assert.equal(field.required, false); assert.equal(field.phase, 'setup');
+  const env = { field, answers: {}, editable: true, busy: '', queuedMetadata: undefined, FieldButton: 'button',
+    changeAnswer(key, value) { env.answers[key] = value; } };
+  const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === "field.type === 'checkbox'" && node.getText(ast).includes('changeAnswer(field.key');
+  let control = renderedNativeBranch(select, env); assert.equal(control.props.variant, 'secondary'); assert.match(renderedText(control), /I confirm/); assert.equal(env.answers.homeStarCommissioned, undefined);
+  control.props.onPress(); assert.equal(env.answers.homeStarCommissioned, true);
+  control = renderedNativeBranch(select, env); assert.equal(control.props.variant, 'primary'); control.props.onPress(); assert.equal(env.answers.homeStarCommissioned, false);
+});
+
 test('a real unsaved answer stays on review with an actionable message instead of bouncing to sections', async () => {
   const env = { active: { id: 'module' }, finishRequest: undefined, earlierDrafts: [], pendingSaves: [], completionBlockers: [], activeHasDraft: true,
     setError(message) { env.message = message; }, setPage() { assert.fail('Finish must not navigate away from review'); } };
@@ -561,7 +696,7 @@ test('issued report email uses current sharing access after issuance closes canI
 test('unverified or inaccessible optional checks record limitations without requiring invented test readings', async () => {
   for (const outcome of ['meets', 'does_not_meet', 'not_accessible', 'specialist_verification_required', 'exemption_evidence_pending']) {
     const env = { draft: { outcome, response: {}, findingDescription: 'Could not access the test point', quotation: {}, quantity: '', unitLabel: 'each' },
-      check: { responseType: 'test_result' }, editable: true, page: 'details', detailField: { key: 'testReading', required: true },
+      check: { responseType: 'test_result' }, simpleReview: false, editable: true, page: 'details', detailField: { key: 'testReading', required: true },
       detailIndex: 0, responseFields: [{ key: 'testReading' }], RENTAL_ADVERSE_OUTCOMES: new Set(['does_not_meet', 'not_accessible', 'specialist_verification_required', 'exemption_evidence_pending']),
       rentalQuotation: (value) => value, data: { findings: [] }, item: undefined,
       setError(message) { env.message = message; }, setPage(page) { env.page = page; }, change(values) { Object.assign(env.draft, values); },

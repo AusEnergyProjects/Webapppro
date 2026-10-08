@@ -6,7 +6,7 @@ import { RENTAL_SAFETY_TEMPLATE_VERSION, rentalSafetyVisitTemplate, rentalSafety
 export const RENTAL_INSPECTION_SERVICE_CATEGORY = "rental-inspection";
 
 export const RENTAL_ASSESSMENT_TEMPLATE_KEY = "vic-rental-minimum-standards";
-export const RENTAL_ASSESSMENT_TEMPLATE_VERSION = 3;
+export const RENTAL_ASSESSMENT_TEMPLATE_VERSION = 4;
 export const RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM = "2026-06-30";
 export const RENTAL_REPORT_LINK_DAYS = 60;
 
@@ -122,6 +122,8 @@ function check(key, prompt, options = {}) {
     required: options.required !== false,
     requiredEvidenceCount: Number.isInteger(options.requiredEvidenceCount) ? options.requiredEvidenceCount : 1,
     responseType: options.responseType || "outcome",
+    ...(options.verificationBasis ? { verificationBasis: options.verificationBasis } : {}),
+    ...(options.operationPhotoRequired ? { operationPhotoRequired: true } : {}),
     responseFields: options.responseType === "test_result" ? [
       { key: "testMethod", label: "Test method and conditions", required: true },
       { key: "testInstrument", label: "Test instrument and identifier", required: true },
@@ -156,6 +158,7 @@ function field(key, label, type, options = {}) {
 }
 
 const minimumStandardsMetadata = Object.freeze([
+  field("homeStarCommissioned", "Commissioned by HomeStar Upgrades", "checkbox", { phase: "setup", help: "Optional. Add the HomeStar Upgrades logo and commissioning label to an assessment issued by Australian Energy Assessments. The actual assessor, issuing business and TLink remain identified." }),
   field("assessorName", "Assessor", "text", { source: "team_profile", phase: "profile" }),
   field("inspectionDate", "Assessment date", "date", { required: true }),
   field("rentalRegime", "Which rental type is being assessed?", "select", {
@@ -208,8 +211,7 @@ const minimumStandardsSections = Object.freeze([
     title: "Electrical safety minimum standard",
     summary: "Record the switchboard and obtain licensed verification of circuit breaker and residual current device protection where required.",
     checks: Object.freeze([
-      check("switchboard_observation", "The switchboard and circuit schedule have been recorded.", { photoGuidance: "Photograph the board location, accessible front labels and readable circuit schedule. Do not remove covers or touch electrical parts. Record hidden or unreadable details as unknown for the electrician." }),
-      check("outlet_lighting_protection", "Power outlet and lighting circuits have the required circuit breaker and residual current device protection.", { credentialGate: "licensed_electrician", photoGuidance: "A photo alone cannot prove this result. Record the electrician verification and supporting switchboard evidence." }),
+      check("outlet_lighting_protection", "Does the switchboard meet the circuit breaker and safety-switch requirement?", { verificationBasis: "licensed_electrician_video_review", credentialGate: "assigned_assessor", help: "Record the licensed electrician's answer from the video review as the assessment result. Photograph the accessible switchboard front and labels. Do not remove covers or touch electrical parts.", photoGuidance: "Take a clear photo of the accessible switchboard front showing circuit breakers, safety switches and readable labels. Record the licensed electrician's Meets or Doesn't meet answer from the video review." }),
     ]),
   }),
   Object.freeze({
@@ -535,7 +537,7 @@ const energyReadinessSections = Object.freeze([
     key: "cooling", title: "Cooling", summary: "Check fixed cooling in the main living area.", checks: [
       energyCheck("cooling_2027_readiness", "Does the main living area already have qualifying fixed cooling?",
         "Check operation and the local-climate GEMS rating: non-ducted cooling needs at least 3 stars; ducted cooling needs TCSPF 3.8. From 1 March 2027 a new or converted periodic agreement triggers installation where no fixed cooler exists; replacement is triggered by irreparable failure. All rentals need qualifying cooling from 1 July 2030, subject to applicable exceptions. A ducted evaporative replacement may be permitted.",
-        { trigger: "New agreement, periodic conversion or irreparable failure from 1 March 2027; all rentals from 1 July 2030", sourceUrl: energySources[2].url, photoGuidance: "Capture the cooler and outlet in the main living area, data plate and rating. If absent, photograph the living area." }),
+        { operationPhotoRequired: true, trigger: "New agreement, periodic conversion or irreparable failure from 1 March 2027; all rentals from 1 July 2030", sourceUrl: energySources[2].url, photoGuidance: "Photograph the cooling equipment and readable label, plus the controller switched on or operating indicator. Record actual operation observed; an indicator alone does not prove cooling performance." }),
     ],
   },
   {
@@ -672,8 +674,28 @@ export function rentalAssessmentTemplateSnapshot(value, assessmentScope) {
   });
 }
 
+/** Keep the retired switchboard observation's definition for issued report history after an explicit upgrade. */
+export function rentalAssessmentTemplateWithHistory(nextTemplate, previousTemplate) {
+  const next = structuredClone(nextTemplate);
+  const retained = new Map((previousTemplate?.historicalChecks || []).map((entry) => [entry.check.key, structuredClone(entry)]));
+  if (!(next.sections || []).some((section) => section.checks.some((entry) => entry.key === "switchboard_observation"))) {
+    for (const section of previousTemplate?.sections || []) {
+      const previousCheck = section.checks?.find((entry) => entry.key === "switchboard_observation");
+      if (previousCheck) retained.set(previousCheck.key, { sectionKey: section.key, sectionTitle: section.title, sectionSummary: section.summary || "", check: structuredClone(previousCheck) });
+    }
+  }
+  if (retained.size) next.historicalChecks = [...retained.values()];
+  return next;
+}
+
 export function rentalAssessmentModule(key) {
   return RENTAL_ASSESSMENT_MODULES.find((module) => module.key === key) || null;
+}
+
+/** Historical definitions are for presentation only, never a current save or completion target. */
+export function rentalAssessmentHistoricalCheck(moduleTemplate, sectionKey, checkKey) {
+  const entry = moduleTemplate?.historicalChecks?.find((candidate) => candidate.sectionKey === sectionKey && candidate.check?.key === checkKey);
+  return entry ? { section: { key: entry.sectionKey, title: entry.sectionTitle, summary: entry.sectionSummary }, check: entry.check } : null;
 }
 
 export function rentalAssessmentCheck(moduleTemplate, sectionKey, checkKey) {
@@ -745,6 +767,9 @@ export function rentalAssessmentCompletion(input) {
           blockers.push({ key: `location:${item.itemKey}`, label: `${section.title}: add the location for every repeated item.` });
         }
         const outcome = String(item.outcome || "not_assessed");
+        if (assessmentCheck.verificationBasis === "licensed_electrician_video_review" && !["meets", "does_not_meet"].includes(outcome)) {
+          blockers.push({ key: `video-result:${item.itemKey}`, label: `${itemLabel}: record the licensed electrician's Meets or Doesn't meet answer from the video review.` });
+        }
         if (outcome === "not_assessed") {
           blockers.push({ key: `outcome:${item.itemKey}`, label: `${itemLabel} needs an assessment result.` });
           continue;
@@ -768,6 +793,13 @@ export function rentalAssessmentCompletion(input) {
         if (Number(assessmentCheck.requiredPdfCount || 0) > 0 && ["meets", "does_not_meet"].includes(outcome)
           && Number(pdfCounts[item.id] || 0) < assessmentCheck.requiredPdfCount) blockers.push({ key: `document:${item.itemKey}`, label: `${itemLabel}: attach the complete professional PDF.` });
         const response = parsedObject(item.responseJson);
+        const finding = findings.find((candidate) => candidate?.itemId === item.id || candidate?.itemKey === item.itemKey);
+        if (!item.derived && (finding || Number(moduleTemplate.templateVersion || 0) >= 4)) {
+          for (const [index, message] of rentalObservationBlockers({ checkKey: assessmentCheck.key, outcome, response, finding,
+            enforceQuoteCapture: Number(moduleTemplate.templateVersion || 0) >= 4 }).entries()) {
+            blockers.push({ key: `observation:${item.itemKey}:${index}`, label: `${itemLabel}: ${message}` });
+          }
+        }
         for (const responseField of assessmentCheck.responseFields || []) {
           if (responseField.required && ["meets", "does_not_meet"].includes(outcome) && !String(response[responseField.key] || "").trim()) {
             blockers.push({ key: `response:${item.itemKey}:${responseField.key}`, label: `${itemLabel}: ${responseField.label} is required.` });
@@ -779,14 +811,8 @@ export function rentalAssessmentCompletion(input) {
           blockers.push({ key: `credential:${item.itemKey}`, label: `${itemLabel} needs the specialist credential and verification used for this result.` });
         }
         if (["does_not_meet", "specialist_verification_required", "not_accessible", "exemption_evidence_pending"].includes(outcome)) {
-          const finding = findings.find((candidate) => candidate?.itemId === item.id || candidate?.itemKey === item.itemKey);
           if (!finding || !String(finding.title || "").trim() || !String(finding.description || "").trim()) {
             blockers.push({ key: `finding:${item.itemKey}`, label: `${itemLabel} needs a short description of what was observed or could not be checked.` });
-          }
-          if (finding && !item.derived) {
-            for (const [index, message] of rentalObservationBlockers({ checkKey: assessmentCheck.key, outcome, response, finding }).entries()) {
-              blockers.push({ key: `observation:${item.itemKey}:${index}`, label: `${itemLabel}: ${message}` });
-            }
           }
           if (finding?.severity === "immediate_safety_risk") {
             const details = parsedObject(finding.details);

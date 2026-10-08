@@ -54,6 +54,8 @@ test('inaccessible checks finish honestly and electrical verification stays prot
   input.findings = [{ itemId: 'one', title: 'Area not accessed', description: 'Locked and no key available' }];
   assert.equal(rentalAssessmentCompletion(input).complete, true);
   const electrical = assessment('outlet_lighting_protection');
+  electrical.moduleTemplate.sections[0].checks[0] = { ...electrical.moduleTemplate.sections[0].checks[0], credentialGate: 'licensed_electrician' };
+  delete electrical.moduleTemplate.sections[0].checks[0].verificationBasis;
   electrical.evidenceCounts.one = 2; electrical.photoCounts.one = 2;
   assert.ok(rentalAssessmentCompletion(electrical).blockers.some(b => b.key.startsWith('credential:')));
 });

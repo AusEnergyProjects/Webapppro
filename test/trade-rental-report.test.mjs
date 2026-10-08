@@ -12,6 +12,7 @@ import {
 import { createRentalAssessmentPdfBytes } from "../src/lib/trade-rental-report-pdf.mjs";
 import { RENTAL_OBSERVATION_NUMBER_FIELDS, rentalObservationResponseLabel } from "../src/lib/rental-quotation.mjs";
 import * as answerPresentation from "../src/lib/rental-report-answer.mjs";
+import * as branding from "../src/lib/rental-report-branding.mjs";
 
 function decodedPageContent(pdf) {
   const output = [];
@@ -79,6 +80,68 @@ function reportSnapshot() {
     sources: [{ title: "Current Victorian source", url: "https://example.com/source", effectiveFrom: "2026-06-30" }],
   };
 }
+
+test("frozen HomeStar commissioning is optional, AEA-scoped and retains TLink plus the actual issuer", async () => {
+  for (const flag of [undefined, false, "true", 1]) assert.equal(branding.rentalReportBrandingProfile({ abn: "73675233557" }, flag), "standard");
+  assert.equal(branding.rentalReportBrandingProfile({ abn: "73675233557" }, true), "homestar");
+  assert.equal(branding.rentalReportBrandingProfile({ abn: "12345678901" }, true), "standard");
+  const old = reportSnapshot();
+  old.business.abn = "73675233557";
+  old.modules[0].answers.homeStarCommissioned = true;
+  assert.equal(branding.rentalReportBranding(old).homestar, false, "An old frozen report is not rebranded from mutable module answers");
+  const oldContent = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(old)));
+  assert.doesNotMatch(oldContent, /HomeStar/);
+  const commissioned = structuredClone(old);
+  commissioned.report.branding = "homestar";
+  const before = structuredClone(commissioned);
+  const pdf = await PDFDocument.load(await createRentalAssessmentPdfBytes(commissioned), { updateMetadata: false });
+  const content = decodedPageContent(pdf);
+  assert.match(content, /Commissioned by[\s\S]*HomeStar Upgrades/);
+  assert.match(content, /Example Trade Business/);
+  assert.match(content, /Alex Assessor/);
+  assert.match(content, /TLink/);
+  assert.equal(pdf.getProducer(), "TLink");
+  assert.deepEqual(commissioned, before, "Rendering never rewrites a frozen record");
+});
+
+test("inactive answers print as retained history, separately from current cable limitations and downlight status", async () => {
+  const snapshot = reportSnapshot();
+  snapshot.access = { pdfUrl: "/test.pdf", expiresAt: "2026-11-10" };
+  snapshot.modules[0].credential = {};
+  snapshot.findings[0].category = "bathroom";
+  snapshot.modules[0].sections[0].items[0].response = { cableMeasurementStatus: "Unable to determine", cableLimitationReason: "CURRENT concealed route", downlightCountStatus: "Unknown", downlightCountLimitation: "CURRENT labels unreadable" };
+  snapshot.modules[0].sections[0].items[0].retainedResponse = { cooktopCableRunMetres: "15", nonIc4DownlightCount: "7", cableRouteBasis: "EARLIER route recorded" };
+  const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  assert.match(content, /CURRENT concealed route/);
+  assert.match(content, /CURRENT labels unreadable/);
+  assert.match(content, /Earlier answers retained/);
+  assert.match(content, /Earlier: Cooktop cable length \(m\)/);
+  assert.match(content, /EARLIER route recorded/);
+  const html = await renderReportSnapshot(snapshot);
+  assert.match(html, /Earlier answers retained/);
+  assert.match(html, /These answers do not apply to the current selection/);
+  assert.match(html, /Confirmed non-IC4 downlight count/);
+});
+
+test("an older frozen response keeps valid inactive answers readable as earlier history without a rewrite", async () => {
+  const snapshot = reportSnapshot();
+  snapshot.access = { pdfUrl: "/test.pdf", expiresAt: "2026-11-10" };
+  snapshot.modules[0].credential = {};
+  snapshot.findings = [];
+  const item = snapshot.modules[0].sections[0].items[0];
+  item.checkKey = "showerhead_rating";
+  item.response = { limitationStatus: "No limitation", limitationReason: "EARLIER inaccessible shower answer", welsRating: "4 stars or above", flowLitresPerMinute: 7.5 };
+  const before = structuredClone(snapshot);
+  assert.ok(!answerPresentation.rentalReportObservationEntries(item).some(([key]) => key === "limitationReason"));
+  assert.ok(answerPresentation.rentalReportRetainedObservationEntries(item).some(([key, value]) => key === "limitationReason" && value === item.response.limitationReason));
+  const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  const html = await renderReportSnapshot(snapshot);
+  for (const rendered of [content, html]) {
+    assert.match(rendered, /Earlier answers retained/);
+    assert.match(rendered, /EARLIER inaccessible shower answer/);
+  }
+  assert.deepEqual(snapshot, before);
+});
 
 test("readiness PDF names the future scope and avoids presenting a planning gap as today's non-compliance", async () => {
   const snapshot = reportSnapshot();
@@ -246,7 +309,7 @@ test("oversized evidence captions continue without dropping text and unavailable
   assert.match(content, /CAPTION END RETAINED/);
   assert.match(content, /Preview unavailable; file not supplied/);
   assert.match(content, /Open the file in PDF attachments/);
-  assert.equal((content.match(/Detailed/g) || []).length, 900);
+  assert.equal((content.replace("Detailed assessment", "").match(/Detailed/g) || []).length, 900);
   assert.equal((content.match(/observation\./g) || []).length, 900);
   const firstGalleryPage = pdf.getPages().map((page) => decodedPageContent({ context: pdf.context, getPages: () => [page] })).find((page) => page.includes("Photo register"));
   assert.match(firstGalleryPage, /E001 Tj/, "A long first caption must not strand the gallery heading on an empty page");
@@ -281,12 +344,7 @@ test("earlier faults retain their status and evidence in history without enterin
   const original = structuredClone(snapshot);
   const pdf = await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot));
   const cover = decodedPageContent({ getPages: () => [pdf.getPage(0)], context: pdf.context });
-  const coverText = [...cover.matchAll(/^(.+) Tj$/gm)].map((match) => match[1]);
-  const workCountLabel = coverText.indexOf("Work items");
-  const issueCountLabel = coverText.indexOf("Current issues");
-  assert.ok(workCountLabel > 0 && issueCountLabel > 0);
-  assert.equal(coverText[workCountLabel - 1], "0");
-  assert.equal(coverText[issueCountLabel - 1], "0");
+  assert.doesNotMatch(cover, /Current issues|Future upgrades|Need verification|Work items/);
   assert.doesNotMatch(cover, /historical fixture fault/);
   assert.match(cover, /1 earlier finding is/);
   assert.match(cover, /An earlier urgent finding remains/);
@@ -396,6 +454,7 @@ async function renderReportSnapshot(snapshot) {
     "@/lib/rental-quotation.mjs": quotation,
     "@/lib/trade-rental-assessment.mjs": assessment,
     "@/lib/rental-report-answer.mjs": answerPresentation,
+    "@/lib/rental-report-branding.mjs": branding,
     "./RentalReportViewer.module.css": { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) },
   };
   const output = { exports: {} };
@@ -405,6 +464,33 @@ async function renderReportSnapshot(snapshot) {
   }, output, output.exports);
   return renderToStaticMarkup(React.createElement(output.exports.RentalReportViewer, { token: "test-token" }));
 }
+
+test("online report has summary-first expandable standards, conditional logos and unique finding numbers", async () => {
+  const snapshot = reportSnapshot();
+  snapshot.report.branding = "homestar";
+  snapshot.business.abn = "73675233557";
+  snapshot.access = { pdfUrl: "/test.pdf", expiresAt: "2026-11-10" };
+  snapshot.modules[0].credential = {};
+  snapshot.findings[0].category = "bathroom";
+  snapshot.findings.push({ ...snapshot.findings[0], id: "history", historicalObservation: true, category: "kitchen", title: "Retained earlier issue" },
+    { ...snapshot.findings[0], id: "resolved", status: "compliant", title: "Resolved earlier issue" });
+  const before = structuredClone(snapshot);
+  const html = await renderReportSnapshot(snapshot);
+  assert.match(html, /src="\/aea-email-signature-brand-lockup.png"/);
+  assert.match(html, /src="\/homestar-upgrades.png"/);
+  assert.match(html, /TLink/);
+  assert.match(html, /HomeStar Upgrades will be in contact/);
+  assert.doesNotMatch(html, /No account is required|summaryCards/);
+  assert.ok(html.indexOf('id="summary"') < html.indexOf('id="findings"'));
+  assert.match(html, /<details class="assessmentSection"[^>]*>/);
+  assert.deepEqual([...html.matchAll(/class="findingHeading"><span>(\d+)<\/span>/g)].map((entry) => entry[1]), ["01", "02", "03"]);
+  const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  for (const number of ["01", "02", "03"]) assert.equal((content.match(new RegExp(`ITEM ${number}`, "g")) || []).length, 1);
+  assert.deepEqual(snapshot, before);
+  snapshot.report.branding = "standard";
+  const ordinary = await renderReportSnapshot(snapshot);
+  assert.doesNotMatch(ordinary, /homestar-upgrades.png|HomeStar Upgrades will be in contact/);
+});
 
 test("online report uses option labels and keeps earlier findings out of current work without losing history", async () => {
   const snapshot = reportSnapshot();
@@ -422,7 +508,7 @@ test("online report uses option labels and keeps earlier findings out of current
   finding.severity = "urgent";
   const before = structuredClone(snapshot);
   const html = await renderReportSnapshot(snapshot);
-  assert.match(html, /Current findings<\/span><strong>0<\/strong>/);
+  assert.doesNotMatch(html, /summaryCards|Current findings<\/span><strong>|Selected modules<\/span><strong>|Evidence files<\/span><strong>/);
   assert.match(html, /No current work scopes recorded/);
   assert.match(html, /Earlier observations are not counted as current or marked resolved/);
   assert.match(html, /Its resolution is not confirmed in this report/);
