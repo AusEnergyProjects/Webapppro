@@ -247,7 +247,9 @@ const REQUIRED_COLUMNS = {
   trade_rental_inspection_events: ["id", "inspection_id", "report_id", "report_link_id", "firebase_uid"],
 } as const;
 
-const readinessByDatabase = new WeakMap<object, Promise<void>>();
+// Cache completed verification only. D1 I/O belongs to the request that starts
+// it; another invocation must not inherit a stalled or cancelled request.
+const readinessByDatabase = new WeakSet<object>();
 
 async function requireRentalSchemaMigration(database: D1Database) {
   const missing: string[] = [];
@@ -289,15 +291,7 @@ async function installRentalSchemaGuards(database: D1Database) {
 
 export async function ensureTradeRentalSchemaGuards(database: D1Database) {
   const key = database as object;
-  let readiness = readinessByDatabase.get(key);
-  if (!readiness) {
-    readiness = installRentalSchemaGuards(database);
-    readinessByDatabase.set(key, readiness);
-  }
-  try {
-    await readiness;
-  } catch (error) {
-    readinessByDatabase.delete(key);
-    throw error;
-  }
+  if (readinessByDatabase.has(key)) return;
+  await installRentalSchemaGuards(database);
+  readinessByDatabase.add(key);
 }

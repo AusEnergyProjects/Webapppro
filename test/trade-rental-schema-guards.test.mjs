@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
-import { TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS } from "../src/lib/trade-rental-schema-guards.ts";
+import { TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS, ensureTradeRentalSchemaGuards } from "../src/lib/trade-rental-schema-guards.ts";
 import { canonicalTlinkSchemaGuardSql } from "../src/lib/tlink-schema-guards.ts";
 
 const migrationUrl = new URL("../drizzle/0160_trade_rental_inspections.sql", import.meta.url);
@@ -32,6 +32,89 @@ async function fixture() {
   for (const definition of TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS) database.exec(definition.sql);
   return { database, migration };
 }
+
+function testD1(database) {
+  return {
+    prepare(sql) {
+      return { sql, async all() { return { results: database.prepare(sql).all() }; } };
+    },
+    async batch(statements) {
+      for (const statement of statements) database.exec(statement.sql);
+      return statements.map(() => ({ success: true }));
+    },
+  };
+}
+
+test("rental guard verification does not inherit another request's stalled or cancelled I/O", async () => {
+  const { database } = await fixture();
+  const base = testD1(database);
+  const parked = Promise.withResolvers();
+  let reads = 0;
+  const d1 = {
+    ...base,
+    prepare(sql) {
+      const statement = base.prepare(sql);
+      return {
+        ...statement,
+        async all() {
+          reads += 1;
+          if (reads === 1) await parked.promise;
+          return statement.all();
+        },
+      };
+    },
+  };
+  const interrupted = ensureTradeRentalSchemaGuards(d1).catch((error) => error);
+  let timer;
+  try {
+    await Promise.race([
+      ensureTradeRentalSchemaGuards(d1),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("The new request inherited stalled rental I/O")), 1000); }),
+    ]);
+    const completedReads = reads;
+    assert.ok(completedReads > 1, "The second request independently checked the schema");
+    parked.reject(new Error("Original request disconnected"));
+    assert.match((await interrupted).message, /Original request disconnected/);
+    await ensureTradeRentalSchemaGuards(d1);
+    assert.equal(reads, completedReads, "Completed readiness remains cached after the first request fails");
+    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total,
+      TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS.length);
+  } finally {
+    clearTimeout(timer);
+    parked.reject(new Error("Fixture cleanup"));
+    await interrupted;
+    database.close();
+  }
+});
+
+test("rental guard verification caches only completed checks and retries a failed request", async () => {
+  const { database } = await fixture();
+  const base = testD1(database);
+  let reads = 0;
+  const d1 = {
+    ...base,
+    prepare(sql) {
+      const statement = base.prepare(sql);
+      return {
+        ...statement,
+        async all() {
+          reads += 1;
+          if (reads === 1) throw new Error("D1 unavailable");
+          return statement.all();
+        },
+      };
+    },
+  };
+  try {
+    await assert.rejects(ensureTradeRentalSchemaGuards(d1), /D1 unavailable/);
+    await ensureTradeRentalSchemaGuards(d1);
+    const completedReads = reads;
+    await ensureTradeRentalSchemaGuards(d1);
+    assert.equal(reads, completedReads);
+    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total,
+      TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS.length);
+  } finally { database.close(); }
+});
 
 function seedAssessment(database) {
   database.prepare("INSERT INTO trade_work_orders (id, firebase_uid) VALUES (?, ?)").run("job-a", "owner-a");
