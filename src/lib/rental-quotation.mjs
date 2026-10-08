@@ -103,10 +103,10 @@ const cableFields = (checkKey) => [
 ].map((field) => ({ ...field, captureVersion: 4 }));
 const gemsAppliances = { heating: ["Split system", "Ducted", "Other", "Unknown"], cooling: ["Split system", "Ducted", "Evaporative", "Other", "Unknown"] };
 /** @param {'heating'|'cooling'} mode @returns {RentalObservationField[]} */
-const energyRatingFields = (mode) => {
+const legacyEnergyRatingFields = (mode) => {
   const statusKey = `${mode}GemsStatus`;
   const applianceCondition = { key: "applianceType", values: gemsAppliances[mode] };
-  const extra = { showIfAll: [applianceCondition] };
+  const extra = { showIfAll: [applianceCondition], legacy: true };
   return [
     selectField(statusKey, `${mode === "heating" ? "Heating" : "Cooling"} GEMS / energy-rating label status`, RENTAL_OBSERVATION_SELECT_OPTIONS[statusKey], { ...extra, help: "Record the actual appliance label or registration evidence. Leave the rating unknown when it is unavailable; this observation does not determine legal compliance." }),
     shortText(`${mode}EnergyRating`, `${mode === "heating" ? "Heating" : "Cooling"} rating or stars from the label`, { ...extra, showIf: { key: statusKey, values: ["Label recorded"] }, help: "Copy the rating and its units or stars exactly. State the climate zone where the label distinguishes zones." }),
@@ -155,7 +155,7 @@ export function rentalObservationFields(checkKey) {
     selectField("applianceType", "Heater type", heaterOptions, { shared: true }), ...identityFields(),
     ...(checkKey === "heating_2027_readiness" ? [...roomFields(), selectField("accessStatus", "Access to heater", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus), ...limitationFields()] : []),
     ...(["main_living_heater", "heating_2027_readiness"].includes(checkKey) ? cableFields(checkKey) : []),
-    ...(["heater_efficiency", "heating_2027_readiness"].includes(checkKey) ? energyRatingFields("heating") : []),
+    ...(["heater_efficiency", "heating_2027_readiness"].includes(checkKey) ? legacyEnergyRatingFields("heating") : []),
     shortText("measurement", "Earlier measurement notes", { legacy: true }), shortText("actionTaken", "Earlier location notes", { legacy: true }),
     ...(checkKey !== "heating_2027_readiness" ? [shortText("limitationReason", "Earlier observation limitation", { legacy: true })] : []),
   ];
@@ -178,7 +178,7 @@ export function rentalObservationFields(checkKey) {
     doors_2027_readiness: [numberField("count", "Total doors needing seals"), numberField("sealLengthMetres", "Total door draughtproofing length (metres)")].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
     vents_2027_readiness: [selectField("ventType", "Wall vent type", RENTAL_OBSERVATION_SELECT_OPTIONS.ventType, { showForOutcomes: ["meets", "does_not_meet", "specialist_verification_required"] }), { ...numberField("count", "Total wall vents needing sealing"), showForOutcomes: ["does_not_meet", "specialist_verification_required"] }],
     shower_2027_readiness: [selectField("welsRating", "Confirmed WELS rating", RENTAL_OBSERVATION_SELECT_OPTIONS.welsRating, { shared: true }), { ...numberField("flowLitresPerMinute", "Main shower flow (litres per minute)"), shared: true }, shortText("model", "Make / model from label (optional)", { shared: true })],
-    cooling_2027_readiness: [selectField("applianceType", "Cooling type", coolingOptions), ...identityFields(), ...energyRatingFields("cooling"), ...roomFields(), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
+    cooling_2027_readiness: [selectField("applianceType", "Cooling type", coolingOptions), ...identityFields(), ...legacyEnergyRatingFields("cooling"), ...roomFields(), selectField("accessStatus", "Access to equipment", RENTAL_OBSERVATION_SELECT_OPTIONS.accessStatus)],
     hot_water_2027_readiness: hotWaterFields(),
     window_covering: [{ ...numberField("count", "Total coverings needing attention"), showForOutcomes: ["does_not_meet"] }],
   };
@@ -295,18 +295,6 @@ export function rentalObservationBlockers({ checkKey, outcome, response, finding
       if (!RENTAL_OBSERVATION_SELECT_OPTIONS.sharedHotWaterServiceStatus.some((option) => option.value === response.sharedHotWaterServiceStatus)) blockers.push("Record only the hot-water supply observed in this apartment.");
       if (!String(response.sharedHotWaterLimitation || "").trim()) blockers.push("Record that the shared building plant was not inspected and what needs confirmation.");
       if (outcome === "meets") blockers.push("Apartment hot-water supply does not verify the shared plant's efficiency. Record the plant as needing verification when it was not inspected.");
-    }
-    const ratingMode = ["heater_efficiency", "heating_2027_readiness"].includes(checkKey) ? "heating" : checkKey === "cooling_2027_readiness" ? "cooling" : "";
-    if (ratingMode && gemsAppliances[ratingMode].includes(response.applianceType)) {
-      const status = response[`${ratingMode}GemsStatus`];
-      if (!RENTAL_OBSERVATION_SELECT_OPTIONS[`${ratingMode}GemsStatus`].some((option) => option.value === status)) blockers.push("Record the energy-rating label status for this appliance.");
-      else if (status === "Label recorded") {
-        if (!String(response[`${ratingMode}EnergyRating`] || "").trim()) blockers.push("Copy the actual heating or cooling rating and units or stars from the label.");
-        for (const suffix of ["RatingZone", "RatingBasis"]) {
-          if (!RENTAL_OBSERVATION_SELECT_OPTIONS[`${ratingMode}${suffix}`].some((option) => option.value === response[`${ratingMode}${suffix}`])) blockers.push(suffix === "RatingZone" ? "Record the rating climate zone or state that the label does not show one." : "Record the label or registration evidence basis for the rating.");
-        }
-      }
-      else if (status !== "Label recorded" && !String(response[`${ratingMode}RatingLimitation`] || "").trim()) blockers.push("Explain why the energy rating was unavailable, unverified or not applicable.");
     }
   }
   return blockers;

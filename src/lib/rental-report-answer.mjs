@@ -115,7 +115,7 @@ export function rentalReportObservationEntries(value) {
     : rentalObservationResponseProjection(item.checkKey, item.outcome, record(item.response)).response));
   const entries = Object.entries(response).filter(([key, entry]) => key !== "showerCaptureVersion" && entry !== "" && entry !== null && entry !== undefined);
   for (const field of rentalObservationFields(item.checkKey)) {
-    if (field.captureVersion !== 4 && field.key !== "joistClearWidthMm" || entries.some(([key]) => key === field.key)) continue;
+    if (field.legacy || field.captureVersion !== 4 && field.key !== "joistClearWidthMm" || entries.some(([key]) => key === field.key)) continue;
     if (field.showIfAll && !rentalObservationFieldIsVisible({ ...field, showIf: undefined }, { outcome: item.outcome, response })) continue;
     if (field.showForOutcomes && !field.showForOutcomes.includes(item.outcome)) continue;
     if (field.showIf && !field.showIf.values.includes(response[field.showIf.key])) {

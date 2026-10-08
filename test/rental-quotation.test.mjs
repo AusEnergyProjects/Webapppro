@@ -21,7 +21,7 @@ test("version four adds default-off HomeStar setup and quote capture through exp
   assert.equal(commissioning.type, "checkbox");
   assert.equal(commissioning.phase, "setup");
   assert.equal(commissioning.required, false);
-  for (const checkKey of ["main_living_heater", "heating_2027_readiness", "cooktop_function", "hot_water_2027_readiness", "artificial_lighting", "heater_efficiency", "cooling_2027_readiness"]) {
+  for (const checkKey of ["main_living_heater", "heating_2027_readiness", "cooktop_function", "hot_water_2027_readiness", "artificial_lighting"]) {
     const old = rentalAssessorFields({ key: checkKey }, { templateVersion: 3 });
     const current = rentalAssessorFields({ key: checkKey }, { templateVersion: 4 });
     assert.ok(!old.some((entry) => entry.captureVersion === 4));
@@ -81,16 +81,36 @@ test("correcting a conditional selection hides inactive answers without deleting
   assert.equal(projection.response.cableLimitationReason, "Current concealed route");
 });
 
-test("heating and cooling energy ratings retain their actual zone and evidence without forcing unavailable stars", () => {
+test("heating and cooling rating questions are retired from the shared web and native assessor controls", () => {
   for (const [checkKey, mode] of [["heater_efficiency", "heating"], ["heating_2027_readiness", "heating"], ["cooling_2027_readiness", "cooling"]]) {
-    const response = { applianceType: "Split system", [`${mode}GemsStatus`]: "Label recorded", [`${mode}EnergyRating`]: "3.5 stars", [`${mode}RatingZone`]: "Cold", [`${mode}RatingBasis`]: "Appliance label", cableMeasurementStatus: "Unable to determine", cableLimitationReason: "Route concealed" };
+    const ratingKeys = ["GemsStatus", "EnergyRating", "RatingZone", "RatingBasis", "GemsReference", "RatingLimitation"].map((suffix) => `${mode}${suffix}`);
+    const retired = rentalObservationFields(checkKey).filter((field) => ratingKeys.includes(field.key));
+    assert.deepEqual(retired.map((field) => field.key).sort(), [...ratingKeys].sort());
+    assert.ok(retired.every((field) => field.legacy));
+    for (const templateVersion of [1, 2, 3, 4]) {
+      const activeFields = rentalAssessorFields({ key: checkKey }, { templateVersion }).filter((field) => !field.legacy);
+      assert.ok(activeFields.every((field) => !ratingKeys.includes(field.key)), `${checkKey} v${templateVersion}`);
+    }
+  }
+});
+
+test("rating status, stars, climate zone, evidence and unavailable reason no longer block save or completion", () => {
+  const template = rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+  for (const [checkKey, mode] of [["heater_efficiency", "heating"], ["heating_2027_readiness", "heating"], ["cooling_2027_readiness", "cooling"]]) {
+    const response = { applianceType: "Split system", roomLengthMetres: "4", cableMeasurementStatus: "Unable to determine", cableLimitationReason: "Route concealed" };
     const input = { checkKey, outcome: "meets", enforceQuoteCapture: true };
-    assert.deepEqual(rentalObservationBlockers({ ...input, response }), []);
-    assert.match(rentalObservationBlockers({ ...input, response: { ...response, [`${mode}RatingZone`]: "" } }).join(" "), /climate zone/);
-    assert.match(rentalObservationBlockers({ ...input, response: { ...response, [`${mode}RatingBasis`]: "" } }).join(" "), /evidence basis/);
-    assert.deepEqual(rentalObservationBlockers({ ...input, response: { ...response, applianceType: "Ducted", [`${mode}GemsStatus`]: "Not available", [`${mode}RatingLimitation`]: "Ducted label does not display stars" } }), []);
-    const projection = quotationModule.rentalObservationResponseProjection(checkKey, "meets", { ...response, [`${mode}GemsStatus`]: "Unverified", [`${mode}RatingLimitation`]: "Unreadable" });
-    assert.equal(Object.hasOwn(projection.response, `${mode}EnergyRating`), false);
+    const section = template.sections.find((entry) => entry.checks.some((check) => check.key === checkKey));
+    const check = section.checks.find((entry) => entry.key === checkKey);
+    const moduleTemplate = { ...template, sections: [{ ...section, checks: [check] }] };
+    const item = { id: checkKey, itemKey: checkKey, instanceKey: "property", sectionKey: section.key, checkKey, outcome: "meets" };
+    const answers = { inspectionDate: "2026-10-08", dwellingClass: "house", occupancyAtAssessment: "vacant", rentalRegime: "ordinary_residential", agreementStartDate: "2026-10-01", coverageConfirmed: true, assessorDeclaration: true };
+    for (const status of [undefined, "Label recorded", "Not available", "Unreadable", "Unverified", "Not applicable"]) {
+      const partialRating = { ...response, ...(status === undefined ? {} : { [`${mode}GemsStatus`]: status }) };
+      for (const outcome of ["meets", "does_not_meet"]) assert.deepEqual(rentalObservationBlockers({ ...input, outcome, response: partialRating }), []);
+      const complete = rentalAssessmentCompletion({ moduleTemplate, items: [{ ...item, responseJson: JSON.stringify(partialRating) }], answers,
+        evidenceCounts: { [checkKey]: 2 }, photoCounts: { [checkKey]: 2 } });
+      assert.equal(complete.complete, true, JSON.stringify(complete.blockers));
+    }
   }
   const gas = { applianceType: "Gas heater", heatingGemsStatus: "Label recorded", heatingEnergyRating: "Earlier different appliance" };
   assert.equal(quotationModule.rentalObservationFieldIsVisible(rentalObservationFields("heater_efficiency").find((field) => field.key === "heatingEnergyRating"), { outcome: "meets", response: gas }), false);

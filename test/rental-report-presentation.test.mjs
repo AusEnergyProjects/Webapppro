@@ -5,7 +5,7 @@ import ts from "typescript";
 import { PDFArray, PDFDocument, PDFRawStream, PDFName, PDFDict, decodePDFRawStream } from "pdf-lib";
 import * as branding from "../src/lib/rental-report-branding.mjs";
 import { rentalAssessmentTemplateSnapshot } from "../src/lib/trade-rental-assessment.mjs";
-import { rentalReportAnswerPresentation, rentalReportCheckStandard, rentalReportSectionGroups, rentalReportSectionResult, rentalReportScopeText, rentalReportObservationEntries } from "../src/lib/rental-report-answer.mjs";
+import { rentalReportAnswerPresentation, rentalReportCheckStandard, rentalReportSectionGroups, rentalReportSectionResult, rentalReportScopeText, rentalReportObservationEntries, rentalReportRetainedObservationEntries } from "../src/lib/rental-report-answer.mjs";
 import { createRentalAssessmentPdfBytes } from "../src/lib/trade-rental-report-pdf.mjs";
 
 function completedModule() {
@@ -165,10 +165,36 @@ test("new quoting inputs are unknown for earlier capture and never guessed or ad
   assert.equal(Object.fromEntries(rentalReportObservationEntries({ checkKey: "artificial_lighting", outcome: "meets", response: {} })).nonIc4DownlightCount, "Not recorded");
   assert.ok(!Object.hasOwn(Object.fromEntries(rentalReportObservationEntries({ checkKey: "artificial_lighting", outcome: "meets", response: { downlightCountStatus: "No downlights" } })), "downlightEvidence"));
   assert.equal(Object.fromEntries(rentalReportObservationEntries({ checkKey: "ceiling_2027_readiness", outcome: "meets", response: {} })).joistClearWidthMm, "Not recorded");
-  const rating = Object.fromEntries(rentalReportObservationEntries({ checkKey: "cooling_2027_readiness", outcome: "meets", response: { applianceType: "Split system" } }));
-  assert.equal(rating.coolingGemsStatus, "Not recorded");
+  for (const [checkKey, mode] of [["heater_efficiency", "heating"], ["heating_2027_readiness", "heating"], ["cooling_2027_readiness", "cooling"]]) {
+    const rating = Object.fromEntries(rentalReportObservationEntries({ checkKey, outcome: "meets", response: { applianceType: "Split system" } }));
+    for (const suffix of ["GemsStatus", "EnergyRating", "RatingZone", "RatingBasis", "GemsReference", "RatingLimitation"]) assert.ok(!Object.hasOwn(rating, `${mode}${suffix}`));
+  }
   const shared = Object.fromEntries(rentalReportObservationEntries({ checkKey: "hot_water_2027_readiness", outcome: "specialist_verification_required", response: { hotWaterSupplyType: "Shared building system", sharedHotWaterServiceStatus: "Hot water supplied when checked", sharedHotWaterLimitation: "Plant not inspected", cableMeasurementStatus: "Measured", hotWaterCableRunMetres: "15" } }));
   assert.ok(!Object.hasOwn(shared, "hotWaterCableRunMetres"));
+});
+
+test("retired rating questions preserve saved values and their active or retained report history", async () => {
+  for (const [checkKey, mode] of [["heater_efficiency", "heating"], ["heating_2027_readiness", "heating"], ["cooling_2027_readiness", "cooling"]]) {
+    for (const historicalObservation of [false, true]) {
+      const assessmentModule = completedModule();
+      const section = assessmentModule.sections.find((entry) => entry.items.some((item) => item.checkKey === checkKey));
+      const item = section.items.find((entry) => entry.checkKey === checkKey);
+      const savedRating = { [`${mode}GemsStatus`]: "Label recorded", [`${mode}EnergyRating`]: "3.5 stars", [`${mode}RatingZone`]: "Cold", [`${mode}RatingBasis`]: "Appliance label", [`${mode}GemsReference`]: "GEMS-RECORDED-REFERENCE", [`${mode}RatingLimitation`]: "Earlier unreadable label" };
+      item.response = { applianceType: "Split system", ...savedRating };
+      item.historicalObservation = historicalObservation;
+      assessmentModule.sections = [{ ...section, items: [item] }];
+      const snapshot = reportWithModule(assessmentModule);
+      const before = structuredClone(snapshot);
+      const active = Object.fromEntries(rentalReportObservationEntries(item));
+      const retained = Object.fromEntries(rentalReportRetainedObservationEntries(item));
+      const combined = { ...active, ...retained };
+      for (const [key, value] of Object.entries(savedRating)) assert.equal(combined[key], value);
+      assert.equal((historicalObservation ? active : retained)[`${mode}RatingLimitation`], savedRating[`${mode}RatingLimitation`]);
+      const content = pdfText(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+      for (const value of Object.values(savedRating)) assert.ok(content.includes(value), `${checkKey}: ${value}`);
+      assert.deepEqual(snapshot, before, "Rendering must not change the saved rating, its earlier limitation, or the issued snapshot");
+    }
+  }
 });
 
 test("HomeStar PDF retains TLink, puts the plain summary first, and preserves the data and geotags", async () => {

@@ -86,17 +86,33 @@ test("web changing a limitation hides its old reason without losing the stored v
   assert.equal(response.limitationReason, "Plant behind locked door");
 });
 
-test("web cable and rating branches follow the current status despite retained earlier answers", () => {
+test("web cable branches follow the current status while retired rating answers stay saved without controls", () => {
   const response = { applianceType: "Split system", cableMeasurementStatus: "Measured", airconTotalCableMetres: "18", cableRouteBasis: "Wall route",
     heatingGemsStatus: "Label recorded", heatingEnergyRating: "4 stars", heatingRatingZone: "Cold", heatingRatingBasis: "Appliance label" };
   const h = card("heating_2027_readiness", response);
-  let tree = h.render(); assert.ok(input(tree, "airconTotalCableMetres")); assert.ok(input(tree, "heatingEnergyRating"));
+  let tree = h.render(); assert.ok(input(tree, "airconTotalCableMetres"));
+  for (const suffix of ["GemsStatus", "EnergyRating", "RatingZone", "RatingBasis", "GemsReference", "RatingLimitation"]) assert.equal(input(tree, `heating${suffix}`), undefined);
   input(tree, "cableMeasurementStatus").props.onChange({ target: { value: "Unable to determine" } });
-  input(tree, "heatingGemsStatus").props.onChange({ target: { value: "Unverified" } });
   tree = h.render();
   assert.equal(input(tree, "airconTotalCableMetres"), undefined); assert.equal(input(tree, "cableRouteBasis"), undefined);
-  assert.ok(input(tree, "cableLimitationReason")); assert.equal(input(tree, "heatingEnergyRating"), undefined); assert.ok(input(tree, "heatingRatingLimitation"));
+  assert.ok(input(tree, "cableLimitationReason"));
+  assert.equal(input(tree, "heatingEnergyRating"), undefined); assert.equal(input(tree, "heatingRatingLimitation"), undefined);
   assert.equal(response.airconTotalCableMetres, "18"); assert.equal(response.heatingEnergyRating, "4 stars");
+});
+
+test("web heater and cooling saves preserve old ratings and accept appliances without rating answers", () => {
+  for (const [checkKey, mode] of [["heater_efficiency", "heating"], ["heating_2027_readiness", "heating"], ["cooling_2027_readiness", "cooling"]]) {
+    for (const rating of [{}, { [`${mode}GemsStatus`]: "Label recorded", [`${mode}EnergyRating`]: "4 stars", [`${mode}RatingZone`]: "Cold", [`${mode}RatingBasis`]: "Appliance label", [`${mode}GemsReference`]: "Recorded model" }]) {
+      const response = { applianceType: "Split system", ...rating };
+      const h = card(checkKey, response);
+      const tree = h.render();
+      for (const suffix of ["GemsStatus", "EnergyRating", "RatingZone", "RatingBasis", "GemsReference", "RatingLimitation"]) assert.equal(input(tree, `${mode}${suffix}`), undefined);
+      const saved = h.body();
+      assert.equal(saved.outcome, "meets");
+      for (const [key, value] of Object.entries(rating)) assert.equal(saved.response[key], value);
+      assert.deepEqual(response, { applianceType: "Split system", ...rating });
+    }
+  }
 });
 
 test("web save ignores inactive invalid numeric history but still rejects an active invalid measurement", () => {
