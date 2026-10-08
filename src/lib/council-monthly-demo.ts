@@ -4,12 +4,11 @@ import { communityReport } from "./council-community.ts";
 import { bundledCommunitySnapshot } from "./council-community-server.ts";
 import { councilVeuReport } from "./council-veu.ts";
 import { councilVeuBaseline } from "./council-veu-server.ts";
-import { PORT_PHILLIP_DEMO_BRANDING } from "./council-public-branding.ts";
 import type { CouncilMonthlyReportBundle } from "./council-monthly-report.ts";
 
 /** A fixed public demonstration. It never reads live council, customer or subscription records. */
 export async function councilMonthlyDemoBundle(now = new Date()): Promise<CouncilMonthlyReportBundle> {
-  const profile = { ...createCouncilDemoState(now).profile, name: "City of Port Phillip", theme: PORT_PHILLIP_DEMO_BRANDING.theme };
+  const profile = createCouncilDemoState(now).profile;
   const communitySnapshot = await bundledCommunitySnapshot();
   const tlink = loadCouncilDemo("year", now, profile);
   const scope = { councilId: profile.councilId, name: profile.name, state: profile.state, postcodes: profile.postcodes };

@@ -171,7 +171,7 @@ test("official model identity, approved filter, displayed aggregation and source
 });
 
 test("captured baselines are valid and reports keep source totals, missing areas and installer uncertainty explicit", async () => {
-  const baseline = await councilVeuBaseline(); assert.equal(baseline.filter(item=>!item.sectorBasis).length, 3); assert.equal(baseline.filter(item=>item.sectorBasis).length,4); assert.ok(baseline.every(contract.isCouncilVeuSnapshot));
+  const baseline = await councilVeuBaseline(); assert.equal(baseline.filter(item=>!item.sectorBasis).length, 3); assert.equal(baseline.filter(item=>item.sectorBasis).length,6); assert.ok(baseline.every(contract.isCouncilVeuSnapshot));
   const snapshot = baseline.find(item => item.period.key === "all");
   const report = contract.councilVeuReport(snapshot, scope, { checkedAt: snapshot.fetchedAt, refreshFailed: false, dataOrigin: "baseline" }, now);
   assert.equal(report.totals.activities, 159161); assert.equal(report.totals.estimatedLifetimeTonnesCo2e, 1378258.6);
@@ -186,6 +186,19 @@ test("captured baselines are valid and reports keep source totals, missing areas
   assert.equal(contract.isCouncilVeuSnapshot(bad), false);
   const badPeriod = structuredClone(baseline.find(item => item.period.key === "year")); badPeriod.period.startDate = "2026-02-01";
   assert.equal(contract.isCouncilVeuSnapshot(badPeriod), false);
+});
+
+test("SECCCA selected-area captures retain real source totals, sector provenance and an empty current quarter", async () => {
+  const area = ["3182", "3186", "3194", "3805", "3810", "3931", "3995"];
+  const snapshots = (await councilVeuBaseline()).filter(item => JSON.stringify(item.postcodes) === JSON.stringify(area));
+  assert.deepEqual(snapshots.map(item => item.period.key), ["year", "quarter"]);
+  assert.ok(snapshots.every(item => item.sectorBasis === "official_activity_sector" && Object.values(item.provenance).every(hash => /^[a-f0-9]{64}$/.test(hash))));
+  const year = snapshots.find(item => item.period.key === "year");
+  assert.equal(year.totals.activities, 3246); assert.equal(year.totals.reportedVeecEquivalents, 130307);
+  const report = contract.councilVeuReport(year, { ...scope, name: "SECCCA selected postcodes", postcodes: area }, { checkedAt: year.fetchedAt, refreshFailed: false, dataOrigin: "baseline" }, Date.parse(year.fetchedAt));
+  assert.equal(report.sectors.rows.reduce((total, row) => total + row.totals.activities, 0), report.totals.activities);
+  assert.equal(report.coverage.availablePostcodes, 7);
+  assert.equal(snapshots.find(item => item.period.key === "quarter").totals.activities, 0);
 });
 
 test("retained Port Phillip official sectors cover its10approved postcodes and stay separate from fictional TLink outcomes",async()=>{
@@ -356,7 +369,8 @@ test("public VEU demo serves only retained official aggregates and never labels 
   const partial = await (await get("postcodes=3805,3175&period=year")).json();
   assert.equal(partial.report.totals.activities, null); assert.equal(partial.report.coverage.availablePostcodes, 1);
   assert.equal(partial.report.postcodes.find(row => row.postcode === "3175").activities, null);
-  const old = await demoRouteFixture(now + 4 * 86400_000);
+  const newestFetched = Math.max(...(await councilVeuBaseline()).filter(item => item.period.key === "year" && item.postcodes.includes("3805")).map(item => Date.parse(item.fetchedAt)));
+  const old = await demoRouteFixture(newestFetched + 4 * 86400_000);
   const oldReport = await (await old.route.GET(new Request("https://example.test/api/council/veu/demo?postcodes=3805&period=year"))).json();
   assert.equal(oldReport.report.source.stale, true);
 });

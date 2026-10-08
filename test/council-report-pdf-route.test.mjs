@@ -27,12 +27,12 @@ function setup(change={}) {
   return {GET:record.exports.GET,calls,access};
 }
 test("public demo PDF has a fixed identity and does not access private records",async()=>{
-  const f=setup(),response=await f.GET(new Request("https://example.test/api/council/report-pdf?demonstration=port-phillip"));
+  const f=setup(),response=await f.GET(new Request("https://example.test/api/council/report-pdf?demonstration=seccca"));
   assert.equal(response.status,200);assert.equal(response.headers.get("content-type"),"application/pdf");
   assert.equal(f.calls.access,0);assert.equal(f.calls.profile,0);assert.equal(f.calls.bundle,0);assert.equal(f.calls.demo,1);
 });
 test("malformed or mixed demo selectors never reach source, private records or PDF generation",async()=>{
-  for(const query of ["demonstration=", "demonstration=other", "demonstration=port-phillip&councilId=private", "councilId=a&councilId=b", "demonstration=port-phillip&postcodes=2000"]){
+  for(const query of ["demonstration=", "demonstration=other", "demonstration=seccca&councilId=private", "councilId=a&councilId=b", "demonstration=seccca&postcodes=2000"]){
     const f=setup();assert.equal((await f.GET(new Request(`https://example.test/api/council/report-pdf?${query}`))).status,400);assert.equal(f.calls.access,0);assert.equal(f.calls.pdf,0);assert.equal(f.calls.pdfModule,0);
   }
 });

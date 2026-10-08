@@ -20,6 +20,8 @@ export async function loadCouncilEnquiries(db: Pick<D1Database,"prepare">, input
     const window = reportWindow(start,end<period.end ? end : period.end,input.state);
     months.push({key:start.slice(0,7),startUtc:window.startUtc,endUtc:window.endUtc});
   }
+  // D1 allows five compound SELECT terms. Group both privacy dimensions in one
+  // term so postcode/month and sector complements are still checked together.
   const query = `WITH area AS (SELECT value postcode FROM json_each(?)), months AS (
     SELECT json_extract(value,'$.key') key,json_extract(value,'$.startUtc') starts,json_extract(value,'$.endUtc') ends FROM json_each(?)
   ), source AS MATERIALIZED (
@@ -37,12 +39,12 @@ export async function loadCouncilEnquiries(db: Pick<D1Database,"prepare">, input
     UNION ALL SELECT 'month',m.key,COUNT(*),COUNT(DISTINCT s.customer),SUM(s.customer IS NULL)
       FROM selected s JOIN months m ON julianday(s.created_at)>=julianday(m.starts) AND julianday(s.created_at)<julianday(m.ends) GROUP BY m.key
     UNION ALL SELECT 'sector',sector,COUNT(*),COUNT(DISTINCT customer),SUM(customer IS NULL) FROM selected GROUP BY sector
-    UNION ALL SELECT 'privacy',s.band||':'||s.postcode||':'||COALESCE(m.key,'before_trend'),COUNT(*),COUNT(DISTINCT s.customer),SUM(s.customer IS NULL)
-      FROM source s LEFT JOIN months m ON julianday(s.created_at)>=julianday(m.starts) AND julianday(s.created_at)<julianday(m.ends)
-      GROUP BY s.band,s.postcode,COALESCE(m.key,'before_trend')
-    UNION ALL SELECT 'sector_privacy',s.sector||':'||s.band||':'||s.postcode||':'||COALESCE(m.key,'before_trend'),COUNT(*),COUNT(DISTINCT s.customer),SUM(s.customer IS NULL)
-      FROM source s LEFT JOIN months m ON julianday(s.created_at)>=julianday(m.starts) AND julianday(s.created_at)<julianday(m.ends)
-      GROUP BY s.sector,s.band,s.postcode,COALESCE(m.key,'before_trend')
+    UNION ALL SELECT dimension.value,
+      CASE WHEN dimension.value='sector_privacy' THEN s.sector||':' ELSE '' END||s.band||':'||s.postcode||':'||COALESCE(m.key,'before_trend'),
+      COUNT(*),COUNT(DISTINCT s.customer),SUM(s.customer IS NULL)
+      FROM source s CROSS JOIN json_each('["privacy","sector_privacy"]') dimension
+      LEFT JOIN months m ON julianday(s.created_at)>=julianday(m.starts) AND julianday(s.created_at)<julianday(m.ends)
+      GROUP BY dimension.value,CASE WHEN dimension.value='sector_privacy' THEN s.sector ELSE '' END,s.band,s.postcode,COALESCE(m.key,'before_trend')
   ) SELECT * FROM cells`;
   const {results} = await db.prepare(query).bind(JSON.stringify(input.postcodes),JSON.stringify(months),quarter.startUtc,year.startUtc,input.state,period.endUtc,period.startUtc).all<Cell>();
   // Protect postcode/month intersections and the older remainder as well as visible

@@ -49,7 +49,7 @@ export function CouncilMonthlyReports({ profile, demonstration, user, api, canMa
     if (busy) return;
     const actor = identity; setBusy(true); setError(""); setNotice("");
     try {
-      const path = demonstration ? "/api/council/report-pdf?demonstration=port-phillip" : previousId
+      const path = demonstration ? "/api/council/report-pdf?demonstration=seccca" : previousId
         ? `/api/council/monthly-report?councilId=${encodeURIComponent(profile.councilId)}&download=${encodeURIComponent(previousId)}`
         : `/api/council/report-pdf?councilId=${encodeURIComponent(profile.councilId)}`;
       const headers = new Headers();
@@ -66,12 +66,12 @@ export function CouncilMonthlyReports({ profile, demonstration, user, api, canMa
       const href = URL.createObjectURL(blob), link = document.createElement("a");
       link.href = href; link.download = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ?? "council-energy-progress.pdf";
       link.click(); setTimeout(() => URL.revokeObjectURL(href), 1000);
-      setNotice(demonstration ? "Port Phillip demonstration PDF downloaded. Official source data is real; TLink outcomes are sample data." : "Council energy progress PDF downloaded.");
+      setNotice(demonstration ? "SECCCA demonstration PDF downloaded. Official source data is real; TLink outcomes are sample data." : "Council energy progress PDF downloaded.");
     } catch (reason) { if (mounted.current && currentIdentity.current === actor) setError(reason instanceof Error ? reason.message : "The PDF could not be downloaded."); }
     finally { if (mounted.current && currentIdentity.current === actor) setBusy(false); }
   }
   return <CouncilPanel title="Your council energy report" subtitle="A branded PDF with official community data, available business/residential activity and separate TLink participation.">
-    <div className={styles.intro}><div><span className={styles.tag}>Ready to share</span><p>CER solar and storage figures, official VEU business and residential upgrades, postcode activity and clear reporting notes in one document.</p><small>CER covers the latest 12 published months. VEU and TLink cover the current calendar year. Source dates and unavailable figures are shown in the report.</small></div><button type="button" disabled={busy} className={styles.primary} onClick={() => void download()}><CouncilIcon name="download" size={18}/>{busy ? "Preparing…" : demonstration ? "Download Port Phillip sample" : "Download current PDF"}</button></div>
+    <div className={styles.intro}><div><span className={styles.tag}>Ready to share</span><p>CER solar and storage figures, official VEU business and residential upgrades, postcode activity and clear reporting notes in one document.</p><small>CER covers the latest 12 published months. VEU and TLink cover the current calendar year. Source dates and unavailable figures are shown in the report.</small></div><button type="button" disabled={busy} className={styles.primary} onClick={() => void download()}><CouncilIcon name="download" size={18}/>{busy ? "Preparing…" : demonstration ? "Download SECCCA sample" : "Download current PDF"}</button></div>
     {demonstration ? <p className={styles.hint}>Demonstration only. No council affiliation or endorsement. Monthly emails are not enabled here. Sign in to an approved council workspace to nominate recipients.</p> : loading ? <p role="status">Loading monthly report settings…</p> : settings && <form className={styles.form} onSubmit={event => void save(event)}>
       <div><h3>Monthly delivery</h3><p>The source check runs daily. A report becomes eligible 24 hours after a new CER publication date is first detected. Each council receives one edition for that source date; source revisions are not extra emails.</p></div>
       <label className={styles.toggle}><input type="checkbox" checked={enabled} disabled={!canManage || !settings.canManage || busy} onChange={event => setEnabled(event.target.checked)}/>Email my council&apos;s monthly report</label>

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { resolveCouncilPublicHost, isCouncilPlatformHost, PORT_PHILLIP_DEMO_BRANDING, PORT_PHILLIP_JOURNEY_DEMO_PATH } from "../src/lib/council-public-branding.ts";
+import ts from "typescript";
+import * as jsxRuntime from "react/jsx-runtime";
+import { resolveCouncilPublicHost, isCouncilPlatformHost, SECCCA_DEMO_BRANDING, SECCCA_DEMO_POSTCODES, SECCCA_JOURNEY_DEMO_PATH } from "../src/lib/council-public-branding.ts";
 import { loadPublicCouncilCampaign, resolveCouncilReferral } from "../src/lib/council-campaign-server.ts";
 
 const code = "1234567890abcdef1234567890abcdef";
@@ -66,11 +68,53 @@ test("known platform hosts remain platform routes and do not need a council bind
   }
 });
 
-test("Port Phillip public preview is labelled, returns to the official council website and uses a local-only enquiry", () => {
-  assert.equal(PORT_PHILLIP_DEMO_BRANDING.homeUrl, "https://www.portphillip.vic.gov.au/");
-  assert.equal(PORT_PHILLIP_JOURNEY_DEMO_PATH, "/council/program/demo/port-phillip");
+test("SECCCA public preview is labelled, returns to its website and uses a local-only enquiry", () => {
+  assert.equal(SECCCA_DEMO_BRANDING.homeUrl, "https://seccca.org.au/");
+  assert.equal(SECCCA_JOURNEY_DEMO_PATH, "/council/program/demo/seccca");
+  assert.match(SECCCA_DEMO_BRANDING.logoDataUrl,/^data:image\/png;base64,/);
+  assert.deepEqual(SECCCA_DEMO_POSTCODES,["3182","3186","3194","3805","3810","3931","3995"]);
   const component = fs.readFileSync(new URL("../src/components/CouncilProgram.tsx", import.meta.url), "utf8");
   assert.match(component, /No enquiries are sent/); assert.match(component, /does not imply council endorsement/);
   assert.match(component, /councilReference=\{demonstration \? undefined : campaign.code\}/);
   assert.match(component, /initialCustomerSector=\{sector\}/);
+});
+
+function demoPage(path, dependencies) {
+  const exported = {};
+  const output = ts.transpileModule(fs.readFileSync(new URL(path,import.meta.url),"utf8"), {
+    compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX},
+  }).outputText;
+  Function("require","exports",output)(name => {
+    assert.ok(Object.hasOwn(dependencies,name),`Unexpected page dependency: ${name}`);
+    return dependencies[name];
+  },exported);
+  return exported;
+}
+
+test("the new public page supplies the shared SECCCA logo, colours and selected areas to its preview", () => {
+  const Entry = () => null;
+  const page = demoPage("../src/app/council/program/demo/seccca/page.tsx", {
+    "react/jsx-runtime":jsxRuntime,"@/components/CouncilEntry":{CouncilProgramEntry:Entry},
+    "@/lib/council-public-branding":{SECCCA_DEMO_BRANDING,SECCCA_DEMO_POSTCODES},
+  });
+  const element = page.default();
+  assert.equal(element.type,Entry);
+  assert.equal(element.props.demonstration,true);
+  assert.equal(element.props.campaign.councilName,"SECCCA");
+  assert.equal(element.props.campaign.logoDataUrl,SECCCA_DEMO_BRANDING.logoDataUrl);
+  assert.equal(element.props.campaign.primaryColor,SECCCA_DEMO_BRANDING.theme.primaryColor);
+  assert.equal(element.props.campaign.accentColor,SECCCA_DEMO_BRANDING.theme.accentColor);
+  assert.deepEqual(element.props.campaign.postcodes,SECCCA_DEMO_POSTCODES);
+  assert.match(page.metadata.title.absolute,/SECCCA/);
+  assert.deepEqual(page.metadata.robots,{index:false,follow:false});
+});
+
+test("the previous Port Phillip path redirects through the framework to the single SECCCA preview", () => {
+  const redirected = [];
+  const page = demoPage("../src/app/council/program/demo/port-phillip/page.tsx", {
+    "next/navigation":{redirect:path=>{redirected.push(path);throw new Error("NEXT_REDIRECT");}},
+    "@/lib/council-public-branding":{SECCCA_JOURNEY_DEMO_PATH},
+  });
+  assert.throws(()=>page.default(),/NEXT_REDIRECT/);
+  assert.deepEqual(redirected,[SECCCA_JOURNEY_DEMO_PATH]);
 });

@@ -2,10 +2,10 @@ import { parseCouncilCampaignInput, type CouncilCampaign } from "./council-campa
 import { parseCouncilProfileInput, type CouncilProfile } from "./council-profile.ts";
 import { loadCouncilDemo } from "./council-demo.ts";
 import type { CouncilPeriodKey, CouncilReport } from "./council-reporting.ts";
-import { PORT_PHILLIP_DEMO_BRANDING, PORT_PHILLIP_JOURNEY_DEMO_PATH } from "./council-public-branding.ts";
+import { SECCCA_DEMO_BRANDING, SECCCA_JOURNEY_DEMO_PATH } from "./council-public-branding.ts";
 
-export const COUNCIL_DEMO_STORAGE_KEY = "tlink.council.demonstration.v1";
-export type CouncilDemoState = { version: 1; profile: CouncilProfile; campaigns: CouncilCampaign[]; period: CouncilPeriodKey };
+export const COUNCIL_DEMO_STORAGE_KEY = "tlink.council.demonstration.seccca.v2";
+export type CouncilDemoState = { version: 2; profile: CouncilProfile; campaigns: CouncilCampaign[]; period: CouncilPeriodKey };
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : null;
@@ -14,10 +14,10 @@ function record(value: unknown): Record<string, unknown> | null {
 export function createCouncilDemoState(now = new Date()): CouncilDemoState {
   const report = loadCouncilDemo("year",now);
   return {
-    version: 1, period: "year",
-    profile: { councilId: "demonstration", name: report.scope.name, state: "VIC", postcodes: report.scope.postcodes, logoDataUrl: null, theme: {...PORT_PHILLIP_DEMO_BRANDING.theme}, updatedAt: now.toISOString(),
-      publicJourney: { enabled: true, homeUrl: PORT_PHILLIP_DEMO_BRANDING.homeUrl, requestedHostname: null,
-        domainStatus: "not_requested", sharePath: PORT_PHILLIP_JOURNEY_DEMO_PATH, customDomainUrl: null } },
+    version: 2, period: "year",
+    profile: { councilId: "demonstration", name: report.scope.name, state: "VIC", postcodes: report.scope.postcodes, logoDataUrl: SECCCA_DEMO_BRANDING.logoDataUrl, theme: {...SECCCA_DEMO_BRANDING.theme}, updatedAt: now.toISOString(),
+      publicJourney: { enabled: true, homeUrl: SECCCA_DEMO_BRANDING.homeUrl, requestedHostname: null,
+        domainStatus: "not_requested", sharePath: SECCCA_JOURNEY_DEMO_PATH, customDomainUrl: null } },
     campaigns: report.campaigns.map((row,index) => ({ id: row.id, councilId: "demonstration", code: row.referenceCode, title: row.name,
       kind: index === 2 ? "session" : "campaign", audience: index === 1 ? "businesses" : "everyone", status: "active",
       startsAt: index === 2 ? "2026-10-08T07:00:00.000Z" : null, location: index === 2 ? "Demonstration community centre" : null,
@@ -31,7 +31,7 @@ export function readCouncilDemoState(raw: string | null): CouncilDemoState | nul
   try {
     const saved = record(JSON.parse(raw));
     const savedProfile = record(saved?.profile);
-    if (!saved || saved.version !== 1 || !savedProfile || savedProfile.councilId !== "demonstration" || savedProfile.state !== "VIC"
+    if (!saved || saved.version !== 2 || !savedProfile || savedProfile.councilId !== "demonstration" || savedProfile.state !== "VIC"
       || (saved.period !== "quarter" && saved.period !== "year" && saved.period !== "all") || !Array.isArray(saved.campaigns) || saved.campaigns.length > 100) return null;
     const savedJourney = record(savedProfile.publicJourney);
     const profile = parseCouncilProfileInput({ name: savedProfile.name, postcodes: savedProfile.postcodes, logoDataUrl: savedProfile.logoDataUrl, theme: savedProfile.theme,
@@ -52,8 +52,8 @@ export function readCouncilDemoState(raw: string | null): CouncilDemoState | nul
     });
     if (loadCouncilDemo().campaigns.some(campaign => !ids.has(campaign.id))) return null;
     const { publicJourney: restoredJourney, ...restoredIdentity } = profile;
-    return { version: 1, period: saved.period, profile: {...restoredIdentity,councilId:"demonstration",state:"VIC",updatedAt:savedProfile.updatedAt,
-      ...(restoredJourney ? { publicJourney: { ...restoredJourney, domainStatus: "not_requested", sharePath: PORT_PHILLIP_JOURNEY_DEMO_PATH, customDomainUrl: null } } : {}) },campaigns };
+    return { version: 2, period: saved.period, profile: {...restoredIdentity,councilId:"demonstration",state:"VIC",updatedAt:savedProfile.updatedAt,
+      ...(restoredJourney ? { publicJourney: { ...restoredJourney, domainStatus: "not_requested", sharePath: SECCCA_JOURNEY_DEMO_PATH, customDomainUrl: null } } : {}) },campaigns };
   } catch { return null; }
 }
 

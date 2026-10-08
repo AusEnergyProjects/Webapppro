@@ -21,6 +21,16 @@
 .shareBox > input { min-width:0; width:100%; padding:11px; border:1px solid var(--c-line); border-radius:7px; background:var(--c-field); color:var(--c-ink); font:12px monospace; }
 .shareBox > div { display:flex; gap:9px; flex-wrap:wrap; }
 .shareBox a { text-decoration:none; }
+.customerPreviewAction { margin:16px 0 20px; }
+.customerPreview { padding:0; width:min(1220px,calc(100vw - 48px)); max-width:none; height:min(940px,calc(100dvh - 48px)); max-height:none; border:1px solid var(--c-line); border-radius:16px; background:var(--c-page); color:var(--c-ink); font:14px Arial,Helvetica,sans-serif; overflow:hidden; }
+.customerPreview[open] { display:flex; flex-direction:column; }
+.customerPreview::backdrop { background:#081c24b8; }
+.customerPreviewToolbar { display:flex; align-items:center; justify-content:space-between; gap:22px; padding:18px 24px; border-bottom:1px solid var(--c-line); background:var(--c-surface); }
+.customerPreviewToolbar h2 { margin:0 0 5px; font-size:18px; }
+.customerPreviewToolbar p { margin:0; color:var(--c-muted); font-size:12px; line-height:1.6; }
+.customerPreviewToolbar button { flex-shrink:0; min-height:44px; padding:10px 15px; border:1px solid var(--c-line); border-radius:8px; color:var(--c-ink); background:var(--c-soft); font:600 12px Arial,Helvetica,sans-serif; cursor:pointer; }
+.customerPreviewToolbar button:focus-visible { outline:3px solid var(--c-accent); outline-offset:3px; }
+.customerPreviewViewport { min-height:0; overflow:auto; overscroll-behavior:contain; }
 .field input, .postcodeEntry input { width: 100%; min-width: 0; min-height: 43px; border: 1px solid var(--c-line); border-radius: 7px; color: var(--c-ink); background: var(--c-field); padding: 10px 12px; font-size: 13px; }
 .state { margin-top: 15px; color: var(--c-muted); display: flex; align-items: center; gap: 15px; font-size: 12px; }
 .state strong { background: var(--c-soft); border-radius: 5px; color: var(--c-ink); padding: 4px 9px; }
@@ -67,3 +77,4 @@
 @media(max-width:800px) { .layout { grid-template-columns: 1fr; }.previewColumn { position: static; }.preview { display: none; }.previewNote { padding-top: 0; }.colours { grid-template-columns: 1fr 1fr; } }
 @media(max-width:420px) { .section { padding: 17px; }.logoBox { width: 72px; height: 72px; }.logoEditor { gap: 14px; }.presets { grid-template-columns: repeat(2,minmax(0,1fr)); }.colours { gap: 9px; }.colours .hexInput { font-size: 10px; }.saveBar > div { width: 100%; }.saveBar button { flex: 1; }.logoEditor button + button { margin-left: 0; display: flex; } }
 @media print { .layout { display: block; }.previewColumn, .saveBar, .postcodeEntry, .fileInput, .presets, .logoEditor button, .postcodeChips button { display: none; }.section { break-inside: avoid; margin-bottom: 20px; } }
+@media(max-width:560px) { .customerPreview { width:100vw; height:100dvh; border:0; border-radius:0; margin:0; }.customerPreviewToolbar { align-items:flex-start; gap:12px; padding:14px 16px; }.customerPreviewToolbar h2 { font-size:16px; }.customerPreviewToolbar p { font-size:11px; }.customerPreviewToolbar button { padding:9px 11px; } }

@@ -1,6 +1,7 @@
 import { councilReportPeriod, COUNCIL_MINIMUM_COHORT, COUNCIL_REPORT_METHODOLOGY, COUNCIL_SECTORS, type CouncilBreakdown, type CouncilPeriodKey, type CouncilReport, type CouncilSectorKey } from "./council-reporting.ts";
 import { postcodeCoordinate } from "./postcode-distance.ts";
 import type { CouncilProfile } from "./council-profile.ts";
+import { SECCCA_DEMO_POSTCODES } from "./council-public-branding.ts";
 
 type DemonstrationOutcome = { month: string; postcode: string; activity: string; sector: CouncilSectorKey; jobs: number; value: number; local: number; veecs: number; stcs: number; carbon: number; campaign: number; referred: number; enquiries: number };
 const activities = [
@@ -10,18 +11,9 @@ const activities = [
   { key:"electric-cooking",label:"Replacing gas cooking",value:240000,veecs:0,stcs:0 },
   { key:"insulation",label:"Insulation and comfort",value:410000,veecs:18,stcs:0 },
 ];
-const defaultPlaces = [
-  { postcode:"3004",label:"St Kilda Road",registeredLocalBusinesses:13 },
-  { postcode:"3006",label:"Southbank",registeredLocalBusinesses:11 },
-  { postcode:"3181",label:"Windsor",registeredLocalBusinesses:16 },
-  { postcode:"3182",label:"St Kilda",registeredLocalBusinesses:7 },
-  { postcode:"3183",label:"Balaclava",registeredLocalBusinesses:9 },
-  { postcode:"3184",label:"Elwood",registeredLocalBusinesses:8 },
-  { postcode:"3185",label:"Ripponlea",registeredLocalBusinesses:6 },
-  { postcode:"3205",label:"South Melbourne",registeredLocalBusinesses:12 },
-  { postcode:"3206",label:"Albert Park / Middle Park",registeredLocalBusinesses:10 },
-  { postcode:"3207",label:"Port Melbourne",registeredLocalBusinesses:15 },
-];
+const placeLabels = ["St Kilda", "Brighton", "Mentone", "Narre Warren", "Pakenham", "Mornington", "Wonthaggi"];
+const sampleBusinessCounts = [7, 11, 16, 9, 12, 10, 15];
+const defaultPlaces = SECCCA_DEMO_POSTCODES.map((postcode, index) => ({ postcode, label: placeLabels[index], registeredLocalBusinesses: sampleBusinessCounts[index] }));
 const campaigns = [
   { id:"demo-electrify",name:"Community electrification demonstration",referenceCode:"DEMO-ELECTRIFY",channel:"Council campaign" },
   { id:"demo-business",name:"Business energy upgrade drive",referenceCode:"DEMO-BUSINESS",channel:"Council campaign" },
@@ -56,7 +48,7 @@ export function loadCouncilDemo(periodKey: CouncilPeriodKey = "year", now = new 
   const firstMonth=outcomes[0]?.month || period.end.slice(0,7);
   return {
     generatedAt:now.toISOString(),mode:"demonstration",
-    scope:{ councilId:"demonstration",name:profile?.name || "City of Port Phillip Demonstration",state,postcodes:places.map(place => place.postcode) },
+    scope:{ councilId:"demonstration",name:profile?.name || "SECCCA Demonstration",state,postcodes:places.map(place => place.postcode) },
     period:{ key:period.key,label:period.label,start:periodKey === "all" ? `${firstMonth}-01` : period.start,end:period.end,timeZone:period.timeZone },
     metrics:{ completedJobs,completedValueCents:total(outcomes,"value"),localJobs,outsideJobs:completedJobs-localJobs,unknownLocalityJobs:0,localSharePercent:completedJobs ? localJobs/completedJobs*100 : null,registeredLocalBusinesses:places.reduce((sum,place)=>sum+place.registeredLocalBusinesses,0),attributedEnquiries:total(outcomes,"enquiries"),attributedCompletedJobs:total(outcomes,"referred"),veecQuantity:total(outcomes,"veecs"),stcQuantity:total(outcomes,"stcs"),estimatedTonnesCo2e:total(outcomes,"carbon") },
     activities:rows,
@@ -66,14 +58,14 @@ export function loadCouncilDemo(periodKey: CouncilPeriodKey = "year", now = new 
     })},
     enquiries: {total:total(outcomes,"enquiries")+completedJobs,postcodes:places.map(place=>({postcode:place.postcode,count:total(outcomes.filter(row=>row.postcode===place.postcode),"enquiries")+total(outcomes.filter(row=>row.postcode===place.postcode),"jobs")})),trend:monthKeys.filter(month=>outcomes.some(row=>row.month===month)).map(month=>({month,count:total(outcomes.filter(row=>row.month===month),"enquiries")+total(outcomes.filter(row=>row.month===month),"jobs")})),suppressed:false},
     postcodes:postcodeRows,
-    map:{ coordinateBasis:"postcode_centroid",cells:postcodeRows.map(row => { const coordinate=postcodeCoordinate(row.key); return { postcode:row.key,label:row.label,position:coordinate ? {lat:coordinate[0],lng:coordinate[1]} : null,completedJobs:row.completedJobs,registeredLocalBusinesses:row.registeredLocalBusinesses }; }),boundaryNote:"Port Phillip demonstration postcode area; synthetic TLink outcomes, no council affiliation. Markers show real postcode centres, not businesses or customer addresses. Postcodes cross municipal boundaries." },
+    map:{ coordinateBasis:"postcode_centroid",cells:postcodeRows.map(row => { const coordinate=postcodeCoordinate(row.key); return { postcode:row.key,label:row.label,position:coordinate ? {lat:coordinate[0],lng:coordinate[1]} : null,completedJobs:row.completedJobs,registeredLocalBusinesses:row.registeredLocalBusinesses }; }),boundaryNote:"Selected representative SECCCA demonstration postcodes, not a verified entire alliance boundary; synthetic TLink outcomes, no council affiliation. Markers show real postcode centres, not businesses or customer addresses. Postcodes cross municipal boundaries." },
     trend:monthKeys.filter(month => outcomes.some(row => row.month===month)).map(month => {
       const next=new Date(`${month}-01T00:00:00Z`); next.setUTCMonth(next.getUTCMonth()+1);
       const end=new Date(next.getTime()-86400000).toISOString().slice(0,10);
       return { ...group(outcomes.filter(row => row.month===month),month,`${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sept","Oct","Nov","Dec"][Number(month.slice(5,7))-1]} ${month.slice(0,4)}`),start:`${month}-01`,end:end<period.end ? end : period.end };
     }),
     campaigns:campaigns.map((campaign,index) => { const rows=outcomes.filter(row => row.campaign===index); return { ...campaign,enquiries:total(rows,"enquiries"),completedJobs:total(rows,"referred"),completedValueCents:rows.reduce((sum,row) => sum+row.referred*(row.value/row.jobs),0) }; }),
-    dataQuality:{ minimumCohort:COUNCIL_MINIMUM_COHORT,suppressed:false,suppressedBreakdowns:[],missingInvoice:0,missingLocality:0,missingCarbonMethod:false,impactEvidence:"demonstration",impactCoverageJobs:completedJobs,coverageNote:"Fictional TLink participation only. Real Port Phillip postcode centres illustrate the area; campaigns and every TLink outcome are synthetic with no council affiliation. No customer or trade records are used. Carbon represents an illustrative lifetime VEU abatement equivalent only, excluding STCs." },
-    methodology:["DEMONSTRATION: Port Phillip postcode area; synthetic TLink outcomes, no council affiliation. Real postcode centres do not define a council boundary. TLink sample data must not be used as evidence of actual outcomes, certificate creation or measured emissions reductions.","Illustrative carbon totals use the fictional VEEC quantity as a lifetime abatement proxy. STCs are displayed separately and contribute no carbon figure. Actual reporting requires governed scheme and activity evidence.",...COUNCIL_REPORT_METHODOLOGY],
+    dataQuality:{ minimumCohort:COUNCIL_MINIMUM_COHORT,suppressed:false,suppressedBreakdowns:[],missingInvoice:0,missingLocality:0,missingCarbonMethod:false,impactEvidence:"demonstration",impactCoverageJobs:completedJobs,coverageNote:"Fictional TLink participation only. Selected representative SECCCA postcodes illustrate the area, not a verified entire alliance boundary. Campaigns and every TLink outcome are synthetic with no council affiliation. No customer or trade records are used. Carbon represents an illustrative lifetime VEU abatement equivalent only, excluding STCs." },
+    methodology:["DEMONSTRATION: selected representative SECCCA postcodes, not a verified entire alliance boundary; synthetic TLink outcomes, no council affiliation. Real postcode centres do not define a council boundary. TLink sample data must not be used as evidence of actual outcomes, certificate creation or measured emissions reductions.","Illustrative carbon totals use the fictional VEEC quantity as a lifetime abatement proxy. STCs are displayed separately and contribute no carbon figure. Actual reporting requires governed scheme and activity evidence.",...COUNCIL_REPORT_METHODOLOGY],
   };
 }

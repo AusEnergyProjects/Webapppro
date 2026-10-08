@@ -51,9 +51,14 @@ export async function createCouncilMonthlyReportPdf(bundle: CouncilMonthlyReport
     section = title; page = doc.addPage([W, H]); y = H - 136;
     page.drawRectangle({ x: 0, y: H - 98, width: W, height: 98, color: brand });
     page.drawRectangle({ x: 0, y: H - 102, width: W, height: 4, color: accent });
-    if (logo) { const scale = Math.min(44 / logo.width, 44 / logo.height); page.drawImage(logo, { x: margin, y: H - 65, width: logo.width * scale, height: logo.height * scale }); }
-    const offset = logo ? 56 : 0;
-    const councilName = lines(profile.name, width - offset - 100, 15, bold).slice(0, 2);
+    let offset = 0;
+    if (logo) {
+      const scale = Math.min(104 / logo.width, 44 / logo.height), logoWidth = logo.width * scale, logoHeight = logo.height * scale;
+      page.drawRectangle({ x: margin, y: H - 76, width: logoWidth + 16, height: 52, color: white });
+      page.drawImage(logo, { x: margin + 8, y: H - 50 - logoHeight / 2, width: logoWidth, height: logoHeight });
+      offset = logoWidth + 28;
+    }
+    const councilName = lines(profile.name, width - offset - 138, 15, bold).slice(0, 2);
     councilName.forEach((row, index) => draw(row, margin + offset, H - 20 - index * 18, 15, bold, white));
     draw(bundle.demonstration ? "DEMONSTRATION" : "COMMUNITY ENERGY", margin + offset, H - 68, 8, bold, white);
     draw(`CER edition ${community.sourceAsOf}`, W - margin - 126, H - 24, 9, regular, white);
@@ -85,7 +90,7 @@ export async function createCouncilMonthlyReportPdf(bundle: CouncilMonthlyReport
     y -= 14;
   }
   newPage("Community progress", "Official energy upgrade and installation data, followed by your council's separately identified TLink participation.");
-  if (bundle.demonstration) paragraph("Preview for City of Port Phillip. This is a TLink demonstration with no council affiliation or endorsement. Official figures are real public data; every TLink participation figure is fictional.", 9);
+  if (bundle.demonstration) paragraph(`Preview for ${profile.name}. This is a TLink demonstration with no council affiliation or endorsement. Official figures are real public data; every TLink participation figure is fictional.`, 9);
   paragraph(`Reporting area: ${profile.postcodes.join(", ")}. Postcodes can cross council boundaries; this is a postcode report, not an exact municipal-boundary total.`, 9);
   heading("Installations across your community");
   paragraph(`Clean Energy Regulator / ${community.period.label}: ${community.period.startMonth} to ${community.period.endMonth}. Residential and business combined.`, 9);
@@ -141,7 +146,7 @@ export async function createCouncilMonthlyReportPdf(bundle: CouncilMonthlyReport
   heading("Use each source for its own purpose");
   paragraph("CER installations, VEU activities and TLink jobs can describe the same upgrade. They are presented separately and never added together. Official source data describes community-wide uptake, while TLink measures platform participation. Sector is supplied by the official VEU record or the recorded CRM customer type; installation size and the trade's business status are never used to infer customer sector.", 9);
   paragraph(`Approved postcode area: ${profile.postcodes.join(", ")}. Postcodes cross municipal boundaries. Capacity is not generation. Unknowns and protected cohorts remain unavailable. This PDF is a dated snapshot; consult the workspace for updated information.`, 9);
-  if (bundle.demonstration) paragraph("City of Port Phillip demonstration only, without council affiliation or endorsement. Postcode list sourced from the council's 'Who lives in our City?' page. No monthly email subscription is enabled by viewing this demonstration.", 9);
+  if (bundle.demonstration) paragraph(`${profile.name} only, without council affiliation or endorsement. Selected representative postcodes across SECCCA member areas are not a complete alliance boundary. No monthly email subscription is enabled by viewing this demonstration.`, 9);
   const pages = doc.getPages();
   pages.forEach((item, index) => { item.drawLine({ start: { x: margin, y: 49 }, end: { x: W - margin, y: 49 }, color: line, thickness: .7 }); item.drawText(text(`${bundle.demonstration ? "DEMONSTRATION | " : ""}TLink Council | Official data and platform participation reported separately`), { x: margin, y: 32, size: 7, font: regular, color: muted }); item.drawText(`${index + 1} / ${pages.length}`, { x: W - margin - 30, y: 32, size: 8, font: bold, color: ink }); });
   return doc.save();

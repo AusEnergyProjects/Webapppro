@@ -1,12 +1,14 @@
 "use client";
 
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import NextImage from "next/image";
 import type { CouncilProfile, CouncilProfileInput } from "@/lib/council-profile";
+import { parseCouncilProfileInput } from "@/lib/council-profile";
 import { COUNCIL_THEME_PRESETS } from "@/lib/council-theme";
 import { PUBLIC_SITE } from "@/lib/public-site";
-import { PORT_PHILLIP_JOURNEY_DEMO_PATH } from "@/lib/council-public-branding";
+import { SECCCA_JOURNEY_DEMO_PATH } from "@/lib/council-public-branding";
 import { CouncilIcon } from "./CouncilPrimitives";
+import { CouncilCustomerPagePreview } from "./CouncilCustomerPagePreview";
 import shared from "./CouncilWorkspace.module.css";
 import styles from "./CouncilProfileSettings.module.css";
 
@@ -23,7 +25,7 @@ async function prepareLogo(file: File): Promise<string> {
     image.src = url;
     try { await image.decode(); } catch { throw new Error("This image could not be read. Try another PNG, JPEG or WebP file."); }
     if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth * image.naturalHeight > 32_000_000) throw new Error("Choose a logo image with no more than 32 million pixels.");
-    const ratio = Math.min(1, 256 / Math.max(image.naturalWidth, image.naturalHeight));
+    const ratio = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight));
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
     canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
@@ -60,21 +62,23 @@ type Props = {
   onSave: (value: CouncilProfileInput) => Promise<void>;
   onCancel: () => void;
   onResetDemo?: () => void;
+  journeyMetricsSlot?: ReactNode;
 };
 
-export function CouncilProfileSettings({ profile, value, canManage, dirty, demonstration, onChange, onSave, onCancel, onResetDemo }: Props) {
+export function CouncilProfileSettings({ profile, value, canManage, dirty, demonstration, onChange, onSave, onCancel, onResetDemo, journeyMetricsSlot }: Props) {
   const [postcodeText, setPostcodeText] = useState("");
   const [saving, setSaving] = useState(false);
   const [preparingLogo, setPreparingLogo] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
+  const [customerPreview, setCustomerPreview] = useState<CouncilProfileInput | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const postcodeId = useId();
   const disabled = !canManage || saving || preparingLogo;
   const journey = value.publicJourney ?? { enabled: false, homeUrl: null, requestedHostname: null };
   const savedJourney = profile.publicJourney;
-  const sharePath = demonstration ? PORT_PHILLIP_JOURNEY_DEMO_PATH : savedJourney?.sharePath;
+  const sharePath = demonstration ? SECCCA_JOURNEY_DEMO_PATH : savedJourney?.sharePath;
   const shareUrl = sharePath ? `${PUBLIC_SITE.apexUrl}${sharePath}` : null;
   const customDomainUrl = !demonstration && savedJourney?.customDomainUrl;
   async function copyJourneyLink() {
@@ -97,6 +101,11 @@ export function CouncilProfileSettings({ profile, value, canManage, dirty, demon
   function addPostcodes() {
     try { update(withPendingPostcodes()); setPostcodeText(""); } catch (failure) { setError(failure instanceof Error ? failure.message : "Check the postcodes and try again."); }
   }
+  function previewCustomerPage() {
+    setError("");
+    try { setCustomerPreview(parseCouncilProfileInput(withPendingPostcodes(), profile.state)); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "Check your profile details before previewing."); }
+  }
   async function uploadLogo(file: File) {
     setError(""); setNotice(""); setPreparingLogo(true);
     try { onChange({ ...value, logoDataUrl: await prepareLogo(file) }); }
@@ -116,14 +125,14 @@ export function CouncilProfileSettings({ profile, value, canManage, dirty, demon
     catch (failure) { setError(failure instanceof Error ? failure.message : "Your council profile could not be saved."); }
     finally { setSaving(false); }
   }
-  return <form className={styles.layout} onSubmit={event => void submit(event)}>
-    <div className={styles.editor}>
+  return <><div className={styles.layout}>
+    <div className={styles.editor}><form className={styles.editor} onSubmit={event => void submit(event)}>
       {!canManage && <p className={shared.notice}>You have reporting access. A council manager can update this profile.</p>}
       {error && <p className={shared.error} role="alert">{error}</p>}
       {notice && <p className={shared.notice} role="status">{notice}</p>}
       <fieldset className={styles.section} disabled={disabled}>
         <legend>Council identity</legend><p className={styles.intro}>Make this workspace recognisably yours. Your name and logo stay visible across every view.</p>
-        <div className={styles.logoEditor}><div className={styles.logoBox}>{value.logoDataUrl ? <NextImage unoptimized src={value.logoDataUrl} alt={`${value.name || "Council"} logo preview`} width={72} height={72} /> : <CouncilIcon name="business" size={32} />}</div><div><button type="button" className={shared.secondaryButton} onClick={() => fileInput.current?.click()}>{preparingLogo ? "Preparing logo..." : value.logoDataUrl ? "Change logo" : "Upload council logo"}</button>{value.logoDataUrl && <button type="button" className={shared.textButton} onClick={() => update({ ...value, logoDataUrl: null })}>Remove logo</button>}{demonstration && <button type="button" className={shared.textButton} onClick={useSampleLogo}>Try a sample logo</button>}<p className={styles.hint}>PNG, JPEG or WebP. Resized to 256 pixels and saved with your profile.</p><input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" aria-label="Council logo file" className={styles.fileInput} onChange={event => { const file = event.target.files?.[0]; if (file) void uploadLogo(file); }} /></div></div>
+        <div className={styles.logoEditor}><div className={styles.logoBox}>{value.logoDataUrl ? <NextImage unoptimized src={value.logoDataUrl} alt={`${value.name || "Council"} logo preview`} width={72} height={72} /> : <CouncilIcon name="business" size={32} />}</div><div><button type="button" className={shared.secondaryButton} onClick={() => fileInput.current?.click()}>{preparingLogo ? "Preparing logo..." : value.logoDataUrl ? "Change logo" : "Upload council logo"}</button>{value.logoDataUrl && <button type="button" className={shared.textButton} onClick={() => update({ ...value, logoDataUrl: null })}>Remove logo</button>}{demonstration && <button type="button" className={shared.textButton} onClick={useSampleLogo}>Try a sample logo</button>}<p className={styles.hint}>PNG, JPEG or WebP. Resized to 512 pixels and saved with your profile for customer pages and council documents.</p><input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" aria-label="Council logo file" className={styles.fileInput} onChange={event => { const file = event.target.files?.[0]; if (file) void uploadLogo(file); }} /></div></div>
         <label className={styles.field}>Council name<input required minLength={2} maxLength={120} value={value.name} autoComplete="organization" onChange={event => update({ ...value, name: event.target.value })} /></label>
         <div className={styles.state}><span>State or territory</span><strong>{profile.state}</strong></div>
       </fieldset>
@@ -141,18 +150,21 @@ export function CouncilProfileSettings({ profile, value, canManage, dirty, demon
         <legend>Your public customer journey</legend><p className={styles.intro}>Offer residents and businesses a familiar council header, a return link to your website and one enquiry flow. Enquiries from this link are attributed to your council.</p>
         <label className={styles.toggle}><input type="checkbox" checked={journey.enabled} onChange={event => update({ ...value, publicJourney: { ...journey, enabled: event.target.checked } })} />Enable the council-branded journey</label>
         <label className={styles.field}>Council home website<input type="url" inputMode="url" placeholder="https://www.yourcouncil.vic.gov.au/" maxLength={1000} value={journey.homeUrl ?? ""} required={journey.enabled} onChange={event => update({ ...value, publicJourney: { ...journey, homeUrl: event.target.value || null } })} /></label>
-        <p className={styles.hint}>{demonstration ? "This demonstration opens a fixed City of Port Phillip preview. Live customer journeys use your saved name, logo and colours." : "Your saved name, logo and colours also appear in the customer journey."}</p>
+        <p className={styles.hint}>The &ldquo;Back to council website&rdquo; button opens this address.</p>
+        <p className={styles.hint}>Preview your current name, logo, colours, website and postcodes before saving. Saving updates the public page and council documents.</p>
+        <button type="button" className={`${shared.secondaryButton} ${styles.customerPreviewAction}`} onClick={previewCustomerPage}>Preview customer page</button>
         <label className={styles.field}>Your own domain or subdomain <span className={styles.optional}>(optional)</span><input type="text" inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="energy.yourcouncil.vic.gov.au" maxLength={253} value={journey.requestedHostname ?? ""} onChange={event => update({ ...value, publicJourney: { ...journey, requestedHostname: event.target.value || null } })} /></label>
-        <p className={styles.hint}>{savedJourney?.domainStatus === "verified" ? "Domain connected. Customers can open your council's public journey here." : journey.requestedHostname ? "Setup pending. TLink must confirm your domain's DNS and hosting before it can serve the journey. Your standard council link works while this is arranged." : "The council link works immediately after saving. A custom domain requires your council's DNS administrator and TLink hosting setup."}</p>
-        {shareUrl && <div className={styles.shareBox}><strong>{demonstration ? "City of Port Phillip demonstration" : "Your saved council link"}</strong><input readOnly aria-label="Council customer journey link" value={customDomainUrl || shareUrl} onFocus={event => event.target.select()} /><div><a className={shared.secondaryButton} href={demonstration ? PORT_PHILLIP_JOURNEY_DEMO_PATH : customDomainUrl || sharePath || "#"} target="_blank" rel="noopener noreferrer">{demonstration ? "Preview customer journey" : "Open customer journey"} ↗</a><button type="button" className={shared.secondaryButton} onClick={() => void copyJourneyLink()}>Copy link</button></div><p className={styles.hint}>{demonstration ? "A clearly labelled preview. No enquiry is sent, no providers are contacted and no council endorsement is implied." : "The link continues to work when you update your council profile. Customer details stay private in council reporting."}</p></div>}
+        <p className={styles.hint}>{savedJourney?.domainStatus === "verified" ? "Your saved domain is connected. Customers opening that link see your council hostname in their address bar." : "Your council hostname appears in the address bar only after DNS and TLink hosting activation. The standard council link works after saving while setup is arranged."}</p>
+        {shareUrl && <div className={styles.shareBox}><strong>{demonstration ? "SECCCA demonstration link" : "Your saved council link"}</strong><input readOnly aria-label="Council customer journey link" value={customDomainUrl || shareUrl} onFocus={event => event.target.select()} /><div><a className={shared.secondaryButton} href={demonstration ? SECCCA_JOURNEY_DEMO_PATH : customDomainUrl || sharePath || "#"} target="_blank" rel="noopener noreferrer">{demonstration ? "Open demonstration link" : "Open customer journey"} ↗</a><button type="button" className={shared.secondaryButton} onClick={() => void copyJourneyLink()}>Copy link</button></div><p className={styles.hint}>{demonstration ? "This shareable SECCCA example uses its default branding. Use Preview customer page above to explore your own changes. No enquiry is sent and no council endorsement is implied." : "The link continues to work when you update your council profile. Customer details stay private in council reporting."}</p></div>}
         {!demonstration && journey.enabled && !shareUrl && <p className={styles.hint}>Save your profile to create your permanent council journey link.</p>}
       </fieldset>
       <div className={styles.saveBar}><span>{dirty || postcodeText ? "Previewing unsaved changes" : "Your saved council profile"}</span><div><button type="button" className={shared.secondaryButton} disabled={disabled || (!dirty && !postcodeText)} onClick={() => { onCancel(); setPostcodeText(""); setError(""); setNotice(""); }}>Cancel changes</button><button type="submit" className={shared.primaryButton} disabled={disabled || (!dirty && !postcodeText)}><CouncilIcon name="check" size={16} />{saving ? "Saving profile..." : "Save council profile"}</button></div></div>
+    </form>{journeyMetricsSlot}
     </div>
     <aside className={styles.previewColumn}>
       <section className={styles.preview}><div className={styles.previewHeader}><span className={styles.previewLogo}>{value.logoDataUrl ? <NextImage unoptimized src={value.logoDataUrl} alt="" width={52} height={52} /> : <CouncilIcon name="business" size={25} />}</span><div><small>Your council workspace</small><h2>{value.name || "Your council"}</h2></div></div><div className={styles.previewBody}><span className={shared.eyebrow}>Live preview</span><h3>Local action.<br />Your identity.</h3><p>Your community insights, with a familiar council presence.</p><div className={styles.previewScope}><strong>{value.postcodes.length}</strong><span>reporting postcodes<br />{profile.state}</span></div><div className={styles.previewBars} aria-hidden="true"><span /><span /><span /><span /><span /></div><span className={styles.previewTag}>TLink Council workspace</span></div></section>
       <div className={styles.previewNote}><CouncilIcon name="shield" size={20} /><p>Your visual identity changes. Customer information remains protected in every view.</p></div>
       {demonstration && onResetDemo && <section className={styles.reset}><h3>Start a fresh demonstration</h3><p>Reset the profile, practice campaigns and sessions saved in this browser.</p>{confirmReset ? <><p className={styles.resetQuestion}>Discard your local practice changes?</p><div><button type="button" className={shared.secondaryButton} onClick={() => setConfirmReset(false)}>Keep changes</button><button type="button" className={shared.secondaryButton} onClick={() => { onCancel(); onResetDemo(); setConfirmReset(false); setPostcodeText(""); setNotice(""); }}>Reset demonstration</button></div></> : <button type="button" className={shared.textButton} onClick={() => setConfirmReset(true)}><CouncilIcon name="refresh" size={15} />Reset demonstration</button>}</section>}
     </aside>
-  </form>;
+  </div>{customerPreview && <CouncilCustomerPagePreview profile={customerPreview} state={profile.state} onClose={() => setCustomerPreview(null)} />}</>;
 }

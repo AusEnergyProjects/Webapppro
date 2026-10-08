@@ -1,4 +1,5 @@
 import type { CouncilTheme } from "./council-theme.ts";
+import { SECCCA_DEMO_LOGO } from "../data/seccca-demo-logo.ts";
 
 /** Only this deliberate public projection leaves the council workspace. */
 export type CouncilPublicBranding = {
@@ -48,8 +49,10 @@ export async function resolveCouncilPublicHost(db: Pick<D1Database, "prepare">, 
   return campaign || assets || address || lead ? { kind: "council", code: row.code, rewritePath: null } : { kind: "deny" };
 }
 
-export const PORT_PHILLIP_JOURNEY_DEMO_PATH = "/council/program/demo/port-phillip";
-export const PORT_PHILLIP_DEMO_BRANDING: CouncilPublicBranding = {
-  councilName: "City of Port Phillip", logoDataUrl: null, homeUrl: "https://www.portphillip.vic.gov.au/",
-  theme: { primaryColor: "#003e51", accentColor: "#007e8a" },
+export const SECCCA_JOURNEY_DEMO_PATH = "/council/program/demo/seccca";
+/** Selected representative postcodes, not a complete regional boundary. */
+export const SECCCA_DEMO_POSTCODES = ["3182", "3186", "3194", "3805", "3810", "3931", "3995"];
+export const SECCCA_DEMO_BRANDING: CouncilPublicBranding = {
+  councilName: "SECCCA", logoDataUrl: SECCCA_DEMO_LOGO, homeUrl: "https://seccca.org.au/",
+  theme: { primaryColor: "#00402f", accentColor: "#9e5330" },
 };

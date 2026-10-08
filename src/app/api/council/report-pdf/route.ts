@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   if ([...url.searchParams.keys()].some(key => !["councilId", "demonstration"].includes(key) || url.searchParams.getAll(key).length !== 1)) return json("Choose a council report.", 400);
   const demonstration = url.searchParams.get("demonstration");
   if (url.searchParams.has("demonstration")) {
-    if (demonstration !== "port-phillip" || url.searchParams.has("councilId")) return json("Choose the Port Phillip demonstration.", 400);
+    if (demonstration !== "seccca" || url.searchParams.has("councilId")) return json("Choose the SECCCA demonstration.", 400);
     try {
       const bundle = await councilMonthlyDemoBundle();
       const { createCouncilMonthlyReportPdf } = await import("@/lib/council-monthly-report-pdf");

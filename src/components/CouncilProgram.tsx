@@ -16,17 +16,18 @@ type PublicCampaign = {
   logoDataUrl?: string | null; primaryColor?: string; accentColor?: string; homeUrl?: string | null;
 };
 
-export function CouncilProgram({ campaign, unavailable = false, demonstration = false }: { campaign: PublicCampaign | null; unavailable?: boolean; demonstration?: boolean }) {
+export function CouncilProgram({ campaign, unavailable = false, demonstration = false, embeddedPreview = false }: { campaign: PublicCampaign | null; unavailable?: boolean; demonstration?: boolean; embeddedPreview?: boolean }) {
   const [enquiryOpen, setEnquiryOpen] = useState(false);
   const [sector, setSector] = useState<"residential" | "business">(campaign?.audience === "businesses" ? "business" : "residential");
   const theme = { primaryColor: campaign?.primaryColor || COUNCIL_DEFAULT_THEME.primaryColor, accentColor: campaign?.accentColor || COUNCIL_DEFAULT_THEME.accentColor };
   const branding: CouncilPublicBranding | undefined = campaign ? { councilName: campaign.councilName, logoDataUrl: campaign.logoDataUrl || null, homeUrl: campaign.homeUrl || null, theme } : undefined;
   const timeZone = campaign ? councilReportPeriod("year", campaign.state).timeZone : "Australia/Melbourne";
   const initials = campaign?.councilName.split(/\s+/).filter(word => !["city", "of", "council"].includes(word.toLowerCase())).slice(0, 2).map(word => word[0]).join("") || "C";
-  return <main id="site-content" className={styles.page} style={councilThemeVariables(theme, "day")}>
-    {demonstration && <div className={styles.demo} role="note"><strong>Customer journey demonstration</strong><span>Preview using City of Port Phillip. No enquiries are sent. This preview does not imply council endorsement.</span></div>}
+  const Page = embeddedPreview ? "div" : "main";
+  return <Page id={embeddedPreview ? undefined : "site-content"} className={styles.page} style={councilThemeVariables(theme, "day")}>
+    {demonstration && <div className={styles.demo} role="note"><strong>Customer journey demonstration</strong><span>Preview using {campaign?.councilName || "your council"}. No enquiries are sent. This preview does not imply council endorsement.</span></div>}
     <header className={styles.header}><div className={styles.headerInner}>
-      <div className={styles.identity}><span className={styles.logo}>{campaign?.logoDataUrl ? <NextImage unoptimized src={campaign.logoDataUrl} alt={`${campaign.councilName} logo`} width={64} height={64} /> : <span aria-hidden="true">{initials}</span>}</span><div><strong>{campaign?.councilName || "Local energy upgrades"}</strong><span>Energy upgrades for our community</span></div></div>
+      <div className={styles.identity}><span className={`${styles.logo}${campaign?.logoDataUrl ? ` ${styles.imageLogo}` : ""}`}>{campaign?.logoDataUrl ? <NextImage unoptimized src={campaign.logoDataUrl} alt={`${campaign.councilName} logo`} width={200} height={64} /> : <span aria-hidden="true">{initials}</span>}</span><div><strong>{campaign?.councilName || "Local energy upgrades"}</strong><span>Energy upgrades for our community</span></div></div>
       {branding?.homeUrl && <a href={branding.homeUrl} className={styles.home}>Back to council website <span aria-hidden="true">↗</span></a>}
     </div></header>
     <div className={styles.content}>{campaign ? <>
@@ -42,5 +43,5 @@ export function CouncilProgram({ campaign, unavailable = false, demonstration = 
       {enquiryOpen && <QuickUpgradeEnquiryDialog councilReference={demonstration ? undefined : campaign.code} councilBranding={branding} demonstration={demonstration} initialCustomerSector={sector} initialPostcode={campaign.postcodes.length === 1 ? campaign.postcodes[0] : ""} onClose={() => setEnquiryOpen(false)} />}
     </> : <section className={styles.unavailable}><h1>{unavailable ? "This program is temporarily unavailable" : "This campaign is no longer active"}</h1><p>{unavailable ? "Please try again shortly or contact TLink support." : "Contact your council for its current program link."}</p><a className={styles.primary} href={`${PUBLIC_SITE.apexUrl}/direct-trade`}>Explore TLink →</a></section>}</div>
     <footer className={styles.footer}><span>Energy upgrade enquiries powered by <strong>TLink</strong></span><nav aria-label="TLink access"><a href={`${PUBLIC_SITE.apexUrl}/direct-trade`}>Join as a local provider ↗</a><a href={`${PUBLIC_SITE.apexUrl}/council`}>Council sign in ↗</a></nav></footer>
-  </main>;
+  </Page>;
 }

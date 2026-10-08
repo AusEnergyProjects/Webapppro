@@ -87,7 +87,7 @@ test("demo data is deterministic, fictional and reconciles across six months and
   assert.equal(report.campaigns.reduce((sum,row) => sum+row.enquiries,0),report.metrics.attributedEnquiries);
   assert.equal(loadCouncilDemo("quarter",now).trend.length,3);
   assert.ok(report.metrics.estimatedTonnesCo2e < report.metrics.veecQuantity+report.metrics.stcQuantity);
-  assert.deepEqual(report.map.cells.map(row => row.postcode),["3004","3006","3181","3182","3183","3184","3185","3205","3206","3207"]);
+  assert.deepEqual(report.map.cells.map(row => row.postcode),["3182","3186","3194","3805","3810","3931","3995"]);
   for(const key of ["completedJobs","completedValueCents","veecQuantity","stcQuantity","estimatedTonnesCo2e"])assert.equal(report.sectors.rows.reduce((sum,row)=>sum+row.metrics[key],0),report.metrics[key],key);
   assert.equal(report.map.cells.reduce((sum,row) => sum+row.completedJobs,0),report.metrics.completedJobs);
   assert.equal(report.map.cells.reduce((sum,row) => sum+row.registeredLocalBusinesses,0),report.metrics.registeredLocalBusinesses);
