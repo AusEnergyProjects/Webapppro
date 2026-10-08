@@ -109,12 +109,33 @@ test("the new public page supplies the shared SECCCA logo, colours and selected 
   assert.deepEqual(page.metadata.robots,{index:false,follow:false});
 });
 
-test("the previous Port Phillip path redirects through the framework to the single SECCCA preview", () => {
-  const redirected = [];
-  const page = demoPage("../src/app/council/program/demo/port-phillip/page.tsx", {
-    "next/navigation":{redirect:path=>{redirected.push(path);throw new Error("NEXT_REDIRECT");}},
+test("the previous Port Phillip path redirects GET and HEAD to the single SECCCA preview", async () => {
+  const route = demoPage("../src/app/council/program/demo/port-phillip/route.ts", {
     "@/lib/council-public-branding":{SECCCA_JOURNEY_DEMO_PATH},
   });
-  assert.throws(()=>page.default(),/NEXT_REDIRECT/);
-  assert.deepEqual(redirected,[SECCCA_JOURNEY_DEMO_PATH]);
+  for (const origin of ["https://ausenergyassessments.com", "http://localhost:5276"]) {
+    for (const method of ["GET", "HEAD"]) {
+      const response = route[method](new Request(`${origin}/council/program/demo/port-phillip?next=https://foreign.example/`, {
+        method, headers: { Host: "foreign.example", "X-Forwarded-Host": "foreign.example", "X-Forwarded-Proto": "https" },
+      }));
+      assert.equal(response.status, 307);
+      assert.equal(response.headers.get("Location"), `${origin}${SECCCA_JOURNEY_DEMO_PATH}`);
+      assert.equal(response.headers.get("Cache-Control"), "no-store");
+      assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
+      assert.equal(await response.text(), "");
+    }
+  }
+});
+
+test("the legacy redirect remains server-only in the installed framework's browser route registry", async () => {
+  const route = new URL("../src/app/council/program/demo/port-phillip/route.ts", import.meta.url);
+  assert.equal(fs.existsSync(route), true);
+  assert.equal(fs.existsSync(new URL("./page.tsx", route)), false);
+  const { generateBrowserEntry } = await import(new URL("./entries/app-browser-entry.js", import.meta.resolve("vinext")));
+  const entry = generateBrowserEntry([
+    { pagePath: null, routePath: route.pathname, layouts: ["src/app/layout.tsx"], patternParts: ["council", "program", "demo", "port-phillip"], isDynamic: false },
+    { pagePath: "seccca/page.tsx", routePath: null, layouts: ["src/app/layout.tsx"], patternParts: ["council", "program", "demo", "seccca"], isDynamic: false },
+  ]);
+  assert.doesNotMatch(entry, /port-phillip/);
+  assert.match(entry, /"seccca"/);
 });
