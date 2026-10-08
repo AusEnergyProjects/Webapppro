@@ -34,7 +34,7 @@ function render(permissions = {}, view = 'business', crmView = 'jobs', crewId) {
 
 test('field staff use one Home and Jobs workflow with Connect and their schedule', () => {
   const ui = render();
-  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'Forms', 'Tasks & training', 'Wattzun']);
+  assert.deepEqual(ui.buttons.map(label), ['Home dashboard', 'Jobs', 'Schedule', 'My time', 'Connect ', 'Forms', 'Tasks & training', 'Wattzun', 'My profile']);
   assert.equal(ui.tree.props['aria-label'], 'Staff workspace');
   assert.equal(ui.tree.props.className, 'dashboard-workspace-nav tlink-workspace-nav');
   assert.deepEqual(flatten(ui.tree).filter(node => node.type === 'h2').map(label), ['Daily work', 'Business tools', 'Specialist tools']);
@@ -156,13 +156,16 @@ test('authenticated team shell exposes installation and theme while public invit
   assert.match(portal, /!teamReady && <SiteFooter>/);
   assert.match(portal, /className="tlink-get-app" href="\/direct-trade\/field-app"/);
   assert.match(portal, /aria-label="Night mode" aria-pressed=\{colourMode === "night"\}/);
-  assert.match(portal, /readTLinkColourMode\(window\.localStorage\)/);
-  assert.match(portal, /writeTLinkColourMode\(window\.localStorage, next\)/);
+  assert.match(portal, /readTradePersonalAppearance\(storage, appearanceScope\)/);
+  assert.match(portal, /writeTradePersonalAppearance\(storage, appearanceScope, next\)/);
+  assert.match(portal, /tradePersonalAppearanceStorageKey\(user\?\.uid \|\| "", business\?\.ownerUid \|\| ""\)/);
+  assert.doesNotMatch(portal, /TLINK_COLOUR_MODE_STORAGE_KEY|writeTLinkColourMode|readTLinkColourMode/);
   assert.doesNotMatch(portal, /className="team-portal-hero"/);
   assert.doesNotMatch(portal, /tlink-team-header|tlink-team-navigation|tlink-team-themeToggle/);
   assert.match(portal, /<header className="dashboard-hero" ref=\{headerRef\}/);
   assert.match(portal, /<TLinkBrand context="Team workspace"/);
-  assert.match(portal, /data-trade-theme=\{teamReady \? data\.access\?\.brandThemeKey \|\| DEFAULT_TRADE_BRAND_THEME : undefined\}/);
+  assert.match(portal, /data-trade-theme=\{teamReady \? personalTheme : undefined\}/);
+  assert.match(portal, /personalTheme = appearance\.themeKey \|\| employerTheme/);
   assert.match(portal, /<TeamWorkspaceHeader key=\{user\.uid\} businessName=\{data\.access\.businessName\}/);
   assert.match(portal, /shell\.style\.setProperty\("--trade-header-stack-height"/);
 });
@@ -170,8 +173,8 @@ test('authenticated team shell exposes installation and theme while public invit
 test('staff sidebar uses shared active styling without exposing owner-only destinations', () => {
   for (const [view, crmView, selected] of [['business', 'today', 'Home dashboard'], ['business', 'jobs', 'Jobs'], ['business', 'schedule', 'Schedule'], ['messages', 'jobs', 'Connect '], ['forms', 'jobs', 'Forms'], ['training', 'jobs', 'Tasks & training'], ['wattzun', 'jobs', 'Wattzun']]) {
     const ui = render({}, view, crmView);
-    assert.equal(ui.button(selected).props.className, 'active');
-    assert.equal(ui.buttons.filter(button => button.props.className === 'active').length, 1);
+    assert.match(ui.button(selected).props.className, /\bactive\b/);
+    assert.equal(ui.buttons.filter(button => /\bactive\b/.test(button.props.className)).length, 1);
     for (const name of ['Business settings', 'Leads', 'Finance', 'Follow-ups', 'Trade network', 'Calculator']) assert.equal(ui.button(name), undefined);
   }
 });
@@ -245,13 +248,25 @@ test('staff record deep links respect an unsaved-work guard and restore the prio
   }
 });
 
-test('Sales, tasks, training, communication and time deep links keep their destinations', () => {
-  for (const view of ['sales', 'tasks', 'training', 'messages', 'time']) {
+test('Sales, tasks, training, communication, time and profile deep links keep their destinations', () => {
+  for (const view of ['sales', 'tasks', 'training', 'messages', 'time', 'profile']) {
     const result = context.workspaceLocation('?workspace=' + view);
     assert.equal(result.view, view); assert.equal(result.target, null);
   }
   assert.match(portal, /window\.addEventListener\("popstate", applyWorkspaceLink\)/);
-  assert.match(portal, /<TradePersonalNameSettings/);
+  assert.match(portal, /portalView === "profile" && <TradePersonalProfileSettings/);
+  assert.doesNotMatch(portal, /TradePersonalNameSettings/);
+});
+
+test('ordinary staff can open their own profile without business settings or administration', () => {
+  const ui = render({}, 'profile');
+  assert.equal(ui.button('My profile').props['aria-current'], 'page');
+  ui.button('My profile').props.onClick();
+  assert.deepEqual(ui.destinations, [['portal', 'profile']]);
+  assert.equal(ui.button('Business settings'), undefined);
+  assert.equal(ui.button('Team'), undefined);
+  assert.match(portal, /onProfile=\{\(\) => setPortalView\("profile"\)\}/);
+  assert.match(portal, /TradePersonalProfileSettings key=\{`\$\{user\.uid\}:\$\{business\?\.ownerUid\}:\$\{data\.access\.memberId\}`\}/);
 });
 
 test('Sales state remounts when the reader, business, membership or permission scope changes', () => {

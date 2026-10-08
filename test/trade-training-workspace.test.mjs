@@ -398,7 +398,7 @@ test("training is reachable for owners and staff and learner bundles never impor
   const read = (name) => fs.readFileSync(new URL(`../src/components/${name}`, import.meta.url), "utf8");
   assert.match(read("DirectTradeDashboard.tsx"), /workspace === "tasks" \|\| workspace === "training"\) && <TradeTasksAndTraining/);
   assert.match(read("TradeTeamPortal.tsx"), /portalView === "tasks" \|\| portalView === "training"\) && <TradeTasksAndTraining/);
-  assert.match(read("TradeTasksAndTraining.tsx"), /tab === 'tasks' \? <TradeTasksWorkspace user=\{user\} \/> : <TradeTrainingWorkspace user=\{user\}/);
+  assert.match(read("TradeTasksAndTraining.tsx"), /tab === 'tasks' \? <><TradeTrainingSummary user=\{user\} onOpenTraining=\{\(\) => onTab\('training'\)\} \/><TradeTasksWorkspace user=\{user\} \/><\/> : <TradeTrainingWorkspace user=\{user\}/);
   assert.match(read("TradeTeamPortal.tsx"), /onOpenOwnTraining=\{\(\) => setPortalView\("training"\)\}/);
   assert.match(read("DirectTradeDashboard.tsx"), /onOpenOwnTraining=\{\(\) => setWorkspace\("training"\)\}/);
   assert.doesNotMatch(read("DirectTradePartnerForm.tsx"), /<TradeCreditexOnboarding/);

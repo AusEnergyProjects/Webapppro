@@ -4,7 +4,7 @@ import TradeTeamPresence from "./TradeTeamPresence";
 import { WattzunToolsWorkspace } from "./WattzunToolsWorkspace";
 import { TradeTeamTimeWorkspace } from "./TradeTeamTimeWorkspace";
 import { TradeCrewWorkspace } from "./TradeCrewWorkspace";
-import { TradePersonalNameSettings } from "./TradePersonalNameSettings";
+import { TradePersonalProfileSettings } from "./TradePersonalProfileSettings";
 
 import { TradeBusinessGate, useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 
@@ -18,7 +18,8 @@ import { SiteFooter } from "./ComparatorChrome";
 import { AeaProductLink, TLinkBrand, TLinkHeader, TLinkMark } from "./TLinkChrome";
 import { DEFAULT_TRADE_BRAND_THEME, type TradeBrandThemeKey } from "@/lib/trade-business-branding";
 import { TLinkNavigationIcon } from "./TLinkNavigationIcon";
-import { readTLinkColourMode, writeTLinkColourMode, TLINK_COLOUR_MODE_STORAGE_KEY, type TLinkColourMode } from "@/lib/trade-device-client";
+import type { TLinkColourMode } from "@/lib/trade-device-client";
+import { DEFAULT_TRADE_PERSONAL_APPEARANCE, readTradePersonalAppearance, tradePersonalAppearanceStorageKey, writeTradePersonalAppearance, type TradePersonalAppearance } from "@/lib/trade-personal-appearance";
 import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import { InstallerCrmWorkspace } from "./InstallerCrmWorkspace";
 import { TradeTeamSettings, type TradeTeamPermissions } from "./TradeTeamSettings";
@@ -37,13 +38,13 @@ import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlert
 type Result = { ownerUid?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; brandThemeKey?: TradeBrandThemeKey; displayName: string; memberId: string; isOwner: boolean; crewId?: string; crewLead?: boolean; permissions: TradeTeamPermissions }; error?: string };
 type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
-type PortalView = "business" | "sales" | "wattzun" | "map" | "team" | "forms" | "tasks" | "training" | "messages" | "time" | "crew";
+type PortalView = "business" | "sales" | "wattzun" | "map" | "team" | "forms" | "tasks" | "training" | "messages" | "time" | "crew" | "profile";
 type CrmShortcut = "today" | "jobs" | "customers" | "schedule" | "pricebook" | "reports";
 
 function teamWorkspaceLocation(search: string): { view: PortalView; target: TLinkCommandTarget | null } {
   const parameters = new URLSearchParams(search);
   const workspace = parameters.get("workspace");
-  if (workspace === "wattzun" || workspace === "sales" || workspace === "forms" || workspace === "tasks" || workspace === "training" || workspace === "messages" || workspace === "time") return { view: workspace, target: null };
+  if (workspace === "wattzun" || workspace === "sales" || workspace === "forms" || workspace === "tasks" || workspace === "training" || workspace === "messages" || workspace === "time" || workspace === "profile") return { view: workspace, target: null };
   const jobId = parameters.get("jobId") || "";
   if (workspace === "work" && /^[A-Za-z0-9:_-]{1,180}$/.test(jobId)) {
     const requestedTab = parameters.get("jobTab");
@@ -99,11 +100,12 @@ function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm, cr
       <button type="button" className={view === "wattzun" ? "active" : ""} aria-current={view === "wattzun" ? "page" : undefined} onClick={() => onView("wattzun")}><TLinkNavigationIcon name="wattzun" /><span>Wattzun</span></button>
       {permissions.canViewQuotes && permissions.canManageQuotes && <button type="button" className={view === "map" ? "active" : ""} aria-current={view === "map" ? "page" : undefined} onClick={() => onView("map")}><TLinkNavigationIcon name="map" /><span>Map &amp; quote</span></button>}
     </div>
+    <button type="button" className={view === "profile" ? "tlink-nav-settings active" : "tlink-nav-settings"} aria-current={view === "profile" ? "page" : undefined} onClick={() => onView("profile")}><TLinkNavigationIcon name="customers" /><span>My profile</span></button>
   </nav>;
 }
 
-function TeamWorkspaceHeader({ businessName, colourMode, onToggleColourMode, onSignOut, getAuthHeaders, headerRef }: {
-  businessName: string; colourMode: TLinkColourMode; onToggleColourMode: () => void; onSignOut: () => void;
+function TeamWorkspaceHeader({ businessName, colourMode, onToggleColourMode, onProfile, onSignOut, getAuthHeaders, headerRef }: {
+  businessName: string; colourMode: TLinkColourMode; onToggleColourMode: () => void; onProfile: () => void; onSignOut: () => void;
   getAuthHeaders: () => Promise<Record<string, string>>; headerRef: Ref<HTMLElement>;
 }) {
   return <header className="dashboard-hero" ref={headerRef}>
@@ -117,6 +119,7 @@ function TeamWorkspaceHeader({ businessName, colourMode, onToggleColourMode, onS
       <div className="dashboard-account-summary"><small>Team account</small><strong>{businessName}</strong></div>
       <TradeTeamPresence getAuthHeaders={getAuthHeaders} />
       <a className="tlink-get-app" href="/direct-trade/field-app"><TLinkMark size={25} /><span>Get the app</span></a>
+      <button type="button" onClick={onProfile}>My profile</button>
       <button type="button" onClick={onSignOut}>Sign out</button>
     </div>
   </header>;
@@ -200,26 +203,34 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   const [crmTarget, setCrmTarget] = useState<TLinkCommandTarget | null>(null);
   const [crmView, setCrmView] = useState("today");
   const workspaceLocation = useRef(typeof window === "undefined" ? "" : `${window.location.pathname}${window.location.search}${window.location.hash}`);
-  const [colourMode, setColourMode] = useState<TLinkColourMode>("day");
+  const appearanceScope = tradePersonalAppearanceStorageKey(user?.uid || "", business?.ownerUid || "");
+  const [appearanceState, setAppearanceState] = useState<{ scope: string | null; appearance: TradePersonalAppearance; storageAvailable: boolean }>({ scope: null, appearance: { ...DEFAULT_TRADE_PERSONAL_APPEARANCE }, storageAvailable: false });
+  const appearance = appearanceState.scope === appearanceScope ? appearanceState.appearance : DEFAULT_TRADE_PERSONAL_APPEARANCE;
+  const colourMode = appearance.colourMode;
+  const employerTheme = data.access?.brandThemeKey || DEFAULT_TRADE_BRAND_THEME;
+  const personalTheme = appearance.themeKey || employerTheme;
   const teamReady = Boolean(user && emailVerified && data.access && invitationReady && !invitationError && !resolver && !mfaRequired);
 
   useEffect(() => {
     if (!teamReady) return;
     const apply = () => {
-      let next: TLinkColourMode = "day";
-      try { next = readTLinkColourMode(window.localStorage); } catch { /* Storage can be unavailable in private browsing. */ }
-      setColourMode(next); document.documentElement.dataset.tlinkColourMode = next;
+      let storage: Storage | null = null;
+      try { storage = window.localStorage; } catch { /* This browser does not allow device preferences. */ }
+      const next = readTradePersonalAppearance(storage, appearanceScope);
+      setAppearanceState({ scope: appearanceScope, ...next }); document.documentElement.dataset.tlinkColourMode = next.appearance.colourMode;
     };
-    const stored = (event: StorageEvent) => { if (event.key === TLINK_COLOUR_MODE_STORAGE_KEY || event.key === null) apply(); };
+    const stored = (event: StorageEvent) => { if (event.key === appearanceScope || event.key === null) apply(); };
     apply(); window.addEventListener("storage", stored);
     return () => { window.removeEventListener("storage", stored); delete document.documentElement.dataset.tlinkColourMode; };
-  }, [teamReady]);
+  }, [teamReady, appearanceScope]);
 
-  const toggleColourMode = () => {
-    const next = colourMode === "night" ? "day" : "night";
-    setColourMode(next); document.documentElement.dataset.tlinkColourMode = next;
-    try { writeTLinkColourMode(window.localStorage, next); } catch { /* This tab still keeps the selected appearance. */ }
+  const changeAppearance = (next: TradePersonalAppearance) => {
+    let storage: Storage | null = null;
+    try { storage = window.localStorage; } catch { /* The choice still applies in this tab. */ }
+    const storageAvailable = writeTradePersonalAppearance(storage, appearanceScope, next);
+    setAppearanceState({ scope: appearanceScope, appearance: next, storageAvailable }); document.documentElement.dataset.tlinkColourMode = next.colourMode;
   };
+  const toggleColourMode = () => changeAppearance({ ...appearance, colourMode: colourMode === "night" ? "day" : "night" });
 
   const openCrm = (view: CrmShortcut) => {
     void mapNavigation.run(() => {
@@ -453,7 +464,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   if (resolver) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
   if (user && mfaRequired) return <main className="wrap trade-team-page"><TLinkHeader active="team" /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); setAuthRevision(current => current + 1); }} /><button type="button" onClick={() => void leaveAccount()}>Sign out</button></main>;
 
-  return <TradeMessageAlerts user={user} enabled={Boolean(data.access)} onOpen={threadId => { setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 })); setPortalView("messages"); }}><TradeTeamCallProvider user={user} enabled={Boolean(data.access)}><main className={teamReady ? `trade-team-page trade-portal-shell tlink-team-shell is-installer` : "wrap trade-team-page"} data-trade-theme={teamReady ? data.access?.brandThemeKey || DEFAULT_TRADE_BRAND_THEME : undefined} data-trade-colour-mode={teamReady ? colourMode : undefined}>{!teamReady && <TLinkHeader active="team" />}
+  return <TradeMessageAlerts user={user} enabled={Boolean(data.access)} onOpen={threadId => { setMessageTarget(current => ({ id: threadId, revision: current.revision + 1 })); setPortalView("messages"); }}><TradeTeamCallProvider user={user} enabled={Boolean(data.access)}><main className={teamReady ? `trade-team-page trade-portal-shell tlink-team-shell is-installer` : "wrap trade-team-page"} data-trade-theme={teamReady ? personalTheme : undefined} data-trade-colour-mode={teamReady ? colourMode : undefined}>{!teamReady && <TLinkHeader active="team" />}
     {!invitationReady ? <section className="dashboard-state-card"><p role="status">Opening your invitation...</p></section>
       : invitationError ? <section className="dashboard-state-card"><h1>{invitationInvalid ? "Use your newest invitation" : "Let's try that again"}</h1><p role="alert">{invitationError}</p>{invitationInvalid ? <><p>Look for the most recent email titled &ldquo;You&apos;re invited to ... on TLink&rdquo;. Earlier invitation and password-reset links may refer to the old invitation.</p><p>Your business can also send you the current link from Team &gt; Copy invitation link.</p><a className="btn" href="/direct-trade/team">Already joined? Sign in</a></> : <button className="btn" type="button" onClick={() => setInvitationAttempt(current => current + 1)}>Try again</button>}</section>
       : !authReady ? <section className="dashboard-state-card"><h1>{invitation ? "Your invitation is ready" : "Opening TLink"}</h1><p role="status">{authDelayed ? "Sign-in is taking longer than expected. Check your connection and try again." : "Checking your sign-in..."}</p>{authDelayed && <button className="btn" type="button" onClick={() => window.location.reload()}>Try again</button>}</section>
@@ -484,9 +495,10 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       : !emailVerified ? <section className="team-auth-shell"><div className="team-auth-intro"><span>One final step</span><h1>Confirm your email</h1><p>Your login is ready. Confirm that {user.email} is yours to open your team&apos;s workspace.</p></div><div className="team-auth-card"><h2>Check your inbox</h2><p>Open the verification email, tap the link and return here. Your team&apos;s saved access will then open automatically.</p>{status && <p role="status">{status}</p>}<button className="btn" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verify"); await refreshVerification(true); setBusy(""); }}>{busy === "verify" ? "Checking..." : "I've verified my email"}</button><button className="customer-reset-link" type="button" disabled={Boolean(busy)} onClick={async () => { setBusy("verification-email"); await sendVerification(user); setBusy(""); }}>{busy === "verification-email" ? "Sending..." : "Resend verification email"}</button><button className="customer-reset-link" type="button" onClick={() => void leaveAccount()}>Use another account</button></div></section>
       : loading ? <section className="dashboard-state-card"><p>Opening your workspace...</p></section>
       : !data.access ? <section className="dashboard-state-card"><span>Team access</span><h1>Opening your team</h1><p>{status || "Checking your saved access..."}</p><button className="btn" type="button" onClick={() => void leaveAccount()}>Use another account</button></section> : <>
-      <TeamWorkspaceHeader key={user.uid} businessName={data.access.businessName} colourMode={colourMode} onToggleColourMode={toggleColourMode} onSignOut={() => void leaveAccount()} getAuthHeaders={async () => ({ Authorization: "Bearer " + await user.getIdToken() })} headerRef={observePortalHeader} />
+      <TeamWorkspaceHeader key={user.uid} businessName={data.access.businessName} colourMode={colourMode} onToggleColourMode={toggleColourMode} onProfile={() => setPortalView("profile")} onSignOut={() => void leaveAccount()} getAuthHeaders={async () => ({ Authorization: "Bearer " + await user.getIdToken() })} headerRef={observePortalHeader} />
       <TeamWorkspaceNavigation permissions={data.access.permissions} crewId={data.access.crewId} view={portalView} crmView={crmView} onView={setPortalView} onCrm={openCrm} />
       <div className="tlink-team-content">
+      {portalView === "profile" && <TradePersonalProfileSettings key={`${user.uid}:${business?.ownerUid}:${data.access.memberId}`} user={user} name={data.access.displayName} appearance={appearance} employerTheme={employerTheme} storageAvailable={appearanceState.scope === appearanceScope && appearanceState.storageAvailable} onAppearanceChange={changeAppearance} onSaved={displayName => setData(current => current.access ? { ...current, access: { ...current.access, displayName } } : current)} />}
       {portalView === "sales" && salesAllowed && <TradeSalesWorkspace key={salesScopeKey} user={user} onOpenJob={openSalesJob} onNewQuote={canCreateSalesQuote ? openSalesQuote : undefined} onRegisterLeave={registerMapSave} />}
       {portalView === "sales" && !salesAllowed && <section className="dashboard-state-card"><p role="alert">Customer and quote access is required to open Sales.</p><button type="button" onClick={() => openCrm("jobs")}>Open jobs</button></section>}
       {portalView === "time" && <TradeTeamTimeWorkspace user={user} />}
@@ -498,6 +510,6 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       {(portalView === "tasks" || portalView === "training") && <TradeTasksAndTraining key={user.uid} user={user} tab={portalView} onTab={setPortalView} />}
       {portalView === "team" && permissions?.canManageTeam && <section className="team-field-tools" aria-label="Team management"><TradeTeamSettings user={user} onOpenOwnTraining={() => setPortalView("training")} onOpenSchedule={() => openCrm("schedule")} /></section>}
       {status && <p className="crm-status" role="status">{status}</p>}
-      </div><TradePersonalNameSettings key={`${user.uid}:${data.access.memberId}`} user={user} name={data.access.displayName} onSaved={displayName => setData(current => current.access ? { ...current, access: { ...current.access, displayName } } : current)} /><footer className="tlink-team-footer"><span>Signed in as {data.access.displayName}</span></footer>
+      </div><footer className="tlink-team-footer"><span>Signed in as {data.access.displayName}</span></footer>
     </>}{!teamReady && <SiteFooter>Team access is controlled by the installer business. Australian Energy Assessments protected customer identity and contact details remain unavailable.</SiteFooter>}</main></TradeTeamCallProvider></TradeMessageAlerts>;
 }

@@ -30,7 +30,7 @@ const bundled = await build({
       const permissions=window.fixturePermissions;
       ${headerObserver.getText(portal)}
       return <main className="trade-team-page trade-portal-shell tlink-team-shell is-installer" data-trade-theme="violet_sunset" data-trade-colour-mode={colourMode}>
-        <TeamWorkspaceHeader businessName="Australian Energy Assessments" colourMode={colourMode} headerRef={observePortalHeader} getAuthHeaders={async()=>({})} onSignOut={()=>{window.fixtureSignedOut=true}} onToggleColourMode={()=>{const next=colourMode==='night'?'day':'night';document.documentElement.dataset.tlinkColourMode=next;setMode(next)}}/>
+        <TeamWorkspaceHeader businessName="Australian Energy Assessments" colourMode={colourMode} headerRef={observePortalHeader} getAuthHeaders={async()=>({})} onProfile={()=>setView('profile')} onSignOut={()=>{window.fixtureSignedOut=true}} onToggleColourMode={()=>{const next=colourMode==='night'?'day':'night';document.documentElement.dataset.tlinkColourMode=next;setMode(next)}}/>
         <TeamWorkspaceNavigation permissions={permissions} view={view} crmView={crmView} onView={setView} onCrm={next=>{setCrm(next);setView('business')}}/>
         <div className="tlink-team-content"><section className="dashboard-panel" style={{padding:24,minHeight:1400}}><h1>{view==='business'?crmView:view}</h1><p>Synthetic scoped staff workspace</p></section></div>
         <footer className="tlink-team-footer">Signed in as Synthetic Tester</footer>
@@ -48,7 +48,8 @@ const bundled = await build({
   } }],
 });
 const script = bundled.outputFiles.find(file => file.path.endsWith('.js')).text;
-const css = ['../src/app/protected-workspaces.css', '../src/app/tlink-colour-mode.css'].map(file => fs.readFileSync(new URL(file, import.meta.url), 'utf8')).join('\n')
+const globalCss = fs.readFileSync(new URL('../src/app/globals.css', import.meta.url), 'utf8').replace(/^@import .*$/m, '').replace('@theme inline {', ':root {');
+const css = globalCss+'\n'+['../src/app/protected-workspaces.css', '../src/app/tlink-colour-mode.css'].map(file => fs.readFileSync(new URL(file, import.meta.url), 'utf8')).join('\n')
   + '\n' + (bundled.outputFiles.find(file => file.path.endsWith('.css'))?.text || '');
 const browserPath = [process.env.TEST_BROWSER_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/chromium'].find(value => value && fs.existsSync(value));
 const fieldPermissions = { jobScope: 'own', scheduleScope: 'own', canViewCustomers: false, canSearchCustomers: false, canViewPriceBook: false, canManageTeam: false, canViewQuotes: false, canManageQuotes: false, canRunReports: false };
@@ -61,6 +62,7 @@ test('staff inherit the shared branded shell with scoped desktop and mobile navi
       const errors = []; page.on('pageerror', error => errors.push(error.message));
       try {
         await page.route('https://fixture.invalid/**', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><html></html>' }));
+        await page.route('https://fixture.invalid/tlink-icon-192.png', route => route.fulfill({status:200,contentType:'image/png',body:fs.readFileSync(new URL('../public/tlink-icon-192.png',import.meta.url))}));
         await page.goto('https://fixture.invalid/');
         await page.setContent(`<style>*{box-sizing:border-box}html,body{margin:0;font-family:Arial,sans-serif}[data-tlink-business-switcher]{height:48px;position:sticky;top:0;z-index:90}${css}</style><div data-tlink-business-switcher>Working with Synthetic AEA</div><div id="root"></div>`);
         await page.evaluate(permissions => { window.fixturePermissions = permissions; }, fieldPermissions);
@@ -95,6 +97,9 @@ test('staff inherit the shared branded shell with scoped desktop and mobile navi
         assert.equal(await page.getByRole('button', { name: 'Night mode' }).getAttribute('aria-pressed'), 'true');
         await page.getByRole('button', { name: 'Wattzun', exact: true }).click();
         await page.getByRole('heading', { name: 'wattzun', exact: true }).waitFor();
+        await page.locator('header').getByRole('button', { name: 'My profile', exact: true }).click();
+        await page.getByRole('heading', { name: 'profile', exact: true }).waitFor();
+        assert.equal(await page.locator('nav').getByRole('button', { name: 'My profile', exact: true }).getAttribute('aria-current'), 'page');
         assert.equal(await page.getByRole('link', { name: 'Get the app', exact: true }).getAttribute('href'), '/direct-trade/field-app');
         await page.getByRole('button', { name: 'Sign out', exact: true }).click();
         assert.equal(await page.evaluate(() => window.fixtureSignedOut), true);
