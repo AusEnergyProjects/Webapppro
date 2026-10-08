@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { CouncilProfileInput } from "@/lib/council-profile";
